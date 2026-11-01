@@ -83,7 +83,7 @@ export default function TrialEnding({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktWay — faktury KSeF dla mikrofirm. Ta wiadomość została wysłana
+            FaktWay, faktury KSeF dla mikrofirm. Ta wiadomość została wysłana
             automatycznie. Pytania? Odpowiedz na ten email.
           </Text>
         </Container>
