@@ -289,6 +289,32 @@ describe('lista faktur: wiersz i karta telefonu', () => {
     expect(actions.undo).not.toHaveBeenCalled();
   });
 
+  // Recenzja PR #358, pkt 5: „już zapłacona” to sukces, ale wpłata nie jest z tego dotknięcia. „Cofnij” kliknięte
+  // przed odpowiedzią serwera usunęłoby ręczną wpłatę innej karty albo drugiej osoby.
+  it('„Cofnij”, gdy okazało się, że faktura jest już zapłacona: nie woła cofnięcia (cudzej wpłaty nie usuwa)', async () => {
+    const serwer = odroczony<unknown>();
+    actions.mark.mockReturnValue(serwer.promise);
+    await renderuj(lista());
+    await dotknij(przyciski('Zapłacone')[0]!);
+    const opcje = (toast.success.mock.calls[0] as unknown as [string, { action: { onClick: () => void } }])[1];
+
+    await act(async () => {
+      opcje.action.onClick();
+    });
+    await act(async () => {
+      serwer.resolve({ success: true, status: 'already_paid', number: 'FV/1/2026' });
+    });
+
+    expect(actions.undo).not.toHaveBeenCalled();
+    // O stanie mówi toast oznaczenia („jest już zapłacona”), a odświeżenie pokazuje stan z serwera.
+    expect(toast.info).toHaveBeenCalledWith(
+      'Faktura FV/1/2026 jest już zapłacona.',
+      expect.objectContaining({ id: 'toast-1' }),
+    );
+    expect(toast.success).not.toHaveBeenCalledWith('Faktura FV/1/2026: cofnięto zapłatę');
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
   it('faktura z importu: bez stanu płatności („—”), a mimo to z przyciskiem; po dotknięciu „Opłacona”', async () => {
     const serwer = odroczony<unknown>();
     actions.mark.mockReturnValue(serwer.promise);

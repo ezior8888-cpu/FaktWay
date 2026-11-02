@@ -81,6 +81,9 @@ export function useInvoicePayment<T extends PayableInvoice>({
         const marked = pendingMark ? await pendingMark : null;
         // Oznaczenie się nie udało: nie ma czego cofać, a o błędzie mówi już jego toast.
         if (marked && !marked.success) return;
+        // „Już zapłacona” to sukces, ale wpłata nie jest z tego dotknięcia (inna karta albo druga osoba
+        // była pierwsza): cofnięcie usunęłoby cudzą ręczną wpłatę. O stanie mówi toast oznaczenia.
+        if (marked?.success && marked.status === 'already_paid') return;
         const result = await safeUndo(invoice.id);
         if (!result.success) {
           toast.error(result.error);
