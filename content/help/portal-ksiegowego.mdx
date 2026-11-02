@@ -3,27 +3,32 @@ title: "Portal księgowego"
 category: "zespol"
 order: 3
 summary: "Jak dać biuru rachunkowemu dostęp do danych bez zakładania pełnego konta."
-updated: "2026-05-19"
+updated: "2026-11-02"
 ---
 
-Portal księgowego to dostęp tylko do odczytu: Twoja księgowa pobiera dokumenty, nie ingerując w fakturowanie.
+Portal księgowego to dostęp z linku, bez zakładania konta w FaktWay. Księgowa niczego nie zmienia w Twoich danych: ogląda faktury i, jeśli na to pozwolisz, pobiera dokumenty.
 
 ## Po co osobny portal
 
-Nie każda księgowa potrzebuje pełnego konta z rolą. Portal daje jej dokładnie to, czego potrzebuje: pobieranie eksportów (JPK_FA, KPiR, faktury) w formacie jej programu i nic więcej.
+Nie każda księgowa potrzebuje pełnego konta z rolą. Portal daje jej tylko to, czego potrzebuje do pracy na dokumentach, i nic więcej.
 
 ## Jak udostępnić
 
-W **Ustawienia → Księgowa** generujesz token portalu. Księgowa wchodzi przez dedykowany URL z tym tokenem, bez zakładania konta w FaktWay.
+W **Ustawienia → Księgowa** tworzysz link do portalu, wybierasz poziom dostępu i ważność linku. Księgowa wchodzi przez ten link, bez zakładania konta w FaktWay.
+
+## Poziomy dostępu
+
+- **Tylko podgląd**: poziom domyślny. Księgowa widzi listę faktur, ale niczego nie pobiera.
+- **Podgląd + pobieranie XML**: księgowa może też pobrać XML faktury oraz za wybrany miesiąc JPK_FA(4) i KPiR w Excelu.
+
+Chcesz, żeby księgowa pobierała dokumenty? Wybierz drugi poziom przy tworzeniu linku.
 
 ## Co widzi księgowa
 
-- listę faktur za wybrany okres,
-- eksport JPK_FA i KPiR,
-- pobieranie w uniwersalnym CSV (eksporty do Comarch Optima i Subiekta są w przygotowaniu; Symfonia i WAPRO wczytują JPK_FA),
-- faktury w PDF.
+- listę 100 najnowszych faktur (starszych w portalu nie ma),
+- przy dostępie z pobieraniem: XML faktury oraz JPK_FA(4) i KPiR (Excel) za wybrany miesiąc.
 
-Portal jest tylko do odczytu: księgowa niczego nie zmienia w Twoich danych.
+W portalu nie ma uniwersalnego CSV ani PDF-ów faktur. Plik CSV wygenerujesz Ty w sekcji raportów i prześlesz go księgowej. Eksporty do Comarch Optima i Subiekta są w przygotowaniu, a Symfonia i WAPRO wczytują JPK_FA.
 
 ## Co-Pilot Księgowego
 

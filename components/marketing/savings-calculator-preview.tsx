@@ -19,6 +19,14 @@ import { ButtonLink } from '@/components/site/ui';
  */
 const SUBSCRIPTION_YEAR_GROSZE = MONTHLY_PRICE_GROSS_GROSZE * 12;
 
+/**
+ * Odczyt ze zdjęcia ma twardy limit miesięczny na firmę: 3 zł budżetu, przy
+ * obecnych cenach około 55 rozpoznań (lib/ai/tenant-ai-budget.ts). Po jego
+ * wyczerpaniu dane wpisuje się ręcznie, więc z dokumentów ponad limit nie
+ * liczymy oszczędności. Wartość jest tu na sztywno, bo plik jest kliencki.
+ */
+const LIMIT_ODCZYTOW_MIESIECZNIE = 55;
+
 export function SavingsCalculatorPreview() {
   const [invoicesPerMonth, setInvoicesPerMonth] = useState(20);
   const [hourlyRate, setHourlyRate] = useState(150);
@@ -31,7 +39,7 @@ export function SavingsCalculatorPreview() {
     const savedMinutesPerInvoice =
       minutesPerInvoiceManual - minutesPerInvoiceWithOcr;
 
-    const invoicesPerYear = invoicesPerMonth * 12;
+    const invoicesPerYear = Math.min(invoicesPerMonth, LIMIT_ODCZYTOW_MIESIECZNIE) * 12;
     const minutesSavedPerYear = invoicesPerYear * savedMinutesPerInvoice;
     const hoursSavedPerYear = minutesSavedPerYear / 60;
     const moneySavedPerYear = hoursSavedPerYear * hourlyRate;
@@ -102,7 +110,9 @@ export function SavingsCalculatorPreview() {
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border p-6 lg:px-10">
         <p className="max-w-md text-xs text-muted-foreground">
           Szacunek przy założeniu: 8 min na dokument ręcznie i 1,5 min
-          z odczytem ze zdjęcia w FaktWay, abonament {PRICE_PER_MONTH}. Twój wynik może być inny.
+          z odczytem ze zdjęcia w FaktWay, abonament {PRICE_PER_MONTH}. Odczyt ze zdjęcia ma limit, około{' '}
+          {LIMIT_ODCZYTOW_MIESIECZNIE} dokumentów miesięcznie na firmę, więc ponad limit oszczędności nie
+          liczymy. Twój wynik może być inny.
         </p>
         <ButtonLink href="/register">
           Zacznij oszczędzać teraz

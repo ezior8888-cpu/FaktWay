@@ -12,7 +12,7 @@ FaktWay ułatwia współpracę z biurem rachunkowym. Dane przekazujesz w formaci
 
 - **JPK_FA**: ustrukturyzowany plik XML z fakturami za wybrany okres.
 - **KPiR w Excelu**: księga w układzie zgodnym z rozporządzeniem MF.
-- **Uniwersalny CSV**: sam wybierasz kolumny.
+- **Uniwersalny CSV**: stały układ kolumn (numer, data wystawienia, kontrahent, NIP, netto, VAT, brutto, waluta (zawsze PLN), rodzaj, numer KSeF).
 
 Symfonia FK i WAPRO Kaper wczytują faktury z pliku JPK_FA, więc wybierz JPK_FA. Eksporty JPK_V7M(3), Comarch Optima i Subiekt (EDI++) są w przygotowaniu i jeszcze niedostępne; do tego czasu księgowa dostaje uniwersalny CSV.
 
@@ -26,7 +26,7 @@ Zamiast eksportować ręcznie co miesiąc, włącz Co-Pilot Księgowego. W ustaw
 
 ## Portal księgowego
 
-Możesz też dać księgowej własny dostęp przez portal księgowego. Generujesz token, księgowa wchodzi przez dedykowany URL i sama pobiera dokumenty w wybranym formacie. Zobacz artykuł o portalu księgowego.
+Możesz też dać księgowej własny dostęp przez portal księgowego. Tworzysz link, księgowa wchodzi przez niego bez konta i, jeśli wybierzesz dostęp z pobieraniem, sama pobiera JPK_FA(4) albo KPiR za wybrany miesiąc oraz XML faktur. Zobacz artykuł o portalu księgowego.
 
 ## Co dalej?
 

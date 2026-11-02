@@ -69,9 +69,7 @@ const FEATURES = [
     items: [
       'Lista faktur po terminie',
       'Zapłacone jednym dotknięciem',
-      'Przypomnienia i przedsądowe wezwania do zapłaty, wysyłane po Twoim zatwierdzeniu',
       'Walidacja NIP (biała lista VAT, VIES)',
-      'Sprawdzanie rachunków na białej liście',
     ],
   },
   {
@@ -149,7 +147,7 @@ export default function PricingPage() {
                 <span className="text-sm text-primary-foreground">/ miesiąc · z VAT</span>
               </p>
               <p className="mt-3 text-sm text-primary-foreground">
-                {PRICE_NET} netto + {PRICE_VAT} VAT · faktura VAT co miesiąc
+                {PRICE_NET} netto + {PRICE_VAT} VAT · cena za jedną firmę (NIP)
               </p>
               <ButtonLink href="/register" variant="inverse" className="mt-8 w-full">
                 Wypróbuj {TRIAL_DAYS} dni za darmo

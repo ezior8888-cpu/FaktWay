@@ -69,7 +69,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   {
     id: 'rozliczenia',
     label: 'Subskrypcja',
-    description: 'Cena, płatności, okres próbny, faktury za FaktWay.',
+    description: 'Cena, płatności, okres próbny.',
     icon: 'credit_card',
   },
   {

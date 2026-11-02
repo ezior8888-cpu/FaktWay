@@ -14,7 +14,7 @@ Potrzebujesz certyfikatu KSeF typu 1 (uwierzytelnianie). Pobierzesz go z Modułu
 
 ## Wgranie do FaktWay
 
-W **Ustawienia → KSeF** wgrywasz certyfikat i klucz w plikach PEM. Może to zrobić tylko właściciel firmy, po włączeniu logowania dwuetapowego. FaktWay szyfruje je przed zapisem (AES-256-GCM), więc dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
+W **Ustawienia → KSeF** dodajesz certyfikat i klucz w plikach PEM. Przy wgrywaniu plików działa klucz prywatny RSA w formacie PKCS#8 bez hasła. Może to zrobić tylko właściciel firmy, po włączeniu logowania dwuetapowego. FaktWay szyfruje je przed zapisem (AES-256-GCM), więc dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
 
 ## Weryfikacja połączenia
 
@@ -22,6 +22,7 @@ Przy wgrywaniu FaktWay łączy się z KSeF i sprawdza, czy certyfikat działa dl
 
 - czy certyfikat nie wygasł,
 - czy NIP w certyfikacie zgadza się z NIP-em firmy,
+- czy klucz prywatny jest w formacie PKCS#8 (RSA) i nie ma hasła,
 - czy certyfikat pochodzi z właściwego środowiska KSeF (testowego albo produkcyjnego).
 
 ## Wygasanie certyfikatu

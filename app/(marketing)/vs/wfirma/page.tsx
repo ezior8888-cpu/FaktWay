@@ -301,7 +301,7 @@ export default function WfirmaPage() {
           <ul className="space-y-0 border-t border-zinc-100">
             {[
               { k: 'Warstwa podstawowa', v: 'rozliczenia, faktury, często sensowny start bez pełnej „maszyny mobilnej”.' },
-              { k: 'Warstwa rozszerzeń', v: 'dodatkowe firmy, wyższe limity dokumentów, integracje: koszt skokowy przy wzroście skali.' },
+              { k: 'Warstwa rozszerzeń', v: 'wyższe limity dokumentów, integracje: koszt skokowy przy wzroście skali.' },
               { k: 'Kadry i płace', v: 'mocna strona wFirma: jeśli tego potrzebujesz, może to uzasadniać wyższy abonament.' },
               { k: 'FaktWay', v: `jedna stawka ${PRICE_PER_MONTH}, telefon, koszty ze zdjęcia i KSeF w jednym programie, ${TRIAL_DAYS} dni za darmo, czyli przewidywalny koszt dla mikrofirmy bez działu IT.` },
             ].map((item, i) => (

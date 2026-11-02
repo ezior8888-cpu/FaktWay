@@ -34,17 +34,17 @@ const FEATURES = [
   {
     icon: CloudOff,
     title: 'Ponawianie, gdy KSeF nie działa',
-    text: 'Gdy KSeF nie odpowiada, ponawiamy wysyłkę sami przez dobę. O wyniku dostajesz powiadomienie.',
+    text: 'Gdy KSeF nie odpowiada, ponawiamy wysyłkę sami, w coraz dłuższych odstępach. Możesz też wysłać fakturę ponownie jednym przyciskiem.',
   },
   {
     icon: BellRing,
     title: 'Należności pod kontrolą',
-    text: 'Faktury po terminie masz w jednym miejscu. Zapłacone oznaczasz jednym dotknięciem, a przypomnienie wysyłasz po sprawdzeniu treści.',
+    text: 'Faktury po terminie masz w jednym miejscu, a zapłacone oznaczasz jednym dotknięciem.',
   },
   {
     icon: Receipt,
     title: 'Koszty ze zdjęcia',
-    text: 'Robisz zdjęcie paragonu albo faktury, sprawdzasz odczytane dane i wpis trafia do KPiR. Faktury zakupowe z KSeF przychodzą same.',
+    text: 'Robisz zdjęcie paragonu albo faktury, a odczytany koszt trafia do KPiR od razu. Na liście wydatków czeka z oznaczeniem „Do opisania”, żebyś go sprawdził. Faktury zakupowe z KSeF przychodzą same.',
   },
   {
     icon: Users,
@@ -141,7 +141,7 @@ const PLAN_FEATURES = [
   'Faktury bez limitu',
   'Wysyłka do KSeF i pobieranie UPO',
   'Zdjęcie paragonu do KPiR',
-  'Faktury po terminie i przypomnienia',
+  'Faktury po terminie',
   'Paczka dla księgowej',
   'Import z Fakturowni, inFaktu, wFirmy i iFirmy',
   'Działa w przeglądarce telefonu',
@@ -159,7 +159,7 @@ export function Pricing() {
         />
         <Reveal y={40} className="mx-auto mt-14 max-w-md rounded-3xl bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/20 sm:p-10">
           <h3 className="text-lg font-semibold">FaktWay</h3>
-          <p className="mt-1 text-sm text-primary-foreground">Dla firm i księgowych.</p>
+          <p className="mt-1 text-sm text-primary-foreground">Dla firm i księgowych. Cena za jedną firmę (NIP).</p>
           <p className="mt-6 flex items-baseline gap-2">
             <span className="text-5xl font-semibold tracking-tight">{PRICE_GROSS}</span>
             <span className="text-sm text-primary-foreground">/mies. z VAT</span>
@@ -189,13 +189,13 @@ const QUESTIONS = [
     },
     {
       q: 'Czy muszę mieć podpis elektroniczny?',
-      a: 'Podpis kwalifikowany nie jest potrzebny. Do Aplikacji Podatnika KSeF wejdziesz profilem zaufanym, pobierzesz tam certyfikat KSeF i wgrasz go w ustawieniach FaktWay.',
+      a: 'Podpis kwalifikowany nie jest potrzebny. Do Aplikacji Podatnika KSeF wejdziesz profilem zaufanym, wygenerujesz tam certyfikat KSeF i dodasz go w ustawieniach FaktWay. Przy wgrywaniu plików działa klucz prywatny RSA w formacie PEM (PKCS#8) bez hasła.',
     },
   ],
   [
     {
       q: 'Co się dzieje, gdy KSeF nie odpowiada?',
-      a: 'Ponawiamy wysyłkę sami przez dobę i dajemy Ci znać o wyniku. Jeśli KSeF dalej nie działa, wyślesz fakturę ponownie jednym przyciskiem.',
+      a: 'Ponawiamy wysyłkę sami: najpierw kilka razy w ciągu około półtorej godziny, potem co kilka godzin. Fakturę możesz też wysłać ponownie jednym przyciskiem.',
     },
     {
       q: 'Przeniesiecie moje dane z innego programu?',
@@ -205,7 +205,7 @@ const QUESTIONS = [
   [
     {
       q: 'Gdzie trzymacie moje dane?',
-      a: 'Na serwerach w Niemczech. Połączenia są szyfrowane, a certyfikat KSeF zapisujemy zaszyfrowany. Dokumenty trzymamy przez cały czas korzystania z FaktWay i w każdej chwili możesz je wyeksportować. Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów.',
+      a: 'Na serwerach w Niemczech. Połączenia są szyfrowane, a certyfikat KSeF zapisujemy zaszyfrowany. Dokumenty trzymamy przez cały czas korzystania z FaktWay i w każdej chwili możesz je wyeksportować. Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów. Odczyt kosztów ze zdjęcia i wysyłka e-maili korzystają z dostawców spoza UE, a ich listę znajdziesz w dokumentach prawnych, na stronie „Podmioty przetwarzające”.',
     },
     {
       q: 'Czy mogę zrezygnować w każdej chwili?',

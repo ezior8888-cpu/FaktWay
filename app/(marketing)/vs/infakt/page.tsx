@@ -265,7 +265,7 @@ export default function InfaktPage() {
             Odczyt dokumentów z kolei nie może być &bdquo;ładną ikonką&rdquo; w cenniku. Musi radzić sobie z krzywym skanem, drugą stroną faktury z regulaminem na odwrocie i tabelą pozycji, gdzie każda linia ma inną stawkę VAT. Ograniczenia, takie jak limit stron albo brak uczenia z poprawek, przekładają się bezpośrednio na godziny Twojej pracy albo koszt księgowej. Dlatego w tabeli porównawczej celowo eksponujemy te wiersze.
           </p>
           <p>
-            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR, dodatkowe firmy czy wyższe limity dokumentów bywa nieprzewidywalna. FaktWay trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu, stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
+            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR czy wyższe limity dokumentów bywa nieprzewidywalna. FaktWay trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu, stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
           </p>
         </section>
 
