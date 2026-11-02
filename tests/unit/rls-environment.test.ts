@@ -76,6 +76,7 @@ describe('separate RLS test configuration', () => {
       // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
       // CHECK-i, ksef_upo_expected i filtr osadzenia `invoices!inner` przez PostgREST.
       'tests/rls-historia-ksef.test.ts',
+      'tests/rls-skrzynka-harmonogram.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
