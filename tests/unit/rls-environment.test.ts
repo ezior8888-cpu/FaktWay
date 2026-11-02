@@ -76,6 +76,9 @@ describe('separate RLS test configuration', () => {
       // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
       // CHECK-i, ksef_upo_expected i filtr osadzenia `invoices!inner` przez PostgREST.
       'tests/rls-historia-ksef.test.ts',
+      // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej faktury
+      // w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji przez psql.
+      'tests/rls-lejek-analityka.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
