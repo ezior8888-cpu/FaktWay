@@ -20,6 +20,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { MOBILE_MEDIA } from '@/hooks/use-mobile';
+import { sendExpenseFile } from '@/lib/expenses/photo-upload';
+import { ACTION_FILE_LIMIT_LABEL } from '@/lib/upload-limit';
 import { cn } from '@/lib/utils';
 
 type CaptureState =
@@ -124,9 +126,9 @@ export function CaptureButton({
     setState({ kind: 'uploading' });
 
     startUpload(async () => {
-      const fd = new FormData();
-      fd.append('photo', file);
-      const result = await uploadExpensePhotoAction(fd);
+      // Zdjęcie zmniejszone, plik ponad limit akcji zatrzymany z komunikatem,
+      // odrzucona obietnica akcji jako błąd (plan skalowania, sesja 4).
+      const result = await sendExpenseFile(file, uploadExpensePhotoAction);
 
       if (!result.success) {
         setState({ kind: 'failed', error: result.error });
@@ -211,7 +213,7 @@ export function CaptureButton({
           </div>
           <SheetFooter>
             <p className="text-muted-foreground text-center text-xs">
-              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Max 10 MB.
+              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Zdjęcia zmniejszamy sami, PDF do {ACTION_FILE_LIMIT_LABEL}.
             </p>
           </SheetFooter>
         </SheetContent>
