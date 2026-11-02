@@ -20,7 +20,11 @@ vi.mock('@/lib/dashboard/expense-stats', () => ({
   getInboxMonthCosts: vi.fn(async () => ({ month: '2026-10', gross: 0, count: 0 })),
   countExpensesToReview: vi.fn(async () => 0),
   getLastInboxFetchAt: vi.fn(async () => null),
+  getInboxScheduleSummary: vi.fn(async () => null),
 }));
+// Strona zleca przyspieszenie terminu po odpowiedzi; poza żądaniem `after` by rzucił.
+vi.mock('next/server', () => ({ after: vi.fn() }));
+vi.mock('@/lib/ksef/inbox-activity', () => ({ requestInboxPollOnVisit: vi.fn() }));
 vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: vi.fn(async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null })) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

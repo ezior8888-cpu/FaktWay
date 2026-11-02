@@ -16,7 +16,8 @@ export type RateLimitBucket =
   | 'invoice_email'
   | 'invitation'
   | 'batch_pdf'
-  | 'ksef_certificate';
+  | 'ksef_certificate'
+  | 'ksef_inbox_check';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

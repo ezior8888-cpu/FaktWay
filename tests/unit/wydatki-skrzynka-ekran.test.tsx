@@ -19,6 +19,7 @@ const stats = vi.hoisted(() => ({
   getInboxMonthCosts: vi.fn(),
   countExpensesToReview: vi.fn(),
   getLastInboxFetchAt: vi.fn(),
+  getInboxScheduleSummary: vi.fn(),
   verified: vi.fn(),
   trybCtx: null as unknown,
 }));
@@ -37,6 +38,9 @@ vi.mock('@/lib/demo/tryb-danych', () => ({
   },
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// Strona zleca przyspieszenie terminu po odpowiedzi; poza żądaniem `after` by rzucił.
+vi.mock('next/server', () => ({ after: vi.fn() }));
+vi.mock('@/lib/ksef/inbox-activity', () => ({ requestInboxPollOnVisit: vi.fn() }));
 vi.mock('sonner', () => ({ toast }));
 vi.mock('@/app/actions/expenses', () => ({
   deleteExpenseAction: vi.fn(),
@@ -517,6 +521,40 @@ describe('Skrzynka KSeF P9', () => {
     stats.verified.mockResolvedValue(false);
     const noKsef = html((await InboxLastFetchCell(props)) as ReactElement);
     expect(noKsef).toContain('Podłącz KSeF, a faktury kosztowe pobierzemy same');
+    expect(noKsef).not.toContain('Sprawdź teraz');
+  });
+
+  it('kafel: „Sprawdź teraz” i ostatnie sprawdzenie, gdy firma ma harmonogram', async () => {
+    stats.getLastInboxFetchAt.mockResolvedValue('2026-10-19T14:05:00Z');
+    stats.getInboxScheduleSummary.mockResolvedValue({ lastCheckedAt: '2026-10-20T08:30:00Z' });
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
+
+    const cell = html((await InboxLastFetchCell(props)) as ReactElement);
+    expect(cell).toContain('Sprawdź teraz');
+    expect(cell).toContain('19.10.2026, 16:05');
+    expect(cell).toContain('Ostatnie sprawdzenie: 20.10.2026, 10:30');
+    expect(cell).toContain('sprawdzamy KSeF co 15 minut');
+    expect(cell).not.toMatch(/[—–]/);
+  });
+
+  it('kafel: przed pierwszą fakturą przycisk też jest, gdy firma ma KSeF', async () => {
+    stats.getLastInboxFetchAt.mockResolvedValue(null);
+    stats.getInboxScheduleSummary.mockResolvedValue({ lastCheckedAt: null });
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
+
+    const cell = html((await InboxLastFetchCell(props)) as ReactElement);
+    expect(cell).toContain('Jeszcze nie pobraliśmy żadnej faktury');
+    expect(cell).toContain('Sprawdź teraz');
+  });
+
+  it('kafel: bez harmonogramu (firma bez KSeF albo baza przed 00160) bez przycisku, dotychczasowy tekst', async () => {
+    stats.getLastInboxFetchAt.mockResolvedValue('2026-10-19T14:05:00Z');
+    stats.getInboxScheduleSummary.mockResolvedValue(null);
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
+
+    const cell = html((await InboxLastFetchCell(props)) as ReactElement);
+    expect(cell).toContain('Sprawdzamy KSeF co 15 minut');
+    expect(cell).not.toContain('Sprawdź teraz');
   });
 });
 
