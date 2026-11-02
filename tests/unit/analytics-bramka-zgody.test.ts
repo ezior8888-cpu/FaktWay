@@ -5,7 +5,8 @@ import { PostHog } from 'posthog-node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ANALYTICS_EVENTS, type AnalyticsEventName } from '@/lib/analytics/events';
-import { identifyServer, trackServer } from '@/lib/analytics/server';
+import { firstTouchPersonProperties, sanitizeFirstTouch } from '@/lib/analytics/privacy';
+import { identifyServer, trackServer, unsetFirstTouchServer } from '@/lib/analytics/server';
 
 import { memoryDb, type MemoryDb, type Row } from '../helpers/fake-supabase-memory';
 import { fakePosthog, lejekClient } from '../helpers/lejek-atrapy';
@@ -110,6 +111,33 @@ describe('zdarzenia firmy: zgoda właściciela z bazy', () => {
     db.failures['rpc:analytics_tenant_owner'] = { code: '42883', message: 'brak funkcji' };
     await expect(trackServer({ tenantId: TENANT, event: ANALYTICS_EVENTS.paymentSucceeded })).resolves.toBeUndefined();
     expect(posthog.messages).toEqual([]);
+  });
+});
+
+describe('odwołanie zgody zdejmuje źródło wejścia z osoby w PostHogu', () => {
+  it('$unset obejmuje dokładnie te właściwości, które lejek ustawia w $set_once', async () => {
+    seed({ analytics_consent: 'denied', signup_source: null });
+    await unsetFirstTouchServer(OWNER);
+    expect(posthog.messages).toHaveLength(1);
+    const message = posthog.messages[0]!;
+    expect(message).toMatchObject({ distinctId: OWNER, event: '$set' });
+    const full = sanitizeFirstTouch({
+      ...SOURCE, utm_term: 'term', utm_content: 'content',
+    })!;
+    expect([...(message.properties!.$unset as string[])].sort()).toEqual(
+      Object.keys(firstTouchPersonProperties(full)).sort(),
+    );
+  });
+
+  it('nie dotyka bramki zgody (służy wycofaniu), ale odrzuca niebezpieczny identyfikator', async () => {
+    await unsetFirstTouchServer('osoba@example.com');
+    await unsetFirstTouchServer('');
+    expect(posthog.messages).toEqual([]);
+  });
+
+  it('awaria PostHoga nie przerywa odwołania', async () => {
+    h.posthog = { capture: () => { throw new Error('posthog down'); }, flush: async () => undefined };
+    await expect(unsetFirstTouchServer(OWNER)).resolves.toBeUndefined();
   });
 });
 

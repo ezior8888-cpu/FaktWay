@@ -44,7 +44,13 @@ bierz `/admin`, a PostHoga do pytania „gdzie i dlaczego odpadają”.
   się zgoda **najstarszego aktywnego właściciela** (`analytics_tenant_owner`). Na niego
   też idzie `distinct_id`, dzięki czemu lejek widzi jedną osobę od rejestracji po płatność.
 - Odwołanie: przeglądarka przestaje wysyłać od razu, ciasteczko źródła znika od razu,
-  serwer przestaje wysyłać przy następnym zdarzeniu, `users.signup_source` jest kasowane.
+  serwer przestaje wysyłać przy następnym zdarzeniu, `users.signup_source` jest kasowane,
+  a z osoby w PostHogu znikają właściwości źródła (`$unset`, `unsetFirstTouchServer`;
+  wysyła je akcja tylko wtedy, gdy RPC zgłosi `withdrawn`, czyli zgoda faktycznie była).
+  Zdarzenia już wysłane zostają w PostHogu do końca retencji (24 miesiące) i tak mówią
+  obie polityki. Usunięcie osoby z PostHoga na prośbę (art. 17 RODO, także po usunięciu
+  konta) idzie ręcznie: Persons, wyszukaj `distinct_id` (id konta z `users` albo
+  `audit_logs`), „Delete person and events”. Zadanie, które robiłoby to samo, to osobne ustalenie.
 - Miejsca zmiany: baner, `/legal/cookies`, Ustawienia → Konto i dane (RODO).
 - Każda zmiana decyzji to wpis `analytics.consent_changed` w `audit_logs` z wersją
   oświadczenia (`ANALYTICS_STATEMENT` w `lib/legal/versions.ts`).

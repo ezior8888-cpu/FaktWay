@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { FUNNEL_EVENTS, type AnalyticsEventName, type AnalyticsProperties } from './events';
 import { getPostHogNodeClient } from './posthog-node-client';
 import {
+  FIRST_TOUCH_PERSON_PROPERTY_NAMES,
   firstTouchPersonProperties,
   isAllowedAnalyticsEvent,
   isSafeAnalyticsId,
@@ -119,6 +120,28 @@ export async function trackServer(input: TrackServerInput): Promise<void> {
     await c.flush();
   } catch (err) {
     console.error('[analytics:server] capture failed:', err);
+  }
+}
+
+/**
+ * Odwołanie zgody: zdejmuje z osoby w PostHogu właściwości źródła wejścia, które lejek
+ * ustawił jako `$set_once`. Celowo poza bramką zgody, bo służy wycofaniu. Zdarzenia już
+ * wysłane zostają w PostHogu (polityka prywatności mówi o tym wprost). Awaria nie psuje
+ * odwołania, które jest już zapisane na koncie.
+ */
+export async function unsetFirstTouchServer(distinctId: string): Promise<void> {
+  if (!isSafeAnalyticsId(distinctId)) return;
+  const c = getPostHogNodeClient();
+  if (!c) return;
+  try {
+    c.capture({
+      distinctId,
+      event: '$set',
+      properties: { $unset: [...FIRST_TOUCH_PERSON_PROPERTY_NAMES] },
+    });
+    await c.flush();
+  } catch (err) {
+    console.error('[analytics:server] unset failed:', err);
   }
 }
 

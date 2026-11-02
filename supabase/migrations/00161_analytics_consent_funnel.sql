@@ -167,11 +167,13 @@ UPDATE public.tenants t
 -- bez daty: zgoda liczy się wyłącznie na koncie bez decyzji. Odwołanie wygrywa zawsze
 -- i dostaje stempel serwera: zegar urządzenia (np. 2 h do tyłu) nie może go zablokować.
 -- `changed` mówi, czy decyzja naprawdę się zmieniła (wtedy akcja dopisuje wpis w audit_logs).
+-- `withdrawn` mówi, że ta osoba miała zgodę i właśnie ją odwołała: tylko wtedy akcja zdejmuje
+-- z osoby w PostHogu właściwości źródła. Pierwsza odmowa (bez wcześniejszej zgody) nic tam nie wysyła.
 CREATE OR REPLACE FUNCTION public.sync_analytics_consent(
   p_consent text DEFAULT NULL,
   p_chosen_at timestamptz DEFAULT NULL
 )
-RETURNS TABLE (consent text, consent_at timestamptz, changed boolean)
+RETURNS TABLE (consent text, consent_at timestamptz, changed boolean, withdrawn boolean)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
@@ -181,6 +183,7 @@ DECLARE
   v_previous text;
   v_at timestamptz;
   v_changed boolean := false;
+  v_withdrawn boolean := false;
 BEGIN
   IF v_user IS NULL THEN
     RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '42501';
@@ -209,10 +212,11 @@ BEGIN
          OR (p_chosen_at IS NOT NULL AND u.analytics_consent_at < v_at)
        );
     v_changed := FOUND AND v_previous IS DISTINCT FROM p_consent;
+    v_withdrawn := v_changed AND v_previous IS NOT DISTINCT FROM 'granted' AND p_consent = 'denied';
   END IF;
 
   RETURN QUERY
-    SELECT u.analytics_consent, u.analytics_consent_at, v_changed
+    SELECT u.analytics_consent, u.analytics_consent_at, v_changed, v_withdrawn
       FROM public.users u
      WHERE u.id = v_user;
 END;

@@ -110,7 +110,7 @@ export const POLITYKA_PRYWATNOSCI: LegalDocument = {
             'Analityka korzystania z serwisu (PostHog): w przeglądarce i zdarzenia z serwera (np. rejestracja, podłączenie KSeF, pierwsza faktura, próba, płatność, rezygnacja), wyłącznie za zgodą',
             'pseudonimowy identyfikator użytkownika i firmy, odwiedzane sekcje serwisu, typ urządzenia i przeglądarki, zdarzenie z zamkniętej listy, źródło wejścia (kanał, parametry kampanii, host strony odsyłającej, strona wejścia); bez treści dokumentów i bez adresu IP',
             'art. 6 ust. 1 lit. a RODO i art. 399 Prawa komunikacji elektronicznej (zgoda)',
-            'do wycofania zgody, nie dłużej niż 24 miesiące; źródło wejścia przy koncie usuwamy przy wycofaniu zgody',
+            'do wycofania zgody, nie dłużej niż 24 miesiące; po wycofaniu usuwamy źródło wejścia z konta i z profilu osoby w PostHogu, a zdarzenia już wysłane zostają tam pod pseudonimowym identyfikatorem do końca tego okresu albo do usunięcia na Twoją prośbę, także po usunięciu Konta',
           ],
           [
             'Zbiorcze statystyki firm w panelu administratora (np. ile nowych firm w danym tygodniu podłączyło KSeF i zaczęło płacić)',

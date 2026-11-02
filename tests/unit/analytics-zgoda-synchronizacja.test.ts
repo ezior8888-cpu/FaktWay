@@ -262,6 +262,7 @@ describe('akcja serwerowa', () => {
   const rpc = vi.fn();
   const getUser = vi.fn();
   const audit = vi.fn();
+  const unset = vi.fn();
   const USER = '00000000-0000-4000-8000-000000000031';
 
   async function action() {
@@ -271,6 +272,7 @@ describe('akcja serwerowa', () => {
       createClient: async () => ({ auth: { getUser }, rpc }),
     }));
     vi.doMock('@/lib/audit/log', () => ({ logAudit: audit }));
+    vi.doMock('@/lib/analytics/server', () => ({ unsetFirstTouchServer: unset }));
     return (await import('@/app/actions/analytics-consent')).syncAnalyticsConsentAction;
   }
 
@@ -278,12 +280,32 @@ describe('akcja serwerowa', () => {
     rpc.mockReset();
     getUser.mockReset();
     audit.mockReset();
+    unset.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: USER } } });
-    rpc.mockResolvedValue({ data: [{ consent: 'granted', consent_at: T0, changed: true }], error: null });
+    rpc.mockResolvedValue({ data: [{ consent: 'granted', consent_at: T0, changed: true, withdrawn: false }], error: null });
   });
   afterEach(() => {
     vi.doUnmock('@/lib/supabase/server');
     vi.doUnmock('@/lib/audit/log');
+    vi.doUnmock('@/lib/analytics/server');
+  });
+
+  it('odwołanie zgody, która była: zdejmuje źródło wejścia z osoby w PostHogu', async () => {
+    rpc.mockResolvedValue({ data: [{ consent: 'denied', consent_at: T1, changed: true, withdrawn: true }], error: null });
+    const run = await action();
+    await expect(run({ consent: 'denied', chosenAt: T1 })).resolves.toEqual({ status: 'ok', consent: 'denied', consentAt: T1 });
+    expect(unset).toHaveBeenCalledExactlyOnceWith(USER);
+  });
+
+  it.each([
+    ['pierwsza odmowa, bez wcześniejszej zgody', { consent: 'denied', changed: true, withdrawn: false }],
+    ['zgoda', { consent: 'granted', changed: true, withdrawn: false }],
+    ['odczyt albo powtórka', { consent: 'denied', changed: false, withdrawn: false }],
+  ])('%s: do PostHoga nic nie idzie', async (_label, row) => {
+    rpc.mockResolvedValue({ data: [{ ...row, consent_at: T1 }], error: null });
+    const run = await action();
+    await run({ consent: row.consent as 'granted' | 'denied', chosenAt: T1 });
+    expect(unset).not.toHaveBeenCalled();
   });
 
   it('bez sesji: nic nie zapisuje', async () => {

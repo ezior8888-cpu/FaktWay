@@ -218,6 +218,19 @@ export function firstTouchPersonProperties(touch: FirstTouch): Properties {
   return { first_touch_channel: channel, ...fields, first_touch_at: at };
 }
 
+/**
+ * Wszystkie nazwy, które `firstTouchPersonProperties` może ustawić na osobie.
+ * Przy odwołaniu zgody zdejmujemy je z osoby w PostHogu ($unset); test pilnuje,
+ * żeby lista nadążała za `FirstTouch`.
+ */
+export const FIRST_TOUCH_PERSON_PROPERTY_NAMES: readonly string[] = [
+  'first_touch_channel',
+  ...UTM_FIELDS,
+  'referrer_host',
+  'landing_path',
+  'first_touch_at',
+];
+
 /** Final outbound allowlist also strips old persisted person properties. */
 export function sanitizeAnalyticsEvent(event: CaptureResult | null): CaptureResult | null {
   if (!event || !hasAnalyticsConsent() || !ALLOWED_EVENTS.has(event.event)) return null;

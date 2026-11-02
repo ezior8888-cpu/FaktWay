@@ -260,7 +260,10 @@ describe.skipIf(!hasDatabase)('00161: pomiar na prawdziwej bazie', () => {
 
     const sync = async (client: SupabaseClient, consent: string | null, chosenAt: string | null) => {
       const { data, error } = await client.rpc('sync_analytics_consent', { p_consent: consent, p_chosen_at: chosenAt });
-      return { row: (data as Array<{ consent: string | null; consent_at: string | null; changed: boolean }> | null)?.[0], error };
+      return {
+        row: (data as Array<{ consent: string | null; consent_at: string | null; changed: boolean; withdrawn: boolean }> | null)?.[0],
+        error,
+      };
     };
 
     it('anonim nie woła funkcji', async () => {
@@ -297,7 +300,24 @@ describe.skipIf(!hasDatabase)('00161: pomiar na prawdziwej bazie', () => {
     it('brak decyzji na koncie: odczyt zwraca same puste wartości', async () => {
       await resetConsent(ownerId);
       const read = await sync(owner, null, null);
-      expect(read.row).toEqual({ consent: null, consent_at: null, changed: false });
+      expect(read.row).toEqual({ consent: null, consent_at: null, changed: false, withdrawn: false });
+    });
+
+    it('withdrawn: tylko odwołanie zgody, która była; pierwsza odmowa i powtórka nie są odwołaniem', async () => {
+      await resetConsent(ownerId);
+      const first = await sync(owner, 'denied', T0);
+      expect(first.row).toMatchObject({ consent: 'denied', changed: true, withdrawn: false });
+
+      await resetConsent(ownerId, { analytics_consent: 'granted', analytics_consent_at: T0, signup_source: SOURCE });
+      const withdrawal = await sync(owner, 'denied', T1);
+      expect(withdrawal.row).toMatchObject({ consent: 'denied', changed: true, withdrawn: true });
+      const again = await sync(owner, 'denied', T1);
+      expect(again.row).toMatchObject({ changed: false, withdrawn: false });
+
+      // Odwołanie ma stempel serwera, więc ponowna zgoda musi być od niego późniejsza (data z przyszłości
+      // jest obcinana do chwili serwera).
+      const grant = await sync(owner, 'granted', new Date(Date.now() + 60_000).toISOString());
+      expect(grant.row).toMatchObject({ consent: 'granted', changed: true, withdrawn: false });
     });
 
     it('odwołanie kasuje źródło wejścia od razu', async () => {

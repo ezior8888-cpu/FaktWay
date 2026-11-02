@@ -70,6 +70,7 @@ U nas to jest **zbudowane tak**:
 
 - Nie wklejaj jawnego `phc_…` do `app/layout.tsx`, `browser-posthog.ts` ani innych plików **commitowanych** do Gita.
 - Nie duplikuj drugiego `posthog.init` — tylko `initPosthogBrowser()` w `instrumentation-client.ts`.
+- **Ustawienia projektu, które obiecuje polityka prywatności (nie kod, sprawdź po założeniu projektu i po zmianie planu):** retencja zdarzeń 24 miesiące oraz odrzucanie adresu IP klienta („Discard client IP data”). Opcja `ip: false` w SDK nie działa, więc zdanie „bez adresu IP” trzyma tylko to ustawienie.
 - **Scroll depth (3/3 w wizardzie):** w PostHog → **Project settings → Web analytics** włącz „Scroll depth” (to ustawienie projektu, nie kod).
 - **Nie modyfikuj `proxy.ts` pod PostHog** — to Edge proxy (sesja Supabase). Wizard pisze „proxy.ts”, ale chodzi o **inny** typ aplikacji. U nas:
   - `new PostHog(token, { host })` → **`lib/analytics/posthog-node-client.ts`** (token z env)

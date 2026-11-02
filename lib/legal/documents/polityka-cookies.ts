@@ -58,14 +58,14 @@ export const POLITYKA_COOKIES: LegalDocument = {
       'analityczne',
       '3. Analityka (tylko za zgodą)',
       p('Za Twoją zgodą korzystamy z PostHog (serwery w UE), żeby rozumieć, których części serwisu używasz, i poprawiać produkt. PostHog nie zapisuje plików cookies ani danych w pamięci przeglądarki (działa wyłącznie w pamięci otwartej karty), nie zbiera adresu IP ani treści dokumentów, a adresy stron skraca do nazwy sekcji. Nie nagrywamy sesji i nie śledzimy kliknięć automatycznie.'),
-      p('Za tą samą zgodą zapisujemy jedno własne ciasteczko, żeby wiedzieć, skąd do nas trafiłeś. Przechowuje parametry kampanii z adresu (utm), sam host strony odsyłającej, stronę wejścia i datę. Nie zapisujemy identyfikatorów kliknięć reklam. Przy rejestracji dane te trafiają do Twojego konta, a przy wycofaniu zgody je usuwamy.'),
+      p('Za tą samą zgodą zapisujemy jedno własne ciasteczko, żeby wiedzieć, skąd do nas trafiłeś. Przechowuje parametry kampanii z adresu (utm), sam host strony odsyłającej, stronę wejścia i datę. Nie zapisujemy identyfikatorów kliknięć reklam. Przy rejestracji dane te trafiają do Twojego konta. Przy wycofaniu zgody usuwamy je z konta i zdejmujemy z Twojego profilu w PostHogu. Zdarzenia, które PostHog już od nas dostał, zostają tam pod pseudonimowym identyfikatorem do końca okresu przechowywania (24 miesiące) albo do usunięcia na Twoją prośbę.'),
       table(
         ['Nazwa', 'Rodzaj', 'Do czego służy', 'Jak długo'],
         [
-          [ATTRIBUTION_COOKIE, 'cookie (własne)', 'zapamiętanie, skąd do nas trafiłeś, żeby przypisać to do konta przy rejestracji', 'do rejestracji, do zapisania decyzji na koncie albo do wycofania zgody, najdłużej 90 dni; po rejestracji zostaje sam znacznik bez danych, do następnego wejścia na stronę'],
+          [ATTRIBUTION_COOKIE, 'cookie (własne)', 'zapamiętanie, skąd do nas trafiłeś, żeby przypisać to do konta przy rejestracji', 'do rejestracji, do zapisania decyzji na koncie, do wylogowania albo do wycofania zgody, najdłużej 90 dni; po rejestracji zostaje sam znacznik bez danych, do następnego wejścia na stronę'],
         ],
       ),
-      p('Zgoda jest dobrowolna. Możesz ją wycofać w każdej chwili przyciskiem w sekcji „Twoje ustawienia”, a po zalogowaniu także w Ustawienia → Konto i dane (RODO). Wycofanie działa od razu, także dla zdarzeń wysyłanych z naszego serwera, i nie wpływa na zgodność z prawem wcześniejszego przetwarzania.'),
+      p('Zgoda jest dobrowolna. Możesz ją wycofać w każdej chwili przyciskiem w sekcji „Twoje ustawienia”, a po zalogowaniu także w Ustawienia → Konto i dane (RODO). Wycofanie działa od razu w tej przeglądarce. Dla zdarzeń wysyłanych z naszego serwera działa od zapisu na koncie: gdy klikniesz, będąc wylogowanym, zapiszemy je na koncie przy najbliższym logowaniu w tej przeglądarce, a do tego czasu te zdarzenia mogą jeszcze wychodzić. Wycofanie nie wpływa na zgodność z prawem wcześniejszego przetwarzania.'),
     ),
     section(
       'zewnetrzne',

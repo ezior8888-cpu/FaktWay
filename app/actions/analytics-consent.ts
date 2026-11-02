@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 
+import { unsetFirstTouchServer } from '@/lib/analytics/server';
 import { logAudit } from '@/lib/audit/log';
 import { ANALYTICS_STATEMENT } from '@/lib/legal/versions';
 import { createClient } from '@/lib/supabase/server';
@@ -20,6 +21,7 @@ interface ConsentRow {
   consent: 'granted' | 'denied' | null;
   consent_at: string | null;
   changed: boolean;
+  withdrawn: boolean;
 }
 
 /**
@@ -61,6 +63,10 @@ export async function syncAnalyticsConsentAction(
       },
     });
   }
+
+  // Odwołanie zgody, która była: z osoby w PostHogu znikają właściwości źródła wejścia.
+  // Bez błędu dla klienta (odwołanie jest już zapisane na koncie).
+  if (row.withdrawn) await unsetFirstTouchServer(user.id);
 
   return { status: 'ok', consent: row.consent, consentAt: row.consent_at };
 }
