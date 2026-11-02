@@ -7,9 +7,9 @@ import {
   CONSENT_KEY,
   getAnalyticsConsent,
   isAnalyticsConfigured,
-  setAnalyticsConsent,
   type ConsentState,
 } from '@/lib/analytics/consent';
+import { chooseAnalyticsConsent } from '@/lib/analytics/consent-sync';
 
 function subscribe(onChange: () => void): () => void {
   const onStorage = (event: StorageEvent) => {
@@ -57,7 +57,7 @@ export function CookieSettings() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => setAnalyticsConsent(true)}
+          onClick={() => chooseAnalyticsConsent(true)}
           disabled={state === 'granted'}
           className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
@@ -65,7 +65,7 @@ export function CookieSettings() {
         </button>
         <button
           type="button"
-          onClick={() => setAnalyticsConsent(false)}
+          onClick={() => chooseAnalyticsConsent(false)}
           disabled={state === 'denied'}
           className="rounded-full px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-border transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
         >

@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { initAttribution } from '@/lib/analytics/attribution';
 import { initPosthogBrowser } from '@/lib/analytics/init-posthog-browser';
 import { sentryPrivacyOptions } from '@/lib/observability/scrub';
 
@@ -21,5 +22,6 @@ Sentry.init({
 });
 
 initPosthogBrowser();
+initAttribution();
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
