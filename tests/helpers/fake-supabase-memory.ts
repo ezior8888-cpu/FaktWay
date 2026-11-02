@@ -95,12 +95,12 @@ export function fakeSupabase(db: MemoryDb) {
           filters.push((r) => (r[k] ?? null) === v);
           return q;
         },
-        // `gt`: liczby (kwoty) albo teksty (daty ISO); brak wartości nie spełnia warunku.
+        // `gt`: liczby (kwoty) tylko dla liczb; teksty (daty ISO) jak dotąd leksykograficznie,
+        // a brak wartości (kolumna z `DEFAULT now()` w bazie, której atrapa nie ustawia)
+        // przechodzi: na tym stoją testy wyzwań WebAuthn (`expires_at`).
         gt: (k: string, v: number | string) => {
           filters.push((r) =>
-            typeof v === 'number'
-              ? typeof r[k] === 'number' && r[k] > v
-              : r[k] != null && String(r[k]) > v,
+            typeof v === 'number' ? typeof r[k] === 'number' && r[k] > v : String(r[k]) > v,
           );
           return q;
         },

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { memoryDb, type MemoryDb, type Row } from '../helpers/fake-supabase-memory';
 import { fakePosthog, lejekClient } from '../helpers/lejek-atrapy';
+import { makeSelfSignedCertificate } from '../helpers/self-signed-cert';
 
 /**
  * ksef_configured: pierwsze skuteczne podłączenie, czyli wynik `claimed` z RPC.
@@ -66,7 +67,10 @@ vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: h.rateLimit }));
 
 import { uploadCertificateAction } from '@/components/settings/actions';
 
-const pem = { certPem: 'CERTIFICATE_FIXTURE', keyPem: 'PRIVATE_KEY_FIXTURE' };
+// Akcja czyta pliki naprawdę (kreator KSeF), więc fixture to prawdziwy certyfikat samopodpisany.
+const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64');
+const material = makeSelfSignedCertificate({ kind: 'ec', nip: '1234567890' });
+const pem = { certificate: b64(material.certPem), privateKey: b64(material.keyPem) };
 let posthog: ReturnType<typeof fakePosthog>;
 
 function seed(owner: Row = {}) {

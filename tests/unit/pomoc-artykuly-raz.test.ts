@@ -68,8 +68,9 @@ describe('getAllHelpArticles', () => {
   it('getArticlesByCategory korzysta z tej samej listy', async () => {
     const { getAllHelpArticles, getArticlesByCategory } = await swiezyModul();
     getAllHelpArticles();
-    const flo = getArticlesByCategory('flo');
+    const ksef = getArticlesByCategory('ksef');
     expect(readdir).toHaveBeenCalledTimes(1);
-    expect(flo.every((a) => a.category === 'flo')).toBe(true);
+    expect(ksef.length).toBeGreaterThan(0);
+    expect(ksef.every((a) => a.category === 'ksef')).toBe(true);
   });
 });

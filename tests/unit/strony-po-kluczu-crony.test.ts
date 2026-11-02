@@ -44,7 +44,6 @@ vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: m.audit }));
 
 import { runCertExpiryAlert } from '@/lib/jobs/runners/cert-expiry-alert';
 import { runCoPilotMonthly } from '@/lib/jobs/runners/co-pilot-monthly';
-import { runInboxPolling } from '@/lib/jobs/runners/inbox-polling';
 import { runKsefHistorySync } from '@/lib/jobs/runners/ksef-history-sync';
 
 // Atrapa w pamięci na 2500 firmach: lokalnie ok. 1 s na test, zapas na wolniejszy runner CI.
@@ -91,25 +90,6 @@ function longestTenantIn(table: string): number {
   return Math.max(0, ...sizes);
 }
 
-/** N-te zapytanie SELECT do tabeli kończy się błędem bazy (pozostałe działają). */
-function failNthSelect(table: string, nth: number): void {
-  const client = historyClient(db);
-  let calls = 0;
-  m.db = {
-    ...client,
-    from(name: string) {
-      const q = client.from(name) as ReturnType<typeof client.from> & { then: unknown };
-      if (name !== table) return q;
-      calls += 1;
-      if (calls === nth) {
-        q.then = (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) =>
-          Promise.resolve({ data: null, count: null, error: { message: 'canceling statement due to statement timeout' } }).then(ok, fail);
-      }
-      return q;
-    },
-  };
-}
-
 function context(sendEvent = vi.fn()): JobContext {
   return {
     attempt: 0,
@@ -130,28 +110,10 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
-describe('skrzynka KSeF (cron.inbox-polling)', () => {
-  it(`${FIRMS} firm z KSeF → ${FIRMS} zadań inbox/poll.tenant, każda firma raz, jedno wysłanie po całej liście`, async () => {
-    useDb({ tenants: heapOrder(FIRMS).map((n) => tenant(n)) });
-    const sendEvent = vi.fn();
-    await expect(runInboxPolling(context(sendEvent))).resolves.toEqual({ polled: FIRMS });
-
-    expect(sendEvent).toHaveBeenCalledTimes(1);
-    const events = sendEvent.mock.calls[0]![1] as Array<{ groupId: string; data: { tenantId: string; nip: string } }>;
-    expect(new Set(events.map((e) => e.data.tenantId)).size).toBe(FIRMS);
-    expect(events.every((e) => e.groupId === e.data.nip)).toBe(true);
-    // 5 stron po 500 + pusta strona na koniec.
-    expect(selects('tenants')).toHaveLength(6);
-  });
-
-  it('błąd odczytu strony 2 — cron rzuca i nie wysyła NIC (ponowienie nie zdubluje zadań)', async () => {
-    useDb({ tenants: heapOrder(FIRMS).map((n) => tenant(n)) });
-    failNthSelect('tenants', 2);
-    const sendEvent = vi.fn();
-    await expect(runInboxPolling(context(sendEvent))).rejects.toThrow('Failed to list tenants: canceling statement');
-    expect(sendEvent).not.toHaveBeenCalled();
-  });
-});
+// Skrzynka KSeF (cron.inbox-polling) nie czyta już listy firm: od harmonogramu
+// (FW1, sekcja 3 pkt 6; migracja 00160) bierze należne firmy jednym RPC
+// z limitem slotów, więc ucięcie do 1000 wierszy jej nie dotyczy. Jej testy:
+// tests/unit/skrzynka-harmonogram.test.ts i tests/rls-skrzynka-harmonogram.test.ts.
 
 describe('historia KSeF (cron.ksef-history-sync)', () => {
   // Firmy 1–2000: bez strumieni (nowe), 1–1200 z HWM skrzynki (dostają też

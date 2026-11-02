@@ -141,8 +141,6 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', SUPABASE_URL);
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'fixture-anon-key');
   vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.maintenance.mockResolvedValue(false);
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
 });
@@ -200,7 +198,8 @@ const scenarios: Scenario[] = [
   { name: 'zalogowany na /login → pulpit', path: '/login', status: 307, location: '/dashboard' },
   { name: 'wybór firmy przy pierwszym wejściu', path: '/dashboard', status: 307, location: '/dashboard' },
   { name: 'bez firmy → onboarding', path: '/dashboard', setup: () => { fixture.memberships = 0; }, status: 307, location: '/onboarding' },
-  { name: 'telefon → /mobile', path: '/dashboard', opts: { phone: true }, status: 307, location: '/mobile' },
+  // FaktWay 1.0: panel działa na telefonie, bez bramki /mobile. Zalogowany telefon jedzie na pulpit.
+  { name: 'telefon, zalogowany na landingu → pulpit', path: '/', opts: { phone: true }, status: 307, location: '/dashboard' },
   { name: 'przerwa techniczna (strona)', path: '/dashboard', setup: () => { mocks.maintenance.mockResolvedValue(true); }, status: 307, location: '/przerwa-techniczna' },
   { name: 'MFA do potwierdzenia (strona)', path: '/invoices', setup: () => { fixture.aal = 'aal1'; }, status: 307, location: '/login/two-factor?redirect=%2Finvoices' },
   { name: 'sesja odrzucona przy weryfikacji (strona)', path: '/invoices', setup: () => { fixture.authUser = 'rejected-after-first'; }, status: 307, location: '/login?redirect=%2Finvoices', userCalls: 2 },

@@ -479,10 +479,20 @@ async function renderuj(s: Scenariusz): Promise<Wynik> {
 }
 
 /** Rodzaj zapytania wejścia na Pulpit (do opisu PR i progów niżej). */
+function czyOdczytNaleznosci(z: Zapytanie): boolean {
+  if (z.table !== 'invoices') return false;
+  if (ma(z, 'not', 'advance_invoice_ids', 'eq', '{}')) return true;
+  if (ma(z, 'not', 'parent_invoice_id', 'is', null) && !ma(z, 'eq', 'direction', 'outgoing')) return true;
+  return ma(z, 'eq', 'origin', 'app') && z.calls.some(([m, a]) => m === 'gt' && a[0] === 'gross_total');
+}
+
 function rodzaj(z: Zapytanie): string {
   if (z.table === 'invoice_line_items') return 'pozycje';
   if (z.table === 'ksef_history_sync') return 'historia KSeF';
   if (z.table === 'tenants') return 'firma';
+  // Należności po odwołaniu D-W: `getReceivables` czyta otwarte faktury sprzedaży
+  // oraz listy korekt i faktur rozliczających (bez filtra kierunku).
+  if (czyOdczytNaleznosci(z)) return 'należności';
   if (z.table === 'expenses' || ma(z, 'eq', 'direction', 'incoming') || (z.table === 'invoices' && !ma(z, 'eq', 'direction', 'outgoing'))) {
     return 'koszty';
   }
@@ -561,14 +571,16 @@ describe('izolacja błędów: strażnik zabiera tylko kartę, której okno obejm
     expect(kartyBledu(wynik)).toEqual(['Najlepiej sprzedające się']);
   });
 
-  it('przyjęta faktura bez środowiska sprzed 20 miesięcy — tylko karta rankingów', async () => {
+  // Po odwołaniu D-W (02.11.2026) Należności czytają `getReceivables`, której strażnik
+  // środowiska zabiera kartę przy każdej przyjętej fakturze bez środowiska (bez okna).
+  it('przyjęta faktura bez środowiska sprzed 20 miesięcy — karta rankingów i Należności', async () => {
     const { karty: wynik } = await renderuj(scenariusz('przyjęta faktura bez środowiska sprzed 20 miesięcy'));
-    expect(kartyBledu(wynik)).toEqual(['Najlepiej sprzedające się']);
+    expect(kartyBledu(wynik)).toEqual(['Należności', 'Najlepiej sprzedające się']);
   });
 
-  it('bez środowiska rok i 2 miesiące temu — tylko Przychód (rok wcześniej) i rankingi; luka okna Przychodu nie liczy się', async () => {
+  it('bez środowiska rok i 2 miesiące temu — Przychód (rok wcześniej), Należności i rankingi; luka okna Przychodu nie liczy się', async () => {
     const { karty: wynik } = await renderuj(scenariusz('przyjęta faktura bez środowiska rok i 2 miesiące temu (tylko rok wcześniej Przychodu i klienci)'));
-    expect(kartyBledu(wynik)).toEqual(['Przychód netto', 'Najlepiej sprzedające się']);
+    expect(kartyBledu(wynik)).toEqual(['Przychód netto', 'Należności', 'Najlepiej sprzedające się']);
   });
 
   it('zaliczka w EUR sprzed 4 miesięcy — Średnia (2 miesiące) zostaje', async () => {
@@ -576,14 +588,14 @@ describe('izolacja błędów: strażnik zabiera tylko kartę, której okno obejm
     expect(kartyBledu(wynik)).toEqual(['Finanse', 'Faktury w KSeF', 'Przychód netto', 'VAT należny', 'Najlepiej sprzedające się']);
   });
 
-  it('firma VAT: faktura bez środowiska z datą w przyszłym miesiącu nie zabiera żadnej karty (czyta ją tylko limit VAT)', async () => {
+  it('firma VAT: faktura bez środowiska z datą w przyszłym miesiącu zabiera tylko Należności (czyta ją też limit VAT)', async () => {
     const { karty: wynik } = await renderuj(scenariusz('firma VAT: przyjęta faktura bez środowiska z datą w przyszłym miesiącu'));
-    expect(kartyBledu(wynik)).toEqual([]);
+    expect(kartyBledu(wynik)).toEqual(['Należności']);
   });
 
-  it('firma zwolniona: ta sama faktura zabiera tylko Limit VAT', async () => {
+  it('firma zwolniona: ta sama faktura zabiera Limit VAT i Należności', async () => {
     const { karty: wynik } = await renderuj(scenariusz('zwolniona: przyjęta faktura bez środowiska z datą w przyszłym miesiącu'));
-    expect(kartyBledu(wynik)).toEqual(['Limit VAT']);
+    expect(kartyBledu(wynik)).toEqual(['Limit VAT', 'Należności']);
   });
 
   it('zapis w trakcie odczytu kilku stron: wspólny odczyt pada, karty czytają swoje okna jak dawniej i działają', async () => {
@@ -627,7 +639,7 @@ describe('izolacja błędów: strażnik zabiera tylko kartę, której okno obejm
 });
 
 describe('zapytania na wejście (QRY-02, QAL-05, QRY-05, QRY-07)', () => {
-  it('dane przykładowe: sprzedaż jednym odczytem — 14 zapytań zamiast 26 (wzrost wymaga świadomej zmiany)', async () => {
+  it('dane przykładowe: sprzedaż jednym odczytem — 15 zapytań zamiast 27 (wzrost wymaga świadomej zmiany)', async () => {
     const { zapytania } = await renderuj(scenariusz('dane przykładowe jako prawdziwe'));
     expect(licznik(zapytania).rodzaje).toEqual({
       // Wspólny odczyt sprzedaży: jedna strona i jeden odczyt faktur bez środowiska (dawniej 7 stron i 7 COUNT).
@@ -635,16 +647,18 @@ describe('zapytania na wejście (QRY-02, QAL-05, QRY-05, QRY-07)', () => {
       'strażnik środowiska (wiersze)': 1,
       szkice: 1,
       pozycje: 1,
-      // Poza sesją 19: koszty (E10), należności (E11), ustawienia firmy (VAT w karcie i w kosztach), tryb danych.
+      // Poza sesją 19: koszty (E10), należności, ustawienia firmy (VAT w karcie i w kosztach), tryb danych.
+      // Należności po odwołaniu D-W (02.11.2026) świadomie +1: `getReceivables` czyta trzy razy
+      // (otwarte faktury, korekty, faktury rozliczające), a wpływy od dziś (E11) dwa razy.
       koszty: 5,
-      należności: 2,
+      należności: 3,
       firma: 2,
       'historia KSeF': 1,
     });
-    expect(zapytania).toHaveLength(14);
+    expect(zapytania).toHaveLength(15);
   });
 
-  it('mikrofirma 40 FV/mies.: 35 → 22 zapytań; licznik COUNT tylko na pierwszej stronie i raz na końcu', async () => {
+  it('mikrofirma 40 FV/mies.: 36 → 23 zapytań; licznik COUNT tylko na pierwszej stronie i raz na końcu', async () => {
     const { zapytania } = await renderuj(scenariusz('mikrofirma: 40 faktur miesięcznie przez 24 miesiące'));
     const { rodzaje } = licznik(zapytania);
     expect(rodzaje['sprzedaż: strony']).toBe(3);
@@ -653,7 +667,7 @@ describe('zapytania na wejście (QRY-02, QAL-05, QRY-05, QRY-07)', () => {
     expect(rodzaje['strażnik środowiska (COUNT)']).toBeUndefined();
     // Pozycje: paczki po 100 faktur (długość adresu), do czterech naraz — liczba bez zmian, czas krótszy.
     expect(rodzaje.pozycje).toBe(6);
-    expect(zapytania).toHaveLength(22);
+    expect(zapytania).toHaveLength(23);
     // Strony 2 i 3 wspólnego odczytu idą po kluczu, bez COUNT.
     const strony = zapytania.filter(czyOdczytSprzedazy);
     expect(strony.map((z) => [z.count, z.calls.some(([m]) => m === 'gt'), z.calls.some(([m]) => m === 'range')]))

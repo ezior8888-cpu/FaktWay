@@ -91,8 +91,8 @@ const NOW = new Date('2026-10-23T08:00:00Z');
  * Sesja 19 planu skalowania świadomie −4: karty sprzedaży czytają wspólny
  * zbiór (`lib/dashboard/sales-history.ts`) — poza RSC każda karta czyta go
  * sama (strony + faktury bez środowiska), bez osobnych COUNT. W jednym
- * zakresie `cache()` (render RSC) cały Pulpit to 14 odczytów
- * (`tests/unit/pulpit-jeden-odczyt.test.tsx`).
+ * zakresie `cache()` (render RSC) cały Pulpit to 14 odczytów, a z poprawką D-W
+ * niżej 15 (`tests/unit/pulpit-jeden-odczyt.test.tsx`).
  * Odwołanie D-W (02.11.2026) świadomie +1: prawdziwa firma ma w Należnościach
  * `getReceivables` (faktury, korekty i ROZ) zamiast wpływów od dziś z korektami.
  */

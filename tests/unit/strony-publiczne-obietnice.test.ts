@@ -75,7 +75,8 @@ interface Regula {
 const BEZ_AI: Regula[] = [
   { wzor: /\bflo\b/i, co: 'FLO' },
   { wzor: /asystent/i, co: 'asystent' },
-  { wzor: /\bagent/i, co: 'agent' },
+  // Nagłówek HTTP `user-agent` (logowanie, „Zapamiętaj mnie”) i moduł `phone-user-agent` to nie obietnica.
+  { wzor: /(?<!user-)\bagent/i, co: 'agent' },
   { wzor: /\bAI\b/, co: 'AI' },
   { wzor: /sztuczn/i, co: 'sztuczna inteligencja' },
   { wzor: /inteligentn/i, co: '„inteligentne” funkcje' },

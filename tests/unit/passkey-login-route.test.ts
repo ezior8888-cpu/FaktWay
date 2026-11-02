@@ -197,7 +197,7 @@ describe('POST /api/auth/passkey/login/verify', () => {
       metadata: expect.objectContaining({ method: 'passkey' }),
     }));
     expect(h.track).toHaveBeenCalledWith(expect.objectContaining({
-      distinctId: USER_ID, event: 'login_completed', properties: { method: 'passkey' },
+      userId: USER_ID, event: 'login_completed', properties: { method: 'passkey' },
     }));
 
     // Licznik i ostatnie użycie.

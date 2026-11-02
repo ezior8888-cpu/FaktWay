@@ -125,6 +125,7 @@ describe('KSeF certificate claim action', () => {
 
     await expect(uploadCertificateAction(pem)).resolves.toEqual({
       success: false,
+      reason: 'mfa_required',
       mfaStepUp: true,
       error: 'Zmiana certyfikatu KSeF wymaga potwierdzenia kodem z aplikacji.',
     });

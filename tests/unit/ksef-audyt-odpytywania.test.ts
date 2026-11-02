@@ -235,13 +235,15 @@ describe('skrzynka — przebieg bez zmian nie zapisuje audytu', () => {
     expect(rows()).toEqual([]);
   });
 
-  it('429 na drugiej stronie: tylko wiersz błędu tej strony, przebieg rzuca', async () => {
+  it('429 na drugiej stronie: tylko wiersz błędu tej strony, przebieg kończy się wynikiem rate_limit', async () => {
     const replies = [
       reply(200, { invoices: [faktura(1)], hasMore: true, isTruncated: false, permanentStorageHwmDate: HWM }),
       reply(429, { exception: {} }),
     ];
     ksefHttp(() => replies.shift()!);
-    await expect(runInboxPollTenant(DATA, ctx)).rejects.toMatchObject({ status: 429 });
+    // Harmonogram Skrzynki (FW1): 429 to zwykły stan, ponowieniem jest termin w harmonogramie,
+    // więc przebieg nie rzuca, tylko oddaje klasę błędu.
+    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ fetched: 0, newlyAdded: 0, failed: 'rate_limit' });
     await flushAudit();
     expect(rows()).toEqual([
       expect.objectContaining({

@@ -120,9 +120,10 @@ export async function markInvoicePaidAction(invoiceId: string, paidOn?: string):
   await invalidateTenantDashboard(tenantId);
   revalidatePaymentViews(invoiceId);
   await trackServer({
-    distinctId: user.id,
+    userId: user.id,
+    tenantId,
     event: ANALYTICS_EVENTS.invoiceMarkedPaid,
-    properties: { tenant_id: tenantId, source: 'manual', role },
+    properties: { source: 'manual', role },
   });
   return { success: true, status: 'marked', amount, paidOn: day, number };
 }

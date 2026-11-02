@@ -67,9 +67,10 @@ describe('markInvoicePaidAction', () => {
     });
     expect(m.invalidate).toHaveBeenCalledWith(TENANT);
     expect(m.track).toHaveBeenCalledWith({
-      distinctId: USER,
+      userId: USER,
+      tenantId: TENANT,
       event: 'invoice_marked_paid',
-      properties: { tenant_id: TENANT, source: 'manual', role: 'member' },
+      properties: { source: 'manual', role: 'member' },
     });
     const paths = m.revalidate.mock.calls.map((call) => call[0]);
     expect(paths).toEqual(expect.arrayContaining([

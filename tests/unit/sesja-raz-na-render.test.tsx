@@ -111,6 +111,13 @@ vi.mock('next/navigation', () => ({
   },
 }));
 
+// Harmonogram Skrzynki KSeF: layout panelu woła `after()`, które działa tylko
+// w prawdziwym żądaniu Next. Tu bez odroczonego zapisu aktywności firmy.
+vi.mock('next/server', async (original) => ({
+  ...(await original<typeof import('next/server')>()),
+  after: vi.fn(),
+}));
+
 // Szkielet: komponenty klienckie bez związku z sesją. `AppHeader` renderuje
 // swój `profile`, bo w nim siedzi serwerowe menu profilu z listą firm.
 vi.mock('@/components/dashboard/app-header', () => ({
@@ -155,7 +162,6 @@ vi.mock('@/components/ui/tooltip', async (original) => ({
 vi.mock('@/components/settings/finora/settings-view', () => ({
   default: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }));
-vi.mock('@/components/settings/certificate-upload', () => ({ CertificateUpload: () => null }));
 vi.mock('@/components/settings/complete-nip-form', () => ({ CompleteNipForm: () => null }));
 vi.mock('@/components/invoices/invoice-detail-view', () => ({ InvoiceDetailView: () => null }));
 vi.mock('@/app/(dashboard)/settings/security/_components/password-change-card', () => ({ PasswordChangeCard: () => null }));
@@ -316,6 +322,14 @@ function liczniki() {
 /** Cel sesji 9: jedno sprawdzenie sesji i jedno zapytanie o członkostwo, nic poza tym. */
 const RAZ = { getUser: 1, memberships: 1, siecGetUser: 1, siecMemberships: 1, gotrueInne: 0, rpc: 0 };
 
+/**
+ * Strony, które potwierdzają 2FA przez `getVerifiedMfaState` (Bezpieczeństwo
+ * z logowaniem biometrią, kreator KSeF): w kodzie dwa dodatkowe `getUser(token)`
+ * (wprost i przez `getClaims` przy kluczu HS256). Do sieci wychodzi nadal jedno
+ * (`siecGetUser`), bo Next skleja identyczne GET w renderze.
+ */
+const RAZ_Z_MFA = { ...RAZ, getUser: 3 };
+
 /** Jedno żądanie RSC: pełne drzewo (z asynchronicznymi dziećmi), bez błędów renderu. */
 async function wyrenderuj(drzewo: ReactNode): Promise<string> {
   const bledy: unknown[] = [];
@@ -386,17 +400,17 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
     const out = await wyrenderuj(
       <DashboardLayout>
         <SettingsLayout>
-          <KsefSettingsPage />
+          <KsefSettingsPage searchParams={Promise.resolve({})} />
         </SettingsLayout>
       </DashboardLayout>,
     );
     expect(out).toContain('Skonfigurowano połączenie');
-    expect(liczniki()).toEqual(RAZ);
+    expect(liczniki()).toEqual(RAZ_Z_MFA);
   });
 
   it('/settings/ksef, miękka nawigacja z innej zakładki ustawień (sama strona)', async () => {
-    await wyrenderuj(<KsefSettingsPage />);
-    expect(liczniki()).toEqual(RAZ);
+    await wyrenderuj(<KsefSettingsPage searchParams={Promise.resolve({})} />);
+    expect(liczniki()).toEqual(RAZ_Z_MFA);
   });
 
   it.each([
@@ -413,7 +427,7 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
       </DashboardLayout>,
     );
     expect(out).toContain(`data-2fa="${wlaczone}"`);
-    expect(liczniki()).toEqual(RAZ);
+    expect(liczniki()).toEqual(RAZ_Z_MFA);
   });
 
   // Zgody e-mail czyta `getEmailConsents` przez `auth.admin.getUserById`
@@ -431,9 +445,9 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
 
   it('/settings/ksef: tożsamość Google z tego samego odczytu użytkownika', async () => {
     h.uzytkownik = uzytkownik(USER_ID, { identities: [{ provider: 'google' }] });
-    const out = await wyrenderuj(<KsefSettingsPage />);
+    const out = await wyrenderuj(<KsefSettingsPage searchParams={Promise.resolve({})} />);
     expect(out).toContain('Połączone');
-    expect(liczniki().getUser).toBe(1);
+    expect(liczniki()).toMatchObject({ getUser: 3, siecGetUser: 1 });
   });
 
   // Rolę w firmie TEJ faktury strona czyta sesją klienta (RLS), nie kluczem

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       metadata: { method: 'passkey', passkey_id: passkeyId },
     });
     await trackServer({
-      distinctId: userId,
+      userId,
       event: ANALYTICS_EVENTS.loginCompleted,
       properties: { method: 'passkey' },
     });

@@ -57,8 +57,6 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', SUPABASE_URL);
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'fixture-anon-key');
   vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.flag.mockResolvedValue(false);
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
