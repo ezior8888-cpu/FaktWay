@@ -28,7 +28,7 @@ vi.mock('@/lib/supabase/page-context', () => ({
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
-import InvoicesPage from '@/app/(dashboard)/invoices/page';
+import InvoicesPage from '@/app/(dashboard)/(faktury)/invoices/page';
 
 type Row = Record<string, unknown>;
 type Pred = (row: Row) => boolean;

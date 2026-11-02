@@ -22,11 +22,9 @@ import {
   PageSizeSelect,
   TableSearch,
 } from '@/components/lists/finora-data-table';
-import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
@@ -257,19 +255,23 @@ export function RecurringInvoicesView({
   const lastPageIndex = Math.max(0, table.getPageCount() - 1);
   if (pagination.pageIndex > lastPageIndex) setPagination((p) => ({ ...p, pageIndex: lastPageIndex }));
 
+  // Zawartość karty sekcji Faktur: kartę i rząd zakładek daje
+  // `(faktury)/layout.tsx` (poprawka Bartosza 25.10.2026 — przełączenie
+  // zakładki zmienia tylko tabelę), więc tu bez własnej karty.
   return (
-    <div className='flex flex-1 flex-col gap-6'>
+    <div className='flex flex-1 flex-col'>
       {templateNotice ? (
-        <Alert>
-          <AlertTitle>Nie wybraliśmy faktury-wzoru</AlertTitle>
-          <AlertDescription>{templateNotice}</AlertDescription>
-        </Alert>
+        <div className='px-4 pt-2'>
+          <Alert>
+            <AlertTitle>Nie wybraliśmy faktury-wzoru</AlertTitle>
+            <AlertDescription>{templateNotice}</AlertDescription>
+          </Alert>
+        </div>
       ) : null}
 
       {items.length === 0 ? (
         // Pusty stan w oprawie `Empty` Finory (jak „Invoice Not Found”), z przyciskiem jak w pasku narzędzi.
-        <Card className='flex-1 pt-0 shadow-none'>
-          <InvoicesTabs active='cykliczne' />
+        <>
           <Empty className='py-12'>
             <EmptyHeader>
               <EmptyMedia variant='icon'>
@@ -285,10 +287,9 @@ export function RecurringInvoicesView({
               <Button onClick={openCreate}>+ Nowa faktura cykliczna</Button>
             </EmptyContent>
           </Empty>
-        </Card>
+        </>
       ) : (
-        <Card className='flex-1 pt-0 shadow-none'>
-          <InvoicesTabs active='cykliczne' />
+        <>
           <div className='flex w-full flex-1 flex-col pt-2'>
             <div className='flex-1 border-b'>
               <div className='flex gap-6 p-4 pt-0 max-lg:flex-col lg:items-center lg:justify-between'>
@@ -348,7 +349,7 @@ export function RecurringInvoicesView({
             </div>
             <DataTablePagination table={table} />
           </div>
-        </Card>
+        </>
       )}
 
       <RecurringInvoiceSheet

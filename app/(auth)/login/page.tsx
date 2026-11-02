@@ -27,7 +27,7 @@ import { Separator } from '@/components/ui/separator'
 // Lib Imports
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers'
 import { safeRedirectPath } from '@/lib/auth/safe-redirect'
-import { isPhoneUserAgent } from '@/lib/mobile-access'
+import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent'
 import { SUPPORT_EMAIL } from '@/lib/site'
 
 import { loginWithEmail, loginWithGoogle } from './actions'

@@ -52,7 +52,7 @@ describe('strona /expenses — zakres miesiąca w zapytaniu', () => {
         return { supabase: chain, tenantId: 'ten-1' };
       },
     }));
-    const { default: ExpensesPage } = await import('@/app/(dashboard)/expenses/page');
+    const { default: ExpensesPage } = await import('@/app/(dashboard)/(koszty)/expenses/page');
     await ExpensesPage({ searchParams: Promise.resolve({ miesiac: '2026-02' }) });
     expect(calls.filter(([m]) => m === 'gte')).toEqual([['gte', ['issue_date', '2026-02-01']]]);
     expect(calls.filter(([m]) => m === 'lte')).toEqual([['lte', ['issue_date', '2026-02-28']]]);

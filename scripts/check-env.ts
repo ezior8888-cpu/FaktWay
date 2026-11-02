@@ -43,8 +43,6 @@ const SPECS: VarSpec[] = [
   { name: 'NEXT_PUBLIC_APP_URL', feature: 'Rdzeń aplikacji', level: 'required' },
   { name: 'NEXT_PUBLIC_APP_ENV', feature: 'Rdzeń aplikacji', level: 'required', note: 'MUSI być "production" na prod (bramki SEC-1)' },
   { name: 'NEXT_PUBLIC_APP_DOMAIN', feature: 'Rdzeń aplikacji', level: 'optional' },
-  { name: 'NEXT_PUBLIC_MOBILE_PANEL', feature: 'Panel na telefonie', level: 'optional', note: "off | allowlist | on; brak = off (telefony na /mobile)" },
-  { name: 'NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', feature: 'Panel na telefonie', level: 'optional', note: 'identyfikatory userów po przecinku; działa tylko przy trybie allowlist' },
 
   // ── Baza + logowanie (Supabase) ──
   { name: 'NEXT_PUBLIC_SUPABASE_URL', feature: 'Baza + logowanie', level: 'required' },

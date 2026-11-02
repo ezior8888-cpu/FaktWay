@@ -74,8 +74,9 @@ describe('KpirView — układ Finory', () => {
     const ledger = doc.querySelector('#korzen > #ksiega');
     expect(ledger).not.toBeNull();
     expect(ledger!.className).toContain('flex-1');
-    // Pierwszy rząd karty to zakładki Księgowości.
-    expect(ledger!.firstElementChild?.getAttribute('aria-label')).toBe('Księgowość');
+    // Zakładki Księgowości stoją od 25.10.2026 nad stroną (`reports/layout.tsx`),
+    // nie w karcie księgi — przy przełączeniu nie skaczą w pionie.
+    expect(ledger!.querySelector('nav[aria-label="Księgowość"]')).toBeNull();
     expect(doc.querySelector('#korzen > :last-child')).toBe(ledger);
   });
 

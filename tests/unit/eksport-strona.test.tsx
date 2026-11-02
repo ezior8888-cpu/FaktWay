@@ -61,9 +61,11 @@ async function renderPage(searchParams: Record<string, string> = {}) {
   const page = await ExportsCenterPage({ searchParams: Promise.resolve(searchParams) });
   const { prelude } = await prerender(page);
   const html = await new Response(prelude).text();
-  // Formularz stoi przed kartą z zakładkami, historia w niej.
-  const nav = html.indexOf('<nav aria-label="Księgowość"');
+  // Formularz stoi przed kartą historii. Rząd zakładek Księgowości jest od
+  // 25.10.2026 w `reports/layout.tsx`, więc kartę historii poznajemy po `id`.
+  const nav = html.indexOf('id="historia"');
   expect(nav).toBeGreaterThan(0);
+  expect(html).not.toContain('<nav aria-label="Księgowość"');
   return { form: html.slice(0, nav), history: html.slice(nav) };
 }
 

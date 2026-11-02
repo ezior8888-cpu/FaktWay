@@ -1,9 +1,7 @@
 import { Suspense } from 'react';
 
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
-import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { RECURRING_GENERIC_ERROR, recurringErrorMessage } from '@/lib/invoices/recurring/error-message';
@@ -16,7 +14,6 @@ import {
 } from '@/lib/invoices/recurring/queries';
 import { getPageContext, type PageContext } from '@/lib/supabase/page-context';
 
-import { InvoiceStatTiles } from '../_components/invoice-stat-tiles';
 import { RecurringInvoicesView } from './_components/recurring-invoices-view';
 
 export const dynamic = 'force-dynamic';
@@ -35,28 +32,22 @@ function param(params: Record<string, string | string[] | undefined>, key: strin
 
 function TableSkeleton() {
   return (
-    <Card className='flex-1 pt-0 shadow-none' aria-busy='true'>
-      <InvoicesTabs active='cykliczne' />
-      <div className='space-y-4 p-4 pt-2'>
-        <Skeleton className='h-9 w-full max-w-md' />
-        <Skeleton className='h-56 w-full' />
-      </div>
-    </Card>
+    <div className='space-y-4 p-4 pt-2' aria-busy='true'>
+      <Skeleton className='h-9 w-full max-w-md' />
+      <Skeleton className='h-56 w-full' />
+    </div>
   );
 }
 
-/** Błąd w karcie z zakładkami — z ekranu da się przejść do pozostałych zakładek Faktur. */
+/** Błąd w karcie sekcji — rząd zakładek nad nim (layout) prowadzi do pozostałych zakładek Faktur. */
 function SectionError({ message }: { message: string }) {
   return (
-    <Card className='flex-1 pt-0 shadow-none'>
-      <InvoicesTabs active='cykliczne' />
-      <div className='px-4 pt-2'>
-        <Alert variant='destructive'>
-          <AlertTitle>Nie udało się pobrać faktur cyklicznych</AlertTitle>
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      </div>
-    </Card>
+    <div className='px-4 pt-2'>
+      <Alert variant='destructive'>
+        <AlertTitle>Nie udało się pobrać faktur cyklicznych</AlertTitle>
+        <AlertDescription>{message}</AlertDescription>
+      </Alert>
+    </div>
   );
 }
 
@@ -125,7 +116,9 @@ async function RecurringSection({
  * nie ma widocznego nagłówka; tytuł dla czytników ekranu.
  *
  * Poprawka 21.10.2026: zakładka „Cykliczne” ekranu Faktur — te same kafle co
- * „Wystawione” (przełączenie zakładki zmienia tylko kartę), karta do stopki.
+ * „Wystawione”, karta do stopki. Od 25.10.2026 kafle i karta z zakładkami
+ * stoją w `(faktury)/layout.tsx`, więc przełączenie zakładki naprawdę zmienia
+ * tylko zawartość karty — ta strona.
  */
 export default async function RecurringInvoicesPage({
   searchParams,
@@ -136,9 +129,8 @@ export default async function RecurringInvoicesPage({
   const wzorId = param((await searchParams) ?? {}, 'wzor');
 
   return (
-    <div className='ff-page-fill flex flex-col gap-6'>
+    <div className='ff-tab-panel flex w-full flex-1 flex-col'>
       <h1 className='sr-only'>Faktury cykliczne</h1>
-      <InvoiceStatTiles supabase={ctx.supabase} tenantId={ctx.tenantId} />
       <SectionErrorBoundary
         fallback={<SectionError message={RECURRING_GENERIC_ERROR} />}
       >

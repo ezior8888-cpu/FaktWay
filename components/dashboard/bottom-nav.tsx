@@ -1,14 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { MotionConfig, motion } from "framer-motion";
 
 import {
   RiLogoutBoxRLine,
@@ -17,6 +12,7 @@ import {
 } from "@remixicon/react";
 
 import { signOut } from "@/app/(auth)/login/actions";
+import { LinkPendingMark } from "@/components/navigation/link-pending-mark";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { OTWORZ_POMOC } from "@/lib/support/open-support-event";
 import {
@@ -27,6 +23,12 @@ import {
   type DashboardMobileTab,
 } from "@/lib/dashboard-nav-config";
 import { cn } from "@/lib/utils";
+
+/** Ile najdłużej „Więcej” pokazuje oczekiwanie na stronę wybraną w arkuszu. */
+const MORE_PENDING_MAX_MS = 10_000;
+
+/** Sprężyna plusa: krótka, z wyraźnym odbiciem — jak przycisk w aplikacji, nie strona. */
+const PLUS_SPRING = { type: "spring" as const, stiffness: 520, damping: 26 };
 
 /**
  * Dolna nawigacja telefonu — pasek z sierpniowej makiety.
@@ -42,35 +44,37 @@ import { cn } from "@/lib/utils";
  * Tablet dostaje ten sam pasek zamiast hamburgera — jeden wzorzec zamiast
  * dwóch na tej samej szerokości.
  *
- * Podświetlenie idzie tym samym torem co w sidebarze: `pointerdown` ustawia
- * cel natychmiast, nie czekając, aż Next dokończy nawigację RSC. Bez tego
- * pasek wygląda na zepsuty przez pierwsze kilkaset milisekund.
+ * PODŚWIETLENIE Z NAWIGACJI, NIE Z DOTKNIĘCIA (poprawka Bartosza 25.10.2026:
+ * „podświetla się i nic się nie dzieje, dopiero za drugim razem”). Dawniej
+ * `pointerdown` od razu podświetlał slot i gasił je dopiero zmiana adresu.
+ * Gdy dotyk nie kończył się kliknięciem (palec się przesunął, iOS przejął
+ * gest), slot zostawał zapalony bez żadnej nawigacji. Teraz slot zapala
+ * `LinkPendingMark` (`useLinkStatus`), czyli tylko trwająca nawigacja Nexta,
+ * a pasek postępu u góry paska mówi, że strona jest w drodze
+ * (`.ff-bottom-nav` w `globals.css`).
  */
 export function BottomNav() {
   const pathname = usePathname();
-  const router = useRouter();
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Pozycja wybrana w arkuszu „Więcej”. Arkusz zamyka się od razu, więc jego
+  // link znika i nie zgłosi oczekiwania — robi to za niego slot „Więcej”.
+  const [morePending, setMorePending] = useState<string | null>(null);
 
-  useEffect(() => {
-    setPendingHref(null);
+  // Nowa trasa: arkusz zamknięty, oczekiwanie skończone. Stan dostosowany
+  // w renderze (wzorzec Reacta „poprzednia wartość”), bez efektu.
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
     setMoreOpen(false);
-  }, [pathname]);
+    setMorePending(null);
+  }
 
-  const highlightedHref = useMemo(() => {
-    if (pendingHref !== null && !isActiveNavPath(pathname, pendingHref)) {
-      return pendingHref;
-    }
-    return null;
-  }, [pathname, pendingHref]);
-
-  const isHrefActive = useCallback(
-    (href: string) => {
-      if (highlightedHref !== null) return href === highlightedHref;
-      return isActiveNavPath(pathname, href);
-    },
-    [pathname, highlightedHref],
-  );
+  // Nieudana nawigacja nie może zostawić „Więcej” w oczekiwaniu na zawsze.
+  useEffect(() => {
+    if (morePending === null) return;
+    const timer = setTimeout(() => setMorePending(null), MORE_PENDING_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [morePending]);
 
   const moreSections = useMemo(() => getDashboardMoreSections(), []);
 
@@ -81,10 +85,15 @@ export function BottomNav() {
    */
   const moreActive =
     moreOpen ||
-    (highlightedHref === null &&
-      !dashboardMobileTabs.some(
-        (tab) => tab.href !== null && isActiveNavPath(pathname, tab.href),
-      ));
+    morePending !== null ||
+    !dashboardMobileTabs.some(
+      (tab) => tab.href !== null && isActiveNavPath(pathname, tab.href),
+    );
+
+  const chooseFromMore = (href: string) => {
+    setMoreOpen(false);
+    if (!isActiveNavPath(pathname, href)) setMorePending(href);
+  };
 
   return (
     <>
@@ -92,16 +101,55 @@ export function BottomNav() {
         aria-label="Nawigacja główna"
         className="ff-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-stretch lg:hidden"
       >
-        {dashboardMobileTabs.map((tab) => (
-          <BottomNavSlot
-            key={tab.label}
-            tab={tab}
-            active={tab.href === null ? moreActive : isHrefActive(tab.href)}
-            onBeginNav={setPendingHref}
-            onPrefetch={(href) => void router.prefetch(href)}
-            onOpenMore={() => setMoreOpen(true)}
-          />
-        ))}
+        {dashboardMobileTabs.map((tab) => {
+          if (tab.emphasis && tab.href !== null) {
+            return (
+              <PlusSlot
+                key={tab.label}
+                tab={tab}
+                href={tab.href}
+                active={isActiveNavPath(pathname, tab.href)}
+              />
+            );
+          }
+          if (tab.href === null) {
+            return (
+              <button
+                key={tab.label}
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                aria-expanded={moreOpen}
+                className={cn(
+                  SLOT_CLASS,
+                  moreActive ? SLOT_ACTIVE : SLOT_IDLE,
+                  "pb-[var(--ff-safe-b)]",
+                )}
+              >
+                {morePending !== null ? <span data-link-pending="" hidden /> : null}
+                <tab.icon aria-hidden className="size-5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          }
+          const active = isActiveNavPath(pathname, tab.href);
+          return (
+            <Link
+              key={tab.label}
+              href={tab.href}
+              prefetch
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                SLOT_CLASS,
+                active ? SLOT_ACTIVE : SLOT_IDLE,
+                "pb-[var(--ff-safe-b)]",
+              )}
+            >
+              <LinkPendingMark />
+              <tab.icon aria-hidden className="size-5" />
+              <span>{tab.label}</span>
+            </Link>
+          );
+        })}
       </nav>
 
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
@@ -127,6 +175,7 @@ export function BottomNav() {
                     icon={item.icon}
                     prefetch={item.prefetch !== false}
                     active={isActiveNavPath(pathname, item.href)}
+                    onChoose={chooseFromMore}
                   />
                 ))}
               </div>
@@ -139,6 +188,7 @@ export function BottomNav() {
               label={dashboardSettingsNavItem.label}
               icon={dashboardSettingsNavItem.icon}
               active={isActiveNavPath(pathname, dashboardSettingsNavItem.href)}
+              onChoose={chooseFromMore}
             />
 
             {/* Pomoc jest tu, bo na telefonie pływający bąbelek jest ukryty —
@@ -179,107 +229,63 @@ export function BottomNav() {
   );
 }
 
-function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
-  return (
-    e.pointerType !== "mouse" ||
-    (e.button === 0 && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)
-  );
-}
+// 44 px to minimalny cel dotykowy z wytycznych Apple i Google; slot ma pełną
+// wysokość paska, więc trafienie jest łatwiejsze niż w samą ikonę.
+// `active:scale-95`: dotyk widać od razu, zanim ruszy nawigacja.
+const SLOT_CLASS =
+  "flex flex-1 select-none flex-col items-center justify-center gap-1 pt-2 text-[11px] font-medium leading-none transition-[color,transform] duration-150 active:scale-95";
+const SLOT_ACTIVE = "text-[var(--ff-accent)]";
+const SLOT_IDLE = "text-[var(--ff-text-muted)]";
 
 /**
- * Jeden slot paska. Wyróżniony („Nowa") rysuje się jako niebieskie koło
- * z plusem, bez widocznego podpisu.
+ * Plus dolnego paska: link do „Nowa faktura” (tam też kafel „Wydatek” ze
+ * zdjęcia, poprawka Bartosza 25.10.2026 — wysuwane menu nad plusem odpadło).
  *
- * Poprawka Bartosza 21.10.2026: koło nie jest już wyniesione ponad krawędź
- * paska (dawne `-mt-5`) i nie ma pod sobą napisu „Nowa” (dawne `-mt-3`).
- * Napis nachodził na dół koła, więc zamiast go przesuwać, koło stoi teraz
- * dokładnie tam, gdzie był napis, a sam napis zostaje tylko dla czytników
- * ekranu (`sr-only`) — link nadal ma nazwę dostępną „Nowa”. Odstępy
- * paska od bezpiecznego obszaru (`--ff-safe-b`) zostają bez zmian.
+ * Animacja zamiast „płaskiego przejścia”: koło ugina się pod palcem i obraca
+ * plus o ćwierć obrotu, a po puszczeniu wraca na sprężynie z odbiciem
+ * (`whileTap`). Dopóki strona kreatora jest w drodze, koło pulsuje
+ * (`[data-ff-plus]` w `globals.css`). `MotionConfig reducedMotion="user"`:
+ * przy „ogranicz ruch” bez obrotu i odbicia.
+ *
+ * Koło stoi w pasku na miejscu napisu (poprawka 21.10.2026), napis zostaje
+ * dla czytników ekranu (`sr-only`).
  */
-function BottomNavSlot({
+function PlusSlot({
   tab,
+  href,
   active,
-  onBeginNav,
-  onPrefetch,
-  onOpenMore,
 }: {
   tab: DashboardMobileTab;
+  href: string;
   active: boolean;
-  onBeginNav: (href: string) => void;
-  onPrefetch: (href: string) => void;
-  onOpenMore: () => void;
 }) {
-  // 44 px to minimalny cel dotykowy z wytycznych Apple i Google; slot ma
-  // pełną wysokość paska, więc trafienie jest łatwiejsze niż w samą ikonę.
-  const slotClass =
-    "flex flex-1 select-none flex-col items-center justify-center gap-1 pt-2 text-[11px] font-medium leading-none transition-colors";
-
-  if (tab.emphasis && tab.href !== null) {
-    return (
+  return (
+    <MotionConfig reducedMotion="user">
       <Link
-        href={tab.href}
+        href={href}
         prefetch
         aria-current={active ? "page" : undefined}
-        onPointerDown={(e) => {
-          if (!shouldHandlePrimaryInAppNav(e)) return;
-          onBeginNav(tab.href!);
-        }}
-        // `pb-[var(--ff-safe-b)]` jak w pozostałych slotach: bez niego na iPhonie
-        // z paskiem domowym koło, już nie uniesione, zjeżdżałoby w strefę paska.
-        className={cn(slotClass, "pb-[var(--ff-safe-b)]", "text-[var(--ff-accent)]")}
+        // `pb-[var(--ff-safe-b)]` jak w pozostałych slotach: bez niego na
+        // iPhonie z paskiem domowym koło zjeżdżałoby w strefę paska.
+        // `active:scale-100`: ugięcie robi koło, nie cały slot.
+        className={cn(
+          SLOT_CLASS,
+          "pb-[var(--ff-safe-b)] text-[var(--ff-accent)] active:scale-100",
+        )}
       >
-        <span
+        <LinkPendingMark />
+        <motion.span
           aria-hidden
-          className="flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-md shadow-primary/30 transition-transform active:scale-95"
+          data-ff-plus=""
+          whileTap={{ scale: 0.8, rotate: 90 }}
+          transition={PLUS_SPRING}
+          className="flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-md shadow-primary/30"
         >
           <tab.icon aria-hidden className="size-6" />
-        </span>
-        {/* Nazwa dostępna dla czytników ekranu i testów; wzrokowo zasłania ją
-            koło (poprawka Bartosza 21.10.2026). */}
+        </motion.span>
         <span className="sr-only">{tab.label}</span>
       </Link>
-    );
-  }
-
-  const content = (
-    <>
-      <tab.icon aria-hidden className="size-5" />
-      <span>{tab.label}</span>
-    </>
-  );
-
-  const toneClass = active
-    ? "text-[var(--ff-accent)]"
-    : "text-[var(--ff-text-muted)]";
-
-  if (tab.href === null) {
-    return (
-      <button
-        type="button"
-        onClick={onOpenMore}
-        aria-expanded={active}
-        className={cn(slotClass, toneClass, "pb-[var(--ff-safe-b)]")}
-      >
-        {content}
-      </button>
-    );
-  }
-
-  return (
-    <Link
-      href={tab.href}
-      prefetch
-      aria-current={active ? "page" : undefined}
-      onPointerDown={(e) => {
-        if (!shouldHandlePrimaryInAppNav(e)) return;
-        onBeginNav(tab.href!);
-      }}
-      onPointerEnter={() => onPrefetch(tab.href!)}
-      className={cn(slotClass, toneClass, "pb-[var(--ff-safe-b)]")}
-    >
-      {content}
-    </Link>
+    </MotionConfig>
   );
 }
 
@@ -289,6 +295,7 @@ function MoreRow({
   icon: Icon,
   active,
   prefetch = true,
+  onChoose,
 }: {
   href: string;
   label: string;
@@ -296,11 +303,21 @@ function MoreRow({
   /** `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). */
   prefetch?: boolean;
   active: boolean;
+  /**
+   * Wybór pozycji: arkusz zamyka się od razu. Dawniej czekał otwarty na
+   * przyjście strony, więc wyglądało, że nic się nie stało, i klient
+   * dotykał drugi raz.
+   */
+  onChoose: (href: string) => void;
 }) {
   return (
     <Link
       href={href}
       prefetch={prefetch}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        onChoose(href);
+      }}
       className={cn(
         "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
         active

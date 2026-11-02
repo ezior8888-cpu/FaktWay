@@ -245,7 +245,10 @@ describe('P5: wybór rodzaju faktury w kartach Finory', () => {
     ]) {
       expect(html).toMatch(new RegExp(`<a[^>]*href="/invoices/new/${type}"[\\s\\S]*?${label}`));
     }
-    expect(html.match(/data-slot="card"/g)).toHaveLength(4);
+    // Piąta karta (pierwsza w siatce) to „Wydatek” ze zdjęcia — nie link,
+    // tylko przyciski aparatu i pliku (poprawka Bartosza 25.10.2026).
+    expect(html.match(/data-slot="card"/g)).toHaveLength(5);
+    expect(html.indexOf('>Wydatek<')).toBeLessThan(html.indexOf('Faktura zwykła'));
     bezZakazanych(html);
     expect(html).not.toContain('material-symbols');
   });

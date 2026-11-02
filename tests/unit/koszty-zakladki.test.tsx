@@ -8,6 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * „line” Finory co Faktury (`SectionTabs`), pierwszy w karcie z tabelą. Karta
  * sięga do stopki pustym arkuszem (`ff-page-fill`), paginacja stoi na dole
  * karty, a pusty stan na środku pustego arkusza.
+ *
+ * Poprawka Bartosza 25.10.2026: jedna strona, nie dwie podstrony. Kafle (jedne
+ * dla sekcji), karta i rząd zakładek stoją w `(koszty)/layout.tsx`, a strona
+ * zakładki to sama zawartość karty.
  */
 
 const ctx = vi.hoisted(() => ({ supabase: null as unknown, tenantId: 'firma-a' }));
@@ -26,7 +30,11 @@ vi.mock('@/lib/dashboard/expense-stats', () => ({
 vi.mock('next/server', () => ({ after: vi.fn() }));
 vi.mock('@/lib/ksef/inbox-activity', () => ({ requestInboxPollOnVisit: vi.fn() }));
 vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: vi.fn(async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null })) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }));
+const nav = vi.hoisted(() => ({ pathname: '/expenses' }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => nav.pathname,
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/app/actions/expenses', () => ({
   deleteExpenseAction: vi.fn(),
@@ -43,9 +51,13 @@ const { INVOICES_TABS, InvoicesTabs } = await import('@/components/invoices/invo
 const { ExpensesTable } = await import('@/components/expenses/finora/expenses-table');
 const { ExpenseStatsCards } = await import('@/components/expenses/finora/expense-stat-cells');
 const { default: MonthSelector } = await import('@/components/expenses/finora/month-selector');
-const { InboxTable } = await import('@/app/(dashboard)/inbox/_components/inbox-table');
-const { default: ExpensesPage } = await import('@/app/(dashboard)/expenses/page');
-const { default: InboxPage } = await import('@/app/(dashboard)/inbox/page');
+const { InboxTable } = await import('@/app/(dashboard)/(koszty)/inbox/_components/inbox-table');
+const { default: ExpensesPage } = await import('@/app/(dashboard)/(koszty)/expenses/page');
+const { default: InboxPage } = await import('@/app/(dashboard)/(koszty)/inbox/page');
+const { default: KosztyLayout } = await import('@/app/(dashboard)/(koszty)/layout');
+const { SectionTabsNav, activeSectionTab } = await import('@/components/lists/section-tabs-nav');
+const { StatsCardsFrame } = await import('@/components/expenses/finora/stats-cards');
+const { StatSlot } = await import('@/components/expenses/finora/stat-slot');
 const { dashboardNavItems, isActiveNavPath } = await import('@/lib/dashboard-nav-config');
 const { buildPaletteNavEntries } = await import('@/lib/command-palette');
 
@@ -132,70 +144,88 @@ describe('CostsTabs — zakładki Kosztów', () => {
   });
 });
 
-describe('Wydatki (/expenses) — zakładka „Wydatki”', () => {
-  it('pełny arkusz, tytuł tylko dla czytników, zakładki w karcie z tabelą', async () => {
-    const tree = await ExpensesPage({ searchParams: Promise.resolve({}) });
+describe('jedna strona sekcji Kosztów (25.10.2026)', () => {
+  it('layout: jedne kafle sekcji, karta z rzędem zakładek Kosztów, strona zakładki w karcie', async () => {
+    ctx.supabase = memoryClient({ invoices: [], expenses: [] });
+    const tree = await KosztyLayout({ children: <p id="tabela">tabela</p> });
     expect(props(tree).className).toContain('ff-page-fill');
-    // Karta sięga stopki na obu zakładkach — korzeń bez dolnego odstępu (pływający
-    // „+ Dodaj wydatek” ma miejsce nad stopką), tak samo jak w Skrzynce KSeF.
-    expect(props(tree).className).toBe('ff-page-fill flex flex-col gap-6');
-    expect(activeCostsTabs(tree)).toEqual(['wydatki']);
-    const headings = elements(tree).filter((el) => el.type === 'h1');
-    expect(headings.map((el) => [props(el).className, props(el).children])).toEqual([['sr-only', 'Wydatki']]);
-
-    const card = elements(tree).find(
-      (el) => el.type === Card && elements(props(el).children as ReactNode).some((c) => c.type === ExpensesTable),
-    );
-    expect(props(card!).className).toBe('flex-1 pt-0');
-    expect(elements(props(card!).children as ReactNode)[0]!.type).toBe(CostsTabs);
+    const all = elements(tree);
+    const frame = all.find((el) => el.type === StatsCardsFrame)!;
+    const labels = elements(props(frame).cells as ReactNode)
+      .filter((el) => el.type === StatSlot)
+      .map((el) => props(el).label);
+    expect(labels).toEqual(['Wydatki w tym miesiącu', 'VAT do odliczenia', 'Do opisania', 'Ostatnie pobranie z KSeF']);
+    const card = all.find((el) => el.type === Card)!;
+    const inCard = elements(props(card).children as ReactNode);
+    expect(props(inCard.find((el) => el.type === SectionTabsNav)!).tabs).toBe(COSTS_TABS);
+    expect(inCard.some((el) => props(el).id === 'tabela')).toBe(true);
+    // Kafle sekcji liczą bieżący miesiąc, niezależnie od filtra tabeli.
+    expect(all.some((el) => el.type === MonthSelector)).toBe(false);
   });
 
-  it('przełącznik „Miesiąc / Do opisania” i wybór miesiąca zostają — w rzędzie nad kaflami, do prawej', async () => {
+  it('aktywna zakładka z adresu', () => {
+    expect(activeSectionTab('/expenses', COSTS_TABS)).toBe('wydatki');
+    expect(activeSectionTab('/inbox', COSTS_TABS)).toBe('skrzynka');
+    for (const [pathname, active] of [['/expenses', ['/expenses', true]], ['/inbox', ['/inbox', true]]] as const) {
+      nav.pathname = pathname;
+      const html = renderToStaticMarkup(<SectionTabsNav label="Rodzaje kosztów" tabs={COSTS_TABS} />);
+      expect(tabs(html).filter(([, on]) => on)).toEqual([active]);
+    }
+  });
+});
+
+describe('Wydatki (/expenses) — zakładka „Wydatki”', () => {
+  it('zawartość karty sekcji: tytuł tylko dla czytników, tabela, bez kafli i zakładek', async () => {
+    const tree = await ExpensesPage({ searchParams: Promise.resolve({}) });
+    expect(String(props(tree).className).split(' ')).toEqual(expect.arrayContaining(['ff-tab-panel', 'flex-1', 'flex-col']));
+    expect(activeCostsTabs(tree)).toEqual([]);
+    const headings = elements(tree).filter((el) => el.type === 'h1');
+    expect(headings.map((el) => [props(el).className, props(el).children])).toEqual([['sr-only', 'Wydatki']]);
+    expect(elements(tree).some((el) => el.type === ExpensesTable)).toBe(true);
+    expect(elements(tree).some((el) => el.type === ExpenseStatsCards || el.type === Card)).toBe(false);
+  });
+
+  it('„Miesiąc / Do opisania” i wybór miesiąca filtrują tabelę — w jej pasku, linki bez przewijania', async () => {
     const tree = await ExpensesPage({ searchParams: Promise.resolve({ miesiac: '2026-09' }) });
     const all = elements(tree);
-    const switcher = all.find((el) => el.type === 'nav' && props(el)['aria-label'] === 'Widok listy wydatków');
+    const switcher = all.find((el) => el.type === 'nav' && props(el)['aria-label'] === 'Widok listy wydatków')!;
     expect(switcher).toBeDefined();
+    for (const link of elements(props(switcher).children as ReactNode).filter((el) => props(el).href)) {
+      expect(props(link)).toMatchObject({ prefetch: true, scroll: false });
+    }
     const selector = all.find((el) => el.type === MonthSelector);
     expect(props(selector!)).toMatchObject({ month: '2026-09', basePath: '/expenses' });
-    const row = all.find((el) => elements(props(el).children as ReactNode).includes(switcher!) && el !== tree);
-    expect(String(props(row!).className).split(' ')).toContain('justify-end');
-    // Przełącznik i miesiąc sterują kaflami i tabelą, więc stoją przed kaflami.
-    expect(all.indexOf(selector!)).toBeLessThan(all.findIndex((el) => el.type === ExpenseStatsCards));
+    // Pasek stoi nad tabelą, w karcie.
+    expect(all.indexOf(selector!)).toBeLessThan(all.findIndex((el) => el.type === ExpensesTable));
 
     const unreviewed = elements(await ExpensesPage({ searchParams: Promise.resolve({ filter: 'unreviewed' }) }));
     expect(unreviewed.some((el) => el.type === 'nav' && props(el)['aria-label'] === 'Widok listy wydatków')).toBe(true);
     expect(unreviewed.some((el) => el.type === MonthSelector)).toBe(false);
   });
 
-  it('błąd odczytu: komunikat w karcie z zakładkami, „+ Dodaj wydatek” przy nim od lg', async () => {
+  it('błąd odczytu: komunikat w karcie sekcji, „+ Dodaj wydatek” przy nim od lg', async () => {
     ctx.supabase = failingClient();
-    const tree = await ExpensesPage({ searchParams: Promise.resolve({}) });
-    expect(activeCostsTabs(tree)).toEqual(['wydatki']);
-    const html = renderToStaticMarkup(tree);
-    // Ostatnia karta to karta listy: zakładki, potem komunikat.
-    const listCard = html.slice(html.lastIndexOf('data-slot="card"'));
-    expect(listCard.indexOf('Rodzaje kosztów')).toBeGreaterThan(-1);
-    expect(listCard.indexOf('Rodzaje kosztów')).toBeLessThan(listCard.indexOf('Nie udało się pobrać wydatków'));
+    const html = renderToStaticMarkup(await ExpensesPage({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain('Nie udało się pobrać wydatków');
+    // Zakładki (przejście do Skrzynki) daje layout sekcji, nad tym komunikatem.
+    expect(html).not.toContain('Rodzaje kosztów');
     expect(html.match(/\+ Dodaj wydatek/g)).toHaveLength(2);
   });
 });
 
 describe('Skrzynka KSeF (/inbox) — zakładka „Skrzynka KSeF”', () => {
-  it('pełny arkusz, tytuł tylko dla czytników, bez stałego podtytułu, zakładki w karcie', async () => {
+  it('zawartość karty sekcji: tytuł tylko dla czytników, bez stałego podtytułu, bez kafli i zakładek', async () => {
     ctx.supabase = memoryClient({ invoices: incoming(3), expenses: [] });
     const tree = await InboxPage();
-    expect(props(tree).className).toContain('ff-page-fill');
-    expect(activeCostsTabs(tree)).toEqual(['skrzynka']);
+    expect(props(tree).className).toContain('ff-tab-panel');
+    expect(activeCostsTabs(tree)).toEqual([]);
 
     const html = renderToStaticMarkup(tree);
     expect(html).toContain('<h1 class="sr-only">Skrzynka KSeF</h1>');
     expect(html).not.toContain('aktualizowane co 15 minut');
     expect(html).not.toContain('maks. 200');
-    expect(tabs(html)).toEqual([
-      ['/expenses', false],
-      ['/inbox', true],
-    ]);
-    expect(html).toMatch(/data-slot="card"[^>]*class="[^"]*\bflex-1\b[^"]*\bpt-0\b[^"]*"><nav aria-label="Rodzaje kosztów"/);
+    expect(html).not.toContain('Rodzaje kosztów');
+    expect(html).not.toContain('data-slot="card"');
   });
 
   it('limit 200 pozycji: krótka nota tylko wtedy, gdy lista go osiąga', async () => {
@@ -208,11 +238,11 @@ describe('Skrzynka KSeF (/inbox) — zakładka „Skrzynka KSeF”', () => {
     const at = renderToStaticMarkup(await InboxPage());
     expect(at).toContain('z <span>200</span>');
     expect(at.match(/Pokazujemy 200 najnowszych faktur według daty przyjęcia w KSeF\./g)).toHaveLength(1);
-    // Nota w karcie listy, pod paginacją — nie nad kaflami.
+    // Nota pod paginacją, na dole karty.
     expect(at.indexOf('najnowszych faktur')).toBeGreaterThan(at.indexOf('Następna strona'));
   });
 
-  it('nieudany odczyt statusu: komunikat w karcie, pod zakładkami', async () => {
+  it('nieudany odczyt statusu: komunikat nad tabelą', async () => {
     const client = memoryClient({ invoices: incoming(1) });
     ctx.supabase = {
       from: (table: string) => (table === 'expenses' ? failingClient().from() : client.from(table)),
@@ -220,18 +250,15 @@ describe('Skrzynka KSeF (/inbox) — zakładka „Skrzynka KSeF”', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const html = renderToStaticMarkup(await InboxPage());
     error.mockRestore();
-    const listCard = html.slice(html.lastIndexOf('data-slot="card"'));
-    expect(listCard.indexOf('Rodzaje kosztów')).toBeGreaterThan(-1);
-    expect(listCard.indexOf('Rodzaje kosztów')).toBeLessThan(listCard.indexOf('Nie udało się sprawdzić statusu faktur'));
+    expect(html.indexOf('Nie udało się sprawdzić statusu faktur')).toBeGreaterThan(-1);
+    expect(html.indexOf('Nie udało się sprawdzić statusu faktur')).toBeLessThan(html.indexOf('FA/0/10/2026'));
   });
 
-  it('błąd odczytu faktur: komunikat w karcie z zakładkami (da się przejść do Wydatków)', async () => {
+  it('błąd odczytu faktur: komunikat w karcie sekcji (zakładki z layoutu prowadzą do Wydatków)', async () => {
     ctx.supabase = failingClient();
-    const tree = await InboxPage();
-    expect(activeCostsTabs(tree)).toEqual(['skrzynka']);
-    const listCard = renderToStaticMarkup(tree).split('data-slot="card"').at(-1)!;
-    expect(listCard).toContain('href="/expenses"');
-    expect(listCard).toContain('Nie udało się pobrać faktur: connection reset');
+    const html = renderToStaticMarkup(await InboxPage());
+    expect(html).toContain('Nie udało się pobrać faktur: connection reset');
+    expect(html).not.toContain('Rodzaje kosztów');
   });
 });
 

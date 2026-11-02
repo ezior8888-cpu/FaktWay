@@ -24,7 +24,7 @@ const FEATURES = [
   // Decyzja Bartosza 22.10.2026: bez Magicznego importu — historia z KSeF pobiera się sama.
   'Historia z KSeF i import z innych programów',
   'Co-Pilot Księgowego',
-  // Dawniej „PWA mobilna z OCR” — panel na telefonie jest wyłączony (/mobile).
+  // Dawniej „PWA mobilna z OCR” (do FaktWay 1.0 panel na telefonie był wyłączony).
   'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',
   'Wsparcie po polsku',
 ];

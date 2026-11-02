@@ -17,8 +17,6 @@ let refresh: boolean;
 beforeEach(() => {
   vi.resetAllMocks(); aal = 'aal1'; factors = [factor]; refresh = false;
   vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.create.mockImplementation((_url: string, _key: string, options: {
     cookies: { setAll: (values: { name: string; value: string; options: { path: string; httpOnly: boolean } }[], headers: Record<string, string>) => void };
   }) => {
@@ -128,9 +126,7 @@ function phoneRequest(path: string) {
   });
 }
 
-it.each(['on', 'allowlist'])('mobile rollout %s still challenges enrolled AAL1 before company data', async (mode) => {
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', mode);
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+it('phone still challenges enrolled AAL1 before company data', async () => {
   refresh = true;
   const response = await updateSession(phoneRequest('/invoices'));
   expect(response.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Finvoices');
@@ -139,18 +135,14 @@ it.each(['on', 'allowlist'])('mobile rollout %s still challenges enrolled AAL1 b
   expect(mocks.localAal).not.toHaveBeenCalled();
 });
 
-it.each(['off', 'on', 'allowlist'])('mobile mode %s cannot exempt a private API from MFA', async (mode) => {
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', mode);
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+it('phone cannot exempt a private API from MFA', async () => {
   const response = await updateSession(phoneRequest('/api/gdpr/export'));
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: 'mfa_required' });
   expect(mocks.from).not.toHaveBeenCalled();
 });
 
-it('lets an allowed phone with verified MFA continue to its protected page', async () => {
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'allowlist');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+it('lets a phone with verified MFA continue to its protected page', async () => {
   aal = 'aal2';
   const response = await updateSession(phoneRequest('/invoices'));
   expect(response.headers.get('x-middleware-next')).toBe('1');

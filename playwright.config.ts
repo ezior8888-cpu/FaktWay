@@ -85,10 +85,6 @@ export default defineConfig({
         env: {
           NODE_ENV: 'test',
           KSEF_ENV: 'test',
-          // Projekty `mobile-*` muszą wejść do panelu. Ustawiamy jawnie,
-          // zamiast liczyć na `isLocalDevEnv()`: ta bramka wymaga
-          // NODE_ENV === 'development', a tu jest 'test'.
-          NEXT_PUBLIC_MOBILE_PANEL: 'on',
           // Logowanie biometrią: RP ID i dozwolony origin bierzemy z tego adresu
           // (`lib/auth/passkey/config.ts`), a http działa tylko przy tym środowisku.
           NEXT_PUBLIC_APP_URL: BASE_URL,

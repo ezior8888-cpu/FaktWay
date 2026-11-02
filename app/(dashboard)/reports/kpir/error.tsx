@@ -7,7 +7,6 @@ import { RiErrorWarningLine, RiRefreshLine } from '@remixicon/react';
 
 import { kpirMonthTitle, kpirPeriodFromParams } from '@/components/reports/kpir/kpir-model';
 import { KpirToolbar } from '@/components/reports/kpir/kpir-toolbar';
-import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -66,11 +65,10 @@ export default function KpirError({
   }, [error]);
 
   return (
-    <div className="ff-page-fill flex flex-col gap-6">
+    <div className="ff-tab-panel flex flex-1 flex-col gap-6">
       <h1 className="sr-only">Książka przychodów i rozchodów</h1>
       <KpirToolbar period={period} currentMonth={today.slice(0, 7)} monthTitle={kpirMonthTitle(month, year)} />
-      <Card className="flex-1 pt-0">
-        <KsiegowoscTabs active="kpir" />
+      <Card className="flex-1">
         <Empty className="flex-1">
           <EmptyHeader>
             <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">

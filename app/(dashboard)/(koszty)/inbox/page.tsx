@@ -1,13 +1,10 @@
 import { after } from 'next/server';
 
-import { CostsTabs } from '@/components/expenses/costs-tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
 import { requestInboxPollOnVisit } from '@/lib/ksef/inbox-activity';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 import { buildInboxRows, INBOX_COLUMNS, loadInboxExpenseLinks, type InboxInvoiceRow } from './_components/inbox-rows';
-import { InboxStatsCards } from './_components/inbox-stat-cells';
 import { InboxTable } from './_components/inbox-table';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +31,7 @@ const INBOX_LIMIT = 200;
  * brzydka).
  */
 export default async function InboxPage() {
-  const { supabase, tenantId, user } = await getPageContext();
+  const { supabase, tenantId } = await getPageContext();
 
   // Klient patrzy na Skrzynkę: przyspieszamy termin (najwyżej raz na 5 minut).
   // Po odpowiedzi, żeby wejście na stronę nie czekało na zapis.
@@ -56,26 +53,23 @@ export default async function InboxPage() {
       : [];
   const rows = buildInboxRows(invoiceRows, links);
 
+  // Zawartość karty sekcji Kosztów: kafle, kartę i rząd zakładek daje
+  // `(koszty)/layout.tsx` (poprawka Bartosza 25.10.2026 — przełączenie
+  // zakładki zmienia tylko tabelę).
   return (
-    <div className="ff-page-fill flex flex-col gap-6">
+    <div className="ff-tab-panel flex w-full flex-1 flex-col pt-2">
       <h1 className="sr-only">Skrzynka KSeF</h1>
 
-      <InboxStatsCards supabase={supabase} tenantId={tenantId} user={user} />
-
       {error ? (
-        // Błąd w karcie z zakładkami — z ekranu da się przejść do Wydatków.
-        <Card className="flex-1 pt-0">
-          <CostsTabs active="skrzynka" />
-          <div className="px-4 pt-2">
-            <Alert variant="destructive">
-              <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
-            </Alert>
-          </div>
-        </Card>
+        // Błąd w karcie sekcji — rząd zakładek nad nim prowadzi do Wydatków.
+        <div className="px-4">
+          <Alert variant="destructive">
+            <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
+          </Alert>
+        </div>
       ) : (
-        <Card className="flex-1 pt-0">
-          <CostsTabs active="skrzynka" />
-          <div className="flex w-full flex-1 flex-col pt-2">
+        <>
+          <div className="flex w-full flex-1 flex-col">
             {links === null ? (
               <div className="px-4 pb-4">
                 <Alert>
@@ -93,7 +87,7 @@ export default async function InboxPage() {
               Pokazujemy {INBOX_LIMIT} najnowszych faktur według daty przyjęcia w KSeF.
             </p>
           ) : null}
-        </Card>
+        </>
       )}
     </div>
   );

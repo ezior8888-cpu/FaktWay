@@ -24,7 +24,7 @@ vi.mock('@/lib/supabase/page-context', () => ({
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
-import InvoicesPage from '@/app/(dashboard)/invoices/page';
+import InvoicesPage from '@/app/(dashboard)/(faktury)/invoices/page';
 import {
   amountFromSearch,
   INVOICE_KIND_FILTERS,

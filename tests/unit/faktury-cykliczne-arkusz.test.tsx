@@ -30,7 +30,7 @@ import {
   NO_TEMPLATES_TEXT,
   RecurringInvoiceSheet,
   type RecurringInvoiceSheetProps,
-} from '@/app/(dashboard)/invoices/recurring/_components/recurring-invoice-sheet';
+} from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoice-sheet';
 import type { RecurringInvoiceListItem, RecurringTemplateCandidate } from '@/lib/invoices/recurring/queries';
 
 const TPL = '7f1c2d3e-4b5a-4c6d-8e7f-901234567890';

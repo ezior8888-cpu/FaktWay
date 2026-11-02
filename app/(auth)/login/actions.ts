@@ -17,7 +17,7 @@ import {
 } from '@/lib/auth/device-cookies';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
-import { isPhoneUserAgent } from '@/lib/mobile-access';
+import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';

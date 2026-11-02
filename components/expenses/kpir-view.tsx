@@ -45,7 +45,6 @@ import {
 } from '@/components/reports/kpir/kpir-model';
 import { KpirResultCard, REVENUE_TINT } from '@/components/reports/kpir/kpir-result-card';
 import { KpirToolbar } from '@/components/reports/kpir/kpir-toolbar';
-import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { SegmentedControl, type SegmentedOption } from '@/components/reports/segmented-control';
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -496,9 +495,8 @@ export function KpirView({ month, year, expenses, invoices, settledError = null,
         />
       ) : null}
 
-      <Card id="ksiega" className="flex-1 scroll-mt-24 pt-0">
-        <KsiegowoscTabs active="kpir" />
-        <div className="flex w-full flex-1 flex-col pt-2">
+      <Card id="ksiega" className="flex-1 scroll-mt-24">
+        <div className="flex w-full flex-1 flex-col">
           {entries.length === 0 ? (
             <Empty className="flex-1 py-12">
               <EmptyHeader>

@@ -65,16 +65,16 @@ import { monthOptions } from '@/components/expenses/finora/month-selector';
 import { StatCell, StatsCardsFrame } from '@/components/expenses/finora/stats-cards';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import type { PageContext } from '@/lib/supabase/page-context';
-import { buildInboxRows, type InboxInvoiceRow } from '@/app/(dashboard)/inbox/_components/inbox-rows';
+import { buildInboxRows, type InboxInvoiceRow } from '@/app/(dashboard)/(koszty)/inbox/_components/inbox-rows';
 import {
   InboxLastFetchCell,
   InboxMonthCostsCell,
   InboxNewCell,
-} from '@/app/(dashboard)/inbox/_components/inbox-stat-cells';
-import { inboxAmount, inboxColumns, InboxTable } from '@/app/(dashboard)/inbox/_components/inbox-table';
+} from '@/app/(dashboard)/(koszty)/inbox/_components/inbox-stat-cells';
+import { inboxAmount, inboxColumns, InboxTable } from '@/app/(dashboard)/(koszty)/inbox/_components/inbox-table';
 import { RiArrowRightUpLine } from '@remixicon/react';
-import ExpensesPage from '@/app/(dashboard)/expenses/page';
-import InboxPage from '@/app/(dashboard)/inbox/page';
+import ExpensesPage from '@/app/(dashboard)/(koszty)/expenses/page';
+import InboxPage from '@/app/(dashboard)/(koszty)/inbox/page';
 
 const supabase = {} as PageContext['supabase'];
 const TENANT = 'firma-a';
