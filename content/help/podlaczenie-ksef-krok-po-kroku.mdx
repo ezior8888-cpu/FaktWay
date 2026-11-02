@@ -1,0 +1,46 @@
+---
+title: "Podłączenie KSeF krok po kroku"
+category: "ksef"
+order: 1
+summary: "Jak pobrać certyfikat w Aplikacji Podatnika i podłączyć nim FaktWay, także gdy klucz jest chroniony hasłem."
+updated: "2026-11-02"
+---
+
+Podłączenie robisz raz i zajmuje kilka minut. Kreator znajdziesz w **Ustawienia, zakładka KSeF**. Prowadzi przez wszystkie kroki i sam wraca do właściwego, gdy odświeżysz stronę albo wrócisz później.
+
+## Co będzie potrzebne
+
+- Konto właściciela firmy w FaktWay z włączonym logowaniem dwuetapowym (kreator pomoże je włączyć na pierwszym kroku).
+- Dostęp do tej firmy w Aplikacji Podatnika KSeF jako jej właściciel w KSeF.
+- Chwila na zapisanie hasła do klucza.
+
+## 1. Certyfikat w Aplikacji Podatnika
+
+1. Zaloguj się w Aplikacji Podatnika na właściwą firmę. Adres odpowiedni dla środowiska, do którego jest podłączony FaktWay, pokazuje kreator.
+2. Wejdź w **Certyfikaty**, a potem w **Wnioskuj o certyfikat**.
+3. Wpisz nazwę i ustaw hasło do klucza. Zapisz je: nie da się go potem odczytać ani zmienić.
+4. Kliknij **Generuj**. Przeglądarka zapisze plik klucza prywatnego (.key). Drugi raz nie da się go pobrać.
+5. W polu **Przeznaczenie certyfikatu** wybierz **Uwierzytelnienie w systemie KSeF** i wyślij wniosek. Typ Offline (do podpisu linku weryfikującego wystawcę) nie pozwala zalogować się do KSeF.
+6. Gdy certyfikat pojawi się na liście, pobierz jego plik (.crt).
+
+## 2. Pliki we FaktWay
+
+Wskaż oba pliki naraz albo jeden po drugim. Rozpoznajemy je po zawartości, więc nazwy i rozszerzenia nie mają znaczenia. Gdy klucz jest chroniony hasłem, kreator zapyta o nie. Hasła nie zapisujemy: służy tylko do odczytania klucza. W bazie zostaje klucz zaszyfrowany algorytmem AES-256-GCM.
+
+FaktWay obsługuje klucze RSA 2048 oraz EC P-256, czyli te, które wydaje Aplikacja Podatnika.
+
+## 3. Sprawdzenie w KSeF
+
+FaktWay loguje się do KSeF Twoim certyfikatem i sprawdza, czy masz uprawnienia właścicielskie do NIP firmy. Trwa to kilka sekund. Jeśli się nie uda, pliki zostają w kreatorze, a komunikat mówi, co zrobić.
+
+## Gdy coś nie działa
+
+- **Klucz jest chroniony hasłem albo hasło nie pasuje.** Wpisz hasło ustawione przy tworzeniu certyfikatu. Jeśli go nie pamiętasz, wygeneruj nowy certyfikat.
+- **Klucz nie pasuje do certyfikatu.** Wybrano pliki z różnych wniosków. Mają tę samą nazwę, którą nadano w Aplikacji Podatnika.
+- **Certyfikat typu Offline.** Wygeneruj certyfikat z przeznaczeniem Uwierzytelnienie w systemie KSeF.
+- **KSeF nie przypisał certyfikatu do firmy.** Certyfikat wystawiono po zalogowaniu na inną firmę. Wygeneruj go na firmę z NIP z kreatora.
+- **Brak uprawnień właścicielskich.** Połączyć firmę może tylko jej właściciel w KSeF. Przekaż mu instrukcję.
+- **Certyfikat z innego środowiska.** Certyfikat z KSeF testowego nie działa w produkcyjnym i odwrotnie.
+- **KSeF jest chwilowo niedostępny.** Spróbuj ponownie za kilka minut.
+
+Jeśli utkniesz, napisz na pomoc@faktway.pl i podaj, na którym kroku jesteś.
