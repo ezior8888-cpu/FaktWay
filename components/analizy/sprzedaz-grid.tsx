@@ -14,10 +14,10 @@ import { productBreakdown } from '@/lib/analytics-finance/products';
 import { RECURRING_MONTHS, recurringClients } from '@/lib/analytics-finance/recurring';
 import { salesMonthStats, salesOfMonth, salesTrend, type SaleInvoice } from '@/lib/analytics-finance/sales';
 import { inflowTerms } from '@/lib/dashboard/inflow-terms';
-import { INFLOW_NOTE } from '@/lib/dashboard/inflow-labels';
 import { PRODUCTS_NOTE } from '@/lib/dashboard/rankings';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { plural } from '@/lib/i18n/plural';
 
 import {
   incomeExpenseNet,
@@ -25,6 +25,7 @@ import {
   isOtherSlice,
   RECURRING_LIST_LIMIT,
   receivablesRows,
+  receivablesRowsPrzyklad,
   recentSaleItems,
   salesAvgDaily,
   toCategorySlices,
@@ -45,7 +46,7 @@ import SubscriptionsCard from './finora-1do1/subscriptions-card';
 import AssetAllocationCard from './finora/chart-asset-allocation';
 import { ANALIZY_EMPTY, type EmptyStateProps } from './finora/empty';
 import MoverListCard from './finora/mover-list-card';
-import { loadCostsWindow, loadProductLines, loadSalesWindow, loadUpcomingInflows } from './loaders';
+import { loadCostsWindow, loadProductLines, loadReceivables, loadSalesWindow, loadUpcomingInflows } from './loaders';
 import { pobieramy } from './podpisy';
 
 /**
@@ -56,7 +57,7 @@ import { pobieramy } from './podpisy';
  * spodem. Karty to kopie z `finora-1do1/`, dane — prawdziwe, przez czyste
  * adaptery (`./adapters`). Faktury jednym odczytem `getSalesInvoices`
  * (§2.4 pkt 2, 4–7), produkty `fetchProductLines` (§2.4 pkt 13), należności
- * — przyszłe terminy z `getInflows` (E11, D-W). Każda karta osobno
+ * `getReceivables` (§2.4 pkt 11). Każda karta osobno
  * w `SectionErrorBoundary` z własną kartą błędu (§2.4 pkt 15); strona czeka
  * na wszystkie naraz (`AnalizySiatka`, bez szkieletów — poprawka 23.10.2026).
  */
@@ -77,13 +78,14 @@ function salesEmpty(invoices: readonly SaleInvoice[], tryb: TrybDanych): EmptySt
 }
 
 /**
- * Należności (E11, D-W): przyszłe terminy faktur sprzedaży bez prawdziwej
- * zapłaty — założenie nazwane w podpisie („według terminów płatności”,
- * krótszy od dawnego zastrzeżenia Z16), pełne zdanie w dymku.
+ * Należności: faktury bez oznaczonej zapłaty, także po terminie (D-W odwołane
+ * 02.11.2026). Krótki podpis, pełne zdanie w dymku.
  */
-const RECEIVABLES_CAPTION = `Faktury sprzedaży · ${INFLOW_NOTE}`;
+const RECEIVABLES_CAPTION = 'Faktury z FaktWay bez oznaczonej zapłaty';
 const RECEIVABLES_CAPTION_TITLE =
-  `Faktury sprzedaży z terminem płatności od dziś, bez potwierdzonej zapłaty — ${INFLOW_NOTE}. Termin, który minął, liczymy jako wpływ w Przepływach.`;
+  'Faktury z FaktWay bez oznaczonej zapłaty, bez importów i faktur skorygowanych. Gdy klient zapłaci, dotknij „Zapłacone” przy fakturze.';
+/** Atrapa bazy nie ma wpłat: jej należności to same przyszłe terminy. */
+const RECEIVABLES_CAPTION_DEMO = 'Faktury sprzedaży z terminem od dziś';
 
 const inMonth = (invoices: readonly SaleInvoice[], month: string) =>
   invoices.filter((inv) => inv.issueDate.slice(0, 7) === month);
@@ -199,16 +201,29 @@ export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, tryb,
   });
 }
 
-export async function ReceivablesSlot({ supabase, tenantId, nowIso, className }: CardProps) {
+export async function ReceivablesSlot({ supabase, tenantId, nowIso, tryb, className }: CardProps) {
   return loadAnalizyCard('Należności', className, async () => {
-    // Faktura spoza PLN zatrzymuje kartę (jak przychód) — nie pomijamy jej po cichu.
-    const terms = inflowTerms(await loadUpcomingInflows(supabase, tenantId, nowIso), todayInWarsaw(new Date(nowIso)));
+    if (tryb === 'przyklad') {
+      const terms = inflowTerms(await loadUpcomingInflows(supabase, tenantId, nowIso), todayInWarsaw(new Date(nowIso)));
+      return (
+        <SpendingStreaksCard
+          title="Należności"
+          description={RECEIVABLES_CAPTION_DEMO}
+          rows={receivablesRowsPrzyklad(terms)}
+          className={className}
+        />
+      );
+    }
+    const r = await loadReceivables(supabase, tenantId, nowIso);
+    const skipped = r.foreignCurrencyCount > 0
+      ? ` · pominięto ${r.foreignCurrencyCount} ${plural(r.foreignCurrencyCount, ['fakturę', 'faktury', 'faktur'])} w walucie obcej`
+      : '';
     return (
       <SpendingStreaksCard
         title="Należności"
-        description={RECEIVABLES_CAPTION}
+        description={`${RECEIVABLES_CAPTION}${skipped}`}
         descriptionTitle={RECEIVABLES_CAPTION_TITLE}
-        rows={receivablesRows(terms)}
+        rows={receivablesRows(r)}
         className={className}
       />
     );

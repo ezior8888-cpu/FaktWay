@@ -7,42 +7,49 @@ import type { PageContext } from '@/lib/supabase/page-context';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
- * Wpływy pieniędzy — JEDNA droga odczytu dla Przepływów, karty Należności
- * Pulpitu i Analiz (PLAN-PRAWDZIWE-DANE E11, decyzja Bartosza D-W
- * 23.10.2026: klient NIC nie oznacza).
+ * Wpływy pieniędzy: JEDNA droga odczytu dla Przepływów (PLAN-PRAWDZIWE-DANE E11).
  *
- * Faktura sprzedaży to wpływ w jednym dniu (`inflowDay`), w tej kolejności:
- * 1. `paid_at` — prawdziwa zapłata potwierdzona w FaktWay (wpłaty / FLO;
- *    wyzwalacz 00073 ustawia go dopiero przy pełnej zapłacie), dzień
- *    w Europe/Warsaw; kwota `paid_amount`;
- * 2. `Zaplacono = 1` + `DataZaplaty` z FA(3) (`fa3_data.parsed.paidDate`,
- *    import pliku i historii KSeF) — faktura wystawiona po zapłacie;
- * 3. termin płatności (`payment_due_date`) — zakładamy zapłatę w terminie;
- * 4. bez terminu — dzień wystawienia.
- * Przy 3–4 kwota to brutto do zapłaty (`amountDueOf`: ROZ — reszta po
- * zaliczkach; z korektami — niżej), a `outstanding` to reszta po potwierdzonych wpłatach
- * częściowych — tę kwotę pokazują Spodziewane wpływy i Należności. Wpłaty
- * częściowej nie dzielimy na osobny dzień: bez `payments` (plan Finora §2.4
- * pkt 14) jej dnia nie znamy, więc liczy się w dniu terminu razem z resztą.
+ * Wpływ to wyłącznie prawdziwe pieniądze (FaktWay 1.0 §3 pkt 3). Decyzję D-W
+ * z 23.10.2026 („klient nic nie oznacza, zakładamy zapłatę w terminie”)
+ * odwołano 02.11.2026 na polecenie Bartosza; klient oznacza zapłatę jednym
+ * dotknięciem (`mark_invoice_paid`, 00158).
+ *
+ * `getInflows` zwraca faktury sprzedaży z ich dniem (`inflowDay`), a podstawa
+ * dnia mówi, czy to pieniądze:
+ * 1. `paid`: `paid_at` (wpłaty, „Zapłacone”, FLO; wyzwalacz ustawia go dopiero
+ *    przy pełnej zapłacie), dzień w Europe/Warsaw, kwota `paid_amount`; albo
+ *    `Zaplacono = 1` + `DataZaplaty` z FA(3) (`fa3_data.parsed.paidDate`, import
+ *    pliku i historii KSeF), kwota brutto do zapłaty;
+ * 2. `correction`: korekta in minus do faktury zapłaconej naprawdę (niżej);
+ * 3. `due`: faktura bez wpłaty z terminem, dniem jest termin;
+ * 4. `issued`: faktura bez wpłaty i bez terminu, dniem jest wystawienie.
+ * Tylko 1–2 są wpływem (`receivedInflows` w `cash-movements`). Faktura z 3–4 to
+ * należność: `outstanding` to reszta po korektach i wpłatach częściowych,
+ * a z terminem dziś lub później jest spodziewanym wpływem (`isExpectedInflow`).
+ * Miniony termin bez wpłaty to należność po terminie (`getReceivables`
+ * i `/payments/overdue`), nie wpływ. Wpłaty częściowej nie dzielimy na osobny
+ * wpływ: bez odczytu `payments` (zablokowane dla sesji, 00074) jej dnia nie
+ * znamy, więc faktura wchodzi do wpływów, gdy jest zapłacona w całości.
  *
  * Faktury jak przychód (`getSalesInvoices`): sprzedaż przyjęta w KSeF
  * w aktywnym środowisku, z każdego pochodzenia (FaktWay, plik, historia
  * KSeF), korekta jako różnica ze znakiem. Strażniki jak przychód, ale tylko
- * dla faktur z dniem wpływu w zakresie: przyjęta faktura bez środowiska
- * (`ENVIRONMENT_ERROR`) i faktura spoza PLN (`InflowCurrencyError` — ten sam
+ * dla faktur z dniem w zakresie: przyjęta faktura bez środowiska
+ * (`ENVIRONMENT_ERROR`) i faktura spoza PLN (`InflowCurrencyError`, ten sam
  * typ co strażnik przychodu, z numerem dokumentu) zatrzymują kartę.
- * Przypomnienia i `/payments/overdue` zostają na `getReceivables`
- * i `paid_at` — tu nic o zaległościach.
  *
- * Korekta (`parent_invoice_id`) wystawiona najpóźniej w dniu wpływu faktury
- * pierwotnej bez prawdziwej zapłaty zmienia kwotę TEGO wpływu: nabywca
- * zapłaci w terminie kwotę po korekcie (w KSeF nie ma anulowania — korekta
- * do zera zdejmuje fakturę z wpływów i ze spodziewanych). Taka korekta nie
- * jest osobnym wpływem. Korekta późniejsza (zwrot, dopłata po zakładanej
- * zapłacie) albo do faktury opłaconej naprawdę to osobny ruch w swoim dniu.
- * Korekty wystawione przed `from` do faktur z dniem wpływu w zakresie
- * czytamy osobnym zapytaniem (`correctionsBefore`) — tylko gdy takie
- * faktury są.
+ * Korekta (`parent_invoice_id`) wystawiona najpóźniej w dniu terminu faktury
+ * pierwotnej bez wpłaty zmienia kwotę TEJ należności: nabywca zapłaci kwotę po
+ * korekcie (w KSeF nie ma anulowania, korekta do zera zdejmuje fakturę ze
+ * spodziewanych). Taka korekta nie jest osobną pozycją. Korekty wystawione
+ * przed `from` do faktur z dniem w zakresie czytamy osobnym zapytaniem
+ * (`correctionsBefore`), tylko gdy takie faktury są.
+ *
+ * Korekta in minus do faktury zapłaconej naprawdę to osobny ruch w dniu jej
+ * wystawienia (`correction`): wpłata jest na całą fakturę (`mark_invoice_paid`),
+ * więc dopiero razem z korektą suma mówi, ile zostało u klienta. Korekta in minus
+ * do faktury bez wpłaty nie jest ruchem, bo żadne pieniądze się nie ruszyły.
+ * Korekta in plus to osobny dług: ma własne „Zapłacone”.
  */
 
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
@@ -70,18 +77,21 @@ export class InflowCurrencyError extends OutgoingInvoiceCurrencyNotSupportedErro
   }
 }
 
-/** Skąd dzień wpływu: prawdziwa zapłata, termin płatności albo dzień wystawienia. */
-export type InflowBasis = 'paid' | 'due' | 'issued';
+/**
+ * Skąd dzień faktury. Pieniądze: `paid` (zapłata) i `correction` (korekta in minus
+ * zapłaconej faktury). Należność bez wpłaty: `due` (termin) i `issued` (wystawienie).
+ */
+export type InflowBasis = 'paid' | 'correction' | 'due' | 'issued';
 
 export interface InflowEntry {
   /** Id faktury. */
   id: string;
-  /** Dzień wpływu w Europe/Warsaw, RRRR-MM-DD (`inflowDay`). */
+  /** Dzień w Europe/Warsaw, RRRR-MM-DD (`inflowDay`): zapłata, termin albo wystawienie. */
   date: string;
   basis: InflowBasis;
   /**
    * PLN ze znakiem dokumentu: wpłata, brutto do zapłaty (z korektami
-   * wystawionymi do dnia wpływu) albo różnica korekty późniejszej.
+   * wystawionymi do dnia terminu) albo różnica korekty.
    */
   amount: number;
   /** Reszta do zapłaty po korektach i wpłatach częściowych; 0 przy prawdziwej zapłacie i korekcie in minus. */
@@ -99,7 +109,7 @@ export interface InflowEntry {
   consumers: boolean;
 }
 
-/** Kolumny dnia wpływu (`inflowDay`). */
+/** Kolumny dnia faktury (`inflowDay`). */
 export interface InflowDayRow {
   paid_at: string | null;
   fa3_paid_date: string | null;
@@ -129,7 +139,7 @@ function isIsoDate(value: string | null | undefined): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-/** Dzień wpływu faktury (D-W): prawdziwa zapłata → data zapłaty z FA(3) → termin → wystawienie. */
+/** Dzień faktury: prawdziwa zapłata → data zapłaty z FA(3) → termin → wystawienie. */
 export function inflowDay(row: InflowDayRow): { date: string; basis: InflowBasis } | null {
   if (row.paid_at) {
     const paidAt = new Date(row.paid_at);
@@ -200,10 +210,40 @@ async function correctionsBefore(
   return rows.filter((row) => parentIds.has(row.parent_invoice_id ?? '') && !fetchedIds.has(row.id));
 }
 
+const PARENT_LOOKUP_CHUNK = 100;
+
 /**
- * Wpływy z dniem w `[from, toExclusive)` (RRRR-MM-DD, kalendarz
- * Europe/Warsaw); bez `toExclusive` — także wszystkie przyszłe terminy.
- * Posortowane po dniu wpływu, potem po id faktury.
+ * Faktury pierwotne spoza głównego odczytu (wszystkie ich daty są przed `from`),
+ * zapłacone naprawdę. Korekta in minus do takiej faktury to ruch pieniędzy,
+ * a korekta do faktury bez wpłaty nie, więc bez tego odczytu suma byłaby zła.
+ * Bez takich korekt: bez zapytania.
+ */
+async function paidParentsOutsideRead(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  parentIds: readonly string[],
+): Promise<Set<string>> {
+  const paid = new Set<string>();
+  for (let i = 0; i < parentIds.length; i += PARENT_LOOKUP_CHUNK) {
+    const chunk = parentIds.slice(i, i + PARENT_LOOKUP_CHUNK);
+    const rows = await readCompletePages('Nie można odczytać faktur korygowanych', (from, to) => supabase
+      .from('invoices')
+      .select(`id, paid_at, payment_due_date, issue_date, fa3_paid_date:${FA3_PAID_DATE}`, { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .in('id', chunk)
+      .order('id', { ascending: true })
+      .range(from, to));
+    for (const row of rows as unknown as Array<InflowDayRow & { id: string }>) {
+      if (inflowDay(row)?.basis === 'paid') paid.add(row.id);
+    }
+  }
+  return paid;
+}
+
+/**
+ * Faktury sprzedaży z dniem w `[from, toExclusive)` (RRRR-MM-DD, kalendarz
+ * Europe/Warsaw); bez `toExclusive` także wszystkie przyszłe terminy.
+ * Posortowane po dniu, potem po id faktury.
  */
 export async function getInflows(
   supabase: PageContext['supabase'],
@@ -211,7 +251,7 @@ export async function getInflows(
   range: { from: string; toExclusive?: string },
 ): Promise<InflowEntry[]> {
   const environment = requireConfiguredKsefEnvironment();
-  // Dzień wpływu ≥ `from` wymaga, by któraś z jego kolumn była ≥ `from`.
+  // Dzień ≥ `from` wymaga, by któraś z jego kolumn była ≥ `from`.
   // `paid_at` to znacznik czasu: okno poszerzone o dobę, dokładny dzień
   // w Warszawie liczy filtr niżej. Sama data (bez „:” i „.”, które w `or`
   // PostgREST-a trzeba by cytować). Górnej granicy w zapytaniu nie ma.
@@ -236,7 +276,7 @@ export async function getInflows(
   const inWindow = (date: string) =>
     date >= range.from && (range.toExclusive === undefined || date < range.toExclusive);
 
-  // Faktury pierwotne bez prawdziwej zapłaty — korekta wystawiona do ich dnia wpływu zmienia ten wpływ.
+  // Faktury pierwotne bez prawdziwej zapłaty: korekta wystawiona do ich dnia zmienia tę należność.
   const parents = new Map<string, { row: InflowRow; date: string; basis: InflowBasis }>();
   for (const row of rows) {
     const day = inflowDay(row);
@@ -257,13 +297,31 @@ export async function getInflows(
     foldedIds.add(correction.id);
   }
 
+  // Korekta in minus bez własnej wpłaty: czy faktura pierwotna ma prawdziwą zapłatę.
+  const isPaidOff = (row: InflowRow) => inflowDay(row)?.basis === 'paid';
+  const minusCorrections = rows.filter((row) =>
+    row.parent_invoice_id !== null && !foldedIds.has(row.id) && !isPaidOff(row) && amountDueOf(row) < 0);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const paidParents = new Set(rows.filter((row) => row.parent_invoice_id === null && isPaidOff(row)).map((row) => row.id));
+  const outsideRead = [...new Set(minusCorrections
+    .filter((row) => inWindow(row.issue_date?.slice(0, 10) ?? '') && !byId.has(row.parent_invoice_id ?? ''))
+    .map((row) => row.parent_invoice_id as string))];
+  if (outsideRead.length > 0) {
+    for (const id of await paidParentsOutsideRead(supabase, tenantId, outsideRead)) paidParents.add(id);
+  }
+  const moneyCorrections = new Set(minusCorrections
+    .filter((row) => paidParents.has(row.parent_invoice_id ?? '') && isIsoDate(row.issue_date?.slice(0, 10)))
+    .map((row) => row.id));
+
   const inRange: Array<{ row: InflowRow; date: string; basis: InflowBasis }> = [];
   for (const row of rows) {
     if (foldedIds.has(row.id)) continue;
-    const day = inflowDay(row);
+    const day = moneyCorrections.has(row.id)
+      ? { date: (row.issue_date as string).slice(0, 10), basis: 'correction' as const }
+      : inflowDay(row);
     if (day && inWindow(day.date)) inRange.push({ row, ...day });
   }
-  // Strażniki obejmują też korekty, które zmieniają kwotę wpływu z zakresu.
+  // Strażniki obejmują też korekty, które zmieniają kwotę należności z zakresu.
   const guarded = inRange.flatMap(({ row }) => [row, ...(folded.get(row.id) ?? [])]);
   if (guarded.some((row) => row.ksef_environment === null || !KNOWN_ENVIRONMENTS.has(row.ksef_environment))) {
     throw new Error(ENVIRONMENT_ERROR);
@@ -280,7 +338,7 @@ export async function getInflows(
   const entries: InflowEntry[] = [];
   for (const { row, date, basis } of active) {
     const paidByPayments = basis === 'paid' && Boolean(row.paid_at);
-    // Brutto do zapłaty po korektach wystawionych do dnia wpływu (różnice ze znakiem).
+    // Brutto do zapłaty po korektach wystawionych do dnia terminu (różnice ze znakiem).
     const due = (folded.get(row.id) ?? []).reduce((sum, correction) => sum + amountDueOf(correction), amountDueOf(row));
     const amount = roundToCents(paidByPayments ? finiteNumber(row.paid_amount) : due) || 0;
     if (amount === 0) continue;
@@ -291,7 +349,9 @@ export async function getInflows(
       date,
       basis,
       amount,
-      outstanding: basis === 'paid' ? 0 : Math.max(0, roundToCents(due - finiteNumber(row.paid_amount)) || 0),
+      outstanding: basis === 'paid' || basis === 'correction'
+        ? 0
+        : Math.max(0, roundToCents(due - finiteNumber(row.paid_amount)) || 0),
       dueDate: isIsoDate(dueDate) ? dueDate : null,
       invoiceKind: row.invoice_kind,
       internalNumber: row.internal_number,

@@ -58,7 +58,7 @@ const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvir
  * środowisko i walutę: +2), a pełne koszty czytają faktury zakupu z wydatkami
  * osadzonymi (+1), wydatki o tym samym NIP-ie i numerze (+1) i zwolnienie
  * z VAT (+1).
- * E11 (D-W) świadomie −2: „Spodziewane wpływy” czytają wpływy (`getInflows`,
+ * E11 świadomie −2: „Spodziewane wpływy” czytają wpływy (`getInflows`,
  * jeden odczyt) zamiast należności (`getReceivables`: faktury, korekty i ROZ).
  * Recenzja 2 świadomie +5: odczyt wpływów okna 12 miesięcy (pięć odczytów
  * bez RSC `cache()`, na produkcji jeden) czyta też korekty wystawione przed
@@ -156,16 +156,15 @@ afterEach(() => {
 describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same loadery', () => {
   it('karty Finory z prawdziwymi podpisami, bez napisów szablonu', async () => {
     const markup = await przeplywy();
-    // E11 (D-W): wpływy według terminów płatności — „Suma wpływów” (napis szablonu sprzed E6 wraca,
-    // bo znowu jest prawdziwy), drugi wiersz aktywności „Termin · …” (demo nie ma oznaczonych wpłat).
+    // Dane przykładowe (`lib/demo` bez wpłat): miniony termin gra rolę wpłaty (`przykladoweWplywy`), więc
+    // karty są pełne jak zawsze, a napisy te same co u prawdziwej firmy z oznaczonymi wpłatami.
     for (const text of [
       'Przepływy pieniężne', 'Suma wpływów', 'Suma kosztów', 'Tygodniowo', 'Miesięcznie', 'Rocznie',
       'Odłóż na podatek', 'Szacunek PIT od 1 stycznia', 'Szacunek: liniowy, bez ZUS',
-      // Recenzja 2: kafel nie twierdzi, że pieniądze wpłynęły — założenie D-W w tytule, jak „(brutto)” obok.
-      'Wpływy w tym miesiącu (wg terminów)', 'Koszty w tym miesiącu (brutto)', 'wobec poprzedniego miesiąca',
+      'Wpłynęło w tym miesiącu', 'Koszty w tym miesiącu (brutto)', 'wobec poprzedniego miesiąca',
       'Największe źródła przepływów', 'Spodziewane wpływy', 'Następne 30 dni', 'Termin ',
-      'Ostatnia aktywność', 'Termin · ', 'Kontrahent', 'Kategoria', 'Status', 'Przykład',
-      'Terminy płatności, koszty brutto', 'Wg terminu',
+      'Ostatnia aktywność', 'Wpłata · ', 'Kontrahent', 'Kategoria', 'Status', 'Przykład',
+      'Oznaczone wpłaty i koszty brutto', 'Opłacona',
     ]) {
       expect(markup).toContain(text);
     }
@@ -174,7 +173,8 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
       'Nadchodzące rachunki', 'Czynsz za biuro', 'Wynagrodzenia', 'Rachunek firmowy', 'Rachunek oszczędnościowy',
       'Internet i media', 'Netflix', 'Allegro', 'Jakub Adamski', 'zrealizowana', 'nieudana', 'subskrypcja',
       'Suma wydatków', 'Wpływy i wydatki w czasie', 'Udostępnij', 'Aktualizuj',
-      'Wpłata · ', 'Suma wpłat', 'oznacz', 'zaległ', 'nie potwierdzamy', 'Wpłynęło',
+      'Termin · ', 'Suma wpłat', 'zaległ', 'nie potwierdzamy', 'Wg terminu', 'Wg wystawienia',
+      'Terminy płatności', 'wg terminów', 'według terminów',
     ]) {
       expect(markup).not.toContain(text);
     }
@@ -233,11 +233,12 @@ describe('Przepływy po weryfikacji KSeF: prawdziwe dane', () => {
     state.proof = ZWERYFIKOWANA;
   });
 
-  it('pusta firma: bez znaczników przykładu, pusty stan wpływów bez „oznaczania” (E11)', async () => {
+  it('pusta firma: bez znaczników przykładu, pusty stan wpływów prowadzi do oznaczenia zapłaty', async () => {
     const markup = await przeplywy(memoryClient({ ksef_history_sync: [] }));
     expect(ZNACZNIKI_PRZYKLADU.filter((z) => markup.includes(z))).toEqual([]);
-    expect(markup).toContain('Brak wpływów wg terminów');
-    expect(markup).not.toContain('Wpłat jeszcze nie oznaczono');
+    expect(markup).toContain('Oznacz wpłatę przy fakturze');
+    expect(markup).toContain('Przejdź do faktur');
+    expect(markup).toContain('href="/invoices"');
     expect(markup).not.toContain('Pobieramy faktury z KSeF');
   });
 
@@ -272,7 +273,7 @@ describe('Przepływy po weryfikacji KSeF: prawdziwe dane', () => {
 
   it('faktura w EUR zabiera tylko karty, które ją czytają; reszta działa', async () => {
     const tables = danePrzykladowe(NOW, 'test');
-    // E11: demo nie ma `paid_at` — wzorem jest faktura sprzedaży; EUR z terminem w tym miesiącu.
+    // Demo nie ma `paid_at` — wzorem jest faktura sprzedaży; EUR z terminem w tym miesiącu.
     const wzor = tables.invoices!.find((f) => f.direction === 'outgoing')!;
     tables.invoices!.push({
       ...wzor, id: 'eur-1', currency: 'EUR', issue_date: '2026-10-05', sale_date: '2026-10-05', payment_due_date: '2026-10-19',
@@ -303,15 +304,14 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
   const bucket = (label: string, inflow: number, outflow: number, inflowCount = 1) =>
     ({ key: label, label, period: label, inflow, outflow, inflowCount });
 
-  it('wykres: trzy zakładki z danych, podtytuł z zastrzeżeniem wpłat', () => {
+  it('wykres: trzy zakładki z danych, podtytuł mówi o oznaczonych wpłatach', () => {
     const dane = adaptery.wykresProps(
       { week: [bucket('13.10', 1, 2)], month: [bucket('Paź', 10, 20)], year: [bucket('2026', 100, 200)] },
       'prawdziwe',
     );
     expect(dane.tabs.yearly.map((b) => b.inflow)).toEqual([100]);
-    // E11 (D-W): wpływy według terminów płatności, ta sama długość co dawne „Oznaczone wpłaty i koszty brutto”.
-    expect(dane.subTitle).toBe('Terminy płatności, koszty brutto');
-    expect(dane.subTitleHint).toContain('według terminów płatności');
+    expect(dane.subTitle).toBe('Oznaczone wpłaty i koszty brutto');
+    expect(dane.subTitleHint).toContain('według oznaczonych wpłat');
     const pusty = adaptery.wykresProps(
       { week: [bucket('13.10', 0, 0, 0)], month: [bucket('Paź', 0, 0, 0)], year: [bucket('2026', 0, 0, 0)] },
       'synchronizacja',
@@ -319,12 +319,12 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     expect(pusty.subTitle).toBe('Pobieramy faktury z KSeF…');
   });
 
-  it('kafel wpływów: bez wpływu „—” i pusty stan bez „oznaczania”, nie „0 zł”', () => {
+  it('kafel wpływów: bez wpływu „—” i pusty stan prowadzący do oznaczenia, nie „0 zł”', () => {
     const flow = { amount: 0, prevAmount: 500, count: 0, changePct: -100, daily: [{ date: '2026-10-01', value: 0 }] };
     const dane = adaptery.wplywyMiesiacaProps(flow, adaptery.krzywaTygodni([], '2026-10-01'), 'prawdziwe');
     expect(dane.amount).toBe('—');
     expect(dane.changePercentage).toBe('—');
-    expect(dane.comparison).toBe('Brak wpływów wg terminów');
+    expect(dane.comparison).toBe('Oznacz wpłatę przy fakturze');
     // Krzywa nie zależy od dnia miesiąca: 1. dnia też 8 punktów (dawniej jeden punkt + dopisane zero).
     expect(dane.chartData).toHaveLength(8);
 
@@ -364,10 +364,13 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     ]);
     expect(krzywa.map((p) => p.value)).toEqual([150, 0, 0, 0, 0, 0, 500, 410.25]);
 
-    // Wpływy: termin dziś to jeszcze „Spodziewane wpływy” (`receivedInflows`), koszty — według daty dokumentu, brutto.
-    const wpis = (id: string, date: string, amount: number) =>
-      ({ id, date, amount, basis: 'due' as const, dueDate: date, outstanding: amount }) as unknown as Parameters<typeof adaptery.krzywaWplywow>[0][number];
-    const wplywy = adaptery.krzywaWplywow([wpis('a', '2026-10-20', 100), wpis('b', '2026-10-23', 900)], '2026-10-23');
+    // Wpływy: same oznaczone wpłaty (`receivedInflows`), termin to jeszcze nie pieniądze; koszty według daty dokumentu, brutto.
+    const wpis = (id: string, date: string, amount: number, basis: 'paid' | 'due') =>
+      ({ id, date, amount, basis, dueDate: date, outstanding: basis === 'paid' ? 0 : amount }) as unknown as Parameters<typeof adaptery.krzywaWplywow>[0][number];
+    const wplywy = adaptery.krzywaWplywow(
+      [wpis('a', '2026-10-20', 100, 'paid'), wpis('b', '2026-10-23', 900, 'due'), wpis('c', '2026-10-21', 700, 'due')],
+      '2026-10-23',
+    );
     expect(wplywy.at(-1)!.value).toBe(100);
     const koszt = { issueDate: '2026-10-21', outflow: 123, cost: 100 } as unknown as Parameters<typeof adaptery.krzywaKosztow>[0][number];
     expect(adaptery.krzywaKosztow([koszt], '2026-10-23').at(-1)!.value).toBe(123);
@@ -380,14 +383,13 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
       { key: 'in:3', name: 'Konsumenci', direction: 'in' as const, consumers: true, nip: null, amount: 100, count: 1, share: 2 },
     ];
     const prawdziwe = adaptery.zrodlaProps(src, 'prawdziwe');
-    // E11: wpływ to faktura według terminu, nie oznaczona wpłata.
-    expect(prawdziwe.items.map((s) => s.sourceType)).toEqual(['Klient · 3 faktury', 'Dostawca · 5 dokumentów', 'B2C · 1 faktura']);
+    expect(prawdziwe.items.map((s) => s.sourceType)).toEqual(['Klient · 3 wpłaty', 'Dostawca · 5 dokumentów', 'B2C · 1 wpłata']);
     expect(prawdziwe.items.map((s) => s.href)).toEqual(['/contractors', '/contractors', null]);
     expect(prawdziwe.items[1]!.share).toBe(60);
     expect(adaptery.zrodlaProps(src, 'przyklad').items.every((s) => s.href === null)).toBe(true);
   });
 
-  it('spodziewane wpływy: termin dziś / jutro / za N dni, kwota pozostała, „według terminów płatności” (E11)', () => {
+  it('spodziewane wpływy: termin dziś / jutro / za N dni, kwota pozostała, otwarte faktury bez oznaczonej zapłaty', () => {
     const items = [0, 1, 12].map((daysLeft, i) => ({
       id: `f${i}`, name: `Klient ${i}`, internalNumber: `FV/${i}`, dueDate: '2026-10-23', daysLeft, amount: 1850,
     }));
@@ -395,7 +397,7 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     expect(dane.items.map((b) => b.dueDate)).toEqual(['Termin dziś', 'Termin jutro', 'Termin za 12 dni']);
     expect(dane.items[0]!.amount).toBe('1850,00 zł');
     expect(dane.items[0]!.href).toBe('/invoices/f0');
-    expect(dane.note).toMatch(/według terminów płatności/);
+    expect(dane.note).toMatch(/bez oznaczonej zapłaty/);
     expect(dane.note).not.toMatch(/nie potwierdzamy/);
   });
 
@@ -496,7 +498,7 @@ describe('dawna siatka: jedna karta = jedno źródło awarii', () => {
     expect(slots.map((slot) => (slot.props as { title: string }).title)).toHaveLength(12);
   });
 
-  // E11 (D-W): wpływy to te same faktury sprzedaży co przychód, więc faktura w EUR z terminem w oknie
+  // Wpływy to te same faktury sprzedaży co przychód, więc faktura w EUR z terminem w oknie
   // zatrzymuje też karty wpływów (jak przychód); karta kosztów dalej działa.
   it('faktura sprzedaży w EUR zatrzymuje karty sprzedaży i wpływów, a karta kosztów działa', async () => {
     const supabase = db({

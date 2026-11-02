@@ -84,12 +84,14 @@ const NOW = new Date('2026-10-23T08:00:00Z');
  * (`getCosts` sprawdza ich środowisko i walutę: +2), a pełne koszty czytają
  * faktury zakupu z wydatkami osadzonymi (+1), wydatki o tym samym NIP-ie
  * i numerze (+1) i zwolnienie z VAT (+1).
- * E11 (D-W) świadomie −2: Należności czytają wpływy od dziś (`getInflows`,
+ * E11 świadomie −2: Należności czytają wpływy od dziś (`getInflows`,
  * jeden odczyt) zamiast `getReceivables` (faktury, korekty i ROZ).
  * Recenzja 2 świadomie +1: korekty wystawione przed dziś do faktur z terminem
  * od dziś (zmieniają kwotę spodziewaną; `correctionsBefore` w `inflows.ts`).
+ * Odwołanie D-W (02.11.2026) świadomie +1: prawdziwa firma ma w Należnościach
+ * `getReceivables` (faktury, korekty i ROZ) zamiast wpływów od dziś z korektami.
  */
-const READS_PULPITU = 28;
+const READS_PULPITU = 29;
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvironment: 'test' };
 
 async function html(node: ReactNode): Promise<string> {
@@ -289,8 +291,8 @@ describe('Pulpit przed weryfikacją KSeF: dane przykładowe przez te same loader
       'Finanse', 'Ostatnie 7 miesięcy', 'Raport', 'Ten miesiąc', 'Zobacz przepływy',
       'Faktury w KSeF', 'Średnia faktura', 'Przychód netto', 'VAT należny', 'Ostatni rok',
       'Należności', 'Szczegóły', 'Najlepiej sprzedające się', 'Najwięksi klienci', 'Przykład',
-      // E11 (D-W): Należności to przyszłe terminy płatności, nie zaległości.
-      'Ten tydzień', 'Do 30 dni', 'Później', 'według terminów płatności',
+      // Dane przykładowe bez wpłat (`lib/demo`): Należności to przyszłe terminy płatności, nie zaległości.
+      'Ten tydzień', 'Do 30 dni', 'Później', 'bez oznaczonej zapłaty',
     ]) {
       expect(markup).toContain(text);
     }
@@ -304,7 +306,7 @@ describe('Pulpit przed weryfikacją KSeF: dane przykładowe przez te same loader
     expect(markup).not.toMatch(/\$\d/);
     expect(markup).not.toContain('/images/avatars');
     expect(markup).toContain('href="/przeplywy"');
-    // E11: „Szczegóły” Należności prowadzą do Spodziewanych wpływów (Przepływy), nie do listy zaległości.
+    // W przykładzie „Szczegóły” Należności prowadzą do Spodziewanych wpływów (Przepływy), nie do listy zaległości.
     expect(markup).not.toContain('href="/payments/overdue"');
   });
 
@@ -405,11 +407,11 @@ describe('Odporność i koszt: karty czytają osobno', () => {
     const blad = 'Raport wstrzymany: faktura sprzedaży nie ma potwierdzonej waluty PLN.';
     // Finanse i VAT (wspólne okno 12 miesięcy) oraz rankingi (12 + poprzednie 12).
     expect(markup.split(blad).length - 1).toBe(3);
-    // Kafle, przychód (5 miesięcy i rok wcześniej) i należności (przyszłe terminy, E11) zostają.
+    // Kafle, przychód (5 miesięcy i rok wcześniej) i należności (faktura w EUR poza sumą w złotych) zostają.
     expect(markup).toContain('Faktury w KSeF');
     expect(markup).toContain('Średnia faktura');
     expect(markup).toContain('Przychód netto');
-    expect(markup).toContain('Ten tydzień');
+    expect(markup).toContain('W terminie');
   });
 
   it('T9: liczba odczytów bazy na cały Pulpit — wzrost wymaga świadomej zmiany tej liczby', async () => {

@@ -43,6 +43,7 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 | `invoice_rejected` | server | `error_code` | KSeF odrzucił |
 | `invoice_correction_created` | server | `parent_invoice_id` | korekta |
 | `invoice_offline_queued` | server | `reason` | wpadła do Offline24 |
+| `invoice_marked_paid` | server | `tenant_id`, `source`: 'manual', `role` | klient dotknął „Zapłacone” (RPC `mark_invoice_paid`, tylko gdy powstała wpłata; drugie dotknięcie bez zdarzenia) |
 | `expense_added` | server | `source`: 'manual'\|'ocr'\|'ksef_inbox' | INSERT do `expenses` |
 | `ocr_scan_completed` | server | `vendor_recognized`, `confidence` | po Inngest `processOcrJob` |
 | `contractor_added` | server | `source`: 'manual'\|'import' | INSERT do `contractors` |

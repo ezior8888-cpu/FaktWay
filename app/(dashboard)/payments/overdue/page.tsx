@@ -8,6 +8,7 @@ import { getDashboardOrgSwitcherProps } from '@/lib/dashboard-shell-data';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
 import { amountDueOf } from '@/lib/invoices/amount-due';
+import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
 import { countRemindersSentThisMonth, readLatestReminders } from '@/lib/overdue/reminder-overview';
 import type { Database } from '@/types/database';
 
@@ -48,7 +49,8 @@ export default async function OverduePage() {
   const { activeOrgId: tenantId, memberships } = await getDashboardOrgSwitcherProps();
   // „Ustawienia przypomnień” prowadzą na stronę tylko dla właściciela
   // (`getPageContextWithRole('owner')` w /settings/reminders).
-  const isOwner = memberships?.find((membership) => membership.isActive)?.role === 'owner';
+  const activeRole = memberships?.find((membership) => membership.isActive)?.role;
+  const isOwner = activeRole === 'owner';
   const supabase = await createClient();
   const environment = requireConfiguredKsefEnvironment();
 
@@ -279,6 +281,7 @@ export default async function OverduePage() {
       }}
       limitReached={limitReached}
       canManageSettings={isOwner}
+      canMarkPaid={canChangeInvoicePayment(activeRole)}
     />
   );
 }

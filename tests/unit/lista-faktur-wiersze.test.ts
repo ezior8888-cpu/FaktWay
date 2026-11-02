@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * P3 (PLAN-FINORA §5): kolumna „Do zapłaty” i ikona płatności na liście
  * faktur tylko dla faktur spełniających §2.4 pkt 11 (bez warunku statusu
  * płatności). Szkice, importy, korekty, waluta obca, inne środowisko
- * i faktury z dziećmi dostają „—”, nigdy plakietkę „Opłacona”. Predykat jest
- * TEN SAM co w `getReceivables` — lista nie ma drugiej kopii warunków.
- * Link „Korekta” tylko dla faktur, które przyjmuje formularz korekty.
+ * i faktury z dziećmi dostają „—”, chyba że są zapłacone: wpłata to fakt
+ * (00158). Predykat jest TEN SAM co w `getReceivables` — lista nie ma drugiej
+ * kopii warunków. Link „Korekta” tylko dla faktur, które przyjmuje formularz
+ * korekty. „Zapłacone” dla każdej przyjętej sprzedaży z resztą do zapłaty.
  */
 
 const env = vi.hoisted(() => ({ value: 'production' as string }));
@@ -17,6 +18,7 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
 import { getReceivables } from '@/lib/dashboard/receivables';
 import {
   canCorrectInvoice,
+  canMarkInvoicePaid,
   LIST_ROW_FACT_COLUMNS,
   loadInvoiceListRowFacts,
   paymentFactsOf,
@@ -228,6 +230,57 @@ describe('ikona płatności — z daty w Europe/Warsaw, nie z payment_status', (
     expect(map.get(row.id as string)!.payment).toBe('unpaid');
   });
 
+  it('zapłata to fakt: faktura spoza należności, zapłacona naprawdę, mówi „Opłacona”, nie „—”', () => {
+    const ctx = { environment: 'production' as const, childIds: new Set<string>() };
+    const paid = { payment_status: 'paid', paid_amount: 1000 };
+    for (const over of [
+      { origin: 'ksef_import' },
+      { origin: 'file_import' },
+      { invoice_kind: 'correction', invoice_type: 'KOR' },
+      { currency: 'EUR' },
+    ]) {
+      expect(paymentFactsOf(asRow(invoice({ ...paid, ...over })), ctx, '2026-10-17'), JSON.stringify(over))
+        .toEqual({ payment: 'paid', outstanding: 0 });
+    }
+    // Faktura z dzieckiem po zapłacie też.
+    const zDzieckiem = invoice(paid);
+    expect(paymentFactsOf(asRow(zDzieckiem), { ...ctx, childIds: new Set([zDzieckiem.id as string]) }, '2026-10-17'))
+      .toEqual({ payment: 'paid', outstanding: 0 });
+    // Data zapłaty z FA(3): import, który nigdy nie dostanie wpłaty w `payments`.
+    expect(paymentFactsOf(asRow(invoice({ origin: 'file_import', fa3_paid_date: '2026-09-20' })), ctx, '2026-10-17'))
+      .toEqual({ payment: 'paid', outstanding: 0 });
+    // Import bez wpłaty: nie wiemy, więc nie mówimy „Nieopłacona”.
+    expect(paymentFactsOf(asRow(invoice({ origin: 'ksef_import' })), ctx, '2026-10-17'))
+      .toEqual({ payment: null, outstanding: null });
+    // Zapłacona, ale szkic, zakup albo inne środowisko: nie nasza sprawa.
+    for (const over of [{ ksef_status: 'draft' }, { direction: 'incoming' }, { ksef_environment: 'test' }]) {
+      expect(paymentFactsOf(asRow(invoice({ ...paid, ...over })), ctx, '2026-10-17'), JSON.stringify(over))
+        .toEqual({ payment: null, outstanding: null });
+    }
+  });
+
+  it.each<[string, Row, number, boolean]>([
+    ['zwykła po terminie', {}, 0, true],
+    ['import z pliku', { origin: 'file_import' }, 0, true],
+    ['historia KSeF', { origin: 'ksef_import' }, 0, true],
+    ['faktura w walucie obcej', { currency: 'EUR' }, 0, true],
+    ['wpłata częściowa', { paid_amount: 400, payment_status: 'partial' }, 0, true],
+    ['korekta częściowa', {}, -100, true],
+    ['korekta do zera', {}, -1000, false],
+    ['korekta in plus', { invoice_kind: 'correction', invoice_type: 'KOR', gross_total: 200 }, 0, true],
+    ['korekta in minus', { invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -200 }, 0, false],
+    ['ROZ z resztą', { invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, payment_data: { amountDue: 300 } }, 0, true],
+    ['ROZ pokryta zaliczkami', { invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, payment_data: { amountDue: 0 } }, 0, false],
+    ['zapłacona', { paid_amount: 1000, payment_status: 'paid' }, 0, false],
+    ['data zapłaty z FA(3)', { fa3_paid_date: '2026-09-20' }, 0, false],
+    ['szkic', { ksef_status: 'draft' }, 0, false],
+    ['błąd wysyłki', { ksef_status: 'failed' }, 0, false],
+    ['zakup', { direction: 'incoming' }, 0, false],
+    ['inne środowisko', { ksef_environment: 'test' }, 0, false],
+  ])('canMarkInvoicePaid: %s', (_label, over, corrections, expected) => {
+    expect(canMarkInvoicePaid(asRow(invoice(over)), 'production', corrections)).toBe(expected);
+  });
+
   it('paymentFactsOf jest czystą funkcją', () => {
     const ctx = { environment: 'production' as const, childIds: new Set<string>() };
     expect(paymentFactsOf(asRow(invoice({ payment_due_date: '2026-10-01' })), ctx, '2026-10-17'))
@@ -303,11 +356,27 @@ describe('odczyt dzieci dla strony listy', () => {
     ]));
   });
 
+  it('„Zapłacone”: suma przyjętych korekt z odczytu dzieci; korekta do zera zdejmuje przycisk, częściowa nie', async () => {
+    const czesciowa = invoice();
+    const doZera = invoice();
+    const wTrakcie = invoice();
+    const dzieci = [
+      invoice({ invoice_kind: 'correction', invoice_type: 'KOR', parent_invoice_id: czesciowa.id, gross_total: -100 }),
+      invoice({ invoice_kind: 'correction', invoice_type: 'KOR', parent_invoice_id: doZera.id, gross_total: -1000 }),
+      // Korekta w toku (szkic) jeszcze nie zmienia długu.
+      invoice({ invoice_kind: 'correction', invoice_type: 'KOR', parent_invoice_id: wTrakcie.id, gross_total: -1000, ksef_status: 'draft' }),
+    ];
+    const { map } = await facts([czesciowa, doZera, wTrakcie, ...dzieci], [czesciowa, doZera, wTrakcie]);
+    expect(map.get(czesciowa.id as string)!.canMarkPaid).toBe(true);
+    expect(map.get(doZera.id as string)!.canMarkPaid).toBe(false);
+    expect(map.get(wTrakcie.id as string)!.canMarkPaid).toBe(true);
+  });
+
   it('strona bez kandydatów (same szkice) — bez zapytań', async () => {
     const draft = invoice({ ksef_status: 'draft', ksef_environment: null, ksef_number: null });
     const { c, map } = await facts([draft]);
     expect(c.log).toHaveLength(0);
-    expect(map.get(draft.id as string)).toEqual({ payment: null, outstanding: null, canCorrect: false });
+    expect(map.get(draft.id as string)).toEqual({ payment: null, outstanding: null, canCorrect: false, canMarkPaid: false });
   });
 
   it('błąd odczytu dzieci — wyjątek, nie „bez dzieci”', async () => {

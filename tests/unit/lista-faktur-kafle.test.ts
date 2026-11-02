@@ -215,10 +215,8 @@ describe('Faktury w tym miesiącu', () => {
 describe('Opłacone (wpływy w tym miesiącu)', () => {
   it('podpisy karty', () => {
     expect(PAID_NOTE).toBe('według oznaczonych wpłat');
-    // E0 (PLAN-PRAWDZIWE-DANE, Z8): bez potwierdzania wpłat (N6) pusty stan nie
-    // każe „oznaczać” — tej czynności klient nie ma; mówi tylko, jak jest.
-    expect(PAID_EMPTY_STATE).toBe('Wpłat jeszcze nie oznaczono');
-    expect(PAID_EMPTY_STATE).not.toMatch(/oznaczaj/i);
+    // Od 00158 klient ma tę czynność („Zapłacone” przy fakturze), więc pusty stan do niej prowadzi.
+    expect(PAID_EMPTY_STATE).toBe('Oznacz wpłatę przy fakturze');
   });
 
   it('bez opłaconych faktur w miesiącu → null (pusty stan), nie 0', async () => {
@@ -226,7 +224,7 @@ describe('Opłacone (wpływy w tym miesiącu)', () => {
     expect(await paidThisMonth(supabase, TENANT, NOW)).toBeNull();
   });
 
-  it('sumuje paid_amount faktur z pkt 11 według paid_at w Warszawie', async () => {
+  it('sumuje paid_amount według paid_at w Warszawie', async () => {
     const { supabase } = sb({ invoices: [
       paid(100, '2026-10-02T08:00:00Z'),
       paid(200.5, '2026-10-31T23:30:00Z'), // 1.11 00:30 w Warszawie (CET) → poza
@@ -236,9 +234,18 @@ describe('Opłacone (wpływy w tym miesiącu)', () => {
     expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(400);
   });
 
+  // „Zapłacone” działa na imporcie, historii KSeF i korekcie in plus (00158): wpłata jest faktem, a kafel
+  // ma się zgadzać z Przepływami. Świadomie zastępuje dawne „import i korekta nie są wpływem”.
   it.each([
-    ['import', { origin: 'ksef_import' }],
-    ['korekta', { invoice_kind: 'correction', invoice_type: 'KOR' }],
+    ['plik', { origin: 'file_import' }],
+    ['historia KSeF', { origin: 'ksef_import' }],
+    ['korekta in plus', { invoice_kind: 'correction', invoice_type: 'KOR' }],
+  ])('%s oznaczona jako zapłacona jest wpływem', async (_label, overrides) => {
+    const { supabase } = sb({ invoices: [paid(999, '2026-10-05T10:00:00Z', overrides), paid(1, '2026-10-05T10:00:00Z')] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1000);
+  });
+
+  it.each([
     ['EUR', { currency: 'EUR' }],
     ['inne środowisko', { ksef_environment: 'test' }],
     ['zakup', { direction: 'incoming' }],

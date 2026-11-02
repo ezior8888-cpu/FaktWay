@@ -18,7 +18,7 @@ import { DymekWiersz } from '@/components/dashboard/finora/dymek'
 
 // Util Imports
 import type { FlowBucket } from '@/lib/dashboard/cash-movements'
-import { INFLOW_EMPTY, INFLOW_EMPTY_TITLE, INFLOW_NOTE } from '@/lib/dashboard/inflow-labels'
+import { INFLOW_EMPTY_TITLE, INFLOW_NONE, INFLOW_NOTE } from '@/lib/dashboard/inflow-labels'
 import { formatPlCompactNumber, formatPlInt, formatPlMoney } from '@/lib/format/pl'
 import { cn } from '@/lib/utils'
 
@@ -26,8 +26,8 @@ import { cn } from '@/lib/utils'
  * PLAN-PRAWDZIWE-DANE E6: dane z propsów (`buildCashFlowChart` przez
  * `adaptery.ts`), wygląd bez zmian. Sumy nad wykresem idą za AKTYWNĄ
  * zakładką (w szablonie zawsze z miesięcy), oś Y z danych („12 tys.”),
- * dymek z „zł”. E11 (D-W): seria „Wpływy” według terminów płatności, a okres
- * bez żadnej faktury z terminem mówi to wprost.
+ * dymek z „zł”. Seria „Wpływy” to oznaczone wpłaty (D-W odwołane 02.11.2026),
+ * a okres bez żadnej wpłaty mówi to wprost.
  */
 
 type TabValue = 'weekly' | 'monthly' | 'yearly'
@@ -178,7 +178,7 @@ const CashFlowCard = ({ tabs, subTitle, subTitleHint, menuItems, demo, className
                               <DymekWiersz
                                 color={item.color}
                                 label={cashFlowChartConfig.inflow.label}
-                                value={bucket.inflowCount > 0 ? zl(Number(value)) : INFLOW_EMPTY.toLowerCase()}
+                                value={bucket.inflowCount > 0 ? zl(Number(value)) : INFLOW_NONE}
                               />
                             )
                           }

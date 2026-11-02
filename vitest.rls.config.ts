@@ -29,6 +29,9 @@ export default defineConfig({
       // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
       // CHECK-i, ksef_upo_expected i filtr osadzenia przez PostgREST.
       'tests/rls-historia-ksef.test.ts',
+      // 00158 („Zapłacone” jednym dotknięciem, FaktWay 1.0 §3 pkt 3): RPC razem
+      // z wyzwalaczami paid_amount, paid_at i payment_status, role, obca firma, przypomnienia.
+      'tests/rls-zaplacone.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

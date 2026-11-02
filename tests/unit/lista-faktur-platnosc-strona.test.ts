@@ -82,6 +82,14 @@ function parseCondition(text: string): Pred {
     case 'is':
       if (value !== 'null') throw new Error(`nieobsługiwane is.${value}`);
       return (r) => r[column] === null || r[column] === undefined;
+    case 'not': {
+      // `fa3_data->parsed->>paidDate.not.is.null`: ścieżka JSON z filtra „Opłacone”.
+      if (value !== 'is.null') throw new Error(`nieobsługiwane not.${value}`);
+      const path = column.split(/->>?/);
+      const read = (r: Row): unknown =>
+        path.reduce<unknown>((node, key) => (node && typeof node === 'object' ? (node as Row)[key] : undefined), r);
+      return (r) => read(r) !== null && read(r) !== undefined;
+    }
     default:
       throw new Error(`nieobsługiwany operator w or(): ${op}`);
   }
@@ -245,15 +253,22 @@ describe('C1: filtr płatności na stronie /invoices obejmuje tylko należności
     expect(await listFor('nieoplacone')).toEqual(['bez-waluty', 'rozliczenie', 'vat', 'zaliczka']);
   });
 
-  it('opłacone: opłacony import ani opłacona korekta nie są „opłaconą fakturą” listy', async () => {
+  // Zapłata to fakt bez względu na pochodzenie: „Zapłacone” działa też na imporcie (00158), a wiersz
+  // takiej faktury mówi „Opłacona”. Filtr ma pokazać te same faktury. Świadomie zastępuje dawne
+  // „opłacony import ani opłacona korekta nie są opłaconą fakturą listy”.
+  it('opłacone: każda zapłacona faktura sprzedaży, także import i z datą zapłaty z FA(3)', async () => {
     const paid = { payment_status: 'paid', paid_amount: 1230, paid_at: '2026-10-05T10:00:00Z' };
     state.rows = [
       invoice('vat-oplacona', paid),
       invoice('import-oplacony', { ...paid, origin: 'ksef_import' }),
       invoice('korekta-oplacona', { ...paid, invoice_kind: 'correction', invoice_type: 'KOR' }),
+      invoice('plik-z-data-z-fa3', { origin: 'file_import', fa3_data: { parsed: { paidDate: '2026-09-20' } } }),
       invoice('vat-nieoplacona'),
+      invoice('szkic-oplacony', { ...paid, ksef_status: 'draft', ksef_environment: null, ksef_number: null }),
+      invoice('zakup-oplacony', { ...paid, direction: 'incoming' }),
+      invoice('inne-srodowisko', { ...paid, ksef_environment: 'test' }),
     ];
-    expect(await listFor('oplacone')).toEqual(['vat-oplacona']);
+    expect(await listFor('oplacone')).toEqual(['import-oplacony', 'korekta-oplacona', 'plik-z-data-z-fa3', 'vat-oplacona']);
   });
 
   it('bez filtra płatności lista pokazuje wszystkie faktury sprzedaży (jak dotąd)', async () => {

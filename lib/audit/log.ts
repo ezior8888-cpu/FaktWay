@@ -83,6 +83,9 @@ export type AuditAction =
   | 'invoice.operator_original_release'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
+  // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
+  | 'invoice.marked_paid'
+  | 'invoice.paid_undone'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'
