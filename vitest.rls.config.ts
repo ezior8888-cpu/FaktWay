@@ -29,6 +29,8 @@ export default defineConfig({
       // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
       // CHECK-i, ksef_upo_expected i filtr osadzenia przez PostgREST.
       'tests/rls-historia-ksef.test.ts',
+      // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
+      'tests/rls-sprzatanie-dziennikow.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

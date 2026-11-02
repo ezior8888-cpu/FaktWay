@@ -89,7 +89,9 @@ const TZ = 'Europe/Warsaw';
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
-  { queue: 'cron.cleanup-audit-logs', cron: '0 3 1 * *', tz: TZ },
+  // Retencja dzienników paczkami (00157): codziennie, z budżetem czasu — przy
+  // kadencji miesięcznej przebieg miał do usunięcia cały miesiąc wierszy naraz.
+  { queue: 'cron.cleanup-audit-logs', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cleanup-old-backups', cron: '0 4 * * *', tz: TZ },
   { queue: 'cron.co-pilot-monthly', cron: '0 8 * * *', tz: TZ },
   { queue: 'cron.critical-alerts-monitor', cron: '*/5 * * * *', tz: TZ },

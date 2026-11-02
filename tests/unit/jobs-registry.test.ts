@@ -99,6 +99,9 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('reminders.send.requested')?.maxRetries).toBe(3);
     // Nightly validation: 1 (jak w Inngest).
     expect(byQueue.get('cron.nightly-validation-recheck')?.maxRetries).toBe(1);
+    // Sprzątanie dzienników paczkami (00157): ponowienie od zera powtarza 10-min budżet,
+    // więc 1 (błąd przejściowy); resztę i tak bierze następna noc.
+    expect(byQueue.get('cron.cleanup-audit-logs')?.maxRetries).toBe(1);
     // Reszta: default Inngest 4.
     expect(byQueue.get('cron.daily-summary-email')?.maxRetries).toBe(4);
   });
