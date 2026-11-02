@@ -229,6 +229,8 @@ sql "z otwartym znacznikiem _pendingFullFetch (K2: cron inbox-backfill)" \
   "SELECT count(*) FROM invoices WHERE direction='incoming' AND fa3_data->>'_pendingFullFetch' = 'true'"
 sql "kursory skrzynki (window_to = HWM, saved_count)" \
   "SELECT tenant_id, window_to, announced_count, saved_count, updated_at FROM ksef_inbox_cursor ORDER BY updated_at DESC LIMIT 10"
+sql "harmonogram skrzynki wg poziomu (00160; należne dawniej niż 5 min = nie nadąża, docs/runbooks/skrzynka-ksef-pojemnosc.md)" \
+  "SELECT activity_tier, count(*) AS firmy, count(*) FILTER (WHERE next_poll_at < now() - interval '5 minutes') AS spoznione, count(*) FILTER (WHERE poll_lease_until > now()) AS w_toku, count(*) FILTER (WHERE consecutive_errors > 0) AS z_bledem, min(next_poll_at) AS najstarszy_termin FROM ksef_inbox_schedule GROUP BY 1 ORDER BY 1"
 
 section "7. db-1: pg-boss"
 sql "joby wg kolejki i stanu (osierocone kolejki po ETAP 10?)" \

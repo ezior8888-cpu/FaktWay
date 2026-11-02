@@ -10,7 +10,8 @@
  *      - `yieldAll` (żadnego wywołania KSeF w tym przebiegu): firma ma fakturę
  *        w wysyłce (`queued`/`sending`) albo świeże (15 min) sprawdzenie
  *        duplikatu 440 (`failed` + `KSEF_DUPLICATE_RECONCILE`), albo HWM
- *        skrzynki jest starszy niż 60 min (skrzynka nadrabia),
+ *        skrzynki jest starszy, niż pozwala poziom firmy (skrzynka nadrabia;
+ *        firma gorąca 60 min, zimna kilkanaście godzin, `inbox-schedule.ts`),
  *      - `yieldDownloads` (bez pobrań XML): faktura ze skrzynki z ostatnich 2 h
  *        czeka na archiwum XML (`fa3_data._pendingFullFetch`).
  * 2. POJEMNOŚĆ. Fan-out jednego cyklu crona mieści się w 3 slotach × 13 min
@@ -23,6 +24,8 @@
  */
 
 import type { createAdminClient } from '@/lib/supabase/admin';
+
+import { inboxLagYieldThresholdMs, type InboxActivityTier } from '@/lib/ksef/inbox-schedule';
 
 import {
   FANOUT_SLOT_SECONDS,
@@ -38,6 +41,16 @@ export interface YieldSignals {
   reasons: string[];
 }
 
+interface InboxScheduleReader {
+  from(table: 'ksef_inbox_schedule'): {
+    select(columns: 'activity_tier'): {
+      eq(column: 'tenant_id', value: string): {
+        maybeSingle(): PromiseLike<{ data: { activity_tier: InboxActivityTier } | null; error: { message: string } | null }>;
+      };
+    };
+  };
+}
+
 /** Świeżość sprawdzenia duplikatu 440, które właśnie pobrało oryginał. */
 const DUPLICATE_CHECK_WINDOW_MS = 15 * 60_000;
 
@@ -48,7 +61,7 @@ const DUPLICATE_CHECK_WINDOW_MS = 15 * 60_000;
 export async function readYieldSignals(admin: AdminClient, tenantId: string, now: Date): Promise<YieldSignals> {
   const reasons: string[] = [];
   const nowMs = now.getTime();
-  const [sending, duplicateCheck, cursor, pendingXml] = await Promise.all([
+  const [sending, duplicateCheck, cursor, pendingXml, schedule] = await Promise.all([
     admin.from('invoices').select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId).eq('direction', 'outgoing').in('ksef_status', ['queued', 'sending']),
     admin.from('invoices').select('id', { count: 'exact', head: true })
@@ -60,8 +73,10 @@ export async function readYieldSignals(admin: AdminClient, tenantId: string, now
       .eq('tenant_id', tenantId).eq('direction', 'incoming')
       .eq('fa3_data->>_pendingFullFetch', 'true')
       .gt('created_at', new Date(nowMs - INBOX_XML_PENDING_WINDOW_MS).toISOString()),
+    // Tabela z 00160 poza `types/database.ts`, dopóki typy nie zostaną wygenerowane z produkcji.
+    (admin as unknown as InboxScheduleReader).from('ksef_inbox_schedule').select('activity_tier').eq('tenant_id', tenantId).maybeSingle(),
   ]);
-  for (const r of [sending, duplicateCheck, cursor, pendingXml]) {
+  for (const r of [sending, duplicateCheck, cursor, pendingXml, schedule]) {
     if (r.error) throw new Error(`Historia KSeF: sygnały ustępowania: ${r.error.message}`);
   }
 
@@ -70,7 +85,8 @@ export async function readYieldSignals(admin: AdminClient, tenantId: string, now
   const windowTo = (cursor.data as { window_to: string | null } | null)?.window_to ?? null;
   if (windowTo) {
     const hwm = Date.parse(windowTo);
-    if (Number.isFinite(hwm) && nowMs - hwm > INBOX_LAG_YIELD_MS) reasons.push('skrzynka nadrabia zaległość');
+    const threshold = inboxLagYieldThresholdMs(schedule.data?.activity_tier, INBOX_LAG_YIELD_MS);
+    if (Number.isFinite(hwm) && nowMs - hwm > threshold) reasons.push('skrzynka nadrabia zaległość');
   }
   const yieldAll = reasons.length > 0;
   const yieldDownloads = (pendingXml.count ?? 0) > 0;

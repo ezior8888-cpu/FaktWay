@@ -80,6 +80,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-sprzatanie-dziennikow.test.ts',
       'tests/rls-zaplacone.test.ts',
       'tests/rls-passkeys.test.ts',
+      'tests/rls-skrzynka-harmonogram.test.ts',
       // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej faktury
       // w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji przez psql.
       'tests/rls-lejek-analityka.test.ts',

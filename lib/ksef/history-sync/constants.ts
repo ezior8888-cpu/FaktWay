@@ -8,7 +8,7 @@
  * ── Budżet KSeF ────────────────────────────────────────────────────
  * KSeF pozwala na (kontekst NIP, adres IP): 20 zapytań o metadane na godzinę
  * i 64 pobrania faktur na godzinę, 16 na minutę. Ten sam budżet zużywa
- * Skrzynka KSeF (co 15 min) i wysyłka faktur. Historia jest konsumentem
+ * Skrzynka KSeF (firma gorąca co 15 min, `inbox-schedule.ts`) i wysyłka faktur. Historia jest konsumentem
  * o NAJNIŻSZYM priorytecie: przebieg co 15 minut bierze najwyżej
  * 1 zapytanie o metadane i 5 pobrań w dzień (4/h i 20/h), 2 i 10 w nocy
  * (8/h i 40/h), pobrania co najmniej 6 s od siebie (≤ 10/min), a przy 429
@@ -70,7 +70,7 @@ export const RATE_LIMIT_MAX_MS = 24 * 3_600_000;
 /** Tyle firm z 429 w ostatniej godzinie = globalny bezpiecznik (bez fan-outu, alarm). */
 export const GLOBAL_429_TENANTS = 3;
 
-/** HWM skrzynki starszy niż tyle = skrzynka ma zaległość, historia ustępuje. */
+/** HWM skrzynki starszy niż tyle (firma gorąca; rzadziej odpytywane mają wyższy próg, `inboxLagYieldThresholdMs`) = skrzynka ma zaległość, historia ustępuje. */
 export const INBOX_LAG_YIELD_MS = 60 * 60_000;
 /** Faktura ze skrzynki czeka na archiwum XML (świeższa niż tyle) = historia nie pobiera. */
 export const INBOX_XML_PENDING_WINDOW_MS = 2 * 3_600_000;

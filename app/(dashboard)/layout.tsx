@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
+import { after } from 'next/server';
 import { assertDashboardShellAccess, getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import DashboardProfileMenu from '@/app/(dashboard)/_components/dashboard-profile-menu';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
@@ -23,6 +24,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { REMEMBER_ME_COOKIE, REMEMBER_ME_VALUE } from '@/lib/auth/device-cookies';
 import { getAllHelpArticles } from '@/lib/help/articles';
+import { noteTenantActivityThrottled } from '@/lib/ksef/inbox-activity';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 /**
@@ -57,6 +59,13 @@ export default async function DashboardLayout({
     getDashboardSessionUser(),
     getActiveOrgIdFromCookies(),
   ]);
+
+  // Harmonogram skrzynki: ktoś z firmy jest aktywny (firma gorąca przez 24 h).
+  // `assertDashboardShellAccess` potwierdziło członkostwo w tej firmie. Po odpowiedzi
+  // i najwyżej raz na godzinę na firmę, więc wejście na panel za to nie płaci.
+  if (activeOrg) {
+    after(() => noteTenantActivityThrottled(activeOrg));
+  }
 
   // Stan paska bocznego (rozwinięty / zwinięty do ikon) z ciasteczka, które
   // zapisuje `SidebarProvider` — bez tego pasek „skakałby" po hydracji.

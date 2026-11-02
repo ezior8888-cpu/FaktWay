@@ -37,6 +37,9 @@ export default defineConfig({
       // 00159 (logowanie biometrią): RLS i granty kolumnowe `user_passkeys`, wyzwania
       // jednorazowe przez DELETE ... RETURNING, usuwanie zależne od AAL, kaskada z auth.users.
       'tests/rls-passkeys.test.ts',
+      // 00160 (harmonogram Skrzynki KSeF): RPC wyboru należnych firm, uprawnienia,
+      // rozsyłka w transakcji z pg-boss, przyspieszenie terminu, alarm względem poziomu.
+      'tests/rls-skrzynka-harmonogram.test.ts',
       // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej
       // faktury w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji.
       'tests/rls-lejek-analityka.test.ts',

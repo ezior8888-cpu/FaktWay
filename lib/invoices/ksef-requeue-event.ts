@@ -178,7 +178,8 @@ export function buildKsefRequeueEvent(
     sendAttemptId,
     event: {
       groupId: row.tenant_id,
-      // W kolejce czeka najwyżej jedno zlecenie na fakturę.
+      // Etykieta w `pgboss.job`, nie deduplikacja (`lib/jobs/enqueue.ts`): przed
+      // drugim zleceniem chroni przejście statusu w RPC.
       singletonKey: row.id,
       name: 'invoice/submit.requested',
       data: {

@@ -20,9 +20,13 @@ const db = vi.hoisted(() => ({
   updates: [] as Array<{ patch: Row; filters: Array<[string, unknown]> }>,
   filters: [] as Array<[string, string, unknown]>,
   sentry: vi.fn(),
+  waitingSql: vi.fn(),
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureMessage: db.sentry, captureException: vi.fn() }));
+vi.mock('@/lib/jobs/boss', () => ({
+  startBoss: async () => ({ getDb: () => ({ executeSql: db.waitingSql }) }),
+}));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => {
@@ -96,6 +100,8 @@ beforeEach(() => {
   db.updates = [];
   db.filters = [];
   db.sentry.mockClear();
+  db.waitingSql.mockReset();
+  db.waitingSql.mockResolvedValue({ rows: [] });
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -141,6 +147,42 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
     const { ctx, sendEvent } = context();
     await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 0, emitted: 0, exhausted: 0 });
     expect(sendEvent).not.toHaveBeenCalled();
+  });
+
+  // Sesja 17 planu skalowania: `singletonKey` na kolejce `standard` nie deduplikuje,
+  // więc przy długiej kolejce cron dokładał zadanie co 15 min i w 90 min zużywał
+  // wszystkie próby, choć pierwsze zadanie jeszcze nie ruszyło.
+  it('pomija faktury, których zadanie jeszcze czeka: bez emisji i bez zużycia próby', async () => {
+    db.pending = [pendingRow('inv-1'), pendingRow('inv-2'), pendingRow('inv-3', 1)];
+    db.waitingSql.mockResolvedValue({ rows: [{ value: 'inv-2' }] });
+    const { ctx, sendEvent } = context();
+
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 3, emitted: 2, exhausted: 0 });
+
+    const events = sendEvent.mock.calls[0]![1] as Array<{ data: Row }>;
+    expect(events.map((e) => e.data.invoiceId)).toEqual(['inv-1', 'inv-3']);
+    expect(db.updates.map((u) => u.filters.find(([c]) => c === 'id')?.[1])).toEqual(['inv-1', 'inv-3']);
+    const [sql, args] = db.waitingSql.mock.calls[0]!;
+    expect(sql).toContain('pgboss.job');
+    expect(args).toEqual(['inbox.invoice-received', ['inv-1', 'inv-2', 'inv-3']]);
+  });
+
+  it('wszystkie czekają: bez emisji', async () => {
+    db.pending = [pendingRow('inv-1')];
+    db.waitingSql.mockResolvedValue({ rows: [{ value: 'inv-1' }] });
+    const { ctx, sendEvent } = context();
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 1, emitted: 0, exhausted: 0 });
+    expect(sendEvent).not.toHaveBeenCalled();
+    expect(db.updates).toEqual([]);
+  });
+
+  it('błąd odczytu kolejki: emituje jak dawniej (dubel kończy się jednym odczytem)', async () => {
+    db.pending = [pendingRow('inv-1')];
+    db.waitingSql.mockRejectedValue(new Error('kolejka niedostępna'));
+    const { ctx, sendEvent } = context();
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 1, emitted: 1, exhausted: 0 });
+    expect(sendEvent).toHaveBeenCalledOnce();
+    expect(ctx.logger.warn).toHaveBeenCalled();
   });
 
   it('faktury po wyczerpaniu prób zgłasza operatorowi, zamiast kręcić w pętli', async () => {

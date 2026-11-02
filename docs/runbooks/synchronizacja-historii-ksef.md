@@ -4,7 +4,7 @@ Decyzja Bartosza 22.10.2026: „Magiczny import” znika. FaktWay sam pobiera
 z KSeF **całą historię** sprzedaży i zakupów firmy (od 2022-01-01 albo od
 daty rozpoczęcia działalności), a potem **na bieżąco** faktury sprzedaży
 wystawione poza FaktWay. Bieżące zakupy dalej przychodzą przez Skrzynkę KSeF
-(co 15 minut, koszty i KPiR bez zmian).
+(firma gorąca co 15 minut, harmonogram: `skrzynka-ksef-pojemnosc.md`; koszty i KPiR bez zmian).
 
 | Element | Gdzie |
 |---|---|
@@ -75,7 +75,8 @@ Pobrania co ≥ 6 s, po 90 s od startu przebiegu — żadnego nowego wywołania.
 zmieniałoby wysyłkę i skrzynkę chronione planem „zero zgubionych faktur”):
 
 - bez żadnego wywołania KSeF, gdy firma ma fakturę `queued`/`sending`, świeże
-  (15 min) sprawdzenie duplikatu 440 albo HWM skrzynki starszy niż 60 min;
+  (15 min) sprawdzenie duplikatu 440 albo HWM skrzynki starszy, niż pozwala poziom
+  firmy (gorąca 60 min, rzadziej odpytywane odpowiednio dłużej, `inboxLagYieldThresholdMs`);
 - bez pobrań, gdy faktura ze skrzynki z ostatnich 2 h czeka na archiwum XML.
 
 **Pojemność:** fan-out cyklu mieści się w 3 slotach × 13 min (szacunek

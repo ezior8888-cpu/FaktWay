@@ -1,6 +1,9 @@
+import { after } from 'next/server';
+
 import { CostsTabs } from '@/components/expenses/costs-tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
+import { requestInboxPollOnVisit } from '@/lib/ksef/inbox-activity';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 import { buildInboxRows, INBOX_COLUMNS, loadInboxExpenseLinks, type InboxInvoiceRow } from './_components/inbox-rows';
@@ -32,6 +35,10 @@ const INBOX_LIMIT = 200;
  */
 export default async function InboxPage() {
   const { supabase, tenantId, user } = await getPageContext();
+
+  // Klient patrzy na Skrzynkę: przyspieszamy termin (najwyżej raz na 5 minut).
+  // Po odpowiedzi, żeby wejście na stronę nie czekało na zapis.
+  after(() => requestInboxPollOnVisit(tenantId));
 
   const { data: invoices, error } = await supabase
     .from('invoices')

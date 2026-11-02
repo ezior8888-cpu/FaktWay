@@ -8,6 +8,8 @@ import {
   INBOX_PENDING_FLAG,
 } from '@/lib/ksef/inbox-pending';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { findWaitingJobsByDataField } from '@/lib/jobs/pending-jobs';
+import { queuesForEvent } from '@/lib/jobs/queues';
 
 import { inboxInvoiceReceivedAutoCategorize } from '../events';
 
@@ -20,10 +22,15 @@ import { inboxInvoiceReceivedAutoCategorize } from '../events';
  * starsza niż `INBOX_BACKFILL_MIN_AGE_MS` (żeby nie ścigać się ze świeżym
  * zdarzeniem z odbioru), z zapalonym `fa3_data._pendingFullFetch` i poniżej
  * limitu prób. Dla każdej emitujemy to samo zdarzenie co odbiór skrzynki
- * (`inbox/invoice-received`, `singletonKey` = id faktury — pg-boss trzyma w
- * kolejce jeden job na fakturę) i dopiero potem zwiększamy licznik prób:
- * błąd emisji nie zużywa próby, a błąd zapisu licznika kończy się co najwyżej
- * jedną dodatkową emisją.
+ * (`inbox/invoice-received`) i dopiero potem zwiększamy licznik prób: błąd emisji
+ * nie zużywa próby, a błąd zapisu licznika kończy się co najwyżej jedną dodatkową
+ * emisją.
+ *
+ * Faktury, których zadanie jeszcze czeka w kolejce, pomijamy (sesja 17 planu
+ * skalowania). `singletonKey` na kolejce `standard` nie deduplikuje (`lib/jobs/
+ * enqueue.ts`), więc przy długiej kolejce cron dokładał zadanie co 15 minut
+ * i zużywał wszystkie próby, zanim pierwsze ruszyło. Dubel, który i tak powstanie
+ * (wyścig, błąd odczytu kolejki), kończy się jednym odczytem w `auto-categorize-inbox`.
  *
  * Po `INBOX_BACKFILL_MAX_ATTEMPTS` faktura wypada z automatu i trafia do
  * operatora (Sentry + log); `auto-categorize-inbox` kończy ją
@@ -67,10 +74,28 @@ export async function runInboxBackfill({ step, logger }: JobContext) {
     return (data ?? []) as PendingRow[];
   });
 
-  if (pending.length > 0) {
+  const toEmit = await step.run('skip-waiting', async (): Promise<PendingRow[]> => {
+    if (pending.length === 0) return pending;
+    try {
+      const waiting = await findWaitingJobsByDataField(
+        queuesForEvent(inboxInvoiceReceivedAutoCategorize.name)[0]!,
+        'invoiceId',
+        pending.map((row) => row.id),
+      );
+      return pending.filter((row) => !waiting.has(row.id));
+    } catch (e) {
+      // Bez odczytu kolejki emitujemy jak dawniej: dubel to tylko jeden odczyt.
+      logger.warn('Skrzynka: nie udało się sprawdzić czekających zadań, cron wysyła wszystkie', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return pending;
+    }
+  });
+
+  if (toEmit.length > 0) {
     await step.sendEvent(
       'backfill-auto-categorize',
-      pending.map((row) => ({
+      toEmit.map((row) => ({
         ...inboxInvoiceReceivedAutoCategorize.create({
           invoiceId: row.id,
           tenantId: row.tenant_id,
@@ -81,7 +106,7 @@ export async function runInboxBackfill({ step, logger }: JobContext) {
     );
 
     await step.run('bump-attempts', async () => {
-      for (const row of pending) {
+      for (const row of toEmit) {
         await bumpInboxBackfillAttempt(supabase, row);
       }
     });
@@ -117,9 +142,9 @@ export async function runInboxBackfill({ step, logger }: JobContext) {
 
   logger.info('Skrzynka: uzupełnianie kategoryzacji', {
     scanned: pending.length,
-    emitted: pending.length,
+    emitted: toEmit.length,
     exhausted,
   });
 
-  return { scanned: pending.length, emitted: pending.length, exhausted };
+  return { scanned: pending.length, emitted: toEmit.length, exhausted };
 }
