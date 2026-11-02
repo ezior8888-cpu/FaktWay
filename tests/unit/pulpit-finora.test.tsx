@@ -88,8 +88,13 @@ const NOW = new Date('2026-10-23T08:00:00Z');
  * jeden odczyt) zamiast `getReceivables` (faktury, korekty i ROZ).
  * Recenzja 2 świadomie +1: korekty wystawione przed dziś do faktur z terminem
  * od dziś (zmieniają kwotę spodziewaną; `correctionsBefore` w `inflows.ts`).
+ * Sesja 19 planu skalowania świadomie −4: karty sprzedaży czytają wspólny
+ * zbiór (`lib/dashboard/sales-history.ts`) — poza RSC każda karta czyta go
+ * sama (strony + faktury bez środowiska), bez osobnych COUNT. W jednym
+ * zakresie `cache()` (render RSC) cały Pulpit to 14 odczytów
+ * (`tests/unit/pulpit-jeden-odczyt.test.tsx`).
  */
-const READS_PULPITU = 28;
+const READS_PULPITU = 24;
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvironment: 'test' };
 
 async function html(node: ReactNode): Promise<string> {

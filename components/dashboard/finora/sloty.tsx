@@ -11,13 +11,18 @@ import { PulpitCardError } from '@/components/dashboard/pulpit/card-states';
 import { PULPIT_GENERIC_ERROR, pulpitErrorMessage } from '@/components/dashboard/pulpit/pulpit-grid';
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
 import { shiftMonthKey } from '@/lib/analytics-finance/months';
-import { getSalesInvoices, salesMonthStats } from '@/lib/analytics-finance/sales';
+import { salesMonthStats } from '@/lib/analytics-finance/sales';
 import { getCostsWithKsefPurchases, sumCostsByMonth } from '@/lib/dashboard/costs';
-import { getMonthlyFigures, getSalesSeries } from '@/lib/dashboard/monthly-figures';
-import { getTopClients, getTopProducts, warsawMonthWindow } from '@/lib/dashboard/rankings';
+import { warsawMonthWindow } from '@/lib/dashboard/rankings';
 import { inflowTerms } from '@/lib/dashboard/inflow-terms';
 import { getInflows } from '@/lib/dashboard/inflows';
-import { getVatLimit } from '@/lib/dashboard/vat-limit';
+import {
+  pulpitMonthlyFigures,
+  pulpitRankings,
+  pulpitSalesInvoices,
+  pulpitSalesSeries,
+  pulpitVatLimit,
+} from '@/lib/dashboard/sales-history';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
@@ -59,6 +64,10 @@ import TopProductsCard from './widget-top-products';
  * atrapa bazy z danymi przykładowymi (`kontekstDanych`), w pozostałych —
  * sesja klienta (RLS). Sloty nie wiedzą, skąd są dane; tryb decyduje tylko
  * o tekście pustego stanu („Pobieramy faktury z KSeF…” w stanie B).
+ *
+ * Karty sprzedaży czytają faktury RAZ na wejście (`lib/dashboard/sales-history.ts`,
+ * sesja 19 planu skalowania): każda bierze swoje okna ze wspólnego zbioru,
+ * a strażniki liczą się na oknie karty — błąd dalej zabiera jedną kartę.
  */
 
 export interface PulpitSlotProps {
@@ -82,13 +91,14 @@ const PRZYCHOD_MIESIACE = 5;
 
 /**
  * Seria sprzedaży raz na żądanie dla kart, które jej potrzebują (Finanse
- * i VAT czytają to samo 12-miesięczne okno). „Przychód netto” czyta osobne
+ * i VAT liczą to samo 12-miesięczne okno). „Przychód netto” bierze osobne
  * okno 5 miesięcy z rokiem wcześniej, żeby stara faktura sprzed roku nie
- * zabierała strażnikiem waluty kart bieżących.
+ * zabierała strażnikiem waluty kart bieżących. Wiersze obu serii pochodzą
+ * ze wspólnego odczytu sprzedaży (`sales-history.ts`).
  */
 const serieSprzedazy = cache(
   (supabase: PageContext['supabase'], tenantId: string, nowIso: string, months: number, withPrevYear: boolean) =>
-    getSalesSeries(supabase, tenantId, new Date(nowIso), { months, withPrevYear }),
+    pulpitSalesSeries(supabase, tenantId, nowIso, months, withPrevYear),
 );
 
 /** Dane karty albo karta błędu z treścią wyjątku dla klienta. */
@@ -151,7 +161,7 @@ async function FinanseKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, cl
 
 async function KafelFakturKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Faktury w KSeF', className, async () => {
-    const dane = kafelFaktur(await getMonthlyFigures(supabase, tenantId, new Date(nowIso)), tryb);
+    const dane = kafelFaktur(await pulpitMonthlyFigures(supabase, tenantId, nowIso), tryb);
     return (
       <StatisticsCard
         icon={<RiFileList3Line />}
@@ -171,7 +181,7 @@ async function KafelSredniejKarta({ supabase, tenantId, nowIso, tryb, className 
     const now = new Date(nowIso);
     const month = todayInWarsaw(now).slice(0, 7);
     const prev = shiftMonthKey(month, -1);
-    const invoices = await getSalesInvoices(supabase, tenantId, warsawMonthWindow(now, 2));
+    const invoices = await pulpitSalesInvoices(supabase, tenantId, nowIso, warsawMonthWindow(now, 2));
     const dane = kafelSredniej(
       salesMonthStats(invoices, month, prev).avgPerInvoice,
       salesMonthStats(invoices, prev, shiftMonthKey(prev, -1)).avgPerInvoice,
@@ -214,7 +224,7 @@ async function VatKarta({ supabase, tenantId, nowIso, tryb, className }: SlotPro
   const exempt = isSubjectiveVatExemption(exemption);
   return zaladujKarte(exempt ? 'Limit VAT' : 'VAT należny', className, async () => {
     const dane = exempt
-      ? limitVatProps(await getVatLimit(supabase, tenantId, new Date(nowIso)), tryb)
+      ? limitVatProps(await pulpitVatLimit(supabase, tenantId, nowIso), tryb)
       : vatNaleznyProps(await serieSprzedazy(supabase, tenantId, nowIso, SERIA_MIESIACE, false), tryb);
     return <StatisticsImpressionCard {...dane} className={className} />;
   });
@@ -240,11 +250,7 @@ const KOLORY_IKON: (string | undefined)[] = [
 
 async function RankingiKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Najlepiej sprzedające się', className, async () => {
-    const now = new Date(nowIso);
-    const [products, clients] = await Promise.all([
-      getTopProducts(supabase, tenantId, now),
-      getTopClients(supabase, tenantId, now),
-    ]);
+    const { products, clients } = await pulpitRankings(supabase, tenantId, nowIso);
     const dane = rankingiProps(products, clients, tryb);
     return (
       <TopProductsCard
