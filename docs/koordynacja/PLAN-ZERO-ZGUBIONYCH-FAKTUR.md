@@ -475,6 +475,11 @@ agenta z weryfikacją Bartosza, nie obietnica.
   (kolumna/filtr), komunikaty zamiast wyjątków na pulpicie; przećwiczone
   na kopii bazy (I3).
 - DoD: próbne przełączenie na kopii bez „Coś poszło nie tak”.
+- Z pomiaru FaktWay 1.0 (#357, 00161): w kroku przełączenia wyzeruj
+  `tenants.first_invoice_accepted_at` i policz ją od nowa z faktur nowego
+  środowiska (SQL w `docs/analytics/lejek-faktway.md`, „Przełączenie TEST →
+  PROD”). Inaczej `/admin` pokaże „Fakturę” z TEST, a pierwsza prawdziwa
+  faktura nie wyśle `first_invoice_sent`.
 - Z D-A4-2 (04.10.2026): przed zmianą `KSEF_ENV` hamulec i pusta kolejka,
   a faktury `failed` z kodami przejściowymi i `KSEF_PAUSED` rozstrzygnięte
   (szkic albo wysyłka na TEST) — cron I6/I7 wznawia je nowym zdarzeniem

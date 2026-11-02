@@ -98,7 +98,8 @@ describe('odczyt danych karty', () => {
     h.requireAdmin.mockImplementation(async () => { h.order.push('requireAdmin'); });
     h.rpc.mockImplementation(async (fn: string, args: unknown) => {
       h.order.push(fn);
-      expect(args).toEqual({ p_weeks: 12 });
+      // Środowisko aplikacji (KSEF_ENV=test w vitest): „KSeF podłączony” liczy się tylko w nim.
+      expect(args).toEqual({ p_weeks: 12, p_environment: 'test' });
       return {
         data: [{
           week_start: '2026-10-26', source: 'all', new_tenants: 10, ksef_connected: 8,

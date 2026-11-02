@@ -30,7 +30,7 @@ describe('migracja 00161', () => {
   });
 
   it('funkcje serwisowe tylko dla service_role, zapis zgody tylko dla zalogowanego', () => {
-    for (const fn of ['admin_funnel_weekly(integer)', 'analytics_tenant_owner(uuid)']) {
+    for (const fn of ['admin_funnel_weekly(integer, text)', 'analytics_tenant_owner(uuid)']) {
       expect(sql).toContain(`REVOKE ALL ON FUNCTION public.${fn} FROM PUBLIC, anon, authenticated;`);
       expect(sql).toContain(`GRANT EXECUTE ON FUNCTION public.${fn} TO service_role;`);
     }

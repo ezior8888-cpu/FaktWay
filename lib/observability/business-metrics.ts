@@ -7,6 +7,7 @@
  */
 
 import { MONTHLY_NET_PLN } from '@/lib/billing/pricing';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -279,7 +280,11 @@ export const FUNNEL_WEEKS = 12;
  * człowieka idzie przez `getAdminFunnelWeekly` z lib/admin/metrics.
  */
 export async function getFunnelWeekly(weeks = FUNNEL_WEEKS): Promise<FunnelWeekRow[]> {
-  const { data, error } = await createAdminClient().rpc('admin_funnel_weekly', { p_weeks: weeks });
+  // „KSeF podłączony” liczy się w środowisku aplikacji, tak jak hasConfiguredKsefProof.
+  const { data, error } = await createAdminClient().rpc('admin_funnel_weekly', {
+    p_weeks: weeks,
+    p_environment: configuredKsefEnvironment(),
+  });
   if (error) throw new Error(`Lejek niedostępny: ${error.message}`);
   const rows = (data ?? []) as Array<{
     week_start: string;

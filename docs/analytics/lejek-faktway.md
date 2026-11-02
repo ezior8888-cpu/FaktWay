@@ -187,21 +187,47 @@ Odfiltruj własne konta: Project settings → **Filter out internal and test use
 
 ## Lejek zbiorczy w `/admin`
 
-`admin_funnel_weekly(p_weeks)`, tylko `service_role`, zakres przycinany do 1–52 tygodni.
+`admin_funnel_weekly(p_weeks, p_environment)`, tylko `service_role`, zakres przycinany do 1–52 tygodni.
 Każda firma liczy się w tygodniu założenia (poniedziałek, czas Warszawy), więc świeże
 tygodnie jeszcze dojrzewają: tygodnia sprzed trzech dni nie porównuj z tym sprzed trzech miesięcy.
 
 | Kolumna | Definicja |
 |---|---|
 | Nowe | `tenants.created_at` w tym tygodniu |
-| KSeF | `ksef_verified_at` ustawione |
-| Faktura | `first_invoice_accepted_at` ustawione |
+| KSeF | `ksef_verified_at` ustawione i `ksef_verified_environment` równe `KSEF_ENV` aplikacji (panel przekazuje je jako `p_environment`; firma po przełączeniu środowiska musi zweryfikować się ponownie, tak jak liczy aplikacja) |
+| Faktura | `first_invoice_accepted_at` ustawione (bez środowiska, patrz „Przełączenie TEST → PROD”) |
 | Próba | subskrypcja z `trial_start` |
 | Płacący | płatność `amount_cents > 0` (także później zwrócona) |
 | Odeszli | subskrypcja `canceled` i żadnej trwającej |
 
 Wiersz `source = 'all'` nie zależy od zgód. Wiersze kanałów obejmują tylko firmy, których
 właściciel ma zgodę, i znikają od razu po jej odwołaniu.
+
+### Przełączenie TEST → PROD
+
+Produkcja działa dziś na `KSEF_ENV=test`, więc uzupełnienie z migracji 00161 i runner
+liczą faktury z TEST. `first_invoice_accepted_at` nie ma środowiska: firma z fakturą z TEST
+miałaby „Fakturę” w `/admin`, a jej pierwsza prawdziwa faktura nie wysłałaby
+`first_invoice_sent`, bo zapis warunkiem `IS NULL` już nic nie zmieni. W kroku przełączenia
+(`docs/runbooks/go-live-ksef-prod.md`, F1/W15 w `PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`), po
+zmianie `KSEF_ENV` obu aplikacji i jako `postgres` (wyzwalacz blokuje tylko role klienta):
+
+```sql
+-- Wyzeruj, potem policz od nowa wyłącznie z faktur nowego środowiska.
+UPDATE public.tenants SET first_invoice_accepted_at = NULL WHERE first_invoice_accepted_at IS NOT NULL;
+UPDATE public.tenants t SET first_invoice_accepted_at = f.first_accepted_at
+  FROM (SELECT i.tenant_id, min(COALESCE(i.ksef_accepted_at, i.created_at)) AS first_accepted_at
+          FROM public.invoices i
+         WHERE i.direction = 'outgoing' AND i.ksef_status = 'accepted' AND i.origin = 'app'
+           AND i.ksef_environment = 'production'
+         GROUP BY i.tenant_id) f
+ WHERE t.id = f.tenant_id;
+```
+
+Kolumna „KSeF” poprawia się sama: firma bez ponownej weryfikacji w nowym środowisku
+przestaje się liczyć jako podłączona (`p_environment`). Drugie `ksef_configured` po
+ponownym wgraniu certyfikatu to osobne zdarzenie z nowym `timestamp`; w PostHogu
+„pierwsze podłączenie” czytaj po najwcześniejszym `timestamp` osoby.
 
 ## Po wdrożeniu
 

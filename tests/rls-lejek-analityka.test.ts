@@ -492,6 +492,20 @@ describe.skipIf(!hasDatabase)('00161: pomiar na prawdziwej bazie', () => {
       });
     });
 
+    it('środowisko KSeF: firma zweryfikowana w innym środowisku nie liczy się jako podłączona', async () => {
+      const connected = async (environment?: string) => {
+        const { data, error } = await admin.rpc('admin_funnel_weekly', {
+          p_weeks: 30,
+          ...(environment ? { p_environment: environment } : {}),
+        });
+        if (error) throw new Error(error.message);
+        return (data as FunnelRow[]).find((r) => r.week_start === COHORT_DAY && r.source === 'all')!.ksef_connected;
+      };
+      expect(await connected()).toBe(3);
+      expect(await connected('test')).toBe(3);
+      expect(await connected('production')).toBe(0);
+    });
+
     it('podział na źródła tylko z firm, których właściciel ma zgodę', async () => {
       const rows = (await funnel()).filter((r) => r.week_start === COHORT_DAY && r.source !== 'all');
       expect(rows).toEqual([

@@ -258,7 +258,14 @@ COMMENT ON FUNCTION public.analytics_tenant_owner(uuid) IS
 -- Wiersz `source = 'all'` jest dla każdego tygodnia, także bez nowych firm, i nie
 -- zależy od zgód. Pozostałe wiersze to kanały, tylko firmy, których właściciel ma
 -- zgodę. Najwyżej 52 tygodnie × 9 wierszy: poniżej limitu 1000 wierszy PostgREST.
-CREATE OR REPLACE FUNCTION public.admin_funnel_weekly(p_weeks integer DEFAULT 12)
+-- `p_environment` (KSEF_ENV aplikacji) zawęża „KSeF podłączony” do firm zweryfikowanych
+-- w tym środowisku, tak jak liczy aplikacja (hasConfiguredKsefProof); NULL = bez filtra.
+-- Data pierwszej faktury nie ma środowiska: przy przełączeniu TEST → PROD zerujemy ją
+-- i liczymy od nowa (docs/analytics/lejek-faktway.md, „Przełączenie TEST → PROD”).
+CREATE OR REPLACE FUNCTION public.admin_funnel_weekly(
+  p_weeks integer DEFAULT 12,
+  p_environment text DEFAULT NULL
+)
 RETURNS TABLE (
   week_start date,
   source text,
@@ -284,7 +291,8 @@ AS $$
   ),
   firms AS (
     SELECT date_trunc('week', t.created_at AT TIME ZONE 'Europe/Warsaw')::date AS cohort,
-           t.ksef_verified_at IS NOT NULL AS is_connected,
+           (t.ksef_verified_at IS NOT NULL
+             AND (p_environment IS NULL OR t.ksef_verified_environment = p_environment)) AS is_connected,
            t.first_invoice_accepted_at IS NOT NULL AS has_invoice,
            EXISTS (
              SELECT 1 FROM public.subscriptions s
@@ -345,10 +353,10 @@ AS $$
     FROM funnel_rows r
    ORDER BY r.cohort DESC, (r.channel = 'all') DESC, r.channel
 $$;
-REVOKE ALL ON FUNCTION public.admin_funnel_weekly(integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_funnel_weekly(integer) TO service_role;
+REVOKE ALL ON FUNCTION public.admin_funnel_weekly(integer, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_funnel_weekly(integer, text) TO service_role;
 
-COMMENT ON FUNCTION public.admin_funnel_weekly(integer) IS
-  'Lejek firm tygodniami dla panelu /admin: same liczby, bez danych osobowych, niezależnie od PostHoga. Podział na kanały tylko z firm ze zgodą właściciela. Zakres przycinany do 1–52 tygodni.';
+COMMENT ON FUNCTION public.admin_funnel_weekly(integer, text) IS
+  'Lejek firm tygodniami dla panelu /admin: same liczby, bez danych osobowych, niezależnie od PostHoga. Podział na kanały tylko z firm ze zgodą właściciela. Zakres przycinany do 1–52 tygodni. Drugi argument zawęża „KSeF podłączony” do jednego środowiska.';
 
 COMMIT;
