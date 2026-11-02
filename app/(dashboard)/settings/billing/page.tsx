@@ -38,6 +38,7 @@ import { plural } from '@/lib/i18n/plural';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
 
+import { BlikTerms } from './_components/blik-terms';
 import { PlanCards } from './_components/plan-cards';
 import { PortalButton } from './_components/portal-button';
 
@@ -228,6 +229,16 @@ export default async function BillingPage(props: {
   );
 }
 
+/** Kiedy BLIK dodany w portalu zostanie obciążony pierwszy raz. */
+function blikNextCharge(subscription: ActiveSubscription, inTrial: boolean): string {
+  if (subscription.cancel_at_period_end) {
+    return `tylko jeśli wznowisz subskrypcję przed ${fmtDate(subscription.current_period_end)}`;
+  }
+  if (subscription.status === 'past_due') return 'zaległa kwota, przy najbliższej próbie pobrania';
+  if (subscription.status === 'unpaid') return 'zaległa kwota, gdy opłacisz fakturę';
+  return fmtDate(inTrial ? subscription.trial_end : subscription.current_period_end);
+}
+
 function ActiveSubscriptionSection({
   subscription,
   canManage,
@@ -241,6 +252,11 @@ function ActiveSubscriptionSection({
   const inTrial = isInTrial(subscription);
   const trialLeft = trialDaysRemaining(subscription);
   const failureAdvice = paymentFailureAdvice(paymentFailureReason, subscription.status);
+  // Portal pozwala dodać BLIK, a Stripe wymaga warunków przed kodem także przy formularzu
+  // hostowanym. Mail po odmowie prowadzi tu, na stronę z przyciskiem. Wycofany plan roczny
+  // zostaje bez warunków: zgoda mówi o płatnościach co miesiąc.
+  const blikTerms =
+    canManage && subscription.plan === 'monthly' && isBlikAvailable() ? buildBlikDisclosure() : null;
 
   return (
     <>
@@ -261,8 +277,21 @@ function ActiveSubscriptionSection({
           </div>
           <FieldDescription>{fmtPlan(subscription.plan)}</FieldDescription>
         </FieldContent>
-        {canManage ? <PortalButton /> : null}
+        {canManage ? <PortalButton blikStatementVersion={blikTerms?.version ?? null} /> : null}
       </Field>
+
+      {blikTerms ? (
+        <BlikTerms
+          title="Zmieniasz metodę płatności na BLIK?"
+          rows={[
+            { label: 'Przy dodaniu BLIK-a płacisz', value: blikTerms.dueToday },
+            { label: 'Następna płatność', value: blikNextCharge(subscription, inTrial) },
+            { label: 'Potem', value: blikTerms.cycle },
+          ]}
+          banks={blikTerms.banks}
+          consent={blikTerms.consent}
+        />
+      ) : null}
 
       {inTrial && trialLeft !== null ? (
         <StatRow

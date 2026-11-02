@@ -140,7 +140,14 @@ export async function startCheckoutAction(
  * Otwiera Stripe Customer Portal (hosted page do zarządzania subskrypcją:
  * zmiana metody płatności, cancel, view invoices history).
  */
-export async function openCustomerPortalAction(): Promise<void> {
+export async function openCustomerPortalAction(
+  /**
+   * Wersja zgody na BLIK, którą strona pokazała przy przycisku. Portal pozwala dodać
+   * BLIK, a tam nie ma naszych ujawnień, więc audyt otwarcia portalu mówi, co klient
+   * widział tuż przed nim.
+   */
+  blikStatementVersion: string | null = null,
+): Promise<void> {
   const ctx = await getPageContext();
 
   if (!canManageBilling(ctx.role)) {
@@ -193,7 +200,12 @@ export async function openCustomerPortalAction(): Promise<void> {
       tenantId: ctx.tenantId,
       userId: ctx.user.id,
       entityType: 'stripe_portal',
-      metadata: { adminEmail: ctx.user.email },
+      metadata: {
+        adminEmail: ctx.user.email,
+        ...(isBlikAvailable() && blikStatementVersion === BLIK_RECURRING_STATEMENT.version
+          ? { blikStatementVersion }
+          : {}),
+      },
     });
   } catch {
     // Audit fail nie powinien blokować akcji billing'u.

@@ -15,6 +15,8 @@
 
 import type { ActiveSubscription } from '@/lib/stripe/subscription';
 
+import { BLIK_RECURRING_BANKS } from './trial-payment';
+
 export interface PaymentFailureAdvice {
   reason: string | null;
   action: string;
@@ -39,8 +41,8 @@ const ADVICE_BY_DECLINE_CODE: Record<string, PaymentFailureAdvice> = {
   recurring_not_supported_by_bank: {
     reason: 'Twój bank nie obsługuje płatności cyklicznych BLIK.',
     action:
-      `Zmień metodę płatności: ${PORTAL_PATH} i wybierz kartę albo BLIK w banku, który obsługuje ` +
-      'płatności cykliczne. Kolejne próby z obecną metodą się nie udadzą.',
+      `Zmień metodę płatności: ${PORTAL_PATH} i wybierz kartę albo BLIK w jednym z banków: ` +
+      `${BLIK_RECURRING_BANKS.join(', ')}. Kolejne próby z obecną metodą się nie udadzą.`,
   },
   insufficient_funds: {
     reason: 'Na koncie zabrakło środków.',

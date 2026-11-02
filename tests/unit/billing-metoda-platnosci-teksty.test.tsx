@@ -59,9 +59,9 @@ vi.mock('@/lib/auth/sensitive-mfa', () => ({
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 
 import BillingPage from '@/app/(dashboard)/settings/billing/page';
-import { startCheckoutAction } from '@/app/(dashboard)/settings/billing/actions';
+import { openCustomerPortalAction, startCheckoutAction } from '@/app/(dashboard)/settings/billing/actions';
 import { PlanCards } from '@/app/(dashboard)/settings/billing/_components/plan-cards';
-import { buildBlikDisclosure, trialPaymentHint } from '@/lib/billing/trial-payment';
+import { BLIK_RECURRING_BANKS, buildBlikDisclosure, trialPaymentHint } from '@/lib/billing/trial-payment';
 import RefundIssued from '@/lib/email/templates/RefundIssued';
 import TrialEnding from '@/lib/email/templates/TrialEnding';
 import PaymentFailed from '@/lib/email/templates/PaymentFailed';
@@ -108,7 +108,9 @@ beforeEach(() => {
     sessionId: 'cs_test_x',
     url: 'https://checkout.stripe.test/cs_test_x',
   });
+  mocks.createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.test/portal' });
   mocks.logAudit.mockResolvedValue(undefined);
+  mocks.logAuditSystem.mockResolvedValue(undefined);
 });
 
 afterEach(() => vi.unstubAllEnvs());
@@ -175,7 +177,8 @@ describe('strona abonamentu', () => {
     const html = await pageHtml({ checkout: 'success' });
     expect(html).toContain('metodą płatności');
     expect(html).toContain('Pobierzemy płatność automatycznie');
-    expect(html).not.toMatch(CARD_WORD);
+    // Jedyne słowo „karta” przy włączonym przełączniku to wyjście dla klienta banku spoza listy.
+    expect(html.replace('Na stronie płatności wybierz kartę.', '')).not.toMatch(CARD_WORD);
     expect(html).not.toMatch(/3D-Secure/);
   });
 
@@ -237,6 +240,136 @@ describe('strona abonamentu', () => {
     mocks.getActiveSubscription.mockResolvedValue(subscription);
     await pageHtml();
     expect(mocks.getLatestPaymentFailureReason).not.toHaveBeenCalled();
+  });
+});
+
+describe('subskrypcja z portalem: warunki BLIK-a przy przycisku, bo portal pozwala go dodać', () => {
+  const CONSENT = BLIK_RECURRING_STATEMENT.text;
+
+  it('włączony przełącznik: zgoda, następna płatność, cykl i banki, przy przycisku portalu', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    mocks.getActiveSubscription.mockResolvedValue(subscription);
+
+    const html = await pageHtml();
+
+    expect(html).toContain('Zarządzaj subskrypcją');
+    expect(html).toContain(CONSENT);
+    expect(html).toContain('Następna płatność');
+    expect(html).toContain('02.12.2026');
+    expect(html).toContain('0 zł');
+    expect(html).toContain(buildBlikDisclosure().cycle);
+    for (const bank of BLIK_RECURRING_BANKS) expect(html).toContain(bank);
+    expect(html.indexOf('Zarządzaj subskrypcją')).toBeLessThan(html.indexOf(CONSENT));
+    expect(html.indexOf(CONSENT)).toBeLessThan(html.indexOf('Następne odnowienie'));
+    expect(html).not.toMatch(LONG_DASH);
+  });
+
+  it('wyłączony przełącznik: bez BLIK-a, strona jak dotąd', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', '');
+    mocks.getActiveSubscription.mockResolvedValue(subscription);
+
+    const html = await pageHtml();
+
+    expect(html).toContain('Zarządzaj subskrypcją');
+    expect(html).not.toMatch(/BLIK/);
+    expect(html).not.toContain('PKO Bank Polski');
+  });
+
+  it('w próbie pierwsza płatność to koniec próby, nie koniec okresu', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+    try {
+      mocks.getActiveSubscription.mockResolvedValue({
+        ...subscription,
+        status: 'trialing',
+        trial_end: '2026-12-15T10:00:00.000Z',
+        current_period_end: '2026-12-20T10:00:00.000Z',
+      });
+
+      const html = await pageHtml();
+
+      expect(html).toMatch(/Następna płatność<\/dt><dd[^>]*>15\.12\.2026/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['past_due', { status: 'past_due' }, 'zaległa kwota, przy najbliższej próbie pobrania'],
+    ['unpaid', { status: 'unpaid' }, 'zaległa kwota, gdy opłacisz fakturę'],
+    ['anulowana z końcem okresu', { cancel_at_period_end: true }, 'tylko jeśli wznowisz subskrypcję przed 02.12.2026'],
+  ])('%s: następna płatność zgodna ze stanem subskrypcji', async (_name, overrides, label) => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    mocks.getActiveSubscription.mockResolvedValue({ ...subscription, ...overrides });
+
+    const html = await pageHtml();
+
+    expect(html).toContain(label);
+    expect(html).toContain(CONSENT);
+  });
+
+  it('kto nie może otworzyć portalu, nie widzi warunków', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    mocks.pageContext.mockResolvedValue({
+      role: 'member',
+      tenantId: 't-1',
+      user: { id: 'u-2', email: 'pracownik@example.test' },
+    });
+    mocks.getActiveSubscription.mockResolvedValue(subscription);
+
+    const html = await pageHtml();
+
+    expect(html).not.toContain('Zarządzaj subskrypcją');
+    expect(html).not.toContain(CONSENT);
+  });
+
+  it('wycofany plan roczny: bez warunków, bo zgoda mówi o płatnościach co miesiąc', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    mocks.getActiveSubscription.mockResolvedValue({ ...subscription, plan: 'annual' });
+
+    const html = await pageHtml();
+
+    expect(html).toContain('Zarządzaj subskrypcją');
+    expect(html).not.toContain(CONSENT);
+  });
+
+  it('bank bez BLIK-a cyklicznego: tekst odmowy podaje banki, które go obsługują', async () => {
+    mocks.getActiveSubscription.mockResolvedValue({ ...subscription, status: 'past_due' });
+    mocks.getLatestPaymentFailureReason.mockResolvedValue('recurring_not_supported_by_bank');
+    vi.stubEnv('STRIPE_BLIK_RECURRING', '');
+
+    const html = await pageHtml();
+
+    for (const bank of BLIK_RECURRING_BANKS) expect(html).toContain(bank);
+  });
+});
+
+describe('openCustomerPortalAction: ślad warunków BLIK-a pokazanych przed portalem', () => {
+  const portalAudit = () => mocks.logAuditSystem.mock.calls[0][0] as {
+    entityType: string;
+    metadata: Record<string, unknown>;
+  };
+
+  async function open(version: string | null) {
+    await expect(openCustomerPortalAction(version))
+      .rejects.toThrow('redirect:https://billing.stripe.test/portal');
+  }
+
+  it('włączony przełącznik i aktualna wersja: wersja w audycie otwarcia portalu', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    await open(BLIK_RECURRING_STATEMENT.version);
+    expect(portalAudit().entityType).toBe('stripe_portal');
+    expect(portalAudit().metadata.blikStatementVersion).toBe(BLIK_RECURRING_STATEMENT.version);
+  });
+
+  it.each([
+    ['brak wersji', 'on', null],
+    ['inne brzmienie', 'on', '2000-01-01'],
+    ['przełącznik wyłączony', '', BLIK_RECURRING_STATEMENT.version],
+  ])('%s: portal otwiera się, a audyt nie twierdzi, że warunki były pokazane', async (_name, env, version) => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', env);
+    await open(version);
+    expect(portalAudit().metadata).not.toHaveProperty('blikStatementVersion');
   });
 });
 

@@ -103,6 +103,7 @@ vi.mock('@/lib/email/send', () => ({ sendPaymentFailedEmail: mocks.sendPaymentFa
 
 import { clearOperatorCache } from '@/lib/billing/operator-config';
 import { paymentFailureAdvice } from '@/lib/billing/payment-failure';
+import { BLIK_RECURRING_BANKS } from '@/lib/billing/trial-payment';
 import PaymentFailed from '@/lib/email/templates/PaymentFailed';
 import { runDunningPaymentFailed } from '@/lib/jobs/runners/dunning-payment-failed';
 import { runSelfInvoicePayment } from '@/lib/jobs/runners/self-invoice-payment';
@@ -501,8 +502,10 @@ describe('paymentFailureAdvice: kody odmowy z dokumentacji BLIK', () => {
     expect(advice.action).toMatch(action);
   });
 
-  it('bank bez BLIK-a cyklicznego: bez obietnicy ponownej próby, bo się nie uda', () => {
-    expect(paymentFailureAdvice('recurring_not_supported_by_bank').action).not.toMatch(/spróbujemy/i);
+  it('bank bez BLIK-a cyklicznego: bez obietnicy ponownej próby i z listą banków, które go obsługują', () => {
+    const { action } = paymentFailureAdvice('recurring_not_supported_by_bank');
+    expect(action).not.toMatch(/spróbujemy/i);
+    for (const bank of BLIK_RECURRING_BANKS) expect(action).toContain(bank);
   });
 
   it('kod nieznany, kod karty i brak kodu: tekst ogólny, bez kodu technicznego i bez słowa „karta”', () => {

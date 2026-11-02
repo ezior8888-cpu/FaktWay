@@ -14,6 +14,8 @@ import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
 import { startCheckoutAction } from '../actions';
 
+import { BlikTerms } from './blik-terms';
+
 const FEATURES = [
   'Faktury sprzedaż + zakupy bez limitu',
   'OCR z auto-kategoryzacją KPiR',
@@ -34,31 +36,6 @@ interface PlanCardProps {
   onStatementChange: (accepted: boolean) => void;
   blikDisclosure: BlikDisclosure | null;
   paymentHint: string;
-}
-
-/**
- * Warunki BLIK-a cyklicznego przed kodem. Przy hostowanym Checkout pokazuje je
- * sprzedawca: kwota dziś, data pierwszego obciążenia, cykl i banki. Zgoda stoi
- * w polu wyboru pod spodem, bo jej zaznaczenie jest warunkiem startu próby.
- */
-function BlikTerms({ disclosure }: { disclosure: BlikDisclosure }) {
-  return (
-    <div className="text-muted-foreground flex flex-col gap-2 rounded-md border p-3 text-xs leading-relaxed">
-      <p className="text-foreground text-sm font-medium">Płatność kartą albo BLIK-iem</p>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-        <dt>Dziś płacisz</dt>
-        <dd className="text-foreground font-medium">{disclosure.dueToday}</dd>
-        <dt>Pierwsza płatność</dt>
-        <dd className="text-foreground font-medium">{disclosure.firstCharge}, jeśli zaczniesz dziś</dd>
-        <dt>Potem</dt>
-        <dd className="text-foreground font-medium">{disclosure.cycle}</dd>
-      </dl>
-      <p>
-        BLIK bez ponownego kodu działa w bankach: {disclosure.banks.join(', ')}. Masz konto w innym
-        banku? Na stronie płatności wybierz kartę.
-      </p>
-    </div>
-  );
 }
 
 /**
@@ -113,7 +90,18 @@ function PlanCard({
       </CardContent>
 
       <CardFooter className="flex flex-col items-stretch gap-2">
-        {blikDisclosure ? <BlikTerms disclosure={blikDisclosure} /> : null}
+        {/* Zgoda stoi w polu wyboru pod spodem: jej zaznaczenie jest warunkiem startu próby. */}
+        {blikDisclosure ? (
+          <BlikTerms
+            title="Płatność kartą albo BLIK-iem"
+            rows={[
+              { label: 'Dziś płacisz', value: blikDisclosure.dueToday },
+              { label: 'Pierwsza płatność', value: `${blikDisclosure.firstCharge}, jeśli zaczniesz dziś` },
+              { label: 'Potem', value: blikDisclosure.cycle },
+            ]}
+            banks={blikDisclosure.banks}
+          />
+        ) : null}
         <label className="text-muted-foreground flex items-start gap-2.5 text-xs leading-relaxed">
           <input
             type="checkbox"
