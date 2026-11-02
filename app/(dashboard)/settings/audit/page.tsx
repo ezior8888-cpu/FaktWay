@@ -10,6 +10,8 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.logout': 'Wylogowanie',
   'auth.signup': 'Rejestracja',
   'auth.password_reset_requested': 'Prośba o reset hasła',
+  'auth.passkey_added': 'Dodano urządzenie do logowania biometrią',
+  'auth.passkey_removed': 'Usunięto urządzenie do logowania biometrią',
   'invoice.draft_created': 'Utworzono szkic faktury',
   'invoice.draft_updated': 'Zaktualizowano szkic faktury',
   'invoice.draft_deleted': 'Usunięto szkic faktury',

@@ -300,6 +300,24 @@ describe('KSeF history pause', () => {
     await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(/^redirect:\/import-danych\?wstrzymanie=2fa$/);
     expect(mocks.pause).not.toHaveBeenCalled();
   });
+  // Logowanie biometrią (FW1): właściciel ma 2FA i wszedł do panelu ze znacznikiem.
+  // „Ustaw 2FA” byłoby tu nieprawdą, więc prowadzimy prosto na ekran kodu i z powrotem.
+  it('a passkey session (panel marker) goes to the code screen and back, without writing', async () => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'fixture-service-role-key-do-testow');
+    const { createPasskeySessionMarker } = await import('@/lib/auth/passkey/session-marker');
+    const marker = await createPasskeySessionMarker({ sub: userId, sessionId: 'session-a' });
+    aal = 'aal1'; factorType = 'totp';
+    mocks.getClaims.mockImplementation(async () => ({ data: { claims: { sub: userId, aal, session_id: 'session-a' } }, error: null }));
+    mocks.cookies.mockResolvedValue({
+      get: (key: string) => key === ACTIVE_ORG_COOKIE ? { value: org }
+        : key === 'ksef.passkey_session' ? { value: marker } : undefined,
+      set: mocks.setCookie,
+    });
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow('redirect:/login/two-factor?redirect=%2Fimport-danych&potwierdzenie=1');
+    expect(mocks.pause).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
   it.each(['admin', 'member', 'accountant'])('denies the %s role', async (role) => {
     memberRole = role;
     await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);

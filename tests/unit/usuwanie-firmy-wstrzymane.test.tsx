@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getPageContext: vi.fn(), getActiveGdprRequest: vi.fn(), from: vi.fn(),
 }));
+vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: mocks.getPageContext }));
 vi.mock('@/lib/gdpr/deletion', () => ({ getActiveGdprRequest: mocks.getActiveGdprRequest }));
 vi.mock('@/app/(dashboard)/settings/account/actions', () => ({

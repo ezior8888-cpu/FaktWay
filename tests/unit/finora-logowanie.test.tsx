@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
+vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/auth/oauth-providers', () => ({ isGoogleLoginEnabled: mocks.google }));
 vi.mock('@/lib/feature-flags/signups', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/feature-flags/signups')>()),
@@ -169,10 +170,13 @@ describe('logowanie (login/index.tsx Finory)', () => {
     expect(html).toContain('Witaj ponownie!');
   });
 
-  it('wylatują Facebook i „Remember me”; brak angielskich tekstów Finory', async () => {
+  // Od FW1 „Zapamiętaj mnie” działa naprawdę (przy nim `IdleWatcher` nie wylogowuje),
+  // więc pole wróciło po polsku; angielska nazwa z Finory dalej ma się nie pojawić.
+  it('wylatuje Facebook; „Zapamiętaj mnie” po polsku; brak angielskich tekstów Finory', async () => {
     const html = await login();
     expect(html).not.toMatch(/facebook/i);
-    expect(html).not.toMatch(/remember|zapamiętaj/i);
+    expect(html).toContain('Zapamiętaj mnie');
+    expect(html).not.toMatch(/Remember me/i);
     expect(html).not.toMatch(/Welcome|Login with|Sign in|Forgot Password|Create an account|Finora|Shadcn/);
     expect(html).not.toMatch(OLD_LOOK);
   });

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,11 +14,15 @@ import { uploadCertificateAction } from './actions';
 /**
  * Wgranie certyfikatu KSeF. Wygląd: pola jak w `change-password-card.tsx`
  * Finory (etykieta nad polem na całą szerokość, przycisk pod spodem).
+ *
+ * `stepUpRequired`: sesja po biometrii. Mówimy o kodzie, zanim klient wybierze
+ * pliki, bo po powrocie z ekranu kodu musiałby wybierać je jeszcze raz.
  */
-export function CertificateUpload() {
+export function CertificateUpload({ stepUpRequired = false }: { stepUpRequired?: boolean }) {
   const [certFile, setCertFile] = useState<File | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [needsCode, setNeedsCode] = useState(stepUpRequired);
 
   const handleUpload = async () => {
     if (!certFile || !keyFile) return;
@@ -33,6 +38,10 @@ export function CertificateUpload() {
         window.location.reload();
         return;
       }
+      if (result.mfaStepUp) {
+        setNeedsCode(true);
+        return;
+      }
       toast.error(result.error);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Nieznany błąd');
@@ -43,6 +52,11 @@ export function CertificateUpload() {
 
   return (
     <FieldGroup>
+      {needsCode && (
+        <MfaStepUpNotice returnTo="/settings/ksef">
+          Zmiana certyfikatu KSeF wymaga potwierdzenia kodem z aplikacji.
+        </MfaStepUpNotice>
+      )}
       <Field orientation="responsive" className="flex-col!">
         <FieldContent>
           <FieldLabel htmlFor="ksef-cert-file">Plik certyfikatu (cert.pem lub .crt)</FieldLabel>

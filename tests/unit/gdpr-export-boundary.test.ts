@@ -35,7 +35,7 @@ beforeEach(() => {
     ],
     // Sekcje osobowe z AUD-76 (format 3) — tu puste; zakres sprawdza rodo-eksport-pelny.
     users: [{ id: USER, name: 'Own' }],
-    email_preferences: [], push_subscriptions: [], support_conversations: [], support_messages: [],
+    email_preferences: [], push_subscriptions: [], user_passkeys: [], support_conversations: [], support_messages: [],
     organization_join_requests: [], organization_invitations: [], gdpr_deletion_requests: [],
     newsletter_subscribers: [], email_bounces: [],
   };
@@ -120,6 +120,32 @@ describe('account export endpoint', () => {
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(mocks.admin).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  // Logowanie biometrią (FW1): eksport wymaga prawdziwego kodu, a link w panelu
+  // to zwykła nawigacja. Goły JSON 403 byłby dla klienta martwym błędem.
+  it('asks the shared context for full MFA, not the panel marker', async () => {
+    await GET();
+    expect(mocks.verified).toHaveBeenCalledWith({ fullMfa: true });
+  });
+
+  it('sends a browser navigation without the code to the code screen and back to the account page', async () => {
+    mocks.verified.mockResolvedValue({ ok: false, reason: 'mfa_required' });
+    const navigation = new Request('https://faktway.pl/api/gdpr/export', {
+      headers: { 'sec-fetch-dest': 'document', accept: 'text/html' },
+    });
+    const response = await GET(navigation);
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/login/two-factor?redirect=%2Fsettings%2Faccount&potwierdzenie=1');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it('keeps a JSON refusal for API clients', async () => {
+    mocks.verified.mockResolvedValue({ ok: false, reason: 'mfa_required' });
+    const response = await GET(new Request('https://faktway.pl/api/gdpr/export', { headers: { accept: 'application/json' } }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'mfa_required' });
   });
 
   it('returns a private download and audits the actual scope', async () => {

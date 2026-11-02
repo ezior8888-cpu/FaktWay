@@ -103,6 +103,30 @@ describe('KSeF certificate claim action', () => {
     expectNoKsefEffects();
   });
 
+  // Logowanie biometrią (FW1): panel przepuścił sesję ze znacznikiem, a tu dalej
+  // trzeba prawdziwego kodu. Klient dostaje przejście na ekran kodu, nie „włącz 2FA”.
+  it('a passkey session past the panel gate gets the code-screen path, without KSeF effects', async () => {
+    mocks.mfa.mockResolvedValueOnce({ status: 'verified', user })
+      .mockResolvedValueOnce({ status: 'challenge_required', user });
+
+    await expect(uploadCertificateAction(pem)).resolves.toEqual({
+      success: false,
+      mfaStepUp: true,
+      error: 'Zmiana certyfikatu KSeF wymaga potwierdzenia kodem z aplikacji.',
+    });
+    expectNoKsefEffects();
+  });
+
+  it('an owner without 2FA still gets the enable-2FA message and no code-screen path', async () => {
+    mocks.mfa.mockResolvedValueOnce({ status: 'verified', user })
+      .mockResolvedValueOnce({ status: 'enrollment_required', user });
+
+    const result = await uploadCertificateAction(pem);
+    expect(result).toMatchObject({ success: false, error: 'Przed zmianą certyfikatu KSeF włącz i potwierdź logowanie dwuetapowe.' });
+    expect(result).not.toHaveProperty('mfaStepUp');
+    expectNoKsefEffects();
+  });
+
   it('refuses an MFA identity mismatch before authentication with KSeF', async () => {
     mocks.mfa.mockResolvedValueOnce({ status: 'verified', user })
       .mockResolvedValueOnce({ status: 'verified', user: { ...user, id: 'other-user' } });

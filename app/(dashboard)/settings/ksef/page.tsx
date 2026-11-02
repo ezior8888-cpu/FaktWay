@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,10 @@ export default async function KsefSettingsPage() {
       .single(),
     supabase.auth.getUser(),
   ]);
+
+  // Sesja po biometrii wchodzi tu bez kodu, a certyfikat kodu wymaga (`uploadCertificateAction`).
+  const certificateNeedsCode = role === 'owner'
+    && (await getVerifiedMfaState(supabase).catch(() => null))?.status === 'challenge_required';
 
   // Sama flaga obecności — zaszyfrowany blob nie wychodzi do klienta (AUD-103).
   const hasCredentials = !!tenant?.has_ksef_credentials;
@@ -141,7 +146,7 @@ export default async function KsefSettingsPage() {
             Do zmiany certyfikatu potrzebujesz potwierdzonego logowania dwuetapowego.{' '}
             <Link href="/settings/security">Ustaw 2FA</Link>
           </FieldDescription>
-          <CertificateUpload />
+          <CertificateUpload stepUpRequired={certificateNeedsCode} />
         </>
       ) : (
         <FieldDescription>Certyfikat KSeF może zmienić wyłącznie właściciel organizacji.</FieldDescription>
