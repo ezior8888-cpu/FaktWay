@@ -89,7 +89,8 @@ export async function uploadCertificateAction(data: {
       return fail('mfa_required', 'Przed zmianą certyfikatu KSeF włącz i potwierdź logowanie dwuetapowe.');
     }
 
-    if (!data || typeof data.certificate !== 'string' || typeof data.privateKey !== 'string') {
+    // Akcję da się wywołać z dowolnym ciałem, także null, stąd `?.` mimo typu parametru.
+    if (typeof data?.certificate !== 'string' || typeof data?.privateKey !== 'string') {
       return fail('invalid_input', FILES_MISSING);
     }
     const password = typeof data.password === 'string' ? data.password : undefined;

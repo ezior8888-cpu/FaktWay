@@ -210,7 +210,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('połączenie z certyfikatem, historia faktur z KSeF i logowanie Google', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: true, ksef_certificate_expiry: '2027-03-01T00:00:00Z' };
     ctx.user = { identities: [{ provider: 'google' }], app_metadata: { providers: ['email', 'google'] } };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Skonfigurowano połączenie');
     expect(html).toContain('Certyfikat ważny do: 01.03.2027');
     expect(html).toContain('Historia faktur z KSeF');
@@ -227,7 +227,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('bez certyfikatu: ostrzeżenie zamiast linku do postępu, Google niepołączony', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
     ctx.user = { identities: [{ provider: 'email' }], app_metadata: { providers: ['email'] } };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Brak certyfikatu');
     expect(html).toContain('najpierw podłącz KSeF kreatorem');
     expect(html).toContain('Historia faktur z KSeF');
@@ -238,7 +238,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
 
   it('firma bez NIP-u: uzupełnienie NIP zamiast certyfikatu', async () => {
     ctx.tenant = { name: 'Szkic', nip: '' };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Organizacja bez NIP-u');
     expect(html).toContain('id="complete-nip"');
     expect(html).not.toContain('Wgraj i zweryfikuj certyfikat');
@@ -247,7 +247,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('członek nie wgra certyfikatu', async () => {
     ctx.role = 'member';
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Certyfikat KSeF może zmienić wyłącznie właściciel organizacji.');
     expect(html).not.toContain('Wgraj i zweryfikuj certyfikat');
   });

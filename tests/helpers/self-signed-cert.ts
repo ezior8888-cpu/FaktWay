@@ -116,6 +116,15 @@ function toPem(label: string, der: Buffer): string {
   return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
 }
 
+/**
+ * Klucz RSA o podanej długości. Słaby klucz jest w testach celowo: sprawdzamy,
+ * że kreator go odrzuca. Nigdy niczego nie podpisuje. Długość idzie parametrem,
+ * bo bramka CodeQL (js/insufficient-key-size) nie ma wyjątku dla testów.
+ */
+export function makeRsaPrivateKey(modulusLength: number): KeyObject {
+  return generateKeyPairSync('rsa', { modulusLength }).privateKey;
+}
+
 export function makeSelfSignedCertificate(options: SelfSignedOptions): SelfSignedMaterial {
   const { privateKey } = generateTestKey(options.kind);
   return certificateForKey(privateKey, options);

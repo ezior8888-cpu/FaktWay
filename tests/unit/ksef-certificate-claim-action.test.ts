@@ -29,8 +29,8 @@ vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: mocks.rateLimit }));
 import { uploadCertificateAction } from '@/components/settings/actions';
 import { KsefAuthRejectedError } from '@/lib/ksef/auth-errors';
 import { KsefApiError } from '@/lib/ksef/client';
-import { generateKeyPairSync, X509Certificate as X509, type KeyObject } from 'node:crypto';
-import { CERTIFICATE_HEADER, makeSelfSignedCertificate, PKCS8_HEADER } from '../helpers/self-signed-cert';
+import { X509Certificate as X509, type KeyObject } from 'node:crypto';
+import { CERTIFICATE_HEADER, makeRsaPrivateKey, makeSelfSignedCertificate, PKCS8_HEADER } from '../helpers/self-signed-cert';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const user = { id: '22222222-2222-4222-8222-222222222222', email: 'owner@example.test' };
@@ -208,7 +208,7 @@ describe('KSeF certificate claim action', () => {
 describe('kreator podłączenia KSeF: pliki klienta (PEM, DER, hasło)', () => {
   const day = 24 * 3600 * 1000;
   const other = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });
-  const weakRsa = generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey;
+  const weakRsa = makeRsaPrivateKey(1024);
 
   it.each([
     ['brak hasła do zaszyfrowanego klucza', () => ({ certificate: pem.certificate, privateKey: encryptedKey(material.privateKey) }), 'password_required', /chroniony hasłem/],

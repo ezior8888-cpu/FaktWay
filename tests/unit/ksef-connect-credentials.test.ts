@@ -8,7 +8,7 @@ import {
   MAX_KSEF_FILE_BYTES,
 } from '@/lib/ksef/certificate-files';
 import { prepareKsefCredentials } from '@/lib/ksef/connect-credentials';
-import { makeSelfSignedCertificate, PKCS8_HEADER, type TestKeyKind } from '../helpers/self-signed-cert';
+import { makeRsaPrivateKey, makeSelfSignedCertificate, PKCS8_HEADER, type TestKeyKind } from '../helpers/self-signed-cert';
 
 const NIP = '1234567890';
 const PASSWORD = 'Haslo-testowe-15-znakow!';
@@ -158,7 +158,7 @@ describe('przygotowanie poświadczeń KSeF z plików klienta', () => {
 
   it('odrzuca niedozwolone rodzaje kluczy zanim porówna je z certyfikatem', () => {
     const cert = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });
-    const weakRsa = generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey;
+    const weakRsa = makeRsaPrivateKey(1024);
     const p384 = generateKeyPairSync('ec', { namedCurve: 'secp384r1' }).privateKey;
     const ed25519 = generateKeyPairSync('ed25519').privateKey;
     for (const key of [weakRsa, p384, ed25519]) {

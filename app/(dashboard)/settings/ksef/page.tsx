@@ -43,9 +43,9 @@ const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:tex
 export default async function KsefSettingsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ krok?: string | string[] }>;
-} = {}) {
-  const requested = (await searchParams)?.krok;
+  searchParams: Promise<{ krok?: string | string[] }>;
+}) {
+  const requested = (await searchParams).krok;
   const { supabase, tenantId, role } = await getPageContext();
 
   const [{ data: tenant }, { data: authUser }, mfaState] = await Promise.all([
