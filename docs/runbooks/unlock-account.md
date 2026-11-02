@@ -15,6 +15,7 @@ najczęstsze + procedurę odblokowania.
 | "Próbuję anulować usunięcie konta" | GDPR deletion request pending | §4 |
 | "Logowanie przez Google nie działa" | Account linking conflict | §5 |
 | Konto nie istnieje, ale user "na pewno się zarejestrował" | Hard bounce email (Faza 26) | §6 |
+| "Zgubiłem telefon, na którym loguję się biometrią" | Urządzenie w `user_passkeys` | §7 |
 
 ---
 
@@ -164,6 +165,21 @@ tym samym emailem. Supabase Auth łączy je tylko gdy email jest verified.
 3. `/admin/users/<userId>` → "Change email" (Server Action zmienia w
    `auth.users` + wysyła verify do nowego).
 4. Po verify — odznacz bounce flag, konto żyje.
+
+## §7. Zgubione urządzenie z logowaniem biometrią
+
+**Trigger:** klient zgubił telefon albo chce odciąć urządzenie, a sesja na nim może być
+otwarta nawet 90 dni (logowanie biometrią liczy się jak „Zapamiętaj mnie”).
+
+### Procedura
+
+1. Klient ma hasło i kod z aplikacji: Ustawienia → Bezpieczeństwo → Logowanie biometrią →
+   Usuń. Usunięcie wylogowuje pozostałe urządzenia i zapisuje `auth.passkey_removed`.
+2. Klient nie może się zalogować: najpierw potwierdź tożsamość jak w §2, potem zakończ
+   sesje konta w `/admin/users/<userId>` i usuń urządzenia na `db-1`:
+   `DELETE FROM public.user_passkeys WHERE user_id = '<userId>';`. To polecenie nie zostawia
+   wpisu w `audit_logs`, więc zapisz je w zgłoszeniu.
+3. Blokada konta w `/admin/users/<userId>` zatrzymuje także logowanie biometrią.
 
 ---
 
