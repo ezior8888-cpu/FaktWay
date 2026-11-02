@@ -9,6 +9,7 @@ import {
   type PulpitSlotProps,
 } from '@/components/dashboard/finora/sloty';
 import { kontekstDanych } from '@/lib/demo/tryb-danych';
+import { recordTiming } from '@/lib/observability/timings';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -31,6 +32,10 @@ import { getPageContext } from '@/lib/supabase/page-context';
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardHomePage() {
+  // Czas renderu Pulpitu (sesja, kontekst i dane wszystkich kart) — p50/p95
+  // w linii `process.metrics` (plan skalowania, sesja 23).
+  // eslint-disable-next-line react-hooks/purity -- komponent serwerowy renderuje się raz na żądanie, czas nie trafia do UI
+  const startedAt = performance.now();
   const pageCtx = await getPageContext();
   const { supabase, tenantId, nowIso, tryb, kosztyKsefOd } = await kontekstDanych(pageCtx, new Date());
   const props: PulpitSlotProps = { supabase, tenantId, nowIso, tryb, kosztyKsefOd };
@@ -45,6 +50,8 @@ export default async function DashboardHomePage() {
     NaleznosciSlot({ ...props, className: 'col-span-full lg:col-span-3 xl:col-span-2' }),
     RankingiSlot({ ...props, className: 'col-span-full xl:col-span-4' }),
   ]);
+  // eslint-disable-next-line react-hooks/purity -- jak wyżej
+  recordTiming('dashboard', performance.now() - startedAt);
 
   return (
     <div className="ff-route-content">

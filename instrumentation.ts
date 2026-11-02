@@ -8,6 +8,10 @@ export async function register() {
       '@/lib/analytics/posthog-process-shutdown'
     );
     registerPostHogProcessShutdown();
+
+    // Linia `process.metrics` co 60 s w logu kontenera (plan skalowania, sesja 23).
+    const { startProcessMetrics } = await import('@/lib/observability/process-metrics');
+    startProcessMetrics({ process: 'web' });
   }
 
   if (process.env.NEXT_RUNTIME === 'edge') {

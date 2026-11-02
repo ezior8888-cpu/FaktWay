@@ -1,11 +1,13 @@
 import * as Sentry from '@sentry/nextjs';
 import { initPosthogBrowser } from '@/lib/analytics/init-posthog-browser';
 import { sentryPrivacyOptions } from '@/lib/observability/scrub';
+import { tracesSampler } from '@/lib/observability/sentry-sampling';
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   ...sentryPrivacyOptions,
-  tracesSampleRate: 0.1,
+  // Bez healthchecków, telemetrii i prefetchu (plan skalowania, sesja 23).
+  tracesSampler,
   debug: false,
   ignoreErrors: [
     'NEXT_NOT_FOUND',

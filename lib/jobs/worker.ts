@@ -23,6 +23,7 @@ import { CRON_JOBS, RETIRED_CRON_QUEUES, RETIRED_QUEUES, SMOKE_QUEUE } from './q
 import { getRegisteredJobs, registerJob } from './registry';
 import { wrapHandler } from './run-job';
 import { workOptionsFor } from './work-options';
+import { startProcessMetrics } from '@/lib/observability/process-metrics';
 import {
   flushWorkerSentry,
   initWorkerSentry,
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
   } else {
     log.warn('Sentry: alerty z jobów WYŁĄCZONE (brak SENTRY_DSN albo NODE_ENV≠production)');
   }
+  startProcessMetrics({ process: 'worker' });
 
   // Harmonogram i nadzór pg-boss prowadzi TYLKO worker (AUD-88).
   enableWorkerRole();
