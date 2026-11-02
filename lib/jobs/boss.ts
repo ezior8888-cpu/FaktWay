@@ -7,7 +7,7 @@
 
 import { PgBoss } from 'pg-boss';
 
-import { getJobsDatabaseUrl } from './config';
+import { getJobsDatabaseUrl, getJobsSchema } from './config';
 
 let cached: PgBoss | null = null;
 let started = false;
@@ -27,7 +27,7 @@ export function getBoss(): PgBoss {
   if (!cached) {
     cached = new PgBoss({
       connectionString: getJobsDatabaseUrl(),
-      schema: 'pgboss',
+      schema: getJobsSchema(),
       application_name: workerRole ? 'faktflow-jobs' : 'faktflow-web',
       // Mała pula — worker to jeden proces; apka enqueue'uje krótkimi zapytaniami.
       max: 5,
