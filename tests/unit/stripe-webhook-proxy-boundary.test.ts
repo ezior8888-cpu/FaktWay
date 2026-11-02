@@ -47,8 +47,6 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-local-anon-fixture');
   vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.claims.mockResolvedValue({ data: null, error: null });
   mocks.create.mockReturnValue({ auth: { getClaims: mocks.claims } });
   mocks.claim.mockResolvedValue({ state: 'claimed', token: '11111111-1111-4111-8111-111111111111' });

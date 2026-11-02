@@ -3,9 +3,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
 
-import { isMobilePanelAllowed, mobilePanelMode } from '@/lib/mobile-access';
-import { isLocalDevEnv } from '@/lib/security/environment';
-
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
 
 /**
@@ -96,18 +93,6 @@ export function isAuthPublicPath(pathname: string): boolean {
 const APP_HOME = '/dashboard';
 
 /**
- * BUG-008: telefony (nie tablety) nie wchodzą do panelu aplikacji — dostają
- * tylko landing + stronę `/mobile`. Blokada jest ZDEJMOWANA przełącznikiem
- * `NEXT_PUBLIC_MOBILE_PANEL` (zob. `lib/mobile-access.ts`); domyślnie stoi.
- * `Android` bez `Mobile` w UA to tablet — celowo przepuszczany, podobnie iPad.
- */
-const PHONE_UA_RE = /iPhone|iPod|Windows Phone|Android(?=.*\bMobile\b)/i;
-
-function isPhoneUserAgent(ua: string | null): boolean {
-  return ua !== null && PHONE_UA_RE.test(ua);
-}
-
-/**
  * Proxy / „middleware” — odświeżenie sesji Supabase + reguły routingu.
  *
  * Reguły:
@@ -177,42 +162,9 @@ export async function updateSession(request: NextRequest) {
   const isApi = path === '/api' || path.startsWith('/api/');
   const isAdmin = path === '/admin' || path.startsWith('/admin/');
 
-  // ─── BUG-008: blokada aplikacji na telefonie, zdejmowana przełącznikiem ───
-  // Domyślnie telefon widzi wyłącznie strony marketingowe (+ /mobile), a każda
-  // inna nawigacja HTML (login, register, onboarding, dashboard…) → /mobile.
-  // Filtr `accept: text/html` chroni asety (sw.js, manifest, /ingest,
-  // /monitoring) i fetch'e RSC przed zbędnym przekierowaniem.
-  const isPhone = isPhoneUserAgent(request.headers.get('user-agent'));
-  const wantsHtml =
-    request.headers.get('accept')?.includes('text/html') ?? false;
-
-  // W trybie `allowlist` o wstępie decyduje `userId` — a tego przed
-  // zalogowaniem nie ma. Bez tej furtki konto z listy nie miałoby JAK się
-  // zalogować z telefonu: `/login` jest trasą panelu i odbijałoby się na
-  // `/mobile`, czyli w kółko. Sam ekran logowania nie odsłania niczego, czego
-  // nie widać z komputera.
-  const phoneNeedsAuthRoute =
-    userId === null &&
-    mobilePanelMode() === 'allowlist' &&
-    isAuthPublicPath(path);
-
-  const phoneBlocked =
-    isPhone &&
-    !phoneNeedsAuthRoute &&
-    !isMobilePanelAllowed({ userId, isDevEnv: isLocalDevEnv() });
-
-  if (phoneBlocked && wantsHtml && !isApi && !isMarketingPath(path)) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/mobile';
-    url.search = '';
-    const res = NextResponse.redirect(url);
-    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
-    return res;
-  }
-
-  // Zalogowany na landing z telefonu BEZ wstępu zostaje na landingu — nie ma
-  // dokąd iść. Telefon wpuszczony jedzie na `APP_HOME` jak każdy inny klient.
-  if (userId && path === '/' && !phoneBlocked) {
+  // Zalogowany na landingu jedzie na `APP_HOME`, także z telefonu: panel jest
+  // dostępny na każdym urządzeniu (FaktWay 1.0, bez bramki BUG-008).
+  if (userId && path === '/') {
     const url = request.nextUrl.clone();
     url.pathname = APP_HOME;
     url.search = '';

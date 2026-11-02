@@ -28,7 +28,7 @@ export const metadata: Metadata = {
  * Usunięte wtedy: „Bez limitu paragonów” (OCR ma limit dzienny i miesięczny,
  * lib/ai/tenant-ai-budget.ts), eksporty JPK_V7M / Optima / Subiekt / Symfonia /
  * Wapro (wyłączone, lib/exports/suspended-formats.ts — pilnuje test
- * marketing-bez-fikcji), „Mobile” (panel na telefonach jest wyłączony, /mobile),
+ * marketing-bez-fikcji), „Mobile” (do FaktWay 1.0 panel na telefonach był wyłączony),
  * „Retencja 10 lat” (dane trzymamy przez czas umowy), „GDPR-compliant”,
  * „Bank EU”, „Live chat” (czat prowadzi asystent AI).
  */
@@ -188,8 +188,8 @@ export default function PricingPage() {
 
           <Reveal className="mx-auto mt-8 max-w-3xl">
             <p className="text-center text-sm text-pretty text-muted-foreground">
-              W przygotowaniu (jeszcze niedostępne): eksport JPK_V7M(3), eksport
-              do Comarch Optima i Subiekta (EDI++), panel na telefonie. Odczyt
+              W przygotowaniu (jeszcze niedostępne): eksport JPK_V7M(3) oraz eksport
+              do Comarch Optima i Subiekta (EDI++). Odczyt
               dokumentów przez AI ma limit dzienny i miesięczny na firmę. Po jego
               wyczerpaniu dane wpisujesz ręcznie. Szczegóły w{' '}
               <Link href="/legal/regulamin" className="font-medium text-primary underline-offset-4 hover:underline">

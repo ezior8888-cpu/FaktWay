@@ -26,7 +26,6 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-02T10:00:00Z'));
   signedIn = true;
   vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
   mocks.create.mockImplementation(() => ({
     auth: { getClaims: mocks.getClaims },
     from: mocks.from,

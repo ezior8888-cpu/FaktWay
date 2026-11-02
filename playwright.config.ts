@@ -85,10 +85,6 @@ export default defineConfig({
         env: {
           NODE_ENV: 'test',
           KSEF_ENV: 'test',
-          // Projekty `mobile-*` muszą wejść do panelu. Ustawiamy jawnie,
-          // zamiast liczyć na `isLocalDevEnv()`: ta bramka wymaga
-          // NODE_ENV === 'development', a tu jest 'test'.
-          NEXT_PUBLIC_MOBILE_PANEL: 'on',
           E2E_MOCK_KSEF: '1',
           E2E_MOCK_ANTHROPIC: '1',
           E2E_MOCK_RESEND: '1',
