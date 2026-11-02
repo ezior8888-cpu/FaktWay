@@ -107,6 +107,7 @@ serwer nie widzi. Dlatego dowodzi wyłącznie wyboru, który nie dotarł jeszcze
 - rejestracja je zużywa: zostaje sam znacznik `delivered` bez danych, a przeglądarka przy
   następnej stronie albo synchronizacji uznaje wybór za dostarczony i sprząta;
 - dostarczenie wyboru na konto i odwołanie kasują je od razu;
+- wylogowanie (także po bezczynności) kasuje je od razu, żeby nie przeszło na kolejną osobę;
 - przy starcie strony nie powstaje, więc 90 dni to prawdziwy limit tego dowodu.
 
 Dzięki temu kolejna osoba przy wspólnym komputerze nie dostaje cudzego „tak” ani cudzego źródła.

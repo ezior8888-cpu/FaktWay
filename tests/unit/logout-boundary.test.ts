@@ -92,6 +92,12 @@ describe('logout uses the real SDK and clears only the current browser session',
       metadata: expect.objectContaining({ local_session_cleared: true, global_sign_out_confirmed: false }),
     }));
   });
+  it.each([signOut, forceSignOutInactive])('real action also clears the first-touch cookie, so it never reaches the next person on a shared computer', async (action) => {
+    await seedSdk(204);
+    jar.set('ff_first_touch', '{"channel":"google_ads"}');
+    await expect(action()).rejects.toThrow('REDIRECT:/login');
+    expect([...jar.keys()]).toEqual(['ksef.active_org', 'sb-other-auth-token']);
+  });
   it('does not attribute the cookie user identity when Auth cannot verify it', async () => {
     await seedSdk(500, true);
     expect(await signOutCurrentSession()).toEqual({ userId: null, localSessionCleared: true, globalSignOutConfirmed: false });
