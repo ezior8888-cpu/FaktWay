@@ -32,9 +32,44 @@ const mocks = vi.hoisted(() => ({
   audit: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),
+  logAudit: vi.fn(),
 }));
 
-vi.mock('@/lib/stripe/client', () => ({ getStripe: mocks.getStripe }));
+vi.mock('server-only', () => ({}));
+vi.mock('next/navigation', () => ({
+  redirect: (path: string) => { throw new Error('redirect:' + path); },
+}));
+vi.mock('@/lib/supabase/page-context', () => ({
+  getPageContext: async () => ({
+    role: 'owner',
+    tenantId: '11111111-1111-4111-8111-111111111111',
+    user: { id: 'u-1', email: 'owner@example.test' },
+  }),
+}));
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: { name: 'Firma Testowa', nip: '1234567890', stripe_customer_id: 'cus_TestA' },
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  }),
+}));
+vi.mock('@/lib/auth/sensitive-mfa', () => ({
+  assertSensitiveMfa: async () => undefined,
+  SensitiveMfaRequiredError: class extends Error {},
+}));
+vi.mock('@/lib/stripe/customer-email', () => ({ syncStripeCustomerEmail: async () => undefined }));
+vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.logAudit }));
+vi.mock('@/lib/stripe/client', () => ({
+  getStripe: mocks.getStripe,
+  isStripeConfigured: () => true,
+}));
 vi.mock('@/lib/stripe/subscription', () => ({
   getActiveSubscription: mocks.getActiveSubscription,
 }));
@@ -55,6 +90,8 @@ vi.mock('@sentry/nextjs', () => ({
   captureMessage: mocks.captureMessage,
 }));
 
+import { startCheckoutAction } from '@/app/(dashboard)/settings/billing/actions';
+import { BLIK_RECURRING_STATEMENT } from '@/lib/legal/versions';
 import { createCheckoutSession, type CreateCheckoutInput } from '@/lib/stripe/checkout';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
@@ -64,6 +101,7 @@ const sessionId = 'cs_test_TestA';
 const DEFAULT_API_VERSION = '2024-11-20.acacia';
 const BLIK_API_VERSION = '2026-09-30.endive';
 const CARD_KEY = 'faktflow-checkout-v2:' + attemptId;
+const CARD_ONLY_KEY = 'faktflow-checkout-card-v1:' + attemptId;
 
 const input: CreateCheckoutInput = {
   tenantId,
@@ -237,15 +275,6 @@ describe('przełącznik STRIPE_BLIK_RECURRING wyłączony: żądanie jak dziś',
     }));
   });
 
-  it('włączony przełącznik bez potwierdzonych ujawnień (offerBlik) to też żądanie jak dziś', async () => {
-    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
-
-    await createCheckoutSession(input);
-
-    expect(createCalls()).toHaveLength(1);
-    expect(createCalls()[0].headers['idempotency-key']).toBe(CARD_KEY);
-    expect(createCalls()[0].body).toEqual(TODAY_BODY);
-  });
 });
 
 describe('przełącznik włączony: karta i BLIK jawnie, wersja API na to jedno żądanie', () => {
@@ -278,6 +307,37 @@ describe('przełącznik włączony: karta i BLIK jawnie, wersja API na to jedno 
     expect(mocks.hold).not.toHaveBeenCalled();
     expect(mocks.captureMessage).not.toHaveBeenCalled();
     expect(mocks.captureException).not.toHaveBeenCalled();
+  });
+
+  it('strona bez potwierdzonych ujawnień: jawnie sama karta, bo bez listy Stripe wziąłby metody z Dashboardu', async () => {
+    createResponses = [{ status: 200, body: session({ payment_method_types: ['card'] }) }];
+
+    await expect(createCheckoutSession(input)).resolves.toMatchObject({ sessionId });
+
+    expect(createCalls()).toHaveLength(1);
+    const [request] = createCalls();
+    expect(request.headers['stripe-version']).toBe(DEFAULT_API_VERSION);
+    expect(request.headers['idempotency-key']).toBe(CARD_ONLY_KEY);
+    expect(request.body['payment_method_types[0]']).toBe('card');
+    expect(request.body['payment_method_types[1]']).toBeUndefined();
+    expect(Object.keys(request.body).filter((k) => k.startsWith('allowed_payment_method_types'))).toEqual([]);
+    expect(bodyWithout(request.body, 'payment_method_types[0]')).toEqual(TODAY_BODY);
+    expect(mocks.record).toHaveBeenCalledWith(attemptId, sessionId, 2_000_000_000);
+    expect(mocks.hold).not.toHaveBeenCalled();
+    // Sama karta jest tu zamierzona, a nie sygnałem, że Stripe odrzucił BLIK.
+    expect(mocks.captureMessage).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: 'billing.checkout.blik_unavailable',
+    }));
+  });
+
+  it('strona bez ujawnień i błąd Stripe: hold uncertain, bez ponowienia', async () => {
+    createResponses = [stripeError(400, { type: 'invalid_request_error', message: 'No such price' })];
+
+    await expect(createCheckoutSession(input)).rejects.toThrow('No such price');
+
+    expect(createCalls()).toHaveLength(1);
+    expect(mocks.hold).toHaveBeenCalledWith(attemptId, 'creating', 'uncertain');
   });
 
   it('nie zmienia wersji API klienta: odczyty przed tworzeniem idą w starej wersji', async () => {
@@ -465,5 +525,54 @@ describe('przełącznik włączony: karta i BLIK jawnie, wersja API na to jedno 
       .rejects.toThrow('already in progress');
 
     expect(createCalls()).toHaveLength(0);
+  });
+});
+
+describe('startCheckoutAction: bramka ujawnień aż do żądania do Stripe', () => {
+  const CHECKOUT_URL = 'redirect:https://checkout.stripe.test/cs_test_TestA';
+
+  beforeEach(() => vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test'));
+
+  it('aktualna wersja zgody: karta i BLIK, dowód zgody w audycie', async () => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+
+    await expect(startCheckoutAction('monthly', true, BLIK_RECURRING_STATEMENT.version))
+      .rejects.toThrow(CHECKOUT_URL);
+
+    const [request] = createCalls();
+    expect(request.headers['stripe-version']).toBe(BLIK_API_VERSION);
+    expect(request.body['allowed_payment_method_types[1]']).toBe('blik');
+    expect(mocks.logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'legal.checkout_statement_accepted',
+      metadata: expect.objectContaining({ blikStatementVersion: BLIK_RECURRING_STATEMENT.version }),
+    }));
+  });
+
+  it.each([
+    ['karta sprzed włączenia przełącznika (brak wersji)', null],
+    ['karta ze starym brzmieniem zgody', '2000-01-01'],
+  ])('%s: Checkout dostaje samą kartę, a klient nie poda kodu BLIK bez ujawnień', async (_name, version) => {
+    vi.stubEnv('STRIPE_BLIK_RECURRING', 'on');
+    createResponses = [{ status: 200, body: session({ payment_method_types: ['card'] }) }];
+
+    await expect(startCheckoutAction('monthly', true, version)).rejects.toThrow(CHECKOUT_URL);
+
+    expect(createCalls()).toHaveLength(1);
+    const [request] = createCalls();
+    expect(request.headers['stripe-version']).toBe(DEFAULT_API_VERSION);
+    expect(request.headers['idempotency-key']).toBe(CARD_ONLY_KEY);
+    expect(request.body['payment_method_types[0]']).toBe('card');
+    expect(request.body['payment_method_types[1]']).toBeUndefined();
+    const audit = mocks.logAudit.mock.calls[0][0] as { metadata: Record<string, unknown> };
+    expect(audit.metadata).not.toHaveProperty('blikStatementVersion');
+  });
+
+  it('przełącznik wyłączony po wyrenderowaniu strony: żądanie sprzed BLIK-a', async () => {
+    await expect(startCheckoutAction('monthly', true, BLIK_RECURRING_STATEMENT.version))
+      .rejects.toThrow(CHECKOUT_URL);
+
+    const [request] = createCalls();
+    expect(request.headers['idempotency-key']).toBe(CARD_KEY);
+    expect(request.body).toEqual(TODAY_BODY);
   });
 });

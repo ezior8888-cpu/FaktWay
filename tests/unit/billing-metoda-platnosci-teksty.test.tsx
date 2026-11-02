@@ -236,7 +236,8 @@ describe('startCheckoutAction: BLIK tylko po ujawnieniach, które klient widzia�
     ['strona sprzed włączenia (brak wersji)', 'on', null],
     ['strona z inną wersją brzmienia', 'on', '2000-01-01'],
     ['przełącznik wyłączony po wyrenderowaniu strony', '', BLIK_RECURRING_STATEMENT.version],
-  ])('%s: bez BLIK-a i bez zapisu zgody', async (_name, env, version) => {
+  ])('%s: oferta bez BLIK-a i bez zapisu zgody', async (_name, env, version) => {
+    // Że taka oferta to w żądaniu jawnie sama karta: tests/unit/stripe-checkout-blik.test.ts.
     vi.stubEnv('STRIPE_BLIK_RECURRING', env);
     const checkout = await start(version);
     expect(checkout.offerBlik).toBe(false);

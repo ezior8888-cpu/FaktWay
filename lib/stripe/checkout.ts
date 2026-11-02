@@ -6,10 +6,11 @@
  * must never be retried with a new key or released by a clock.
  *
  * BLIK obok karty (`STRIPE_BLIK_RECURRING=on`, docs/runbooks/stripe-blik.md):
- * wyłączony przełącznik wysyła dokładnie żądanie sprzed BLIK-a. Włączony dokłada
- * listę metod i wersję API na to jedno żądanie. Odmowa pewna (Stripe odrzucił
- * żądanie, Session nie powstała) nie zatrzymuje próby: jedno ponowienie tylko
- * z kartą w tym samym claimie. Wynik niepewny nadal kończy się stanem „uncertain”.
+ * wyłączony przełącznik wysyła dokładnie żądanie sprzed BLIK-a. Włączony zawsze
+ * podaje listę metod: kartę i BLIK z wersją API na to jedno żądanie, a stronie bez
+ * aktualnych ujawnień samą kartę. Odmowa pewna (Stripe odrzucił żądanie, Session
+ * nie powstała) nie zatrzymuje próby: jedno ponowienie tylko z kartą w tym samym
+ * claimie. Wynik niepewny nadal kończy się stanem „uncertain”.
  */
 
 import * as Sentry from '@sentry/nextjs';
@@ -45,8 +46,9 @@ export interface CreateCheckoutInput {
   /** Base URL do redirectu — np. https://faktway.pl. */
   baseUrl: string;
   /**
-   * Klient widział ujawnienia BLIK-a przed przekierowaniem. Bez tego (albo przy
-   * wyłączonym `STRIPE_BLIK_RECURRING`) Checkout idzie żądaniem jak przed BLIK-iem.
+   * Klient widział ujawnienia BLIK-a przed przekierowaniem. Bez tego przy włączonym
+   * `STRIPE_BLIK_RECURRING` Checkout dostaje jawnie samą kartę, a przy wyłączonym
+   * idzie żądaniem sprzed BLIK-a.
    */
   offerBlik?: boolean;
 }
@@ -292,6 +294,27 @@ async function reportBlikUnavailable(
 }
 
 /**
+ * Jawnie sama karta przy włączonym przełączniku: ponowienie po odmowie BLIK-a albo
+ * strona bez aktualnych ujawnień. Bez listy Stripe wziąłby metody z Dashboardu, gdzie
+ * BLIK już jest, a klient podałby kod bez warunków, których Stripe wymaga przed nim.
+ * Wersja API klienta i jej parametr, bo to żądanie nie ma zależeć od niczego, co mogło
+ * zawieść w wariancie z BLIK-iem. Przy podniesieniu globalnej wersji do endive trzeba
+ * tu przejść na `allowed_payment_method_types`.
+ */
+function createCardOnlySession(
+  stripe: Stripe,
+  params: Stripe.Checkout.SessionCreateParams,
+  attemptId: string,
+): Promise<Stripe.Checkout.Session> {
+  return stripe.checkout.sessions.create({
+    ...params,
+    payment_method_types: ['card'],
+  }, {
+    idempotencyKey: 'faktflow-checkout-card-v1:' + attemptId,
+  });
+}
+
+/**
  * Tworzy Session wariantem z BLIK-iem. Każda lista parametrów ma własny klucz
  * idempotencji, bo Stripe odrzuca ten sam klucz z innymi parametrami. Oba klucze
  * są stałe dla tego claimu, więc automatyczne powtórzenie SDK niczego nie dubluje.
@@ -328,15 +351,7 @@ async function createBlikSession(
       stripeCode: code ?? null,
       stripeParam: param ?? null,
     });
-    // Wersja API klienta i jej parametr: to ponowienie nie zależy od niczego,
-    // co mogło zawieść w wariancie z BLIK-iem. Przy podniesieniu globalnej wersji
-    // do endive trzeba tu przejść na `allowed_payment_method_types`.
-    return stripe.checkout.sessions.create({
-      ...params,
-      payment_method_types: ['card'],
-    }, {
-      idempotencyKey: 'faktflow-checkout-card-v1:' + attemptId,
-    });
+    return createCardOnlySession(stripe, params, attemptId);
   }
 
   // `allowed_payment_method_types` to filtr: BLIK nieaktywny na koncie znika bez
@@ -388,16 +403,19 @@ async function createClaimedSession(
     },
     invoice_creation: undefined,
   };
-  const offerBlik = input.offerBlik === true && isBlikAvailable();
 
   let session: Stripe.Checkout.Session;
   try {
-    session = offerBlik
-      ? await createBlikSession(stripe, params, input, attemptId)
-      : await stripe.checkout.sessions.create(params, {
-          // Stable for this one durable attempt; contains no tenant PII or ID.
-          idempotencyKey: 'faktflow-checkout-v2:' + attemptId,
-        });
+    if (!isBlikAvailable()) {
+      session = await stripe.checkout.sessions.create(params, {
+        // Stable for this one durable attempt; contains no tenant PII or ID.
+        idempotencyKey: 'faktflow-checkout-v2:' + attemptId,
+      });
+    } else if (input.offerBlik === true) {
+      session = await createBlikSession(stripe, params, input, attemptId);
+    } else {
+      session = await createCardOnlySession(stripe, params, attemptId);
+    }
 
     if (!session.id.startsWith('cs_') ||
         stripeCustomerId(session.customer) !== customerId ||
