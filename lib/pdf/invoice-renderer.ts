@@ -83,6 +83,7 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   transfer: 'Przelew',
   cash: 'Gotówka',
   card: 'Karta',
+  mobile: 'Płatność mobilna',
   other: 'Inna',
 };
 

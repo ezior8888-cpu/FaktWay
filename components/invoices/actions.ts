@@ -913,7 +913,8 @@ async function prefillCore(
       buyerAddressLine2: buyer.address?.addressLine2 ?? '',
       buyerEmail: buyer.email ?? '',
       lines: lines as InvoiceFormValues['lines'],
-      paymentMethod: faktura.payment?.method ?? 'transfer',
+      // „mobile” ma tylko faktura za abonament opłacony BLIK-iem; formularz tej formy nie zna.
+      paymentMethod: faktura.payment?.method === 'mobile' ? 'other' : faktura.payment?.method ?? 'transfer',
       bankAccount: faktura.payment?.bankAccount ?? '',
     },
   };

@@ -196,6 +196,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         paidAt: authoritativePaidAt,
         stripeInvoiceId,
         plan,
+        paymentMethodType: data.paymentMethodType,
       });
       if (!draft) {
         throw new NonRetriableError(
