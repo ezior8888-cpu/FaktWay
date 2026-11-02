@@ -17,6 +17,7 @@ import {
 } from '@/lib/flo/functions/expense-inbox';
 import { readInboxHwm, saveInboxHwm } from '@/lib/flo/functions/inbox-cursor';
 import { sendPushToTenant } from '@/lib/push/sender';
+import { readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { InvoiceMetadata, KsefEnvironment } from '@/types/ksef';
@@ -140,17 +141,23 @@ async function findExistingInboxNumbers(
 export async function runInboxPolling({ step, logger }: JobContext) {
     const env = requireConfiguredKsefEnvironment();
     // Polling wymaga certyfikatu oraz znacznika zweryfikowanego NIP-u.
+    // Stronami po kluczu (sesja 27 planu skalowania, JOB-11): jedno zapytanie
+    // oddawało najwyżej 1000 firm (PGRST_DB_MAX_ROWS), reszta po cichu nie
+    // była odpytywana. Najpierw CAŁA lista, potem jedno wysłanie niżej:
+    // wysyłka strona po stronie zdublowałaby zadania przy ponowieniu (pg-boss
+    // powtarza cały handler, zdarzenia nie mają singletonKey).
     const tenants = await step.run('list-active-tenants', async () => {
       const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, nip')
-        .not('ksef_credentials_encrypted', 'is', null)
-        .not('ksef_verified_at', 'is', null)
-        .eq('ksef_verified_environment', env);
-
-      if (error) throw new Error(`Failed to list tenants: ${error.message}`);
-      return data ?? [];
+      return readAllById<{ id: string; nip: string }>('Failed to list tenants', (afterId, limit) => {
+        let query = supabase
+          .from('tenants')
+          .select('id, nip')
+          .not('ksef_credentials_encrypted', 'is', null)
+          .not('ksef_verified_at', 'is', null)
+          .eq('ksef_verified_environment', env);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
     });
 
     logger.info(`Polling dla ${tenants.length} tenantów`);

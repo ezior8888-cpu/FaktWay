@@ -23,6 +23,8 @@ vi.mock('@/lib/jobs/boss', () => ({
 
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
+import { historyClient, historyDb } from './helpers/historia-ksef-baza';
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.send.mockImplementation(async (queue: string) => `job-${queue}`);
@@ -61,19 +63,16 @@ describe('fan-out do kilku kolejek', () => {
 describe('fan-out skrzynki', () => {
   it('każde zdarzenie inbox/poll.tenant ma groupId = NIP firmy', async () => {
     vi.resetModules();
-    vi.doMock('@/lib/supabase/server', () => ({
-      createAdminClient: async () => ({
-        from: () => {
-          const q = {
-            select: () => q,
-            // Firmy z certyfikatem i NIP-em zweryfikowanym w bieżącym środowisku (#63).
-            not: () => q,
-            eq: () => Promise.resolve({ data: [{ id: 't1', nip: '1234567890' }, { id: 't2', nip: '5260001246' }], error: null }),
-          };
-          return q;
-        },
-      }),
-    }));
+    // Firmy z certyfikatem i NIP-em zweryfikowanym w bieżącym środowisku (#63);
+    // lista idzie stronami po kluczu (sesja 27), więc atrapa z gt/order/limit.
+    const firma = (id: string, nip: string) => ({
+      id, nip, ksef_credentials_encrypted: '\\x00', ksef_verified_at: '2026-09-01T00:00:00Z', ksef_verified_environment: 'test',
+    });
+    const db = historyDb({ tenants: [
+      firma('11111111-1111-4111-8111-111111111111', '1234567890'),
+      firma('22222222-2222-4222-8222-222222222222', '5260001246'),
+    ] });
+    vi.doMock('@/lib/supabase/server', () => ({ createAdminClient: async () => historyClient(db) }));
     const { runInboxPolling } = await import('@/lib/jobs/runners/inbox-polling');
     const sendEvent = vi.fn();
     await runInboxPolling({

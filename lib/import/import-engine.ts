@@ -7,6 +7,7 @@
  * kontrahenci, produkty, znaczniki czasu i lista ostrzeżeń.
  */
 
+import { KeysetPageError, readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -331,18 +332,30 @@ async function upsertProducts(
 ): Promise<number> {
   if (productsMap.size === 0) return 0;
 
-  const { data: existingRows, error: selErr } = await supabase
-    .from('products')
-    .select('id, name, unit, use_count')
-    .eq('tenant_id', tenantId);
-
-  if (selErr) {
-    warnings.push(`Produkty: odczyt — ${selErr.message}`);
+  // Cały katalog firmy stronami po kluczu (sesja 27 planu skalowania): jedno
+  // zapytanie oddawało najwyżej 1000 produktów (PGRST_DB_MAX_ROWS), a pozycja
+  // pasująca do produktu spoza tej części szła do INSERT — tabela nie ma
+  // UNIQUE, więc powstawał dubel, przy każdej kolejnej fakturze następny.
+  // Błąd którejkolwiek strony = nic nie zapisujemy (częściowy katalog to ten
+  // sam dubel w innym przebraniu).
+  let existingRows: Array<{ id: string; name: string; unit: string; use_count: number | null }>;
+  try {
+    existingRows = await readAllById('Produkty: odczyt', (afterId, limit) => {
+      let query = supabase
+        .from('products')
+        .select('id, name, unit, use_count')
+        .eq('tenant_id', tenantId);
+      if (afterId) query = query.gt('id', afterId);
+      return query.order('id', { ascending: true }).limit(limit);
+    });
+  } catch (error) {
+    if (!(error instanceof KeysetPageError)) throw error;
+    warnings.push(`Produkty: odczyt — ${error.reason}`);
     return 0;
   }
 
   const existingByKey = new Map<string, { id: string; use_count: number }>();
-  for (const row of existingRows ?? []) {
+  for (const row of existingRows) {
     const k = normalizeProductKey(row.name, row.unit);
     if (k) existingByKey.set(k, { id: row.id, use_count: row.use_count ?? 0 });
   }
