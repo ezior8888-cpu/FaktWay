@@ -86,6 +86,7 @@ export type AuditAction =
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
   // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
+  // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
   | 'invoice.marked_paid'
   | 'invoice.paid_undone'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę

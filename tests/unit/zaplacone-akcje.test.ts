@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 describe('markInvoicePaidAction', () => {
-  it('oznaczenie: RPC na kliencie sesji, audyt, pamięć podręczna, odświeżenie widoków, analityka', async () => {
+  it('oznaczenie: RPC na kliencie sesji, pamięć podręczna, odświeżenie widoków, analityka; audyt zapisuje RPC', async () => {
     m.rpc.mockResolvedValue({
       data: {
         status: 'marked', amount: 1230, paid_on: '2026-11-02', payment_id: 'p1',
@@ -57,14 +57,8 @@ describe('markInvoicePaidAction', () => {
     expect(result).toEqual({ success: true, status: 'marked', amount: 1230, paidOn: '2026-11-02', number: 'FV/1/2026' });
     expect(m.requireOrgRole).toHaveBeenCalledWith(['owner', 'admin', 'member']);
     expect(m.rpc).toHaveBeenCalledWith('mark_invoice_paid', { p_invoice_id: INVOICE, p_paid_on: null });
-    expect(m.logAudit).toHaveBeenCalledWith({
-      tenantId: TENANT,
-      userId: USER,
-      action: 'invoice.marked_paid',
-      entityType: 'invoice',
-      entityId: INVOICE,
-      metadata: { amount: 1230, paidOn: '2026-11-02', customDate: false, paymentId: 'p1', remindersCancelled: 2 },
-    });
+    // Wpis `invoice.marked_paid` robi sama funkcja w bazie, w transakcji z wpłatą (00158): akcja go nie dubluje.
+    expect(m.logAudit).not.toHaveBeenCalled();
     expect(m.invalidate).toHaveBeenCalledWith(TENANT);
     expect(m.track).toHaveBeenCalledWith({
       userId: USER,
@@ -78,13 +72,13 @@ describe('markInvoicePaidAction', () => {
     ]));
   });
 
-  it('wybrana data idzie do RPC i do audytu', async () => {
+  it('wybrana data idzie do RPC (audyt z customDate zapisuje RPC, nie akcja)', async () => {
     m.rpc.mockResolvedValue({ data: { status: 'marked', amount: 100, paid_on: '2026-10-20' }, error: null });
 
     await markInvoicePaidAction(INVOICE, '2026-10-20');
 
     expect(m.rpc).toHaveBeenCalledWith('mark_invoice_paid', { p_invoice_id: INVOICE, p_paid_on: '2026-10-20' });
-    expect(m.logAudit.mock.calls[0]![0].metadata).toMatchObject({ paidOn: '2026-10-20', customDate: true });
+    expect(m.logAudit).not.toHaveBeenCalled();
   });
 
   it('„już zapłacona”: sukces bez audytu, bez zdarzenia i bez czyszczenia pamięci', async () => {
@@ -157,20 +151,14 @@ describe('markInvoicePaidAction', () => {
 });
 
 describe('undoInvoicePaidAction', () => {
-  it('cofnięcie: audyt, pamięć podręczna i odświeżenie widoków', async () => {
+  it('cofnięcie: pamięć podręczna i odświeżenie widoków; audyt zapisuje RPC', async () => {
     m.rpc.mockResolvedValue({ data: { status: 'undone', amount: 1230, paid_on: '2026-11-02', reminders_restored: 1 }, error: null });
 
     expect(await undoInvoicePaidAction(INVOICE)).toEqual({ success: true, status: 'undone' });
 
     expect(m.rpc).toHaveBeenCalledWith('undo_invoice_paid', { p_invoice_id: INVOICE });
-    expect(m.logAudit).toHaveBeenCalledWith({
-      tenantId: TENANT,
-      userId: USER,
-      action: 'invoice.paid_undone',
-      entityType: 'invoice',
-      entityId: INVOICE,
-      metadata: { amount: 1230, paidOn: '2026-11-02', remindersRestored: 1 },
-    });
+    // Wpis `invoice.paid_undone` robi funkcja w bazie, w transakcji z usunięciem wpłaty (00158).
+    expect(m.logAudit).not.toHaveBeenCalled();
     expect(m.invalidate).toHaveBeenCalledWith(TENANT);
     expect(m.revalidate.mock.calls.map((call) => call[0])).toContain('/przeplywy');
     expect(m.track).not.toHaveBeenCalled();

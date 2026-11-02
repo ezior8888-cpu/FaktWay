@@ -146,6 +146,27 @@ async function wplaty(id: string) {
   return (data ?? []).map((row) => ({ ...row, amount: Number(row.amount) }));
 }
 
+/**
+ * Wpisy audytu oznaczenia i cofnięcia. `audit_logs` jest tylko do dopisywania (00052): wpisy z wcześniejszych
+ * przebiegów na tej samej bazie zostają, więc testy porównują stan przed i po wywołaniu (`nowyAudyt`).
+ */
+async function audyt(id: string) {
+  const { data, error } = await admin
+    .from('audit_logs')
+    .select('tenant_id, user_id, action, entity_type, entity_id, metadata')
+    .eq('entity_id', id)
+    .in('action', ['invoice.marked_paid', 'invoice.paid_undone'])
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+async function nowyAudyt(id: string, wywolanie: () => PromiseLike<unknown>) {
+  const przed = (await audyt(id)).length;
+  await wywolanie();
+  return (await audyt(id)).slice(przed);
+}
+
 async function cleanup() {
   for (const org of [ORG_A, ORG_B]) {
     await admin.from('flo_proposals').delete().eq('tenant_id', org);
@@ -165,10 +186,12 @@ describe.skipIf(!hasDatabase)('„Zapłacone” jednym dotknięciem (00158)', ()
     await cleanup();
     await admin.from('memberships').delete().in('organization_id', [ORG_A, ORG_B]);
     await admin.from('tenants').delete().in('id', [ORG_A, ORG_B]);
-    const tenants = await admin.from('tenants').insert([
+    // Wpisy audytu firmy testowej zostają po przebiegu (00052), a kasowanie firmy kaskadą jest wtedy blokowane:
+    // kolejny przebieg na tej samej bazie dopisuje się do istniejącej firmy.
+    const tenants = await admin.from('tenants').upsert([
       { id: ORG_A, nip: NIP, name: 'Firma A Zapłacone' },
       { id: ORG_B, nip: NIP, name: 'Firma B Zapłacone' },
-    ]);
+    ], { onConflict: 'id' });
     if (tenants.error) throw tenants.error;
     const profiles = await admin.from('users').upsert(
       (Object.keys(users) as Array<keyof typeof EMAILS>).map((who) => ({ id: users[who], name: who })),
@@ -544,6 +567,98 @@ describe.skipIf(!hasDatabase)('„Zapłacone” jednym dotknięciem (00158)', ()
     });
   });
 
+  // Recenzja PR #358: audyt robi sama funkcja w bazie, w tej samej transakcji co wpłata. Dopiero wtedy nie ma
+  // wpłaty bez śladu (akcja serwerowa mogła paść między RPC a zapisem audytu) ani śladu bez wpłaty.
+  describe('audyt w tej samej transakcji co wpłata', () => {
+    it('oznaczenie zapisuje wpis: firma i użytkownik z sesji, kwota, dzień, wpłata, przypomnienia', async () => {
+      const id = await faktura();
+      const c = await signedIn('owner');
+      let payment = '';
+
+      const wpisy = await nowyAudyt(id, async () => {
+        const { data } = await c.rpc('mark_invoice_paid', { p_invoice_id: id });
+        payment = (data as { payment_id: string }).payment_id;
+      });
+
+      expect(payment).not.toBe('');
+      expect(wpisy).toEqual([{
+        tenant_id: ORG_A,
+        user_id: users.owner,
+        action: 'invoice.marked_paid',
+        entity_type: 'invoice',
+        entity_id: id,
+        metadata: { amount: 1230, paidOn: warsawToday(), customDate: false, paymentId: payment, remindersCancelled: 0 },
+      }]);
+    });
+
+    it('wybrana data to customDate = true, a wpis niesie użytkownika, który kliknął (członek firmy)', async () => {
+      const id = await faktura();
+      const c = await signedIn('member');
+      const day = shiftDays(warsawToday(), -3);
+
+      const wpisy = await nowyAudyt(id, () => c.rpc('mark_invoice_paid', { p_invoice_id: id, p_paid_on: day }));
+
+      expect(wpisy).toHaveLength(1);
+      expect(wpisy[0]).toMatchObject({
+        user_id: users.member,
+        action: 'invoice.marked_paid',
+        metadata: { amount: 1230, paidOn: day, customDate: true, remindersCancelled: 0 },
+      });
+    });
+
+    it('cofnięcie zapisuje wpis z kwotą i dniem usuniętej wpłaty', async () => {
+      const id = await faktura();
+      const c = await signedIn('owner');
+      const day = shiftDays(warsawToday(), -2);
+      await c.rpc('mark_invoice_paid', { p_invoice_id: id, p_paid_on: day });
+
+      const wpisy = await nowyAudyt(id, () => c.rpc('undo_invoice_paid', { p_invoice_id: id }));
+
+      expect(wpisy).toEqual([{
+        tenant_id: ORG_A,
+        user_id: users.owner,
+        action: 'invoice.paid_undone',
+        entity_type: 'invoice',
+        entity_id: id,
+        metadata: { amount: 1230, paidOn: day, remindersRestored: 0 },
+      }]);
+    });
+
+    it('bez zmiany nie ma wpisu: ponowne oznaczenie, odmowa, brak uprawnień, drugie cofnięcie', async () => {
+      const id = await faktura();
+      const c = await signedIn('owner');
+      const ksiegowa = await signedIn('accountant');
+      await c.rpc('mark_invoice_paid', { p_invoice_id: id });
+      await c.rpc('undo_invoice_paid', { p_invoice_id: id });
+      await c.rpc('mark_invoice_paid', { p_invoice_id: id });
+
+      const wpisy = await nowyAudyt(id, async () => {
+        await c.rpc('mark_invoice_paid', { p_invoice_id: id });
+        await c.rpc('mark_invoice_paid', { p_invoice_id: id, p_paid_on: shiftDays(warsawToday(), 3) });
+        await ksiegowa.rpc('mark_invoice_paid', { p_invoice_id: id });
+        await ksiegowa.rpc('undo_invoice_paid', { p_invoice_id: id });
+        await c.rpc('undo_invoice_paid', { p_invoice_id: id });
+        await c.rpc('undo_invoice_paid', { p_invoice_id: id });
+      });
+
+      expect(wpisy.map((w) => w.action)).toEqual(['invoice.paid_undone']);
+    });
+
+    it('wpłata z banku zostaje i nie ma wpisu o cofnięciu', async () => {
+      const id = await faktura();
+      const bank = await admin.from('payments').insert({
+        tenant_id: ORG_A, invoice_id: id, amount: 300, payment_date: '2026-10-05',
+        is_confirmed: true, match_method: 'bank_import',
+      });
+      if (bank.error) throw bank.error;
+      const c = await signedIn('owner');
+
+      const wpisy = await nowyAudyt(id, () => c.rpc('undo_invoice_paid', { p_invoice_id: id }));
+
+      expect(wpisy).toEqual([]);
+    });
+  });
+
   describe('należności po oznaczeniu', () => {
     it('widok invoices_overdue: znika po oznaczeniu, wraca po cofnięciu', async () => {
       const id = await faktura();
@@ -732,6 +847,19 @@ describe.skipIf(!hasDatabase)('„Zapłacone” jednym dotknięciem (00158)', ()
         { stage: 'stage_2', status: 'cancelled', failure_reason: MARKER },
         { stage: 'stage_3', status: 'cancelled', failure_reason: 'Wstrzymane przez użytkownika' },
       ]);
+    });
+
+    it('audyt niesie liczbę anulowanych i zwolnionych przypomnień', async () => {
+      const id = await faktura();
+      await przypomnienie(id, 'stage_1', { status: 'sent', sent_at: new Date().toISOString() });
+      await przypomnienie(id, 'stage_2');
+      const c = await signedIn('owner');
+
+      const oznaczenie = await nowyAudyt(id, () => c.rpc('mark_invoice_paid', { p_invoice_id: id }));
+      const cofniecie = await nowyAudyt(id, () => c.rpc('undo_invoice_paid', { p_invoice_id: id }));
+
+      expect(oznaczenie[0]?.metadata).toMatchObject({ remindersCancelled: 1 });
+      expect(cofniecie[0]?.metadata).toMatchObject({ remindersRestored: 1 });
     });
 
     it('cofnięcie zwalnia etap anulowany przez oznaczenie, a jego stara zgoda nie może już wysłać', async () => {

@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
-import { logAudit } from '@/lib/audit/log';
 import { invalidateTenantDashboard } from '@/lib/cache/invalidation';
 import {
   INVOICE_PAYMENT_ROLES,
@@ -24,9 +23,11 @@ import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabas
  * jeszcze raz RPC z 00158 w jednej transakcji z zapisem, a `payments` zostaje
  * zablokowana dla sesji (00074).
  *
- * Ponowienie: oba RPC są idempotentne (drugie oznaczenie zwraca `already_paid`,
- * drugie cofnięcie `nothing_to_undo`, oba bez zapisu), więc audyt i analityka
- * idą tylko po rzeczywistej zmianie.
+ * Audyt (`invoice.marked_paid`, `invoice.paid_undone`) zapisują same RPC w tej
+ * samej transakcji co wpłata, więc akcja go nie dubluje. Ponowienie: oba RPC są
+ * idempotentne (drugie oznaczenie zwraca `already_paid`, drugie cofnięcie
+ * `nothing_to_undo`, oba bez zapisu), więc pamięć podręczna i analityka idą tylko
+ * po rzeczywistej zmianie.
  */
 
 /**
@@ -103,20 +104,6 @@ export async function markInvoicePaidAction(invoiceId: string, paidOn?: string):
 
   const amount = Number(result.amount);
   const day = String(result.paid_on);
-  await logAudit({
-    tenantId,
-    userId: user.id,
-    action: 'invoice.marked_paid',
-    entityType: 'invoice',
-    entityId: invoiceId,
-    metadata: {
-      amount,
-      paidOn: day,
-      customDate: paidOn !== undefined,
-      paymentId: text(result.payment_id),
-      remindersCancelled: Number(result.reminders_cancelled ?? 0),
-    },
-  });
   await invalidateTenantDashboard(tenantId);
   revalidatePaymentViews(invoiceId);
   await trackServer({
@@ -132,7 +119,7 @@ export async function undoInvoicePaidAction(invoiceId: string): Promise<UndoInvo
   if (!invoiceIdSchema.safeParse(invoiceId).success) return { success: false, error: UNDO_PAID_FAILED };
   const auth = await authorized();
   if ('error' in auth) return { success: false, error: auth.error };
-  const { supabase, tenantId, user } = auth.ctx;
+  const { supabase, tenantId } = auth.ctx;
 
   const { data, error } = await (supabase as unknown as ManualPaymentRpc).rpc('undo_invoice_paid', {
     p_invoice_id: invoiceId,
@@ -149,18 +136,6 @@ export async function undoInvoicePaidAction(invoiceId: string): Promise<UndoInvo
   if (result.status === 'nothing_to_undo') return { success: true, status: 'nothing_to_undo' };
   if (result.status !== 'undone') return { success: false, error: UNDO_PAID_FAILED };
 
-  await logAudit({
-    tenantId,
-    userId: user.id,
-    action: 'invoice.paid_undone',
-    entityType: 'invoice',
-    entityId: invoiceId,
-    metadata: {
-      amount: Number(result.amount),
-      paidOn: String(result.paid_on),
-      remindersRestored: Number(result.reminders_restored ?? 0),
-    },
-  });
   await invalidateTenantDashboard(tenantId);
   revalidatePaymentViews(invoiceId);
   return { success: true, status: 'undone' };

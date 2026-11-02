@@ -14,15 +14,22 @@
 -- (recalculate_invoice_paid_amount z 00073, update_invoice_payment_status
 -- z 00145). Funkcje ustawiają ręcznie tylko dzień `paid_at` przy wybranej dacie.
 --
+-- Audyt: oba RPC same dopisują wiersz do audit_logs (invoice.marked_paid,
+-- invoice.paid_undone) w tej samej transakcji co wpłata, więc nie ma wpłaty bez
+-- śladu ani śladu bez wpłaty (akcja serwerowa mogła paść między RPC a zapisem).
+-- Kształt akcji i metadanych jak dotąd w `app/actions/invoice-payments.ts`;
+-- ip_address i user_agent zostają puste, bo baza nie zna adresu klienta (żądanie
+-- do PostgREST idzie z serwera aplikacji). Użytkownik z auth.uid(), firma z sesji.
+--
 -- Kto: właściciel, administrator, członek firmy (jak EDITOR_ROLES w
 -- app/actions/contractors.ts). Księgowa ma wgląd: oznaczenie to zapis w danych
 -- firmy, a nie w jej księgach. Rola i firma z sesji, nie z argumentów.
 --
 -- Kolejność: PRZED wdrożeniem (addytywna: nowy indeks częściowy i trzy nowe
 -- funkcje). Stara wersja aplikacji ich nie woła. DELETE w ciele
--- undo_invoice_paid działa dopiero na żądanie klienta i tylko na wierszach
--- z tej funkcji, przy wgraniu żadne dane się nie zmieniają (bez DROP,
--- TRUNCATE i DML poza ciałami funkcji). Kod nigdy nie zapisywał
+-- undo_invoice_paid i INSERT do audit_logs w ciałach obu funkcji działają dopiero
+-- na żądanie klienta i tylko na wierszach z tych funkcji, przy wgraniu żadne dane
+-- się nie zmieniają (bez DROP, TRUNCATE i DML poza ciałami funkcji). Kod nigdy nie zapisywał
 -- match_method = 'manual' (jedyny zapis z aplikacji to FLO: flo_confirmation),
 -- więc indeks powstaje bez kolizji. Przed wgraniem na produkcję sprawdź:
 --   SELECT count(*) FROM public.payments WHERE match_method = 'manual';  -- oczekiwane 0
@@ -164,6 +171,18 @@ BEGIN
      AND status = 'pending';
   GET DIAGNOSTICS v_reminders = ROW_COUNT;
 
+  INSERT INTO public.audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+  VALUES (
+    v_tenant_id, auth.uid(), 'invoice.marked_paid', 'invoice', p_invoice_id,
+    jsonb_build_object(
+      'amount', v_rest,
+      'paidOn', v_paid_on,
+      'customDate', p_paid_on IS NOT NULL,
+      'paymentId', v_payment_id,
+      'remindersCancelled', v_reminders
+    )
+  );
+
   RETURN jsonb_build_object(
     'status', 'marked',
     'payment_id', v_payment_id,
@@ -177,7 +196,8 @@ $$;
 
 COMMENT ON FUNCTION public.mark_invoice_paid(uuid, date) IS
   'Oznacza fakturę sprzedaży przyjętą w KSeF jako zapłaconą: wpłata na całą resztę '
-  '(match_method = manual), anulowanie oczekujących przypomnień. Idempotentne.';
+  '(match_method = manual), anulowanie oczekujących przypomnień i wpis audytu '
+  '(invoice.marked_paid) w jednej transakcji. Idempotentne.';
 
 -- Cofnięcie usuwa wyłącznie wpłatę ręczną. Wpłaty z banku i z FLO zostają,
 -- a faktura z taką wpłatą wraca do stanu `partial`.
@@ -264,6 +284,16 @@ BEGIN
   )
   SELECT count(*) INTO v_reminders FROM freed;
 
+  INSERT INTO public.audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+  VALUES (
+    v_tenant_id, auth.uid(), 'invoice.paid_undone', 'invoice', p_invoice_id,
+    jsonb_build_object(
+      'amount', v_amount,
+      'paidOn', v_paid_on,
+      'remindersRestored', v_reminders
+    )
+  );
+
   RETURN jsonb_build_object(
     'status', 'undone',
     'amount', v_amount,
@@ -275,7 +305,8 @@ $$;
 
 COMMENT ON FUNCTION public.undo_invoice_paid(uuid) IS
   'Cofa wyłącznie wpłatę ręczną z mark_invoice_paid; zwalnia etapy przypomnień '
-  'anulowane tym oznaczeniem, które planuje od nowa harmonogram.';
+  'anulowane tym oznaczeniem, które planuje od nowa harmonogram. Wpis audytu '
+  '(invoice.paid_undone) w tej samej transakcji.';
 
 -- `payments` nie ma odczytu dla sesji (00074), a szczegóły faktury muszą wiedzieć,
 -- czy pokazać „Cofnij zapłatę”. Sama data i kwota wpłaty ręcznej tej firmy,
