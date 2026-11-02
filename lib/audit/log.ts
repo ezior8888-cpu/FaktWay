@@ -67,10 +67,20 @@ export type AuditAction =
   | 'invoice.operator_reset'
   // D-A4-1b-3 PR B: operator zapisał decyzję klienta przy nierozstrzygniętym 440
   // (decyzję zapisuje RPC `decide_ksef_duplicate` — `invoice.ksef_duplicate_decided`).
+  // PR C (00156): metadane niosą też `mode`, `offer` i `importedInvoiceId` (K zapisana z KSeF; brak przy `no-import`).
   | 'invoice.operator_duplicate_decision'
   // D-A4-1b-3 PR B: „Faktura … czeka na Twoją decyzję” dostarczone (e-mail albo push) —
   // zapis bezpośredni (`lib/ksef/duplicate-decision-notice.ts`), raz na (fakturę, K).
+  // PR C: metadane niosą `variant` (`pair` / `record` / `released` / `review`).
   | 'invoice.ksef_duplicate_decision_notified'
+  // D-A4-1b-3 PR C (00156, spec v3 6.6): zapis oryginału z KSeF decyzją (RPC `decide_ksef_duplicate_original`,
+  // tryb `import`), oddanie decyzji klientowi po przeglądzie pliku (RPC `release_ksef_original_review`) i trwały
+  // znacznik „sprawdź ponownie” (RPC `flag_ksef_original_recheck`) — zapisuje baza (`ksef_send_audit`), nie aplikacja.
+  | 'invoice.ksef_original_imported'
+  | 'invoice.ksef_original_review_released'
+  | 'invoice.ksef_original_recheck_flagged'
+  // PR C: operator oddał decyzję klientowi (`operatorReleaseOriginalReviewAction`, notatka operatora, tylko nowe oddanie).
+  | 'invoice.operator_original_release'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę

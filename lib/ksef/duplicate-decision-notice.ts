@@ -7,6 +7,12 @@
  * `metadata.original_ksef_number`). Operator może przypomnieć klientowi
  * najwyżej raz na 24 h; przypomnienie ma własny klucz idempotencji.
  *
+ * PR C (00156, spec v3 5.7): ślad niesie `metadata.variant` (`pair` / `record` / `released` /
+ * `review`). Powiadomienia mają dwie RODZINY śladów: `decision` („czeka na Twoją decyzję”,
+ * ślady bez `variant` albo z `variant` innym niż `review`) i `review` („sprawdzamy fakturę
+ * z KSeF” — ślad `review`). „Raz na (fakturę, K)” i reguła 24 h liczą ślady swojej rodziny,
+ * więc „sprawdzamy” nie blokuje późniejszego powiadomienia o decyzji (po oddaniu).
+ *
  * Fail-closed w obie strony:
  *   - błąd odczytu śladu RZUCA — „nie wiem, co wysłałem” to nie „nic nie
  *     wysłałem” (precedens `cert-expiry-alert.ts`);
@@ -20,6 +26,8 @@
 import 'server-only';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+
+import type { DuplicateNoticeVariant } from './duplicate-decision';
 
 /** Akcja śladu w `audit_logs` (raport dzienny liczy ją w akcjach doby). */
 export const DUPLICATE_NOTICE_ACTION = 'invoice.ksef_duplicate_decision_notified';
@@ -43,6 +51,24 @@ export function duplicateNoticeKey(invoiceId: string, ksefNumber: string, remind
   return reminder === null ? base : `${base}/przypomnienie-${reminder}`;
 }
 
+/** PR C: klucz Resend powiadomienia „sprawdzamy fakturę z KSeF” (przegląd pliku) — raz na (fakturę, K). */
+export function duplicateReviewNoticeKey(invoiceId: string, ksefNumber: string): string {
+  return `ksef-duplicate-decision/${invoiceId}/${ksefNumber}/sprawdzamy`;
+}
+
+/**
+ * PR C: klucz Resend e-maila po oddaniu decyzji klientowi przez operatora — `…/oddanie-{release_at}`
+ * (`importGate.release.at` z RPC, w milisekundach). Ten sam klucz przy ponowieniu po zgubionej
+ * odpowiedzi; Resend deduplikuje 24 h.
+ */
+export function duplicateReleaseNoticeKey(invoiceId: string, ksefNumber: string, releaseAt: string): string {
+  const at = Date.parse(releaseAt);
+  return `ksef-duplicate-decision/${invoiceId}/${ksefNumber}/oddanie-${Number.isNaN(at) ? encodeURIComponent(releaseAt) : at}`;
+}
+
+/** Rodzina śladów: `decision` („czeka na Twoją decyzję”, przypomnienia, oddanie) albo `review` („sprawdzamy”). */
+export type DuplicateNoticeFamily = 'decision' | 'review';
+
 export interface DuplicateNotices {
   /** Liczba śladów powiadomień o tej fakturze i tym K. */
   count: number;
@@ -62,6 +88,12 @@ type NoticeRow = { tenant_id?: string | null; entity_id?: string | null; created
 const isNoticeOf = (r: NoticeRow, tenantId: string, invoiceId: string, ksefNumber: string): boolean =>
   r.tenant_id === tenantId && r.entity_id === invoiceId && isRecord(r.metadata) && r.metadata.original_ksef_number === ksefNumber;
 
+/** Ślad bez `variant` (sprzed PR C) należy do rodziny `decision`; `variant: 'review'` — do `review`. */
+const isInFamily = (r: NoticeRow, family: DuplicateNoticeFamily): boolean => {
+  const isReview = isRecord(r.metadata) && r.metadata.variant === 'review';
+  return family === 'review' ? isReview : !isReview;
+};
+
 function summarizeNotices(rows: readonly NoticeRow[]): DuplicateNotices {
   let lastAt: string | null = null;
   let lastMs = -Infinity;
@@ -76,13 +108,14 @@ function summarizeNotices(rows: readonly NoticeRow[]): DuplicateNotices {
 }
 
 /**
- * Ślady powiadomień o fakturze `invoiceId` i numerze KSeF oryginału `ksefNumber`.
- * Rzuca przy błędzie odczytu.
+ * Ślady powiadomień o fakturze `invoiceId` i numerze KSeF oryginału `ksefNumber`
+ * w rodzinie `family` (domyślnie `decision`). Rzuca przy błędzie odczytu.
  */
 export async function findDuplicateNotices(
   tenantId: string,
   invoiceId: string,
   ksefNumber: string,
+  family: DuplicateNoticeFamily = 'decision',
 ): Promise<DuplicateNotices> {
   const { data, error } = await createAdminClient()
     .from('audit_logs')
@@ -94,7 +127,9 @@ export async function findDuplicateNotices(
     .order('created_at', { ascending: false })
     .limit(NOTICE_READ_LIMIT);
   if (error) throw new Error(`Nie można odczytać śladu powiadomień o decyzji klienta: ${error.message}`);
-  return summarizeNotices(((data ?? []) as NoticeRow[]).filter((r) => isNoticeOf(r, tenantId, invoiceId, ksefNumber)));
+  return summarizeNotices(
+    ((data ?? []) as NoticeRow[]).filter((r) => isNoticeOf(r, tenantId, invoiceId, ksefNumber) && isInFamily(r, family)),
+  );
 }
 
 /**
@@ -106,6 +141,7 @@ export async function findDuplicateNotices(
  */
 export async function findDuplicateNoticesBatch(
   invoices: ReadonlyArray<{ invoiceId: string; tenantId: string; ksefNumber: string }>,
+  family: DuplicateNoticeFamily = 'decision',
 ): Promise<Map<string, DuplicateNotices>> {
   const result = new Map<string, DuplicateNotices>(invoices.map((i) => [i.invoiceId, { count: 0, lastAt: null }]));
   if (invoices.length === 0) return result;
@@ -122,7 +158,10 @@ export async function findDuplicateNoticesBatch(
     throw new Error(`Ślad powiadomień o decyzji klienta: ${rows.length} wierszy — wynik obcięty limitem`);
   }
   for (const i of invoices) {
-    result.set(i.invoiceId, summarizeNotices(rows.filter((r) => isNoticeOf(r, i.tenantId, i.invoiceId, i.ksefNumber))));
+    result.set(
+      i.invoiceId,
+      summarizeNotices(rows.filter((r) => isNoticeOf(r, i.tenantId, i.invoiceId, i.ksefNumber) && isInFamily(r, family))),
+    );
   }
   return result;
 }
@@ -143,6 +182,8 @@ export interface DuplicateNoticeRecord {
   operatorEmail?: string | null;
   /** Operator przy przypomnieniu; `null` dla joba. */
   userId?: string | null;
+  /** PR C: wariant powiadomienia (`review` — rodzina „sprawdzamy”); brak — ślad PR B (rodzina `decision`). */
+  variant?: DuplicateNoticeVariant;
 }
 
 /**
@@ -165,6 +206,7 @@ export async function recordDuplicateNotice(record: DuplicateNoticeRecord): Prom
       push_sent: record.pushSent,
       reminder: record.reminder ?? null,
       operator: record.operatorEmail ?? null,
+      ...(record.variant ? { variant: record.variant } : {}),
       source: 'system',
     },
     ip_address: null,

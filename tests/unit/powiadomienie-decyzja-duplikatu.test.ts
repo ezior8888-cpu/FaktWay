@@ -71,6 +71,7 @@ function client() {
       let op: 'select' | 'insert' = 'select';
       let payload: Row = {};
       let head = false;
+      let columns: string | undefined;
       let max = Infinity;
       let order: { key: string; ascending: boolean } | null = null;
       const execute = () => {
@@ -88,10 +89,14 @@ function client() {
           rows = [...rows].sort((a, b) => String(a[key] ?? '').localeCompare(String(b[key] ?? '')) * (ascending ? 1 : -1));
         }
         rows = rows.slice(0, max);
-        return { data: head ? null : rows.map((r) => ({ ...r })), error: null, count: rows.length };
+        // Jak PostgREST: wpisy `ksef_submissions` zwracają TYLKO wybrane kolumny — odczyt, któremu brakuje kolumny
+        // historii (`session_reference_number`, `request_payload_hash`, …), widzi `undefined`, nie dane z fikstury.
+        const only = table === 'ksef_submissions' && columns && columns !== '*' ? columns.split(',').map((c) => c.trim()) : null;
+        const shaped = (r: Row): Row => (only ? Object.fromEntries(only.map((key) => [key, r[key] ?? null])) : { ...r });
+        return { data: head ? null : rows.map(shaped), error: null, count: rows.length };
       };
       const q = {
-        select: (_columns?: string, options?: { head?: boolean }) => { head = Boolean(options?.head); return q; },
+        select: (cols?: string, options?: { head?: boolean }) => { columns = cols; head = Boolean(options?.head); return q; },
         insert: (row: Row) => { op = 'insert'; payload = row; return q; },
         eq: (k: string, v: unknown) => { filters.push((r) => columnValue(r, k) === v); return q; },
         neq: (k: string, v: unknown) => { filters.push((r) => columnValue(r, k) !== v); return q; },
@@ -149,6 +154,8 @@ vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi
 
 import { runNotifyFailure } from '@/lib/jobs/runners/notify-user';
 import { RetryAfterError } from '@/lib/jobs/errors';
+import { ORIGINAL_GATE_RULES } from '@/lib/ksef/duplicate-check';
+import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 
 type FailedEvent = Parameters<typeof runNotifyFailure>[0];
 
@@ -187,7 +194,7 @@ const notice = (ksefNumber: string, extra: Row = {}): Row => ({
 });
 const notices = () => (m.tables.audit_logs ?? []).filter((r) => r.action === ACTION);
 
-function seed(options: { invoice?: Row; check?: Row; notices?: Row[] } = {}) {
+function seed(options: { invoice?: Row; check?: Row; notices?: Row[]; submissions?: Row[] } = {}) {
   m.tables = {
     invoices: [{
       id: ID, tenant_id: T, direction: 'outgoing', internal_number: NUMBER, ksef_status: 'failed', ksef_number: null,
@@ -203,6 +210,7 @@ function seed(options: { invoice?: Row; check?: Row; notices?: Row[] } = {}) {
         original_session_reference_number: 'S-OBCA', session_reference_number: 'S-1', invoice_reference_number: 'I-1',
         original_check: check(options.check), attempted_at: '2026-10-07T08:00:00.000Z',
       },
+      ...(options.submissions ?? []),
     ],
     audit_logs: [...(options.notices ?? [])],
     memberships: [
@@ -430,5 +438,240 @@ describe('U7g–U7h: kiedy powiadomienia o decyzji nie ma', () => {
     expect(m.duplicateEmail).not.toHaveBeenCalled();
     expect(m.push).not.toHaveBeenCalled();
     expect(notices()).toEqual([]);
+  });
+});
+
+/**
+ * D-A4-1b-3 PR C (spec v3 5.7, INV-24; 7.2): wariant e-maila i pusha pochodzi
+ * z TEJ SAMEJ funkcji oferty co panel (`duplicateNoticeVariant`), z własną
+ * historią liczoną z kolumn wpisów, które czyta panel (`session_reference_number`,
+ * `request_payload_hash`, `original_session_reference_number`) — nigdy `null` w miejscu
+ * `ownHistoryDb`. W przeglądzie pliku (blokada `provenance-review`) klient dostaje
+ * RAZ „sprawdzamy” (własny klucz i rodzina śladu), nigdy „czeka na Twoją decyzję”,
+ * bez karty FLO i bez e-maila „odrzucona”. Na HEAD e-mail nie niesie `variant`,
+ * a każda blokada oprócz NULL kończy się ścieżką ogólną.
+ */
+const FF = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
+const SHA = 'bb'.repeat(32);
+const OPERATOR_ID = '99999999-9999-4999-8999-999999999999';
+const GATE_IMPORTABLE: Row = { v: 1, rules: ORIGINAL_GATE_RULES, kind: 'importable', problems: [], preview: null };
+const GATE_REVIEW: Row = { v: 1, rules: ORIGINAL_GATE_RULES, kind: 'review', problems: ['rates'], preview: null };
+const GATE_RELEASED: Row = {
+  ...GATE_REVIEW,
+  release: { at: '2026-10-07T09:00:00.000Z', via: 'operator', actorUserId: OPERATOR_ID, note: 'Plik sprawdzony: nie powstał w FaktFlow.' },
+};
+/** Znacznik `faktflow-original` z plikiem FaktFlow i oceną pliku (00149). */
+const faktflowCheck = (extra: Row = {}): Row => ({
+  reason: 'faktflow-original',
+  summary: { systemInfo: 'KSeF SaaS v1.0', number: NUMBER, issueDate: '2026-10-07', buyerNip: '5252241585', buyerName: 'Klient', gross: '123.00', currency: 'PLN' },
+  sameContentExceptHeader: false,
+  ownHistory: false,
+  importGate: GATE_IMPORTABLE,
+  ...extra,
+});
+/** Wpis X z próbą wysyłki: sesja i/albo skrót pliku (kolumny, z których panel liczy własną historię w bazie). */
+const attempt = (extra: Row): Row => ({
+  id: 'sub-proba', tenant_id: T, invoice_id: ID, status: 'abandoned', original_ksef_number: null,
+  session_reference_number: 'S-PROBA', request_payload_hash: null, attempted_at: '2026-10-05T08:00:00.000Z', ...extra,
+});
+const reviewNotice = (createdAt = '2026-10-07T09:00:00.000Z'): Row => ({
+  id: 'notice-review', tenant_id: T, user_id: null, action: ACTION, entity_type: 'invoice', entity_id: ID,
+  metadata: {
+    original_ksef_number: K, via: 'auto', idempotency_key: `${KEY}/sprawdzamy`, variant: 'review',
+    emailed: true, push_sent: 1, reminder: null, operator: null, source: 'system',
+  },
+  created_at: createdAt,
+});
+const lastNotice = () => notices().at(-1) as { metadata: Row } | undefined;
+
+describe('D-A4-1b-3 PR C: wariant powiadomienia o decyzji = oferta panelu (INV-24)', () => {
+  it.each([
+    ['powód PR B (no-own-file)', () => seed()],
+    ['FO-PARA: brama importable, ownHistory=false w JSON i brak historii w bazie', () => seed({ check: faktflowCheck() })],
+  ])('%s → wariant pair: tekst PR B, e-mail z variant "pair", ślad niesie wariant', async (_label, arrange) => {
+    arrange();
+
+    const result = await runNotifyFailure(failedEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: true, emailed: true });
+    expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+    expect(m.duplicateEmail).toHaveBeenCalledWith(
+      OWNER_EMAIL,
+      expect.objectContaining({ invoiceId: ID, invoiceNumber: NUMBER, ksefNumber: K, reminder: false, variant: 'pair' }),
+      expect.objectContaining({ idempotencyKey: KEY }),
+    );
+    expect(m.push).toHaveBeenCalledWith(OWNER, 'invoice_rejected', {
+      title: DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_TITLE(NUMBER),
+      body: DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_BODY,
+      url: `/invoices/${ID}`,
+      tag: `invoice-${ID}`,
+    });
+    expect(notices()).toHaveLength(1);
+    expect(lastNotice()?.metadata).toMatchObject({ original_ksef_number: K, variant: 'pair', idempotency_key: KEY, via: 'auto' });
+  });
+
+  it.each([
+    ['ta sama treść (sameContentExceptHeader=true)', () => seed({ check: faktflowCheck({ sameContentExceptHeader: true }) })],
+    ['ownHistory=true w JSON znacznika', () => seed({ check: faktflowCheck({ ownHistory: true }) })],
+    [
+      'JSON ownHistory=false, a skrót oryginału jest w request_payload_hash próby X (T3: historia w bazie, nie null)',
+      () => seed({ check: faktflowCheck(), submissions: [attempt({ request_payload_hash: SHA })] }),
+    ],
+    [
+      'JSON ownHistory=false, a sesja oryginału jest sesją próby X (historia w bazie)',
+      () => seed({ check: faktflowCheck(), submissions: [attempt({ session_reference_number: 'S-OBCA' })] }),
+    ],
+  ])('%s → wariant record: e-mail z variant "record", push o zapisie faktury z KSeF', async (_label, arrange) => {
+    arrange();
+
+    const result = await runNotifyFailure(failedEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: true, emailed: true });
+    expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+    expect(m.duplicateEmail).toHaveBeenCalledWith(
+      OWNER_EMAIL,
+      expect.objectContaining({ ksefNumber: K, reminder: false, variant: 'record' }),
+      expect.objectContaining({ idempotencyKey: KEY }),
+    );
+    expect(m.push).toHaveBeenCalledWith(OWNER, 'invoice_rejected', expect.objectContaining({
+      body: FF.NOTICE_PUSH_BODY_RECORD,
+      url: `/invoices/${ID}`,
+      tag: `invoice-${ID}`,
+    }));
+    expect(lastNotice()?.metadata).toMatchObject({ variant: 'record', idempotency_key: KEY });
+  });
+
+  it('FO-ODDANA (operator oddał decyzję: importGate.release) → wariant released, ten sam klucz „raz na (fakturę, K)”', async () => {
+    seed({ check: faktflowCheck({ importGate: GATE_RELEASED }) });
+
+    const result = await runNotifyFailure(failedEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: true, emailed: true });
+    expect(m.duplicateEmail).toHaveBeenCalledWith(
+      OWNER_EMAIL,
+      expect.objectContaining({ ksefNumber: K, reminder: false, variant: 'released' }),
+      expect.objectContaining({ idempotencyKey: KEY }),
+    );
+    expect(lastNotice()?.metadata).toMatchObject({ variant: 'released', idempotency_key: KEY });
+  });
+});
+
+describe('D-A4-1b-3 PR C: przegląd pliku (provenance-review) — klient dostaje raz „sprawdzamy”, nie „czeka na decyzję”', () => {
+  const REVIEW_KEY = `${KEY}/sprawdzamy`;
+  const reviewEvent = () => failedEvent({ error: FF.LAST_ERROR_REVIEW(K) });
+  const seedReview = (over: { notices?: Row[] } = {}) => {
+    seed({ check: faktflowCheck({ importGate: GATE_REVIEW }), notices: over.notices });
+    m.blocker = 'provenance-review';
+  };
+
+  it('blokada provenance-review → jeden e-mail variant "review" z własnym kluczem, push „sprawdzamy”, ślad rodziny review; bez karty FLO i maila „odrzucona”', async () => {
+    seedReview();
+
+    const result = await runNotifyFailure(reviewEvent(), ctx());
+
+    expect(result).not.toHaveProperty('pending');
+    expect(result).toMatchObject({ notified: true, emailed: true });
+    expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+    expect(m.duplicateEmail).toHaveBeenCalledWith(
+      OWNER_EMAIL,
+      expect.objectContaining({ invoiceId: ID, invoiceNumber: NUMBER, ksefNumber: K, reminder: false, variant: 'review' }),
+      expect.objectContaining({ idempotencyKey: REVIEW_KEY }),
+    );
+    expect(m.push).toHaveBeenCalledTimes(1);
+    expect(m.push).toHaveBeenCalledWith(OWNER, 'invoice_rejected', {
+      title: FF.NOTICE_PUSH_TITLE_REVIEW(NUMBER),
+      body: FF.NOTICE_PUSH_BODY_REVIEW,
+      url: `/invoices/${ID}`,
+      tag: `invoice-${ID}`,
+    });
+    expect(notices()).toHaveLength(1);
+    expect(lastNotice()?.metadata).toMatchObject({
+      original_ksef_number: K, variant: 'review', idempotency_key: REVIEW_KEY, via: 'auto', emailed: true, push_sent: 1,
+    });
+    expect(m.proposal).not.toHaveBeenCalled();
+    expect(m.failedEmail).not.toHaveBeenCalled();
+    expect(m.rpcCalls).toContainEqual({ fn: 'ksef_duplicate_decision_blocker', args: { p_invoice_id: ID, p_tenant_id: T } });
+  });
+
+  it('raz na (fakturę, K): drugie zdarzenie w przeglądzie → already-notified, bez e-maila, pusha i zapisu', async () => {
+    seedReview({ notices: [reviewNotice()] });
+
+    const result = await runNotifyFailure(reviewEvent(), ctx());
+
+    expect(result).toMatchObject({ skipped: true, reason: 'already-notified' });
+    expect(m.duplicateEmail).not.toHaveBeenCalled();
+    expect(m.push).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(1);
+    expect(m.proposal).not.toHaveBeenCalled();
+    expect(m.failedEmail).not.toHaveBeenCalled();
+  });
+
+  it('ślad „sprawdzamy” nie blokuje późniejszego powiadomienia o decyzji (po oddaniu: blokada NULL, wariant released)', async () => {
+    seed({ check: faktflowCheck({ importGate: GATE_RELEASED }), notices: [reviewNotice()] });
+    m.blocker = null;
+
+    const result = await runNotifyFailure(failedEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: true, emailed: true });
+    expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+    expect(m.duplicateEmail).toHaveBeenCalledWith(
+      OWNER_EMAIL,
+      expect.objectContaining({ ksefNumber: K, variant: 'released' }),
+      expect.objectContaining({ idempotencyKey: KEY }),
+    );
+    expect(notices().map((r) => (r.metadata as Row).variant)).toEqual(['review', 'released']);
+  });
+
+  it('ślad powiadomienia o decyzji (bez wariantu, sprzed PR C) nie blokuje „sprawdzamy” — rodziny śladów są osobne', async () => {
+    seedReview({ notices: [notice(K)] });
+
+    const result = await runNotifyFailure(reviewEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: true, emailed: true });
+    expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+    expect(m.duplicateEmail).toHaveBeenCalledWith(
+      OWNER_EMAIL,
+      expect.objectContaining({ variant: 'review' }),
+      expect.objectContaining({ idempotencyKey: REVIEW_KEY }),
+    );
+    expect(notices()).toHaveLength(2);
+  });
+
+  it('e-mail niewysłany i push 0 → próba była, bez śladu (jak przy decyzji: kolejne zdarzenie może ponowić)', async () => {
+    seedReview();
+    m.duplicateEmail.mockResolvedValue({ sent: false, reason: 'not-configured' });
+    m.push.mockResolvedValue({ sent: 0, failed: 0 });
+
+    const result = await runNotifyFailure(reviewEvent(), ctx());
+
+    expect(result).toMatchObject({ notified: false, emailed: false });
+    expect(notices()).toEqual([]);
+    expect(m.failedEmail).not.toHaveBeenCalled();
+    expect(m.proposal).not.toHaveBeenCalled();
+  });
+});
+
+describe('D-A4-1b-3 PR C: inne blokady faktflow-original — bez powiadomienia o decyzji (ścieżka ogólna jak dziś)', () => {
+  // Strażnik (zielony na HEAD z założenia: spec 5.7 „jak dziś”, `{ pending: false }`): recheck-needed, known-now
+  // i cross-tenant nie obiecują decyzji — faktura jest w I5 (cron robi nowy werdykt) albo czeka na runbook.
+  it.each([
+    ['recheck-needed (znacznik bez oceny pliku, sprzed 00149)', 'recheck-needed', () => seed({ check: faktflowCheck({ importGate: undefined }) })],
+    ['recheck-needed (trwały znacznik recheckNeeded po odmowie w chwili zapisu)', 'recheck-needed', () => seed({
+      check: faktflowCheck({ recheckNeeded: { kind: 'gate-drift', at: '2026-10-07T08:30:00.000Z' } }),
+    })],
+    ['known-now (K ma już inna faktura tej firmy)', 'known-now', () => seed({ check: faktflowCheck() })],
+    ['cross-tenant (K albo numer X ma faktura innej firmy z tym NIP)', 'cross-tenant', () => seed({ check: faktflowCheck() })],
+  ])('strażnik: %s → ścieżka ogólna (manual-reconciliation), bez e-maila o decyzji, pusha i śladu', async (_label, blocker, arrange) => {
+    arrange();
+    m.blocker = blocker;
+
+    const result = await runNotifyFailure(failedEvent({ error: FF.LAST_ERROR(K) }), ctx());
+
+    expect(result).toMatchObject({ skipped: true, reason: 'manual-reconciliation' });
+    expect(m.duplicateEmail).not.toHaveBeenCalled();
+    expect(m.push).not.toHaveBeenCalled();
+    expect(notices()).toEqual([]);
+    expect(m.failedEmail).not.toHaveBeenCalled();
+    expect(m.rpcCalls).toContainEqual({ fn: 'ksef_duplicate_decision_blocker', args: { p_invoice_id: ID, p_tenant_id: T } });
   });
 });

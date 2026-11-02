@@ -11,6 +11,7 @@ import { describeDuplicateOriginal, parseDuplicateCheck } from '@/lib/ksef/dupli
 import {
   duplicateDecisionOptions,
   duplicateMarker,
+  importedOriginalProvenance,
   retiredDraftView,
   type DuplicateDecisionInvoiceRow,
   type DuplicateDecisionView,
@@ -120,6 +121,11 @@ export default async function InvoiceDetailPage({
         id,
         // Kolumny `DUPLICATE_DECISION_INVOICE_COLUMNS` są w odczycie wyżej; loader sprawdza każdą.
         invoice as unknown as DuplicateDecisionInvoiceRow,
+        // PR C (4.9, INV-13): przy znaczniku `faktflow-original` blokadę SQL czyta SESJA klienta
+        // (`ksef_duplicate_decision_blocker_for_session`) — strona nie dostaje klucza serwisowego,
+        // nie czyta archiwum i nie alarmuje; podgląd pliku jest w `importGate.preview` na znaczniku.
+        // Szkic wycofany (baner) blokady nie potrzebuje.
+        awaitingDecision ? { sqlBlocker: 'session' } : undefined,
       )
     : null;
 
@@ -208,6 +214,9 @@ export default async function InvoiceDetailPage({
     // D-A4-1b-3 PR B: widoki liczone na serwerze — bez surowego `original_check`.
     ksef_duplicate_decision: duplicateDecision,
     ksef_retired_draft: retiredDraft,
+    // D-A4-1b-3 PR C: panel odsyła do akcji środowisko, które zobaczył (INV-8); karta K — skąd faktura się wzięła (6.5).
+    ksef_server_environment: env,
+    ksef_imported_original: importedOriginalProvenance(invoice.fa3_data),
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;

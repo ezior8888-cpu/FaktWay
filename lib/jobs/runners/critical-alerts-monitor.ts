@@ -730,6 +730,10 @@ export async function checkKsefReconciliationAnomalies(): Promise<AlertCheckResu
 /** Wiersz I5D (00148), którego oryginał sprawdzono w innym albo nieznanym środowisku KSeF. */
 export const I5D_ENV_INVARIANT = 'I5D-env';
 
+/** PR C (00156, 5.8): przegląd pliku z oznaczeniem FaktWay (I5R) czeka na operatora co najmniej tyle — alarm krytyczny `I5R-72h`. */
+export const I5R_ALARM_INVARIANT = 'I5R-72h';
+const I5R_ALARM_AFTER_MS = 72 * 60 * 60 * 1000;
+
 /**
  * Inwariant do alarmu dla wiersza strażnika. I5D (00148, D-A4-1b-3 PR B,
  * decyzja 4) — faktura czeka na decyzję klienta: nie alarm, także gdy
@@ -738,11 +742,29 @@ export const I5D_ENV_INVARIANT = 'I5D-env';
  * klientowi” (raport dzienny, /admin/ksef z kolumną „Powiadomienie klienta”). Wyjątek: dane oryginału sprawdzono w innym środowisku KSeF niż
  * obecne (albo KSEF_ENV jest nieznane) — wtedy `I5D-env`, bo klient nie
  * zapisze decyzji (RPC ENV). `null` — wiersz nie alarmuje.
+ *
+ * PR C (00156, spec v3 5.8): `I3K` (K zapisana decyzją bez sesji UPO albo bez daty nadania) nie alarmuje
+ * z monitora — to trwały sygnał w raporcie i KPI, a alarm Sentry idzie z akcji decyzji. `I5R`
+ * (przegląd pliku przez operatora; klient usłyszał „damy znać”) alarmuje dopiero po 72 h od ostatniego
+ * udanego sprawdzenia (`detail.checked_at`): młodsze `checked_at` → `null`; brak albo nieczytelna wartość →
+ * `I5R-72h` od razu (fail-closed: nie wiemy, od kiedy klient czeka). Zegar liczy od ostatniego sprawdzenia:
+ * „Tylko uzgodnij”, które pobierze plik, zapisuje nowe `checkedAt` i zaczyna 72 h od nowa (nowa ocena
+ * = nowy przegląd).
  */
-function alertingInvariant(row: { invariant: string; detail?: unknown }, environment: string | null): string | null {
-  if (row.invariant !== 'I5D') return row.invariant;
-  const detail = typeof row.detail === 'object' && row.detail !== null ? (row.detail as { env?: unknown }) : null;
-  return environment !== null && detail?.env === environment ? null : I5D_ENV_INVARIANT;
+function alertingInvariant(row: { invariant: string; detail?: unknown }, environment: string | null, now: number): string | null {
+  const detail = typeof row.detail === 'object' && row.detail !== null ? (row.detail as Record<string, unknown>) : null;
+  switch (row.invariant) {
+    case 'I5D':
+      return environment !== null && detail?.env === environment ? null : I5D_ENV_INVARIANT;
+    case 'I3K':
+      return null;
+    case 'I5R': {
+      const checkedAt = typeof detail?.checked_at === 'string' ? Date.parse(detail.checked_at) : Number.NaN;
+      return Number.isNaN(checkedAt) || now - checkedAt >= I5R_ALARM_AFTER_MS ? I5R_ALARM_INVARIANT : null;
+    }
+    default:
+      return row.invariant;
+  }
 }
 
 /**
@@ -753,14 +775,16 @@ function alertingInvariant(row: { invariant: string; detail?: unknown }, environ
  * I5D (00148) — faktura czeka na decyzję klienta: nie alarm (e-mail idzie raz
  * i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi” —
  * widzi fakturę w raporcie i w /admin/ksef); I5D-env — alarm, bo klient nie
- * zapisze decyzji.
+ * zapisze decyzji. PR C (00156): I5R (przegląd pliku) — alarm `I5R-72h` po 72 h,
+ * I3K — bez alarmu z monitora (patrz `alertingInvariant`).
  */
 export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> {
   const { data, error } = await createAdminClient().rpc('ksef_lifecycle_violations');
   if (error) throw new Error(`ksef_lifecycle_violations: ${error.message}`);
   const environment = configuredKsefEnvironment();
+  const now = Date.now();
   const alerting = ((data ?? []) as Array<{ invariant: string; detail?: unknown }>)
-    .map((row) => alertingInvariant(row, environment))
+    .map((row) => alertingInvariant(row, environment, now))
     .filter((inv): inv is string => inv !== null);
   if (alerting.length === 0) {
     return { type: 'ksef_lifecycle_violations', fired: false };
@@ -776,7 +800,8 @@ export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> 
   await alertCritical(
     'Strażnik cyklu życia faktury: naruszenia',
     'Faktury w stanie sprzecznym z cyklem życia. I1 (queued bez zlecenia) i klasę transient naprawia cron ponowień; pozostałe wymagają operatora: I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez kodu z katalogu, I5 wpis sent starszy niż 48 h, I9 failed z numerem KSeF. ' +
-      OPERATOR_DUPLICATE_MESSAGES.i5dEnv,
+      OPERATOR_DUPLICATE_MESSAGES.i5dEnv +
+      (counts.has(I5R_ALARM_INVARIANT) ? ` ${OPERATOR_DUPLICATE_MESSAGES.i5r72h}` : ''),
     {
       fields: invariants.map((inv) => ({ label: inv, value: String(counts.get(inv)) })),
       link: {

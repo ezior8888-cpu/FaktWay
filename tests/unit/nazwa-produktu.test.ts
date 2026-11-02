@@ -35,10 +35,15 @@ const OWNED_ELSEWHERE = [
 
 // Teksty, które baza ma u siebie i porównuje albo zwraca dosłownie.
 // Zmieniają się razem z migracją, która przepisze te funkcje bazy:
-// Dziś żadnych: fakturę za abonament przyjmuje w obu nazwach migracja 00152
+// Fakturę za abonament przyjmuje w obu nazwach migracja 00152
 // (`lib/billing/self-invoice.ts` pisze FaktWay), a lustro odmów decyzji
 // o duplikacie (`DUPLICATE_DECISION_SQL_TEXTS`) przepisała na FaktWay 00151.
+// Zostaje wzorzec przyszłego `<SystemInfo>` (D-A4-1b-3-SYS): funkcja bazy
+// z 00156 (powód `faktflow-original`) dopasowuje go dosłownie (`~ '^FaktFlow [0-9]'`),
+// a lustro w TS (`FAKTFLOW_SYSTEM_INFO_NEXT`) musi być identyczne. To nie tekst
+// dla klienta; zmienia się razem z migracją i decyzją o nowym SystemInfo generatora.
 const DB_BOUND = new Map<string, string[]>([
+  ['lib/ksef/duplicate-decision.ts', ['FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/']],
 ]);
 
 function walk(dir: string): string[] {

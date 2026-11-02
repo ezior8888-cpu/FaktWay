@@ -129,6 +129,15 @@ import { invoiceXmlKeyFor } from '@/lib/storage/r2';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
 import { freshKsef, SEEDED_ACQUISITION, seedKsefInvoice, sha256Hex } from './helpers/ksef-pelna-sciezka';
+import {
+  KSEF_ORIGINAL_ALARM_KINDS,
+  ORIGINAL_GATE_RULES,
+  mergeDuplicateCheck,
+  parseDuplicateCheck,
+  type KsefDuplicateCheck,
+  type KsefOriginalRelease,
+} from '@/lib/ksef/duplicate-check';
+import { DUPLICATE_DECISION_TEXTS, duplicateOriginalOffer } from '@/lib/ksef/duplicate-decision';
 
 const faktura = (unitPriceNet = 100) => finalizeInvoice({
   internalNumber: NUMBER,
@@ -707,6 +716,524 @@ describe('D-A4-1b-3 PR B: znany numer KSeF — oryginał pobrany i opisany (U18)
     expect(marker()!.original_check).toMatchObject({
       reason: 'known-number', knownInvoice: KNOWN, sha256: sha256Hex(original), archivePath: archiveKey, ownHistory: false,
       summary: expect.objectContaining({ number: NUMBER }), recheck: null,
+    });
+  });
+});
+
+/**
+ * D-A4-1b-3 PR C (spec v3, 5.1 i 7.2): przy werdykcie `faktflow-original` runner
+ * ocenia plik oryginału (brama pochodzenia, `evaluateOriginalGate`) i zapisuje
+ * wynik na znaczniku jako `original_check.importGate`. Na tej ocenie SQL z 00149
+ * buduje ofertę (`pair`/`record`/`released`/`review-*`) i blokadę
+ * `provenance-review` (I5R): plik z generatora FaktFlow zapisuje klient,
+ * plik, który na taki nie wygląda (EUR, ceny brutto…), trafia do operatora.
+ *
+ * Zmiany runnera (5.1): `importGate` w `recordCheck` tylko dla `faktflow-original`;
+ * `importGate: { kind, problems }` w `extra` alarmu `alertOperator`; przy
+ * `review` dodatkowy alarm Sentry z odciskiem `[kind, invoiceId]`; `last_error`
+ * z `FAKTFLOW.LAST_ERROR` / `LAST_ERROR_REVIEW` (bez „operatora” — reguła
+ * 07.10.2026); `parseDuplicateCheck` czyta `importGate` i `recheckNeeded`,
+ * a `mergeDuplicateCheck` zachowuje `release` (INV-26) i nie przenosi
+ * `recheckNeeded` do nowego zapisu (INV-25).
+ */
+describe('D-A4-1b-3 PR C: runner zapisuje bramę pochodzenia na znaczniku faktflow-original (5.1)', () => {
+  // Realny kształt numeru KSeF — z niego zakres dat zapytania o metadane (data nadania).
+  const K = '5260001246-20260928-0100A0B0C0D0-1A';
+  /** NIP sprzedawcy w pliku z `faktura()` — brama porównuje go z NIP firmy ZE ZDARZENIA (F3). */
+  const SELLER_NIP = '5260001246';
+  // PR C: brzmienie po zmianie marki (merge 3451a72e); spec 5.1 ma nazwę sprzed zmiany, a nazwa-produktu.test.ts zabrania „FaktFlow” w lib/.
+  const PROVENANCE_MESSAGE = 'KSeF: plik z oznaczeniem FaktWay do przeglądu operatora';
+  const OPERATOR_MESSAGE = 'KSeF: duplikat 440 do uzgodnienia przez operatora';
+  const ARCHIVE_KEY = `${T}/ksef-import/${K}.xml`;
+  const RELEASE = {
+    at: '2026-10-05T12:00:00.000Z',
+    via: 'operator',
+    actorUserId: '99999999-9999-4999-8999-999999999999',
+    note: 'Plik sprawdzony z klientem, zgodny z jego fakturą.',
+  } as const;
+  const RECHECK_NEEDED = { kind: 'gate-drift', at: '2026-10-06T08:00:00.000Z' } as const;
+  /** Podgląd zapisany na znaczniku przy oddaniu — z kluczem, którego kod nie zna: `preview` ma zostać BEZ przebudowy. */
+  const STORED_PREVIEW = {
+    issueDate: '2026-10-01',
+    saleDate: '2026-10-01',
+    period: '10.2026',
+    buyerIdKind: 'nip',
+    annotations: [],
+    exemptionBasis: null,
+    lineCount: 1,
+    lines: [{ ordinal: 1, name: 'Usługa', quantity: '1.0000', unit: 'usł.', unitPriceNet: '150.0000', vatRate: '23', gross: '184.50' }],
+    totals: { net: '150.00', vat: '34.50', gross: '184.50' },
+    zapisaneBezPrzebudowy: 'tak',
+  };
+
+  /** Zdarzenie z NIP firmy równym NIP sprzedawcy w pliku (`event()` ma `1234567890`). */
+  const gateEvent = () => ({ ...event(), nip: SELLER_NIP });
+  const seedOriginal = (xml: string) =>
+    seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml, acquisitionDate: '2026-09-28T07:15:00.000Z' });
+  const marker = () => submissions().find((r) => r.original_ksef_number === K);
+  const checkOfMarker = () => (marker()?.original_check ?? {}) as Row;
+  const importGateOf = () => checkOfMarker().importGate as Row | undefined;
+  const provenanceAlarms = () => m.captureMessage.mock.calls.filter(([text]) => text === PROVENANCE_MESSAGE);
+  const asEur = (xml: string) => xml.replace('<KodWaluty>PLN</KodWaluty>', '<KodWaluty>EUR</KodWaluty>');
+  const withGrossPrice = (xml: string) => xml.replace('<P_9A>', '<P_9B>184.5</P_9B><P_9A>');
+  /** Jak `beforeEach` — dla testów, które uruchamiają kilka niezależnych werdyktów. */
+  const resetWorld = () => {
+    vi.clearAllMocks();
+    m.ksef = freshKsef();
+    m.mem = { db: { ksef_submissions: [], invoices: [] }, failWrite: null };
+    m.storage = new Map();
+    m.storageReadFails = false;
+    m.archiveFails = false;
+  };
+  /** Znacznik po werdykcie `review`, na którym SQL `release_ksef_original_review` zapisał oddanie decyzji i `recheckNeeded`. */
+  const releasedMarker = async () => {
+    seedOriginal(asEur(ourXml(150)));
+    await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+    const check = checkOfMarker();
+    check.importGate = { v: 1, rules: ORIGINAL_GATE_RULES, kind: 'review', problems: ['currency'], preview: STORED_PREVIEW, release: RELEASE };
+    check.recheckNeeded = RECHECK_NEEDED;
+    return structuredClone(check);
+  };
+
+  describe('plik z generatora FaktFlow — brama importable', () => {
+    it('importGate {v, rules, kind: importable, problems: [], preview} na znaczniku; last_error z FAKTFLOW.LAST_ERROR; bez alarmu przeglądu', async () => {
+      seedOriginal(ourXml(150));
+
+      const error = await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+
+      expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+      expect(error.message).toBe(`[KSEF_DUPLICATE_RECONCILE] ${DUPLICATE_DECISION_TEXTS.FAKTFLOW.LAST_ERROR(K)}`);
+      // Reguła 07.10.2026: ani „operator”, ani „uzgodnienia” — klient zdecyduje sam na karcie.
+      expect(error.message).not.toMatch(/operator/i);
+      expect(importGateOf()).toEqual({
+        v: 1,
+        rules: ORIGINAL_GATE_RULES,
+        kind: 'importable',
+        problems: [],
+        preview: expect.objectContaining({
+          issueDate: '2026-10-01',
+          saleDate: '2026-10-01',
+          period: '10.2026',
+          buyerIdKind: 'nip',
+          annotations: [],
+          exemptionBasis: null,
+          lineCount: 1,
+        }),
+      });
+      const preview = importGateOf()!.preview as { totals: Record<string, string>; lines: Array<Record<string, string>> };
+      expect({ net: Number(preview.totals.net), vat: Number(preview.totals.vat), gross: Number(preview.totals.gross) })
+        .toEqual({ net: 150, vat: 34.5, gross: 184.5 });
+      expect(preview.lines).toHaveLength(1);
+      expect(provenanceAlarms()).toEqual([]);
+      // Dotychczasowy alarm operatora dostaje ocenę bramy w `extra`.
+      expect(m.captureMessage).toHaveBeenCalledWith(OPERATOR_MESSAGE, expect.objectContaining({
+        tags: expect.objectContaining({ kind: 'ksef-duplicate-faktflow-original' }),
+        extra: expect.objectContaining({ importGate: { kind: 'importable', problems: [] } }),
+      }));
+      expect(m.ksef.invoicePosts).toBe(1);
+    });
+
+    it('NIP firmy do reguły „seller” bierze ze zdarzenia (F3): inny NIP w zdarzeniu niż sprzedawca w pliku → review', async () => {
+      seedOriginal(ourXml(150));
+
+      const error = await failing(runSubmitInvoice(event(), ctx(0)));
+
+      expect(importGateOf()).toMatchObject({ v: 1, kind: 'review' });
+      expect(importGateOf()!.problems).toEqual(['seller']);
+      expect(error.message).toBe(`[KSEF_DUPLICATE_RECONCILE] ${DUPLICATE_DECISION_TEXTS.FAKTFLOW.LAST_ERROR_REVIEW(K)}`);
+      expect(provenanceAlarms()).toHaveLength(1);
+    });
+  });
+
+  describe('plik, który nie wygląda na plik z generatora — brama review + alarm przeglądu', () => {
+    it.each([
+      ['plik w EUR', asEur, 'currency'],
+      ['plik z ceną brutto (P_9B)', withGrossPrice, 'gross-prices'],
+    ] as const)('%s → kind: review, jeden alarm Sentry z odciskiem [kind, invoiceId], last_error z LAST_ERROR_REVIEW', async (_name, mutate, problem) => {
+      seedOriginal(mutate(ourXml(150)));
+
+      const error = await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+
+      expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
+      expect(error.message).toBe(`[KSEF_DUPLICATE_RECONCILE] ${DUPLICATE_DECISION_TEXTS.FAKTFLOW.LAST_ERROR_REVIEW(K)}`);
+      expect(error.message).not.toMatch(/operator/i);
+      const gate = importGateOf()!;
+      expect(gate).toMatchObject({ v: 1, rules: ORIGINAL_GATE_RULES, kind: 'review' });
+      expect(gate.problems).toContain(problem);
+      // EUR: plik się nie odczytał — brak podglądu; cena brutto: podgląd jest (rodzaj nabywcy dla CORRECTION_PERSON).
+      if (problem === 'currency') expect(gate.preview).toBeNull();
+      else expect(gate.preview).toMatchObject({ buyerIdKind: 'nip', lineCount: 1 });
+      expect(provenanceAlarms()).toEqual([[PROVENANCE_MESSAGE, {
+        level: 'warning',
+        tags: expect.objectContaining({ kind: KSEF_ORIGINAL_ALARM_KINDS.provenanceReview }),
+        fingerprint: [KSEF_ORIGINAL_ALARM_KINDS.provenanceReview, ID],
+        extra: expect.objectContaining({ tenantId: T, invoiceId: ID, originalKsefNumber: K, problems: gate.problems }),
+      }]]);
+      // Alarm operatora też niesie ocenę: ten sam kind i problemy.
+      expect(m.captureMessage).toHaveBeenCalledWith(OPERATOR_MESSAGE, expect.objectContaining({
+        extra: expect.objectContaining({ importGate: { kind: 'review', problems: gate.problems } }),
+      }));
+      expect(m.ksef.invoicePosts).toBe(1);
+    });
+  });
+
+  describe('importGate tylko przy faktflow-original', () => {
+    it('znany numer (też gdy plik jest z FaktFlow), ta sama treść z innego programu i brak własnego pliku zostają bez importGate', async () => {
+      // Kontrast: faktflow-original ma bramę.
+      seedOriginal(ourXml(150));
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'faktflow-original' });
+      expect(importGateOf()).toMatchObject({ v: 1, kind: 'importable' });
+
+      // Znany numer wygrywa z faktflow-original: powód known-number, bez bramy.
+      resetWorld();
+      seedOriginal(ourXml(150));
+      m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: K, internal_number: 'FV/INNA/1' }];
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'known-number' });
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+
+      // Ta sama treść z innego programu: same-content-other-program, bez bramy.
+      resetWorld();
+      seedOriginal(withOtherHeaderDate(ourXml()).replace(/<SystemInfo>[^<]*<\/SystemInfo>/, '<SystemInfo>Inny Program 2.0</SystemInfo>'));
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'same-content-other-program' });
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+
+      // Historia wysyłki bez naszego pliku (wpis sprzed 00134) i oryginał z innego programu: no-own-file, bez bramy.
+      resetWorld();
+      seedOriginal(fromOtherProgram(ourXml()));
+      const ours = ourXml();
+      m.ksef.sessions.set('S-9', { open: false, invoices: [{
+        referenceNumber: 'I-9', invoiceNumber: NUMBER, invoiceHash: Buffer.from(sha256Hex(ours), 'hex').toString('base64'),
+        code: 440, ksefNumber: null, xml: ours, originalSession: 'S-STARA', originalKsef: K,
+      }] });
+      m.mem.db.ksef_submissions = [{
+        id: 'row-9', tenant_id: T, invoice_id: ID, submission_type: 'online', status: 'sent',
+        session_reference_number: 'S-9', invoice_reference_number: 'I-9', request_payload_hash: null,
+        xml_storage_path: null, attempted_at: new Date().toISOString(),
+      }];
+      await failing(runSubmitInvoice(gateEvent(), ctx(1)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'no-own-file' });
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+      expect(provenanceAlarms()).toEqual([]);
+    });
+
+    it('odmowa pobrania (403), chwilowa awaria (503) i niezapisany plik w archiwum nie mają oryginału do oceny — bez importGate', async () => {
+      seedOriginal(ourXml(150));
+      m.ksef.downloadFailure = { status: 403 };
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'download-refused' });
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+
+      m.ksef.downloadFailure = { status: 503 };
+      await failing(runSubmitInvoice(gateEvent(), ctx(1)));
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+
+      // Błąd zapisu archiwum (archive-pending) i inny plik pod tym numerem (archive-conflict): ocena pliku nie powstaje.
+      m.ksef.downloadFailure = null;
+      m.archiveFails = true;
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'archive-pending' });
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+      m.archiveFails = false;
+      m.storage.set(ARCHIVE_KEY, '<Faktura>coś innego</Faktura>');
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+      expect(checkOfMarker()).toMatchObject({ reason: 'archive-conflict' });
+      expect(checkOfMarker()).not.toHaveProperty('importGate');
+      expect(provenanceAlarms()).toEqual([]);
+
+      // Kontrast: po usunięciu konfliktu ten sam plik dostaje bramę.
+      m.storage.delete(ARCHIVE_KEY);
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+      expect(importGateOf()).toMatchObject({ kind: 'importable' });
+    });
+  });
+
+  describe('ponowienie od zera', () => {
+    it('brama jest deterministyczna: ten sam plik → ten sam importGate, jeden znacznik, alarm przeglądu z tym samym odciskiem', async () => {
+      seedOriginal(asEur(ourXml(150)));
+
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      const first = structuredClone(importGateOf());
+      expect(first).toMatchObject({ kind: 'review', problems: ['currency'] });
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+
+      expect(importGateOf()).toEqual(first);
+      expect(submissions().filter((r) => r.original_ksef_number === K)).toHaveLength(1);
+      const alarms = provenanceAlarms();
+      expect(alarms).toHaveLength(2);
+      expect(alarms[1]![1]).toEqual(alarms[0]![1]);
+    });
+  });
+
+  describe('INV-26: ponowne sprawdzenie nie gubi oddania decyzji (release)', () => {
+    it.each([[503], [403]])('nieudane pobranie (%i) po oddaniu zostawia importGate co do bajtu (release.actorUserId, release.note, preview) i recheckNeeded', async (status) => {
+      const before = await releasedMarker();
+      m.ksef.downloadFailure = { status };
+
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+
+      const after = checkOfMarker();
+      expect(after.importGate).toEqual(before.importGate);
+      expect((after.importGate as Row).release).toEqual(RELEASE);
+      expect((after.importGate as Row).preview).toEqual(STORED_PREVIEW);
+      expect(after.recheckNeeded).toEqual(RECHECK_NEEDED);
+      expect(after.recheck).toMatchObject({ httpStatus: status });
+      // Dane oryginału z udanego sprawdzenia zostają — na nich klient podejmie decyzję.
+      expect(after).toMatchObject({ reason: 'faktflow-original', sha256: before.sha256, archivePath: before.archivePath });
+    });
+
+    it('po nieudanym pobraniu oferta nadal „released” (decyzja wraca do klienta jak w PR B)', async () => {
+      await releasedMarker();
+      m.ksef.downloadFailure = { status: 503 };
+
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+
+      // `recheckNeeded` blokuje decyzję klienta (blokada recheck-needed), ale ocena oferty z samego znacznika to `released`.
+      expect(duplicateOriginalOffer(checkOfMarker(), false)).toBe('released');
+    });
+
+    it('udane pobranie tego samego pliku z tą samą oceną review zachowuje release; recheckNeeded znika (nowy werdykt = nowa ocena)', async () => {
+      seedOriginal(asEur(ourXml(150)));
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      const assessed = structuredClone(importGateOf());
+      expect(assessed).toMatchObject({ kind: 'review', problems: ['currency'] });
+      const check = checkOfMarker();
+      check.importGate = { ...(check.importGate as Row), release: RELEASE };
+      check.recheckNeeded = RECHECK_NEEDED;
+
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+
+      const after = checkOfMarker();
+      expect(after.importGate).toEqual({ ...assessed, release: RELEASE });
+      expect(after).not.toHaveProperty('recheckNeeded');
+      expect(after.recheck).toBeNull();
+    });
+
+    it.each([
+      ['inny plik w EUR (inny SHA, te same problemy)', (xml: string) => asEur(xml.replace('<P_9A>150.0000</P_9A>', '<P_9A>175.0000</P_9A>').replace('150.00', '175.00')), 'currency'],
+      ['plik z ceną brutto (inny SHA i inne problemy)', withGrossPrice, 'gross-prices'],
+    ] as const)('%s → nowa ocena bez release', async (_name, mutate, problem) => {
+      seedOriginal(asEur(ourXml(150)));
+      await failing(runSubmitInvoice(gateEvent(), ctx(0)));
+      const check = checkOfMarker();
+      expect(check.importGate).toMatchObject({ kind: 'review' });
+      check.importGate = { ...(check.importGate as Row), release: RELEASE };
+      // Inne bajty pod tym samym numerem KSeF (w KSeF to się nie zdarza; test sprawdza regułę SHA) — archiwum bez starego pliku.
+      m.ksef.sessions.get('S-STARA')!.invoices[0]!.xml = mutate(ourXml(150));
+      m.storage.delete(ARCHIVE_KEY);
+
+      await failing(runSubmitInvoice({ ...gateEvent(), reconcileOnly: true }, ctx(0)));
+
+      const gate = importGateOf()!;
+      expect(gate).toMatchObject({ v: 1, kind: 'review' });
+      expect(gate.problems).toContain(problem);
+      expect(gate).not.toHaveProperty('release');
+      expect(checkOfMarker().sha256).not.toBe(check.sha256);
+    });
+  });
+});
+
+/**
+ * Odczyt i scalanie `original_check` (5.1 punkt 4) bez runnera: to, co
+ * `recordKsefDuplicateCheck` robi na każdym zapisie — `parseDuplicateCheck`
+ * poprzedniego jsonb z bazy + `mergeDuplicateCheck(previous, next)`.
+ * Czerwone na commicie kontraktu: `parseDuplicateCheck` nie czyta jeszcze
+ * `importGate` ani `recheckNeeded` (obiekt budowany od nowa gubi nieznane
+ * klucze), a `mergeDuplicateCheck` nie przenosi `release`.
+ */
+describe('D-A4-1b-3 PR C (5.1 pkt 4): parseDuplicateCheck i mergeDuplicateCheck dla importGate, release i recheckNeeded', () => {
+  const K = '5260001246-20260928-0100A0B0C0D0-1A';
+  const SHA = 'ab'.repeat(32);
+  const PREVIEW = {
+    issueDate: '2026-10-01', saleDate: null, period: '10.2026', buyerIdKind: 'nip', annotations: [], exemptionBasis: null,
+    lineCount: 1,
+    lines: [{ ordinal: 1, name: 'Usługa', quantity: '1', unit: 'usł.', unitPriceNet: '150.00', vatRate: '23', gross: '184.50' }],
+    totals: { net: '150.00', vat: '34.50', gross: '184.50' },
+    pozostawione: { bez: 'przebudowy' },
+  };
+  const NEW_PREVIEW = { ...PREVIEW, lineCount: 2, pozostawione: undefined };
+  const RELEASE: KsefOriginalRelease = {
+    at: '2026-10-05T12:00:00.000Z', via: 'operator', actorUserId: '99999999-9999-4999-8999-999999999999', note: 'Plik sprawdzony z klientem.',
+  };
+  const RECHECK_NEEDED = { kind: 'gate-drift', at: '2026-10-06T08:00:00.000Z' } as const;
+  const SUMMARY = { systemInfo: 'KSeF SaaS v1.0', number: NUMBER, issueDate: '2026-10-01', buyerNip: '5252241585', buyerName: 'Klient', gross: '184.50', currency: 'PLN' };
+
+  const reviewGate = (problems: string[], extra: Row = {}): Row => ({
+    v: 1, rules: ORIGINAL_GATE_RULES, kind: 'review', problems, preview: PREVIEW, ...extra,
+  });
+  /** `original_check` jak w bazie (jsonb) — po udanym sprawdzeniu `faktflow-original`. */
+  const stored = (over: Row = {}): Row => ({
+    v: 1, env: 'test', checkedAt: '2026-10-05T08:00:00.000Z', reason: 'faktflow-original', sha256: SHA,
+    archivePath: `${T}/ksef-import/${K}.xml`, sizeBytes: 2048, summary: SUMMARY, sameContentExceptHeader: false,
+    ownHistory: false, acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null, knownInvoice: null, recheck: null,
+    importGate: reviewGate(['gross-prices', 'markers'], { release: RELEASE }), recheckNeeded: RECHECK_NEEDED, ...over,
+  });
+  const previousOf = (over: Row = {}): KsefDuplicateCheck => {
+    const parsed = parseDuplicateCheck(stored(over));
+    if (!parsed) throw new Error('parseDuplicateCheck odrzuciło poprawny zapis');
+    return parsed;
+  };
+  /** Nowy zapis runnera po udanym pobraniu (to, co `recordCheck` buduje; bez `recheckNeeded`). */
+  const nextOf = (over: Partial<KsefDuplicateCheck> = {}): KsefDuplicateCheck => ({
+    v: 1, env: 'test', checkedAt: '2026-10-07T08:00:00.000Z', reason: 'faktflow-original', sha256: SHA,
+    archivePath: `${T}/ksef-import/${K}.xml`, sizeBytes: 2048, summary: SUMMARY, sameContentExceptHeader: false,
+    ownHistory: false, acquiredAt: '2026-09-28T07:15:00.000Z', httpStatus: null, knownInvoice: null, recheck: null,
+    importGate: reviewGate(['markers', 'gross-prices'], { preview: NEW_PREVIEW }) as unknown as KsefDuplicateCheck['importGate'],
+    ...over,
+  });
+  /** Nieudane pobranie (503) — dane puste, tylko powód i status (jak `recordCheck('download-pending', …)`). */
+  const failedFetch = (status = 503): KsefDuplicateCheck => ({
+    v: 1, env: 'test', checkedAt: '2026-10-07T08:00:00.000Z', reason: status === 403 ? 'download-refused' : 'download-pending',
+    sha256: null, archivePath: null, sizeBytes: null, summary: null, sameContentExceptHeader: null, ownHistory: null,
+    acquiredAt: null, httpStatus: status, knownInvoice: null, recheck: null,
+  });
+
+  describe('parseDuplicateCheck', () => {
+    it('importGate z release (w całości), preview (bez przebudowy) i recheckNeeded przechodzą przez odczyt z bazy', () => {
+      const parsed = previousOf();
+
+      expect(parsed.importGate).toEqual(reviewGate(['gross-prices', 'markers'], { release: RELEASE }));
+      expect(parsed.importGate?.preview).toEqual(PREVIEW);
+      expect(parsed.importGate?.release).toEqual(RELEASE);
+      expect(parsed.recheckNeeded).toEqual(RECHECK_NEEDED);
+      expect(parsed.reason).toBe('faktflow-original');
+    });
+
+    it('brama bez release i z preview null — poprawna', () => {
+      const parsed = previousOf({ importGate: { v: 1, rules: 7, kind: 'importable', problems: [], preview: null }, recheckNeeded: undefined });
+
+      expect(parsed.importGate).toEqual({ v: 1, rules: 7, kind: 'importable', problems: [], preview: null });
+      expect(parsed).not.toHaveProperty('recheckNeeded');
+    });
+
+    it.each([
+      ['v ≠ 1', { v: 2, rules: 1, kind: 'review', problems: ['rates'], preview: null }],
+      ['rules nie jest liczbą', { v: 1, rules: '1', kind: 'review', problems: ['rates'], preview: null }],
+      ['kind spoza importable/review', { v: 1, rules: 1, kind: 'ok', problems: [], preview: null }],
+      ['problems nie jest tablicą', { v: 1, rules: 1, kind: 'review', problems: 'rates', preview: null }],
+      ['problems z elementem, który nie jest napisem', { v: 1, rules: 1, kind: 'review', problems: [7], preview: null }],
+      ['review bez problemów', { v: 1, rules: 1, kind: 'review', problems: [], preview: null }],
+      ['importable z problemami', { v: 1, rules: 1, kind: 'importable', problems: ['rates'], preview: null }],
+      ['brama napisem', 'importable'],
+      ['brama tablicą', [{ v: 1 }]],
+    ])('zły kształt bramy (%s) → klucz pominięty (blokada recheck-needed), reszta znacznika nietknięta', (_name, gate) => {
+      const parsed = previousOf({ importGate: gate });
+
+      // Kontrola dodatnia w tym samym teście: poprawna brama NIE jest pomijana.
+      expect(previousOf().importGate).toBeDefined();
+      expect(parsed).not.toHaveProperty('importGate');
+      expect(parsed).toMatchObject({ reason: 'faktflow-original', sha256: SHA, archivePath: `${T}/ksef-import/${K}.xml` });
+    });
+
+    it.each([
+      ['bez via', { at: RELEASE.at, actorUserId: RELEASE.actorUserId, note: RELEASE.note }],
+      ['via „client”', { ...RELEASE, via: 'client' }],
+      ['at pustym napisem', { ...RELEASE, at: '' }],
+      ['actorUserId liczbą', { ...RELEASE, actorUserId: 7 }],
+      ['note liczbą', { ...RELEASE, note: 7 }],
+      ['release napisem', 'oddane'],
+    ])('zły kształt release (%s) → klucz release pominięty, brama zostaje', (_name, release) => {
+      const parsed = previousOf({ importGate: reviewGate(['rates'], { release }) });
+
+      expect(previousOf().importGate?.release).toEqual(RELEASE);
+      expect(parsed.importGate).toEqual(reviewGate(['rates']));
+      expect(parsed.importGate?.release).toBeUndefined();
+    });
+
+    it('release.at niebędące datą, ale niepustym napisem — release zostaje (M5: SQL sprawdza tylko typ), także po scaleniu z nieudanym pobraniem', () => {
+      const release = { ...RELEASE, at: 'wczoraj' };
+      const previous = previousOf({ importGate: reviewGate(['rates'], { release }) });
+
+      expect(previous.importGate?.release).toEqual(release);
+      expect(mergeDuplicateCheck(previous, failedFetch()).importGate?.release).toEqual(release);
+    });
+
+    it('release z actorUserId i note równymi null — poprawny (operator bez konta/notatki w starym wpisie)', () => {
+      const release = { at: RELEASE.at, via: 'operator', actorUserId: null, note: null };
+
+      expect(previousOf({ importGate: reviewGate(['rates'], { release }) }).importGate?.release).toEqual(release);
+    });
+
+    it.each([
+      ['kind spoza listy', { kind: 'kiedyś', at: RECHECK_NEEDED.at }],
+      ['at nie jest napisem', { kind: 'gate-drift', at: 1 }],
+      ['napisem', 'gate-drift'],
+    ])('zły kształt recheckNeeded (%s) → klucz pominięty', (_name, bad) => {
+      expect(previousOf().recheckNeeded).toEqual(RECHECK_NEEDED);
+      expect(previousOf({ recheckNeeded: bad })).not.toHaveProperty('recheckNeeded');
+    });
+  });
+
+  describe('mergeDuplicateCheck: nieudane pobranie (zachowaj poprzedni)', () => {
+    it.each([[503], [403]])('%i po oddaniu → importGate co do bajtu (release.actorUserId, release.note, preview) i recheckNeeded, wynik próby w recheck', (status) => {
+      const previous = previousOf();
+
+      const merged = mergeDuplicateCheck(previous, failedFetch(status));
+
+      expect(merged.importGate).toEqual(reviewGate(['gross-prices', 'markers'], { release: RELEASE }));
+      expect(merged.importGate?.release?.actorUserId).toBe(RELEASE.actorUserId);
+      expect(merged.importGate?.release?.note).toBe(RELEASE.note);
+      expect(merged.importGate?.preview).toEqual(PREVIEW);
+      expect(merged.recheckNeeded).toEqual(RECHECK_NEEDED);
+      expect(merged.recheck).toEqual({ reason: status === 403 ? 'download-refused' : 'download-pending', httpStatus: status, checkedAt: '2026-10-07T08:00:00.000Z' });
+      expect(merged.sha256).toBe(SHA);
+    });
+  });
+
+  describe('mergeDuplicateCheck: nowy zapis (INV-26 release, INV-25 recheckNeeded)', () => {
+    it('ten sam plik (SHA, środowisko), ta sama ocena review (problemy jako zbiór, kolejność bez znaczenia) → release przechodzi, preview i reszta z nowej oceny; recheckNeeded nie', () => {
+      const merged = mergeDuplicateCheck(previousOf(), nextOf());
+
+      expect(merged.importGate?.release).toEqual(RELEASE);
+      expect(merged.importGate).toEqual({ ...reviewGate(['markers', 'gross-prices'], { preview: NEW_PREVIEW }), release: RELEASE });
+      expect(merged.importGate?.preview).toEqual(NEW_PREVIEW);
+      expect(merged).not.toHaveProperty('recheckNeeded');
+      expect(merged.recheck).toBeNull();
+      expect(merged.checkedAt).toBe('2026-10-07T08:00:00.000Z');
+    });
+
+    it.each([
+      ['inny SHA-256 pliku', () => nextOf({ sha256: 'cd'.repeat(32) })],
+      ['inne środowisko', () => nextOf({ env: 'production' })],
+      ['inne problemy (zbiór różny)', () => nextOf({ importGate: reviewGate(['gross-prices'], { preview: NEW_PREVIEW }) as unknown as KsefDuplicateCheck['importGate'] })],
+      ['dodatkowy problem', () => nextOf({ importGate: reviewGate(['gross-prices', 'markers', 'rates']) as unknown as KsefDuplicateCheck['importGate'] })],
+      ['nowa ocena importable (plik zgodny z generatorem)', () => nextOf({ importGate: { v: 1, rules: ORIGINAL_GATE_RULES, kind: 'importable', problems: [], preview: null } })],
+      ['nowy zapis bez bramy', () => nextOf({ importGate: undefined })],
+      ['powód inny niż faktflow-original', () => nextOf({ reason: 'known-number', knownInvoice: { id: 'inna', internalNumber: 'FV/INNA/1' }, importGate: undefined })],
+    ])('%s → nowa ocena bez release (przegląd zaczyna się od nowa)', (_name, make) => {
+      // Kontrola dodatnia: ten sam poprzedni znacznik z pasującym nowym zapisem release zachowuje.
+      expect(mergeDuplicateCheck(previousOf(), nextOf()).importGate?.release).toEqual(RELEASE);
+
+      const merged = mergeDuplicateCheck(previousOf(), make());
+
+      expect(merged.importGate?.release).toBeUndefined();
+      expect(merged).not.toHaveProperty('recheckNeeded');
+    });
+
+    it('poprzedni znacznik bez release (przegląd bez oddania) → nowy zapis bez release', () => {
+      const previous = previousOf({ importGate: reviewGate(['gross-prices', 'markers']) });
+
+      expect(mergeDuplicateCheck(previousOf(), nextOf()).importGate?.release).toEqual(RELEASE);
+      const merged = mergeDuplicateCheck(previous, nextOf());
+
+      expect(merged.importGate).toEqual(reviewGate(['markers', 'gross-prices'], { preview: NEW_PREVIEW }));
+      expect(merged.importGate?.release).toBeUndefined();
+    });
+
+    it('poprzedni znacznik z nieczytelną bramą (pominiętą przy odczycie) → nic do przeniesienia', () => {
+      const previous = previousOf({ importGate: { v: 1, rules: 1, kind: 'review', problems: [], preview: null, release: RELEASE } });
+
+      expect(mergeDuplicateCheck(previousOf(), nextOf()).importGate?.release).toEqual(RELEASE);
+      expect(mergeDuplicateCheck(previous, nextOf()).importGate?.release).toBeUndefined();
+    });
+
+    it('recheckNeeded z poprzedniego znacznika nie przechodzi do nowego zapisu, nawet bez release', () => {
+      const previous = previousOf({ importGate: reviewGate(['markers', 'gross-prices']), recheckNeeded: RECHECK_NEEDED });
+
+      expect(previous.recheckNeeded).toEqual(RECHECK_NEEDED);
+      expect(mergeDuplicateCheck(previous, nextOf())).not.toHaveProperty('recheckNeeded');
     });
   });
 });

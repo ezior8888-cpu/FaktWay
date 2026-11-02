@@ -20,7 +20,7 @@ import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation
 import CertExpiry from './templates/CertExpiry';
 import GdprDeletionScheduled from './templates/GdprDeletionScheduled';
 import InvoiceAccepted from './templates/InvoiceAccepted';
-import InvoiceDuplicateDecision from './templates/InvoiceDuplicateDecision';
+import InvoiceDuplicateDecision, { duplicateDecisionSubject } from './templates/InvoiceDuplicateDecision';
 import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
 import PaymentFailed from './templates/PaymentFailed';
@@ -126,6 +126,11 @@ export interface InvoiceDuplicateDecisionPayload {
   ksefNumber: string;
   /** Przypomnienie operatora (inny temat). */
   reminder: boolean;
+  /**
+   * PR C (spec v3 5.7): wariant z tej samej oferty co panel (`duplicateNoticeVariant`) — `pair` (teksty PR B),
+   * `record`, `released` albo `review` („sprawdzamy”). Brak = `pair`.
+   */
+  variant?: DuplicateNoticeVariant;
 }
 
 interface CertExpiryPayload {
@@ -144,7 +149,7 @@ import {
   isUnsubscribeConfigured,
 } from './unsubscribe-token';
 import { SUPPORT_EMAIL } from '@/lib/site';
-import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
+import type { DuplicateNoticeVariant } from '@/lib/ksef/duplicate-decision';
 
 async function sendViaResend(opts: {
   to: string;
@@ -282,15 +287,14 @@ export async function sendInvoiceFailedEmail(
  * w `audit_logs`, klucz idempotencji z wywołującego); przypomnienie operatora
  * z tematem „Przypomnienie: …”. Teksty: `DUPLICATE_DECISION_TEXTS.NOTICE`
  * (przegląd prawnika przed KSeF PROD). Błąd Resend rzuca (`sendViaResend`).
+ * PR C: `payload.variant` (`pair` / `record` / `released` / `review`) wybiera temat i treść.
  */
 export async function sendInvoiceDuplicateDecisionEmail(
   email: string,
   payload: InvoiceDuplicateDecisionPayload,
   options: SendOptions = {},
 ): Promise<EmailStubResult> {
-  const subject = payload.reminder
-    ? DUPLICATE_DECISION_TEXTS.NOTICE.REMINDER_SUBJECT(payload.invoiceNumber)
-    : DUPLICATE_DECISION_TEXTS.NOTICE.SUBJECT(payload.invoiceNumber);
+  const subject = duplicateDecisionSubject(payload.variant ?? 'pair', payload.reminder, payload.invoiceNumber);
   if (!isResendConfigured()) {
     logger.debug(`[email:stub] sendInvoiceDuplicateDecisionEmail → ${email}:`, `${subject} (numer KSeF ${payload.ksefNumber})`);
     return { sent: false, reason: 'not-configured' };

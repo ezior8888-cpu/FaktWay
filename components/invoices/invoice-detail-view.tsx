@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
+import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
 import { KsefDuplicateDecision } from '@/components/invoices/ksef-duplicate-decision';
 import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
@@ -21,9 +22,10 @@ import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
-import type { DuplicateDecisionView, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
+import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
+import type { KsefEnvironment } from '@/types/ksef';
 
 export interface InvoiceDetailLine {
   ordinal: number;
@@ -109,6 +111,17 @@ export interface InvoiceDetailInitial {
   ksef_duplicate_decision: DuplicateDecisionView | null;
   /** D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — baner każdego rodzaju (decyzja 9). */
   ksef_retired_draft: RetiredDraftView | null;
+  /**
+   * D-A4-1b-3 PR C (INV-8): środowisko KSeF serwera pokazane klientowi — panel odsyła je do akcji
+   * razem z trybem i ofertą, a serwer odmawia `STALE`, gdy się zmieniło. Brak pola = `null`.
+   */
+  ksef_server_environment?: KsefEnvironment | null;
+  /**
+   * D-A4-1b-3 PR C (6.5): faktura zapisana z KSeF decyzją klienta albo operatora — skąd się wzięła
+   * (`importedOriginalProvenance(fa3_data)` liczy serwer; sama treść dokumentu nie trafia do klienta).
+   * Brak pola = `null`.
+   */
+  ksef_imported_original?: ImportedOriginalProvenance | null;
 }
 
 interface PaymentSnapshot {
@@ -330,7 +343,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     ksef_resend_facts: initial.ksef_resend_facts,
     ksef_environment_known: initial.ksef_environment_known,
     ksef_duplicate_panel: duplicatePanel,
-    ksef_retired: retired ? { deletable: retired.deletable } : null,
+    ksef_retired: retired ? { deletable: retired.deletable, ...(retired.imported ? { imported: retired.imported } : {}) } : null,
     can_correct: inv.can_correct,
     can_set_recurring: inv.can_set_recurring ?? false,
   };
@@ -376,6 +389,9 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               />
             )}
 
+            {/* PR C (6.5): faktura zapisana z KSeF decyzją — skąd się wzięła i co dalej (wpłaty, przypomnienia). */}
+            {inv.ksef_imported_original && <ImportedOriginalNote provenance={inv.ksef_imported_original} />}
+
             {inv.last_error && !duplicatePanel && (
               <InvoiceErrorDisplay
                 errorMessage={inv.last_error}
@@ -404,7 +420,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                   ))}
                 </dl>
                 {decision ? (
-                  <KsefDuplicateDecision invoiceId={inv.id} view={decision} />
+                  <KsefDuplicateDecision invoiceId={inv.id} view={decision} env={initial.ksef_server_environment} />
                 ) : (
                   <>
                     <p className="mt-3 text-sm text-amber-900 dark:text-amber-100">

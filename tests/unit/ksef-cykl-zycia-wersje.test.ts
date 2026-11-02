@@ -10,8 +10,9 @@ import { describe, expect, it } from 'vitest';
  * starszego pliku zgubiłaby po cichu:
  *   - I3 przez predykat `ksef_upo_expected(i)` (historia z KSeF nie ma UPO),
  *   - I5D (00148: faktura czeka na decyzję klienta przy 440).
- * Dlatego każda redefinicja po 00148 musi zawierać oba. Uwaga dla PR C (00149):
- * weź ciało z 00155 (rejestr w docs/koordynacja/CLAUDE-DO-CODEXA.md).
+ * Dlatego każda redefinicja po 00148 musi zawierać oba. PR C (00156, dawniej
+ * rezerwacja 00149) bierze ciało z 00155 — pilnuje tego też przypadek „15.” w
+ * tests/unit/zapis-oryginalu-migracja.test.ts (rejestr: docs/koordynacja/CLAUDE-DO-CODEXA.md).
  */
 
 const DIR = join(process.cwd(), 'supabase/migrations');

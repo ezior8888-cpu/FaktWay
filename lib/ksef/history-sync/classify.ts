@@ -12,7 +12,7 @@
  * tekst dla klienta i ścieżkę operatora — runbook synchronizacja-historii-ksef).
  *
  * Numer zajęty przez szkic wycofany przy duplikacie 440 (`number_taken`) NIE
- * jest importowany (`retired_draft`): numer przenosi wyłącznie PR C (00149),
+ * jest importowany (`retired_draft`): numer przenosi wyłącznie PR C (00156),
  * decyzja 07.10 (A).
  *
  * Synchronizacja niczego tu nie zmienia w fakturach — tylko czyta.

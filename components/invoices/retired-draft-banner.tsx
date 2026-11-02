@@ -14,10 +14,15 @@ import { DUPLICATE_DECISION_TEXTS, type RetiredDraftView } from '@/lib/ksef/dupl
  * mają przycisku — ich wyjście to „Usuń szkic” w pasku akcji. Przy decyzji
  * „ta sama sprzedaż” z powodem known-number — odnośnik do dokumentu Y.
  *
+ * D-A4-1b-3 PR C (6.4): po zapisie oryginału z KSeF numer dokumentu przeszedł na fakturę K —
+ * baner (trzy warianty treści liczy `retiredDraftView`) ma odnośnik do tej faktury
+ * (`view.imported`); przycisk „Wystaw nową fakturę” zostaje tylko przy „innej sprzedaży”.
+ *
  * Widok liczy serwer (`retiredDraftView`); komponent tylko go pokazuje.
  */
 export function RetiredDraftBanner({ view }: { view: RetiredDraftView }) {
   const known = view.knownInvoice;
+  const imported = view.imported ?? null;
   return (
     <Card className="p-4 mb-6 ring-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:ring-amber-900">
       <div className="flex items-start gap-3">
@@ -32,6 +37,16 @@ export function RetiredDraftBanner({ view }: { view: RetiredDraftView }) {
                 className="font-medium text-amber-900 dark:text-amber-100 underline underline-offset-2 hover:no-underline"
               >
                 {DUPLICATE_DECISION_TEXTS.KNOWN_LINK(known.internalNumber ?? 'bez numeru')}
+              </Link>
+            </p>
+          )}
+          {imported && (
+            <p className="text-sm">
+              <Link
+                href={`/invoices/${encodeURIComponent(imported.id)}`}
+                className="font-medium text-amber-900 dark:text-amber-100 underline underline-offset-2 hover:no-underline"
+              >
+                {DUPLICATE_DECISION_TEXTS.FAKTFLOW.IMPORTED_LINK(imported.internalNumber)}
               </Link>
             </p>
           )}
