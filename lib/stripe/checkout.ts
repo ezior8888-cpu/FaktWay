@@ -4,10 +4,17 @@
  * The per-tenant database attempt is claimed before sessions.create. An open
  * Session can outlive an hourly idempotency key; an ambiguous provider response
  * must never be retried with a new key or released by a clock.
+ *
+ * BLIK obok karty (`STRIPE_BLIK_RECURRING=on`, docs/runbooks/stripe-blik.md):
+ * wyłączony przełącznik wysyła dokładnie żądanie sprzed BLIK-a. Włączony dokłada
+ * listę metod i wersję API na to jedno żądanie. Odmowa pewna (Stripe odrzucił
+ * żądanie, Session nie powstała) nie zatrzymuje próby: jedno ponowienie tylko
+ * z kartą w tym samym claimie. Wynik niepewny nadal kończy się stanem „uncertain”.
  */
 
 import * as Sentry from '@sentry/nextjs';
 import { TRIAL_DAYS } from '@/lib/billing/pricing';
+import { isBlikAvailable } from '@/lib/billing/trial-payment';
 import type Stripe from 'stripe';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
@@ -36,6 +43,11 @@ export interface CreateCheckoutInput {
   plan: CheckoutPlan;
   /** Base URL do redirectu — np. https://faktway.pl. */
   baseUrl: string;
+  /**
+   * Klient widział ujawnienia BLIK-a przed przekierowaniem. Bez tego (albo przy
+   * wyłączonym `STRIPE_BLIK_RECURRING`) Checkout idzie żądaniem jak przed BLIK-iem.
+   */
+  offerBlik?: boolean;
 }
 
 function resolvePriceId(plan: CheckoutPlan): string {
@@ -226,6 +238,130 @@ async function reconcileCompletedAttempt(
     claim.attemptId, session.id, subscriptionId,
   );
 }
+
+/**
+ * Wersja API tylko dla żądania z BLIK-iem. Globalna (`lib/stripe/client.ts`)
+ * zostaje: od niej zależą kształty obiektów, które czytają dowód płatności
+ * i webhooki (np. `invoice.payment_intent` zniknął w basil). Dokumentacja
+ * BLIK-a cyklicznego i referencja Checkout opisują właśnie tę wersję.
+ */
+const BLIK_CHECKOUT_API_VERSION = '2026-09-30.endive';
+
+/**
+ * Parametr z referencji API 2026-09-30.endive. Ta wersja usunęła
+ * `payment_method_types` z tworzenia Session (400), a stripe-node 22.1.1 ma typy
+ * z 2026-04-22.dahlia i `allowed_payment_method_types` jeszcze nie zna. Zawężamy
+ * tylko tutaj: nazwę i wartości sprawdza test na poziomie HTTP.
+ */
+type BlikSessionCreateParams = Stripe.Checkout.SessionCreateParams & {
+  allowed_payment_method_types: Array<'card' | 'blik'>;
+};
+
+/**
+ * Odmowa pewna: Stripe przeczytał żądanie i odrzucił je przed utworzeniem Session.
+ * 400/404 to `StripeInvalidRequestError`, 403 to `StripePermissionError`. Patrzymy
+ * na typ, nie na `code`, bo odmowa metody płatności nie ma stałego kodu: bywa bez
+ * niego (tylko `param`), z `payment_method_unactivated` albo `capability_not_active`.
+ * Klucz idempotencji w użyciu, 429, 5xx i zerwane połączenie zostają niepewne.
+ */
+function isCertainStripeRefusal(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const type = (error as { type?: unknown }).type;
+  return type === 'StripeInvalidRequestError' || type === 'StripePermissionError';
+}
+
+/**
+ * Sygnał dla operatora. Nigdy nie rzuca: nie może zmienić wyniku tworzenia Session.
+ * `audit_logs.entity_id` to UUID, więc idzie tu identyfikator próby, nie Session:
+ * wiersz z `cs_…` baza by odrzuciła.
+ */
+async function reportBlikUnavailable(
+  input: CreateCheckoutInput,
+  attemptId: string,
+  reason: 'refused' | 'filtered',
+  details: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await logAuditSystem({
+      action: 'billing.checkout.blik_unavailable',
+      tenantId: input.tenantId,
+      userId: null,
+      entityType: 'stripe_checkout_attempt',
+      entityId: attemptId,
+      metadata: { reason, attemptId, ...details },
+    });
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { area: 'billing.audit' },
+      extra: { attemptId, tenantId: input.tenantId },
+    });
+  }
+}
+
+/**
+ * Tworzy Session wariantem z BLIK-iem. Każda lista parametrów ma własny klucz
+ * idempotencji, bo Stripe odrzuca ten sam klucz z innymi parametrami. Oba klucze
+ * są stałe dla tego claimu, więc automatyczne powtórzenie SDK niczego nie dubluje.
+ */
+async function createBlikSession(
+  stripe: Stripe,
+  params: Stripe.Checkout.SessionCreateParams,
+  input: CreateCheckoutInput,
+  attemptId: string,
+): Promise<Stripe.Checkout.Session> {
+  const blikParams: BlikSessionCreateParams = {
+    ...params,
+    allowed_payment_method_types: ['card', 'blik'],
+  };
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripe.checkout.sessions.create(blikParams, {
+      idempotencyKey: 'faktflow-checkout-blik-v1:' + attemptId,
+      apiVersion: BLIK_CHECKOUT_API_VERSION,
+    });
+  } catch (error) {
+    if (!isCertainStripeRefusal(error)) throw error;
+    const { statusCode, code, param } = error as {
+      statusCode?: number;
+      code?: string;
+      param?: string;
+    };
+    Sentry.captureException(error, {
+      tags: { area: 'billing.checkout.blik' },
+      extra: { attemptId, tenantId: input.tenantId, statusCode, code, param },
+    });
+    await reportBlikUnavailable(input, attemptId, 'refused', {
+      statusCode: statusCode ?? null,
+      stripeCode: code ?? null,
+      stripeParam: param ?? null,
+    });
+    // Wersja API klienta i jej parametr: to ponowienie nie zależy od niczego,
+    // co mogło zawieść w wariancie z BLIK-iem. Przy podniesieniu globalnej wersji
+    // do endive trzeba tu przejść na `allowed_payment_method_types`.
+    return stripe.checkout.sessions.create({
+      ...params,
+      payment_method_types: ['card'],
+    }, {
+      idempotencyKey: 'faktflow-checkout-card-v1:' + attemptId,
+    });
+  }
+
+  // `allowed_payment_method_types` to filtr: BLIK nieaktywny na koncie znika bez
+  // błędu, a `payment_method_types` w odpowiedzi mówi, co klient naprawdę zobaczy.
+  // Session z samą kartą jest poprawna, operator ma się tylko o tym dowiedzieć.
+  if (!session.payment_method_types?.includes('blik')) {
+    Sentry.captureMessage('Stripe Checkout offered no BLIK despite STRIPE_BLIK_RECURRING=on', {
+      level: 'warning',
+      tags: { area: 'billing.checkout.blik' },
+      extra: { attemptId, tenantId: input.tenantId, offered: session.payment_method_types ?? null },
+    });
+    await reportBlikUnavailable(input, attemptId, 'filtered', {
+      offeredPaymentMethods: session.payment_method_types ?? null,
+    });
+  }
+  return session;
+}
+
 async function createClaimedSession(
   stripe: Stripe,
   input: CreateCheckoutInput,
@@ -235,35 +371,40 @@ async function createClaimedSession(
 ): Promise<{ sessionId: string; url: string }> {
   await preflightClaimedAttempt(stripe, customerId, attemptId);
 
-  let session: Stripe.Checkout.Session;
-  try {
-    session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      client_reference_id: attemptId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        trial_period_days: TRIAL_DAYS,
-        metadata: {
-          tenantId: input.tenantId,
-          plan: input.plan,
-        },
-      },
-      automatic_tax: { enabled: false },
-      allow_promotion_codes: true,
-      success_url: input.baseUrl +
-        '/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: input.baseUrl + '/settings/billing?checkout=canceled',
+  const params: Stripe.Checkout.SessionCreateParams = {
+    mode: 'subscription',
+    customer: customerId,
+    client_reference_id: attemptId,
+    line_items: [{ price: priceId, quantity: 1 }],
+    subscription_data: {
+      trial_period_days: TRIAL_DAYS,
       metadata: {
         tenantId: input.tenantId,
         plan: input.plan,
-        attemptId,
       },
-      invoice_creation: undefined,
-    }, {
-      // Stable for this one durable attempt; contains no tenant PII or ID.
-      idempotencyKey: 'faktflow-checkout-v2:' + attemptId,
-    });
+    },
+    automatic_tax: { enabled: false },
+    allow_promotion_codes: true,
+    success_url: input.baseUrl +
+      '/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+    cancel_url: input.baseUrl + '/settings/billing?checkout=canceled',
+    metadata: {
+      tenantId: input.tenantId,
+      plan: input.plan,
+      attemptId,
+    },
+    invoice_creation: undefined,
+  };
+  const offerBlik = input.offerBlik === true && isBlikAvailable();
+
+  let session: Stripe.Checkout.Session;
+  try {
+    session = offerBlik
+      ? await createBlikSession(stripe, params, input, attemptId)
+      : await stripe.checkout.sessions.create(params, {
+          // Stable for this one durable attempt; contains no tenant PII or ID.
+          idempotencyKey: 'faktflow-checkout-v2:' + attemptId,
+        });
 
     if (!session.id.startsWith('cs_') ||
         stripeCustomerId(session.customer) !== customerId ||

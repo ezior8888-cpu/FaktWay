@@ -17,10 +17,19 @@ import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET } from '@/lib/billing/pricing';
+import { paymentFailureAdvice } from '@/lib/billing/payment-failure';
+import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import {
+  buildBlikDisclosure,
+  isBlikAvailable,
+  trialPaymentHint,
+  trialPaymentMethodLabel,
+  trialPaymentRetryHint,
+} from '@/lib/billing/trial-payment';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import {
   getActiveSubscription,
+  getLatestPaymentFailureReason,
   isInTrial,
   trialDaysRemaining,
   type ActiveSubscription,
@@ -126,6 +135,11 @@ export default async function BillingPage(props: {
   const subscription = stripeConfigured
     ? await getActiveSubscription(ctx.tenantId).catch(() => null)
     : null;
+  // Przyczyna tylko do podpowiedzi: jej brak daje tekst ogólny, nie błąd strony.
+  const paymentFailureReason =
+    subscription?.status === 'past_due' || subscription?.status === 'unpaid'
+      ? await getLatestPaymentFailureReason(ctx.tenantId).catch(() => null)
+      : null;
 
   const canManage = ctx.role === 'owner' || ctx.role === 'admin';
   const errorMsg = params.error ? ERROR_MESSAGES[params.error] : null;
@@ -135,8 +149,7 @@ export default async function BillingPage(props: {
       <div>
         <FieldLabel>Subskrypcja i rozliczenia</FieldLabel>
         <FieldDescription>
-          Zarządzaj planem, kartą, fakturami. Płatności obsługuje Stripe (PSD2 +
-          3D-Secure).
+          Zarządzaj planem, metodą płatności i fakturami. Płatności obsługuje Stripe.
         </FieldDescription>
       </div>
 
@@ -146,7 +159,7 @@ export default async function BillingPage(props: {
           icon={RiCheckboxCircleLine}
           tone="success"
           title="Subskrypcja aktywna"
-          description="Dziękujemy! Trial 30 dni właśnie się rozpoczął. Karta zostanie obciążona dopiero po jego zakończeniu."
+          description="Dziękujemy! Trial 30 dni właśnie się rozpoczął. Pierwsza płatność dopiero po jego zakończeniu."
         />
       ) : null}
       {params.checkout === 'canceled' ? (
@@ -154,7 +167,7 @@ export default async function BillingPage(props: {
           icon={RiAlertLine}
           tone="warning"
           title="Subskrypcja niedokończona"
-          description="Anulowałeś Checkout. Możesz spróbować ponownie — żadne pieniądze nie zostały pobrane."
+          description={`Płatność nie została dokończona, żadne pieniądze nie zostały pobrane. Możesz spróbować ponownie. ${trialPaymentRetryHint()}`.trim()}
         />
       ) : null}
       {errorMsg ? (
@@ -191,6 +204,7 @@ export default async function BillingPage(props: {
         <ActiveSubscriptionSection
           subscription={subscription}
           canManage={canManage}
+          paymentFailureReason={paymentFailureReason}
         />
       ) : stripeConfigured ? (
         // Brak subskrypcji + Stripe OK = pokaż plan selection
@@ -199,10 +213,15 @@ export default async function BillingPage(props: {
             icon={RiSparklingLine}
             tone="success"
             title="30 dni za darmo"
-            description="Wybierz plan. Karta wymagana, ale obciążymy ją dopiero po 30 dniach trialu. Anulujesz kiedy chcesz."
+            description={`Wybierz plan. Podajesz ${trialPaymentMethodLabel('biernik')}, ale pierwsza płatność dopiero po ${TRIAL_DAYS} dniach trialu. Anulujesz, kiedy chcesz.`}
           />
 
-          {canManage ? <PlanCards /> : null}
+          {canManage ? (
+            <PlanCards
+              blikDisclosure={isBlikAvailable() ? buildBlikDisclosure() : null}
+              paymentHint={trialPaymentHint()}
+            />
+          ) : null}
         </>
       ) : null}
     </FieldGroup>
@@ -212,13 +231,16 @@ export default async function BillingPage(props: {
 function ActiveSubscriptionSection({
   subscription,
   canManage,
+  paymentFailureReason,
 }: {
   subscription: ActiveSubscription;
   canManage: boolean;
+  paymentFailureReason: string | null;
 }) {
   const status = statusLabel(subscription.status);
   const inTrial = isInTrial(subscription);
   const trialLeft = trialDaysRemaining(subscription);
+  const failureAdvice = paymentFailureAdvice(paymentFailureReason);
 
   return (
     <>
@@ -256,7 +278,7 @@ function ActiveSubscriptionSection({
           sublabel={
             subscription.cancel_at_period_end
               ? 'Subskrypcja wygaśnie po tej dacie'
-              : `Karta zostanie obciążona automatycznie`
+              : 'Pobierzemy płatność automatycznie z Twojej metody płatności'
           }
         />
       )}
@@ -280,7 +302,7 @@ function ActiveSubscriptionSection({
           icon={RiAlertLine}
           tone="warning"
           title="Płatność nie została pobrana"
-          description="Stripe ponowi próbę automatycznie. Możesz też zaktualizować kartę w panelu klienta."
+          description={[failureAdvice.reason, failureAdvice.action].filter(Boolean).join(' ')}
         />
       ) : null}
     </>

@@ -263,7 +263,7 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
 
   await alertCritical(
     `${failures} Stripe payment failures w ostatniej godzinie`,
-    `Może to wskazywać na problem z Stripe API, błędne karty, lub fraud attempt.`,
+    `Może to wskazywać na problem z Stripe API, odmowy banków albo fraud attempt.`,
     {
       fields: [
         { label: 'Failures (1h)', value: String(failures) },
