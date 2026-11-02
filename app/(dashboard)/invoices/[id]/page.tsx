@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
 import { canCorrectInvoice } from '@/lib/invoices/list-row-facts';
-import { canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
+import { canDuplicateInvoice, canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -200,6 +200,12 @@ export default async function InvoiceDetailPage({
       invoice_type: invoice.invoice_type as string | null,
       ksef_status: invoice.ksef_status as string | null,
       currency: invoice.currency as string | null,
+    }),
+    // Telefon nie ma menu „⋯” tabeli, więc „Duplikuj” stoi też w karcie „Dokument”.
+    can_duplicate: canDuplicateInvoice({
+      direction: invoice.direction as string | null,
+      origin: (invoice.origin as string | null) ?? null,
+      invoice_kind: invoice.invoice_kind as string | null,
     }),
     qr,
     upo_status:

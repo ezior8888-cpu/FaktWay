@@ -93,6 +93,8 @@ export interface InvoiceDetailInitial {
    * Brak pola = przycisk ukryty.
    */
   can_set_recurring?: boolean;
+  /** „Duplikuj” w karcie „Dokument”: zwykła faktura z FaktWay (ten sam predykat co menu „⋯” listy). */
+  can_duplicate?: boolean;
   /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
   qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
@@ -346,6 +348,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     ksef_retired: retired ? { deletable: retired.deletable, ...(retired.imported ? { imported: retired.imported } : {}) } : null,
     can_correct: inv.can_correct,
     can_set_recurring: inv.can_set_recurring ?? false,
+    can_duplicate: inv.can_duplicate ?? false,
   };
 
   return (

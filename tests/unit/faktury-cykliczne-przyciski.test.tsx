@@ -187,6 +187,37 @@ describe('podgląd faktury (P4): „Ustaw jako cykliczną” w karcie „Dokumen
   });
 });
 
+describe('podgląd faktury: „Duplikuj” w karcie „Dokument” (telefon nie ma menu „⋯” tabeli)', () => {
+  const FACTS: KsefResendFacts = { sendData: 'stored', kindHeld: false, issueDatePassed: false };
+  const render = (canDuplicate: boolean | undefined) =>
+    renderToStaticMarkup(
+      <InvoiceActions
+        section="secondary"
+        invoice={{
+          id: ID,
+          ksef_status: 'accepted',
+          xml_storage_path: null,
+          invoice_type: 'VAT',
+          invoice_kind: 'regular',
+          ksef_resend_facts: FACTS,
+          ksef_environment_known: true,
+          can_duplicate: canDuplicate,
+        }}
+      />,
+    );
+
+  it('link do formularza z wzorem, gdy strona policzyła, że fakturę wolno zduplikować', () => {
+    const html = render(true);
+    expect(html).toContain('Duplikuj');
+    expect(html).toContain(`href="${duplicateInvoiceHref(ID)}"`);
+  });
+
+  it('bez flagi albo z false: przycisku nie ma', () => {
+    expect(render(false)).not.toContain('Duplikuj');
+    expect(render(undefined)).not.toContain('Duplikuj');
+  });
+});
+
 describe('„Stali klienci” (P11): „Zrób fakturę cykliczną” z najnowszej faktury-wzoru klienta', () => {
   const months = monthKeysEnding('2026-10', 4);
   let seq = 0;
