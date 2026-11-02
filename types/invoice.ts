@@ -114,6 +114,7 @@ export type PaymentMethod =
   | 'transfer' // przelew
   | 'cash' // gotówka
   | 'card' // karta
+  | 'mobile' // płatność mobilna, FA(3) FormaPlatnosci 7; dziś tylko abonament opłacony BLIK-iem
   | 'other';
 
 export interface PaymentInfo {

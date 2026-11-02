@@ -34,6 +34,8 @@ export interface BuildSelfInvoiceInput {
   stripeInvoiceId: string;
   /** Plan subskrypcji — wpływa na nazwę pozycji. */
   plan: 'monthly' | 'annual';
+  /** Rodzaj metody ze sprawdzonego Charge (`card`, `blik`); brak = karta. */
+  paymentMethodType?: string;
 }
 
 export interface BuildSelfInvoiceOutput {
@@ -64,6 +66,15 @@ export function paidDateInPoland(paidAt: string): string {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(paidAt));
+}
+
+/**
+ * Forma płatności na fakturze. BLIK to w FA(3) „mobilna”, nie „karta”; faktura
+ * VAT ma mówić, jak klient naprawdę zapłacił. `create_billing_vat_invoice`
+ * (00158) przyjmuje tylko te dwie formy.
+ */
+function selfInvoicePaymentMethod(paymentMethodType: string | undefined): 'card' | 'mobile' {
+  return paymentMethodType === 'blik' ? 'mobile' : 'card';
 }
 
 // `create_billing_vat_invoice` (00152) przyjmuje tylko te wzorce nazwy
@@ -167,7 +178,7 @@ export async function buildSelfInvoiceDraft(
       amountDue: gross,
       currency: 'PLN',
       dueDate: issueDate, // Już opłacone (Stripe), termin = data wystawienia.
-      method: 'card',
+      method: selfInvoicePaymentMethod(input.paymentMethodType),
       bankAccount: operator.bankAccount ?? undefined,
     },
     notes: `Faktura za subskrypcję FaktWay. Płatność Stripe: ${input.stripeInvoiceId}.`,

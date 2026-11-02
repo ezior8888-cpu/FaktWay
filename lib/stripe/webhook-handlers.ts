@@ -29,6 +29,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import {
   mapInvoiceToPaymentRow,
 } from './event-mapping';
+import { readPaymentDeclineCode } from './payment-decline';
 import { verifyPaidInvoicePaymentReferences } from './payment-reference-proof';
 import { syncCurrentStripeSubscription } from './subscription-sync';
 import { RetryablePreEffectWebhookError } from './webhook-errors';
@@ -241,6 +242,7 @@ export async function handleInvoicePaymentSucceeded(
       taxCents: ((invoice as unknown as { total_taxes?: Array<{ amount?: number | null }> | null }).total_taxes ?? []).reduce((s, t) => s + (t.amount ?? 0), 0),
       currency: (invoice.currency ?? 'pln').toLowerCase(),
       paidAt: persistedPaidAt,
+      paymentMethodType: proof.paymentMethodType,
     }),
   });
 
@@ -268,6 +270,15 @@ export async function handleInvoicePaymentFailed(
   const supabase = createAdminClient();
   const existingStatus = await readStripePaymentStatus(supabase, invoice.id, true);
   if (existingStatus === 'succeeded' || isRefundedPaymentStatus(existingStatus)) return;
+
+  // Kod odmowy (np. `recurring_not_supported_by_bank`) mówi klientowi, co zrobić.
+  // Zastępuje błąd finalizacji tylko wtedy, gdy Stripe go podał.
+  const declineCode = await readPaymentDeclineCode(
+    typeof mapping.row.stripe_payment_intent_id === 'string'
+      ? mapping.row.stripe_payment_intent_id : null,
+  );
+  const failedRow = declineCode ? { ...mapping.row, failure_reason: declineCode } : mapping.row;
+
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
       upsert: (
@@ -282,7 +293,7 @@ export async function handleInvoicePaymentFailed(
     };
   })
     .from('stripe_payments')
-    .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
+    .upsert(failedRow, { onConflict: 'stripe_invoice_id' })
     .select('id, status');
 
   if (error) {
@@ -303,7 +314,7 @@ export async function handleInvoicePaymentFailed(
   const paymentId = persistedPayment.id;
 
   const failureReason =
-    (mapping.row.failure_reason as string | null | undefined) ?? null;
+    (failedRow.failure_reason as string | null | undefined) ?? null;
 
   await logAuditSystem({
     action: 'billing.payment.failed',
