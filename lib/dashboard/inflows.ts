@@ -244,6 +244,16 @@ async function paidParentsOutsideRead(
   return paid;
 }
 
+export interface InflowOptions {
+  /**
+   * Faktura spoza PLN z dniem w zakresie: `halt` (domyślnie, karty Przepływów,
+   * Pulpitu i Analiz) zatrzymuje kartę `InflowCurrencyError`; `skip` pomija taką
+   * fakturę (kafel „Opłacone” listy faktur nie zatrzymuje tabeli z powodu faktury
+   * walutowej, tak jak należności pomijają waluty obce).
+   */
+  foreignCurrency?: 'halt' | 'skip';
+}
+
 /**
  * Faktury sprzedaży z dniem w `[from, toExclusive)` (RRRR-MM-DD, kalendarz
  * Europe/Warsaw); bez `toExclusive` także wszystkie przyszłe terminy.
@@ -253,6 +263,7 @@ export async function getInflows(
   supabase: PageContext['supabase'],
   tenantId: string,
   range: { from: string; toExclusive?: string },
+  options: InflowOptions = {},
 ): Promise<InflowEntry[]> {
   const environment = requireConfiguredKsefEnvironment();
   // Dzień ≥ `from` wymaga, by któraś z jego kolumn była ≥ `from`.
@@ -334,14 +345,15 @@ export async function getInflows(
   if (guarded.some((row) => row.ksef_environment === null || !KNOWN_ENVIRONMENTS.has(row.ksef_environment))) {
     throw new Error(ENVIRONMENT_ERROR);
   }
-  const active = inRange.filter(({ row }) => row.ksef_environment === environment);
+  const inEnvironment = inRange.filter(({ row }) => row.ksef_environment === environment);
   // Jak przychód (`assertOutgoingInvoicesInPln`): brak waluty też nie potwierdza złotówek.
-  const foreign = active
-    .flatMap(({ row }) => [row, ...(folded.get(row.id) ?? [])])
-    .find((row) => row.currency?.trim().toUpperCase() !== 'PLN');
-  if (foreign) {
+  const withFolded = (row: InflowRow) => [row, ...(folded.get(row.id) ?? [])];
+  const isPln = (row: InflowRow) => row.currency?.trim().toUpperCase() === 'PLN';
+  const foreign = inEnvironment.flatMap(({ row }) => withFolded(row)).find((row) => !isPln(row));
+  if (foreign && options.foreignCurrency !== 'skip') {
     throw new InflowCurrencyError(foreign.internal_number ?? foreign.id, foreign.currency?.trim().toUpperCase() ?? '');
   }
+  const active = foreign ? inEnvironment.filter(({ row }) => withFolded(row).every(isPln)) : inEnvironment;
 
   const entries: InflowEntry[] = [];
   for (const { row, date, basis } of active) {

@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * P3 (PLAN-FINORA §5): kafle listy faktur — Kontrahenci, Faktury w tym
  * miesiącu, Opłacone, Do zapłaty. Każdy kafel to osobna funkcja (osobna karta
  * w <Suspense>, §2.4 pkt 15). Miesiąc liczony w Europe/Warsaw (pkt 10),
- * sprzedaż tylko z faktur przyjętych w aktywnym środowisku (pkt 2), wpływy
- * z `paid_amount` faktur z pkt 11 według `paid_at` (pkt 14) — bez warunku
- * dzieci, bo wpłata nie znika po korekcie ani ROZ (C2) — bez wpłat pusty
- * stan, nigdy „0 zł”.
+ * sprzedaż tylko z faktur przyjętych w aktywnym środowisku (pkt 2), wpływy jak
+ * Przepływy (`getInflows`, pkt 14): `paid_at` albo data zapłaty z FA(3), korekty
+ * według reguły z `lib/dashboard/inflows.ts` — bez warunku dzieci, bo wpłata nie
+ * znika po korekcie ani ROZ (C2) — bez wpłat pusty stan, nigdy „0 zł”.
  */
 
 const env = vi.hoisted(() => ({ value: 'production' as string }));
@@ -15,6 +15,7 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
   requireConfiguredKsefEnvironment: () => env.value,
 }));
 
+import { orPredicate } from '@/lib/demo/fake-postgrest';
 import {
   countContractors,
   countInvoicesThisMonth,
@@ -24,6 +25,8 @@ import {
   warsawMonthBounds,
 } from '@/lib/invoices/list-stats';
 import type { PageContext } from '@/lib/supabase/page-context';
+
+import { withJsonAliases } from '../helpers/json-alias';
 
 type Row = Record<string, unknown>;
 type Supabase = PageContext['supabase'];
@@ -98,6 +101,8 @@ function client(tables: Record<string, Row[]>, options: ClientOptions = {}) {
         lt: (c: string, v: string) => add('lt', c, v, (r) => r[c] !== null && String(r[c]) < v),
         lte: (c: string, v: string) => add('lte', c, v, (r) => r[c] !== null && String(r[c]) <= v),
         in: (c: string, v: unknown[]) => add('in', c, v, (r) => v.includes(r[c])),
+        // Kafel „Opłacone” czyta jak Przepływy (`getInflows`): dzień z kilku kolumn, alternatywa jak w PostgREST.
+        or: (expr: string) => add('or', '', expr, orPredicate(expr)),
         is: (c: string, v: null) => add('is', c, v, (r) => r[c] === v),
         not: (c: string, op: string, v: unknown) => add(`not.${op}`, c, v, (r) => {
           if (op === 'is' && v === null) return r[c] !== null && r[c] !== undefined;
@@ -127,7 +132,7 @@ function client(tables: Record<string, Row[]>, options: ClientOptions = {}) {
           });
           const start = range?.[0] ?? 0;
           const wanted = range ? range[1] - range[0] + 1 : matching.length;
-          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity));
+          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity)).map((r) => withJsonAliases(columns, r));
           const count = countRequested && !options.withholdCount ? matching.length : null;
           return Promise.resolve({ data: head ? null : data, count, error: null }).then(resolve, reject);
         },
@@ -278,16 +283,63 @@ describe('Opłacone (wpływy w tym miesiącu)', () => {
     expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1000);
   });
 
-  it('opłacony oryginał z korektą — wpłata oryginału zostaje, korekta nie jest wpływem', async () => {
+  // Recenzja PR #358, pkt 2: kafel liczy jak Przepływy (`getInflows`). „Zapłacone” zapisuje całą resztę
+  // brutto, więc korekta in minus wystawiona do dnia zapłaty pomniejsza tę wpłatę, a późniejsza jest
+  // osobnym ruchem w miesiącu swojego wystawienia.
+  it('opłacony oryginał z korektą wystawioną do dnia zapłaty — kwota po korekcie (1230 − 123)', async () => {
     const original = paid(1230, '2026-10-05T10:00:00Z');
     const correction = invoice({
       invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -123, parent_invoice_id: original.id,
     });
     const { supabase } = sb({ invoices: [original, correction] });
-    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1230);
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1107);
   });
 
-  it('nie czyta dzieci całej firmy (wpływy nie zależą od korekt ani ROZ)', async () => {
+  it('korekta wystawiona przed początkiem miesiąca, zapłata w miesiącu — też kwota po korekcie', async () => {
+    const original = paid(1000, '2026-10-02T10:00:00Z', { issue_date: '2026-09-10', payment_due_date: null });
+    const correction = invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -300, parent_invoice_id: original.id,
+      issue_date: '2026-09-28', payment_due_date: null,
+    });
+    const { supabase } = sb({ invoices: [original, correction] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(700);
+  });
+
+  it('korekta późniejsza niż zapłata — osobny ruch w miesiącu korekty, kafel pomniejszony', async () => {
+    const original = paid(1230, '2026-10-02T10:00:00Z');
+    const correction = invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -123, parent_invoice_id: original.id,
+      issue_date: '2026-10-10',
+    });
+    const { supabase } = sb({ invoices: [original, correction] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1107);
+  });
+
+  it('sama korekta do faktury opłaconej w poprzednim miesiącu — pusty stan, nie ujemna kwota', async () => {
+    const original = paid(1230, '2026-09-20T10:00:00Z', { issue_date: '2026-09-10' });
+    const correction = invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -123, parent_invoice_id: original.id,
+      issue_date: '2026-10-10',
+    });
+    const { supabase } = sb({ invoices: [original, correction] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBeNull();
+  });
+
+  // Import z `Zaplacono = 1` ma `paid_at = NULL`, a dzień zapłaty siedzi w `fa3_data.parsed.paidDate`
+  // (jak w `inflowDay` i `isSettledSale`). Kwota: brutto do zapłaty, bo nie ma wpłaty w `payments`.
+  it('faktura z datą zapłaty z FA(3) i pustym paid_at liczy się w miesiącu tej daty', async () => {
+    const imported = invoice({ origin: 'file_import', gross_total: 500, fa3_data: { parsed: { paidDate: '2026-10-03' } } });
+    const wrzesien = invoice({ origin: 'ksef_import', gross_total: 70, fa3_data: { parsed: { paidDate: '2026-09-30' } } });
+    const { supabase } = sb({ invoices: [imported, wrzesien, paid(100, '2026-10-02T08:00:00Z')] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(600);
+  });
+
+  it('faktura w EUR z terminem w miesiącu nie zatrzymuje kafla (jest pomijana)', async () => {
+    const { supabase } = sb({ invoices: [invoice({ currency: 'EUR' }), paid(1, '2026-10-05T10:00:00Z')] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1);
+  });
+
+  it('nie czyta dzieci całej firmy (korekty tylko faktur z dniem w miesiącu)', async () => {
     const { supabase, c } = sb({ invoices: [paid(10, '2026-10-05T10:00:00Z')] });
     await paidThisMonth(supabase, TENANT, NOW);
     expect(c.log).toHaveLength(1);

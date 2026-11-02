@@ -19,6 +19,8 @@ import { orPredicate } from '@/lib/demo/fake-postgrest';
 import { paidThisMonth } from '@/lib/invoices/list-stats';
 import type { PageContext } from '@/lib/supabase/page-context';
 
+import { withJsonAliases } from '../helpers/json-alias';
+
 type Row = Record<string, unknown>;
 type Supabase = PageContext['supabase'];
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -123,7 +125,7 @@ function client(tables: Record<string, Row[]>, options: ClientOptions = {}) {
           });
           const start = range?.[0] ?? 0;
           const wanted = range ? range[1] - range[0] + 1 : matching.length;
-          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity));
+          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity)).map((r) => withJsonAliases(columns, r));
           const count = countRequested && !options.withholdCount ? matching.length : null;
           return Promise.resolve({ data: head ? null : data, count, error: null }).then(resolve, reject);
         },
@@ -178,6 +180,27 @@ describe('getInflows — brzegi odczytu wpływów', () => {
     ];
     const { supabase } = sb({ invoices: rows });
     expect(sum(await getInflows(supabase, TENANT, OCTOBER))).toBe(await paidThisMonth(supabase, TENANT, NOW));
+  });
+
+  // Recenzja PR #358, pkt 2: kafel i Przepływy czytają tę samą drogą (`getInflows`), więc nawet z importem
+  // z FA(3) (`paid_at` puste) i korektami przed zapłatą oraz po niej mówią tę samą kwotę.
+  it('kafel „Opłacone” zgadza się z wpływami przy imporcie z FA(3) i korektach przed i po zapłacie', async () => {
+    const przed = paid(1000, '2026-10-12T10:00:00Z', { issue_date: '2026-09-10', payment_due_date: null });
+    const po = paid(1230, '2026-10-02T10:00:00Z');
+    const korekta = (parent: Row, gross: number, issued: string) => invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: gross, parent_invoice_id: parent.id,
+      issue_date: issued, payment_due_date: null,
+    });
+    const { supabase } = sb({ invoices: [
+      przed,
+      korekta(przed, -300, '2026-09-28'),
+      po,
+      korekta(po, -123, '2026-10-10'),
+      invoice({ origin: 'ksef_import', gross_total: 500, fa3_data: { parsed: { paidDate: '2026-10-03' } } }),
+    ] });
+    const wplywy = sum(await getInflows(supabase, TENANT, OCTOBER));
+    expect(wplywy).toBe(700 + 1107 + 500);
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(wplywy);
   });
 
   it.each([

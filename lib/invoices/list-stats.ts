@@ -1,6 +1,6 @@
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import { RECEIVABLE_BASE_COLUMNS } from '@/lib/dashboard/receivables';
-import { addDaysToIsoDate, todayInWarsaw } from '@/lib/format/warsaw-date';
+import { receivedInflows } from '@/lib/dashboard/cash-movements';
+import { getInflows } from '@/lib/dashboard/inflows';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -19,7 +19,6 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  */
 
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
-const KNOWN_ENVIRONMENTS: ReadonlySet<string> = new Set(['test', 'demo', 'production']);
 
 /**
  * Podpis karty „Opłacone” (§2.4 pkt 14) i jej pusty stan, gdy `paidThisMonth`
@@ -131,62 +130,41 @@ export async function countInvoicesThisMonth(
 }
 
 /**
- * Kafel „Opłacone”: wpłaty w bieżącym miesiącu (Europe/Warsaw) — suma
- * `paid_amount` faktur sprzedaży przyjętych w KSeF, w PLN, według `paid_at`,
- * czyli dnia zapłaty (§2.4 pkt 14). `paid_at` opisuje stan „opłacona w całości”
- * (00073), więc wpłaty częściowe pojawią się tu dopiero po dopłacie reszty.
+ * Kafel „Opłacone”: wpływy w bieżącym miesiącu (Europe/Warsaw), do dziś. Liczy go
+ * ta sama droga co Przepływy (`getInflows` + `receivedInflows`), więc obie liczby są
+ * zgodne z założenia, a nie z dyscypliny dwóch zapytań:
+ * - dzień zapłaty to `paid_at` (wpłaty, „Zapłacone”, FLO) albo `Zaplacono = 1` +
+ *   `DataZaplaty` z FA(3) (`fa3_data.parsed.paidDate`; import ma `paid_at = NULL`),
+ *   a `paid_at` opisuje stan „opłacona w całości” (00073), więc wpłaty częściowe
+ *   pojawią się tu dopiero po dopłacie reszty;
+ * - korekta in minus wystawiona do dnia zapłaty pomniejsza tę wpłatę („Zapłacone”
+ *   zapisuje całą resztę brutto), a późniejsza jest osobnym ruchem w miesiącu swojego
+ *   wystawienia (`lib/dashboard/inflows.ts`);
+ * - wpłata jest faktem bez względu na pochodzenie i rodzaj dokumentu: „Zapłacone”
+ *   działa też na imporcie, historii KSeF i korekcie in plus (00158). Zaliczka i jej
+ *   ROZ to dwie różne wpłaty (`paid_amount` ROZ to reszta po zaliczkach, 00145).
  *
- * Bez warunków należności z pkt 11: wpłata jest faktem bez względu na pochodzenie
- * i rodzaj dokumentu. „Zapłacone” działa też na imporcie, historii KSeF i korekcie
- * in plus (00158), a kafel ma się zgadzać z Przepływami. Opłacona faktura, która
- * potem dostała korektę albo ROZ, nadal jest wpływem (C2). Zaliczka i jej ROZ to
- * dwie różne wpłaty (`paid_amount` ROZ to reszta po zaliczkach, 00145).
+ * Faktura w obcej walucie jest pomijana (`foreignCurrency: 'skip'`): bez kursu nie
+ * zgadujemy złotówek, ale lista faktur nie traci przez nią kafla. Przepływy w tym
+ * samym przypadku pokazują kartę błędu.
  *
- * `null`, gdy w miesiącu nie ma żadnej opłaconej faktury z wpłatą > 0 —
- * karta pokazuje wtedy `PAID_EMPTY_STATE`, nigdy „0 zł”.
+ * `null`, gdy w miesiącu nie ma żadnej opłaconej faktury z wpłatą > 0 (sama korekta
+ * do wcześniejszej wpłaty to nie „opłacona” faktura) — karta pokazuje wtedy
+ * `PAID_EMPTY_STATE`, nigdy „0 zł”.
  */
 export async function paidThisMonth(
   supabase: PageContext['supabase'],
   tenantId: string,
   now: Date = new Date(),
 ): Promise<number | null> {
-  const environment = requireConfiguredKsefEnvironment();
-  const { start, endExclusive, monthKey } = warsawMonthBounds(now);
-  // `paid_at` to znacznik czasu. Okno w UTC poszerzone o dobę z każdej
-  // strony, dokładny miesiąc w Warszawie liczy filtr niżej.
-  const windowStart = `${addDaysToIsoDate(start, -1) ?? start}T00:00:00.000Z`;
-  const windowEnd = `${addDaysToIsoDate(endExclusive, 1) ?? endExclusive}T00:00:00.000Z`;
-
-  const rows = await readCompletePages('Nie można odczytać wpłat', (from, to) => supabase
-    .from('invoices')
-    .select(`${RECEIVABLE_BASE_COLUMNS}, paid_at`, { count: 'exact' })
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .gte('paid_at', windowStart)
-    .lt('paid_at', windowEnd)
-    .order('id', { ascending: true })
-    .range(from, to));
-
-  const inMonth = rows.filter((row) => {
-    if (!row.paid_at) return false;
-    const paidAt = new Date(row.paid_at);
-    return !Number.isNaN(paidAt.getTime()) && todayInWarsaw(paidAt).slice(0, 7) === monthKey;
-  });
-  if (inMonth.some((row) => row.ksef_environment === null || !KNOWN_ENVIRONMENTS.has(row.ksef_environment))) {
-    throw new Error(ENVIRONMENT_ERROR);
-  }
-
-  let sum = 0;
-  let paidInvoices = 0;
-  for (const row of inMonth) {
-    if (row.ksef_environment !== environment) continue;
-    // Wpłata w obcej walucie nie wchodzi do sumy w złotych (jak `isPlnOrUnset` należności).
-    if (row.currency !== null && row.currency !== 'PLN') continue;
-    const amount = Number(row.paid_amount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    sum += amount;
-    paidInvoices += 1;
-  }
-  return paidInvoices > 0 ? roundToCents(sum) : null;
+  const { start, endExclusive } = warsawMonthBounds(now);
+  const entries = await getInflows(
+    supabase,
+    tenantId,
+    { from: start, toExclusive: endExclusive },
+    { foreignCurrency: 'skip' },
+  );
+  const received = receivedInflows(entries, todayInWarsaw(now));
+  if (!received.some((entry) => entry.basis === 'paid' && entry.amount > 0)) return null;
+  return roundToCents(received.reduce((sum, entry) => sum + entry.amount, 0));
 }
