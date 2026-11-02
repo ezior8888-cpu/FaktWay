@@ -9,7 +9,8 @@ import { RevealGroup, RevealItem } from '@/components/site/motion';
 import { PageHero } from '@/components/site/page-hero';
 import { Container } from '@/components/site/ui';
 
-// Faza 22: kontakt to czysto statyczna strona — cache na dobę.
+// Faza 22: kontakt to czysto statyczna strona, więc cache na dobę.
+// Czas odpowiedzi taki sam jak w regulaminie (lib/legal/documents/regulamin.ts).
 export const revalidate = 86400;
 
 // „| FaktWay” dopisuje szablon tytułu z layoutu stron marketingowych.
@@ -31,14 +32,14 @@ const CARDS: ContactCardProps[] = [
     title: 'Email',
     value: SUPPORT_EMAIL,
     href: `mailto:${SUPPORT_EMAIL}`,
-    note: 'Odpowiedź w 24h',
+    note: 'Odpisuje człowiek, w dni robocze, zwykle w ciągu 2 dni roboczych',
   },
   {
     icon: MessageCircle,
-    title: 'Live Chat',
-    value: 'W aplikacji',
+    title: 'Czat pomocy',
+    value: 'W panelu, po zalogowaniu',
     href: '/login',
-    note: 'Od poniedziałku do piątku, od 9:00 do 17:00',
+    note: 'Podpowiedzi z centrum pomocy. Odpowiada automat, a z czatu przejdziesz do człowieka',
   },
   {
     icon: BookOpen,
@@ -58,7 +59,7 @@ const CARDS: ContactCardProps[] = [
 export default function ContactPage() {
   return (
     <>
-      <PageHero title="Pomożemy" lead="Czytamy każdą wiadomość. Odpowiadamy w ciągu 24h." />
+      <PageHero title="Pomożemy" lead="Czytamy każdą wiadomość. Odpowiadamy w dni robocze, zwykle w ciągu 2 dni roboczych." />
 
       <section aria-label="Kanały kontaktu" className="pb-20 sm:pb-28">
         <Container>

@@ -3,6 +3,9 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import manifest from '@/app/manifest';
+import { OFERTA } from '@/lib/marketing/oferta';
+
 /**
  * Plan Finora, D8: produkt nazywa się FaktWay (zmiana nazwy 17.10.2026,
  * wcześniej FaktFlow, a jeszcze wcześniej robocze „KSeF SaaS”). Interfejs,
@@ -24,6 +27,7 @@ const SCANNED = ['app', 'components', 'lib', 'content', 'hooks', 'types', 'publi
 const EXTENSIONS = /\.(tsx?|mjs|js|mdx?|json|webmanifest|css|txt)$/;
 
 // D4: pliki FLO zmienia ich właściciel (Masło, tor silnika) — nie ten test.
+// `content/flo/pomoc` to artykuły o FLO zdjęte z publicznej pomocy (FaktWay 1.0).
 const OWNED_ELSEWHERE = [
   'components/flo/',
   'app/(dashboard)/flo/',
@@ -79,6 +83,15 @@ function oldNameHits(): string[] {
 describe('nazwa produktu: FaktWay (plan Finora, D8)', () => {
   it('aplikacja nie pisze starych nazw (FaktFlow, KSeF SaaS)', () => {
     expect(oldNameHits()).toEqual([]);
+  });
+
+  it('metadane stron przed logowaniem: nazwa FaktWay, bez starych nazw w zdaniu oferty', () => {
+    expect(manifest().name).toContain('FaktWay');
+    expect(manifest().short_name).toBe('FaktWay');
+    expect(OFERTA).not.toMatch(OLD_NAMES);
+    const layout = readFileSync(join(ROOT, 'app/layout.tsx'), 'utf8');
+    expect(layout).toContain("title: 'FaktWay'");
+    expect(layout).toContain("applicationName: 'FaktWay'");
   });
 
   it('wyjątki z bazy nadal są w kodzie (inaczej usuń je z listy)', () => {

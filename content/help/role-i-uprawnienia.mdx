@@ -2,8 +2,8 @@
 title: "Role i uprawnienia"
 category: "zespol"
 order: 2
-summary: "Czym różnią się role właściciela, administratora i członka organizacji."
-updated: "2026-10-15"
+summary: "Czym różnią się role właściciela, administratora, członka i księgowego."
+updated: "2026-11-02"
 ---
 
 Każda osoba w organizacji ma rolę, która określa, co może robić.
@@ -21,24 +21,28 @@ Każda firma ma co najmniej jednego właściciela.
 
 ## Administrator (admin)
 
-Zarządza codzienną pracą, ale nie rozliczeniami. Administrator:
+Zarządza codzienną pracą i ma dostęp do abonamentu. Administrator:
 
 - wystawia i edytuje faktury,
 - zarządza kontrahentami i produktami,
 - dodaje członków zespołu,
-- ma wgląd w ustawienia z wyjątkiem rozliczeń.
+- ma dostęp do ustawień firmy i abonamentu: może uruchomić subskrypcję i otworzyć portal płatności Stripe, także po to, żeby ją anulować.
 
 ## Członek (member)
 
 Pracuje na fakturach i kosztach, bez dostępu do zarządzania zespołem ani rozliczeń. Dobra rola dla osoby, która ma tylko wystawiać dokumenty.
 
+## Księgowy (accountant)
+
+Rola dla osoby z biura rachunkowego, którą zapraszasz do zespołu z własnym kontem. W aplikacji ma takie same uprawnienia jak członek. Jeśli księgowa ma tylko pobierać dokumenty, wystarczy portal księgowego, bez konta.
+
 ## Jak zmienić rolę
 
-Właściciel i administrator zmieniają role w **Ustawienia → Zespół**. Wybierasz osobę i przypisujesz nową rolę — zmiana działa natychmiast.
+Role zmienia tylko właściciel, w **Ustawienia → Zespół**. Wybierasz osobę i przypisujesz nową rolę, a zmiana działa natychmiast.
 
 ## Bezpieczeństwo danych
 
-Niezależnie od ról, dane biznesowe są chronione na poziomie bazy (Row Level Security) — użytkownik widzi wyłącznie organizacje, do których faktycznie należy.
+Niezależnie od ról, dane biznesowe są chronione na poziomie bazy (Row Level Security): użytkownik widzi wyłącznie organizacje, do których faktycznie należy.
 
 ## Co dalej?
 

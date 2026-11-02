@@ -89,8 +89,9 @@ describe('critical Slack delivery', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
     vi.stubGlobal('fetch', fetchMock);
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // Bez wyjątku, ale z informacją, że nie doszło („Połącz z człowiekiem” z niej korzysta).
     await expect(sendSlackAlert({ channel: 'bugs', text: 'synthetic' }))
-      .resolves.toBeUndefined();
+      .resolves.toBe(false);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledOnce();
     expect(JSON.stringify(log.mock.calls)).not.toContain(webhookUrl);

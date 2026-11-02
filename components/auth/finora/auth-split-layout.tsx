@@ -22,17 +22,17 @@ import Link from 'next/link'
 import { Reveal } from '@/components/site/motion'
 import { BandGlow } from '@/components/site/ui'
 import { PortalContainerProvider } from '@/components/ui/portal-container'
+import { OFERTA_TEKST } from '@/lib/marketing/oferta'
 
 import { AuthLogo } from './auth-logo'
 import { AuthShowcase } from './auth-showcase'
 
 /**
- * Hasło z planu §5 P15 (treść do akceptacji Masła). Drugie zdanie planu
- * („FLO pilnuje terminów…”) obiecywało FLO, którego klient jeszcze nie ma
- * (agent niewdrożony, poza Pulpitem od 19.10) — zostaje prawdziwe zdanie
- * z dawnej strony logowania.
+ * Pierwsze zdanie to zdanie oferty z lib/marketing/oferta.ts, to samo co na
+ * stronie głównej i w cenniku (FaktWay 1.0). Drugie zostaje z dawnej strony
+ * logowania, bo mówi prawdę o wysyłce.
  */
-export const AUTH_SLOGAN_TITLE = 'Faktury w KSeF bez stresu.'
+export const AUTH_SLOGAN_TITLE = OFERTA_TEKST
 export const AUTH_SLOGAN_TEXT = 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.'
 
 export function AuthSplitLayout({
@@ -77,7 +77,7 @@ export function AuthSplitLayout({
 
               <Reveal onLoad delay={0.25} className='relative mx-auto w-full max-w-md'>
                 <AuthShowcase />
-                <p className='mt-8 text-2xl font-semibold tracking-tight'>{AUTH_SLOGAN_TITLE}</p>
+                <p className='mt-8 text-xl font-semibold tracking-tight text-pretty'>{AUTH_SLOGAN_TITLE}</p>
                 <p className='mt-2 text-pretty text-primary-foreground'>{AUTH_SLOGAN_TEXT}</p>
               </Reveal>
             </div>

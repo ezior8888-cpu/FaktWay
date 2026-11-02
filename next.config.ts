@@ -156,6 +156,14 @@ const nextConfig: NextConfig = {
         destination: '/import-danych',
         permanent: true,
       },
+      // FaktWay 1.0: artykuły o FLO zniknęły z publicznej pomocy
+      // (content/flo/pomoc). Stare linki i wyniki wyszukiwarki lądują na
+      // stronie głównej zamiast na 404.
+      {
+        source: '/pomoc/flo-:slug',
+        destination: '/',
+        permanent: true,
+      },
     ];
   },
 

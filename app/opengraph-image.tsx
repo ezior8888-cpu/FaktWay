@@ -1,8 +1,9 @@
 import { ImageResponse } from 'next/og';
 
 import { LOCKUP } from '@/lib/brand/faktway-logo-paths';
+import { OFERTA, OFERTA_TEKST } from '@/lib/marketing/oferta';
 
-export const alt = 'FaktWay: faktury KSeF dla mikrofirm';
+export const alt = OFERTA;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -28,25 +29,15 @@ export default function OgImage() {
         </svg>
         <div
           style={{
-            fontSize: '72px',
+            fontSize: '56px',
             fontWeight: 700,
             letterSpacing: '-0.04em',
-            lineHeight: 1.05,
+            lineHeight: 1.15,
             textAlign: 'center',
-            maxWidth: '900px',
+            maxWidth: '1000px',
           }}
         >
-          Faktury, KSeF i KPiR.
-        </div>
-        <div
-          style={{
-            fontSize: '36px',
-            color: '#64748b',
-            marginTop: '20px',
-            textAlign: 'center',
-          }}
-        >
-          Automatyzacja, której nie ma u konkurencji.
+          {OFERTA_TEKST}
         </div>
       </div>
     ),

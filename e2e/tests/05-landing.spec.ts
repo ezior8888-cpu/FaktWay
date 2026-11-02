@@ -1,28 +1,20 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Strona główna i strony marketingowe', () => {
-  // Strona główna od 23.10.2026 (app/(home)): o FaktWay, agent FLO jako
-  // dodatek. Wcześniejsze testy szukały sekcji („Problem/Solution”,
-  // kalkulator), których nie było już na stronie Zova.
-  test('hero: faktury w KSeF i główne CTA', async ({ page }) => {
+  // Strona główna od 23.10.2026 (app/(home)), od FaktWay 1.0 z jednym zdaniem
+  // oferty (lib/marketing/oferta.ts) i bez FLO. Wcześniejsze testy szukały
+  // sekcji („Problem/Solution”, kalkulator), których nie było już na stronie Zova.
+  test('hero: zdanie oferty i główne CTA', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1, name: /faktury w\s+ksef bez stresu/i })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /faktury z\s+ksef, koszty i\s+należności/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /wypróbuj za darmo/i }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: /od faktury do księgowej/i })).toBeVisible();
   });
 
-  test('sekcja FLO: zakładka pokazuje scenę do końca', async ({ page }) => {
-    await page.goto('/#flo');
-    const tabs = page.getByRole('tablist', { name: 'Co robi FLO' });
-    await tabs.getByRole('tab', { name: /odrzucone faktury/i }).click();
-    const panel = page.getByRole('tabpanel');
-    await expect(panel).toContainText('KSeF odrzucił fakturę');
-    // Napis na przycisku zmienia się dopiero na końcu sceny (toBeVisible
-    // nie wystarczy: Playwright liczy opacity 0 jako widoczne). Po kliknięciu
-    // zakładki sceny już się nie zmieniają same.
-    await expect(panel).not.toContainText('Wysłano');
-    await expect(panel).toContainText('Wysłano', { timeout: 8000 });
-    await expect(panel).toContainText('KSeF odrzucił fakturę');
+  test('stare adresy o FLO prowadzą na stronę główną, pas o telefonie jest na miejscu', async ({ page }) => {
+    await page.goto('/pomoc/flo-czym-jest');
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { level: 2, name: /także w\s+telefonie/i })).toBeVisible();
   });
 
   // Strony porównawcze wyłączone 15.10.2026 do weryfikacji treści
