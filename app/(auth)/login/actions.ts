@@ -77,7 +77,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
       metadata: { method: 'password' },
     });
     await trackServer({
-      distinctId: signedIn.id,
+      userId: signedIn.id,
       event: ANALYTICS_EVENTS.loginCompleted,
       properties: { method: 'password' },
     });
