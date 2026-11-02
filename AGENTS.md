@@ -15,6 +15,13 @@
 > przeczytaj [`docs/koordynacja/PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md),
 > zrób checklistę startową (sekcja 0) i pracuj od „Następny krok”
 > w dzienniku (sekcja 12).
+>
+> **„Kontynuuj plan skalowania 3000, sesja N”** (wydajność i skalowanie
+> pod 3000 aktywnych userów): przeczytaj
+> [`docs/koordynacja/PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md),
+> zrób checklistę (sekcja 0) i TYLKO wskazaną sesję według „Protokołu
+> naprawy błędu” niżej, a na końcu dopisz wiersz w dzienniku (sekcja 6)
+> z numerem PR.
 
 ## Projekt
 
