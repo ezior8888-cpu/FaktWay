@@ -122,15 +122,15 @@ Klient tych kolumn nie czyta (GRANT kolumnowy).
 | `imported` / — , `jpk_note` | pobrana (notatka JPK w szczegółach) | — |
 | `imported` / `repaired` | nie liczy się do pobranych | — |
 | `skipped` / `own_invoice` | — | faktura wysłana z FaktWay |
-| `skipped` / `already_present` | — | jest już w FaktWay (plik, OCR, dawny import) — wiersza nie ruszamy |
+| `skipped` / `already_present` | — | jest już w FaktWay **i w księgach**: wiersz przyjęty (`accepted`) w tym środowisku — dawny import, plik albo OCR przyjęty; wiersza nie ruszamy. Wyjątek: dawny import KSeF bez środowiska (`stan`, pkt 6). Szkic z importu pliku to `number_conflict`, nie pominięcie (ZAP-01, §4a). Stan końcowy — cron go nie sprawdza ponownie |
 | `skipped` / `retired_draft` | „N faktur ma numer zajęty przez dokument wycofany przy duplikacie — nie przenosimy ich” | numer przenosi wyłącznie PR C (00149); sprawdzane raz na dobę; `odblokuj … retired_draft --tak` tylko po decyzji Bartosza |
 | `deferred` / `duplicate_decision` | „czeka na Twoją decyzję przy duplikacie” + link do dokumentu | ścieżka klienta 440 (e-mail, I5D); bez limitu czasu |
-| `deferred` / `own_send_pending` | „prawdopodobnie faktura wysłana właśnie z FaktWay — sprawdzimy za godzinę” | po 48 h → `own_send_unresolved` |
+| `deferred` / `own_send_pending` | „prawdopodobnie faktura wysłana właśnie z FaktWay — sprawdzimy za godzinę” | po 48 h → `own_send_unresolved`. Także szkic z importu pliku, który klient wysyła z FaktWay (w kolejce, w wysyłce albo `failed`/`rejected` z próbą — ZAP-01) |
 | `blocked` / `currency_not_supported` | „faktura w walucie … — oryginał zostaje w KSeF” | brak obsługi walut; `odblokuj … --wymus` dopiero po jej dodaniu |
-| `blocked` / `number_conflict` | „W FaktWay jest szkic o numerze … — zmień numer albo usuń szkic” + link | samo po zmianie szkicu (sprawdzane co godzinę) |
-| `blocked` / `file_import_mismatch` | „faktura przeniesiona z pliku, ale z innymi danymi — nie zmieniaj jej” | porównać z oryginałem w KSeF; decyzja Bartosza (§15 pkt 2) |
+| `blocked` / `number_conflict` | „W FaktWay jest szkic o numerze …, np. z importu pliku. Szkic nie liczy się w przychodzie ani w KPiR — usuń go…” + link | tylko szkic, który klient może usunąć: `draft` bez prób wysyłki (szkic z próbą, np. wycofany 440, to `number_taken_local` albo `local_conflict`). Samo po usunięciu szkicu — także szkicu z importu CSV/JPK (ZAP-01); sprawdzenie ok. 1 h po usunięciu przy ≤ 50 pozycjach firmy do sprawdzenia, przy N pozycjach do ok. ceil(N/50) h — zerowanie `invoice_id` podbija `updated_at`, więc usunięty szkic idzie na koniec kolejki sprawdzeń (niżej); oryginał pobiera potem kolejka pobrań. Szkicu nie da się edytować, więc „zmiana numeru” nie jest drogą klienta. Bez alarmu — przy wielu blokadach krok operatora z §4b |
+| `blocked` / `file_import_mismatch` | „faktura przeniesiona z pliku, ale z innymi danymi — nie zmieniaj jej” | tylko wiersz przyjęty w tym środowisku (szkic z pliku to `number_conflict`); porównać z oryginałem w KSeF; decyzja Bartosza (§15 pkt 2) |
 | `blocked` / `number_taken_local` | „dokument o tym numerze z innym numerem KSeF — nie zmieniaj go” | wyjaśnić, który dokument jest prawdziwy |
-| `blocked` / `local_conflict` | „nie udało się jej zapisać — sprawdzamy” | dwa wiersze albo inne środowisko przy tym numerze KSeF |
+| `blocked` / `local_conflict` | „nie udało się jej zapisać — sprawdzamy” | dwa wiersze albo inne środowisko przy tym numerze KSeF; także wiersz spoza FaktWay z tym numerem KSeF albo numerem faktury, którego księgi nie liczą (nieprzyjęty, bez statusu, inne środowisko, przyjęty bez środowiska, szkic z pliku z próbą wysyłki — np. wycofany 440 bez numeru oryginału, którego klient nie usunie (00148; usuwa serwis za zgodą Bartosza, §4a) — ZAP-01) |
 | `blocked` / `own_send_unresolved` | „wynik wysyłki jeszcze uzgadniamy — nie wystawiaj ponownie” | jak I5: uzgodnić wysyłkę w `/admin/ksef` |
 | `blocked` / `parse_failed`, `metadata_mismatch`, `archive_conflict` | „nie udało się jej zapisać — napisz na pomoc@ jeśli pilne” | `pozycje <firma> blocked <powód>` (detail), naprawa, `odblokuj` |
 | `blocked` / `save_failed`, `repair_failed`, `download_failed` | jak wyżej | 3 nieudane próby; szczegół = pierwsze ostrzeżenie silnika / HTTP. `save_failed` z `invoice_id` ≠ NULL = niepełny zapis tego strumienia (np. nagłówek bez pozycji) — sprawdzić fakturę w `/admin`, naprawić, `odblokuj` |
@@ -138,6 +138,104 @@ Klient tych kolumn nie czyta (GRANT kolumnowy).
 Powody zależne od stanu lokalnego (`number_conflict`, `number_taken_local`,
 `file_import_mismatch`, `local_conflict`, `own_send_unresolved`) są
 sprawdzane ponownie co godzinę (najstarsze pierwsze, `updated_at` podbijany).
+Jeden przebieg firmy sprawdza najwyżej 50 pozycji (`RECHECK_LIMIT`, razem
+z odłożonymi i wycofanymi szkicami), a przebieg bez pracy w KSeF rusza
+najwyżej raz na godzinę — przy N pozycjach do sprawdzenia firma czeka do
+ok. ceil(N/50) h (w fazie bieżącej przebiegi idą co 14–29 min, więc szybciej).
+Odblokowana pozycja wraca do kolejki pobrań (`pending`), a ta pobiera
+najwyżej 5 faktur na przebieg w dzień i 10 w nocy (`BUDGET_DAY`,
+`BUDGET_NIGHT`) — przy N szkicach usuniętych naraz oryginały dochodzą
+przez ok. N/20 h w dzień (mniej, gdy historia ustępuje skrzynce).
+
+## 4a. ZAP-01: szkic z importu pliku a oryginał z KSeF
+
+Import CSV/JPK zapisuje sprzedaż jako szkic (`draft`, bez numeru KSeF i bez
+środowiska), a przychód, KPiR, JPK i Pulpit liczą tylko faktury przyjęte
+w KSeF w bieżącym środowisku. Do 27.10.2026 historia uznawała taki szkic za
+„tę samą sprzedaż” (`skipped/already_present`) i oryginału z KSeF nie
+pobierała — sprzedaż znikała z ksiąg bez komunikatu. Od poprawki:
+
+- `already_present` (i `imported`) w sprzedaży tylko z wierszem w księgach
+  (`inSalesBooks` w `lib/ksef/history-sync/classify.ts`, strażnik
+  w `tests/unit/ksef-historia-pobieranie.test.ts`);
+- szkic bez numeru KSeF i bez prób wysyłki → `number_conflict`: klient
+  usuwa szkic, sprawdzenie (ok. 1 h po usunięciu przy ≤ 50 pozycjach
+  firmy do sprawdzenia, inaczej do ok. ceil(N/50) h) zwalnia pozycję do
+  pobrania, a oryginał z KSeF pobiera kolejka pobrań (§4, tempo).
+  Także szkic z INNYMI danymi niż w KSeF (wcześniej `file_import_mismatch`
+  z alarmem) — nie jest w księgach, prawnie wiąże oryginał z KSeF. Przy
+  wielu takich blokadach w jednej firmie — §4b;
+- szkic z pliku, który klient wysłał z FaktWay, idzie jak faktura FaktWay:
+  wysyłka w toku albo `failed`/`rejected` z próbą → `own_send_pending`
+  (po 48 h `own_send_unresolved`); szkic z próbą wysyłki i wiersz bez
+  statusu → `local_conflict` (operator, alarm), bo „usuń szkic” nie
+  zawsze ma tam wyjście (recenzja #339). Operator: `pozycje <firma>
+  blocked local_conflict`, potem wiersz z `invoice_id` w `/admin` i jego
+  próby wysyłki:
+  - wycofany 440 (wpis `number_taken`, np. bez numeru oryginału) zwykłej
+    faktury albo zaliczki — klient go nie usunie (wyzwalacz 00148);
+    usuwa go tylko serwis za zgodą Bartosza, procedura
+    `ksef-error-codes.md` („Usunięcie albo zmiana numeru wycofanego
+    szkicu”). Usunięcie zabiera wpisy prób (kaskada), najbliższe
+    sprawdzenie zwalnia oryginał do pobrania. Wycofany KOR i ROZ klient
+    usuwa sam;
+  - szkic z próbami innymi niż `number_taken` (np. po „Wróć do szkicu”)
+    — klient usuwa go sam („Usuń szkic”), operator mu to przekazuje;
+  - wiersz bez statusu — poprawić status albo usunąć rolą serwisową,
+    za zgodą Bartosza;
+- inny wiersz spoza ksiąg → `local_conflict` (operator, alarm
+  `ksef_history_blocked`): `pozycje <firma> blocked local_conflict`, potem
+  wiersz z `invoice_id` w `/admin` — status i środowisko. Szkic z numerem
+  KSeF albo wiersz odrzucony: uzgodnić z klientem, czy dokument usunąć;
+  przyjęty bez środowiska albo w innym: to sprawa środowiska (jak pkt 6
+  `stan`), decyzja Bartosza. Po zmianie wiersza pozycja odblokuje się sama.
+
+## 4b. Wiele szkiców blokuje oryginały (`number_conflict`)
+
+Firma, która przeniosła sprzedaż plikiem CSV/JPK, a potem włączyła
+historię KSeF, dostaje blokadę na KAŻDĄ fakturę z tego okresu. Klient
+widzi na ekranie Import danych najwyżej 20 pozycji z tekstem i linkiem
+i usuwa szkice po jednym (akcji zbiorczej nie ma). Alarmu nie ma —
+`number_conflict` ma drogę klienta, więc nie jest w
+`KSEF_HISTORY_OPERATOR_REASONS`.
+
+1. `ksef-historia.sh stan`, pkt 9: firmy wg liczby blokad
+   (`szkic_usuniety` = klient już usunął szkic, pozycja czeka na
+   sprawdzenie; `najstarsza` = kiedy historia odkryła najdawniejszą
+   zablokowaną fakturę, `discovered_at` — od tej chwili sprzedaż z KSeF
+   czeka poza księgami; `updated_at` się nie nadaje, bo sprawdzenie co
+   godzinę go podbija).
+2. Kilkadziesiąt i więcej blokad albo blokady starsze niż tydzień —
+   kontakt z klientem (pomoc@): sprzedaż z KSeF nie trafi do przychodu
+   ani KPiR, dopóki szkice z pliku są w FaktWay; szkic tylko zajmuje
+   numer, oryginał z KSeF go zastąpi.
+3. `ksef-historia.sh pozycje <firma> blocked number_conflict` — numery
+   faktur i `invoice_id` szkiców do przekazania klientowi (najnowsze 100).
+4. Po usunięciu szkiców pozycje odblokują się same: do ok. ceil(N/50) h
+   (50 pozycji na przebieg, najdawniej sprawdzane pierwsze — usunięte
+   szkice czekają za pozostałymi blokadami firmy; przy ≤ 50 ok. 1 h),
+   a oryginały pobiera kolejka: 5 na przebieg w dzień, 10 w nocy.
+   `odblokuj <firma> number_conflict` tego nie przyspieszy: w obu drogach
+   wąskim gardłem są pobrania (5/10 na przebieg), zysk to najwyżej ok. 1 h
+   na pierwszych pozycjach. Kosztuje za to sesję KSeF na każdy przebieg,
+   klient widzi wszystkie jako „pobieramy”, a pozycje, których szkic
+   jeszcze jest, tracą link do szkicu (`invoice_id` NULL) do ponownej
+   klasyfikacji — nie używać.
+
+Akcja zbiorcza (usunięcie szkiców jednego importu pliku, RPC operatora)
+to decyzja Bartosza — skrypt jej nie ma.
+
+## 4c. Pozycje sprzed poprawki ZAP-01
+
+**Pozycje sprzed poprawki** zostały `skipped/already_present` — to stan
+końcowy, poprawka ich nie otworzy. Ile ich jest, pokazuje
+`ksef-historia.sh stan` (pkt 8: podział wg posiadacza i lista firm z liczbą
+pozycji; posiadacz `usuniety` / kolumna `szkic_usuniety` = klient usunął
+szkic już po pominięciu, oryginał na pewno nie trafił do bazy). Jednorazowe
+otwarcie to decyzja Bartosza — skrypt dziś tego nie robi (`odblokuj` nie
+obejmuje `already_present`). Otwarta pozycja (`pending`, `invoice_id` NULL)
+przejdzie zwykłą klasyfikację przed pobraniem: szkic da `number_conflict`,
+faktura w księgach wróci do `already_present` bez wywołania KSeF.
 
 ## 5. Alarmy
 
