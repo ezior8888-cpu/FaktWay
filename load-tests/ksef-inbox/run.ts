@@ -339,6 +339,8 @@ async function report(db: PgClient, ctx: {
   const warmupEnd = ctx.startedAt + 15 * 60_000;
   const lagAfterWarmup = summarize(startedJobs.filter((job) => job.started! >= warmupEnd).map(lagSeconds));
   const durationSeconds = summarize(done.filter((job) => job.started !== null).map((job) => (job.completed! - job.started!) / 1000));
+  // Po rozruchu większość firm gorących odświeża sesję zamiast logować się od zera.
+  const durationAfterWarmup = summarize(done.filter((job) => job.started !== null && job.started >= warmupEnd).map((job) => (job.completed! - job.started!) / 1000));
 
   const perMinute = new Map<number, number>();
   for (const job of done) {
@@ -363,7 +365,10 @@ async function report(db: PgClient, ctx: {
   const samples = readJsonLines(ctx.samplesFile);
   const first = samples[0];
   const last = samples.at(-1);
+  // RSS na Macu skacze przez kompresję pamięci (test widział 80-420 MB przy stałej stercie),
+  // więc obok niego sterta: ona pokazuje, ile pamięci naprawdę trzyma worker.
   const rss = samples.map((s) => s.rss!);
+  const heap = samples.map((s) => s.heapUsed!);
   const queryCounters = first && last
     ? {
         postgrest: last.postgrest! - first.postgrest!,
@@ -415,6 +420,7 @@ async function report(db: PgClient, ctx: {
       perMinuteAvg: Math.round(done.length / minutes),
       perMinuteMax: Math.max(0, ...perMinute.values()),
       duration_s: durationSeconds,
+      durationAfterWarmup_s: durationAfterWarmup,
     },
     lag_s: { all: lagAll, afterWarmup: lagAfterWarmup },
     ksef: {
@@ -434,6 +440,7 @@ async function report(db: PgClient, ctx: {
     worker: {
       rssMaxMb: rss.length ? Math.round(Math.max(...rss) / 1048576) : null,
       rssLastMb: last ? Math.round(last.rss! / 1048576) : null,
+      heapP95Mb: heap.length ? Math.round(percentile([...heap].sort((a, b) => a - b), 95)! / 1048576) : null,
       cpuPercent: cpuPercent === null ? null : Math.round(cpuPercent),
       loopP99Ms: loopP99,
       dbQueriesPerMinute: queryCounters
