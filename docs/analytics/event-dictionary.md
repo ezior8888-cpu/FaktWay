@@ -4,8 +4,15 @@ Słownik 51 eventów analitycznych. Źródło prawdy: [lib/analytics/events.ts](
 Nazwy są typed (`AnalyticsEventName`) — TS pilnuje literówek.
 
 Każdy event ma stronę: **client** (z `track()` w komponentach) albo **server**
-(z `trackServer()` w Server Actions / Inngest jobs). Server eventy są
-wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
+(z `trackServer()` w Server Actions i jobach). Server eventy są odporne na
+ad-blockery, ale **tak samo jak client wymagają zgody**: `trackServer` to bramka,
+która przy każdym zdarzeniu czyta `users.analytics_consent` (zdarzenia firmy: zgoda
+najstarszego aktywnego właściciela). Brak zgody = brak zdarzenia.
+
+Lejek, zgoda, źródło wejścia i definicja w PostHogu: [lejek-faktway.md](lejek-faktway.md).
+Właściwości spoza listy w `lib/analytics/privacy.ts` są wycinane przed wysyłką, także
+te wymienione niżej (`*_id`, `amount_cents`, `internal_number`, `failure_reason`):
+tabele opisują nazwy z planu, lista w kodzie decyduje, co wychodzi.
 
 ---
 
@@ -15,7 +22,7 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 |---|---|---|---|
 | `page_view` | client | `$current_url` (auto) | każda zmiana trasy (App Router) |
 | `signup_started` | client | `method` | wejście na `/register` |
-| `signup_completed` | **server** | `method`: 'password' \| 'google' | po `auth.signUp` sukces (Krok 4) |
+| `signup_completed` | **server** | `method`: 'password' \| 'google', `source` | nowe konto: formularz hasła albo pierwsze logowanie Google; raz na użytkownika |
 | `login_completed` | **server** | `method`: 'password' | po `signInWithPassword` sukces |
 | `marketing_cta_clicked` | client | `location`, `target` | kliknięcie CTA na landing/blog/vs |
 
@@ -26,8 +33,8 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 | `onboarding_started` | client | — | pierwszy step kreatora |
 | `onboarding_step_completed` | client | `step`, `step_index` | każdy step |
 | `onboarding_completed` | client | `tenant_id` | finalizacja kreatora |
-| `ksef_configured` | server | `env`: 'test'\|'production' | po wgraniu certyfikatu |
-| `first_invoice_sent` | server | `invoice_type`, `ksef_env` | pierwsza faktura per-tenant |
+| `ksef_configured` | **server** | `env`: 'test'\|'demo'\|'production', `source` | pierwsze skuteczne podłączenie: wynik `claimed`, nie wymiana certyfikatu |
+| `first_invoice_sent` | **server** | `ksef_env`, `source` | pierwsza faktura firmy przyjęta w KSeF, warunkowy UPDATE `tenants.first_invoice_accepted_at` |
 | `first_ocr_scan` | server | — | pierwsze użycie OCR per-tenant |
 | `magic_import_started` | server | `source`: 'ksef'\|'csv'\|'xls' | start importu |
 | `magic_import_completed` | server | `imported_count`, `duration_ms` | po zakończeniu Inngest joba |
@@ -39,7 +46,7 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 | `dashboard_viewed` | client | — | wejście na `/dashboard` |
 | `invoice_created` | server | `invoice_type`, `is_draft` | INSERT do `invoices` |
 | `invoice_sent` | server | `invoice_type`, `ksef_env` | submit do KSeF |
-| `invoice_accepted` | **server** | `ksef_env`, `internal_number` | KSeF przyjął (Krok 4) |
+| `invoice_accepted` | **server** | `ksef_env` | KSeF przyjął |
 | `invoice_rejected` | server | `error_code` | KSeF odrzucił |
 | `invoice_correction_created` | server | `parent_invoice_id` | korekta |
 | `invoice_offline_queued` | server | `reason` | wpadła do Offline24 |
@@ -66,13 +73,12 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 
 | Event | Strona | Properties | Wzbudza |
 |---|---|---|---|
-| `trial_started` | server | `trial_days`: 30 | po `subscription.created` ze statusem `trialing` |
-| `trial_ended` | server | `converted`: bool | po `trial_will_end` |
+| `trial_started` | **server** | `trial_days`: 30, `source` | webhook `customer.subscription.created` z `trial_start`; raz na firmę |
 | `checkout_started` | client | `plan`: 'monthly'\|'annual' | klik „Wybierz plan" |
 | `checkout_completed` | server | `plan` | po `checkout.session.completed` |
-| `payment_succeeded` | **server** | `amount_cents`, `currency`, `stripe_invoice_id` | webhook `invoice.payment_succeeded` (Krok 4) |
-| `payment_failed` | **server** | `amount_cents`, `failure_reason` | webhook `invoice.payment_failed` (Krok 4) |
-| `subscription_created` | **server** | `status`, `price_id`, `setPerson: plan='active'` | webhook `customer.subscription.created` (Krok 4) |
+| `payment_succeeded` | **server** | `first_payment`: bool, `source`, `setPerson: plan='active'` | webhook `invoice.payment_succeeded`, tylko płatność powyżej 0 zł (faktura 0 zł z próby się nie liczy) |
+| `payment_failed` | **server** | — | webhook `invoice.payment_failed` |
+| `subscription_created` | **server** | `status`, `setPerson: plan='trial'\|'active'` | webhook `customer.subscription.created` |
 | `subscription_renewed` | server | `period_start` | webhook update z renewal |
 | `plan_changed` | server | `from_plan`, `to_plan` | Customer Portal proration |
 
@@ -88,8 +94,9 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 
 | Event | Strona | Properties | Wzbudza |
 |---|---|---|---|
-| `subscription_canceled` | **server** | `subscription_id`, `setPerson: plan='canceled'` | webhook (Krok 4) |
-| `payment_churn` | server | `failed_attempts` | po 3. fail dunning |
+| `subscription_canceled` | **server** | `reason`: 'canceled', `source`, `setPerson: plan='canceled'` | webhook `customer.subscription.deleted` po płatnościach, rezygnacja |
+| `payment_churn` | **server** | `reason`: 'payment_failed', `source`, `setPerson: plan='canceled'` | webhook `customer.subscription.deleted` po płatnościach, powód Stripe `payment_failed` albo `payment_disputed` |
+| `trial_ended` | **server** | `reason`: 'trial_no_payment', `converted`: false, `source`, `setPerson: plan='canceled'` | webhook `customer.subscription.deleted`, próba bez żadnej płatności |
 | `account_deletion_requested` | server | `scheduled_for` | GDPR `createGdprRequest` |
 | `account_deleted` | server | — | po Inngest `gdprProcessDeletions` execute |
 
@@ -105,13 +112,12 @@ wiarygodniejsze — odporne na ad-blockery i nie wymagają zgody.
 
 ## Person properties
 
-Ustawiane przez `setPersonProperties` w `trackServer()`:
+Bez adresu e-mail i imienia: osobę identyfikuje pseudonimowy UUID.
 
 | Property | Ustawia | Wartość |
 |---|---|---|
-| `email` | signup_completed, identify | `user.email` |
-| `first_name` | signup_completed | parsed z `name` |
-| `plan` | signup_completed → `'trial'`; subscription_created → `'active'`; subscription_canceled → `'canceled'` | aktualny plan |
+| `plan` | `setPersonProperties`: signup_completed i trial_started → `'trial'`; subscription_created i payment_succeeded → `'active'`; odejście → `'canceled'` | aktualny plan |
+| `first_touch_channel`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `referrer_host`, `landing_path`, `first_touch_at` | `$set_once` na zdarzeniach lejka, z `users.signup_source` | pierwszy dotyk |
 
-UTM-y są łapane automatycznie przez PostHog autocapture jako
-`$initial_utm_source/medium/campaign/term/content`.
+PostHog nie zbiera utm sam (`save_campaign_params: false`). Źródło zapisuje
+`lib/analytics/attribution.ts`, dopiero po zgodzie.

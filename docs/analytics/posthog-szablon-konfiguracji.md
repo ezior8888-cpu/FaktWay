@@ -21,7 +21,7 @@ NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
 
 Zapisz plik i **zrestartuj** `pnpm dev` (zmienne `NEXT_PUBLIC_*` ładowane przy starcie builda / dev).
 
-**Uwaga (zgoda):** capture jest **wyłączony tylko** gdy w localStorage jest `ff_analytics_consent` = `"denied"`. Jeśli wcześniej kliknąłeś „Tylko niezbędne”, w konsoli: `localStorage.removeItem('ff_analytics_consent')` i odśwież stronę.
+**Uwaga (zgoda):** capture działa **tylko** gdy w localStorage jest `ff_analytics_consent` = `"granted"`. Jeśli wcześniej kliknąłeś „Tylko niezbędne”, kliknij „Włącz analitykę” na `/legal/cookies`. Zdarzenia z serwera czytają zgodę z `users.analytics_consent`.
 
 ---
 
