@@ -3,7 +3,8 @@
  *
  * Wejście to `stripe_payments.failure_reason`: kod odmowy Stripe albo tekst błędu
  * finalizacji. Klient widzi tylko kody z tej listy (kody BLIK z dokumentacji
- * Stripe). Reszta dostaje tekst ogólny: surowy kod nic nie mówi, a przy kartach
+ * Stripe; szczegółowe przychodzą dzięki wersji odczytu w `lib/stripe/payment-decline.ts`).
+ * Reszta dostaje tekst ogólny: surowy kod nic nie mówi, a przy kartach
  * Stripe zakazuje podawania niektórych powodów (np. `lost_or_stolen_card`).
  *
  * `willRetry`: czy Stripe ma szansę pobrać płatność kolejną próbą. Przy banku bez

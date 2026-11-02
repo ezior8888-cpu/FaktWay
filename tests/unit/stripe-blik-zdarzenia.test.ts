@@ -428,7 +428,12 @@ describe('3. nieudane obciążenie recurring_not_supported_by_bank', () => {
 
     await handleInvoicePaymentFailed(failedInvoice());
 
-    expect(mocks.retrievePaymentIntent).toHaveBeenCalledWith(PAYMENT_INTENT, {}, expect.anything());
+    // Wersja przed endive dałaby `generic_decline`: tests/unit/stripe-payment-decline.test.ts.
+    expect(mocks.retrievePaymentIntent).toHaveBeenCalledWith(
+      PAYMENT_INTENT,
+      {},
+      expect.objectContaining({ apiVersion: '2026-09-30.endive' }),
+    );
     expect(mocks.tables.stripe_payments[0]).toMatchObject({
       status: 'failed',
       failure_reason: 'recurring_not_supported_by_bank',

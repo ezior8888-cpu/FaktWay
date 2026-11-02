@@ -9,10 +9,20 @@
  */
 import * as Sentry from '@sentry/nextjs';
 
+import { BLIK_API_VERSION } from './blik-api-version';
 import { getStripe } from './client';
 
-/** Webhook ma odpowiedzieć szybko, a ten odczyt nie jest warunkiem jego powodzenia. */
-const STRIPE_READ_OPTIONS = { timeout: 3_000, maxNetworkRetries: 0 } as const;
+/**
+ * Webhook ma odpowiedzieć szybko, a ten odczyt nie jest warunkiem jego powodzenia.
+ * Wersja na to jedno żądanie: wersje przed endive dostają przy BLIK-u `generic_decline`
+ * zamiast `insufficient_funds`, `customer_declined`, `payment_limit_exceeded`
+ * i `partner_generic_decline`. Z obiektu czytamy tylko `last_payment_error`.
+ */
+const STRIPE_READ_OPTIONS = {
+  timeout: 3_000,
+  maxNetworkRetries: 0,
+  apiVersion: BLIK_API_VERSION,
+} as const;
 
 export async function readPaymentDeclineCode(
   paymentIntentId: string | null,

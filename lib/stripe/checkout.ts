@@ -18,6 +18,7 @@ import { isBlikAvailable } from '@/lib/billing/trial-payment';
 import type Stripe from 'stripe';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
+import { BLIK_API_VERSION } from './blik-api-version';
 import { getActiveSubscription } from './subscription';
 import { getStripe } from './client';
 import { ensureStripeCustomer } from './customer';
@@ -240,14 +241,6 @@ async function reconcileCompletedAttempt(
 }
 
 /**
- * Wersja API tylko dla żądania z BLIK-iem. Globalna (`lib/stripe/client.ts`)
- * zostaje: od niej zależą kształty obiektów, które czytają dowód płatności
- * i webhooki (np. `invoice.payment_intent` zniknął w basil). Dokumentacja
- * BLIK-a cyklicznego i referencja Checkout opisują właśnie tę wersję.
- */
-const BLIK_CHECKOUT_API_VERSION = '2026-09-30.endive';
-
-/**
  * Parametr z referencji API 2026-09-30.endive. Ta wersja usunęła
  * `payment_method_types` z tworzenia Session (400), a stripe-node 22.1.1 ma typy
  * z 2026-04-22.dahlia i `allowed_payment_method_types` jeszcze nie zna. Zawężamy
@@ -317,7 +310,7 @@ async function createBlikSession(
   try {
     session = await stripe.checkout.sessions.create(blikParams, {
       idempotencyKey: 'faktflow-checkout-blik-v1:' + attemptId,
-      apiVersion: BLIK_CHECKOUT_API_VERSION,
+      apiVersion: BLIK_API_VERSION,
     });
   } catch (error) {
     if (!isCertainStripeRefusal(error)) throw error;
