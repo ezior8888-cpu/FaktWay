@@ -64,3 +64,18 @@ export const CHECKOUT_STATEMENT = {
     'wiadomości, że w razie odstąpienia zapłacę za usługę świadczoną do chwili odstąpienia ' +
     '(okres próbny jest bezpłatny).',
 } as const;
+
+/**
+ * Zgoda na cykliczne płatności BLIK-iem, zaznaczana razem z `CHECKOUT_STATEMENT`,
+ * gdy włączony jest `STRIPE_BLIK_RECURRING` (lib/billing/trial-payment.ts). Przy
+ * hostowanym Checkout warunki mandatu pokazuje sprzedawca, PRZED kodem BLIK
+ * (docs.stripe.com/payments/blik/recurring-payments). Wersję zapisuje audyt
+ * `legal.checkout_statement_accepted`.
+ */
+export const BLIK_RECURRING_STATEMENT = {
+  version: '2026-11-02',
+  text:
+    'Jeśli na stronie płatności wybiorę BLIK, zgadzam się na cykliczne płatności: FaktWay będzie co miesiąc ' +
+    'pobierać opłatę za subskrypcję z mojego konta bankowego bez ponownego kodu BLIK i bez zatwierdzania ' +
+    'każdej płatności w aplikacji banku. Zgodę wycofam, anulując subskrypcję albo zmieniając metodę płatności.',
+} as const;

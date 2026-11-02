@@ -14,7 +14,7 @@ interface Props {
 
 /**
  * Przycisk otwierający Stripe Customer Portal w nowym tabie. Klient sam
- * zmienia plan/kartę/anuluje, my dostajemy webhook'a i synchronizujemy
+ * zmienia plan i metodę płatności albo anuluje, my dostajemy webhook'a i synchronizujemy
  * lokalną subscription.
  */
 export function PortalButton({ disabled }: Props) {
