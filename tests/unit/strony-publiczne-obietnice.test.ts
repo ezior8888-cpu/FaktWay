@@ -103,6 +103,7 @@ const BEZ_POKRYCIA: Regula[] = [
     wyjatki: [
       ['content/help/faktury-walutowe.mdx', 'artykuł mówi wprost, że faktur w obcej walucie jeszcze nie ma'],
       ['content/help/magic-import-z-innych-programow.mdx', 'faktur w obcej walucie nie przenosimy z historii KSeF'],
+      ['content/help/eksport-kpir-dla-ksiegowego.mdx', 'kolumna „Waluta” w uniwersalnym CSV ma stałą wartość PLN (csv-generators.ts)'],
     ],
   },
   { wzor: /po angielsku|dwujęzyczn/i, co: 'faktury po angielsku' },
@@ -129,6 +130,59 @@ const STARE_HASLA: Regula[] = [
   { wzor: /Faktury KSeF dla mikrofirm/i, co: 'stary opis meta' },
   // Opis meta z ceną to druga oferta: cena w opisie jest tylko w zdaniu oferty.
   { wzor: /description:.*PRICE_/, co: 'opis meta z ceną obok zdania oferty' },
+];
+
+/**
+ * Obietnice, które kod spełnia inaczej albo wcale (recenzja PR #355). Każda
+ * reguła ma podstawę w kodzie, a prawdziwy opis idzie do pomocy i na stronę.
+ * Funkcji nie dobudowujemy: dopóki kod się nie zmieni, strona o tym milczy.
+ */
+const ROZBIEZNE_Z_KODEM: Regula[] = [
+  {
+    // prepareReminderAction, runSendReminder i wykonawca karty pytają o rodzaj
+    // payment.chase. Bez wiersza w flo_rollout isInCanary() daje false, więc
+    // przycisk nie działa nikomu, a killFloAgent wyłącza go wszystkim.
+    wzor: /przypomnie\w*\s+(i|oraz)\s+(przedsądow\w*\s+)?wezwa|(wysyłasz|wyślesz|wysyłane)[^.]*przypomnie|przypomnie\w*[^.]*(wysyłasz|wyślesz|wysyłane)|FaktWay[^.]*(przypomnie|wezwa)|po terminie i przypomnienia|Ustawienia\s*→\s*Przypomnienia|przypomnie\w*\s+o\s+płatno|przypomnień\s+o\s+płatno/i,
+    co: 'przypomnienia i wezwania stoją za przełącznikiem FLO (payment.chase) i nie działają nikomu',
+    wyjatki: [['app/(marketing)/vs/', 'strony wyłączone flagą (404): przegląd przed włączeniem, patrz opis PR #355']],
+  },
+  // BankAccountInput nie jest nigdzie użyty, pole rachunku na fakturze to zwykły Input.
+  { wzor: /rachunk\w*\s+na białej liście/i, co: 'sprawdzanie rachunków na białej liście' },
+  {
+    // Cykl ponowień trwa ok. 2,5 h, więc limit 24 ponowień nie zapala się w dobę,
+    // a po pierwszej serii idzie mail „Faktura odrzucona przez KSeF”.
+    wzor: /przez dobę|po dobie|o wyniku (dostajesz|dajemy)|dajemy Ci znać o wyniku|informujemy o wyniku|mniej więcej co godzinę|prosi Cię o ponowną wysyłkę/i,
+    co: 'ponawianie „przez dobę” z powiadomieniem o wyniku',
+  },
+  {
+    // load-accountant-portal: 100 najnowszych dokumentów; API: jpk_fa i kpir_excel;
+    // XML tylko przy poziomie „Podgląd + pobieranie XML” (domyślny to „Tylko podgląd”).
+    wzor: /w formacie jej programu|pobieranie w uniwersalnym CSV|faktury w PDF|listę faktur za wybrany okres|w wybranym formacie|Twoja księgowa pobiera dokumenty/i,
+    co: 'portal księgowego: CSV, PDF, format programu i lista za okres',
+  },
+  {
+    // process-ocr wstawia wydatek z is_reviewed=false i domyślnym is_deductible=true.
+    wzor: /sprawdzasz odczytane dane|Sprawdź odczytane dane i zapisz|zanim zapiszesz koszt|wypełnia formularz kosztu|gdy KSeF przyjmie fakturę albo zapiszesz koszt/i,
+    co: 'odczyt ze zdjęcia: przegląd przed wpisem do KPiR',
+  },
+  {
+    // canManageBilling wpuszcza administratora, changeMembershipRoleAction wymaga właściciela.
+    wzor: /nie rozliczeniami|z wyjątkiem rozliczeń|Właściciel i administrator zmieniają role/i,
+    co: 'role: administrator bez rozliczeń, role zmieniane przez administratora',
+  },
+  { wzor: /sam wybierasz kolumny/i, co: 'uniwersalny CSV z wyborem kolumn' },
+  {
+    wzor: /danych fakturowych poza UE/i,
+    co: 'dane poza UE: Anthropic (USA) i Resend (USA lub UE) dostają zdjęcia i e-maile',
+  },
+  { wzor: /dodatkowe firmy/i, co: 'dopłata za dodatkowe firmy jako wada konkurencji (u nas też cena za firmę)' },
+  { wzor: /nie stracić dostępu do funkcji/i, co: 'utrata dostępu przy nieudanej płatności (nic nie sprawdza subskrypcji)' },
+  {
+    // Bez FAKTFLOW_OPERATOR_TENANT_ID runSelfInvoicePayment kończy się skipped, a usługodawca
+    // formalnie jeszcze nie istnieje (lib/legal/entity.ts).
+    wzor: /faktura VAT co miesiąc|faktur\w* za FaktWay|Za (samą )?subskrypcję dostajesz fakturę|własnym systemem|po każdej udanej płatności/i,
+    co: 'faktura VAT za abonament',
+  },
 ];
 
 function walk(dir: string): string[] {
@@ -237,6 +291,43 @@ describe('strażnik: strony publiczne', () => {
 
   it('bez starych haseł obok zdania oferty', () => {
     expect(trafienia(STARE_HASLA)).toEqual([]);
+  });
+
+  it('bez obietnic, które kod spełnia inaczej (recenzja #355)', () => {
+    expect(trafienia(ROZBIEZNE_Z_KODEM)).toEqual([]);
+  });
+});
+
+describe('treści opisują to, co robi kod (recenzja #355)', () => {
+  const czytaj = (sciezka: string) => readFileSync(join(ROOT, sciezka), 'utf8');
+  const FAQ = czytaj('app/(home)/_components/sections.tsx');
+
+  it('certyfikat: FAQ i pomoc mówią, jaki klucz działa przy wgrywaniu plików', () => {
+    // uploadCertificateAction importuje klucz tylko jako PKCS#8 RSA, bez pola hasła.
+    for (const tekst of [FAQ, czytaj('content/help/konfiguracja-certyfikatu-ksef.mdx')]) {
+      expect(tekst).toContain('PKCS#8');
+      expect(tekst).toContain('bez hasła');
+    }
+  });
+
+  it('cena jest za jedną firmę (NIP): karta na stronie głównej i w cenniku', () => {
+    expect(FAQ).toContain('za jedną firmę (NIP)');
+    expect(czytaj('app/(marketing)/pricing/page.tsx')).toContain('za jedną firmę (NIP)');
+  });
+
+  it('FAQ mówi, że odczyt ze zdjęcia i e-maile idą do dostawców spoza UE, i odsyła do listy', () => {
+    expect(FAQ).toContain('spoza UE');
+    expect(FAQ).toContain('Podmioty przetwarzające');
+  });
+
+  it.each([
+    ['content/help/portal-ksiegowego.mdx', ['100 najnowszych', 'Tylko podgląd', 'Podgląd + pobieranie XML']],
+    ['content/help/role-i-uprawnienia.mdx', ['Księgowy', 'tylko właściciel']],
+    ['content/help/eksport-kpir-dla-ksiegowego.mdx', ['stały układ kolumn']],
+    ['content/help/skanowanie-paragonow-ocr.mdx', ['od razu', 'Do opisania']],
+  ])('%s: opis zgodny z kodem', (plik, fragmenty) => {
+    const tresc = czytaj(plik);
+    for (const fragment of fragmenty) expect(tresc, fragment).toContain(fragment);
   });
 });
 
