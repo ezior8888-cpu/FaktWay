@@ -126,6 +126,7 @@ const SPECS: VarSpec[] = [
   { name: 'STRIPE_PRICE_MONTHLY', feature: 'Billing (Stripe)', level: 'deferred' },
   { name: 'STRIPE_PRICE_ANNUAL', feature: 'Billing (Stripe)', level: 'deferred' },
   { name: 'STRIPE_API_VERSION', feature: 'Billing (Stripe)', level: 'optional' },
+  { name: 'STRIPE_BLIK_RECURRING', feature: 'Billing (Stripe)', level: 'optional', note: 'włącza tylko „on”: BLIK obok karty przy próbie; najpierw docs/runbooks/stripe-blik.md' },
   { name: 'FAKTFLOW_OPERATOR_TENANT_ID', feature: 'Self-invoicing', level: 'deferred', note: 'Faza 37+ (nasza firma jako sprzedawca)' },
   { name: 'FAKTFLOW_OPERATOR_BANK_ACCOUNT', feature: 'Self-invoicing', level: 'deferred' },
   { name: 'GUS_API_KEY', feature: 'GUS (dane firm)', level: 'required', note: 'bez klucza: sandbox GUS (stare, zanonimizowane dane) — przy KSEF_ENV=production JPK_FA odmawia (adres siedziby z GUS), a podpowiedzi kontrahentów idą z danych testowych' },
