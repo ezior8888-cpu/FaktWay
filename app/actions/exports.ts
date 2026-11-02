@@ -14,6 +14,7 @@ import {
   requireUserAndTenant,
 } from '@/lib/supabase/auth-context';
 import { downloadFromR2 } from '@/lib/storage/r2';
+import { exportIncludesFor } from '@/lib/exports/export-scope';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import type { Database } from '@/types/database';
 
@@ -109,6 +110,9 @@ export async function startExportAction(params: {
     return { success: false, error: 'Data końcowa < początkowa' };
   }
 
+  // Zakres z reguły formatu (FIR-01) — nie wprost z tego, co przysłał klient.
+  const scope = exportIncludesFor(params.format, params);
+
   const { data: job, error } = await supabase
     .from('export_jobs')
     .insert({
@@ -118,9 +122,9 @@ export async function startExportAction(params: {
       trigger_source: 'manual',
       period_start: startDay,
       period_end: endDay,
-      include_issued: params.includeIssued ?? true,
-      include_received: params.includeReceived ?? false,
-      include_corrections: params.includeCorrections ?? true,
+      include_issued: scope.includeIssued,
+      include_received: scope.includeReceived,
+      include_corrections: scope.includeCorrections,
       status: 'pending',
     })
     .select('id')

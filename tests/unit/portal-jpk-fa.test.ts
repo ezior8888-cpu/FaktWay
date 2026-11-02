@@ -27,9 +27,10 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/exports/data-fetcher', () => ({
-  fetchInvoicesForExport: async (params: { direction: string }) => {
+  fetchInvoicesForExport: async (params: { direction: string; includeExpenses?: boolean }) => {
     mocks.lastDirection = params.direction;
-    if (mocks.receivedError && params.direction !== 'issued') throw mocks.receivedError;
+    // Jak w prawdziwym pobieraniu: kontrola waluty kosztu KSeF idzie z kosztami.
+    if (mocks.receivedError && params.includeExpenses) throw mocks.receivedError;
     return {
       issuer: { nip: '5260001246', name: 'ACME' },
       issuedInvoices: mocks.issued,
@@ -99,7 +100,8 @@ describe('portal: KPiR', () => {
     mocks.receivedError = new KsefExpenseCurrencyNotSupportedError();
     const odp = await pobierz('kpir_excel');
     expect(odp.status).toBe(422);
-    expect(mocks.lastDirection).toBe('both');
+    // FIR-01: KPiR czyta wystawione i koszty z wydatków — faktur otrzymanych nie.
+    expect(mocks.lastDirection).toBe('issued');
     expect(await odp.json()).toEqual({ error: mocks.receivedError.message });
   });
 });
