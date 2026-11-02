@@ -32,6 +32,9 @@ bierz `/admin`, a PostHoga do pytania „gdzie i dlaczego odpadają”.
 - Drugi wyjątek: odwołanie wygrywa zawsze. RPC stempluje je czasem serwera, więc zegar
   urządzenia (np. 2 h do tyłu) go nie blokuje, a powtórzone odwołanie niczego nie zmienia.
   Cena: starsze odwołanie, które dotarło późno, przebija nowszą zgodę z innego urządzenia.
+- PostHog łączy przeglądarkę z osobą i firmą (`identify`, `group`) dopiero po odpowiedzi
+  konta z decyzją `granted`. Sama zgoda z localStorage nie wystarcza, bo bywa odwołana
+  na innym urządzeniu albo cudza. Do tego czasu zdarzenia idą z losowym id przeglądarki.
 - Zgoda w localStorage bez daty pochodzi sprzed 11.2026, gdy baner mówił o samych statystykach.
   Liczy się jak brak decyzji: baner pyta od nowa, nic nie trafia na konto ani do ciasteczka.
   Odmowa bez daty zostaje.
