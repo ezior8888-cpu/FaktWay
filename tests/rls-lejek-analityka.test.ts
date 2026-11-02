@@ -268,19 +268,21 @@ describe.skipIf(!hasDatabase)('00161: pomiar na prawdziwej bazie', () => {
       expect(error).not.toBeNull();
     });
 
-    it('pierwsza decyzja zapisuje wybór i chwilę; starsza przegrywa, nowsza wygrywa', async () => {
+    it('pierwsza decyzja zapisuje wybór i chwilę; starsza zgoda przegrywa, nowsza wygrywa', async () => {
       await resetConsent(ownerId);
       const first = await sync(owner, 'granted', T0);
       expect(first.error).toBeNull();
       expect(first.row).toMatchObject({ consent: 'granted', changed: true });
       expect(new Date(first.row!.consent_at!).toISOString()).toBe(T0);
 
-      const older = await sync(owner, 'denied', OLDER);
-      expect(older.row).toMatchObject({ consent: 'granted', changed: false });
-
       const newer = await sync(owner, 'denied', T1);
       expect(newer.row).toMatchObject({ consent: 'denied', changed: true });
-      expect(new Date(newer.row!.consent_at!).toISOString()).toBe(T1);
+      // Odwołanie dostaje stempel serwera, nie datę z urządzenia.
+      expect(new Date(newer.row!.consent_at!).getTime()).toBeGreaterThanOrEqual(new Date(T1).getTime());
+
+      // Starsza zgoda nie cofa nowszego odwołania.
+      const older = await sync(owner, 'granted', T0);
+      expect(older.row).toMatchObject({ consent: 'denied', changed: false });
     });
 
     it('sam odczyt niczego nie zmienia, także gdy dostanie datę bez wyboru', async () => {
@@ -304,10 +306,23 @@ describe.skipIf(!hasDatabase)('00161: pomiar na prawdziwej bazie', () => {
       expect(await consentRow(ownerId)).toMatchObject({ analytics_consent: 'denied', signup_source: null });
     });
 
-    it('przegrany wybór „denied” nie kasuje źródła: decyzja nowsza jest na koncie', async () => {
+    it('odwołanie wygrywa z datą z urządzenia: zegar do tyłu go nie blokuje, a źródło znika', async () => {
+      // Konto ma zgodę z chwili T1, a urządzenie z zegarem do tyłu podaje wcześniejsze T0.
       await resetConsent(ownerId, { analytics_consent: 'granted', analytics_consent_at: T1, signup_source: SOURCE });
-      await sync(owner, 'denied', T0);
-      expect((await consentRow(ownerId)).signup_source).toEqual(SOURCE);
+      const behind = await sync(owner, 'denied', T0);
+      expect(behind.row).toMatchObject({ consent: 'denied', changed: true });
+      expect(new Date(behind.row!.consent_at!).getTime()).toBeGreaterThanOrEqual(new Date(T1).getTime());
+      expect(await consentRow(ownerId)).toMatchObject({ analytics_consent: 'denied', signup_source: null });
+    });
+
+    it('odwołanie bez daty też wygrywa, a powtórzone niczego nie zmienia', async () => {
+      await resetConsent(ownerId, { analytics_consent: 'granted', analytics_consent_at: T1, signup_source: SOURCE });
+      const undated = await sync(owner, 'denied', null);
+      expect(undated.row).toMatchObject({ consent: 'denied', changed: true });
+      const stamp = (await consentRow(ownerId)).analytics_consent_at;
+      const again = await sync(owner, 'denied', OLDER);
+      expect(again.row).toMatchObject({ consent: 'denied', changed: false });
+      expect((await consentRow(ownerId)).analytics_consent_at).toBe(stamp);
     });
 
     it('data z przyszłości (zły zegar urządzenia) nie blokuje późniejszych wyborów', async () => {

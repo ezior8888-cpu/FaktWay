@@ -142,9 +142,11 @@ CREATE TRIGGER trigger_guard_tenant_first_invoice_accepted_at
   FOR EACH ROW EXECUTE FUNCTION public.guard_tenant_first_invoice_accepted_at();
 
 -- Uzupełnienie dla istniejących faktur, opis w nagłówku. Bez filtra środowiska:
--- na jednej instancji KSEF_ENV jest stałe. Puste `ksef_accepted_at` to stare
--- wiersze sprzed tej kolumny, wtedy data utworzenia. tests/rls-lejek-analityka.test.ts
--- uruchamia tę instrukcję jeszcze raz na zasianych danych.
+-- instancja pracuje dziś na KSEF_ENV=test, więc liczy faktury z TEST. Przy przełączeniu
+-- na PROD datę zerujemy i liczymy od nowa tylko z faktur nowego środowiska (docs/analytics/
+-- lejek-faktway.md, „Przełączenie TEST → PROD”). Puste `ksef_accepted_at` to stare wiersze
+-- sprzed tej kolumny, wtedy data utworzenia. tests/rls-lejek-analityka.test.ts uruchamia
+-- tę instrukcję jeszcze raz na zasianych danych.
 UPDATE public.tenants t
    SET first_invoice_accepted_at = f.first_accepted_at
   FROM (
@@ -162,8 +164,9 @@ UPDATE public.tenants t
 -- 4. Zgoda: zapis i odczyt zalogowanego użytkownika
 -- ─────────────────────────────────────────────────────────────────
 -- p_consent NULL = tylko odczyt. p_chosen_at NULL = wybór sprzed tej migracji,
--- bez daty: liczy się wyłącznie na koncie bez decyzji. `changed` mówi, czy decyzja
--- naprawdę się zmieniła (wtedy akcja dopisuje wpis w audit_logs).
+-- bez daty: zgoda liczy się wyłącznie na koncie bez decyzji. Odwołanie wygrywa zawsze
+-- i dostaje stempel serwera: zegar urządzenia (np. 2 h do tyłu) nie może go zablokować.
+-- `changed` mówi, czy decyzja naprawdę się zmieniła (wtedy akcja dopisuje wpis w audit_logs).
 CREATE OR REPLACE FUNCTION public.sync_analytics_consent(
   p_consent text DEFAULT NULL,
   p_chosen_at timestamptz DEFAULT NULL
@@ -196,12 +199,13 @@ BEGIN
     v_at := LEAST(COALESCE(p_chosen_at, now()), now());
     UPDATE public.users u
        SET analytics_consent = p_consent,
-           analytics_consent_at = v_at,
+           analytics_consent_at = CASE WHEN p_consent = 'denied' THEN now() ELSE v_at END,
            -- Odwołanie zgody kasuje dane zebrane na jej podstawie.
            signup_source = CASE WHEN p_consent = 'granted' THEN u.signup_source END
      WHERE u.id = v_user
        AND (
          u.analytics_consent_at IS NULL
+         OR (p_consent = 'denied' AND u.analytics_consent IS DISTINCT FROM 'denied')
          OR (p_chosen_at IS NOT NULL AND u.analytics_consent_at < v_at)
        );
     v_changed := FOUND AND v_previous IS DISTINCT FROM p_consent;

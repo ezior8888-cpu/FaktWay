@@ -29,6 +29,9 @@ bierz `/admin`, a PostHoga do pytania „gdzie i dlaczego odpadają”.
 - Wyjątek od „ostatni wygrywa”: wybór raz dostarczony na konto nie jest już nowy.
   Przy wspólnym komputerze druga osoba nie dostaje cudzego „tak”; jeśli sama nie ma
   decyzji, baner pyta ją od nowa.
+- Drugi wyjątek: odwołanie wygrywa zawsze. RPC stempluje je czasem serwera, więc zegar
+  urządzenia (np. 2 h do tyłu) go nie blokuje, a powtórzone odwołanie niczego nie zmienia.
+  Cena: starsze odwołanie, które dotarło późno, przebija nowszą zgodę z innego urządzenia.
 - Zgoda w localStorage bez daty pochodzi sprzed 11.2026, gdy baner mówił o samych statystykach.
   Liczy się jak brak decyzji: baner pyta od nowa, nic nie trafia na konto ani do ciasteczka.
   Odmowa bez daty zostaje.
