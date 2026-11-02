@@ -256,6 +256,64 @@ describe('korekta to nie zapłata', () => {
   });
 });
 
+// Recenzja PR #358, pkt 1. „Zapłacone” (`mark_invoice_paid`) zapisuje całą resztę brutto
+// faktury, a korekta nie rusza `paid_amount`: faktura 1000 zł, korekta −300 z 28.10,
+// zapłacone 2.11 to w kasie 700 zł. Korekta wystawiona do dnia zapłaty należy do wpływu
+// z tej wpłaty (jeden ruch w dniu zapłaty); osobnym ruchem jest dopiero korekta późniejsza.
+describe('korekta wystawiona do dnia zapłaty zmniejsza wpływ z tej wpłaty', () => {
+  const zaplaconaTysiac = (fields: Row = {}) => zaplacona('a', '2026-11-02T08:00:00Z', {
+    gross_total: 1000, net_total: 813.01, vat_total: 186.99, paid_amount: 1000, ...fields,
+  });
+  const minus300 = (issued: string, fields: Row = {}) =>
+    korekta('k', 'a', -300, { issue_date: issued, payment_due_date: null, ...fields });
+  const skrot = (entries: Array<{ id: string; date: string; basis: string; amount: number }>) =>
+    entries.map((e) => [e.id, e.date, e.basis, e.amount]);
+
+  it('korekta sprzed zapłaty: jeden ruch +700 w dniu zapłaty, bez ujemnego ruchu w dniu korekty', async () => {
+    const entries = await getInflows(sb([zaplaconaTysiac(), minus300('2026-10-28')]), TENANT, OD_POCZATKU_ROKU);
+    expect(skrot(movements.receivedInflows(entries, TODAY))).toEqual([['a', '2026-11-02', 'paid', 700]]);
+    expect(movements.buildCashFlowChart(entries, [], TODAY).month.slice(-2).map((m) => [m.key, m.inflow, m.inflowCount]))
+      .toEqual([['2026-10', 0, 0], ['2026-11', 700, 1]]);
+    expect(movements.monthFlows(entries, [], TODAY).inflow).toMatchObject({ amount: 700, count: 1 });
+  });
+
+  it('okno odczytu zaczyna się po wystawieniu korekty: wpływ i tak jest po korekcie', async () => {
+    const entries = await getInflows(sb([zaplaconaTysiac(), minus300('2026-10-28')]), TENANT, { from: '2026-11-01' });
+    expect(skrot(entries)).toEqual([['a', '2026-11-02', 'paid', 700]]);
+  });
+
+  it('korekta w dniu zapłaty jest wliczona, dzień później to osobny ruch; suma ta sama', async () => {
+    const wDniuZaplaty = await getInflows(sb([zaplaconaTysiac(), minus300('2026-11-02')]), TENANT, OD_POCZATKU_ROKU);
+    expect(skrot(wDniuZaplaty)).toEqual([['a', '2026-11-02', 'paid', 700]]);
+
+    const dzienPozniej = await getInflows(
+      sb([zaplaconaTysiac({ paid_at: '2026-11-01T10:00:00Z' }), minus300('2026-11-02')]),
+      TENANT,
+      OD_POCZATKU_ROKU,
+    );
+    expect(skrot(dzienPozniej)).toEqual([['a', '2026-11-01', 'paid', 1000], ['k', '2026-11-02', 'correction', -300]]);
+    expect(dzienPozniej.reduce((s, e) => s + e.amount, 0)).toBe(700);
+  });
+
+  it('faktura zapłacona wg FA(3) i skorygowana do daty zapłaty: kwota po korekcie', async () => {
+    const entries = await getInflows(sb([
+      faktura('a', {
+        origin: 'file_import', gross_total: 1000, net_total: 813.01, vat_total: 186.99,
+        fa3_data: { parsed: { paidDate: '2026-10-30' } },
+      }),
+      minus300('2026-10-28'),
+    ]), TENANT, OD_POCZATKU_ROKU);
+    expect(skrot(entries)).toEqual([['a', '2026-10-30', 'paid', 700]]);
+  });
+
+  it('korekta in plus przed zapłatą to osobny dług, nie część wpłaty', async () => {
+    const plus200 = korekta('k', 'a', 200, { issue_date: '2026-10-28', payment_due_date: '2026-11-15' });
+    const entries = await getInflows(sb([zaplaconaTysiac(), plus200]), TENANT, OD_POCZATKU_ROKU);
+    expect(skrot(movements.receivedInflows(entries, TODAY))).toEqual([['a', '2026-11-02', 'paid', 1000]]);
+    expect(movements.upcomingInflows(entries, TODAY).items.map((i) => [i.id, i.amount])).toEqual([['k', 200]]);
+  });
+});
+
 describe('należności: po terminie to należność, nie wpływ', () => {
   it('Pulpit (prawdziwe dane): należność po terminie widać i prowadzi do listy zaległości', async () => {
     const out = await prerender(

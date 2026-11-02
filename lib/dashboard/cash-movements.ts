@@ -13,8 +13,9 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  * z tych samych zbiorów, więc liczby się nie rozjeżdżają.
  *
  * Wpływ = prawdziwe pieniądze (`receivedInflows`, FaktWay 1.0 §3 pkt 3): faktura
- * zapłacona w dniu zapłaty i korekta in minus zapłaconej faktury w dniu jej
- * wystawienia. Wykres, kafel, źródła i operacje liczą tylko je. Otwarta faktura
+ * zapłacona w dniu zapłaty (kwota po korektach in minus wystawionych do tego dnia,
+ * `getInflows`) i korekta in minus wystawiona po zapłacie, w dniu jej wystawienia.
+ * Wykres, kafel, źródła i operacje liczą tylko je. Otwarta faktura
  * z terminem od dziś to „Spodziewane wpływy” (`upcomingInflows`), a z minionym
  * terminem należność po terminie, nie wpływ.
  * Wydatek = brutto dokumentu kosztowego (`CostEntry.outflow`) w dniu jego
@@ -120,7 +121,8 @@ interface Movement {
 
 /**
  * Wpływy, czyli prawdziwe pieniądze do dziś: zapłata (`paid`) albo korekta in
- * minus zapłaconej faktury (`correction`). Faktura bez wpłaty nie jest wpływem,
+ * minus wystawiona po zapłacie faktury (`correction`; korekta wystawiona do dnia
+ * zapłaty siedzi już w kwocie `paid`). Faktura bez wpłaty nie jest wpływem,
  * nawet gdy jej termin minął (D-W odwołane 02.11.2026), więc jedna faktura nigdy
  * nie jest jednocześnie wpływem i spodziewanym.
  */
@@ -442,7 +444,7 @@ export function upcomingInflows(
 
 /**
  * Wpływ: „paid” — prawdziwa zapłata (`paid_at` albo data zapłaty z FA(3)),
- * „correction” — korekta in minus zapłaconej faktury. Wydatek „reviewed” /
+ * „correction” — korekta in minus wystawiona po zapłacie faktury. Wydatek „reviewed” /
  * „pending” (opisany albo do akceptacji); faktura zakupu z KSeF bez wydatku
  * „ksef” — nie ma jej w Wydatkach, więc nie jest ani zatwierdzona, ani do
  * akceptacji (E10).
