@@ -17,7 +17,7 @@ import { nbpRateForCost } from '@/lib/nbp/client';
 import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
-import { markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
+import { fa3Record, INBOX_PENDING_FLAG, markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database, Json } from '@/types/database';
 
@@ -216,11 +216,43 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     }
     const supabase = createAdminClient();
 
+    // Sesja 17 planu skalowania: to samo zadanie może przyjść drugi raz (skrzynka
+    // i cron uzupełniający; `singletonKey` na tej kolejce nie deduplikuje).
+    // Jeden odczyt rozstrzyga, zanim pójdzie pobranie XML albo zapytanie do AI.
+    const current = await step.run('check-already-processed', async () => {
+      const { data: row, error } = await supabase
+        .from('invoices')
+        .select('fa3_data, expenses!expenses_ksef_invoice_id_fkey(id)')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      // Błąd odczytu nie jest powodem do pominięcia: pełna droga sama zapyta o stan.
+      if (error || !row) return { processed: false, hasExpense: false };
+      const fa3 = fa3Record(row.fa3_data);
+      const expenses = (row as unknown as { expenses: unknown }).expenses;
+      return {
+        processed: fa3[INBOX_PENDING_FLAG] === false,
+        hasExpense: Array.isArray(expenses) ? expenses.length > 0 : Boolean(expenses),
+      };
+    });
+    if (current.processed) {
+      logger.info('Skrzynka: faktura już domknięta, zadanie zbędne', { invoiceId });
+      return { success: true as const, skipped: 'already-processed' as const };
+    }
+
     // #122 część B: oryginał XML faktury otrzymanej (KOD I, „Pobierz XML”).
     // Przed kategoryzacją, więc działa także, gdy koszt zostanie pominięty;
     // błąd nie przerywa joba — PDF zostaje podglądem (B14).
     const xml = await step.run('archive-ksef-xml', () =>
       archiveInboxInvoiceXml({ tenantId, invoiceId, environment }));
+
+    // Koszt już jest, brakowało tylko XML: bez drugiego liczenia kategorii i bez AI.
+    if (current.hasExpense) {
+      if (xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable') {
+        await closeInboxInvoice({ supabase, tenantId, invoiceId, step, logger });
+      }
+      return { success: true as const, skipped: 'expense-exists' as const };
+    }
 
     // Nowa nazwa kroku wymusza ponowny odczyt waluty także przy wznowieniu
     // starszego przebiegu Inngest z zapamiętanym wynikiem `fetch-invoice`.
@@ -438,23 +470,36 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     // ponownie, a koszt już jest.
     const xmlSettled = xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable';
     if (xmlSettled) {
-      // Praca jest zrobiona; nieudane zgaszenie znacznika kosztuje najwyżej
-      // jedną zbędną emisję z crona (idempotentną), więc nie wywraca joba.
-      try {
-        await step.run('mark-inbox-processed', () =>
-          markInboxInvoiceProcessed(supabase, { tenantId, invoiceId }));
-      } catch (e) {
-        logger.warn('Skrzynka: nie udało się zgasić znacznika _pendingFullFetch — cron uzupełniający ponowi', {
-          invoiceId,
-          error: e instanceof Error ? e.message : String(e),
-        });
-        Sentry.captureException(e, {
-          tags: { job: 'auto-categorize-inbox', step: 'mark-inbox-processed' },
-          extra: { tenantId, invoiceId },
-        });
-      }
+      await closeInboxInvoice({ supabase, tenantId, invoiceId, step, logger });
     }
 
     return { success: true as const };
+}
+
+/**
+ * Praca jest zrobiona; nieudane zgaszenie znacznika kosztuje najwyżej jedną zbędną
+ * emisję z crona (idempotentną), więc nie wywraca joba.
+ */
+async function closeInboxInvoice(input: {
+  supabase: ReturnType<typeof createAdminClient>;
+  tenantId: string;
+  invoiceId: string;
+  step: JobContext['step'];
+  logger: JobContext['logger'];
+}): Promise<void> {
+  const { supabase, tenantId, invoiceId, step, logger } = input;
+  try {
+    await step.run('mark-inbox-processed', () =>
+      markInboxInvoiceProcessed(supabase, { tenantId, invoiceId }));
+  } catch (e) {
+    logger.warn('Skrzynka: nie udało się zgasić znacznika _pendingFullFetch — cron uzupełniający ponowi', {
+      invoiceId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    Sentry.captureException(e, {
+      tags: { job: 'auto-categorize-inbox', step: 'mark-inbox-processed' },
+      extra: { tenantId, invoiceId },
+    });
+  }
 }
 
