@@ -1,4 +1,4 @@
--- 00158_billing_invoice_mobile_payment.sql
+-- 00162_billing_invoice_mobile_payment.sql
 --
 -- BLIK obok karty przy próbie (FAKTWAY-1-0, sekcja 3 pkt 5): faktura VAT za
 -- abonament opłacony BLIK-iem ma formę płatności „mobilna” (FA(3):
@@ -203,7 +203,7 @@ BEGIN
      OR p_invoice->'buyer'->>'nip' IS DISTINCT FROM v_customer.nip
      OR p_invoice->'payment'->>'currency' IS DISTINCT FROM 'PLN'
      OR p_invoice->'payment'->>'dueDate' IS DISTINCT FROM v_paid_date::text
-     -- 00158: forma z opłaconej płatności, karta albo BLIK (mobilna).
+     -- 00162: forma z opłaconej płatności, karta albo BLIK (mobilna).
      OR COALESCE(p_invoice->'payment'->>'method', '') NOT IN ('card', 'mobile') THEN
     RAISE EXCEPTION 'Billing VAT identity/date requires reconciliation'
       USING ERRCODE = '23514';

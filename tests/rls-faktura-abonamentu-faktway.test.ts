@@ -312,7 +312,7 @@ describe.skipIf(!hasDatabase)('faktura za abonament pod nazwą FaktWay (00152)',
     expect(await storedInvoices(payment.stripeInvoiceId)).toEqual([]);
   });
 
-  // 00158: płatność BLIK to na fakturze forma „mobilna” (FA(3): 7), nie „karta”.
+  // 00162: płatność BLIK to na fakturze forma „mobilna” (FA(3): 7), nie „karta”.
   async function blikDraftFor(payment: Payment): Promise<Invoice> {
     const draft = await buildSelfInvoiceDraft(CUSTOMER, {
       grossCents: GROSS_CENTS,

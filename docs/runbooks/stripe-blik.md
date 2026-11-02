@@ -22,7 +22,7 @@ dostajemy sygnał w Sentry.
 
 1. Stripe działa na tym środowisku: `STRIPE_SECRET_KEY`, webhook, `STRIPE_PRICE_MONTHLY` w **PLN**
    (BLIK cykliczny to tylko PLN, do 2000 zł na obciążenie).
-2. Migracja `00158` na bazie, przed wdrożeniem kodu (`AGENTS.md`, „Wgrywanie migracji”). Bez niej
+2. Migracja `00162` na bazie, przed wdrożeniem kodu (`AGENTS.md`, „Wgrywanie migracji”). Bez niej
    faktura za abonament opłacony BLIK-iem dostanie odmowę `Billing VAT identity/date requires reconciliation`.
 3. **Regulamin mówi dziś o karcie** (`lib/legal/documents/regulamin.ts`: „dane karty płatniczej”,
    „obciążania karty”). Przed włączeniem na produkcji zmień go z prawnikiem: nowa `CONTRACT_VERSION`
@@ -71,7 +71,7 @@ Do tego ścieżka bez adresu specjalnego. W sandboxie działa dowolny kod sześc
 
 ## Włączenie na produkcji
 
-1. Migracja `00158`, potem wdrożenie (kolejność z `AGENTS.md`).
+1. Migracja `00162`, potem wdrożenie (kolejność z `AGENTS.md`).
 2. Coolify, aplikacja `id=1` (Next.js): `STRIPE_BLIK_RECURRING=on`, wiersz `is_preview = false`. Worker
    tej zmiennej nie czyta. Zmiana wymaga wdrożenia aplikacji.
 3. Dashboard (tryb live): włącz BLIK i płatności cykliczne jak wyżej. Stripe aktywuje to z opóźnieniem,
@@ -132,4 +132,4 @@ Do tego ścieżka bez adresu specjalnego. W sandboxie działa dowolny kod sześc
 - Klucze idempotencji: `faktflow-checkout-v2:` (sama karta, jak dotąd), `faktflow-checkout-blik-v1:`,
   `faktflow-checkout-card-v1:` (ponowienie po odmowie). Mandat bez `expires_at`, czyli bezterminowy.
 - Kody odmów na tekst: `lib/billing/payment-failure.ts`; kod czyta `lib/stripe/payment-decline.ts`.
-- Faktura: `lib/billing/self-invoice.ts`, metoda `mobile`, RPC z migracji `00158`.
+- Faktura: `lib/billing/self-invoice.ts`, metoda `mobile`, RPC z migracji `00162`.

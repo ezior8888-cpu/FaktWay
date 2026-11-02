@@ -71,7 +71,7 @@ export function paidDateInPoland(paidAt: string): string {
 /**
  * Forma płatności na fakturze. BLIK to w FA(3) „mobilna”, nie „karta”; faktura
  * VAT ma mówić, jak klient naprawdę zapłacił. `create_billing_vat_invoice`
- * (00158) przyjmuje tylko te dwie formy.
+ * (00162) przyjmuje tylko te dwie formy.
  */
 function selfInvoicePaymentMethod(paymentMethodType: string | undefined): 'card' | 'mobile' {
   return paymentMethodType === 'blik' ? 'mobile' : 'card';
