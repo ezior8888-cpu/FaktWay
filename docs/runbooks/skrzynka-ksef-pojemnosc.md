@@ -99,7 +99,25 @@ na stałą liczbę godzin. Firma zimna po 5 h jest w normie, firma gorąca po 2 
 
 Firmy usunięte, nieaktywne i z wygasłym certyfikatem nie są odpytywane i nie budzą.
 
-@@POMIAR@@
+## Co zmierzono (02.11.2026)
+
+`pnpm load:inbox` na Macu z M4 i lokalną bazą, prawdziwy worker i cron, atrapa KSeF po HTTP
+(logowanie 2-4 s, zapytanie 300-800 ms, losowe 429 i 503), rozkład poziomów 60/25/10/5.
+Opóźnienie to czas od terminu firmy do startu zadania, po pierwszych 15 minutach.
+
+| Przebieg | Firmy | Sloty | Opóźnienie p50 / p95 / maks. (s) | Zadań na minutę | Logowania XAdES / odświeżenia | Pamięć maks. (MB) | Spóźnione ponad 5 min | Czekające na koniec |
+|---|---|---|---|---|---|---|---|---|
+| stary kod (rozsyłka co 15 min) | 1000 | 8 | 426 / 887 / 941 | 43 | 1422 / 0 | 362 | 746 | 582 |
+| nowy kod, mało slotów | 5000 | 8 | 492 / 545 / 573 | 122 | 2411 / 22 | 382 | 1065 | 105 |
+| nowy kod | 1000 | 16 | 32 / 69 / 93 | 42 | 695 / 229 | 420 | 0 | 0 |
+| nowy kod | 3000 | 16 | 40 / 81 / 108 | 129 | 2110 / 750 | 342 | 0 | 0 |
+| nowy kod | 5000 | 16 | 57 / 103 / 127 | 207 | 3516 / 1137 | 419 | 0 | 0 |
+| wszystkie należne naraz (po awarii) | 5000 | 16 | p95 712, całego okresu | 240 | 2899 / 0 | 439 | 2125 | 348 |
+
+Wzór pojemności: jeden slot obsługuje ok. 15 zadań na minutę (16 slotów dało 240 przy
+zadaniu trwającym ok. 3,8 s). Potrzebne sloty ≈ zadania na minutę z harmonogramu / 15.
+Przy rozkładzie z testu 5000 firm to ok. 207 zadań na minutę, czyli zapas ok. 15%.
+Po awarii 5000 firm nadrabia się w ok. 20 minut.
 
 ## Co zrobić, gdy przestaje nadążać
 

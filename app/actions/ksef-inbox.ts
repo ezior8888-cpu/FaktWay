@@ -11,7 +11,7 @@ export interface InboxCheckResult {
 
 function tooSoonMessage(retryAfterSeconds: number): string {
   const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
-  return `Sprawdzaliśmy KSeF przed chwilą. Spróbuj ponownie za ${minutes} min.`;
+  return `KSeF sprawdzamy właśnie albo sprawdzaliśmy przed chwilą. Spróbuj ponownie za ${minutes} min.`;
 }
 
 /**
