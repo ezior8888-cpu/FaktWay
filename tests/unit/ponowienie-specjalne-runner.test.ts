@@ -250,8 +250,8 @@ async function failing(run: Promise<unknown>): Promise<Error> {
 /** „Zapisz i wyślij” — zdarzenie A z kolejki i id nowego dokumentu. */
 async function firstSend(kind: Kind) {
   const result = kind === 'advance'
-    ? await saveAndSendAdvanceAction(advanceInput())
-    : await saveAndSendCorrectionAction(correctionInput());
+    ? await saveAndSendAdvanceAction(advanceInput(), TENANT)
+    : await saveAndSendCorrectionAction(correctionInput(), TENANT);
   expect(result, JSON.stringify(result)).toMatchObject({ success: true });
   expect(m.jobs).toHaveLength(1);
   const first = m.jobs[0]!;

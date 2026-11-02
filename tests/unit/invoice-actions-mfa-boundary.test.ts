@@ -112,8 +112,8 @@ beforeEach(() => {
 });
 const entries = [
   { name: 'buyer lookup', invoke: () => lookupBuyerAction(buyer.nip), nullable: false },
-  { name: 'draft', invoke: () => saveDraftAction(form), nullable: false },
-  { name: 'save and send', invoke: () => saveAndSendInvoiceAction(form), nullable: false },
+  { name: 'draft', invoke: () => saveDraftAction(form, org), nullable: false },
+  { name: 'save and send', invoke: () => saveAndSendInvoiceAction(form, org), nullable: false },
   { name: 'last invoice prefill', invoke: () => prefillFromLastInvoiceAction(), nullable: true },
 ];
 function expectNoBusinessEffects() {
@@ -175,7 +175,7 @@ it('buyer lookup still returns the current tenant contractor cache', async () =>
   expect(queries).toContainEqual(expect.objectContaining({ table: 'contractors', filters: { tenant_id: org, nip: buyer.nip } }));
 });
 it.each(['draft', 'send'])('a verified user can still save %s through the session client', async (action) => {
-  const result = action === 'draft' ? await saveDraftAction(form) : await saveAndSendInvoiceAction(form);
+  const result = action === 'draft' ? await saveDraftAction(form, org) : await saveAndSendInvoiceAction(form, org);
   expect(result).toMatchObject({ success: true, invoiceId: 'new-invoice' });
   expect(mocks.adminFrom).toHaveBeenCalledExactlyOnceWith('memberships');
   expect(queries).toContainEqual(expect.objectContaining({
@@ -194,14 +194,14 @@ describe('zwolnienie z VAT przy wystawianiu (stawka zw)', () => {
 
   it('podstawa z ustawień firmy trafia do faktury (P_19A) i faktura idzie do kolejki', async () => {
     vatBasis = 'art. 113 ust. 1 ustawy o VAT';
-    await expect(saveAndSendInvoiceAction(zw)).resolves.toMatchObject({ success: true });
+    await expect(saveAndSendInvoiceAction(zw, org)).resolves.toMatchObject({ success: true });
     const invoice = mocks.enqueue.mock.calls[0]![0].invoice;
     expect(invoice.annotations).toEqual({ vatExemptionBasis: 'art. 113 ust. 1 ustawy o VAT' });
     expect(invoice.lines[0].vatRate).toBe('zw');
   });
 
   it('bez podstawy: odmowa od razu — bez zapisu faktury i bez kolejki KSeF', async () => {
-    const result = await saveAndSendInvoiceAction(zw);
+    const result = await saveAndSendInvoiceAction(zw, org);
     expect(result).toMatchObject({ success: false });
     expect(result.success === false && result.error).toContain('podstawy prawnej zwolnienia');
     expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
@@ -211,12 +211,12 @@ describe('zwolnienie z VAT przy wystawianiu (stawka zw)', () => {
   // Szkic nie idzie do KSeF (w aplikacji nie ma wysyłki szkicu) — blokada
   // dotyczy tylko wysyłki.
   it('szkic bez podstawy wolno zapisać', async () => {
-    await expect(saveDraftAction(zw)).resolves.toMatchObject({ success: true });
+    await expect(saveDraftAction(zw, org)).resolves.toMatchObject({ success: true });
   });
 
   it('faktura bez „zw” nie dostaje P_19A, nawet gdy firma ma podstawę', async () => {
     vatBasis = 'art. 113 ust. 1 ustawy o VAT';
-    await saveAndSendInvoiceAction(form);
+    await saveAndSendInvoiceAction(form, org);
     expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
   });
 });
@@ -225,12 +225,12 @@ describe('mechanizm podzielonej płatności (MPP, P_18A)', () => {
   const mpp: InvoiceFormValues = { ...form, bankAccount: 'PL61109010140000071219812874', splitPayment: true };
 
   it('zaznaczony MPP trafia do faktury w kolejce KSeF', async () => {
-    await expect(saveAndSendInvoiceAction(mpp)).resolves.toMatchObject({ success: true });
+    await expect(saveAndSendInvoiceAction(mpp, org)).resolves.toMatchObject({ success: true });
     expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toEqual({ splitPayment: 1 });
   });
 
   it('MPP bez rachunku — odmowa także na serwerze, bez kolejki', async () => {
-    const result = await saveAndSendInvoiceAction({ ...mpp, bankAccount: '' });
+    const result = await saveAndSendInvoiceAction({ ...mpp, bankAccount: '' }, org);
     expect(result).toMatchObject({ success: false });
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
@@ -239,7 +239,7 @@ describe('mechanizm podzielonej płatności (MPP, P_18A)', () => {
 describe('metoda kasowa firmy (P_16)', () => {
   it.each(['draft', 'send'])('brak 00094 blokuje %s przed zapisem i kolejką', async (action) => {
     missingCashMethodColumn = true;
-    const result = action === 'draft' ? await saveDraftAction(form) : await saveAndSendInvoiceAction(form);
+    const result = action === 'draft' ? await saveDraftAction(form, org) : await saveAndSendInvoiceAction(form, org);
     expect(result).toMatchObject({ success: false, error: expect.stringContaining('00094') });
     expect(queries.some((query) => query.table === 'invoices')).toBe(false);
     expect(mocks.enqueue).not.toHaveBeenCalled();
@@ -248,19 +248,19 @@ describe('metoda kasowa firmy (P_16)', () => {
 
   it('firma na metodzie kasowej: P_16 w fakturze w kolejce KSeF', async () => {
     cashMethod = true;
-    await expect(saveAndSendInvoiceAction(form)).resolves.toMatchObject({ success: true });
+    await expect(saveAndSendInvoiceAction(form, org)).resolves.toMatchObject({ success: true });
     expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toEqual({ cashMethod: 1 });
   });
 
   it('firma zwolniona z VAT: metoda kasowa jej nie dotyczy — bez P_16', async () => {
     cashMethod = true;
     vatBasis = 'art. 113 ust. 1 ustawy o VAT';
-    await saveAndSendInvoiceAction(form);
+    await saveAndSendInvoiceAction(form, org);
     expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
   });
 
   it('metoda memoriałowa: bez P_16', async () => {
-    await saveAndSendInvoiceAction(form);
+    await saveAndSendInvoiceAction(form, org);
     expect(mocks.enqueue.mock.calls[0]![0].invoice.annotations).toBeUndefined();
   });
 });

@@ -7,8 +7,8 @@ vi.mock('@/lib/supabase/active-org', () => ({
   getActiveOrgIdFromCookies: mocks.getActiveOrgIdFromCookies,
 }));
 vi.mock('@/components/invoices/correction-form', () => ({
-  CorrectionInvoiceForm: ({ parentInvoices }: { parentInvoices: Array<{ internal_number: string }> }) =>
-    parentInvoices.map((invoice) => invoice.internal_number).join(','),
+  CorrectionInvoiceForm: ({ parentInvoices, tenantId }: { parentInvoices: Array<{ internal_number: string }>; tenantId: string }) =>
+    `firma:${tenantId} ${parentInvoices.map((invoice) => invoice.internal_number).join(',')}`,
 }));
 
 import NewCorrectionPage from '@/app/(dashboard)/invoices/new/correction/page';
@@ -59,6 +59,8 @@ it('lists only current-tenant accepted parents with PROD provenance and KSeF num
   const html = renderToStaticMarkup(await NewCorrectionPage({ searchParams: Promise.resolve({}) }));
   expect(html).toContain('PROD-A');
   expect(html).not.toMatch(/TEST-A|LEGACY-A|PROD-B|NO-NUMBER/);
+  // UX-01: firma listy idzie do formularza — zapis korekty sprawdzi, że to wciąż aktywna firma.
+  expect(html).toContain('firma:tenant-a ');
   // Dwa odczyty: rodzice + korekty firmy (K4 — rodzic z otwartą korektą nie jest kandydatem).
   expect(reads).toBe(2);
 });

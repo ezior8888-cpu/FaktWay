@@ -135,7 +135,7 @@ beforeEach(() => {
 
 describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
   it('można zapisać szkic z zaakceptowanymi zaliczkami', async () => {
-    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380), 'firma-a');
     expect(wynik).toMatchObject({ success: true });
     expect(inserts[0]).toMatchObject({
       table: 'invoices',
@@ -145,7 +145,7 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
   });
 
   it('A4b (00137): szkic zapisuje na wierszu finalData i wiersze rozliczenia zaliczek (te, które pójdą w zdarzeniu)', async () => {
-    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380), 'firma-a');
     expect(wynik).toMatchObject({ success: true });
     const value = inserts[0]?.value as Row;
     expect(value.special_data, 'INSERT ROZ bez special_data').toBeDefined();
@@ -167,17 +167,17 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
       internal_number: `FR/${id}`, advance_invoice_ids: [ZAL_23],
     });
     tables.invoices.push(roz('odrzucona', 'rejected'));
-    expect(await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380))).toMatchObject({ success: true });
+    expect(await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380), 'firma-a')).toMatchObject({ success: true });
 
     inserts = [];
     tables.invoices.push(roz('szkic', 'draft'));
-    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380), 'firma-a');
     expect(wynik).toMatchObject({ success: false, error: expect.stringContaining('FR/szkic') });
     expect(inserts).toEqual([]);
   });
 
   it('zaliczka w stawce spoza zamówienia wraca do formularza — bez szkicu i bez wysyłki', async () => {
-    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_5], 13350));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_5], 13350), 'firma-a');
     expect(wynik).toMatchObject({ success: false });
     expect((wynik as { error: string }).error).toMatch(/nie ma pozycji w tej stawce/);
     expect(inserts).toEqual([]);
@@ -193,7 +193,7 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
       tables.invoices[0].issue_date = '2026-08-01';
       tables.invoices[0].ksef_number = '5260001246-20260801-0000000000-00';
 
-      const wynik = await saveAndSendFinalAction(formularz([ZAL_23], 12300));
+      const wynik = await saveAndSendFinalAction(formularz([ZAL_23], 12300), 'firma-a');
       expect(wynik).toEqual({ success: false, error: ROZ_SUBMISSION_HOLD_MESSAGE });
       expect(inserts).toEqual([]);
       expect(mocks.enqueue).not.toHaveBeenCalled();

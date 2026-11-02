@@ -61,6 +61,8 @@ const emptyBuyer: BuyerB2B = {
 
 export interface AdvanceInvoiceFormProps {
   initialSeller: SellerData;
+  /** Firma, dla której wyrenderowano formularz i sprzedawcę — zapis odsyła ją jako `expectedTenantId` (UX-01). */
+  tenantId: string;
 }
 
 // E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
@@ -75,7 +77,7 @@ const PAYMENT_METHOD_ITEMS = [
   { value: 'other', label: 'Inna' },
 ] as const
 
-export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
+export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -167,7 +169,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const onSave = form.handleSubmit(
     (data) =>
       startSave(async () => {
-        const r = await saveAdvanceAction(data);
+        const r = await saveAdvanceAction(data, tenantId);
         if (r.success) {
           toast.success('Zapisano szkic zaliczki');
           router.push(`/invoices/${r.invoiceId}`);
@@ -179,7 +181,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const onSend = form.handleSubmit(
     (data) =>
       startSend(async () => {
-        const r = await saveAndSendAdvanceAction(data);
+        const r = await saveAndSendAdvanceAction(data, tenantId);
         if (r.success) {
           toast.success('Zaliczka w kolejce KSeF');
           router.push(`/invoices/${r.invoiceId}`);

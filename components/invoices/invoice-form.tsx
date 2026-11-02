@@ -150,6 +150,7 @@ function euCountryName(code: string): string | undefined {
 }
 
 export function InvoiceForm({
+  tenantId,
   prefill = null,
   vatExempt = false,
   suggestedNumber = null,
@@ -158,6 +159,12 @@ export function InvoiceForm({
   recurringInvoiceId = null,
   recurringPeriod = null,
 }: {
+  /**
+   * Firma, dla której strona wyrenderowała formularz (UX-01). Zapis odsyła ją
+   * jako `expectedTenantId`; akcja odmawia, gdy w innej karcie przełączono
+   * firmę. Tylko do porównania — firmą faktury jest firma z sesji.
+   */
+  tenantId: string;
   /**
    * Dane sprzedawcy do nagłówka dokumentu (P5) — tylko do wyświetlenia.
    * Faktura i tak bierze sprzedawcę z profilu firmy po stronie serwera.
@@ -184,7 +191,7 @@ export function InvoiceForm({
   recurringInvoiceId?: string | null;
   /** Okres z banera strony (np. `2026-11`) — ukryte pole; zapis sprawdza, czy pozycja go nie zmieniła (C3). */
   recurringPeriod?: string | null;
-} = {}) {
+}) {
   const newLine: InvoiceFormValues['lines'][number] = vatExempt
     ? { ...defaultLine, vatRate: 'zw' }
     : defaultLine;
@@ -371,7 +378,7 @@ export function InvoiceForm({
       submitInFlightRef.current = true;
       startSaving(async () => {
         try {
-          const result = await saveDraftAction(values);
+          const result = await saveDraftAction(values, tenantId);
           if (result.success) {
             toast.success('Szkic zapisany');
             router.push(`/invoices/${result.invoiceId}`);
@@ -434,7 +441,7 @@ export function InvoiceForm({
       submitInFlightRef.current = true;
       startSending(async () => {
         try {
-          const result = await saveAndSendInvoiceAction(values);
+          const result = await saveAndSendInvoiceAction(values, tenantId);
           if (result.success) {
             toast.success('Wysyłanie faktury do KSeF rozpoczęte');
             router.push(`/invoices/${result.invoiceId}`);

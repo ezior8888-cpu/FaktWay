@@ -38,6 +38,8 @@ import { tekstBezZnacznikow } from './helpers/tekst-html';
  * sprawdzamy, że oprawa niczego z nich nie zgubiła po drodze.
  */
 
+/** Firma formularza (UX-01) — w tym teście tylko wymagany prop. */
+const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const seller = {
   nip: '1234567890',
   name: 'Firma Testowa sp. z o.o.',
@@ -67,7 +69,7 @@ function at(html: string, needle: string): number {
 
 describe('P5: faktura zwykła w układzie dokumentu Finory', () => {
   const html = renderToStaticMarkup(
-    <InvoiceForm seller={seller} suggestedNumber="FV/10/2026/007" />,
+    <InvoiceForm tenantId={TENANT} seller={seller} suggestedNumber="FV/10/2026/007" />,
   );
 
   it('siatka dokument + kolumna 18rem', () => {
@@ -150,7 +152,7 @@ describe('P5: faktura zwykła w układzie dokumentu Finory', () => {
   });
 
   it('bez sprzedawcy: nagłówek odsyła do danych firmy, formularz działa dalej', () => {
-    const bez = renderToStaticMarkup(<InvoiceForm />);
+    const bez = renderToStaticMarkup(<InvoiceForm tenantId={TENANT} />);
     expect(bez).toContain('Dane sprzedawcy weźmiemy z profilu firmy.');
     expect(bez).toMatch(/<a[^>]*href="\/settings"[^>]*>Sprawdź dane firmy<\/a>/);
     expect(bez).toContain('id="internalNumber"');
@@ -158,7 +160,7 @@ describe('P5: faktura zwykła w układzie dokumentu Finory', () => {
 });
 
 describe('P5: faktura zaliczkowa', () => {
-  const html = renderToStaticMarkup(<AdvanceInvoiceForm initialSeller={seller} />);
+  const html = renderToStaticMarkup(<AdvanceInvoiceForm initialSeller={seller} tenantId={TENANT} />);
 
   it('sprzedawca w nagłówku, numer i daty obok', () => {
     expect(html).toContain('Firma Testowa sp. z o.o.');
@@ -205,7 +207,7 @@ describe('P5: faktura rozliczająca', () => {
   ];
 
   it('zaliczki z datą DD.MM.RRRR i kwotą w zł; podsumowanie po prawej', () => {
-    const html = renderToStaticMarkup(<FinalInvoiceForm initialSeller={seller} advanceInvoices={advances} />);
+    const html = renderToStaticMarkup(<FinalInvoiceForm initialSeller={seller} advanceInvoices={advances} tenantId={TENANT} />);
     expect(html).toContain('Firma Testowa sp. z o.o.');
     expect(html).toContain('ZAL/1/2026');
     expect(html).toContain('05.09.2026');
@@ -226,7 +228,7 @@ describe('P5: faktura rozliczająca', () => {
   });
 
   it('pusta lista zaliczek ma swój komunikat', () => {
-    const html = renderToStaticMarkup(<FinalInvoiceForm initialSeller={seller} advanceInvoices={[]} />);
+    const html = renderToStaticMarkup(<FinalInvoiceForm initialSeller={seller} advanceInvoices={[]} tenantId={TENANT} />);
     expect(html).toContain('Brak zaliczek do wyboru. Wystaw i zaakceptuj najpierw fakturę zaliczkową.');
   });
 });
@@ -308,17 +310,17 @@ function etykietyBezPola(html: string): string[] {
 describe('P5 po przeglądzie: etykiety pól powiązane z kontrolkami', () => {
   it('faktura zwykła', () => {
     expect(etykietyBezPola(renderToStaticMarkup(
-      <InvoiceForm seller={seller} suggestedNumber="FV/10/2026/007" />,
+      <InvoiceForm tenantId={TENANT} seller={seller} suggestedNumber="FV/10/2026/007" />,
     ))).toEqual([]);
   });
 
   it('faktura zaliczkowa', () => {
-    expect(etykietyBezPola(renderToStaticMarkup(<AdvanceInvoiceForm initialSeller={seller} />))).toEqual([]);
+    expect(etykietyBezPola(renderToStaticMarkup(<AdvanceInvoiceForm initialSeller={seller} tenantId={TENANT} />))).toEqual([]);
   });
 
   it('faktura rozliczająca', () => {
     expect(etykietyBezPola(renderToStaticMarkup(
-      <FinalInvoiceForm initialSeller={seller} advanceInvoices={[]} />,
+      <FinalInvoiceForm initialSeller={seller} advanceInvoices={[]} tenantId={TENANT} />,
     ))).toEqual([]);
   });
 });

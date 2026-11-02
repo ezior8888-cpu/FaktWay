@@ -257,7 +257,7 @@ interface FirstSend {
 
 /** Prawdziwe „Zapisz i wyślij” korekty (TEST) — pierwsze zdarzenie i treść INSERT. */
 async function sendCorrection(extra: Partial<CorrectionInvoiceSchemaIn>): Promise<FirstSend> {
-  const result = await saveAndSendCorrectionAction(correctionInput(extra));
+  const result = await saveAndSendCorrectionAction(correctionInput(extra), TENANT);
   expect(result).toMatchObject({ success: true, invoiceId: NEW_ID });
   expect(st.events).toHaveLength(1);
   return { first: st.events[0] as CapturedEvent, insert: st.inserted[0] as Row };
@@ -265,7 +265,7 @@ async function sendCorrection(extra: Partial<CorrectionInvoiceSchemaIn>): Promis
 
 /** Prawdziwe „Zapisz i wyślij” zaliczki — pierwsze zdarzenie i treść INSERT. */
 async function sendAdvance(): Promise<FirstSend> {
-  const result = await saveAndSendAdvanceAction(advanceInput);
+  const result = await saveAndSendAdvanceAction(advanceInput, TENANT);
   expect(result).toMatchObject({ success: true, invoiceId: NEW_ID });
   expect(st.events).toHaveLength(1);
   return { first: st.events[0] as CapturedEvent, insert: st.inserted[0] as Row };

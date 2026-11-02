@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import type { createClient } from '@/lib/supabase/server';
-import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
@@ -67,14 +67,16 @@ interface TenantSnapshot {
 
 /** Pobiera kontekst zalogowanego usera + jego tenanta.
  *  Rzuca wyjątek jeśli user niezalogowany lub bez tenanta - powinien
- *  wtedy być na `/onboarding`, wejście na formularz z `null` to bug. */
-async function getTenantContext(): Promise<{
+ *  wtedy być na `/onboarding`, wejście na formularz z `null` to bug.
+ *  `formTenant` — zapis dokumentu z formularza: firma formularza musi być
+ *  firmą aktywną teraz (UX-01). */
+async function getTenantContext(formTenant?: FormTenantCheck): Promise<{
   supabase: Awaited<ReturnType<typeof createClient>>;
   userId: string;
   tenant: TenantSnapshot;
 }> {
   // This action boundary enforces MFA and current membership independently of routing.
-  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg(formTenant);
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -637,8 +639,14 @@ async function recurringLinkForForm(
   return { ok: true, link: loaded.link };
 }
 
+/**
+ * `expectedTenantId` — firma, dla której strona wyrenderowała formularz
+ * (UX-01). Tylko do porównania z firmą z ciasteczka; firmą dokumentu jest
+ * firma z sesji. Dotyczy też `saveAndSendInvoiceAction`.
+ */
 export async function saveDraftAction(
-  values: InvoiceFormValues
+  values: InvoiceFormValues,
+  expectedTenantId: string,
 ): Promise<InvoiceActionResult> {
   // C2 (E9): z pozycji cyklicznej nie ma szkicu. Szkic zajmowałby okres
   // i przesuwał harmonogram, a nazajutrz nie dałby się wysłać (data
@@ -652,7 +660,7 @@ export async function saveDraftAction(
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Nieprawidłowe dane faktury' };
   }
   try {
-    const { supabase, tenant, userId } = await getTenantContext();
+    const { supabase, tenant, userId } = await getTenantContext({ expectedTenantId });
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
@@ -686,7 +694,8 @@ export async function saveDraftAction(
 }
 
 export async function saveAndSendInvoiceAction(
-  values: InvoiceFormValues
+  values: InvoiceFormValues,
+  expectedTenantId: string,
 ): Promise<InvoiceActionResult> {
   // Ten sam schemat co formularz (AGENTS.md: walidacja klient + serwer). Bez
   // tego wszystko, co pilnuje formularz — NIP z sumą kontrolną, pozycje, MPP
@@ -696,7 +705,7 @@ export async function saveAndSendInvoiceAction(
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Nieprawidłowe dane faktury' };
   }
   try {
-    const { supabase, tenant, userId } = await getTenantContext();
+    const { supabase, tenant, userId } = await getTenantContext({ expectedTenantId });
     // Faktura w KSeF jest wystawiona w dniu przesłania (F-092, A1) — ta sama
     // reguła dla wszystkich dokumentów. Inną datę można zapisać jako szkic.
     const notToday = issueDateNotTodayError(values.issueDate, 'form');
