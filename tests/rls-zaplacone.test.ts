@@ -756,6 +756,12 @@ describe.skipIf(!hasDatabase)('„Zapłacone” jednym dotknięciem (00158)', ()
       const snapshot = await snapshotZgody(pending);
       expect(snapshot.reminderDispatch).toBeUndefined();
       expect(snapshot.reminderDispatchVoided).toMatchObject({ reason: 'undo_invoice_paid' });
+      // To samo zapytanie co `hasReminderDispatch` (`lib/reminders/delivery-consent.ts`).
+      const zlecenia = await admin.from('flo_approvals').select('id').eq('tenant_id', ORG_A)
+        .eq('snapshot->reminderDispatch->>invoiceId', id).eq('snapshot->reminderDispatch->>stage', 'stage_2');
+      expect(zlecenia.data).toEqual([]);
+      // A nowa wysyłka tego etapu zmieści się w UNIQUE (invoice_id, stage).
+      await przypomnienie(id, 'stage_2');
       // Faktura wraca do kandydatów crona (`findInvoicesRequiringReminders`).
       expect((await stanFaktury(id)).payment_status).toBe('overdue');
     });

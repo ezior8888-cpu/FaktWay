@@ -22,8 +22,10 @@
 -- funkcje). Stara wersja aplikacji ich nie woła. DELETE w ciele
 -- undo_invoice_paid działa dopiero na żądanie klienta i tylko na wierszach
 -- z tej funkcji, przy wgraniu żadne dane się nie zmieniają (bez DROP,
--- TRUNCATE i DML poza ciałami funkcji). Na produkcji nie ma wpłat
--- z match_method = 'manual', więc indeks powstaje bez kolizji.
+-- TRUNCATE i DML poza ciałami funkcji). Kod nigdy nie zapisywał
+-- match_method = 'manual' (jedyny zapis z aplikacji to FLO: flo_confirmation),
+-- więc indeks powstaje bez kolizji. Przed wgraniem na produkcję sprawdź:
+--   SELECT count(*) FROM public.payments WHERE match_method = 'manual';  -- oczekiwane 0
 -- Rejestr numerów: docs/koordynacja/CLAUDE-DO-CODEXA.md.
 -- ═══════════════════════════════════════════════════════════════
 

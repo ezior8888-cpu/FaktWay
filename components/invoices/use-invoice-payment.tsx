@@ -149,7 +149,8 @@ export function MarkPaidButton({
       type="button"
       variant="outline"
       disabled={disabled}
-      aria-label={number ? `Oznacz fakturę ${number} jako zapłaconą` : 'Oznacz fakturę jako zapłaconą'}
+      // Zaczyna się od widocznego tekstu (WCAG 2.5.3): sterowanie głosem ma trafić w „Zapłacone”.
+      aria-label={number ? `Zapłacone: oznacz fakturę ${number}` : 'Zapłacone: oznacz fakturę'}
       onClick={onClick}
       className={cn(TOUCH_TARGET, className)}
     >

@@ -10,6 +10,8 @@ vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironmen
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: vi.fn() }));
 vi.mock('@/components/reminders/reminder-consent-dialog', () => ({ ReminderConsentDialog: () => null }));
 vi.mock('@/app/actions/reminders', () => ({ toggleInvoiceRemindersAction: vi.fn() }));
+vi.mock('@/app/actions/invoice-payments', () => ({ markInvoicePaidAction: vi.fn(), undoInvoicePaidAction: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 import OverduePage from '@/app/(dashboard)/payments/overdue/page';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -376,6 +378,26 @@ describe('overdue reminder status', () => {
     expect(await markup()).toContain('href="/settings/reminders"');
     mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role: 'member', isActive: true }] });
     expect(await markup()).not.toContain('href="/settings/reminders"');
+  });
+
+  // „Zapłacone” (00158): ta sama lista ról co w `mark_invoice_paid`. Księgowa widzi
+  // należność, ale nie oznacza, więc przycisk, który RPC i tak by odrzuciło, nie powstaje.
+  it.each([
+    ['owner', true],
+    ['admin', true],
+    ['member', true],
+    ['accountant', false],
+  ])('role %s: the "Zapłacone" button present = %s', async (role, expected) => {
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role, isActive: true }] });
+    const html = await markup();
+    expect(html.includes('aria-label="Zapłacone: oznacz fakturę VISIBLE-1"')).toBe(expected);
+    // Etykieta zaczyna się od widocznego tekstu (WCAG 2.5.3), a pole dotyku ma 44 px.
+    if (expected) expect(html).toMatch(/max-lg:min-h-\[44px\][^"]*max-lg:min-w-\[44px\]/);
+  });
+
+  it('marks nothing without a membership in the active organization', async () => {
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: FOREIGN, role: 'owner', isActive: false }] });
+    expect(await markup()).not.toContain('Zapłacone: oznacz fakturę');
   });
 
   it('leaves fresh preparation available only when the status read succeeds and finds no pending row', async () => {

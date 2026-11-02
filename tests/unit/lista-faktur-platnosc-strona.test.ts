@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * NOT EXISTS na wierszu rodzica; jego wiersz pokazuje „—”.
  */
 
-const state = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>>, envBroken: false }));
+const state = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>>, envBroken: false, role: 'owner' }));
 
 vi.mock('@/lib/ksef/claim-environment', () => ({
   requireConfiguredKsefEnvironment: () => {
@@ -24,7 +24,7 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
   },
 }));
 vi.mock('@/lib/supabase/page-context', () => ({
-  getPageContext: async () => ({ supabase: memoryClient(state.rows), tenantId: TENANT }),
+  getPageContext: async () => ({ supabase: memoryClient(state.rows), tenantId: TENANT, role: state.role }),
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
@@ -222,6 +222,38 @@ beforeEach(() => {
   seq = 0;
   state.rows = [];
   state.envBroken = false;
+  state.role = 'owner';
+});
+
+describe('„Zapłacone” (00158): strona listy przekazuje prawo roli', () => {
+  /** Props komponentu z listą (`initialInvoices`) z drzewa strony. */
+  function listProps(tree: ReactNode): Row | null {
+    let found: Row | null = null;
+    const walk = (node: ReactNode): void => {
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (node === null || typeof node !== 'object' || !('props' in node)) return;
+      const props = (node as ReactElement<Record<string, unknown>>).props;
+      if (Array.isArray(props.initialInvoices)) found = props;
+      walk(props.children as ReactNode);
+    };
+    walk(tree);
+    return found;
+  }
+
+  it.each([
+    ['owner', true],
+    ['admin', true],
+    ['member', true],
+    ['accountant', false],
+  ])('rola %s: canMarkPaid = %s', async (role, expected) => {
+    state.role = role;
+    state.rows = [invoice('vat')];
+    const props = listProps(await InvoicesPage({ searchParams: Promise.resolve({}) }));
+    expect(props?.canMarkPaid).toBe(expected);
+  });
 });
 
 describe('C1: filtr płatności na stronie /invoices obejmuje tylko należności (§2.4 pkt 11)', () => {

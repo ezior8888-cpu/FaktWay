@@ -22,6 +22,9 @@ const st = vi.hoisted(() => ({
   user: 'fixture-user',
   /** Wywołania `.not(...)` (baza w pamięci go nie ma) — D-A4-1b-3 PR B: strona czyta znacznik loaderem z samymi `.eq`. */
   notCalls: [] as Array<{ table: string; args: unknown[] }>,
+  /** Odpowiedź RPC `invoice_manual_payment` (00158). */
+  manualPayment: { data: null as unknown, error: null as { message: string } | null },
+  rpcCalls: [] as Array<{ fn: string; args: unknown }>,
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,6 +42,10 @@ vi.mock('@/lib/supabase/server', () => ({
       });
     },
     auth: { getUser: async () => ({ data: { user: { id: st.user } }, error: null }) },
+    rpc: async (fn: string, args: unknown) => {
+      st.rpcCalls.push({ fn, args });
+      return st.manualPayment;
+    },
   }),
 }));
 vi.mock('next/navigation', () => ({
@@ -203,6 +210,8 @@ async function loadInitial(id: string): Promise<InvoiceDetailInitial> {
 beforeEach(() => {
   seed();
   st.notCalls.length = 0;
+  st.rpcCalls.length = 0;
+  st.manualPayment = { data: null, error: null };
   vi.stubEnv('KSEF_ENV', 'test');
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
@@ -483,6 +492,111 @@ describe('D-A4-1b-3 PR B: widok decyzji klienta i baner szkicu wycofanego liczon
     for (const key of KSEF_RESEND_SOURCE_COLUMN_KEYS) {
       expect(columns.filter((c) => c === key), `kolumna ${key}`).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * „Zapłacone” (00158, FaktWay 1.0 §3 pkt 3): panel płatności liczy serwer, RPC
+ * i tak sprawdza wszystko jeszcze raz. Treść dokumentu nie wychodzi: z `fa3_data`
+ * idzie tylko data zapłaty.
+ */
+describe('„Zapłacone”: panel płatności liczony na serwerze', () => {
+  const ID = '33333333-3333-4333-8333-333333333361';
+  const KOR = '33333333-3333-4333-8333-333333333362';
+  const PANEL_TODAY = { today: TODAY };
+
+  function faktura(patch: Row = {}): Row {
+    return invoiceRow(ID, {
+      ksef_status: 'accepted',
+      ksef_number: '1234567890-20261002-0100A0B0C0D0-1A',
+      ksef_accepted_at: '2026-10-02T09:00:00Z',
+      last_error: null,
+      last_error_code: null,
+      ksef_environment: 'test',
+      currency: 'PLN',
+      origin: 'app',
+      paid_amount: 0,
+      paid_at: null,
+      payment_status: 'unpaid',
+      ...patch,
+    });
+  }
+  const put = (...rows: Row[]) => st.db!.tables.invoices!.push(...rows);
+  const panel = async () => (await loadInitial(ID)).payment_panel;
+
+  it('otwarta faktura: przycisk i dziś w Warszawie jako granica daty', async () => {
+    put(faktura());
+    expect(await panel()).toEqual({ canMark: true, canUndo: false, paidOn: null, paidOnFromDocument: false, ...PANEL_TODAY });
+    expect(st.rpcCalls).toEqual([]);
+  });
+
+  it('import z pliku i historia KSeF też mają przycisk', async () => {
+    put(faktura({ origin: 'file_import' }));
+    expect((await panel())?.canMark).toBe(true);
+  });
+
+  it('zapłacona ręcznie: „Cofnij zapłatę” i dzień z wpłaty', async () => {
+    put(faktura({ payment_status: 'paid', paid_amount: 123, paid_at: '2026-09-20T10:00:00Z' }));
+    st.manualPayment = { data: { amount: 123, paid_on: '2026-09-20' }, error: null };
+    expect(await panel()).toEqual({ canMark: false, canUndo: true, paidOn: '2026-09-20', paidOnFromDocument: false, ...PANEL_TODAY });
+    expect(st.rpcCalls).toEqual([{ fn: 'invoice_manual_payment', args: { p_invoice_id: ID } }]);
+  });
+
+  it('zapłacona z banku albo FLO: bez cofnięcia, dzień z `paid_at` w Warszawie', async () => {
+    put(faktura({ payment_status: 'paid', paid_amount: 123, paid_at: '2026-09-19T22:30:00Z' }));
+    expect(await panel()).toEqual({ canMark: false, canUndo: false, paidOn: '2026-09-20', paidOnFromDocument: false, ...PANEL_TODAY });
+  });
+
+  it('błąd odczytu wpłaty ręcznej: bez cofnięcia, podgląd działa', async () => {
+    put(faktura({ payment_status: 'paid', paid_amount: 123, paid_at: '2026-09-20T10:00:00Z' }));
+    st.manualPayment = { data: null, error: { message: 'boom' } };
+    expect(await panel()).toMatchObject({ canUndo: false, paidOn: '2026-09-20' });
+  });
+
+  it('data zapłaty z FA(3): zapłacona, mówi skąd data, a reszta `fa3_data` zostaje na serwerze', async () => {
+    put(faktura({ origin: 'ksef_import', fa3_data: { parsed: { paidDate: '2026-09-01', sekret: 'tresc' } } }));
+    const initial = await loadInitial(ID);
+    expect(initial.payment_panel).toEqual({ canMark: false, canUndo: false, paidOn: '2026-09-01', paidOnFromDocument: true, ...PANEL_TODAY });
+    expect(JSON.stringify(initial)).not.toContain('tresc');
+  });
+
+  it('księgowa: zapłaconą widzi, ale nie cofa; otwartej nie oznacza; RPC nie jest wołane', async () => {
+    st.db!.tables.memberships![0]!.role = 'accountant';
+    put(faktura({ payment_status: 'paid', paid_amount: 123, paid_at: '2026-09-20T10:00:00Z' }));
+    expect(await panel()).toEqual({ canMark: false, canUndo: false, paidOn: '2026-09-20', paidOnFromDocument: false, ...PANEL_TODAY });
+    expect(st.rpcCalls).toEqual([]);
+
+    st.db!.tables.invoices!.length = 0;
+    put(faktura());
+    expect(await panel()).toEqual({ canMark: false, canUndo: false, paidOn: null, paidOnFromDocument: false, ...PANEL_TODAY });
+  });
+
+  it('korekta do zera zdejmuje przycisk, korekta częściowa nie', async () => {
+    const korekta = (gross: number): Row => ({
+      id: KOR, tenant_id: TENANT, parent_invoice_id: ID, invoice_kind: 'correction', ksef_status: 'accepted', gross_total: gross,
+    });
+    put(faktura(), korekta(-123));
+    expect((await panel())?.canMark).toBe(false);
+
+    st.db!.tables.invoices!.length = 0;
+    put(faktura(), korekta(-23));
+    expect((await panel())?.canMark).toBe(true);
+  });
+
+  it.each([
+    ['szkic', { ksef_status: 'draft', ksef_number: null }],
+    ['błąd wysyłki', { ksef_status: 'failed' }],
+    ['zakup', { direction: 'incoming' }],
+    ['inne środowisko', { ksef_environment: 'demo' }],
+  ] as const)('%s: panelu nie ma', async (_label, patch) => {
+    put(faktura(patch));
+    expect(await panel()).toBeNull();
+  });
+
+  it('KSEF_ENV niepoprawne: panelu nie ma', async () => {
+    vi.stubEnv('KSEF_ENV', 'bogus');
+    put(faktura());
+    expect(await panel()).toBeNull();
   });
 });
 
