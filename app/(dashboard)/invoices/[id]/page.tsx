@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
 import { canCorrectInvoice } from '@/lib/invoices/list-row-facts';
@@ -92,8 +93,9 @@ export default async function InvoiceDetailPage({
 
   // Rola w firmie TEJ faktury (nie z ciasteczka aktywnej firmy): decyduje
   // o przyciskach po błędzie wysyłki (PR 3b, D4). Akcje sprawdzają rolę
-  // ponownie po swojej stronie — tu tylko to, co pokazać.
-  const { data: { user } } = await supabase.auth.getUser();
+  // ponownie po swojej stronie — tu tylko to, co pokazać. Użytkownik ten sam
+  // co w layoucie (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
+  const user = await getDashboardSessionUser();
   const { data: membership } = user
     ? await supabase
         .from('memberships')

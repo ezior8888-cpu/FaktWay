@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -38,13 +39,14 @@ const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:tex
 export default async function KsefSettingsPage() {
   const { supabase, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, { data: authUser }] = await Promise.all([
+  const [{ data: tenant }, user] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, has_ksef_credentials, ksef_certificate_expiry')
       .eq('id', tenantId)
       .single(),
-    supabase.auth.getUser(),
+    // Ten sam użytkownik co w `getPageContext` (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
+    getDashboardSessionUser(),
   ]);
 
   // Sama flaga obecności — zaszyfrowany blob nie wychodzi do klienta (AUD-103).
@@ -52,7 +54,6 @@ export default async function KsefSettingsPage() {
   const hasNip = !!tenant?.nip?.trim();
 
   // Tylko odczyt: czy konto ma tożsamość Google (logowanie „Zaloguj przez Google”).
-  const user = authUser?.user ?? null;
   const providers = Array.isArray(user?.app_metadata?.providers) ? (user.app_metadata.providers as unknown[]) : [];
   const hasGoogle =
     (user?.identities ?? []).some((identity) => identity.provider === 'google') || providers.includes('google');

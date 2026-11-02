@@ -37,6 +37,13 @@ function fakeSupabase() {
   };
 }
 
+// Pełny użytkownik (tożsamości, dostawcy logowania) — ten sam odczyt co w
+// `getPageContext`, z `cache()` na żądanie (sesja 9 planu skalowania).
+vi.mock('@/lib/dashboard-shell-data', async (original) => ({
+  ...(await original<typeof import('@/lib/dashboard-shell-data')>()),
+  getDashboardSessionUser: async () => ctx.user,
+}));
+
 vi.mock('@/lib/supabase/page-context', () => ({
   getPageContext: async () => ({
     supabase: fakeSupabase(),

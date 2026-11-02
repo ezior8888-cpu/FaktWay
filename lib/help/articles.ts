@@ -146,8 +146,23 @@ function parseArticle(file: string): HelpArticle | null {
   };
 }
 
+/**
+ * Lista liczona raz na proces: pliki są w obrazie (`outputFileTracingIncludes`)
+ * i zmieniają się tylko z wdrożeniem, a layout panelu bierze z niej tytuły przy
+ * każdym renderze (sesja 9 planu skalowania, CPU-14). W `next dev` bez pamięci,
+ * żeby edycja `.mdx` była widoczna od razu.
+ */
+let allArticlesMemo: HelpArticle[] | null = null;
+
 /** Wszystkie artykuły, posortowane (kategoria → order → tytuł). */
 export function getAllHelpArticles(): HelpArticle[] {
+  if (process.env.NODE_ENV === 'development') return readAllHelpArticles();
+  allArticlesMemo ??= readAllHelpArticles();
+  // Kopia tablicy: wołający może ją sortować albo filtrować w miejscu bez psucia pamięci.
+  return [...allArticlesMemo];
+}
+
+function readAllHelpArticles(): HelpArticle[] {
   const dir = helpDirPath();
   if (!fs.existsSync(dir)) return [];
   const categoryRank = new Map(

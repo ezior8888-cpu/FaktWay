@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
-import { assertDashboardShellAccess } from '@/lib/dashboard-shell-data';
+import { assertDashboardShellAccess, getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import DashboardProfileMenu from '@/app/(dashboard)/_components/dashboard-profile-menu';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
@@ -22,7 +22,6 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { getAllHelpArticles } from '@/lib/help/articles';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
-import { createClient } from '@/lib/supabase/server';
 
 /**
  * Dashboard layout dla wszystkich chronionych podstron `(dashboard)/...`.
@@ -49,14 +48,13 @@ export default async function DashboardLayout({
 }) {
   await assertDashboardShellAccess();
 
-  // Identity dla PostHog (Faza 31 Krok 5). `assertDashboardShellAccess`
-  // już potwierdziło sesję i aktywną org — tu tylko czytamy id-ki dla
-  // `<AnalyticsIdentify>`. Oba odczyty są lekkie (sesja w cache, cookie).
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const activeOrg = await getActiveOrgIdFromCookies();
+  // Identity dla PostHog (Faza 31 Krok 5) i imię do menu. `assertDashboardShellAccess`
+  // już potwierdziło sesję i aktywną org — tu ten sam użytkownik z `cache()`
+  // na żądanie (bez drugiego wywołania GoTrue) i aktywna org z cookie.
+  const [user, activeOrg] = await Promise.all([
+    getDashboardSessionUser(),
+    getActiveOrgIdFromCookies(),
+  ]);
 
   // Stan paska bocznego (rozwinięty / zwinięty do ikon) z ciasteczka, które
   // zapisuje `SidebarProvider` — bez tego pasek „skakałby" po hydracji.
