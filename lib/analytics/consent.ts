@@ -8,7 +8,7 @@ export type ConsentState = 'granted' | 'denied' | 'unset';
 
 export interface ConsentRecord {
   consent: ConsentState;
-  /** Chwila wyboru; `null` przy wyborze sprzed zapisu daty (przed 11.2026). */
+  /** Chwila wyboru; `null` tylko przy odmowie sprzed zapisu daty (przed 11.2026). */
   chosenAt: string | null;
   /** Wybór dotarł na konto. Taki wybór nie przechodzi już na inne konto w tej przeglądarce. */
   synced: boolean;
@@ -46,7 +46,12 @@ export function readAnalyticsConsentRecord(): ConsentRecord {
   try {
     const value = window.localStorage.getItem(CONSENT_KEY);
     if (value !== 'granted' && value !== 'denied') return UNSET;
-    return { consent: value, ...parseMeta(window.localStorage.getItem(CONSENT_META_KEY)) };
+    const meta = parseMeta(window.localStorage.getItem(CONSENT_META_KEY));
+    // Zgoda bez daty pochodzi sprzed 11.2026: stary baner mówił o samych statystykach,
+    // a polityka, że nic nie zapisujemy. Na ciasteczko źródła i zapis na koncie tej zgody
+    // nie było, więc baner pyta od nowa. Odmowa zostaje, bo nie potrzebuje nowego brzmienia.
+    if (value === 'granted' && !meta.chosenAt) return UNSET;
+    return { consent: value, ...meta };
   } catch {
     return UNSET;
   }
@@ -63,11 +68,12 @@ function writeRecord(record: ConsentRecord, notify: boolean): void {
       window.localStorage.removeItem(CONSENT_KEY);
       window.localStorage.removeItem(CONSENT_META_KEY);
     } else {
-      window.localStorage.setItem(CONSENT_KEY, record.consent);
+      // Data przed decyzją: inna karta po zdarzeniu `storage` nie może zobaczyć zgody bez daty.
       window.localStorage.setItem(
         CONSENT_META_KEY,
         JSON.stringify({ chosenAt: record.chosenAt, synced: record.synced }),
       );
+      window.localStorage.setItem(CONSENT_KEY, record.consent);
     }
     transient = undefined;
   } catch {
@@ -89,8 +95,17 @@ export function setAnalyticsConsent(granted: boolean): void {
 /** Decyzja z konta (ostatni wybór wygrał na serwerze). */
 export function adoptAnalyticsConsent(consent: 'granted' | 'denied', chosenAt: string): void {
   if (typeof window === 'undefined') return;
-  const changed = getAnalyticsConsent() !== consent;
-  writeRecord({ consent, chosenAt, synced: true }, changed);
+  const before = readAnalyticsConsentRecord();
+  // Zdarzenie także przy samym dostarczeniu: ciasteczko źródła przestaje wtedy cokolwiek dowodzić.
+  writeRecord({ consent, chosenAt, synced: true }, before.consent !== consent || !before.synced);
+}
+
+/** Wybór z tej przeglądarki trafił na konto przy rejestracji (znacznik w ciasteczku źródła). */
+export function markAnalyticsConsentDelivered(): void {
+  if (typeof window === 'undefined') return;
+  const record = readAnalyticsConsentRecord();
+  if (record.consent === 'unset' || record.synced) return;
+  writeRecord({ ...record, synced: true }, true);
 }
 
 /** Wybór należał do innego konta: ta przeglądarka wraca do „bez decyzji” i baner pyta od nowa. */

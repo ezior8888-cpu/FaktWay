@@ -4,8 +4,9 @@ import {
   ANALYTICS_CONSENT_EVENT,
   CONSENT_KEY,
   getAnalyticsConsent,
-  hasAnalyticsConsent,
   isAnalyticsConfigured,
+  markAnalyticsConsentDelivered,
+  readAnalyticsConsentRecord,
 } from './consent';
 import {
   isPublicEntryPath,
@@ -22,11 +23,20 @@ import {
  * po zgodzie. Przed zgodą adres z chwili wejścia siedzi wyłącznie w pamięci karty,
  * bo art. 399 PKE dotyczy zapisu w urządzeniu, a klik „Akceptuję” często pada
  * dopiero po przejściu na inną podstronę. Ciasteczko czyta serwer przy rejestracji
- * (hasłem i przez Google) i dla anonimowego gościa jest też dowodem zgody: powstaje
- * tylko po niej, a odwołanie kasuje je od razu. Lista pól: lib/analytics/privacy.ts.
+ * (hasłem i przez Google) i dla anonimowego gościa jest też dowodem zgody, więc
+ * dowodzi tylko wyboru, który nie dotarł jeszcze na konto: powstaje z kliknięcia,
+ * rejestracja je zużywa, a dostarczenie wyboru na konto albo odwołanie kasuje.
+ * Inaczej kolejna osoba przy wspólnym komputerze dostałaby cudze „tak”.
+ * Lista pól: lib/analytics/privacy.ts.
  */
 export const ATTRIBUTION_COOKIE = 'ff_first_touch';
 export const ATTRIBUTION_COOKIE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
+/**
+ * Wartość ciasteczka po rejestracji: sam znacznik, że wybór trafił na konto, bez
+ * danych. Serwer nie zmieni localStorage, więc tak mówi przeglądarce, że ma uznać
+ * wybór za dostarczony. Nie jest JSON-em, więc `decodeFirstTouch` nie widzi w nim dowodu.
+ */
+export const ATTRIBUTION_COOKIE_DELIVERED = 'delivered';
 
 // Dawna domena też jest „nasza”: stare linki przekierowują na nową (lib/legacy-host-redirect.ts).
 const OWN_DOMAINS = ['faktway.pl', 'faktflow.pl'];
@@ -180,12 +190,14 @@ function captureFromLocation(): FirstTouch | null {
   }
 }
 
-function hasStoredTouch(): boolean {
-  return document.cookie.split(';').some((part) => part.trim().startsWith(`${ATTRIBUTION_COOKIE}=`));
+function storedTouch(): string | null {
+  const prefix = `${ATTRIBUTION_COOKIE}=`;
+  const part = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(prefix));
+  return part === undefined ? null : part.slice(prefix.length);
 }
 
 function persistTouch(): void {
-  if (hasStoredTouch() || !isAnalyticsConfigured() || !isPublicEntryPath(window.location.pathname)) return;
+  if (storedTouch() !== null || !isAnalyticsConfigured() || !isPublicEntryPath(window.location.pathname)) return;
   pendingTouch ??= captureFromLocation();
   if (!pendingTouch) return;
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
@@ -193,12 +205,18 @@ function persistTouch(): void {
 }
 
 function eraseTouch(): void {
-  if (!hasStoredTouch()) return;
+  if (storedTouch() === null) return;
   document.cookie = `${ATTRIBUTION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
 }
 
+function isUndeliveredGrant(): boolean {
+  const record = readAnalyticsConsentRecord();
+  return record.consent === 'granted' && !record.synced;
+}
+
+/** Zmiana decyzji: kliknięcie w tej albo innej karcie, odpowiedź z konta. */
 function syncTouchWithConsent(): void {
-  if (hasAnalyticsConsent()) {
+  if (isUndeliveredGrant()) {
     persistTouch();
     return;
   }
@@ -211,11 +229,26 @@ function onStorage(event: StorageEvent): void {
   if (event.key === CONSENT_KEY || event.key === null) syncTouchWithConsent();
 }
 
-/** Start w `instrumentation-client.ts`, obok PostHoga. */
+/**
+ * Znacznik po rejestracji: wybór trafił na konto, więc nie przejdzie już na kolejne.
+ * Woła to też synchronizacja, bo po rejestracji Next przechodzi na następną stronę bez
+ * przeładowania, a konto kolejnej osoby nie może przejąć wyboru, który już dostarczono.
+ */
+export function settleDeliveredTouch(): void {
+  if (typeof document === 'undefined' || storedTouch() !== ATTRIBUTION_COOKIE_DELIVERED) return;
+  markAnalyticsConsentDelivered();
+  eraseTouch();
+}
+
+/**
+ * Start w `instrumentation-client.ts`, obok PostHoga. Przy starcie ciasteczka nie
+ * tworzymy: powstaje z kliknięcia, więc jego 90 dni jest prawdziwym limitem tego dowodu.
+ */
 export function initAttribution(): void {
   if (typeof window === 'undefined') return;
   if (getAnalyticsConsent() !== 'denied') pendingTouch = captureFromLocation();
   window.addEventListener(ANALYTICS_CONSENT_EVENT, syncTouchWithConsent);
   window.addEventListener('storage', onStorage);
-  syncTouchWithConsent();
+  settleDeliveredTouch();
+  if (!isUndeliveredGrant()) eraseTouch();
 }

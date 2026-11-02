@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ATTRIBUTION_COOKIE,
+  ATTRIBUTION_COOKIE_DELIVERED,
   ATTRIBUTION_COOKIE_MAX_AGE_SECONDS,
   decodeFirstTouch,
   encodeFirstTouch,
@@ -220,6 +221,15 @@ function browser(url: string, referrer = '') {
   return { win, doc, jar, writes, storage };
 }
 
+function storeChoice(
+  b: ReturnType<typeof browser>,
+  consent: 'granted' | 'denied',
+  meta: { synced: boolean },
+) {
+  b.storage.set('ff_analytics_consent_meta', JSON.stringify({ chosenAt: '2026-11-01T09:00:00.000Z', ...meta }));
+  b.storage.set('ff_analytics_consent', consent);
+}
+
 async function load() {
   vi.resetModules();
   const attribution = await import('@/lib/analytics/attribution');
@@ -277,20 +287,37 @@ describe('ciasteczko pierwszego dotyku w przeglądarce', () => {
     expect(decodeFirstTouch(b.jar.get(ATTRIBUTION_COOKIE))).toMatchObject({ channel: 'tiktok', landing_path: '/pricing' });
   });
 
-  it('wcześniejsza zgoda: zapis od razu przy starcie strony, ale pierwszy dotyk się nie nadpisuje', async () => {
+  it('zgoda sprzed zmiany (bez daty) przy starcie strony niczego nie zapisuje: tej osoby nikt o to nie pytał', async () => {
+    const b = browser('https://faktway.pl/?utm_source=youtube');
+    b.storage.set('ff_analytics_consent', 'granted');
+    const { hasAnalyticsConsent, initAttribution } = await load();
+    initAttribution();
+    expect(hasAnalyticsConsent()).toBe(false);
+    expect(b.writes).toEqual([]);
+  });
+
+  it('ciasteczko powstaje z kliknięcia, nie ze starej zgody przy kolejnej wizycie', async () => {
+    const b = browser('https://faktway.pl/?utm_source=youtube');
+    storeChoice(b, 'granted', { synced: false });
+    const { initAttribution } = await load();
+    initAttribution();
+    expect(b.writes).toEqual([]);
+  });
+
+  it('pierwszy dotyk się nie nadpisuje: kolejna zgoda z innego źródła zostawia poprzedni zapis', async () => {
     const first = browser('https://faktway.pl/?utm_source=youtube');
-    first.storage.set('ff_analytics_consent', 'granted');
     const a = await load();
     a.initAttribution();
+    a.setAnalyticsConsent(true);
     expect(decodeFirstTouch(first.jar.get(ATTRIBUTION_COOKIE))?.channel).toBe('youtube');
 
-    // Kolejna wizyta z innego źródła, to samo ciasteczko w przeglądarce.
     const stored = first.jar.get(ATTRIBUTION_COOKIE)!;
     const second = browser('https://faktway.pl/?utm_source=tiktok');
-    second.storage.set('ff_analytics_consent', 'granted');
+    storeChoice(second, 'granted', { synced: false });
     second.jar.set(ATTRIBUTION_COOKIE, stored);
     const b = await load();
     b.initAttribution();
+    b.setAnalyticsConsent(true);
     expect(second.writes).toEqual([]);
     expect(decodeFirstTouch(second.jar.get(ATTRIBUTION_COOKIE))?.channel).toBe('youtube');
   });
@@ -308,9 +335,9 @@ describe('ciasteczko pierwszego dotyku w przeglądarce', () => {
 
   it('odwołanie w innej karcie też usuwa ciasteczko', async () => {
     const b = browser('https://faktway.pl/?utm_source=youtube');
-    b.storage.set('ff_analytics_consent', 'granted');
-    const { initAttribution } = await load();
+    const { initAttribution, setAnalyticsConsent } = await load();
     initAttribution();
+    setAnalyticsConsent(true);
     expect(b.jar.has(ATTRIBUTION_COOKIE)).toBe(true);
     b.storage.set('ff_analytics_consent', 'denied');
     b.win.dispatchEvent(Object.assign(new Event('storage'), { key: 'ff_analytics_consent' }));
@@ -320,9 +347,9 @@ describe('ciasteczko pierwszego dotyku w przeglądarce', () => {
   it('strona panelu albo token w adresie: bez ciasteczka mimo zgody', async () => {
     for (const url of ['https://faktway.pl/dashboard', 'https://faktway.pl/accountant/portal-secret']) {
       const b = browser(url);
-      b.storage.set('ff_analytics_consent', 'granted');
-      const { initAttribution } = await load();
+      const { initAttribution, setAnalyticsConsent } = await load();
       initAttribution();
+      setAnalyticsConsent(true);
       expect(b.writes, url).toEqual([]);
     }
   });
@@ -330,18 +357,67 @@ describe('ciasteczko pierwszego dotyku w przeglądarce', () => {
   it('bez skonfigurowanego PostHoga nie ma zgody do zebrania, więc nie ma ciasteczka', async () => {
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_KEY', '');
     const b = browser('https://faktway.pl/');
-    b.storage.set('ff_analytics_consent', 'granted');
-    const { initAttribution } = await load();
+    const { initAttribution, setAnalyticsConsent } = await load();
     initAttribution();
+    setAnalyticsConsent(true);
     expect(b.writes).toEqual([]);
   });
 
   it('http na lokalnym dev: bez atrybutu Secure, bo przeglądarka odrzuciłaby ciasteczko', async () => {
     const b = browser('http://localhost:3103/');
-    b.storage.set('ff_analytics_consent', 'granted');
-    const { initAttribution } = await load();
+    const { initAttribution, setAnalyticsConsent } = await load();
     initAttribution();
+    setAnalyticsConsent(true);
     expect(b.writes[0]).not.toContain('Secure');
+  });
+
+  describe('ciasteczko dowodzi tylko wyboru, który nie dotarł jeszcze na konto', () => {
+    const stored = encodeFirstTouch({ channel: 'youtube', at: '2026-10-30' });
+
+    it('wybór już dostarczony (wspólny komputer): start strony kasuje ciasteczko i go nie odtwarza', async () => {
+      const b = browser('https://faktway.pl/register');
+      storeChoice(b, 'granted', { synced: true });
+      b.jar.set(ATTRIBUTION_COOKIE, stored);
+      const { initAttribution } = await load();
+      initAttribution();
+      expect(b.jar.has(ATTRIBUTION_COOKIE)).toBe(false);
+      expect(b.writes.every((raw) => /Max-Age=0/.test(raw))).toBe(true);
+    });
+
+    it('dostarczenie na konto bez zmiany decyzji też kasuje ciasteczko od razu', async () => {
+      const b = browser('https://faktway.pl/?utm_source=youtube');
+      const { adoptAnalyticsConsent, initAttribution, setAnalyticsConsent } = await load();
+      initAttribution();
+      setAnalyticsConsent(true);
+      expect(b.jar.has(ATTRIBUTION_COOKIE)).toBe(true);
+
+      adoptAnalyticsConsent('granted', '2026-11-02T10:30:00.000Z');
+
+      expect(b.jar.has(ATTRIBUTION_COOKIE)).toBe(false);
+    });
+
+    it('wybór jeszcze niedostarczony: ciasteczko zostaje do rejestracji', async () => {
+      const b = browser('https://faktway.pl/register');
+      storeChoice(b, 'granted', { synced: false });
+      b.jar.set(ATTRIBUTION_COOKIE, stored);
+      const { initAttribution } = await load();
+      initAttribution();
+      expect(b.jar.get(ATTRIBUTION_COOKIE)).toBe(stored);
+    });
+
+    it('po rejestracji serwer zostawia sam znacznik: przeglądarka uznaje wybór za dostarczony i sprząta', async () => {
+      const b = browser('https://faktway.pl/login?success=check_email');
+      storeChoice(b, 'granted', { synced: false });
+      b.jar.set(ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_DELIVERED);
+      const { initAttribution, readAnalyticsConsentRecord } = await load();
+      initAttribution();
+      expect(readAnalyticsConsentRecord().synced).toBe(true);
+      expect(b.jar.has(ATTRIBUTION_COOKIE)).toBe(false);
+    });
+
+    it('sam znacznik nie jest dowodem zgody ani źródłem wejścia', () => {
+      expect(decodeFirstTouch(ATTRIBUTION_COOKIE_DELIVERED)).toBeNull();
+    });
   });
 
   it('niedostępne localStorage: zgoda z pamięci strony działa, odwołanie usuwa ciasteczko', async () => {

@@ -7,7 +7,12 @@ import { logAudit } from '@/lib/audit/log';
 import { ANALYTICS_STATEMENT } from '@/lib/legal/versions';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import { ATTRIBUTION_COOKIE, decodeFirstTouch } from './attribution';
+import {
+  ATTRIBUTION_COOKIE,
+  ATTRIBUTION_COOKIE_DELIVERED,
+  ATTRIBUTION_COOKIE_MAX_AGE_SECONDS,
+  decodeFirstTouch,
+} from './attribution';
 import { ANALYTICS_EVENTS } from './events';
 import type { ChurnReason } from './privacy';
 import { trackServer } from './server';
@@ -37,6 +42,8 @@ interface SignupUser {
 /**
  * Rejestracja: serwer nie widzi localStorage, ale ciasteczko pierwszego dotyku
  * powstaje tylko po zgodzie i znika przy odwołaniu, więc jest jej dowodem dla gościa.
+ * Dowód jest jednorazowy: po użyciu zostaje sam znacznik bez danych, inaczej kolejne
+ * konto w tej przeglądarce dostałoby cudze „tak” i cudze źródło (biuro księgowe).
  * Warunek `analytics_consent IS NULL`: decyzja już zapisana na koncie wygrywa.
  */
 export async function recordSignupCompleted(input: {
@@ -44,7 +51,8 @@ export async function recordSignupCompleted(input: {
   method: 'password' | 'google';
 }): Promise<void> {
   try {
-    const touch = decodeFirstTouch((await cookies()).get(ATTRIBUTION_COOKIE)?.value);
+    const cookieStore = await cookies();
+    const touch = decodeFirstTouch(cookieStore.get(ATTRIBUTION_COOKIE)?.value);
     if (touch) {
       const admin = await createAdminClient();
       const consentAt = new Date().toISOString();
@@ -55,6 +63,13 @@ export async function recordSignupCompleted(input: {
         .is('analytics_consent', null)
         .select('id');
       if (error) throw new Error(`signup source write: ${error.code ?? 'unknown'}`);
+      // Bez `httpOnly`: przeglądarka czyta znacznik i sprząta go przy następnej stronie.
+      cookieStore.set(ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_DELIVERED, {
+        path: '/',
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: ATTRIBUTION_COOKIE_MAX_AGE_SECONDS,
+      });
       if (data?.length) {
         await logAudit({
           action: 'analytics.consent_changed',

@@ -1,5 +1,6 @@
 import { syncAnalyticsConsentAction } from '@/app/actions/analytics-consent';
 
+import { settleDeliveredTouch } from './attribution';
 import {
   adoptAnalyticsConsent,
   forgetAnalyticsConsent,
@@ -20,6 +21,7 @@ let generation = 0;
 
 export async function syncAnalyticsConsentWithServer(): Promise<void> {
   const mine = ++generation;
+  settleDeliveredTouch();
   const local = readAnalyticsConsentRecord();
   const choice = local.consent !== 'unset' && !local.synced ? local.consent : null;
 

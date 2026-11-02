@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { encodeFirstTouch, ATTRIBUTION_COOKIE, parseFirstTouch } from '@/lib/analytics/attribution';
+import {
+  ATTRIBUTION_COOKIE,
+  ATTRIBUTION_COOKIE_DELIVERED,
+  decodeFirstTouch,
+  encodeFirstTouch,
+  parseFirstTouch,
+} from '@/lib/analytics/attribution';
 
 import { memoryDb, type MemoryDb, type Row } from '../helpers/fake-supabase-memory';
 import { fakePosthog, lejekClient } from '../helpers/lejek-atrapy';
@@ -26,7 +32,7 @@ vi.mock('next/headers', () => ({
   headers: async () => new Headers({ origin: 'https://app.example.test' }),
   cookies: async () => ({
     get: (name: string) => (h.jar.has(name) ? { name, value: h.jar.get(name) } : undefined),
-    set: vi.fn(),
+    set: (name: string, value: string) => { h.jar.set(name, value); },
   }),
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -140,12 +146,37 @@ describe('rejestracja hasłem', () => {
     expect(posthog.sklejone('signup_completed')).toHaveLength(1);
   });
 
+  it('ciasteczko jest jednorazowe: druga rejestracja w tej przeglądarce nie dostaje cudzego „tak” ani cudzego źródła', async () => {
+    const SECOND = '00000000-0000-4000-8000-000000000042';
+    h.jar.set(ATTRIBUTION_COOKIE, encodeFirstTouch(TOUCH));
+    await signup();
+    expect(row()).toMatchObject({ analytics_consent: 'granted', signup_source: TOUCH });
+    expect(h.jar.get(ATTRIBUTION_COOKIE)).toBe(ATTRIBUTION_COOKIE_DELIVERED);
+
+    db.tables.users!.push({ id: SECOND, analytics_consent: null, analytics_consent_at: null, signup_source: null });
+    h.signUp.mockResolvedValue({ data: { user: goTrueUser({ id: SECOND }), session: null }, error: null });
+    await signup();
+
+    expect(db.tables.users![1]).toMatchObject({ analytics_consent: null, signup_source: null });
+    expect(posthog.messages.filter((m) => m.distinctId === SECOND)).toEqual([]);
+  });
+
+  it('zapis na koncie się nie udał: ciasteczko zostaje, a wybór dotrze przy wejściu do panelu', async () => {
+    const value = encodeFirstTouch(TOUCH);
+    h.jar.set(ATTRIBUTION_COOKIE, value);
+    db.failures['users:update'] = { code: '08006', message: 'połączenie zerwane' };
+    await signup();
+    expect(h.jar.get(ATTRIBUTION_COOKIE)).toBe(value);
+  });
+
   it('zajęty adres: GoTrue zwraca konto bez tożsamości, więc ani zdarzenia, ani zapisu na cudzym id', async () => {
     h.jar.set(ATTRIBUTION_COOKIE, encodeFirstTouch(TOUCH));
     h.signUp.mockResolvedValue({ data: { user: goTrueUser({ identities: [] }), session: null }, error: null });
     await signup();
     expect(row()).toMatchObject({ analytics_consent: null, signup_source: null });
     expect(posthog.messages).toEqual([]);
+    // To nie rejestracja, więc dowód zostaje dla prawdziwej.
+    expect(decodeFirstTouch(h.jar.get(ATTRIBUTION_COOKIE))).toEqual(TOUCH);
   });
 
   it('decyzja już zapisana na koncie wygrywa z ciasteczkiem', async () => {
@@ -207,6 +238,13 @@ describe('rejestracja przez Google (/auth/callback)', () => {
     await callback();
     await callback();
     expect(posthog.sklejone('signup_completed')).toHaveLength(1);
+  });
+
+  it('nowe konto: ciasteczko zużyte, kolejne konto Google w tej przeglądarce nie dostaje zgody', async () => {
+    h.jar.set(ATTRIBUTION_COOKIE, encodeFirstTouch(TOUCH));
+    h.exchange.mockResolvedValue({ data: { user: googleUser() }, error: null });
+    await callback();
+    expect(h.jar.get(ATTRIBUTION_COOKIE)).toBe(ATTRIBUTION_COOKIE_DELIVERED);
   });
 
   it('nowe konto bez zgody: bez źródła i bez zdarzenia', async () => {

@@ -29,6 +29,9 @@ bierz `/admin`, a PostHoga do pytania „gdzie i dlaczego odpadają”.
 - Wyjątek od „ostatni wygrywa”: wybór raz dostarczony na konto nie jest już nowy.
   Przy wspólnym komputerze druga osoba nie dostaje cudzego „tak”; jeśli sama nie ma
   decyzji, baner pyta ją od nowa.
+- Zgoda w localStorage bez daty pochodzi sprzed 11.2026, gdy baner mówił o samych statystykach.
+  Liczy się jak brak decyzji: baner pyta od nowa, nic nie trafia na konto ani do ciasteczka.
+  Odmowa bez daty zostaje.
 - Każde zdarzenie z serwera przechodzi przez `trackServer`, a ten przy każdym zdarzeniu
   czyta bazę. Brak `granted`, błąd odczytu albo brak właściciela = brak zdarzenia.
 - Zdarzenia firmy (webhook Stripe, wysyłka do KSeF) nie mają przeglądarki, więc liczy
@@ -88,10 +91,21 @@ Worker pg-boss powtarza cały handler, a Stripe ponawia webhook po każdym 500.
 
 ## Źródło wejścia
 
-Przed zgodą adres z chwili wejścia leży wyłącznie w pamięci karty. Po zgodzie powstaje
-ciasteczko `ff_first_touch` (własne, 90 dni, `SameSite=Lax`, tylko na stronach publicznych),
-a odwołanie je kasuje. Pierwszy dotyk się nie nadpisuje. Dla anonimowego gościa to
-ciasteczko jest też dowodem zgody przy rejestracji, bo localStorage serwer nie widzi.
+Przed zgodą adres z chwili wejścia leży wyłącznie w pamięci karty. Kliknięcie „Akceptuję”
+na stronie publicznej tworzy ciasteczko `ff_first_touch` (własne, najdłużej 90 dni,
+`SameSite=Lax`). Pierwszy dotyk się nie nadpisuje.
+
+Dla anonimowego gościa to ciasteczko jest też dowodem zgody przy rejestracji, bo localStorage
+serwer nie widzi. Dlatego dowodzi wyłącznie wyboru, który nie dotarł jeszcze na konto:
+
+- rejestracja je zużywa: zostaje sam znacznik `delivered` bez danych, a przeglądarka przy
+  następnej stronie albo synchronizacji uznaje wybór za dostarczony i sprząta;
+- dostarczenie wyboru na konto i odwołanie kasują je od razu;
+- przy starcie strony nie powstaje, więc 90 dni to prawdziwy limit tego dowodu.
+
+Dzięki temu kolejna osoba przy wspólnym komputerze nie dostaje cudzego „tak” ani cudzego źródła.
+Została jedna luka, której przeglądarka nie zamknie: gość A kliknął „Akceptuję” i nie założył
+konta, a konto zakłada B, zanim ciasteczko wygaśnie. Serwer nie odróżni A od B.
 
 Zapisywane pola (`FirstTouch` w `privacy.ts`): `channel`, `utm_source`, `utm_medium`,
 `utm_campaign`, `utm_term`, `utm_content`, `referrer_host` (sam host), `landing_path`

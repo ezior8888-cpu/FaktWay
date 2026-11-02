@@ -119,14 +119,32 @@ describe('ostatni wybór wygrywa', () => {
     expect(getAnalyticsConsent()).toBe('granted');
   });
 
-  it('wybór sprzed zmiany (bez daty): idzie bez daty, serwer przyjmie go tylko, gdy sam nie ma decyzji', async () => {
+  it('zgoda sprzed zmiany (bez daty) to brak decyzji: nowego oświadczenia ta osoba nie widziała, więc baner pyta od nowa', async () => {
     const { storage } = browser();
     storage.set('ff_analytics_consent', 'granted');
-    mocks.action.mockResolvedValue(ok('granted', T1));
-    const { readAnalyticsConsentRecord, syncAnalyticsConsentWithServer } = await load();
+    mocks.action.mockResolvedValue(ok(null));
+    const { getAnalyticsConsent, hasAnalyticsConsent, syncAnalyticsConsentWithServer } = await load();
+
+    expect(getAnalyticsConsent()).toBe('unset');
+    expect(hasAnalyticsConsent()).toBe(false);
     await syncAnalyticsConsentWithServer();
-    expect(mocks.action).toHaveBeenCalledWith({ consent: 'granted', chosenAt: null });
-    expect(readAnalyticsConsentRecord()).toEqual({ consent: 'granted', chosenAt: T1, synced: true });
+
+    // Sam odczyt: żadnego „granted” na koncie z wpisem w dzienniku na brzmienie, którego nie było.
+    expect(mocks.action).toHaveBeenCalledWith({ consent: null, chosenAt: null });
+    expect(getAnalyticsConsent()).toBe('unset');
+  });
+
+  it('odmowa sprzed zmiany zostaje: idzie bez daty, serwer przyjmie ją tylko, gdy sam nie ma decyzji', async () => {
+    const { storage } = browser();
+    storage.set('ff_analytics_consent', 'denied');
+    mocks.action.mockResolvedValue(ok('denied', T1));
+    const { getAnalyticsConsent, readAnalyticsConsentRecord, syncAnalyticsConsentWithServer } = await load();
+
+    expect(getAnalyticsConsent()).toBe('denied');
+    await syncAnalyticsConsentWithServer();
+
+    expect(mocks.action).toHaveBeenCalledWith({ consent: 'denied', chosenAt: null });
+    expect(readAnalyticsConsentRecord()).toEqual({ consent: 'denied', chosenAt: T1, synced: true });
   });
 
   it('spóźniona odpowiedź nie nadpisuje świeższego kliknięcia', async () => {
@@ -191,10 +209,18 @@ describe('wspólna przeglądarka', () => {
 describe('zapis lokalny', () => {
   it('uszkodzona data wyboru to brak daty, a nie wieczna odmowa walidacji w akcji', async () => {
     const { storage } = browser();
+    storage.set('ff_analytics_consent', 'denied');
+    storage.set('ff_analytics_consent_meta', JSON.stringify({ chosenAt: 'wczoraj', synced: false }));
+    const { readAnalyticsConsentRecord } = await load();
+    expect(readAnalyticsConsentRecord()).toEqual({ consent: 'denied', chosenAt: null, synced: false });
+  });
+
+  it('zgoda z uszkodzoną datą nie dowodzi niczego: wraca pytanie', async () => {
+    const { storage } = browser();
     storage.set('ff_analytics_consent', 'granted');
     storage.set('ff_analytics_consent_meta', JSON.stringify({ chosenAt: 'wczoraj', synced: false }));
     const { readAnalyticsConsentRecord } = await load();
-    expect(readAnalyticsConsentRecord()).toEqual({ consent: 'granted', chosenAt: null, synced: false });
+    expect(readAnalyticsConsentRecord()).toEqual({ consent: 'unset', chosenAt: null, synced: false });
   });
 
   it('uszkodzony zapis meta nie psuje odczytu zgody', async () => {

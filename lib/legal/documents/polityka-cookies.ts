@@ -62,7 +62,7 @@ export const POLITYKA_COOKIES: LegalDocument = {
       table(
         ['Nazwa', 'Rodzaj', 'Do czego służy', 'Jak długo'],
         [
-          [ATTRIBUTION_COOKIE, 'cookie (własne)', 'zapamiętanie, skąd do nas trafiłeś, żeby przypisać to do konta przy rejestracji', '90 dni albo do wycofania zgody'],
+          [ATTRIBUTION_COOKIE, 'cookie (własne)', 'zapamiętanie, skąd do nas trafiłeś, żeby przypisać to do konta przy rejestracji', 'do rejestracji, do zapisania decyzji na koncie albo do wycofania zgody, najdłużej 90 dni; po rejestracji zostaje sam znacznik bez danych, do następnego wejścia na stronę'],
         ],
       ),
       p('Zgoda jest dobrowolna. Możesz ją wycofać w każdej chwili przyciskiem w sekcji „Twoje ustawienia”, a po zalogowaniu także w Ustawienia → Konto i dane (RODO). Wycofanie działa od razu, także dla zdarzeń wysyłanych z naszego serwera, i nie wpływa na zgodność z prawem wcześniejszego przetwarzania.'),
