@@ -1,5 +1,5 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import { isReceivableBase, RECEIVABLE_BASE_COLUMNS } from '@/lib/dashboard/receivables';
+import { RECEIVABLE_BASE_COLUMNS } from '@/lib/dashboard/receivables';
 import { addDaysToIsoDate, todayInWarsaw } from '@/lib/format/warsaw-date';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
@@ -131,18 +131,16 @@ export async function countInvoicesThisMonth(
 }
 
 /**
- * Kafel „Opłacone”: wpływy w bieżącym miesiącu (Europe/Warsaw) — suma
- * `paid_amount` faktur z §2.4 pkt 11 (predykat `isReceivableBase`, bez
- * warunku statusu) według `paid_at`, czyli dnia oznaczenia wpłaty
- * (§2.4 pkt 14). `paid_at` opisuje stan „opłacona w całości” (00073), więc
- * wpłaty częściowe pojawią się tu dopiero po dopłacie reszty.
+ * Kafel „Opłacone”: wpłaty w bieżącym miesiącu (Europe/Warsaw) — suma
+ * `paid_amount` faktur sprzedaży przyjętych w KSeF, w PLN, według `paid_at`,
+ * czyli dnia zapłaty (§2.4 pkt 14). `paid_at` opisuje stan „opłacona w całości”
+ * (00073), więc wpłaty częściowe pojawią się tu dopiero po dopłacie reszty.
  *
- * Bez warunku dzieci z pkt 11 (C2): opłacona faktura, która potem dostała
- * korektę albo fakturę rozliczającą (ROZ), nadal jest wpływem — warunek
- * dzieci chroni należności przed kwotą zmienioną korektą, a wpłata, która
- * już wpłynęła, nie znika. Zaliczka i jej ROZ to dwie różne wpłaty
- * (`paid_amount` ROZ to reszta po zaliczkach, 00145), nie podwójne liczenie.
- * Same korekty wpływem nie są (rodzaj spoza pkt 11).
+ * Bez warunków należności z pkt 11: wpłata jest faktem bez względu na pochodzenie
+ * i rodzaj dokumentu. „Zapłacone” działa też na imporcie, historii KSeF i korekcie
+ * in plus (00158), a kafel ma się zgadzać z Przepływami. Opłacona faktura, która
+ * potem dostała korektę albo ROZ, nadal jest wpływem (C2). Zaliczka i jej ROZ to
+ * dwie różne wpłaty (`paid_amount` ROZ to reszta po zaliczkach, 00145).
  *
  * `null`, gdy w miesiącu nie ma żadnej opłaconej faktury z wpłatą > 0 —
  * karta pokazuje wtedy `PAID_EMPTY_STATE`, nigdy „0 zł”.
@@ -164,7 +162,6 @@ export async function paidThisMonth(
     .select(`${RECEIVABLE_BASE_COLUMNS}, paid_at`, { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
-    .eq('origin', 'app')
     .eq('ksef_status', 'accepted')
     .gte('paid_at', windowStart)
     .lt('paid_at', windowEnd)
@@ -180,11 +177,12 @@ export async function paidThisMonth(
     throw new Error(ENVIRONMENT_ERROR);
   }
 
-  const withoutChildCondition = { environment, childIds: new Set<string>() };
   let sum = 0;
   let paidInvoices = 0;
   for (const row of inMonth) {
-    if (!isReceivableBase(row, withoutChildCondition)) continue;
+    if (row.ksef_environment !== environment) continue;
+    // Wpłata w obcej walucie nie wchodzi do sumy w złotych (jak `isPlnOrUnset` należności).
+    if (row.currency !== null && row.currency !== 'PLN') continue;
     const amount = Number(row.paid_amount);
     if (!Number.isFinite(amount) || amount <= 0) continue;
     sum += amount;

@@ -23,6 +23,8 @@ import {
   pulpitSalesSeries,
   pulpitVatLimit,
 } from '@/lib/dashboard/sales-history';
+import { getReceivables } from '@/lib/dashboard/receivables';
+import { receivablesAging } from '@/lib/dashboard/receivables-aging';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
@@ -35,6 +37,7 @@ import {
   kafelSredniej,
   limitVatProps,
   naleznosciProps,
+  naleznosciPrzykladProps,
   przychodProps,
   rankingiProps,
   vatNaleznyProps,
@@ -232,10 +235,15 @@ async function VatKarta({ supabase, tenantId, nowIso, tryb, className }: SlotPro
 
 async function NaleznosciKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Należności', className, async () => {
-    // E11 (D-W): przyszłe terminy faktur sprzedaży bez prawdziwej zapłaty (wpływy od dziś).
-    const today = todayInWarsaw(new Date(nowIso));
-    const terms = inflowTerms(await getInflows(supabase, tenantId, { from: today }), today);
-    return <TotalVisitorsCard {...naleznosciProps(terms, tryb)} className={className} />;
+    if (tryb === 'przyklad') {
+      // Atrapa bez wpłat: tylko przyszłe terminy (`naleznosciPrzykladProps`).
+      const today = todayInWarsaw(new Date(nowIso));
+      const terms = inflowTerms(await getInflows(supabase, tenantId, { from: today }), today);
+      return <TotalVisitorsCard {...naleznosciPrzykladProps(terms, tryb)} className={className} />;
+    }
+    // Faktura bez wpłaty z minionym terminem to należność po terminie, nie wpływ (D-W odwołane 02.11.2026).
+    const aging = receivablesAging(await getReceivables(supabase, tenantId, new Date(nowIso)));
+    return <TotalVisitorsCard {...naleznosciProps(aging, tryb)} className={className} />;
   });
 }
 

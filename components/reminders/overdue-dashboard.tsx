@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useOptimistic, useState, useTransition } from 'react';
 import type { ColumnDef, ColumnFiltersState, PaginationState } from '@tanstack/react-table';
 import {
   getCoreRowModel,
@@ -35,6 +35,12 @@ import { ReminderConsentDialog } from './reminder-consent-dialog';
 import { toggleInvoiceRemindersAction } from '@/app/actions/reminders';
 import StatsCards from '@/components/dashboard/stats-cards';
 import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
+import {
+  MarkPaidButton,
+  stableOptimisticReducer,
+  useInvoicePayment,
+  type PayableInvoice,
+} from '@/components/invoices/use-invoice-payment';
 import {
   ColumnSelectFilter,
   DataTablePagination,
@@ -91,7 +97,27 @@ interface Props {
   limitReached?: boolean;
   /** „Ustawienia przypomnień” tylko dla właściciela (P7). */
   canManageSettings?: boolean;
+  /** Rola pozwala oznaczać zapłatę (`canChangeInvoicePayment`); księgowa ma wgląd. */
+  canMarkPaid?: boolean;
 }
+
+/** „Cofnij” zwraca wiersz, którego serwer już może nie mieć: zapamiętujemy go przy dotknięciu. */
+interface PayableOverdue extends PayableInvoice {
+  invoice: OverdueInvoice;
+}
+
+type OverdueListChange = { type: 'hide'; id: string } | { type: 'show'; invoice: OverdueInvoice };
+
+/** Lista po dotknięciu „Zapłacone” albo „Cofnij”: ta sama kolejność co na serwerze (najstarsze zaległości). */
+export function applyOverdueChange(list: OverdueInvoice[], change: OverdueListChange): OverdueInvoice[] {
+  if (change.type === 'hide') return list.filter((invoice) => invoice.id !== change.id);
+  if (list.some((invoice) => invoice.id === change.invoice.id)) return list;
+  return [...list, change.invoice].sort(
+    (a, b) => b.days_overdue - a.days_overdue || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+}
+
+const overdueReducer = stableOptimisticReducer(applyOverdueChange);
 
 const money = (n: number) => `${formatPlMoney(n)} zł`;
 
@@ -204,12 +230,20 @@ function ReminderCell({ invoice }: { invoice: OverdueInvoice }) {
 }
 
 /**
- * Akcje jednej zaległości: „Przygotuj przypomnienie” (podgląd i zgoda
- * w `ReminderConsentDialog`) oraz „Wstrzymaj / Wznów”
+ * Akcje jednej zaległości: „Zapłacone”, „Przygotuj przypomnienie” (podgląd
+ * i zgoda w `ReminderConsentDialog`) oraz „Wstrzymaj / Wznów”
  * (`toggleInvoiceRemindersAction`). JEDEN komponent dla tabeli i karty —
  * inaczej dwie kopie obsługi wstrzymania.
  */
-function OverdueRowActions({ invoice, onPrepare }: { invoice: OverdueInvoice; onPrepare: () => void }) {
+function OverdueRowActions({
+  invoice,
+  onPrepare,
+  onMarkPaid,
+}: {
+  invoice: OverdueInvoice;
+  onPrepare: () => void;
+  onMarkPaid?: (invoice: OverdueInvoice) => void;
+}) {
   const router = useRouter();
   const [isPausing, startPausing] = useTransition();
 
@@ -245,6 +279,9 @@ function OverdueRowActions({ invoice, onPrepare }: { invoice: OverdueInvoice; on
 
   return (
     <div className="flex items-center justify-center gap-1">
+      {onMarkPaid ? (
+        <MarkPaidButton number={invoice.internal_number || null} onClick={() => onMarkPaid(invoice)} />
+      ) : null}
       <Tooltip>
         <TooltipTrigger
           render={
@@ -320,10 +357,14 @@ export function OverdueDashboardError({ message }: { message: string }) {
 }
 
 /**
- * Kolumny tabeli P7. `onPrepare` otwiera podgląd przypomnienia; eksport dla
+ * Kolumny tabeli P7. `onPrepare` otwiera podgląd przypomnienia, `onMarkPaid`
+ * oznacza zapłatę (bez niego — rola bez prawa — przycisku nie ma); eksport dla
  * testu filtra „Status przypomnienia”.
  */
-export function overdueColumns(onPrepare: (invoice: OverdueInvoice) => void): ColumnDef<OverdueInvoice>[] {
+export function overdueColumns(
+  onPrepare: (invoice: OverdueInvoice) => void,
+  onMarkPaid?: (invoice: OverdueInvoice) => void,
+): ColumnDef<OverdueInvoice>[] {
   return [
     {
       header: 'Faktura',
@@ -380,23 +421,53 @@ export function overdueColumns(onPrepare: (invoice: OverdueInvoice) => void): Co
       id: 'actions',
       header: () => 'Akcje',
       cell: ({ row }) => (
-        <OverdueRowActions invoice={row.original} onPrepare={() => onPrepare(row.original)} />
+        <OverdueRowActions invoice={row.original} onPrepare={() => onPrepare(row.original)} onMarkPaid={onMarkPaid} />
       ),
-      size: 120,
+      size: 220,
       enableHiding: false,
       enableSorting: false,
     },
   ];
 }
 
-export function OverdueDashboard({ overdueInvoices, stats, limitReached = false, canManageSettings = false }: Props) {
+export function OverdueDashboard({
+  overdueInvoices: serverInvoices,
+  stats: serverStats,
+  limitReached = false,
+  canManageSettings = false,
+  canMarkPaid = false,
+}: Props) {
   const router = useRouter();
+  // „Zapłacone” zdejmuje wiersz od razu, zanim odpowie serwer; przy błędzie wiersz wraca sam.
+  const [overdueInvoices, applyChange] = useOptimistic(serverInvoices, overdueReducer);
+  // Stabilne, bo od `mark` zależą kolumny tabeli: nowe kolumny przy każdym renderze to przeliczanie całego modelu.
+  const onPaid = useCallback(({ id }: PayableOverdue) => applyChange({ type: 'hide', id }), [applyChange]);
+  const onRestored = useCallback(({ invoice }: PayableOverdue) => applyChange({ type: 'show', invoice }), [applyChange]);
+  const { mark } = useInvoicePayment<PayableOverdue>({ onPaid, onRestored });
+  const markPaid = useMemo(
+    () => (canMarkPaid
+      ? (invoice: OverdueInvoice) => mark({ id: invoice.id, number: invoice.internal_number || null, invoice })
+      : undefined),
+    [canMarkPaid, mark],
+  );
+  // Kafle też bez czekania. Liczby są sumą pokazanych wierszy (jak na serwerze), więc liczymy je tak samo.
+  const stats = overdueInvoices === serverInvoices
+    ? serverStats
+    : {
+      ...serverStats,
+      totalCount: overdueInvoices.length,
+      totalAmount: overdueInvoices.reduce((sum, invoice) => sum + invoice.amount_due, 0),
+      avgDaysOverdue: overdueInvoices.length
+        ? Math.round(overdueInvoices.reduce((sum, invoice) => sum + invoice.days_overdue, 0) / overdueInvoices.length)
+        : 0,
+      pausedCount: overdueInvoices.filter((invoice) => invoice.reminders_paused).length,
+    };
   const [reminderInvoice, setReminderInvoice] = useState<OverdueInvoice | null>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-  const columns = useMemo(() => overdueColumns(setReminderInvoice), []);
+  const columns = useMemo(() => overdueColumns(setReminderInvoice, markPaid), [markPaid]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- tanstack zwraca funkcje, których React Compiler nie zapamiętuje (jak w Finorze)
   const table = useReactTable({
@@ -549,7 +620,13 @@ export function OverdueDashboard({ overdueInvoices, stats, limitReached = false,
                           <ReminderCell invoice={invoice} />
                         </>
                       }
-                      actions={<OverdueRowActions invoice={invoice} onPrepare={() => setReminderInvoice(invoice)} />}
+                      actions={
+                        <OverdueRowActions
+                          invoice={invoice}
+                          onPrepare={() => setReminderInvoice(invoice)}
+                          onMarkPaid={markPaid}
+                        />
+                      }
                     />
                   );
                 }}

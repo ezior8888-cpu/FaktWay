@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Wpływy `/przeplywy` (plan Finora §2.4 pkt 14, etap E5; od E11 decyzja D-W):
- * `getInflows` liczy fakturę sprzedaży w dniu prawdziwej zapłaty, inaczej
- * w dniu terminu płatności (bez terminu — wystawienia). Tu brzegi odczytu:
- * dzień w Warszawie, strony, firma, nabywca, zaliczka + ROZ. Reguła D-W
- * (termin, FA(3), import, korekta, waluta) — `wplywy-wg-terminow.test.tsx`.
+ * Wpływy `/przeplywy` (plan Finora §2.4 pkt 14, etap E5): `getInflows` daje
+ * fakturę sprzedaży w dniu prawdziwej zapłaty, inaczej w dniu terminu płatności
+ * (bez terminu — wystawienia). Tu brzegi odczytu: dzień w Warszawie, strony,
+ * firma, nabywca, zaliczka + ROZ. Reguła dnia (termin, FA(3), import, korekta,
+ * waluta) — `wplywy-wg-terminow.test.tsx`; co jest wpływem —
+ * `wplywy-prawdziwe-pieniadze.test.tsx`.
  */
 
 const env = vi.hoisted(() => ({ value: 'production' as string }));
@@ -167,9 +168,8 @@ describe('getInflows — brzegi odczytu wpływów', () => {
     expect(entries.map((e) => [e.date, e.amount])).toEqual([['2026-10-01', 300], ['2026-10-02', 100]]);
   });
 
-  it('same prawdziwe wpłaty faktur z FaktWay — ta sama suma co kafel „Opłacone” listy faktur', async () => {
-    // E11: kafel „Opłacone” liczy tylko `paid_at` faktur z FaktWay; przy takich danych obie drogi są zgodne.
-    // (Import z historii KSeF i termin bez zapłaty to wpływ według D-W, ale nie „Opłacone”.)
+  it('prawdziwe wpłaty — ta sama suma co kafel „Opłacone” listy faktur', async () => {
+    // Kafel „Opłacone” liczy `paid_at`, a wpływy prawdziwe pieniądze: obie drogi są zgodne.
     const rows = [
       paid(100, '2026-10-02T08:00:00Z'),
       paid(200.5, '2026-10-31T23:30:00Z'),

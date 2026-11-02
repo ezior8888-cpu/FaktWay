@@ -15,9 +15,9 @@ vi.mock('next/navigation', () => ({
 const { getInflows } = await import('@/lib/dashboard/inflows');
 const movements = await import('@/lib/dashboard/cash-movements');
 const { inflowTerms } = await import('@/lib/dashboard/inflow-terms');
-const { naleznosciProps } = await import('@/components/dashboard/finora/adaptery');
+const { naleznosciPrzykladProps } = await import('@/components/dashboard/finora/adaptery');
 const przeplywyAdaptery = await import('@/components/przeplywy/finora-1do1/adaptery');
-const { receivablesRows } = await import('@/components/analizy/adapters');
+const { receivablesRowsPrzyklad } = await import('@/components/analizy/adapters');
 const { default: CashFlowCard } = await import('@/components/przeplywy/finora-1do1/chart-cash-flow');
 const { default: TransactionDatatable } = await import('@/components/przeplywy/finora-1do1/datatable-transaction');
 const przeplywy = await import('@/components/przeplywy/finora-1do1/sloty');
@@ -26,13 +26,13 @@ const sprzedaz = await import('@/components/analizy/sprzedaz-grid');
 const { danePrzykladowe, DEMO_TENANT } = await import('@/lib/demo/dane-przykladowe');
 
 /**
- * PLAN-PRAWDZIWE-DANE E11, decyzja Bartosza D-W (23.10.2026): klient NIC nie
- * oznacza. Wpływ faktury sprzedaży liczymy w dniu prawdziwej zapłaty, jeśli
- * ją znamy (`paid_at` z wpłat/FLO, potem `Zaplacono` + `DataZaplaty` z FA(3)),
- * inaczej w dniu terminu płatności, a bez terminu — w dniu wystawienia.
- * Kwota: brutto do zapłaty; Spodziewane wpływy i Należności pokazują resztę
- * po potwierdzonych wpłatach częściowych. Należności nie twierdzą, że ktoś
- * zalega — pokazują przyszłe terminy. Podpisy: „według terminów płatności”.
+ * Dzień faktury z `getInflows` (PLAN-PRAWDZIWE-DANE E11): prawdziwa zapłata
+ * (`paid_at`, potem `Zaplacono` + `DataZaplaty` z FA(3)), inaczej termin
+ * płatności, a bez terminu dzień wystawienia. Podstawa dnia mówi, czy to
+ * pieniądze: decyzję D-W odwołano 02.11.2026, więc wpływem jest tylko zapłata
+ * (`tests/unit/wplywy-prawdziwe-pieniadze.test.tsx`), a termin od dziś to
+ * spodziewany wpływ. Dane przykładowe (`lib/demo`, bez wpłat) zostają pełne
+ * dzięki `przykladoweWplywy`.
  */
 
 const TENANT = 'firma-a';
@@ -101,8 +101,8 @@ function wszystkieNapisy(markup: string): string {
 
 // ─── Dzień i kwota wpływu ────────────────────────────────────────────────────
 
-describe('getInflows — dzień wpływu według D-W', () => {
-  it('faktura bez zapłaty: wpływ w dniu terminu płatności, kwota brutto', async () => {
+describe('getInflows — dzień faktury', () => {
+  it('faktura bez zapłaty: dniem jest termin płatności, kwota brutto, podstawa „due” (to jeszcze nie pieniądze)', async () => {
     const [entry] = await getInflows(sb([sprzedaz1('a')]), TENANT, OCTOBER);
     expect(entry).toMatchObject({
       id: 'a', date: '2026-10-19', basis: 'due', amount: 1230, outstanding: 1230, dueDate: '2026-10-19',
@@ -132,17 +132,17 @@ describe('getInflows — dzień wpływu według D-W', () => {
     ]);
   });
 
-  it('faktura bez terminu płatności: wpływ w dniu wystawienia', async () => {
+  it('faktura bez terminu płatności: dniem jest wystawienie, podstawa „issued”', async () => {
     const [entry] = await getInflows(sb([sprzedaz1('a', { payment_due_date: null })]), TENANT, OCTOBER);
     expect(entry).toMatchObject({ date: '2026-10-05', basis: 'issued', amount: 1230, dueDate: null });
   });
 
-  it('wpłata częściowa: brutto w dniu terminu, do zapłaty zostaje reszta', async () => {
+  it('wpłata częściowa: brutto w dniu terminu, podstawa „due”, do zapłaty zostaje reszta', async () => {
     const [entry] = await getInflows(sb([sprzedaz1('a', { paid_amount: 400, payment_status: 'partial' })]), TENANT, OCTOBER);
     expect(entry).toMatchObject({ date: '2026-10-19', basis: 'due', amount: 1230, outstanding: 830 });
   });
 
-  it('sprzedaż z historii KSeF się liczy, korekta in minus zmniejsza wpływy (ze znakiem)', async () => {
+  it('sprzedaż z historii KSeF jest w odczycie, korekta in minus ma znak', async () => {
     const entries = await getInflows(sb([
       sprzedaz1('a', { origin: 'ksef_import' }),
       sprzedaz1('k', {
@@ -255,15 +255,16 @@ describe('Spodziewane wpływy i Należności: przyszłe terminy bez prawdziwej z
 
 describe('Przepływy: wpływy do dziś, sumy zakładek = suma serii', () => {
   const entries = [
-    wpis('a', '2026-10-05'),
-    // Recenzja 2: termin dziś jest jeszcze spodziewany (`receivedInflows`), więc „dziś” na wykresie
-    // to prawdziwa zapłata z dzisiejszym dniem (wcześniej: termin dziś — liczył się dwa razy).
+    wpis('a', '2026-10-05', { basis: 'paid', outstanding: 0 }),
+    // Termin dziś jest jeszcze spodziewany (`receivedInflows`), więc „dziś” na wykresie
+    // to prawdziwa zapłata z dzisiejszym dniem.
     wpis('b', '2026-10-23', { amount: 250, basis: 'paid', outstanding: 0 }),
     wpis('przyszly', '2026-10-28', { amount: 9999 }),
+    wpis('bez-wplaty', '2026-10-12', { amount: 7777 }),
     wpis('sierpien', '2026-08-20', { amount: 400, basis: 'paid', outstanding: 0 }),
   ];
 
-  it('wykres i kafel miesiąca nie liczą terminów z przyszłości', () => {
+  it('wykres i kafel miesiąca liczą same wpłaty: ani terminów z przyszłości, ani minionych bez wpłaty', () => {
     const chart = movements.buildCashFlowChart(entries, [], TODAY);
     expect(chart.month.at(-1)).toMatchObject({ inflow: 1250, inflowCount: 2 });
     expect(movements.monthFlows(entries, [], TODAY).inflow.amount).toBe(1250);
@@ -281,16 +282,20 @@ describe('Przepływy: wpływy do dziś, sumy zakładek = suma serii', () => {
     expect(out).toContain('Suma wpływów');
   });
 
-  it('operacje: tylko wpływy do dziś, status z podstawy dnia (prawdziwa zapłata, termin, wystawienie)', () => {
+  it('operacje: tylko wpłaty do dziś i korekta zapłaconej faktury; termin i wystawienie to nie operacja', () => {
     const ops = movements.cashFlowOperations(
-      [...entries, wpis('wyst', '2026-10-02', { basis: 'issued', dueDate: null })],
+      [
+        ...entries,
+        wpis('wyst', '2026-10-02', { basis: 'issued', dueDate: null }),
+        wpis('kor', '2026-10-03', { basis: 'correction', amount: -100, outstanding: 0, invoiceKind: 'correction' }),
+      ],
       [],
       TODAY,
     );
     expect(ops.map((o) => [o.id, o.status])).toEqual([
       ['in:b', 'paid'],
-      ['in:a', 'due'],
-      ['in:wyst', 'issued'],
+      ['in:a', 'paid'],
+      ['in:kor', 'correction'],
       ['in:sierpien', 'paid'],
     ]);
     expect(movements.topCashFlowSources(entries, [], TODAY)[0]).toMatchObject({ amount: 1650, count: 3 });
@@ -299,23 +304,23 @@ describe('Przepływy: wpływy do dziś, sumy zakładek = suma serii', () => {
 
 // ─── Napisy kart ──────────────────────────────────────────────────────────────
 
-const ZALEGLOSC = /zaległ|po terminie|oznacz|nie potwierdzamy/i;
+const ZALEGLOSC = /zaległ|po terminie|nie potwierdzamy/i;
 
-describe('Pulpit: karta Należności pokazuje przyszłe terminy, bez zaległości', () => {
+describe('Dane przykładowe: karta Należności Pulpitu pokazuje przyszłe terminy, bez zaległości', () => {
   const terms = inflowTerms([wpis('a', '2026-10-24'), wpis('b', '2026-11-10'), wpis('c', '2026-12-30')], TODAY);
 
   it('kolumny „Ten tydzień” / „Do 30 dni” / „Później”, plakietka = liczba faktur, bez „% zaległe”', () => {
-    const dane = naleznosciProps(terms, 'prawdziwe');
+    const dane = naleznosciPrzykladProps(terms, 'przyklad');
     expect(dane.visitorData.map((c) => c.name)).toEqual(['Ten tydzień', 'Do 30 dni', 'Później']);
     expect(dane.badge).toBe('3 faktury');
-    expect(dane.note).toContain('według terminów płatności');
+    expect(dane.note).toContain('bez oznaczonej zapłaty');
     // Strzałka nie ocenia: każda kolumna to wpływ (↗), jak strzałka wpływu w Przepływach.
     expect(dane.visitorData.map((c) => c.trend)).toEqual(['up', 'up', 'up']);
     const napisy = JSON.stringify(dane);
     expect(napisy).not.toMatch(ZALEGLOSC);
   });
 
-  it('karta na Pulpicie (prawdziwe dane): ani słowa o zaległościach, zapłacona faktura się nie liczy', async () => {
+  it('karta na Pulpicie (tryb przykładu): ani słowa o zaległościach, zapłacona faktura się nie liczy', async () => {
     const out = await prerender(
       <pulpit.NaleznosciSlot
         supabase={sb([
@@ -325,7 +330,7 @@ describe('Pulpit: karta Należności pokazuje przyszłe terminy, bez zaległośc
         ])}
         tenantId={TENANT}
         nowIso={NOW_ISO}
-        tryb="prawdziwe"
+        tryb="przyklad"
         kosztyKsefOd={null}
       />,
     );
@@ -335,9 +340,9 @@ describe('Pulpit: karta Należności pokazuje przyszłe terminy, bez zaległośc
   });
 });
 
-describe('Analizy: karta Należności analogicznie', () => {
+describe('Dane przykładowe: karta Należności Analiz analogicznie', () => {
   it('trzy wiersze terminów, bez „Po terminie” i „Najstarszej zaległości”', () => {
-    const rows = receivablesRows(inflowTerms([wpis('a', '2026-10-24'), wpis('b', '2026-12-30', { outstanding: 2500 })], TODAY));
+    const rows = receivablesRowsPrzyklad(inflowTerms([wpis('a', '2026-10-24'), wpis('b', '2026-12-30', { outstanding: 2500 })], TODAY));
     expect(rows.map((r) => [r.title, r.value])).toEqual([
       ['Ten tydzień', '1000,00 zł · 1 faktura'],
       ['Do 30 dni', '0,00 zł · 0 faktur'],
@@ -346,45 +351,51 @@ describe('Analizy: karta Należności analogicznie', () => {
     expect(JSON.stringify(rows.map((r) => [r.title, r.value, r.iconClassName]))).not.toMatch(/zaległ|po terminie|destructive/i);
   });
 
-  it('podpis karty: „według terminów płatności” zamiast zastrzeżenia Z16', async () => {
+  it('podpis karty mówi o przyszłych terminach', async () => {
     const out = html(await sprzedaz.ReceivablesSlot({
       supabase: sb([sprzedaz1('a', { payment_due_date: '2026-11-03' })]),
-      tenantId: TENANT, nowIso: NOW_ISO, month: '2026-10', tryb: 'prawdziwe', kosztyKsefOd: null,
+      tenantId: TENANT, nowIso: NOW_ISO, month: '2026-10', tryb: 'przyklad', kosztyKsefOd: null,
     }));
-    expect(out).toContain('Faktury sprzedaży · według terminów płatności');
+    expect(out).toContain('Faktury sprzedaży z terminem od dziś');
     expect(wszystkieNapisy(out)).not.toMatch(ZALEGLOSC);
   });
 });
 
 describe('Przepływy: napisy kart', () => {
-  it('Ostatnia aktywność: „Termin · DD.MM.RRRR”, „Wpłata · …” przy prawdziwej zapłacie, „Wystawiona · …” bez terminu', () => {
+  it('Ostatnia aktywność: „Wpłata · DD.MM.RRRR” przy zapłacie, „Korekta · …” przy korekcie zapłaconej faktury', () => {
     const ops = movements.cashFlowOperations([
       wpis('t', '2026-10-19'),
       wpis('p', '2026-10-10', { basis: 'paid', outstanding: 0 }),
-      wpis('w', '2026-10-05', { basis: 'issued', dueDate: null }),
+      wpis('k', '2026-10-05', { basis: 'correction', amount: -100, outstanding: 0 }),
     ], [], TODAY);
     const dane = przeplywyAdaptery.aktywnoscProps(ops, 'prawdziwe');
-    expect(dane.items.map((i) => i.subLabel)).toEqual(['Termin · 19.10.2026', 'Wpłata · 10.10.2026', 'Wystawiona · 05.10.2026']);
+    expect(dane.items.map((i) => [i.subLabel, i.direction])).toEqual([
+      ['Wpłata · 10.10.2026', 'in'],
+      ['Korekta · 05.10.2026', 'out'],
+    ]);
   });
 
-  it('tabela: „Opłacona” tylko przy prawdziwej zapłacie, inaczej „Wg terminu” / „Wg wystawienia”', () => {
+  it('tabela: „Opłacona” i „Korekta”, bez „Wg terminu” i „Wg wystawienia”', () => {
     const ops = movements.cashFlowOperations([
       wpis('t', '2026-10-19'),
       wpis('p', '2026-10-10', { basis: 'paid', outstanding: 0 }),
+      wpis('k', '2026-10-05', { basis: 'correction', amount: -100, outstanding: 0 }),
       wpis('w', '2026-10-05', { basis: 'issued', dueDate: null }),
     ], [], TODAY);
     const { rows } = przeplywyAdaptery.tabelaProps(ops, 'prawdziwe');
     const out = html(<TransactionDatatable data={rows} />);
     expect(out.match(/Opłacona/g)).toHaveLength(1);
-    expect(out).toContain('Wg terminu');
-    expect(out).toContain('Wg wystawienia');
+    expect(out).toContain('Korekta');
+    expect(out).not.toContain('Wg terminu');
+    expect(out).not.toContain('Wg wystawienia');
     expect(out).not.toMatch(/zaległ|Termin minął/i);
   });
 
-  it('kafel wpływów miesiąca: podpis „według terminów płatności”, pusty stan bez „oznaczania”', () => {
-    const flow = movements.monthFlows([wpis('a', '2026-10-05')], [], TODAY).inflow;
-    const krzywa = przeplywyAdaptery.krzywaWplywow([wpis('a', '2026-10-05')], TODAY);
-    expect(przeplywyAdaptery.wplywyMiesiacaProps(flow, krzywa, 'prawdziwe').amountTitle).toContain('według terminów płatności');
+  it('kafel wpływów miesiąca: podpis „według oznaczonych wpłat”, pusty stan prowadzi do oznaczenia', () => {
+    const zaplacona1 = wpis('a', '2026-10-05', { basis: 'paid', outstanding: 0 });
+    const flow = movements.monthFlows([zaplacona1], [], TODAY).inflow;
+    const krzywa = przeplywyAdaptery.krzywaWplywow([zaplacona1], TODAY);
+    expect(przeplywyAdaptery.wplywyMiesiacaProps(flow, krzywa, 'prawdziwe').amountTitle).toContain('według oznaczonych wpłat');
     const pusty = przeplywyAdaptery.wplywyMiesiacaProps(movements.monthFlows([], [], TODAY).inflow, [], 'prawdziwe');
     expect(pusty.amount).toBe('—');
     expect(`${pusty.comparison} ${pusty.amountTitle}`).not.toMatch(ZALEGLOSC);
@@ -392,7 +403,7 @@ describe('Przepływy: napisy kart', () => {
     expect(pusty.comparison.length).toBeLessThanOrEqual('wobec poprzedniego miesiąca'.length);
   });
 
-  it('Spodziewane wpływy: zapłacona faktura się nie pokazuje, dymek bez zastrzeżenia Z16', async () => {
+  it('Spodziewane wpływy: zapłacona faktura się nie pokazuje, dymek mówi o otwartych fakturach', async () => {
     const out = await prerender(
       <przeplywy.SpodziewaneSlot
         supabase={sb([
@@ -407,21 +418,19 @@ describe('Przepływy: napisy kart', () => {
     );
     expect(out).toContain('Alfa Przykład');
     expect(out).not.toContain('Zeta Przykład');
-    expect(out).toContain('według terminów płatności');
+    expect(out).toContain('bez oznaczonej zapłaty');
     expect(wszystkieNapisy(out)).not.toMatch(ZALEGLOSC);
   });
 
-  it('podtytuł wykresu nazywa założenie (terminy płatności) i nie jest dłuższy od dawnego', () => {
-    // Szerokość w Outfit (pomiar 23.10.2026): 199 wobec 205 jednostek dawnego napisu — ta sama linia.
-    expect(przeplywyAdaptery.PODTYTUL_WYKRESU).toMatch(/Terminy płatności/);
-    expect(przeplywyAdaptery.PODTYTUL_WYKRESU.length).toBeLessThanOrEqual('Oznaczone wpłaty i koszty brutto'.length);
+  it('podtytuł wykresu: oznaczone wpłaty i koszty brutto', () => {
+    expect(przeplywyAdaptery.PODTYTUL_WYKRESU).toBe('Oznaczone wpłaty i koszty brutto');
   });
 });
 
 // ─── Atrapa ───────────────────────────────────────────────────────────────────
 
-describe('dane przykładowe liczone tą samą regułą', () => {
-  it('demo: bez oznaczonych wpłat — wpływy z terminów; Należności we wszystkich trzech kolumnach', async () => {
+describe('dane przykładowe: pliki `lib/demo` bez zmian, karty pełne przez `przykladoweWplywy`', () => {
+  it('demo: bez oznaczonych wpłat; miniony termin gra rolę wpłaty, termin od dziś zostaje spodziewany', async () => {
     const tables = danePrzykladowe(NOW, 'test');
     const sprzedazDemo = tables.invoices!.filter((i) => i.direction === 'outgoing');
     expect(sprzedazDemo.every((i) => i.paid_at === null && Number(i.paid_amount) === 0)).toBe(true);
@@ -430,5 +439,19 @@ describe('dane przykładowe liczone tą samą regułą', () => {
     expect(entries.every((e) => e.basis !== 'paid')).toBe(true);
     expect(inflowTerms(entries, TODAY).buckets.map((b) => b.count > 0)).toEqual([true, true, true]);
     expect(movements.upcomingInflows(entries, TODAY).count).toBeGreaterThanOrEqual(5);
+    // Prawdziwa firma z taką samą bazą: terminy to nie pieniądze.
+    expect(movements.receivedInflows(entries, TODAY)).toEqual([]);
+
+    const demo = movements.przykladoweWplywy(entries, TODAY);
+    const received = movements.receivedInflows(demo, TODAY);
+    expect(received.length).toBeGreaterThan(0);
+    // Te same pozycje i kwoty co przed odwołaniem D-W: wszystko, co nie jest spodziewane, do dziś.
+    expect(received.map((e) => e.id).sort()).toEqual(
+      entries.filter((e) => e.date <= TODAY && !(e.basis === 'due' && e.outstanding > 0 && e.date >= TODAY)).map((e) => e.id).sort(),
+    );
+    expect(movements.upcomingInflows(demo, TODAY)).toEqual(movements.upcomingInflows(entries, TODAY));
+    // Korekta in minus to „Korekta”, nie „Wpłata”.
+    expect(received.filter((e) => e.amount < 0).every((e) => e.basis === 'correction')).toBe(true);
+    expect(received.filter((e) => e.amount > 0).every((e) => e.basis === 'paid' && e.outstanding === 0)).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
 import { Card } from '@/components/ui/card';
-import { receivableBaseFilterOps } from '@/lib/dashboard/receivables';
+import { receivableBaseFilterOps, settledFilterOps } from '@/lib/dashboard/receivables';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
   INVOICE_PAYMENT_FILTERS,
@@ -24,6 +24,7 @@ import {
   type InvoiceListRowFacts,
   type ListRowFactsRow,
 } from '@/lib/invoices/list-row-facts';
+import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { getPageContext } from '@/lib/supabase/page-context';
 import type { InvoiceFactsById, InvoiceRow } from '@/components/invoices/invoice-row-types';
@@ -52,7 +53,7 @@ export default async function InvoicesPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { supabase, tenantId } = await getPageContext();
+  const { supabase, tenantId, role } = await getPageContext();
   const params = parseInvoiceListParams((await searchParams) ?? {});
   const today = todayInWarsaw();
   const [rangeFrom, rangeTo] = pageRange(params.page, params.perPage);
@@ -72,8 +73,12 @@ export default async function InvoicesPage({
   let paymentOps: PaymentFilterOp[] | null = null;
   let paymentFilterError = false;
   try {
-    paymentOps = paymentFilterSpec(params.payment, today, () =>
-      receivableBaseFilterOps(requireConfiguredKsefEnvironment()));
+    paymentOps = paymentFilterSpec(
+      params.payment,
+      today,
+      () => receivableBaseFilterOps(requireConfiguredKsefEnvironment()),
+      () => settledFilterOps(requireConfiguredKsefEnvironment()),
+    );
   } catch (e) {
     console.error('[invoices] filtr płatności bez środowiska KSeF', e);
     paymentFilterError = true;
@@ -192,6 +197,7 @@ export default async function InvoicesPage({
                   initialInvoices={rows}
                   facts={factsById}
                   today={today}
+                  canMarkPaid={canChangeInvoicePayment(role)}
                   filtered={filtered}
                   summary={total === 0 ? undefined : 'Sortowanie wg daty utworzenia'}
                 />

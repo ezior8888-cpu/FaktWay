@@ -190,7 +190,8 @@ export function invoiceListHref(p: InvoiceListParams, overrides: Partial<Invoice
 export type OrFilterTerm =
   | { op: 'eq'; column: string; value: string }
   | { op: 'in'; column: string; value: readonly string[] }
-  | { op: 'is'; column: string; value: null };
+  | { op: 'is'; column: string; value: null }
+  | { op: 'not_null'; column: string };
 
 /** Jeden warunek PostgREST filtra płatności; strona stosuje go na zapytaniu listy. */
 export type PaymentFilterOp =
@@ -203,6 +204,8 @@ export type PaymentFilterOp =
   | { op: 'or'; anyOf: ReadonlyArray<ReadonlyArray<OrFilterTerm>> };
 
 const OR_COLUMN = /^[a-z_]+$/;
+/** Ścieżka JSON w `or()`: sama data zapłaty z FA(3), bez wartości od użytkownika. */
+const OR_JSON_COLUMN = 'fa3_data->parsed->>paidDate';
 const OR_VALUE = /^[A-Za-z0-9_]+$/;
 
 function orValue(value: string): string {
@@ -211,6 +214,10 @@ function orValue(value: string): string {
 }
 
 function orTermString(term: OrFilterTerm): string {
+  if (term.op === 'not_null') {
+    if (term.column !== OR_JSON_COLUMN) throw new Error(`Niedozwolona kolumna w warunku or(): ${term.column}`);
+    return `${term.column}.not.is.null`;
+  }
   if (!OR_COLUMN.test(term.column)) throw new Error(`Niedozwolona kolumna w warunku or(): ${term.column}`);
   switch (term.op) {
     case 'is':
@@ -254,17 +261,24 @@ export function orFilterString(anyOf: ReadonlyArray<ReadonlyArray<OrFilterTerm>>
  * albo po terminie, choć ich wiersze mają „—”, a kafel „Do zapłaty” ich nie
  * liczy. `baseOps` jest funkcją, bo wymaga skonfigurowanego środowiska
  * KSeF — strona bez filtra płatności go nie potrzebuje.
+ *
+ * „Opłacone” ma własne warunki (`settledOps` = `settledFilterOps`): zapłata to
+ * fakt bez względu na pochodzenie, więc pokazuje też import oznaczony jako
+ * zapłacony (00158). Bez `settledOps` bierze warunki należności.
  */
 export function paymentFilterSpec(
   payment: InvoicePaymentFilter,
   today: string,
   baseOps: () => readonly PaymentFilterOp[],
+  settledOps?: () => readonly PaymentFilterOp[],
 ): PaymentFilterOp[] | null {
   switch (payment) {
     case 'wszystkie':
       return null;
     case 'oplacone':
-      return [...baseOps(), { op: 'eq', column: 'payment_status', value: 'paid' }];
+      return settledOps
+        ? [...settledOps()]
+        : [...baseOps(), { op: 'eq', column: 'payment_status', value: 'paid' }];
     case 'nieoplacone':
       return [...baseOps(), { op: 'in', column: 'payment_status', value: ['unpaid', 'partial', 'overdue'] }];
     case 'po_terminie':

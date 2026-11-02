@@ -260,10 +260,24 @@ describe('strona /invoices — zapytanie do bazy', () => {
     }
   });
 
-  it('P3: rodzaj → eq(invoice_kind), płatność „opłacone” → eq(payment_status, paid)', async () => {
+  it('P3: rodzaj → eq(invoice_kind), płatność „opłacone” → zapłacona albo z datą zapłaty z FA(3)', async () => {
     await InvoicesPage({ searchParams: Promise.resolve({ rodzaj: 'advance', platnosc: 'oplacone' }) });
-    expect(called('eq')).toEqual(expect.arrayContaining([['invoice_kind', 'advance'], ['payment_status', 'paid']]));
+    expect(called('eq')).toEqual(expect.arrayContaining([['invoice_kind', 'advance']]));
+    expect(called('or')).toContainEqual(['payment_status.eq.paid,fa3_data->parsed->>paidDate.not.is.null']);
     expect(called('lt')).toEqual([]);
+  });
+
+  // Zapłata to fakt bez względu na pochodzenie: „Zapłacone” działa też na imporcie (00158), więc filtr
+  // „Opłacone” nie ma warunku `origin` ani rodzaju. Nadal tylko sprzedaż przyjęta w aktywnym środowisku.
+  it('„Opłacone” bez warunków należności, ale tylko przyjęta sprzedaż z aktywnego środowiska', async () => {
+    await InvoicesPage({ searchParams: Promise.resolve({ platnosc: 'oplacone' }) });
+    expect(called('eq')).toEqual(expect.arrayContaining([
+      ['direction', 'outgoing'],
+      ['ksef_status', 'accepted'],
+      ['ksef_environment', 'test'], // KSEF_ENV z vitest.config.ts
+    ]));
+    expect(called('eq')).not.toContainEqual(['origin', 'app']);
+    expect(called('gt')).toEqual([]);
   });
 
   it('P3: nieopłacone → in(payment_status, unpaid/partial/overdue)', async () => {
@@ -274,7 +288,7 @@ describe('strona /invoices — zapytanie do bazy', () => {
   // C1 (rewizja E3): filtr płatności bez warunków §2.4 pkt 11 listował
   // importy, szkice i korekty jako nieopłacone / po terminie, choć ich wiersze
   // pokazują „—”, a kafel „Do zapłaty” ich nie liczy.
-  it.each(['oplacone', 'nieoplacone', 'po_terminie'])('C1: filtr %s niesie warunki należności (§2.4 pkt 11)', async (platnosc) => {
+  it.each(['nieoplacone', 'po_terminie'])('C1: filtr %s niesie warunki należności (§2.4 pkt 11)', async (platnosc) => {
     await InvoicesPage({ searchParams: Promise.resolve({ platnosc }) });
     expect(called('eq')).toEqual(expect.arrayContaining([
       ['origin', 'app'],
