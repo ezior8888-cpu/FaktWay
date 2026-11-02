@@ -73,8 +73,9 @@ webhook `deleted` nie przyjdzie i odejścia nie zobaczysz ani tu, ani w `/admin`
 
 Worker pg-boss powtarza cały handler, a Stripe ponawia webhook po każdym 500.
 
-- **Deterministyczny uuid** (`dedupeKey` w `trackServer`): UUID v5 z nazwy zdarzenia
-  i klucza z tabeli wyżej. Ponowienie wysyła ten sam uuid.
+- **Deterministyczny uuid** (`dedupeKey` w `trackServer`): UUID v8 z SHA-256 nazwy zdarzenia
+  i klucza z tabeli wyżej. Ponowienie wysyła ten sam uuid. Nie v5, bo ta wersja oznacza SHA-1,
+  a na to odpowiada czerwonym alertem CodeQL.
 - **SDK nie deduplikuje.** `posthog-node` tylko przekazuje `uuid` do paczki (bez niego
   nadaje świeży uuidv7), co sprawdza test `analytics-bramka-zgody` na prawdziwym kliencie
   z podstawionym `fetch`. Skleja magazyn PostHoga po kluczu (data z `timestamp`, nazwa,

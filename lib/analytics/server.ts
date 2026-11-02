@@ -44,11 +44,11 @@ export type TrackServerInput = (
 // Stała przestrzeń nazw: zmiana rozkleiłaby zdarzenia przy ponowieniu w trakcie wdrożenia.
 const EVENT_UUID_NAMESPACE = 'faktway-analytics-event-v1';
 
-/** UUID v5 (RFC 9562): SHA-1 z nazwy zdarzenia i klucza. */
+/** UUID v8 (RFC 9562): pierwsze 128 bitów SHA-256 z nazwy zdarzenia i klucza, z bitami wersji i wariantu. */
 function eventUuid(event: string, key: string): string {
-  const hex = createHash('sha1').update(`${EVENT_UUID_NAMESPACE}:${event}:${key}`).digest('hex');
+  const hex = createHash('sha256').update(`${EVENT_UUID_NAMESPACE}:${event}:${key}`).digest('hex');
   const variant = ((parseInt(hex.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
-  return [hex.slice(0, 8), hex.slice(8, 12), `5${hex.slice(13, 16)}`, variant + hex.slice(18, 20), hex.slice(20, 32)].join('-');
+  return [hex.slice(0, 8), hex.slice(8, 12), `8${hex.slice(13, 16)}`, variant + hex.slice(18, 20), hex.slice(20, 32)].join('-');
 }
 
 function eventTimestamp(value: TrackServerInput['timestamp']): Date | undefined {

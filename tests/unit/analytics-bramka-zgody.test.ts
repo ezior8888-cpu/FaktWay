@@ -175,7 +175,8 @@ describe('deterministyczny uuid', () => {
     await send(ANALYTICS_EVENTS.trialEnded, TENANT);
     await send(ANALYTICS_EVENTS.trialStarted, 'inna-firma');
     const [a, b, c, d] = posthog.messages.map((m) => m.uuid);
-    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    // UUID v8 (RFC 9562): 122 bity z SHA-256, wersja 8 i wariant 10xx. Wersja 5 oznacza SHA-1 (alert CodeQL).
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(b).toBe(a);
     expect(c).not.toBe(a);
     expect(d).not.toBe(a);
