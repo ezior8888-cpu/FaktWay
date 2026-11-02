@@ -11,6 +11,7 @@ import { createCheckoutSession, type CheckoutPlan } from '@/lib/stripe/checkout'
 import { createPortalSession } from '@/lib/stripe/portal';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { mfaStepUpHref } from '@/lib/auth/mfa-step-up';
 import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { syncStripeCustomerEmail } from '@/lib/stripe/customer-email';
 
@@ -67,10 +68,7 @@ export async function startCheckoutAction(
   if (statementAccepted !== true) {
     redirect('/settings/billing?error=statement-required');
   }
-  // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
-  if (!(await billingMfaSatisfied(ctx))) {
-    redirect('/settings/billing?error=mfa-required');
-  }
+  await enforceBillingMfa(ctx);
 
   // Sprzedajemy wyłącznie plan miesięczny (lib/billing/pricing.ts). Stara
   // karta w otwartej zakładce nie może założyć subskrypcji rocznej.
@@ -153,10 +151,7 @@ export async function openCustomerPortalAction(
   if (!canManageBilling(ctx.role)) {
     redirect('/settings/billing?error=forbidden');
   }
-  // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
-  if (!(await billingMfaSatisfied(ctx))) {
-    redirect('/settings/billing?error=mfa-required');
-  }
+  await enforceBillingMfa(ctx);
 
   if (!isStripeConfigured()) {
     redirect('/settings/billing?error=not-configured');
@@ -214,14 +209,21 @@ export async function openCustomerPortalAction(
   redirect(url);
 }
 
-async function billingMfaSatisfied(ctx: { tenantId: string; user: { id: string } }): Promise<boolean> {
+/**
+ * AAL2 przy płatnościach (AUD-65). Konto bez 2FA przy włączonej fladze wraca
+ * z komunikatem „włącz 2FA”. Sesja po biometrii ma 2FA, więc idzie prosto na
+ * ekran kodu i wraca do Abonamentu.
+ */
+async function enforceBillingMfa(ctx: { tenantId: string; user: { id: string } }): Promise<void> {
+  let refusal: SensitiveMfaRequiredError | null = null;
   try {
     await assertSensitiveMfa({ tenantId: ctx.tenantId, userId: ctx.user.id }, 'billing');
-    return true;
   } catch (e) {
-    if (e instanceof SensitiveMfaRequiredError) return false;
-    throw e;
+    if (!(e instanceof SensitiveMfaRequiredError)) throw e;
+    refusal = e;
   }
+  if (!refusal) return;
+  redirect(refusal.reason === 'challenge' ? mfaStepUpHref('/settings/billing') : '/settings/billing?error=mfa-required');
 }
 
 /**

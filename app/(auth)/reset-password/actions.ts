@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/lib/audit/log';
 import { validatePassword } from '@/lib/auth/password';
 import { getVerifiedPasswordRecoveryState } from '@/lib/auth/password-recovery';
+import { clearDeviceLoginCookies } from '@/lib/auth/sign-out';
 import { checkPasswordOperationRateLimit, claimPasswordRecoverySession } from '@/lib/rate-limit/password';
 import { createClient } from '@/lib/supabase/server';
 
@@ -64,6 +65,7 @@ export async function resetPasswordAction(
   const globalLogout = await supabase.auth.admin.signOut(current.accessToken, 'global').catch(() => null);
   // Separate local cookie cleanup: it may tolerate an already-revoked session.
   const localLogout = await supabase.auth.signOut({ scope: 'local' }).catch(() => null);
+  await clearDeviceLoginCookies();
   revalidatePath('/', 'layout');
   return {
     ok: true,

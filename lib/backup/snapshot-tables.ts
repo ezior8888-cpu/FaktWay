@@ -17,4 +17,5 @@ export const SKIP_TABLES: ReadonlySet<string> = new Set([
   'inngest_run_log',
   'ksef_health_log',
   'gdpr_deletion_requests', // PII + ma własną logikę cooling-off, restore by zepsuł flow
+  'webauthn_challenges', // wygasają po 5 minutach, po odtworzeniu i tak martwe
 ]);

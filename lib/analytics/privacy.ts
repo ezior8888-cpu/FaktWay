@@ -76,7 +76,7 @@ const ENUM_PROPERTIES: Readonly<Record<string, ReadonlySet<string>>> = {
   '$browser': new Set(['Chrome', 'Chrome iOS', 'Firefox', 'Firefox iOS', 'Safari', 'Mobile Safari', 'Microsoft Edge', 'Opera', 'Samsung Internet']),
   '$device_type': new Set(['Desktop', 'Mobile', 'Tablet']),
   '$group_type': new Set(['tenant']),
-  method: new Set(['password', 'google', 'email']),
+  method: new Set(['password', 'google', 'email', 'passkey']),
   plan: PLANS,
   from_plan: PLANS,
   to_plan: PLANS,

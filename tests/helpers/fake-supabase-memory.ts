@@ -95,8 +95,13 @@ export function fakeSupabase(db: MemoryDb) {
           filters.push((r) => (r[k] ?? null) === v);
           return q;
         },
-        gt: (k: string, v: number) => {
-          filters.push((r) => typeof r[k] === 'number' && r[k] > v);
+        // `gt`: liczby (kwoty) albo teksty (daty ISO); brak wartości nie spełnia warunku.
+        gt: (k: string, v: number | string) => {
+          filters.push((r) =>
+            typeof v === 'number'
+              ? typeof r[k] === 'number' && r[k] > v
+              : r[k] != null && String(r[k]) > v,
+          );
           return q;
         },
         lt: (k: string, v: string) => {

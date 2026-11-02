@@ -21,10 +21,12 @@
  */
 export const CONTRACT_VERSION = '2026-10-21';
 // 2026-11-02: zdarzenia z serwera wyłącznie za zgodą, źródło wejścia (pomiar FaktWay 1.0).
+// 2026-11-02: dane logowania biometrią (klucz publiczny i nazwa urządzenia).
 export const PRIVACY_POLICY_VERSION = '2026-11-02';
 // 2026-10-22: cookie `sidebar_state` (menu boczne panelu, plan Finora).
 // 2026-10-25: Turnstile także przy potwierdzaniu hasła w ustawieniach.
 // 2026-11-02: cookie `ff_first_touch` i zapis daty wyboru (pomiar FaktWay 1.0).
+// 2026-11-02: logowanie biometrią i „Zapamiętaj mnie” (trzy cookies, klucz localStorage).
 export const COOKIE_POLICY_VERSION = '2026-11-02';
 
 /**

@@ -35,6 +35,8 @@ const KNOWN: Record<string, string> = {
   'lib/analytics/attribution.ts': 'skąd do nas trafiłeś',
   // To samo ciasteczko: po rejestracji serwer zostawia w nim sam znacznik bez danych.
   'lib/analytics/funnel.ts': 'sam znacznik',
+  'components/auth/passkey-enroll-offer.tsx': 'faktway.passkey_offer_dismissed',
+  'components/auth/passkey-enroll-offer-gate.tsx': 'ksef.passkey_offer',
   'app/actions/organizations.ts': 'w której firmie (Organizacji) pracujesz',
   'lib/supabase/middleware.ts': 'utrzymanie zalogowanej sesji',
   'lib/supabase/server.ts': 'utrzymanie zalogowanej sesji',

@@ -21,6 +21,16 @@
  * FAIL-CLOSED: brak zmiennej = `off` = zachowanie sprzed zmiany.
  */
 
+/**
+ * Telefon, nie tablet: `Android` bez `Mobile` w UA to tablet, podobnie iPad.
+ * Czytają to bramka w proxy i ekran logowania („Zapamiętaj mnie”, propozycja biometrii).
+ */
+const PHONE_UA_RE = /iPhone|iPod|Windows Phone|Android(?=.*\bMobile\b)/i;
+
+export function isPhoneUserAgent(userAgent: string | null | undefined): boolean {
+  return typeof userAgent === 'string' && PHONE_UA_RE.test(userAgent);
+}
+
 /** `off` — wszystkie telefony na `/mobile`. `allowlist` — tylko wskazane konta. `on` — każdy. */
 export type MobilePanelMode = 'off' | 'allowlist' | 'on';
 

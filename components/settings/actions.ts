@@ -27,6 +27,8 @@ export type UploadCertificateResult =
       success: false;
       error: string;
       code?: 'NIP_ALREADY_CLAIMED';
+      /** Sesja po biometrii: konto ma 2FA, trzeba podać kod (`MfaStepUpNotice`). */
+      mfaStepUp?: true;
     };
 
 const MAX_PEM_BYTES = 128 * 1024;
@@ -42,6 +44,13 @@ export async function uploadCertificateAction(data: {
     // A Server Action can be POSTed directly. The page layout is not its guard.
     const { supabase, tenantId, user } = await requireOwner();
     const mfa = await getVerifiedMfaState(supabase).catch(() => null);
+    if (mfa?.status === 'challenge_required' && mfa.user.id === user.id) {
+      return {
+        success: false,
+        mfaStepUp: true,
+        error: 'Zmiana certyfikatu KSeF wymaga potwierdzenia kodem z aplikacji.',
+      };
+    }
     if (!mfa || mfa.status !== 'verified' || mfa.user.id !== user.id) {
       return {
         success: false,

@@ -47,6 +47,8 @@ export interface UserDataExport {
   email_preferences: Rows;
   /** Urządzenia z powiadomieniami — bez adresu i kluczy szyfrowania. */
   push_devices: Rows;
+  /** Urządzenia do logowania biometrią — nazwa i daty, bez klucza i identyfikatora poświadczenia. */
+  passkey_devices: Rows;
   support_conversations: Array<Record<string, unknown> & { messages: Rows }>;
   join_requests: Rows;
   invitations_received: Rows;
@@ -58,6 +60,7 @@ export interface UserDataExport {
     | 'audit_logs'
     | 'email_preferences'
     | 'push_devices'
+    | 'passkey_devices'
     | 'support_conversations'
     | 'support_messages'
     | 'join_requests'
@@ -87,6 +90,11 @@ const SECTIONS = {
   push_devices: {
     table: 'push_subscriptions',
     columns: 'id, tenant_id, device_type, device_name, user_agent, notify_invoice_accepted, notify_invoice_rejected, notify_payment_received, notify_cert_expiry, notify_inbox_new, last_used_at, is_active, created_at',
+    by: 'user_id',
+  },
+  passkey_devices: {
+    table: 'user_passkeys',
+    columns: 'id, device_label, backed_up, created_at, last_used_at',
     by: 'user_id',
   },
   support_conversations: {
@@ -220,6 +228,7 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
       .map(({ organization_id, role }) => ({ organization_id, role })),
     email_preferences: byName.email_preferences.rows,
     push_devices: byName.push_devices.rows,
+    passkey_devices: byName.passkey_devices.rows,
     support_conversations: byName.support_conversations.rows.map((conversation) => ({
       ...conversation,
       messages: messages.filter((m) => m.conversation_id === conversation.id),
@@ -234,6 +243,7 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
       audit_logs: coverage(audit.data.length, audit.count),
       email_preferences: byName.email_preferences.coverage,
       push_devices: byName.push_devices.coverage,
+      passkey_devices: byName.passkey_devices.coverage,
       support_conversations: byName.support_conversations.coverage,
       support_messages: messagesCoverage,
       join_requests: byName.join_requests.coverage,
@@ -248,7 +258,7 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
     },
     notes: 'Zestawienie obejmuje profil konta, członkostwa, maksymalnie 1000 ostatnich wpisów audytu ' +
       'oraz dane zapisane o Tobie w aplikacji: preferencje poczty, urządzenia z powiadomieniami, ' +
-      'rozmowy z pomocą, prośby o dołączenie, otrzymane zaproszenia, żądania usunięcia konta, ' +
+      'urządzenia do logowania biometrią, rozmowy z pomocą, prośby o dołączenie, otrzymane zaproszenia, żądania usunięcia konta, ' +
       'zapis na newsletter i odbicia poczty (do 1000 pozycji w każdej sekcji). ' +
       'Pola coverage podają liczbę zwróconych i dostępnych rekordów oraz informację o ograniczeniu wyników. ' +
       'Klucze techniczne (np. klucze szyfrowania powiadomień, skróty tokenów) nie są danymi o Tobie i nie trafiają do pliku. ' +

@@ -3,12 +3,18 @@ import 'server-only';
 import { redirect } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/server';
+import { getRequestPanelMfaState } from './panel-mfa-request';
 import { getVerifiedMfaState } from './verified-mfa';
 
-/** Bootstrap and invitations need an authenticated user before an org exists. */
-export async function getVerifiedUserContext() {
+/**
+ * Bootstrap and invitations need an authenticated user before an org exists.
+ * Jak panel: sesja po biometrii przechodzi. `fullMfa` wymaga prawdziwego kodu
+ * (eksport danych konta), znacznik wtedy nie wystarcza.
+ */
+export async function getVerifiedUserContext(options: { fullMfa?: boolean } = {}) {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await (options.fullMfa ? getVerifiedMfaState(supabase) : getRequestPanelMfaState(supabase))
+    .catch(() => null);
   if (!state) {
     return {
       ok: false as const,

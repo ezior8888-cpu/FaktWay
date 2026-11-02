@@ -54,7 +54,7 @@ export const POLITYKA_PRYWATNOSCI: LegalDocument = {
         [
           [
             'Założenie i prowadzenie Konta, świadczenie usług (Regulamin)',
-            'imię i nazwisko, e-mail, skrót hasła, role w Organizacjach, ustawienia, dane z logowania Google (jeśli go użyjesz)',
+            'imię i nazwisko, e-mail, skrót hasła, role w Organizacjach, ustawienia, dane z logowania Google (jeśli go użyjesz), klucz publiczny i nazwa urządzenia do logowania biometrią (jeśli je dodasz; odcisk palca ani obraz twarzy do nas nie trafiają)',
             'art. 6 ust. 1 lit. b RODO (umowa) — gdy jesteś stroną umowy; art. 6 ust. 1 lit. f (prawnie uzasadniony interes: obsługa klienta, w imieniu którego działasz) — gdy korzystasz z Konta jako pracownik lub księgowy klienta',
             `do usunięcia Konta (usunięcie następuje po ${GDPR_COOLING_OFF_DAYS} dniach na wycofanie decyzji, najpóźniej w ciągu miesiąca od żądania)`,
           ],

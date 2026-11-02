@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ logout: vi.fn() }));
+vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/auth/inactivity-logout', () => ({ forceSignOutInactive: mocks.logout }));
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => open ? <div>{children}</div> : null,
