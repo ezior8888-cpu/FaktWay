@@ -10,7 +10,7 @@ vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@/lib/security/turnstile', () => ({ verifyTurnstile: vi.fn() }));
 vi.mock('@/lib/rate-limit/auth', () => ({ checkLoginRateLimit: vi.fn() }));
-import { signOutCurrentSession } from '@/lib/auth/sign-out';
+import { clearDeviceLoginCookies, signOutCurrentSession } from '@/lib/auth/sign-out';
 import { signOut } from '@/app/(auth)/login/actions';
 import { forceSignOutInactive } from '@/lib/auth/inactivity-logout';
 
@@ -117,6 +117,13 @@ describe('logout uses the real SDK and clears only the current browser session',
     jar = new Map([['ksef.passkey_session', 'v1.fixture'], ['ksef.remember_me', '1'], ['theme', 'dark']]);
     expect((await signOutCurrentSession()).localSessionCleared).toBe(true);
     expect([...jar.keys()]).toEqual(['theme']);
+  });
+  it('clearDeviceLoginCookies (wylogowanie po zmianie hasła z linku) nie rusza innych ciasteczek i nie rzuca', async () => {
+    jar = new Map([['ksef.passkey_session', 'v1.fixture'], ['ksef.remember_me', '1'], ['ksef.active_org', 'other-cookie']]);
+    await clearDeviceLoginCookies();
+    expect([...jar.keys()]).toEqual(['ksef.active_org']);
+    mocks.cookies.mockRejectedValue(new Error('poza żądaniem'));
+    await expect(clearDeviceLoginCookies()).resolves.toBeUndefined();
   });
   it.each([signOut, forceSignOutInactive])('does not redirect or write logout success when cookie cleanup fails', async (action) => {
     await seedSdk(204);
