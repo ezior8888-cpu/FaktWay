@@ -1,4 +1,5 @@
-import { CONSENT_KEY } from '@/lib/analytics/consent';
+import { ATTRIBUTION_COOKIE } from '@/lib/analytics/attribution';
+import { CONSENT_KEY, CONSENT_META_KEY } from '@/lib/analytics/consent';
 import { LEGAL_ENTITY } from '@/lib/legal/entity';
 import { p, section, table, type LegalDocument } from '@/lib/legal/doc-model';
 import { ACTIVE_ORG_COOKIE } from '@/lib/supabase/active-org';
@@ -23,7 +24,7 @@ export const POLITYKA_COOKIES: LegalDocument = {
   version: COOKIE_POLICY_VERSION,
   summary: [
     'Bez Twojej zgody zapisujemy w przeglądarce tylko to, bez czego serwis nie zadziała: sesję logowania, wybraną firmę, Twoje ustawienia i Twoją decyzję w sprawie analityki.',
-    'Analityka (PostHog) włącza się dopiero po kliknięciu „Akceptuję” i nie zapisuje plików cookies. Zgodę zmienisz w każdej chwili poniżej.',
+    'Analityka (PostHog) włącza się dopiero po kliknięciu „Akceptuję”. Za tą samą zgodą zapisujemy jedno własne ciasteczko ze źródłem wejścia. Zgodę zmienisz w każdej chwili poniżej.',
     'Nie używamy cookies reklamowych ani śledzących między stronami.',
   ],
   sections: [
@@ -42,7 +43,7 @@ export const POLITYKA_COOKIES: LegalDocument = {
         [
           ['sb-…-auth-token', 'cookie (własne)', 'utrzymanie zalogowanej sesji', 'do wylogowania; odnawiane w trakcie korzystania'],
           [ACTIVE_ORG_COOKIE, 'cookie (własne, niedostępne dla skryptów)', 'zapamiętanie, w której firmie (Organizacji) pracujesz', 'do 30 dni'],
-          [CONSENT_KEY, 'localStorage', 'zapamiętanie Twojej decyzji w sprawie analityki', 'do zmiany decyzji lub wyczyszczenia danych przeglądarki'],
+          [`${CONSENT_KEY}, ${CONSENT_META_KEY}`, 'localStorage', 'zapamiętanie Twojej decyzji w sprawie analityki i chwili jej podjęcia', 'do zmiany decyzji lub wyczyszczenia danych przeglądarki'],
           [THEME_STORAGE_KEY, 'localStorage', 'motyw jasny lub ciemny, który wybrałeś', 'jw.'],
           // Menu boczne panelu (shadcn, plan Finora) — components/ui/sidebar.tsx.
           ['sidebar_state', 'cookie (własne)', 'zapamiętanie, czy menu boczne panelu jest rozwinięte, czy zwinięte', 'do 7 dni'],
@@ -56,8 +57,15 @@ export const POLITYKA_COOKIES: LegalDocument = {
     section(
       'analityczne',
       '3. Analityka (tylko za zgodą)',
-      p('Za Twoją zgodą korzystamy z PostHog (serwery w UE), żeby rozumieć, których części serwisu używasz, i poprawiać produkt. Analityka nie zapisuje plików cookies ani danych w pamięci przeglądarki (działa wyłącznie w pamięci otwartej karty), nie zbiera adresu IP ani treści dokumentów, a adresy stron skraca do nazwy sekcji. Nie nagrywamy sesji i nie śledzimy kliknięć automatycznie.'),
-      p('Zgoda jest dobrowolna. Możesz ją wycofać w każdej chwili przyciskiem w sekcji „Twoje ustawienia” — wycofanie działa od razu i nie wpływa na zgodność z prawem wcześniejszego przetwarzania.'),
+      p('Za Twoją zgodą korzystamy z PostHog (serwery w UE), żeby rozumieć, których części serwisu używasz, i poprawiać produkt. PostHog nie zapisuje plików cookies ani danych w pamięci przeglądarki (działa wyłącznie w pamięci otwartej karty), nie zbiera adresu IP ani treści dokumentów, a adresy stron skraca do nazwy sekcji. Nie nagrywamy sesji i nie śledzimy kliknięć automatycznie.'),
+      p('Za tą samą zgodą zapisujemy jedno własne ciasteczko, żeby wiedzieć, skąd do nas trafiłeś. Przechowuje parametry kampanii z adresu (utm), sam host strony odsyłającej, stronę wejścia i datę. Nie zapisujemy identyfikatorów kliknięć reklam. Przy rejestracji dane te trafiają do Twojego konta. Przy wycofaniu zgody usuwamy je z konta i zdejmujemy z Twojego profilu w PostHogu. Zdarzenia, które PostHog już od nas dostał, zostają tam pod pseudonimowym identyfikatorem do końca okresu przechowywania (24 miesiące) albo do usunięcia na Twoją prośbę.'),
+      table(
+        ['Nazwa', 'Rodzaj', 'Do czego służy', 'Jak długo'],
+        [
+          [ATTRIBUTION_COOKIE, 'cookie (własne)', 'zapamiętanie, skąd do nas trafiłeś, żeby przypisać to do konta przy rejestracji', 'do rejestracji, do zapisania decyzji na koncie, do wylogowania albo do wycofania zgody, najdłużej 90 dni; po rejestracji zostaje sam znacznik bez danych, do następnego wejścia na stronę'],
+        ],
+      ),
+      p('Zgoda jest dobrowolna. Możesz ją wycofać w każdej chwili przyciskiem w sekcji „Twoje ustawienia”, a po zalogowaniu także w Ustawienia → Konto i dane (RODO). Wycofanie działa od razu w tej przeglądarce. Dla zdarzeń wysyłanych z naszego serwera działa od zapisu na koncie: gdy klikniesz, będąc wylogowanym, zapiszemy je na koncie przy najbliższym logowaniu w tej przeglądarce, a do tego czasu te zdarzenia mogą jeszcze wychodzić. Wycofanie nie wpływa na zgodność z prawem wcześniejszego przetwarzania.'),
     ),
     section(
       'zewnetrzne',

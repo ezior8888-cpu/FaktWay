@@ -168,7 +168,9 @@ export type AuditAction =
   | 'legal.terms_accepted'
   | 'legal.checkout_statement_accepted'
   | 'legal.email_consent_granted'
-  | 'legal.email_consent_withdrawn';
+  | 'legal.email_consent_withdrawn'
+  // Zgoda na analitykę (00161): kto, kiedy i na jakie brzmienie (ANALYTICS_STATEMENT).
+  | 'analytics.consent_changed';
 
 export interface AuditLogEntry {
   action: AuditAction;

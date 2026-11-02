@@ -31,6 +31,9 @@ export default defineConfig({
       'tests/rls-historia-ksef.test.ts',
       // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
       'tests/rls-sprzatanie-dziennikow.test.ts',
+      // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej
+      // faktury w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji.
+      'tests/rls-lejek-analityka.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

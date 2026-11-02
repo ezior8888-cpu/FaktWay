@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/headers', () => ({ cookies: vi.fn(), headers: vi.fn() }));
 
-import { CONSENT_KEY } from '@/lib/analytics/consent';
+import { ATTRIBUTION_COOKIE } from '@/lib/analytics/attribution';
+import { CONSENT_KEY, CONSENT_META_KEY } from '@/lib/analytics/consent';
 import { GDPR_COOLING_OFF_DAYS } from '@/lib/gdpr/deletion-constants';
 import {
   listLabel,
@@ -221,9 +222,24 @@ describe('treść odpowiada rzeczywistości', () => {
 
   it('polityka cookies wymienia klucze, których kod naprawdę używa', () => {
     const t = text(POLITYKA_COOKIES);
-    for (const key of [CONSENT_KEY, ACTIVE_ORG_COOKIE, THEME_STORAGE_KEY, 'install-prompt-dismissed-at']) {
+    for (const key of [CONSENT_KEY, CONSENT_META_KEY, ATTRIBUTION_COOKIE, ACTIVE_ORG_COOKIE, THEME_STORAGE_KEY, 'install-prompt-dismissed-at']) {
       expect(t, key).toContain(key);
     }
+  });
+
+  // Od 11.2026 zdarzenia z serwera wymagają zgody tak samo jak przeglądarka.
+  it('dokumenty nie obiecują już analityki bez zgody i opisują ciasteczko źródła wejścia', () => {
+    const privacy = text(POLITYKA_PRYWATNOSCI);
+    expect(privacy).not.toContain('także wobec statystyk po stronie serwera');
+    expect(privacy).toMatch(/zdarzenia z serwera[^|]*wyłącznie za zgodą|wyłącznie za zgodą[^|]*zdarzenia z serwera/i);
+    expect(privacy).toContain('źródło wejścia');
+    const cookies = text(POLITYKA_COOKIES);
+    expect(cookies).not.toContain('Analityka nie zapisuje plików cookies');
+    expect(cookies).toContain('90 dni');
+    expect(cookies).toContain('Ustawienia → Konto i dane');
+    const posthog = SUBPROCESSORS.find((s) => s.name === 'PostHog, Inc.');
+    expect(posthog?.purpose).toContain('po wyrażeniu zgody');
+    expect(posthog?.purpose).not.toContain('w przeglądarce wyłącznie');
   });
 
   it('terminy usuwania konta zgodne z kodem', () => {

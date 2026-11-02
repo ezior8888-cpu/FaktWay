@@ -2,6 +2,7 @@
 
 import { X509Certificate } from 'node:crypto';
 
+import { recordKsefConfigured } from '@/lib/analytics/funnel';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { authenticateWithXades } from '@/lib/ksef/auth';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -159,6 +160,7 @@ export async function uploadCertificateAction(data: {
 
     revalidatePath('/settings/ksef');
     const wasFirstClaim = claimResult === 'claimed';
+    if (wasFirstClaim) await recordKsefConfigured({ tenantId, environment: env });
     // Decyzja Bartosza 22.10.2026: historię z KSeF pobiera cron
     // `cron.ksef-history-sync` (sam znajduje zweryfikowaną firmę) — tu bez
     // zdarzenia joba, tylko informacja dla klienta.

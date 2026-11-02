@@ -39,7 +39,7 @@ export interface UserDataExport {
     last_sign_in_at: string | null;
     metadata: Record<string, unknown>;
   };
-  /** Profil w aplikacji (`public.users`) — imię, ostatnie logowanie. */
+  /** Profil w aplikacji (`public.users`): imię, ostatnie logowanie, zgoda na analitykę i źródło wejścia. */
   profile: Record<string, unknown> | null;
   memberships: MembershipRecord[];
   audit_logs: AuditRecord[];
@@ -176,7 +176,7 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
       .eq('user_id', userId).order('created_at', { ascending: false })
       .order('id').limit(ROW_LIMIT).returns<AuditRecord[]>(),
     supabase.from('users')
-      .select('id, name, last_login, created_at', { count: 'exact' })
+      .select('id, name, last_login, created_at, analytics_consent, analytics_consent_at, signup_source', { count: 'exact' })
       .eq('id', userId).order('id').limit(1).returns<Rows>(),
     ...(Object.keys(SECTIONS) as SectionName[]).map((name) => readSection(name)),
   ]);

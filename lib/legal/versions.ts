@@ -20,10 +20,12 @@
  * zastąpione, nie dopisane.
  */
 export const CONTRACT_VERSION = '2026-10-21';
-export const PRIVACY_POLICY_VERSION = '2026-10-21';
+// 2026-11-02: zdarzenia z serwera wyłącznie za zgodą, źródło wejścia (pomiar FaktWay 1.0).
+export const PRIVACY_POLICY_VERSION = '2026-11-02';
 // 2026-10-22: cookie `sidebar_state` (menu boczne panelu, plan Finora).
 // 2026-10-25: Turnstile także przy potwierdzaniu hasła w ustawieniach.
-export const COOKIE_POLICY_VERSION = '2026-10-25';
+// 2026-11-02: cookie `ff_first_touch` i zapis daty wyboru (pomiar FaktWay 1.0).
+export const COOKIE_POLICY_VERSION = '2026-11-02';
 
 /**
  * Oświadczenie przy rejestracji / w bramce (obowiązkowe). Znaczniki linków
@@ -47,6 +49,18 @@ export const MARKETING_STATEMENT = {
     'Chcę otrzymywać e-mailem od FaktWay porady dotyczące korzystania z serwisu, ' +
     'informacje o nowościach i oferty. Zgodę mogę wycofać w każdej chwili ' +
     '(link w każdej wiadomości albo Ustawienia → Powiadomienia).',
+} as const;
+
+/**
+ * Zgoda na analitykę z banera (dobrowolna, art. 6 ust. 1 lit. a RODO i art. 399
+ * Prawa komunikacji elektronicznej). Baner pokazuje dokładnie ten tekst, a wpis
+ * `analytics.consent_changed` w audit_logs niesie jego wersję.
+ */
+export const ANALYTICS_STATEMENT = {
+  version: '2026-11-02',
+  text:
+    'Za Twoją zgodą zbieramy statystyki użycia (PostHog, hostowane w UE) i zapamiętujemy, ' +
+    'skąd do nas trafiłeś, żeby naprawiać błędy i ulepszać FaktWay. Decyzję zmienisz w każdej chwili.',
 } as const;
 
 /**

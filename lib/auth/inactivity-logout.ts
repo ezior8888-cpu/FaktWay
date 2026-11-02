@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { forgetFirstTouchCookie } from '@/lib/analytics/attribution-server';
 import { logAudit } from '@/lib/audit/log';
 import { signOutCurrentSession } from '@/lib/auth/sign-out';
 
@@ -17,6 +18,7 @@ import { signOutCurrentSession } from '@/lib/auth/sign-out';
 export async function forceSignOutInactive(): Promise<{ ok: false; error: 'local_logout_failed' }> {
   const result = await signOutCurrentSession();
   if (!result.localSessionCleared) return { ok: false, error: 'local_logout_failed' };
+  await forgetFirstTouchCookie();
   if (result.userId) {
     await logAudit({
       action: 'auth.logout', tenantId: null, userId: result.userId,

@@ -42,6 +42,19 @@ export function isAllowedAnalyticsEvent(value: string): boolean {
   return ALLOWED_EVENTS.has(value);
 }
 
+/**
+ * Kanał źródła wejścia: jedyne wartości `source` w zdarzeniach lejka
+ * i `signup_source.channel` w bazie (CHECK w 00161 trzyma tę samą listę).
+ */
+export const ATTRIBUTION_CHANNELS = [
+  'google_ads', 'organic_search', 'youtube', 'tiktok', 'social', 'referral', 'direct', 'other',
+] as const;
+export type AttributionChannel = (typeof ATTRIBUTION_CHANNELS)[number];
+
+/** Powód odejścia w zdarzeniach subscription_canceled, payment_churn i trial_ended. */
+export const CHURN_REASONS = ['canceled', 'payment_failed', 'trial_no_payment'] as const;
+export type ChurnReason = (typeof CHURN_REASONS)[number];
+
 const ID_PROPERTIES = new Set([
   'distinct_id', '$device_id', '$user_id', '$anon_distinct_id', '$session_id', '$window_id',
   '$insert_id', '$pageview_id', '$prev_pageview_id', '$group_key',
@@ -49,7 +62,7 @@ const ID_PROPERTIES = new Set([
 ]);
 const BOOLEAN_PROPERTIES = new Set([
   '$is_identified', '$process_person_profile', '$geoip_disable',
-  'success', 'is_draft', 'vendor_recognized', 'converted',
+  'success', 'is_draft', 'vendor_recognized', 'converted', 'first_payment',
 ]);
 const COUNTER_PROPERTIES = new Set([
   '$screen_height', '$screen_width', '$viewport_height', '$viewport_width',
@@ -68,9 +81,10 @@ const ENUM_PROPERTIES: Readonly<Record<string, ReadonlySet<string>>> = {
   from_plan: PLANS,
   to_plan: PLANS,
   status: new Set(['active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'success', 'failed', 'pending']),
-  env: new Set(['test', 'production']),
-  ksef_env: new Set(['test', 'production']),
-  source: new Set(['manual', 'ocr', 'ksef', 'ksef_inbox', 'csv', 'xls', 'import']),
+  env: new Set(['test', 'demo', 'production']),
+  ksef_env: new Set(['test', 'demo', 'production']),
+  source: new Set(['manual', 'ocr', 'ksef', 'ksef_inbox', 'csv', 'xls', 'import', ...ATTRIBUTION_CHANNELS]),
+  reason: new Set(CHURN_REASONS),
   format: new Set(['jpk_fa', 'kpir', 'csv', 'xlsx', 'xml', 'pdf', 'zip']),
   role: new Set(['owner', 'admin', 'member', 'accountant', 'viewer']),
   feature: ROUTE_AREAS,
@@ -106,6 +120,117 @@ export function sanitizeAnalyticsProperties(properties: Record<string, unknown>)
   }
   return safe;
 }
+
+// ─── Źródło wejścia: lista dozwolonych pól ──────────────────────────────
+
+const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
+
+/**
+ * Pierwszy dotyk: tylko te pola trafiają do ciasteczka, `users.signup_source`
+ * i właściwości osoby. Identyfikatorów kliknięć (gclid, fbclid) tu nie ma:
+ * adres mówi tylko, z jakiego kanału ktoś przyszedł, a sam identyfikator
+ * pozwalałby powiązać osobę z danymi dostawcy reklam.
+ */
+export interface FirstTouch {
+  channel: AttributionChannel;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_term?: string;
+  utm_content?: string;
+  /** Sam host strony odsyłającej, bez ścieżki i parametrów. */
+  referrer_host?: string;
+  /** Publiczna strona wejścia (`isPublicEntryPath`), bez parametrów. */
+  landing_path?: string;
+  /** Data pierwszego dotyku, RRRR-MM-DD. */
+  at: string;
+}
+
+// Litery, cyfry i separatory spotykane w nazwach kampanii. Bez `@`, więc e-mail
+// odpada już tutaj, a ciąg siedmiu cyfr to najpewniej telefon, NIP albo PESEL.
+const UTM_VALUE = /^[\p{L}\p{N} ._~+:|()/-]{1,100}$/u;
+const LONG_DIGITS = /\d{7}/;
+const HOST = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Wartość utm albo null, gdy może zawierać dane osobowe lub śmieci. */
+export function sanitizeUtmValue(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!UTM_VALUE.test(trimmed) || LONG_DIGITS.test(trimmed)) return null;
+  return trimmed;
+}
+
+export function sanitizeReferrerHost(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 253) return null;
+  const host = value.toLowerCase();
+  return HOST.test(host) ? host : null;
+}
+
+// Strony, na które wchodzi się bez logowania. Reszta adresów może nieść token
+// albo identyfikator dokumentu (/accountant/<token>, /invite/<token>, /invoices/<id>).
+// Nowa strona marketingowa: dopisz tutaj, pilnuje tego test atrybucja-zrodla.
+const ENTRY_PAGES = new Set([
+  '/', '/pricing', '/kalkulator-oszczednosci', '/kontakt', '/mobile', '/about', '/login', '/register',
+]);
+const ENTRY_SECTIONS = new Set(['/blog', '/vs', '/pomoc', '/legal']);
+const ENTRY_SLUG = /^[a-z0-9][a-z0-9-]{0,79}$/;
+
+/** Ścieżka publicznej strony wejścia (bez końcowego ukośnika) albo null. */
+export function sanitizeLandingPath(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 200) return null;
+  const path = value.length > 1 && value.endsWith('/') ? value.slice(0, -1) : value;
+  if (ENTRY_PAGES.has(path) || ENTRY_SECTIONS.has(path)) return path;
+  const [empty, section, slug, ...rest] = path.split('/');
+  if (empty !== '' || !section || !slug || rest.length > 0) return null;
+  return ENTRY_SECTIONS.has(`/${section}`) && ENTRY_SLUG.test(slug) ? path : null;
+}
+
+export function isPublicEntryPath(pathname: string): boolean {
+  return sanitizeLandingPath(pathname) !== null;
+}
+
+/**
+ * Walidacja pierwszego dotyku z niezaufanego źródła (ciasteczko da się podrobić,
+ * JSON z bazy mógł zapisać starszy kod): obce klucze odpadają, wadliwe pola też,
+ * a bez poprawnego kanału albo daty cały zapis jest nieważny.
+ */
+export function sanitizeFirstTouch(value: unknown): FirstTouch | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const channel = ATTRIBUTION_CHANNELS.find((c) => c === raw.channel);
+  if (!channel || typeof raw.at !== 'string' || !DATE_ONLY.test(raw.at)) return null;
+  const touch: FirstTouch = { channel, at: raw.at };
+  for (const field of UTM_FIELDS) {
+    const clean = sanitizeUtmValue(raw[field]);
+    if (clean) touch[field] = clean;
+  }
+  const host = sanitizeReferrerHost(raw.referrer_host);
+  if (host) touch.referrer_host = host;
+  const landing = sanitizeLandingPath(raw.landing_path);
+  if (landing) touch.landing_path = landing;
+  return touch;
+}
+
+/** Surowe dane wejścia idą do właściwości osoby, do zdarzeń tylko kanał. */
+export function firstTouchPersonProperties(touch: FirstTouch): Properties {
+  const { channel, at, ...fields } = touch;
+  return { first_touch_channel: channel, ...fields, first_touch_at: at };
+}
+
+/**
+ * Wszystkie nazwy, które `firstTouchPersonProperties` może ustawić na osobie.
+ * Przy odwołaniu zgody zdejmujemy je z osoby w PostHogu ($unset); test pilnuje,
+ * żeby lista nadążała za `FirstTouch`.
+ */
+export const FIRST_TOUCH_PERSON_PROPERTY_NAMES: readonly string[] = [
+  'first_touch_channel',
+  ...UTM_FIELDS,
+  'referrer_host',
+  'landing_path',
+  'first_touch_at',
+];
+
 /** Final outbound allowlist also strips old persisted person properties. */
 export function sanitizeAnalyticsEvent(event: CaptureResult | null): CaptureResult | null {
   if (!event || !hasAnalyticsConsent() || !ALLOWED_EVENTS.has(event.event)) return null;

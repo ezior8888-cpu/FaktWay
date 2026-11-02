@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
+import { forgetFirstTouchCookie } from '@/lib/analytics/attribution-server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
 import { getClientIp } from '@/lib/auth/get-client-ip';
@@ -77,7 +78,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
       metadata: { method: 'password' },
     });
     await trackServer({
-      distinctId: signedIn.id,
+      userId: signedIn.id,
       event: ANALYTICS_EVENTS.loginCompleted,
       properties: { method: 'password' },
     });
@@ -131,6 +132,7 @@ export async function loginWithGoogle(): Promise<void> {
 export async function signOut(): Promise<void> {
   const result = await signOutCurrentSession();
   if (!result.localSessionCleared) throw new Error('Nie udało się wylogować tej przeglądarki. Spróbuj ponownie.');
+  await forgetFirstTouchCookie();
   if (result.userId) {
     await logAudit({
       action: 'auth.logout', tenantId: null, userId: result.userId,

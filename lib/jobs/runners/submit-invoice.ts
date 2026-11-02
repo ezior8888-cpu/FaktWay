@@ -8,6 +8,7 @@ import { IssueDatePassedError, issueDatePassedMessage } from '@/lib/ksef/special
 import type { JobContext } from '@/lib/jobs/registry';
 import type { KsefEnvironment } from '@/types/ksef';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { recordFirstInvoiceAccepted } from '@/lib/analytics/funnel';
 import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { invoiceSubmitRequested } from '../events';
@@ -869,6 +870,9 @@ export async function runSubmitInvoice(
         ksefNumber: alreadyDone.ksef_number,
       });
       await reconcileAcceptedOfflineQueue(parsed.data);
+      // Ponowienie po awarii tuż po zapisie akceptacji: kroki niżej już się nie wykonają,
+      // a pierwszej faktury firmy nie wolno zgubić (powtórka ma ten sam uuid).
+      await recordFirstInvoiceAccepted({ tenantId, invoiceId });
       return {
         alreadyAccepted: true as const,
         ksefNumber: alreadyDone.ksef_number,
@@ -1967,13 +1971,13 @@ export async function runSubmitInvoice(
 
     await step.run('analytics-invoice-accepted', async () => {
       await trackServer({
-        distinctId: tenantId,
+        tenantId,
         event: ANALYTICS_EVENTS.invoiceAccepted,
-        properties: {
-          ksef_env: env,
-          internal_number: invoice.internalNumber ?? null,
-        },
+        properties: { ksef_env: env },
+        dedupeKey: invoiceId,
+        timestamp: result.acquisitionTimestamp,
       });
+      await recordFirstInvoiceAccepted({ tenantId, invoiceId });
     });
 
     await step.sendEvent('trigger-upo-download', {
