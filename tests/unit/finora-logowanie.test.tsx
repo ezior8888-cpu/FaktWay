@@ -61,6 +61,7 @@ import {
 } from '@/components/auth/finora/auth-split-layout';
 import { PasswordInput } from '@/components/auth/finora/password-input';
 import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
+import { OFERTA } from '@/lib/marketing/oferta';
 import { OnboardingForm } from '@/components/onboarding/form';
 import { ImportProgressView, type ImportJobRow } from '@/components/onboarding/import-progress-view';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
@@ -119,7 +120,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).toContain('max-lg:hidden');
     expect(html).toContain('Tytuł panelu');
     expect(html).toContain('Tekst panelu');
-    expect(AUTH_SLOGAN_TITLE).toBe('Faktury w KSeF bez stresu.');
+    // FaktWay 1.0: to samo zdanie oferty co na stronie głównej i w cenniku.
+    expect(AUTH_SLOGAN_TITLE).toBe(OFERTA);
     // Bez obietnicy FLO, którego klient nie ma (agent niewdrożony).
     expect(AUTH_SLOGAN_TEXT).toBe('Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.');
     expect(html.split(AUTH_SLOGAN_TITLE).length - 1).toBe(2); // telefon + karta

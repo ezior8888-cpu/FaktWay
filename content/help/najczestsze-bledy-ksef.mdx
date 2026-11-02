@@ -3,35 +3,35 @@ title: "Najczęstsze błędy KSeF i jak je naprawić"
 category: "ksef"
 order: 4
 summary: "Co oznaczają kody błędów KSeF i jak poprawić odrzuconą fakturę."
-updated: "2026-05-19"
+updated: "2026-11-02"
 ---
 
 KSeF może odrzucić fakturę, jeśli dokument nie spełnia wymagań formatu FA(3). FaktWay tłumaczy kody błędów na zrozumiały język i wskazuje, co poprawić.
 
 ## Walidacja przed wysyłką
 
-FaktWay waliduje fakturę lokalnie, **zanim** wyśle ją do KSeF. Większość problemów wyłapujemy od razu w formularzu — pole z błędem jest podświetlone, a Ty widzisz konkretną podpowiedź zamiast surowego kodu.
+FaktWay waliduje fakturę lokalnie, **zanim** wyśle ją do KSeF. Większość problemów wyłapujemy od razu w formularzu: pole z błędem jest podświetlone, a Ty widzisz konkretną podpowiedź zamiast surowego kodu.
 
 ## Typowe przyczyny odrzucenia
 
-- **Nieaktywny NIP nabywcy** — kontrahent ma wykreśloną lub zawieszoną działalność. FaktWay sprawdza NIP w Białej Liście jeszcze przy wpisywaniu.
-- **Brak wymaganej daty** — np. data sprzedaży lub data wykonania usługi przy konkretnej pozycji.
-- **Niespójne kwoty** — suma pozycji nie zgadza się z podsumowaniem VAT.
-- **Zły kod stawki VAT** — stawka nieobsługiwana dla danego typu transakcji.
+- **Nieaktywny NIP nabywcy**: kontrahent ma wykreśloną lub zawieszoną działalność. FaktWay sprawdza NIP w Białej Liście jeszcze przy wpisywaniu.
+- **Brak wymaganej daty**: np. data sprzedaży lub data wykonania usługi przy konkretnej pozycji.
+- **Niespójne kwoty**: suma pozycji nie zgadza się z podsumowaniem VAT.
+- **Zły kod stawki VAT**: stawka nieobsługiwana dla danego typu transakcji.
 
 ## Jak naprawić
 
-Gdy KSeF odrzuci fakturę, w jej szczegółach zobaczysz komunikat z opisem i przyciskiem prowadzącym do pola wymagającego poprawki. Popraw dane i wyślij ponownie — to ta sama faktura, nie tworzysz nowej.
+Gdy KSeF odrzuci fakturę, w jej szczegółach zobaczysz komunikat z opisem i przyciskiem prowadzącym do pola wymagającego poprawki. Popraw dane i wyślij ponownie: to ta sama faktura, nie tworzysz nowej.
 
 ## Błąd a awaria
 
 Rozróżniamy dwie sytuacje:
 
-- **Odrzucenie (błąd 4xx)** — coś jest nie tak z fakturą. Trzeba poprawić dane.
-- **Awaria KSeF (błąd 5xx)** — problem po stronie systemu. FaktWay ponawia wysyłkę automatycznie, a po wyczerpaniu prób przenosi fakturę do Offline24.
+- **Odrzucenie (błąd 4xx)**: coś jest nie tak z fakturą. Trzeba poprawić dane.
+- **Awaria KSeF (błąd 5xx)**: problem po stronie systemu. FaktWay ponawia wysyłkę automatycznie przez dobę, a potem prosi Cię o ponowną wysyłkę.
 
-Nie musisz znać tej różnicy — FaktWay sam decyduje, czy ponawiać, czy poprosić Cię o poprawkę.
+Nie musisz znać tej różnicy, bo FaktWay sam decyduje, czy ponawiać, czy poprosić Cię o poprawkę.
 
 ## Co dalej?
 
-Jeśli faktura utknęła z powodu awarii, zobacz artykuł o trybie Offline24.
+Jeśli faktura utknęła z powodu awarii, zobacz artykuł o tym, co się dzieje, gdy KSeF nie działa.

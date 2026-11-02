@@ -22,17 +22,17 @@ import Link from 'next/link'
 import { Reveal } from '@/components/site/motion'
 import { BandGlow } from '@/components/site/ui'
 import { PortalContainerProvider } from '@/components/ui/portal-container'
+import { OFERTA } from '@/lib/marketing/oferta'
 
 import { AuthLogo } from './auth-logo'
 import { AuthShowcase } from './auth-showcase'
 
 /**
- * Hasło z planu §5 P15 (treść do akceptacji Masła). Drugie zdanie planu
- * („FLO pilnuje terminów…”) obiecywało FLO, którego klient jeszcze nie ma
- * (agent niewdrożony, poza Pulpitem od 19.10) — zostaje prawdziwe zdanie
- * z dawnej strony logowania.
+ * Pierwsze zdanie to zdanie oferty z lib/marketing/oferta.ts, to samo co na
+ * stronie głównej i w cenniku (FaktWay 1.0). Drugie zostaje z dawnej strony
+ * logowania, bo mówi prawdę o wysyłce.
  */
-export const AUTH_SLOGAN_TITLE = 'Faktury w KSeF bez stresu.'
+export const AUTH_SLOGAN_TITLE = OFERTA
 export const AUTH_SLOGAN_TEXT = 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.'
 
 export function AuthSplitLayout({

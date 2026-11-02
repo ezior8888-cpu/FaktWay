@@ -102,7 +102,7 @@ export function SavingsCalculatorPreview() {
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border p-6 lg:px-10">
         <p className="max-w-md text-xs text-muted-foreground">
           Szacunek przy założeniu: 8 min na dokument ręcznie i 1,5 min
-          z OCR FaktWay, abonament {PRICE_PER_MONTH}. Twój wynik może być inny.
+          z odczytem ze zdjęcia w FaktWay, abonament {PRICE_PER_MONTH}. Twój wynik może być inny.
         </p>
         <ButtonLink href="/register">
           Zacznij oszczędzać teraz

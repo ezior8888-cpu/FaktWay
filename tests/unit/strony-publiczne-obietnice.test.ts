@@ -100,9 +100,13 @@ const BEZ_POKRYCIA: Regula[] = [
   { wzor: /po angielsku|dwujęzyczn/i, co: 'faktury po angielsku' },
   { wzor: /proform/i, co: 'proforma' },
   { wzor: /faktur\w* do paragonu/i, co: 'faktura do paragonu' },
-  { wzor: /App Store|Google Play|aplikacj\w* w sklepach/i, co: 'aplikacje w sklepach' },
+  {
+    wzor: /App Store|Google Play|aplikacj\w* w sklepach/i,
+    co: 'aplikacje w sklepach',
+    wyjatki: [['app/(marketing)/vs/', 'opis konkurencji („brak app store”), nie FaktWay']],
+  },
   { wzor: /BLIK/, co: 'BLIK (dopisuje gałąź zbiorcza, w lib/marketing/oferta.ts)' },
-  { wzor: /magiczn/i, co: 'Magiczny Import (decyzja 22.10.2026: znika)' },
+  { wzor: /magiczn\w*\s+import/i, co: 'Magiczny Import (decyzja 22.10.2026: znika)' },
 ];
 
 /** Stare hasła, które konkurowały ze zdaniem oferty. */

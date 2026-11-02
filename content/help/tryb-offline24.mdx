@@ -1,38 +1,38 @@
 ---
-title: "Tryb Offline24 — co gdy KSeF nie działa"
+title: "Co się dzieje, gdy KSeF nie działa"
 category: "ksef"
 order: 3
-summary: "Jak FaktWay obsługuje awarie KSeF, żebyś nie stracił żadnej faktury."
-updated: "2026-05-19"
+summary: "Jak FaktWay ponawia wysyłkę przy awarii KSeF i co możesz zrobić, gdy awaria trwa dłużej."
+updated: "2026-11-02"
 ---
 
-KSeF, jak każdy system, miewa przerwy techniczne. Tryb Offline24 sprawia, że awaria po stronie Ministerstwa nie blokuje Twojej pracy.
+KSeF, jak każdy system, miewa przerwy techniczne. Gdy nie odpowiada, FaktWay sam ponawia wysyłkę, a Ty nie musisz nic robić.
 
 ## Jak to działa
 
-Gdy FaktWay wykryje, że KSeF jest niedostępny:
+Gdy wysyłka do KSeF się nie uda z powodu awarii:
 
-1. Faktura zostaje zapisana lokalnie i trafia do **kolejki Offline24**.
-2. Generujemy dwa kody QR zgodne z rozporządzeniem MF — kod offline oraz kod z podpisem certyfikatu.
-3. Możesz wydrukować lub wysłać fakturę nabywcy — jest ważna mimo braku numeru KSeF.
-4. Gdy KSeF wróci, FaktWay automatycznie wysyła zakolejkowane faktury i pobiera numery KSeF oraz UPO.
+1. FaktWay ponawia ją sam: najpierw kilka razy w ciągu około półtorej godziny.
+2. Jeśli KSeF dalej nie odpowiada, ponawia ją mniej więcej co godzinę przez dobę.
+3. O wyniku dostajesz powiadomienie: fakturę przyjętą albo taką, która wymaga Twojego ruchu.
+4. Jeśli po dobie faktura nadal nie wyszła, wyślesz ją ponownie jednym przyciskiem w szczegółach faktury albo wrócisz do szkicu.
 
-## Nie tracisz faktur
+## Nie dublujemy faktur
 
-Kolejka Offline24 używa deterministycznych identyfikatorów — nawet przy wielokrotnych próbach wysyłki ta sama faktura nie zostanie zdublowana w KSeF.
+Przed ponowną wysyłką FaktWay sprawdza stan poprzedniej próby, więc ta sama faktura nie zostanie zdublowana w KSeF.
 
-## Termin wysyłki
+## Faktury zaliczkowe
 
-Zgodnie z przepisami fakturę wystawioną w trybie offline trzeba przesłać do KSeF w określonym terminie. FaktWay pilnuje go i wysyła automatycznie — Ty nie musisz nic robić.
+Faktura zaliczkowa może wyjść do KSeF tylko w dniu wystawienia, więc ponawiamy ją tylko do północy. Jeśli nie wyjdzie, wróć do szkicu i wystaw ją od nowa z dzisiejszą datą.
 
-## Ograniczenia
+## Tryb Offline24 jest wstrzymany
 
-Dopóki faktura czeka w kolejce Offline24, nie można wystawić do niej korekty. Korektę zrobisz, gdy oryginał uzyska numer KSeF.
+Automatyczny tryb Offline24 z kodami QR jest wstrzymany do czasu, aż kody będą w pełni zgodne ze specyfikacją Ministerstwa Finansów. Dlatego faktura czeka na ponowienie, zamiast wychodzić do nabywcy bez numeru KSeF.
 
 ## Status KSeF
 
-Aktualny stan połączenia z KSeF widzisz w banerze panelu. Gdy KSeF jest „degraded" lub „down", baner Cię o tym informuje, a faktury idą do Offline24.
+Aktualny stan połączenia z KSeF widzisz w banerze panelu. Pokazuje się, gdy KSeF działa wolno albo jest niedostępny.
 
 ## Co dalej?
 
-Jeśli faktura została odrzucona przez KSeF (a nie zakolejkowana), zobacz artykuł o najczęstszych błędach KSeF.
+Jeśli faktura została odrzucona przez KSeF (a nie czeka na ponowienie), zobacz artykuł o najczęstszych błędach KSeF.

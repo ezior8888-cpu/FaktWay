@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { OFERTA } from '@/lib/marketing/oferta';
+
 import { Container, Wordmark } from './ui';
 
 const COLUMNS = [
@@ -7,7 +9,7 @@ const COLUMNS = [
     title: 'Produkt',
     links: [
       { label: 'Funkcje', href: '/#funkcje' },
-      { label: 'Agent FLO', href: '/#flo' },
+      { label: 'Telefon', href: '/#telefon' },
       { label: 'Cennik', href: '/#pricing' },
       { label: 'Pytania', href: '/#faq' },
     ],
@@ -38,7 +40,7 @@ export function SiteFooter() {
         <div className="flex flex-col gap-12 py-14 md:flex-row md:justify-between">
           <div className="max-w-xs">
             <Wordmark />
-            <p className="mt-3 text-sm text-muted-foreground">Faktury w KSeF bez stresu.</p>
+            <p className="mt-3 text-sm text-muted-foreground">{OFERTA}</p>
           </div>
           <nav aria-label="Stopka" className="grid grid-cols-2 gap-10 sm:grid-cols-3 sm:gap-16">
             {COLUMNS.map((column) => (
