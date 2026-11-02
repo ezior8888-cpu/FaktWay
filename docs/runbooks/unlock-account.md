@@ -175,11 +175,13 @@ otwarta nawet 90 dni (logowanie biometrią liczy się jak „Zapamiętaj mnie”
 
 1. Klient ma hasło i kod z aplikacji: Ustawienia → Bezpieczeństwo → Logowanie biometrią →
    Usuń. Usunięcie wylogowuje pozostałe urządzenia i zapisuje `auth.passkey_removed`.
-2. Klient nie może się zalogować: najpierw potwierdź tożsamość jak w §2, potem zakończ
-   sesje konta w `/admin/users/<userId>` i usuń urządzenia na `db-1`:
-   `DELETE FROM public.user_passkeys WHERE user_id = '<userId>';`. To polecenie nie zostawia
-   wpisu w `audit_logs`, więc zapisz je w zgłoszeniu.
-3. Blokada konta w `/admin/users/<userId>` zatrzymuje także logowanie biometrią.
+2. Klient nie może się zalogować: najpierw potwierdź tożsamość jak w §2, potem usuń na `db-1`
+   urządzenia i sesje konta (przycisk wymuszenia wylogowania w `/admin/users` jest dziś
+   niedostępny, `forceLogoutAction`):
+   `DELETE FROM public.user_passkeys WHERE user_id = '<userId>';`
+   `DELETE FROM auth.sessions WHERE user_id = '<userId>';`
+   Te polecenia nie zostawiają wpisu w `audit_logs`, więc zapisz je w zgłoszeniu.
+3. Zawieszenie konta w `/admin/users/<userId>` zatrzymuje także logowanie biometrią.
 
 ---
 
