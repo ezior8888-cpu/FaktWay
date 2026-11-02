@@ -240,7 +240,7 @@ function ActiveSubscriptionSection({
   const status = statusLabel(subscription.status);
   const inTrial = isInTrial(subscription);
   const trialLeft = trialDaysRemaining(subscription);
-  const failureAdvice = paymentFailureAdvice(paymentFailureReason);
+  const failureAdvice = paymentFailureAdvice(paymentFailureReason, subscription.status);
 
   return (
     <>

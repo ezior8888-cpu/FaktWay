@@ -490,32 +490,49 @@ describe('3. nieudane obciążenie recurring_not_supported_by_bank', () => {
 
 describe('paymentFailureAdvice: kody odmowy z dokumentacji BLIK', () => {
   it.each([
-    ['recurring_not_supported_by_bank', /nie obsługuje/, /Zmień metodę płatności/, false],
-    ['insufficient_funds', /środków/, /metodę płatności/, true],
-    ['customer_declined', /zatwierdz/, /metodę płatności/, true],
-    ['payment_limit_exceeded', /limit/, /metodę płatności/, true],
-    ['partner_generic_decline', /bank/i, /metodę płatności/, true],
-  ] as const)('%s', (code, reason, action, willRetry) => {
+    ['recurring_not_supported_by_bank', /nie obsługuje/, /Zmień metodę płatności/],
+    ['insufficient_funds', /środków/, /metodę płatności/],
+    ['customer_declined', /zatwierdz/, /metodę płatności/],
+    ['payment_limit_exceeded', /limit/, /metodę płatności/],
+    ['partner_generic_decline', /bank/i, /metodę płatności/],
+  ] as const)('%s', (code, reason, action) => {
     const advice = paymentFailureAdvice(code);
     expect(advice.reason).toMatch(reason);
     expect(advice.action).toMatch(action);
-    expect(advice.willRetry).toBe(willRetry);
+  });
+
+  it('bank bez BLIK-a cyklicznego: bez obietnicy ponownej próby, bo się nie uda', () => {
+    expect(paymentFailureAdvice('recurring_not_supported_by_bank').action).not.toMatch(/spróbujemy/i);
   });
 
   it('kod nieznany, kod karty i brak kodu: tekst ogólny, bez kodu technicznego i bez słowa „karta”', () => {
     for (const code of [null, 'generic_decline', 'card_declined', 'lost_or_stolen_card', 'Finalizacja nieudana']) {
       const advice = paymentFailureAdvice(code);
       expect(advice.reason, String(code)).toBeNull();
-      expect(advice.willRetry, String(code)).toBe(true);
       expect(advice.action, String(code)).toMatch(/metodę płatności/);
       expect(advice.action, String(code)).not.toMatch(/kart/i);
     }
   });
 
+  it('status unpaid: powód zostaje, ale każdy kod kieruje do opłacenia faktury, a nie do czekania', () => {
+    for (const code of [null, 'generic_decline', 'recurring_not_supported_by_bank', 'insufficient_funds', 'customer_declined', 'payment_limit_exceeded', 'partner_generic_decline']) {
+      const advice = paymentFailureAdvice(code, 'unpaid');
+      expect(advice.reason, String(code)).toBe(paymentFailureAdvice(code).reason);
+      expect(advice.action, String(code)).toContain('Opłać zaległą fakturę');
+      expect(advice.action, String(code)).not.toMatch(/spróbujemy|kolejną próbę/i);
+    }
+  });
+
+  it('inny status niż unpaid: tekst taki jak bez statusu', () => {
+    expect(paymentFailureAdvice('insufficient_funds', 'past_due')).toEqual(paymentFailureAdvice('insufficient_funds'));
+  });
+
   it('teksty bez długich myślników', () => {
-    for (const code of [null, 'recurring_not_supported_by_bank', 'insufficient_funds', 'customer_declined', 'payment_limit_exceeded', 'partner_generic_decline']) {
-      const { reason, action } = paymentFailureAdvice(code);
-      expect(`${reason ?? ''} ${action}`).not.toMatch(/[–—]/);
+    for (const status of [undefined, 'unpaid'] as const) {
+      for (const code of [null, 'recurring_not_supported_by_bank', 'insufficient_funds', 'customer_declined', 'payment_limit_exceeded', 'partner_generic_decline']) {
+        const { reason, action } = paymentFailureAdvice(code, status);
+        expect(`${reason ?? ''} ${action}`).not.toMatch(/[–—]/);
+      }
     }
   });
 });

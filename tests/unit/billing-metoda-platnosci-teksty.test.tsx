@@ -197,6 +197,36 @@ describe('strona abonamentu', () => {
     expect(html).not.toMatch(CARD_WORD);
   });
 
+  it.each([
+    ['insufficient_funds', 'Na koncie zabrakło środków.'],
+    ['customer_declined', 'Płatność nie została zatwierdzona'],
+    ['recurring_not_supported_by_bank', 'Twój bank nie obsługuje'],
+    [null, null],
+  ])('status unpaid przy kodzie %s: Stripe już nie pobiera, więc bez obietnicy kolejnej próby', async (code, reason) => {
+    mocks.getActiveSubscription.mockResolvedValue({ ...subscription, status: 'unpaid' });
+    mocks.getLatestPaymentFailureReason.mockResolvedValue(code);
+
+    const html = await pageHtml();
+
+    expect(html).toContain('Płatność nie została pobrana');
+    if (reason) expect(html).toContain(reason);
+    expect(html).toContain('Kolejnych prób pobrania już nie będzie');
+    expect(html).toContain('Opłać zaległą fakturę');
+    expect(html).not.toMatch(/spróbujemy/i);
+    expect(html).not.toMatch(/kolejną próbę/i);
+    expect(html).not.toMatch(LONG_DASH);
+  });
+
+  it('status past_due: Stripe może jeszcze pobrać, tekst jak dla kodu', async () => {
+    mocks.getActiveSubscription.mockResolvedValue({ ...subscription, status: 'past_due' });
+    mocks.getLatestPaymentFailureReason.mockResolvedValue('insufficient_funds');
+
+    const html = await pageHtml();
+
+    expect(html).toContain('Uzupełnij środki, a spróbujemy ponownie');
+    expect(html).not.toContain('Kolejnych prób pobrania już nie będzie');
+  });
+
   it('błąd odczytu przyczyny nie wywraca strony', async () => {
     mocks.getActiveSubscription.mockResolvedValue({ ...subscription, status: 'past_due' });
     mocks.getLatestPaymentFailureReason.mockRejectedValue(new Error('baza niedostępna'));
