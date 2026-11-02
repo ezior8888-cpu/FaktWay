@@ -104,14 +104,16 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   // trafności w panelu operatora.
   { queue: 'cron.flo-shadow-settle', cron: '0 6 * * 1', tz: TZ },
   { queue: 'cron.gdpr-process-deletions', cron: '0 * * * *' },
-  { queue: 'cron.inbox-polling', cron: '*/15 * * * *', tz: TZ },
-  // K2: 7 minut po odbiorze skrzynki — domyka faktury bez kosztu/XML.
+  // Co minutę, ale to lekki takt: bierze firmy należne według harmonogramu (00160)
+  // do limitu slotów, więc żadna firma nie jest odpytywana co minutę. 1440 przebiegów
+  // na dobę, 2 zapytania każdy. Założenie limitu: `INBOX_DISPATCH_TICK_SECONDS`.
+  { queue: 'cron.inbox-polling', cron: '* * * * *', tz: TZ },
+  // K2: co 15 minut domyka faktury bez kosztu/XML.
   { queue: 'cron.inbox-backfill', cron: '7,22,37,52 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.ksef-health-check', cron: '* * * * *', tz: TZ },
-  // Historia KSeF (decyzja Bartosza 22.10.2026): co 15 min, przesunięty o 4 min
-  // od skrzynki (:07 backfill, :15 skrzynka) — wybór firm i fan-out; same
-  // pobrania mają własny budżet i ustępują skrzynce i wysyłce. 96 przebiegów na dobę.
+  // Historia KSeF (decyzja Bartosza 22.10.2026): co 15 min — wybór firm i fan-out;
+  // same pobrania mają własny budżet i ustępują skrzynce i wysyłce. 96 przebiegów na dobę.
   { queue: 'cron.ksef-history-sync', cron: '11,26,41,56 * * * *', tz: TZ },
   // Cykl życia faktury (PR 4b): co 15 min — I1 (queued bez zlecenia),
   // automatyczne ponowienia klasy transient (co godzinę, 24 h), wznowienie

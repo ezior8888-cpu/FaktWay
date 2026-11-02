@@ -231,10 +231,13 @@ export function nextInboxPollAfterError(input: {
 export const INBOX_DISPATCH_TICK_SECONDS = 60;
 
 /**
- * Domyślna liczba slotów kolejki `inbox.poll.tenant`. Przebieg to głównie
- * czekanie na sieć. Zmiana bez wdrożenia kodu: `KSEF_INBOX_POLL_SLOTS`.
+ * Domyślna liczba slotów kolejki `inbox.poll.tenant`. Przebieg to głównie czekanie
+ * na sieć, więc slot kosztuje mało (pomiar: docs/runbooks/skrzynka-ksef-pojemnosc.md).
+ * Wymiarowane pod restart workera przy 5000 firm: pełne logowanie trwa ok. 4 s, czyli
+ * 15 firm na minutę na slot, a tyle trzeba, żeby firmy gorące nie czekały przez cykl.
+ * Zmiana bez wdrożenia kodu: `KSEF_INBOX_POLL_SLOTS`.
  */
-export const INBOX_POLL_SLOTS_DEFAULT = 8;
+export const INBOX_POLL_SLOTS_DEFAULT = 16;
 const INBOX_POLL_SLOTS_MAX = 64;
 
 /**

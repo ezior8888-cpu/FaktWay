@@ -4,7 +4,7 @@
  * w etapie 10). Nieznana wartość `JOBS_BACKEND` = błąd, zlecenie nie wychodzi.
  */
 
-import type { Db as IDatabase } from 'pg-boss';
+import type { Db as IDatabase, PgBoss } from 'pg-boss';
 
 import { getJobsBackend } from './config';
 import { queuesForEvent } from './queues';
@@ -20,10 +20,12 @@ export interface JobEvent {
    */
   groupId?: string;
   /**
-   * pg-boss `singletonKey`: w kolejce czeka najwyżej jeden job z tym kluczem.
-   * Dla zdarzeń, które może wysłać kilku nadawców naraz (skrzynka i cron
-   * uzupełniający dla tej samej faktury — K2), drugie zlecenie nie dubluje
-   * pracy, dopóki pierwsze nie zostało wykonane.
+   * pg-boss `singletonKey`. Sam klucz na naszych kolejkach (polityka `standard`)
+   * NICZEGO NIE DEDUPLIKUJE: unikalne indeksy po kluczu obejmują tylko polityki
+   * short, singleton, stately, exclusive i key_strict_fifo albo `singletonSeconds`
+   * (pg-boss 12, `plans.js`, job_i1–job_i8). Dziś to tylko etykieta w `pgboss.job`.
+   * Przed dublem chroni to, co wykonuje zadanie: warunek w UPDATE, RPC cyklu
+   * życia faktury, wczesne wyjście (`auto-categorize-inbox`, sesja 17).
    */
   singletonKey?: string;
 }
@@ -128,6 +130,26 @@ export async function sendJobEvents(
     }
   }
   return { ids };
+}
+
+export type JobsTransaction = Pick<IDatabase, 'executeSql'>;
+
+/**
+ * Krok SQL i zapis wielu zleceń jedną transakcją: `boss.insert(kolejka, zadania,
+ * { db: tx })` to jeden INSERT, więc paczka nie płaci za zapytanie na zlecenie.
+ * Gdy cokolwiek padnie, wycofują się oba (skrzynka: dzierżawa firm i zlecenia).
+ */
+export async function withJobsTransaction<T>(
+  fn: (tx: JobsTransaction, boss: PgBoss) => Promise<T>,
+): Promise<T> {
+  getJobsBackend();
+  const { startBoss } = await import('./boss');
+  const boss = await startBoss();
+  const db = boss.getDb() as TransactionalDb;
+  if (typeof db.withTransaction !== 'function') {
+    throw new Error('Kolejka nie obsługuje transakcji — zlecenia nie zostały wysłane');
+  }
+  return db.withTransaction((tx) => fn(tx, boss));
 }
 
 /**

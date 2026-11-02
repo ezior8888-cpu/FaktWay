@@ -263,7 +263,8 @@ describe('termin po błędzie', () => {
 });
 
 describe('limit taktu', () => {
-  it('sloty: domyślnie 8, zmienna środowiskowa, zła wartość nie zatrzymuje workera', () => {
+  it('sloty: domyślnie 16, zmienna środowiskowa, zła wartość nie zatrzymuje workera', () => {
+    expect(INBOX_POLL_SLOTS_DEFAULT).toBe(16);
     expect(inboxPollSlots({})).toBe(INBOX_POLL_SLOTS_DEFAULT);
     expect(inboxPollSlots({ KSEF_INBOX_POLL_SLOTS: '12' })).toBe(12);
     expect(inboxPollSlots({ KSEF_INBOX_POLL_SLOTS: 'dużo' })).toBe(INBOX_POLL_SLOTS_DEFAULT);

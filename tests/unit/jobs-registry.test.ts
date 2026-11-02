@@ -178,6 +178,11 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(100);
     expect(byQueue.get('invoice.upo.requested')?.groupConcurrency).toBe(3);
     expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(1); // AUD-91: jeden przebieg skrzynki na NIP
+    // Harmonogram 00160: ponowieniem przebiegu jest termin zależny od rodzaju błędu,
+    // a taktu rozsyłki następna minuta. Sloty z konfiguracji, domyślnie 16.
+    expect(byQueue.get('inbox.poll.tenant')?.maxRetries).toBe(0);
+    expect(byQueue.get('inbox.poll.tenant')?.localConcurrency).toBe(16);
+    expect(byQueue.get('cron.inbox-polling')?.maxRetries).toBe(0);
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
     // Historia KSeF: jeden przebieg na NIP, bez ponowień pg-boss (ponowieniem
     // jest następny cron — cały stan w bazie), 3 firmy naraz (plan fan-outu).
