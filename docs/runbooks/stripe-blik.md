@@ -29,7 +29,9 @@ dostajemy sygnał w Sentry.
    i powiadomienie z wyprzedzeniem (§ 15). Dotyczy też `lib/legal/subprocessors.ts` i polityki prywatności.
 4. Portal klienta: Dashboard → Settings → Billing → Customer portal, opcja **Payment methods** włączona
    (domyślnie jest). To nasza ścieżka zmiany metody po odmowie. Portal bierze metody z domyślnej
-   konfiguracji metod płatności, więc BLIK pojawi się tam po kroku z Dashboardem.
+   konfiguracji metod płatności, więc BLIK pojawi się tam po kroku z Dashboardem. Ustaw też
+   **Terms of service link** na regulamin: portal pokazuje go przy dodawaniu metody, a naszych ujawnień
+   BLIK-a tam nie ma (są tylko przed startem próby).
 
 ## Włączenie w trybie testowym
 
@@ -61,7 +63,7 @@ trial albo `stripe subscriptions update sub_… --trial-end now`.
 | `alias_unregistered@`, `alias_expired@` | po 6 min `mandate.updated` (active → inactive) | nic od razu; najbliższe obciążenie kończy się odmową i mailem |
 | `insufficient_funds@`, `limit_exceeded@`, `customer_declined@`, `bank_declined@` | odmowa z tym kodem po ok. 8 s | mail mówi, co zrobić przy tym kodzie (`lib/billing/payment-failure.ts`) |
 
-Do tego ścieżka bez adresu specjalnego, kod BLIK wg [dokumentacji](https://docs.stripe.com/payments/blik/accept-a-payment):
+Do tego ścieżka bez adresu specjalnego. W sandboxie działa dowolny kod sześciocyfrowy, np. `123456`:
 
 1. Strona `/settings/billing` pokazuje przed przyciskiem: 0 zł dziś, datę pierwszej płatności, cykl, listę
    banków i zgodę w polu wyboru.
@@ -110,6 +112,8 @@ Do tego ścieżka bez adresu specjalnego, kod BLIK wg [dokumentacji](https://doc
   Odmowa Stripe tam nie trafia.
 - W Dashboardzie: `mandate.updated` (klient usunął BLIK w banku). Aplikacja tego zdarzenia nie obsługuje,
   dowiaduje się przy najbliższym obciążeniu.
+- Zwroty i spory: zwrot BLIK-iem jest możliwy do 13 miesięcy od płatności, klient może zgłosić spór w banku
+  w tym samym czasie, bez możliwości odwołania. Obsługa bez zmian: `docs/runbooks/refund-and-disputes.md`.
 
 ## Wycofanie
 
