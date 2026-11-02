@@ -97,6 +97,8 @@ export function SupportWidget({
   const [csatGiven, setCsatGiven] = useState<boolean | null>(null);
   const [escalation, setEscalation] = useState<'idle' | 'done' | 'failed'>('idle');
   const [, startAction] = useTransition();
+  // Osobno od oceny: akcja czeka na zapis i alerty, a klient ma widzieć, że prośba idzie.
+  const [escalating, startEscalation] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const [portalReady, setPortalReady] = useState(false);
@@ -269,6 +271,7 @@ export function SupportWidget({
             {hasAiReply && !isStreaming && conversationId && (
               <ConversationFooter
                 escalation={escalation}
+                escalating={escalating}
                 csatGiven={csatGiven}
                 onCsat={(positive) => {
                   setCsatGiven(positive);
@@ -279,7 +282,7 @@ export function SupportWidget({
                 onEscalate={() => {
                   // „Zgłoszono” dopiero po zapisie: odmowa (np. wygasła sesja)
                   // albo błąd sieci nie może udawać, że ktoś się odezwie.
-                  startAction(async () => {
+                  startEscalation(async () => {
                     const result = await escalateConversationAction(conversationId).catch(() => null);
                     setEscalation(result?.ok ? 'done' : 'failed');
                   });
@@ -450,11 +453,13 @@ function WelcomeState({
 
 function ConversationFooter({
   escalation,
+  escalating,
   csatGiven,
   onCsat,
   onEscalate,
 }: {
   escalation: 'idle' | 'done' | 'failed';
+  escalating: boolean;
   csatGiven: boolean | null;
   onCsat: (positive: boolean) => void;
   onEscalate: () => void;
@@ -503,10 +508,11 @@ function ConversationFooter({
         <button
           type="button"
           onClick={onEscalate}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          disabled={escalating}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:no-underline disabled:opacity-70"
         >
           <UserRound className="h-3.5 w-3.5" />
-          Połącz z człowiekiem
+          {escalating ? 'Zgłaszam…' : 'Połącz z człowiekiem'}
         </button>
       )}
     </div>

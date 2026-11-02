@@ -1,6 +1,7 @@
 'use server';
 
 import { sendSlackAlert } from '@/lib/alerts/slack';
+import { sendSupportEscalationEmail } from '@/lib/email/send';
 import { ActionAuthError, requireVerifiedUser } from '@/lib/supabase/auth-context';
 import { getOwnedConversation, updateConversation } from './conversations';
 
@@ -35,7 +36,11 @@ export async function submitCsatAction(
   const conv = await getOwnedConversation(conversationId, user.id);
   if (!conv) return { ok: false };
 
-  await updateConversation(conversationId, { csat_positive: positive });
+  try {
+    await updateConversation(conversationId, { csat_positive: positive });
+  } catch {
+    return { ok: false };
+  }
 
   if (!positive) {
     await sendSlackAlert({
@@ -53,7 +58,16 @@ export async function submitCsatAction(
 
 /**
  * Ręczna eskalacja — użytkownik klika „Połącz z człowiekiem".
- * Oznacza konwersację jako `escalated` i alarmuje zespół.
+ * Oznacza konwersację jako `escalated` i alarmuje zespół: Slackiem oraz mailem
+ * na adres pomocy (z adresem klienta do odpowiedzi).
+ *
+ * Trzy rzeczy, na których opiera się napis „Zgłoszono. Odezwiemy się mailem”:
+ *  - rozmowa, którą czat sam eskalował (`ai_uncertain`), to NIE jest prośba
+ *    klienta: tamten alert nie ma jego adresu, więc tu idzie własny. Bez
+ *    dubla tylko przy powtórzonej prośbie (`user_requested`);
+ *  - nieudany zapis to odmowa, nie „Zgłoszono”;
+ *  - gdy żadna droga nie dotarła, `ok: false`: widget podaje adres zamiast
+ *    obiecywać odpowiedź. Wiersz zostaje, operator widzi go w `/admin/support`.
  */
 export async function escalateConversationAction(
   conversationId: string,
@@ -64,24 +78,42 @@ export async function escalateConversationAction(
   const conv = await getOwnedConversation(conversationId, user.id);
   if (!conv) return { ok: false };
 
-  // Już eskalowane — nie duplikujemy alertu.
-  if (conv.status === 'escalated') return { ok: true };
+  // Klient już poprosił — nie duplikujemy alertu.
+  if (conv.status === 'escalated' && conv.escalation_reason === 'user_requested') {
+    return { ok: true };
+  }
 
-  await updateConversation(conversationId, {
-    status: 'escalated',
-    escalated_at: new Date().toISOString(),
-    escalation_reason: 'user_requested',
-  });
+  try {
+    await updateConversation(conversationId, {
+      status: 'escalated',
+      escalated_at: new Date().toISOString(),
+      escalation_reason: 'user_requested',
+    });
+  } catch {
+    return { ok: false };
+  }
 
-  await sendSlackAlert({
-    channel: 'bugs',
-    text: '🙋 Użytkownik poprosił o kontakt z człowiekiem (support).',
-    context: {
-      conversation_id: conversationId,
-      user_email: user.email ?? 'unknown',
-      category: conv.category ?? 'unknown',
-    },
-  });
+  const [slack, email] = await Promise.allSettled([
+    sendSlackAlert({
+      channel: 'bugs',
+      text: '🙋 Użytkownik poprosił o kontakt z człowiekiem (support).',
+      context: {
+        conversation_id: conversationId,
+        user_email: user.email ?? 'unknown',
+        category: conv.category ?? 'unknown',
+      },
+    }),
+    sendSupportEscalationEmail({
+      conversationId,
+      userEmail: user.email ?? null,
+      subject: conv.subject,
+      category: conv.category,
+    }),
+  ]);
 
-  return { ok: true };
+  const delivered =
+    (slack.status === 'fulfilled' && slack.value === true) ||
+    (email.status === 'fulfilled' && email.value.sent === true);
+
+  return { ok: delivered };
 }

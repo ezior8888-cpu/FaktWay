@@ -33,10 +33,11 @@ export interface SlackMessage {
   context?: Record<string, string | number | boolean>;
 }
 
+/** `true` = Slack potwierdził przyjęcie (2xx); `false` = brak webhooka albo błąd bez wymogu dostarczenia. */
 async function postSlackAlert(
   msg: SlackMessage,
   requireDelivery: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const url = getWebhookUrl(msg.channel);
   if (!url) {
     if (requireDelivery) {
@@ -45,7 +46,7 @@ async function postSlackAlert(
     // AUD-83: alert bez webhooka znikał bez śladu. Pierwsza linia wystarczy,
     // żeby w logu było widać, co przepadło.
     console.warn(`[slack] brak webhooka ${msg.channel} — alert pominięty: ${msg.text.split('\n')[0]!.slice(0, 120)}`);
-    return;
+    return false;
   }
 
   const payload: Record<string, unknown> = { text: msg.text };
@@ -79,30 +80,38 @@ async function postSlackAlert(
       // exceptions; each can contain sensitive material.
       throw new Error('Slack delivery HTTP ' + response.status);
     }
+    return true;
   } catch {
     if (requireDelivery) {
       throw new Error('Critical Slack delivery was not confirmed');
     }
     console.error('[slack] webhook delivery was not confirmed');
+    return false;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-/** Fail-soft transport for support, bugs, backups and metrics. */
-export async function sendSlackAlert(msg: SlackMessage): Promise<void> {
+/**
+ * Fail-soft transport for support, bugs, backups and metrics.
+ *
+ * Wynik mówi, czy Slack potwierdził przyjęcie. Większość wywołań go ignoruje;
+ * „Połącz z człowiekiem” dzięki niemu nie obiecuje klientowi maila, gdy alert
+ * nigdzie nie dotarł.
+ */
+export async function sendSlackAlert(msg: SlackMessage): Promise<boolean> {
   if (msg.channel !== 'urgent' || !isTelegramConfigured()) {
-    await postSlackAlert(msg, false);
-    return;
+    return postSlackAlert(msg, false);
   }
   // Pilne (dziś: kopie bazy) idą też na Telegram, jak alarmy krytyczne —
   // sam Slack nikogo nie budzi (AUD-83). Oba kanały fail-soft.
-  await Promise.all([
+  const [slack] = await Promise.all([
     postSlackAlert(msg, false),
     sendTelegramMessage(formatUrgentForTelegram(msg)).catch(() => {
       console.error('[telegram] pilny alert niedostarczony');
     }),
   ]);
+  return slack;
 }
 
 function formatUrgentForTelegram(msg: SlackMessage): string {

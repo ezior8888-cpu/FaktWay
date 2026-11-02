@@ -25,6 +25,7 @@ import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
 import PaymentFailed from './templates/PaymentFailed';
 import RefundIssued from './templates/RefundIssued';
+import SupportEscalation, { type SupportEscalationProps } from './templates/SupportEscalation';
 import TrialEnding from './templates/TrialEnding';
 
 // ═══════════════════════════════════════════════════════════════
@@ -167,6 +168,8 @@ async function sendViaResend(opts: {
    * (AUD-86). Klucz zależy od zdarzenia, nie od próby.
    */
   idempotencyKey?: string;
+  /** Adres do odpowiedzi; domyślnie pomoc FaktWay. */
+  replyTo?: string;
 }): Promise<EmailStubResult> {
   const category: EmailCategory = opts.category ?? 'transactional';
   const finalTo = DEV_TO_OVERRIDE ?? opts.to;
@@ -205,7 +208,7 @@ async function sendViaResend(opts: {
   const message = {
     from: getFromEmail(category),
     // Nadawca to no-reply@ — bez tego odpowiedź klienta ginie (MAN-18).
-    replyTo: SUPPORT_EMAIL,
+    replyTo: opts.replyTo ?? SUPPORT_EMAIL,
     to: [finalTo],
     subject: finalSubject,
     html: opts.html,
@@ -278,6 +281,28 @@ export async function sendInvoiceFailedEmail(
     subject: 'Faktura odrzucona przez KSeF',
     html,
     idempotencyKey: options.idempotencyKey,
+  });
+}
+
+/**
+ * Klient kliknął „Połącz z człowiekiem”. Zgłoszenie na adres pomocy: odpowiedź
+ * z tej wiadomości idzie od razu do klienta. Klucz na rozmowę: wyścig dwóch
+ * kliknięć nie wysyła drugiego maila.
+ */
+export async function sendSupportEscalationEmail(
+  payload: SupportEscalationProps,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendSupportEscalationEmail: rozmowa ${payload.conversationId}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(SupportEscalation(payload));
+  return sendViaResend({
+    to: SUPPORT_EMAIL,
+    subject: 'Klient prosi o kontakt z człowiekiem',
+    html,
+    replyTo: payload.userEmail ?? undefined,
+    idempotencyKey: `support-escalation/${payload.conversationId}`,
   });
 }
 

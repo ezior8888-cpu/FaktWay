@@ -155,6 +155,30 @@ describe('czat wsparcia: oznaczenie i człowiek', () => {
     expect(tekst()).toContain('Nie udało się zgłosić');
   });
 
+  it('w trakcie zgłaszania przycisk jest zablokowany i mówi, co się dzieje, a drugi klik nie woła akcji', async () => {
+    let dokoncz: (wynik: { ok: boolean }) => void = () => {};
+    mocks.escalate.mockImplementation(
+      () => new Promise<{ ok: boolean }>((resolve) => { dokoncz = resolve; }),
+    );
+    vi.stubGlobal('fetch', vi.fn(async () => odpowiedz('c-1')));
+    await openWidget();
+    await zapytaj();
+    await polaczZCzlowiekiem();
+
+    const trwa = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Zgłaszam'));
+    expect(trwa).toBeDefined();
+    expect(trwa!.disabled).toBe(true);
+    await act(async () => {
+      trwa!.click();
+    });
+    expect(mocks.escalate).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      dokoncz({ ok: true });
+    });
+    expect(tekst()).toContain('Zgłoszono do zespołu');
+  });
+
   it('teksty dla klienta bez długich myślników', async () => {
     await openWidget();
     expect(tekst()).not.toMatch(/[—–]/);
