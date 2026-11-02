@@ -29,6 +29,9 @@ export default defineConfig({
       // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
       // CHECK-i, ksef_upo_expected i filtr osadzenia przez PostgREST.
       'tests/rls-historia-ksef.test.ts',
+      // 00159 (logowanie biometrią): RLS i granty kolumnowe `user_passkeys`, wyzwania
+      // jednorazowe przez DELETE ... RETURNING, usuwanie zależne od AAL, kaskada z auth.users.
+      'tests/rls-passkeys.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
