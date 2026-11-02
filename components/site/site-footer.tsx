@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { OFERTA } from '@/lib/marketing/oferta';
+import { OFERTA_TEKST } from '@/lib/marketing/oferta';
 
 import { Container, Wordmark } from './ui';
 
@@ -40,7 +40,7 @@ export function SiteFooter() {
         <div className="flex flex-col gap-12 py-14 md:flex-row md:justify-between">
           <div className="max-w-xs">
             <Wordmark />
-            <p className="mt-3 text-sm text-muted-foreground">{OFERTA}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{OFERTA_TEKST}</p>
           </div>
           <nav aria-label="Stopka" className="grid grid-cols-2 gap-10 sm:grid-cols-3 sm:gap-16">
             {COLUMNS.map((column) => (

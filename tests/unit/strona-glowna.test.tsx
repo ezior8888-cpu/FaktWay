@@ -24,7 +24,7 @@ const text = html.replace(/<[^>]+>/g, ' ');
 /** Tekst nagłówka bez znaczników i twardych spacji. */
 function h1Text(): string {
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? '';
-  return h1.replace(/<[^>]+>/g, '').replaceAll(' ', ' ').replaceAll('&nbsp;', ' ').trim();
+  return h1.replace(/<[^>]+>/g, '').replaceAll('\u00a0', ' ').replaceAll('&nbsp;', ' ').trim();
 }
 
 describe('strona główna', () => {

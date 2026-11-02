@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 
 import { LOCKUP } from '@/lib/brand/faktway-logo-paths';
-import { OFERTA } from '@/lib/marketing/oferta';
+import { OFERTA, OFERTA_TEKST } from '@/lib/marketing/oferta';
 
 export const alt = OFERTA;
 export const size = { width: 1200, height: 630 };
@@ -37,7 +37,7 @@ export default function OgImage() {
             maxWidth: '1000px',
           }}
         >
-          {OFERTA}
+          {OFERTA_TEKST}
         </div>
       </div>
     ),

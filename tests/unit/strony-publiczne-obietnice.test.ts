@@ -1,15 +1,21 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import manifest from '@/app/manifest';
 import sitemap from '@/app/sitemap';
 import { metadata as homeMetadata } from '@/app/(home)/page';
-import { metadata as pricingMetadata } from '@/app/(marketing)/pricing/page';
+import PricingPage, { metadata as pricingMetadata } from '@/app/(marketing)/pricing/page';
+import VsIfirma from '@/app/(marketing)/vs/ifirma/page';
+import VsInfakt from '@/app/(marketing)/vs/infakt/page';
+import VsInni from '@/app/(marketing)/vs/inni/page';
+import VsWfirma from '@/app/(marketing)/vs/wfirma/page';
 import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
 import { getAllHelpArticles, HELP_CATEGORIES } from '@/lib/help/articles';
-import { METODA_PLATNOSCI, OFERTA, OFERTA_NAGLOWEK, PROBA } from '@/lib/marketing/oferta';
+import { METODA_PLATNOSCI, OFERTA, OFERTA_NAGLOWEK, OFERTA_TEKST, PROBA } from '@/lib/marketing/oferta';
 
 /**
  * FaktWay 1.0 (FAKTWAY-1-0, sekcja 3 pkt 8): strony przed logowaniem mówią
@@ -105,8 +111,13 @@ const BEZ_POKRYCIA: Regula[] = [
     co: 'aplikacje w sklepach',
     wyjatki: [['app/(marketing)/vs/', 'opis konkurencji („brak app store”), nie FaktWay']],
   },
-  { wzor: /BLIK/, co: 'BLIK (dopisuje gałąź zbiorcza, w lib/marketing/oferta.ts)' },
+  {
+    wzor: /BLIK/,
+    co: 'BLIK zależy od przełącznika',
+    wyjatki: [['lib/marketing/oferta.ts', 'jedyne miejsce z metodą płatności, dopisze go gałąź zbiorcza']],
+  },
   { wzor: /magiczn\w*\s+import/i, co: 'Magiczny Import (decyzja 22.10.2026: znika)' },
+  { wzor: /Frankfurt/, co: 'serwery stoją w Norymberdze, nie we Frankfurcie' },
 ];
 
 /** Stare hasła, które konkurowały ze zdaniem oferty. */
@@ -114,6 +125,8 @@ const STARE_HASLA: Regula[] = [
   { wzor: /bez stresu/i, co: 'stare hasło „bez stresu”' },
   { wzor: /której nie ma u konkurencji/i, co: 'hasło bez pokrycia w OG' },
   { wzor: /Faktury KSeF dla mikrofirm/i, co: 'stary opis meta' },
+  // Opis meta z ceną to druga oferta: cena w opisie jest tylko w zdaniu oferty.
+  { wzor: /description:.*PRICE_/, co: 'opis meta z ceną obok zdania oferty' },
 ];
 
 function walk(dir: string): string[] {
@@ -167,7 +180,7 @@ function zywyMarketing(): string[] {
 function plikiPubliczne(): string[] {
   const katalogi = KATALOGI_PUBLICZNE.flatMap((d) => walk(join(ROOT, d)));
   const pliki = PLIKI_PUBLICZNE.map((p) => join(ROOT, p));
-  const roboty = walk(join(ROOT, 'public')).filter((p) => TEKSTY_W_PUBLIC.test(p) && !rel(p).endsWith('sw.js'));
+  const roboty = walk(join(ROOT, 'public')).filter((p) => TEKSTY_W_PUBLIC.test(p));
   return [...new Set([...katalogi, ...pliki, ...zywyMarketing(), ...roboty])]
     .filter((p) => CZY_TRESC.test(p) || roboty.includes(p))
     .filter((p) => !WYJATKI_CALE_PLIKI.some(([prefiks]) => rel(p).startsWith(prefiks)));
@@ -230,12 +243,14 @@ describe('jedno zdanie oferty', () => {
     expect(OFERTA).toBe(
       `Faktury z KSeF, koszty i należności w jednym programie, także w telefonie, za ${PRICE_GROSS} miesięcznie.`,
     );
-    expect(OFERTA).not.toContain(' ');
+    expect(OFERTA).not.toContain('\u00a0');
   });
 
   it('nagłówek to to samo zdanie, różnią się tylko twarde spacje', () => {
     const naglowek = `${OFERTA_NAGLOWEK.przed}${OFERTA_NAGLOWEK.wyroznienie}${OFERTA_NAGLOWEK.po}`;
-    expect(naglowek.replaceAll(' ', ' ')).toBe(OFERTA);
+    expect(naglowek).toBe(OFERTA_TEKST);
+    expect(naglowek.replaceAll('\u00a0', ' ')).toBe(OFERTA);
+    expect(OFERTA_TEKST).toContain(PRICE_GROSS.replace(' ', '\u00a0'));
   });
 
   it('opisy meta strony głównej, cennika, układu, manifestu i obrazka to to samo zdanie', () => {
@@ -247,6 +262,10 @@ describe('jedno zdanie oferty', () => {
     expect(readFileSync(join(ROOT, 'app/opengraph-image.tsx'), 'utf8')).toContain('export const alt = OFERTA;');
   });
 
+  it('cennik pokazuje to samo zdanie pod nagłówkiem', () => {
+    expect(renderToStaticMarkup(createElement(PricingPage))).toContain(OFERTA_TEKST);
+  });
+
   it('nikt nie przepisał zdania ręcznie: jest tylko w lib/marketing/oferta.ts', () => {
     const kopie = plikiPubliczne()
       .filter((p) => rel(p) !== 'lib/marketing/oferta.ts')
@@ -256,14 +275,40 @@ describe('jedno zdanie oferty', () => {
   });
 
   it('metoda płatności stoi w jednym miejscu, reszta bierze ją z modułu', () => {
-    expect(METODA_PLATNOSCI).toBe('karta przy starcie');
-    expect(PROBA).toBe(`${TRIAL_DAYS} dni za darmo, karta przy starcie`);
+    expect(METODA_PLATNOSCI).toContain('karta');
+    expect(PROBA).toBe(`${TRIAL_DAYS} dni za darmo, ${METODA_PLATNOSCI}`);
     const wzor = /kart[aęy]\s+(przy starcie|na starcie|podajesz)|kartę\s+podajesz/i;
     const kopie = plikiPubliczne()
       .filter((p) => rel(p) !== 'lib/marketing/oferta.ts')
       .filter((p) => wzor.test(CZY_KOD.test(p) ? bezKomentarzy(readFileSync(p, 'utf8')) : readFileSync(p, 'utf8')))
       .map(rel);
     expect(kopie).toEqual([]);
+  });
+});
+
+describe('porównania /vs/*: kolumna FaktWay zgodna z kodem', () => {
+  // Strony są wyłączone flagą (app/(marketing)/vs/layout.tsx), więc tylko test
+  // pokazuje, że się renderują i że nie wrócą z funkcjami, których nie ma.
+  it.each([
+    ['inFakt', VsInfakt],
+    ['wFirma', VsWfirma],
+    ['iFirma', VsIfirma],
+    ['Inni', VsInni],
+  ])('%s: renderuje się bez AI jako wyróżnika', (nazwa, Strona) => {
+    const html = renderToStaticMarkup(createElement(Strona));
+    expect(html).toContain(nazwa);
+    const tekst = html.replace(/<[^>]+>/g, ' ');
+    expect(tekst).not.toMatch(/\bAI\b|\bflo\b|asystent|\bagent|Claude|Frankfurt|[—–]/i);
+  });
+
+  it('funkcje wstrzymane w kodzie nie mają „tak” w kolumnie FaktWay', () => {
+    const wstrzymane = /feature: '(Tryb Offline24[^']*|Korekta jednym klikiem|Offline mode|Offline queue dokumentów|Webhooks[^']*|Import gross z zagranicy[^']*)',\s*ksefSaas: \{ status: '(\w+)'/g;
+    for (const strona of ['infakt', 'wfirma', 'ifirma', 'inni']) {
+      const zrodlo = readFileSync(join(ROOT, `app/(marketing)/vs/${strona}/page.tsx`), 'utf8');
+      for (const [, funkcja, status] of zrodlo.matchAll(wstrzymane)) {
+        expect(status, `${strona}: ${funkcja}`).toBe('no');
+      }
+    }
   });
 });
 

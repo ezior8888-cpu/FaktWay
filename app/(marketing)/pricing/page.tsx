@@ -9,7 +9,7 @@ import {
   PRICE_VAT,
   TRIAL_DAYS,
 } from '@/lib/billing/pricing';
-import { METODA_PLATNOSCI, OFERTA } from '@/lib/marketing/oferta';
+import { METODA_PLATNOSCI, OFERTA, OFERTA_TEKST } from '@/lib/marketing/oferta';
 
 import { Reveal, RevealGroup, RevealItem } from '@/components/site/motion';
 import { PageHero } from '@/components/site/page-hero';
@@ -129,7 +129,7 @@ const PROMISES = [
 export default function PricingPage() {
   return (
     <>
-      <PageHero title="Jeden plan. Wszystkie funkcje." lead={OFERTA} />
+      <PageHero title="Jeden plan. Wszystkie funkcje." lead={OFERTA_TEKST} />
 
       {/* Karta planu w tym samym kroju co cennik na stronie głównej, obok dwie obietnice. */}
       <section aria-labelledby="plan-title" className="pb-20 sm:pb-28">

@@ -22,7 +22,7 @@ import Link from 'next/link'
 import { Reveal } from '@/components/site/motion'
 import { BandGlow } from '@/components/site/ui'
 import { PortalContainerProvider } from '@/components/ui/portal-container'
-import { OFERTA } from '@/lib/marketing/oferta'
+import { OFERTA_TEKST } from '@/lib/marketing/oferta'
 
 import { AuthLogo } from './auth-logo'
 import { AuthShowcase } from './auth-showcase'
@@ -32,7 +32,7 @@ import { AuthShowcase } from './auth-showcase'
  * stronie głównej i w cenniku (FaktWay 1.0). Drugie zostaje z dawnej strony
  * logowania, bo mówi prawdę o wysyłce.
  */
-export const AUTH_SLOGAN_TITLE = OFERTA
+export const AUTH_SLOGAN_TITLE = OFERTA_TEKST
 export const AUTH_SLOGAN_TEXT = 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.'
 
 export function AuthSplitLayout({
@@ -77,7 +77,7 @@ export function AuthSplitLayout({
 
               <Reveal onLoad delay={0.25} className='relative mx-auto w-full max-w-md'>
                 <AuthShowcase />
-                <p className='mt-8 text-2xl font-semibold tracking-tight'>{AUTH_SLOGAN_TITLE}</p>
+                <p className='mt-8 text-xl font-semibold tracking-tight text-pretty'>{AUTH_SLOGAN_TITLE}</p>
                 <p className='mt-2 text-pretty text-primary-foreground'>{AUTH_SLOGAN_TEXT}</p>
               </Reveal>
             </div>

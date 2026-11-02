@@ -14,7 +14,7 @@ test.describe('Strona główna i strony marketingowe', () => {
   test('stare adresy o FLO prowadzą na stronę główną, pas o telefonie jest na miejscu', async ({ page }) => {
     await page.goto('/pomoc/flo-czym-jest');
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { name: /także w\s+telefonie/i })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: /także w\s+telefonie/i })).toBeVisible();
   });
 
   // Strony porównawcze wyłączone 15.10.2026 do weryfikacji treści

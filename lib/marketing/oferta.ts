@@ -10,16 +10,16 @@ import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
  * na końcu linii, a środkowa część stoi pod podkreśleniem markerem.
  */
 export const OFERTA_NAGLOWEK = {
-  przed: 'Faktury z KSeF, koszty i należności ',
-  wyroznienie: 'w jednym programie',
-  po: `, także w telefonie, za ${PRICE_GROSS.replace(' ', ' ')} miesięcznie.`,
+  przed: 'Faktury z\u00a0KSeF, koszty i\u00a0należności ',
+  wyroznienie: 'w\u00a0jednym programie',
+  po: `, także w\u00a0telefonie, za\u00a0${PRICE_GROSS.replace(' ', '\u00a0')} miesięcznie.`,
 } as const;
 
-/** To samo zdanie zwykłymi spacjami: do opisów meta, akapitów i obrazków. */
-export const OFERTA = `${OFERTA_NAGLOWEK.przed}${OFERTA_NAGLOWEK.wyroznienie}${OFERTA_NAGLOWEK.po}`.replaceAll(
-  ' ',
-  ' ',
-);
+/** Zdanie do tekstu na stronie: z twardymi spacjami, żeby kwota i „zł” się nie rozdzieliły. */
+export const OFERTA_TEKST = `${OFERTA_NAGLOWEK.przed}${OFERTA_NAGLOWEK.wyroznienie}${OFERTA_NAGLOWEK.po}`;
+
+/** To samo zdanie zwykłymi spacjami: do opisów meta, manifestu i porównań. */
+export const OFERTA = OFERTA_TEKST.replaceAll('\u00a0', ' ');
 
 /**
  * Jedyny tekst o metodzie płatności na stronach publicznych. BLIK zależy od
