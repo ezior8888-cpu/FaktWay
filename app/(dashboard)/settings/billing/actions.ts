@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
 import { logAuditSystem } from '@/lib/audit/log-system';
-import { CHECKOUT_STATEMENT, CONTRACT_VERSION } from '@/lib/legal/versions';
+import { isBlikAvailable } from '@/lib/billing/trial-payment';
+import { BLIK_RECURRING_STATEMENT, CHECKOUT_STATEMENT, CONTRACT_VERSION } from '@/lib/legal/versions';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import { createCheckoutSession, type CheckoutPlan } from '@/lib/stripe/checkout';
 import { createPortalSession } from '@/lib/stripe/portal';
@@ -51,6 +52,12 @@ export async function startCheckoutAction(
    * konsumenta). Bez niego nie kierujemy do płatności.
    */
   statementAccepted = false,
+  /**
+   * Wersja zgody na BLIK cykliczny, którą strona pokazała klientowi. Stripe każe
+   * pokazać warunki PRZED kodem BLIK, więc strona bez ujawnień (sprzed włączenia
+   * przełącznika albo z innym brzmieniem) dostaje samą kartę.
+   */
+  blikStatementVersion: string | null = null,
 ): Promise<void> {
   const ctx = await getPageContext();
 
@@ -87,6 +94,8 @@ export async function startCheckoutAction(
   }
   await syncBillingEmail(tenant.stripe_customer_id, ctx.user.email, ctx.tenantId);
 
+  const offerBlik = isBlikAvailable() && blikStatementVersion === BLIK_RECURRING_STATEMENT.version;
+
   let url: string;
   try {
     const result = await createCheckoutSession({
@@ -96,6 +105,7 @@ export async function startCheckoutAction(
       nip: tenant.nip,
       plan,
       baseUrl: getBaseUrl(),
+      offerBlik,
     });
     url = result.url;
     // Dowód oświadczenia: wersja brzmienia, regulaminu i plan. Zapis po
@@ -109,6 +119,7 @@ export async function startCheckoutAction(
         plan,
         statementVersion: CHECKOUT_STATEMENT.version,
         contractVersion: CONTRACT_VERSION,
+        ...(offerBlik ? { blikStatementVersion: BLIK_RECURRING_STATEMENT.version } : {}),
       },
     });
   } catch (e) {
@@ -127,9 +138,16 @@ export async function startCheckoutAction(
 
 /**
  * Otwiera Stripe Customer Portal (hosted page do zarządzania subskrypcją:
- * zmiana karty, cancel, view invoices history).
+ * zmiana metody płatności, cancel, view invoices history).
  */
-export async function openCustomerPortalAction(): Promise<void> {
+export async function openCustomerPortalAction(
+  /**
+   * Wersja zgody na BLIK, którą strona pokazała przy przycisku. Portal pozwala dodać
+   * BLIK, a tam nie ma naszych ujawnień, więc audyt otwarcia portalu mówi, co klient
+   * widział tuż przed nim.
+   */
+  blikStatementVersion: string | null = null,
+): Promise<void> {
   const ctx = await getPageContext();
 
   if (!canManageBilling(ctx.role)) {
@@ -182,7 +200,12 @@ export async function openCustomerPortalAction(): Promise<void> {
       tenantId: ctx.tenantId,
       userId: ctx.user.id,
       entityType: 'stripe_portal',
-      metadata: { adminEmail: ctx.user.email },
+      metadata: {
+        adminEmail: ctx.user.email,
+        ...(isBlikAvailable() && blikStatementVersion === BLIK_RECURRING_STATEMENT.version
+          ? { blikStatementVersion }
+          : {}),
+      },
     });
   } catch {
     // Audit fail nie powinien blokować akcji billing'u.

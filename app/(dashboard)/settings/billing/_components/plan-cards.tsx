@@ -9,9 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import type { BlikDisclosure } from '@/lib/billing/trial-payment';
 import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
 import { startCheckoutAction } from '../actions';
+
+import { BlikTerms } from './blik-terms';
 
 const FEATURES = [
   'Faktury sprzedaż + zakupy bez limitu',
@@ -31,6 +34,8 @@ interface PlanCardProps {
   onSelect: () => void;
   statementAccepted: boolean;
   onStatementChange: (accepted: boolean) => void;
+  blikDisclosure: BlikDisclosure | null;
+  paymentHint: string;
 }
 
 /**
@@ -42,7 +47,14 @@ interface PlanCardProps {
  * konsumenta) — brzmienie z lib/legal/versions.ts; serwer odrzuca zakup bez
  * niego (`startCheckoutAction`, `statement-required`).
  */
-function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }: PlanCardProps) {
+function PlanCard({
+  isPending,
+  onSelect,
+  statementAccepted,
+  onStatementChange,
+  blikDisclosure,
+  paymentHint,
+}: PlanCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -78,6 +90,18 @@ function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }:
       </CardContent>
 
       <CardFooter className="flex flex-col items-stretch gap-2">
+        {/* Zgoda stoi w polu wyboru pod spodem: jej zaznaczenie jest warunkiem startu próby. */}
+        {blikDisclosure ? (
+          <BlikTerms
+            title="Płatność kartą albo BLIK-iem"
+            rows={[
+              { label: 'Dziś płacisz', value: blikDisclosure.dueToday },
+              { label: 'Pierwsza płatność', value: `${blikDisclosure.firstCharge}, jeśli zaczniesz dziś` },
+              { label: 'Potem', value: blikDisclosure.cycle },
+            ]}
+            banks={blikDisclosure.banks}
+          />
+        ) : null}
         <label className="text-muted-foreground flex items-start gap-2.5 text-xs leading-relaxed">
           <input
             type="checkbox"
@@ -87,6 +111,7 @@ function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }:
           />
           <span>
             <LegalInline text={CHECKOUT_STATEMENT.text} linkClassName="underline underline-offset-2" />
+            {blikDisclosure ? <> {blikDisclosure.consent}</> : null}
           </span>
         </label>
         <Button size="lg" className="w-full" disabled={isPending || !statementAccepted} onClick={onSelect}>
@@ -94,22 +119,26 @@ function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }:
           Zacznij {TRIAL_DAYS} dni za darmo
           <RiArrowRightLine aria-hidden />
         </Button>
-        <p className="text-muted-foreground text-center text-xs">
-          Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
-        </p>
+        <p className="text-muted-foreground text-center text-xs">{paymentHint}</p>
       </CardFooter>
     </Card>
   );
 }
 
-export function PlanCards() {
+interface PlanCardsProps {
+  /** Ujawnienia BLIK-a z serwera; `null`, gdy `STRIPE_BLIK_RECURRING` jest wyłączony. */
+  blikDisclosure: BlikDisclosure | null;
+  paymentHint: string;
+}
+
+export function PlanCards({ blikDisclosure, paymentHint }: PlanCardsProps) {
   const [isPending, startTransition] = useTransition();
   const [statementAccepted, setStatementAccepted] = useState(false);
 
   const handleSelect = () => {
     startTransition(async () => {
       try {
-        await startCheckoutAction('monthly', statementAccepted);
+        await startCheckoutAction('monthly', statementAccepted, blikDisclosure?.version ?? null);
         // `startCheckoutAction` rzuca NEXT_REDIRECT — kod tu nie dotrze przy
         // sukcesie. Toast wyląduje gdy redirect wróci z `?error=...`.
       } catch (e) {
@@ -129,6 +158,8 @@ export function PlanCards() {
         onSelect={handleSelect}
         statementAccepted={statementAccepted}
         onStatementChange={setStatementAccepted}
+        blikDisclosure={blikDisclosure}
+        paymentHint={paymentHint}
       />
     </div>
   );

@@ -261,6 +261,11 @@ export const billingPaymentSucceeded = jobEvent<{
     taxCents: number;
     currency: string;
     paidAt: string;
+    /**
+     * Rodzaj metody ze sprawdzonego Charge (`card`, `blik`): forma płatności na
+     * fakturze. Job sprzed BLIK-a go nie ma, wtedy płatność mogła być tylko kartą.
+     */
+    paymentMethodType?: string;
   }>('billing/payment.succeeded');
 
 export const billingPaymentFailed = jobEvent<{

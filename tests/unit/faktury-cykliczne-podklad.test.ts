@@ -117,6 +117,15 @@ describe('prefillFromInvoiceAction', () => {
     expect((await prefillFromInvoiceAction(TPL))?.values.splitPayment).toBe(true);
   });
 
+  it('faktura za abonament opłacony BLIK-iem: forma „mobile” wraca jako „other”, którą zna formularz', async () => {
+    db.tables.invoices = [wzor({}, { payment: { method: 'mobile' } })];
+    const p = await prefillFromInvoiceAction(TPL);
+    expect(p?.values.paymentMethod).toBe('other');
+    const values: InvoiceFormValues = { notes: '', buyerIsEu: false, buyerVatUe: '', buyerCountryCode: '', ...p!.values };
+    const r = invoiceFormSchema.safeParse(values);
+    expect(r.success ? [] : r.error.issues.map((i) => i.message)).toEqual([]);
+  });
+
   it.each([
     ['faktura innej firmy', () => { db.tables.invoices = [wzor({ tenant_id: 'ten-2' })]; }, TPL],
     ['faktura kosztowa', () => { db.tables.invoices = [wzor({ direction: 'incoming' })]; }, TPL],

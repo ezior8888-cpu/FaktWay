@@ -311,4 +311,56 @@ describe.skipIf(!hasDatabase)('faktura za abonament pod nazwą FaktWay (00152)',
 
     expect(await storedInvoices(payment.stripeInvoiceId)).toEqual([]);
   });
+
+  // 00162: płatność BLIK to na fakturze forma „mobilna” (FA(3): 7), nie „karta”.
+  async function blikDraftFor(payment: Payment): Promise<Invoice> {
+    const draft = await buildSelfInvoiceDraft(CUSTOMER, {
+      grossCents: GROSS_CENTS,
+      paidAt: PAID_AT,
+      stripeInvoiceId: payment.stripeInvoiceId,
+      plan: 'monthly',
+      paymentMethodType: 'blik',
+    });
+    if (!draft) throw new Error('draft nie powstał');
+    return draft.invoice;
+  }
+
+  it('płatność BLIK: baza wystawia fakturę z formą „mobile”, a ponowienie zwraca tę samą', async () => {
+    const payment = await paidPayment();
+    const invoice = await blikDraftFor(payment);
+    expect(invoice.payment.method).toBe('mobile');
+
+    const created = await insert(invoice, payment);
+
+    expect(created.created).toBe(true);
+    const [row, ...rest] = await storedInvoices(payment.stripeInvoiceId);
+    expect(rest).toEqual([]);
+    expect((row.fa3_data as Invoice).payment.method).toBe('mobile');
+    expect(await linkedInvoice(payment)).toBe(created.invoiceId);
+
+    const again = await insert(invoice, payment);
+    expect(again).toEqual({ invoiceId: created.invoiceId, internalNumber: created.internalNumber, created: false });
+  });
+
+  it('ponowienie z inną formą płatności niż na wystawionej fakturze odbija', async () => {
+    const payment = await paidPayment();
+    const invoice = await blikDraftFor(payment);
+    const created = await insert(invoice, payment);
+    expect(created.created).toBe(true);
+
+    const asCard: Invoice = { ...invoice, payment: { ...invoice.payment, method: 'card' } };
+    await expect(insert(asCard, payment)).rejects.toThrow('Existing VAT invoice requires reconciliation');
+
+    expect((await storedInvoices(payment.stripeInvoiceId)).map((row) => row.id)).toEqual([created.invoiceId]);
+  });
+
+  it.each(['transfer', 'cash', 'other'] as const)('forma „%s” nadal odbija: abonament idzie tylko przez Stripe', async (method) => {
+    const payment = await paidPayment();
+    const draft = await draftFor(payment);
+    const foreign: Invoice = { ...draft, payment: { ...draft.payment, method } };
+
+    await expect(insert(foreign, payment)).rejects.toThrow('Billing VAT identity/date requires reconciliation');
+
+    expect(await storedInvoices(payment.stripeInvoiceId)).toEqual([]);
+  });
 });

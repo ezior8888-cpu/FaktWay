@@ -3,13 +3,15 @@
  *
  * Customer Portal to hosted page Stripe gdzie klient sam może:
  *   - Zmienić plan (upgrade/downgrade z proration)
- *   - Zmienić kartę
+ *   - Zmienić metodę płatności (kartę albo BLIK; to ścieżka ponowienia po odmowie)
  *   - Anulować subskrypcję
  *   - Zobaczyć historię faktur Stripe + pobrać PDF
  *
  * Konfiguracja portalu (włączone features, branding) — w Stripe Dashboard
  * → Settings → Billing → Customer portal. Bez konfiguracji portal NIE działa,
  * Stripe rzuca błąd "No configuration provided" — udokumentowane w `.env.example`.
+ * Metody do wyboru bierze z domyślnej konfiguracji metod płatności konta, więc
+ * BLIK pojawia się tu po włączeniu go w Dashboardzie (docs/runbooks/stripe-blik.md).
  */
 
 import { getStripe } from './client';

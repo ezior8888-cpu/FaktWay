@@ -134,6 +134,8 @@ export type AuditAction =
   // Faza 25 — Stripe billing lifecycle.
   | 'billing.customer.created'
   | 'billing.checkout.session_created'
+  /** Stripe nie zaoferował BLIK-a mimo `STRIPE_BLIK_RECURRING=on` (odmowa albo filtr). */
+  | 'billing.checkout.blik_unavailable'
   | 'billing.subscription.created'
   | 'billing.subscription.updated'
   | 'billing.subscription.synced'
