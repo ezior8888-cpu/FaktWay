@@ -72,6 +72,8 @@ function expectNoSession() {
   expect(cookieWrites.has('ksef.remember_me')).toBe(false);
 }
 
+let ipCounter = 0;
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN);
@@ -80,7 +82,9 @@ beforeEach(() => {
   authenticator = new SoftAuthenticator({ rpId: RP_ID, origin: ORIGIN });
   cookieWrites = new Map();
   // Osobne IP na test: limit w pamięci procesu nie ma przeciekać między przypadkami.
-  ip = `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
+  // Licznik, nie losowanie: test limitu wyczerpuje okno swojego adresu, a trafienie
+  // w ten sam adres później dawało przypadkowe 429 (raz na kilka przebiegów CI).
+  ip = `203.0.113.${++ipCounter}`;
   h.headers.mockImplementation(async () => new Headers({ 'x-real-ip': ip, 'user-agent': 'Vitest' }));
   h.cookies.mockImplementation(async () => ({
     get: (name: string) => cookieWrites.has(name) ? { value: cookieWrites.get(name)!.value } : undefined,
