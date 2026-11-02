@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  deriveWizardStep,
+  failureIsPassword,
+  failureNeedsNewCertificate,
+  stepNumber,
+  type WizardInput,
+} from '@/app/(dashboard)/settings/ksef/_components/wizard-model';
+
+const ready: WizardInput = { hasNip: true, isOwner: true, mfa: 'verified', hasCredentials: false };
+const step = (over: Partial<WizardInput>) => deriveWizardStep({ ...ready, ...over });
+
+describe('kreator KSeF: krok liczony z serwera', () => {
+  it('bez spełnionych warunków zawsze krok 1, a przy spełnionych krok 2', () => {
+    expect(step({})).toBe('certyfikat');
+    expect(step({ hasNip: false })).toBe('warunki');
+    expect(step({ isOwner: false })).toBe('warunki');
+    for (const mfa of ['challenge_required', 'enrollment_required', 'unknown'] as const) {
+      expect(step({ mfa })).toBe('warunki');
+    }
+  });
+
+  it('krok 3 tylko po „Dalej” (?krok=pliki) i tylko gdy warunki nadal są spełnione', () => {
+    expect(step({ requested: 'pliki' })).toBe('pliki');
+    expect(step({ requested: 'certyfikat' })).toBe('certyfikat');
+    // Wygasła sesja 2FA albo utrata roli po powrocie: wracamy do warunków, nie do wgrywania.
+    expect(step({ requested: 'pliki', mfa: 'challenge_required' })).toBe('warunki');
+    expect(step({ requested: 'pliki', isOwner: false })).toBe('warunki');
+  });
+
+  it('nieznana wartość ?krok= nie otwiera niczego poza krokiem 2', () => {
+    expect(step({ requested: 'polaczono' })).toBe('certyfikat');
+    expect(step({ requested: '../admin' })).toBe('certyfikat');
+    expect(step({ requested: null })).toBe('certyfikat');
+  });
+
+  it('połączona firma widzi podsumowanie, także gdy nie jest właścicielem i bez 2FA', () => {
+    expect(step({ hasCredentials: true })).toBe('polaczono');
+    expect(step({ hasCredentials: true, isOwner: false, mfa: 'unknown' })).toBe('polaczono');
+  });
+
+  it('odnowienie certyfikatu przechodzi tę samą drogę, z warunkami', () => {
+    expect(step({ hasCredentials: true, requested: 'certyfikat' })).toBe('certyfikat');
+    expect(step({ hasCredentials: true, requested: 'pliki' })).toBe('pliki');
+    expect(step({ hasCredentials: true, requested: 'pliki', mfa: 'challenge_required' })).toBe('warunki');
+  });
+
+  it('numeruje kroki jak w opisie (czwarty to oczekiwanie na trzecim ekranie)', () => {
+    expect(['warunki', 'certyfikat', 'pliki', 'polaczono'].map((s) => stepNumber(s as never))).toEqual([1, 2, 3, 5]);
+  });
+
+  it('powroty: po odmowie KSeF klient wraca do pobrania certyfikatu, po błędzie hasła zostaje przy plikach', () => {
+    for (const reason of ['no_permission', 'not_owner', 'revoked', 'untrusted_issuer', 'cert_expired', 'cert_offline']) {
+      expect(failureNeedsNewCertificate(reason)).toBe(true);
+    }
+    for (const reason of ['password_required', 'password_wrong', 'key_mismatch', 'unavailable', 'rate_limited', 'rejected']) {
+      expect(failureNeedsNewCertificate(reason)).toBe(false);
+    }
+    expect(failureIsPassword('password_wrong')).toBe(true);
+    expect(failureIsPassword('key_mismatch')).toBe(false);
+  });
+});

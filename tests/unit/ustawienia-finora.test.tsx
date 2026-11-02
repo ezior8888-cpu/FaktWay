@@ -51,6 +51,12 @@ vi.mock('@/app/actions/vat-exemption', () => ({ updateVatExemptionAction: vi.fn(
 vi.mock('@/app/actions/company-profile', () => ({ updateCompanyProfileAction: vi.fn() }));
 vi.mock('@/app/actions/business-start', () => ({ updateBusinessStartAction: vi.fn() }));
 vi.mock('@/components/settings/actions', () => ({ uploadCertificateAction: vi.fn() }));
+// Krok 1 kreatora KSeF osadza kartę 2FA z Bezpieczeństwa, a ta ciągnie akcje serwerowe.
+vi.mock('@/app/(dashboard)/settings/security/actions', () => ({
+  enrollTotpAction: vi.fn(),
+  unenrollTotpAction: vi.fn(),
+  verifyTotpEnrollmentAction: vi.fn(),
+}));
 vi.mock('@/components/onboarding/actions', () => ({ lookupNipAction: vi.fn() }));
 vi.mock('@/app/actions/organizations', () => ({
   completeCompanyNipAction: vi.fn(),
@@ -223,7 +229,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
     ctx.user = { identities: [{ provider: 'email' }], app_metadata: { providers: ['email'] } };
     const html = renderToStaticMarkup(await KsefSettingsPage());
     expect(html).toContain('Brak certyfikatu');
-    expect(html).toContain('najpierw wgraj certyfikat');
+    expect(html).toContain('najpierw podłącz KSeF kreatorem');
     expect(html).toContain('Historia faktur z KSeF');
     expect(html).not.toContain('Zobacz postęp');
     expect(html).not.toContain('Magiczny');
@@ -295,7 +301,10 @@ describe('przeniesione ekrany bez wyglądu prototypu (plan §9 pkt 5)', () => {
     'components/settings/accountant-list.tsx',
     'components/settings/business-start-form.tsx',
     'components/settings/cash-method-form.tsx',
-    'components/settings/certificate-upload.tsx',
+    'app/(dashboard)/settings/ksef/_components/certificate-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/conditions-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/connected-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/files-step.tsx',
     'components/settings/company-deletion.tsx',
     'components/settings/company-profile-form.tsx',
     'components/settings/complete-nip-form.tsx',
