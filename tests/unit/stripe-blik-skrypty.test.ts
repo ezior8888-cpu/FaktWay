@@ -61,6 +61,7 @@ function runContainerPart(script: string, routes: Route[], env: Record<string, s
     const result = spawnSync(process.execPath, ['--import', preload, main], {
       encoding: 'utf8',
       env: {
+        NODE_ENV: 'test', // typ ProcessEnv z Next.js wymaga tego pola
         PATH: process.env.PATH,
         STRIPE_SECRET_KEY: WARTOSC_KLUCZA,
         TEST_ROUTES: JSON.stringify(routes),
@@ -131,6 +132,7 @@ function runWholeScript(
     const result = spawnSync('bash', [join(process.cwd(), script), ...args], {
       encoding: 'utf8',
       env: {
+        NODE_ENV: 'test',
         PATH: [dir, dirname(process.execPath), process.env.PATH].join(':'),
         FAKTFLOW_INFRA_ENV: infra,
         NODE_OPTIONS: `--import=${preload}`,
