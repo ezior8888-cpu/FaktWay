@@ -144,9 +144,18 @@ export async function updateSession(request: NextRequest) {
   if (isNoSessionPath(request.nextUrl.pathname)) return NextResponse.next();
 
   let supabaseResponse = NextResponse.next({ request });
+  // Nagłówki, które `@supabase/ssr` podaje w `setAll` razem z ciasteczkami
+  // sesji (`Cache-Control: private, no-store…`, `Expires`, `Pragma`). Odpowiedź
+  // z odświeżonym ciasteczkiem nie może trafić do wspólnego cache'u (CDN,
+  // reverse proxy) — oddałby cudzą sesję następnemu klientowi. Next nie
+  // nadpisuje `Cache-Control` ustawionego w proxy, więc ten nagłówek wygrywa
+  // też z `public, s-maxage` trasy i z cache'em statycznej strony. Jadą z KAŻDĄ
+  // odpowiedzią niosącą ciasteczka sesji, dlatego kopiuje je `withSessionCookies`.
+  let sessionCacheHeaders: Record<string, string> = {};
 
   function withSessionCookies(response: NextResponse): NextResponse {
     for (const cookie of supabaseResponse.cookies.getAll()) response.cookies.set(cookie);
+    for (const [name, value] of Object.entries(sessionCacheHeaders)) response.headers.set(name, value);
     return response;
   }
   function denyApi(error: string, status: number): NextResponse {
@@ -165,7 +174,7 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
@@ -173,6 +182,8 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           );
+          sessionCacheHeaders = headers;
+          for (const [name, value] of Object.entries(headers)) supabaseResponse.headers.set(name, value);
         },
       },
       global: isUuid(activeOrgCookie)
@@ -231,7 +242,7 @@ export async function updateSession(request: NextRequest) {
     url.pathname = '/mobile';
     url.search = '';
     const res = NextResponse.redirect(url);
-    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+    withSessionCookies(res);
     return res;
   }
 
@@ -242,7 +253,7 @@ export async function updateSession(request: NextRequest) {
     url.pathname = APP_HOME;
     url.search = '';
     const res = NextResponse.redirect(url);
-    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+    withSessionCookies(res);
     return res;
   }
 
@@ -254,7 +265,7 @@ export async function updateSession(request: NextRequest) {
     url.pathname = '/login';
     url.searchParams.set('redirect', path);
     const res = NextResponse.redirect(url);
-    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+    withSessionCookies(res);
     return res;
   }
 
@@ -263,7 +274,7 @@ export async function updateSession(request: NextRequest) {
     url.pathname = APP_HOME;
     url.search = '';
     const res = NextResponse.redirect(url);
-    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+    withSessionCookies(res);
     return res;
   }
 
@@ -301,7 +312,7 @@ export async function updateSession(request: NextRequest) {
       url.search = '';
       url.searchParams.set('redirect', path);
       const res = NextResponse.redirect(url);
-      for (const cookie of supabaseResponse.cookies.getAll()) res.cookies.set(cookie);
+      withSessionCookies(res);
       return res;
     }
     if (state.status === 'challenge_required') {
@@ -311,7 +322,7 @@ export async function updateSession(request: NextRequest) {
       url.search = '';
       url.searchParams.set('redirect', path);
       const res = NextResponse.redirect(url);
-      for (const cookie of supabaseResponse.cookies.getAll()) res.cookies.set(cookie);
+      withSessionCookies(res);
       return res;
     }
   }
@@ -335,7 +346,7 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/onboarding';
       url.search = '';
       const res = NextResponse.redirect(url);
-      for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+      withSessionCookies(res);
       return res;
     }
 
@@ -351,7 +362,7 @@ export async function updateSession(request: NextRequest) {
 
     const targetUrl = request.nextUrl.clone();
     const res = NextResponse.redirect(targetUrl);
-    for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+    withSessionCookies(res);
     res.cookies.set({
       name: ACTIVE_ORG_COOKIE,
       value: choice,

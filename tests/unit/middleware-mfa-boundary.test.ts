@@ -19,10 +19,11 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
   vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.create.mockImplementation((_url: string, _key: string, options: {
-    cookies: { setAll: (values: { name: string; value: string; options: { path: string; httpOnly: boolean } }[]) => void };
+    cookies: { setAll: (values: { name: string; value: string; options: { path: string; httpOnly: boolean } }[], headers: Record<string, string>) => void };
   }) => {
     mocks.getClaims.mockImplementation(async (token?: string) => {
-      if (!token && refresh) options.cookies.setAll([{ name: 'fixture-session', value: 'refreshed', options: { path: '/', httpOnly: true } }]);
+      // Drugi argument jak w prawdziwym `@supabase/ssr` (applyServerStorage).
+      if (!token && refresh) options.cookies.setAll([{ name: 'fixture-session', value: 'refreshed', options: { path: '/', httpOnly: true } }], { 'Cache-Control': 'private, no-cache, no-store, must-revalidate, max-age=0', Expires: '0', Pragma: 'no-cache' });
       return { data: { claims: { sub: userId, aal } }, error: null };
     });
     return { auth: {
