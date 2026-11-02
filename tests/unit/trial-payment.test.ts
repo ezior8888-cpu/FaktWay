@@ -159,6 +159,33 @@ describe('konfiguracja: .env.example i scripts/check-env.ts', () => {
     expect(runbook).toContain('./scripts/ops/stripe-blik-sprawdz.sh');
   });
 
+  it('runbook mówi o wersji zdarzeń webhooka i o tym, że `stripe listen` jej nie bierze z endpointu', () => {
+    const runbook = read('docs/runbooks/stripe-blik.md');
+    expect(runbook).toContain('docs/security/STRIPE-PARA-PI-CHARGE-ODBIOR-2026-09-25.md');
+    expect(runbook).toContain('api_version=2024-11-20.acacia');
+    expect(runbook).toContain('You are using Stripe API Version');
+  });
+
+  it('runbook: wygaszanie otwartych Session skryptem, a nie w Dashboardzie', () => {
+    const runbook = read('docs/runbooks/stripe-blik.md');
+    expect(runbook).toContain('./scripts/ops/stripe-blik-wygas-sesje.sh');
+    expect(runbook).not.toContain('wygaś je w Dashboardzie');
+  });
+
+  it('runbook: zwrot BLIK-a z panelu kończy się uzgodnieniem i ma opisane wyjście', () => {
+    const runbook = read('docs/runbooks/stripe-blik.md');
+    expect(runbook).toContain('stripe_status_pending');
+    expect(runbook).toContain('settle_admin_refund_case');
+    expect(runbook).not.toContain('Obsługa bez zmian');
+  });
+
+  it('runbook: warunki BLIK-a przy portalu i mandat po anulowaniu', () => {
+    const runbook = read('docs/runbooks/stripe-blik.md');
+    expect(runbook).not.toContain('są tylko przed startem próby');
+    expect(runbook).toContain('Zmieniasz metodę płatności na BLIK?');
+    expect(runbook).toContain('Anulowanie subskrypcji kończy pobrania, ale nie mandat');
+  });
+
   it('skrypt dla operatora: jedna linia, sam ładuje infra.env, nie wypisuje klucza', () => {
     const script = read('scripts/ops/stripe-blik-sprawdz.sh');
     expect(script).toContain('source "$ENV_FILE"');
