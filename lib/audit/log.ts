@@ -34,6 +34,8 @@ export type AuditAction =
   | 'auth.mfa_challenge_failed'
   | 'auth.mfa_recovery_code_used'
   | 'auth.mfa_recovery_codes_regenerated'
+  | 'auth.passkey_added'
+  | 'auth.passkey_removed'
   | 'gdpr.export_requested'
   | 'gdpr.deletion_requested'
   | 'gdpr.deletion_canceled'

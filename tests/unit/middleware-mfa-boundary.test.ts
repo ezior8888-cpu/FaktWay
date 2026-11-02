@@ -1,3 +1,4 @@
+import { createHmac, hkdfSync } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
@@ -153,4 +154,77 @@ it('lets an allowed phone with verified MFA continue to its protected page', asy
   const response = await updateSession(phoneRequest('/invoices'));
   expect(response.headers.get('x-middleware-next')).toBe('1');
   expect(mocks.getUser).toHaveBeenCalledWith('signed-fixture');
+});
+
+// Logowanie biometrią (FW1): znacznik liczony niezależnie od kodu aplikacji,
+// ta sama derywacja co w `tests/unit/passkey-session-marker.test.ts`.
+const SERVICE_ROLE = 'fixture-service-role-key-do-testow';
+const SESSION_ID = 'fixture-session-id';
+function passkeyMarker(sub = userId, sessionId = SESSION_ID): string {
+  const expiry = String(Math.floor(Date.now() / 1000) + 3600);
+  const key = Buffer.from(hkdfSync('sha256', SERVICE_ROLE, Buffer.alloc(0), 'faktway/passkey-session-marker/v1', 32));
+  const mac = createHmac('sha256', key).update(['v1', sub, sessionId, expiry].join('\n')).digest('base64url');
+  return ['v1', expiry, mac].join('.');
+}
+function markedRequest(path: string, marker: string) {
+  return new NextRequest('https://app.example.test' + path, {
+    headers: { cookie: `${ACTIVE_ORG_COOKIE}=${org}; ksef.passkey_session=${marker}` },
+  });
+}
+function withSessionClaims() {
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SERVICE_ROLE);
+  mocks.create.mockImplementation(() => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: userId, aal: 'aal1', session_id: SESSION_ID } }, error: null });
+    return { auth: {
+      getSession: mocks.getSession, getUser: mocks.getUser, getClaims: mocks.getClaims,
+      mfa: { getAuthenticatorAssuranceLevel: mocks.localAal },
+    }, from: mocks.from };
+  });
+}
+
+it.each(['/invoices', '/api/invoices/fixture/pdf'])('valid passkey marker of this session passes the panel gate at %s', async (path) => {
+  withSessionClaims();
+  const response = await updateSession(markedRequest(path, passkeyMarker()));
+  expect(response.status).toBe(200);
+  expect(response.headers.get('x-middleware-next')).toBe('1');
+});
+
+it.each([
+  ['another session', () => passkeyMarker(userId, 'other-session')],
+  ['another account', () => passkeyMarker('other-user', SESSION_ID)],
+  ['a forged signature', () => passkeyMarker().slice(0, -2) + 'AA'],
+])('passkey marker of %s still gets the challenge', async (_name, marker) => {
+  withSessionClaims();
+  const page = await updateSession(markedRequest('/invoices', marker()));
+  expect(page.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Finvoices');
+  const api = await updateSession(markedRequest('/api/invoices/fixture/pdf', marker()));
+  expect(api.status).toBe(403);
+  expect(await api.json()).toEqual({ error: 'mfa_required' });
+});
+
+it('/admin ignores the passkey marker and asks for the real code, keeping the deep link', async () => {
+  withSessionClaims();
+  const response = await updateSession(markedRequest('/admin/users', passkeyMarker()));
+  expect(response.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Fadmin%2Fusers');
+});
+
+it('passkey login endpoints are public, registration is not', async () => {
+  mocks.create.mockImplementation(() => {
+    mocks.getClaims.mockResolvedValue({ data: null, error: null });
+    return { auth: {
+      getSession: mocks.getSession, getUser: mocks.getUser, getClaims: mocks.getClaims,
+      mfa: { getAuthenticatorAssuranceLevel: mocks.localAal },
+    }, from: mocks.from };
+  });
+  for (const path of ['/api/auth/passkey/login/options', '/api/auth/passkey/login/verify']) {
+    const response = await updateSession(request(path, false, 'POST'));
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+  }
+  for (const path of ['/api/auth/passkey', '/api/auth/passkey/register/options', '/api/auth/passkey/register/verify', '/api/auth/passkey/fixture-id']) {
+    const response = await updateSession(request(path, false, 'POST'));
+    expect(response.status).toBe(401);
+  }
+  // Prefiks nie otwiera sąsiednich nazw.
+  const lookalike = await updateSession(request('/api/auth/passkey/loginx', false, 'POST'));
+  expect(lookalike.status).toBe(401);
 });

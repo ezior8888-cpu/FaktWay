@@ -21,7 +21,9 @@
 
 import { cookies } from 'next/headers';
 
-import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
+// Bramka panelu: sesja po biometrii przechodzi jak `verified`. Operacje wrażliwe
+// dokładają `getVerifiedMfaState` wprost (certyfikat, 2FA, hasło) albo `assertSensitiveMfa`.
+import { getRequestPanelMfaState } from '@/lib/auth/panel-mfa-request';
 import { createAdminClient, createClient } from './server';
 import { ACTIVE_ORG_COOKIE, isUuid } from './active-org';
 
@@ -52,7 +54,7 @@ export interface AuthContext {
  */
 export async function requireUserAndActiveOrg(): Promise<AuthContext> {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await getRequestPanelMfaState(supabase).catch(() => null);
   if (!state) {
     throw new ActionAuthError('Nie udało się zweryfikować sesji. Zaloguj się ponownie.');
   }
@@ -101,7 +103,7 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
  */
 export async function requireVerifiedUser(): Promise<Pick<AuthContext, 'supabase' | 'user'>> {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await getRequestPanelMfaState(supabase).catch(() => null);
   if (!state) {
     throw new ActionAuthError('Nie udało się zweryfikować sesji. Zaloguj się ponownie.');
   }
@@ -134,7 +136,7 @@ export type ApiOrgContext =
 
 export async function resolveApiUserAndActiveOrg(): Promise<ApiOrgContext> {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await getRequestPanelMfaState(supabase).catch(() => null);
   if (!state) return { ok: false, status: 401, error: 'session_verification_failed' };
   if (state.status === 'unauthenticated') {
     return { ok: false, status: 401, error: 'not_authenticated' };

@@ -104,6 +104,20 @@ describe('logout uses the real SDK and clears only the current browser session',
     expect(await signOutCurrentSession()).toEqual({ userId: null, localSessionCleared: true, globalSignOutConfirmed: false });
     expect([...jar.keys()]).toEqual(unrelated);
   });
+  // Logowanie biometrią (FW1): znacznik sesji i „zapamiętaj mnie” nie mogą
+  // przeżyć wylogowania, nawet gdy Auth jest niedostępny.
+  it.each([204, 500])('clears the passkey marker, remember-me and offer cookies after remote HTTP %s', async (status) => {
+    await seedSdk(status);
+    jar.set('ksef.passkey_session', 'v1.fixture'); jar.set('ksef.remember_me', '1'); jar.set('ksef.passkey_offer', '1');
+    expect((await signOutCurrentSession()).localSessionCleared).toBe(true);
+    expect([...jar.keys()]).toEqual(['ksef.active_org', 'sb-other-auth-token']);
+  });
+  it('clears the passkey cookies even when session initialization fails', async () => {
+    mocks.client.mockRejectedValue(new Error('synthetic-private-error'));
+    jar = new Map([['ksef.passkey_session', 'v1.fixture'], ['ksef.remember_me', '1'], ['theme', 'dark']]);
+    expect((await signOutCurrentSession()).localSessionCleared).toBe(true);
+    expect([...jar.keys()]).toEqual(['theme']);
+  });
   it.each([signOut, forceSignOutInactive])('does not redirect or write logout success when cookie cleanup fails', async (action) => {
     await seedSdk(204);
     mocks.cookies.mockResolvedValue({ getAll: () => cookieStore().getAll(), set: () => { throw new Error('synthetic-cookie-error'); } });

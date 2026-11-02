@@ -1,9 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getPanelMfaState } from '@/lib/auth/panel-mfa';
+import { PASSKEY_SESSION_COOKIE } from '@/lib/auth/passkey/session-marker';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
 
-import { isMobilePanelAllowed, mobilePanelMode } from '@/lib/mobile-access';
+import { isMobilePanelAllowed, isPhoneUserAgent, mobilePanelMode } from '@/lib/mobile-access';
 import { isLocalDevEnv } from '@/lib/security/environment';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
@@ -43,6 +45,9 @@ const PUBLIC_API_PREFIXES = [
   '/api/status',
   '/api/portal',
   '/api/email',
+  // Logowanie biometrią jest przed sesją. Dodawanie i usuwanie urządzeń
+  // (`/api/auth/passkey`, `/register`, `/[id]`) zostaje za bramką.
+  '/api/auth/passkey/login',
   // Dev-only diagnostyka (route sam zwraca 404 na production)
   '/api/dev',
 ] as const;
@@ -94,18 +99,6 @@ export function isAuthPublicPath(pathname: string): boolean {
 }
 
 const APP_HOME = '/dashboard';
-
-/**
- * BUG-008: telefony (nie tablety) nie wchodzą do panelu aplikacji — dostają
- * tylko landing + stronę `/mobile`. Blokada jest ZDEJMOWANA przełącznikiem
- * `NEXT_PUBLIC_MOBILE_PANEL` (zob. `lib/mobile-access.ts`); domyślnie stoi.
- * `Android` bez `Mobile` w UA to tablet — celowo przepuszczany, podobnie iPad.
- */
-const PHONE_UA_RE = /iPhone|iPod|Windows Phone|Android(?=.*\bMobile\b)/i;
-
-function isPhoneUserAgent(ua: string | null): boolean {
-  return ua !== null && PHONE_UA_RE.test(ua);
-}
 
 /**
  * Proxy / „middleware” — odświeżenie sesji Supabase + reguły routingu.
@@ -178,6 +171,8 @@ export async function updateSession(request: NextRequest) {
   const isAdmin = path === '/admin' || path.startsWith('/admin/');
 
   // ─── BUG-008: blokada aplikacji na telefonie, zdejmowana przełącznikiem ───
+  // Telefony (nie tablety) nie wchodzą do panelu, chyba że zdejmie to
+  // `NEXT_PUBLIC_MOBILE_PANEL` (`lib/mobile-access.ts`).
   // Domyślnie telefon widzi wyłącznie strony marketingowe (+ /mobile), a każda
   // inna nawigacja HTML (login, register, onboarding, dashboard…) → /mobile.
   // Filtr `accept: text/html` chroni asety (sw.js, manifest, /ingest,
@@ -258,8 +253,13 @@ export async function updateSession(request: NextRequest) {
   // Recheck authoritative factors and the claims of the exact session token.
   // The SDK's no-argument AAL helper reads session.user from client cookies.
   // Private APIs must enforce the same policy as HTML before any org lookup.
+  // Sesja po biometrii (znacznik tej sesji) przechodzi przez panel bez kodu;
+  // `/admin` zawsze wymaga prawdziwego kodu, a tu zachowujemy też głęboki link.
   if (userId && !isPublicPath(path)) {
-    const state = await getVerifiedMfaState(supabase).catch(() => null);
+    const state = await (isAdmin
+      ? getVerifiedMfaState(supabase)
+      : getPanelMfaState(supabase, () => request.cookies.get(PASSKEY_SESSION_COOKIE)?.value)
+    ).catch(() => null);
     const verificationFailed = !state ||
       (state.status !== 'unauthenticated' && state.user.id !== userId);
     if (verificationFailed) {

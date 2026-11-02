@@ -75,6 +75,14 @@ export function fakeSupabase(db: MemoryDb) {
           filters.push((r) => String(r[k]) <= v);
           return q;
         },
+        gt: (k: string, v: string) => {
+          filters.push((r) => String(r[k]) > v);
+          return q;
+        },
+        lt: (k: string, v: string) => {
+          filters.push((r) => String(r[k]) < v);
+          return q;
+        },
         in: (k: string, vs: unknown[]) => {
           filters.push((r) => vs.includes(r[k]));
           return q;

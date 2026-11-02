@@ -59,6 +59,8 @@
     "@remixicon/react": "^4.9.0",
     "@sentry/nextjs": "^10.75.2",
     "@serwist/next": "^9.5.11",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.3",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-table": "8.21.3",

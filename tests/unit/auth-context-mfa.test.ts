@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHmac, hkdfSync } from 'node:crypto';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(), createAdminClient: vi.fn(), cookies: vi.fn(),
@@ -12,7 +14,7 @@ vi.mock('next/headers', () => ({ cookies: mocks.cookies }));
 
 import {
   ActionAuthError, requireOwner, requireUserAndActiveOrg,
-  requireUserAndTenant, resolveApiUserAndActiveOrg,
+  requireUserAndTenant, requireVerifiedUser, resolveApiUserAndActiveOrg,
 } from '@/lib/supabase/auth-context';
 import { ACTIVE_ORG_COOKIE } from '@/lib/supabase/active-org';
 
@@ -209,4 +211,49 @@ it('the compatibility alias and owner guard inherit MFA enforcement', async () =
   await expect(requireUserAndTenant()).rejects.toBeInstanceOf(ActionAuthError);
   await expect(requireOwner()).rejects.toThrow(challengeRequired.message);
   expect(mocks.createAdminClient).not.toHaveBeenCalled();
+});
+
+// Logowanie biometrią (FW1): asercja z weryfikacją użytkownika wystarcza do
+// panelu, więc sesja AAL1 ze znacznikiem przechodzi te same granice co AAL2.
+// Znacznik liczony niezależnie od kodu aplikacji.
+describe('passkey session marker at the panel boundaries', () => {
+  const SERVICE_ROLE = 'fixture-service-role-key-do-testow';
+  const SESSION = 'fixture-session-id';
+  function marker(sub = user.id, sessionId = SESSION): string {
+    const expiry = String(Math.floor(Date.now() / 1000) + 3600);
+    const key = Buffer.from(hkdfSync('sha256', SERVICE_ROLE, Buffer.alloc(0), 'faktway/passkey-session-marker/v1', 32));
+    const mac = createHmac('sha256', key).update(['v1', sub, sessionId, expiry].join('\n')).digest('base64url');
+    return ['v1', expiry, mac].join('.');
+  }
+  function cookiesWith(value: string | undefined) {
+    mocks.cookies.mockResolvedValue({
+      get: (key: string) => key === ACTIVE_ORG_COOKIE ? { value: tenantId }
+        : key === 'ksef.passkey_session' && value ? { value } : undefined,
+    });
+  }
+  beforeEach(() => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SERVICE_ROLE);
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: user.id, aal: 'aal1', session_id: SESSION } }, error: null });
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('allows actions, API routes and the user-only boundary with a valid marker of this session', async () => {
+    cookiesWith(marker());
+    await expect(requireUserAndActiveOrg()).resolves.toMatchObject({ tenantId, role: 'owner', user: { id: user.id } });
+    await expect(resolveApiUserAndActiveOrg()).resolves.toEqual({ ok: true, userId: user.id, tenantId, role: 'owner' });
+    await expect(requireVerifiedUser()).resolves.toMatchObject({ user: { id: user.id } });
+    await expect(requireOwner()).resolves.toMatchObject({ role: 'owner' });
+  });
+
+  it.each([
+    ['another session', () => marker(user.id, 'other-session')],
+    ['another account', () => marker('other-user', SESSION)],
+    ['no marker', () => undefined],
+  ])('denies the challenge state with %s before any tenant lookup', async (_name, value) => {
+    cookiesWith(value());
+    await expect(requireUserAndActiveOrg()).rejects.toThrow(challengeRequired.message);
+    await expect(resolveApiUserAndActiveOrg()).resolves.toEqual({ ok: false, status: 403, error: 'mfa_required' });
+    await expect(requireVerifiedUser()).rejects.toThrow(challengeRequired.message);
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
 });
