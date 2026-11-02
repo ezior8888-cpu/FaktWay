@@ -63,6 +63,10 @@ export async function finishPasskeyLogin(
     .maybeSingle<PasskeyRow>();
   if (rowError) throw new Error('passkey_lookup_failed');
   if (!row) return FAILED;
+  // Poświadczenie wykrywalne: uwierzytelniacz podaje też właściciela (identyfikator
+  // z rejestracji) i ma on się zgadzać z wierszem (WebAuthn § 7.2).
+  const { userHandle } = response.response;
+  if (userHandle && Buffer.from(userHandle, 'base64url').toString('utf8') !== row.user_id) return FAILED;
 
   let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
   try {

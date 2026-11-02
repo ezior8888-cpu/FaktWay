@@ -10,8 +10,7 @@ const PRIVATE_HEADERS = {
 };
 
 /** Zwykły link w panelu, nie `fetch`: goły JSON byłby dla klienta martwym błędem. */
-function isBrowserNavigation(request?: Request): boolean {
-  if (!request) return false;
+function isBrowserNavigation(request: Request): boolean {
   return request.headers.get('sec-fetch-dest') === 'document'
     || (request.headers.get('accept') ?? '').includes('text/html');
 }
@@ -21,7 +20,7 @@ function isBrowserNavigation(request?: Request): boolean {
  * Pełne MFA: plik zawiera dane całego konta, więc sama sesja po biometrii
  * (z „zapamiętaj mnie” otwarta długo) nie wystarcza.
  */
-export async function GET(request?: Request): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   try {
     const context = await getVerifiedUserContext({ fullMfa: true });
     if (!context.ok) {

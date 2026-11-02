@@ -278,6 +278,28 @@ describe('POST /api/auth/passkey/login/verify', () => {
     expectNoSession();
   });
 
+  it('userHandle innego konta nie przechodzi, a właściciela tak (WebAuthn § 7.2, poświadczenie wykrywalne)', async () => {
+    seedPasskey();
+    const foreign = await issueChallenge();
+    const foreignAssertion = authenticator.assert(foreign);
+    const refused = await verify({
+      response: {
+        ...foreignAssertion,
+        response: { ...foreignAssertion.response, userHandle: Buffer.from('inne-konto').toString('base64url') },
+      },
+    });
+    expect(refused.response.status).toBe(401);
+    expect(refused.json).toEqual(GENERIC_FAILURE);
+    expectNoSession();
+
+    const own = await issueChallenge();
+    const ownAssertion = authenticator.assert(own);
+    const accepted = await verify({
+      response: { ...ownAssertion, response: { ...ownAssertion.response, userHandle: Buffer.from(USER_ID).toString('base64url') } },
+    });
+    expect(accepted.response.status).toBe(200);
+  });
+
   it('podmieniony podpis nie przechodzi', async () => {
     seedPasskey();
     const challenge = await issueChallenge();
