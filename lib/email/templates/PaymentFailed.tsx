@@ -74,7 +74,7 @@ export default function PaymentFailed({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktWay — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>

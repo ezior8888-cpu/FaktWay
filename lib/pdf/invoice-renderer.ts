@@ -10,6 +10,7 @@ import {
   REVERSE_CHARGE_LABEL,
   SPLIT_PAYMENT_LABEL,
 } from '@/lib/invoices/annotations';
+import { PUBLIC_SITE_DOMAIN, PUBLIC_SITE_URL } from '@/lib/site';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
@@ -600,12 +601,12 @@ function drawFooter(
     .lineTo(left + width, footY)
     .strokeColor('#eeeeee')
     .stroke();
-  const footer = 'Wygenerowano w FaktWay — faktury KSeF dla mikrofirm.';
+  const footer = `Wygenerowano w FaktWay, faktury KSeF dla mikrofirm: ${PUBLIC_SITE_DOMAIN}`;
   doc.font('body').fontSize(7);
   // Znak FaktWay tylko w stopce: nagłówek faktury należy do sprzedawcy.
   drawFaktWayMark(doc, left + (width - doc.widthOfString(footer)) / 2 - 9, footY + 4.6, 5.4);
   doc.font('body').fontSize(7).fillColor('#aaaaaa');
-  doc.text(footer, left, footY + 4, { width, align: 'center' });
+  doc.text(footer, left, footY + 4, { width, align: 'center', link: PUBLIC_SITE_URL });
 }
 
 /** Znak FaktWay (wektor) o wysokości `h` z lewym górnym rogiem w (x, y). */

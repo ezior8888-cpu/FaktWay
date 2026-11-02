@@ -3,6 +3,8 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
+import { PUBLIC_SITE_DOMAIN } from '@/lib/site';
+
 export interface UpoPdfData {
   ksefNumber: string;
   /** Może być puste, jeśli faktura nie ma jeszcze numeru wewnętrznego. */
@@ -217,7 +219,7 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
       doc
         .fontSize(7)
         .text(
-          `Wygenerowano: ${new Date().toLocaleString('pl-PL')} | FaktWay | https://ksef.mf.gov.pl`,
+          `Wygenerowano: ${new Date().toLocaleString('pl-PL')} | FaktWay, ${PUBLIC_SITE_DOMAIN} | https://ksef.mf.gov.pl`,
           50,
           775,
           { width: 495, align: 'center' },
