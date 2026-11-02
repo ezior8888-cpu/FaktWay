@@ -127,9 +127,12 @@ USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
-# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
-CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]
+# `server-only-hook.mjs`: moduły z `import 'server-only'` rzucają poza warunkiem
+# `react-server`, więc hak podmienia sam `server-only` na pusty moduł. NIE wracaj
+# do globalnego `--conditions=react-server`: psuje `react-dom/server` i render
+# maili (RUN-01). Ten sam ciąg ma `worker:dev` — pilnuje tego test
+# tests/unit/worker-start-jak-dockerfile.test.ts.
+CMD ["node", "--import", "./lib/jobs/server-only-hook.mjs", "--import", "tsx", "lib/jobs/worker.ts"]
 
 # ── runner: minimalny obraz produkcyjny ──
 # MUSI zostać ostatnim etapem pliku: `docker build` bez `--target` buduje

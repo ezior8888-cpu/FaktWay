@@ -42,7 +42,7 @@
     "perf:lighthouse": "lighthouse --budget-path=load-tests/lighthouse-budget.json --only-categories=performance --chrome-flags=\"--headless\"",
     "verify:fa3": "tsx scripts/verify-fa3-all-types.ts",
     "check:env": "tsx scripts/check-env.ts",
-    "worker:dev": "node --conditions=react-server --import tsx lib/jobs/worker.ts",
+    "worker:dev": "node --import ./lib/jobs/server-only-hook.mjs --import tsx lib/jobs/worker.ts",
     "jobs:smoke": "tsx scripts/pgboss-smoke.ts"
   },
   "dependencies": {
