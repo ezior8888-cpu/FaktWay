@@ -71,11 +71,17 @@ export const CHECKOUT_STATEMENT = {
  * hostowanym Checkout warunki mandatu pokazuje sprzedawca, PRZED kodem BLIK
  * (docs.stripe.com/payments/blik/recurring-payments). Wersję zapisuje audyt
  * `legal.checkout_statement_accepted`.
+ *
+ * Anulowanie i zmiana metody kończą pobrania, ale nie upoważnienie: to kończy odpięcie
+ * metody albo cofnięcie w banku (docs.stripe.com/payments/blik, „Cancel mandates”),
+ * a kod niczego nie odpina. Żadne wcześniejsze brzmienie nie było pokazane klientom
+ * (przełącznik nigdy nie był włączony), więc nie ma zapisów zgód na inną treść.
  */
 export const BLIK_RECURRING_STATEMENT = {
   version: '2026-11-02',
   text:
     'Jeśli na stronie płatności wybiorę BLIK, zgadzam się na cykliczne płatności: FaktWay będzie co miesiąc ' +
     'pobierać opłatę za subskrypcję z mojego konta bankowego bez ponownego kodu BLIK i bez zatwierdzania ' +
-    'każdej płatności w aplikacji banku. Zgodę wycofam, anulując subskrypcję albo zmieniając metodę płatności.',
+    'każdej płatności w aplikacji banku. Pobrania zakończę, anulując subskrypcję albo zmieniając metodę ' +
+    'płatności. Upoważnienie mogę też cofnąć w aplikacji banku.',
 } as const;

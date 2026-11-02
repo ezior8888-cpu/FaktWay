@@ -107,6 +107,16 @@ describe('ujawnienia przed kodem BLIK (wymóg Stripe przy hostowanym Checkout)',
     expect(BLIK_RECURRING_STATEMENT.text).not.toMatch(LONG_DASH);
   });
 
+  it('zgoda nie obiecuje, że anulowanie cofa upoważnienie: kończy je bank albo odpięcie metody', () => {
+    // docs.stripe.com/payments/blik, „Cancel mandates”. Kod niczego nie odpina, więc
+    // anulowanie kończy pobrania, a alias zostaje w aplikacji banku klienta.
+    expect(BLIK_RECURRING_STATEMENT.text).not.toMatch(/wycofam, anulując/);
+    expect(BLIK_RECURRING_STATEMENT.text).toContain(
+      'Pobrania zakończę, anulując subskrypcję albo zmieniając metodę płatności.',
+    );
+    expect(BLIK_RECURRING_STATEMENT.text).toContain('Upoważnienie mogę też cofnąć w aplikacji banku.');
+  });
+
   it('lista banków z dokumentacji Stripe', () => {
     expect([...BLIK_RECURRING_BANKS]).toEqual([
       'Alior Bank',
