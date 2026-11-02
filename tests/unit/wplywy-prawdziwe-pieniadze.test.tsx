@@ -314,6 +314,43 @@ describe('korekta wystawiona do dnia zapłaty zmniejsza wpływ z tej wpłaty', (
   });
 });
 
+// Recenzja PR #358, pkt 3. Korekta in plus wystawiona do terminu nieopłaconej faktury składa się w jej
+// należność (nabywca zapłaci kwotę po korekcie). Ale korekta ma własne „Zapłacone”: gdy już jest zapłacona,
+// jest osobnym wpływem w dniu zapłaty, a Spodziewane nie mogą jej liczyć jako jeszcze do zapłaty.
+describe('zapłacona korekta in plus złożona w nieopłaconą fakturę', () => {
+  const otwarta = () => faktura('a', { payment_due_date: '2026-11-20', payment_status: 'unpaid' });
+  const plus123 = (fields: Row = {}) =>
+    korekta('k', 'a', 123, { issue_date: '2026-10-25', payment_due_date: '2026-11-08', ...fields });
+  const zaplaconaPlus = () => plus123({ paid_amount: 123, paid_at: '2026-11-01T10:00:00Z', payment_status: 'paid' });
+
+  it('jest widoczna jako wpływ w dniu własnej zapłaty', async () => {
+    const entries = await getInflows(sb([otwarta(), zaplaconaPlus()]), TENANT, OD_POCZATKU_ROKU);
+    expect(movements.receivedInflows(entries, TODAY).map((e) => [e.id, e.date, e.basis, e.amount])).toEqual([
+      ['k', '2026-11-01', 'paid', 123],
+    ]);
+    expect(movements.monthFlows(entries, [], TODAY).inflow).toMatchObject({ amount: 123, count: 1 });
+  });
+
+  it('Spodziewane liczą tylko samą fakturę, bez zapłaconej już korekty', async () => {
+    const entries = await getInflows(sb([otwarta(), zaplaconaPlus()]), TENANT, OD_POCZATKU_ROKU);
+    expect(movements.upcomingInflows(entries, TODAY).items.map((i) => [i.id, i.amount])).toEqual([['a', 1230]]);
+    expect(entries.find((e) => e.id === 'a')).toMatchObject({ basis: 'due', amount: 1230, outstanding: 1230 });
+  });
+
+  it('korekta zapłacona wg FA(3) (import) też zostaje osobnym wpływem', async () => {
+    const importowana = plus123({ origin: 'ksef_import', fa3_data: { parsed: { paidDate: '2026-10-30' } } });
+    const entries = await getInflows(sb([otwarta(), importowana]), TENANT, OD_POCZATKU_ROKU);
+    expect(movements.receivedInflows(entries, TODAY).map((e) => [e.id, e.date, e.amount])).toEqual([['k', '2026-10-30', 123]]);
+    expect(movements.upcomingInflows(entries, TODAY).items.map((i) => [i.id, i.amount])).toEqual([['a', 1230]]);
+  });
+
+  it('korekta jeszcze niezapłacona składa się w należność jak dotąd', async () => {
+    const entries = await getInflows(sb([otwarta(), plus123()]), TENANT, OD_POCZATKU_ROKU);
+    expect(movements.receivedInflows(entries, TODAY)).toEqual([]);
+    expect(movements.upcomingInflows(entries, TODAY).items.map((i) => [i.id, i.amount])).toEqual([['a', 1353]]);
+  });
+});
+
 describe('należności: po terminie to należność, nie wpływ', () => {
   it('Pulpit (prawdziwe dane): należność po terminie widać i prowadzi do listy zaległości', async () => {
     const out = await prerender(

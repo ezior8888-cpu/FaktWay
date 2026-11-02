@@ -41,7 +41,9 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  * Korekta (`parent_invoice_id`) wystawiona najpóźniej w dniu terminu faktury
  * pierwotnej bez wpłaty zmienia kwotę TEJ należności: nabywca zapłaci kwotę po
  * korekcie (w KSeF nie ma anulowania, korekta do zera zdejmuje fakturę ze
- * spodziewanych). Taka korekta nie jest osobną pozycją. Korekty wystawione
+ * spodziewanych). Taka korekta nie jest osobną pozycją, chyba że ma własną
+ * wpłatę: korekta zapłacona (własne „Zapłacone”) jest osobnym wpływem w dniu
+ * swojej zapłaty, a Spodziewane jej już nie liczą. Korekty wystawione
  * przed `from` do faktur z dniem w zakresie czytamy osobnym zapytaniem
  * (`correctionsBefore`), tylko gdy takie faktury są.
  *
@@ -310,6 +312,9 @@ export async function getInflows(
     const issued = correction.issue_date?.slice(0, 10);
     if (!parent || !isIsoDate(issued) || issued > parent.date) continue;
     if (correction.ksef_environment !== parent.row.ksef_environment) continue;
+    // Korekta z własną wpłatą (`paid_at` albo data zapłaty z FA(3)) to osobny, już zapłacony dług:
+    // zostaje własnym wpływem w dniu swojej zapłaty, a należność faktury pierwotnej jej nie obejmuje.
+    if (inflowDay(correction)?.basis === 'paid') continue;
     // Do wpłaty składamy tylko korektę in minus. Korekta in plus to osobny dług z własnym „Zapłacone”.
     if (parent.basis === 'paid' && amountDueOf(correction) >= 0) continue;
     folded.set(parent.row.id, [...(folded.get(parent.row.id) ?? []), correction]);
