@@ -8,6 +8,8 @@ import HomePage, { metadata } from '@/app/(home)/page';
 import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
 import { METODA_PLATNOSCI, OFERTA } from '@/lib/marketing/oferta';
 
+import { tekstBezZnacznikow } from './helpers/tekst-html';
+
 /**
  * Strona główna od 23.10.2026: prosty układ w duchu Salient/TaxPal, pisany
  * od zera na naszych tokenach. Zasady od Bartosza:
@@ -24,7 +26,7 @@ const text = html.replace(/<[^>]+>/g, ' ');
 /** Tekst nagłówka bez znaczników i twardych spacji. */
 function h1Text(): string {
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? '';
-  return h1.replace(/<[^>]+>/g, '').replaceAll('\u00a0', ' ').replaceAll('&nbsp;', ' ').trim();
+  return tekstBezZnacznikow(h1).replaceAll('\u00a0', ' ').trim();
 }
 
 describe('strona główna', () => {

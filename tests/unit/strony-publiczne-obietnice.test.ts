@@ -17,6 +17,8 @@ import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
 import { getAllHelpArticles, HELP_CATEGORIES } from '@/lib/help/articles';
 import { METODA_PLATNOSCI, OFERTA, OFERTA_NAGLOWEK, OFERTA_TEKST, PROBA } from '@/lib/marketing/oferta';
 
+import { tekstBezZnacznikow } from './helpers/tekst-html';
+
 /**
  * FaktWay 1.0 (FAKTWAY-1-0, sekcja 3 pkt 8): strony przed logowaniem mówią
  * jednym zdaniem oferty i obiecują tylko to, co jest w kodzie. Bez FLO, bez
@@ -297,7 +299,7 @@ describe('porównania /vs/*: kolumna FaktWay zgodna z kodem', () => {
   ])('%s: renderuje się bez AI jako wyróżnika', (nazwa, Strona) => {
     const html = renderToStaticMarkup(createElement(Strona));
     expect(html).toContain(nazwa);
-    const tekst = html.replace(/<[^>]+>/g, ' ');
+    const tekst = tekstBezZnacznikow(html);
     expect(tekst).not.toMatch(/\bAI\b|\bflo\b|asystent|\bagent|Claude|Frankfurt|[—–]/i);
   });
 
