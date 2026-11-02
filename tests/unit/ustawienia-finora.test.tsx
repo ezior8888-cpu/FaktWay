@@ -58,6 +58,12 @@ vi.mock('@/app/actions/vat-exemption', () => ({ updateVatExemptionAction: vi.fn(
 vi.mock('@/app/actions/company-profile', () => ({ updateCompanyProfileAction: vi.fn() }));
 vi.mock('@/app/actions/business-start', () => ({ updateBusinessStartAction: vi.fn() }));
 vi.mock('@/components/settings/actions', () => ({ uploadCertificateAction: vi.fn() }));
+// Krok 1 kreatora KSeF osadza kartę 2FA z Bezpieczeństwa, a ta ciągnie akcje serwerowe.
+vi.mock('@/app/(dashboard)/settings/security/actions', () => ({
+  enrollTotpAction: vi.fn(),
+  unenrollTotpAction: vi.fn(),
+  verifyTotpEnrollmentAction: vi.fn(),
+}));
 vi.mock('@/components/onboarding/actions', () => ({ lookupNipAction: vi.fn() }));
 vi.mock('@/app/actions/organizations', () => ({
   completeCompanyNipAction: vi.fn(),
@@ -211,7 +217,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('połączenie z certyfikatem, historia faktur z KSeF i logowanie Google', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: true, ksef_certificate_expiry: '2027-03-01T00:00:00Z' };
     ctx.user = { identities: [{ provider: 'google' }], app_metadata: { providers: ['email', 'google'] } };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Skonfigurowano połączenie');
     expect(html).toContain('Certyfikat ważny do: 01.03.2027');
     expect(html).toContain('Historia faktur z KSeF');
@@ -228,9 +234,9 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('bez certyfikatu: ostrzeżenie zamiast linku do postępu, Google niepołączony', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
     ctx.user = { identities: [{ provider: 'email' }], app_metadata: { providers: ['email'] } };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Brak certyfikatu');
-    expect(html).toContain('najpierw wgraj certyfikat');
+    expect(html).toContain('najpierw podłącz KSeF kreatorem');
     expect(html).toContain('Historia faktur z KSeF');
     expect(html).not.toContain('Zobacz postęp');
     expect(html).not.toContain('Magiczny');
@@ -239,7 +245,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
 
   it('firma bez NIP-u: uzupełnienie NIP zamiast certyfikatu', async () => {
     ctx.tenant = { name: 'Szkic', nip: '' };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Organizacja bez NIP-u');
     expect(html).toContain('id="complete-nip"');
     expect(html).not.toContain('Wgraj i zweryfikuj certyfikat');
@@ -248,7 +254,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('członek nie wgra certyfikatu', async () => {
     ctx.role = 'member';
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Certyfikat KSeF może zmienić wyłącznie właściciel organizacji.');
     expect(html).not.toContain('Wgraj i zweryfikuj certyfikat');
   });
@@ -302,7 +308,10 @@ describe('przeniesione ekrany bez wyglądu prototypu (plan §9 pkt 5)', () => {
     'components/settings/accountant-list.tsx',
     'components/settings/business-start-form.tsx',
     'components/settings/cash-method-form.tsx',
-    'components/settings/certificate-upload.tsx',
+    'app/(dashboard)/settings/ksef/_components/certificate-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/conditions-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/connected-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/files-step.tsx',
     'components/settings/company-deletion.tsx',
     'components/settings/company-profile-form.tsx',
     'components/settings/complete-nip-form.tsx',

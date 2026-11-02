@@ -1,9 +1,11 @@
+import { createPrivateKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Crypto } from '@peculiar/webcrypto';
 import * as xadesjs from 'xadesjs';
 import * as XmlCore from 'xml-core';
 import { DOMParser, XMLSerializer, DOMImplementation } from '@xmldom/xmldom';
 import { isSensitiveDebugAllowed } from '@/lib/security/debug';
+import { KsefAuthRejectedError } from './auth-errors';
 import { ksefFetch } from './client';
 import { ksefNumericStatusCode } from './normalize-status-code';
 import type {
@@ -64,16 +66,37 @@ export interface KsefAuthSession {
   nip: string;
 }
 
+export { KsefAuthRejectedError };
+
 /**
- * Konwertuje PEM (BEGIN/END headers + base64) na ArrayBuffer (dla WebCrypto).
+ * Klucz do podpisu i algorytm wynikają z samego klucza: RSA (2048+) podpisuje
+ * RSASSA-PKCS1-v1_5/SHA-256, EC P-256 (zalecany przez MF i dawany klientom przez
+ * Aplikację Podatnika) podpisuje ECDSA/SHA-256 w układzie R||S, jak chce XML-DSig.
+ * PKCS#8 DER bierzemy z `node:crypto`, więc zapis klucza (PKCS#1, SEC1, PKCS#8)
+ * nie ma znaczenia. Zapisane wcześniej poświadczenia RSA działają bez zmian.
  */
-function pemToArrayBuffer(pem: string): ArrayBuffer {
-  const base64 = pem
-    .replace(/-----BEGIN [^-]+-----/g, '')
-    .replace(/-----END [^-]+-----/g, '')
-    .replace(/\s/g, '');
-  const buffer = Buffer.from(base64, 'base64');
-  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+async function importSigningKey(privateKeyPem: string): Promise<{
+  key: CryptoKey;
+  signatureAlgorithm: Algorithm | EcdsaParams;
+}> {
+  const keyObject = createPrivateKey(privateKeyPem);
+  const pkcs8 = keyObject.export({ type: 'pkcs8', format: 'der' });
+  const keyData = pkcs8.buffer.slice(pkcs8.byteOffset, pkcs8.byteOffset + pkcs8.byteLength) as ArrayBuffer;
+  const subtle = xadesjs.Application.crypto.subtle;
+
+  if (keyObject.asymmetricKeyType === 'rsa') {
+    return {
+      key: await subtle.importKey('pkcs8', keyData, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']),
+      signatureAlgorithm: { name: 'RSASSA-PKCS1-v1_5' },
+    };
+  }
+  if (keyObject.asymmetricKeyType === 'ec' && keyObject.asymmetricKeyDetails?.namedCurve === 'prime256v1') {
+    return {
+      key: await subtle.importKey('pkcs8', keyData, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']),
+      signatureAlgorithm: { name: 'ECDSA', hash: 'SHA-256' },
+    };
+  }
+  throw new Error('Nieobsługiwany rodzaj klucza do podpisu KSeF (dozwolone: RSA 2048 i EC P-256)');
 }
 
 /**
@@ -132,22 +155,15 @@ async function buildSignedAuthXml(
 
   const doc = new DOMParser().parseFromString(unsignedXml, 'application/xml');
 
-  // Import prywatnego klucza do WebCrypto
-  const engine = xadesjs.Application.crypto;
-  const privateKey = await engine.subtle.importKey(
-    'pkcs8',
-    pemToArrayBuffer(privateKeyPem),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
+  // Import prywatnego klucza do WebCrypto (RSA albo EC P-256, zob. wyżej)
+  const { key: privateKey, signatureAlgorithm } = await importSigningKey(privateKeyPem);
 
   const certBase64 = certPemToBase64(certificatePem);
 
   // Podpisanie XAdES-BES
   const signedXml = new xadesjs.SignedXml();
   const signature = await signedXml.Sign(
-    { name: 'RSASSA-PKCS1-v1_5' },
+    signatureAlgorithm,
     privateKey,
     doc as unknown as Document,
     {
@@ -205,16 +221,21 @@ async function submitSignedAuth(
 }
 
 /**
- * Krok 5: polling statusu żądania uwierzytelniania.
+ * Krok 5: polling statusu żądania uwierzytelniania. Status wymaga nagłówka
+ * Authorization z `authenticationToken` z odpowiedzi na wysłanie podpisu
+ * (OpenAPI KSeF 2.0: GET /auth/{referenceNumber}, schemat Bearer). Bez niego
+ * KSeF zwraca 401, co wyszło dopiero na pierwszym prawdziwym przebiegu na KSeF TEST.
  */
 async function pollAuthStatus(
   referenceNumber: string,
+  authenticationToken: string,
   env?: KsefEnvironment,
   maxAttempts = 20,
   intervalMs = 1000
 ): Promise<AuthStatusResponse> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const status = await ksefFetch<AuthStatusResponse>(`/auth/${referenceNumber}`, {
+      accessToken: authenticationToken,
       env,
     });
 
@@ -225,7 +246,7 @@ async function pollAuthStatus(
     const code = ksefNumericStatusCode(status.status?.code);
     if (code === 200) return status;
     if (Number.isFinite(code) && code >= 400) {
-      throw new Error(`KSeF auth failed: ${status.status.description}`);
+      throw new KsefAuthRejectedError(code, status.status.description, status.status.details ?? []);
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -262,19 +283,14 @@ export async function authenticateWithXades(
   // 2. Podpisany XML (XAdES-BES)
   const signedXml = await buildSignedAuthXml(challenge, credentials);
 
-  // 3. Submit
-  const { referenceNumber } = await submitSignedAuth(signedXml, env);
+  // 3. Submit: odpowiedź niesie numer referencyjny i token operacji (do statusu i do wymiany)
+  const { referenceNumber, authenticationToken } = await submitSignedAuth(signedXml, env);
 
-  // 4. Polling statusu
-  await pollAuthStatus(referenceNumber, env);
+  // 4. Polling statusu tym tokenem
+  await pollAuthStatus(referenceNumber, authenticationToken.token, env);
 
-  // 5. Redeem -> accessToken
-  // UWAGA: status.authenticationToken.token z pollAuthStatus można użyć też bezpośrednio
-  const statusWithToken = await ksefFetch<AuthStatusResponse>(
-    `/auth/${referenceNumber}`,
-    { env }
-  );
-  const tokens = await redeemAuthToken(statusWithToken.authenticationToken.token, env);
+  // 5. Redeem -> accessToken (tym samym tokenem operacji; odpowiedź ze statusem go nie zawiera)
+  const tokens = await redeemAuthToken(authenticationToken.token, env);
 
   return {
     accessToken: tokens.accessToken.token,
