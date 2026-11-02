@@ -27,10 +27,24 @@ vi.mock('@/lib/ksef/credentials-crypto', () => ({ encryptCredentials: mocks.encr
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: mocks.rateLimit }));
 
 import { uploadCertificateAction } from '@/components/settings/actions';
+import { KsefAuthRejectedError } from '@/lib/ksef/auth-errors';
+import { KsefApiError } from '@/lib/ksef/client';
+import { generateKeyPairSync, X509Certificate as X509, type KeyObject } from 'node:crypto';
+import { CERTIFICATE_HEADER, makeSelfSignedCertificate, PKCS8_HEADER } from '../helpers/self-signed-cert';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const user = { id: '22222222-2222-4222-8222-222222222222', email: 'owner@example.test' };
-const pem = { certPem: 'CERTIFICATE_FIXTURE', keyPem: 'PRIVATE_KEY_FIXTURE' };
+const NIP = '1234567890';
+const PKCS8_START = new RegExp('^' + PKCS8_HEADER);
+const CERT_START = new RegExp('^' + CERTIFICATE_HEADER);
+const PASSWORD = 'Haslo-testowe-15-znakow!';
+
+// Akcja czyta pliki naprawdę (PEM/DER), więc fixture to prawdziwy certyfikat samopodpisany.
+const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64');
+const material = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });
+const pem = { certificate: b64(material.certPem), privateKey: b64(material.keyPem) };
+const encryptedKey = (key: KeyObject) =>
+  b64(key.export({ type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: PASSWORD }) as string);
 
 function ksefSession(permissions: unknown = 'Owner') {
   const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -131,11 +145,20 @@ describe('KSeF certificate claim action', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it('denies a missing limiter instead of sending unbounded attempts to KSeF', async () => {
-    mocks.rateLimit.mockResolvedValue({ allowed: true, fallback: true, retryAfter: 0 });
+  it('does not turn the in-memory limiter (no Redis on production) into a denial, but still enforces it', async () => {
+    // Produkcja ma wyłączony Upstash, więc `fallback: true` jest tam zawsze. Dawniej oznaczało to
+    // odmowę dla KAŻDEGO wgrania certyfikatu. Limit w pamięci procesu nadal obowiązuje.
+    mocks.rateLimit.mockResolvedValueOnce({ allowed: true, fallback: true, remaining: 4, retryAfter: 0 });
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: true });
 
-    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false });
-    expectNoKsefEffects();
+    mocks.rateLimit.mockResolvedValueOnce({ allowed: false, fallback: true, remaining: 0, retryAfter: 600 });
+    mocks.ksefAuth.mockClear();
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({
+      success: false,
+      reason: 'rate_limited',
+      error: expect.stringContaining('10 min'),
+    });
+    expect(mocks.ksefAuth).not.toHaveBeenCalled();
   });
 
   it('does not claim ownership if KSeF rejects the certificate or leaks its exception', async () => {
@@ -153,17 +176,19 @@ describe('KSeF certificate claim action', () => {
 
     expect(result).toMatchObject({ success: true, wasFirstClaim: true });
     expect(mocks.ksefAuth).toHaveBeenCalledExactlyOnceWith({
-      type: 'xades', nip: '1234567890', certificatePem: pem.certPem,
-      privateKeyPem: pem.keyPem,
+      type: 'xades', nip: '1234567890',
+      certificatePem: expect.stringMatching(CERT_START),
+      privateKeyPem: expect.stringMatching(PKCS8_START),
     }, 'test');
     expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith('finalize_ksef_certificate_claim', {
       p_tenant_id: tenantId,
       p_actor_user_id: user.id,
       p_expected_nip: '1234567890',
       p_encrypted_credentials: `\\x${Buffer.alloc(64, 1).toString('hex')}`,
-      p_certificate_expiry: null,
+      p_certificate_expiry: new Date(new X509(material.certPem).validTo).toISOString(),
       p_environment: 'test',
     });
+    expect(mocks.rateLimit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ bucket: 'ksef_certificate', limit: 5 }));
     expect(mocks.revalidate).toHaveBeenCalledWith('/settings/ksef');
   });
 
@@ -177,5 +202,108 @@ describe('KSeF certificate claim action', () => {
     if (!first.success) expect(first.error).not.toContain('private_schema');
     expect(second).toMatchObject({ success: false });
     expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('kreator podłączenia KSeF: pliki klienta (PEM, DER, hasło)', () => {
+  const day = 24 * 3600 * 1000;
+  const other = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });
+  const weakRsa = generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey;
+
+  it.each([
+    ['brak hasła do zaszyfrowanego klucza', () => ({ certificate: pem.certificate, privateKey: encryptedKey(material.privateKey) }), 'password_required', /chroniony hasłem/],
+    ['złe hasło', () => ({ certificate: pem.certificate, privateKey: encryptedKey(material.privateKey), password: 'inne-haslo-12345!' }), 'password_wrong', /nie pasuje do klucza/],
+    ['klucz z innego wniosku', () => ({ certificate: pem.certificate, privateKey: b64(other.keyPem) }), 'key_mismatch', /nie pasuje do tego certyfikatu/],
+    ['niedozwolony rodzaj klucza', () => ({ certificate: pem.certificate, privateKey: b64(weakRsa.export({ type: 'pkcs8', format: 'pem' })) }), 'key_unsupported', /RSA 2048 oraz EC P-256/],
+    ['pomylone pliki', () => ({ certificate: pem.privateKey, privateKey: pem.certificate }), 'cert_unreadable', /odczytać pliku certyfikatu/],
+    ['nieczytelny klucz', () => ({ certificate: pem.certificate, privateKey: b64('to nie jest klucz') }), 'key_unreadable', /odczytać pliku klucza/],
+    ['plik zbyt duży', () => ({ certificate: pem.certificate, privateKey: 'A'.repeat(200_000) }), 'files_too_large', /za duży/],
+    ['brak plików', () => ({ certificate: '', privateKey: '' }), 'invalid_input', /oba pliki/],
+  ])('%s: konkretny komunikat, zero prób KSeF i zero zużytego limitu', async (_name, input, reason, message) => {
+    await expect(uploadCertificateAction(input())).resolves.toMatchObject({
+      success: false,
+      reason,
+      error: expect.stringMatching(message),
+    });
+    expectNoKsefEffects();
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+  });
+
+  it('certyfikat wygasły, jeszcze nieważny i typu Offline mają osobne komunikaty', async () => {
+    const expired = makeSelfSignedCertificate({ kind: 'ec', nip: NIP, notBefore: new Date(Date.now() - 30 * day), notAfter: new Date(Date.now() - day) });
+    const future = makeSelfSignedCertificate({ kind: 'ec', nip: NIP, notBefore: new Date(Date.now() + 5 * day) });
+    const offline = makeSelfSignedCertificate({ kind: 'ec', nip: NIP, usage: 'offline' });
+    const files = (m: typeof expired) => ({ certificate: b64(m.certPem), privateKey: b64(m.keyPem) });
+
+    await expect(uploadCertificateAction(files(expired))).resolves.toMatchObject({ reason: 'cert_expired', error: expect.stringContaining('wygasł') });
+    await expect(uploadCertificateAction(files(future))).resolves.toMatchObject({ reason: 'cert_not_yet_valid', error: expect.stringContaining('zacznie obowiązywać') });
+    await expect(uploadCertificateAction(files(offline))).resolves.toMatchObject({ reason: 'cert_offline', error: expect.stringContaining('Offline') });
+    expectNoKsefEffects();
+  });
+
+  it('klucz EC zaszyfrowany hasłem: do KSeF i do bazy idzie klucz bez hasła, a hasło nigdzie nie zostaje', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await uploadCertificateAction({
+      certificate: pem.certificate,
+      privateKey: encryptedKey(material.privateKey),
+      password: PASSWORD,
+    });
+
+    expect(result).toMatchObject({ success: true, wasFirstClaim: true });
+    expect(mocks.ksefAuth.mock.calls[0]![0]).toMatchObject({ privateKeyPem: expect.stringMatching(PKCS8_START) });
+    expect(mocks.encrypt.mock.calls[0]![0]).toMatchObject({ privateKeyPem: expect.stringMatching(PKCS8_START) });
+    const everything = JSON.stringify([
+      result, mocks.ksefAuth.mock.calls, mocks.encrypt.mock.calls, mocks.rpc.mock.calls, mocks.rateLimit.mock.calls, log.mock.calls,
+    ]);
+    expect(everything).not.toContain(PASSWORD);
+    log.mockRestore();
+  });
+
+  it('pliki w DER (certyfikat i klucz PKCS#8) działają tak samo jak PEM', async () => {
+    const der = {
+      certificate: b64(material.certDer),
+      privateKey: b64(material.privateKey.export({ type: 'pkcs8', format: 'der' })),
+    };
+    await expect(uploadCertificateAction(der)).resolves.toMatchObject({ success: true });
+    expect(mocks.ksefAuth.mock.calls[0]![0]).toMatchObject({ privateKeyPem: expect.stringMatching(PKCS8_START) });
+  });
+
+  it('klucz RSA działa jak dotąd', async () => {
+    const rsa = makeSelfSignedCertificate({ kind: 'rsa', nip: NIP });
+    await expect(uploadCertificateAction({ certificate: b64(rsa.certPem), privateKey: b64(rsa.keyPem) })).resolves.toMatchObject({ success: true });
+  });
+
+  it.each([
+    ['brak uprawnień do NIP (415)', new KsefAuthRejectedError(415, 'Uwierzytelnianie zakończone niepowodzeniem', ['Brak przypisanych uprawnień']), 'no_permission', /NIP 1234567890/],
+    ['certyfikat odwołany (460)', new KsefAuthRejectedError(460, 'Uwierzytelnianie zakończone niepowodzeniem z powodu błędu certyfikatu', ['Certyfikat odwołany']), 'revoked', /unieważniony/],
+    ['certyfikat zawieszony (460)', new KsefAuthRejectedError(460, 'Błąd certyfikatu', ['Certyfikat zawieszony']), 'revoked', /zawieszony/],
+    ['inne środowisko (460)', new KsefAuthRejectedError(460, 'Błąd certyfikatu', ['Niezaufany łańcuch certyfikatów']), 'untrusted_issuer', /inne(go)? środowisk/],
+    ['blokada (480)', new KsefAuthRejectedError(480, 'Uwierzytelnienie zablokowane', []), 'blocked', /zablokował/],
+    ['KSeF niedostępny (503)', new KsefApiError(503, 'private_schema.detail', 'KSeF API POST /auth failed: 503'), 'unavailable', /Spróbuj ponownie za kilka minut/],
+    ['za dużo żądań (429)', new KsefApiError(429, 'private_schema.detail', 'KSeF API 429'), 'unavailable', /ponownie/],
+    ['błąd sieci', new TypeError('fetch failed'), 'unavailable', /chwilowo niedostępny/],
+    ['nierozpoznana odpowiedź', new Error('private_schema.cert_detail'), 'rejected', /nie potwierdził tego certyfikatu/],
+  ])('odpowiedź KSeF: %s ma konkretny komunikat i nic nie zapisuje', async (_name, error, reason, message) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.ksefAuth.mockRejectedValue(error);
+
+    const result = await uploadCertificateAction(pem);
+    expect(result).toMatchObject({ success: false, reason, error: expect.stringMatching(message) });
+    if (!result.success) expect(result.error).not.toContain('private_schema');
+    expect(mocks.encrypt).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    // Do limitu liczy się próba, która doszła do KSeF.
+    expect(mocks.rateLimit).toHaveBeenCalledTimes(1);
+    log.mockRestore();
+  });
+
+  it('certyfikat bez uprawnień właścicielskich daje osobny komunikat', async () => {
+    mocks.ksefAuth.mockResolvedValue(ksefSession(['InvoiceRead']));
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({
+      success: false,
+      reason: 'not_owner',
+      error: expect.stringContaining('właściciel'),
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

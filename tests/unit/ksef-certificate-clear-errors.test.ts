@@ -50,11 +50,17 @@ vi.mock('@/lib/ksef/credentials-crypto', () => ({ encryptCredentials: mocks.encr
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: mocks.rateLimit }));
 
 import { uploadCertificateAction } from '@/components/settings/actions';
+import { makeSelfSignedCertificate } from '../helpers/self-signed-cert';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const otherTenant = '33333333-3333-4333-8333-333333333333';
 const user = { id: '22222222-2222-4222-8222-222222222222', email: 'owner@example.test' };
-const pem = { certPem: 'CERTIFICATE_FIXTURE', keyPem: 'PRIVATE_KEY_FIXTURE' };
+// Akcja czyta pliki naprawdę (PEM/DER), więc fixture to prawdziwy certyfikat samopodpisany.
+const material = makeSelfSignedCertificate({ kind: 'ec', nip: '1234567890' });
+const pem = {
+  certificate: Buffer.from(material.certPem).toString('base64'),
+  privateKey: Buffer.from(material.keyPem).toString('base64'),
+};
 
 const rows = () => state.streams as StreamRow[];
 
