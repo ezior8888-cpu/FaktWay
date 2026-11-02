@@ -3,6 +3,7 @@ import { ksefNumericStatusCode } from './normalize-status-code';
 import { generateSessionEncryption, encryptInvoiceXml } from './encryption';
 import { ksefSessionCache } from './session-cache';
 import { ksefRateLimiter } from './rate-limiter';
+import { recordKsefPollSummary } from './poll-audit';
 import type { KsefAuth } from './auth';
 import type {
   OpenOnlineSessionRequest,
@@ -39,7 +40,10 @@ export interface SubmitInvoiceResult {
 
 /** Kontekst audytu (Faza 23 sekcja 3) — opcjonalny, propaguje się do każdego
  * `ksefFetch` wewnątrz tego flow. Bez niego wywołania nie są logowane do
- * `audit_logs` (backwards-compat — testy / dev scripty).
+ * `audit_logs` (backwards-compat — testy / dev scripty). Otwarcie sesji,
+ * wysyłka, zamknięcie, uzgodnienie i lista faktur sesji: wiersz przy każdym
+ * wywołaniu. Odpytanie statusu po wysyłce: wiersz błędu próby i jeden wiersz
+ * podsumowania na fakturę (EXT-03, `pollInvoiceStatus`).
  */
 export interface SubmitAuditContext {
   tenantId: string;
@@ -500,8 +504,17 @@ export async function listSessionInvoicesAfterClose(
   });
 }
 
+/** Wynik odpytania statusu w wierszu podsumowania audytu (`metadata.outcome`). */
+type InvoicePollOutcome = 'accepted' | 'rejected' | 'ksef-error' | 'request-error' | 'timeout';
+
 /**
  * Polling statusu faktury co 2 sekundy aż do akceptacji / odrzucenia.
+ *
+ * Audyt (EXT-03, sesja 26 planu skalowania): próba trafia do `audit_logs`
+ * tylko przy błędzie żądania (spoza 2xx, timeout, sieć). Po rozstrzygnięciu —
+ * akceptacja, odrzucenie, błąd, koniec prób — jeden wiersz podsumowania:
+ * liczba prób, czas, wynik i ostatni kod statusu KSeF. Wcześniej każda próba
+ * „w kolejce” była osobnym wierszem bez kodu statusu.
  */
 async function pollInvoiceStatus(
   sessionRef: string,
@@ -512,32 +525,70 @@ async function pollInvoiceStatus(
   intervalMs = 2000,
   auditContext?: SubmitAuditContext,
 ): Promise<InvoiceStatusResponse> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const status = await ksefFetch<InvoiceStatusResponse>(
-      `/sessions/${sessionRef}/invoices/${invoiceRef}`,
-      {
-        accessToken,
-        env,
-        audit: auditContext
-          ? {
-              ...auditContext,
-              action: 'invoice.poll',
-              metadata: { sessionRef, attempt },
-            }
-          : undefined,
+  const startedAt = Date.now();
+  let attempts = 0;
+  let statusCode: number | null = null;
+  let ksefNumber: string | undefined;
+  // Błąd żądania (KsefApiError, sieć) wychodzi z `ksefFetch` bez zmiany wyniku.
+  let outcome: InvoicePollOutcome = 'request-error';
+  try {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      attempts = attempt + 1;
+      const status = await ksefFetch<InvoiceStatusResponse>(
+        `/sessions/${sessionRef}/invoices/${invoiceRef}`,
+        {
+          accessToken,
+          env,
+          audit: auditContext
+            ? {
+                ...auditContext,
+                action: 'invoice.poll',
+                when: 'error',
+                metadata: { sessionRef, attempt },
+              }
+            : undefined,
+        }
+      );
+      statusCode = ksefNumericStatusCode(status.status?.code);
+
+      let settled: InvoiceStatusResponse | null;
+      try {
+        settled = settleInvoiceStatus(status, { sessionReferenceNumber: sessionRef, invoiceReferenceNumber: invoiceRef });
+      } catch (e) {
+        outcome = e instanceof KsefInvoiceRejectedError ? 'rejected' : 'ksef-error';
+        throw e;
       }
+      if (settled) {
+        outcome = 'accepted';
+        ksefNumber = settled.ksefNumber;
+        return settled;
+      }
+
+      // Status 150 (QUEUED) lub nieznany kod < 400 — czekamy
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    outcome = 'timeout';
+    throw new Error(
+      `KSeF invoice polling timed out. Session: ${sessionRef}, invoice: ${invoiceRef}`
     );
-
-    const settled = settleInvoiceStatus(status, { sessionReferenceNumber: sessionRef, invoiceReferenceNumber: invoiceRef });
-    if (settled) return settled;
-
-    // Status 150 (QUEUED) lub nieznany kod < 400 — czekamy
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  } finally {
+    if (auditContext) {
+      void recordKsefPollSummary({
+        tenantId: auditContext.tenantId,
+        action: 'invoice.poll',
+        invoiceId: auditContext.invoiceId,
+        metadata: {
+          sessionRef,
+          attempts,
+          durationMs: Date.now() - startedAt,
+          outcome,
+          statusCode: Number.isFinite(statusCode) ? statusCode : null,
+          ...(ksefNumber ? { ksefNumber } : {}),
+        },
+      });
+    }
   }
-
-  throw new Error(
-    `KSeF invoice polling timed out. Session: ${sessionRef}, invoice: ${invoiceRef}`
-  );
 }
 
 /** Kod KSeF „Sesja tymczasowo niedostępna” (API 2.8.0, produkcja od 23.09.2026). */

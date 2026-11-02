@@ -69,6 +69,24 @@ sequenceDiagram
 - `lib/xml/validator.ts` — walidacja XSD
 - Tabele: `invoices`, `ksef_submissions`, `upo_receipts`, `ksef_offline_queue`, `ksef_sessions`, `xml_documents`
 
+## Ślad w `audit_logs` (Faza 23 sekcja 3, zawężona w EXT-03)
+
+Wywołanie KSeF z kontekstem audytu zapisuje wiersz `ksef.<akcja>` (status
+HTTP, czas, rozmiary). Od sesji 26 planu skalowania (EXT-03) zależy to od
+rodzaju wywołania (`audit.when` w `lib/ksef/client.ts`):
+
+| Wywołanie | Wiersz | Dlaczego |
+|---|---|---|
+| `session.open`, `invoice.send`, `session.close`, `invoice.download-original`, `invoice.original-metadata`, UPO | przy każdym wywołaniu | zmienia stan albo jest dowodem wysyłki |
+| `invoice.reconcile`, `session.invoices` | przy każdym wywołaniu | od odpowiedzi zależy, czy wysyłamy fakturę ponownie |
+| `inbox.poll` (strona skrzynki co 15 min) | błąd żądania (spoza 2xx, timeout, sieć) + jeden wiersz podsumowania na przebieg, który dodał faktury | zwykła strona niczego nie zmienia; przy 2000 firm to ok. 6 mln wierszy miesięcznie |
+| `invoice.poll` (status po wysyłce, do 30 prób) | błąd żądania + jeden wiersz podsumowania na fakturę: próby, czas, wynik, kod statusu KSeF | jw. |
+| `history.query` (synchronizacja historii) | przy każdym wywołaniu | jednorazowe pobranie archiwum firmy, każda strona niesie nowe dane |
+
+Wiersz podsumowania ma tę samą akcję co wiersz błędu i `metadata.summary =
+true` (`lib/ksef/poll-audit.ts`). Dowodem wysyłki pozostają `ksef_submissions`
+i wiersze otwarcia, wysyłki i zamknięcia sesji.
+
 ## Retry schedule
 
 | Próba | Po jakim czasie | Powód |

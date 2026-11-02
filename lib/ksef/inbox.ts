@@ -9,7 +9,11 @@ import type {
   KsefEnvironment,
 } from '@/types/ksef';
 
-/** Kontekst audytu (Faza 23 sekcja 3) — opcjonalny propagator do `ksefFetch`. */
+/**
+ * Kontekst audytu (Faza 23 sekcja 3) — opcjonalny propagator do `ksefFetch`.
+ * Strona skrzynki trafia do `audit_logs` tylko przy błędzie (EXT-03); przebieg,
+ * który dodał faktury, zapisuje runner jednym wierszem podsumowania.
+ */
 export interface InboxAuditContext {
   tenantId: string;
 }
@@ -29,6 +33,8 @@ export interface ReceivedInvoicesResult {
    * podał i okna nie wolno przesunąć.
    */
   hwm: string | null;
+  /** Ile zapytań (stron) poszło do KSeF w tym oknie — do wiersza podsumowania audytu. */
+  requests: number;
 }
 
 /**
@@ -59,6 +65,7 @@ export async function queryReceivedInvoices(
     let from = dateFrom.toISOString();
     let pageOffset = 0;
     let hwm: string | null = null;
+    let requests = 0;
 
     for (let request = 0; ; request += 1) {
       // Rzucamy zamiast przerywać: HWM się wtedy nie przesunie, a alarm
@@ -92,11 +99,13 @@ export async function queryReceivedInvoices(
             ? {
                 tenantId: auditContext.tenantId,
                 action: 'inbox.poll',
+                when: 'error',
                 metadata: { dateFrom: from, dateTo: dateTo.toISOString(), pageOffset },
               }
             : undefined,
         },
       );
+      requests = request + 1;
 
       const page = response.invoices ?? [];
       for (const inv of page) byNumber.set(inv.ksefNumber, inv);
@@ -115,7 +124,7 @@ export async function queryReceivedInvoices(
       }
     }
 
-    return { invoices: [...byNumber.values()], hwm };
+    return { invoices: [...byNumber.values()], hwm, requests };
   });
 }
 

@@ -9,6 +9,7 @@ import {
 } from '../events';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
+import { recordKsefPollSummary } from '@/lib/ksef/poll-audit';
 import { createProposal } from '@/lib/flo/proposals';
 import {
   buildInboxSummaryProposal,
@@ -201,9 +202,10 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
       return { fetched: 0, newlyAdded: 0 };
     }
 
-    const { invoices: newInvoices, hwm } = await step.run('query-ksef', async () => {
+    const { invoices: newInvoices, hwm, requests } = await step.run('query-ksef', async () => {
       const credentials = await getTenantKsefCredentials(tenantId);
-      // Faza 23 sekcja 3: audit log każdej query do KSeF /invoices/query/metadata.
+      // Faza 23 sekcja 3 + EXT-03: strona `/invoices/query/metadata` trafia do
+      // audytu tylko przy błędzie; przebieg, który dodał faktury — niżej.
       return queryReceivedInvoices(
         credentials,
         new Date(window.from),
@@ -348,6 +350,27 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
 
     const insertedNumbers = new Set(insertedInvoices.map((row) => row.ksef_number as string));
     const newlyAddedInvoices = freshInvoices.filter((inv) => insertedNumbers.has(inv.ksefNumber));
+
+    // EXT-03 (sesja 26 planu skalowania): jeden wiersz audytu na przebieg,
+    // który dodał faktury, zamiast wiersza na każdą stronę co 15 minut.
+    // Przebieg bez nowych faktur nie zapisuje nic. Ponowienie (pg-boss
+    // powtarza cały handler) nie dopisze drugiego wiersza: zapisane faktury
+    // odsieje `filter-existing`. Awaria procesu między zapisem faktur a tym
+    // wierszem zostawia faktury bez wiersza — ich przyjęcie widać w nich samych.
+    if (insertedInvoices.length > 0) {
+      await recordKsefPollSummary({
+        tenantId,
+        action: 'inbox.poll',
+        metadata: {
+          windowFrom: window.from,
+          windowTo: window.to,
+          hwm,
+          requests,
+          fetched: newInvoices.length,
+          added: insertedInvoices.length,
+        },
+      });
+    }
 
     // K2 (rewizja 03.10.2026): kategoryzacja kosztu i archiwum XML idą
     // NATYCHMIAST po zapisie — przed kartą FLO i pushem. Wcześniej błąd karty

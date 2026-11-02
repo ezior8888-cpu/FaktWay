@@ -102,7 +102,8 @@ export type AuditAction =
   // Ostrzeżenie o wygasającym certyfikacie dostarczone (mail albo push) —
   // zadanie cert-expiry-alert czyta stąd, które progi już wysłało (AUD-53).
   | 'ksef.cert_expiry_alert'
-  // Faza 23 sekcja 3 — audyt każdej interakcji z KSeF API.
+  // Faza 23 sekcja 3 — audyt interakcji z KSeF API. Odpytywanie (`*.poll`):
+  // wiersz błędu żądania i wiersz podsumowania z `metadata.summary` (EXT-03).
   | 'ksef.session.open'
   | 'ksef.session.close'
   | 'ksef.invoice.send'
