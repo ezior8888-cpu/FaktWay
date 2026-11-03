@@ -12,9 +12,13 @@ export const NAV_LINKS = [
   { label: 'Blog', href: '/blog' },
 ] as const;
 
+// `relative z-50`: animacja wejścia (`Reveal onLoad`) zostawia na nagłówku
+// `transform`, czyli osobny kontekst nakładania. Bez tego menu telefonu
+// (`z-50` w środku nagłówka) przegrywało z animowanym tytułem strony pod
+// nim i tekst przebijał przez rozwiniętą listę (zgłoszenie z 03.11.2026).
 export function SiteHeader() {
   return (
-    <header className="py-6 sm:py-8">
+    <header className="relative z-50 py-6 sm:py-8">
       <Container>
         <Reveal onLoad y={-12}>
         <nav aria-label="Główna" className="relative flex items-center justify-between">
