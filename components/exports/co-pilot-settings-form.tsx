@@ -16,6 +16,7 @@ import {
   triggerCoPilotNowAction,
   updateAccountantSettingsAction,
 } from '@/app/actions/exports';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -126,6 +127,9 @@ export function CoPilotSettingsForm({
 
   const [isSaving, startSave] = useTransition();
   const [isTriggering, startTrigger] = useTransition();
+  // Odmowa „potrzebny kod” (sesja po biometrii): komunikat z przejściem na ekran kodu zamiast
+  // samego powiadomienia, bo bez wyjścia to ślepy zaułek (jak w Zespole i Dostępie księgowej).
+  const [stepUp, setStepUp] = useState<string | null>(null);
 
   const saveDisabled = isSaving;
   const triggerDisabled =
@@ -134,6 +138,7 @@ export function CoPilotSettingsForm({
     !settings.accountant_email.trim();
 
   const handleSave = () => {
+    setStepUp(null);
     startSave(async () => {
       const result = await updateAccountantSettingsAction({
         co_pilot_enabled: settings.co_pilot_enabled,
@@ -153,6 +158,8 @@ export function CoPilotSettingsForm({
       if (result.success) {
         toast.success('Ustawienia zapisane');
         router.refresh();
+      } else if (result.mfaStepUp) {
+        setStepUp(result.error);
       } else {
         toast.error(result.error ?? 'Błąd zapisu');
       }
@@ -165,6 +172,7 @@ export function CoPilotSettingsForm({
       return;
     }
 
+    setStepUp(null);
     startTrigger(async () => {
       // `triggerCoPilotNowAction` czyta ustawienia z bazy — bez zapisu
       // przełącznik/email w UI nie trafiały do DB i ręczne wysłanie kończyło się błędem.
@@ -184,7 +192,8 @@ export function CoPilotSettingsForm({
           settings.cc_emails.length > 0 ? settings.cc_emails : undefined,
       });
       if (!saveResult.success) {
-        toast.error(saveResult.error ?? 'Nie udało się zapisać ustawień');
+        if (saveResult.mfaStepUp) setStepUp(saveResult.error);
+        else toast.error(saveResult.error ?? 'Nie udało się zapisać ustawień');
         return;
       }
 
@@ -225,6 +234,12 @@ export function CoPilotSettingsForm({
   // sekcje rozdzielone `Separator`, przyciski pod spodem.
   return (
     <FieldGroup>
+      {stepUp ? (
+        <MfaStepUpNotice returnTo="/settings/accountant">
+          {stepUp} Po potwierdzeniu wrócisz tutaj i zapiszesz zmiany jeszcze raz.
+        </MfaStepUpNotice>
+      ) : null}
+
       <Field orientation="horizontal" className="items-center!">
         <FieldContent>
           <FieldLabel htmlFor="co-pilot-enabled">

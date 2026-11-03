@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   revokeInvitation: vi.fn(),
   createToken: vi.fn(),
   revokeToken: vi.fn(),
+  updateSettings: vi.fn(),
+  triggerNow: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -44,14 +46,21 @@ vi.mock('@/components/settings/accountant-actions', () => ({
   revokeAccountantTokenAction: mocks.revokeToken,
 }));
 
+vi.mock('@/app/actions/exports', () => ({
+  updateAccountantSettingsAction: mocks.updateSettings,
+  triggerCoPilotNowAction: mocks.triggerNow,
+}));
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { TeamManagement } = await import('@/components/team/team-management');
 const { AccountantAccessList } = await import('@/components/settings/accountant-list');
+const { CoPilotSettingsForm } = await import('@/components/exports/co-pilot-settings-form');
 
 const STEP_UP = (message: string) => ({ success: false, error: message, mfaStepUp: true });
 const TEAM_HREF = mfaStepUpHref('/settings/team');
 const ACCOUNTANT_HREF = mfaStepUpHref('/settings/accountant');
+const SETTINGS_HREF = mfaStepUpHref('/settings/accountant');
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -187,5 +196,72 @@ describe('dostęp dla księgowej', () => {
 
     expect(mocks.toastError).toHaveBeenCalledWith('Błąd tworzenia zaproszenia');
     expect(notice()).toBeNull();
+  });
+});
+
+/**
+ * Ustawienia wysyłki do księgowej (recenzja #361, pkt 8): zapis adresu i kopii w sesji po biometrii
+ * wymaga kodu, więc formularz pokazuje przejście na ekran kodu, nie samo powiadomienie. "Wyślij teraz"
+ * najpierw zapisuje ustawienia, więc też.
+ */
+describe('Co-Pilot księgowej', () => {
+  const settings = {
+    co_pilot_enabled: true,
+    accountant_email: 'anna@biuro.example',
+    accountant_name: 'Anna',
+    accountant_company: null,
+    preferred_formats: ['jpk_fa'],
+    send_day_of_month: 5,
+    include_issued_invoices: true,
+    include_received_invoices: true,
+    include_corrections: true,
+    cc_emails: [],
+  } as never;
+
+  it('zapis po biometrii: komunikat z przejściem na ekran kodu i powrotem do Księgowej', async () => {
+    mocks.updateSettings.mockResolvedValue(STEP_UP('Zmiana ustawień wysyłki dla księgowej wymaga potwierdzenia kodem z aplikacji.'));
+    await render(<CoPilotSettingsForm initialSettings={settings} recentJobs={[]} />);
+
+    await click(button('Zapisz ustawienia'));
+
+    expect(noticeLink()?.getAttribute('href')).toBe(SETTINGS_HREF);
+    expect(notice()?.textContent).toContain('Zmiana ustawień wysyłki dla księgowej');
+    expect(notice()?.textContent).toMatch(/zapiszesz zmiany jeszcze raz/);
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('"Wyślij teraz" po biometrii: to samo przejście i żadnej wysyłki', async () => {
+    mocks.updateSettings.mockResolvedValue(STEP_UP('Zmiana ustawień wysyłki dla księgowej wymaga potwierdzenia kodem z aplikacji.'));
+    await render(<CoPilotSettingsForm initialSettings={settings} recentJobs={[]} />);
+
+    await click(button('Wyślij teraz'));
+
+    expect(noticeLink()?.getAttribute('href')).toBe(SETTINGS_HREF);
+    expect(mocks.triggerNow).not.toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('zwykła porażka zapisu zostaje powiadomieniem, bez przejścia na kod', async () => {
+    mocks.updateSettings.mockResolvedValue({ success: false, error: 'Nieprawidłowy email' });
+    await render(<CoPilotSettingsForm initialSettings={settings} recentJobs={[]} />);
+
+    await click(button('Zapisz ustawienia'));
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Nieprawidłowy email');
+    expect(notice()).toBeNull();
+  });
+
+  it('udany zapis po wcześniejszej odmowie chowa komunikat o kodzie', async () => {
+    mocks.updateSettings
+      .mockResolvedValueOnce(STEP_UP('Zmiana ustawień wysyłki dla księgowej wymaga potwierdzenia kodem z aplikacji.'))
+      .mockResolvedValueOnce({ success: true });
+    await render(<CoPilotSettingsForm initialSettings={settings} recentJobs={[]} />);
+
+    await click(button('Zapisz ustawienia'));
+    expect(notice()).not.toBeNull();
+    await click(button('Zapisz ustawienia'));
+
+    expect(notice()).toBeNull();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Ustawienia zapisane');
   });
 });

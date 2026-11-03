@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
+import { requireCodeForAccessGrant } from '@/lib/auth/access-grant-mfa';
 import {
   exportsCoPilotSendPackage,
   exportsGenerateRequested,
@@ -276,7 +277,12 @@ export async function updateAccountantSettingsAction(settings: {
   include_received_invoices: boolean;
   include_corrections: boolean;
   cc_emails?: string[];
-}): Promise<{ success: true } | { success: false; error: string }> {
+}): Promise<
+  | { success: true }
+  // `mfaStepUp`: konto ma 2FA, a ta sesja (logowanie biometrią) kodu nie podała. Formularz pokazuje
+  // wtedy przejście na ekran kodu (`MfaStepUpNotice`), nie sam tekst błędu.
+  | { success: false; error: string; mfaStepUp?: true }
+> {
   let ctx;
   try {
     ctx = await requireOrgRole(['owner', 'admin']);
@@ -286,7 +292,7 @@ export async function updateAccountantSettingsAction(settings: {
     }
     throw e;
   }
-  const { supabase, tenantId } = ctx;
+  const { supabase, tenantId, user } = ctx;
 
   if (settings.co_pilot_enabled && !settings.accountant_email?.trim()) {
     return { success: false, error: 'Email księgowego wymagany' };
@@ -317,6 +323,12 @@ export async function updateAccountantSettingsAction(settings: {
       error: 'Wybierz co najmniej jeden rozpoznawalny format eksportu',
     };
   }
+
+  // Adres księgowej i kopie dostają co miesiąc JPK i KPiR firmy, a "Wyślij teraz" zapisuje te
+  // ustawienia przed wysyłką. Sesja po biometrii potrzebuje więc kodu (jak przy zaproszeniach).
+  // `triggerCoPilotNowAction` adresu nie przyjmuje (bierze go z zapisanych ustawień), więc kroku nie ma.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Zmiana ustawień wysyłki dla księgowej');
+  if (stepUp) return stepUp;
 
   const upsertPayload: AccountantSettingsUpsertPayload = {
     tenant_id: tenantId,
