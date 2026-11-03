@@ -102,13 +102,27 @@ Do tego ścieżka bez adresu specjalnego. W sandboxie działa dowolny kod sześc
 1. Migracja `00162`, potem wdrożenie (kolejność z `AGENTS.md`).
 2. Coolify, aplikacja `id=1` (Next.js): `STRIPE_BLIK_RECURRING=on`, wiersz `is_preview = false`. Worker
    tej zmiennej nie czyta. Zmiana wymaga wdrożenia aplikacji.
+   **Zmienna musi być dostępna także przy budowaniu** (w Coolify oznacz ją jako „Build Variable”, tak jak
+   zmienne `NEXT_PUBLIC_*`), a zmiana wymaga **pełnego wdrożenia z nowym buildem**, nie samego restartu
+   kontenera. Powód: strona główna i cennik są budowane statycznie, a tekst o metodzie płatności („karta
+   przy starcie” albo „karta albo BLIK przy starcie”, `lib/marketing/oferta.ts`) powstaje przy `next build`
+   z `trialPaymentMethodLabel()`. Po samym restarcie panel `/settings/billing` (renderowany na żądanie)
+   pokazałby już BLIK-a, a strony publiczne wciąż obiecywałyby samą kartę.
 3. Dashboard (tryb live): włącz BLIK i płatności cykliczne jak wyżej. Stripe aktywuje to z opóźnieniem,
    do tego czasu klienci widzą samą kartę.
 4. Sprawdź zmienną, `capabilities` i wersję zdarzeń webhooka jedną linią (tylko odczyt):
    ```bash
    ./scripts/ops/stripe-blik-sprawdz.sh
    ```
-5. Test na własnym koncie w banku z listy: start próby, potem anulowanie w portalu.
+5. Sprawdź, że strony publiczne mówią to samo co panel (obie linie mają wypisać trafienie):
+   ```bash
+   curl -s https://faktway.pl/ | grep -o 'karta albo BLIK przy starcie' | head -1
+   curl -s https://faktway.pl/pricing | grep -o 'karta albo BLIK przy starcie' | head -1
+   ```
+   Brak trafienia znaczy, że zmienna nie była dostępna przy budowaniu (Dockerfile deklaruje `ARG` tylko dla
+   `NEXT_PUBLIC_*`, więc sprawdź w logu budowania, czy Coolify przekazał także tę zmienną) albo że
+   wdrożenie było tylko restartem.
+6. Test na własnym koncie w banku z listy: start próby, potem anulowanie w portalu.
 
 ## Co obserwować
 
@@ -210,7 +224,8 @@ Co zrobić:
 ## Wycofanie
 
 1. Dashboard: wyłącz BLIK (najpierw to, zobacz „Najważniejsze: kolejność”).
-2. Coolify: pusta `STRIPE_BLIK_RECURRING`, wdrożenie aplikacji. Strona wraca do samej karty.
+2. Coolify: pusta `STRIPE_BLIK_RECURRING`, wdrożenie aplikacji (pełne, z nowym buildem, jak przy włączeniu:
+   inaczej strona główna i cennik zostają przy „karta albo BLIK”). Strona wraca do samej karty.
 3. Otwarte Session z BLIK-iem żyją do 24 h i aplikacja dalej je podaje klientowi, który wróci. Pilne: wygaś je
    przez API, jedną linią. Bez argumentu skrypt tylko je pokazuje, a przy włączonej zmiennej niczego nie wygasi:
    ```bash

@@ -1,4 +1,7 @@
+import 'server-only';
+
 import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
+import { trialPaymentMethodLabel } from '@/lib/billing/trial-payment';
 
 /**
  * Jedno zdanie oferty FaktWay 1.0 (FAKTWAY-1-0, sekcja 3 pkt 8). Zmiana
@@ -22,11 +25,20 @@ export const OFERTA_TEKST = `${OFERTA_NAGLOWEK.przed}${OFERTA_NAGLOWEK.wyroznien
 export const OFERTA = OFERTA_TEKST.replaceAll('\u00a0', ' ');
 
 /**
- * Jedyny tekst o metodzie płatności na stronach publicznych. BLIK zależy od
- * przełącznika, więc tu go nie ma: dopisze go gałąź zbiorcza, w tym jednym
- * miejscu.
+ * Jedyny tekst o metodzie płatności na stronach publicznych: "karta przy
+ * starcie", a po włączeniu BLIK-a cyklicznego "karta albo BLIK przy starcie".
+ * Napis daje `trialPaymentMethodLabel()` (lib/billing/trial-payment.ts), czyli ta
+ * sama odpowiedź co w panelu i w Checkout, więc strona nie obieca metody, której
+ * Stripe nie pokaże.
+ *
+ * Przełącznik `STRIPE_BLIK_RECURRING` czyta tylko serwer: w przeglądarce zmiennej
+ * nie ma, więc komponent kliencki z tym modułem pokazałby inny tekst niż serwer.
+ * Stąd `server-only` na górze pliku (import z komponentu klienckiego nie zbuduje
+ * się), a do komponentów klienckich napis idzie przez właściwości. Strony statyczne
+ * (strona główna, cennik) biorą wartość z chwili budowania, więc zmiana przełącznika
+ * wymaga pełnego wdrożenia (docs/runbooks/stripe-blik.md).
  */
-export const METODA_PLATNOSCI = 'karta przy starcie';
+export const METODA_PLATNOSCI = `${trialPaymentMethodLabel()} przy starcie`;
 
 /** „30 dni za darmo, karta przy starcie”: okres próbny z metodą płatności. */
 export const PROBA = `${TRIAL_DAYS} dni za darmo, ${METODA_PLATNOSCI}`;

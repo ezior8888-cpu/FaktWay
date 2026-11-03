@@ -116,9 +116,10 @@ const BEZ_POKRYCIA: Regula[] = [
     wyjatki: [['app/(marketing)/vs/', 'opis konkurencji („brak app store”), nie FaktWay']],
   },
   {
+    // Metodę płatności składa lib/marketing/oferta.ts z trialPaymentMethodLabel() (zależy od
+    // STRIPE_BLIK_RECURRING), więc BLIK-a nie wpisuje się na stronach ręcznie, także w oferta.ts.
     wzor: /BLIK/,
     co: 'BLIK zależy od przełącznika',
-    wyjatki: [['lib/marketing/oferta.ts', 'jedyne miejsce z metodą płatności, dopisze go gałąź zbiorcza']],
   },
   { wzor: /magiczn\w*\s+import/i, co: 'Magiczny Import (decyzja 22.10.2026: znika)' },
   { wzor: /Frankfurt/, co: 'serwery stoją w Norymberdze, nie we Frankfurcie' },
