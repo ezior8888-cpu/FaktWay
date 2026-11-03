@@ -1,13 +1,10 @@
 import Link from 'next/link';
 import {
-  BadgeCheck,
   BellRing,
-  Camera,
   Check,
   CloudOff,
   FileCheck2,
   FileInput,
-  Fingerprint,
   Receipt,
   Users,
 } from 'lucide-react';
@@ -75,58 +72,6 @@ export function Features() {
               </span>
               <h3 className="mt-5 text-lg font-semibold">{title}</h3>
               <p className="mt-2 text-pretty text-muted-foreground">{text}</p>
-            </RevealItem>
-          ))}
-        </RevealGroup>
-      </Container>
-    </section>
-  );
-}
-
-const PHONE_FEATURES = [
-  {
-    icon: BadgeCheck,
-    title: 'Zapłacone jednym dotknięciem',
-    text: 'Gdy klient zapłaci, oznaczasz fakturę jako zapłaconą i znika z listy należności.',
-  },
-  {
-    icon: Fingerprint,
-    title: 'Logowanie biometrią',
-    text: 'Odciskiem palca albo twarzą, jeśli Twój telefon to potrafi.',
-  },
-  {
-    icon: Camera,
-    title: 'Zdjęcie prosto z aparatu',
-    text: 'Przycisk „Dodaj wydatek” otwiera aparat, a dane z dokumentu odczytujemy sami.',
-  },
-] as const;
-
-// Telefon opisany tak, jak działa: przeglądarka i ekran główny (decyzja 4).
-export function Phone() {
-  return (
-    <section
-      id="telefon"
-      aria-labelledby="telefon-title"
-      className="relative overflow-hidden bg-primary py-20 text-primary-foreground sm:py-28"
-    >
-      <BandGlow />
-      <Container className="relative">
-        <Reveal className="mx-auto max-w-3xl text-center">
-          <h2 id="telefon-title" className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-            FaktWay także w telefonie
-          </h2>
-          <p className="mt-5 text-lg text-pretty text-primary-foreground">
-            Działa w przeglądarce telefonu. Możesz dodać go do ekranu głównego i otwierać jak zwykły program.
-          </p>
-        </Reveal>
-        <RevealGroup as="ul" className="mx-auto mt-14 grid max-w-5xl gap-x-8 gap-y-12 sm:grid-cols-3">
-          {PHONE_FEATURES.map(({ icon: Icon, title, text }) => (
-            <RevealItem as="li" key={title}>
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary-foreground text-primary">
-                <Icon aria-hidden className="size-5" />
-              </span>
-              <h3 className="mt-5 text-lg font-semibold">{title}</h3>
-              <p className="mt-2 text-pretty text-primary-foreground">{text}</p>
             </RevealItem>
           ))}
         </RevealGroup>
