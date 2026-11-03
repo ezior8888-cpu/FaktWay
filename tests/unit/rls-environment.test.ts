@@ -84,6 +84,8 @@ describe('separate RLS test configuration', () => {
       // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej faktury
       // w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji przez psql.
       'tests/rls-lejek-analityka.test.ts',
+      // 00163 (krok kodu przy dostępie osób trzecich).
+      'tests/rls-krok-kodu.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
