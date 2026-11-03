@@ -6,6 +6,10 @@ import {
   isCertificateBlock,
   isPrivateKeyBlock,
   pemBlocks,
+  readTlv,
+  tlvChildren,
+  type PemBlock,
+  type Tlv,
 } from './certificate-files';
 
 /**
@@ -63,6 +67,114 @@ class KeyProblem extends Error {
   }
 }
 
+// ── Koszt wyprowadzania klucza z hasła ───────────────────────────────────────
+//
+// `createPrivateKey` z hasłem jest synchroniczne: PBKDF2 liczy się w wątku, który
+// obsługuje wszystkie żądania procesu, a liczbę iteracji podaje plik klienta. Zaszyfrowany
+// klucz ma ok. 150 bajtów, a plik z 100 mln iteracji zatrzymuje pętlę zdarzeń na 7,5 s
+// (2 mld to ponad dwie minuty), i to PRZED limitem prób. Dlatego algorytm i liczbę
+// iteracji czytamy z DER sami, a OpenSSL dostaje tylko klucz, który policzy się w
+// rozsądnym czasie. Niczego poza tym nie czytamy: ani soli, ani zaszyfrowanych danych.
+
+/** Prawdziwe klucze mają od 2 tys. (domyślne OpenSSL) do kilkuset tys. iteracji; 2 mln to ok. 0,15 s dla SHA-256. */
+const MAX_KDF_ITERATIONS = 2_000_000;
+
+const SEQUENCE = 0x30;
+const INTEGER = 0x02;
+const OCTET_STRING = 0x04;
+const OBJECT_IDENTIFIER = 0x06;
+
+const OID_PBES2 = '1.2.840.113549.1.5.13';
+const OID_PBKDF2 = '1.2.840.113549.1.5.12';
+const OID_SCRYPT = '1.3.6.1.4.1.11591.4.11';
+/** PBES1 (PKCS#5 v1.5: MD2, MD5 albo SHA-1 z DES lub RC2) i PBE z PKCS#12: parametry to { sól, liczba iteracji }. */
+const LEGACY_PBE = /^(?:1\.2\.840\.113549\.1\.5\.(?:1|3|4|6|10|11)|1\.2\.840\.113549\.1\.12\.1\.[1-6])$/;
+
+function objectIdentifier(der: Uint8Array, node: Tlv | undefined): string | null {
+  if (!node || node.tag !== OBJECT_IDENTIFIER || node.end <= node.start) return null;
+  const arcs: number[] = [];
+  let value = 0;
+  let open = false;
+  for (let i = node.start; i < node.end; i += 1) {
+    if (value > 2 ** 40) return null;
+    const byte = der[i]!;
+    value = value * 128 + (byte & 0x7f);
+    open = (byte & 0x80) !== 0;
+    if (!open) {
+      arcs.push(value);
+      value = 0;
+    }
+  }
+  if (open) return null;
+  const head = arcs[0]!;
+  const first = head < 80 ? [Math.floor(head / 40), head % 40] : [2, head - 80];
+  return [...first, ...arcs.slice(1)].join('.');
+}
+
+/** Nieujemna liczba całkowita z DER; `Infinity`, gdy nie mieści się w liczbie bezpiecznej. */
+function integerValue(der: Uint8Array, node: Tlv | undefined): number | null {
+  if (!node || node.tag !== INTEGER || node.end <= node.start || (der[node.start]! & 0x80) !== 0) return null;
+  let value = 0;
+  for (let i = node.start; i < node.end; i += 1) {
+    value = value * 256 + der[i]!;
+    if (value > Number.MAX_SAFE_INTEGER) return Infinity;
+  }
+  return value;
+}
+
+/** Parametry { sól, liczba iteracji, ... } (PBKDF2, PBES1, PKCS#12): liczba iteracji ma być sensowna i niewielka. */
+function requireAffordableIterations(der: Uint8Array, parameters: Tlv | undefined): void {
+  if (parameters?.tag !== SEQUENCE) throw new KeyProblem('key_unreadable');
+  const iterations = integerValue(der, tlvChildren(der, parameters)[1]);
+  if (iterations === null || iterations < 1 || iterations > MAX_KDF_ITERATIONS) throw new KeyProblem('key_unreadable');
+}
+
+/**
+ * Wołaj PRZED `createPrivateKey` dla każdego klucza, do którego może trafić hasło.
+ * DER zaczynający się od INTEGER (PKCS#8, PKCS#1, SEC1) nie używa hasła, więc przechodzi.
+ * EncryptedPrivateKeyInfo = { AlgorithmIdentifier, OCTET STRING } przechodzi tylko z
+ * PBES2 (PBKDF2 w granicach limitu albo scrypt, który ma limit pamięci w OpenSSL) albo
+ * starszym PBES1 / PKCS#12 w granicach limitu. Reszta jest dla nas nieczytelna.
+ */
+function assertAffordableKeyDerivation(der: Uint8Array): void {
+  const root = readTlv(der, 0);
+  if (!root || root.tag !== SEQUENCE) throw new KeyProblem('key_unreadable');
+  const first = readTlv(der, root.start, root.end);
+  if (!first) throw new KeyProblem('key_unreadable');
+  if (first.tag === INTEGER) return;
+  const data = first.tag === SEQUENCE ? readTlv(der, first.end, root.end) : null;
+  if (data?.tag !== OCTET_STRING) throw new KeyProblem('key_unreadable');
+
+  const [algorithmId, parameters] = tlvChildren(der, first);
+  const algorithm = objectIdentifier(der, algorithmId);
+  if (algorithm === OID_PBES2) {
+    if (parameters?.tag !== SEQUENCE) throw new KeyProblem('key_unreadable');
+    const keyDerivation = tlvChildren(der, parameters)[0];
+    if (keyDerivation?.tag !== SEQUENCE) throw new KeyProblem('key_unreadable');
+    const [kdfId, kdfParameters] = tlvChildren(der, keyDerivation);
+    const kdf = objectIdentifier(der, kdfId);
+    if (kdf === OID_PBKDF2) requireAffordableIterations(der, kdfParameters);
+    else if (kdf !== OID_SCRYPT) throw new KeyProblem('key_unreadable');
+    return;
+  }
+  if (algorithm !== null && LEGACY_PBE.test(algorithm)) {
+    requireAffordableIterations(der, parameters);
+    return;
+  }
+  throw new KeyProblem('key_unreadable');
+}
+
+/** Treść bloku PEM jako DER (bez linii BEGIN i END oraz nagłówków w rodzaju Proc-Type). */
+function pemBlockDer(block: PemBlock): Buffer {
+  const base64 = block.text
+    .replace(/^-----BEGIN [A-Z0-9 ]+-----/, '')
+    .replace(/-----END [A-Z0-9 ]+-----$/, '')
+    .replace(/^[ \t]*[A-Za-z0-9-]+:.*$/gm, '')
+    .replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) throw new KeyProblem('key_unreadable');
+  return Buffer.from(base64, 'base64');
+}
+
 function errorCode(error: unknown): string {
   return typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : '';
 }
@@ -89,6 +201,7 @@ function parseKey(source: { key: string | Buffer; format: 'pem' | 'der'; type?: 
 
 function readPrivateKey(bytes: Buffer, password: string | undefined): KeyObject {
   if (bytes[0] === 0x30) {
+    assertAffordableKeyDerivation(bytes);
     const encrypted = classifyKsefFile(bytes) === 'encrypted-private-key';
     let firstProblem: KeyProblem | null = null;
     for (const type of ['pkcs8', 'pkcs1', 'sec1'] as const) {
@@ -104,6 +217,9 @@ function readPrivateKey(bytes: Buffer, password: string | undefined): KeyObject 
   }
   const block = pemBlocks(bytes.toString('utf8')).find(isPrivateKeyBlock);
   if (!block) throw new KeyProblem('key_unreadable');
+  // Tradycyjny PEM (Proc-Type, DEK-Info) szyfruje jedną rundą MD5, więc nie ma tu czego sprawdzać.
+  const traditional = block.encrypted && block.label !== 'ENCRYPTED PRIVATE KEY';
+  if (!traditional) assertAffordableKeyDerivation(pemBlockDer(block));
   return parseKey({ key: block.text, format: 'pem' }, password, block.encrypted);
 }
 
