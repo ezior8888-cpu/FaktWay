@@ -50,6 +50,8 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+# Opcjonalny: strony statyczne przy `next build` mówią o BLIK-u (`lib/marketing/oferta.ts`).
+ARG STRIPE_BLIK_RECURRING
 # Opcjonalny: source maps do GlitchTip/Sentry (build działa bez niego).
 ARG SENTRY_AUTH_TOKEN
 ENV NEXT_PUBLIC_APP_DOMAIN=$NEXT_PUBLIC_APP_DOMAIN \
