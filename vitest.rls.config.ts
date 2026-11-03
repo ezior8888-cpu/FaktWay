@@ -43,6 +43,9 @@ export default defineConfig({
       // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej
       // faktury w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji.
       'tests/rls-lejek-analityka.test.ts',
+      // 00163 (krok kodu przy dostępie osób trzecich): adres wysyłki i link dla księgowej,
+      // przyjęcie prośby i zmiana roli odmawiają sesji AAL1 konta z 2FA; cofnięcie działa.
+      'tests/rls-krok-kodu.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
