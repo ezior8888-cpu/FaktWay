@@ -37,3 +37,20 @@ export async function listPasskeyDevices(
   if (error) throw new Error('passkey_devices_unavailable');
   return ((data ?? []) as DeviceRow[]).map(toPasskeyDevice);
 }
+
+/**
+ * Wszystkie klucze konta, klientem serwisowym. Reset hasła z e-maila to sesja AAL1,
+ * a polityka usuwania z 00159 na koncie z 2FA wpuszcza tylko AAL2, więc klientem
+ * użytkownika to nie przejdzie. Zwraca liczbę usuniętych kluczy; błąd bazy rzuca.
+ */
+export async function deleteAllPasskeysWith(
+  admin: Pick<SupabaseClient, 'from'>,
+  userId: string,
+): Promise<number> {
+  const { data, error } = await admin.from('user_passkeys')
+    .delete()
+    .eq('user_id', userId)
+    .select('id');
+  if (error) throw new Error('passkey_delete_failed');
+  return data?.length ?? 0;
+}
