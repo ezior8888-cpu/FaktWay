@@ -308,6 +308,10 @@ DD.MM”) przy najbliższym PR.
 NAJPIERW przeczytaj plik migracji i sprawdź, czy nie ma `DROP`, `TRUNCATE`
 ani `DELETE FROM`. Dopiero potem uruchamiaj.
 
+Jedną linią robi to `./scripts/ops/wgraj-migracje.sh 00157 00158`: pliki
+z `origin/main`, jedna transakcja na plik, `schema_migrations`, `NOTIFY pgrst`
+i sprawdzenie PostgREST-a. Poniżej ta sama droga ręcznie.
+
 ```bash
 source .agents/infra.env          # daje $K, $DB, $PGC
 M=00063_nazwa
@@ -628,3 +632,13 @@ Gdy piszesz nowy kod:
 3. Dla Server Components — async/await bezpośrednio, bez `useEffect`.
 4. Dla Client Components — dodawaj `"use client"` na górze pliku.
 5. Commituj małe, logiczne zmiany (jeden commit = jedna sensowna zmiana).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
