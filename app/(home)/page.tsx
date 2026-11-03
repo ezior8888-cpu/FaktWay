@@ -4,7 +4,8 @@ import { SiteShell } from '@/components/site/site-shell';
 import { OFERTA } from '@/lib/marketing/oferta';
 
 import { Hero } from './_components/hero';
-import { CallToAction, Faq, Features, Phone, Pricing } from './_components/sections';
+import { Phone } from './_components/phone-section';
+import { CallToAction, Faq, Features, Pricing } from './_components/sections';
 
 export const metadata: Metadata = {
   title: 'FaktWay: program do faktur z KSeF',

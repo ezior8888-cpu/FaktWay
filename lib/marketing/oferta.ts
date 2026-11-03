@@ -5,13 +5,24 @@ import { trialPaymentMethodLabel } from '@/lib/billing/trial-payment';
 
 /**
  * Jedno zdanie oferty FaktWay 1.0 (FAKTWAY-1-0, sekcja 3 pkt 8). Zmiana
- * oferty to zmiana tego pliku: nagłówek strony głównej, cennik, opisy meta,
+ * oferty to zmiana tego pliku: cennik, opisy meta (także strony głównej),
  * stopka, ekran logowania, manifest i obrazek do udostępniania biorą tekst
  * stąd. Pilnuje tests/unit/strony-publiczne-obietnice.test.ts.
  *
  * Części nagłówka mają twarde spacje, żeby przyimek ani „zł” nie zostały same
  * na końcu linii, a środkowa część stoi pod podkreśleniem markerem.
  */
+/**
+ * Nagłówek strony głównej od 03.11.2026 (decyzja Bartosza): hasło w formacie
+ * dawnego „bez stresu”, czyli czarny początek i wyróżnione zakończenie
+ * podkreślone markerem. Zdanie oferty zostaje w opisach meta i w cenniku.
+ * Pilnuje tests/unit/strona-glowna.
+ */
+export const HASLO = {
+  przed: 'Faktury w\u00a0KSeF ',
+  wyroznienie: 'z\u00a0głowy',
+} as const;
+
 export const OFERTA_NAGLOWEK = {
   przed: 'Faktury z\u00a0KSeF, koszty i\u00a0należności ',
   wyroznienie: 'w\u00a0jednym programie',

@@ -1,6 +1,7 @@
 import { ATTRIBUTION_COOKIE } from '@/lib/analytics/attribution';
 import { CONSENT_KEY, CONSENT_META_KEY } from '@/lib/analytics/consent';
 import {
+  PASSKEY_DEVICE_KEYS_KEY,
   PASSKEY_OFFER_COOKIE,
   PASSKEY_OFFER_DISMISSED_KEY,
   PASSKEY_SESSION_COOKIE,
@@ -53,6 +54,7 @@ export const POLITYKA_COOKIES: LegalDocument = {
           [PASSKEY_SESSION_COOKIE, 'cookie (własne, niedostępne dla skryptów)', 'potwierdzenie, że ta sesja zaczęła się od logowania biometrią', 'do 30 dni albo do wylogowania'],
           [REMEMBER_ME_COOKIE, 'cookie (własne, niedostępne dla skryptów)', 'Twój wybór „Zapamiętaj mnie”: panel nie wylogowuje po godzinie bezczynności', 'do 90 dni albo do wylogowania'],
           [`${PASSKEY_OFFER_COOKIE}, ${PASSKEY_OFFER_DISMISSED_KEY}`, 'cookie (własne) / localStorage', 'jednorazowa propozycja logowania biometrią na telefonie i zapamiętanie, że ją odrzuciłeś', 'cookie do 1 godziny; localStorage do wyczyszczenia danych przeglądarki'],
+          [PASSKEY_DEVICE_KEYS_KEY, 'localStorage', 'identyfikatory kluczy biometrii dodanych na tym telefonie, żeby logowanie biometrią korzystało tylko z nich, bez kodu QR dla innego urządzenia', 'do wyczyszczenia danych przeglądarki'],
           [`${CONSENT_KEY}, ${CONSENT_META_KEY}`, 'localStorage', 'zapamiętanie Twojej decyzji w sprawie analityki i chwili jej podjęcia', 'do zmiany decyzji lub wyczyszczenia danych przeglądarki'],
           [THEME_STORAGE_KEY, 'localStorage', 'motyw jasny lub ciemny, który wybrałeś', 'jw.'],
           // Menu boczne panelu (shadcn, plan Finora) — components/ui/sidebar.tsx.

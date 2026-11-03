@@ -6,7 +6,7 @@ import { RiFingerprintLine } from '@remixicon/react';
 
 import { Button } from '@/components/ui/button';
 import { PASSKEY_OFFER_DISMISSED_KEY } from '@/lib/auth/device-cookies';
-import { addPasskeyDevice, fetchPasskeyDevices } from '@/lib/auth/passkey/client';
+import { addPasskeyDevice, fetchPasskeyDevices, isHandheldDevice, readDeviceKeys } from '@/lib/auth/passkey/client';
 
 const TITLE = 'Włącz logowanie biometrią';
 
@@ -28,7 +28,8 @@ function rememberDismissal(): void {
 
 /**
  * Jednorazowa propozycja po logowaniu hasłem na telefonie. Pojawia się tylko, gdy
- * urządzenie ma biometrię, konto nie ma jeszcze dodanych urządzeń i sesja może je dodać.
+ * urządzenie ma biometrię, konto nie ma jeszcze dodanych urządzeń (albo ten telefon nie ma
+ * swojego klucza) i sesja może je dodać.
  * Odrzucenie zostaje na tym urządzeniu. Ładuje ją `PasskeyEnrollOfferGate`.
  */
 export function PasskeyEnrollOffer() {
@@ -41,7 +42,10 @@ export function PasskeyEnrollOffer() {
     void (async () => {
       if (!(await platformAuthenticatorIsAvailable())) return;
       const list = await fetchPasskeyDevices();
-      if (active && list.ok && list.canManage && list.devices.length === 0) setStage('offer');
+      // Telefon bez własnego klucza dostaje propozycję także wtedy, gdy konto ma klucz
+      // z innego urządzenia: bez niego logowanie biometrią na telefonie prowadziłoby do kodu QR.
+      const phoneWithoutKey = isHandheldDevice() && readDeviceKeys().length === 0;
+      if (active && list.ok && list.canManage && (list.devices.length === 0 || phoneWithoutKey)) setStage('offer');
     })();
     return () => { active = false; };
   }, []);
