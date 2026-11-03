@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 
 import { challengeFromClientData, consumeChallengeWith } from '@/lib/auth/passkey/challenges';
 import type { PasskeyConfig } from '@/lib/auth/passkey/config';
+import { logPasskeyFailure } from '@/lib/auth/passkey/log';
 import {
   createPasskeySessionMarker,
   passkeySessionCookieOptions,
@@ -21,6 +22,11 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
  * zły podpis, brak biometrii, cofnięty licznik, blokada konta) daje ten sam wynik
  * `failed`, żeby odpowiedź nie mówiła, co dokładnie się nie zgodziło.
  * `session_unavailable` to tylko awaria po naszej stronie: można ponowić.
+ *
+ * Odpowiedź zostaje jednym kodem, ale błąd nie jest już niemy: wyjątek biblioteki
+ * i awaria po naszej stronie zostawiają w logu etap i nazwę klasy błędu
+ * (`lib/auth/passkey/log.ts`), bez treści. Zwykła odmowa (nieznany klucz, wyzwanie
+ * po terminie, zablokowane konto, wyścig o licznik) nie jest błędem i nic nie loguje.
  */
 
 export type PasskeyLoginOutcome =
@@ -50,6 +56,22 @@ export async function finishPasskeyLogin(
   config: PasskeyConfig,
   response: AuthenticationResponseJSON,
 ): Promise<PasskeyLoginOutcome> {
+  const trace = { stage: 'challenge' };
+  try {
+    return await verifyLoginAssertion(config, response, trace);
+  } catch (error) {
+    // Wyjątek idzie dalej (trasa odpowiada 503), tylko już z etapem w logu.
+    logPasskeyFailure('login', trace.stage, error);
+    throw error;
+  }
+}
+
+/** `trace.stage` mówi, na którym etapie wypadł wyjątek; wartość ląduje w logu, więc zostaje stałą nazwą. */
+async function verifyLoginAssertion(
+  config: PasskeyConfig,
+  response: AuthenticationResponseJSON,
+  trace: { stage: string },
+): Promise<PasskeyLoginOutcome> {
   const admin = createAdminClient();
 
   // Wyzwanie zużywamy pierwsze: nieudana próba też je kasuje, więc tej samej
@@ -57,17 +79,24 @@ export async function finishPasskeyLogin(
   const challenge = challengeFromClientData(response.response.clientDataJSON);
   if (!challenge || !(await consumeChallengeWith(admin, { challenge, purpose: 'login' }))) return FAILED;
 
+  trace.stage = 'lookup';
   const { data: row, error: rowError } = await admin.from('user_passkeys')
     .select('id, user_id, credential_id, public_key, counter, transports')
     .eq('credential_id', response.id)
     .maybeSingle<PasskeyRow>();
   if (rowError) throw new Error('passkey_lookup_failed');
+  // Nieznane poświadczenie to zwykła odmowa, nie błąd: bez wpisu w logu błędów.
   if (!row) return FAILED;
   // Poświadczenie wykrywalne: uwierzytelniacz podaje też właściciela (identyfikator
-  // z rejestracji) i ma on się zgadzać z wierszem (WebAuthn § 7.2).
+  // z rejestracji) i ma on się zgadzać z wierszem (WebAuthn § 7.2). Niezgodność przy
+  // znanym kluczu to anomalia (błąd zapisu albo podmiana), więc zostawia ślad.
   const { userHandle } = response.response;
-  if (userHandle && Buffer.from(userHandle, 'base64url').toString('utf8') !== row.user_id) return FAILED;
+  if (userHandle && Buffer.from(userHandle, 'base64url').toString('utf8') !== row.user_id) {
+    logPasskeyFailure('login', 'user_handle');
+    return FAILED;
+  }
 
+  trace.stage = 'verify';
   let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
   try {
     verification = await verifyAuthenticationResponse({
@@ -83,19 +112,31 @@ export async function finishPasskeyLogin(
         transports: row.transports ?? [],
       },
     });
-  } catch {
-    // Biblioteka rzuca przy każdej niezgodności (podpis, origin, UV, licznik).
+  } catch (error) {
+    // Biblioteka rzuca przy każdej niezgodności (podpis, origin, UV, licznik). Klient
+    // dostaje zwykłą odmowę, a my klasę błędu: po zmianie domeny to jedyny ślad złego RP ID.
+    logPasskeyFailure('login', 'verify', error);
     return FAILED;
   }
-  if (!verification.verified) return FAILED;
+  if (!verification.verified) {
+    logPasskeyFailure('login', 'verify_result');
+    return FAILED;
+  }
 
+  trace.stage = 'account';
   const account = await admin.auth.admin.getUserById(row.user_id);
-  if (account.error) return account.error.status === 404 ? FAILED : SESSION_UNAVAILABLE;
+  if (account.error) {
+    // 404: konta już nie ma, zwykła odmowa. Reszta to awaria Auth po naszej stronie.
+    if (account.error.status === 404) return FAILED;
+    logPasskeyFailure('login', 'account', account.error);
+    return SESSION_UNAVAILABLE;
+  }
   const user = account.data.user;
   if (!user || user.id !== row.user_id || !isAccountOpen(user)) return FAILED;
 
   // Warunkowo po poprzedniej wartości: druga asercja w tym samym czasie nie nadpisze
   // licznika po cichu. Zero wierszy znaczy, że ktoś był szybszy, więc bez logowania.
+  trace.stage = 'counter';
   const { authenticationInfo } = verification;
   const advanced = await admin.from('user_passkeys')
     .update({
@@ -109,6 +150,7 @@ export async function finishPasskeyLogin(
   if (advanced.error) throw new Error('passkey_counter_update_failed');
   if ((advanced.data?.length ?? 0) !== 1) return FAILED;
 
+  trace.stage = 'session';
   return issueSession(user, row.id);
 }
 
@@ -122,12 +164,17 @@ export async function finishPasskeyLogin(
 async function issueSession(user: User & { email: string }, passkeyId: string): Promise<PasskeyLoginOutcome> {
   const link = await createAdminClient().auth.admin.generateLink({ type: 'magiclink', email: user.email });
   const tokenHash = link.data?.properties?.hashed_token;
-  if (link.error || !tokenHash || link.data.user?.id !== user.id) return SESSION_UNAVAILABLE;
+  if (link.error || !tokenHash || link.data.user?.id !== user.id) {
+    logPasskeyFailure('login', 'session_link', link.error);
+    return SESSION_UNAVAILABLE;
+  }
 
   const supabase = await createClient();
   const verified = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
   if (verified.error) {
-    return verified.error.code === 'user_banned' ? FAILED : SESSION_UNAVAILABLE;
+    if (verified.error.code === 'user_banned') return FAILED;
+    logPasskeyFailure('login', 'session_verify', verified.error);
+    return SESSION_UNAVAILABLE;
   }
   const { session, user: sessionUser } = verified.data;
 
@@ -136,6 +183,7 @@ async function issueSession(user: User & { email: string }, passkeyId: string): 
     : null;
   if (!marker) {
     // Sesja bez znacznika albo cudza: lepiej nie zostawiać jej w ciasteczkach.
+    logPasskeyFailure('login', 'session_marker');
     await supabase.auth.signOut({ scope: 'local' }).catch(() => null);
     return SESSION_UNAVAILABLE;
   }

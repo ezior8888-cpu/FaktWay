@@ -10,6 +10,7 @@ import type { User } from '@supabase/supabase-js';
 import { challengeFromClientData, consumeChallengeWith, storeChallengeWith } from '@/lib/auth/passkey/challenges';
 import type { PasskeyConfig } from '@/lib/auth/passkey/config';
 import { DEVICE_COLUMNS, toPasskeyDevice } from '@/lib/auth/passkey/devices';
+import { logPasskeyFailure } from '@/lib/auth/passkey/log';
 import type { PasskeyDevice } from '@/lib/auth/passkey/types';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -29,7 +30,22 @@ interface ExistingCredential {
   transports: string[] | null;
 }
 
+/**
+ * Wyjątek biblioteki i awaria po naszej stronie zostawiają w logu etap i nazwę klasy
+ * błędu (`lib/auth/passkey/log.ts`), bez treści; wyjątek idzie dalej jak dotąd.
+ * Zwykła odmowa (limit urządzeń, obce wyzwanie, urządzenie już dodane) nic nie loguje.
+ */
 export async function beginPasskeyRegistration(config: PasskeyConfig, user: User) {
+  const trace = { stage: 'options_lookup' };
+  try {
+    return await prepareRegistration(config, user, trace);
+  } catch (error) {
+    logPasskeyFailure('registration', trace.stage, error);
+    throw error;
+  }
+}
+
+async function prepareRegistration(config: PasskeyConfig, user: User, trace: { stage: string }) {
   const admin = createAdminClient();
   const { data, error } = await admin.from('user_passkeys')
     .select('credential_id, transports')
@@ -38,6 +54,7 @@ export async function beginPasskeyRegistration(config: PasskeyConfig, user: User
   const existing = (data ?? []) as ExistingCredential[];
   if (existing.length >= MAX_PASSKEYS_PER_ACCOUNT) return { ok: false as const };
 
+  trace.stage = 'options_generate';
   const options = await generateRegistrationOptions({
     rpName: config.rpName,
     rpID: config.rpId,
@@ -51,6 +68,7 @@ export async function beginPasskeyRegistration(config: PasskeyConfig, user: User
     excludeCredentials: existing.map(({ credential_id: id, transports }) => ({ id, transports: transports ?? [] })),
     authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
   });
+  trace.stage = 'options_store';
   await storeChallengeWith(admin, { challenge: options.challenge, purpose: 'registration', userId: user.id });
   return { ok: true as const, options };
 }
@@ -65,6 +83,23 @@ export async function finishPasskeyRegistration(
   response: RegistrationResponseJSON,
   deviceLabel: string,
 ): Promise<PasskeyRegistrationOutcome> {
+  const trace = { stage: 'challenge' };
+  try {
+    return await verifyRegistration(config, userId, response, deviceLabel, trace);
+  } catch (error) {
+    logPasskeyFailure('registration', trace.stage, error);
+    throw error;
+  }
+}
+
+/** `trace.stage` mówi, na którym etapie wypadł wyjątek; wartość ląduje w logu, więc zostaje stałą nazwą. */
+async function verifyRegistration(
+  config: PasskeyConfig,
+  userId: string,
+  response: RegistrationResponseJSON,
+  deviceLabel: string,
+  trace: { stage: string },
+): Promise<PasskeyRegistrationOutcome> {
   const admin = createAdminClient();
 
   const challenge = challengeFromClientData(response.response.clientDataJSON);
@@ -72,6 +107,7 @@ export async function finishPasskeyRegistration(
     return { ok: false, reason: 'failed' };
   }
 
+  trace.stage = 'verify';
   let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
   try {
     verification = await verifyRegistrationResponse({
@@ -82,11 +118,16 @@ export async function finishPasskeyRegistration(
       requireUserVerification: true,
       supportedAlgorithmIDs: SUPPORTED_ALGORITHM_IDS,
     });
-  } catch {
+  } catch (error) {
+    logPasskeyFailure('registration', 'verify', error);
     return { ok: false, reason: 'failed' };
   }
-  if (!verification.verified || !verification.registrationInfo) return { ok: false, reason: 'failed' };
+  if (!verification.verified || !verification.registrationInfo) {
+    logPasskeyFailure('registration', 'verify_result');
+    return { ok: false, reason: 'failed' };
+  }
 
+  trace.stage = 'insert';
   const { credential, credentialBackedUp } = verification.registrationInfo;
   const { data, error } = await admin.from('user_passkeys')
     .insert({
