@@ -3,7 +3,7 @@
  *
  * Stripe robi własne Smart Retries + Dunning (włączane w Stripe Dashboard
  * → Settings → Subscriptions and emails). My dorzucamy 1 email natychmiast
- * z linkiem do `/settings/billing` żeby user mógł zaktualizować kartę.
+ * z linkiem do `/settings/billing` żeby user mógł zmienić metodę płatności.
  *
  * Bez follow-upów — Stripe pociągnie 2 dodatkowe próby przez 7 dni i pośle
  * własne smart-dunning emails. My nie chcemy duplikować.

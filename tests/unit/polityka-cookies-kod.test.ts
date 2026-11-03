@@ -31,6 +31,12 @@ const KNOWN: Record<string, string> = {
   'hooks/use-install-prompt.ts': 'install-prompt-dismissed-at',
   'app/(dashboard)/_components/ksef-health-banner-client.tsx': 'klucze zamkniętych komunikatów',
   'lib/analytics/consent.ts': 'decyzji w sprawie analityki',
+  // Pierwszy dotyk (FAKTWAY-1-0, pkt 7): tylko po zgodzie, 90 dni.
+  'lib/analytics/attribution.ts': 'skąd do nas trafiłeś',
+  // To samo ciasteczko: po rejestracji serwer zostawia w nim sam znacznik bez danych.
+  'lib/analytics/funnel.ts': 'sam znacznik',
+  'components/auth/passkey-enroll-offer.tsx': 'faktway.passkey_offer_dismissed',
+  'components/auth/passkey-enroll-offer-gate.tsx': 'ksef.passkey_offer',
   'app/actions/organizations.ts': 'w której firmie (Organizacji) pracujesz',
   'lib/supabase/middleware.ts': 'utrzymanie zalogowanej sesji',
   'lib/supabase/server.ts': 'utrzymanie zalogowanej sesji',

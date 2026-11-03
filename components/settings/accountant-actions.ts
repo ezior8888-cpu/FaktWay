@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { generateAccountantToken } from '@/lib/accountant/tokens';
 import { logAudit } from '@/lib/audit/log';
+import { requireCodeForAccessGrant } from '@/lib/auth/access-grant-mfa';
 import { ActionAuthError, requireOwner } from '@/lib/supabase/auth-context';
 
 const createTokenSchema = z.object({
@@ -16,7 +17,8 @@ const createTokenSchema = z.object({
 
 export type CreateAccountantTokenResult =
   | { success: true; id: string; token: string; shareUrl: string }
-  | { success: false; error: string };
+  /** `mfaStepUp`: sesja po biometrii, konto ma 2FA. Formularz pokazuje przejście na ekran kodu. */
+  | { success: false; error: string; mfaStepUp?: true };
 
 export async function createAccountantTokenAction(
   input: z.infer<typeof createTokenSchema>
@@ -37,6 +39,10 @@ export async function createAccountantTokenAction(
     };
   }
   const { supabase, tenantId, user } = ctx;
+
+  // Link daje dostęp do faktur osobie z zewnątrz: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Wystawienie linku dla księgowej');
+  if (stepUp) return stepUp;
 
   const { token, hash } = generateAccountantToken();
   const expiresAt = new Date();

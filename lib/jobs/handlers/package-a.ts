@@ -42,7 +42,9 @@ function cronJob(
 
 cronJob('cron.archive-old-invoices', runArchiveOldInvoices);
 cronJob('cron.cert-expiry-alert', runCertExpiryAlert);
-cronJob('cron.cleanup-audit-logs', runCleanupAuditLogs);
+// Sprzątanie dzienników paczkami (00157): ponowienie od zera powtarza cały
+// 10-minutowy budżet, więc 1 retry (błąd przejściowy); resztę bierze następna noc.
+cronJob('cron.cleanup-audit-logs', runCleanupAuditLogs, 1);
 cronJob('cron.cleanup-old-backups', runCleanupOldBackups);
 cronJob('cron.daily-db-snapshot', runDailyDbSnapshot);
 cronJob('cron.gdpr-process-deletions', runGdprProcessDeletions);

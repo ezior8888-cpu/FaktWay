@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
+import { requireCodeForAccessGrant } from '@/lib/auth/access-grant-mfa';
 import { emailsForUserIds } from '@/lib/auth/auth-users';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
@@ -50,7 +51,11 @@ async function setActiveOrgCookie(orgId: string) {
 
 export type ActionOk<T = unknown> =
   T extends object ? { success: true } & T : { success: true };
-export type ActionFail = { success: false; error: string };
+/**
+ * `mfaStepUp`: konto ma 2FA, a ta sesja (po biometrii) kodu nie podała. Formularz
+ * pokazuje wtedy przejście na ekran kodu (`MfaStepUpNotice`), nie sam tekst błędu.
+ */
+export type ActionFail = { success: false; error: string; mfaStepUp?: true };
 
 export interface OrganizationCompanyInput {
   nip: string;
@@ -593,6 +598,10 @@ export async function inviteMemberAction(params: {
     return { success: false, error: 'Nieprawidłowa rola' };
   }
 
+  // Zaproszenie oddaje dostęp osobie trzeciej: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Zaproszenie do firmy');
+  if (stepUp) return stepUp;
+
   // Czy ten email już jest aktywnym członkiem?
   // Membership wskazuje na user_id; email żyje w auth.users — zmatchujemy
   // poprzez auth.admin.listUsers() (jedyne źródło prawdy o emailu).
@@ -878,6 +887,10 @@ export async function approveJoinRequestAction(
   }
   const { supabase, tenantId, user } = ctx;
 
+  // Przyjęcie prośby oddaje dostęp osobie trzeciej: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Przyjęcie prośby o dostęp');
+  if (stepUp) return stepUp;
+
   const { error } = await supabase.rpc('approve_join_request', {
     p_request_id: requestId,
     p_role: role,
@@ -983,6 +996,10 @@ export async function changeMembershipRoleAction(params: {
     throw e;
   }
   const { supabase, tenantId, user } = ctx;
+
+  // Zmiana roli (także na właściciela) oddaje uprawnienia: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Zmiana roli w firmie');
+  if (stepUp) return stepUp;
 
   const { error } = await supabase.rpc('change_membership_role', {
     p_membership_id: params.membershipId,

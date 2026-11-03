@@ -127,10 +127,11 @@ export interface KsefRequestOptions {
    */
   responseType?: 'auto' | 'bytes';
   /**
-   * Audit log każdej interakcji z KSeF (Faza 23 sekcja 3). Gdy `audit`
-   * jest podane, każde wywołanie ksefFetch wpisuje do `audit_logs`:
+   * Audit log interakcji z KSeF (Faza 23 sekcja 3). Gdy `audit` jest
+   * podane, wywołanie ksefFetch wpisuje do `audit_logs`:
    *   - status HTTP, response time, payload size
    *   - tenantId + invoiceId + nazwa akcji ('submit', 'upo.download', etc.)
+   * Kiedy — mówi `when` (EXT-03, sesja 26 planu skalowania).
    *
    * Logowanie jest fire-and-forget (`void` promise) — nie blokuje
    * głównego flow ani nie rzuca jeśli `audit_logs` insert padnie.
@@ -143,6 +144,16 @@ export interface KsefRequestOptions {
     invoiceId?: string;
     /** Dodatkowy kontekst — np. ksefNumber, batchSize. */
     metadata?: Record<string, unknown>;
+    /**
+     * `always` (domyślnie) — każda odpowiedź, timeout i błąd sieci: operacje,
+     * które zmieniają stan w KSeF (sesja, wysyłka, zamknięcie), i odczyty,
+     * od których zależy decyzja o wysyłce (uzgodnienie, lista faktur sesji).
+     * `error` — tylko odpowiedź spoza 2xx, timeout i błąd sieci: odpytywanie
+     * (strony skrzynki, status po wysyłce), którego zwykła odpowiedź niczego
+     * nie zmienia. Wywołujący zapisuje wtedy jeden wiersz podsumowania
+     * (`recordKsefPollSummary` w `./poll-audit`).
+     */
+    when?: 'always' | 'error';
   };
 }
 
@@ -325,8 +336,9 @@ export async function ksefFetch<TResponse = unknown>(
       }
     }
 
-    // Audit (fire-and-forget) — KAŻDA interakcja KSeF jest zapisana.
-    if (audit) {
+    // Audit (fire-and-forget): każda odpowiedź, a przy `when: 'error'` tylko
+    // odpowiedź spoza 2xx. Timeout i błąd sieci zapisujemy zawsze (niżej).
+    if (audit && (!responseOk || audit.when !== 'error')) {
       void recordKsefAudit(audit, {
         method,
         path,

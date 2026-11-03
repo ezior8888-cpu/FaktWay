@@ -118,11 +118,18 @@ rozmiarowo i designowo, zmieniają się tylko napisy i źródło danych):
 - **Z17:** stos Koszty + Zysk + VAT = sprzedaż brutto.
 - **D-P (druczek):** przed weryfikacją KSeF Pulpit i Przepływy mają
   plakietkę „Dane przykładowe” (ta sama co w Księgowości i Analizach).
-- **D-W (wpłaty, zamiast N6 / Z16):** klient niczego nie oznacza.
-  Zakładamy zapłatę faktury sprzedaży w dniu terminu płatności (brak
-  terminu: data wystawienia); prawdziwa data zapłaty (`invoices.paid_at`
-  albo `Zaplacono` + `DataZaplaty` z FA(3)) ma pierwszeństwo. Podpisy:
-  „według terminów płatności”; Należności nie twierdzą, że ktoś zalega.
+- **D-W (wpłaty, zamiast N6 / Z16): ODWOŁANE 02.11.2026 na polecenie
+  Bartosza** (FaktWay 1.0 §3 pkt 3, migracja 00158). Było: klient niczego nie
+  oznacza, zakładamy zapłatę faktury sprzedaży w dniu terminu płatności (brak
+  terminu: data wystawienia); prawdziwa data zapłaty (`invoices.paid_at` albo
+  `Zaplacono` + `DataZaplaty` z FA(3)) ma pierwszeństwo; podpisy „według
+  terminów płatności”; Należności nie twierdzą, że ktoś zalega. Jest: klient
+  oznacza zapłatę jednym dotknięciem („Zapłacone”, RPC `mark_invoice_paid`).
+  Wpływy to wyłącznie prawdziwe pieniądze (`paid_at` albo data z FA(3)),
+  faktura bez wpłaty z minionym terminem to należność po terminie (Pulpit
+  i Analizy znów na `getReceivables`), spodziewane wpływy to otwarte faktury
+  z terminem dziś lub później. Pliki `lib/demo/*` bez zmian: w trybie
+  `przyklad` miniony termin gra rolę wpłaty (`przykladoweWplywy`).
 - **D-K (koszty):** wykresy i karty kosztów pokazują pełne koszty z KSeF
   (faktury zakupowe, także z archiwum historii, plus wydatki spoza KSeF
   bez powiązanej faktury, bez podwójnego liczenia). KPiR, JPK, eksporty
@@ -602,7 +609,7 @@ Wszystkie z audytu §6, bez zmiany siatki i wyglądu kart:
   zakupowe z KSeF plus wydatki spoza KSeF; KPiR bez zmian.
 - **E11 — wpływy według terminów płatności (D-W):** zakładana zapłata
   w dniu terminu, prawdziwa data zapłaty ma pierwszeństwo; podpisy
-  „według terminów płatności”.
+  „według terminów płatności”. **Odwołane 02.11.2026** (patrz D-W wyżej).
 - **E12 — druczek (D-P):** plakietka „Dane przykładowe” w nagłówku
   pierwszej karty Pulpitu („Finanse”) i Przepływów (wykres przepływów),
   tylko w trybie przykładu; wysokość nagłówka bez zmian.
@@ -685,7 +692,7 @@ własnym planem):**
 | # | Co | Wpływ na karty | Migracja |
 |---|---|---|---|
 | K1 | Koszty z historii zakupów KSeF (Z9): `expenses` z zakupów `origin='ksef_import'` bieżącego roku, `is_reviewed=false`, idempotentnie przez istniejący `uq_expenses_tenant_ksef_invoice` (00121) | znika podpis „Koszty od DD.MM”; zysk i „Odłóż na podatek” przestają być zawyżone | prawdopodobnie nie; **niepewne**, czy strażnik pochodzenia (00127/00128) przepuści zapis z workera dla `ksef_import` — jeśli nie, migracja **00156** |
-| K2 | N6: „Oznacz jako zapłaconą” (RPC, test RLS) | wpływy i tabela operacji zaczynają być pełne; Należności, „% po terminie” i Spodziewane wpływy przestają liczyć zapłacone faktury (znika zdanie z Z16); wraca przycisk w pustym stanie | tak (00156 albo następny wolny) |
+| K2 | N6: „Oznacz jako zapłaconą” (RPC, test RLS). **Zrobione 02.11.2026: 00158, „Zapłacone” jednym dotknięciem** | wpływy i tabela operacji zaczynają być pełne; Należności, „% po terminie” i Spodziewane wpływy przestają liczyć zapłacone faktury (znika zdanie z Z16); wraca przycisk w pustym stanie | tak (00156 albo następny wolny) |
 | K3 | N7: termin płatności kosztów z XML | „Nadchodzące rachunki” mogą wrócić jako prawdziwe rachunki do zapłaty | tak |
 | K4 | N5: wyciąg bankowy | saldo, prawdziwe wpływy | tak |
 

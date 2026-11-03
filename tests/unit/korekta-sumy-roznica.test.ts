@@ -95,7 +95,7 @@ beforeEach(() => { st.inserted = []; });
 
 describe('sumy korekty w bazie = różnica', () => {
   it('przed/po: różnica, nie wartość po korekcie', async () => {
-    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line()], linesAfter: [line({ quantity: 8 })] }));
+    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line()], linesAfter: [line({ quantity: 8 })] }), '11111111-1111-4111-8111-111111111111');
     expect(r).toEqual({ success: true, invoiceId: 'inv-1' });
     expect(st.inserted[0]).toEqual(expect.objectContaining({ net_total: -200, vat_total: -46, gross_total: -246 }));
   });
@@ -104,12 +104,12 @@ describe('sumy korekty w bazie = różnica', () => {
     await saveCorrectionDraftAction(payload({
       correctionType: 'amount_change',
       amountChange: { netDelta: -100, vatDelta: -23, grossDelta: -123, description: 'Rabat posprzedażowy' },
-    }));
+    }), '11111111-1111-4111-8111-111111111111');
     expect(st.inserted[0]).toEqual(expect.objectContaining({ net_total: -100, vat_total: -23, gross_total: -123 }));
   });
 
   it('anulowanie: minus cała faktura, nie zero', async () => {
-    await saveCorrectionDraftAction(payload({ correctionType: 'cancellation', linesBefore: [line()] }));
+    await saveCorrectionDraftAction(payload({ correctionType: 'cancellation', linesBefore: [line()] }), '11111111-1111-4111-8111-111111111111');
     expect(st.inserted[0]).toEqual(expect.objectContaining({ net_total: -1000, vat_total: -230, gross_total: -1230 }));
   });
 });

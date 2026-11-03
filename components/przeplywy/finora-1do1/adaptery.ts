@@ -15,7 +15,13 @@ import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney, formatPlPercentChange } from '@/lib/format/pl';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
-import { INFLOW_EMPTY, INFLOW_EMPTY_TITLE, INFLOW_NOTE } from '@/lib/dashboard/inflow-labels';
+import {
+  INFLOW_EMPTY,
+  INFLOW_EMPTY_LINK,
+  INFLOW_EMPTY_LIST,
+  INFLOW_EMPTY_TITLE,
+  INFLOW_NOTE,
+} from '@/lib/dashboard/inflow-labels';
 import { plural } from '@/lib/i18n/plural';
 
 /**
@@ -28,11 +34,10 @@ import { plural } from '@/lib/i18n/plural';
  *
  * Zasada Bartosza 23.10.2026: karty IDENTYCZNE rozmiarowo i designowo, więc
  * adaptery dają tylko napisy w istniejących miejscach i o długości dawnych
- * napisów szablonu. Liczba jest prawdziwa albo jej nie ma („—”), a założenie
- * jest nazwane w istniejącym podpisie: wpływy „według terminów płatności”
- * (E11, decyzja D-W: klient nic nie oznacza), koszty z KSeF przed końcem
- * historii zakupów — „KSeF od DD.MM”; dłuższe wyjaśnienie idzie do dymku
- * (`title`).
+ * napisów szablonu. Liczba jest prawdziwa albo jej nie ma („—”): wpływy to
+ * oznaczone wpłaty (FaktWay 1.0 §3 pkt 3, D-W odwołane 02.11.2026), a pusty stan
+ * prowadzi do oznaczenia; koszty z KSeF przed końcem historii zakupów — „KSeF od
+ * DD.MM”. Dłuższe wyjaśnienie idzie do dymku (`title`).
  * Formatowanie robi serwer; do kart klienckich idą napisy i liczby.
  */
 
@@ -74,14 +79,12 @@ export interface WykresDane {
 }
 
 /**
- * Podtytuł wykresu (E11, D-W): wpływy według terminów płatności, koszty
- * brutto — nie dłuższy od dawnego „Oznaczone wpłaty i koszty brutto”
- * (32 znaki; w Outfit węższy). Pełne zdanie w dymku podtytułu
- * (`PODTYTUL_WYKRESU_DYMEK`).
+ * Podtytuł wykresu: oznaczone wpłaty i koszty brutto. Pełne zdanie w dymku
+ * podtytułu (`PODTYTUL_WYKRESU_DYMEK`).
  */
-export const PODTYTUL_WYKRESU = 'Terminy płatności, koszty brutto';
+export const PODTYTUL_WYKRESU = 'Oznaczone wpłaty i koszty brutto';
 export const PODTYTUL_WYKRESU_DYMEK =
-  'Wpływy z faktur sprzedaży według terminów płatności (prawdziwa zapłata ma pierwszeństwo, bez terminu — dzień wystawienia); koszty brutto według daty dokumentu';
+  'Wpływy z faktur sprzedaży według oznaczonych wpłat: faktura bez wpłaty nie jest wpływem, także po terminie. Koszty brutto według daty dokumentu.';
 
 export function wykresProps(chart: CashFlowChartData, tryb: TrybDanych): WykresDane {
   const empty = [...chart.week, ...chart.month, ...chart.year].every((b) => b.inflowCount === 0 && b.outflow === 0);
@@ -150,7 +153,7 @@ export function krzywaTygodni(ruchy: readonly RuchKrzywej[], today: string): Kaf
   }));
 }
 
-/** Wpływy, które już były (`receivedInflows`: termin od dziś to jeszcze „Spodziewane wpływy”), według dnia wpływu. */
+/** Wpływy, czyli prawdziwe pieniądze (`receivedInflows`), według dnia zapłaty. */
 export function krzywaWplywow(inflows: readonly InflowEntry[], today: string): KafelMiesiacaDane['chartData'] {
   return krzywaTygodni(receivedInflows(inflows, today).map((i) => ({ date: i.date, amount: i.amount })), today);
 }
@@ -161,10 +164,9 @@ export function krzywaKosztow(costs: readonly CostEntry[], today: string): Kafel
 }
 
 /**
- * „Wpływy w tym miesiącu (wg terminów)”: wpływy od 1. dnia miesiąca do dziś
- * według terminów płatności (E11, D-W; termin dziś — jeszcze spodziewany);
- * bez żadnego wpływu — „—” i pusty stan, nie „0 zł”. Krzywa: 8 tygodni
- * (`krzywaWplywow`).
+ * „Wpłynęło w tym miesiącu”: oznaczone wpłaty od 1. dnia miesiąca do dziś; bez
+ * żadnej wpłaty „—” i pusty stan prowadzący do oznaczenia, nie „0 zł”. Krzywa:
+ * 8 tygodni (`krzywaWplywow`).
  */
 export function wplywyMiesiacaProps(
   flow: MonthFlow,
@@ -284,6 +286,14 @@ export interface ListaDane<T> {
   items: T[];
   /** Tekst pustej listy (karta bez pozycji). */
   empty: string;
+  /** Dokąd iść z pustej listy, żeby oznaczyć zapłatę; `null` w przykładzie i przy pobieraniu z KSeF. */
+  emptyLink?: { label: string; href: string } | null;
+}
+
+/** Pusty stan kart ze wpływami: prawdziwa firma dostaje drogę do oznaczenia zapłaty. */
+function pustaListaWplywow(tryb: TrybDanych): Pick<ListaDane<never>, 'empty' | 'emptyLink'> {
+  if (synchronizacja(tryb)) return { empty: POBIERAMY, emptyLink: null };
+  return { empty: INFLOW_EMPTY_LIST, emptyLink: prawdziwe(tryb) ? INFLOW_EMPTY_LINK : null };
 }
 
 const OKRES_12 = 'w ostatnich 12 miesiącach';
@@ -292,9 +302,8 @@ export function zrodlaProps(sources: readonly CashFlowSource[], tryb: TrybDanych
   return {
     items: sources.map((s) => ({
       sourceName: s.name,
-      // Wpływ to faktura sprzedaży według terminu (E11), nie oznaczona wpłata.
       sourceType: s.direction === 'in'
-        ? `${s.consumers ? 'B2C' : 'Klient'} · ${s.count} ${plural(s.count, ['faktura', 'faktury', 'faktur'])}`
+        ? `${s.consumers ? 'B2C' : 'Klient'} · ${s.count} ${plural(s.count, ['wpłata', 'wpłaty', 'wpłat'])}`
         : `Dostawca · ${s.count} ${plural(s.count, ['dokument', 'dokumenty', 'dokumentów'])}`,
       amount: zlCale(s.amount),
       amountTitle: s.direction === 'in' ? `${zl(s.amount)} ${OKRES_12}, ${INFLOW_NOTE}` : `${zl(s.amount)} ${OKRES_12}`,
@@ -303,7 +312,7 @@ export function zrodlaProps(sources: readonly CashFlowSource[], tryb: TrybDanych
       // Konsumenci nie mają karty kontrahenta.
       href: prawdziwe(tryb) && !s.consumers ? '/contractors' : null,
     })),
-    empty: synchronizacja(tryb) ? POBIERAMY : 'Brak wpłat i kosztów w 12 miesiącach',
+    ...pustaListaWplywow(tryb),
   };
 }
 
@@ -318,12 +327,12 @@ export interface SpodziewanyDane {
 }
 
 /**
- * E11 (D-W): faktury sprzedaży z terminem w 30 dni, bez prawdziwej zapłaty,
- * kwota = reszta do zapłaty. Podtytuł karty („Następne 30 dni”) nie ma
- * miejsca na zdanie — idzie do dymku podtytułu i czytnika ekranu.
+ * Otwarte faktury sprzedaży z terminem w 30 dni, kwota = reszta do zapłaty.
+ * Podtytuł karty („Następne 30 dni”) nie ma miejsca na zdanie: idzie do dymku
+ * podtytułu i czytnika ekranu.
  */
 export const SPODZIEWANE_NOTA =
-  `Faktury sprzedaży z terminem płatności w najbliższych 30 dniach, bez potwierdzonej zapłaty — ${INFLOW_NOTE}.`;
+  'Otwarte faktury sprzedaży z terminem płatności dziś lub w najbliższych 30 dniach, bez oznaczonej zapłaty.';
 
 function termin(daysLeft: number): string {
   if (daysLeft === 0) return 'Termin dziś';
@@ -361,14 +370,10 @@ export interface AktywnoscDane {
   href: string | null;
 }
 
-/**
- * Skąd data w drugim wierszu (E11, D-W): prawdziwa zapłata („Wpłata”), termin
- * płatności („Termin”) albo — faktura bez terminu — dzień wystawienia.
- */
+/** Skąd data w drugim wierszu: wpłata albo wystawienie korekty zapłaconej faktury. */
 const PODSTAWA: Record<CashFlowOperation['status'], { krotko: string; dymek: string }> = {
   paid: { krotko: 'Wpłata', dymek: 'Wpłata' },
-  due: { krotko: 'Termin', dymek: 'Termin płatności' },
-  issued: { krotko: 'Wystawiona', dymek: 'Bez terminu płatności, wystawiona' },
+  correction: { krotko: 'Korekta', dymek: 'Korekta zapłaconej faktury' },
   reviewed: { krotko: 'Koszt', dymek: 'Koszt' },
   pending: { krotko: 'Koszt', dymek: 'Koszt' },
   ksef: { krotko: 'Koszt', dymek: 'Koszt' },
@@ -388,7 +393,7 @@ export function aktywnoscProps(ops: readonly CashFlowOperation[], tryb: TrybDany
         href: prawdziwe(tryb) ? op.href : null,
       };
     }),
-    empty: synchronizacja(tryb) ? POBIERAMY : 'Brak wpłat i kosztów w 12 miesiącach',
+    ...pustaListaWplywow(tryb),
   };
 }
 
@@ -438,6 +443,6 @@ export function tabelaProps(
       openLabel: op.direction === 'in' || op.status === 'ksef' ? 'Otwórz fakturę' : 'Otwórz wydatek',
       href: prawdziwe(tryb) ? op.href : null,
     })),
-    empty: synchronizacja(tryb) ? POBIERAMY : 'Brak wyników.',
+    empty: synchronizacja(tryb) ? POBIERAMY : 'Brak operacji. Oznacz zapłatę przy fakturze, a pojawi się tutaj.',
   };
 }

@@ -1,45 +1,50 @@
 import Link from 'next/link';
 import {
+  BadgeCheck,
   BellRing,
+  Camera,
   Check,
   CloudOff,
   FileCheck2,
   FileInput,
+  Fingerprint,
   Receipt,
   Users,
 } from 'lucide-react';
 
 import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
+import { PROBA } from '@/lib/marketing/oferta';
 
 import { Reveal, RevealGroup, RevealItem } from '@/components/site/motion';
 import { BandGlow, ButtonLink, Container, SectionHeading } from '@/components/site/ui';
 
 /*
- * Opisy funkcji pochodzą z poprzedniej strony głównej, cennika i pytań,
- * sprawdzonych w przeglądzie prawnym 15.10.2026 (tests/unit/marketing-bez-fikcji).
- * Nowych obietnic o produkcie tu nie dopisujemy.
+ * Każda funkcja ma pokrycie w kodzie, plik do każdej jest w opisie PR
+ * (FaktWay 1.0, decyzja 4). Przed dopisaniem nowej znajdź plik, który ją
+ * realizuje. Pilnują tests/unit/strony-publiczne-obietnice
+ * i tests/unit/marketing-bez-fikcji.
  */
 
 const FEATURES = [
   {
     icon: FileCheck2,
     title: 'Wysyłka do KSeF',
-    text: 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pobieramy UPO.',
+    text: 'Wystawiasz fakturę, my wysyłamy ją do KSeF i sami pobieramy UPO.',
   },
   {
     icon: CloudOff,
-    title: 'Kolejka, gdy KSeF nie działa',
-    text: 'Faktura czeka w kolejce i wychodzi sama, gdy system wróci. Dostajesz wtedy powiadomienie.',
+    title: 'Ponawianie, gdy KSeF nie działa',
+    text: 'Gdy KSeF nie odpowiada, ponawiamy wysyłkę sami, w coraz dłuższych odstępach. Możesz też wysłać fakturę ponownie jednym przyciskiem.',
   },
   {
     icon: BellRing,
-    title: 'Płatności pod kontrolą',
-    text: 'Faktury po terminie masz w jednym miejscu, a FLO przygotowuje przypomnienia dla klientów.',
+    title: 'Należności pod kontrolą',
+    text: 'Faktury po terminie masz w jednym miejscu, a zapłacone oznaczasz jednym dotknięciem.',
   },
   {
     icon: Receipt,
-    title: 'Paragony do KPiR',
-    text: 'Zdjęcie paragonu trafia prosto do KPiR.',
+    title: 'Koszty ze zdjęcia',
+    text: 'Robisz zdjęcie paragonu albo faktury, a odczytany koszt trafia do KPiR od razu. Na liście wydatków czeka z oznaczeniem „Do opisania”, żebyś go sprawdził. Faktury zakupowe z KSeF przychodzą same.',
   },
   {
     icon: Users,
@@ -48,8 +53,8 @@ const FEATURES = [
   },
   {
     icon: FileInput,
-    title: 'Import z innego programu',
-    text: 'Wgrywasz plik z Fakturowni albo inFaktu, resztę robimy my.',
+    title: 'Przeprowadzka z innego programu',
+    text: 'Historię z KSeF pobieramy sami. Starsze faktury wgrywasz plikiem z Fakturowni, inFaktu, wFirmy albo iFirmy.',
   },
 ] as const;
 
@@ -78,15 +83,69 @@ export function Features() {
   );
 }
 
+const PHONE_FEATURES = [
+  {
+    icon: BadgeCheck,
+    title: 'Zapłacone jednym dotknięciem',
+    text: 'Gdy klient zapłaci, oznaczasz fakturę jako zapłaconą i znika z listy należności.',
+  },
+  {
+    icon: Fingerprint,
+    title: 'Logowanie biometrią',
+    text: 'Odciskiem palca albo twarzą, jeśli Twój telefon to potrafi.',
+  },
+  {
+    icon: Camera,
+    title: 'Zdjęcie prosto z aparatu',
+    text: 'Przycisk „Dodaj wydatek” otwiera aparat, a dane z dokumentu odczytujemy sami.',
+  },
+] as const;
+
+// Telefon opisany tak, jak działa: przeglądarka i ekran główny (decyzja 4).
+export function Phone() {
+  return (
+    <section
+      id="telefon"
+      aria-labelledby="telefon-title"
+      className="relative overflow-hidden bg-primary py-20 text-primary-foreground sm:py-28"
+    >
+      <BandGlow />
+      <Container className="relative">
+        <Reveal className="mx-auto max-w-3xl text-center">
+          <h2 id="telefon-title" className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
+            FaktWay także w telefonie
+          </h2>
+          <p className="mt-5 text-lg text-pretty text-primary-foreground">
+            Działa w przeglądarce telefonu. Możesz dodać go do ekranu głównego i otwierać jak zwykły program.
+          </p>
+        </Reveal>
+        <RevealGroup as="ul" className="mx-auto mt-14 grid max-w-5xl gap-x-8 gap-y-12 sm:grid-cols-3">
+          {PHONE_FEATURES.map(({ icon: Icon, title, text }) => (
+            <RevealItem as="li" key={title}>
+              <span className="flex size-11 items-center justify-center rounded-xl bg-primary-foreground text-primary">
+                <Icon aria-hidden className="size-5" />
+              </span>
+              <h3 className="mt-5 text-lg font-semibold">{title}</h3>
+              <p className="mt-2 text-pretty text-primary-foreground">{text}</p>
+            </RevealItem>
+          ))}
+        </RevealGroup>
+      </Container>
+    </section>
+  );
+}
+
 // Jeden plan dla wszystkich (decyzja z 1 października 2026), cena
 // z lib/billing/pricing.ts.
 const PLAN_FEATURES = [
   'Faktury bez limitu',
   'Wysyłka do KSeF i pobieranie UPO',
   'Zdjęcie paragonu do KPiR',
+  'Faktury po terminie',
   'Paczka dla księgowej',
-  'Import z Fakturowni i inFaktu',
-  `${TRIAL_DAYS} dni za darmo`,
+  'Import z Fakturowni, inFaktu, wFirmy i iFirmy',
+  'Działa w przeglądarce telefonu',
+  PROBA,
 ];
 
 export function Pricing() {
@@ -100,7 +159,7 @@ export function Pricing() {
         />
         <Reveal y={40} className="mx-auto mt-14 max-w-md rounded-3xl bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/20 sm:p-10">
           <h3 className="text-lg font-semibold">FaktWay</h3>
-          <p className="mt-1 text-sm text-primary-foreground">Dla firm i księgowych.</p>
+          <p className="mt-1 text-sm text-primary-foreground">Dla firm i księgowych. Cena za jedną firmę (NIP).</p>
           <p className="mt-6 flex items-baseline gap-2">
             <span className="text-5xl font-semibold tracking-tight">{PRICE_GROSS}</span>
             <span className="text-sm text-primary-foreground">/mies. z VAT</span>
@@ -125,28 +184,28 @@ export function Pricing() {
 const QUESTIONS = [
   [
     {
-      q: 'Co dokładnie robi FLO?',
-      a: 'Zauważa sprawy, które czekają na ruch: fakturę po terminie, fakturę odrzuconą przez KSeF, koniec miesiąca dla księgowej. Przygotowuje rozwiązanie, a Ty je zatwierdzasz.',
+      q: 'Czy FaktWay działa w telefonie?',
+      a: 'Tak, w przeglądarce telefonu. Możesz też dodać FaktWay do ekranu głównego i otwierać go jak zwykły program.',
     },
     {
       q: 'Czy muszę mieć podpis elektroniczny?',
-      a: 'Nie. Wystarczy token z KSeF albo profil zaufany. Przeprowadzimy Cię przez to przy zakładaniu konta.',
+      a: 'Podpis kwalifikowany nie jest potrzebny. Do Aplikacji Podatnika KSeF wejdziesz profilem zaufanym, wygenerujesz tam certyfikat KSeF i dodasz go w ustawieniach FaktWay. Przy wgrywaniu plików działa klucz prywatny RSA w formacie PEM (PKCS#8) bez hasła.',
     },
   ],
   [
     {
       q: 'Co się dzieje, gdy KSeF nie odpowiada?',
-      a: 'Faktura czeka w kolejce, a my wysyłamy ją automatycznie, gdy system wróci. Dostajesz wtedy powiadomienie.',
+      a: 'Ponawiamy wysyłkę sami: najpierw kilka razy w ciągu około półtorej godziny, potem co kilka godzin. Fakturę możesz też wysłać ponownie jednym przyciskiem.',
     },
     {
       q: 'Przeniesiecie moje dane z innego programu?',
-      a: 'Tak. Wgrywasz plik z Fakturowni albo inFaktu, resztę robimy my.',
+      a: 'Tak. Faktury z KSeF pobieramy sami, a starsze wgrywasz plikiem CSV z Fakturowni, inFaktu, wFirmy albo iFirmy.',
     },
   ],
   [
     {
       q: 'Gdzie trzymacie moje dane?',
-      a: 'Na serwerach w Niemczech. Połączenia są szyfrowane, a tokeny KSeF zapisujemy zaszyfrowane. Dokumenty trzymamy przez cały czas korzystania z FaktWay i w każdej chwili możesz je wyeksportować. Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów.',
+      a: 'Na serwerach w Niemczech. Połączenia są szyfrowane, a certyfikat KSeF zapisujemy zaszyfrowany. Dokumenty trzymamy przez cały czas korzystania z FaktWay i w każdej chwili możesz je wyeksportować. Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów. Odczyt kosztów ze zdjęcia i wysyłka e-maili korzystają z dostawców spoza UE, a ich listę znajdziesz w dokumentach prawnych, na stronie „Podmioty przetwarzające”.',
     },
     {
       q: 'Czy mogę zrezygnować w każdej chwili?',

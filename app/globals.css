@@ -1008,9 +1008,34 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   flex-grow: 1;
 }
 
+/* Zawartość karty sekcji, czyli strona podzakładki (poprawka Bartosza
+ * 25.10.2026: przy zmianie zakładki „płynnie zmienia się sama tabelka”).
+ * Kafle, karta i rząd zakładek stoją w layoucie sekcji i się nie ruszają;
+ * nowa tabela tylko krótko się rozjaśnia. Sama przezroczystość, bez ruchu:
+ * `transform` zrobiłby z panelu blok zawierający dla `fixed` dzieci (pływający
+ * „+ Dodaj wydatek”), jak opisano niżej przy `.ff-route-template`. */
+.ff-tab-panel {
+  animation: ff-tab-panel-in 160ms ease-out backwards;
+}
+
+@keyframes ff-tab-panel-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-tab-panel {
+    animation: none;
+  }
+}
+
 /* Zakładki w karcie (`components/lists/section-tabs.tsx`): dotknięta zakładka
  * przejmuje podkreślenie od razu, zanim jej strona przyjdzie z serwera.
- * Znacznik `[data-link-pending]` wstawia `SectionTabPending` tylko na czas
+ * Znacznik `[data-link-pending]` wstawia `LinkPendingMark` tylko na czas
  * oczekiwania. Zwykły CSS, nie warstwa: wygrywa z klasami Tailwinda zakładki. */
 .ff-section-tabs:has([data-link-pending]) > a:not(:has([data-link-pending]))::after {
   opacity: 0;
@@ -1175,6 +1200,65 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   height: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
   background-color: var(--background);
   border-top: 1px solid var(--border);
+}
+
+/* Slot, którego strona jest w drodze (`LinkPendingMark` albo pozycja wybrana
+ * w arkuszu „Więcej”), przejmuje kolor od razu, dotychczasowy aktywny gaśnie,
+ * a u góry paska przesuwa się pasek postępu (poprawka Bartosza 25.10.2026:
+ * „podświetla się i nic się nie dzieje”). Znacznik znika, gdy nawigacja się
+ * skończy, więc nic nie zostaje zapalone bez przejścia. */
+.ff-bottom-nav:has([data-link-pending]) > a[aria-current='page'] {
+  color: var(--ff-text-muted);
+}
+
+.ff-bottom-nav > :is(a, button):has([data-link-pending]) {
+  color: var(--ff-accent);
+}
+
+.ff-bottom-nav:has([data-link-pending])::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ff-primary), transparent) no-repeat;
+  background-size: 40% 100%;
+  animation: ff-nav-progress 1s ease-in-out infinite;
+}
+
+@keyframes ff-nav-progress {
+  from {
+    background-position: -67% 0;
+  }
+  to {
+    background-position: 167% 0;
+  }
+}
+
+/* Plus w drodze do kreatora: koło pulsuje obwódką (`[data-ff-plus]`
+ * w `bottom-nav.tsx`), zamiast stać płasko do przyjścia strony. */
+.ff-bottom-nav > a:has([data-link-pending]) [data-ff-plus] {
+  animation: ff-plus-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes ff-plus-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-primary) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--ff-primary) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-bottom-nav:has([data-link-pending])::before {
+    animation: none;
+    background-size: 100% 100%;
+  }
+
+  .ff-bottom-nav > a:has([data-link-pending]) [data-ff-plus] {
+    animation: none;
+  }
 }
 
 /* Arkusz z dołu dostaje klasę `.ff-dashboard`, bo Radix portaluje go POZA

@@ -22,6 +22,7 @@ import {
   revokeInvitationAction,
   revokeMembershipAction,
 } from '@/app/actions/organizations';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -83,10 +84,23 @@ export function TeamManagement({
 }) {
   const router = useRouter();
   const isOwner = currentRole === 'owner';
+  // Odmowa „potrzebny kod” (sesja po biometrii): komunikat z przejściem na ekran
+  // kodu zamiast samego powiadomienia, bo bez wyjścia to ślepy zaułek.
+  const [stepUp, setStepUp] = useState<string | null>(null);
+  const refresh = () => {
+    setStepUp(null);
+    router.refresh();
+  };
 
   return (
     <FieldGroup>
-      <InviteForm onInvited={() => router.refresh()} />
+      {stepUp ? (
+        <MfaStepUpNotice returnTo="/settings/team">
+          {stepUp} Po potwierdzeniu wrócisz tutaj.
+        </MfaStepUpNotice>
+      ) : null}
+
+      <InviteForm onInvited={refresh} onStepUp={setStepUp} />
 
       {joinRequests.length > 0 && (
         <>
@@ -96,7 +110,8 @@ export function TeamManagement({
               <JoinRequestRow
                 key={r.id}
                 row={r}
-                onChanged={() => router.refresh()}
+                onChanged={refresh}
+                onStepUp={setStepUp}
               />
             ))}
           </Section>
@@ -111,7 +126,7 @@ export function TeamManagement({
               <InvitationRow
                 key={i.id}
                 row={i}
-                onChanged={() => router.refresh()}
+                onChanged={refresh}
               />
             ))}
           </Section>
@@ -129,7 +144,8 @@ export function TeamManagement({
             key={m.membershipId}
             member={m}
             isOwner={isOwner}
-            onChanged={() => router.refresh()}
+            onChanged={refresh}
+            onStepUp={setStepUp}
           />
         ))}
       </Section>
@@ -165,7 +181,7 @@ function RowIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
-function InviteForm({ onInvited }: { onInvited: () => void }) {
+function InviteForm({ onInvited, onStepUp }: { onInvited: () => void; onStepUp: (message: string) => void }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'member' | 'accountant'>('member');
   const [isPending, start] = useTransition();
@@ -181,6 +197,8 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
         toast.success('Zaproszenie wysłane');
         setEmail('');
         onInvited();
+      } else if (r.mfaStepUp) {
+        onStepUp(r.error);
       } else {
         toast.error(r.error);
       }
@@ -237,10 +255,12 @@ function MemberRow({
   member,
   isOwner,
   onChanged,
+  onStepUp,
 }: {
   member: TeamMember;
   isOwner: boolean;
   onChanged: () => void;
+  onStepUp: (message: string) => void;
 }) {
   const [isPending, start] = useTransition();
 
@@ -253,6 +273,8 @@ function MemberRow({
       if (r.success) {
         toast.success('Rola zmieniona');
         onChanged();
+      } else if (r.mfaStepUp) {
+        onStepUp(r.error);
       } else {
         toast.error(r.error);
       }
@@ -395,9 +417,11 @@ function InvitationRow({
 function JoinRequestRow({
   row,
   onChanged,
+  onStepUp,
 }: {
   row: PendingJoinRequest;
   onChanged: () => void;
+  onStepUp: (message: string) => void;
 }) {
   const [isPending, start] = useTransition();
 
@@ -409,6 +433,8 @@ function JoinRequestRow({
       if (r.success) {
         toast.success(approve ? 'Dodano do zespołu' : 'Prośba odrzucona');
         onChanged();
+      } else if (r.mfaStepUp) {
+        onStepUp(r.error);
       } else {
         toast.error(r.error);
       }

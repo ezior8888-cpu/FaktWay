@@ -72,7 +72,7 @@ beforeEach(() => {
 
 describe('„Wystaw i wyślij” — data wystawienia = dziś (F-092)', () => {
   it.each(['2026-10-03', '2026-10-01', '2026-09-15'])('data %s — odmowa bez zapisu i bez kolejki', async (data) => {
-    const r = await saveAndSendInvoiceAction(form(data));
+    const r = await saveAndSendInvoiceAction(form(data), 'ten-1');
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error).toContain('2026-10-02');
     expect(mocks.inserts).toEqual([]);
@@ -80,14 +80,14 @@ describe('„Wystaw i wyślij” — data wystawienia = dziś (F-092)', () => {
   });
 
   it('dzisiejsza data w Polsce (choć w UTC jeszcze wczoraj) — zapis i kolejka', async () => {
-    const r = await saveAndSendInvoiceAction(form('2026-10-02'));
+    const r = await saveAndSendInvoiceAction(form('2026-10-02'), 'ten-1');
     expect(r).toMatchObject({ success: true, invoiceId: 'inv-new' });
     expect(mocks.inserts).toContain('invoices');
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
   });
 
   it('szkic z inną datą nadal można zapisać', async () => {
-    const r = await saveDraftAction(form('2026-10-05'));
+    const r = await saveDraftAction(form('2026-10-05'), 'ten-1');
     expect(r).toMatchObject({ success: true });
     expect(mocks.inserts).toContain('invoices');
     expect(mocks.enqueue).not.toHaveBeenCalled();

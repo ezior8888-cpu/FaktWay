@@ -9,74 +9,88 @@ import {
   PRICE_VAT,
   TRIAL_DAYS,
 } from '@/lib/billing/pricing';
+import { METODA_PLATNOSCI, OFERTA, OFERTA_TEKST } from '@/lib/marketing/oferta';
 
 import { Reveal, RevealGroup, RevealItem } from '@/components/site/motion';
 import { PageHero } from '@/components/site/page-hero';
 import { ButtonLink, Container, SectionHeading } from '@/components/site/ui';
 
-// Faza 22: cennik się rzadko zmienia — godzinny revalidate na edge.
+// Faza 22: cennik się rzadko zmienia, więc godzinny revalidate na edge.
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: `Cennik FaktWay: ${PRICE_PER_MONTH}, wszystkie funkcje, ${TRIAL_DAYS} dni za darmo`,
-  description:
-    `Jeden plan dla wszystkich: ${PRICE_PER_MONTH}, płatne co miesiąc. ${TRIAL_DAYS} dni za darmo. OCR, KSeF 2.0, KPiR, Wkurzacz Dłużników w cenie. Bez ukrytych dodatków.`,
+  description: OFERTA,
 };
 
 /**
- * Lista funkcji — każda pozycja musi działać dziś (przegląd prawny 15.10.2026).
+ * Lista funkcji: każda pozycja ma pokrycie w kodzie, plik do każdej jest
+ * w opisie PR (FaktWay 1.0, decyzja 4; przegląd prawny 15.10.2026).
  * Usunięte wtedy: „Bez limitu paragonów” (OCR ma limit dzienny i miesięczny,
  * lib/ai/tenant-ai-budget.ts), eksporty JPK_V7M / Optima / Subiekt / Symfonia /
- * Wapro (wyłączone, lib/exports/suspended-formats.ts — pilnuje test
- * marketing-bez-fikcji), „Mobile” (panel na telefonach jest wyłączony, /mobile),
- * „Retencja 10 lat” (dane trzymamy przez czas umowy), „GDPR-compliant”,
- * „Bank EU”, „Live chat” (czat prowadzi asystent AI).
+ * Wapro (wyłączone, lib/exports/suspended-formats.ts; pilnuje test
+ * marketing-bez-fikcji), „Retencja 10 lat” (dane trzymamy przez czas umowy),
+ * „GDPR-compliant”, „Bank EU”, „Live chat” (czat jest automatyczny).
+ * Usunięte przy FaktWay 1.0: „Tryb Offline24” (wstrzymany wszędzie,
+ * lib/ksef/offline24-policy.ts), korekty i faktury rozliczające (wysyłka
+ * wstrzymana, lib/ksef/kind-holds.ts). Wracają razem ze zdjęciem blokad.
  */
 const FEATURES = [
   {
     category: 'Faktury',
     items: [
       'Bez limitu faktur sprzedaży i zakupu',
-      'Korekty, zaliczki i faktury rozliczające',
-      'Wystawianie B2B i B2C',
+      'Faktury zaliczkowe',
+      'Wystawianie B2B i dla konsumentów',
+      'Dane kontrahenta z GUS po NIP',
     ],
   },
   {
     category: 'KSeF 2.0',
     items: [
-      'Pre-send walidacja FA(3)',
-      'Post-send monitoring',
-      'UPO automatyczne + archiwizacja',
-      'Tryb Offline24',
-      'Auto-retry przy błędach',
+      'Walidacja FA(3) przed wysyłką',
+      'Sprawdzanie statusu po wysyłce',
+      'UPO pobierane samo i archiwizowane',
+      'Ponawianie wysyłki, gdy KSeF nie odpowiada',
+      'Faktury zakupowe z KSeF przychodzą same',
+      'Historia faktur z KSeF pobiera się sama',
     ],
   },
   {
-    category: 'OCR + KPiR',
+    category: 'Koszty i KPiR',
     items: [
-      'Odczyt faktur kosztowych i paragonów (AI), z limitem dziennym i miesięcznym',
+      'Odczyt faktur kosztowych i paragonów ze zdjęcia, z limitem dziennym i miesięcznym',
       'Podpowiedź kolumny KPiR, która uczy się Twoich poprawek',
-      'Automatyczny import faktur zakupowych z KSeF',
-      'Eksport JPK_FA i KPiR (Excel)',
+      'KPiR z faktur i kosztów',
     ],
   },
   {
-    category: 'Workflow',
+    category: 'Należności',
     items: [
-      'Magiczny Import z 4 innych programów (CSV)',
-      'Wkurzacz Dłużników (przypomnienia i przedsądowe wezwania do zapłaty, wysyłane po Twoim zatwierdzeniu)',
-      'Co-Pilot Księgowego (paczka dla księgowej co miesiąc)',
+      'Lista faktur po terminie',
+      'Zapłacone jednym dotknięciem',
       'Walidacja NIP (biała lista VAT, VIES)',
-      'Sprawdzanie rachunków na białej liście',
+    ],
+  },
+  {
+    category: 'Telefon',
+    items: [
+      'Działa w przeglądarce telefonu',
+      'Można dodać do ekranu głównego',
+      'Logowanie biometrią',
+      'Zdjęcie dokumentu prosto z aparatu',
       'Powiadomienia push w przeglądarce',
     ],
   },
   {
-    category: 'Eksport',
+    category: 'Księgowa i eksport',
     items: [
+      'Paczka dla księgowej co miesiąc',
+      'Portal księgowej bez zakładania konta',
       'JPK_FA(4)',
       'KPiR (Excel)',
       'Uniwersalny CSV dla księgowej',
+      'Import z Fakturowni, inFaktu, wFirmy i iFirmy (CSV)',
     ],
   },
   {
@@ -84,7 +98,7 @@ const FEATURES = [
     items: [
       'Serwery w UE (Niemcy)',
       'Umowa powierzenia danych (RODO) w standardzie',
-      'Eksport pełnych danych w każdej chwili',
+      'Eksport faktur i danych konta w każdej chwili',
       'Weryfikacja dwuetapowa (2FA)',
       'Dziennik zdarzeń',
     ],
@@ -92,9 +106,9 @@ const FEATURES = [
   {
     category: 'Wsparcie',
     items: [
-      'E-mail po polsku (dni robocze)',
+      'E-mail po polsku, zwykle w ciągu 2 dni roboczych',
       'Centrum pomocy po polsku',
-      'Czat z asystentem AI i kontakt z człowiekiem',
+      'Automatyczny czat z podpowiedziami i przejście do człowieka',
     ],
   },
 ];
@@ -102,21 +116,18 @@ const FEATURES = [
 const PROMISES = [
   {
     value: `${TRIAL_DAYS} dni`,
-    label: `Pełen dostęp do wszystkich funkcji. Kartę podajesz na starcie, pierwsza płatność dopiero po ${TRIAL_DAYS} dniach.`,
+    label: `Pełen dostęp do wszystkich funkcji (${METODA_PLATNOSCI}). Pierwsza płatność dopiero po ${TRIAL_DAYS} dniach.`,
   },
   {
     value: `${TRIAL_DAYS} dni`,
-    label: 'Parallel Run: możesz używać równolegle z poprzednią apką, by porównać przed migracją.',
+    label: 'Tyle masz na sprawdzenie FaktWay obok obecnego programu, zanim się przeniesiesz.',
   },
 ];
 
 export default function PricingPage() {
   return (
     <>
-      <PageHero
-        title="Jeden plan. Wszystkie funkcje."
-        lead={<>Bez tierów. Bez &bdquo;premium&rdquo; toggle. Bez umowy na rok.</>}
-      />
+      <PageHero title="Jeden plan. Wszystkie funkcje." lead={OFERTA_TEKST} />
 
       {/* Karta planu w tym samym kroju co cennik na stronie głównej, obok dwie obietnice. */}
       <section aria-labelledby="plan-title" className="pb-20 sm:pb-28">
@@ -127,7 +138,7 @@ export default function PricingPage() {
               className="rounded-3xl bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/20 sm:p-10"
             >
               <h2 id="plan-title" className="text-lg font-semibold">
-                Plan podstawowy
+                FaktWay
               </h2>
               <p className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="text-5xl font-semibold tracking-tight whitespace-nowrap sm:text-6xl">
@@ -136,7 +147,7 @@ export default function PricingPage() {
                 <span className="text-sm text-primary-foreground">/ miesiąc · z VAT</span>
               </p>
               <p className="mt-3 text-sm text-primary-foreground">
-                {PRICE_NET} netto + {PRICE_VAT} VAT · faktura VAT co miesiąc
+                {PRICE_NET} netto + {PRICE_VAT} VAT · cena za jedną firmę (NIP)
               </p>
               <ButtonLink href="/register" variant="inverse" className="mt-8 w-full">
                 Wypróbuj {TRIAL_DAYS} dni za darmo
@@ -164,7 +175,7 @@ export default function PricingPage() {
           {/* Twarda spacja po „w”: przyimek nie zostaje sam na końcu linii. */}
           <SectionHeading
             id="features-title"
-            title={<>Co dostajesz w{' '}{PRICE_GROSS}</>}
+            title={<>Co dostajesz w{' '}{PRICE_GROSS}</>}
             lead={`${FEATURES.length} kategorii. Wszystko od pierwszego dnia.`}
           />
 
@@ -188,9 +199,9 @@ export default function PricingPage() {
 
           <Reveal className="mx-auto mt-8 max-w-3xl">
             <p className="text-center text-sm text-pretty text-muted-foreground">
-              W przygotowaniu (jeszcze niedostępne): eksport JPK_V7M(3), eksport
-              do Comarch Optima i Subiekta (EDI++), panel na telefonie. Odczyt
-              dokumentów przez AI ma limit dzienny i miesięczny na firmę. Po jego
+              W przygotowaniu (jeszcze niedostępne): wysyłka korekt i faktur rozliczających do KSeF,
+              tryb Offline24, eksport JPK_V7M(3), eksport do Comarch Optima i Subiekta (EDI++).
+              Odczyt dokumentów ze zdjęcia ma limit dzienny i miesięczny na firmę. Po jego
               wyczerpaniu dane wpisujesz ręcznie. Szczegóły w{' '}
               <Link href="/legal/regulamin" className="font-medium text-primary underline-offset-4 hover:underline">
                 regulaminie

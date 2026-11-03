@@ -48,10 +48,13 @@ export async function POST(request: Request) {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });
+          // `Cache-Control: private, no-store…` od `@supabase/ssr` — odpowiedź
+          // z ciasteczkiem sesji nie może trafić do wspólnego cache'u.
+          for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
         },
       },
     },

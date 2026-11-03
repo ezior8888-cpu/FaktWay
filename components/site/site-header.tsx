@@ -6,7 +6,7 @@ import { ButtonLink, Container, Wordmark } from './ui';
 
 export const NAV_LINKS = [
   { label: 'Funkcje', href: '/#funkcje' },
-  { label: 'Agent FLO', href: '/#flo' },
+  { label: 'Telefon', href: '/#telefon' },
   { label: 'Cennik', href: '/#pricing' },
   { label: 'Pytania', href: '/#faq' },
   { label: 'Blog', href: '/blog' },

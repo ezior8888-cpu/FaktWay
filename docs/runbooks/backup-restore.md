@@ -11,8 +11,8 @@ Komendy zakładają `source .agents/infra.env` (`$K`, `$DB`, `$OPS`, `$PGC`).
 
 | Warstwa | Co obejmuje | Gdzie | Kiedy | Retencja | Stan |
 |---|---|---|---|---|---|
-| **A. `pg_dump`** (główna) | cała baza `postgres`: `public`, `auth`, `storage`, `pgboss`, `supabase_migrations` + role | `db-1`, `/root/backups/daily` | cron 01:30 UTC | 14 ostatnich kompletnych | skrypt gotowy (`scripts/hetzner/db-backup.sh`), instalacja: § 2 |
-| **B. Storage Box** | zrzuty z A, zaszyfrowane (`rclone crypt`) | Hetzner Storage Box | po każdym zrzucie A | snapshoty Storage Boxa | **czeka na zakup** (§ 3) |
+| **A. `pg_dump`** (główna) | cała baza `postgres`: `public`, `auth`, `storage`, `pgboss`, `supabase_migrations` + role | `db-1`, `/root/backups/daily` | cron 01:30 UTC | 14 ostatnich kompletnych (`KEEP`); 2–3 dopiero po uruchomieniu B (§ 3, krok 4) | skrypt gotowy (`scripts/hetzner/db-backup.sh`), instalacja: § 2 |
+| **B. Storage Box** | zrzuty z A, zaszyfrowane (`rclone crypt`) | Hetzner Storage Box | po każdym zrzucie A | skrypt usuwa kopie starsze niż 60 dni (`REMOTE_RETENTION_DAYS`) + snapshoty Storage Boxa | **czeka na zakup** (§ 3) |
 | **C. Snapshot JSON** (pomocniczy) | tabele `public` przez REST, bez `auth` | MinIO na `ops-1`, `backups/` | 02:00 PL | 30 dni / 8 tyg., zawsze ≥ 7 udanych | działa; alarm, gdy najnowszy > 26 h |
 | **D. Backup Hetznera** | obraz dysku `db-1` | Hetzner Cloud | dzienny | 7 | **do sprawdzenia w konsoli** (Servers → db-1 → Backups) |
 
@@ -34,7 +34,15 @@ ssh -i $K root@$DB "chmod 700 /usr/local/sbin/faktflow-db-backup && umask 077 &&
 
 Healthchecks: osobny check „db-backup” (okres 1 dzień, karencja 2 h). Jego
 adres dopisz jako `HC_URL=` do `/etc/faktflow-backup.env`. Bez tego cichą
-awarię crona złapie tylko ręczne zajrzenie do logu.
+awarię crona złapie tylko ręczne zajrzenie do logu (skrypt pisze tam wtedy
+`UWAGA: brak HC_URL`).
+
+**Miejsce na dysku.** Zrzuty leżą na tym samym dysku co dane Postgresa.
+Przed zrzutem skrypt sprawdza, czy wolne wynosi co najmniej 2 × ostatni
+zrzut (najmniej 1 GB) + 10% systemu plików. Jeśli nie, kończy się błędem
+`za mało miejsca` i pingiem `/fail`, a zrzutu nie zaczyna. Wtedy zwolnij
+miejsce na `db-1`. Zrzuty na osobnym wolumenie: `DISK_RESERVE_PCT=0`.
+Przerwany przebieg sam usuwa swoje pliki `.partial-*`.
 
 **Nazwa kontenera Postgresa zmienia się przy przebudowie usługi w Coolify.**
 Po takiej zmianie popraw `PGC` w `/etc/faktflow-backup.env`. Zrzut padnie
@@ -59,7 +67,20 @@ wtedy z błędem i pingiem `/fail`, więc nie przejdzie po cichu.
    `rclone.conf`.
 4. Dopisz `RCLONE_REMOTE=boxcrypt:db` do `/etc/faktflow-backup.env`.
    Uruchom `/usr/local/sbin/faktflow-db-backup` i sprawdź
-   `rclone ls boxcrypt:db`. Skrypt sam robi `rclone cryptcheck`.
+   `rclone ls boxcrypt:db`. Skrypt sam robi `rclone cryptcheck`, potem
+   usuwa tam kopie starsze niż 60 dni (umowa powierzenia § 9: cykl ≤ 60 dni)
+   i daje `/fail`, gdy Storage Box jest zajęty w ponad 80%. Snapshot z kroku 1
+   trzyma też pliki, które skrypt już usunął, więc kopia żyje
+   `REMOTE_RETENTION_DAYS` + tyle dni, ile sięgają snapshoty. Umowa
+   dopuszcza razem 60 dni: ustaw `REMOTE_RETENTION_DAYS` = 60 − liczba
+   dni snapshotów (przy 14 dziennych: 46). W logu co noc
+   powinna być linia `Storage Box: zajęte …`. Jeśli jest
+   `UWAGA: rclone about nie podał zajętości`, pilnuj zajętości ręcznie.
+
+   **Kiedy obniżyć `KEEP`.** Po tygodniu nocy z `kopia poza serwerem`
+   w logu, bez błędu `cryptcheck`, i z włączonymi snapshotami (krok 1)
+   można ustawić `KEEP=3`. Decyzja Bartosza. Wcześniej lokalne zrzuty są
+   jedyną historią bazy.
 5. Odczyt z innej maszyny: zainstaluj `rclone`, skonfiguruj `box` i
    `boxcrypt` tym samym hasłem i solą, a potem
    `rclone copy boxcrypt:db/<nazwa> .`. Przećwicz to raz od razu po
@@ -149,7 +170,7 @@ scp -i $K scripts/hetzner/restore-drill.sh root@$OPS:/root/drill/
 
 # 3. próba (kontener bez sieci, usuwany po próbie) i sprzątanie
 ssh -i $K root@$OPS "cd /root/drill && bash restore-drill.sh $D.dump $D-roles.sql $D-counts.txt; rm -rf /root/drill"
-ssh -i $K root@$DB "rm -f /root/backups/$D-counts.txt"
+ssh -i $K root@$DB "rm -f /root/backups/$D.dump /root/backups/$D-roles.sql /root/backups/$D-counts.txt"
 ```
 
 Po zainstalowaniu Storage Boxa krok 1 zastępuje pobranie najnowszego zrzutu

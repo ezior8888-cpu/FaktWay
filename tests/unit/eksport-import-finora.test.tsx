@@ -46,7 +46,9 @@ describe('Eksport — karty formatów w stylu Accounts', () => {
   // Formularz stoi przed kartą z zakładkami, historia w niej. Wiersz historii (wrzesień)
   // i domyślny okres formularza (też wrzesień) mają te same napisy — bez podziału
   // sprawdzenie jednego przechodziłoby dzięki drugiemu.
-  const nav = html.indexOf('<nav aria-label="Księgowość"');
+  // Rząd zakładek Księgowości stoi od 25.10.2026 w `reports/layout.tsx`;
+  // kartę historii poznajemy po `id`.
+  const nav = html.indexOf('id="historia"');
   const form = html.slice(0, nav);
   const history = html.slice(nav);
 
@@ -154,10 +156,12 @@ describe('Eksport — karty formatów w stylu Accounts', () => {
     expect(blank).not.toContain('Pobierz');
   });
 
-  it('powłoka: ff-page-fill, karta z zakładkami Księgowości sięga stopki', () => {
-    expect(html).toMatch(/^<div class="ff-page-fill flex flex-col gap-6"><h1 class="sr-only">/);
-    expect(html).toContain('<nav aria-label="Księgowość"');
-    expect(html).toMatch(/<a aria-current="page"[^>]*href="\/reports\/exports">Eksport<\/a>/);
+  it('powłoka: zawartość zakładki, karta historii sięga stopki, zakładki w layoucie', () => {
+    expect(html).toMatch(/^<div class="ff-tab-panel flex flex-1 flex-col gap-6"><h1 class="sr-only">/);
+    const historyCard = /<div[^>]*id="historia"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(historyCard).toContain('data-slot="card"');
+    expect(historyCard).toMatch(/class="[^"]*\bflex-1\b/);
+    expect(html).not.toContain('<nav aria-label="Księgowość"');
   });
 });
 

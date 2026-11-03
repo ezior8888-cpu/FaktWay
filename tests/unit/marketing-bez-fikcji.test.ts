@@ -44,7 +44,9 @@ const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
   ['app/(home)/page.tsx', ['Testimonial', 'clientLogos']],
   ['app/(home)/_components/hero.tsx', ['Ocena 4,8', 'Logo klienta', 'asset.']],
   ['app/(home)/_components/sections.tsx', ['dziesięć lat', 'i księgujemy', 'z banku, poczty i sklepu', 'bez podawania karty', '+48 22 123 45 67']],
-  ['app/(home)/_components/flo-section.tsx', ['sam pilnuje terminów i przepisów']],
+  // FaktWay 1.0: czat nie jest „Live Chat”, a czas odpowiedzi jest ten sam co
+  // w regulaminie (§ 10: zwykle w ciągu 2 dni roboczych), nie 24 h.
+  ['app/(marketing)/kontakt/page.tsx', ['Live Chat', '24h', '9:00']],
   ['lib/jobs/runners/email-sequence.ts', ['Bez karty kredytowej', '[screenshot OCR]', 'beta-test', 'Fakturownią', 'KSeF SaaS', 'Już teraz się zwróciła']],
   ['content/help/okres-probny-trial.mdx', ['Bez karty na starcie', 'stan ograniczony']],
   ['components/marketing/savings-calculator-preview.tsx', ['pomiarów beta-testerów']],
@@ -76,6 +78,10 @@ const SUSPENDED_PRODUCT_NAMES = ['Comarch Optima', 'Insert Subiekt', 'Wapro Mag'
 const PRICE_LIST_FORBIDDEN = [
   'Bez limitu paragonów', 'Retencja 10 lat', 'GDPR-compliant', 'Live chat', 'Bank EU',
   'PWA installable', "'JPK_V7M'",
+  // Wstrzymane w kodzie (lib/ksef/offline24-policy.ts, lib/ksef/kind-holds.ts):
+  // wolno tylko w zdaniu „W przygotowaniu”, nie na liście funkcji.
+  "'Tryb Offline24'", "'Korekty, zaliczki i faktury rozliczające'",
+  "'Magiczny Import",
   ...SUSPENDED_PRODUCT_NAMES.map((n) => `'${n}'`),
 ];
 

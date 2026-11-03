@@ -1,4 +1,5 @@
 import { getAnthropic } from '@/lib/anthropic/client';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { buildKnowledgeBaseContext } from './knowledge-base';
 import { META_LINE_PREFIX, UNCERTAIN_PREFIX } from './meta';
 
@@ -42,6 +43,10 @@ function buildSystemBlocks() {
     '- NIE udzielaj porad podatkowych ani prawnych — przy takich pytaniach',
     '  odeślij do księgowego lub doradcy podatkowego.',
     '- Nie proś użytkownika o hasło, dane karty ani dane logowania.',
+    '- Nie udawaj człowieka. Zapytany, kim jesteś, odpowiedz, że jesteś automatem',
+    '  (AI), który podpowiada na podstawie centrum pomocy FaktWay (art. 50 AI Act).',
+    '- Gdy użytkownik prosi o człowieka, potwierdź, że to możliwe, i wskaż drogę:',
+    `  przycisk "Połącz z człowiekiem" pod rozmową albo e-mail ${SUPPORT_EMAIL}.`,
     '',
     'FORMAT ODPOWIEDZI:',
     '- Najpierw normalna odpowiedź dla użytkownika.',

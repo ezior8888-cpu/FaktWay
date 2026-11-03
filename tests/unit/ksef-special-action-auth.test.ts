@@ -54,10 +54,10 @@ afterEach(() => {
 
 describe('special invoice actions', () => {
   it.each([
-    ['advance draft', () => saveAdvanceAction({})],
-    ['advance send', () => saveAndSendAdvanceAction({})],
-    ['final draft', () => saveFinalAction({})],
-    ['final send', () => saveAndSendFinalAction({})],
+    ['advance draft', () => saveAdvanceAction({}, tenantId)],
+    ['advance send', () => saveAndSendAdvanceAction({}, tenantId)],
+    ['final draft', () => saveFinalAction({}, tenantId)],
+    ['final send', () => saveAndSendFinalAction({}, tenantId)],
   ])('denies %s before any tenant read, write or enqueue when MFA is pending', async (_label, action) => {
     mocks.requireAuth.mockRejectedValueOnce(new Error('Wymagana weryfikacja dwuetapowa'));
     const result = await action();
@@ -156,9 +156,9 @@ describe('ZAL/ROZ seller authority', () => {
   });
 
   it.each([
-    ['advance draft', () => saveAdvanceAction(advanceInput)],
-    ['advance send', () => saveAndSendAdvanceAction(advanceInput)],
-    ['final draft', () => saveFinalAction(finalInput)],
+    ['advance draft', () => saveAdvanceAction(advanceInput, tenantId)],
+    ['advance send', () => saveAndSendAdvanceAction(advanceInput, tenantId)],
+    ['final draft', () => saveFinalAction(finalInput, tenantId)],
   ])('uses the server tenant seller in %s', async (label, action) => {
     const result = await action();
     expect(result).toMatchObject({ success: true, invoiceId });
@@ -182,7 +182,7 @@ describe('ZAL/ROZ seller authority', () => {
   // Wysyłka ROZ jest w main wstrzymana do partii 15 audytu (AUD-23 ROZ, 67, 95)
   // — akcja nie zapisuje nowej faktury i nie zleca joba.
   it('final send stays on hold until settlement fixes (partia 15)', async () => {
-    const result = await saveAndSendFinalAction(finalInput);
+    const result = await saveAndSendFinalAction(finalInput, tenantId);
     expect(result).toMatchObject({ success: false });
     expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
     expect(mocks.enqueue).not.toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe('ZAL/ROZ seller authority', () => {
       [saveAndSendFinalAction, { ...finalInput, seller: forged }],
     ] as const) {
       queries = [];
-      const result = await action(payload);
+      const result = await action(payload, tenantId);
       expect(result).toMatchObject({ success: false });
       expect(queries.some((q) => q.table === 'invoices')).toBe(false);
       expect(mocks.enqueue).not.toHaveBeenCalled();
@@ -209,7 +209,7 @@ describe('ZAL/ROZ seller authority', () => {
     for (const malformed of [{ countryCode: 'PL', addressLine1: 'ul. Testowa 1' }, 42]) {
       tenantRow.address_json = malformed;
       queries = [];
-      const result = await saveAndSendAdvanceAction(advanceInput);
+      const result = await saveAndSendAdvanceAction(advanceInput, tenantId);
       expect(result).toMatchObject({ success: false });
       expect(queries.some((q) => q.table === 'invoices')).toBe(false);
       expect(mocks.enqueue).not.toHaveBeenCalled();
@@ -221,7 +221,7 @@ describe('ZAL/ROZ seller authority', () => {
     ['ordinary VAT and no MPP', false, false, '<P_16>2</P_16>', '<P_18A>2</P_18A>'],
   ])('freezes %s in draft/event and valid FA(3) XML', async (_label, cash, mpp, p16, p18a) => {
     tenantRow.vat_cash_method = cash;
-    const result = await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: mpp });
+    const result = await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: mpp }, tenantId);
     expect(result).toMatchObject({ success: true, invoiceId });
     const event = mocks.enqueue.mock.calls[0]?.[0] as
       | { invoice: Invoice; advanceData: AdvanceInvoiceData }
@@ -249,10 +249,10 @@ describe('ZAL/ROZ seller authority', () => {
     const noAnswer: Partial<typeof advanceInput> = { ...advanceInput };
     delete noAnswer.splitPayment;
     expect(advanceInvoiceSchema.safeParse(noAnswer).success).toBe(false);
-    expect(await saveAndSendAdvanceAction(noAnswer)).toMatchObject({ success: false });
-    expect(await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: true, bankAccount: '' }))
+    expect(await saveAndSendAdvanceAction(noAnswer, tenantId)).toMatchObject({ success: false });
+    expect(await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: true, bankAccount: '' }, tenantId))
       .toMatchObject({ success: false });
-    expect(await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: true, paymentMethod: 'cash' }))
+    expect(await saveAndSendAdvanceAction({ ...advanceInput, splitPayment: true, paymentMethod: 'cash' }, tenantId))
       .toMatchObject({ success: false });
     expect(queries.some((q) => q.table === 'invoices')).toBe(false);
     expect(mocks.enqueue).not.toHaveBeenCalled();
@@ -263,7 +263,7 @@ describe('ZAL/ROZ seller authority', () => {
     ['ordinary VAT and no MPP', false, false],
   ])('freezes %s in the ROZ draft (AUD-23)', async (_label, cash, mpp) => {
     tenantRow.vat_cash_method = cash;
-    const result = await saveFinalAction({ ...finalInput, splitPayment: mpp });
+    const result = await saveFinalAction({ ...finalInput, splitPayment: mpp }, tenantId);
     expect(result).toMatchObject({ success: true, invoiceId });
     const inserted = queries.find((q) => q.table === 'invoices' && q.operation === 'insert');
     expect(inserted?.payload).toMatchObject({
@@ -275,36 +275,36 @@ describe('ZAL/ROZ seller authority', () => {
     const noAnswer: Partial<typeof finalInput> = { ...finalInput };
     delete noAnswer.splitPayment;
     expect(finalInvoiceSchema.safeParse(noAnswer).success).toBe(false);
-    expect(await saveFinalAction(noAnswer)).toMatchObject({ success: false });
-    expect(await saveFinalAction({ ...finalInput, splitPayment: true, bankAccount: '' }))
+    expect(await saveFinalAction(noAnswer, tenantId)).toMatchObject({ success: false });
+    expect(await saveFinalAction({ ...finalInput, splitPayment: true, bankAccount: '' }, tenantId))
       .toMatchObject({ success: false });
-    expect(await saveFinalAction({ ...finalInput, splitPayment: true, paymentMethod: 'cash' }))
+    expect(await saveFinalAction({ ...finalInput, splitPayment: true, paymentMethod: 'cash' }, tenantId))
       .toMatchObject({ success: false });
     expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
   });
 
   it('rejects an advance already settled by another ROZ before INSERT (AUD-67)', async () => {
     settlingFinals = [{ id: 'other-roz', internal_number: 'ROZ/2026/1', advance_invoice_ids: [advanceId] }];
-    const result = await saveFinalAction(finalInput);
+    const result = await saveFinalAction(finalInput, tenantId);
     expect(result).toMatchObject({ success: false, error: expect.stringContaining('ROZ/2026/1') });
     expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
   });
 
   it('fails closed when the settled-advance lookup errors (AUD-67)', async () => {
     settledLookupError = { message: 'temporary-db-error' };
-    const result = await saveFinalAction(finalInput);
+    const result = await saveFinalAction(finalInput, tenantId);
     expect(result).toMatchObject({ success: false });
     expect(queries.some((q) => q.table === 'invoices' && q.operation === 'insert')).toBe(false);
   });
 
   it('rejects missing 00094 or an unreadable cash-method value before INSERT/queue', async () => {
     cashMethodError = { code: '42703', message: 'missing vat_cash_method' };
-    expect(await saveAndSendAdvanceAction(advanceInput)).toMatchObject({
+    expect(await saveAndSendAdvanceAction(advanceInput, tenantId)).toMatchObject({
       success: false, error: expect.stringContaining('00094'),
     });
     cashMethodError = null;
     tenantRow.vat_cash_method = null;
-    expect(await saveAndSendAdvanceAction(advanceInput)).toMatchObject({ success: false });
+    expect(await saveAndSendAdvanceAction(advanceInput, tenantId)).toMatchObject({ success: false });
     expect(queries.some((q) => q.table === 'invoices')).toBe(false);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });

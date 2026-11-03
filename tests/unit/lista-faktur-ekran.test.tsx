@@ -95,6 +95,7 @@ const facts = (over: Partial<InvoiceListRowFacts> = {}): InvoiceListRowFacts => 
   payment: 'unpaid',
   outstanding: 1230,
   canCorrect: false,
+  canMarkPaid: false,
   ...over,
 });
 

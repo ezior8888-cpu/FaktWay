@@ -2,8 +2,8 @@
 title: "Weryfikacja dwuetapowa (2FA)"
 category: "bezpieczenstwo"
 order: 2
-summary: "Jak włączyć 2FA, czym są kody ratunkowe i co zrobić po utracie telefonu."
-updated: "2026-05-19"
+summary: "Jak włączyć 2FA i co zrobić po utracie telefonu."
+updated: "2026-11-02"
 ---
 
 Weryfikacja dwuetapowa (2FA) dodaje drugi czynnik logowania. Nawet jeśli ktoś pozna Twoje hasło, bez kodu z aplikacji nie wejdzie na konto.
@@ -11,34 +11,21 @@ Weryfikacja dwuetapowa (2FA) dodaje drugi czynnik logowania. Nawet jeśli ktoś 
 ## Jak włączyć 2FA
 
 1. Wejdź w **Ustawienia → Bezpieczeństwo**.
-2. Kliknij „Włącz 2FA".
-3. Zeskanuj kod QR aplikacją TOTP — Google Authenticator, 1Password, Authy lub podobną.
+2. Kliknij „Włącz 2FA”.
+3. Zeskanuj kod QR aplikacją TOTP: Google Authenticator, 1Password, Authy lub podobną.
 4. Wpisz 6-cyfrowy kod z aplikacji, żeby potwierdzić.
 
 Od tej pory przy każdym logowaniu, po haśle, podajesz kod z aplikacji.
 
-## Kody ratunkowe
-
-Po włączeniu 2FA dostajesz 8 kodów ratunkowych. **Zapisz je w bezpiecznym miejscu** — menedżerze haseł, wydruku, sejfie. Pokazujemy je tylko raz.
-
-Każdy kod działa jednorazowo. Używasz ich, gdy nie masz dostępu do aplikacji TOTP (np. zgubiłeś telefon).
-
 ## Utrata telefonu
 
-Jeśli stracisz dostęp do aplikacji TOTP:
+Samodzielne odzyskiwanie dostępu, także kodami ratunkowymi, jest teraz niedostępne. Jeśli stracisz dostęp do aplikacji TOTP, napisz na pomoc@faktway.pl. Zweryfikujemy tożsamość i pomożemy odzyskać dostęp.
 
-- zaloguj się, używając kodu ratunkowego zamiast kodu z aplikacji,
-- w ustawieniach wyłącz stare 2FA i skonfiguruj je na nowym urządzeniu.
-
-Jeśli straciłeś też kody ratunkowe — skontaktuj się z pomocą techniczną. Zweryfikujemy tożsamość i pomożemy odzyskać dostęp.
-
-## Nowe kody ratunkowe
-
-W ustawieniach możesz wygenerować nowy zestaw kodów. Stare przestają wtedy działać — to przydatne, jeśli podejrzewasz, że ktoś je zobaczył.
+Dlatego dobrze dodać konto w aplikacji, która ma kopię zapasową, np. w menedżerze haseł.
 
 ## Wyłączenie 2FA
 
-2FA wyłączysz w ustawieniach, podając aktualne hasło. Pamiętaj — wyłączenie osłabia ochronę konta.
+2FA wyłączysz w ustawieniach, podając aktualne hasło. Pamiętaj, że wyłączenie osłabia ochronę konta. Bez 2FA nie zmienisz też certyfikatu KSeF.
 
 ## Co dalej?
 

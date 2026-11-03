@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation';
 
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
-import { canCorrectInvoice } from '@/lib/invoices/list-row-facts';
-import { canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
+import { canCorrectInvoice, canMarkInvoicePaid } from '@/lib/invoices/list-row-facts';
+import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
+import { canDuplicateInvoice, canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -19,6 +21,7 @@ import {
 } from '@/lib/ksef/duplicate-decision';
 import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
 import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -62,6 +65,8 @@ export default async function InvoiceDetailPage({
       currency,
       ksef_environment,
       paid_amount,
+      paid_at,
+      payment_status,
       stripe_invoice_id,
       offline_idempotency_key,
       offline_qr_offline,
@@ -92,8 +97,9 @@ export default async function InvoiceDetailPage({
 
   // Rola w firmie TEJ faktury (nie z ciasteczka aktywnej firmy): decyduje
   // o przyciskach po błędzie wysyłki (PR 3b, D4). Akcje sprawdzają rolę
-  // ponownie po swojej stronie — tu tylko to, co pokazać.
-  const { data: { user } } = await supabase.auth.getUser();
+  // ponownie po swojej stronie — tu tylko to, co pokazać. Użytkownik ten sam
+  // co w layoucie (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
+  const user = await getDashboardSessionUser();
   const { data: membership } = user
     ? await supabase
         .from('memberships')
@@ -163,6 +169,7 @@ export default async function InvoiceDetailPage({
     payment_data: invoice.payment_data,
   });
   const canCorrect = await loadCanCorrect(supabase, invoice, env);
+  const paymentPanel = await loadPaymentPanel(supabase, invoice, env, membership?.role ?? null);
   const qr = await loadQr(supabase, invoice);
 
   const initial: InvoiceDetailInitial = {
@@ -187,6 +194,8 @@ export default async function InvoiceDetailPage({
     seller_data: invoice.seller_data,
     buyer_data: invoice.buyer_data,
     payment_data: invoice.payment_data ?? null,
+    payment_status: (invoice.payment_status as string | null) ?? null,
+    payment_panel: paymentPanel,
     lines,
     currency,
     split_payment: splitPayment,
@@ -200,6 +209,12 @@ export default async function InvoiceDetailPage({
       invoice_type: invoice.invoice_type as string | null,
       ksef_status: invoice.ksef_status as string | null,
       currency: invoice.currency as string | null,
+    }),
+    // Telefon nie ma menu „⋯” tabeli, więc „Duplikuj” stoi też w karcie „Dokument”.
+    can_duplicate: canDuplicateInvoice({
+      direction: invoice.direction as string | null,
+      origin: (invoice.origin as string | null) ?? null,
+      invoice_kind: invoice.invoice_kind as string | null,
     }),
     qr,
     upo_status:
@@ -274,6 +289,100 @@ async function loadCanCorrect(
     (data ?? []) as Array<{ parent_invoice_id: string | null; ksef_status: string | null }>,
   );
   return canCorrectInvoice(row, { environment: env, openCorrectionParents: open });
+}
+
+/** `Zaplacono = 1` + `DataZaplaty` z FA(3): sama data, reszta `fa3_data` zostaje na serwerze. */
+function fa3PaidDate(fa3Data: unknown): string | null {
+  if (!fa3Data || typeof fa3Data !== 'object' || Array.isArray(fa3Data)) return null;
+  const parsed = (fa3Data as { parsed?: unknown }).parsed;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const paidDate = (parsed as { paidDate?: unknown }).paidDate;
+  return typeof paidDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(paidDate) ? paidDate : null;
+}
+
+/**
+ * Panel „Zapłacone” (00158): tylko faktura sprzedaży przyjęta w KSeF w bieżącym
+ * środowisku. Korekty czytamy, gdy jest reszta do zapłaty (korekta do zera zdejmuje
+ * przycisk), a wpłatę ręczną, gdy faktura jest zapłacona (od niej zależy „Cofnij
+ * zapłatę”). Błąd odczytu chowa przycisk, nie wywraca podglądu: RPC i tak
+ * sprawdza wszystko po swojej stronie.
+ */
+async function loadPaymentPanel(
+  supabase: SessionClient,
+  invoice: Record<string, unknown>,
+  env: ReturnType<typeof configuredKsefEnvironment>,
+  role: string | null,
+): Promise<InvoiceDetailInitial['payment_panel']> {
+  if (!env || invoice.direction !== 'outgoing' || invoice.ksef_status !== 'accepted' || invoice.ksef_environment !== env) {
+    return null;
+  }
+  const id = invoice.id as string;
+  const tenantId = invoice.tenant_id as string;
+  const today = todayInWarsaw();
+  const documentPaidOn = fa3PaidDate(invoice.fa3_data);
+  const paidAt = (invoice.paid_at as string | null) ?? null;
+  const allowed = canChangeInvoicePayment(role);
+
+  if (invoice.payment_status === 'paid' || documentPaidOn) {
+    let canUndo = false;
+    let manualPaidOn: string | null = null;
+    if (allowed && invoice.payment_status === 'paid') {
+      const { data, error } = await (supabase as unknown as ManualPaymentRead)
+        .rpc('invoice_manual_payment', { p_invoice_id: id });
+      const manual = !error && data && typeof data === 'object' ? (data as { paid_on?: unknown }) : null;
+      canUndo = manual !== null;
+      manualPaidOn = typeof manual?.paid_on === 'string' ? manual.paid_on : null;
+    }
+    return {
+      canMark: false,
+      canUndo,
+      paidOn: manualPaidOn ?? (paidAt ? todayInWarsaw(new Date(paidAt)) : documentPaidOn),
+      paidOnFromDocument: !paidAt && documentPaidOn !== null,
+      today,
+    };
+  }
+
+  const row = {
+    id,
+    direction: invoice.direction as string | null,
+    origin: (invoice.origin as string | null) ?? null,
+    ksef_status: invoice.ksef_status as string | null,
+    ksef_environment: invoice.ksef_environment as string | null,
+    invoice_kind: (invoice.invoice_kind as string | null) ?? null,
+    invoice_type: (invoice.invoice_type as string | null) ?? null,
+    currency: (invoice.currency as string | null) ?? null,
+    gross_total: invoice.gross_total as number | string | null,
+    paid_amount: invoice.paid_amount as number | string | null,
+    payment_data: invoice.payment_data,
+    payment_due_date: (invoice.payment_due_date as string | null) ?? null,
+    payment_status: (invoice.payment_status as string | null) ?? null,
+  };
+  if (!allowed || !canMarkInvoicePaid(row, env)) {
+    return { canMark: false, canUndo: false, paidOn: null, paidOnFromDocument: false, today };
+  }
+  const { data: corrections, error } = await supabase
+    .from('invoices')
+    .select('gross_total')
+    .eq('tenant_id', tenantId)
+    .eq('parent_invoice_id', id)
+    .eq('ksef_status', 'accepted');
+  if (error) return { canMark: false, canUndo: false, paidOn: null, paidOnFromDocument: false, today };
+  const correctionSum = (corrections ?? []).reduce((sum, c) => sum + (Number(c.gross_total) || 0), 0);
+  return {
+    canMark: canMarkInvoicePaid(row, env, correctionSum),
+    canUndo: false,
+    paidOn: null,
+    paidOnFromDocument: false,
+    today,
+  };
+}
+
+/** Funkcja z 00158: `types/database.ts` generujemy z produkcji po wgraniu migracji (AGENTS.md). */
+interface ManualPaymentRead {
+  rpc(fn: 'invoice_manual_payment', args: { p_invoice_id: string }): PromiseLike<{
+    data: unknown;
+    error: { message: string } | null;
+  }>;
 }
 
 /**

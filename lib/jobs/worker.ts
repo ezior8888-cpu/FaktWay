@@ -17,12 +17,13 @@
 import { createServer } from 'node:http';
 
 import { ensureQueue, startBoss, stopBoss, enableWorkerRole } from './boss';
-import { assertPgBossWorkerBackend, getWorkerHealthPort } from './config';
+import { assertPgBossWorkerBackend, getWorkerCronAllowlist, getWorkerHealthPort } from './config';
 import { createJobLogger } from './logger';
 import { CRON_JOBS, RETIRED_CRON_QUEUES, RETIRED_QUEUES, SMOKE_QUEUE } from './queues';
 import { getRegisteredJobs, registerJob } from './registry';
 import { wrapHandler } from './run-job';
 import { workOptionsFor } from './work-options';
+import { startProcessMetrics } from '@/lib/observability/process-metrics';
 import {
   flushWorkerSentry,
   initWorkerSentry,
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
   } else {
     log.warn('Sentry: alerty z jobów WYŁĄCZONE (brak SENTRY_DSN albo NODE_ENV≠production)');
   }
+  startProcessMetrics({ process: 'worker' });
 
   // Harmonogram i nadzór pg-boss prowadzi TYLKO worker (AUD-88).
   enableWorkerRole();
@@ -112,9 +114,14 @@ async function main(): Promise<void> {
       `WORKER_DISABLE_SCHEDULES=true — crony wyłączone, wyczyszczono ${CRON_JOBS.length} wpisów harmonogramu`,
     );
   }
+  const cronAllowlist = getWorkerCronAllowlist();
+  if (cronAllowlist) {
+    log.warn(`WORKER_ONLY_CRONS: tylko ${[...cronAllowlist].join(', ')} (test poza produkcją)`);
+  }
   for (const cron of CRON_JOBS) {
     if (schedulesDisabled) break;
     if (!registeredQueues.has(cron.queue)) continue;
+    if (cronAllowlist && !cronAllowlist.has(cron.queue)) continue;
     await boss.schedule(cron.queue, cron.cron, {}, cron.tz ? { tz: cron.tz } : {});
     scheduled++;
   }

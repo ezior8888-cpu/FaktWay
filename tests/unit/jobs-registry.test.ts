@@ -99,6 +99,9 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('reminders.send.requested')?.maxRetries).toBe(3);
     // Nightly validation: 1 (jak w Inngest).
     expect(byQueue.get('cron.nightly-validation-recheck')?.maxRetries).toBe(1);
+    // Sprzątanie dzienników paczkami (00157): ponowienie od zera powtarza 10-min budżet,
+    // więc 1 (błąd przejściowy); resztę i tak bierze następna noc.
+    expect(byQueue.get('cron.cleanup-audit-logs')?.maxRetries).toBe(1);
     // Reszta: default Inngest 4.
     expect(byQueue.get('cron.daily-summary-email')?.maxRetries).toBe(4);
   });
@@ -178,6 +181,11 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(100);
     expect(byQueue.get('invoice.upo.requested')?.groupConcurrency).toBe(3);
     expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(1); // AUD-91: jeden przebieg skrzynki na NIP
+    // Harmonogram 00160: ponowieniem przebiegu jest termin zależny od rodzaju błędu,
+    // a taktu rozsyłki następna minuta. Sloty z konfiguracji, domyślnie 16.
+    expect(byQueue.get('inbox.poll.tenant')?.maxRetries).toBe(0);
+    expect(byQueue.get('inbox.poll.tenant')?.localConcurrency).toBe(16);
+    expect(byQueue.get('cron.inbox-polling')?.maxRetries).toBe(0);
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
     // Historia KSeF: jeden przebieg na NIP, bez ponowień pg-boss (ponowieniem
     // jest następny cron — cały stan w bazie), 3 firmy naraz (plan fan-outu).

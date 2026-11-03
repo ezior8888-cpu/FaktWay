@@ -1,28 +1,23 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import matter from 'gray-matter';
 import { describe, expect, it } from 'vitest';
+
 import { getAllHelpArticles, HELP_CATEGORIES } from '@/lib/help/articles';
 
-describe('baza wiedzy o agencie (krok 36)', () => {
-  const articles = getAllHelpArticles().filter((a) => a.slug.startsWith('flo-'));
+/**
+ * Sześć artykułów o agencie (krok 36). FaktWay 1.0: FLO znika z obietnic,
+ * więc leżą poza `content/help` (kod FLO zostaje w repozytorium, tak samo
+ * jego teksty) i nie ma ich w `/pomoc` ani w bazie wiedzy czatu.
+ */
 
-  it('sześć artykułów o agencie jest wczytanych', () => {
-    expect(articles).toHaveLength(6);
-  });
+const DIR = join(process.cwd(), 'content/flo/pomoc');
+const files = readdirSync(DIR).filter((f) => f.endsWith('.mdx'));
 
-  it('wszystkie siedzą w kategorii Agent Flo', () => {
-    expect(HELP_CATEGORIES.some((c) => c.id === 'flo')).toBe(true);
-    for (const a of articles) expect(a.category).toBe('flo');
-  });
-
-  it('każdy ma streszczenie dla czatu wsparcia', () => {
-    for (const a of articles) {
-      expect(a.summary.length).toBeGreaterThan(30);
-      expect(a.content.length).toBeGreaterThan(400);
-    }
-  });
-
-  it('opisują dokładnie te tematy, które każe plan', () => {
-    const slugs = articles.map((a) => a.slug).sort();
-    expect(slugs).toEqual([
+describe('baza wiedzy o agencie poza pomocą publiczną', () => {
+  it('sześć artykułów leży w content/flo/pomoc', () => {
+    expect(files.map((f) => f.replace(/\.mdx$/, '')).sort()).toEqual([
       'flo-cisza',
       'flo-cofanie',
       'flo-czym-jest',
@@ -30,5 +25,18 @@ describe('baza wiedzy o agencie (krok 36)', () => {
       'flo-dlaczego-to-widze',
       'flo-wyciszanie',
     ]);
+  });
+
+  it('każdy ma streszczenie i treść, gdyby wróciły do panelu', () => {
+    for (const file of files) {
+      const { data, content } = matter(readFileSync(join(DIR, file), 'utf8'));
+      expect(String(data.summary).length).toBeGreaterThan(30);
+      expect(content.length).toBeGreaterThan(400);
+    }
+  });
+
+  it('pomoc publiczna ich nie wczytuje', () => {
+    expect(HELP_CATEGORIES.some((c) => (c.id as string) === 'flo')).toBe(false);
+    expect(getAllHelpArticles().filter((a) => a.slug.startsWith('flo-'))).toEqual([]);
   });
 });

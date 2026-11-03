@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
+vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/auth/oauth-providers', () => ({ isGoogleLoginEnabled: mocks.google }));
 vi.mock('@/lib/feature-flags/signups', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/feature-flags/signups')>()),
@@ -61,6 +62,7 @@ import {
 } from '@/components/auth/finora/auth-split-layout';
 import { PasswordInput } from '@/components/auth/finora/password-input';
 import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
+import { OFERTA_TEKST } from '@/lib/marketing/oferta';
 import { OnboardingForm } from '@/components/onboarding/form';
 import { ImportProgressView, type ImportJobRow } from '@/components/onboarding/import-progress-view';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
@@ -119,7 +121,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).toContain('max-lg:hidden');
     expect(html).toContain('Tytuł panelu');
     expect(html).toContain('Tekst panelu');
-    expect(AUTH_SLOGAN_TITLE).toBe('Faktury w KSeF bez stresu.');
+    // FaktWay 1.0: to samo zdanie oferty co na stronie głównej i w cenniku.
+    expect(AUTH_SLOGAN_TITLE).toBe(OFERTA_TEKST);
     // Bez obietnicy FLO, którego klient nie ma (agent niewdrożony).
     expect(AUTH_SLOGAN_TEXT).toBe('Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.');
     expect(html.split(AUTH_SLOGAN_TITLE).length - 1).toBe(2); // telefon + karta
@@ -169,10 +172,13 @@ describe('logowanie (login/index.tsx Finory)', () => {
     expect(html).toContain('Witaj ponownie!');
   });
 
-  it('wylatują Facebook i „Remember me”; brak angielskich tekstów Finory', async () => {
+  // Od FW1 „Zapamiętaj mnie” działa naprawdę (przy nim `IdleWatcher` nie wylogowuje),
+  // więc pole wróciło po polsku; angielska nazwa z Finory dalej ma się nie pojawić.
+  it('wylatuje Facebook; „Zapamiętaj mnie” po polsku; brak angielskich tekstów Finory', async () => {
     const html = await login();
     expect(html).not.toMatch(/facebook/i);
-    expect(html).not.toMatch(/remember|zapamiętaj/i);
+    expect(html).toContain('Zapamiętaj mnie');
+    expect(html).not.toMatch(/Remember me/i);
     expect(html).not.toMatch(/Welcome|Login with|Sign in|Forgot Password|Create an account|Finora|Shadcn/);
     expect(html).not.toMatch(OLD_LOOK);
   });

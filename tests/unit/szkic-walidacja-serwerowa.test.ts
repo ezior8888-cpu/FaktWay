@@ -34,7 +34,7 @@ beforeEach(() => {
 
 describe('saveDraftAction — walidacja serwerowa (F-042)', () => {
   it('błędny NIP nabywcy — odmowa bez zapisu', async () => {
-    const r = await saveDraftAction({ ...form, buyerNip: '1234567891' });
+    const r = await saveDraftAction({ ...form, buyerNip: '1234567891' }, '11111111-1111-4111-8111-111111111111');
     expect(r).toEqual({ success: false, error: 'NIP firmy — 10 cyfr i suma kontrolna' });
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
@@ -43,7 +43,7 @@ describe('saveDraftAction — walidacja serwerowa (F-042)', () => {
     const r = await saveDraftAction({
       ...form,
       lines: [{ name: 'Usługa', unit: 'szt', quantity: -1, unitPriceNet: 100, vatRate: '23' }],
-    });
+    }, '11111111-1111-4111-8111-111111111111');
     expect(r.success).toBe(false);
     expect(mocks.createClient).not.toHaveBeenCalled();
   });

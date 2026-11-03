@@ -3,15 +3,45 @@
 import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/lib/audit/log';
 import { validatePassword } from '@/lib/auth/password';
+import { deleteAllPasskeysWith } from '@/lib/auth/passkey/devices';
 import { getVerifiedPasswordRecoveryState } from '@/lib/auth/password-recovery';
+import { clearDeviceLoginCookies } from '@/lib/auth/sign-out';
 import { checkPasswordOperationRateLimit, claimPasswordRecoverySession } from '@/lib/rate-limit/password';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 
 export type ResetPasswordResult =
-  | { ok: true; localSessionCleared: boolean; globalSignOutConfirmed: boolean }
+  /**
+   * `passkeys`: `removed`, gdy skasowano klucze biometrii konta (klient dodaje je ponownie
+   * w ustawieniach); `failed`, gdy się nie udało (ekran każe sprawdzić urządzenia po
+   * zalogowaniu). Brak pola: konto nie miało kluczy.
+   */
+  | { ok: true; localSessionCleared: boolean; globalSignOutConfirmed: boolean; passkeys?: 'removed' | 'failed' }
   | { ok: false; error: 'invalid_link' | 'mfa_required' | 'weak_password' | 'password_breached'
       | 'password_mismatch' | 'rate_limited' | 'verification_unavailable' | 'restart_required';
       retryAfter?: number };
+
+/**
+ * Klucz dodany z przejętej sesji nie może przeżyć resetu hasła, bo wracałby nim
+ * napastnik. Wołane PO zmianie hasła i odwołaniu sesji: nic z przejętej sesji nie
+ * zdąży dodać klucza po usunięciu. Błąd nie cofa resetu i nie jest przemilczany:
+ * log bez danych osobowych i `failed` w wyniku. Zerwanie procesu między zmianą
+ * hasła a tym krokiem zostawia klucze; kolejny reset je usuwa.
+ */
+async function removePasskeysAfterReset(userId: string): Promise<'removed' | 'failed' | null> {
+  let removed: number;
+  try {
+    removed = await deleteAllPasskeysWith(createAdminClient(), userId);
+  } catch (error) {
+    console.error('[reset-password] passkeys_removal_failed', { errorName: error instanceof Error ? error.name : 'unknown' });
+    return 'failed';
+  }
+  if (removed === 0) return null;
+  await logAudit({
+    action: 'auth.passkey_removed', tenantId: null, userId,
+    metadata: { reason: 'password_recovery', removed_count: removed },
+  });
+  return 'removed';
+}
 
 export async function resetPasswordAction(
   _previous: ResetPasswordResult | null,
@@ -64,10 +94,13 @@ export async function resetPasswordAction(
   const globalLogout = await supabase.auth.admin.signOut(current.accessToken, 'global').catch(() => null);
   // Separate local cookie cleanup: it may tolerate an already-revoked session.
   const localLogout = await supabase.auth.signOut({ scope: 'local' }).catch(() => null);
+  const passkeys = await removePasskeysAfterReset(state.user.id);
+  await clearDeviceLoginCookies();
   revalidatePath('/', 'layout');
   return {
     ok: true,
     localSessionCleared: !!localLogout && !localLogout.error,
     globalSignOutConfirmed: !!globalLogout && !globalLogout.error,
+    ...(passkeys ? { passkeys } : {}),
   };
 }

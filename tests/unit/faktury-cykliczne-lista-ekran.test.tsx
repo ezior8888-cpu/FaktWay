@@ -20,11 +20,11 @@ vi.mock('@/app/actions/recurring-invoices', () => ({
 }));
 vi.mock('@/app/actions/recurring-invoice-templates', () => ({ searchRecurringTemplatesAction: vi.fn() }));
 
-import { RecurringInvoicesView } from '@/app/(dashboard)/invoices/recurring/_components/recurring-invoices-view';
+import { RecurringInvoicesView } from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoices-view';
 import {
   RECURRING_STATUS_STYLES,
   RecurringStatusBadge,
-} from '@/app/(dashboard)/invoices/recurring/_components/recurring-status-badge';
+} from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-status-badge';
 import type { RecurringInvoiceListItem } from '@/lib/invoices/recurring/queries';
 
 const ID_A = '3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d';

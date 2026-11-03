@@ -22,6 +22,11 @@ export interface HistoryDb {
   rpc: (fn: string, args: Record<string, unknown>) => { data: unknown; error: { message: string } | null };
   /** Wymuszony błąd: klucz `tabela:operacja`. */
   failures: Set<string>;
+  /**
+   * Limit wierszy odpowiedzi SELECT jak `PGRST_DB_MAX_ROWS` na produkcji
+   * (1000): ucina BEZ błędu. Domyślnie bez limitu (sesja 27 planu skalowania).
+   */
+  maxRows?: number;
 }
 
 let lastStamp = 0;
@@ -37,12 +42,13 @@ function nextId(): string {
   return `00000000-0000-4000-8000-${String(seq).padStart(12, '0')}`;
 }
 
-export function historyDb(tables: Record<string, Row[]> = {}): HistoryDb {
+export function historyDb(tables: Record<string, Row[]> = {}, options: { maxRows?: number } = {}): HistoryDb {
   return {
     tables,
     log: [],
     rpc: () => ({ data: null, error: null }),
     failures: new Set(),
+    maxRows: options.maxRows,
   };
 }
 
@@ -234,6 +240,7 @@ export function historyClient(db: HistoryDb) {
         }
         const count = hits.length;
         if (limitN !== null) hits = hits.slice(0, limitN);
+        if (db.maxRows !== undefined) hits = hits.slice(0, db.maxRows);
         const data = hits.map((r) => project(r, columns));
         if (single) return { data: data[0] ?? null, count, error: null };
         return { data: head ? null : data, count: withCount ? count : null, error: null };
@@ -259,7 +266,15 @@ export function historyClient(db: HistoryDb) {
           if (o !== 'is' || v !== null) throw new Error('Atrapa: not() tylko is null');
           return add(`${c}=not.is.null`, (r) => valueAt(r, c) != null);
         },
-        in: (c: string, vs: unknown[]) => add(`${c}=in.(${vs.join(',')})`, (r) => vs.some((v) => matches(r, c, 'eq', v))),
+        in: (c: string, vs: unknown[]) => {
+          // Zbiór zamiast `vs.some(matches)`: testy na 2500 firmach robią
+          // setki `in.(…)` po tysiącach wierszy. Te same reguły co `eq`.
+          const keys = new Set(vs.filter((v) => v != null).map(String));
+          return add(`${c}=in.(${vs.join(',')})`, (r) => {
+            const actual = valueAt(r, c);
+            return actual == null ? vs.some((v) => v === actual) : keys.has(String(actual));
+          });
+        },
         lt: (c: string, v: unknown) => add(`${c}=lt.${String(v)}`, (r) => matches(r, c, 'lt', v)),
         lte: (c: string, v: unknown) => add(`${c}=lte.${String(v)}`, (r) => matches(r, c, 'lte', v)),
         gt: (c: string, v: unknown) => add(`${c}=gt.${String(v)}`, (r) => matches(r, c, 'gt', v)),

@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
-  Bot,
   CloudSync,
   CreditCard,
   ReceiptText,
@@ -17,6 +16,7 @@ import {
   HELP_CATEGORIES,
   type HelpCategoryId,
 } from '@/lib/help/articles';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { Reveal, RevealGroup, RevealItem } from '@/components/site/motion';
 import { PageHero } from '@/components/site/page-hero';
 import { ButtonLink, Container } from '@/components/site/ui';
@@ -27,7 +27,7 @@ import { HelpSearch, type HelpSearchItem } from './_components/help-search';
 export const metadata: Metadata = {
   title: 'Centrum pomocy',
   description:
-    'Poradniki i odpowiedzi na pytania o KSeF, wystawianie faktur, OCR paragonów, KPiR i rozliczenia. Pomoc dla mikrofirm i księgowych.',
+    'Poradniki i odpowiedzi na pytania o KSeF, wystawianie faktur, koszty ze zdjęcia, KPiR i abonament. Pomoc dla mikrofirm i księgowych.',
 };
 
 /*
@@ -36,7 +36,6 @@ export const metadata: Metadata = {
  * więc nowa kategoria bez ikony nie przejdzie typecheck.
  */
 const CATEGORY_ICONS: Record<HelpCategoryId, LucideIcon> = {
-  flo: Bot,
   start: Rocket,
   ksef: CloudSync,
   faktury: ReceiptText,
@@ -66,7 +65,7 @@ export default function PomocPage() {
     <>
       <PageHero
         title="Centrum pomocy"
-        lead="Poradniki krok po kroku. Nie znajdujesz odpowiedzi? Asystent AI w panelu odpowie w kilka sekund."
+        lead={`Poradniki krok po kroku. Nie znajdujesz odpowiedzi? Napisz na ${SUPPORT_EMAIL}.`}
       >
         <div className="mx-auto max-w-2xl">
           <HelpSearch items={searchItems} />
@@ -137,12 +136,15 @@ export default function PomocPage() {
               Nie znalazłeś odpowiedzi?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-muted-foreground">
-              Zaloguj się i kliknij ikonę pomocy w prawym dolnym rogu panelu.
-              Asystent AI zna całą dokumentację FaktWay.
+              Napisz do nas, odpisuje człowiek. Po zalogowaniu pomoże też automatyczny czat
+              (ikona pomocy w panelu, na telefonie w menu „Więcej”), a z niego przejdziesz do człowieka.
             </p>
-            <ButtonLink href="/login" className="mt-8">
-              Przejdź do panelu
-            </ButtonLink>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <ButtonLink href="/kontakt">Napisz do nas</ButtonLink>
+              <ButtonLink href="/login" variant="outline">
+                Przejdź do panelu
+              </ButtonLink>
+            </div>
           </Reveal>
         </Container>
       </div>

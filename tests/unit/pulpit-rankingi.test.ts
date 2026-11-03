@@ -240,8 +240,10 @@ describe('getTopProducts — najlepiej sprzedające się (§2.4 pkt 13)', () => 
     const result = await products(invs, lines, NOW, reads);
     expect(result).toEqual([expect.objectContaining({ name: 'Abonament', net: 1500 })]);
     // Paczka 100 faktur: strony 0–499 i 500–999; paczka 50 faktur: jedna strona.
+    // Sesja 19 (QRY-05): paczki idą naraz, więc pierwsza strona drugiej paczki
+    // wychodzi przed drugą stroną pierwszej; strony jednej paczki dalej po kolei.
     expect(pagedReads(reads, 'invoice_line_items').map((r) => [r.inSize, r.range]))
-      .toEqual([[100, [0, 499]], [100, [500, 999]], [50, [0, 499]]]);
+      .toEqual([[100, [0, 499]], [50, [0, 499]], [100, [500, 999]]]);
   });
 
   it('501 faktur: faktury na 2 stronach, pozycje w 6 paczkach .in, suma pełna', async () => {

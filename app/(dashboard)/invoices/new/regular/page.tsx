@@ -160,16 +160,23 @@ export default async function NewRegularInvoicePage({
   const ctx = await getPageContext();
   const { supabase, tenantId } = ctx;
   const params = (await searchParams) ?? {};
-  const [podpowiedz, vatExemptionBasis, suggestedNumber, seller, { source, notice }] = await Promise.all([
+  const [podpowiedz, vatExemptionBasis, suggestedNumber, loadedSeller, { source, notice }] = await Promise.all([
     prefillFromLastInvoiceAction(),
     readTenantVatExemption(supabase, tenantId),
     suggestNextInvoiceNumberForTenant(supabase, tenantId, todayInWarsaw()),
     loadTenantSellerForForms().catch(() => null),
     loadSource(ctx, params),
   ]);
+  const seller = loadedSeller?.seller ?? null;
 
+  // UX-01: `tenantId` — firma tej strony; zapis odsyła ją i odmawia, gdy
+  // w innej karcie przełączono firmę (nie wystawi faktury za inną firmę).
+  // `key`: przełączenie firmy w TEJ karcie odświeża stronę — formularz montuje
+  // się od nowa, zamiast nieść dane wpisane dla poprzedniej firmy.
   const form = (
     <InvoiceForm
+      key={tenantId}
+      tenantId={tenantId}
       prefill={source ? null : podpowiedz}
       vatExempt={vatExemptionBasis !== null}
       suggestedNumber={suggestedNumber}

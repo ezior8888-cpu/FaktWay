@@ -2,7 +2,9 @@
 
 // Plan Finora P15 (E10b): okno importu z pliku na `Dialog` Finory (było
 // własne okno na rozmytym szkle). Logika bez zmian:
-// `startFileImportAction`, limit 10 MB, przejście na stronę postępu.
+// `startFileImportAction`, przejście na stronę postępu. Limit pliku to limit
+// Server Action (1 MB, `lib/upload-limit.ts`) — akcja obiecuje 10 MB, ale
+// większe żądanie Next odrzuca, zanim akcja ruszy (plan skalowania, sesja 4).
 // Decyzja Bartosza 22.10.2026: tylko CSV z czterech programów — bez JPK_FA.
 // Okno jest montowane przez rodzica tylko na czas wyboru, więc stoi otwarte;
 // zamknięcie (X, Esc, klik w tło, „Anuluj”) woła `onClose`, a w trakcie
@@ -22,6 +24,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { startFileImportAction, type FileImportSource } from '@/app/actions/import-danych';
+import {
+  ACTION_FILE_LIMIT_BYTES,
+  ACTION_FILE_LIMIT_LABEL,
+  formatUploadSize,
+  uploadRejectedMessage,
+} from '@/lib/upload-limit';
 
 interface Props {
   source: FileImportSource;
@@ -43,8 +51,6 @@ const FILE_ACCEPT: Record<FileImportSource, string> = {
   ifirma_csv: '.csv',
 };
 
-const MAX_BYTES = 10 * 1024 * 1024;
-
 export function FileImportDialog({ source, tenantId, onClose }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, startUpload] = useTransition();
@@ -52,8 +58,10 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
   const handleUpload = () => {
     if (!file) return;
 
-    if (file.size > MAX_BYTES) {
-      toast.error('Plik przekracza limit 10 MB.');
+    if (file.size > ACTION_FILE_LIMIT_BYTES) {
+      toast.error(
+        `Plik ma ${formatUploadSize(file.size)}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Wyeksportuj krótszy okres (np. kwartał) i wgraj pliki po kolei.`,
+      );
       return;
     }
 
@@ -73,7 +81,11 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
           toast.error(result.error);
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Błąd uploadu');
+        // Odrzucona obietnica akcji (413 od Next, sieć, restart serwera, strona
+        // sprzed wdrożenia) niesie angielski tekst Next albo zredagowany błąd —
+        // klient dostaje polski.
+        console.error('[import] wgranie pliku odrzucone', e);
+        toast.error(uploadRejectedMessage(e));
       }
     });
   };
@@ -107,14 +119,14 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
               <>
                 <p className="truncate px-2 text-sm font-medium">{file.name}</p>
                 <p className="mt-1 font-mono text-xs text-muted-foreground">
-                  {(file.size / 1024).toFixed(1)} KB
+                  {formatUploadSize(file.size)}
                 </p>
               </>
             ) : (
               <>
                 <p className="text-sm font-medium">Kliknij aby wybrać plik</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {FILE_ACCEPT[source]} • max 10 MB
+                  {FILE_ACCEPT[source]} • max {ACTION_FILE_LIMIT_LABEL}
                 </p>
               </>
             )}

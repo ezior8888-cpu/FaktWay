@@ -6,7 +6,7 @@ import {
   type RemixiconComponentType,
 } from '@remixicon/react';
 
-import { includeReceivedAfterFormatChange } from '@/lib/exports/form-defaults';
+import { exportIncludesFor, UnknownExportFormatError, type ExportIncludes } from '@/lib/exports/export-scope';
 import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
 import { Constants, type Tables } from '@/types/database';
 
@@ -99,11 +99,7 @@ export function suspendedFormatsSummary(): string {
     .join(', ');
 }
 
-export interface ExportIncludes {
-  includeIssued: boolean;
-  includeReceived: boolean;
-  includeCorrections: boolean;
-}
+export type { ExportIncludes };
 
 export interface ExportScopeState {
   csv: { issued: boolean; received: boolean; corrections: boolean };
@@ -111,36 +107,38 @@ export interface ExportScopeState {
 }
 
 /**
- * Co wysyłamy do `startExportAction` (kontrakt bez zmian):
- * - KPiR zawsze wszystko — runner i tak czyta koszty, a bez `includeReceived`
- *   księga wychodziła z samymi przychodami (F-058);
- * - JPK_FA tylko faktury wystawione — generator i tak pomija zakupy;
- * - CSV według trzech pól wyboru.
+ * Co wysyłamy do `startExportAction`: pola formularza (CSV ma trzy, JPK_FA
+ * tylko „Korekty”), a co z nich wchodzi do pliku — reguła z
+ * `lib/exports/export-scope.ts` (FIR-01), ta sama co w runnerze.
  */
 export function includesFor(format: EnabledExportFormat, state: ExportScopeState): ExportIncludes {
-  switch (format) {
-    case 'kpir_excel':
-      return { includeIssued: true, includeReceived: true, includeCorrections: true };
-    case 'jpk_fa':
-      return { includeIssued: true, includeReceived: false, includeCorrections: state.jpkCorrections };
-    case 'csv_universal':
-      return {
-        includeIssued: state.csv.issued,
-        includeReceived: state.csv.received,
-        includeCorrections: state.csv.corrections,
-      };
-  }
+  return exportIncludesFor(format, {
+    includeIssued: state.csv.issued,
+    includeReceived: state.csv.received,
+    includeCorrections: format === 'jpk_fa' ? state.jpkCorrections : state.csv.corrections,
+  });
 }
 
-/** Ponowienie eksportu z historii: zakres joba, ale KPiR zawsze z kosztami (F-058). */
+/** Ponowienie eksportu z historii: zakres joba po regule formatu (KPiR zawsze cały). */
 export function includesForJob(
   job: Pick<ManualExportJobWithFiles, 'format' | 'include_issued' | 'include_received' | 'include_corrections'>,
 ): ExportIncludes {
-  return {
-    includeIssued: job.include_issued ?? true,
-    includeReceived: includeReceivedAfterFormatChange(job.format, job.include_received ?? false),
-    includeCorrections: job.include_corrections ?? true,
-  };
+  try {
+    return exportIncludesFor(job.format, {
+      includeIssued: job.include_issued,
+      includeReceived: job.include_received,
+      includeCorrections: job.include_corrections,
+    });
+  } catch (error) {
+    if (!(error instanceof UnknownExportFormatError)) throw error;
+    // Format spoza reguły: flagi joba bez zmian — `startExportAction` odmówi
+    // komunikatem „Nieobsługiwany format eksportu” zamiast wywracać stronę.
+    return {
+      includeIssued: job.include_issued ?? true,
+      includeReceived: job.include_received ?? false,
+      includeCorrections: job.include_corrections ?? true,
+    };
+  }
 }
 
 /** Rozmiar pliku po polsku: „512 B”, „12,4 KB”, „1,2 MB”. */
