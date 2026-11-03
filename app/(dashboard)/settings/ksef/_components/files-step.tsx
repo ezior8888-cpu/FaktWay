@@ -26,11 +26,14 @@ import { cn } from '@/lib/utils';
 import {
   failureIsPassword,
   failureNeedsNewCertificate,
+  RECONFIRM_CERTIFICATE_TEXT,
   WIZARD_CERTIFICATE_HREF,
   WIZARD_PATH,
 } from './wizard-model';
 import { WizardProgress } from './wizard-progress';
 
+const AMBER_ALERT = 'border-none bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400';
+const AMBER_TEXT = 'text-amber-800 dark:text-amber-400/80';
 const TOUCH_BUTTON = 'h-11 w-full justify-center sm:w-auto';
 
 interface PickedFile {
@@ -47,6 +50,14 @@ interface Failure {
 }
 
 type Phase = 'idle' | 'checking' | 'done';
+
+interface FilesStepProps {
+  /**
+   * Firma ma zapisane poświadczenia bez dowodu w środowisku aplikacji (inne środowisko albo stary
+   * znacznik): nad plikami stoi zdanie, że certyfikat trzeba potwierdzić ponownie.
+   */
+  reconfirm?: boolean;
+}
 
 function formatSize(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1).replace('.', ',')} KB`;
@@ -110,7 +121,7 @@ function FileRow({
  * dostaje konkretne zdanie i właściwe wyjście: poprawić hasło, wybrać inny plik
  * albo wrócić do pobrania certyfikatu.
  */
-export function FilesStep() {
+export function FilesStep({ reconfirm = false }: FilesStepProps) {
   const router = useRouter();
   const [certificate, setCertificate] = useState<PickedFile | null>(null);
   const [privateKey, setPrivateKey] = useState<PickedFile | null>(null);
@@ -235,6 +246,11 @@ export function FilesStep() {
   return (
     <div className="flex flex-col gap-4" data-testid="ksef-step-pliki">
       <WizardProgress current={3} />
+      {reconfirm ? (
+        <Alert role="note" className={AMBER_ALERT}>
+          <AlertDescription className={AMBER_TEXT}>{RECONFIRM_CERTIFICATE_TEXT}</AlertDescription>
+        </Alert>
+      ) : null}
       <p className="text-muted-foreground text-sm">
         Wskaż plik certyfikatu (.crt) i plik klucza prywatnego (.key) z Aplikacji Podatnika. Możesz wybrać oba naraz albo
         po kolei, rozpoznamy je po zawartości.

@@ -11,14 +11,14 @@ import { Separator } from '@/components/ui/separator';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { ksefApplicationUrl } from '@/lib/ksef/application-url';
-import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { configuredKsefEnvironment, hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 import { CertificateStep } from './_components/certificate-step';
 import { ConditionsStep } from './_components/conditions-step';
 import { ConnectedStep } from './_components/connected-step';
 import { FilesStep } from './_components/files-step';
-import { deriveWizardStep, type WizardMfa } from './_components/wizard-model';
+import { deriveWizardStep, isConnected, needsReconfirmation, type WizardMfa } from './_components/wizard-model';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +52,7 @@ export default async function KsefSettingsPage({
   const [{ data: tenant }, user, mfaState] = await Promise.all([
     supabase
       .from('tenants')
-      .select('name, nip, has_ksef_credentials, ksef_certificate_expiry')
+      .select('name, nip, has_ksef_credentials, ksef_certificate_expiry, ksef_verified_at, ksef_verified_environment')
       .eq('id', tenantId)
       .single(),
     // Ten sam użytkownik co w `getPageContext` (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
@@ -63,6 +63,12 @@ export default async function KsefSettingsPage({
 
   // Sama flaga obecności: zaszyfrowany blob nie wychodzi do klienta (AUD-103).
   const hasCredentials = !!tenant?.has_ksef_credentials;
+  // „Połączono” wymaga dowodu w środowisku aplikacji, tak jak Import danych i cron historii
+  // (`hasConfiguredKsefProof`). Certyfikat z innego środowiska albo ze starym znacznikiem
+  // niczego nie pobiera, więc klient ma go wgrać ponownie, a nie czytać, że jest dobrze.
+  const confirmed = hasConfiguredKsefProof(tenant?.ksef_verified_at, tenant?.ksef_verified_environment);
+  const connected = isConnected({ hasCredentials, confirmed });
+  const reconfirm = needsReconfirmation({ hasCredentials, confirmed });
   const nip = tenant?.nip?.trim() ?? '';
   const hasNip = nip.length > 0;
   const isOwner = role === 'owner';
@@ -78,6 +84,7 @@ export default async function KsefSettingsPage({
     isOwner,
     mfa,
     hasCredentials,
+    confirmed,
     requested: typeof requested === 'string' ? requested : null,
   });
   const env = configuredKsefEnvironment();
@@ -110,19 +117,21 @@ export default async function KsefSettingsPage({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-medium">KSeF</p>
-                <Badge className={hasCredentials ? BADGE_OK : BADGE_WARN}>
-                  {hasCredentials ? 'Skonfigurowano połączenie' : 'Brak certyfikatu'}
+                <Badge className={connected ? BADGE_OK : BADGE_WARN}>
+                  {connected ? 'Skonfigurowano połączenie' : reconfirm ? 'Wymaga potwierdzenia' : 'Brak certyfikatu'}
                 </Badge>
               </div>
               <p className="text-muted-foreground truncate text-xs">
                 NIP: <span className="font-mono">{nip}</span>
               </p>
               <p className="text-muted-foreground text-xs">
-                {hasCredentials
+                {connected
                   ? tenant?.ksef_certificate_expiry
                     ? `Certyfikat ważny do: ${formatSettingsDate(tenant.ksef_certificate_expiry)}`
                     : 'Certyfikat wgrany'
-                  : 'Podłącz KSeF, aby móc wysyłać faktury'}
+                  : reconfirm
+                    ? 'Certyfikat wgrany, ale trzeba go potwierdzić ponownie'
+                    : 'Podłącz KSeF, aby móc wysyłać faktury'}
               </p>
             </div>
           </div>
@@ -135,7 +144,7 @@ export default async function KsefSettingsPage({
       {step === 'certyfikat' ? (
         <CertificateStep nip={nip} env={env} applicationUrl={ksefApplicationUrl(env)} />
       ) : null}
-      {step === 'pliki' ? <FilesStep /> : null}
+      {step === 'pliki' ? <FilesStep reconfirm={reconfirm} /> : null}
       {step === 'polaczono' ? (
         <ConnectedStep
           name={tenant?.name ?? ''}
@@ -155,14 +164,14 @@ export default async function KsefSettingsPage({
             na bieżąco faktury wystawione poza FaktWay. Pobieranie możesz wstrzymać w Imporcie danych.
           </FieldDescription>
         </FieldContent>
-        {hasCredentials && step !== 'polaczono' ? (
+        {connected && step !== 'polaczono' ? (
           <Link href="/import-danych" className={buttonVariants({ variant: 'outline' })}>
             <RiHistoryLine aria-hidden />
             Zobacz postęp
           </Link>
         ) : null}
       </Field>
-      {hasCredentials ? null : (
+      {connected ? null : (
         <Alert role="note" className={AMBER_ALERT}>
           <AlertDescription className={AMBER_TEXT}>
             Aby FaktWay pobrał historię, najpierw podłącz KSeF kreatorem powyżej: KSeF wymaga

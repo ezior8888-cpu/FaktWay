@@ -4,11 +4,12 @@ import {
   deriveWizardStep,
   failureIsPassword,
   failureNeedsNewCertificate,
+  needsReconfirmation,
   stepNumber,
   type WizardInput,
 } from '@/app/(dashboard)/settings/ksef/_components/wizard-model';
 
-const ready: WizardInput = { hasNip: true, isOwner: true, mfa: 'verified', hasCredentials: false };
+const ready: WizardInput = { hasNip: true, isOwner: true, mfa: 'verified', hasCredentials: false, confirmed: false };
 const step = (over: Partial<WizardInput>) => deriveWizardStep({ ...ready, ...over });
 
 describe('kreator KSeF: krok liczony z serwera', () => {
@@ -35,15 +36,42 @@ describe('kreator KSeF: krok liczony z serwera', () => {
     expect(step({ requested: null })).toBe('certyfikat');
   });
 
-  it('połączona firma widzi podsumowanie, także gdy nie jest właścicielem i bez 2FA', () => {
-    expect(step({ hasCredentials: true })).toBe('polaczono');
-    expect(step({ hasCredentials: true, isOwner: false, mfa: 'unknown' })).toBe('polaczono');
+  it('połączona firma (certyfikat zapisany i potwierdzony) widzi podsumowanie, także gdy nie jest właścicielem i bez 2FA', () => {
+    expect(step({ hasCredentials: true, confirmed: true })).toBe('polaczono');
+    expect(step({ hasCredentials: true, confirmed: true, isOwner: false, mfa: 'unknown' })).toBe('polaczono');
   });
 
   it('odnowienie certyfikatu przechodzi tę samą drogę, z warunkami', () => {
-    expect(step({ hasCredentials: true, requested: 'certyfikat' })).toBe('certyfikat');
-    expect(step({ hasCredentials: true, requested: 'pliki' })).toBe('pliki');
-    expect(step({ hasCredentials: true, requested: 'pliki', mfa: 'challenge_required' })).toBe('warunki');
+    const connected = { hasCredentials: true, confirmed: true };
+    expect(step({ ...connected, requested: 'certyfikat' })).toBe('certyfikat');
+    expect(step({ ...connected, requested: 'pliki' })).toBe('pliki');
+    expect(step({ ...connected, requested: 'pliki', mfa: 'challenge_required' })).toBe('warunki');
+  });
+
+  // Recenzja #361, pkt 2: poświadczenia z innego środowiska (TEST przełączony na produkcję) albo
+  // ze starym znacznikiem nie pobierają historii, a Import danych każe wgrać certyfikat ponownie.
+  // Kreator nie może wtedy mówić „Połączono”.
+  describe('poświadczenia bez dowodu w środowisku aplikacji', () => {
+    const unconfirmed = { hasCredentials: true, confirmed: false };
+
+    it('prowadzą do kroku z plikami, a nie do podsumowania „Połączono”', () => {
+      expect(step(unconfirmed)).toBe('pliki');
+      expect(step({ ...unconfirmed, isOwner: false })).toBe('warunki');
+      expect(needsReconfirmation(unconfirmed)).toBe(true);
+      expect(needsReconfirmation({ hasCredentials: true, confirmed: true })).toBe(false);
+      expect(needsReconfirmation({ hasCredentials: false, confirmed: false })).toBe(false);
+    });
+
+    it('warunki nadal obowiązują: bez kodu z aplikacji najpierw krok 1', () => {
+      for (const mfa of ['challenge_required', 'enrollment_required', 'unknown'] as const) {
+        expect(step({ ...unconfirmed, mfa })).toBe('warunki');
+      }
+    });
+
+    it('klient może świadomie wrócić po nowy certyfikat (krok 2) albo zostać przy plikach', () => {
+      expect(step({ ...unconfirmed, requested: 'certyfikat' })).toBe('certyfikat');
+      expect(step({ ...unconfirmed, requested: 'pliki' })).toBe('pliki');
+    });
   });
 
   it('numeruje kroki jak w opisie (czwarty to oczekiwanie na trzecim ekranie)', () => {

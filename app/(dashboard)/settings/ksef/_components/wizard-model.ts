@@ -28,9 +28,31 @@ export interface WizardInput {
   hasNip: boolean;
   isOwner: boolean;
   mfa: WizardMfa;
+  /** Firma ma zapisane poświadczenia KSeF (`has_ksef_credentials`). */
   hasCredentials: boolean;
+  /**
+   * Poświadczenia są potwierdzone w środowisku aplikacji (`hasConfiguredKsefProof`:
+   * `ksef_verified_at` i `ksef_verified_environment` równe `KSEF_ENV`). To ta sama
+   * reguła co w Imporcie danych i w cronie historii. Bez niej zapisany certyfikat
+   * (z innego środowiska albo ze starym znacznikiem) niczego nie pobiera.
+   */
+  confirmed: boolean;
   /** Wartość `?krok=` z adresu (nieufna: tylko dwie wartości mają znaczenie). */
   requested?: string | null;
+}
+
+/** Jedno zdanie na ekranie plików dla firmy z poświadczeniami bez dowodu w tym środowisku. */
+export const RECONFIRM_CERTIFICATE_TEXT =
+  'Ten certyfikat trzeba potwierdzić w KSeF ponownie, więc wgraj pliki jeszcze raz, żebyśmy mogli pobierać historię faktur.';
+
+/** „Połączono” = poświadczenia zapisane I potwierdzone w środowisku aplikacji. */
+export function isConnected(input: Pick<WizardInput, 'hasCredentials' | 'confirmed'>): boolean {
+  return input.hasCredentials && input.confirmed;
+}
+
+/** Poświadczenia są, ale bez dowodu: klient wgrywa certyfikat ponownie, kreator nie mówi „Połączono”. */
+export function needsReconfirmation(input: Pick<WizardInput, 'hasCredentials' | 'confirmed'>): boolean {
+  return input.hasCredentials && !input.confirmed;
 }
 
 export function conditionsMet(input: Pick<WizardInput, 'hasNip' | 'isOwner' | 'mfa'>): boolean {
@@ -40,9 +62,12 @@ export function conditionsMet(input: Pick<WizardInput, 'hasNip' | 'isOwner' | 'm
 export function deriveWizardStep(input: WizardInput): WizardStepId {
   const reconnecting = input.requested === 'certyfikat' || input.requested === 'pliki';
   // Połączona firma widzi podsumowanie, chyba że świadomie odnawia certyfikat.
-  if (input.hasCredentials && !reconnecting) return 'polaczono';
+  if (isConnected(input) && !reconnecting) return 'polaczono';
   if (!conditionsMet(input)) return 'warunki';
-  return input.requested === 'pliki' ? 'pliki' : 'certyfikat';
+  if (input.requested === 'pliki') return 'pliki';
+  if (input.requested === 'certyfikat') return 'certyfikat';
+  // Zapisane poświadczenia bez dowodu: pliki już są, wystarczy je wgrać jeszcze raz.
+  return needsReconfirmation(input) ? 'pliki' : 'certyfikat';
 }
 
 export function stepNumber(step: WizardStepId): number {
