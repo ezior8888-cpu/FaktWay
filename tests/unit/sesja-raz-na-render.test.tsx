@@ -367,7 +367,7 @@ beforeEach(() => {
   h.uzytkownik = uzytkownik(USER_ID);
   h.tabele = {
     memberships: [czlonkostwo(ORG)],
-    tenants: [{ id: ORG, name: 'Firma Atrapa', nip: '1234567890', has_ksef_credentials: true, ksef_certificate_expiry: null }],
+    tenants: [{ id: ORG, name: 'Firma Atrapa', nip: '1234567890', has_ksef_credentials: true, ksef_certificate_expiry: null, ksef_verified_at: '2026-09-01T08:00:00Z', ksef_verified_environment: 'test' }],
   };
   zalogujCiasteczkiem(USER_ID);
   h.ciasteczka.set('ksef.active_org', ORG);
