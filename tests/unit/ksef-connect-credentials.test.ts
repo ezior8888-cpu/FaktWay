@@ -117,6 +117,33 @@ describe('przygotowanie poświadczeń KSeF z plików klienta', () => {
     expect(result).toEqual({ ok: false, problem: 'password_wrong' });
   });
 
+  // Recenzja #361, pkt 5: ok. 0,3% błędnych haseł daje po rozszyfrowaniu śmieci, które przypadkiem mają
+  // poprawne dopełnienie, i OpenSSL zgłasza ERR_OSSL_UNSUPPORTED zamiast ERR_OSSL_BAD_DECRYPT. Klient
+  // dostawał wtedy "nie możemy odczytać klucza" i szedł generować nowy certyfikat zamiast poprawić literówkę.
+  it.each<[string, TestKeyKind, 'pem' | 'der']>([
+    ['EC w PEM', 'ec', 'pem'],
+    ['RSA w DER', 'rsa', 'der'],
+  ])('klucz %s: 3000 błędnych haseł to zawsze password_wrong, także gdy OpenSSL nie mówi "bad decrypt"', (_name, kind, format) => {
+    const m = makeSelfSignedCertificate({ kind, nip: NIP });
+    const key = format === 'pem' ? pem(encryptedPkcs8(m.privateKey, 'pem')) : encryptedPkcs8(m.privateKey, 'der');
+    const unexpected: Array<{ password: string; problem: string }> = [];
+
+    for (let attempt = 0; attempt < 3000; attempt += 1) {
+      const password = `zle-haslo-${attempt}`;
+      const result = run(m.certDer, key, password);
+      if (result.ok || result.problem !== 'password_wrong') unexpected.push({ password, problem: result.ok ? 'ok' : result.problem });
+    }
+
+    expect(unexpected).toEqual([]);
+  });
+
+  it('prawidłowe hasło po serii błędnych nadal otwiera klucz', () => {
+    const m = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });
+    const key = pem(encryptedPkcs8(m.privateKey, 'pem'));
+    for (let attempt = 0; attempt < 50; attempt += 1) run(m.certDer, key, `zle-haslo-${attempt}`);
+    expect(run(m.certDer, key, PASSWORD)).toMatchObject({ ok: true, keyKind: 'ec' });
+  });
+
   it('odrzuca klucz, który nie pasuje do certyfikatu', () => {
     const a = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });
     const b = makeSelfSignedCertificate({ kind: 'ec', nip: NIP });

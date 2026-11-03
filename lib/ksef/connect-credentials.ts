@@ -179,13 +179,6 @@ function errorCode(error: unknown): string {
   return typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : '';
 }
 
-/** Czy błąd odczytu klucza z hasłem to „złe hasło”, a nie uszkodzony plik. */
-function isWrongPassword(error: unknown): boolean {
-  const text = `${errorCode(error)} ${error instanceof Error ? error.message : ''}`.toLowerCase();
-  return text.includes('bad_decrypt') || text.includes('bad decrypt') || text.includes('bad password')
-    || text.includes('wrong tag');
-}
-
 function parseKey(source: { key: string | Buffer; format: 'pem' | 'der'; type?: 'pkcs8' | 'pkcs1' | 'sec1' }, password: string | undefined, encrypted: boolean): KeyObject {
   // OpenSSL 3 dla PEM bez hasła zgłasza „interrupted or cancelled”, a dla DER „missing passphrase”:
   // zaszyfrowany klucz bez hasła rozpoznajemy więc sami, po treści pliku.
@@ -194,7 +187,12 @@ function parseKey(source: { key: string | Buffer; format: 'pem' | 'der'; type?: 
     return createPrivateKey({ ...source, passphrase: password } as Parameters<typeof createPrivateKey>[0]);
   } catch (error) {
     if (errorCode(error) === 'ERR_MISSING_PASSPHRASE') throw new KeyProblem('password_required');
-    if (encrypted && password && isWrongPassword(error)) throw new KeyProblem('password_wrong');
+    // Plik rozpoznany jako zaszyfrowany i hasło podane: każdy błąd odczytu to złe hasło. Struktura pliku
+    // jest już sprawdzona (`assertAffordableKeyDerivation`), a OpenSSL nie ma jednego kodu na złe hasło:
+    // ok. 0,3% błędnych haseł rozszyfrowuje się w śmieci z poprawnym dopełnieniem i kończy jako
+    // ERR_OSSL_UNSUPPORTED zamiast ERR_OSSL_BAD_DECRYPT. "Nieczytelny klucz" odesłałby klienta po nowy
+    // certyfikat zamiast do poprawienia literówki.
+    if (encrypted && password) throw new KeyProblem('password_wrong');
     throw new KeyProblem('key_unreadable');
   }
 }
