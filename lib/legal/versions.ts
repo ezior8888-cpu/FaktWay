@@ -27,7 +27,8 @@ export const PRIVACY_POLICY_VERSION = '2026-11-02';
 // 2026-10-25: Turnstile także przy potwierdzaniu hasła w ustawieniach.
 // 2026-11-02: cookie `ff_first_touch` i zapis daty wyboru (pomiar FaktWay 1.0).
 // 2026-11-02: logowanie biometrią i „Zapamiętaj mnie” (trzy cookies, klucz localStorage).
-export const COOKIE_POLICY_VERSION = '2026-11-02';
+// 2026-11-03: klucz localStorage z identyfikatorami kluczy biometrii telefonu (bez kodu QR).
+export const COOKIE_POLICY_VERSION = '2026-11-03';
 
 /**
  * Oświadczenie przy rejestracji / w bramce (obowiązkowe). Znaczniki linków

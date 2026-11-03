@@ -23,6 +23,8 @@ export const REMEMBER_ME_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
 export const PASSKEY_OFFER_COOKIE = 'ksef.passkey_offer';
 export const PASSKEY_OFFER_MAX_AGE_SECONDS = 60 * 60;
 export const PASSKEY_OFFER_DISMISSED_KEY = 'faktway.passkey_offer_dismissed';
+/** Identyfikatory kluczy biometrii z tego telefonu (`lib/auth/passkey/client.ts`). */
+export const PASSKEY_DEVICE_KEYS_KEY = 'faktway.passkey_device_keys';
 
 function baseOptions() {
   return {

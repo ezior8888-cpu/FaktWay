@@ -37,6 +37,8 @@ const KNOWN: Record<string, string> = {
   'lib/analytics/funnel.ts': 'sam znacznik',
   'components/auth/passkey-enroll-offer.tsx': 'faktway.passkey_offer_dismissed',
   'components/auth/passkey-enroll-offer-gate.tsx': 'ksef.passkey_offer',
+  // Klucze biometrii tego telefonu: logowanie bez kodu QR (03.11.2026).
+  'lib/auth/passkey/client.ts': 'faktway.passkey_device_keys',
   'app/actions/organizations.ts': 'w której firmie (Organizacji) pracujesz',
   'lib/supabase/middleware.ts': 'utrzymanie zalogowanej sesji',
   'lib/supabase/server.ts': 'utrzymanie zalogowanej sesji',

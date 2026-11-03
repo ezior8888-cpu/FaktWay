@@ -11,7 +11,7 @@ import { RiFingerprintLine } from '@remixicon/react';
 import { AuthMessage } from '@/components/auth/finora/auth-message';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { signInWithPasskey } from '@/lib/auth/passkey/client';
+import { passkeyButtonAvailable, signInWithPasskey } from '@/lib/auth/passkey/client';
 
 const subscribeToNothing = () => () => {};
 
@@ -26,6 +26,9 @@ const subscribeToNothing = () => () => {};
 export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: string; withSeparator: boolean }) {
   // Serwer nie wie, co potrafi przeglądarka, więc na serwerze przycisku nie ma.
   const supported = useSyncExternalStore(subscribeToNothing, browserSupportsWebAuthn, () => false);
+  // Telefon bez własnego klucza nie dostaje przycisku, bo okno systemowe pokazałoby
+  // kod QR (`lib/auth/passkey/client.ts`). Podpowiedź w polu e-mail działa dalej.
+  const showButton = useSyncExternalStore(subscribeToNothing, passkeyButtonAvailable, () => false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(false);
@@ -75,6 +78,7 @@ export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: strin
   };
 
   if (!supported) return null;
+  if (!showButton) return error ? <AuthMessage tone="error">{error}</AuthMessage> : null;
 
   return (
     <>
