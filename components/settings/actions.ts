@@ -155,11 +155,14 @@ export async function uploadCertificateAction(data: {
     // Limit 5 prób na godzinę liczy tylko próby, które dochodzą do KSeF. Bez Redisa (produkcja ma
     // wyłączony Upstash) limiter liczy w pamięci procesu: aplikacja to jeden proces, więc limit jest
     // realny. Dawniej każdy `fallback` był odmową, czyli upload certyfikatu nie działał w ogóle.
+    // `countDenied: false`: kliknięcie w trakcie blokady jej nie wydłuża, więc "za około N min"
+    // jest prawdą. Próba nieudana z winy KSeF wraca do limitu niżej (`budget.refund`).
     const budget = await checkRateLimit({
       bucket: 'ksef_certificate',
       identifier: `${tenantId}:${user.id}`,
       limit: 5,
       windowSeconds: 60 * 60,
+      countDenied: false,
     });
     if (!budget.allowed) {
       const minutes = Math.max(1, Math.ceil(budget.retryAfter / 60));
@@ -184,6 +187,15 @@ export async function uploadCertificateAction(data: {
       // a w logu zostaje etap, powód, klasa błędu i kod (zob. `logFailure`).
       const reason = classifyKsefAuthFailure(error);
       logFailure('ksef_login', reason, describeFailureForLog(error));
+      // 5xx, 429, timeout i błąd sieci to awaria po stronie KSeF, nie próba klienta: nie zużywa limitu.
+      // Zwrot jest dodatkiem, więc jego błąd nie zmienia odpowiedzi dla klienta.
+      if (reason === 'unavailable') {
+        try {
+          await budget.refund?.();
+        } catch {
+          // próba zostaje zużyta, jak przed dodaniem zwrotu
+        }
+      }
       return fail(reason, ksefFailureMessage(reason, { nip, env }));
     }
 

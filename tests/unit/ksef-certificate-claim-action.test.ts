@@ -463,3 +463,88 @@ describe('błędy po naszej stronie: komunikat bez obwiniania certyfikatu i śla
     expect(log).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Recenzja #361, pkt 4: próba nieudana z winy KSeF (5xx, 429, timeout) zużywała limit 5 na godzinę,
+ * a kliknięcie w trakcie blokady ją wydłużało, bo odmowa też dopisywała znacznik.
+ */
+describe('limit prób: odmowa nie wydłuża blokady, a porażka z winy KSeF zwraca próbę', () => {
+  const refundingBudget = () => {
+    const refund = vi.fn().mockResolvedValue(undefined);
+    mocks.rateLimit.mockResolvedValue({ allowed: true, fallback: true, remaining: 4, retryAfter: 0, refund });
+    return refund;
+  };
+  let log: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => log.mockRestore());
+
+  it('kubełek ksef_certificate nie dopisuje odmów do okna (podany czas jest prawdziwy)', async () => {
+    await uploadCertificateAction(pem);
+
+    expect(mocks.rateLimit).toHaveBeenCalledExactlyOnceWith({
+      bucket: 'ksef_certificate',
+      identifier: `${tenantId}:${user.id}`,
+      limit: 5,
+      windowSeconds: 3600,
+      countDenied: false,
+    });
+  });
+
+  it.each([
+    ['HTTP 503', new KsefApiError(503, 'x', 'KSeF API POST /auth failed: 503')],
+    ['HTTP 429', new KsefApiError(429, 'x', 'KSeF API 429')],
+    ['timeout żądania (408)', new KsefApiError(408, 'Request timeout', 'KSeF API timed out after 30000ms')],
+    ['błąd sieci', new TypeError('fetch failed')],
+    ['status uwierzytelnienia 500', new KsefAuthRejectedError(500, 'Błąd wewnętrzny', [])],
+    ['polling bez końca', new Error('KSeF auth polling timed out after 20 attempts')],
+  ])('%s: próba wraca do limitu', async (_name, error) => {
+    const refund = refundingBudget();
+    mocks.ksefAuth.mockRejectedValue(error);
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false, reason: 'unavailable' });
+    expect(refund).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['odmowa KSeF z nieznanym kodem', new KsefAuthRejectedError(400, 'Nieznany', [])],
+    ['certyfikat odwołany', new KsefAuthRejectedError(460, 'Błąd certyfikatu', ['Certyfikat odwołany'])],
+    ['blokada', new KsefAuthRejectedError(480, 'Zablokowane', [])],
+    ['HTTP 400', new KsefApiError(400, 'x', 'KSeF API POST /auth failed: 400')],
+    ['błąd po naszej stronie', new TypeError('Cannot read properties of undefined')],
+  ])('%s: próba zostaje zużyta (to nie chwilowa awaria KSeF)', async (_name, error) => {
+    const refund = refundingBudget();
+    mocks.ksefAuth.mockRejectedValue(error);
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false });
+    expect(refund).not.toHaveBeenCalled();
+  });
+
+  it('sukces nie zwraca próby', async () => {
+    const refund = refundingBudget();
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: true });
+    expect(refund).not.toHaveBeenCalled();
+  });
+
+  it('zwrot, który się nie uda, nie zmienia odpowiedzi dla klienta', async () => {
+    const refund = vi.fn().mockRejectedValue(new Error('redis down'));
+    mocks.rateLimit.mockResolvedValue({ allowed: true, fallback: false, remaining: 4, retryAfter: 0, refund });
+    mocks.ksefAuth.mockRejectedValue(new KsefApiError(503, 'x', 'KSeF API 503'));
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false, reason: 'unavailable' });
+    expect(refund).toHaveBeenCalledTimes(1);
+  });
+
+  it('odmowa limitu mówi, ile czekać, i nie dotyka KSeF', async () => {
+    mocks.rateLimit.mockResolvedValue({ allowed: false, fallback: true, remaining: 0, retryAfter: 3000 });
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({
+      success: false,
+      reason: 'rate_limited',
+      error: expect.stringContaining('50 min'),
+    });
+    expect(mocks.ksefAuth).not.toHaveBeenCalled();
+  });
+});
