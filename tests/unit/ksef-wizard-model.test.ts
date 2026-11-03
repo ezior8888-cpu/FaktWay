@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveWizardStep,
   failureIsPassword,
+  failureIsTemporary,
   failureNeedsNewCertificate,
   needsReconfirmation,
   stepNumber,
@@ -82,10 +83,18 @@ describe('kreator KSeF: krok liczony z serwera', () => {
     for (const reason of ['no_permission', 'not_owner', 'revoked', 'untrusted_issuer', 'cert_expired', 'cert_offline']) {
       expect(failureNeedsNewCertificate(reason)).toBe(true);
     }
-    for (const reason of ['password_required', 'password_wrong', 'key_mismatch', 'unavailable', 'rate_limited', 'rejected']) {
+    for (const reason of ['password_required', 'password_wrong', 'key_mismatch', 'unavailable', 'internal_error', 'rate_limited', 'rejected']) {
       expect(failureNeedsNewCertificate(reason)).toBe(false);
     }
     expect(failureIsPassword('password_wrong')).toBe(true);
     expect(failureIsPassword('key_mismatch')).toBe(false);
+  });
+
+  it('chwilowe porażki (KSeF niedostępny, błąd po naszej stronie) dają przycisk "Spróbuj ponownie", reszta nie', () => {
+    expect(failureIsTemporary('unavailable')).toBe(true);
+    expect(failureIsTemporary('internal_error')).toBe(true);
+    for (const reason of ['rejected', 'rate_limited', 'password_wrong', 'revoked', 'save_failed']) {
+      expect(failureIsTemporary(reason)).toBe(false);
+    }
   });
 });

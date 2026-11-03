@@ -92,6 +92,11 @@ export function failureNeedsNewCertificate(reason: string): boolean {
   return NEEDS_NEW_CERTIFICATE.has(reason);
 }
 
+/** Chwilowe porażki (KSeF niedostępny, błąd po naszej stronie): te same pliki warto wysłać jeszcze raz. */
+export function failureIsTemporary(reason: string): boolean {
+  return reason === 'unavailable' || reason === 'internal_error';
+}
+
 /** Powody, przy których pytamy o hasło albo je poprawiamy, bez ruszania plików. */
 export function failureIsPassword(reason: string): boolean {
   return reason === 'password_required' || reason === 'password_wrong';

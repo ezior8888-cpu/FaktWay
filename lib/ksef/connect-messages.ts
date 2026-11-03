@@ -22,7 +22,9 @@ export type KsefFailureReason =
   | 'invalid_certificate'
   | 'blocked'
   | 'unavailable'
-  | 'rejected';
+  | 'rejected'
+  /** Wyjątek spoza KSeF (nasz błąd, nie odpowiedź KSeF): to nie wina plików klienta. */
+  | 'internal_error';
 
 export function classifyKsefAuthFailure(error: unknown): KsefFailureReason {
   if (error instanceof KsefAuthRejectedError) {
@@ -46,7 +48,84 @@ export function classifyKsefAuthFailure(error: unknown): KsefFailureReason {
   if (error instanceof Error && /timed out|fetch failed|econn|enotfound|network|socket/i.test(error.message)) {
     return 'unavailable';
   }
-  return 'rejected';
+  // Cokolwiek innego to nie jest odpowiedź KSeF, tylko wyjątek w naszym kodzie albo bibliotece podpisu.
+  // "KSeF nie potwierdził certyfikatu" byłoby wtedy nieprawdą i odsyłało klienta do nowego certyfikatu.
+  return 'internal_error';
+}
+
+/** Co wolno zapisać w logu o porażce podłączenia KSeF. */
+export interface FailureLogDetail {
+  errorClass: string;
+  code: string | number | null;
+  /** Tylko odmowa KSeF (`KsefAuthRejectedError`): opis z odpowiedzi KSeF, skrócony i oczyszczony. */
+  description?: string;
+  details?: string[];
+}
+
+const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_$]{0,63}$/;
+const CODE_TEXT = /^[A-Za-z0-9_.:-]{1,64}$/;
+const MAX_LOGGED_TEXT = 200;
+const MAX_LOGGED_DETAILS = 5;
+
+function loggableCode(value: unknown): string | number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && CODE_TEXT.test(value)) return value;
+  return null;
+}
+
+/**
+ * Opis z odpowiedzi KSeF (`status.description` i `details` z GET /auth/{numer}) to tekst KSeF, nie
+ * nasze żądanie: nie niesie klucza, hasła ani certyfikatu. Mimo to idzie do logu skrócony, bez
+ * bloków PEM i długich ciągów base64, żeby nigdy nie stał się kanałem wycieku.
+ */
+function loggableText(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/-----BEGIN [A-Z0-9 ]+-----[\s\S]*?(?:-----END [A-Z0-9 ]+-----|$)/g, '[PEM]')
+    .replace(/[A-Za-z0-9+/=_-]{64,}/g, '[...]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_LOGGED_TEXT);
+}
+
+function errorClassName(error: unknown): string {
+  if (error === null) return 'null';
+  if (typeof error !== 'object' && typeof error !== 'function') return typeof error;
+  const { name } = error as { name?: unknown };
+  const named = typeof name === 'string' && CLASS_NAME.test(name) ? name : null;
+  // `name` bywa ogólne ("Error"), a nazwa klasy dokładniejsza; klasy KSeF ustawiają `name` same,
+  // bo minifikacja kodu serwera potrafi skrócić nazwę konstruktora.
+  if (named && named !== 'Error') return named;
+  const constructorName = (error as { constructor?: { name?: unknown } }).constructor?.name;
+  if (typeof constructorName === 'string' && CLASS_NAME.test(constructorName) && constructorName !== 'Object') {
+    return constructorName;
+  }
+  return named ?? typeof error;
+}
+
+function failureCode(error: unknown): string | number | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const record = error as { code?: unknown; status?: unknown; cause?: unknown };
+  const direct = loggableCode(record.code) ?? loggableCode(record.status);
+  if (direct !== null) return direct;
+  // `fetch failed` niesie prawdziwy kod (ENOTFOUND, ECONNRESET) w `cause`.
+  if (typeof record.cause === 'object' && record.cause !== null) return loggableCode((record.cause as { code?: unknown }).code);
+  return null;
+}
+
+/**
+ * Do logu o porażce podłączenia idą wyłącznie nazwa klasy błędu i kod (a przy odmowie KSeF jej
+ * opis). Nigdy treść wyjątku (`message`, `details`, `hint`, `body`): potrafi zawierać treść żądania,
+ * klucz, hasło albo certyfikat.
+ */
+export function describeFailureForLog(error: unknown): FailureLogDetail {
+  const base: FailureLogDetail = { errorClass: errorClassName(error), code: failureCode(error) };
+  if (!(error instanceof KsefAuthRejectedError)) return base;
+  return {
+    ...base,
+    description: loggableText(error.description),
+    details: (Array.isArray(error.details) ? error.details : []).slice(0, MAX_LOGGED_DETAILS).map(loggableText),
+  };
 }
 
 function formatDate(date: Date | undefined): string {
@@ -101,6 +180,8 @@ export function ksefFailureMessage(
       return `KSeF zablokował uwierzytelnienie dla tego podmiotu. Skontaktuj się z Ministerstwem Finansów przez formularz zgłoszeniowy KSeF albo napisz do nas: ${SUPPORT_EMAIL}.`;
     case 'unavailable':
       return 'KSeF jest chwilowo niedostępny albo przeciążony. Niczego nie zapisaliśmy, a Twoje pliki są nadal wybrane. Spróbuj ponownie za kilka minut.';
+    case 'internal_error':
+      return 'To nie wina Twoich plików: po naszej stronie wystąpił błąd. Niczego nie zapisaliśmy, a pliki są nadal wybrane. Spróbuj ponownie za chwilę.';
     case 'rejected':
       return `KSeF nie potwierdził tego certyfikatu. Sprawdź, czy to certyfikat z przeznaczeniem „Uwierzytelnienie w systemie KSeF” i czy wybrano klucz z tego samego wniosku. Jeśli to się powtarza, napisz do nas: ${SUPPORT_EMAIL}.`;
   }

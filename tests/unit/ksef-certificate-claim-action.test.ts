@@ -307,7 +307,8 @@ describe('kreator podłączenia KSeF: pliki klienta (PEM, DER, hasło)', () => {
     ['KSeF niedostępny (503)', new KsefApiError(503, 'private_schema.detail', 'KSeF API POST /auth failed: 503'), 'unavailable', /Spróbuj ponownie za kilka minut/],
     ['za dużo żądań (429)', new KsefApiError(429, 'private_schema.detail', 'KSeF API 429'), 'unavailable', /ponownie/],
     ['błąd sieci', new TypeError('fetch failed'), 'unavailable', /chwilowo niedostępny/],
-    ['nierozpoznana odpowiedź', new Error('private_schema.cert_detail'), 'rejected', /nie potwierdził tego certyfikatu/],
+    ['odmowa KSeF z nieznanym kodem (400)', new KsefAuthRejectedError(400, 'private_schema.cert_detail', ['private_schema.detail']), 'rejected', /nie potwierdził tego certyfikatu/],
+    ['odpowiedź HTTP 400', new KsefApiError(400, 'private_schema.detail', 'KSeF API POST /auth failed: 400'), 'rejected', /nie potwierdził tego certyfikatu/],
   ])('odpowiedź KSeF: %s ma konkretny komunikat i nic nie zapisuje', async (_name, error, reason, message) => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.ksefAuth.mockRejectedValue(error);
@@ -330,5 +331,135 @@ describe('kreator podłączenia KSeF: pliki klienta (PEM, DER, hasło)', () => {
       error: expect.stringContaining('właściciel'),
     });
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Recenzja #361, pkt 3: wyjątek spoza KSeF dawał "KSeF nie potwierdził tego certyfikatu" i
+ * w logu tylko `reason` z `code: null`, a błąd RPC i zewnętrzny catch nie logowały nic.
+ * Teraz: osobny powód z komunikatem "to nie wina plików" i ślad z etapem, klasą błędu i kodem.
+ * Treść wyjątku, klucz, hasło i certyfikat nigdy nie trafiają do logu.
+ */
+describe('błędy po naszej stronie: komunikat bez obwiniania certyfikatu i ślad w logu', () => {
+  const SECRET = 'SEKRET-z-wyjatku';
+  const protectedFiles = () => ({ certificate: pem.certificate, privateKey: encryptedKey(material.privateKey), password: PASSWORD });
+  let log: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => log.mockRestore());
+
+  /** Wszystko, co poszło do console.error, jako jeden tekst do sprawdzania wycieków. */
+  const logged = () => JSON.stringify(log.mock.calls);
+
+  it('wyjątek spoza KSeF: osobny powód, "to nie wina plików", spróbuj za chwilę, bez adresu pomocy', async () => {
+    mocks.ksefAuth.mockRejectedValue(new TypeError(`Cannot read properties of undefined ${SECRET}`));
+
+    const result = await uploadCertificateAction(protectedFiles());
+
+    expect(result).toMatchObject({ success: false, reason: 'internal_error' });
+    if (result.success) return;
+    expect(result.error).toMatch(/nie wina Twoich plików/);
+    expect(result.error).toMatch(/Spróbuj ponownie za chwilę/);
+    expect(result.error).not.toMatch(/nie potwierdził tego certyfikatu/);
+    expect(result.error).not.toContain('@');
+    expect(result.error).not.toContain(SECRET);
+    expect(mocks.encrypt).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('ślad w logu: etap, powód, klasa błędu i kod; bez treści wyjątku, klucza, hasła i certyfikatu', async () => {
+    mocks.ksefAuth.mockRejectedValue(new TypeError(`${SECRET} ${PASSWORD} ${material.keyPem} ${material.certPem}`));
+
+    await uploadCertificateAction(protectedFiles());
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[uploadCertificateAction]'),
+      { stage: 'ksef_login', reason: 'internal_error', errorClass: 'TypeError', code: null },
+    );
+    const everything = logged();
+    for (const secret of [SECRET, PASSWORD, material.keyPem.trim().split('\n')[1]!, material.certPem.trim().split('\n')[1]!]) {
+      expect(everything).not.toContain(secret);
+    }
+  });
+
+  it('odmowa KSeF: w logu kod, opis i szczegóły z odpowiedzi KSeF, ale nie to, co wysłaliśmy', async () => {
+    mocks.ksefAuth.mockRejectedValue(
+      new KsefAuthRejectedError(460, 'Uwierzytelnianie zakończone niepowodzeniem z powodu błędu certyfikatu', ['Certyfikat odwołany']),
+    );
+
+    await uploadCertificateAction(protectedFiles());
+
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[uploadCertificateAction]'),
+      {
+        stage: 'ksef_login',
+        reason: 'revoked',
+        errorClass: 'KsefAuthRejectedError',
+        code: 460,
+        description: 'Uwierzytelnianie zakończone niepowodzeniem z powodu błędu certyfikatu',
+        details: ['Certyfikat odwołany'],
+      },
+    );
+    expect(logged()).not.toContain(PASSWORD);
+  });
+
+  it('błąd zapisu (RPC): ślad z etapem i kodem, bez message, details i hint', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST202', message: `private_schema.${SECRET}`, details: SECRET, hint: SECRET },
+    });
+
+    const result = await uploadCertificateAction(pem);
+
+    expect(result).toMatchObject({ success: false, reason: 'save_failed' });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[uploadCertificateAction]'),
+      { stage: 'finalize_rpc', reason: 'save_failed', errorClass: 'object', code: 'PGRST202' },
+    );
+    expect(logged()).not.toContain(SECRET);
+  });
+
+  it('nierozpoznany wynik RPC: ślad z etapem, bez udawania sukcesu', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: 'zupelnie_nowy_wynik', error: null });
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false, reason: 'save_failed' });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[uploadCertificateAction]'),
+      { stage: 'finalize_rpc', reason: 'save_failed', result: 'zupelnie_nowy_wynik' },
+    );
+  });
+
+  it('nieoczekiwany wyjątek poza KSeF (zewnętrzny catch): ślad z klasą błędu, bez treści', async () => {
+    mocks.encrypt.mockImplementation(() => {
+      throw new RangeError(`klucz szyfrowania: ${SECRET}`);
+    });
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false, reason: 'save_failed' });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[uploadCertificateAction]'),
+      { stage: 'unexpected', reason: 'save_failed', errorClass: 'RangeError', code: null },
+    );
+    expect(logged()).not.toContain(SECRET);
+  });
+
+  it('brak bezpiecznie skonfigurowanego KSEF_ENV: ślad w logu (to błąd po naszej stronie)', async () => {
+    vi.stubEnv('KSEF_ENV', 'unknown');
+
+    await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: false, reason: 'save_failed' });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('[uploadCertificateAction]'),
+      { stage: 'environment', reason: 'save_failed' },
+    );
+  });
+
+  it('porażki z winy klienta (zły plik, hasło, uprawnienia) nie wchodzą do logu błędów', async () => {
+    await uploadCertificateAction({ certificate: pem.certificate, privateKey: b64('to nie jest klucz') });
+    mocks.membershipResult.mockResolvedValue({ data: { role: 'member', status: 'active' }, error: null });
+    await uploadCertificateAction(pem);
+
+    expect(log).not.toHaveBeenCalled();
   });
 });

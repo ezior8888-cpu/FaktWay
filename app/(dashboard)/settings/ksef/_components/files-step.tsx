@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 
 import {
   failureIsPassword,
+  failureIsTemporary,
   failureNeedsNewCertificate,
   RECONFIRM_CERTIFICATE_TEXT,
   WIZARD_CERTIFICATE_HREF,
@@ -380,7 +381,7 @@ export function FilesStep({ reconfirm = false }: FilesStepProps) {
       ) : null}
 
       <Button type="button" className={TOUCH_BUTTON} disabled={!ready} onClick={() => void submit()} data-testid="ksef-sprawdz">
-        {failure?.reason === 'unavailable' ? 'Spróbuj ponownie' : 'Sprawdź w KSeF'}
+        {failure && failureIsTemporary(failure.reason) ? 'Spróbuj ponownie' : 'Sprawdź w KSeF'}
       </Button>
 
       <Link href={WIZARD_CERTIFICATE_HREF} className={cn(buttonVariants({ variant: 'ghost' }), TOUCH_BUTTON)}>

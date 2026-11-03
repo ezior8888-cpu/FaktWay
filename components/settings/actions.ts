@@ -9,6 +9,7 @@ import { prepareKsefCredentials, type CredentialProblem } from '@/lib/ksef/conne
 import {
   classifyKsefAuthFailure,
   credentialProblemMessage,
+  describeFailureForLog,
   ksefFailureMessage,
   type KsefFailureReason,
 } from '@/lib/ksef/connect-messages';
@@ -67,6 +68,15 @@ const FILES_MISSING = 'Wybierz oba pliki z KSeF: certyfikat (.crt) i klucz prywa
 
 function fail(reason: ConnectFailureReason, error: string): UploadCertificateResult {
   return { success: false, reason, error };
+}
+
+/**
+ * Ślad po porażce, której klient nie spowodował. Do logu idą wyłącznie etap, powód, nazwa klasy
+ * błędu i kod (a przy odmowie KSeF jej opis, zob. `describeFailureForLog`). Nigdy treść wyjątku
+ * ani żądania, klucz, hasło czy certyfikat: komunikat wyjątku potrafi zawierać wszystkie cztery.
+ */
+function logFailure(stage: string, reason: ConnectFailureReason, detail: object = {}): void {
+  console.error('[uploadCertificateAction] nie udało się podłączyć KSeF', { stage, reason, ...detail });
 }
 
 function decodeFile(value: unknown): Buffer | null {
@@ -137,7 +147,10 @@ export async function uploadCertificateAction(data: {
     }
     const nip = tenantRow.nip;
     const env = configuredKsefEnvironment();
-    if (!env) return fail('save_failed', GENERIC_ERROR);
+    if (!env) {
+      logFailure('environment', 'save_failed');
+      return fail('save_failed', GENERIC_ERROR);
+    }
 
     // Limit 5 prób na godzinę liczy tylko próby, które dochodzą do KSeF. Bez Redisa (produkcja ma
     // wyłączony Upstash) limiter liczy w pamięci procesu: aplikacja to jeden proces, więc limit jest
@@ -167,14 +180,10 @@ export async function uploadCertificateAction(data: {
         return fail('not_owner', ksefFailureMessage('not_owner', { nip, env }));
       }
     } catch (error) {
-      // Treść wyjątku KSeF może zawierać szczegóły żądania: do klienta idzie tylko gotowe zdanie,
-      // a w logu zostaje powód i kod, bez treści.
+      // Treść wyjątku może zawierać szczegóły żądania: do klienta idzie tylko gotowe zdanie,
+      // a w logu zostaje etap, powód, klasa błędu i kod (zob. `logFailure`).
       const reason = classifyKsefAuthFailure(error);
-      const detail = error as { code?: unknown; status?: unknown };
-      console.error('[uploadCertificateAction] KSeF nie potwierdził certyfikatu', {
-        reason,
-        code: detail?.code ?? detail?.status ?? null,
-      });
+      logFailure('ksef_login', reason, describeFailureForLog(error));
       return fail(reason, ksefFailureMessage(reason, { nip, env }));
     }
 
@@ -199,7 +208,10 @@ export async function uploadCertificateAction(data: {
         p_environment: env,
       },
     );
-    if (claimError) return fail('save_failed', GENERIC_ERROR);
+    if (claimError) {
+      logFailure('finalize_rpc', 'save_failed', describeFailureForLog(claimError));
+      return fail('save_failed', GENERIC_ERROR);
+    }
 
     if (claimResult === 'already_claimed_by_other') {
       return {
@@ -211,6 +223,7 @@ export async function uploadCertificateAction(data: {
       };
     }
     if (claimResult !== 'claimed' && claimResult !== 'already_claimed_by_self') {
+      logFailure('finalize_rpc', 'save_failed', { result: typeof claimResult === 'string' ? claimResult.slice(0, 40) : typeof claimResult });
       return fail('save_failed', GENERIC_ERROR);
     }
 
@@ -240,6 +253,7 @@ export async function uploadCertificateAction(data: {
     };
   } catch (error) {
     if (error instanceof ActionAuthError) return fail('forbidden', error.message);
+    logFailure('unexpected', 'save_failed', describeFailureForLog(error));
     return fail('save_failed', GENERIC_ERROR);
   }
 }
