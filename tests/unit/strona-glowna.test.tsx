@@ -40,8 +40,9 @@ describe('strona główna', () => {
     expect(text).not.toMatch(/opini|ocen[ay]|zaufali|★/i);
   });
 
-  it('nagłówek i opis meta to jedno zdanie oferty', () => {
-    expect(h1Text()).toBe(OFERTA);
+  it('nagłówek to hasło, a opis meta to zdanie oferty', () => {
+    // Hasło od 03.11.2026 (decyzja Bartosza), w formacie dawnego „bez stresu”.
+    expect(h1Text()).toBe('Faktury w KSeF z głowy');
     expect(metadata.description).toBe(OFERTA);
   });
 
