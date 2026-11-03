@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { mfaStepUpHref } from '@/lib/auth/mfa-step-up';
 import {
+  WIZARD_PATH,
+  WIZARD_TWO_FACTOR_HREF,
   deriveWizardStep,
   failureIsPassword,
   failureIsTemporary,
@@ -96,5 +99,14 @@ describe('kreator KSeF: krok liczony z serwera', () => {
     for (const reason of ['rejected', 'rate_limited', 'password_wrong', 'revoked', 'save_failed']) {
       expect(failureIsTemporary(reason)).toBe(false);
     }
+  });
+});
+
+// Recenzja #361, pkt 6: ręcznie złożony adres ekranu kodu nie miał `potwierdzenie=1` (ekran nie mówił,
+// dlaczego pyta o kod) i niekodowanego `redirect`. Jedyne źródło takiego adresu to `mfaStepUpHref`.
+describe('kreator KSeF: przejście na ekran kodu', () => {
+  it('adres ekranu kodu pochodzi z mfaStepUpHref i wraca do kreatora', () => {
+    expect(WIZARD_TWO_FACTOR_HREF).toBe(mfaStepUpHref(WIZARD_PATH));
+    expect(WIZARD_TWO_FACTOR_HREF).toBe('/login/two-factor?redirect=%2Fsettings%2Fksef&potwierdzenie=1');
   });
 });

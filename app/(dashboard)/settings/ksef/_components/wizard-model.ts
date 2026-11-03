@@ -6,6 +6,8 @@
  * to zwykły link, więc działa też Wstecz przeglądarki).
  */
 
+import { mfaStepUpHref } from '@/lib/auth/mfa-step-up';
+
 export type WizardStepId = 'warunki' | 'certyfikat' | 'pliki' | 'polaczono';
 export type WizardMfa = 'verified' | 'challenge_required' | 'enrollment_required' | 'unknown';
 
@@ -21,8 +23,11 @@ export const WIZARD_STEPS = [
 export const WIZARD_PATH = '/settings/ksef';
 export const WIZARD_CERTIFICATE_HREF = `${WIZARD_PATH}?krok=certyfikat`;
 export const WIZARD_FILES_HREF = `${WIZARD_PATH}?krok=pliki`;
-/** Po zalogowaniu kodem z aplikacji klient wraca prosto do kreatora. */
-export const WIZARD_TWO_FACTOR_HREF = `/login/two-factor?redirect=${WIZARD_PATH}`;
+/**
+ * Sesja po biometrii nie ma kodu, a zmiana certyfikatu go wymaga. Ekran kodu mówi wtedy, dlaczego pyta
+ * (`potwierdzenie=1`), a po kodzie klient wraca prosto do kreatora. Adres składa `mfaStepUpHref`.
+ */
+export const WIZARD_TWO_FACTOR_HREF = mfaStepUpHref(WIZARD_PATH);
 
 export interface WizardInput {
   hasNip: boolean;

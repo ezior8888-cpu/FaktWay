@@ -98,6 +98,7 @@ const { AuditLog } = await import('@/app/(dashboard)/settings/audit/_components/
 const { AccountantAccessList } = await import('@/components/settings/accountant-list');
 const { TeamManagement } = await import('@/components/team/team-management');
 const { EmailPreferences } = await import('@/app/(dashboard)/settings/notifications/_components/email-preferences');
+const { mfaStepUpHref } = await import('@/lib/auth/mfa-step-up');
 const { formatSettingsDate } = await import('@/components/settings/finora/format-date');
 const { RECONFIRM_CERTIFICATE_TEXT } = await import('@/app/(dashboard)/settings/ksef/_components/wizard-model');
 
@@ -328,6 +329,18 @@ describe('zakładka KSeF: dowód połączenia', () => {
 
     expect(html).toContain('data-testid="ksef-step-warunki"');
     expect(html).not.toContain('Połączono z KSeF');
+  });
+
+  it('sesja po biometrii: "Potwierdź kodem z aplikacji" prowadzi na ekran kodu z wyjaśnieniem i powrotem do kreatora', async () => {
+    ctx.mfa = 'challenge_required';
+    ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
+    const html = await render();
+
+    const href = mfaStepUpHref('/settings/ksef');
+    expect(href).toContain('potwierdzenie=1');
+    expect(html).toContain(`href="${href.replaceAll('&', '&amp;')}"`);
+    expect(html).not.toContain('href="/login/two-factor?redirect=/settings/ksef"');
+    expect(html).toContain('Potwierdź kodem z aplikacji');
   });
 
   it('klient może wrócić po nowy certyfikat (?krok=certyfikat) także bez dowodu', async () => {
