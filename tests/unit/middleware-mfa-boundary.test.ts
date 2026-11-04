@@ -159,6 +159,11 @@ function passkeyMarker(sub = userId, sessionId = SESSION_ID): string {
   const mac = createHmac('sha256', key).update(['v1', sub, sessionId, expiry].join('\n')).digest('base64url');
   return ['v1', expiry, mac].join('.');
 }
+/** Zmienia pierwszy znak podpisu, zawsze na inny (dawne `.slice(0, -2) + 'AA'` raz na ~1024 nic nie zmieniało). */
+function forged(marker: string): string {
+  const at = marker.lastIndexOf('.') + 1;
+  return marker.slice(0, at) + (marker[at] === 'A' ? 'B' : 'A') + marker.slice(at + 1);
+}
 function markedRequest(path: string, marker: string) {
   return new NextRequest('https://app.example.test' + path, {
     headers: { cookie: `${ACTIVE_ORG_COOKIE}=${org}; ksef.passkey_session=${marker}` },
@@ -185,7 +190,7 @@ it.each(['/invoices', '/api/invoices/fixture/pdf'])('valid passkey marker of thi
 it.each([
   ['another session', () => passkeyMarker(userId, 'other-session')],
   ['another account', () => passkeyMarker('other-user', SESSION_ID)],
-  ['a forged signature', () => passkeyMarker().slice(0, -2) + 'AA'],
+  ['a forged signature', () => forged(passkeyMarker())],
 ])('passkey marker of %s still gets the challenge', async (_name, marker) => {
   withSessionClaims();
   const page = await updateSession(markedRequest('/invoices', marker()));

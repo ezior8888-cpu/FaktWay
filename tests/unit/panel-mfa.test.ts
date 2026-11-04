@@ -29,6 +29,28 @@ function marker(sub: string, sessionId: string, expiry = Math.floor(Date.now() /
   return ['v1', String(expiry), mac].join('.');
 }
 
+/**
+ * Znacznik, którego podpis kończy się na „AA” (co ok. 1024. znacznik). Na nim
+ * dawne psucie `.slice(0, -2) + 'AA'` nic nie zmieniało i test raz na tysiąc
+ * przebiegów był czerwony.
+ */
+function markerEndingWithAA(): string {
+  const start = Math.floor(Date.now() / 1000) + 3600;
+  for (let expiry = start; ; expiry += 1) {
+    const value = marker(user.id, SESSION, expiry);
+    if (value.endsWith('AA')) return value;
+  }
+}
+
+/**
+ * Zmienia pierwszy znak podpisu, zawsze na inny. Pierwszy, bo ostatni znak
+ * base64url niesie dwa bity dopełnienia, które dekoder pomija.
+ */
+function forged(value: string): string {
+  const at = value.lastIndexOf('.') + 1;
+  return value.slice(0, at) + (value[at] === 'A' ? 'B' : 'A') + value.slice(at + 1);
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SERVICE_ROLE);
@@ -59,7 +81,8 @@ describe('bramka panelu: AAL1 konta z 2FA', () => {
     ['innej sesji', () => marker(user.id, 'session-b')],
     ['innego konta', () => marker('user-b', SESSION)],
     ['przeterminowany', () => marker(user.id, SESSION, Math.floor(Date.now() / 1000) - 1)],
-    ['ze złym podpisem', () => marker(user.id, SESSION).slice(0, -2) + 'AA'],
+    ['ze złym podpisem', () => forged(marker(user.id, SESSION))],
+    ['ze złym podpisem kończącym się na AA', () => forged(markerEndingWithAA())],
     ['śmieciowy', () => 'v1.bzdura'],
   ])('znacznik %s nie przechodzi', async (_name, read) => {
     await expect(getPanelMfaState(client, read)).resolves.toMatchObject({ status: 'challenge_required' });
