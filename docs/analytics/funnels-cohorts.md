@@ -36,7 +36,8 @@ Step 4: onboarding_completed
 Step 5: payment_succeeded
 ```
 
-Filtruj po `$initial_utm_source` żeby zobaczyć konwersję per-źródło.
+Konwersja per-źródło: breakdown po `source` albo właściwości osoby
+`first_touch_channel`. Lejek główny krok po kroku: [lejek-faktway.md](lejek-faktway.md).
 
 ### Activation funnel (24h post-signup)
 
@@ -129,6 +130,6 @@ gdyby PostHog padł. Konfiguracja webhooka: `SLACK_WEBHOOK_METRICS` env.
 
 ## 10. Zgoda RODO
 
-Client tracking startuje dopiero po opt-in (lekki baner). Server eventy
-(signup, payment) lecą zawsze — pseudonimizowane przez `distinctId =
-userId/tenantId` (UUID). Pełny granularny baner cookie dochodzi w Fazie 38.
+Client tracking startuje dopiero po opt-in. Server eventy też: `trackServer`
+sprawdza `users.analytics_consent`, a zdarzenia firmy idą pod zgodą najstarszego
+aktywnego właściciela. Szczegóły: [lejek-faktway.md](lejek-faktway.md).

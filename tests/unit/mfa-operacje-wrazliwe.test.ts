@@ -80,6 +80,41 @@ describe('MFA przy operacjach wrażliwych', () => {
     await expect(assertSensitiveMfa(ctx, 'ksef_submit')).resolves.toBeUndefined();
   });
 
+  // Logowanie biometrią (FW1): sesja AAL1 konta z 2FA wchodzi do panelu ze
+  // znacznikiem. Do tej pory taka sesja nie docierała tu wcale, więc flaga
+  // wyłączona nic nie ryzykowała. Teraz płatności i certyfikat muszą prosić
+  // o prawdziwy kod także przy wyłączonej fladze.
+  describe('sesja po logowaniu biometrią (challenge_required)', () => {
+    beforeEach(() => { s.mfa = 'challenge_required'; });
+
+    it.each(['billing', 'certificate'] as const)('%s: flaga wyłączona, a i tak prosi o kod', async (operation) => {
+      await expect(assertSensitiveMfa(ctx, operation)).rejects.toMatchObject({
+        name: 'SensitiveMfaRequiredError', reason: 'challenge',
+      });
+    });
+
+    it('rola bez obowiązku MFA też podaje kod: konto ma 2FA, a sesja go nie potwierdziła', async () => {
+      s.role = 'member';
+      await expect(assertSensitiveMfa(ctx, 'billing')).rejects.toBeInstanceOf(SensitiveMfaRequiredError);
+    });
+
+    it('wysyłka do KSeF przy wyłączonej fladze przechodzi: biometria to dwa składniki', async () => {
+      await expect(assertSensitiveMfa(ctx, 'ksef_submit')).resolves.toBeUndefined();
+    });
+
+    it('wysyłka do KSeF przy włączonej fladze prosi o kod, a komunikat mówi, gdzie go podać', async () => {
+      s.flag = true;
+      await expect(assertSensitiveMfa(ctx, 'ksef_submit')).rejects.toMatchObject({ reason: 'challenge' });
+      await expect(assertSensitiveMfa(ctx, 'ksef_submit')).rejects.toThrow(/Bezpieczeństwo/);
+      await expect(assertSensitiveMfa(ctx, 'ksef_submit')).rejects.not.toThrow(/Włącz ją/);
+    });
+  });
+
+  it('flaga włączona, konto bez 2FA: powód to brak włączonego 2FA, nie kod', async () => {
+    s.flag = true;
+    await expect(assertSensitiveMfa(ctx, 'billing')).rejects.toMatchObject({ reason: 'enrollment' });
+  });
+
   it('migracja: wiersz flagi wyłączony', () => {
     const sql = readFileSync('supabase/migrations/00108_flag_require_mfa_sensitive.sql', 'utf8');
     expect(sql).toMatch(/'requireMfaForSensitive',\s*false/);

@@ -1,6 +1,13 @@
+// Plan Finora P15 (E10b, §2.2): zaproszenie do firmy w układzie logowania
+// Finory (`AuthSplitLayout`) zamiast szkła. Logika bez zmian (odczyt
+// zaproszenia po skrócie tokenu, akceptacja w `InviteAcceptForm`).
+
 import { createHash } from 'crypto';
 
+import { AuthMessage } from '@/components/auth/finora/auth-message';
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout';
 import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 
@@ -80,48 +87,51 @@ export default async function InviteLandingPage({ params }: PageProps) {
   const emailMatches = inviteEmail.toLowerCase() === userEmail;
 
   return (
-    <div className="min-h-screen bg-mesh-surface flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-3xl border border-glass-border bg-glass-white-strong backdrop-blur-glass-lg shadow-glass-lg p-8 lg:p-10 space-y-6">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Zaproszenie do <span className="font-bold">{orgName}</span>
-            </h1>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Zostałeś/aś zaproszony/a do organizacji <strong>{orgName}</strong>{' '}
-              w roli <strong>{invitation.role}</strong>.
-            </p>
-          </div>
-
-          {emailMatches ? (
-            <InviteAcceptForm token={token} orgName={orgName} />
-          ) : (
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 backdrop-blur-xl p-4 text-sm leading-relaxed">
-              <p className="font-medium mb-1">Niewłaściwe konto</p>
-              <p className="text-muted-foreground">
-                Zaproszenie wysłano na <strong>{inviteEmail}</strong>, ale jesteś
-                zalogowany jako <strong>{user.email}</strong>. Wyloguj się i
-                zaloguj na właściwe konto.
-              </p>
-            </div>
-          )}
-        </div>
+    <InviteLayout>
+      <div>
+        <h1 className="mb-2 text-2xl font-semibold">
+          Zaproszenie do <span className="font-bold">{orgName}</span>
+        </h1>
+        <p className="text-muted-foreground">
+          Zostałeś/aś zaproszony/a do organizacji <strong className="text-foreground">{orgName}</strong>{' '}
+          w roli <strong className="text-foreground">{invitation.role}</strong>.
+        </p>
       </div>
-    </div>
+
+      {emailMatches ? (
+        <InviteAcceptForm token={token} orgName={orgName} />
+      ) : (
+        <Alert role="status" className="border-amber-500/40 px-3 py-2.5">
+          <AlertTitle className="text-sm">Niewłaściwe konto</AlertTitle>
+          <AlertDescription className="text-sm/relaxed">
+            Zaproszenie wysłano na <strong className="text-foreground">{inviteEmail}</strong>, ale jesteś
+            zalogowany jako <strong className="text-foreground">{user.email}</strong>. Wyloguj się i
+            zaloguj na właściwe konto.
+          </AlertDescription>
+        </Alert>
+      )}
+    </InviteLayout>
+  );
+}
+
+function InviteLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthSplitLayout
+      panelTitle="Dołącz do zespołu"
+      panelText="Po akceptacji zobaczysz faktury i kontrahentów firmy w roli, którą nadała Ci osoba zapraszająca."
+    >
+      {children}
+    </AuthSplitLayout>
   );
 }
 
 function FailureBox({ title, body }: { title: string; body: string }) {
   return (
-    <div className="min-h-screen bg-mesh-surface flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-3xl border border-red-500/20 bg-red-500/5 backdrop-blur-xl shadow-glass p-8 lg:p-10 space-y-3">
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {body}
-          </p>
-        </div>
+    <InviteLayout>
+      <div>
+        <h1 className="mb-2 text-2xl font-semibold">{title}</h1>
       </div>
-    </div>
+      <AuthMessage tone="error">{body}</AuthMessage>
+    </InviteLayout>
   );
 }

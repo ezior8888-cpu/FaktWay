@@ -9,6 +9,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface AccountDeletionConfirmationProps {
   tenantName: string;
   /** Format: 'DD MMMM YYYY' — kiedy konto zostanie trwale usunięte. */
@@ -34,13 +36,14 @@ export default function AccountDeletionConfirmation({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             Potwierdzenie usunięcia konta
           </Heading>
 
           <Text style={textStyle}>
             Cześć {tenantName}, otrzymaliśmy żądanie usunięcia Twojego konta
-            FaktFlow. Procedura RODO została uruchomiona.
+            FaktWay. Procedura RODO została uruchomiona.
           </Text>
 
           <Section style={boxStyle}>
@@ -93,7 +96,7 @@ export default function AccountDeletionConfirmation({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>

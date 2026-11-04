@@ -18,6 +18,14 @@ interface SubmitReferenceInput {
   advanceData?: AdvanceInvoiceData;
   finalData?: FinalInvoiceData;
   finalAdvanceSettlementRows?: readonly unknown[];
+  /**
+   * A4b PR2a: pominąć porównanie z BIEŻĄCYM profilem firmy (`tenants`)?
+   * Runner podaje to tylko przed uzgodnieniem — gdy jest otwarty wpis albo
+   * zlecenie „tylko uzgodnij”: zmiana nazwy firmy po pierwszej wysyłce nie
+   * może zamienić uzgodnienia w INVALID_DOCUMENT. Granica tuż przed POST
+   * nigdy tego nie podaje. Liczone leniwie, tylko dla ZAL i ROZ.
+   */
+  skipLiveTenantSeller?: () => Promise<boolean>;
 }
 
 function invalidPayload(): never {
@@ -85,6 +93,9 @@ async function assertSpecialSeller(
       !isDeepStrictEqual(stored.seller_data, sellerFromEvent) ||
       typeof stored.seller_nip !== 'string' ||
       stored.seller_nip.replace(/\D/g, '') !== envelopeSeller.nip.replace(/\D/g, '')) invalidPayload();
+
+  // Uzgodnienie wcześniejszej wysyłki (A4b PR2a): treść jest zamrożona i porównana wyżej.
+  if (await input.skipLiveTenantSeller?.()) return;
 
   // An older queued event could predate the Server Action seller guard.
   const { data: tenant, error } = await input.supabase

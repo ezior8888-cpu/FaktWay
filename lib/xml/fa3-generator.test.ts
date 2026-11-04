@@ -185,7 +185,7 @@ test('Platnosc ma TerminPlatnosci przed FormaPlatnosci', () => {
   assert.ok(termIdx < formIdx, 'TerminPlatnosci musi być PRZED FormaPlatnosci');
 });
 
-test('FormaPlatnosci dla transfer=6, cash=1, card=2', () => {
+test('FormaPlatnosci dla transfer=6, cash=1, card=2, mobile=7', () => {
   const xmlTransfer = generateFA3Xml(buildInvoice());
   assert.match(xmlTransfer, /<FormaPlatnosci>6<\/FormaPlatnosci>/);
 
@@ -198,6 +198,14 @@ test('FormaPlatnosci dla transfer=6, cash=1, card=2', () => {
     buildInvoice({ payment: { ...baseInvoiceInput().payment, method: 'card', bankAccount: undefined } }),
   );
   assert.match(xmlCard, /<FormaPlatnosci>2<\/FormaPlatnosci>/);
+
+  // BLIK: forma „mobilna” z XSD (faktura za abonament opłacony BLIK-iem).
+  const xmlMobile = generateFA3Xml(
+    buildInvoice({ payment: { ...baseInvoiceInput().payment, method: 'mobile', bankAccount: undefined } }),
+  );
+  assert.match(xmlMobile, /<FormaPlatnosci>7<\/FormaPlatnosci>/);
+  const { ok, stderr } = validateAgainstXsd(xmlMobile);
+  assert.ok(ok, `XSD validation failed:\n${stderr}`);
 });
 
 test('payment.method="other" emituje PlatnoscInna+OpisPlatnosci zamiast FormaPlatnosci', () => {

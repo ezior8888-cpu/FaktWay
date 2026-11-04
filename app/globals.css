@@ -8,9 +8,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--font-outfit);
+  --font-mono: var(--font-ibm-plex-mono);
+  --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,72 +50,87 @@
 }
 
 :root {
+  /* Plan Finora (D2, §10.1): preset „Modern Minimal” z szablonu Finora,
+   * wartości 1:1 z `src/utils/theme-presets.ts`, z trzema wyjątkami
+   * kontrastu (§10.2 pkt 1, WCAG AA 4,5:1 — pilnuje
+   * `tests/unit/finora-motyw.test.ts`):
+   *  - `--primary`: `chart-2` presetu (0.55 0.22 262.96) zamiast 0.62 —
+   *    biały tekst na przycisku 5,10:1 zamiast 3,73:1;
+   *  - `--destructive`: 0.53 0.21 27 zamiast 0.64 — tekst przycisku
+   *    `destructive` na własnym tle 10% ma 4,95:1 (preset: 3,1:1).
+   * Promień zostaje 0.625rem (preset go nie ustawia). */
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --foreground: oklch(0.32 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.32 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --popover-foreground: oklch(0.32 0 0);
+  --primary: oklch(0.55 0.22 262.96);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.45 0.03 257.68);
+  --muted: oklch(0.98 0 0);
+  --muted-foreground: oklch(0.55 0.02 264.41);
+  --accent: oklch(0.95 0.03 233.56);
+  --accent-foreground: oklch(0.38 0.14 265.59);
+  --destructive: oklch(0.53 0.21 27);
+  --border: oklch(0.93 0.01 261.82);
+  --input: oklch(0.93 0.01 261.82);
+  --ring: oklch(0.62 0.19 259.76);
+  --chart-1: oklch(0.62 0.19 259.76);
+  --chart-2: oklch(0.55 0.22 262.96);
+  --chart-3: oklch(0.49 0.22 264.43);
+  --chart-4: oklch(0.42 0.18 265.55);
+  --chart-5: oklch(0.38 0.14 265.59);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0.14 0 0);
+  --sidebar-primary: oklch(0.2 0 0);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
   --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent-foreground: oklch(0.2 0 0);
+  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-ring: oklch(0.55 0.02 264);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  /* Ciemny wariant presetu. Wyjątki kontrastu (§10.2 pkt 1):
+   *  - `--primary`: `chart-1` presetu (0.71 0.14 254.69) z CIEMNYM tekstem
+   *    (`--primary-foreground` 0.20) — 7,02:1; biały na 0.62 miał 3,73:1;
+   *  - `--destructive`: 0.80 0.14 22 zamiast 0.64 — tekst przycisku na
+   *    własnym tle 20% leżącym na karcie albo w oknie dialogowym 4,85:1
+   *    (preset: 3,1:1). */
+  --background: oklch(0.2 0 0);
+  --foreground: oklch(0.92 0 0);
+  --card: oklch(0.27 0 0);
+  --card-foreground: oklch(0.92 0 0);
+  --popover: oklch(0.27 0 0);
+  --popover-foreground: oklch(0.92 0 0);
+  --primary: oklch(0.71 0.14 254.69);
+  --primary-foreground: oklch(0.2 0 0);
+  --secondary: oklch(0.27 0 0);
+  --secondary-foreground: oklch(0.92 0 0);
+  --muted: oklch(0.27 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.38 0.14 265.59);
+  --accent-foreground: oklch(0.88 0.06 254.63);
+  --destructive: oklch(0.8 0.14 22);
+  --border: oklch(0.37 0 0);
+  --input: oklch(0.37 0 0);
+  --ring: oklch(0.62 0.19 259.76);
+  --chart-1: oklch(0.71 0.14 254.69);
+  --chart-2: oklch(0.62 0.19 259.76);
+  --chart-3: oklch(0.55 0.22 262.96);
+  --chart-4: oklch(0.49 0.22 264.43);
+  --chart-5: oklch(0.42 0.18 265.55);
+  --sidebar: oklch(0.21 0.01 285.93);
+  --sidebar-foreground: oklch(0.99 0 0);
+  --sidebar-primary: oklch(0.49 0.24 264.4);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.27 0.01 286.1);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.55 0.02 285.93);
 }
 
 @layer base {
@@ -130,7 +145,63 @@
   }
 }
 
-@layer components {}
+@layer components {
+  /* Z `globals.css` szablonu Finora (E1): wysokości pól i kursory. */
+  .input-default {
+    @apply h-9;
+  }
+  .input-lg {
+    @apply h-10;
+  }
+  .input-sm {
+    @apply h-8;
+  }
+  .input-size-lg {
+    @apply size-10;
+  }
+
+  button:not(:disabled),
+  [role='checkbox']:not(:disabled),
+  [role='radio']:not(:disabled),
+  [role='switch']:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  label[for],
+  label:has([role='checkbox']):not(:disabled),
+  label:has([role='radio']):not(:disabled),
+  label:has([role='switch']):not(:disabled) {
+    cursor: pointer;
+  }
+
+  [role='menuitem']:not(:disabled),
+  [role='menuitemcheckbox']:not(:disabled),
+  [role='menuitemradio']:not(:disabled),
+  [role='option']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Odstępy przycisków z szablonu Finora. Celowo POZA warstwą, jak w Finorze:
+ * reguła ma wygrać z `px-2.5` z `buttonVariants` dla wysokości 36/40 px.
+ * `:not([data-size^='icon'])` (nasz dodatek): przyciski-ikony z jawnym
+ * `h-9`/`h-10` w miejscu wywołania nie dostają poziomego wcięcia. */
+[data-slot='button'].h-10:not(.px-6):not([data-size^='icon']),
+[data-slot='dropdown-menu-trigger'].h-10:not(.px-6),
+[data-slot='dialog-trigger'].h-10:not(.px-6),
+[data-slot='dialog-close'].h-10:not(.px-6):not([data-size^='icon']),
+[data-slot='popover-trigger'].h-10:not(.px-6) {
+  padding-inline: calc(var(--spacing) * 4);
+}
+
+[data-slot='button'].h-9:not(.px-6):not([data-size^='icon']),
+[data-slot='dropdown-menu-trigger'].h-9:not(.px-6),
+[data-slot='dialog-trigger'].h-9:not(.px-6),
+[data-slot='dialog-close'].h-9:not(.px-6):not([data-size^='icon']),
+[data-slot='popover-trigger'].h-9:not(.px-6) {
+  padding-inline: calc(var(--spacing) * 3);
+}
 
 @layer utilities {
   .backdrop-blur-glass-sm {
@@ -483,7 +554,7 @@
   line-height: 1.6;
 }
 
-/* ═══ FaktFlow — paleta panelu (biała, z prototypu z sierpnia 2026) ══════════
+/* ═══ FaktWay — paleta panelu (biała, z prototypu z sierpnia 2026) ══════════
  * WŁAŚCICIEL PLIKU: Bartosz (tor silnika) od 30.08.2026.
  * Do 29.08.2026 `app/globals.css` należał do Masła (plan FLO, część IV.2).
  * Przekazanie opisane w `docs/flo/UKLAD-DASHBOARDU.md` i w części VIII planu
@@ -495,65 +566,70 @@
  * tokenów — karty i tekst zostawały ciemne. Dlatego nie „poprawiamy jasnego”,
  * tylko odwracamy strony: baza niżej wypisuje KOMPLET tokenów.
  *
- * Grunt płaski, bez mesh/orbów/szkła: kanwa #f7f8fa, karty białe na ramce
- * #e6e8ec. Akcent = niebieski #2563eb punktowo (CTA, aktywna pozycja menu,
- * awatar agenta), nigdy jako duża plama.
+ * Od planu Finora (E1, 17.10.2026) tokeny `--ff-*` są ALIASAMI zmiennych
+ * presetu Modern Minimal z `:root`/`.dark` — na stałe (plan §11 pkt 1), bo
+ * FLO i stare ekrany używają ich setki razy. Literały zostały tylko tam,
+ * gdzie preset nie ma odpowiednika (bursztyn, błękit informacyjny, fiolet).
+ * Ciemny motyw wynika z `.dark` samoczynnie; blok niżej trzyma tylko te
+ * literały. Wątek FLO ma własne, stare wartości: `.ff-flo-legacy` niżej.
  * ──────────────────────────────────────────────────────────────────────────── */
 .ff-dashboard {
   isolation: isolate;
-  --ff-bg: #f7f8fa;
+  --ff-bg: var(--background);
   /* Bazowe tło — bez tego `bg-transparent` na layoucie prześwituje kartką przeglądarki. */
   background-color: var(--ff-bg);
-  --ff-on-surface: #0f172a;
-  --ff-on-surface-variant: #64748b;
-  --ff-primary: #2563eb;
-  --ff-on-primary: #ffffff;
-  --ff-primary-container: #eff6ff;
+  --ff-on-surface: var(--foreground);
+  --ff-on-surface-variant: var(--muted-foreground);
+  --ff-primary: var(--primary);
+  --ff-on-primary: var(--primary-foreground);
+  --ff-primary-container: var(--accent);
   --ff-secondary: #d97706;
   --ff-secondary-container: #fffbeb;
   --ff-tertiary: #0284c7;
-  --ff-surface-container-low: #ffffff;
-  --ff-surface-container-highest: #f1f5f9;
-  --ff-outline-soft: #e6e8ec;
+  --ff-surface-container-low: var(--card);
+  --ff-surface-container-highest: var(--secondary);
+  --ff-outline-soft: var(--border);
 
   /* ── Semantyczne tokeny prototypu ──────────────────────────────────────── */
-  --ff-surface: #ffffff;
-  --ff-surface-sidebar: #ffffff;
-  --ff-surface-inset: #f7f8fa;
-  --ff-surface-chip: #f1f5f9;
-  --ff-border: #e6e8ec;
-  --ff-border-strong: #d4d8de;
-  --ff-divider: #e6e8ec;
-  --ff-divider-strong: #d4d8de;
-  --ff-row-divider: #f1f5f9;
-  --ff-row-hover: #f8fafc;
+  --ff-surface: var(--card);
+  --ff-surface-sidebar: var(--sidebar);
+  --ff-surface-inset: var(--muted);
+  --ff-surface-chip: var(--secondary);
+  --ff-border: var(--border);
+  --ff-border-strong: color-mix(in oklch, var(--border) 80%, var(--foreground));
+  --ff-divider: var(--border);
+  --ff-divider-strong: color-mix(in oklch, var(--border) 80%, var(--foreground));
+  --ff-row-divider: color-mix(in oklch, var(--border) 60%, transparent);
+  --ff-row-hover: var(--muted);
   --ff-table-header-bg: transparent;
-  --ff-table-row-hover: #f8fafc;
-  --ff-surface-muted: #f8fafc;
-  --ff-surface-hover: #f1f5f9;
+  --ff-table-row-hover: var(--muted);
+  --ff-surface-muted: var(--muted);
+  --ff-surface-hover: var(--muted);
   /* Rampa tekstu: strong → faint */
-  --ff-text-strong: #0f172a;
-  --ff-text: #1e293b;
-  --ff-text-soft: #334155;
-  --ff-text-muted: #64748b;
-  --ff-text-dim: #94a3b8;
-  --ff-text-faint: #a3adba;
+  --ff-text-strong: var(--foreground);
+  --ff-text: var(--foreground);
+  --ff-text-soft: var(--secondary-foreground);
+  --ff-text-muted: var(--muted-foreground);
+  --ff-text-dim: color-mix(in oklch, var(--muted-foreground) 70%, var(--background));
+  --ff-text-faint: color-mix(in oklch, var(--muted-foreground) 55%, var(--background));
   /* Role statusów — kolor + tło „pigułki" pod ten kolor */
-  --ff-accent: #2563eb;
-  --ff-accent-hover: #1d4ed8;
-  --ff-accent-tint: #eff6ff;
+  --ff-accent: var(--primary);
+  --ff-accent-hover: color-mix(in oklch, var(--primary) 85%, var(--foreground));
+  /* Tło pigułek i banerów z linkiem w kolorze akcentu. Nie `--accent`
+   * presetu: akcent jako tekst miał na nim 4,43:1 (< 4,5). */
+  --ff-accent-tint: color-mix(in oklch, var(--primary) 6%, var(--card));
   --ff-warn: #b45309;
   --ff-warn-tint: #fffbeb;
   --ff-warn-border: #fde68a;
   --ff-warn-text: #92400e;
   --ff-info: #0284c7;
   --ff-info-tint: #f0f9ff;
-  --ff-danger: #dc2626;
-  --ff-danger-tint: #fef2f2;
+  --ff-danger: var(--destructive);
+  --ff-danger-tint: color-mix(in oklch, var(--destructive) 10%, var(--card));
   --ff-violet: #7c3aed;
   --ff-violet-tint: #f5f3ff;
-  --ff-neutral-chip: #f1f5f9;
-  --ff-neutral-chip-fg: #475569;
+  --ff-neutral-chip: var(--secondary);
+  --ff-neutral-chip-fg: var(--muted-foreground);
 
   --ff-unit: 8px;
   --ff-gutter: 24px;
@@ -564,7 +640,7 @@
   --ff-glass-blur: 0px;
   --ff-glass-bg: none;
   --ff-glass-bg-hover: none;
-  --ff-glass-border: #e6e8ec;
+  --ff-glass-border: var(--border);
   --ff-glass-shadow: none;
   --ff-radius-lg: 1rem;
   --ff-radius-chart-glow: 0 0 4px rgba(37, 99, 235, 0.18);
@@ -602,15 +678,22 @@
   --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
   --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.09), 0 10px 10px -5px rgba(15, 23, 42, 0.03);
 
-  /* ── Typografia panelu: Inter + IBM Plex Mono ──────────────────────────────
-   * `@theme inline` wstawia WARTOŚĆ zmiennej wprost do utility (`font-sans` →
-   * `font-family: var(--font-geist-sans)`), więc podmiana roli fontu w panelu
-   * sprowadza się do nadpisania tych dwóch zmiennych w tym scope. Marketing
-   * jest poza `.ff-dashboard`, więc zostaje na Geist. */
-  --font-geist-sans: var(--font-inter);
-  --font-geist-mono: var(--font-ibm-plex-mono);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  /* ── Typografia panelu: Outfit + IBM Plex Mono (plan Finora, D2) ─────────
+   * `font-sans`/`font-mono` biorą Outfit i Plex z `@theme inline`. Tutaj
+   * jeszcze `--font-geist-sans`, bo `.font-display` czyta tę zmienną; poza
+   * panelem (marketing, `.zova`) zostaje Geist. */
+  --font-geist-sans: var(--font-outfit);
+  font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+
+  /* ── Skala SM szablonu Finora (D2, §10.1) ─────────────────────────────────
+   * W Finorze to `[data-theme-scale='sm']` na <html>. U nas na `.ff-dashboard`,
+   * żeby nie zmniejszać landingu, logowania (`.zova`) ani `/admin`; arkusze
+   * z klasą `.ff-dashboard` (także kolejka FLO) dostają ją razem z klasą. */
+  --spacing: 0.222222rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.85rem;
+  --text-lg: 1.05rem;
 }
 
 /* ═══ Motyw ciemny — nadpisanie bazy, włączane klasą `.dark` na <html> ═══════
@@ -620,58 +703,21 @@
  * motywami dałoby dwa różne układy tej samej strony.
  * ──────────────────────────────────────────────────────────────────────────── */
 html.dark .ff-dashboard {
-  --ff-bg: #0d1117;
-  --ff-on-surface: #f4f6f8;
-  --ff-on-surface-variant: #8a94a3;
-  --ff-primary: #60a5fa;
-  --ff-on-primary: #0b1b34;
-  --ff-primary-container: #14263f;
+  /* Aliasy z bazy idą za `.dark` same — tu tylko literały i wyjątki. */
   --ff-secondary: #f59e0b;
   --ff-secondary-container: #1a1509;
   --ff-tertiary: #38bdf8;
-  --ff-surface-container-low: #12171f;
-  --ff-surface-container-highest: #1b2430;
-  --ff-outline-soft: #1c2230;
-
-  --ff-surface: #12171f;
-  --ff-surface-sidebar: #0a0d12;
-  --ff-surface-inset: #0d1117;
-  --ff-surface-chip: #1b2430;
-  --ff-border: #1c2230;
-  --ff-border-strong: #2a3442;
-  --ff-divider: #1c2230;
-  --ff-divider-strong: #2a3442;
-  --ff-row-divider: #161c26;
-  --ff-row-hover: #141a24;
-  --ff-table-header-bg: transparent;
-  --ff-table-row-hover: #141a24;
-  --ff-surface-muted: #1b2430;
-  --ff-surface-hover: #141a24;
-
-  --ff-text-strong: #f4f6f8;
-  --ff-text: #e6e8eb;
-  --ff-text-soft: #c8cfda;
-  --ff-text-muted: #8a94a3;
-  --ff-text-dim: #6b7585;
-  --ff-text-faint: #5b6472;
-
-  --ff-accent: #60a5fa;
-  --ff-accent-hover: #93c5fd;
-  --ff-accent-tint: #14263f;
+  /* W ciemnym presecie `muted` = `card`; wnęka ma być ciemniejsza od karty. */
+  --ff-surface-inset: var(--background);
+  --ff-accent-tint: color-mix(in oklch, var(--primary) 10%, var(--card));
   --ff-warn: #f59e0b;
   --ff-warn-tint: #1a1509;
   --ff-warn-border: #3d2f0e;
   --ff-warn-text: #d9c9a3;
   --ff-info: #38bdf8;
   --ff-info-tint: #13202b;
-  --ff-danger: #f87171;
-  --ff-danger-tint: #2a1215;
   --ff-violet: #a78bfa;
   --ff-violet-tint: #1c1830;
-  --ff-neutral-chip: #1b2430;
-  --ff-neutral-chip-fg: #8fa0b5;
-
-  --ff-glass-border: #1c2230;
   --ff-radius-chart-glow: 0 0 8px rgba(96, 165, 250, 0.35);
 
   --color-surface: #0d1117;
@@ -698,6 +744,68 @@ html.dark .ff-dashboard {
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* ═══ Wątek FLO w starych kolorach (plan Finora, E1) ══════════════════════════
+ * Kryterium E1 i E2: „kolory wątku bez zmian”. Tokeny `--ff-*` są od E1
+ * aliasami presetu, a wątek FLO czyta 22 z nich (D4: plików FLO nie
+ * edytujemy). Dlatego dwa miejsca, w których FLO się renderuje, dostają
+ * z powrotem dawne literały, jasne i ciemne:
+ *  - `.ff-flo-legacy` — opakowanie slotu FLO w `app/(dashboard)/dashboard/page.tsx`;
+ *  - arkusz kolejki FLO (`flo-queue-sheet.tsx`, portal do <body>), rozpoznany
+ *    po panelu „Co Flo zrobił” (`flo-history-panel.tsx`).
+ * `--ff-cta-*` też literalnie: zmienna liczy się tam, gdzie ją zadeklarowano,
+ * więc `var(--ff-primary)` z korzenia przyniosłoby kolor presetu.
+ * Nowy wygląd FLO przyjdzie z projektu Claude Design (D4); wtedy ten blok
+ * znika. Pilnuje go `tests/unit/finora-motyw.test.ts`.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.ff-flo-legacy,
+.ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Flo zrobił']) {
+  --ff-on-surface: #0f172a;
+  --ff-primary: #2563eb;
+  --ff-on-primary: #ffffff;
+  --ff-surface-container-low: #ffffff;
+  --ff-surface: #ffffff;
+  --ff-surface-inset: #f7f8fa;
+  --ff-surface-chip: #f1f5f9;
+  --ff-surface-hover: #f1f5f9;
+  --ff-border: #e6e8ec;
+  --ff-border-strong: #d4d8de;
+  --ff-row-divider: #f1f5f9;
+  --ff-text-strong: #0f172a;
+  --ff-text: #1e293b;
+  --ff-text-soft: #334155;
+  --ff-text-muted: #64748b;
+  --ff-text-dim: #94a3b8;
+  --ff-accent: #2563eb;
+  --ff-accent-tint: #eff6ff;
+  --ff-cta-bg: #2563eb;
+  --ff-cta-fg: #ffffff;
+  color: var(--ff-on-surface);
+}
+
+html.dark .ff-flo-legacy,
+html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Flo zrobił']) {
+  --ff-on-surface: #f4f6f8;
+  --ff-primary: #60a5fa;
+  --ff-on-primary: #0b1b34;
+  --ff-surface-container-low: #12171f;
+  --ff-surface: #12171f;
+  --ff-surface-inset: #0d1117;
+  --ff-surface-chip: #1b2430;
+  --ff-surface-hover: #141a24;
+  --ff-border: #1c2230;
+  --ff-border-strong: #2a3442;
+  --ff-row-divider: #161c26;
+  --ff-text-strong: #f4f6f8;
+  --ff-text: #e6e8eb;
+  --ff-text-soft: #c8cfda;
+  --ff-text-muted: #8a94a3;
+  --ff-text-dim: #6b7585;
+  --ff-accent: #60a5fa;
+  --ff-accent-tint: #14263f;
+  --ff-cta-bg: #60a5fa;
+  --ff-cta-fg: #0b1b34;
 }
 
 /* Bezpiecznik na wypadek, gdyby Tailwind wygenerował `font-mono` z inną
@@ -822,69 +930,12 @@ html.dark .ff-dashboard {
   box-shadow: none;
 }
 
-/* Aktywna pozycja w sidebarze: zielona „pigułka" (tło #152b22, tekst #34d399). */
+/* Aktywna pozycja w arkuszu „Więcej" dolnej nawigacji (`bottom-nav.tsx`).
+ * Pasek boczny od E2 planu Finora ma własne klasy aktywności
+ * (`data-active:bg-primary/10` w `app-sidebar.tsx`). */
 .ff-sidebar-active {
   background: var(--ff-accent-tint, #152b22);
   box-shadow: none;
-}
-
-/* shadcn `Card` domyślnie ma `backdrop-blur` — w dashboardzie (10+ kart / scroll)
- * to było główne źródło zacinania. W `.ff-dashboard` wymuszamy ten sam wygląd co
- * `.ff-glass-pane` (gradient + cień), bez compositing read-back. */
-.ff-dashboard [data-slot='card'] {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background-color: var(--ff-surface);
-  background-image: none;
-  border-color: var(--ff-border);
-  box-shadow: none;
-  color: var(--ff-on-surface);
-}
-
-.ff-dashboard [data-slot='card-footer'] {
-  background-color: transparent;
-  border-color: var(--ff-border);
-}
-
-/* ─── Przyciski shadcn w panelu ───────────────────────────────────────────────
- * Prototyp zna dwa przyciski: wypełniony akcentem (akcja główna) i konturowy
- * (wszystko inne). Mapujemy je po `data-variant`, które `<Button>` już
- * wystawia — dzięki temu nie trzeba dotykać 24 miejsc wywołania ani wariantów
- * współdzielonych z marketingiem.
- * ──────────────────────────────────────────────────────────────────────────── */
-.ff-dashboard [data-slot='button'][data-variant='glass-primary'] {
-  background-color: var(--ff-accent);
-  color: var(--ff-on-primary);
-  border-color: transparent;
-  box-shadow: none;
-  font-weight: 600;
-}
-
-.ff-dashboard [data-slot='button'][data-variant='glass-primary']:hover {
-  background-color: var(--ff-accent-hover);
-}
-
-.ff-dashboard [data-slot='button'][data-variant='glass'],
-.ff-dashboard [data-slot='button'][data-variant='outline'] {
-  background-color: var(--ff-surface);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-color: var(--ff-border-strong);
-  color: var(--ff-text-soft);
-  box-shadow: none;
-}
-
-.ff-dashboard [data-slot='button'][data-variant='glass']:hover,
-.ff-dashboard [data-slot='button'][data-variant='outline']:hover {
-  background-color: var(--ff-surface);
-  border-color: var(--ff-accent);
-  color: var(--ff-accent);
-}
-
-/* Prototyp nie skaluje ani nie przesuwa przycisków — reaguje samym kolorem. */
-.ff-dashboard [data-slot='button']:active {
-  transform: none;
-  scale: 1;
 }
 
 /* Prototyp jest PŁASKI — mesh i orby zostają tłem marketingu, ale znikają
@@ -906,7 +957,7 @@ html.dark .ff-dashboard {
 }
 
 .ff-dashboard ::-webkit-scrollbar-thumb {
-  background: #233042;
+  background: var(--ff-border-strong);
   border-radius: 10px;
 }
 
@@ -921,29 +972,81 @@ html.dark .ff-dashboard {
  * znikają — to jest bezpiecznik. Wartości celowo lekko nieprzezroczyste
  * (`rgba(...)` zamiast pełnych `#xxx`), żeby zachować efekt szkła nad mesh.
  * ──────────────────────────────────────────────────────────────────────────── */
-.ff-shell-sidebar {
-  background-color: #ffffff;
-  border-right: 1px solid #e6e8ec;
-}
-
 .ff-shell-header {
-  background-color: #ffffff;
-  border-bottom: 1px solid #e6e8ec;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
   /* Wysokość i wcięcie pod wcięcie ekranu — zob. sekcja „Telefon" niżej.
    * Dzięki temu w layoucie nie ma już `h-20`, którego kopie krążyły po
    * wyliczeniach wysokości na dashboardzie. */
-  height: calc(var(--ff-header-h) + var(--ff-safe-t));
+  /* Wysokość jak w Finorze: z `py-2` i przycisków (21.10.2026), bez sztywnych
+   * 52 px. Wcięcie ekranu dalej dokłada `padding-top`. */
   padding-top: var(--ff-safe-t);
 }
 
-html.dark .ff-shell-sidebar {
-  background-color: #0a0d12;
-  border-right: 1px solid #1c2230;
+/* Stopka panelu (`components/dashboard/footer.tsx`) — przewija się z treścią
+ * jako drugie dziecko `.ff-shell-scroll`. Ta jest kolumną flex, a kontener
+ * treści rośnie, więc na krótkiej stronie stopka stoi przy dolnej krawędzi. */
+.ff-shell-footer {
+  border-top: 1px solid var(--border);
 }
 
-html.dark .ff-shell-header {
-  background-color: #0d1117;
-  border-bottom: 1px solid #1c2230;
+/* Pełny arkusz list Faktur (Wystawione / Cykliczne / Po terminie, poprawka
+ * Bartosza 21.10.2026): karta z tabelą sięga do stopki pustym arkuszem, zamiast
+ * kończyć się po ostatnim wierszu. Korzeń takiej strony ma `ff-page-fill`;
+ * opakowania między kontenerem treści a nim (szablon trasy, skóra `/invoices`)
+ * stają się kolumną flex TYLKO na tych stronach (`:has`). Wszędzie indziej
+ * zostają blokami — w kolumnie flex korzeń `mx-auto max-w-*` skurczyłby się
+ * do szerokości treści. */
+.ff-shell-content:has(.ff-page-fill),
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill) {
+  display: flex;
+  flex-direction: column;
+}
+
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill),
+.ff-shell-content .ff-page-fill {
+  flex-grow: 1;
+}
+
+/* Zawartość karty sekcji, czyli strona podzakładki (poprawka Bartosza
+ * 25.10.2026: przy zmianie zakładki „płynnie zmienia się sama tabelka”).
+ * Kafle, karta i rząd zakładek stoją w layoucie sekcji i się nie ruszają;
+ * nowa tabela tylko krótko się rozjaśnia. Sama przezroczystość, bez ruchu:
+ * `transform` zrobiłby z panelu blok zawierający dla `fixed` dzieci (pływający
+ * „+ Dodaj wydatek”), jak opisano niżej przy `.ff-route-template`. */
+.ff-tab-panel {
+  animation: ff-tab-panel-in 160ms ease-out backwards;
+}
+
+@keyframes ff-tab-panel-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-tab-panel {
+    animation: none;
+  }
+}
+
+/* Zakładki w karcie (`components/lists/section-tabs.tsx`): dotknięta zakładka
+ * przejmuje podkreślenie od razu, zanim jej strona przyjdzie z serwera.
+ * Znacznik `[data-link-pending]` wstawia `LinkPendingMark` tylko na czas
+ * oczekiwania. Zwykły CSS, nie warstwa: wygrywa z klasami Tailwinda zakładki. */
+.ff-section-tabs:has([data-link-pending]) > a:not(:has([data-link-pending]))::after {
+  opacity: 0;
+}
+
+.ff-section-tabs > a:has([data-link-pending]) {
+  color: var(--foreground);
+}
+
+.ff-section-tabs > a:has([data-link-pending])::after {
+  opacity: 1;
 }
 
 
@@ -965,17 +1068,51 @@ html.dark .ff-shell-header {
   --ff-safe-l: env(safe-area-inset-left, 0px);
   --ff-safe-r: env(safe-area-inset-right, 0px);
 
-  /* Poniżej `lg` szkielet ma niższy nagłówek, dolną nawigację i zero sidebara. */
-  --ff-header-h: 56px;
+  /* Poniżej `lg` szkielet ma dolną nawigację i zero paska bocznego.
+   * Nagłówek ma 52 px na każdej szerokości: od E2 planu Finora to zwarty
+   * pasek szablonu (jeden wiersz), a nie dawne 80 px z tytułem strony. */
+  --ff-header-h: 52px;
   --ff-bottom-nav-h: 64px;
   --ff-sidebar-w: 0px;
 }
 
 @media (min-width: 1024px) {
   :root {
-    --ff-header-h: 80px;
     --ff-bottom-nav-h: 0px;
-    --ff-sidebar-w: 280px;
+    /* Rezerwa, gdy szkielet nie ma paska (np. inny layout) — szerokość
+     * rozwiniętego paska Finory (`--sidebar-width`). */
+    --ff-sidebar-w: 16rem;
+  }
+
+  /* Lewa krawędź treści (`SidebarInset`) wg stanu paska z `ui/sidebar.tsx`,
+   * wariant `inset`:
+   *  - rozwinięty: szczelina `w-(--sidebar-width)`, wstawka `ml-0`;
+   *  - zwinięty: szczelina `--sidebar-width-icon + spacing(4)` i wstawka
+   *    `ml-2`, razem `--sidebar-width-icon + spacing(6)`.
+   * `--spacing` liczy się tu w skali SM `.ff-dashboard`, tak samo jak
+   * w klasach paska. Z tego tokenu biorą położenie paski `fixed`
+   * (`.ff-sticky-actions`). */
+  .ff-dashboard:has([data-slot='sidebar'][data-state='expanded']) {
+    --ff-sidebar-w: var(--sidebar-width);
+  }
+
+  .ff-dashboard:has([data-slot='sidebar'][data-state='collapsed']) {
+    --ff-sidebar-w: calc(var(--sidebar-width-icon) + var(--spacing) * 6);
+  }
+
+  /* Wygląd „inset": szara rama w kolorze paska, biała treść. Klasa
+   * `has-data-[variant=inset]:bg-sidebar` z `SidebarProvider` przegrywa
+   * z niewarstwowym `background-color` `.ff-dashboard`, stąd selektor
+   * z atrybutem (o jedną specyficzność wyżej). */
+  .ff-dashboard[data-slot='sidebar-wrapper'] {
+    background-color: var(--sidebar);
+  }
+
+  /* Paski `fixed` kończą się na krawędzi wstawki, nie okna — wstawka ma
+   * margines `m-2` z prawej i od dołu. */
+  .ff-dashboard[data-slot='sidebar-wrapper'] .ff-sticky-actions {
+    right: calc(var(--spacing) * 2);
+    bottom: calc(var(--spacing) * 2);
   }
 }
 
@@ -992,6 +1129,32 @@ html.dark .ff-shell-header {
  * więc reguła nie robi nic na komputerze. */
 .ff-shell-scroll {
   padding-bottom: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
+  /* Dojście do krawędzi listy nie przewija dalej dokumentu („gumka” iOS
+   * ciągnęła wtedy cały ekran razem z paskiem górnym). */
+  overscroll-behavior-y: contain;
+}
+
+/* ─── Pasek górny stoi w miejscu (zgłoszenie Bartosza 23.10.2026) ────────────
+ * W panelu przewija się WYŁĄCZNIE `.ff-shell-scroll`; dokument ma się nie
+ * przewijać wcale. A przewijał się: `<body>` ma `min-h-screen` (100vh), a na
+ * telefonie 100vh to wysokość okna BEZ pasków przeglądarki, czyli więcej niż
+ * widać. Szkielet (`100dvh`) był niższy od `<body>`, więc dokument dawał się
+ * przesunąć o wysokość paska Safari. Przy każdej zmianie zakładki Next woła
+ * `scrollIntoView()` na nowej stronie — to przewija też dokument, aż góra
+ * strony stanie przy górnej krawędzi ekranu, i pasek górny wyjeżdżał poza
+ * ekran. To samo robiła „gumka” iOS przy przeciąganiu za pasek.
+ *
+ * Tylko na ekranie: wydruk (podgląd faktury ma style `print:`) zostaje bez
+ * zmian. Klasa `ff-app-shell` stoi wyłącznie na korzeniu `(dashboard)/layout`,
+ * więc landing i strony logowania przewijają się po staremu. */
+@media screen {
+  html:has(.ff-app-shell),
+  html:has(.ff-app-shell) body {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }
 
 /* ─── Przyklejone paski akcji ────────────────────────────────────────────────
@@ -1031,17 +1194,71 @@ html.dark .ff-shell-header {
  * nie być jeszcze w arkuszu, a przezroczysty pasek nawigacji nad treścią
  * wygląda jak zepsuta strona.
  *
- * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Żadnego `overflow`:
- * wyróżniony przycisk „Nowa" celowo wystaje ponad górną krawędź. */
+ * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Wyróżnione koło „Nowa”
+ * od 21.10.2026 nie wystaje ponad krawędź — stoi w pasku na miejscu napisu. */
 .ff-bottom-nav {
   height: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
-  background-color: #ffffff;
-  border-top: 1px solid #e6e8ec;
+  background-color: var(--background);
+  border-top: 1px solid var(--border);
 }
 
-html.dark .ff-bottom-nav {
-  background-color: #0d1117;
-  border-top: 1px solid #1c2230;
+/* Slot, którego strona jest w drodze (`LinkPendingMark` albo pozycja wybrana
+ * w arkuszu „Więcej”), przejmuje kolor od razu, dotychczasowy aktywny gaśnie,
+ * a u góry paska przesuwa się pasek postępu (poprawka Bartosza 25.10.2026:
+ * „podświetla się i nic się nie dzieje”). Znacznik znika, gdy nawigacja się
+ * skończy, więc nic nie zostaje zapalone bez przejścia. */
+.ff-bottom-nav:has([data-link-pending]) > a[aria-current='page'] {
+  color: var(--ff-text-muted);
+}
+
+.ff-bottom-nav > :is(a, button):has([data-link-pending]) {
+  color: var(--ff-accent);
+}
+
+.ff-bottom-nav:has([data-link-pending])::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ff-primary), transparent) no-repeat;
+  background-size: 40% 100%;
+  animation: ff-nav-progress 1s ease-in-out infinite;
+}
+
+@keyframes ff-nav-progress {
+  from {
+    background-position: -67% 0;
+  }
+  to {
+    background-position: 167% 0;
+  }
+}
+
+/* Plus w drodze do kreatora: koło pulsuje obwódką (`[data-ff-plus]`
+ * w `bottom-nav.tsx`), zamiast stać płasko do przyjścia strony. */
+.ff-bottom-nav > a:has([data-link-pending]) [data-ff-plus] {
+  animation: ff-plus-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes ff-plus-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-primary) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--ff-primary) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-bottom-nav:has([data-link-pending])::before {
+    animation: none;
+    background-size: 100% 100%;
+  }
+
+  .ff-bottom-nav > a:has([data-link-pending]) [data-ff-plus] {
+    animation: none;
+  }
 }
 
 /* Arkusz z dołu dostaje klasę `.ff-dashboard`, bo Radix portaluje go POZA
@@ -1064,12 +1281,7 @@ html.dark .ff-bottom-nav {
  * ──────────────────────────────────────────────────────────────────────────── */
 html,
 html body {
-  background-color: #f7f8fa;
-}
-
-html.dark,
-html.dark body {
-  background-color: #0d1117;
+  background-color: var(--background);
 }
 
 /* Tokeny jasne wróciły do bazy `.ff-dashboard` — jasny motyw jest domyślny
@@ -1098,66 +1310,40 @@ html:not(.dark) .ff-glass-pane-hover:hover {
     0 8px 20px rgba(15, 23, 42, 0.06);
 }
 
-html:not(.dark) .ff-dashboard [data-slot='card'] {
-  background-color: var(--ff-surface, #ffffff);
-  background-image: none;
-  color: var(--ff-on-surface);
-  border-color: var(--ff-glass-border);
-  box-shadow: var(--ff-glass-shadow);
-}
-
-html:not(.dark) .ff-dashboard [data-slot='card-footer'] {
-  background-color: var(--ff-table-header-bg);
-  border-color: var(--ff-divider);
-}
-
 html:not(.dark) .ff-dashboard ::-webkit-scrollbar-thumb {
   background: var(--ff-border-strong, #d4d8de);
 }
 
-/* Tabele / listy — klasy z dark UI → stonowane separatory */
-html:not(.dark) .ff-dashboard [class*='border-white/10'],
-html:not(.dark) .ff-dashboard [class*='border-white\\/10'] {
+/* Tabele / listy — klasy z dark UI → stonowane separatory.
+ * Dopasowanie CAŁEJ klasy (`~=`), nie podciągu: `*=` łapało też
+ * `dark:bg-white/5` i `dark:hover:…` z komponentów Finory (plan §9, E1). */
+html:not(.dark) .ff-dashboard [class~='border-white/10'],
+html:not(.dark) .ff-dashboard [class~='border-white/14'],
+html:not(.dark) .ff-dashboard [class~='border-white/55'] {
   border-color: var(--ff-divider-strong) !important;
 }
 
-html:not(.dark) .ff-dashboard [class*='border-white/14'],
-html:not(.dark) .ff-dashboard [class*='border-white\\/14'] {
-  border-color: var(--ff-divider-strong) !important;
-}
-
-html:not(.dark) .ff-dashboard [class*='border-white/6'],
-html:not(.dark) .ff-dashboard [class*='border-white\\/6'],
-html:not(.dark) .ff-dashboard [class*='border-white/5'],
-html:not(.dark) .ff-dashboard [class*='border-white\\/5'] {
+html:not(.dark) .ff-dashboard [class~='border-white/6'],
+html:not(.dark) .ff-dashboard [class~='border-white/5'] {
   border-color: var(--ff-divider) !important;
 }
 
-html:not(.dark) .ff-dashboard [class*='border-white/55'],
-html:not(.dark) .ff-dashboard [class*='border-white\\/55'] {
-  border-color: var(--ff-divider-strong) !important;
-}
-
-html:not(.dark) .ff-dashboard [class*='bg-white/5'],
-html:not(.dark) .ff-dashboard [class*='bg-white\\/5'] {
+html:not(.dark) .ff-dashboard [class~='bg-white/5'] {
   background-color: var(--ff-surface-hover) !important;
 }
 
-html:not(.dark) .ff-dashboard [class*='hover:bg-white/5']:hover,
-html:not(.dark) .ff-dashboard [class*='hover\\:bg-white\\/5']:hover {
+html:not(.dark) .ff-dashboard [class~='hover:bg-white/5']:hover,
+html:not(.dark) .ff-dashboard [class~='hover:bg-white/10']:hover {
   background-color: var(--ff-surface-hover) !important;
 }
 
-html:not(.dark) .ff-dashboard [class*='hover:bg-white/10']:hover,
-html:not(.dark) .ff-dashboard [class*='hover\\:bg-white\\/10']:hover {
-  background-color: var(--ff-surface-hover) !important;
-}
-
-html:not(.dark) .ff-dashboard thead tr[class*='bg-'] {
+/* Wiersze tabel Finory (`data-slot='table-row'`) mają własny hover — reguła
+ * dotyczy tylko starych tabel bez prymitywu. */
+html:not(.dark) .ff-dashboard thead tr:not([data-slot])[class*='bg-'] {
   background-color: var(--ff-table-header-bg) !important;
 }
 
-html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
+html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hover {
   background-color: var(--ff-table-row-hover) !important;
 }
 
@@ -1211,6 +1397,50 @@ html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .ff-route-template {
+    animation: none;
+  }
+}
+
+/* Wejście treści Pulpitu i Przepływów (poprawka Bartosza 23.10.2026:
+ * „przejścia pomiędzy zakładkami nie są już takie clean”). Strona czeka na
+ * dane wszystkich kart i pojawia się RAZ, w całości — ten sam ruch co szablon
+ * trasy, bo szablon animuje się już przy kliknięciu (na pustym `loading.tsx`),
+ * a treść przychodzi chwilę później. `backwards` z tego samego powodu co
+ * wyżej: po animacji żadnego `transform`, więc żadnego bloku zawierającego. */
+.ff-route-content {
+  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-route-content {
+    animation: none;
+  }
+}
+
+/* Telefon i tablet (poprawka Bartosza 03.11.2026: „płynność przechodzenia
+ * na telefonie”). Tylko urządzenia dotykowe, więc Mac zostaje bez zmian.
+ *
+ * 1. Strona, która przychodzi z serwera w miejsce szkieletu, wchodzi krótkim
+ *    rozjaśnieniem zamiast podmienić się w jednej klatce. Animacja rusza
+ *    przy wstawieniu elementu, czyli właśnie przy tej podmianie. Sama
+ *    przezroczystość, bez `transform`, z tego samego powodu co `.ff-tab-panel`
+ *    (paski `fixed` w środku strony). Pulpit i Przepływy mają już
+ *    `.ff-route-content`, więc ich nie dublujemy.
+ * 2. Bez szarego prostokąta systemu po dotknięciu paska górnego i dolnego:
+ *    oba mają własne ugięcie i podświetlenie, prostokąt wyglądał jak błąd. */
+@media (hover: none) and (pointer: coarse) {
+  .ff-route-template > :not(.ff-route-content) {
+    animation: ff-tab-panel-in 180ms ease-out backwards;
+  }
+
+  .ff-shell-header,
+  .ff-bottom-nav {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: reduce) {
+  .ff-route-template > :not(.ff-route-content) {
     animation: none;
   }
 }
@@ -1466,20 +1696,10 @@ html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
   --ff-emerald-soft: oklch(0.76 0.17 162 / 0.12);
 }
 
-/* Wordmark marki (landing + panel) — SF / Apple system UI, pochylony, gruby. */
-.marketing-wordmark {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    var(--font-geist-sans), system-ui, sans-serif;
-  font-style: italic;
-  font-weight: 800;
-  font-synthesis: weight style;
-  letter-spacing: -0.04em;
-  -webkit-font-smoothing: antialiased;
-}
-
 /* Italic Fraunces — emphasis w hero/headlines (np. "Automatyzacja").
- * Global utility, nie scoped — używane w landingu, vs, blog. */
+ * `--font-fraunces` ustawia tylko `app/(marketing)/layout.tsx` (od 24.10.2026,
+ * żeby panel nie pobierał fontu) — poza tą grupą klasa spada na Georgię.
+ * Pilnuje: tests/unit/fraunces-tylko-marketing.test.ts. */
 .font-editorial {
   font-family: var(--font-fraunces), 'EB Garamond', Georgia, serif;
   font-feature-settings: 'ss01' on;
@@ -1601,42 +1821,8 @@ html:not(.dark) .ff-dashboard tbody tr[class*='hover:bg-']:hover {
   }
 }
 
-/* ─── Dashboard: ekran agenta mieści się w oknie ────────────────────────────
- * Wątek ma własne przewijanie w środku, więc przewijanie CAŁEJ strony dawało
- * drugi pasek i pozwalało „zgubić” pas rozmowy pod krawędzią okna.
- * Klasę na `<html>` ustawia `DashboardRouteFlags`.
- * ────────────────────────────────────────────────────────────────────────── */
-html.ff-route-dashboard .ff-shell-scroll {
-  overflow: hidden;
-}
-
-/* Wysokość musi przejść przez kontener treści z layoutu, inaczej `h-full`
- * na stronie nie ma się od czego odbić i `overflow:hidden` zamiast blokować
- * przewijanie po prostu OBCINA pas rozmowy pod krawędzią okna. */
-html.ff-route-dashboard .ff-shell-scroll > div {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  padding-bottom: 0;
-}
-
-/* Ostatnie dziecko to strona; banery nad nią zajmują tyle, ile potrzebują,
- * a resztę wysokości dostaje ekran agenta. */
-html.ff-route-dashboard .ff-shell-scroll > div > :last-child {
-  flex: 1 1 0%;
-  min-height: 0;
-}
-
-/* Baner certyfikatu na dashboardzie stoi w prawej szynie (jak na makiecie),
- * więc szeroki wariant z layoutu jest tam zbędny. Na pozostałych stronach
- * zostaje bez zmian — tam nie ma szyny, w której mógłby zamieszkać.
- *
- * TYLKO OD `lg`. Poniżej tego progu prawej szyny NIE MA (schodziła pod wątek,
- * czyli poza zablokowaną wysokość ekranu), więc ukrycie szerokiego wariantu
- * kasowałoby ostrzeżenie o braku certyfikatu z telefonu w całości. */
-@media (min-width: 1024px) {
-  html.ff-route-dashboard .ff-shell-banner {
-    display: none;
-  }
-}
+/* Do 19.10.2026 tu stała blokada przewijania `/dashboard` (pełnoekranowy wątek
+ * FLO) i reguła chowająca szeroki baner certyfikatu. Pulpit to teraz strona
+ * Finance Finory bez FLO — przewija się jak każda inna, baner stoi w layoucie.
+ * Klasę `ff-route-dashboard` dalej ustawia `DashboardRouteFlags`; żadna reguła
+ * jej nie używa. */

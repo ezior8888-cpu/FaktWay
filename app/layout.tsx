@@ -1,16 +1,22 @@
 import type { Metadata, Viewport } from 'next';
 import {
   Geist,
-  Geist_Mono,
-  Fraunces,
-  Inter,
   IBM_Plex_Mono,
+  Outfit,
 } from 'next/font/google';
 
+// Ikony panelu z własnego serwera (pakiet `material-symbols`, Apache-2.0).
+// Do 15.10.2026 arkusz i czcionka szły z fonts.googleapis.com / fonts.gstatic.com
+// na KAŻDEJ stronie — adres IP odwiedzającego trafiał do Google bez zgody
+// (LG München I, 3 O 17493/20: 100 € zadośćuczynienia, potem fala wezwań).
+// `next/font/google` pobiera czcionki przy budowaniu, ale ikon Material Symbols
+// nie obsługuje — stąd pakiet. Pilnuje: tests/unit/bez-czcionek-google.test.ts.
+import 'material-symbols/outlined.css';
 import './globals.css';
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
 import { SentryClientInit } from '@/components/sentry-client-init';
 import { Toaster } from '@/components/ui/sonner';
+import { OFERTA } from '@/lib/marketing/oferta';
 import { THEME_BOOT_SCRIPT } from '@/lib/theme/theme';
 import { siteUrl } from '@/lib/site';
 
@@ -19,30 +25,19 @@ const geistSans = Geist({
   subsets: ['latin'],
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
+// Fraunces (marketing) jest w `app/(marketing)/_fonts.ts`, nie tutaj:
+// font z root layoutu `next/font` preładowuje na KAŻDEJ trasie, także
+// w panelu, który go nie używa.
 
-// Fraunces — display serif do Polish Editorial direction marketingu.
-// `latin-ext` jest KRYTYCZNE — polskie znaki (ą, ć, ę, ł, ń, ó, ś, ź, ż)
-// nie są w podstawowym `latin`. `opsz` = optical sizing dla naturalnych
-// rozmiarów display, `SOFT` = wariacja miękkości krawędzi serifów.
-const fraunces = Fraunces({
-  variable: '--font-fraunces',
-  subsets: ['latin', 'latin-ext'],
-  display: 'swap',
-  axes: ['opsz', 'SOFT'],
-});
-
-// Typografia panelu (prototyp „FaktFlow Dashboard"): Inter na interfejs,
-// IBM Plex Mono na liczby, NIP-y, numery faktur i daty — dzięki stałej
-// szerokości znaku kwoty w kolumnach tabel wyrównują się do przecinka.
-// `latin-ext` jest KRYTYCZNE dla polskich znaków (ą, ć, ę, ł, ń, ó, ś, ź, ż).
-// Fonty są ładowane globalnie, ale stosowane TYLKO w `.ff-dashboard` —
-// marketing zostaje na Geist.
-const inter = Inter({
-  variable: '--font-inter',
+// Typografia aplikacji (plan Finora, D2): Outfit na interfejs, IBM Plex Mono
+// na liczby, NIP-y, numery faktur i daty — dzięki stałej szerokości znaku
+// kwoty w kolumnach tabel wyrównują się do przecinka. `latin-ext` jest
+// KRYTYCZNE dla polskich znaków (ą, ć, ę, ł, ń, ó, ś, ź, ż). Outfit jest
+// fontem zmiennym, więc bez listy wag. Strona główna, strony marketingowe
+// i logowanie stoją od 23.10.2026 na tym samym foncie co panel (wcześniej
+// landing i marketing miały Geist z arkusza szablonu Zova).
+const outfit = Outfit({
+  variable: '--font-outfit',
   subsets: ['latin', 'latin-ext'],
   display: 'swap',
 });
@@ -56,35 +51,39 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: 'KSeF SaaS',
-  description: 'Faktury KSeF dla mikrofirm',
+  title: 'FaktWay',
+  description: OFERTA,
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
-  applicationName: 'KSeF SaaS',
+  applicationName: 'FaktWay',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'KSeF',
+    title: 'FaktWay',
   },
   formatDetection: {
     telephone: false,
   },
+  // Pliki z docs/brand/logo/zrodla/aplikacja.py. `icon.svg` w trybie ciemnym
+  // przełącza się na jasny niebieski; `favicon.ico` (16/32/48 px) dla reszty.
   icons: {
-    icon: '/icons/icon-192x192.png',
-    shortcut: '/icons/icon-96x96.png',
+    icon: [
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
     apple: '/icons/apple-touch-icon.png',
   },
 };
 
 export const viewport: Viewport = {
   /**
-   * Te same kolory co `--ff-bg` w `app/globals.css` i co `theme_color`
+   * Te same kolory co `--background` presetu Finora w `app/globals.css`
+   * (jasny oklch(1 0 0), ciemny oklch(0.20 0 0)) i co `theme_color`
    * w `app/manifest.ts`. Do września 2026 były trzy różne zestawy w trzech
-   * plikach (`#f4f4f5` tutaj, `#000000` w manifeście, `#f7f8fa` w arkuszu),
-   * więc pasek stanu telefonu miał inny odcień niż tło strony pod nim.
+   * plikach, więc pasek stanu telefonu miał inny odcień niż tło strony.
    */
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f7f8fa' },
-    { media: '(prefers-color-scheme: dark)', color: '#0d1117' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#161616' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -103,7 +102,7 @@ export default function RootLayout({
       lang="pl"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${inter.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
+      className={`${geistSans.variable} ${outfit.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
     >
       <head>
         {/* Klasa `dark` NIE jest już zaszyta na <html> (było tak do 29.08.2026).
@@ -111,34 +110,14 @@ export default function RootLayout({
             malowaniem, gdy klient wybrał ciemny. Kolejność ma znaczenie:
             skrypt musi być pierwszym elementem <head>. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        {/* Nie @import w globals.css — Tailwind rozwija CSS i @import musi być na początku pliku. */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font -- App Router; Material Symbols dla dashboardu */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
-        />
       </head>
       <body className="min-h-screen font-sans antialiased text-foreground">
         <SentryClientInit />
         <AnalyticsProvider>{children}</AnalyticsProvider>
-        <Toaster
-          richColors
-          position="top-right"
-          toastOptions={{
-            classNames: {
-              toast:
-                'backdrop-blur-[24px] border border-white/55 dark:border-white/14 bg-white/75 dark:bg-[rgba(15,10,30,0.75)] shadow-[0_8px_32px_rgba(31,38,135,0.12)] rounded-2xl',
-              title: 'font-semibold tracking-tight text-sm',
-              description: 'text-muted-foreground text-xs',
-            },
-          }}
-        />
+        {/* Wygląd toastów: tokeny `--popover*` z `components/ui/sonner.tsx`
+            (plan Finora, E1). Dawne klasy „szkła” usunięte — sonner wstrzykuje
+            własny CSS poza warstwami Tailwinda, więc i tak prawie nie działały. */}
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

@@ -24,6 +24,8 @@ interface Props {
   disabled?: boolean;
   enabled?: boolean;
   className?: string;
+  /** `id` pola — dla `<Label htmlFor>` (WCAG 1.3.1). */
+  id?: string;
 }
 
 export function NipValidatedInput({
@@ -34,6 +36,7 @@ export function NipValidatedInput({
   disabled,
   enabled = true,
   className,
+  id,
 }: Props) {
   const validationEnabled = Boolean(enabled && !disabled);
   const { status, result, error, validate } = useNipValidation({
@@ -78,6 +81,7 @@ export function NipValidatedInput({
     <div className="space-y-2">
       <div className="relative">
         <Input
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}

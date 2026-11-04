@@ -34,6 +34,8 @@ export type AuditAction =
   | 'auth.mfa_challenge_failed'
   | 'auth.mfa_recovery_code_used'
   | 'auth.mfa_recovery_codes_regenerated'
+  | 'auth.passkey_added'
+  | 'auth.passkey_removed'
   | 'gdpr.export_requested'
   | 'gdpr.deletion_requested'
   | 'gdpr.deletion_canceled'
@@ -65,15 +67,49 @@ export type AuditAction =
   | 'invoice.operator_requeue'
   | 'invoice.operator_reconcile'
   | 'invoice.operator_reset'
+  // D-A4-1b-3 PR B: operator zapisał decyzję klienta przy nierozstrzygniętym 440
+  // (decyzję zapisuje RPC `decide_ksef_duplicate` — `invoice.ksef_duplicate_decided`).
+  // PR C (00156): metadane niosą też `mode`, `offer` i `importedInvoiceId` (K zapisana z KSeF; brak przy `no-import`).
+  | 'invoice.operator_duplicate_decision'
+  // D-A4-1b-3 PR B: „Faktura … czeka na Twoją decyzję” dostarczone (e-mail albo push) —
+  // zapis bezpośredni (`lib/ksef/duplicate-decision-notice.ts`), raz na (fakturę, K).
+  // PR C: metadane niosą `variant` (`pair` / `record` / `released` / `review`).
+  | 'invoice.ksef_duplicate_decision_notified'
+  // D-A4-1b-3 PR C (00156, spec v3 6.6): zapis oryginału z KSeF decyzją (RPC `decide_ksef_duplicate_original`,
+  // tryb `import`), oddanie decyzji klientowi po przeglądzie pliku (RPC `release_ksef_original_review`) i trwały
+  // znacznik „sprawdź ponownie” (RPC `flag_ksef_original_recheck`) — zapisuje baza (`ksef_send_audit`), nie aplikacja.
+  | 'invoice.ksef_original_imported'
+  | 'invoice.ksef_original_review_released'
+  | 'invoice.ksef_original_recheck_flagged'
+  // PR C: operator oddał decyzję klientowi (`operatorReleaseOriginalReviewAction`, notatka operatora, tylko nowe oddanie).
+  | 'invoice.operator_original_release'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
+  // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
+  // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
+  | 'invoice.marked_paid'
+  | 'invoice.paid_undone'
+  // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
+  // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
+  | 'recurring_invoice.created'
+  | 'recurring_invoice.updated'
+  | 'recurring_invoice.paused'
+  | 'recurring_invoice.resumed'
+  | 'recurring_invoice.deleted'
+  /** Faktura z pozycji zajęła okres; metadane: invoiceId, recurringPeriod, from/toNextRunDate, nextRunDateAdvanced. */
+  | 'recurring_invoice.issued'
+  /** Samonaprawa po 23505: za okres była już faktura, `next_run_date` przesunięta dopiero teraz. */
+  | 'recurring_invoice.run_date_repaired'
+  /** Usunięto szkic, który zajmował okres — `next_run_date` cofnięta o ten okres. */
+  | 'recurring_invoice.run_date_restored'
   | 'ksef.credentials_uploaded'
   | 'ksef.credentials_removed'
   | 'ksef.environment_changed'
   // Ostrzeżenie o wygasającym certyfikacie dostarczone (mail albo push) —
   // zadanie cert-expiry-alert czyta stąd, które progi już wysłało (AUD-53).
   | 'ksef.cert_expiry_alert'
-  // Faza 23 sekcja 3 — audyt każdej interakcji z KSeF API.
+  // Faza 23 sekcja 3 — audyt interakcji z KSeF API. Odpytywanie (`*.poll`):
+  // wiersz błędu żądania i wiersz podsumowania z `metadata.summary` (EXT-03).
   | 'ksef.session.open'
   | 'ksef.session.close'
   | 'ksef.invoice.send'
@@ -81,6 +117,15 @@ export type AuditAction =
   | 'ksef.upo.download'
   | 'ksef.inbox.poll'
   | 'ksef.auth.token'
+  // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): zapytanie
+  // o metadane (każde, przez ksefFetch), jeden zbiorczy wiersz pobrań na
+  // przebieg (liczba + do 10 numerów KSeF) i wyłącznik właściciela firmy.
+  | 'ksef.history.query'
+  | 'ksef.history.download'
+  | 'ksef.history.paused'
+  | 'ksef.history.resumed'
+  // Zapis operatora skryptem `scripts/ops/ksef-historia.sh` (odblokuj, wznow, wstrzymaj-wszystko) — SQL, nie aplikacja.
+  | 'ksef.history.operator'
   // Faza 24 — admin panel actions.
   | 'admin.user.suspended'
   | 'admin.user.unsuspended'
@@ -95,6 +140,8 @@ export type AuditAction =
   // Faza 25 — Stripe billing lifecycle.
   | 'billing.customer.created'
   | 'billing.checkout.session_created'
+  /** Stripe nie zaoferował BLIK-a mimo `STRIPE_BLIK_RECURRING=on` (odmowa albo filtr). */
+  | 'billing.checkout.blik_unavailable'
   | 'billing.subscription.created'
   | 'billing.subscription.updated'
   | 'billing.subscription.synced'
@@ -121,7 +168,15 @@ export type AuditAction =
   | 'join_request.approved'
   | 'join_request.denied'
   | 'membership.revoked'
-  | 'membership.role_changed';
+  | 'membership.role_changed'
+  // Dokumenty prawne i zgody (lib/legal/record.ts). Metadane niosą wersję
+  // dokumentu i wersję brzmienia oświadczenia (lib/legal/versions.ts).
+  | 'legal.terms_accepted'
+  | 'legal.checkout_statement_accepted'
+  | 'legal.email_consent_granted'
+  | 'legal.email_consent_withdrawn'
+  // Zgoda na analitykę (00161): kto, kiedy i na jakie brzmienie (ANALYTICS_STATEMENT).
+  | 'analytics.consent_changed';
 
 export interface AuditLogEntry {
   action: AuditAction;

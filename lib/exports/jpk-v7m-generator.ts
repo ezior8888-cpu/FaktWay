@@ -320,7 +320,7 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
   header.ele('KodFormularza', { kodSystemowy: 'JPK_V7M (3)', wersjaSchemy: '1-0E' }).txt('JPK_VAT').up();
   header.ele('WariantFormularza').txt('3').up();
   header.ele('DataWytworzeniaJPK').txt((data.generatedAt ?? new Date()).toISOString()).up();
-  header.ele('NazwaSystemu').txt(data.systemName ?? 'FaktFlow').up();
+  header.ele('NazwaSystemu').txt(data.systemName ?? 'FaktWay').up();
   header.ele('CelZlozenia', { poz: 'P_7' }).txt(data.goal ?? '1').up();
   header.ele('KodUrzedu').txt(taxOffice).up();
   header.ele('Rok').txt(year).up();

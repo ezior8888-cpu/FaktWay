@@ -9,7 +9,7 @@ import type { Invoice, InvoiceAnnotations } from '@/types/invoice';
  * C5b: adnotacje z importu mają nowe klucze (`vatExemptionBasisKind`,
  * `newMeansOfTransport`, `marginScheme`). Generator FA(3) jest ich
  * konsumentem — nie może ich po cichu zgubić: podstawa z dyrektywy idzie jako
- * P_19B (nie P_19A), a procedur, których FaktFlow nie wystawia, nie emituje
+ * P_19B (nie P_19A), a procedur, których FaktWay nie wystawia, nie emituje
  * jako „nie dotyczy”. Dziś żaden wiersz z importu nie trafia do generatora
  * (brak `fa3_data.lines`); to bezpiecznik przed D-A4-1b-3 PR C.
  */
@@ -34,14 +34,14 @@ describe('FA(3) — rodzaj podstawy zwolnienia i procedury z importu', () => {
     expect((await validateInvoiceXml(xml)).errors).toEqual([]);
   });
 
-  it('bez rodzaju → P_19A jak dotąd (faktury FaktFlow)', () => {
+  it('bez rodzaju → P_19A jak dotąd (faktury FaktWay)', () => {
     expect(gen(faktura({ vatExemptionBasis: 'art. 113 ust. 1 ustawy o VAT' }))).toContain('<P_19A>art. 113 ust. 1 ustawy o VAT</P_19A>');
   });
 
   it.each([
     ['nowe środki transportu (P_22)', { newMeansOfTransport: 1 } as InvoiceAnnotations],
     ['procedura marży', { marginScheme: 'P_PMarzy_3_1' } as InvoiceAnnotations],
-  ])('%s → odmowa (FaktFlow tego nie wystawia), nie „nie dotyczy”', (_n, annotations) => {
+  ])('%s → odmowa (FaktWay tego nie wystawia), nie „nie dotyczy”', (_n, annotations) => {
     expect(() => gen(faktura(annotations, '23'))).toThrow(InvoiceValidationError);
   });
 

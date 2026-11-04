@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 # ═══════════════════════════════════════════════════════════════
-# FaktFlow — obraz produkcyjny pod Coolify/Hetzner (migracja M5).
+# FaktWay — obraz produkcyjny pod Coolify/Hetzner (migracja M5).
 #
 # Multi-stage: deps → build → runner. Finalny obraz to standalone
 # output Next.js (server.js + traced node_modules) — ~10× mniejszy
 # niż pełny node_modules i bez narzędzi builda w runtime.
 #
 # Build lokalny (test):
-#   docker build -t faktflow --build-arg NEXT_PUBLIC_SUPABASE_URL=... .
+#   docker build -t faktway --build-arg NEXT_PUBLIC_SUPABASE_URL=... .
 # W Coolify: zmienne NEXT_PUBLIC_* oznacz jako "Build Variable" —
 # są WYPIEKANE w bundlu JS podczas builda, nie czytane w runtime.
 # ═══════════════════════════════════════════════════════════════
@@ -43,11 +43,6 @@ COPY . .
 ARG NEXT_PUBLIC_APP_DOMAIN
 ARG NEXT_PUBLIC_APP_ENV
 ARG NEXT_PUBLIC_APP_URL
-# Przełącznik wpuszczania telefonów do panelu (zob. lib/mobile-access.ts).
-# Musi być build-argiem: proxy.ts idzie pod Edge, a tam Next wstawia
-# wartości env w czasie budowania, nie odczytuje ich w locie.
-ARG NEXT_PUBLIC_MOBILE_PANEL
-ARG NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST
 ARG NEXT_PUBLIC_POSTHOG_HOST
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ARG NEXT_PUBLIC_SENTRY_DSN
@@ -55,13 +50,13 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+# Opcjonalny: strony statyczne przy `next build` mówią o BLIK-u (`lib/marketing/oferta.ts`).
+ARG STRIPE_BLIK_RECURRING
 # Opcjonalny: source maps do GlitchTip/Sentry (build działa bez niego).
 ARG SENTRY_AUTH_TOKEN
 ENV NEXT_PUBLIC_APP_DOMAIN=$NEXT_PUBLIC_APP_DOMAIN \
     NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
-    NEXT_PUBLIC_MOBILE_PANEL=$NEXT_PUBLIC_MOBILE_PANEL \
-    NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST=$NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST \
     NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST \
     NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
@@ -91,7 +86,23 @@ ENV NEXT_OUTPUT=standalone \
 #
 # Zanim obniżysz tę liczbę: 1958 MB (domyślne dla Node 22) było testowane
 # i NIE WYSTARCZA. Zanim ją podniesiesz: patrz na swap, nie na RAM.
-ENV NODE_OPTIONS="--max-old-space-size=3072"
+#
+# 20.10.2026: 3072 → 3584 MB. Po ekranach Finory (#293–#295) build padł
+# z „JavaScript heap out of memory” (exit 134 — pułap sterty, nie zabójca
+# OOM) w kompilacji webpacka, przy serializacji map źródeł dla Sentry.
+# Pomiar lokalny szczytu sterty kompilacji (Node 24, zawyża względem
+# produkcji): wdrożony 67251ef6 3296 MB, main 4365 MB, main
+# z `experimental.webpackMemoryOptimizations` (next.config.ts) 3526 MB.
+# Optymalizacje + 3584 MB przechodzą lokalnie (także z E9). Swap app-1
+# 20.10: 8 GB, w spoczynku zajęte ~1.6 GB — +512 MB sterty mieści się.
+#
+# 22.10.2026: 3584 → 4096 MB (decyzja Bartosza). Łatki bezpieczeństwa:
+# Next 16.4.1 (GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r) i @sentry/nextjs
+# 10.75.2 (GHSA-mchm-gjx6-7h55 — używamy `tunnelRoute`). Z nową wersją Sentry
+# build padał przy 3584 MB nawet bez `widenClientFileUpload`; przy 4096 MB
+# przechodzi (lokalnie szczyt RSS ~6.7 GB). Swap app-1 22.10: 8 GB, w spoczynku
+# zajęte ~0.8 GB. Gdy build zginie z exit 137 — dołóż swap (pułapki w AGENTS.md).
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm build
 
 # ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──
@@ -111,9 +122,12 @@ USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
-# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
-CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]
+# `server-only-hook.mjs`: moduły z `import 'server-only'` rzucają poza warunkiem
+# `react-server`, więc hak podmienia sam `server-only` na pusty moduł. NIE wracaj
+# do globalnego `--conditions=react-server`: psuje `react-dom/server` i render
+# maili (RUN-01). Ten sam ciąg ma `worker:dev` — pilnuje tego test
+# tests/unit/worker-start-jak-dockerfile.test.ts.
+CMD ["node", "--import", "./lib/jobs/server-only-hook.mjs", "--import", "tsx", "lib/jobs/worker.ts"]
 
 # ── runner: minimalny obraz produkcyjny ──
 # MUSI zostać ostatnim etapem pliku: `docker build` bez `--target` buduje

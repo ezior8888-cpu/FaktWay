@@ -111,7 +111,7 @@ import { onExportsGenerateExhausted, runExportsGenerate } from '@/lib/jobs/runne
 
 /**
  * W9 (C5a): faktura z importu historii KSeF ze stawką FA(3) bez odpowiednika
- * w FaktFlow („0 WDT” — WDT ma w JPK_V7M własne pole) blokuje JPK za okres.
+ * w FaktWay („0 WDT” — WDT ma w JPK_V7M własne pole) blokuje JPK za okres.
  * Odmowa ma nazwać dokument, nie ponawiać się bez sensu i trafić do Centrum
  * eksportu jako powód dla człowieka — nie „Nie udało się wygenerować pliku”.
  */

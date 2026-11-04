@@ -34,7 +34,45 @@ function database() {
   let lookupError = false;
   let pageSize = 1000;
   let sequence = 0;
-  const from = vi.fn(() => {
+  // Rozmowy z czatem pomocy (00054): user_id ON DELETE SET NULL — bez
+  // jawnego usunięcia zostają z treścią po skasowaniu konta.
+  const support: Array<{ id: string; user_id: string | null }> = [];
+  const effects: string[] = [];
+  let supportDeleteError = false;
+  rpc.mockImplementation(async (fn: string) => {
+    effects.push(fn);
+    return { data: (fn === 'gdpr_user_deletion_blockers' ? [] : null) as unknown, error: null };
+  });
+  deleteUser.mockImplementation(async () => {
+    effects.push('deleteUser');
+    return { error: null };
+  });
+  function supportTable() {
+    let userId: string | undefined;
+    let deleting = false;
+    const execute = () => {
+      effects.push('support_conversations.delete');
+      expect(deleting).toBe(true);
+      if (supportDeleteError) return { data: null, error: { message: 'synthetic chat delete failure' }, count: null };
+      const before = support.length;
+      // DELETE bez WHERE kasuje wszystko — pominięty filtr zmienia wynik.
+      for (let i = support.length - 1; i >= 0; i--) {
+        if (userId === undefined || support[i].user_id === userId) support.splice(i, 1);
+      }
+      return { data: null, error: null, count: before - support.length };
+    };
+    const query = {
+      delete: () => { deleting = true; return query; },
+      eq: (key: string, value: string) => { expect(key).toBe('user_id'); userId = value; return query; },
+      then: (
+        onfulfilled: (value: ReturnType<typeof execute>) => unknown,
+        onrejected?: (reason: unknown) => unknown,
+      ) => Promise.resolve().then(execute).then(onfulfilled, onrejected),
+    };
+    return query;
+  }
+  const from = vi.fn((table?: string) => {
+    if (table === 'support_conversations') return supportTable() as never;
     let fields = '*';
     let due: string | undefined;
     const operation: Operation = { kind: 'select', values: null, filters: [], included: [] };
@@ -81,9 +119,10 @@ function database() {
     return query;
   });
   return {
-    rows, operations, from, rpc, auth: { admin: { deleteUser } },
+    rows, operations, from, rpc, auth: { admin: { deleteUser } }, support, effects,
     failLookup: () => { lookupError = true; },
     setPageSize: (size: number) => { pageSize = size; },
+    failSupportDelete: () => { supportDeleteError = true; },
   };
 }
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -306,6 +345,43 @@ describe('GDPR atomic processing claim', () => {
     dueRequest();
     expect(await executeGdprRequest('due-request')).toEqual({ ok: true });
     expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual(['gdpr_user_deletion_blockers', 'anonymize_user_audit_logs']);
+  });
+
+  // Polityka prywatności: rozmowy z czatem pomocy „do 24 miesięcy od ostatniej
+  // wiadomości”. FK `support_conversations.user_id` ma ON DELETE SET NULL, więc
+  // samo deleteUser zostawiało rozmowy z treścią bez właściciela na zawsze.
+  it('deletes the user support chat before the account, leaving other users chats', async () => {
+    dueRequest();
+    db.support.push(
+      { id: 'chat-own-1', user_id: input.userId },
+      { id: 'chat-own-2', user_id: input.userId },
+      { id: 'chat-other', user_id: 'other-user' },
+    );
+    expect(await executeGdprRequest('due-request')).toEqual({ ok: true });
+    expect(db.support).toEqual([{ id: 'chat-other', user_id: 'other-user' }]);
+    // Po sprawdzeniach (odmowa nie ma skutków), przed anonimizacją i deleteUser.
+    expect(db.effects).toEqual([
+      'gdpr_user_deletion_blockers', 'support_conversations.delete', 'anonymize_user_audit_logs', 'deleteUser',
+    ]);
+  });
+
+  it('stops before anonymization and account deletion when the support chat cannot be deleted', async () => {
+    dueRequest(); db.failSupportDelete();
+    expect(await executeGdprRequest('due-request')).toEqual({ ok: false, error: 'support_conversations_delete_failed' });
+    expect(db.rpc).not.toHaveBeenCalledWith('anonymize_user_audit_logs', expect.anything());
+    expect(db.auth.admin.deleteUser).not.toHaveBeenCalled();
+    expect(db.rows[0]).toMatchObject({ status: 'failed', failure_reason: 'support_conversations_delete_failed' });
+  });
+
+  it('keeps the support chat when a foreign key check refuses the deletion', async () => {
+    dueRequest();
+    db.support.push({ id: 'chat-own-1', user_id: input.userId });
+    db.rpc.mockImplementation(async (fn: string) => ({
+      data: fn === 'gdpr_user_deletion_blockers' ? ['public.some_table.user_id'] : null,
+      error: null,
+    }));
+    expect((await executeGdprRequest('due-request')).ok).toBe(false);
+    expect(db.support).toHaveLength(1);
   });
 
   it('records an uncertain failure without automatically repeating deletion', async () => {

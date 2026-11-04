@@ -1,84 +1,80 @@
-import { KeyRound, ShieldCheck } from 'lucide-react';
 import { redirect } from 'next/navigation';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
+import { FieldGroup } from '@/components/ui/field';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { listPasskeyDevices } from '@/lib/auth/passkey/devices';
+import type { PasskeyDevice } from '@/lib/auth/passkey/types';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { createClient } from '@/lib/supabase/server';
+import { PasskeysCard } from './_components/passkeys-card';
 import { PasswordChangeCard } from './_components/password-change-card';
 import { TwoFactorCard } from './_components/two-factor-card';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Zakładka „Bezpieczeństwo” = Security z Finory (`views/settings/security`):
+ * hasło, weryfikacja dwuetapowa i logowanie biometrią. Blokady aplikacji (PIN),
+ * listy sesji i historii logowań z Finory nie mamy, więc ich tu nie ma.
+ */
 export default async function SecuritySettingsPage({
   searchParams,
 }: {
   searchParams: Promise<{ notice?: string }>;
 }) {
   const { notice } = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Ten sam użytkownik co w layoucie (`cache()` na żądanie). Czynniki MFA
+  // z tego odczytu: `mfa.listFactors()` woła pod spodem drugie `getUser()`
+  // (GoTrue) i filtruje `user.factors` tak samo — po typie i statusie.
+  const user = await getDashboardSessionUser();
   if (!user) redirect('/login');
 
-  const { data: factorsRes } = await supabase.auth.mfa.listFactors();
-  const verifiedTotp = factorsRes?.totp?.find((f) => f.status === 'verified');
-  const isTotpEnabled = Boolean(verifiedTotp);
+  const isTotpEnabled = (user.factors ?? []).some(
+    (f) => f.factor_type === 'totp' && f.status === 'verified',
+  );
+
+  // Sesja po biometrii wchodzi do panelu bez kodu, a wszystko na tej stronie go wymaga.
+  // Mówimy o tym od razu, zanim klient wpisze hasło w formularz, który i tak odmówi.
+  const supabase = await createClient();
+  const mfaState = await getVerifiedMfaState(supabase).catch(() => null);
+  const stepUpRequired = mfaState?.status === 'challenge_required';
+
+  let devices: PasskeyDevice[] = [];
+  let devicesLoadFailed = false;
+  try {
+    devices = await listPasskeyDevices(supabase, user.id);
+  } catch {
+    devicesLoadFailed = true;
+  }
 
   return (
-    <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
-          Bezpieczeństwo
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Hasło, weryfikacja dwuetapowa i sesje
-        </p>
-      </div>
-
+    <FieldGroup>
       {notice === 'admin_mfa_required' && (
-        <p role="status" className="rounded-xl border border-glass-border bg-foreground/5 p-4 text-sm">
-          Panel administratora wymaga weryfikacji dwuetapowej. Włącz 2FA poniżej,
-          potwierdź kod z aplikacji TOTP i wróć do panelu administratora.
-        </p>
+        <Alert role="status">
+          <AlertDescription>
+            Panel administratora wymaga weryfikacji dwuetapowej. Włącz 2FA poniżej,
+            potwierdź kod z aplikacji TOTP i wróć do panelu administratora.
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-            <KeyRound className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="flex-1 space-y-4">
-            <div>
-              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                Hasło
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Zmień hasło — wymagamy minimum 12 znaków, mieszanki liter,
-                cyfr i znaków specjalnych. Sprawdzamy też w bazie wycieków.
-              </p>
-            </div>
-            <PasswordChangeCard />
-          </div>
-        </div>
-      </div>
+      {stepUpRequired && (
+        <MfaStepUpNotice returnTo="/settings/security">
+          Zalogowano biometrią. Zmiana hasła, 2FA i urządzeń wymaga kodu z aplikacji uwierzytelniającej.
+        </MfaStepUpNotice>
+      )}
 
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-            <ShieldCheck className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="flex-1 space-y-4">
-            <div>
-              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                Weryfikacja dwuetapowa (2FA)
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Dodaj drugi czynnik logowania (aplikacja TOTP — Google Authenticator,
-                1Password, Authy). Chroni konto nawet jeśli hasło wycieknie.
-              </p>
-            </div>
-            <TwoFactorCard isEnabled={isTotpEnabled} />
-          </div>
-        </div>
-      </div>
-    </div>
+      <PasswordChangeCard />
+
+      <Separator />
+
+      <TwoFactorCard isEnabled={isTotpEnabled} />
+
+      <Separator />
+
+      <PasskeysCard initialDevices={devices} stepUpRequired={stepUpRequired} loadFailed={devicesLoadFailed} />
+    </FieldGroup>
   );
 }

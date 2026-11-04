@@ -78,7 +78,7 @@ function competitorCellBg(status: FeatureStatus): string {
 
 export function VsComparisonTableEmerald({
   competitorName,
-  productName = 'FaktFlow',
+  productName = 'FaktWay',
   rows,
 }: Props) {
   const grouped = rows.reduce<Record<string, ComparisonRow[]>>((acc, r) => {

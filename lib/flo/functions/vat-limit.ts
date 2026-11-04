@@ -1,7 +1,3 @@
-// NIEAKTYWNE (AUD-115): moduł agenta FLO bez importera w kodzie produkcyjnym —
-// na produkcji nie działa. Podpięcie = przegląd i zdjęcie znacznika
-// (pilnuje tests/unit/flo-nieaktywne.test.ts).
-
 /**
  * T-02 — licznik limitu zwolnienia podmiotowego z VAT (krok 37 planu).
  *

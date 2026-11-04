@@ -3,7 +3,9 @@ import {
   type AccountantAccessPublicRow,
 } from '@/components/settings/accountant-list';
 import { CoPilotSettingsForm } from '@/components/exports/co-pilot-settings-form';
+import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { TaxOfficeForm } from '@/components/settings/tax-office-form';
+import { Separator } from '@/components/ui/separator';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { getPageContextWithRole } from '@/lib/supabase/page-context';
 
@@ -60,40 +62,33 @@ export default async function AccountantAccessPage() {
 
   const accesses = toPublicAccesses(raw ?? []);
 
+  // Zakładka „Księgowa” (plan P14, bez odpowiednika w Finorze) złożona
+  // z sekcji Finory rozdzielonych `Separator`: urząd skarbowy, Co-Pilot,
+  // linki dla księgowej (jak `connected-accounts`).
   return (
-    <div className="space-y-8 max-w-4xl">
+    <FieldGroup>
       <div>
-        <h1 className="text-4xl font-semibold tracking-tight">
-          Dostęp dla księgowej
-        </h1>
-        <p className="mt-2 text-muted-foreground">
+        <FieldLabel>Dostęp dla księgowej</FieldLabel>
+        <FieldDescription>
           Generuj ograniczone czasowo linki do udostępnienia faktur biuru
           rachunkowemu i — jako właściciel — skonfiguruj automatyczny Co-Pilot
           miesięczny.
-        </p>
+        </FieldDescription>
       </div>
 
-      <div className="max-w-3xl ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">Urząd skarbowy</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Trafia do nagłówka plików JPK (KodUrzedu).
-          </p>
-        </div>
-        <TaxOfficeForm initialCode={taxOfficeCode} />
-      </div>
+      <TaxOfficeForm initialCode={taxOfficeCode} />
 
-      <div className="max-w-3xl ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">
-        <CoPilotSettingsForm
-          key={settings?.updated_at ?? 'defaults'}
-          initialSettings={settings ?? null}
-          recentJobs={recentJobs ?? []}
-        />
-      </div>
+      <Separator />
 
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">
-        <AccountantAccessList accesses={accesses} />
-      </div>
-    </div>
+      <CoPilotSettingsForm
+        key={settings?.updated_at ?? 'defaults'}
+        initialSettings={settings ?? null}
+        recentJobs={recentJobs ?? []}
+      />
+
+      <Separator />
+
+      <AccountantAccessList accesses={accesses} />
+    </FieldGroup>
   );
 }

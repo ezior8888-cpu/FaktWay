@@ -35,7 +35,7 @@ function htmlResponse(opts: {
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
-  <title>FaktFlow — ${opts.title}</title>
+  <title>FaktWay — ${opts.title}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f6f6f6; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -81,7 +81,7 @@ function categoryLabelOf(category: string): string {
   return category === 'transactional'
     ? 'transakcyjnych (faktury, KSeF, hasła)'
     : category === 'product_updates'
-      ? 'powiadomień produktowych (welcome, magic import done, paczki dla księgowej)'
+      ? 'powiadomień produktowych (welcome, paczki dla księgowej)'
       : 'powiadomień marketingowych';
 }
 

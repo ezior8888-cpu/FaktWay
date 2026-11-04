@@ -32,12 +32,11 @@ describe('webhooki Stripe — porównanie i retencja', () => {
     expect(sql).toContain('REVOKE EXECUTE ON FUNCTION public.prune_stripe_webhook_payloads(integer) FROM PUBLIC, anon, authenticated;');
   });
 
-  it('miesięczny job sprzątania woła retencję Stripe (90 dni)', async () => {
-    s.rpc.mockReset().mockImplementation(async (fn: string) => ({
-      data: fn === 'cleanup_old_audit_logs' ? { deleted_audit_logs: 0, cutoff: '', duration_ms: 1 } : 0,
-      error: null,
-    }));
-    const ctx = { step: { run: async (_n: string, fn: () => unknown) => fn() } } as unknown as JobContext;
+  it('job sprzątania dzienników woła retencję Stripe (90 dni)', async () => {
+    // Funkcje paczkowe dzienników (00157) i retencja Stripe: nic do usunięcia.
+    s.rpc.mockReset().mockImplementation(async () => ({ data: 0, error: null }));
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    const ctx = { step: { run: async (_n: string, fn: () => unknown) => fn() }, logger } as unknown as JobContext;
 
     await runCleanupAuditLogs(ctx);
 

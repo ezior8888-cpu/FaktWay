@@ -277,13 +277,17 @@ export interface AdminSupportConversation {
   category: string | null;
   subject: string | null;
   csatPositive: boolean | null;
+  /** `user_requested` (klient kliknął „Połącz z człowiekiem”) albo `ai_uncertain`. */
   escalationReason: string | null;
   escalatedAt: string | null;
   createdAt: string;
+  /** Adres, na który odpowiadamy; `null`, gdy GoTrue go nie zwróciło. */
+  userEmail: string | null;
 }
 
 interface SupportConvRow {
   id: string;
+  user_id: string | null;
   status: 'open' | 'escalated' | 'resolved' | 'closed';
   category: string | null;
   subject: string | null;
@@ -293,44 +297,64 @@ interface SupportConvRow {
   created_at: string;
 }
 
+const SUPPORT_CONV_COLUMNS =
+  'id, user_id, status, category, subject, csat_positive, escalation_reason, escalated_at, created_at';
+
+/** Górna granica listy eskalowanych: nie ma jeszcze zamykania rozmów, więc wiersze się zbierają. */
+const ESCALATED_LIMIT = 200;
+/** Tyle adresów naraz: panel admina nie może zalać GoTrue setką równoległych zapytań. */
+const EMAIL_LOOKUP_BATCH = 10;
+
+interface SupportConvQuery {
+  eq: (k: string, v: string) => SupportConvQuery;
+  order: (k: string, o: { ascending: boolean }) => SupportConvQuery;
+  limit: (n: number) => PromiseLike<{
+    data: SupportConvRow[] | null;
+    error: { message: string } | null;
+  }>;
+}
+
 /**
- * Ostatnie konwersacje AI support. `support_conversations` to nowa tabela
- * (00054), nieobecna w `types/database.ts` — stąd cast przez `unknown`.
+ * `support_conversations` to nowa tabela (00054), nieobecna w
+ * `types/database.ts` — stąd cast przez `unknown`.
  */
-export async function getSupportConversations(
-  limit = 25,
-): Promise<AdminSupportConversation[]> {
-  await requireAdmin();
-  const supabase = createAdminClient();
-  const res = await (
+function supportConversations(supabase: ReturnType<typeof createAdminClient>): SupportConvQuery {
+  return (
     supabase as unknown as {
-      from: (n: string) => {
-        select: (c: string) => {
-          order: (
-            k: string,
-            o: { ascending: boolean },
-          ) => {
-            limit: (n: number) => Promise<{
-              data: SupportConvRow[] | null;
-              error: { message: string } | null;
-            }>;
-          };
-        };
-      };
+      from: (n: string) => { select: (c: string) => SupportConvQuery };
     }
   )
     .from('support_conversations')
-    .select(
-      'id, status, category, subject, csat_positive, escalation_reason, escalated_at, created_at',
-    )
-    .order('created_at', { ascending: false })
-    .limit(limit);
+    .select(SUPPORT_CONV_COLUMNS);
+}
 
-  if (res.error) {
-    throw new Error(`support_conversations lookup: ${res.error.message}`);
+/** Adresy klientów: każdego pytamy raz, a błąd odczytu nie wywraca panelu. */
+async function emailsByUserId(
+  supabase: ReturnType<typeof createAdminClient>,
+  rows: SupportConvRow[],
+): Promise<Map<string, string | null>> {
+  const ids = [...new Set(rows.map((r) => r.user_id).filter((id): id is string => Boolean(id)))];
+  const emails = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += EMAIL_LOOKUP_BATCH) {
+    await Promise.all(
+      ids.slice(i, i + EMAIL_LOOKUP_BATCH).map(async (id) => {
+        try {
+          const { data } = await supabase.auth.admin.getUserById(id);
+          emails.set(id, data?.user?.email ?? null);
+        } catch {
+          emails.set(id, null);
+        }
+      }),
+    );
   }
+  return emails;
+}
 
-  return (res.data ?? []).map((row) => ({
+function toAdminConversation(
+  row: SupportConvRow,
+  emails: Map<string, string | null>,
+): AdminSupportConversation {
+  return {
     id: row.id,
     status: row.status,
     category: row.category,
@@ -339,5 +363,52 @@ export async function getSupportConversations(
     escalationReason: row.escalation_reason,
     escalatedAt: row.escalated_at,
     createdAt: row.created_at,
-  }));
+    userEmail: row.user_id ? (emails.get(row.user_id) ?? null) : null,
+  };
+}
+
+/** Ostatnie konwersacje AI support. */
+export async function getSupportConversations(
+  limit = 25,
+): Promise<AdminSupportConversation[]> {
+  await requireAdmin();
+  const supabase = createAdminClient();
+  const res = await supportConversations(supabase)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (res.error) {
+    throw new Error(`support_conversations lookup: ${res.error.message}`);
+  }
+
+  const rows = res.data ?? [];
+  const emails = await emailsByUserId(supabase, rows);
+  return rows.map((row) => toAdminConversation(row, emails));
+}
+
+/**
+ * Rozmowy czekające na człowieka, niezależnie od listy najnowszych: bez tego
+ * eskalacja starsza niż 25 nowszych rozmów znikała z panelu, a przy braku
+ * Slacka nikt by o niej nie wiedział. Prośby klienta są na górze.
+ */
+export async function getEscalatedConversations(
+  limit = ESCALATED_LIMIT,
+): Promise<AdminSupportConversation[]> {
+  await requireAdmin();
+  const supabase = createAdminClient();
+  const res = await supportConversations(supabase)
+    .eq('status', 'escalated')
+    .order('escalated_at', { ascending: false })
+    .limit(limit);
+
+  if (res.error) {
+    throw new Error(`support_conversations escalated lookup: ${res.error.message}`);
+  }
+
+  const rows = res.data ?? [];
+  const emails = await emailsByUserId(supabase, rows);
+  const prosba = (row: SupportConvRow) => (row.escalation_reason === 'user_requested' ? 0 : 1);
+  return [...rows]
+    .sort((a, b) => prosba(a) - prosba(b))
+    .map((row) => toAdminConversation(row, emails));
 }

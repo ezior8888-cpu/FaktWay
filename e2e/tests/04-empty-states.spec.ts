@@ -23,6 +23,18 @@ test.describe('Empty states (Faza 19)', () => {
     await expect(page.getByText(/brak faktur przychodzących/i)).toBeVisible();
   });
 
+  // Plan Finora E9 (P6): nowa strona — pusty stan `Empty` z przyciskiem otwierającym arkusz.
+  test('/invoices/recurring bez pozycji pokazuje empty state z „+ Nowa faktura cykliczna”', async ({
+    authenticatedContext,
+  }) => {
+    const page = await authenticatedContext.newPage();
+    await page.goto('/invoices/recurring');
+    await expect(page.getByText('Brak faktur cyklicznych')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '+ Nowa faktura cykliczna' }),
+    ).toBeVisible();
+  });
+
   test('/contractors bez kontrahentów pokazuje empty state', async ({
     authenticatedContext,
   }) => {

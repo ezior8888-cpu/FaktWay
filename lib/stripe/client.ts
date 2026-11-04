@@ -41,9 +41,9 @@ export function getStripe(): Stripe {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     apiVersion: apiVersionEnv as any,
     // Sentry breadcrumbs zachowują kontekst per request — bez `appInfo` Stripe
-    // dashboard pokazałby tylko "Node.js" bez wskazania że to FaktFlow.
+    // dashboard pokazałby tylko "Node.js" bez wskazania że to FaktWay.
     appInfo: {
-      name: 'FaktFlow',
+      name: 'FaktWay',
       version: '0.1.0',
       url: process.env.NEXT_PUBLIC_APP_URL,
     },

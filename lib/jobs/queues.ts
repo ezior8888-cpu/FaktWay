@@ -30,7 +30,6 @@ export const EVENT_QUEUE_MAP = {
   'exports/co-pilot.send-package': ['exports.co-pilot.send-package'],
   'exports/generate.requested': ['exports.generate.requested'],
   'import/file.uploaded': ['import.file.uploaded'],
-  'import/ksef-history.requested': ['import.ksef-history.requested'],
   'inbox/invoice-received': ['inbox.invoice-received'],
   // Brak odbiorcy — na Inngest też nikt tego nie słucha. Pusta lista =
   // wysyłka nic nie publikuje (pg-boss rzuca na kolejce bez `createQueue`).
@@ -49,6 +48,8 @@ export const EVENT_QUEUE_MAP = {
     'invoice.submit.succeeded.offline-queue',
   ],
   'invoice/upo.requested': ['invoice.upo.requested'],
+  // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): fan-out z crona.
+  'ksef/history-sync.tenant': ['ksef.history-sync.tenant'],
   'ocr/process-photo': ['ocr.process-photo'],
   'reminders/send.requested': ['reminders.send.requested'],
   'user/registered': ['user.registered'],
@@ -84,11 +85,13 @@ export interface CronJobDef {
 
 const TZ = 'Europe/Warsaw';
 
-/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat. */
+/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF. */
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
-  { queue: 'cron.cleanup-audit-logs', cron: '0 3 1 * *', tz: TZ },
+  // Retencja dzienników paczkami (00157): codziennie, z budżetem czasu — przy
+  // kadencji miesięcznej przebieg miał do usunięcia cały miesiąc wierszy naraz.
+  { queue: 'cron.cleanup-audit-logs', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cleanup-old-backups', cron: '0 4 * * *', tz: TZ },
   { queue: 'cron.co-pilot-monthly', cron: '0 8 * * *', tz: TZ },
   { queue: 'cron.critical-alerts-monitor', cron: '*/5 * * * *', tz: TZ },
@@ -103,11 +106,17 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   // trafności w panelu operatora.
   { queue: 'cron.flo-shadow-settle', cron: '0 6 * * 1', tz: TZ },
   { queue: 'cron.gdpr-process-deletions', cron: '0 * * * *' },
-  { queue: 'cron.inbox-polling', cron: '*/15 * * * *', tz: TZ },
-  // K2: 7 minut po odbiorze skrzynki — domyka faktury bez kosztu/XML.
+  // Co minutę, ale to lekki takt: bierze firmy należne według harmonogramu (00160)
+  // do limitu slotów, więc żadna firma nie jest odpytywana co minutę. 1440 przebiegów
+  // na dobę, 2 zapytania każdy. Założenie limitu: `INBOX_DISPATCH_TICK_SECONDS`.
+  { queue: 'cron.inbox-polling', cron: '* * * * *', tz: TZ },
+  // K2: co 15 minut domyka faktury bez kosztu/XML.
   { queue: 'cron.inbox-backfill', cron: '7,22,37,52 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.ksef-health-check', cron: '* * * * *', tz: TZ },
+  // Historia KSeF (decyzja Bartosza 22.10.2026): co 15 min — wybór firm i fan-out;
+  // same pobrania mają własny budżet i ustępują skrzynce i wysyłce. 96 przebiegów na dobę.
+  { queue: 'cron.ksef-history-sync', cron: '11,26,41,56 * * * *', tz: TZ },
   // Cykl życia faktury (PR 4b): co 15 min — I1 (queued bez zlecenia),
   // automatyczne ponowienia klasy transient (co godzinę, 24 h), wznowienie
   // po hamulcu. 96 lekkich przebiegów na dobę.
@@ -121,6 +130,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.process-offline-queue', cron: '*/5 * * * *', tz: TZ },
   { queue: 'cron.reminder-scheduler', cron: '0 * * * *', tz: TZ },
   { queue: 'cron.retention-delete', cron: '0 4 * * *', tz: TZ },
+  // Retencja czatu pomocy: „do 24 miesięcy od ostatniej wiadomości” (polityka
+  // prywatności). Codziennie — przy kadencji miesięcznej rozmowa żyłaby 25.
+  { queue: 'cron.support-chat-retention', cron: '30 3 * * *', tz: TZ },
   { queue: 'cron.trial-countdown-emails', cron: '0 9 * * *', tz: TZ },
   { queue: 'cron.upo-retry-stale', cron: '5 * * * *', tz: TZ },
   { queue: 'cron.verify-backup', cron: '0 3 * * 0', tz: TZ },
@@ -149,6 +161,9 @@ export const RETIRED_QUEUES = [
   'invoice.submit.failed',
   'invoice.submit.succeeded',
   'cron.refresh-materialized-views',
+  // Magiczny import wycofany 22.10.2026 (decyzja Bartosza) — historię pobiera
+  // `ksef.history-sync.tenant`. Przed wdrożeniem: `ksef-historia.sh stare-importy` = 0.
+  'import.ksef-history.requested',
 ] as const;
 
 /** Kolejka testowa smoke (Etap 1/2 — weryfikacja fundamentu i połączenia). */

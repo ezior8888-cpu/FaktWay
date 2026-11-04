@@ -1,12 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Resolver } from 'react-hook-form';
 import { useEffect, useMemo, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 
@@ -21,12 +20,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { InvoiceCreateActions } from '@/components/invoices/finora/invoice-create-actions';
+import {
+  DocumentColumns,
+  DocumentHeaderRow,
+  DocumentSection,
+  DocumentSummary,
+  DocumentSummaryRow,
+  InvoiceCreateGrid,
+  InvoiceCreatePageHeading,
+  InvoiceDocumentCard,
+  InvoiceDocumentHeader,
+} from '@/components/invoices/finora/invoice-document';
 import {
   advanceInvoiceSchema,
   type AdvanceInvoiceSchemaIn,
 } from '@/lib/validators/invoice-validators';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { formatPlMoney } from '@/lib/format/pl';
 import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { BuyerB2B, SellerData } from '@/types/invoice-types';
 
@@ -34,8 +47,9 @@ import { saveAdvanceAction, saveAndSendAdvanceAction } from './advance-actions';
 
 type AdvanceFormIn = z.input<typeof advanceInvoiceSchema>;
 
-const labelClass =
-  'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
+/** P5: etykieta i błąd pola w stylu Finory (`FieldLabel` / `FieldError`). */
+const labelClass = 'mb-2';
+const errorClass = 'text-destructive mt-1 text-xs';
 
 const emptyBuyer: BuyerB2B = {
   type: 'b2b',
@@ -47,9 +61,23 @@ const emptyBuyer: BuyerB2B = {
 
 export interface AdvanceInvoiceFormProps {
   initialSeller: SellerData;
+  /** Firma, dla której wyrenderowano formularz i sprzedawcę — zapis odsyła ją jako `expectedTenantId` (UX-01). */
+  tenantId: string;
 }
 
-export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const VAT_RATE_ITEMS = (['23', '8', '5', '0'] as const).map((x) => ({ value: x, label: `${x}%` }))
+
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const PAYMENT_METHOD_ITEMS = [
+  { value: 'transfer', label: 'Przelew' },
+  { value: 'cash', label: 'Gotówka' },
+  { value: 'card', label: 'Karta' },
+  { value: 'compensation', label: 'Kompensata' },
+  { value: 'other', label: 'Inna' },
+] as const
+
+export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -141,7 +169,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const onSave = form.handleSubmit(
     (data) =>
       startSave(async () => {
-        const r = await saveAdvanceAction(data);
+        const r = await saveAdvanceAction(data, tenantId);
         if (r.success) {
           toast.success('Zapisano szkic zaliczki');
           router.push(`/invoices/${r.invoiceId}`);
@@ -153,7 +181,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const onSend = form.handleSubmit(
     (data) =>
       startSend(async () => {
-        const r = await saveAndSendAdvanceAction(data);
+        const r = await saveAndSendAdvanceAction(data, tenantId);
         if (r.success) {
           toast.success('Zaliczka w kolejce KSeF');
           router.push(`/invoices/${r.invoiceId}`);
@@ -165,262 +193,289 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const busy = saving || sending;
 
   return (
-    <form className="space-y-8 pb-32" onSubmit={(e) => e.preventDefault()}>
-      <Link
-        href="/invoices/new"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Typ faktury
-      </Link>
+    <form className="space-y-6 pb-32 lg:pb-10" onSubmit={(e) => e.preventDefault()}>
+      <InvoiceCreatePageHeading
+        title="Faktura zaliczkowa"
+        description={
+          <>
+            Dokument FA(3) z <span className="font-mono text-xs">RodzajFaktury=ZAL</span>
+          </>
+        }
+      />
 
-      <div>
-        <h1 className="text-4xl font-semibold tracking-tight">Faktura zaliczkowa</h1>
-        <p className="mt-2 text-muted-foreground">
-          Dokument FA(3) z <span className="font-mono text-xs">RodzajFaktury=ZAL</span>
-        </p>
-      </div>
-
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <h2 className="text-lg font-semibold tracking-tight">Dane dokumentu</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label className={labelClass}>Numer</Label>
-            <Input {...form.register('internalNumber')} />
-            {form.formState.errors.internalNumber ? (
-              <p className="mt-1 text-xs text-red-600">
-                {form.formState.errors.internalNumber.message}
-              </p>
-            ) : null}
-          </div>
-          <div>
-            <Label className={labelClass}>Data wystawienia</Label>
-            <Input type="date" {...form.register('issueDate')} />
-          </div>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="space-y-3 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-          <h3 className="font-semibold">Wartość umowy (brutto)</h3>
-          <Input
-            type="number"
-            step="0.01"
-            {...form.register('totalContractAmount', { valueAsNumber: true })}
-          />
-          <p className="text-xs text-muted-foreground">Łączna wartość kontraktu / dostaw</p>
-        </section>
-
-        <section className="space-y-3 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-          <h3 className="font-semibold">Kwota zaliczki (brutto)</h3>
-          <Input
-            type="number"
-            step="0.01"
-            {...form.register('advanceAmount', { valueAsNumber: true })}
-          />
-          <p className="text-xs text-muted-foreground">
-            Wartość umowy po tej zaliczce (bez wcześniejszych zaliczek):{' '}
-            <strong className="tabular-nums">{preview.remainingAmount.toFixed(2)} PLN</strong>
-          </p>
-          {form.formState.errors.advanceAmount ? (
-            <p className="text-xs text-red-600">{form.formState.errors.advanceAmount.message}</p>
-          ) : null}
-        </section>
-      </div>
-
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <Label className={labelClass}>Stawka VAT zaliczki</Label>
-            <Select
-              value={vatWatch}
-              onValueChange={(v) =>
-                form.setValue('vatRate', v as AdvanceInvoiceSchemaIn['vatRate'], {
-                  shouldDirty: true,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(['23', '8', '5', '0'] as const).map((x) => (
-                  <SelectItem key={x} value={x}>
-                    {x}%
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Planowana data realizacji</Label>
-            <Input type="date" {...form.register('expectedDeliveryDate')} />
-          </div>
-          <div className="sm:col-span-3">
-            <Label className={labelClass}>Opis</Label>
-            <Textarea rows={2} {...form.register('description')} />
-            {form.formState.errors.description ? (
-              <p className="mt-1 text-xs text-red-600">
-                {form.formState.errors.description.message}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Nabywca (B2B)</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Wyszukaj kontrahenta po NIP lub uzupełnij pola ręcznie
-          </p>
-        </div>
-        <BuyerLookup
-          nip={nipDisplay}
-          onNipChange={(d) => patchBuyer({ nip: d })}
-          onSelected={(data) =>
-            patchBuyer({
-              nip: data.nip,
-              name: data.name,
-              address: {
-                ...currentBuyer().address,
-                addressLine1: data.addressLine1,
-                addressLine2: data.addressLine2,
-                countryCode: 'PL',
-              },
-            })
+      <InvoiceCreateGrid>
+        <InvoiceDocumentCard
+          header={
+            <InvoiceDocumentHeader seller={initialSeller}>
+              <DocumentHeaderRow
+                label="Numer"
+                htmlFor="internalNumber"
+                error={
+                  form.formState.errors.internalNumber ? (
+                    <p className={errorClass}>{form.formState.errors.internalNumber.message}</p>
+                  ) : null
+                }
+              >
+                <Input id="internalNumber" {...form.register('internalNumber')} />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow label="Data wystawienia" htmlFor="issue-date">
+                <Input id="issue-date" type="date" {...form.register('issueDate')} />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow
+                label="Termin płatności"
+                htmlFor="payment-due-date"
+                error={
+                  form.formState.errors.paymentDueDate ? (
+                    <p className={errorClass}>{form.formState.errors.paymentDueDate.message}</p>
+                  ) : null
+                }
+              >
+                <Input id="payment-due-date" type="date" {...form.register('paymentDueDate')} />
+              </DocumentHeaderRow>
+            </InvoiceDocumentHeader>
           }
-        />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Nazwa podmiotu</Label>
-            <Input
-              value={currentBuyer().name}
-              onChange={(e) => patchBuyer({ name: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className={labelClass}>Adres — linia 1</Label>
-            <Input
-              value={currentBuyer().address.addressLine1}
-              onChange={(e) =>
-                patchBuyer({
-                  address: { ...currentBuyer().address, addressLine1: e.target.value },
-                })
-              }
-            />
-          </div>
-          <div>
-            <Label className={labelClass}>Adres — linia 2</Label>
-            <Input
-              value={currentBuyer().address.addressLine2}
-              onChange={(e) =>
-                patchBuyer({
-                  address: { ...currentBuyer().address, addressLine2: e.target.value },
-                })
-              }
-            />
-          </div>
-        </div>
-        {form.formState.errors.buyer?.message ? (
-          <p className="text-xs text-red-600">{String(form.formState.errors.buyer.message)}</p>
-        ) : null}
-      </section>
-
-      <div className="rounded-3xl border border-dashed border-white/45 p-4 text-sm text-muted-foreground dark:border-white/20">
-        <span className="font-medium text-foreground">{initialSeller.name}</span>{' '}
-        <span className="tabular-nums">· NIP {initialSeller.nip}</span>
-      </div>
-
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <h3 className="font-semibold tracking-tight">Płatność</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label className={labelClass}>Metoda</Label>
-            <Select
-              value={paymentMethodWatch}
-              onValueChange={(v) =>
-                form.setValue('paymentMethod', v as AdvanceFormIn['paymentMethod'])
-              }
+        >
+          <DocumentColumns>
+            <DocumentSection
+              title="Nabywca (B2B)"
+              testId="sekcja-nabywca"
+              description="Wyszukaj kontrahenta po NIP lub uzupełnij pola ręcznie"
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="transfer">Przelew</SelectItem>
-                <SelectItem value="cash">Gotówka</SelectItem>
-                <SelectItem value="card">Karta</SelectItem>
-                <SelectItem value="compensation">Kompensata</SelectItem>
-                <SelectItem value="other">Inna</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className={labelClass}>Termin płatności</Label>
-            <Input type="date" {...form.register('paymentDueDate')} />
-            {form.formState.errors.paymentDueDate ? (
-              <p className="mt-1 text-xs text-red-600">
-                {form.formState.errors.paymentDueDate.message}
-              </p>
-            ) : null}
-          </div>
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
-            <Input {...form.register('bankAccount')} />
-            {form.formState.errors.bankAccount ? (
-              <p className="mt-1 text-xs text-red-600">
-                {String(form.formState.errors.bankAccount.message)}
-              </p>
-            ) : null}
-          </div>
-          <fieldset className="sm:col-span-2 space-y-2">
-            <legend className={labelClass}>Czy do tej zaliczki stosuje się mechanizm podzielonej płatności (MPP)?</legend>
-            <div className="flex flex-wrap gap-5 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="advance-split-payment"
-                  checked={splitPaymentWatch === true}
-                  onChange={() => form.setValue('splitPayment', true, { shouldValidate: true, shouldDirty: true })}
+              <BuyerLookup
+                nip={nipDisplay}
+                onNipChange={(d) => patchBuyer({ nip: d })}
+                onSelected={(data) =>
+                  patchBuyer({
+                    nip: data.nip,
+                    name: data.name,
+                    address: {
+                      ...currentBuyer().address,
+                      addressLine1: data.addressLine1,
+                      addressLine2: data.addressLine2,
+                      countryCode: 'PL',
+                    },
+                  })
+                }
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <Label htmlFor="advance-buyer-name" className={labelClass}>Nazwa podmiotu</Label>
+                  <Input
+                    id="advance-buyer-name"
+                    value={currentBuyer().name}
+                    onChange={(e) => patchBuyer({ name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="advance-buyer-address-1" className={labelClass}>Adres — linia 1</Label>
+                  <Input
+                    id="advance-buyer-address-1"
+                    value={currentBuyer().address.addressLine1}
+                    onChange={(e) =>
+                      patchBuyer({
+                        address: { ...currentBuyer().address, addressLine1: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="advance-buyer-address-2" className={labelClass}>Adres — linia 2</Label>
+                  <Input
+                    id="advance-buyer-address-2"
+                    value={currentBuyer().address.addressLine2}
+                    onChange={(e) =>
+                      patchBuyer({
+                        address: { ...currentBuyer().address, addressLine2: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              {form.formState.errors.buyer?.message ? (
+                <p className={errorClass}>{String(form.formState.errors.buyer.message)}</p>
+              ) : null}
+            </DocumentSection>
+
+            <DocumentSection title="Płatność" testId="sekcja-platnosc" description="Sposób zapłaty i rachunek">
+              <div>
+                <Label htmlFor="advance-payment-method" className={labelClass}>Metoda</Label>
+                <Select
+                  value={paymentMethodWatch}
+                  items={PAYMENT_METHOD_ITEMS}
+                  onValueChange={(v) => {
+                    if (v == null) return
+                    form.setValue('paymentMethod', v as AdvanceFormIn['paymentMethod'])
+                  }}
+                >
+                  <SelectTrigger id="advance-payment-method" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_ITEMS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="advance-bank-account" className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
+                <Input id="advance-bank-account" {...form.register('bankAccount')} />
+                {form.formState.errors.bankAccount ? (
+                  <p className={errorClass}>{String(form.formState.errors.bankAccount.message)}</p>
+                ) : null}
+              </div>
+              <fieldset className="space-y-2">
+                <legend className={labelClass}>Czy do tej zaliczki stosuje się mechanizm podzielonej płatności (MPP)?</legend>
+                <div className="flex flex-wrap gap-5 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="advance-split-payment"
+                      className="accent-primary"
+                      checked={splitPaymentWatch === true}
+                      onChange={() => form.setValue('splitPayment', true, { shouldValidate: true, shouldDirty: true })}
+                    />
+                    Tak, MPP
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="advance-split-payment"
+                      className="accent-primary"
+                      checked={splitPaymentWatch === false}
+                      onChange={() => form.setValue('splitPayment', false, { shouldValidate: true, shouldDirty: true })}
+                    />
+                    Nie dotyczy
+                  </label>
+                </div>
+                <p className="text-muted-foreground text-xs">Wybierz świadomie dla tej transakcji; sama kwota zaliczki nie rozstrzyga o MPP.</p>
+                {form.formState.errors.splitPayment ? (
+                  <p className={errorClass}>{form.formState.errors.splitPayment.message}</p>
+                ) : null}
+              </fieldset>
+            </DocumentSection>
+          </DocumentColumns>
+
+          <Separator />
+
+          {/* ZALICZKA — w miejscu pozycji Finory: wartość umowy, kwota, stawka, opis. */}
+          <DocumentSection title="Zaliczka" testId="sekcja-zaliczka" description="Wartość umowy, kwota zaliczki i jej stawka VAT">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="total-contract-amount" className={labelClass}>
+                  Wartość umowy (brutto)
+                </Label>
+                <Input
+                  id="total-contract-amount"
+                  type="number"
+                  step="0.01"
+                  className="text-right tabular-nums"
+                  {...form.register('totalContractAmount', { valueAsNumber: true })}
                 />
-                Tak, MPP
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="advance-split-payment"
-                  checked={splitPaymentWatch === false}
-                  onChange={() => form.setValue('splitPayment', false, { shouldValidate: true, shouldDirty: true })}
+                <p className="text-muted-foreground mt-1.5 text-xs">Łączna wartość kontraktu / dostaw</p>
+              </div>
+              <div>
+                <Label htmlFor="advance-amount" className={labelClass}>
+                  Kwota zaliczki (brutto)
+                </Label>
+                <Input
+                  id="advance-amount"
+                  type="number"
+                  step="0.01"
+                  className="text-right tabular-nums"
+                  {...form.register('advanceAmount', { valueAsNumber: true })}
                 />
-                Nie dotyczy
-              </label>
+                <p className="text-muted-foreground mt-1.5 text-xs">
+                  Wartość umowy po tej zaliczce (bez wcześniejszych zaliczek):{' '}
+                  <strong className="text-foreground tabular-nums">{formatPlMoney(preview.remainingAmount)} zł</strong>
+                </p>
+                {form.formState.errors.advanceAmount ? (
+                  <p className={errorClass}>{form.formState.errors.advanceAmount.message}</p>
+                ) : null}
+              </div>
+              <div>
+                <Label htmlFor="advance-vat-rate" className={labelClass}>Stawka VAT zaliczki</Label>
+                <Select
+                  value={vatWatch}
+                  items={VAT_RATE_ITEMS}
+                  onValueChange={(v) => {
+                    if (v == null) return
+                    form.setValue('vatRate', v as AdvanceInvoiceSchemaIn['vatRate'], {
+                      shouldDirty: true,
+                    })
+                  }}
+                >
+                  <SelectTrigger id="advance-vat-rate" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VAT_RATE_ITEMS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="expected-delivery-date" className={labelClass}>
+                  Planowana data realizacji
+                </Label>
+                <Input id="expected-delivery-date" type="date" {...form.register('expectedDeliveryDate')} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="advance-description" className={labelClass}>
+                  Opis
+                </Label>
+                <Textarea id="advance-description" rows={2} {...form.register('description')} />
+                {form.formState.errors.description ? (
+                  <p className={errorClass}>{form.formState.errors.description.message}</p>
+                ) : null}
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">Wybierz świadomie dla tej transakcji; sama kwota zaliczki nie rozstrzyga o MPP.</p>
-            {form.formState.errors.splitPayment ? (
-              <p className="text-xs text-red-600">{form.formState.errors.splitPayment.message}</p>
-            ) : null}
-          </fieldset>
-        </div>
-      </section>
+          </DocumentSection>
 
-      <section className="rounded-3xl border border-white/55 p-7">
-        <Label className={labelClass}>Uwagi</Label>
-        <Textarea rows={2} {...form.register('notes')} />
-      </section>
+          <Separator />
 
-      <div className="ff-sticky-actions pointer-events-none">
+          {/* Podsumowanie po prawej (Finora: Subtotal / Tax / Total) — z tej samej
+              funkcji `calculateAdvanceTotals`, której używa generator XML ZAL. */}
+          <DocumentSummary label="Podsumowanie zaliczki">
+            <DocumentSummaryRow label="Zaliczka netto" value={`${formatPlMoney(preview.advanceNet)} zł`} />
+            <DocumentSummaryRow label={`VAT ${vatWatch}%`} value={`${formatPlMoney(preview.advanceVat)} zł`} />
+            <Separator className="my-2" />
+            <DocumentSummaryRow strong label="Do zapłaty" value={`${formatPlMoney(preview.advanceGross)} zł`} />
+          </DocumentSummary>
+
+          <Separator />
+
+          <div>
+            <Label htmlFor="advance-notes" className={labelClass}>
+              Uwagi
+            </Label>
+            <Textarea id="advance-notes" rows={2} {...form.register('notes')} />
+          </div>
+        </InvoiceDocumentCard>
+
+        <InvoiceCreateActions
+          onSend={onSend}
+          onSave={onSave}
+          sending={sending}
+          saving={saving}
+          disabled={busy}
+          sendLabel="Wystaw i wyślij zaliczkę do KSeF"
+        />
+      </InvoiceCreateGrid>
+
+      {/* Telefon i tablet: pasek przyklejony do dołu; od `lg` akcje są w prawej kolumnie. */}
+      <div className="ff-sticky-actions pointer-events-none lg:hidden">
         <div className="mx-auto flex max-w-7xl justify-end gap-3 pointer-events-auto">
-          <Button type="button" variant="glass" disabled={busy} size="lg" onClick={onSave}>
+          <Button type="button" variant="outline" disabled={busy} size="lg" onClick={onSave}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Zapisz szkic
           </Button>
-          <Button
-            type="button"
-            variant="glass-primary"
-            size="lg"
-            disabled={busy}
-            onClick={onSend}
-          >
+          <Button type="button" size="lg" disabled={busy} onClick={onSend}>
             {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Wyślij zaliczkę do KSeF
           </Button>

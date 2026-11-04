@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type EmptyStateAction =
@@ -35,11 +35,11 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'rounded-3xl border border-glass-border bg-foreground/3 px-6 py-16 text-center backdrop-blur-glass',
+        'bg-card text-card-foreground ring-foreground/10 rounded-none px-6 py-16 text-center ring-1',
         className,
       )}
     >
-      <div className="mx-auto mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5">
+      <div className="mx-auto mb-5 inline-flex h-14 w-14 items-center justify-center rounded-none bg-muted">
         <Icon className="h-7 w-7 text-muted-foreground" aria-hidden />
       </div>
       <h3 className="mb-2 text-xl font-semibold tracking-tight">{title}</h3>
@@ -51,8 +51,8 @@ export function EmptyState({
 
       {(primaryAction || secondaryAction) && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          {primaryAction ? renderAction(primaryAction, 'glass-primary') : null}
-          {secondaryAction ? renderAction(secondaryAction, 'glass') : null}
+          {primaryAction ? renderAction(primaryAction, 'default') : null}
+          {secondaryAction ? renderAction(secondaryAction, 'outline') : null}
         </div>
       )}
     </div>
@@ -61,7 +61,7 @@ export function EmptyState({
 
 function renderAction(
   action: EmptyStateAction,
-  variant: 'glass-primary' | 'glass',
+  variant: 'default' | 'outline',
 ) {
   const Icon = action.icon;
   const inner = (
@@ -73,9 +73,13 @@ function renderAction(
 
   if (action.type === 'link') {
     return (
-      <Button asChild variant={variant} size="lg" key={action.label}>
-        <Link href={action.href}>{inner}</Link>
-      </Button>
+      <Link
+        href={action.href}
+        key={action.label}
+        className={buttonVariants({ variant, size: 'lg' })}
+      >
+        {inner}
+      </Link>
     );
   }
 

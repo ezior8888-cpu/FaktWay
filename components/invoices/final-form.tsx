@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Resolver } from 'react-hook-form';
 import { useEffect, useMemo, useTransition } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { RiAddLine, RiCloseLine } from '@remixicon/react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
 
@@ -22,7 +22,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { InvoiceCreateActions } from '@/components/invoices/finora/invoice-create-actions';
+import {
+  DocumentColumns,
+  DocumentHeaderRow,
+  DocumentSection,
+  DocumentSummary,
+  DocumentSummaryRow,
+  formatIsoDatePl,
+  InvoiceCreateGrid,
+  InvoiceCreatePageHeading,
+  InvoiceDocumentCard,
+  InvoiceDocumentHeader,
+} from '@/components/invoices/finora/invoice-document';
+import { formatPlMoney } from '@/lib/format/pl';
+import { cn } from '@/lib/utils';
 import { calculateFinalInvoiceTotals } from '@/lib/invoices/calculator';
 import {
   finalInvoiceSchema,
@@ -36,8 +52,16 @@ import { saveFinalAction, saveAndSendFinalAction } from './final-actions';
 
 type FinalFormIn = z.input<typeof finalInvoiceSchema>;
 
-const labelClass =
-  'text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block';
+/** P5: etykieta i błąd pola w stylu Finory (`FieldLabel` / `FieldError`). */
+const labelClass = 'mb-2';
+const errorClass = 'text-destructive mt-1 text-xs';
+
+/** Kolumny wiersza pozycji (Finora `invoice-line-items.tsx`): Nazwa · J.m. · Ilość · Cena netto · VAT · Brutto · usuń. */
+const LINE_GRID =
+  'grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_6rem_5.5rem_6.5rem_2rem] gap-2';
+
+const vatSelectClass =
+  'border-input bg-background dark:bg-input/30 h-8 w-full min-w-0 rounded-none border px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 aria-invalid:border-destructive [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:text-[16px]';
 
 const emptyBuyer: BuyerB2B = {
   type: 'b2b',
@@ -67,14 +91,25 @@ export interface AdvanceOptionRow {
 export interface FinalInvoiceFormProps {
   initialSeller: SellerData;
   advanceInvoices: AdvanceOptionRow[];
+  /** Firma, dla której wyrenderowano formularz, sprzedawcę i zaliczki — zapis odsyła ją jako `expectedTenantId` (UX-01). */
+  tenantId: string;
 }
+
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const PAYMENT_METHOD_ITEMS = [
+  { value: 'transfer', label: 'Przelew' },
+  { value: 'cash', label: 'Gotówka' },
+  { value: 'card', label: 'Karta' },
+  { value: 'compensation', label: 'Kompensata' },
+  { value: 'other', label: 'Inna' },
+] as const
 
 function advanceLabel(row: AdvanceOptionRow): string {
   const num = row.internal_number?.trim() || row.ksef_number?.trim() || row.id.slice(0, 8);
   return num;
 }
 
-export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoiceFormProps) {
+export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: FinalInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -203,7 +238,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const onSave = form.handleSubmit(
     (data) =>
       startSave(async () => {
-        const r = await saveFinalAction(data);
+        const r = await saveFinalAction(data, tenantId);
         if (r.success) {
           toast.success('Zapisano szkic faktury rozliczającej');
           router.push(`/invoices/${r.invoiceId}`);
@@ -215,7 +250,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const onSend = form.handleSubmit(
     (data) =>
       startSend(async () => {
-        const r = await saveAndSendFinalAction(data);
+        const r = await saveAndSendFinalAction(data, tenantId);
         if (r.success) {
           toast.success('Faktura rozliczająca w kolejce KSeF');
           router.push(`/invoices/${r.invoiceId}`);
@@ -227,153 +262,260 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const busy = saving || sending;
 
   return (
-    <form className="space-y-8 pb-32" onSubmit={(e) => e.preventDefault()}>
-      <Link
-        href="/invoices/new"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Typ faktury
-      </Link>
+    <form className="space-y-6 pb-32 lg:pb-10" onSubmit={(e) => e.preventDefault()}>
+      <InvoiceCreatePageHeading
+        title="Faktura rozliczająca"
+        description={
+          <>
+            Dokument FA(3){' '}
+            <span className="font-mono text-xs">RodzajFaktury=ROZ</span> — rozliczenie wcześniejszych
+            zaliczek
+          </>
+        }
+      />
 
-      <div>
-        <h1 className="text-4xl font-semibold tracking-tight">Faktura rozliczająca</h1>
-        <p className="mt-2 text-muted-foreground">
-          Dokument FA(3){' '}
-          <span className="font-mono text-xs">RodzajFaktury=ROZ</span> — rozliczenie wcześniejszych
-          zaliczek
-        </p>
-      </div>
+      <InvoiceCreateGrid>
+        <InvoiceDocumentCard
+          header={
+            <InvoiceDocumentHeader seller={initialSeller}>
+              <DocumentHeaderRow
+                label="Numer"
+                htmlFor="internalNumber"
+                error={
+                  form.formState.errors.internalNumber ? (
+                    <p className={errorClass}>{form.formState.errors.internalNumber.message}</p>
+                  ) : null
+                }
+              >
+                <Input id="internalNumber" {...form.register('internalNumber')} />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow label="Data wystawienia" htmlFor="issue-date">
+                <Input id="issue-date" type="date" {...form.register('issueDate')} />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow
+                label="Termin płatności"
+                htmlFor="payment-due-date"
+                error={
+                  form.formState.errors.paymentDueDate ? (
+                    <p className={errorClass}>{form.formState.errors.paymentDueDate.message}</p>
+                  ) : null
+                }
+              >
+                <Input id="payment-due-date" type="date" {...form.register('paymentDueDate')} />
+              </DocumentHeaderRow>
+            </InvoiceDocumentHeader>
+          }
+        >
+          <DocumentColumns>
+            <DocumentSection
+              title="Nabywca (B2B)"
+              testId="sekcja-nabywca"
+              description="Zwykle ten sam podmiot co na fakturach zaliczkowych"
+            >
+              <BuyerLookup
+                nip={nipDisplay}
+                onNipChange={(d) => patchBuyer({ nip: d })}
+                onSelected={(data) =>
+                  patchBuyer({
+                    nip: data.nip,
+                    name: data.name,
+                    address: {
+                      ...currentBuyer().address,
+                      addressLine1: data.addressLine1,
+                      addressLine2: data.addressLine2,
+                      countryCode: 'PL',
+                    },
+                  })
+                }
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <Label htmlFor="final-buyer-name" className={labelClass}>Nazwa podmiotu</Label>
+                  <Input
+                    id="final-buyer-name"
+                    value={currentBuyer().name}
+                    onChange={(e) => patchBuyer({ name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="final-buyer-address-1" className={labelClass}>Adres — linia 1</Label>
+                  <Input
+                    id="final-buyer-address-1"
+                    value={currentBuyer().address.addressLine1}
+                    onChange={(e) =>
+                      patchBuyer({
+                        address: { ...currentBuyer().address, addressLine1: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="final-buyer-address-2" className={labelClass}>Adres — linia 2</Label>
+                  <Input
+                    id="final-buyer-address-2"
+                    value={currentBuyer().address.addressLine2}
+                    onChange={(e) =>
+                      patchBuyer({
+                        address: { ...currentBuyer().address, addressLine2: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              {form.formState.errors.buyer?.message ? (
+                <p className={errorClass}>{String(form.formState.errors.buyer.message)}</p>
+              ) : null}
+            </DocumentSection>
 
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <h2 className="text-lg font-semibold tracking-tight">Dane dokumentu</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label className={labelClass}>Numer</Label>
-            <Input {...form.register('internalNumber')} />
-            {form.formState.errors.internalNumber ? (
-              <p className="mt-1 text-xs text-red-600">
-                {form.formState.errors.internalNumber.message}
+            <DocumentSection title="Płatność" testId="sekcja-platnosc" description="Sposób zapłaty i rachunek">
+              <div>
+                <Label htmlFor="final-payment-method" className={labelClass}>Metoda</Label>
+                <Select
+                  value={paymentMethodWatch}
+                  items={PAYMENT_METHOD_ITEMS}
+                  onValueChange={(v) => {
+                    if (v == null) return
+                    form.setValue('paymentMethod', v as FinalFormIn['paymentMethod'])
+                  }}
+                >
+                  <SelectTrigger id="final-payment-method" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_ITEMS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="final-bank-account" className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
+                <Input id="final-bank-account" {...form.register('bankAccount')} />
+                {form.formState.errors.bankAccount ? (
+                  <p className={errorClass}>{String(form.formState.errors.bankAccount.message)}</p>
+                ) : null}
+              </div>
+              <fieldset className="space-y-2">
+                <legend className={labelClass}>Czy do tej faktury stosuje się mechanizm podzielonej płatności (MPP)?</legend>
+                <div className="flex flex-wrap gap-5 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="final-split-payment"
+                      className="accent-primary"
+                      checked={splitPaymentWatch === true}
+                      onChange={() => form.setValue('splitPayment', true, { shouldValidate: true, shouldDirty: true })}
+                    />
+                    Tak, MPP
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="final-split-payment"
+                      className="accent-primary"
+                      checked={splitPaymentWatch === false}
+                      onChange={() => form.setValue('splitPayment', false, { shouldValidate: true, shouldDirty: true })}
+                    />
+                    Nie dotyczy
+                  </label>
+                </div>
+                {form.formState.errors.splitPayment ? (
+                  <p className={errorClass}>{form.formState.errors.splitPayment.message}</p>
+                ) : null}
+              </fieldset>
+            </DocumentSection>
+          </DocumentColumns>
+
+          <Separator />
+
+          <DocumentSection
+            title="Faktury zaliczkowe do rozliczenia"
+            testId="sekcja-zaliczki"
+            description="Tylko zaakceptowane w KSeF zaliczki z tej firmy. Suma jest przeliczana automatycznie."
+          >
+            {advanceInvoices.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Brak zaliczek do wyboru. Wystaw i zaakceptuj najpierw fakturę zaliczkową.
+              </p>
+            ) : (
+              <ul className="border-border max-h-64 divide-y overflow-y-auto border">
+                {advanceInvoices.map((row) => {
+                  const checked = selectedIds.includes(row.id);
+                  const amt = roundToCents(Number(row.advance_amount ?? row.gross_total ?? 0));
+                  return (
+                    <li
+                      key={row.id}
+                      className="hover:bg-muted/50 flex flex-wrap items-center gap-3 px-3 py-2"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(c) => toggleAdvance(row.id, c === true)}
+                        aria-label={`Zaliczka ${advanceLabel(row)}`}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium" title={advanceLabel(row)}>
+                        {advanceLabel(row)}
+                      </span>
+                      <span className="text-muted-foreground text-xs tabular-nums">{formatIsoDatePl(row.issue_date)}</span>
+                      <span className="text-sm font-medium tabular-nums">{formatPlMoney(amt)} zł</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {form.formState.errors.advanceInvoiceIds ? (
+              <p className={errorClass}>
+                {String(form.formState.errors.advanceInvoiceIds.message ?? '')}
               </p>
             ) : null}
-          </div>
-          <div>
-            <Label className={labelClass}>Data wystawienia</Label>
-            <Input type="date" {...form.register('issueDate')} />
-          </div>
-        </div>
-      </section>
+          </DocumentSection>
 
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Faktury zaliczkowe do rozliczenia</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tylko zaakceptowane w KSeF zaliczki z tej firmy. Suma jest przeliczana automatycznie.
-          </p>
-        </div>
-        {advanceInvoices.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Brak zaliczek do wyboru. Wystaw i zaakceptuj najpierw fakturę zaliczkową.
-          </p>
-        ) : (
-          <ul className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-white/40 p-3 dark:border-white/10">
-            {advanceInvoices.map((row) => {
-              const checked = selectedIds.includes(row.id);
-              const amt = roundToCents(Number(row.advance_amount ?? row.gross_total ?? 0));
-              return (
-                <li
-                  key={row.id}
-                  className="flex flex-wrap items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/30 dark:hover:bg-white/5"
-                >
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={(c) => toggleAdvance(row.id, c === true)}
-                    aria-label={`Zaliczka ${advanceLabel(row)}`}
-                  />
-                  <span className="min-w-0 flex-1 font-medium">{advanceLabel(row)}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{row.issue_date}</span>
-                  <span className="tabular-nums text-sm font-medium">{amt.toFixed(2)} PLN</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-2xl border border-dashed border-white/45 p-4 dark:border-white/15">
-          <span className="text-sm text-muted-foreground">Suma wybranych zaliczek (brutto)</span>
-          <span className="text-lg font-semibold tabular-nums">
-            {totalAdvancesRounded.toFixed(2)} PLN
-          </span>
-        </div>
-        {form.formState.errors.advanceInvoiceIds ? (
-          <p className="text-xs text-red-600">
-            {String(form.formState.errors.advanceInvoiceIds.message ?? '')}
-          </p>
-        ) : null}
-      </section>
+          <Separator />
 
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Pozycje</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Pełna realizacja zamówienia / usługi</p>
-          </div>
-          <Button type="button" variant="glass" size="sm" onClick={() => append({ ...defaultLine })}>
-            <Plus className="mr-2 h-4 w-4" />
-            Dodaj pozycję
-          </Button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/55 text-left text-muted-foreground dark:border-white/14">
-                {['#', 'Nazwa', 'J.m.', 'Ilość', 'Cena netto', 'VAT', 'Netto', 'Brutto', ''].map(
-                  (h) => (
-                    <th key={h} className="py-3 text-xs font-medium uppercase tracking-wider">
-                      {h}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((field, index) => {
-                const watched = watchedLines[index];
-                const calc = calculateLineItem({
-                  quantity: Number(watched?.quantity) || 0,
-                  unitPriceNet: Number(watched?.unitPriceNet) || 0,
-                  vatRate: (watched?.vatRate ?? '23') as InvoiceLine['vatRate'],
-                });
-                return (
-                  <tr
-                    key={field.id}
-                    className="border-b border-white/55 last:border-0 dark:border-white/[0.07]"
-                  >
-                    <td className="py-3 text-muted-foreground">{index + 1}</td>
-                    <td className="py-3 pr-2">
-                      <Input className="h-9" {...form.register(`lines.${index}.name`)} />
-                    </td>
-                    <td className="py-3 pr-2">
-                      <Input className="h-9" {...form.register(`lines.${index}.unit`)} />
-                    </td>
-                    <td className="py-3 pr-2">
+          {/* POZYCJE (Finora: `invoice-line-items.tsx`) — wiersze siatki; na wąskim
+              ekranie przewijają się w bok wewnątrz karty, jak w Finorze i jak
+              tabela przed P5. */}
+          <DocumentSection title="Pozycje" testId="sekcja-pozycje" description="Pełna realizacja zamówienia / usługi">
+            <div className="-mx-1 overflow-x-auto px-1">
+              <div className="min-w-[38rem] space-y-3">
+                <div className={cn(LINE_GRID, 'text-muted-foreground text-xs font-medium')}>
+                  <span>Nazwa</span>
+                  <span>J.m.</span>
+                  <span>Ilość</span>
+                  <span>Cena netto</span>
+                  <span>VAT</span>
+                  <span className="text-right">Brutto</span>
+                  <span />
+                </div>
+                {fields.map((field, index) => {
+                  const watched = watchedLines[index];
+                  const calc = calculateLineItem({
+                    quantity: Number(watched?.quantity) || 0,
+                    unitPriceNet: Number(watched?.unitPriceNet) || 0,
+                    vatRate: (watched?.vatRate ?? '23') as InvoiceLine['vatRate'],
+                  });
+                  return (
+                    <div key={field.id} className={cn(LINE_GRID, 'items-start')}>
+                      <Input aria-label={`Nazwa pozycji ${index + 1}`} {...form.register(`lines.${index}.name`)} />
+                      <Input aria-label={`Jednostka pozycji ${index + 1}`} {...form.register(`lines.${index}.unit`)} />
                       <Input
                         type="number"
                         step="0.0001"
-                        className="h-9"
+                        aria-label={`Ilość pozycji ${index + 1}`}
+                        className="text-right tabular-nums"
                         {...form.register(`lines.${index}.quantity`, { valueAsNumber: true })}
                       />
-                    </td>
-                    <td className="py-3 pr-2">
                       <Input
                         type="number"
                         step="0.01"
-                        className="h-9"
+                        aria-label={`Cena netto pozycji ${index + 1}`}
+                        className="text-right tabular-nums"
                         {...form.register(`lines.${index}.unitPriceNet`, { valueAsNumber: true })}
                       />
-                    </td>
-                    <td className="py-3 pr-2">
                       <select
-                        className="h-9 w-full rounded-xl border border-white/55 bg-white/50 px-2 text-sm backdrop-blur-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-foreground/20 dark:border-white/14 dark:bg-white/[0.05]"
+                        className={vatSelectClass}
+                        aria-label={`Stawka VAT pozycji ${index + 1}`}
                         {...form.register(`lines.${index}.vatRate`)}
                       >
                         <option value="23">23%</option>
@@ -383,208 +525,81 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
                         <option value="oo">oo</option>
                         <option value="np">np</option>
                       </select>
-                    </td>
-                    <td className="py-3 pr-2 text-right tabular-nums">{calc.netAmount.toFixed(2)}</td>
-                    <td className="py-3 pr-2 text-right tabular-nums font-medium">
-                      {calc.grossAmount.toFixed(2)}
-                    </td>
-                    <td className="py-3">
+                      <span className="mt-1.5 text-right text-sm tabular-nums">
+                        <span className="block font-medium">{formatPlMoney(calc.grossAmount)} zł</span>
+                        <span className="text-muted-foreground block text-xs">
+                          netto {formatPlMoney(calc.netAmount)} zł
+                        </span>
+                      </span>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
+                        aria-label={`Usuń pozycję ${index + 1}`}
                         disabled={fields.length === 1}
                         onClick={() => remove(index)}
-                        className="h-9 w-9"
+                        className="hover:text-destructive"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <RiCloseLine className="size-4" />
                       </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-white/55 dark:border-white/14">
-                <td
-                  colSpan={6}
-                  className="py-4 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                >
-                  Razem brutto pozycji
-                </td>
-                <td className="py-4" />
-                <td className="py-4 text-right tabular-nums font-semibold">
-                  {finalTotals.totalGross.toFixed(2)} PLN
-                </td>
-                <td className="py-4" />
-              </tr>
-              <tr>
-                <td
-                  colSpan={6}
-                  className="pb-4 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                >
-                  Do zapłaty po odliczeniu zaliczek
-                </td>
-                <td className="pb-4" />
-                <td className="pb-4 text-right text-lg font-bold tabular-nums text-foreground">
-                  {finalTotals.amountDue.toFixed(2)} PLN
-                </td>
-                <td className="pb-4" />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        {form.formState.errors.lines ? (
-          <p className="text-xs text-red-600">Sprawdź pozycje (nazwa, ilość, ceny).</p>
-        ) : null}
-      </section>
-
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Nabywca (B2B)</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Zwykle ten sam podmiot co na fakturach zaliczkowych
-          </p>
-        </div>
-        <BuyerLookup
-          nip={nipDisplay}
-          onNipChange={(d) => patchBuyer({ nip: d })}
-          onSelected={(data) =>
-            patchBuyer({
-              nip: data.nip,
-              name: data.name,
-              address: {
-                ...currentBuyer().address,
-                addressLine1: data.addressLine1,
-                addressLine2: data.addressLine2,
-                countryCode: 'PL',
-              },
-            })
-          }
-        />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Nazwa podmiotu</Label>
-            <Input
-              value={currentBuyer().name}
-              onChange={(e) => patchBuyer({ name: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className={labelClass}>Adres — linia 1</Label>
-            <Input
-              value={currentBuyer().address.addressLine1}
-              onChange={(e) =>
-                patchBuyer({
-                  address: { ...currentBuyer().address, addressLine1: e.target.value },
-                })
-              }
-            />
-          </div>
-          <div>
-            <Label className={labelClass}>Adres — linia 2</Label>
-            <Input
-              value={currentBuyer().address.addressLine2}
-              onChange={(e) =>
-                patchBuyer({
-                  address: { ...currentBuyer().address, addressLine2: e.target.value },
-                })
-              }
-            />
-          </div>
-        </div>
-        {form.formState.errors.buyer?.message ? (
-          <p className="text-xs text-red-600">{String(form.formState.errors.buyer.message)}</p>
-        ) : null}
-      </section>
-
-      <div className="rounded-3xl border border-dashed border-white/45 p-4 text-sm text-muted-foreground dark:border-white/20">
-        <span className="font-medium text-foreground">{initialSeller.name}</span>{' '}
-        <span className="tabular-nums">· NIP {initialSeller.nip}</span>
-      </div>
-
-      <section className="space-y-4 rounded-3xl border border-white/55 bg-white/45 p-7 backdrop-blur-[24px] dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <h3 className="font-semibold tracking-tight">Płatność</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label className={labelClass}>Metoda</Label>
-            <Select
-              value={paymentMethodWatch}
-              onValueChange={(v) =>
-                form.setValue('paymentMethod', v as FinalFormIn['paymentMethod'])
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="transfer">Przelew</SelectItem>
-                <SelectItem value="cash">Gotówka</SelectItem>
-                <SelectItem value="card">Karta</SelectItem>
-                <SelectItem value="compensation">Kompensata</SelectItem>
-                <SelectItem value="other">Inna</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className={labelClass}>Termin płatności</Label>
-            <Input type="date" {...form.register('paymentDueDate')} />
-            {form.formState.errors.paymentDueDate ? (
-              <p className="mt-1 text-xs text-red-600">
-                {form.formState.errors.paymentDueDate.message}
-              </p>
-            ) : null}
-          </div>
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
-            <Input {...form.register('bankAccount')} />
-            {form.formState.errors.bankAccount ? (
-              <p className="mt-1 text-xs text-red-600">
-                {String(form.formState.errors.bankAccount.message)}
-              </p>
-            ) : null}
-          </div>
-          <fieldset className="sm:col-span-2 space-y-2">
-            <legend className={labelClass}>Czy do tej faktury stosuje się mechanizm podzielonej płatności (MPP)?</legend>
-            <div className="flex flex-wrap gap-5 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="final-split-payment"
-                  checked={splitPaymentWatch === true}
-                  onChange={() => form.setValue('splitPayment', true, { shouldValidate: true, shouldDirty: true })}
-                />
-                Tak, MPP
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="final-split-payment"
-                  checked={splitPaymentWatch === false}
-                  onChange={() => form.setValue('splitPayment', false, { shouldValidate: true, shouldDirty: true })}
-                />
-                Nie dotyczy
-              </label>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            {form.formState.errors.splitPayment ? (
-              <p className="text-xs text-red-600">{form.formState.errors.splitPayment.message}</p>
+            {form.formState.errors.lines ? (
+              <p className={errorClass}>Sprawdź pozycje (nazwa, ilość, ceny).</p>
             ) : null}
-          </fieldset>
-        </div>
-      </section>
+            <Button type="button" variant="secondary" size="sm" onClick={() => append({ ...defaultLine })}>
+              <RiAddLine />
+              Dodaj pozycję
+            </Button>
+          </DocumentSection>
 
-      <section className="rounded-3xl border border-white/55 p-7">
-        <Label className={labelClass}>Uwagi</Label>
-        <Textarea rows={2} {...form.register('notes')} />
-      </section>
+          <Separator />
 
-      <div className="ff-sticky-actions pointer-events-none">
+          {/* Podsumowanie po prawej (Finora: Subtotal / Tax / Total). */}
+          <DocumentSummary label="Podsumowanie faktury rozliczającej">
+            <DocumentSummaryRow label="Razem brutto pozycji" value={`${formatPlMoney(finalTotals.totalGross)} zł`} />
+            <DocumentSummaryRow
+              label="Suma wybranych zaliczek (brutto)"
+              value={`${formatPlMoney(totalAdvancesRounded)} zł`}
+            />
+            <Separator className="my-2" />
+            <DocumentSummaryRow
+              strong
+              label="Do zapłaty po odliczeniu zaliczek"
+              value={`${formatPlMoney(finalTotals.amountDue)} zł`}
+            />
+          </DocumentSummary>
+
+          <Separator />
+
+          <div>
+            <Label htmlFor="final-notes" className={labelClass}>
+              Uwagi
+            </Label>
+            <Textarea id="final-notes" rows={2} {...form.register('notes')} />
+          </div>
+        </InvoiceDocumentCard>
+
+        <InvoiceCreateActions
+          onSend={onSend}
+          onSave={onSave}
+          sending={sending}
+          saving={saving}
+          disabled={busy}
+        />
+      </InvoiceCreateGrid>
+
+      {/* Telefon i tablet: pasek przyklejony do dołu; od `lg` akcje są w prawej kolumnie. */}
+      <div className="ff-sticky-actions pointer-events-none lg:hidden">
         <div className="mx-auto flex max-w-7xl justify-end gap-3 pointer-events-auto">
-          <Button type="button" variant="glass" disabled={busy} size="lg" onClick={onSave}>
+          <Button type="button" variant="outline" disabled={busy} size="lg" onClick={onSave}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Zapisz szkic
           </Button>
-          <Button type="button" variant="glass-primary" size="lg" disabled={busy} onClick={onSend}>
+          <Button type="button" size="lg" disabled={busy} onClick={onSend}>
             {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Wyślij do KSeF
           </Button>

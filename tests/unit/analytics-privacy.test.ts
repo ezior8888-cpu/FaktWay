@@ -3,7 +3,7 @@ import type { CaptureResult } from 'posthog-js';
 import posthog from 'posthog-js';
 
 import { initPosthogBrowser } from '@/lib/analytics/init-posthog-browser';
-import { CONSENT_KEY, getAnalyticsConsent, setAnalyticsConsent } from '@/lib/analytics/consent';
+import { CONSENT_KEY, CONSENT_META_KEY, getAnalyticsConsent, setAnalyticsConsent } from '@/lib/analytics/consent';
 import { sanitizeAnalyticsEvent, sanitizeAnalyticsUrl } from '@/lib/analytics/privacy';
 import { track, trackPageView } from '@/lib/analytics/client';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -46,12 +46,19 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
+/** Zgoda z datą wyboru. Sama wartość bez daty to zapis sprzed 11.2026, czyli brak decyzji. */
+function storeGranted(): void {
+  storage.set(CONSENT_META_KEY, JSON.stringify({ chosenAt: '2026-11-02T10:00:00.000Z', synced: false }));
+  storage.set(CONSENT_KEY, 'granted');
+}
+
 function event(properties: CaptureResult['properties'] = {}, name = '$pageview'): CaptureResult {
   return { uuid: 'unit-event', event: name, properties };
 }
 
 describe('PostHog explicit consent', () => {
-  it.each([undefined, 'denied', 'unexpected'])('does not initialize or capture with consent %s', (consent) => {
+  // `granted` bez daty: zgoda sprzed 11.2026, na węższe oświadczenie.
+  it.each([undefined, 'denied', 'unexpected', 'granted'])('does not initialize or capture with consent %s', (consent) => {
     if (consent) storage.set(CONSENT_KEY, consent);
     initPosthogBrowser();
     track(ANALYTICS_EVENTS.supportChatStarted);
@@ -90,7 +97,7 @@ describe('PostHog explicit consent', () => {
   });
 
   it('honors revocation in another tab', () => {
-    storage.set(CONSENT_KEY, 'granted');
+    storeGranted();
     initPosthogBrowser();
     storage.set(CONSENT_KEY, 'denied');
     browser.dispatchEvent(Object.assign(new Event('storage'), { key: CONSENT_KEY }));
@@ -121,7 +128,7 @@ describe('PostHog explicit consent', () => {
 
 describe('PostHog outbound data boundary', () => {
   it('preserves only the SDK public project token, never an arbitrary access token', () => {
-    storage.set(CONSENT_KEY, 'granted');
+    storeGranted();
     const safe = sanitizeAnalyticsEvent(event({ token: 'phc_unit_test', access_token: 'private-token' }));
     expect(safe?.properties).toEqual({ token: 'phc_unit_test' });
     expect(sanitizeAnalyticsEvent(event({ token: 'private-token' }))?.properties).toEqual({});
@@ -139,7 +146,7 @@ describe('PostHog outbound data boundary', () => {
   });
 
   it('removes DOM text, personal properties, arbitrary event data and full URLs', () => {
-    storage.set(CONSENT_KEY, 'granted');
+    storeGranted();
     const raw = event({
       distinct_id: '00000000-0000-4000-8000-000000000001', $session_id: '00000000-0000-4000-8000-000000000002',
       $current_url: '/accountant/private-token?token=private-secret',
@@ -165,7 +172,7 @@ describe('PostHog outbound data boundary', () => {
   });
 
   it('preserves reviewed counters, enum values and flags without arbitrary text', () => {
-    storage.set(CONSENT_KEY, 'granted');
+    storeGranted();
     const properties = {
       count: 12, imported_count: 3, duration_ms: 2300, step_index: 2,
       plan: 'monthly', status: 'active', method: 'google', feature: 'invoices',
@@ -181,7 +188,7 @@ describe('PostHog outbound data boundary', () => {
   });
 
   it.each(['$snapshot', '$autocapture', '$exception', '$rageclick', '$dead_click', 'private@example.invalid'])('drops unreviewed event %s', (name) => {
-    storage.set(CONSENT_KEY, 'granted');
+    storeGranted();
     expect(sanitizeAnalyticsEvent(event({}, name))).toBeNull();
   });
 });

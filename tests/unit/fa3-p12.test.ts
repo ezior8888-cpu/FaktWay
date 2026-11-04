@@ -14,7 +14,7 @@ import {
 } from '@/lib/xml/fa3-p12';
 
 /**
- * W9 (C5a): odwzorowanie P_12 FA(3) → stawka FaktFlow przy imporcie z KSeF.
+ * W9 (C5a): odwzorowanie P_12 FA(3) → stawka FaktWay przy imporcie z KSeF.
  * Łańcuch import → JPK sprawdza `import-stawki-p12-jpk.test.ts`; tu reguły
  * i spięcie z mapami generatorów (żeby zmiana w generatorze nie rozjechała
  * importu po cichu).
@@ -30,7 +30,7 @@ describe('importVatRateFromFa3 — kod P_12 obecny', () => {
     expect(domainVatRateFromFa3P12(p12)).toBe(rate);
   });
 
-  it.each(['0 WDT', '0 EX', '22', '7', '4', '3'])('„%s” (bez odpowiednika w FaktFlow) → zapis dosłowny, nigdy stawka FaktFlow', (p12) => {
+  it.each(['0 WDT', '0 EX', '22', '7', '4', '3'])('„%s” (bez odpowiednika w FaktWay) → zapis dosłowny, nigdy stawka FaktWay', (p12) => {
     expect(importVatRateFromFa3(p12, header())).toBe(p12);
     expect(domainVatRateFromFa3P12(p12)).toBeNull();
     expect(importedVatRateLabel(p12)).toBeTruthy();
@@ -91,8 +91,8 @@ describe('importVatRateFromFa3 — brak P_12 (stawka z nagłówka tylko, gdy jed
   });
 });
 
-describe('stawki FaktFlow i mapy generatorów FA(3)', () => {
-  it('VAT_RATES = 8 stawek FaktFlow; isVatRate odrzuca kody FA(3) i prototyp obiektu', () => {
+describe('stawki FaktWay i mapy generatorów FA(3)', () => {
+  it('VAT_RATES = 8 stawek FaktWay; isVatRate odrzuca kody FA(3) i prototyp obiektu', () => {
     expect([...VAT_RATES].sort()).toEqual(['0', '23', '5', '8', 'np', 'np_ii', 'oo', 'zw']);
     expect(isVatRate('0 KR')).toBe(false);
     expect(isVatRate('toString')).toBe(false);

@@ -63,7 +63,8 @@ describe('wysyłka PDF faktury e-mailem', () => {
     expect(await emailInvoiceAction(invoiceId, 'buyer@example.test')).toEqual({ success: true });
     expect(mocks.generatePdf).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId);
     expect(mocks.loadInvoice).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId);
-    expect(mocks.verifyPdf).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId, 'qr-state');
+    // D-A4-1b-3 PR B: mail odmawia szkicu z numerem zajętym w KSeF (pobranie PDF — nie).
+    expect(mocks.verifyPdf).toHaveBeenCalledExactlyOnceWith(invoiceId, tenantId, 'qr-state', { refuseRetiredDraft: true });
     expect(mocks.sendEmail).toHaveBeenCalledOnce();
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ tenantId, entityId: invoiceId }));
   });

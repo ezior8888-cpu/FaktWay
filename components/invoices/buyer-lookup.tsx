@@ -22,6 +22,8 @@ interface Props {
   }) => void;
   nipError?: string;
   onValidationComplete?: (result: CachedValidationResult | null) => void;
+  /** `id` pola NIP — dla `<Label htmlFor>` (WCAG 1.3.1). */
+  inputId?: string;
 }
 
 export function BuyerLookup({
@@ -30,6 +32,7 @@ export function BuyerLookup({
   onSelected,
   nipError,
   onValidationComplete,
+  inputId,
 }: Props) {
   const [isLoading, startLoading] = useTransition();
 
@@ -54,6 +57,7 @@ export function BuyerLookup({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <NipValidatedInput
+            id={inputId}
             value={nip}
             onChange={(v) =>
               onNipChange(v.replace(/\D/g, '').slice(0, 10))

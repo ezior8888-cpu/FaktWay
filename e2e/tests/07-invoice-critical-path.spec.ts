@@ -45,8 +45,10 @@ test.describe('Faktura — krytyczna ścieżka (szkic → PDF)', () => {
     await page.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
 
     const invoiceId = page.url().split('/').pop()!;
-    await expect(page.getByText(invoiceNumber)).toBeVisible();
-    await expect(page.getByText('Szkic')).toBeVisible();
+    // Podgląd w układzie Finory (E3b): numer w tytule dokumentu, plakietka KSeF „Szkic”
+    // w karcie „Status” (dokładny tekst — „Usuń szkic” też zawiera to słowo).
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(invoiceNumber);
+    await expect(page.getByTestId('karta-statusu').getByText('Szkic', { exact: true })).toBeVisible();
 
     // ── PDF przez uwierzytelniony route (cookies z kontekstu strony) ──
     const pdfResponse = await page.request.get(
@@ -58,8 +60,9 @@ test.describe('Faktura — krytyczna ścieżka (szkic → PDF)', () => {
     expect(body.subarray(0, 5).toString()).toBe('%PDF-');
 
     // ── Lista faktur zawiera świeży szkic ──
+    // Numer jest w tabeli (od `lg`) i w karcie wiersza (telefon) — sprawdzamy ten widoczny.
     await page.goto('/invoices');
-    await expect(page.getByText(invoiceNumber)).toBeVisible();
+    await expect(page.getByText(invoiceNumber, { exact: true }).filter({ visible: true }).first()).toBeVisible();
   });
 
   test('walidacja zatrzymuje pusty formularz (brak nazwy pozycji)', async ({

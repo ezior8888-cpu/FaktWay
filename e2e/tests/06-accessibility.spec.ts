@@ -22,21 +22,48 @@ const PUBLIC_PAGES = [
   '/forgot-password',
   '/pricing',
   '/pomoc',
+  // Od 23.10.2026 wszystkie strony przed logowaniem w jednym stylu.
+  '/blog',
+  '/kontakt',
+  '/about',
+  '/legal/regulamin',
+  '/kalkulator-oszczednosci',
 ];
 
 /** Strony za loginem — wymagają `authenticatedContext`. */
 const AUTHENTICATED_PAGES = [
   '/dashboard',
   '/invoices',
+  // Plan Finora E9 (P6).
+  '/invoices/recurring',
   '/contractors',
   '/settings',
   '/settings/security',
 ];
 
+/**
+ * Strony publiczne mają animacje wejścia i odsłaniania przy przewijaniu
+ * (`components/site/motion.tsx`). W trakcie animacji tekst jest
+ * półprzezroczysty i axe zgłasza fałszywe braki kontrastu, więc przed
+ * skanem przewijamy stronę do końca i czekamy, aż wszystko się odsłoni.
+ */
+async function settleAnimations(page: import('@playwright/test').Page) {
+  await page.evaluate(async () => {
+    document.documentElement.style.scrollBehavior = 'auto';
+    for (let y = 0; y < document.body.scrollHeight; y += 300) {
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(1500);
+}
+
 test.describe('Accessibility — axe-core WCAG 2.1 AA', () => {
   for (const path of PUBLIC_PAGES) {
     test(`a11y publiczna: ${path}`, async ({ page }) => {
       await page.goto(path);
+      await settleAnimations(page);
       const results = await new AxeBuilder({ page })
         .withTags(WCAG_TAGS)
         .analyze();

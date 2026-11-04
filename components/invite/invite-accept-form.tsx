@@ -1,10 +1,14 @@
 'use client';
 
+// Plan Finora P15 (E10b): przycisk i błąd na prymitywach Finory. Logika bez
+// zmian: `acceptInvitationAction`, potem Pulpit.
+
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { RiArrowRightLine, RiLoader4Line } from '@remixicon/react';
 
 import { acceptInvitationAction } from '@/app/actions/organizations';
+import { AuthMessage } from '@/components/auth/finora/auth-message';
 import { Button } from '@/components/ui/button';
 
 export function InviteAcceptForm({
@@ -33,27 +37,22 @@ export function InviteAcceptForm({
 
   return (
     <div className="space-y-3">
-      {error ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-xl p-4 text-sm">
-          {error}
-        </div>
-      ) : null}
+      {error ? <AuthMessage tone="error">{error}</AuthMessage> : null}
       <Button
         onClick={handleAccept}
         disabled={isPending}
-        variant="glass-primary"
         size="lg"
         className="w-full"
       >
         {isPending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <RiLoader4Line className="animate-spin" />
             Akceptuję...
           </>
         ) : (
           <>
             Dołącz do {orgName}
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <RiArrowRightLine />
           </>
         )}
       </Button>

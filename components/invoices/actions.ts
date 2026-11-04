@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
 import type { createClient } from '@/lib/supabase/server';
-import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { lookupCompanyByNip } from '@/lib/gus/client';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
@@ -19,6 +19,20 @@ import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
+import {
+  advanceRecurringRunDate,
+  findInvoiceForPeriod,
+  isRecurringPeriodConflict,
+  loadRecurringIssueLink,
+  periodTakenMessage,
+  RECURRING_CHANGED_MESSAGE,
+  RECURRING_DRAFT_LEFT_NOTE,
+  RECURRING_DRAFT_REFUSED_MESSAGE,
+  withRecurringColumns,
+  type RecurringIssueLink,
+} from '@/lib/invoices/recurring/issue';
+import { suggestNextInvoiceNumberForTenant } from '@/lib/invoices/next-number';
+import { addDaysToIsoDate, dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
   EU_BUYER_COUNTRIES,
   invoiceFormSchema,
@@ -53,14 +67,16 @@ interface TenantSnapshot {
 
 /** Pobiera kontekst zalogowanego usera + jego tenanta.
  *  Rzuca wyjątek jeśli user niezalogowany lub bez tenanta - powinien
- *  wtedy być na `/onboarding`, wejście na formularz z `null` to bug. */
-async function getTenantContext(): Promise<{
+ *  wtedy być na `/onboarding`, wejście na formularz z `null` to bug.
+ *  `formTenant` — zapis dokumentu z formularza: firma formularza musi być
+ *  firmą aktywną teraz (UX-01). */
+async function getTenantContext(formTenant?: FormTenantCheck): Promise<{
   supabase: Awaited<ReturnType<typeof createClient>>;
   userId: string;
   tenant: TenantSnapshot;
 }> {
   // This action boundary enforces MFA and current membership independently of routing.
-  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg(formTenant);
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -439,18 +455,30 @@ export type InvoiceActionResult =
 
 /** Wspólna ścieżka zapisu: INSERT invoices + line_items w transakcji
  *  "best-effort" (Supabase nie daje klienckich transakcji; w razie błędu
- *  linii usuwamy fakturę-matkę żeby nie zostawiać sierot). */
+ *  linii usuwamy fakturę-matkę żeby nie zostawiać sierot).
+ *
+ *  `recurring` (plan Finora N1): faktura z pozycji cyklicznej. Powiązanie
+ *  i okres idą w TYM SAMYM INSERT — unikalny indeks `uq_invoices_recurring_period`
+ *  przepuszcza jedną fakturę na okres. Po udanym zapisie (z pozycjami)
+ *  warunkowy UPDATE przesuwa `next_run_date`; jego błąd nie psuje zapisu.
+ *  Oba zdarzenia — zajęcie okresu i samonaprawa daty po 23505 — idą do
+ *  `audit_logs` (K3). Bez `recurring` wiersz i zachowanie są takie jak przed N1. */
 async function insertInvoiceAndLines(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
   invoice: Invoice,
   formValues?: InvoiceFormValues,
+  recurringIssue?: { link: RecurringIssueLink; userId: string },
 ): Promise<InvoiceActionResult> {
+  const recurring = recurringIssue?.link;
+  const recurringUserId = recurringIssue?.userId ?? null;
   const b2c = formValues ? buyerColumnsFromInvoiceForm(formValues) : null;
 
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
-    .insert({
+    // N1: tylko faktura z pozycji cyklicznej niesie dwie nowe kolumny —
+    // zwykła faktura ma wiersz bez zmian (bez tych kluczy, nie z NULL-ami).
+    .insert(withRecurringColumns({
       tenant_id: tenantId,
       // DB CHECK: 'outgoing' | 'incoming' - NIE 'issued'.
       direction: 'outgoing',
@@ -479,11 +507,46 @@ async function insertInvoiceAndLines(
       // Generator XML i tak odtworzy go z `invoice` w jobie - to jest
       // jedynie źródło prawdy dla UI/raportów.
       fa3_data: invoice,
-    })
+    }, recurring))
     .select('id')
     .single();
 
   if (invErr || !inserted) {
+    // N1: za ten okres jest już faktura — komunikat z jej numerem i samonaprawa
+    // `next_run_date` (gdy przesunięcie po tamtym zapisie się nie udało).
+    // Sprawdzamy przy KAŻDYM 23505: przy podwójnym kliknięciu z tym samym
+    // numerem Postgres zgłasza indeks numeru, choć zajęty jest i okres.
+    if (recurring && invErr?.code === '23505') {
+      const existing = await findInvoiceForPeriod(supabase, tenantId, recurring);
+      if (existing) {
+        const repaired = await advanceRecurringRunDate(supabase, tenantId, recurring);
+        if (repaired) {
+          await logAudit({
+            action: 'recurring_invoice.run_date_repaired',
+            tenantId,
+            userId: recurringUserId,
+            entityType: 'recurring_invoice',
+            entityId: recurring.recurringInvoiceId,
+            metadata: {
+              recurringPeriod: recurring.period,
+              existingInvoiceId: existing.id,
+              existingInternalNumber: existing.internal_number,
+              fromNextRunDate: recurring.runDate,
+              toNextRunDate: recurring.nextRunDate,
+            },
+          });
+        }
+        return { success: false, error: periodTakenMessage(existing) };
+      }
+      if (isRecurringPeriodConflict(invErr)) {
+        // Indeks okresu odrzucił zapis, ale faktury nie widać (np. usunięta
+        // między zapisem a odczytem) — bez numeru, bez przesuwania daty.
+        return {
+          success: false,
+          error: 'Faktura za ten okres jest już wystawiona. Sprawdź listę faktur.',
+        };
+      }
+    }
     // Postgres 23505 = unique_violation. Po migracji 00028 to oznacza duplikat
     // `internal_number` w obrębie tego tenanta — najczęściej double-click "Wystaw
     // i wyślij" lub równoległa próba zapisu z innej karty. Friendly message
@@ -526,12 +589,70 @@ async function insertInvoiceAndLines(
     };
   }
 
+  if (recurring) {
+    const advanced = await advanceRecurringRunDate(supabase, tenantId, recurring);
+    await logAudit({
+      action: 'recurring_invoice.issued',
+      tenantId,
+      userId: recurringUserId,
+      entityType: 'recurring_invoice',
+      entityId: recurring.recurringInvoiceId,
+      metadata: {
+        invoiceId: inserted.id as string,
+        internalNumber: invoice.internalNumber,
+        recurringPeriod: recurring.period,
+        fromNextRunDate: recurring.runDate,
+        toNextRunDate: recurring.nextRunDate,
+        // false: przesunięcie nie wyszło (albo ktoś zmienił datę) — naprawi je następna próba po 23505.
+        nextRunDateAdvanced: advanced,
+      },
+    });
+  }
+
   return { success: true, invoiceId: inserted.id as string };
 }
 
+/**
+ * N1: pozycja cykliczna z formularza (`?cykliczna=`) — odczyt PRZED zapisem;
+ * zwykła faktura: `link` pusty. C3: okres z formularza (pokazany w banerze)
+ * musi być okresem pozycji teraz — inaczej nic nie zapisujemy. Jeśli za
+ * okres z formularza jest już faktura, klient dostaje jej numer (a nie radę
+ * „wybierz inny numer”, która prowadziła do drugiej faktury za ten sam
+ * miesiąc); jeśli nie — prośbę o ponowne otwarcie „Wystaw teraz”.
+ */
+async function recurringLinkForForm(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  values: InvoiceFormValues,
+): Promise<{ ok: true; link: RecurringIssueLink | undefined } | { ok: false; error: string }> {
+  if (!values.recurringInvoiceId) return { ok: true, link: undefined };
+  const loaded = await loadRecurringIssueLink(supabase, tenantId, values.recurringInvoiceId);
+  if (!loaded.ok) return loaded;
+  const formPeriod = values.recurringPeriod;
+  if (formPeriod && formPeriod !== loaded.link.period) {
+    const existing = await findInvoiceForPeriod(supabase, tenantId, {
+      recurringInvoiceId: loaded.link.recurringInvoiceId,
+      period: formPeriod,
+    });
+    return { ok: false, error: existing ? periodTakenMessage(existing) : RECURRING_CHANGED_MESSAGE };
+  }
+  return { ok: true, link: loaded.link };
+}
+
+/**
+ * `expectedTenantId` — firma, dla której strona wyrenderowała formularz
+ * (UX-01). Tylko do porównania z firmą z ciasteczka; firmą dokumentu jest
+ * firma z sesji. Dotyczy też `saveAndSendInvoiceAction`.
+ */
 export async function saveDraftAction(
-  values: InvoiceFormValues
+  values: InvoiceFormValues,
+  expectedTenantId: string,
 ): Promise<InvoiceActionResult> {
+  // C2 (E9): z pozycji cyklicznej nie ma szkicu. Szkic zajmowałby okres
+  // i przesuwał harmonogram, a nazajutrz nie dałby się wysłać (data
+  // wystawienia ≠ dziś) — formularz chowa „Zapisz szkic”, a tu odmowa dla
+  // wywołania wprost. Bez zapisu i bez odczytu bazy.
+  if (values?.recurringInvoiceId) return { success: false, error: RECURRING_DRAFT_REFUSED_MESSAGE };
   // Ten sam schemat co formularz i „Wystaw i wyślij” — szkic da się później
   // wysłać do KSeF (F-042), więc nie może omijać walidacji wywołaniem wprost.
   const parsed = invoiceFormSchema.safeParse(values);
@@ -539,7 +660,7 @@ export async function saveDraftAction(
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Nieprawidłowe dane faktury' };
   }
   try {
-    const { supabase, tenant, userId } = await getTenantContext();
+    const { supabase, tenant, userId } = await getTenantContext({ expectedTenantId });
     // Odpornie: przed wgraniem 00091 kolumny nie ma — zwykła faktura nie może
     // od niej zależeć.
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
@@ -547,6 +668,7 @@ export async function saveDraftAction(
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
 
+    // Zwykły szkic — bez pozycji cyklicznej (odmowa wyżej).
     const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
     if (result.success && result.invoiceId) {
       await logAudit({
@@ -572,7 +694,8 @@ export async function saveDraftAction(
 }
 
 export async function saveAndSendInvoiceAction(
-  values: InvoiceFormValues
+  values: InvoiceFormValues,
+  expectedTenantId: string,
 ): Promise<InvoiceActionResult> {
   // Ten sam schemat co formularz (AGENTS.md: walidacja klient + serwer). Bez
   // tego wszystko, co pilnuje formularz — NIP z sumą kontrolną, pozycje, MPP
@@ -582,7 +705,7 @@ export async function saveAndSendInvoiceAction(
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Nieprawidłowe dane faktury' };
   }
   try {
-    const { supabase, tenant, userId } = await getTenantContext();
+    const { supabase, tenant, userId } = await getTenantContext({ expectedTenantId });
     // Faktura w KSeF jest wystawiona w dniu przesłania (F-092, A1) — ta sama
     // reguła dla wszystkich dokumentów. Inną datę można zapisać jako szkic.
     const notToday = issueDateNotTodayError(values.issueDate, 'form');
@@ -598,8 +721,17 @@ export async function saveAndSendInvoiceAction(
     if (invoice.lines.some((l) => l.vatRate === 'zw') && !invoice.annotations?.vatExemptionBasis) {
       return { success: false, error: ZW_WITHOUT_BASIS_MESSAGE };
     }
+    // N1: pozycja wstrzymana, usunięta albo obca — odmowa przed zapisem.
+    const recurring = await recurringLinkForForm(supabase, tenant.id, values);
+    if (!recurring.ok) return { success: false, error: recurring.error };
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
-    const saved = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
+    const saved = await insertInvoiceAndLines(
+      supabase,
+      tenant.id,
+      invoice,
+      values,
+      recurring.link ? { link: recurring.link, userId } : undefined,
+    );
     if (!saved.success) return saved;
 
     const enq = await enqueueKsefSubmitAfterDraft({
@@ -629,13 +761,17 @@ export async function saveAndSendInvoiceAction(
             metadata: {
               internalNumber: invoice.internalNumber,
               note: isSettingsRead ? 'submit_aborted_tenant_read_error' : 'submit_blocked_no_ksef_cert',
+              ...(recurring.link
+                ? { recurringInvoiceId: recurring.link.recurringInvoiceId, recurringPeriod: recurring.link.period }
+                : {}),
             },
           });
         }
       }
       return {
         success: false,
-        error: enq.error,
+        // C4: szkic z okresem został — klient ma wiedzieć, że okres wróci po usunięciu szkicu.
+        error: recurring.link && saved.invoiceId ? `${enq.error} ${RECURRING_DRAFT_LEFT_NOTE}` : enq.error,
         invoiceId: saved.invoiceId,
       };
     }
@@ -720,16 +856,30 @@ export async function prefillFromLastInvoiceAction(): Promise<PrefillFromLastInv
     .limit(1)
     .maybeSingle();
 
-  if (!ostatnia?.fa3_data) return null;
+  if (!ostatnia) return null;
+  return prefillCore(supabase, ostatnia);
+}
 
-  const faktura = ostatnia.fa3_data as Invoice;
+/**
+ * Wspólny rdzeń podkładu (ostatnia faktura i wskazana faktura): nabywca,
+ * pozycje i sposób zapłaty z faktury `row` tej firmy. Bez numeru i bez dat —
+ * zasady w opisie `prefillFromLastInvoiceAction`. `null`, gdy faktura nie ma
+ * nabywcy albo czytelnych pozycji.
+ */
+async function prefillCore(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  row: { id: string; fa3_data: unknown },
+): Promise<PrefillFromLastInvoice | null> {
+  if (!row.fa3_data) return null;
+
+  const faktura = row.fa3_data as Invoice;
   const buyer = faktura.buyer;
   if (!buyer?.name) return null;
 
   const { data: pozycje } = await supabase
     .from('invoice_line_items')
     .select('ordinal, name, unit, quantity, unit_price_net, vat_rate')
-    .eq('invoice_id', ostatnia.id)
+    .eq('invoice_id', row.id)
     .order('ordinal', { ascending: true });
 
   const lines = (pozycje ?? [])
@@ -772,8 +922,136 @@ export async function prefillFromLastInvoiceAction(): Promise<PrefillFromLastInv
       buyerAddressLine2: buyer.address?.addressLine2 ?? '',
       buyerEmail: buyer.email ?? '',
       lines: lines as InvoiceFormValues['lines'],
-      paymentMethod: faktura.payment?.method ?? 'transfer',
+      // „mobile” ma tylko faktura za abonament opłacony BLIK-iem; formularz tej formy nie zna.
+      paymentMethod: faktura.payment?.method === 'mobile' ? 'other' : faktura.payment?.method ?? 'transfer',
       bankAccount: faktura.payment?.bankAccount ?? '',
+    },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Wypełnienie ze wskazanej faktury („Duplikuj”, „Wystaw teraz” z faktury
+// cyklicznej — plan Finora N1)
+// ═══════════════════════════════════════════════════════════════
+
+/** Gdy terminu płatności wzoru nie da się odczytać — 14 dni, jak w pustym formularzu. */
+const DEFAULT_PAYMENT_DAYS = 14;
+/** Termin dłuższy niż rok z dawnej faktury traktujemy jak brak (błędna data), nie przepisujemy. */
+const MAX_PAYMENT_DAYS = 365;
+
+/** Podkład ze wskazanej faktury: wartości gotowe do `defaultValues` formularza. */
+export interface PrefillFromInvoice {
+  invoiceId: string;
+  contractorName: string;
+  /** Numer faktury, z której wypełniamy — do podpisu „na podstawie FV …”. */
+  sourceNumber: string | null;
+  values: PrefillFromLastInvoice['values'] &
+    Pick<
+      InvoiceFormValues,
+      | 'internalNumber'
+      | 'issueDate'
+      | 'saleDate'
+      | 'paymentDueDate'
+      | 'buyerIsConsumer'
+      | 'buyerConsumerIdType'
+      | 'buyerPesel'
+      | 'buyerIdDocument'
+      | 'splitPayment'
+    >;
+}
+
+/** Dni terminu płatności wzoru: `days_to_payment`, a bez niego różnica termin − data wystawienia. */
+function paymentDaysOf(row: {
+  days_to_payment: number | null;
+  issue_date: string | null;
+  payment_due_date: string | null;
+}): number | null {
+  const ok = (d: number) => Number.isInteger(d) && d >= 0 && d <= MAX_PAYMENT_DAYS;
+  if (typeof row.days_to_payment === 'number' && ok(row.days_to_payment)) return row.days_to_payment;
+  if (!row.issue_date || !row.payment_due_date) return null;
+  if (!addDaysToIsoDate(row.issue_date, 0) || !addDaysToIsoDate(row.payment_due_date, 0)) return null;
+  const dni = Math.round(
+    (Date.parse(`${row.payment_due_date}T00:00:00Z`) - Date.parse(`${row.issue_date}T00:00:00Z`)) / 86_400_000,
+  );
+  return ok(dni) ? dni : null;
+}
+
+const CONSUMER_ID_TYPES = ['pesel', 'id_card', 'passport', 'no_id'] as const;
+type ConsumerIdType = (typeof CONSUMER_ID_TYPES)[number];
+
+/**
+ * Wskazana faktura sprzedaży tej firmy jako podkład pod nową — uogólnienie
+ * `prefillFromLastInvoiceAction` na konkretną fakturę (plan Finora N1).
+ *
+ * Te same zasady: treść (nabywca, pozycje, sposób zapłaty) ze wzoru, ale
+ * NIGDY jego numer ani daty. Numer podpowiada `suggestNextInvoiceNumberForTenant`,
+ * data wystawienia i sprzedaży to dziś (Europe/Warsaw), termin płatności to
+ * dziś + tyle dni, ile miał wzór. Klient może wszystko poprawić przed „Wystaw
+ * i wyślij do KSeF” — akcja niczego nie zapisuje.
+ *
+ * Osoba prywatna wraca jako osoba prywatna (rodzaj i numer dokumentu z kolumn
+ * faktury), żeby faktura cykliczna dla konsumenta nie otwierała się z błędem
+ * „NIP firmy”. MPP (P_18A) przechodzi ze wzoru.
+ *
+ * Odczyt klientem sesji (RLS) i z `eq('tenant_id')`; faktura obca, kosztowa
+ * albo nieistniejąca daje `null` — strona pokazuje wtedy pusty formularz
+ * z komunikatem.
+ */
+export async function prefillFromInvoiceAction(invoiceId: string): Promise<PrefillFromInvoice | null> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invoiceId)) return null;
+
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  let tenantId: string;
+  try {
+    const ctx = await getTenantContext();
+    supabase = ctx.supabase;
+    tenantId = ctx.tenant.id;
+  } catch {
+    return null;
+  }
+
+  const { data: wzor } = await supabase
+    .from('invoices')
+    .select(
+      'id, fa3_data, internal_number, issue_date, payment_due_date, days_to_payment, is_b2c, buyer_id_type, buyer_pesel, buyer_id_number',
+    )
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
+    .maybeSingle();
+  if (!wzor) return null;
+
+  const core = await prefillCore(supabase, wzor);
+  if (!core) return null;
+
+  const dzis = todayInWarsaw();
+  const numer = await suggestNextInvoiceNumberForTenant(supabase, tenantId, dzis);
+  const dni = paymentDaysOf(wzor) ?? DEFAULT_PAYMENT_DAYS;
+  const faktura = wzor.fa3_data as unknown as Invoice;
+
+  const idType = wzor.buyer_id_type as string | null;
+  const konsument: ConsumerIdType | null =
+    wzor.is_b2c && !core.values.buyerIsEu
+      ? CONSUMER_ID_TYPES.find((t) => t === idType) ?? 'no_id'
+      : null;
+
+  return {
+    invoiceId: wzor.id,
+    contractorName: core.contractorName,
+    sourceNumber: wzor.internal_number ?? null,
+    values: {
+      ...core.values,
+      ...(konsument ? { buyerNip: '' } : {}),
+      internalNumber: numer ?? '',
+      issueDate: dzis,
+      saleDate: dzis,
+      paymentDueDate: dueDateFrom(dzis, dni),
+      buyerIsConsumer: konsument !== null,
+      buyerConsumerIdType: konsument ?? undefined,
+      buyerPesel: konsument === 'pesel' ? wzor.buyer_pesel ?? '' : '',
+      buyerIdDocument:
+        konsument === 'id_card' || konsument === 'passport' ? wzor.buyer_id_number ?? '' : '',
+      splitPayment: faktura.annotations?.splitPayment === 1,
     },
   };
 }

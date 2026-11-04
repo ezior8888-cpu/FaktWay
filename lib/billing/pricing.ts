@@ -1,10 +1,11 @@
 /**
- * Jedyne źródło ceny FaktFlow.
+ * Jedyne źródło ceny FaktWay.
  *
  * Decyzja Bartosza z 1 października 2026 (krok 8 planu automatyzacji):
  *   - jeden plan dla wszystkich, płatny co miesiąc — bez planu rocznego,
  *   - 29,99 zł BRUTTO (cena końcowa z 23% VAT),
- *   - 30 dni okresu próbnego, karta przy starcie (Stripe Checkout),
+ *   - 30 dni okresu próbnego, karta przy starcie (Stripe Checkout), a po włączeniu
+ *     przełącznika także BLIK (lib/billing/trial-payment.ts),
  *   - bez „money-back” — zasady zwrotów ustala regulamin (prawnik).
  *
  * Wcześniej w repo było pięć wersji cennika (39,99 / 49 / 59 / 588 zł,

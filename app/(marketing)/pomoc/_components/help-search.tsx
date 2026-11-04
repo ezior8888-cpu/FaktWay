@@ -31,41 +31,47 @@ export function HelpSearch({ items }: { items: HelpSearchItem[] }) {
   }, [items, query]);
 
   return (
-    <div className="relative">
+    <div className="relative text-left">
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground"
+        />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Szukaj w pomocy — np. „korekta faktury”, „błąd KSeF”…"
-          className="w-full rounded-2xl border border-glass-border bg-glass-white py-3.5 pl-11 pr-4 text-sm outline-none backdrop-blur-glass focus:border-foreground/30"
+          aria-label="Szukaj w pomocy"
+          placeholder="Szukaj w pomocy, np. „korekta faktury”, „błąd KSeF”…"
+          className="w-full rounded-full bg-card py-3.5 pr-5 pl-12 text-sm text-foreground shadow-sm ring-1 ring-border transition outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
         />
       </div>
 
-      {query.trim().length >= 2 && (
-        <div className="mt-2 overflow-hidden rounded-2xl border border-glass-border bg-glass-white backdrop-blur-glass">
-          {results.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-zinc-500">
-              Brak wyników dla „{query}”. Spróbuj innych słów albo zapytaj
-              asystenta AI w panelu.
-            </p>
-          ) : (
-            results.map((it) => (
-              <Link
-                key={it.slug}
-                href={`/pomoc/${it.slug}`}
-                className="block border-b border-glass-border/50 px-4 py-3 last:border-0 hover:bg-foreground/5"
-              >
-                <p className="text-sm font-medium">{it.title}</p>
-                <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500">
-                  {it.categoryLabel} · {it.summary}
-                </p>
-              </Link>
-            ))
-          )}
-        </div>
-      )}
+      <div aria-live="polite">
+        {query.trim().length >= 2 && (
+          <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-lg shadow-primary/5 ring-1 ring-border">
+            {results.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-muted-foreground">
+                Brak wyników dla „{query}”. Spróbuj innych słów albo napisz do
+                nas przez stronę kontaktu.
+              </p>
+            ) : (
+              results.map((it) => (
+                <Link
+                  key={it.slug}
+                  href={`/pomoc/${it.slug}`}
+                  className="block border-b border-border px-5 py-3.5 transition-colors outline-none last:border-0 hover:bg-muted focus-visible:bg-muted"
+                >
+                  <p className="text-sm font-medium text-foreground">{it.title}</p>
+                  <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                    {it.categoryLabel} · {it.summary}
+                  </p>
+                </Link>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

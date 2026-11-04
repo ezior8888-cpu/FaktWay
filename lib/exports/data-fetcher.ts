@@ -18,6 +18,7 @@ import type { Database, Json } from '@/types/database';
 
 import type { JpkFaInputData, JpkInvoice, JpkInvoiceLine } from './jpk-fa-generator';
 import { jpkAnnotationsFromJson, type Fa3Markers } from '@/lib/xml/fa3-annotations';
+import type { KsefLineFields } from '@/lib/import/fa3-line-amounts';
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type LineItemRow = Database['public']['Tables']['invoice_line_items']['Row'];
@@ -472,6 +473,11 @@ function mapInvoiceRow(
       parentNumberById.get(row.parent_invoice_id) ?? undefined;
   }
 
+  // C5c: faktura z importu KSeF — pola pozycji z pliku (P_9B / P_11A…) dla JPK_FA.
+  const attached = row.origin === 'ksef_import' ? attachKsefLineFields(lines, row.fa3_data) : { lines, problems: [] };
+  const contentFlags = importedContentFlags(row.origin, row.fa3_data);
+  const lineProblems = [...(contentFlags.importedLineAmountProblems ?? []), ...attached.problems];
+
   return {
     invoiceNumber: row.internal_number ?? row.ksef_number ?? '',
     currency: row.currency,
@@ -494,13 +500,14 @@ function mapInvoiceRow(
     vatTotal: Number(row.vat_total ?? 0),
     grossTotal: Number(row.gross_total ?? 0),
 
-    lines,
+    lines: attached.lines,
 
     correctedInvoiceNumber: correctedNumber,
     correctionReason: row.correction_reason ?? undefined,
     ksefNumber: row.ksef_number ?? undefined,
     annotations: annotationsFromFa3(row.fa3_data),
-    ...importedContentFlags(row.origin, row.fa3_data),
+    ...contentFlags,
+    ...(lineProblems.length ? { importedLineAmountProblems: lineProblems } : {}),
   };
 }
 
@@ -520,11 +527,13 @@ const isRecordJson = (v: unknown): v is Record<string, unknown> => Boolean(v) &&
 export function importedContentFlags(
   origin: string | null | undefined,
   fa3: unknown,
-): Pick<JpkInvoice, 'importedAnnotationsMissing' | 'importedAnnotationProblems' | 'importedSaleDateUnclear' | 'ksefMarkers'> {
+): Pick<JpkInvoice,
+  'importedAnnotationsMissing' | 'importedAnnotationProblems' | 'importedSaleDateUnclear' | 'ksefMarkers' |
+  'importedLineAmountProblems' | 'importedTotalsUnknown'> {
   const o = isRecordJson(fa3) ? fa3 : {};
-  const problems = Array.isArray(o.annotationProblems)
-    ? o.annotationProblems.filter((p): p is string => typeof p === 'string')
-    : [];
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((p): p is string => typeof p === 'string') : []);
+  const problems = strings(o.annotationProblems);
+  const lineProblems = strings(o.lineAmountProblems);
   const markers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
   const saleDates = isRecordJson(o.saleDates) ? o.saleDates : undefined;
   return {
@@ -532,7 +541,36 @@ export function importedContentFlags(
     ...(problems.length ? { importedAnnotationProblems: problems } : {}),
     ...(saleDates?.unclear === true ? { importedSaleDateUnclear: true } : {}),
     ...(markers ? { ksefMarkers: markers } : {}),
+    // C5c: kwoty pozycji z pliku KSeF nieprzeniesione wiernie (ceny brutto, VAT od sumy stawki).
+    ...(lineProblems.length ? { importedLineAmountProblems: lineProblems } : {}),
+    ...(o.lineAmountTotalsUnknown === true ? { importedTotalsUnknown: true } : {}),
   };
+}
+
+/**
+ * C5c: pola pozycji z pliku KSeF (`fa3_data.ksefLineFields`) do pozycji JPK
+ * po numerze pozycji. Pozycja bez pary — powód zatrzymania (JPK nie zapisze
+ * wyliczonego netto zamiast ceny brutto z pliku).
+ */
+export function attachKsefLineFields(
+  lines: JpkInvoiceLine[],
+  fa3: unknown,
+): { lines: JpkInvoiceLine[]; problems: string[] } {
+  const raw = isRecordJson(fa3) && Array.isArray(fa3.ksefLineFields) ? fa3.ksefLineFields : null;
+  if (!raw) return { lines, problems: [] };
+  const byOrdinal = new Map<number, Omit<KsefLineFields, 'ordinal'>>();
+  for (const item of raw) {
+    if (!isRecordJson(item) || typeof item.ordinal !== 'number') continue;
+    const { ordinal, ...fields } = item as unknown as KsefLineFields;
+    byOrdinal.set(ordinal, fields);
+  }
+  const problems: string[] = [];
+  const out = lines.map((line) => {
+    const fields = byOrdinal.get(line.position);
+    if (!fields) problems.push(`pozycja ${line.position} bez pól z pliku KSeF`);
+    return fields ? { ...line, ksefFields: fields } : line;
+  });
+  return { lines: out, problems };
 }
 
 /**

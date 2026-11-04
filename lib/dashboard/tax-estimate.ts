@@ -1,5 +1,6 @@
 import { kpirCostAmount, type KpirCostInput } from '@/lib/categorization/kpir-cost';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
@@ -27,7 +28,18 @@ export interface TaxEstimateInvoice {
   settled_advances_net?: number | null;
 }
 
-export type TaxEstimateExpense = KpirCostInput & { issue_date: string };
+/**
+ * Wydatek jako wiersz `expenses` (koszt liczy `kpirCostAmount`) albo jako
+ * gotowy koszt z `getCosts` (`lib/dashboard/costs.ts`, pole `cost` — ta sama
+ * reguła, policzona już przy odczycie).
+ */
+export type TaxEstimateExpense =
+  | (KpirCostInput & { issue_date: string })
+  | { issue_date: string; cost: number };
+
+function expenseCost(expense: TaxEstimateExpense): number {
+  return 'cost' in expense ? expense.cost : kpirCostAmount(expense);
+}
 
 export interface TaxEstimate {
   amount: number;
@@ -46,7 +58,9 @@ export function estimateIncomeTaxThisYear(
   now: Date,
   dataFrom: string,
 ): TaxEstimate {
-  const year = now.getFullYear();
+  // Rok w Polsce, nie w strefie procesu: komponent wywołujący renderuje się
+  // też na serwerze (UTC), a w Nowy Rok tuż po północy to jeszcze stary rok.
+  const year = Number(todayInWarsaw(now).slice(0, 4));
   const yearStart = `${year}-01-01`;
   const fullYear = dataFrom <= yearStart;
   const inRange = (date: string) => date >= dataFrom && date.startsWith(`${year}-`);
@@ -57,7 +71,7 @@ export function estimateIncomeTaxThisYear(
       (s, i) => s + kpirRevenueNet({ kind: i.invoice_kind, net: i.net_total, settledAdvancesNet: i.settled_advances_net }),
       0,
     );
-  const cost = expenses.filter((e) => inRange(e.issue_date)).reduce((s, e) => s + kpirCostAmount(e), 0);
+  const cost = expenses.filter((e) => inRange(e.issue_date)).reduce((s, e) => s + expenseCost(e), 0);
   const amount = Math.max(0, roundToCents((revenue - cost) * LINEAR_PIT_RATE));
 
   if (fullYear) {

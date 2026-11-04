@@ -2,36 +2,36 @@
 title: "Automatyczna kategoryzacja kosztów"
 category: "ocr-kpir"
 order: 2
-summary: "Jak FaktFlow przypisuje koszty do właściwych kolumn KPiR i jak go uczyć."
-updated: "2026-05-19"
+summary: "Jak FaktWay przypisuje koszty do właściwych kolumn KPiR i jak go uczyć."
+updated: "2026-11-02"
 ---
 
-Każdy koszt trzeba przypisać do właściwej kolumny Księgi Przychodów i Rozchodów. FaktFlow robi to za Ciebie.
+Każdy koszt trzeba przypisać do właściwej kolumny Księgi Przychodów i Rozchodów. FaktWay robi to za Ciebie.
 
 ## Jak działa kategoryzacja
 
-Po dodaniu kosztu (z OCR lub z inboxu KSeF) FaktFlow analizuje dokument i proponuje kolumnę KPiR:
+Po dodaniu kosztu (ze zdjęcia lub ze Skrzynki KSeF) FaktWay analizuje dokument i proponuje kolumnę KPiR:
 
-- **kolumna 10** — zakup towarów handlowych i materiałów,
-- **kolumna 11** — koszty uboczne zakupu (np. transport, opakowania),
-- **kolumna 13** — pozostałe wydatki (paliwo, telekomunikacja, oprogramowanie, biuro),
+- **kolumna 10**: zakup towarów handlowych i materiałów,
+- **kolumna 11**: koszty uboczne zakupu (np. transport, opakowania),
+- **kolumna 13**: pozostałe wydatki (paliwo, telekomunikacja, oprogramowanie, biuro),
 - i inne, zależnie od charakteru wydatku.
 
-## Algorytm hybrydowy
+## Skąd bierze się propozycja
 
 Kategoryzacja łączy kilka sygnałów:
 
-- **reguły** — np. znany NIP operatora telekomunikacyjnego → telekomunikacja,
-- **analiza nazw pozycji** — co konkretnie kupiłeś,
-- **AI** — gdy reguły nie wystarczą, model klasyfikuje wydatek.
+- **reguły**: np. znany NIP operatora telekomunikacyjnego → telekomunikacja,
+- **analiza nazw pozycji**: co konkretnie kupiłeś,
+- **automatyczna klasyfikacja**: gdy reguły nie wystarczą, FaktWay sam dobiera kolumnę na podstawie treści dokumentu.
 
 ## Uczy się od Ciebie
 
-Jeśli zmienisz zaproponowaną kategorię, FaktFlow to zapamięta. Następnym razem podobny wydatek od tego samego dostawcy trafi od razu do właściwej kolumny.
+Jeśli zmienisz zaproponowaną kategorię, FaktWay to zapamięta. Następnym razem podobny wydatek od tego samego dostawcy trafi od razu do właściwej kolumny.
 
 ## Zawsze możesz poprawić
 
-Kategoria to propozycja — masz pełną kontrolę. Przy każdym koszcie możesz ręcznie wybrać inną kolumnę. To szczególnie ważne przy nietypowych wydatkach.
+Kategoria to propozycja, a Ty masz pełną kontrolę. Przy każdym koszcie możesz ręcznie wybrać inną kolumnę. To szczególnie ważne przy nietypowych wydatkach.
 
 ## Co dalej?
 

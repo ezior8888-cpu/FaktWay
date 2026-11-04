@@ -1,29 +1,42 @@
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { AuthDivider } from '@/components/auth/auth-divider';
-import {
-  authAlertErrorClass,
-  authGoogleButtonClass,
-  authInputClass,
-  authLabelClass,
-  authLinkClass,
-  authMutedTextClass,
-  authPrimaryButtonClass,
-  authSubtitleClass,
-  authTitleClass,
-} from '@/components/auth/auth-form-styles';
-import { TurnstileWidget } from '@/components/auth/turnstile-widget';
-import { isSignupClosed, SIGNUPS_CLOSED_MESSAGE } from '@/lib/feature-flags/signups';
-import { loginWithGoogle } from '../login/actions';
-import { signupWithEmail } from './actions';
+// Plan Finora P15 (E10b): `src/views/pages/auth/register/index.tsx` +
+// `register-form.tsx` szablonu. Układ i klasy 1:1; logika nasza i bez zmian:
+// `signupWithEmail`, Google przez `loginWithGoogle` (tylko przy włączonym
+// Google w GoTrue), Turnstile, wyłącznik `/wylacz rejestracja` (AUD-63).
+// W miejscu pola zgody Finory („I agree to all Terms…”) są dwa pola z pakietu
+// prawnego (#264): akceptacja regulaminu i umowy powierzenia (wymagana —
+// `signupWithEmail` bez `terms=on` odsyła `terms_required`) i dobrowolna
+// zgoda na e-maile. Brzmienie obu: lib/legal/versions.ts.
+
+// Next Imports
+import Link from 'next/link'
+
+// Component Imports
+import { AuthMessage } from '@/components/auth/finora/auth-message'
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { GoogleIcon } from '@/components/auth/finora/google-icon'
+import { PasswordInput } from '@/components/auth/finora/password-input'
+import { HoneypotField } from '@/components/auth/honeypot-field'
+import { TurnstileWidget } from '@/components/auth/turnstile-widget'
+import { LegalInline } from '@/components/legal/legal-document'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+
+// Lib Imports
+import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers'
+import { isSignupClosed, SIGNUPS_CLOSED_MESSAGE } from '@/lib/feature-flags/signups'
+import { MARKETING_STATEMENT, TERMS_STATEMENT } from '@/lib/legal/versions'
+
+import { loginWithGoogle } from '../login/actions'
+import { signupWithEmail } from './actions'
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_fields: 'Wypełnij wszystkie pola.',
   weak_password:
     'Hasło musi mieć min. 12 znaków, zawierać małą i dużą literę, cyfrę oraz znak specjalny.',
   password_breached:
-    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne — najlepiej passphrase z 4-5 losowych słów.',
+    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne, najlepiej passphrase z 4-5 losowych słów.',
   rate_limited:
     'Zbyt wiele prób rejestracji z tego urządzenia. Poczekaj kilka minut i spróbuj ponownie.',
   bot_check_failed:
@@ -31,146 +44,176 @@ const ERROR_MESSAGES: Record<string, string> = {
   'email rate limit exceeded':
     'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
   signups_disabled: SIGNUPS_CLOSED_MESSAGE,
-};
+  terms_required:
+    'Aby założyć konto, zaakceptuj Regulamin i Umowę powierzenia (pierwsze pole wyboru).',
+}
+
+const LEGAL_LINK_CLASS = 'text-foreground underline underline-offset-2 hover:no-underline'
+
+const PANEL_TITLE = 'Załóż konto i wystaw pierwszą fakturę'
+const PANEL_TEXT =
+  'Po rejestracji podasz NIP, a dane firmy pobierzemy z GUS. Certyfikat KSeF dodasz w ustawieniach, kiedy będziesz gotowy.'
+
+function LoginLink() {
+  return (
+    <p className='text-muted-foreground'>
+      Masz już konto?{' '}
+      <Link href='/login' className='text-foreground underline underline-offset-4 hover:text-primary'>
+        Zaloguj się
+      </Link>
+    </p>
+  )
+}
 
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; retry?: string }>;
+  searchParams: Promise<{ error?: string; retry?: string }>
 }) {
-  const { error, retry } = await searchParams;
-  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null;
+  const { error, retry } = await searchParams
+  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null
   const errorMsg = error
     ? error === 'rate_limited' && retryMinutes
       ? `Zbyt wiele prób rejestracji. Spróbuj ponownie za ~${retryMinutes} min.`
       : (ERROR_MESSAGES[error] ?? error)
-    : null;
+    : null
 
   // Wyłącznik `/wylacz rejestracja`: bez formularza i bez Google, bo pierwsze
   // logowanie Google zakłada konto.
   if (await isSignupClosed()) {
     return (
-      <div className="space-y-6">
+      <AuthSplitLayout panelTitle={PANEL_TITLE} panelText={PANEL_TEXT}>
         <div>
-          <h2 className={authTitleClass}>Utwórz konto</h2>
+          <h2 className='mb-2 text-2xl font-semibold'>Utwórz konto</h2>
         </div>
-        <div className={authAlertErrorClass} role="status">{SIGNUPS_CLOSED_MESSAGE}</div>
-        <p className={`text-center ${authMutedTextClass}`}>
-          Masz już konto?{' '}
-          <Link href="/login" className={authLinkClass}>
-            Zaloguj się
-          </Link>
-        </p>
-      </div>
-    );
+        <AuthMessage tone='error'>{SIGNUPS_CLOSED_MESSAGE}</AuthMessage>
+        <LoginLink />
+      </AuthSplitLayout>
+    )
   }
 
+  const googleEnabled = await isGoogleLoginEnabled()
+
   return (
-    <div className="space-y-6">
+    <AuthSplitLayout panelTitle={PANEL_TITLE} panelText={PANEL_TEXT}>
       <div>
-        <h2 className={authTitleClass}>Utwórz konto</h2>
-        <p className={authSubtitleClass}>Pierwsza faktura w 5 minut</p>
+        <h2 className='mb-2 text-2xl font-semibold'>Utwórz konto</h2>
+        <p className='text-muted-foreground'>Pierwsza faktura w 5 minut</p>
       </div>
 
-      {errorMsg && <div className={authAlertErrorClass}>{errorMsg}</div>}
+      {errorMsg && <AuthMessage tone='error'>{errorMsg}</AuthMessage>}
 
-      <form action={loginWithGoogle}>
-        <Button
-          type="submit"
-          variant="outline"
-          size="lg"
-          className={authGoogleButtonClass}
-        >
-          <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden>
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-          </svg>
-          Zarejestruj przez Google
-        </Button>
-      </form>
+      {googleEnabled && (
+        <>
+          <form action={loginWithGoogle}>
+            <Button type='submit' variant='outline' className='w-full'>
+              <GoogleIcon />
+              Zarejestruj przez Google
+            </Button>
+            {/* Konto z Google powstaje bez naszego formularza — wyraźną
+                akceptację zbiera bramka /onboarding/zgody
+                (lib/legal/acceptance.ts), gdy dokumenty przestaną być wersją
+                roboczą. */}
+            <p className='mt-2 text-center text-xs leading-relaxed text-muted-foreground'>
+              Rejestrując się przez Google, akceptujesz{' '}
+              <LegalInline
+                text="[Regulamin](/legal/regulamin) i [Umowę powierzenia](/legal/umowa-powierzenia) oraz potwierdzasz zapoznanie się z [Polityką prywatności](/legal/polityka-prywatnosci)."
+                linkClassName={LEGAL_LINK_CLASS}
+              />
+            </p>
+          </form>
 
-      <AuthDivider />
+          <div className='flex items-center gap-4'>
+            <Separator className='flex-1' />
+            <p>lub</p>
+            <Separator className='flex-1' />
+          </div>
+        </>
+      )}
 
-      <form action={signupWithEmail} className="space-y-4">
-        <div>
-          <label htmlFor="name" className={authLabelClass}>
-            Imię i nazwisko
-          </label>
-          <Input
-            id="name"
-            name="name"
-            type="text"
-            required
-            autoComplete="name"
-            className={authInputClass}
-          />
-        </div>
-        <div>
-          <label htmlFor="email" className={authLabelClass}>
-            Email
-          </label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className={authInputClass}
-          />
-        </div>
-        <div>
-          <label htmlFor="password" className={authLabelClass}>
-            Hasło
-          </label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={12}
-            autoComplete="new-password"
-            className={authInputClass}
-          />
-          <p className="mt-1.5 text-xs text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-            Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
-          </p>
-        </div>
-        <TurnstileWidget action="register" theme="light" />
-        <Button type="submit" size="lg" className={authPrimaryButtonClass}>
-          Utwórz konto
-        </Button>
-      </form>
+      <div className='space-y-4'>
+        <form action={signupWithEmail}>
+          <FieldGroup className='gap-4'>
+            {/* Name */}
+            <Field className='gap-2'>
+              <FieldLabel className='leading-5' htmlFor='name'>
+                Imię i nazwisko*
+              </FieldLabel>
+              <Input
+                type='text'
+                id='name'
+                name='name'
+                required
+                autoComplete='name'
+                placeholder='Wpisz imię i nazwisko'
+              />
+            </Field>
+            {/* Email */}
+            <Field className='gap-2'>
+              <FieldLabel className='leading-5' htmlFor='email'>
+                Adres e‑mail*
+              </FieldLabel>
+              <Input
+                type='email'
+                id='email'
+                name='email'
+                required
+                autoComplete='email'
+                placeholder='Wpisz adres e‑mail'
+              />
+            </Field>
+            {/* Password */}
+            <Field className='w-full gap-2'>
+              <FieldLabel className='leading-5' htmlFor='password'>
+                Hasło*
+              </FieldLabel>
+              <PasswordInput
+                id='password'
+                name='password'
+                required
+                minLength={12}
+                autoComplete='new-password'
+                aria-describedby='password-hint'
+              />
+              <FieldDescription id='password-hint'>
+                Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
+              </FieldDescription>
+            </Field>
+            {/* Zgody — w miejscu pola zgody Finory. Zwykłe pola wyboru, bo
+                akcja czyta `terms` i `marketing` z FormData („on”). */}
+            <label className='flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground'>
+              <input
+                type='checkbox'
+                name='terms'
+                value='on'
+                required
+                className='mt-1 size-4 shrink-0 accent-primary'
+              />
+              <span>
+                <LegalInline text={TERMS_STATEMENT.text} linkClassName={LEGAL_LINK_CLASS} /> (wymagane)
+              </span>
+            </label>
+            <label className='flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground'>
+              <input
+                type='checkbox'
+                name='marketing'
+                value='on'
+                className='mt-1 size-4 shrink-0 accent-primary'
+              />
+              <span>{MARKETING_STATEMENT.text} (dobrowolne)</span>
+            </label>
+            <HoneypotField />
+            <TurnstileWidget action='register' theme='light' />
+            <Field>
+              <Button className='w-full' type='submit'>
+                Utwórz konto
+              </Button>
+            </Field>
+          </FieldGroup>
+        </form>
 
-      <p className={`text-center ${authMutedTextClass}`}>
-        Masz już konto?{' '}
-        <Link href="/login" className={authLinkClass}>
-          Zaloguj się
-        </Link>
-      </p>
-      <p className={`text-center text-xs ${authMutedTextClass}`}>
-        Rejestrując się akceptujesz{' '}
-        <Link href="/legal/regulamin" className={authLinkClass}>
-          regulamin
-        </Link>{' '}
-        i{' '}
-        <Link href="/legal/polityka-prywatnosci" className={authLinkClass}>
-          politykę prywatności
-        </Link>
-      </p>
-    </div>
-  );
+        <LoginLink />
+      </div>
+    </AuthSplitLayout>
+  )
 }

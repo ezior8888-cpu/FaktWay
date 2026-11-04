@@ -7,7 +7,7 @@
  * JPK_FA odmawia, gdy (`jpk-fa-generator.ts`):
  * - w okresie jest faktura korygująca (kwoty korekty w bazie — C-01),
  * - w okresie jest dokument z importu, którego JPK nie wykaże (W9): pozycja
- *   ze stawką spoza FaktFlow albo zaimportowana korekta / zaliczka / ROZ,
+ *   ze stawką spoza FaktWay albo zaimportowana korekta / zaliczka / ROZ,
  * - GUS nie zna adresu firmy z województwem, powiatem i gminą.
  */
 
@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
 import { amountsOf, JpkFaCorrectionNotSupportedError, type JpkInvoice } from '@/lib/exports/jpk-fa-generator';
-import { importedContentFlags } from '@/lib/exports/data-fetcher';
+import { attachKsefLineFields, importedContentFlags } from '@/lib/exports/data-fetcher';
 import { jpkAnnotationsFromJson } from '@/lib/xml/fa3-annotations';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { VAT_RATES } from '@/lib/xml/fa3-p12';
@@ -31,7 +31,12 @@ interface PeriodInvoice {
   invoice_type: string | null;
   origin: string | null;
   net_total: number | string | null;
-  /** C5b: pola `fa3_data` aliasami (bez pozycji — na fakturach FaktFlow `fa3_data` niesie wszystkie). */
+  vat_total?: number | string | null;
+  /** C5c: `fa3_data.lineAmountProblems` / `lineAmountTotalsUnknown` aliasami. */
+  line_amount_problems?: unknown;
+  line_amount_totals_unknown?: unknown;
+  ksef_line_fields?: unknown;
+  /** C5b: pola `fa3_data` aliasami (bez pozycji — na fakturach FaktWay `fa3_data` niesie wszystkie). */
   annotations?: unknown;
   annotation_problems?: unknown;
   sale_dates?: unknown;
@@ -40,8 +45,12 @@ interface PeriodInvoice {
 
 interface PeriodLine {
   invoice_id: string;
+  /** C5c: numer pozycji — para z `fa3_data.ksefLineFields` (jak eksport). */
+  ordinal?: number | null;
   vat_rate: string | null;
   net_amount: number | string | null;
+  /** C5c: VAT pozycji — kontrola co do grosza z VAT faktury (jak eksport). */
+  vat_amount?: number | string | null;
 }
 
 /**
@@ -49,7 +58,7 @@ interface PeriodLine {
  * odmową co generator (`amountsOf`), więc paczka i plik mówią to samo.
  * Te same faktury co eksport: sprzedaż przyjęta w KSeF, w tym środowisku.
  * Faktury z importu sprawdzane z pozycjami (stawki i suma netto), pozostałe
- * — rodzaj i stawki spoza FaktFlow.
+ * — rodzaj i stawki spoza FaktWay.
  */
 async function unsupportedDocumentReason(
   client: SupabaseClient,
@@ -60,7 +69,7 @@ async function unsupportedDocumentReason(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers')
+      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, vat_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers, line_amount_problems:fa3_data->lineAmountProblems, line_amount_totals_unknown:fa3_data->lineAmountTotalsUnknown, ksef_line_fields:fa3_data->ksefLineFields')
       .eq('tenant_id', params.tenantId)
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -77,6 +86,21 @@ async function unsupportedDocumentReason(
 
   const asJpk = (inv: PeriodInvoice, lines: readonly PeriodLine[] | null): JpkInvoice => {
     const type = (inv.invoice_type ?? '').toUpperCase();
+    const jpkLines = (lines ?? []).map((l, i) => ({
+      position: typeof l.ordinal === 'number' ? l.ordinal : i + 1, name: '', unit: '', quantity: 1, unitPriceNet: 0,
+      netAmount: Number(l.net_amount ?? 0), vatRate: String(l.vat_rate ?? ''),
+      ...(l.vat_amount == null ? {} : { vatAmount: Number(l.vat_amount) }),
+    }));
+    const contentFlags = importedContentFlags(inv.origin, {
+      annotations: inv.annotations, annotationProblems: inv.annotation_problems,
+      saleDates: inv.sale_dates, ksefMarkers: inv.ksef_markers,
+      lineAmountProblems: inv.line_amount_problems, lineAmountTotalsUnknown: inv.line_amount_totals_unknown,
+    });
+    // C5c: pozycja bez pól z pliku KSeF — ta sama odmowa co eksport (`attachKsefLineFields`).
+    const attached = lines !== null && inv.origin === 'ksef_import'
+      ? attachKsefLineFields(jpkLines, { ksefLineFields: inv.ksef_line_fields })
+      : { lines: jpkLines, problems: [] };
+    const lineProblems = [...(contentFlags.importedLineAmountProblems ?? []), ...attached.problems];
     return {
       invoiceNumber: inv.internal_number ?? inv.ksef_number ?? '',
       ksefNumber: inv.ksef_number ?? undefined,
@@ -85,19 +109,14 @@ async function unsupportedDocumentReason(
       importedFromKsef: lines !== null && inv.origin === 'ksef_import',
       // C5b: te same flagi treści co eksport (`data-fetcher`) — paczka i plik mówią to samo.
       annotations: jpkAnnotationsFromJson(inv.annotations),
-      ...importedContentFlags(inv.origin, {
-        annotations: inv.annotations, annotationProblems: inv.annotation_problems,
-        saleDates: inv.sale_dates, ksefMarkers: inv.ksef_markers,
-      }),
+      ...contentFlags,
+      ...(lineProblems.length ? { importedLineAmountProblems: lineProblems } : {}),
       issueDate: params.periodStart,
       buyerName: '',
       netTotal: Number(inv.net_total ?? 0),
-      vatTotal: 0,
+      vatTotal: Number(inv.vat_total ?? 0),
       grossTotal: 0,
-      lines: (lines ?? []).map((l, i) => ({
-        position: i + 1, name: '', unit: '', quantity: 1, unitPriceNet: 0,
-        netAmount: Number(l.net_amount ?? 0), vatRate: String(l.vat_rate ?? ''),
-      })),
+      lines: attached.lines,
     };
   };
   const refusal = (inv: JpkInvoice): string | null => {
@@ -122,7 +141,7 @@ async function unsupportedDocumentReason(
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await client
         .from('invoice_line_items')
-        .select('invoice_id, vat_rate, net_amount')
+        .select('invoice_id, ordinal, vat_rate, net_amount, vat_amount')
         .in('invoice_id', chunk.map((inv) => inv.id))
         .order('id', { ascending: true })
         .range(from, from + PAGE - 1);
@@ -137,7 +156,7 @@ async function unsupportedDocumentReason(
     }
   }
 
-  // Pozostałe faktury: stawka spoza FaktFlow w którejkolwiek pozycji.
+  // Pozostałe faktury: stawka spoza FaktWay w którejkolwiek pozycji.
   const others = invoices.filter((inv) => inv.origin !== 'ksef_import');
   const byId = new Map(others.map((inv) => [inv.id, inv]));
   const allowed = `(${VAT_RATES.map((r) => `"${r}"`).join(',')})`;

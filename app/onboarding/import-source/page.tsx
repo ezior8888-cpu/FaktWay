@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
@@ -7,6 +8,9 @@ import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 /**
  * Krok onboardingu: wybór źródła importu danych po założeniu organizacji.
+ * Decyzja Bartosza 22.10.2026: historię z KSeF FaktWay pobiera sam po
+ * wgraniu certyfikatu (bez Magicznego importu), więc tu zostaje informacja
+ * o KSeF, import pliku CSV z czterech programów i „Pomiń”.
  *
  * Membership/tenant query przez admin client (deterministyczne, omija RLS) —
  * bez tego zaraz po `createOrganizationAction` zdarzała się sytuacja, gdy
@@ -41,21 +45,17 @@ export default async function ImportSourcePage() {
 
   const hasCertificate = !!tenant.has_ksef_credentials;
 
+  // Plan Finora P15 (E10b): układ logowania Finory zamiast szkła.
   return (
-    <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">
-      <div className="ff-mesh-gradient" aria-hidden />
-      <div className="ff-orb-tr" aria-hidden />
-      <div className="ff-orb-bl" aria-hidden />
-
-      <div className="relative z-[1] w-full max-w-3xl">
-        <div className="ff-glass-pane rounded-3xl p-8 lg:p-12">
-          <ImportSourceSelector
-            tenantId={tenantId}
-            tenantName={tenant.name ?? ''}
-            hasCertificate={hasCertificate}
-          />
-        </div>
-      </div>
-    </div>
+    <AuthSplitLayout
+      panelTitle="Przenieś historię faktur"
+      panelText="Historię faktur z KSeF pobierzemy sami po wgraniu certyfikatu. Z poprzedniego programu przeniesiesz ją plikiem CSV — albo zacznij od zera."
+    >
+      <ImportSourceSelector
+        tenantId={tenantId}
+        tenantName={tenant.name ?? ''}
+        hasCertificate={hasCertificate}
+      />
+    </AuthSplitLayout>
   );
 }

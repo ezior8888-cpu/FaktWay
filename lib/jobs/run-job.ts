@@ -56,7 +56,7 @@ async function runOne(
       await def.onExhausted?.(
         new Error(`Niepoprawny payload: ${parsed.error.message}`),
         job.data as never,
-        { step: createJobStep(jobLog), logger: jobLog, attempt },
+        { step: createJobStep(jobLog), logger: jobLog, attempt, jobId: job.id },
       );
       return completed;
     }
@@ -69,6 +69,7 @@ async function runOne(
       step: createJobStep(jobLog),
       logger: jobLog,
       attempt,
+      jobId: job.id,
     });
     await recordJobRun({ queue: def.queue, runId: job.id, status: 'succeeded', durationMs: Date.now() - startedAt });
     return completed;
@@ -113,6 +114,7 @@ async function runOne(
         step: createJobStep(jobLog),
         logger: jobLog,
         attempt,
+        jobId: job.id,
       });
     } catch (exhaustErr) {
       jobLog.error('onExhausted rzucił błąd', exhaustErr);

@@ -133,16 +133,17 @@ export const invoiceSubmitFailed = jobEvent<{
   }>('invoice/submit.failed');
 
 /**
- * Fan-out z `inbox-polling-cron` do per-tenant handlera.
- * Cron nie robi sam polling'u dla wszystkich tenantów w jednym uruchomieniu
- * (pojedynczy job przetwarzający 1000 tenantów trwałby >60min i łatwo by się
- * wywalał). Zamiast tego wybiera aktywnych tenantów i dla każdego emituje ten
- * event — worker pg-boss rozkłada je z limitem równoległości kolejki.
+ * Przebieg skrzynki jednej firmy. Zlecenia tworzy takt `cron.inbox-polling`
+ * dla firm należnych według harmonogramu (00160).
+ * `dueAt` = termin z harmonogramu: `started_on − dueAt` w `pgboss.job` to
+ * opóźnienie względem harmonogramu (runbook `skrzynka-ksef-pojemnosc.md`).
+ * Opcjonalne, bo zlecenia sprzed wdrożenia go nie mają.
  */
 export const inboxPollTenant = jobEvent<{
     tenantId: string;
     nip: string;
     environment: 'test' | 'demo' | 'production';
+    dueAt?: string;
   }>('inbox/poll.tenant');
 
 /** Znaleziono nową fakturę w skrzynce KSeF (subject2 = nabywca). */
@@ -191,20 +192,17 @@ export const invoiceUpoRequested = jobEvent<{
   }>('invoice/upo.requested');
 
 /**
- * Żądanie Magicznego Importu historii faktur z KSeF (wydane lub odebrane).
- *
- * `nip` to klucz grupy kolejki importu (limit per NIP).
+ * Synchronizacja historii KSeF jednej firmy (decyzja Bartosza 22.10.2026 —
+ * zastępuje Magiczny import). Fan-out z `cron.ksef-history-sync`; `groupId`
+ * = NIP (jeden przebieg na NIP). Środowisko z chwili fan-outu: przebieg
+ * w innym środowisku niż `KSEF_ENV` kończy się bez ponowień.
  */
-export const importKsefHistoryRequested = jobEvent<{
-    importJobId: string;
+export const ksefHistorySyncTenant = jobEvent<{
     tenantId: string;
-    /** NIP tenanta — klucz grupy kolejki importu. */
+    /** NIP tenanta — klucz grupy kolejki (limit per NIP). */
     nip: string;
-    dateFrom: string;
-    dateTo: string;
-    direction: 'issued' | 'received';
     environment: 'test' | 'demo' | 'production';
-  }>('import/ksef-history.requested');
+  }>('ksef/history-sync.tenant');
 
 /** Wgrany plik JPK_FA / CSV gotowy do parsowania (ścieżka w R2 z `file-storage`). */
 export const importFileUploaded = jobEvent<{
@@ -264,6 +262,11 @@ export const billingPaymentSucceeded = jobEvent<{
     taxCents: number;
     currency: string;
     paidAt: string;
+    /**
+     * Rodzaj metody ze sprawdzonego Charge (`card`, `blik`): forma płatności na
+     * fakturze. Job sprzed BLIK-a go nie ma, wtedy płatność mogła być tylko kartą.
+     */
+    paymentMethodType?: string;
   }>('billing/payment.succeeded');
 
 export const billingPaymentFailed = jobEvent<{

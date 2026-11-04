@@ -13,6 +13,10 @@ import { resolveApiUserAndActiveOrg } from '@/lib/supabase/auth-context';
  * a nie z samego formatu cookie — inaczej spreparowane cookie z obcym org_id
  * pozwoliłoby pobrać PDF cudzej faktury (ownership check w `generateInvoicePdf`
  * porównuje do wartości z cookie).
+ *
+ * 409 z `{ error, link? }`: stan, w którym PDF nie powstanie (faktura offline bez KODU II,
+ * zmiana stanu w trakcie, szkic wycofany). Przy szkicu wycofanym po zapisie oryginału z KSeF
+ * `link` prowadzi do PDF faktury K (D-A4-1b-3 PR C, C8).
  */
 export async function GET(
   _req: Request,
@@ -37,10 +41,11 @@ export async function GET(
             ? 403
             : result.code === 'KSEF_NOT_VERIFIED'
               ? 403
-              : result.code === 'OFFLINE_QR_UNAVAILABLE' || result.code === 'PDF_STATE_CHANGED'
+              : result.code === 'OFFLINE_QR_UNAVAILABLE' || result.code === 'PDF_STATE_CHANGED' || result.code === 'RETIRED_DRAFT'
                 ? 409
               : 400;
-      return NextResponse.json({ error: result.error }, { status });
+      // D-A4-1b-3 PR C (5.12): szkic wycofany po zapisie oryginału odsyła do PDF faktury K (`link`).
+      return NextResponse.json(result.link ? { error: result.error, link: result.link } : { error: result.error }, { status });
     }
 
     return new NextResponse(new Uint8Array(result.pdf), {

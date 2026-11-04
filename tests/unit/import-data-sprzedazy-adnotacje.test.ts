@@ -30,7 +30,7 @@ import type { Invoice, VatRate } from '@/types/invoice';
  * sprzedaży (P_6, OkresFa, P_6A — `sale_date` zawsze NULL) i całe Adnotacje
  * (metoda kasowa, MPP, samofakturowanie, odwrotne obciążenie, zwolnienie,
  * procedury szczególne). JPK dostawał wtedy „nie dotyczy” tam, gdzie oryginał
- * w KSeF mówi „tak”, a faktury z procedurą, której FaktFlow nie wykazuje
+ * w KSeF mówi „tak”, a faktury z procedurą, której FaktWay nie wykazuje
  * (P_23, marża, nowe środki transportu, FP, TP, GTU…), szły do JPK po cichu.
  *
  * Prawdziwy łańcuch jak w C5a: plik FA(3) z generatora (zmieniony tak, jak
@@ -222,13 +222,13 @@ describe('C5b: data sprzedaży z pliku KSeF (P_6, OkresFa, P_6A)', () => {
     await expectJpkRefusal('FV/DATA/1', /datami sprzedaży|datę sprzedaży/);
   });
 
-  it('zaliczka z P_6 (data otrzymania zaliczki) → sale_date NULL, jak zaliczki FaktFlow', async () => {
+  it('zaliczka z P_6 (data otrzymania zaliczki) → sale_date NULL, jak zaliczki FaktWay', async () => {
     await importXml(replaceOnce(setP6(xml23('ZAL/P6/1'), '2026-08-28'), '<RodzajFaktury>VAT</RodzajFaktury>', '<RodzajFaktury>ZAL</RodzajFaktury>'));
     expect(stored('ZAL/P6/1').sale_date).toBeNull();
   });
 });
 
-describe('C5b: adnotacje z pliku KSeF w fa3_data.annotations (jak faktury FaktFlow)', () => {
+describe('C5b: adnotacje z pliku KSeF w fa3_data.annotations (jak faktury FaktWay)', () => {
   it('P_16 i P_18A = 1 → liczby 1|2 dla wszystkich flag; JPK_FA P_16/P_18A; korekta dziedziczy', async () => {
     const xml = flag(flag(xml23('FV/MPP/1'), 'P_16', '1'), 'P_18A', '1');
     await expectSchemaValid(xml);
@@ -324,7 +324,7 @@ describe('C5b: kod formularza', () => {
   });
 });
 
-describe('C5b: procedury i oznaczenia, których FaktFlow nie wykazuje w JPK → zatrzymane z numerem', () => {
+describe('C5b: procedury i oznaczenia, których FaktWay nie wykazuje w JPK → zatrzymane z numerem', () => {
   const PODMIOT_UPOWAZNIONY = '<PodmiotUpowazniony><DaneIdentyfikacyjne><NIP>1234567890</NIP><Nazwa>Komornik Sądowy</Nazwa></DaneIdentyfikacyjne>' +
     '<Adres><KodKraju>PL</KodKraju><AdresL1>ul. Sądowa 1</AdresL1></Adres><RolaPU>1</RolaPU></PodmiotUpowazniony>';
   const NST = '<NoweSrodkiTransportu><P_22>1</P_22><P_42_5>2</P_42_5><NowySrodekTransportu><P_22A>2026-09-01</P_22A>' +
@@ -367,7 +367,8 @@ describe('C5b: faktury zaimportowane przed C5b i ponowienie importu', () => {
     row.fa3_data = { import: meta, parsed };
     row.sale_date = null;
 
-    await expectJpkRefusal('FV/STARA/1', /zaimportowana przed .*ponów import/i);
+    // Tekst po wycofaniu magicznego importu (decyzja Bartosza 22.10.2026).
+    await expectJpkRefusal('FV/STARA/1', /zaimportowana przed .*uzupełnia te dane automatycznie/i);
 
     const again = await importXml(xml, { ksef });
     expect(again.invoicesFailed).toBe(0);

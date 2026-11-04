@@ -3,6 +3,7 @@ import {
   type InvoiceTotals as Totals,
 } from '@/lib/xml/invoice-calculator';
 import { formatPlMoney } from '@/lib/format/pl';
+import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { InvoiceLineItem } from '@/types/invoice';
 
@@ -35,7 +36,8 @@ function etykietaStawki(rate: string): string {
  * tą samą funkcją co to, co pójdzie do KSeF.
  *
  * „DO ZAPŁATY”, nie „RAZEM”: tak stoi na makiecie i tak nazywa to człowiek,
- * który patrzy na fakturę.
+ * który patrzy na fakturę. Pierwszy wiersz to „Razem netto” (słownik planu
+ * Finora, §6: Subtotal → Razem netto).
  */
 export function InvoiceTotals({
   totals,
@@ -50,45 +52,32 @@ export function InvoiceTotals({
     (s) => s.netSum !== 0 || s.vatSum !== 0,
   );
 
+  // P5: blok „Subtotal / Tax / Total” Finory (`invoice-form.tsx`, `max-w-56
+  // space-y-1.5 text-sm`, Separator przed sumą) — liczby bez zmian.
   return (
-    <section
-      aria-label="Podsumowanie faktury"
-      className={cn(
-        'rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-4 sm:p-5',
-        className,
-      )}
-    >
-      <dl className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[13px] text-[var(--ff-text-muted)]">Netto</dt>
-          <dd className="font-mono text-[15px] tabular-nums text-[var(--ff-text)]">
-            {formatPlMoney(totals.netTotal)}
-          </dd>
-        </div>
-
-        {stawki.map((s) => (
-          <div
-            key={s.rate}
-            className="flex items-baseline justify-between gap-3"
-          >
-            <dt className="text-[13px] text-[var(--ff-text-muted)]">
-              {etykietaStawki(s.rate)}
-            </dt>
-            <dd className="font-mono text-[15px] tabular-nums text-[var(--ff-text)]">
-              {formatPlMoney(s.vatSum)}
-            </dd>
+    <div className={cn('flex justify-end', className)}>
+      <section aria-label="Podsumowanie faktury" className="w-full space-y-1.5 text-sm sm:max-w-80">
+        <dl className="space-y-1.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground">Razem netto</dt>
+            <dd className="font-medium tabular-nums">{formatPlMoney(totals.netTotal)} zł</dd>
           </div>
-        ))}
-      </dl>
 
-      <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-[var(--ff-border)] pt-3">
-        <span className="text-[15px] font-semibold text-[var(--ff-text-strong)]">
-          Do zapłaty
-        </span>
-        <span className="font-mono text-[22px] font-bold tabular-nums text-[var(--ff-text-strong)]">
-          {formatPlMoney(totals.grossTotal)} zł
-        </span>
-      </div>
-    </section>
+          {stawki.map((s) => (
+            <div key={s.rate} className="flex items-baseline justify-between gap-3">
+              <dt className="text-muted-foreground">{etykietaStawki(s.rate)}</dt>
+              <dd className="font-medium tabular-nums">{formatPlMoney(s.vatSum)} zł</dd>
+            </div>
+          ))}
+        </dl>
+
+        <Separator className="my-2" />
+
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-medium">Do zapłaty</span>
+          <span className="text-base font-semibold tabular-nums">{formatPlMoney(totals.grossTotal)} zł</span>
+        </div>
+      </section>
+    </div>
   );
 }

@@ -50,6 +50,17 @@ interface StaleUpoRow {
 }
 
 const RETRY_COLUMNS = 'id, invoice_id, tenant_id, ksef_number, ksef_environment, status, download_attempts, invoices(id, tenant_id, ksef_number, ksef_status, ksef_environment)' as const;
+/**
+ * Skan zaległych UPO: osadzenie `invoices!inner` z polem wyliczanym
+ * `ksef_upo_expected` (00155, decyzja Bartosza 22.10.2026) — UPO istnieje tylko
+ * dla faktur wysłanych sesją FaktWay; faktura z historii KSeF bez związku
+ * z naszą wysyłką go nie ma i nie może być ponawiana co godzinę.
+ * PostgREST przyjmuje filtr pola wyliczanego na osadzeniu (dowód:
+ * tests/rls-historia-ksef.test.ts).
+ */
+const STALE_SCAN_COLUMNS = 'id, invoice_id, tenant_id, ksef_number, ksef_environment, status, download_attempts, invoices!inner(id, tenant_id, ksef_number, ksef_status, ksef_environment)' as const;
+/** Jedno źródło odpowiedzi „ta faktura powinna mieć UPO” (00155). */
+const UPO_EXPECTED = 'ksef_upo_expected';
 
 interface MissingUpoInvoice {
   id: string;
@@ -91,6 +102,7 @@ async function readEligibleMissingInvoice(
     .eq('id', identity.invoiceId).eq('tenant_id', identity.tenantId)
     .eq('direction', 'outgoing').eq('ksef_status', 'accepted')
     .eq('ksef_number', identity.ksefNumber).eq('ksef_environment', environment)
+    .filter(UPO_EXPECTED, 'eq', 'true')
     .maybeSingle();
   if (error) throw new Error('Nie można sprawdzić zaakceptowanej faktury bez UPO');
   const invoice = data as unknown as MissingUpoInvoice | null;
@@ -110,8 +122,9 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
   const cutoffIso = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000).toISOString();
   const stale = await step.run('find-stale-upo', async () => {
     const { data, error } = await createAdminClient().from('upo_receipts')
-      .select(RETRY_COLUMNS).in('status', ['pending', 'failed'])
+      .select(STALE_SCAN_COLUMNS).in('status', ['pending', 'failed'])
       .eq('ksef_environment', environment)
+      .filter(`invoices.${UPO_EXPECTED}`, 'eq', 'true')
       .or('last_error.is.null,last_error.neq.' + UPO_IDENTITY_MISMATCH)
       .lt('created_at', cutoffIso).order('created_at', { ascending: true })
       .limit(STALE_RETRY_BUDGET);
@@ -195,6 +208,7 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
       .eq('direction', 'outgoing').eq('ksef_status', 'accepted')
       .eq('ksef_environment', environment)
       .not('ksef_number', 'is', null)
+      .filter(UPO_EXPECTED, 'eq', 'true')
       .is('upo_receipts', null);
     const filtered = legacy
       ? query.is('ksef_accepted_at', null).lt('created_at', cutoffIso)

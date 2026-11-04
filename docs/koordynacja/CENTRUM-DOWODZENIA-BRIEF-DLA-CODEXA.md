@@ -132,6 +132,21 @@ styku w kodzie to A5.
 
 ## 5. Kontrakt danych: ślad per próba (sesja A5 planu)
 
+> **Aktualizacja 13.10.2026 — wykonane inaczej niż niżej.** Kontrakt
+> zatwierdzony z poprawką po A2: zamiast kolumn w `ksef_submissions`
+> z `UNIQUE (send_attempt_id)` powstała osobna tabela `ksef_send_attempts`
+> (migracja 00150, `lib/ksef/send-attempt-ledger.ts`) — wiersz na każde
+> **wykonanie** joba wysyłki (ponowienie = nowy wiersz) i na każdą odmowę
+> przed kolejką. Po A2 jedna próba (`sendAttemptId`) ma kilka sesji KSeF
+> i kilka wykonań, więc jeden wiersz na próbę nadpisywałby wcześniejsze
+> porażki, a wiersze porażek sprzed POST w `ksef_submissions` mieszałyby się
+> z dowodem kontaktu. Kolumny: `send_attempt_id`, `job_id`, `execution`,
+> `stage`, `error_code`, `error_class`, `error_message`, `ksef_http_status`,
+> `ksef_code`, `retryable`, `worker_sha`, `status`, `result`. Bez
+> `sentry_event_id` (Sentry pomija `NonRetriableError`). Punkt 3 niżej
+> nieaktualny: `findOpenKsefSubmission` zostaje przy `sent`, zamiary obsługuje
+> `findOpenKsefSubmissionIntents` (A2).
+
 Dziś `ksef_submissions` jest już „per próba”, ale tylko od momentu POST.
 Centrum potrzebuje jednego wiersza na **każdą** próbę (`sendAttemptId`
 zdarzenia), niezależnie od tego, na którym etapie padła. Zamiast nowej

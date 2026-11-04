@@ -109,10 +109,11 @@ const P_13_ORDER: readonly string[] = [
 // Mapa FormaPlatnosci → enum TFormaPlatnosci (xsd linie 1324-1365).
 // UWAGA: XSD wartości to 1..7, nie 1..10. 'other' nie ma reprezentacji
 // w enum-ie – emitujemy alternatywnie <PlatnoscInna>1</PlatnoscInna>.
-const PAYMENT_METHOD_MAP: Record<'transfer' | 'cash' | 'card', string> = {
+const PAYMENT_METHOD_MAP: Record<'transfer' | 'cash' | 'card' | 'mobile', string> = {
   cash: '1', // gotówka
   card: '2', // karta
   transfer: '6', // przelew
+  mobile: '7', // mobilna (BLIK)
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -446,10 +447,10 @@ function buildAdnotacje(
 
   // NoweSrodkiTransportu – choice: (P_22 + P_42_5 + NowySrodekTransportu) LUB P_22N
   // MVP zawsze P_22N=1. Faktura z importu KSeF z P_22 (C5b) nie może wyjść
-  // jako „nie dotyczy” — FaktFlow nie wystawia dostaw nowych środków transportu.
+  // jako „nie dotyczy” — FaktWay nie wystawia dostaw nowych środków transportu.
   if (a.newMeansOfTransport === 1) {
     throw new InvoiceValidationError([
-      'FaktFlow nie wystawia faktur dostawy nowych środków transportu (P_22) — tej faktury nie da się utworzyć w FaktFlow z oryginału KSeF.',
+      'FaktWay nie wystawia faktur dostawy nowych środków transportu (P_22) — tej faktury nie da się utworzyć w FaktWay z oryginału KSeF.',
     ]);
   }
   adn.ele('NoweSrodkiTransportu').ele('P_22N').txt('1');
@@ -458,10 +459,10 @@ function buildAdnotacje(
   adn.ele('P_23').txt(String(a.simplifiedProcedure ?? 2));
 
   // PMarzy – choice: (P_PMarzy + P_PMarzy_*) LUB P_PMarzyN. Procedura marży
-  // z importu KSeF (C5b) — FaktFlow jej nie wystawia, więc odmowa, nie P_PMarzyN.
+  // z importu KSeF (C5b) — FaktWay jej nie wystawia, więc odmowa, nie P_PMarzyN.
   if (a.marginScheme) {
     throw new InvoiceValidationError([
-      `FaktFlow nie wystawia faktur w procedurze marży (${a.marginScheme}) — tej faktury nie da się utworzyć w FaktFlow z oryginału KSeF.`,
+      `FaktWay nie wystawia faktur w procedurze marży (${a.marginScheme}) — tej faktury nie da się utworzyć w FaktWay z oryginału KSeF.`,
     ]);
   }
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');

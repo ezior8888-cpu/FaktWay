@@ -303,6 +303,9 @@ describe('W3: onExhausted zawsze zostawia ślad', () => {
     expect(message).toContain('nie wystawiaj');
     expect(message).not.toContain('nie została wysłana');
     expect(message).not.toContain('Wróć do szkicu');
+    // Decyzja Bartosza 07.10.2026 (A4b PR2b): panel operatora nie ma tu ścieżki — pomoc FaktWay sprawdzi fakturę w KSeF.
+    expect(message).not.toMatch(/uzgodni (ją|go) operator/);
+    expect(message).toContain('pomoc@faktway.pl');
   });
 
   it('zły payload (bez nip): failed INVALID_EVENT, gdy da się ustalić fakturę i firmę', async () => {

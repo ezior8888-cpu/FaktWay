@@ -3,13 +3,11 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  AlertCircle,
-  ArrowRight,
-  Building2,
-  CheckCircle2,
-  Loader2,
-  Search,
-} from 'lucide-react';
+  RiArrowRightLine,
+  RiErrorWarningLine,
+  RiLoader4Line,
+  RiSearchLine,
+} from '@remixicon/react';
 import { toast } from 'sonner';
 
 import {
@@ -17,9 +15,16 @@ import {
   type OnboardingCompanyData,
 } from '@/components/onboarding/actions';
 import { completeCompanyNipAction } from '@/app/actions/organizations';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group';
 
 /**
  * Uzupełnienie NIP-u organizacji-szkicu (BUG-007) — ten sam flow co w
@@ -60,71 +65,64 @@ export function CompleteNipForm() {
     });
   };
 
+  // Wygląd z Finory: pole z przyciskiem jak `InputGroup`, błąd i wynik GUS
+  // w `Alert`, przyciski jak w jej oknach dialogowych.
   return (
-    <div className="space-y-5">
-      <div className="space-y-2">
-        <Label
-          htmlFor="complete-nip"
-          className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-        >
-          NIP firmy
-        </Label>
-        <div className="relative">
-          <Input
-            id="complete-nip"
-            value={nipInput}
-            onChange={(e) => setNipInput(e.target.value.replace(/\D/g, ''))}
-            placeholder="Wpisz 10 cyfr NIP"
-            maxLength={10}
-            disabled={isSearching || !!company}
-            className="h-14 pr-14 font-mono text-lg"
-          />
-          <Button
-            onClick={handleLookup}
-            variant="ghost"
-            size="icon"
-            disabled={nipInput.length !== 10 || isSearching || !!company}
-            className="absolute right-2 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl"
-          >
-            {isSearching ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Search className="h-5 w-5" />
-            )}
-          </Button>
+    <FieldGroup>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="complete-nip">NIP firmy</FieldLabel>
+          <FieldDescription>
+            Pobierzemy dane firmy z bazy GUS REGON i przypiszemy je do Twojej
+            organizacji.
+          </FieldDescription>
+        </FieldContent>
+        <div className="w-full!">
+          <InputGroup>
+            <InputGroupInput
+              id="complete-nip"
+              value={nipInput}
+              onChange={(e) => setNipInput(e.target.value.replace(/\D/g, ''))}
+              placeholder="Wpisz 10 cyfr NIP"
+              maxLength={10}
+              disabled={isSearching || !!company}
+              className="font-mono"
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                onClick={handleLookup}
+                size="icon-xs"
+                disabled={nipInput.length !== 10 || isSearching || !!company}
+                aria-label="Szukaj w GUS"
+              >
+                {isSearching ? <RiLoader4Line className="animate-spin" aria-hidden /> : <RiSearchLine aria-hidden />}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Pobierzemy dane firmy z bazy GUS REGON i przypiszemy je do Twojej
-          organizacji.
-        </p>
-      </div>
+      </Field>
 
       {error && (
-        <div className="flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
-          <p className="text-sm">{error}</p>
-        </div>
+        <Alert variant="destructive">
+          <RiErrorWarningLine aria-hidden />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {company && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-            <div className="mb-4 flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="text-sm font-medium">Znaleziono w bazie GUS</span>
-            </div>
-            <dl className="grid grid-cols-1 gap-4 text-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 border p-3">
+            <Badge className="bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
+              Znaleziono w bazie GUS
+            </Badge>
+            <dl className="grid grid-cols-1 gap-3 text-sm">
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Nazwa firmy
-                </dt>
-                <dd className="mt-1 font-medium">{company.name}</dd>
+                <dt className="text-muted-foreground text-xs">Nazwa firmy</dt>
+                <dd className="mt-0.5 font-medium">{company.name}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Adres siedziby
-                </dt>
-                <dd className="mt-1 leading-relaxed">
+                <dt className="text-muted-foreground text-xs">Adres siedziby</dt>
+                <dd className="mt-0.5 leading-relaxed">
                   {company.street} {company.buildingNumber}
                   {company.localNumber ? `/${company.localNumber}` : ''}
                   <br />
@@ -134,50 +132,42 @@ export function CompleteNipForm() {
             </dl>
           </div>
 
-          <Button
-            onClick={handleConfirm}
-            disabled={isSaving}
-            className="w-full"
-            size="lg"
-            variant="glass-primary"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Zapisuję dane firmy...
-              </>
-            ) : (
-              <>
-                Przypisz NIP do organizacji
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setCompany(null);
-              setNipInput('');
-              setError(null);
-            }}
-            className="block w-full text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            ← Wpisz inny NIP
-          </button>
+          <div className="flex gap-3 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCompany(null);
+                setNipInput('');
+                setError(null);
+              }}
+            >
+              Wpisz inny NIP
+            </Button>
+            <Button onClick={handleConfirm} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <RiLoader4Line className="animate-spin" aria-hidden />
+                  Zapisuję dane firmy...
+                </>
+              ) : (
+                <>
+                  Przypisz NIP do organizacji
+                  <RiArrowRightLine aria-hidden />
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
 
       {!company && (
-        <div className="flex items-start gap-3 rounded-2xl border border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)] p-4">
-          <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Twoja organizacja to na razie szkic bez NIP-u. Po przypisaniu NIP-u
-            odblokujesz wgrywanie certyfikatu KSeF, wysyłkę faktur i Magiczny
-            Import historii.
-          </p>
-        </div>
+        <FieldDescription>
+          Twoja organizacja to na razie szkic bez NIP-u. Po przypisaniu NIP-u
+          odblokujesz wgrywanie certyfikatu KSeF, wysyłkę faktur i automatyczne
+          pobieranie historii z KSeF.
+        </FieldDescription>
       )}
-    </div>
+    </FieldGroup>
   );
 }

@@ -5,6 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * i „Wróć do szkicu” mają prawdziwą implementację. Do 03.10.2026
  * `resendInvoiceAction` zawsze odpowiadała „wstrzymana, uzgodnij ręcznie”,
  * a powrotu do szkicu nie było — każda nieudana wysyłka była ślepą uliczką.
+ *
+ * A4b PR2b: akcja czyta kolumny źródła ponowienia (`KSEF_RESEND_SOURCE_COLUMNS`)
+ * i bierze fakty oraz dane zdarzenia z tego samego modułu co cron i operator.
+ * Kolumna niepobrana to błąd programisty — trafia do Sentry, klient dostaje
+ * ogólny komunikat.
  */
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -16,6 +21,7 @@ const m = vi.hoisted(() => ({
   enqueue: vi.fn(),
   rpc: vi.fn(),
   captureMessage: vi.fn(),
+  captureException: vi.fn(),
   revalidate: vi.fn(),
   row: null as Record<string, unknown> | null,
   tenant: { nip: '5260001246' } as Record<string, unknown> | null,
@@ -36,7 +42,7 @@ vi.mock('@/lib/supabase/auth-context', () => {
 });
 vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({ enqueueKsefSubmitAfterDraft: m.enqueue }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: m.rpc }) }));
-vi.mock('@sentry/nextjs', () => ({ captureMessage: m.captureMessage, captureException: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: m.captureMessage, captureException: m.captureException }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 vi.mock('@/lib/storage/r2', () => ({ downloadInvoiceXml: vi.fn() }));
@@ -45,8 +51,11 @@ vi.mock('@/lib/pdf/invoice-data', () => ({ loadInvoiceForPdf: vi.fn() }));
 vi.mock('@/lib/email/send', () => ({ sendInvoiceEmail: vi.fn() }));
 
 import { resendInvoiceAction, resetInvoiceToDraftAction } from '@/components/invoices/actions-detail';
-import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
+import { KSEF_SEND_MESSAGES, KSEF_SPECIAL_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
+
+const GENERIC_RESEND_ERROR = 'Nie można sprawdzić możliwości ponownej wysyłki. Spróbuj później.';
 
 function snapshot() {
   return finalizeInvoice({
@@ -61,10 +70,11 @@ function snapshot() {
   });
 }
 
-function failedRow(extra: Record<string, unknown> = {}) {
+/** Wiersz z kolumnami źródła ponowienia (`KSEF_RESEND_SOURCE_COLUMNS`) — zwykła faktura ma `special_data` NULL. */
+function failedRow(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     ksef_status: 'failed', direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT',
-    last_error_code: 'INFRA', fa3_data: snapshot(), ...extra,
+    last_error_code: 'INFRA', issue_date: '2026-10-02', fa3_data: snapshot(), special_data: null, ...extra,
   };
 }
 
@@ -116,7 +126,6 @@ describe('resendInvoiceAction — ponowna wysyłka przez requeue_ksef_send', () 
     ['rejected', { ksef_status: 'rejected', last_error_code: 'KSEF_REJECTED' }, KSEF_SEND_MESSAGES.rejected],
     ['failed terminal', { last_error_code: 'INVALID_DOCUMENT' }, KSEF_SEND_MESSAGES.terminal],
     ['failed hold', { last_error_code: 'KSEF_PAUSED' }, KSEF_SEND_MESSAGES.hold],
-    ['dokument specjalny', { invoice_kind: 'correction', invoice_type: 'KOR' }, KSEF_SEND_MESSAGES.special],
     ['przychodząca', { direction: 'incoming' }, KSEF_SEND_MESSAGES.direction],
     ['accepted', { ksef_status: 'accepted', last_error_code: null }, KSEF_SEND_MESSAGES.status],
   ])('%s → odmowa bez zlecenia', async (_l, patch, message) => {
@@ -126,12 +135,69 @@ describe('resendInvoiceAction — ponowna wysyłka przez requeue_ksef_send', () 
     expect(m.enqueue).not.toHaveBeenCalled();
   });
 
-  it('klasa reconcile: odmowa i alarm dla operatora (Sentry.captureMessage)', async () => {
+  it('A4b PR2b: stary KOR bez kopii (special_data NULL) → odmowa „wystaw od nowa” z adresem pomocy, bez zlecenia', async () => {
+    m.row = failedRow({ invoice_kind: 'correction', invoice_type: 'KOR' });
+
+    const result = await resendInvoiceAction(ID);
+    expect(result.success).toBe(false);
+    const error = result.success ? '' : result.error;
+    // Do PR2b: jeden tekst „special” dla każdego dokumentu specjalnego, bez powodu i bez wyjścia.
+    expect(error).toMatch(/kopii danych korekty/);
+    expect(error).toContain(SUPPORT_EMAIL);
+    expect(error).toBe(KSEF_SPECIAL_SEND_MESSAGES.incomplete('correction'));
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('A4b PR2b: zwykła faktura z niepustym special_data → M.incomplete (lustro granicy wysyłki), bez zlecenia', async () => {
+    m.row = failedRow({ special_data: { correctionData: { invoiceType: 'correction', issueDate: '2026-10-02' } } });
+
+    // Do PR2b akcja sprawdzała tylko `fa3_data.lines` i kolejkowała taki wiersz.
+    await expect(resendInvoiceAction(ID)).resolves.toEqual({ success: false, error: KSEF_SEND_MESSAGES.incomplete });
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('A4b PR2b: wiersz bez pobranej kolumny special_data → ogólny komunikat i Sentry.captureException (kontrakt kolumn)', async () => {
+    const row = failedRow();
+    delete row.special_data;
+    m.row = row;
+
+    // Do PR2b akcja nie czytała special_data i kolejkowała wiersz bez niej.
+    await expect(resendInvoiceAction(ID)).resolves.toEqual({ success: false, error: GENERIC_RESEND_ERROR });
+    expect(m.enqueue).not.toHaveBeenCalled();
+    expect(m.captureException).toHaveBeenCalledTimes(1);
+    expect(m.captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('KSEF_RESEND_SOURCE_COLUMNS') }),
+      expect.objectContaining({
+        tags: expect.objectContaining({ area: 'ksef.resend' }),
+        extra: expect.objectContaining({ invoiceId: ID }),
+      }),
+    );
+  });
+
+  it('klasa reconcile, KSEF_DUPLICATE_RECONCILE: odmowa tekstem „duplikat” bez „operatora” i alarm dla operatora (Sentry.captureMessage)', async () => {
     m.row = failedRow({ last_error_code: 'KSEF_DUPLICATE_RECONCILE' });
+
+    // D-A4-1b-3 PR B (zasada z 07.10.2026): klient decyduje sam na karcie faktury,
+    // więc tekst nie odsyła do operatora (do PR B: M.reconcile „zajmuje się tym
+    // operator FaktWay”). Alarm Sentry dla operatora zostaje.
+    const result = await resendInvoiceAction(ID);
+    expect(result.success).toBe(false);
+    const error = result.success ? '' : result.error;
+    expect(error).not.toMatch(/operator/);
+    expect(error).toContain(SUPPORT_EMAIL);
+    expect(result).toEqual({ success: false, error: KSEF_SEND_MESSAGES.duplicate });
+    expect(m.captureMessage).toHaveBeenCalledWith(expect.stringContaining('uzgodnienia'), expect.objectContaining({
+      extra: expect.objectContaining({ invoiceId: ID, tenantId: TENANT, code: 'KSEF_DUPLICATE_RECONCILE' }),
+    }));
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('strażnik: inne kody klasy reconcile (RESULT_UNCERTAIN) — dalej M.reconcile i alarm (§7 p. 17)', async () => {
+    m.row = failedRow({ last_error_code: 'RESULT_UNCERTAIN' });
 
     await expect(resendInvoiceAction(ID)).resolves.toEqual({ success: false, error: KSEF_SEND_MESSAGES.reconcile });
     expect(m.captureMessage).toHaveBeenCalledWith(expect.stringContaining('uzgodnienia'), expect.objectContaining({
-      extra: expect.objectContaining({ invoiceId: ID, tenantId: TENANT, code: 'KSEF_DUPLICATE_RECONCILE' }),
+      extra: expect.objectContaining({ code: 'RESULT_UNCERTAIN' }),
     }));
     expect(m.enqueue).not.toHaveBeenCalled();
   });

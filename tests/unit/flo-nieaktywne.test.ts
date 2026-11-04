@@ -16,6 +16,12 @@ import { describe, expect, it } from 'vitest';
  * (`app/actions/flo.ts`) importują rejestr wykonawców dla skutku ubocznego
  * (`import '…'` bez `from`), czego dawny wzorzec nie widział. Zatwierdzona
  * karta ponaglenia realnie wysyła wiadomość. Znaczniki zdjęte, lista skrócona.
+ *
+ * 19.10.2026 (plan Finora E4, decyzja Bartosza „opcja A”): `vat-limit.ts`
+ * AKTYWNY — czyste funkcje limitu zwolnienia z VAT (`vatLimitState`,
+ * `proratedLimit`, `forecast`) liczą kartę „Limit zwolnienia z VAT” na
+ * Pulpicie (`lib/dashboard/vat-limit.ts`). Propozycja agenta `tax.limit`
+ * zostaje za flagą i bramką M12 (D7). Przegląd modułu w PR limitu VAT.
  */
 
 const ROOT = process.cwd();
@@ -33,7 +39,6 @@ const INACTIVE = [
   'lib/flo/functions/tax-deadline.ts',
   'lib/flo/functions/tax-relief.ts',
   'lib/flo/functions/tax-setaside.ts',
-  'lib/flo/functions/vat-limit.ts',
   'lib/flo/interest.ts',
   'lib/flo/llm.ts',
   'lib/flo/redact.ts',

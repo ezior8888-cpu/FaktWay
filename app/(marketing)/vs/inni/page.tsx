@@ -12,9 +12,9 @@ import {
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'FaktFlow vs Inni — porównanie KSeF 2.0, OCR, KPiR (2026)',
+  title: 'FaktWay vs Inni: porównanie KSeF 2.0, kosztów i KPiR (2026)',
   description:
-    'Pełne porównanie FaktFlow z innymi apkami (Fakturownia, inFakt, wFirma, iFirma): KSeF 2.0, OCR, KPiR, mobile, ceny. 23 funkcje jeden do jednego.',
+    'Pełne porównanie FaktWay z innymi apkami (Fakturownia, inFakt, wFirma, iFirma): KSeF 2.0, koszty ze zdjęcia, KPiR, telefon, ceny. Funkcje jeden do jednego.',
 };
 
 const COMPARISON_ROWS = [
@@ -33,7 +33,7 @@ const COMPARISON_ROWS = [
   {
     category: 'KSeF 2026',
     feature: 'Post-send monitoring (false positives)',
-    ksefSaas: { status: 'yes' as const, note: 'po 5 min sprawdzamy real status' },
+    ksefSaas: { status: 'yes' as const, note: 'sprawdzamy status w KSeF po wysyłce' },
     competitor: { status: 'no' as const, note: 'znany bug' },
   },
   {
@@ -45,48 +45,48 @@ const COMPARISON_ROWS = [
   {
     category: 'KSeF 2026',
     feature: 'Tryb Offline24 (awarie MF)',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const, note: 'wstrzymany, ponawiamy wysyłkę' },
     competitor: { status: 'partial' as const },
   },
   {
     category: 'KSeF 2026',
-    feature: 'Authorization stability',
+    feature: 'Odświeżanie sesji KSeF',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'no' as const, note: 'znane zawieszenia 24h' },
   },
   {
-    category: 'OCR + KPiR',
-    feature: 'OCR faktur kosztowych (zdjęcia)',
-    ksefSaas: { status: 'yes' as const, note: 'Claude Vision' },
+    category: 'Koszty i KPiR',
+    feature: 'Odczyt faktur kosztowych ze zdjęcia',
+    ksefSaas: { status: 'yes' as const, note: 'z limitem dziennym i miesięcznym' },
     competitor: { status: 'partial' as const, note: '$9/mc dodatkowo' },
   },
   {
-    category: 'OCR + KPiR',
-    feature: 'Auto-kategoryzacja KPiR',
+    category: 'Koszty i KPiR',
+    feature: 'Podpowiedź kolumny KPiR',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'no' as const },
   },
   {
-    category: 'OCR + KPiR',
-    feature: 'OCR uczy się z poprawek',
+    category: 'Koszty i KPiR',
+    feature: 'Podpowiedź uczy się z poprawek',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'no' as const },
   },
   {
-    category: 'OCR + KPiR',
+    category: 'Koszty i KPiR',
     feature: 'Eksport JPK_FA + KPiR Excel',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'yes' as const },
   },
   {
     category: 'Mobile',
-    feature: 'PWA installable',
+    feature: 'Dodanie do ekranu głównego telefonu',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'no' as const },
   },
   {
     category: 'Mobile',
-    feature: 'Native aparat z capture',
+    feature: 'Zdjęcie prosto z aparatu',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'no' as const },
   },
@@ -99,31 +99,31 @@ const COMPARISON_ROWS = [
   {
     category: 'Mobile',
     feature: 'Offline mode',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const },
     competitor: { status: 'no' as const },
   },
   {
     category: 'Workflow',
-    feature: 'Magiczny Import z konkurencji',
-    ksefSaas: { status: 'yes' as const, note: '5 min, KSeF history + CSV' },
+    feature: 'Przeprowadzka z innego programu',
+    ksefSaas: { status: 'yes' as const, note: 'historia z KSeF + CSV' },
     competitor: { status: 'partial' as const, note: 'manual CSV import' },
   },
   {
     category: 'Workflow',
-    feature: 'Wkurzacz Dłużników',
-    ksefSaas: { status: 'yes' as const, note: 'auto + wezwanie KPC' },
+    feature: 'Przypomnienia i przedsądowe wezwania',
+    ksefSaas: { status: 'yes' as const, note: 'po Twoim zatwierdzeniu' },
     competitor: { status: 'partial' as const, note: 'manual' },
   },
   {
     category: 'Workflow',
     feature: 'Co-Pilot Księgowego',
-    ksefSaas: { status: 'yes' as const, note: 'auto-mailing' },
+    ksefSaas: { status: 'yes' as const, note: 'paczka mailem co miesiąc' },
     competitor: { status: 'no' as const },
   },
   {
     category: 'Workflow',
     feature: 'Korekta jednym klikiem',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const, note: 'wysyłka korekt wstrzymana' },
     competitor: { status: 'no' as const, note: '8+ kroków' },
   },
   {
@@ -134,8 +134,8 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Hosting',
-    feature: 'Bank EU (GDPR-compliant)',
-    ksefSaas: { status: 'yes' as const, note: 'Frankfurt 🇪🇺' },
+    feature: 'Dane w UE',
+    ksefSaas: { status: 'yes' as const, note: 'Niemcy' },
     competitor: { status: 'yes' as const, note: 'Polska' },
   },
   {
@@ -151,7 +151,7 @@ export default function InniPage() {
     <article>
       <VsHero
         competitorName="Inni"
-        subtitle="23 funkcje porównane jeden do jednego — Fakturownia, inFakt, wFirma, iFirma vs FaktFlow pod KSeF 2.0."
+        subtitle="Funkcje porównane jeden do jednego: Fakturownia, inFakt, wFirma, iFirma i FaktWay pod KSeF 2.0."
       />
 
       <VsTldr>
@@ -159,9 +159,9 @@ export default function InniPage() {
         inFakt, wFirma, iFirma) są dobre dla firm, które potrzebują klasycznego
         programu do faktur i nie mają dużo paragonów. Mają znane problemy ze
         stabilnością autoryzacji KSeF i bugi w korektach.{' '}
-        <span className="font-semibold text-[var(--marketing-accent)]">FaktFlow</span> jest
-        dla freelancerów i mikrofirm, które chcą OCR paragonów, workflow
-        mobile-first i automatyczne wezwania do zapłaty — wszystko w cenie
+        <span className="font-semibold text-[var(--marketing-accent)]">FaktWay</span> jest
+        dla freelancerów i mikrofirm, które chcą kosztów ze zdjęcia, pracy
+        w przeglądarce telefonu i przypomnień o płatnościach, wszystko w cenie
         podstawowej, bez dodatków.
       </VsTldr>
 
@@ -175,7 +175,7 @@ export default function InniPage() {
             'Masz duży zespół księgowy i potrzebujesz audit trail',
             'Twoja firma istnieje od 5+ lat z dużą historią',
             'Wystawiasz głównie faktury B2B (mało paragonów)',
-            'Akceptujesz workflow z lat 2010–2015',
+            'Akceptujesz workflow z lat 2010-2015',
           ]}
           whenChooseUs={[
             'Jesteś freelancerem / solo founderem / mikrofirmą',

@@ -3,6 +3,10 @@ const mocks = vi.hoisted(() => ({ admin: vi.fn(), verified: vi.fn(), revalidate:
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/auth/verified-user', () => ({ getVerifiedUserContext: mocks.verified }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
+// Od 15.10.2026 przełącznik zapisuje też zgodę (lib/legal/record.ts) —
+// dziennik i maile z tej ścieżki nie są przedmiotem tego testu.
+vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
+vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
 import { canSendTo, unsubscribe, resubscribe, getUnsubscribedCategories } from '@/lib/email/preferences';
 import { toggleEmailCategoryAction } from '@/app/(dashboard)/settings/notifications/email-actions';
 
@@ -40,6 +44,16 @@ beforeEach(() => {
       };
       return query;
     },
+    // Zgoda na e-maile w app_metadata (lib/legal/record.ts, `setEmailConsent`).
+    auth: {
+      admin: {
+        getUserById: async (id: string) => ({ data: { user: { id, app_metadata: {} } }, error: null }),
+        updateUserById: async (id: string, data: unknown) => {
+          writes.push({ table: 'auth.users', operation: 'update', filters: [['id', id]], data });
+          return { error: null };
+        },
+      },
+    },
   }));
 });
 
@@ -75,10 +89,17 @@ describe('settings authorization and outcome', () => {
   });
   it('uses the verified user for both opt-out and opt-in', async () => {
     expect(await toggleEmailCategoryAction('marketing', false)).toEqual({ success: true });
-    expect(writes[0].data).toEqual(expect.objectContaining({ user_id: 'verified-user', category: 'marketing' }));
+    const prefs = () => writes.filter((w) => w.table === 'email_preferences');
+    const consents = () => writes.filter((w) => w.table === 'auth.users');
+    expect(prefs()[0].data).toEqual(expect.objectContaining({ user_id: 'verified-user', category: 'marketing' }));
     expect(await toggleEmailCategoryAction('marketing', true)).toEqual({ success: true });
-    expect(writes[1].filters).toContainEqual(['user_id', 'verified-user']);
-    expect(writes[1].filters).toContainEqual(['category', 'marketing']);
+    expect(prefs()[1].filters).toContainEqual(['user_id', 'verified-user']);
+    expect(prefs()[1].filters).toContainEqual(['category', 'marketing']);
+    // Wyłączenie = wycofanie zgody, włączenie = zgoda — zapis na koncie tego samego użytkownika.
+    const granted = consents().map((w) => (w.data as { app_metadata: { legal: { email_consents: { marketing: { granted: boolean } } } } })
+      .app_metadata.legal.email_consents.marketing.granted);
+    expect(granted).toEqual([false, true]);
+    expect(consents().every((w) => w.filters[0][1] === 'verified-user')).toBe(true);
   });
   it.each([null, 'false', 1, {}])('rejects non-boolean state %j', async (value) => {
     expect((await toggleEmailCategoryAction('marketing', value as boolean)).success).toBe(false);

@@ -85,29 +85,47 @@ export function suggestNextInvoiceNumber(
 /** Ile kolejnych zajętych numerów przeskakujemy, zanim zrezygnujemy z podpowiedzi. */
 const MAX_TAKEN_SKIPS = 5;
 
+/** Ostatnia zwykła faktura sprzedażowa firmy (opcjonalnie tylko wystawiona w FaktWay). */
+async function lastRegularOutgoing(
+  supabase: SupabaseClient,
+  tenantId: string,
+  onlyApp: boolean,
+): Promise<{ internal_number: string | null; issue_date: string | null } | null> {
+  let query = supabase
+    .from('invoices')
+    .select('internal_number, issue_date')
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
+    .eq('invoice_kind', 'regular');
+  if (onlyApp) query = query.eq('origin', 'app');
+  const { data } = await query
+    .not('internal_number', 'is', null)
+    .order('issue_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as { internal_number: string | null; issue_date: string | null } | null) ?? null;
+}
+
 /**
  * Podpowiedź dla firmy: kolejny numer po ostatniej fakturze sprzedażowej
  * (zwykłej — korekty i zaliczki zwykle mają własne serie). „Ostatnia” to
  * najpóźniejsza data wystawienia, a przy tej samej dacie — najpóźniej
  * utworzona. Numer już zajęty (np. szkic z ręcznie wpisanym numerem)
  * przeskakujemy; gdy wciąż zajęty — brak podpowiedzi zamiast złej.
+ *
+ * Decyzja Bartosza 22.10.2026: najpierw faktury wystawione w FaktWay
+ * (`origin = app`) — sprzedaż spoza FaktWay przychodzi z KSeF na bieżąco
+ * i nie może przestawiać serii. Dopiero gdy firma nie ma żadnej, bierzemy
+ * dowolne pochodzenie (przeprowadzka tylko przez historię z KSeF albo plik).
  */
 export async function suggestNextInvoiceNumberForTenant(
   supabase: SupabaseClient,
   tenantId: string,
   todayIso: string,
 ): Promise<string | null> {
-  const { data: last } = await supabase
-    .from('invoices')
-    .select('internal_number, issue_date')
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('invoice_kind', 'regular')
-    .not('internal_number', 'is', null)
-    .order('issue_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const last = (await lastRegularOutgoing(supabase, tenantId, true))
+    ?? (await lastRegularOutgoing(supabase, tenantId, false));
   if (!last?.internal_number || !last.issue_date) return null;
 
   let candidate = suggestNextInvoiceNumber(

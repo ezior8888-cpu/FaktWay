@@ -1,32 +1,24 @@
 ---
-title: "Faktury walutowe i zagraniczne"
+title: "Klienci z zagranicy i waluty"
 category: "faktury"
 order: 4
-summary: "Jak wystawić fakturę w obcej walucie i co z transakcjami wewnątrzwspólnotowymi (WDT)."
-updated: "2026-05-19"
+summary: "FaktWay wystawia faktury w złotych. Co możesz zrobić, gdy klient jest z innego kraju."
+updated: "2026-11-02"
 ---
 
-FaktFlow obsługuje faktury w walutach obcych i sprzedaż do kontrahentów z innych krajów UE.
+FaktWay wystawia faktury w złotych. Faktur w obcej walucie jeszcze nie wystawisz.
 
-## Faktura w obcej walucie
+## Klient z Unii Europejskiej
 
-Wybierz walutę faktury (np. EUR, USD). Podajesz kwoty w walucie obcej, a FaktFlow przelicza je na złote według odpowiedniego kursu — KSeF wymaga wartości w PLN dla celów VAT.
+Przy kontrahencie z UE podajesz numer VAT UE z prefiksem kraju, np. DE123456789. FaktWay sprawdza taki numer w systemie VIES, tak jak polskie NIP-y na Białej Liście.
 
-Kurs stosuje się zgodnie z przepisami: zwykle średni kurs NBP z ostatniego dnia roboczego poprzedzającego datę powstania obowiązku podatkowego.
+## Usługa dla firmy z UE
 
-## Kontrahent z UE — WDT
+Gdy VAT rozlicza nabywca z UE, wybierz przy pozycji stawkę „np. II (usługa dla firmy z UE)”. To przypadek z art. 100 ust. 1 pkt 4 ustawy o VAT.
 
-Przy sprzedaży towarów do podatnika z innego kraju UE (wewnątrzwspólnotowa dostawa towarów) numer VAT kontrahenta warto zweryfikować w systemie VIES. FaktFlow sprawdza VIES dla numerów spoza Polski — analogicznie jak Białą Listę dla polskich NIP-ów.
+## Sprzedaż towarów za granicę
 
-Poprawnie zweryfikowany numer VAT UE jest warunkiem zastosowania stawki 0% dla WDT.
-
-## Kontrahent spoza UE
-
-Sprzedaż poza UE (eksport) ma własne zasady opodatkowania. Wybierz odpowiednią stawkę i typ transakcji — FaktFlow podpowie dostępne opcje.
-
-## Dane na fakturze
-
-Faktura zagraniczna zawiera te same elementy co krajowa, plus walutę i — w razie potrzeby — numer VAT UE nabywcy. KSeF przyjmuje dokument w formacie FA(3) niezależnie od waluty.
+Osobnych stawek dla wewnątrzwspólnotowej dostawy towarów i eksportu (0% WDT, 0% EX) jeszcze nie ma. Jeśli sprzedajesz towary za granicę, najpierw ustal z księgową, jak wystawić taką fakturę.
 
 ## Co dalej?
 

@@ -2,11 +2,11 @@
  * C5b (plan „zero zgubionych faktur”, C5): odczyt z pliku FA(3)/FA(2) tego,
  * co import historii KSeF dotąd gubił — data sprzedaży (TDataT) i Adnotacje
  * (P_16…P_23, zwolnienie, nowe środki transportu, marża) oraz oznaczenia,
- * których JPK FaktFlow nie wykazuje (FP, TP, podmiot upoważniony, GTU,
+ * których JPK FaktWay nie wykazuje (FP, TP, podmiot upoważniony, GTU,
  * procedury w pozycjach).
  *
  * Wartości przychodzą jako tekst (`parseTagValue: false` w parserze), a
- * FaktFlow trzyma flagi jako liczby 1|2 (`InvoiceAnnotations`). Niczego
+ * FaktWay trzyma flagi jako liczby 1|2 (`InvoiceAnnotations`). Niczego
  * nieczytelnego nie zamieniamy na „nie” (2) — trafia do problemów, a JPK
  * odmawia z numerem faktury. Moduł czysty: bez bazy i bez Node.
  */
@@ -35,7 +35,7 @@ export interface Fa3Annotations {
   marginScheme?: MarginScheme | null;
 }
 
-/** Oznaczenia spoza Adnotacji, których JPK FaktFlow nie wykazuje (zatrzymanie w JPK). */
+/** Oznaczenia spoza Adnotacji, których JPK FaktWay nie wykazuje (zatrzymanie w JPK). */
 export interface Fa3Markers {
   /** FP — faktura do paragonu (art. 109 ust. 3d). */
   fp?: true;
@@ -155,7 +155,7 @@ export function readFa3Annotations(raw: unknown): { annotations: Fa3Annotations;
   return { annotations, problems };
 }
 
-/** Klucze FaktFlow (`fa3_data.annotations`) — liczby 1|2, jak w fakturach z aplikacji. */
+/** Klucze FaktWay (`fa3_data.annotations`) — liczby 1|2, jak w fakturach z aplikacji. */
 export function invoiceAnnotationsFromFa3(a: Fa3Annotations): InvoiceAnnotations {
   const out: InvoiceAnnotations = {};
   if (a.p16 !== undefined) out.cashMethod = a.p16;
@@ -182,7 +182,7 @@ const MARGIN_LABEL: Record<MarginScheme, string> = {
 const isYes = (v: unknown) => v === 1 || v === true;
 
 /**
- * Adnotacje, których JPK FaktFlow nie wykazuje — JPK_FA i JPK_V7M (wspólne
+ * Adnotacje, których JPK FaktWay nie wykazuje — JPK_FA i JPK_V7M (wspólne
  * `amountsOf`) odmawiają. JPK_FA(4) umiałby wpisać P_23 i P_106E_*, ale
  * JPK_V7M nie ma TT_D / MR_T / MR_UZ ani kwot marży — odmowa w obu, żeby
  * nikt nie „naprawił” tylko jednego pliku.
@@ -204,7 +204,7 @@ const AUTHORIZED_ROLE: Record<string, string> = {
   '3': 'przedstawiciel podatkowy',
 };
 
-/** Oznaczenia, których JPK FaktFlow nie wykazuje (V7M wymaga ich w wierszu sprzedaży). */
+/** Oznaczenia, których JPK FaktWay nie wykazuje (V7M wymaga ich w wierszu sprzedaży). */
 export function markersJpkCannotExpress(m?: Fa3Markers | null): string[] {
   if (!m) return [];
   const out: string[] = [];
@@ -221,7 +221,7 @@ export function markersJpkCannotExpress(m?: Fa3Markers | null): string[] {
 
 /**
  * P_19 (zwolnienie) zgodne ze stawkami: podstawa ⇔ co najmniej jedna pozycja
- * „zw”. Stawka spoza FaktFlow w którejś pozycji → `false` (rozstrzyga odmowa
+ * „zw”. Stawka spoza FaktWay w którejś pozycji → `false` (rozstrzyga odmowa
  * stawki, z właściwym powodem).
  */
 export function exemptionMismatch(a: { vatExemptionBasis?: string } | undefined, rates: readonly string[]): boolean {
@@ -245,7 +245,7 @@ export function jpkAnnotationsFromJson(raw: unknown): JpkInvoiceAnnotations | un
       out.vatExemptionBasisKind = raw.vatExemptionBasisKind as ExemptionBasisKind;
     }
   }
-  // Jawne 2 z pliku to „nie” (false); brak klucza — FaktFlow wylicza sam (np. P_18 z pozycji).
+  // Jawne 2 z pliku to „nie” (false); brak klucza — FaktWay wylicza sam (np. P_18 z pozycji).
   for (const key of ['selfInvoicing', 'reverseCharge', 'simplifiedProcedure', 'newMeansOfTransport'] as const) {
     if (raw[key] === 1) out[key] = true;
     else if (raw[key] === 2) out[key] = false;

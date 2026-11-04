@@ -44,7 +44,10 @@ beforeEach(() => {
         return query;
       },
       maybeSingle: async () => ({
-        data: { ksef_status: mocks.status, direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: 'KSEF_REJECTED', fa3_data: {} },
+        data: {
+          ksef_status: mocks.status, direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT',
+          last_error_code: 'KSEF_REJECTED', issue_date: '2026-10-01', fa3_data: {}, special_data: null,
+        },
         error: null,
       }),
     };

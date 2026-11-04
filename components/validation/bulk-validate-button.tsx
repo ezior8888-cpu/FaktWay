@@ -2,13 +2,12 @@
 
 import { useTransition } from 'react';
 
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { RiLoader4Line, RiShieldCheckLine } from '@remixicon/react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { bulkValidateContractorsAction } from '@/app/actions/validation';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 
 export function BulkValidateButton({
   className,
@@ -32,22 +31,19 @@ export function BulkValidateButton({
     });
   };
 
+  // Przycisk Finory (`outline`, jak akcje paska data-table) — bez dawnego „szkła”.
   return (
     <Button
       type="button"
       onClick={handleBulkValidate}
       variant="outline"
-      size="lg"
       disabled={isStarting}
-      className={cn(
-        'ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)]',
-        className,
-      )}
+      className={className}
     >
       {isStarting ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <RiLoader4Line className="animate-spin" aria-hidden />
       ) : (
-        <ShieldCheck className="mr-2 h-4 w-4" />
+        <RiShieldCheckLine aria-hidden />
       )}
       Sprawdź wszystkich
     </Button>

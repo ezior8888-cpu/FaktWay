@@ -69,5 +69,5 @@ test('za krótki sekret jest odrzucany', () => {
 test('nowy sekret: 160 bitów i URI dla aplikacji', () => {
   const { secret, uri } = newTotpSecret('Test');
   assert.equal(base32Decode(secret).length, 20);
-  assert.match(uri, /^otpauth:\/\/totp\/Test\?secret=[A-Z2-7]+&issuer=FaktFlow/);
+  assert.match(uri, /^otpauth:\/\/totp\/Test\?secret=[A-Z2-7]+&issuer=FaktWay/);
 });

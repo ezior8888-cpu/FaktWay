@@ -19,7 +19,6 @@
  */
 
 import { getGlobalFlagForExecution } from '@/lib/feature-flags/global-flags';
-import type { KsefEnvironment } from '@/types/ksef';
 
 export const KSEF_PAUSED = 'KSEF_PAUSED';
 export const KOR_HOLD = 'KOR_HOLD';
@@ -32,16 +31,20 @@ export const KOR_HOLD_MESSAGE =
   'Wysyłka faktur korygujących do KSeF jest tymczasowo wstrzymana do czasu poprawki ich kwot. Korekta została zapisana jako szkic.';
 
 /**
- * Hamulec napotkany już W JOBIE: faktura ma status `failed` z kodem hamulca,
- * a cron cyklu życia ponawia ją sam po zdjęciu hamulca (I7, PR 4). Komunikat
- * nie może kazać klientowi „wysłać ponownie” — do 03.10.2026 kazał, choć
- * ponowna wysyłka nie istniała (K3 z rewizji).
+ * Hamulec napotkany już W JOBIE: faktura ma status `failed` z kodem hamulca.
+ * Cron cyklu życia (I7) wznawia sam tylko KSEF_PAUSED — dokumenty specjalne
+ * tylko w dniu wystawienia (A4b PR2a); KOR_HOLD zostaje operatorowi do C4.
+ * Komunikat mówi prawdę o tym, co się stanie (decyzja Bartosza 07.10.2026).
  */
 export const KSEF_PAUSED_JOB_MESSAGE =
   'Wysyłka faktur do KSeF jest chwilowo wstrzymana przez operatora. Faktura wyjdzie automatycznie po przywróceniu wysyłki.';
 
+/** KSEF_PAUSED dokumentu specjalnego: automat wznowi go tylko w dniu wystawienia. */
+export const KSEF_PAUSED_SPECIAL_JOB_MESSAGE =
+  'Wysyłka faktur do KSeF jest chwilowo wstrzymana przez operatora — tej próby wysyłki nie wykonaliśmy. Korektę i fakturę zaliczkową wyślemy automatycznie tylko wtedy, gdy wysyłka wróci w dniu ich wystawienia (co dalej — na dole strony).';
+
 export const KOR_HOLD_JOB_MESSAGE =
-  'Wysyłka faktur korygujących do KSeF jest tymczasowo wstrzymana do czasu poprawki ich kwot. Korekta wyjdzie automatycznie po zdjęciu blokady.';
+  'Wysyłka faktur korygujących do KSeF jest tymczasowo wstrzymana do czasu poprawki ich kwot — tej próby wysyłki nie wykonaliśmy, a po zdjęciu blokady tej korekty sami nie wyślemy (co dalej — na dole strony).';
 
 /** Czy operator zatrzymał wszystkie wysyłki. Rzuca przy błędzie bazy (fail-closed). */
 export async function isKsefSubmissionPaused(): Promise<boolean> {
@@ -62,12 +65,12 @@ export function isCorrectionSubmission(input: {
     || input.correctionData != null;
 }
 
-/** Korekty są wstrzymane tylko na KSeF produkcyjnym. */
-export function isCorrectionHeldForEnv(env: KsefEnvironment): boolean {
-  return env === 'production';
-}
+// Korekty są wstrzymane tylko na KSeF produkcyjnym — czysta definicja w kind-holds (A4b PR2a).
+export { isCorrectionHeldForEnv } from './kind-holds';
 
-/** Treść błędu joba ze znacznikiem neutralnej blokady (wersja „wyjdzie automatycznie”). */
-export function heldErrorMessage(code: typeof KSEF_PAUSED | typeof KOR_HOLD): string {
-  return `[${code}] ${code === KSEF_PAUSED ? KSEF_PAUSED_JOB_MESSAGE : KOR_HOLD_JOB_MESSAGE}`;
+/** Treść błędu joba ze znacznikiem neutralnej blokady; tekst KSEF_PAUSED zależy od rodzaju dokumentu. */
+export function heldErrorMessage(code: typeof KSEF_PAUSED | typeof KOR_HOLD, invoiceKind: string | null = 'regular'): string {
+  if (code === KOR_HOLD) return `[${code}] ${KOR_HOLD_JOB_MESSAGE}`;
+  const special = invoiceKind !== null && invoiceKind !== 'regular';
+  return `[${code}] ${special ? KSEF_PAUSED_SPECIAL_JOB_MESSAGE : KSEF_PAUSED_JOB_MESSAGE}`;
 }

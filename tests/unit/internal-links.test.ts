@@ -76,8 +76,8 @@ const WZORZEC_ABSOLUTNY = new RegExp(
   'g',
 );
 
-/** Pliki, w których `${baseUrl}/…` to adres CUDZEGO serwera (API KSeF). */
-const OBCE_ADRESY = /^lib\/ksef\//;
+/** Pliki, w których `${baseUrl}/…` to adres CUDZEGO serwera (API KSeF, GoTrue). */
+const OBCE_ADRESY = /^lib\/ksef\/|^lib\/auth\/oauth-providers\.ts$/;
 /** Atrapy kart Flo — pokazywane wyłącznie w lokalnym dev. */
 const POMIJANE = new Set(['lib/flo/fixtures.ts']);
 

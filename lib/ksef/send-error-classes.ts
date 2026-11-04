@@ -38,6 +38,7 @@ export const SEND_ERROR_CODES = {
   KSEF_DUPLICATE_RECONCILE: 'KSEF_DUPLICATE_RECONCILE',
   RESULT_UNCERTAIN: 'RESULT_UNCERTAIN',
   ENV_MISMATCH: 'ENV_MISMATCH',
+  ISSUE_DATE_PASSED: 'ISSUE_DATE_PASSED',
   INVALID_EVENT: 'INVALID_EVENT',
   ENQUEUE_LOST: 'ENQUEUE_LOST',
   NO_CERTIFICATE: 'NO_CERTIFICATE',
@@ -46,6 +47,27 @@ export const SEND_ERROR_CODES = {
 
 export type SendErrorCode = (typeof SEND_ERROR_CODES)[keyof typeof SEND_ERROR_CODES];
 export type SendErrorClass = 'terminal' | 'transient' | 'hold' | 'reconcile' | 'setup';
+
+/**
+ * Kod odmowy wysyłki PRZED kolejką (`ksef-submit-enqueue.ts`, akcje operatora
+ * `/admin/ksef`) — wiersz `refused` w dzienniku prób (`ksef_send_attempts`,
+ * 00150). Kody z katalogu, gdy znaczą to samo (hamulce, certyfikat, KSeF
+ * niedostępny; odmowa operatora z powodu klasy błędu faktury — jej kod), plus
+ * własne odmowy bez odpowiednika w katalogu (klasa `null`).
+ */
+export type SendRefusalCode =
+  | SendErrorCode
+  | 'MFA_REQUIRED'
+  | 'PAUSE_UNKNOWN'
+  | 'OFFLINE_QUEUE_ERROR'
+  | 'ENQUEUE_REFUSED'
+  | 'ENQUEUE_ERROR'
+  // Odmowy operatora (`lib/admin/ksef-operator-policy.ts`, `app/admin/ksef/actions.ts`).
+  | 'STATUS_NOT_ALLOWED'
+  | 'NO_OPEN_SUBMISSION'
+  | 'ENV_UNKNOWN'
+  | 'SEND_DATA_MISSING'
+  | 'NO_NIP';
 
 export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   XSD_INVALID: 'terminal',
@@ -73,6 +95,9 @@ export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   // Ponowienie wysłałoby fakturę w bieżącym (np. dokument z TEST na PROD) —
   // tylko szkic, klient decyduje, czy wysłać ją tutaj.
   ENV_MISMATCH: 'terminal',
+  // 00147 (decyzja 06.10.2026): dokument specjalny z datą wystawienia sprzed
+  // dzisiaj — worker nie wysyła go po północy; tylko szkic (bez automatu).
+  ISSUE_DATE_PASSED: 'terminal',
   INVALID_EVENT: 'reconcile',
   ENQUEUE_LOST: 'reconcile',
   NO_CERTIFICATE: 'setup',

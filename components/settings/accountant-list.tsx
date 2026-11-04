@@ -2,26 +2,38 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Plus,
-  Copy,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  UserCog,
-  X,
-} from 'lucide-react';
+  RiAddLine,
+  RiCloseLine,
+  RiFileCopyLine,
+  RiLoader4Line,
+  RiUserSettingsLine,
+} from '@remixicon/react';
 import { toast } from 'sonner';
-import { FfDataTableCard, ffTable } from '@/components/dashboard/ff-data-table';
+
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import {
   createAccountantTokenAction,
   revokeAccountantTokenAction,
 } from '@/components/settings/accountant-actions';
-import { ffSettingsPanelPadded } from '@/lib/dashboard/ff-surface-classes';
-import { cn } from '@/lib/utils';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { plural } from '@/lib/i18n/plural';
+
+/**
+ * Linki dla księgowej. Wygląd: `connected-accounts` z Finory — nagłówek
+ * z przyciskiem po prawej, każdy dostęp jako wiersz instytucji
+ * (`connected-institution-row.tsx`: ikona, nazwa z odznaką stanu, szczegóły,
+ * akcja po prawej), pusty stan jak jej `Empty`. Tabela zniknęła, więc na
+ * telefonie nic nie przewija się w bok.
+ */
 
 /** Row z serwera (bez pola `token`). */
 export interface AccountantAccessPublicRow {
@@ -38,6 +50,16 @@ export interface AccountantAccessPublicRow {
 
 type AccountantAccess = AccountantAccessPublicRow;
 
+const ACCESS_LEVEL_OPTIONS: { label: string; value: 'read_only' | 'download' }[] = [
+  { label: 'Tylko podgląd', value: 'read_only' },
+  { label: 'Podgląd + pobieranie XML', value: 'download' },
+];
+
+const BADGE_OK = 'bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400';
+const BADGE_ERROR = 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400';
+
+const plDate = formatSettingsDate;
+
 export function AccountantAccessList({
   accesses,
 }: {
@@ -46,26 +68,24 @@ export function AccountantAccessList({
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const activeCount = accesses.filter((a) => !a.revoked_at && new Date(a.expires_at) > new Date()).length;
 
   return (
-    <div className="space-y-6">
-      {/* Header z CTA */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Aktywne tokeny:{' '}
-          <span className="font-medium text-foreground">
-            {accesses.filter((a) => !a.revoked_at && new Date(a.expires_at) > new Date()).length}
-          </span>
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-between gap-2 max-sm:flex-col sm:items-center">
+        <div>
+          <p className="text-sm font-medium">Udostępnione dostępy</p>
+          <p className="text-muted-foreground text-xs">
+            Aktywne tokeny: <span className="text-foreground font-medium">{activeCount}</span>
+          </p>
         </div>
         <Button
-          variant="glass-primary"
-          size="lg"
           onClick={() => {
             setShowForm(true);
             setGeneratedUrl(null);
           }}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <RiAddLine aria-hidden />
           Nowy dostęp
         </Button>
       </div>
@@ -92,44 +112,21 @@ export function AccountantAccessList({
 
       {/* Lista tokenów */}
       {accesses.length === 0 ? (
-        <div
-          className={cn(
-            ffSettingsPanelPadded,
-            'py-16 text-center',
-          )}
-        >
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)]">
-            <UserCog className="h-6 w-6 text-[var(--ff-primary)]" />
-          </div>
-          <h3 className="mb-1 text-xl font-bold tracking-tight">
-            Brak udostępnionych dostępów
-          </h3>
-          <p className="mx-auto max-w-sm text-[15px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-            Utwórz pierwszy link dla księgowej aby udostępnić jej faktury
-          </p>
-        </div>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <RiUserSettingsLine />
+            </EmptyMedia>
+            <EmptyTitle>Brak udostępnionych dostępów</EmptyTitle>
+            <EmptyDescription>Utwórz pierwszy link dla księgowej aby udostępnić jej faktury</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <FfDataTableCard
-          title="Udostępnione dostępy"
-          subtitle={`${accesses.length} tokenów • księgowi z linkiem portalu`}
-          minWidth={960}
-        >
-          <thead>
-            <tr className={ffTable.headRow}>
-              <th className={ffTable.th}>Księgowa</th>
-              <th className={ffTable.th}>Poziom dostępu</th>
-              <th className={ffTable.th}>Wygasa</th>
-              <th className={ffTable.th}>Status</th>
-              <th className={ffTable.th}>Użycia</th>
-              <th className={ffTable.th} aria-hidden />
-            </tr>
-          </thead>
-          <tbody>
-            {accesses.map((access) => (
-              <AccessRow key={access.id} access={access} />
-            ))}
-          </tbody>
-        </FfDataTableCard>
+        <div className="flex flex-col gap-3">
+          {accesses.map((access) => (
+            <AccessRow key={access.id} access={access} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -148,6 +145,8 @@ function CreateTokenForm({
     'read_only'
   );
   const [validForDays, setValidForDays] = useState('90');
+  // Sesja po biometrii: link wymaga kodu, więc odmowa niesie przejście na ekran kodu.
+  const [stepUp, setStepUp] = useState<string | null>(null);
   const [isCreating, startCreating] = useTransition();
 
   const handleSubmit = () => {
@@ -156,6 +155,7 @@ function CreateTokenForm({
       return;
     }
 
+    setStepUp(null);
     startCreating(async () => {
       const result = await createAccountantTokenAction({
         name,
@@ -167,6 +167,8 @@ function CreateTokenForm({
       if (result.success) {
         toast.success('Dostęp utworzony');
         onSuccess(result.shareUrl);
+      } else if (result.mfaStepUp) {
+        setStepUp(result.error);
       } else {
         toast.error(result.error);
       }
@@ -174,49 +176,29 @@ function CreateTokenForm({
   };
 
   return (
-    <div className={cn(ffSettingsPanelPadded, 'space-y-5')}>
-      <div className="flex items-start justify-between">
+    <div className="flex flex-col gap-4 border p-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight text-[var(--ff-on-surface)]">
-            Nowy dostęp dla księgowej
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Wygenerujemy link, który możesz wysłać emailem
-          </p>
+          <p className="text-sm font-medium">Nowy dostęp dla księgowej</p>
+          <p className="text-muted-foreground text-xs">Wygenerujemy link, który możesz wysłać emailem</p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onCancel}
-          className="rounded-full"
-          aria-label="Zamknij"
-        >
-          <X className="h-4 w-4" />
+        <Button variant="ghost" size="icon-sm" onClick={onCancel} aria-label="Zamknij">
+          <RiCloseLine aria-hidden />
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label
-            htmlFor="acc-name"
-            className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block"
-          >
-            Imię i nazwisko / nazwa biura
-          </Label>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="acc-name">Imię i nazwisko / nazwa biura</FieldLabel>
           <Input
             id="acc-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Anna Kowalska"
           />
-        </div>
-        <div>
-          <Label
-            htmlFor="acc-email"
-            className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block"
-          >
-            Email
-          </Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="acc-email">Email</FieldLabel>
           <Input
             id="acc-email"
             type="email"
@@ -224,29 +206,30 @@ function CreateTokenForm({
             onChange={(e) => setEmail(e.target.value)}
             placeholder="anna@biuro.pl"
           />
-        </div>
-        <div>
-          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-            Poziom dostępu
-          </Label>
-          <select
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="acc-level">Poziom dostępu</FieldLabel>
+          <Select
+            items={ACCESS_LEVEL_OPTIONS}
             value={accessLevel}
-            onChange={(e) =>
-              setAccessLevel(e.target.value as 'read_only' | 'download')
-            }
-            className="flex h-11 w-full rounded-xl border border-glass-border bg-white/50 dark:bg-white/[0.05] backdrop-blur-glass-sm px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all duration-200"
+            onValueChange={(value) => value && setAccessLevel(value as 'read_only' | 'download')}
           >
-            <option value="read_only">Tylko podgląd</option>
-            <option value="download">Podgląd + pobieranie XML</option>
-          </select>
-        </div>
-        <div>
-          <Label
-            htmlFor="acc-days"
-            className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block"
-          >
-            Ważność (dni)
-          </Label>
+            <SelectTrigger id="acc-level" className="w-full">
+              <SelectValue placeholder="Poziom dostępu" />
+            </SelectTrigger>
+            <SelectContent className="p-1" alignItemWithTrigger={false}>
+              <SelectGroup>
+                {ACCESS_LEVEL_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="acc-days">Ważność (dni)</FieldLabel>
           <Input
             id="acc-days"
             type="number"
@@ -255,25 +238,21 @@ function CreateTokenForm({
             value={validForDays}
             onChange={(e) => setValidForDays(e.target.value)}
           />
-        </div>
+        </Field>
       </div>
 
-      <div className="flex gap-2 justify-end pt-2">
-        <Button
-          variant="glass"
-          size="lg"
-          onClick={onCancel}
-          disabled={isCreating}
-        >
+      {stepUp ? (
+        <MfaStepUpNotice returnTo="/settings/accountant">
+          {stepUp} Po potwierdzeniu wrócisz tutaj.
+        </MfaStepUpNotice>
+      ) : null}
+
+      <div className="flex gap-3 sm:justify-end">
+        <Button variant="outline" onClick={onCancel} disabled={isCreating}>
           Anuluj
         </Button>
-        <Button
-          variant="glass-primary"
-          size="lg"
-          onClick={handleSubmit}
-          disabled={isCreating}
-        >
-          {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+        <Button onClick={handleSubmit} disabled={isCreating}>
+          {isCreating && <RiLoader4Line className="animate-spin" aria-hidden />}
           Wygeneruj link
         </Button>
       </div>
@@ -298,61 +277,38 @@ function GeneratedTokenCard({
   };
 
   return (
-    <div
-      className={cn(
-        ffSettingsPanelPadded,
-        'space-y-5 border-green-500/25 bg-green-500/10',
-      )}
+    <Alert
+      role="status"
+      className="border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-          </div>
-          <div>
-            <h3 className="font-display font-semibold tracking-tighter-text">
-              Link wygenerowany pomyślnie
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Skopiuj poniższy URL i wyślij emailem do księgowej
-            </p>
-          </div>
+      <AlertTitle>Link wygenerowany pomyślnie</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3 text-green-800 dark:text-green-400/80">
+        <div className="flex items-start justify-between gap-3">
+          <span>Skopiuj poniższy URL i wyślij emailem do księgowej</span>
+          <Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Zamknij">
+            <RiCloseLine aria-hidden />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="rounded-full"
-          aria-label="Zamknij"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="flex gap-2">
-        <Input
-          readOnly
-          value={url}
-          className="font-mono text-xs"
-          onClick={(e) => (e.target as HTMLInputElement).select()}
-        />
-        <Button
-          variant="glass-primary"
-          size="lg"
-          onClick={handleCopy}
-          className="shrink-0"
-        >
-          <Copy className="h-4 w-4 mr-2" />
-          {copied ? 'Skopiowano!' : 'Kopiuj'}
-        </Button>
-      </div>
-
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Link jest jednorazowy do pokazania. Po zamknięciu tej karty już go nie
-        zobaczysz — token pozostaje aktywny do daty wygaśnięcia, ale URL musisz
-        zachować w bezpiecznym miejscu (np. menedżerze haseł).
-      </p>
-    </div>
+        <div className="flex gap-2">
+          <Input
+            readOnly
+            value={url}
+            aria-label="Link dla księgowej"
+            className="text-foreground font-mono text-xs"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+          />
+          <Button onClick={handleCopy} className="shrink-0">
+            <RiFileCopyLine aria-hidden />
+            {copied ? 'Skopiowano!' : 'Kopiuj'}
+          </Button>
+        </div>
+        <span>
+          Link jest jednorazowy do pokazania. Po zamknięciu tej karty już go nie
+          zobaczysz — token pozostaje aktywny do daty wygaśnięcia, ale URL musisz
+          zachować w bezpiecznym miejscu (np. menedżerze haseł).
+        </span>
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -379,69 +335,41 @@ function AccessRow({ access }: { access: AccountantAccess }) {
   };
 
   return (
-    <tr className={ffTable.row}>
-      <td className={ffTable.td}>
-        <div className="font-semibold text-[var(--ff-on-surface)]">
-          {access.accountant_name}
-        </div>
-        <div className="mt-0.5 font-mono text-[11px] text-[var(--ff-text-dim)]">
-          {access.accountant_email}
-        </div>
-      </td>
-      <td className={ffTable.td}>
-        <span className={ffTable.badge}>
-          {access.access_level === 'download' ? 'Pobieranie' : 'Podgląd'}
-        </span>
-      </td>
-      <td className={ffTable.tdMuted}>
-        {new Date(access.expires_at).toLocaleDateString('pl-PL')}
-      </td>
-      <td className={ffTable.td}>
-        {isActive && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20 text-xs font-medium backdrop-blur-glass-sm">
-            <CheckCircle2 className="h-3 w-3" />
-            Aktywny
-          </span>
-        )}
-        {isRevoked && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20 text-xs font-medium backdrop-blur-glass-sm">
-            <XCircle className="h-3 w-3" />
-            Odebrany
-          </span>
-        )}
-        {isExpired && !isRevoked && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-foreground/5 text-muted-foreground border border-glass-border text-xs font-medium backdrop-blur-glass-sm">
-            Wygasł
-          </span>
-        )}
-      </td>
-      <td className={ffTable.tdMuted}>
-        <div className="font-semibold text-[var(--ff-on-surface)]">
-          {access.use_count}×
-        </div>
-        {access.last_used_at ? (
-          <div className="mt-0.5 text-[12px]">
-            {new Date(access.last_used_at).toLocaleDateString('pl-PL')}
+    <div className="flex flex-col gap-3 border p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar className="size-10 items-center justify-center">
+          <AvatarFallback className="bg-transparent">
+            <RiUserSettingsLine className="text-foreground size-5" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-medium" title={access.accountant_name}>
+              {access.accountant_name}
+            </p>
+            {isActive && <Badge className={BADGE_OK}>Aktywny</Badge>}
+            {isRevoked && <Badge className={BADGE_ERROR}>Odebrany</Badge>}
+            {isExpired && !isRevoked && <Badge variant="secondary">Wygasł</Badge>}
+            <Badge variant="outline">{access.access_level === 'download' ? 'Pobieranie' : 'Podgląd'}</Badge>
           </div>
-        ) : null}
-      </td>
-      <td className={`${ffTable.td} text-right`}>
-        {isActive && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRevoke}
-            disabled={isRevoking}
-            className="hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
-          >
-            {isRevoking ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              'Odbierz'
-            )}
+          <p className="text-muted-foreground truncate font-mono text-xs" title={access.accountant_email}>
+            {access.accountant_email}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            Wygasa {plDate(access.expires_at)} · {access.use_count}{' '}
+            {plural(access.use_count, ['użycie', 'użycia', 'użyć'])}
+            {access.last_used_at ? ` · ostatnio ${plDate(access.last_used_at)}` : ''}
+          </p>
+        </div>
+      </div>
+
+      {isActive && (
+        <div className="flex items-center justify-end">
+          <Button variant="ghost" onClick={handleRevoke} disabled={isRevoking}>
+            {isRevoking ? <RiLoader4Line className="animate-spin" aria-hidden /> : 'Odbierz'}
           </Button>
-        )}
-      </td>
-    </tr>
+        </div>
+      )}
+    </div>
   );
 }

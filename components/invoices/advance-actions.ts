@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
@@ -49,12 +49,13 @@ interface TenantSnap {
   } | null;
 }
 
-async function tenantContext(): Promise<{
+/** `formTenant` — firma formularza musi być firmą aktywną teraz (UX-01). */
+async function tenantContext(formTenant: FormTenantCheck): Promise<{
   supabase: SupabaseClient;
   userId: string;
   tenant: TenantSnap;
 }> {
-  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg(formTenant);
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -233,9 +234,13 @@ async function insertAdvanceDraft(
   return { success: true, invoiceId };
 }
 
-export async function saveAdvanceAction(raw: unknown): Promise<ActionResult> {
+/**
+ * `expectedTenantId` — firma, dla której strona wyrenderowała formularz
+ * (UX-01); tylko do porównania z firmą z ciasteczka. Także w wysyłce.
+ */
+export async function saveAdvanceAction(raw: unknown, expectedTenantId: string): Promise<ActionResult> {
   try {
-    const { supabase, tenant, userId } = await tenantContext();
+    const { supabase, tenant, userId } = await tenantContext({ expectedTenantId });
     const parsed = advanceInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
@@ -262,9 +267,9 @@ export async function saveAdvanceAction(raw: unknown): Promise<ActionResult> {
   }
 }
 
-export async function saveAndSendAdvanceAction(raw: unknown): Promise<ActionResult> {
+export async function saveAndSendAdvanceAction(raw: unknown, expectedTenantId: string): Promise<ActionResult> {
   try {
-    const { supabase, tenant, userId } = await tenantContext();
+    const { supabase, tenant, userId } = await tenantContext({ expectedTenantId });
     const parsed = advanceInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 

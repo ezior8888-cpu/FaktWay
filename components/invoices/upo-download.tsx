@@ -65,7 +65,7 @@ export function UpoDownload({
 
   if (!upoStatus || upoStatus === 'pending' || upoStatus === 'failed') {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-glass-border bg-glass-white p-4 backdrop-blur-glass-sm">
+      <div className="flex items-center gap-3 border bg-muted/40 p-4">
         <Loader2 className="text-muted-foreground h-5 w-5 shrink-0 animate-spin" />
         <div className="flex-1">
           <p className="text-sm font-medium">UPO w trakcie generowania</p>
@@ -79,10 +79,10 @@ export function UpoDownload({
   }
 
   return (
-    <div className="border-green-500/20 bg-green-500/5 shadow-glass space-y-4 rounded-3xl border p-6 backdrop-blur-glass">
+    <div className="space-y-3 border border-green-600/30 bg-green-600/5 p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-green-500/10">
-          <FileCheck2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+        <div className="flex size-8 shrink-0 items-center justify-center bg-green-600/10">
+          <FileCheck2 className="size-4 text-green-700 dark:text-green-400" />
         </div>
         <div className="flex-1">
           <p className="font-medium text-xs tracking-wider text-green-700 uppercase dark:text-green-400">
@@ -98,8 +98,7 @@ export function UpoDownload({
       <div className="flex flex-wrap gap-2">
         <Button
           onClick={handleDownloadPdf}
-          variant="glass-primary"
-          size="lg"
+          variant="default"
           disabled={isPdfLoading}
         >
           {isPdfLoading ? (
@@ -111,8 +110,7 @@ export function UpoDownload({
         </Button>
         <Button
           onClick={handleDownloadXml}
-          variant="glass"
-          size="lg"
+          variant="outline"
           disabled={isXmlLoading}
         >
           {isXmlLoading ? (

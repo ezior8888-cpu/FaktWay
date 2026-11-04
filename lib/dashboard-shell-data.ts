@@ -6,8 +6,9 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import type { UserRole } from '@/lib/supabase/auth-context';
 import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
+import { LEGAL_GATE_PATH, needsTermsAcceptance } from '@/lib/legal/acceptance';
 
-/** Kształt listy przekazywanej do `OrgSwitcher`. */
+/** Kształt listy firm w menu profilu (`ProfileMenu`, „Moje firmy”). */
 export interface DashboardOrgMembershipPreview {
   organizationId: string;
   name: string;
@@ -36,7 +37,8 @@ type MembershipTenantRow = {
 };
 
 /**
- * Jedno wywołanie `getUser()` na request RSC (deduplikacja z layoutem / listą org).
+ * Jedno wywołanie `getUser()` na request RSC (deduplikacja z layoutem / listą org,
+ * `getPageContext` i stronami, które potrzebują pełnego użytkownika).
  */
 export const getDashboardSessionUser = cache(async () => {
   const supabase = await createClient();
@@ -115,6 +117,11 @@ export async function assertDashboardShellAccess(): Promise<void> {
   ]);
   if (!user) redirect('/login');
 
+  // Bramka dokumentów prawnych: aktywna dopiero, gdy dane usługodawcy są
+  // kompletne (do tego czasu `needsTermsAcceptance` zwraca false). Odczyt
+  // z `getUser()` — bez dodatkowego zapytania do bazy.
+  if (needsTermsAcceptance(user.app_metadata)) redirect(LEGAL_GATE_PATH);
+
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
   if (!isUuid(activeOrg)) {
     redirect('/onboarding');
@@ -129,7 +136,7 @@ export async function assertDashboardShellAccess(): Promise<void> {
 }
 
 /**
- * Dane do `OrgSwitcher` — wywołanie po `assertDashboardShellAccess()`; zero dodatkowych
+ * Dane do menu profilu („Moje firmy”) — wywołanie po `assertDashboardShellAccess()`; zero dodatkowych
  * zapytań do bazy dzięki `getCachedMembershipRowsWithTenants`.
  */
 export async function getDashboardOrgSwitcherProps(): Promise<{
@@ -165,7 +172,24 @@ export async function getDashboardOrgSwitcherProps(): Promise<{
 }
 
 /**
- * Czy aktywna organizacja ma zweryfikowany KSeF (do banera w layoucie).
+ * Dowód KSeF firmy `tenantId` — tej samej, z której strona czyta dane
+ * (`getPageContext().tenantId`, PLAN-PRAWDZIWE-DANE §4 „Uwaga do F”), a nie
+ * firmy z cookie. Z wierszy członkostwa użytkownika (`cache()` na żądanie —
+ * layout albo `getPageContext` już je przeczytał, więc bez nowego zapytania). `null`: firmy nie ma
+ * w aktywnych członkostwach. Interpretuje go `lib/demo/tryb-danych.ts`.
+ */
+export async function getTenantKsefProof(
+  userId: string,
+  tenantId: string,
+): Promise<{ verifiedAt: string | null; verifiedEnvironment: string | null } | null> {
+  const rows = await getCachedMembershipRowsWithTenants(userId);
+  const tenant = tenantFromActiveRow(rows.find((r) => r.organization_id === tenantId));
+  if (!tenant) return null;
+  return { verifiedAt: tenant.ksef_verified_at, verifiedEnvironment: tenant.ksef_verified_environment };
+}
+
+/**
+ * Czy aktywna organizacja ma zweryfikowany KSeF (puste stany kart: „Podłącz KSeF”).
  */
 export async function getDashboardActiveOrgVerified(): Promise<boolean> {
   const [user, cookieStore] = await Promise.all([

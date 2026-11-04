@@ -98,6 +98,8 @@ function context(buyer: unknown, lines: Array<ReturnType<typeof line>>) {
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
+/** Firma, dla której strona wyrenderowała listę faktur — zapis odsyła ją akcji (UX-01). */
+const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -117,7 +119,7 @@ async function render(rows: CorrectionParentInvoiceRow[], preselectedParentId?: 
   root = createRoot(host);
   await act(async () => {
     root!.render(
-      <CorrectionInvoiceForm parentInvoices={rows} preselectedParentId={preselectedParentId} />,
+      <CorrectionInvoiceForm parentInvoices={rows} preselectedParentId={preselectedParentId} tenantId={TENANT} />,
     );
   });
   // Kontekst faktury pierwotnej przychodzi asynchronicznie z akcji.
@@ -147,15 +149,22 @@ function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
 }
 
 async function chooseAmountChange(el: HTMLElement) {
-  // Radix Select trzyma w formularzu ukryty natywny <select> (autofill) —
-  // jego zmiana przełącza wartość tak samo jak wybór z listy.
-  const native = [...el.querySelectorAll<HTMLSelectElement>('select[aria-hidden="true"]')].find((s) =>
-    optionValues(s).includes('amount_change'),
+  // E1: Base UI Select — otwieramy listę prawdziwym triggerem (mousedown) i klikamy opcję.
+  const trigger = [...el.querySelectorAll<HTMLElement>('[role="combobox"]')].find((t) =>
+    /Korekta|Typ/.test(t.textContent ?? ''),
   );
-  expect(native).toBeDefined();
+  expect(trigger).toBeDefined();
   await act(async () => {
-    native!.value = 'amount_change';
-    native!.dispatchEvent(new Event('change', { bubbles: true }));
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      trigger!.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 }))
+    }
+  });
+  const option = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (o) => o.textContent?.trim().startsWith('Korekta kwotowa'),
+  );
+  expect(option).toBeDefined();
+  await act(async () => {
+    option!.click()
   });
 }
 
@@ -259,6 +268,7 @@ describe('korekta kwotowa — stawka bez VAT z faktury pierwotnej', () => {
     await act(async () => {});
 
     expect(mocks.saveDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.saveDraft.mock.calls[0]![1]).toBe(TENANT);
     expect(mocks.saveDraft.mock.calls[0]![0]).toMatchObject({
       correctionType: 'amount_change',
       buyer: { type: 'eu', vatUeNumber: 'DE123456789' },

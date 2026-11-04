@@ -8,9 +8,9 @@ import { POST } from '@/app/api/email/resend-webhook/route';
 
 /**
  * AUD-80: skarga („to spam”) albo twarde odbicie maila z PONAGLENIEM
- * dotyczy kontrahenta klienta, nie użytkownika FaktFlow. Do 02.10 webhook
+ * dotyczy kontrahenta klienta, nie użytkownika FaktWay. Do 02.10 webhook
  * szukał użytkownika po adresie i wypisywał go ze wszystkich maili — także
- * transakcyjnych — gdy kontrahent sam miał konto w FaktFlow.
+ * transakcyjnych — gdy kontrahent sam miał konto w FaktWay.
  */
 
 const key = Buffer.from('local-fixture-key-no-external-service');

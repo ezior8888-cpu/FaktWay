@@ -90,13 +90,16 @@ export interface AccessTokenResponse {
 // ═══════════════════════════════════════════════════════════════
 
 export interface AuthStatusResponse {
-  authenticationToken: {
+  /** Dawny kształt. Aktualny KSeF 2.0 nie zwraca tokenu w statusie: bierzemy go z odpowiedzi na wysłanie podpisu. */
+  authenticationToken?: {
     token: string;
     validUntil: string;
   };
   status: {
     code: number;
     description: string;
+    /** Np. „Certyfikat odwołany” przy kodzie 460 (dokumentacja MF, tabela statusów). */
+    details?: string[] | null;
   };
 }
 

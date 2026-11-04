@@ -146,13 +146,9 @@ export async function getTenantAdminEmail(
   return authUser?.user?.email ?? null;
 }
 
-/** `users.id` właściciela (owner) dla organizacji — m.in. Web Push bez auth.admin. */
-export async function getTenantOwnerUserId(
-  tenantId: string,
-): Promise<string | null> {
-  const supabase = await createAdminClient();
-
-  const { data: owner } = await supabase
+/** Najstarszy aktywny właściciel firmy — wspólne zapytanie wersji łagodnej i ścisłej. */
+function selectTenantOwner(supabase: Awaited<ReturnType<typeof createAdminClient>>, tenantId: string) {
+  return supabase
     .from('memberships')
     .select('user_id, joined_at')
     .eq('organization_id', tenantId)
@@ -161,8 +157,50 @@ export async function getTenantOwnerUserId(
     .order('joined_at', { ascending: true })
     .limit(1)
     .maybeSingle();
+}
+
+/** `users.id` właściciela (owner) dla organizacji — m.in. Web Push bez auth.admin. */
+export async function getTenantOwnerUserId(
+  tenantId: string,
+): Promise<string | null> {
+  const supabase = await createAdminClient();
+
+  const { data: owner } = await selectTenantOwner(supabase, tenantId);
 
   return owner?.user_id ?? null;
+}
+
+export interface TenantOwnerContact {
+  /** `users.id` najstarszego aktywnego właściciela; `null` — firma nie ma właściciela. */
+  ownerUserId: string | null;
+  /** Adres właściciela z GoTrue; `null` — brak właściciela, konta albo adresu. */
+  email: string | null;
+}
+
+/**
+ * Właściciel firmy i jego e-mail — wariant ŚCISŁY `getTenantOwnerUserId`
+ * i `getTenantAdminEmail` (D-A4-1b-3 PR B, przegląd #1/#4). Dla ścieżek,
+ * w których powiadomienie jest jednorazowe i nic go później nie ponowi
+ * („Faktura … czeka na Twoją decyzję”): błąd odczytu `memberships` albo GoTrue
+ * RZUCA, więc pg-boss ponawia zadanie, zamiast udawać „brak właściciela”.
+ * Prawdziwy brak danych zwraca `null` jak wersje łagodne: brak aktywnego
+ * właściciela, konto bez adresu, konto, którego GoTrue nie zna (404
+ * `user_not_found`). Pozostali wołający zostają przy wersjach łagodnych.
+ * Oba odczyty idą przed jakąkolwiek wysyłką — błąd nie zostawia połowy.
+ */
+export async function readTenantOwnerContact(tenantId: string): Promise<TenantOwnerContact> {
+  const supabase = await createAdminClient();
+  const { data: owner, error } = await selectTenantOwner(supabase, tenantId);
+  if (error) throw new Error(`Nie można odczytać właściciela firmy: ${error.message}`);
+  const ownerUserId = owner?.user_id ?? null;
+  if (!ownerUserId) return { ownerUserId: null, email: null };
+
+  const { data: authUser, error: userError } = await supabase.auth.admin.getUserById(ownerUserId);
+  // 404 to odpowiedź GoTrue „takiego konta nie ma” — dane, nie awaria.
+  if (userError && userError.status !== 404) {
+    throw new Error(`Nie można odczytać e-maila właściciela firmy: ${userError.message}`);
+  }
+  return { ownerUserId, email: authUser?.user?.email || null };
 }
 
 /**

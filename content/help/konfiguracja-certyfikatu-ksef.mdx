@@ -2,40 +2,32 @@
 title: "Konfiguracja certyfikatu KSeF"
 category: "ksef"
 order: 2
-summary: "Jak połączyć FaktFlow z KSeF — certyfikat, token i wybór środowiska."
-updated: "2026-05-19"
+summary: "Jak połączyć FaktWay z KSeF: skąd wziąć certyfikat i gdzie go wgrać."
+updated: "2026-11-02"
 ---
 
-Zanim wyślesz pierwszą fakturę, FaktFlow musi mieć uprawnienia do działania w Twoim imieniu w KSeF.
+Zanim wyślesz pierwszą fakturę, FaktWay musi mieć uprawnienia do działania w Twoim imieniu w KSeF. Daje je certyfikat KSeF przypisany do NIP-u Twojej firmy.
 
-## Środowisko testowe vs produkcyjne
+## Skąd wziąć certyfikat
 
-KSeF udostępnia dwa środowiska:
+Potrzebujesz certyfikatu KSeF typu 1 (uwierzytelnianie). Pobierzesz go z Modułu Certyfikatów w Aplikacji Podatnika KSeF, do której wejdziesz np. profilem zaufanym. Razem z certyfikatem zachowaj klucz prywatny.
 
-- **Testowe** — do prób. Faktury nie mają mocy prawnej. Używaj fikcyjnego NIP-u.
-- **Produkcyjne** — prawdziwe faktury z mocą prawną.
+## Wgranie do FaktWay
 
-W ustawieniach KSeF wybierasz, na którym środowisku pracujesz. Zalecamy zacząć od testowego, żeby spokojnie przejść cały proces.
-
-## Uzyskanie dostępu
-
-Dostęp do KSeF nadajesz przez certyfikat lub token uwierzytelniający, wygenerowany na stronie KSeF Ministerstwa Finansów. Certyfikat przypisany jest do NIP-u Twojej firmy.
-
-## Wgranie do FaktFlow
-
-W **Ustawienia → KSeF** wgrywasz certyfikat i klucz. FaktFlow szyfruje je przed zapisem (AES-256-GCM) — dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
+W **Ustawienia → KSeF** dodajesz certyfikat i klucz w plikach PEM. Przy wgrywaniu plików działa klucz prywatny RSA w formacie PKCS#8 bez hasła. Może to zrobić tylko właściciel firmy, po włączeniu logowania dwuetapowego. FaktWay szyfruje je przed zapisem (AES-256-GCM), więc dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
 
 ## Weryfikacja połączenia
 
-Po wgraniu FaktFlow wykonuje testowe połączenie z KSeF. Zielony status oznacza, że wszystko działa. Jeśli pojawi się błąd, sprawdź:
+Przy wgrywaniu FaktWay łączy się z KSeF i sprawdza, czy certyfikat działa dla Twojego NIP-u. Jeśli pojawi się błąd, sprawdź:
 
 - czy certyfikat nie wygasł,
-- czy NIP w certyfikacie zgadza się z NIP-em organizacji,
-- czy wybrałeś właściwe środowisko (test/produkcja).
+- czy NIP w certyfikacie zgadza się z NIP-em firmy,
+- czy klucz prywatny jest w formacie PKCS#8 (RSA) i nie ma hasła,
+- czy certyfikat pochodzi z właściwego środowiska KSeF (testowego albo produkcyjnego).
 
 ## Wygasanie certyfikatu
 
-Certyfikaty mają datę ważności. FaktFlow przypomni Ci mailem, zanim certyfikat wygaśnie — odnów go z wyprzedzeniem, żeby nie przerwać wystawiania faktur.
+Certyfikaty mają datę ważności. FaktWay przypomni Ci mailem, zanim certyfikat wygaśnie. Odnów go z wyprzedzeniem, żeby nie przerwać wystawiania faktur.
 
 ## Co dalej?
 

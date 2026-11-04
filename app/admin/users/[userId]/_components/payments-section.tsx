@@ -184,7 +184,7 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
                 <DialogDescription>
                   Pełen zwrot kwoty{' '}
                   <strong>{fmtAmount(payment.amountCents, payment.currency)}</strong>{' '}
-                  na kartę klienta. Operacja nieodwracalna. Klient dostanie email z
+                  na metodę płatności klienta. Operacja nieodwracalna. Klient dostanie email z
                   potwierdzeniem.
                 </DialogDescription>
               </DialogHeader>
@@ -201,11 +201,7 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
               </div>
 
               <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline" size="sm">
-                    Anuluj
-                  </Button>
-                </DialogClose>
+                <DialogClose render={<Button variant="outline" size="sm" />}>Anuluj</DialogClose>
                 <Button
                   variant="destructive"
                   size="sm"

@@ -69,7 +69,7 @@ function buildHtml(m: WeeklyMetrics): string {
 </head>
 <body>
   <div class="container">
-    <h1>📈 Weekly business review — FaktFlow</h1>
+    <h1>📈 Weekly business review — FaktWay</h1>
     <p class="period">Tydzień ${new Date(m.period.from).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long' })} → ${new Date(m.period.to).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long' })}</p>
 
     <div class="hero">
@@ -99,7 +99,7 @@ function buildHtml(m: WeeklyMetrics): string {
       <div class="stat"><p class="stat-label">Job failures</p><p class="stat-value" style="color:${m.totalInngestFailures > 50 ? '#dc2626' : '#111'}">${fmtNum(m.totalInngestFailures)}</p></div>
     </div>
 
-    <p class="footer">FaktFlow weekly review · Generowany ${new Date().toLocaleString('pl-PL')}</p>
+    <p class="footer">FaktWay weekly review · Generowany ${new Date().toLocaleString('pl-PL')}</p>
   </div>
 </body>
 </html>`;
@@ -118,7 +118,7 @@ export async function runWeeklyBusinessReview({ step, logger }: JobContext) {
 
     const metrics = await step.run('aggregate-weekly', () => getWeeklyMetrics());
     const html = buildHtml(metrics);
-    const subject = `📈 FaktFlow weekly: MRR ${metrics.mrrPln} zł, ${metrics.signups} nowych`;
+    const subject = `📈 FaktWay weekly: MRR ${metrics.mrrPln} zł, ${metrics.signups} nowych`;
 
     // Email do każdego admina.
     await step.run('send-emails', async () => {

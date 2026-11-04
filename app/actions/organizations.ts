@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
+import { requireCodeForAccessGrant } from '@/lib/auth/access-grant-mfa';
 import { emailsForUserIds } from '@/lib/auth/auth-users';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
@@ -50,7 +51,11 @@ async function setActiveOrgCookie(orgId: string) {
 
 export type ActionOk<T = unknown> =
   T extends object ? { success: true } & T : { success: true };
-export type ActionFail = { success: false; error: string };
+/**
+ * `mfaStepUp`: konto ma 2FA, a ta sesja (po biometrii) kodu nie podała. Formularz
+ * pokazuje wtedy przejście na ekran kodu (`MfaStepUpNotice`), nie sam tekst błędu.
+ */
+export type ActionFail = { success: false; error: string; mfaStepUp?: true };
 
 export interface OrganizationCompanyInput {
   nip: string;
@@ -593,6 +598,10 @@ export async function inviteMemberAction(params: {
     return { success: false, error: 'Nieprawidłowa rola' };
   }
 
+  // Zaproszenie oddaje dostęp osobie trzeciej: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Zaproszenie do firmy');
+  if (stepUp) return stepUp;
+
   // Czy ten email już jest aktywnym członkiem?
   // Membership wskazuje na user_id; email żyje w auth.users — zmatchujemy
   // poprzez auth.admin.listUsers() (jedyne źródło prawdy o emailu).
@@ -611,7 +620,7 @@ export async function inviteMemberAction(params: {
     }
   }
 
-  // Limit zaproszeń firmy (AUD-32): mail idzie z domeny FaktFlow na dowolny
+  // Limit zaproszeń firmy (AUD-32): mail idzie z domeny FaktWay na dowolny
   // adres, z nazwą firmy, którą wpisuje użytkownik.
   const { count: pending, error: pendingError } = await admin
     .from('organization_invitations')
@@ -689,10 +698,10 @@ export async function inviteMemberAction(params: {
   try {
     await sendEmail({
       to: email,
-      subject: `Zaproszenie do ${orgNameSubject} w FaktFlow`,
+      subject: `Zaproszenie do ${orgNameSubject} w FaktWay`,
       html: `
         <p>Cześć,</p>
-        <p>Zostałeś/aś zaproszony/a do organizacji <strong>${orgNameHtml}</strong> w FaktFlow w roli <strong>${params.role}</strong>.</p>
+        <p>Zostałeś/aś zaproszony/a do organizacji <strong>${orgNameHtml}</strong> w FaktWay w roli <strong>${params.role}</strong>.</p>
         <p><a href="${inviteUrl}">Kliknij aby zaakceptować zaproszenie</a></p>
         <p>Link wygasa za 7 dni.</p>
         <p style="color:#888;font-size:12px">Jeśli nie spodziewałeś/aś się tego maila, zignoruj go.</p>
@@ -878,6 +887,10 @@ export async function approveJoinRequestAction(
   }
   const { supabase, tenantId, user } = ctx;
 
+  // Przyjęcie prośby oddaje dostęp osobie trzeciej: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Przyjęcie prośby o dostęp');
+  if (stepUp) return stepUp;
+
   const { error } = await supabase.rpc('approve_join_request', {
     p_request_id: requestId,
     p_role: role,
@@ -984,6 +997,10 @@ export async function changeMembershipRoleAction(params: {
   }
   const { supabase, tenantId, user } = ctx;
 
+  // Zmiana roli (także na właściciela) oddaje uprawnienia: sesja po biometrii potrzebuje kodu.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Zmiana roli w firmie');
+  if (stepUp) return stepUp;
+
   const { error } = await supabase.rpc('change_membership_role', {
     p_membership_id: params.membershipId,
     p_new_role: params.newRole,
@@ -1008,20 +1025,6 @@ export async function changeMembershipRoleAction(params: {
 
   revalidatePath('/settings/team');
   return { success: true };
-}
-
-/**
- * Wywoływane po otwarciu modala „import po rejestracji” — miejsce na przyszłą
- * persystencję (np. jednorazowy flag w profilu). Dziś: weryfikacja sesji, bez
- * zmiany stanu (URL `post_register_import` i tak czyści klient).
- */
-export async function markPostRegisterMagicImportConsumedAction(): Promise<void> {
-  try {
-    await requireVerifiedUser();
-  } catch (e) {
-    if (e instanceof ActionAuthError) return;
-    throw e;
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════

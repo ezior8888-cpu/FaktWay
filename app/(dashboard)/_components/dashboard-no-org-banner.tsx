@@ -1,8 +1,7 @@
 import Link from 'next/link';
 
 /**
- * Ten sam układ co `DashboardVerificationBanner` (KSeF / certyfikat), inna treść —
- * użytkownik bez żadnej organizacji.
+ * Pasek informacyjny dla użytkownika bez żadnej organizacji (link do utworzenia firmy).
  */
 export default function DashboardNoOrgBanner() {
   return (

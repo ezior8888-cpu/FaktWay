@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyScenario,
@@ -10,7 +10,7 @@ import {
   resolveFixture,
   setMockScenario,
 } from '@/lib/ksef/mock-fixtures';
-import { ksefFetch, KsefApiError } from '@/lib/ksef/client';
+import { getKsefBaseUrl, ksefFetch, KsefApiError } from '@/lib/ksef/client';
 
 describe('Mock KSeF fixtures', () => {
   beforeEach(() => {
@@ -96,6 +96,7 @@ describe('ksefFetch z interceptorem', () => {
 
   afterEach(() => {
     resetMockState();
+    vi.unstubAllGlobals();
     delete process.env.E2E_MOCK_KSEF;
     delete process.env.E2E_MOCK_KSEF_SKIP_DELAY;
     delete process.env.E2E_MOCK_KSEF_SCENARIO;
@@ -136,14 +137,25 @@ describe('ksefFetch z interceptorem', () => {
 
   it('passes-through gdy E2E_MOCK_KSEF nie ustawione (delegates to real fetch)', async () => {
     delete process.env.E2E_MOCK_KSEF;
-    // Real fetch poleci do nieistniejącego host'a (z env vars w .env.test) —
-    // sprawdzamy tylko że interceptor wyszedł z drogi. Asercja: błąd jest
-    // siecny (nie z mocka), więc body NIE zawiera nasz 'fixture-not-found' marker.
-    try {
-      await ksefFetch('/sessions/online', { method: 'POST' });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      expect(msg).not.toContain('fixture-not-found');
-    }
+    // Atrapa zamiast sieci: prawdziwy fetch do KSeF TEST potrafił wisieć
+    // ponad 5 s i wywracać test. 500 z atrapy odróżnia odpowiedź z fetch
+    // od fixture'a (dla /sessions/online byłoby 200) i od 404 „fixture-not-found”.
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ exception: 'atrapa' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await ksefFetch('/sessions/online', { method: 'POST' }).catch((e: unknown) => e);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${getKsefBaseUrl('test')}/sessions/online`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(error).toBeInstanceOf(KsefApiError);
+    expect((error as KsefApiError).status).toBe(500);
   });
 });

@@ -1,37 +1,41 @@
 ---
-title: "Skanowanie paragonów i faktur kosztowych (OCR)"
+title: "Paragony i faktury kosztowe ze zdjęcia"
 category: "ocr-kpir"
 order: 1
-summary: "Jak dodać koszt zdjęciem paragonu — OCR wyciąga dane automatycznie."
-updated: "2026-05-19"
+summary: "Jak dodać koszt zdjęciem paragonu: FaktWay sam odczytuje dane."
+updated: "2026-11-02"
 ---
 
-Zamiast przepisywać paragony ręcznie, robisz zdjęcie — OCR FaktFlow odczytuje dane i wypełnia formularz kosztu.
+Zamiast przepisywać paragony ręcznie, robisz zdjęcie. FaktWay odczytuje dane i sam zapisuje koszt.
 
-## Jak zeskanować koszt
+## Jak dodać koszt
 
-1. W panelu wybierz „Dodaj koszt" → „Zeskanuj".
-2. Zrób zdjęcie paragonu lub faktury kosztowej (albo wgraj plik).
-3. OCR przetwarza obraz i wyciąga: sprzedawcę, NIP, datę, kwoty netto/VAT/brutto oraz pozycje.
-4. Sprawdź odczytane dane i zapisz.
+1. W panelu wybierz „Dodaj wydatek”.
+2. Zrób zdjęcie paragonu lub faktury kosztowej albo wybierz plik z galerii (zdjęcie lub PDF, do 10 MB).
+3. FaktWay odczytuje: sprzedawcę, NIP, datę, kwoty netto, VAT i brutto oraz pozycje.
+4. FaktWay zapisuje koszt od razu i dolicza go do KPiR. Na liście wydatków koszt czeka z oznaczeniem „Do opisania”: otwórz go, sprawdź odczytane dane i zaakceptuj.
 
-## Co rozpoznaje OCR
+## Co rozpoznajemy
 
 - paragony fiskalne,
 - faktury kosztowe (PDF lub zdjęcie),
-- dokumenty w różnej jakości — OCR radzi sobie z lekko pomiętymi czy nierówno sfotografowanymi paragonami.
+- dokumenty w różnej jakości, także lekko pomięte czy nierówno sfotografowane paragony.
+
+## Limit odczytów
+
+Odczyt dokumentów ma limit dzienny i miesięczny na firmę. Po jego wyczerpaniu dane wpisujesz ręcznie.
 
 ## Zawsze sprawdź dane
 
-OCR jest dokładny, ale to wciąż automat. Po zeskanowaniu **zweryfikuj kwoty i NIP** zanim zapiszesz koszt — szczególnie przy słabej jakości zdjęcia. Poprawione dane FaktFlow zapamiętuje.
+Odczyt jest automatyczny, więc może się pomylić, a zapisany koszt liczy się do KPiR jeszcze przed Twoim sprawdzeniem. Otwórz każdy koszt „Do opisania” i **sprawdź kwoty i NIP**, szczególnie przy słabej jakości zdjęcia.
 
 ## Skąd biorą się koszty
 
-Koszty trafiają do FaktFlow dwiema drogami:
+Koszty trafiają do FaktWay dwiema drogami:
 
-- **OCR** — to, co dodajesz zdjęciem (paragony, faktury papierowe).
-- **Inbox KSeF** — faktury kosztowe wystawione na Twój NIP przez innych pojawiają się automatycznie z KSeF.
+- **Zdjęcie**: to, co dodajesz sam (paragony, faktury papierowe).
+- **Skrzynka KSeF**: faktury kosztowe wystawione na Twój NIP przez innych pojawiają się automatycznie z KSeF.
 
 ## Co dalej?
 
-Po dodaniu kosztu FaktFlow przypisuje go do kolumny KPiR. Zobacz artykuł o automatycznej kategoryzacji kosztów.
+Po dodaniu kosztu FaktWay przypisuje go do kolumny KPiR. Zobacz artykuł o automatycznej kategoryzacji kosztów.

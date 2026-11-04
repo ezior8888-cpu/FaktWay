@@ -10,22 +10,26 @@ import {
   Text,
 } from '@react-email/components';
 
+import { paymentFailureAdvice } from '@/lib/billing/payment-failure';
+
+import { EmailLogo } from './EmailLogo';
+
 export interface PaymentFailedProps {
   appUrl: string;
   tenantName: string;
   /** Kwota brutto w PLN (np. "60,27 zł"). */
   amountLabel: string;
-  /** Powód z Stripe (z `failure_reason`) — opcjonalny. */
+  /** Kod odmowy albo błąd z Stripe (`failure_reason`); klient widzi tylko znane kody. */
   failureReason: string | null;
 }
 
 /**
  * Faza 25 Krok 5 — dunning email po `invoice.payment_failed`.
  *
- * Strategia: 1 email natychmiast + link do Customer Portal żeby user mógł
- * zaktualizować kartę. Stripe sam robi smart retries (3 próby przez 7 dni),
- * więc nie wysyłamy follow-upów — Stripe `invoice.payment_action_required`
- * przyjdzie jeśli karta wymaga 3D-Secure.
+ * Strategia: 1 email natychmiast + link do Customer Portal, żeby user mógł
+ * zmienić metodę płatności. Stripe sam robi smart retries, więc nie wysyłamy
+ * follow-upów. Treść zależy od kodu odmowy: bank bez BLIK-a cyklicznego nie
+ * zapłaci przy kolejnej próbie, więc taki mail od razu każe zmienić metodę.
  */
 export default function PaymentFailed({
   appUrl,
@@ -33,45 +37,46 @@ export default function PaymentFailed({
   amountLabel,
   failureReason,
 }: PaymentFailedProps) {
+  const advice = paymentFailureAdvice(failureReason);
+
   return (
     <Html lang="pl">
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             Nie udało się pobrać płatności
           </Heading>
 
           <Text style={textStyle}>
-            Cześć {tenantName}, próba obciążenia karty kwotą{' '}
-            <strong>{amountLabel}</strong> nie powiodła się.
+            Cześć {tenantName}, nie udało się pobrać płatności{' '}
+            <strong>{amountLabel}</strong> za subskrypcję.
           </Text>
 
-          {failureReason ? (
+          {advice.reason ? (
             <Section style={boxStyle}>
               <Text style={labelStyle}>Powód</Text>
-              <Text style={reasonStyle}>{failureReason}</Text>
+              <Text style={reasonStyle}>{advice.reason}</Text>
             </Section>
           ) : null}
 
           <Text style={textStyle}>
-            <strong>Co dalej?</strong> Spróbujemy automatycznie obciążyć kartę
-            jeszcze 2 razy w ciągu najbliższych 7 dni. Żeby uniknąć przerwy w
-            usłudze, zaktualizuj dane karty w panelu klienta:
+            <strong>Co zrobić?</strong> {advice.action}
           </Text>
 
           <Button href={`${appUrl}/settings/billing`} style={buttonStyle}>
-            Zaktualizuj kartę
+            Zmień metodę płatności
           </Button>
 
           <Text style={textStyle}>
-            Jeśli problem trwa, odpisz na ten email — pomożemy.
+            Jeśli problem trwa, odpisz na ten email. Pomożemy.
           </Text>
 
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>
@@ -118,7 +123,6 @@ const reasonStyle = {
   color: '#7f1d1d',
   fontSize: '14px',
   margin: '4px 0 0 0',
-  fontFamily: 'Monaco, monospace',
 };
 const buttonStyle = {
   backgroundColor: '#dc2626',

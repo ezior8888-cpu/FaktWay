@@ -27,9 +27,11 @@ export function buildContentSecurityPolicy({ production, supabaseUrl }: ContentS
     "default-src 'self'",
     // Next's bootstrap still needs inline scripts. Nonces require a separate rollout.
     "script-src 'self' 'unsafe-inline'" + (production ? '' : " 'unsafe-eval'") + ' https://challenges.cloudflare.com',
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    // Bez fonts.googleapis.com / fonts.gstatic.com: czcionki i ikony są
+    // serwowane z naszej domeny (app/layout.tsx), Google nie dostaje IP.
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data: https:",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "font-src 'self' data:",
     'connect-src ' + [...new Set(connections)].join(' '),
     "frame-src 'self' https://challenges.cloudflare.com",
     "worker-src 'self' blob:",

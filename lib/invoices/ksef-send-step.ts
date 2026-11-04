@@ -63,6 +63,16 @@ export const KSEF_REQUEUE_NOT_FOUND_MESSAGE = 'Nie znaleziono faktury w tej orga
 export const KSEF_SEND_FORBIDDEN_MESSAGE =
   'Serwer nie ma uprawnień do uruchomienia wysyłki. Faktura została zapisana — zgłoś to operatorowi.';
 
+/** 00135: tekst 23505 RPC, gdy inna korekta tej samej faktury pierwotnej jest w toku. */
+export const OPEN_CORRECTION_CONFLICT_PREFIX = 'Faktura pierwotna ma korektę w toku';
+
+/** Konflikt korekty (00135) — tylko ten 23505; każdy inny naruszony klucz to błąd. */
+export function isOpenCorrectionConflict(e: unknown): boolean {
+  if (typeof e !== 'object' || e === null) return false;
+  const { code, message } = e as { code?: unknown; message?: unknown };
+  return code === '23505' && typeof message === 'string' && message.startsWith(OPEN_CORRECTION_CONFLICT_PREFIX);
+}
+
 /**
  * Komunikat dla klienta po nieudanym kolejkowaniu. Komunikaty P0001 piszą RPC
  * z 00131 wprost dla klienta („wróć do szkicu i popraw” itd.), więc idą bez zmian.

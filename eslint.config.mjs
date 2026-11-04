@@ -35,6 +35,29 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Granica „przykład ↔ prawda” (PLAN-PRAWDZIWE-DANE §5.2): dane przykładowe
+    // i atrapa bazy żyją w `lib/demo/*`; spoza tego katalogu (i testów) wolno
+    // importować tylko `lib/demo/tryb-danych` — jedno miejsce decyzji, czy
+    // strona czyta prawdziwe dane, czy przykład. Pilnuje też test T1
+    // (`tests/unit/dane-granica.test.ts`).
+    files: ["**/*.{ts,tsx,js,jsx,mjs}"],
+    ignores: ["lib/demo/**", "tests/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/demo/*", "!@/lib/demo/tryb-danych", "**/demo/*", "!**/demo/tryb-danych"],
+              message:
+                "Dane przykładowe tylko przez @/lib/demo/tryb-danych (kontekstDanych / trybDanych) — PLAN-PRAWDZIWE-DANE §5.2.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Pliki E2E (Playwright) używają `use` jako Playwright fixture API —
     // ESLint myli to z React `use` hook. Wyłączamy rules-of-hooks dla
     // wszystkich plików w `e2e/` (poza katalogiem React nie ma).

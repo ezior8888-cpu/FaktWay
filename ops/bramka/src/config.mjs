@@ -48,7 +48,7 @@ export function loadConfig(env = process.env) {
       branch: (env.GITHUB_BRANCH ?? 'main').trim(),
       token: env.GITHUB_TOKEN?.trim() || null,
     },
-    healthUrl: (env.PUBLIC_HEALTH_URL ?? 'https://faktflow.pl/api/health').trim(),
+    healthUrl: (env.PUBLIC_HEALTH_URL ?? 'https://faktway.pl/api/health').trim(),
     // Kontrole, bez których wdrożenie się nie zacznie (nazwy jobów z CI).
     requiredChecks: (env.BRAMKA_REQUIRED_CHECKS ?? 'Typecheck + Lint + Unit tests,Next build')
       .split(',').map((s) => s.trim()).filter(Boolean),

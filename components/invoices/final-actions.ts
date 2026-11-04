@@ -15,7 +15,7 @@ import {
 import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { createClient } from '@/lib/supabase/server';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
@@ -69,12 +69,13 @@ interface TenantSnap {
   } | null;
 }
 
-async function tenantContext(): Promise<{
+/** `formTenant` — firma formularza musi być firmą aktywną teraz (UX-01). */
+async function tenantContext(formTenant: FormTenantCheck): Promise<{
   supabase: SupabaseClient;
   userId: string;
   tenant: TenantSnap;
 }> {
-  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg(formTenant);
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -368,9 +369,13 @@ async function resolveFinalPayload(
   return { envelope, settlement };
 }
 
-export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
+/**
+ * `expectedTenantId` — firma, dla której strona wyrenderowała formularz
+ * (UX-01); tylko do porównania z firmą z ciasteczka. Także w wysyłce.
+ */
+export async function saveFinalAction(raw: unknown, expectedTenantId: string): Promise<ActionResult> {
   try {
-    const { supabase, tenant, userId } = await tenantContext();
+    const { supabase, tenant, userId } = await tenantContext({ expectedTenantId });
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 
@@ -398,9 +403,9 @@ export async function saveFinalAction(raw: unknown): Promise<ActionResult> {
   }
 }
 
-export async function saveAndSendFinalAction(raw: unknown): Promise<ActionResult> {
+export async function saveAndSendFinalAction(raw: unknown, expectedTenantId: string): Promise<ActionResult> {
   try {
-    await tenantContext();
+    await tenantContext({ expectedTenantId });
     const parsed = finalInvoiceSchema.safeParse(raw);
     if (!parsed.success) return { success: false, error: zodIssuesMessage(parsed.error) };
 

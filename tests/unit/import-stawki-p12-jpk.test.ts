@@ -26,10 +26,10 @@ import type { Invoice, VatRate } from '@/types/invoice';
 /**
  * W9 (plan „zero zgubionych faktur”, sesja C5a): import historii z KSeF
  * zapisywał P_12 z FA(3) dosłownie (`0 KR`, `np I`, `np II`) jako stawkę
- * pozycji, a eksporty znają tylko stawki FaktFlow (`0`, `np`, `np_ii`).
+ * pozycji, a eksporty znają tylko stawki FaktWay (`0`, `np`, `np_ii`).
  * JPK_FA i JPK_V7M padały na całym miesiącu z jedną taką fakturą.
  *
- * Prawdziwy łańcuch: plik FA(3) z generatora FaktFlow (taki, jaki KSeF
+ * Prawdziwy łańcuch: plik FA(3) z generatora FaktWay (taki, jaki KSeF
  * przyjął) → `parseFa3Xml` → `processImportedInvoices` (zapis do bazy
  * w pamięci) → `fetchInvoicesForExport` (te same wiersze) → generator JPK
  * i walidacja XSD MF.
@@ -136,7 +136,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
-describe('W9: stawki FA(3) z importu historii KSeF → stawki FaktFlow', () => {
+describe('W9: stawki FA(3) z importu historii KSeF → stawki FaktWay', () => {
   it('JPK_V7M za miesiąc z jedną zaimportowaną fakturą „np II”: K_11 = K_12 = netto (DoD planu C5)', async () => {
     await importXml(xmlOf(invoice('FV/NP2/1', [{ rate: 'np_ii', net: 2000 }])));
 
@@ -173,7 +173,7 @@ describe('W9: stawki FA(3) z importu historii KSeF → stawki FaktFlow', () => {
 
   it.each([
     ['23', '23'], ['8', '8'], ['5', '5'], ['0', '0'], ['zw', 'zw'], ['oo', 'oo'], ['np', 'np'], ['np_ii', 'np_ii'],
-  ] as Array<[VatRate, string]>)('plik FaktFlow ze stawką %s → w bazie stawka FaktFlow „%s”', async (rate, stored) => {
+  ] as Array<[VatRate, string]>)('plik FaktWay ze stawką %s → w bazie stawka FaktWay „%s”', async (rate, stored) => {
     await importXml(xmlOf(invoice(`FV/${rate}/1`, [{ rate, net: 100 }])));
     expect(storedRates(`FV/${rate}/1`)).toEqual([stored]);
   });
@@ -184,7 +184,7 @@ describe('W9: stawki FA(3) z importu historii KSeF → stawki FaktFlow', () => {
   });
 });
 
-describe('W9: stawki FA(3) bez odpowiednika w FaktFlow — zapis bez przekłamania, JPK odmawia z nazwą dokumentu', () => {
+describe('W9: stawki FA(3) bez odpowiednika w FaktWay — zapis bez przekłamania, JPK odmawia z nazwą dokumentu', () => {
   const wdt = () => xmlOf(invoice('FV/WDT/1', [{ rate: '0', net: 500 }]))
     .replace('<P_12>0 KR</P_12>', '<P_12>0 WDT</P_12>')
     .replace(/<P_13_6_1>([^<]*)<\/P_13_6_1>/, '<P_13_6_2>$1</P_13_6_2>');
@@ -266,22 +266,37 @@ describe('W9 — ustalenia recenzji C5a', () => {
     await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:.*FV\/MIESZ\/1/);
   });
 
-  it.each([['0', 'FV/BR0/1'], ['23', 'FV/BR23/1']] as Array<[VatRate, string]>)(
-    'ceny brutto (P_11A zamiast P_11, stawka %s) → JPK odmawia z numerem, ostrzeżenie przy imporcie (nie ciche zero)',
-    async (rate, number) => {
-      const xml = xmlOf(invoice(number, [{ rate, net: 500 }]))
-        .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
-        .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
-      const result = await importXml(xml);
-      expect(result.warnings[0]).toContain(number);
-      const refusal = await jpkFa().then(() => null, (e: Error) => e);
-      expect(refusal?.message).toContain('JPK wstrzymany:');
-      expect(refusal?.message).toContain(number);
-      await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:/);
-    },
-  );
+  // C5c (świadoma zmiana): przy 0% brutto = netto, więc P_11A 500 przy P_13_6_1
+  // 500 to spójna faktura w cenach brutto — wchodzi do JPK z polami z pliku.
+  it('ceny brutto (P_11A zamiast P_11) przy 0% → spójne z nagłówkiem: JPK z P_9B/P_11A (C5c)', async () => {
+    const xml = xmlOf(invoice('FV/BR0/1', [{ rate: '0', net: 500 }]))
+      .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
+      .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
+    const result = await importXml(xml);
+    expect(result.warnings.join('\n')).not.toMatch(/JPK_FA i JPK_V7M/);
+    const fa = await jpkFa();
+    expect(fragment(fa, '<P_2A>FV/BR0/1', '</Faktura>')).toContain('<P_13_6>500.00</P_13_6>');
+    const wiersz = fragment(fa, '<P_2B>FV/BR0/1</P_2B>', '</FakturaWiersz>');
+    expect(wiersz).toContain('<P_11A>500.00</P_11A>');
+    expect(wiersz).not.toContain('<P_11>');
+    expect((await validateJpkFa(fa)).errors).toEqual([]);
+  });
 
-  it('ponowny import własnej korekty FaktFlow (w bazie jako korekta z aplikacji) → bez ostrzeżenia „JPK nie powstanie”', async () => {
+  // Przy 23% P_11A 500 ≠ netto 500 + VAT 115 z nagłówka — plik sprzeczny, dalej odmowa (z dokładnym powodem).
+  it('ceny brutto (P_11A zamiast P_11) przy 23%, sprzeczne z nagłówkiem → JPK odmawia z numerem i powodem', async () => {
+    const xml = xmlOf(invoice('FV/BR23/1', [{ rate: '23', net: 500 }]))
+      .replace(/<P_9A>([^<]*)<\/P_9A>/, '<P_9B>$1</P_9B>')
+      .replace(/<P_11>([^<]*)<\/P_11>/, '<P_11A>$1</P_11A>');
+    const result = await importXml(xml);
+    expect(result.warnings[0]).toContain('FV/BR23/1');
+    expect(result.warnings[0]).toContain('brutto pozycji');
+    const refusal = await jpkFa().then(() => null, (e: Error) => e);
+    expect(refusal?.message).toContain('JPK wstrzymany:');
+    expect(refusal?.message).toContain('FV/BR23/1');
+    await expect(jpkV7m()).rejects.toThrow(/JPK wstrzymany:/);
+  });
+
+  it('ponowny import własnej korekty FaktWay (w bazie jako korekta z aplikacji) → bez ostrzeżenia „JPK nie powstanie”', async () => {
     const K = `${NIP}-20260910-0100A0B0C0D1-AF`.slice(0, 35);
     db.tables.invoices!.push({
       id: 'kor-app', tenant_id: T, direction: 'outgoing', origin: 'app', internal_number: 'KOR/APP/1', invoice_kind: 'correction',

@@ -1,19 +1,35 @@
 'use client';
 
+// Plan Finora P15 (E10b): postęp importu na prymitywach Finory (`Card`,
+// belka postępu w kolorze `--primary` jak `ui/progress` Finory, `Button`,
+// ikony Remix) zamiast szkła i gradientu. Logika bez zmian: stan z SSR
+// + Supabase Realtime.
+//
+// Decyzja Bartosza 22.10.2026: Magiczny import znika. Dawny ręczny import
+// z KSeF, który został „w toku”, już się nie skończy (kolejki nie ma) —
+// pokazujemy go jako przerwany i odsyłamy do Importu danych, gdzie historia
+// z KSeF pobiera się sama. Tak samo nieudany (poprawka po przeglądzie): jego
+// zapisany powód kazał „ponowić import”, a „Spróbuj ponownie” prowadził na
+// ekran, na którym tego importu już nie ma. Bez obietnicy e-maila po imporcie.
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowRight,
-  CheckCircle2,
-  FileText,
-  Loader2,
-  Package,
-  Sparkles,
-  Users,
-  XCircle,
-} from 'lucide-react';
+  RiArrowRightLine,
+  RiBox3Line,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+  RiFileTextLine,
+  RiForbidLine,
+  RiGroupLine,
+  RiLoader4Line,
+  RiSparkling2Line,
+} from '@remixicon/react';
 
+import { INTERRUPTED_LEGACY_NOTE, isInterruptedLegacyImport } from '@/components/import-danych/import-model';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { countLabel } from '@/lib/i18n/plural';
 import { createClient } from '@/lib/supabase/client';
 import type { Database, Json } from '@/types/database';
 
@@ -99,18 +115,20 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
 
   const isCompleted = job.status === 'completed';
   const isFailed = job.status === 'failed';
+  // Ta sama reguła co w historii importów: dawny import z KSeF „w toku” albo nieudany.
+  const isInterruptedLegacy = isInterruptedLegacyImport(job);
   const warningList = Array.isArray(job.warnings)
     ? job.warnings.filter((w): w is string => typeof w === 'string')
     : [];
 
   if (isCompleted) {
     return (
-      <div className="rounded-3xl border border-glass-border bg-glass-white-strong backdrop-blur-glass-lg shadow-glass-lg p-8 lg:p-12 space-y-6">
-        <div className="text-center space-y-3">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/10">
-            <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+      <div className="space-y-6">
+        <div className="space-y-3">
+          <div className="flex size-12 items-center justify-center bg-primary/10 text-primary">
+            <RiCheckboxCircleLine className="size-6" />
           </div>
-          <h1 className="text-3xl font-display font-semibold tracking-tighter-display">
+          <h1 className="mb-2 text-2xl font-semibold">
             Import zakończony!
           </h1>
           <p className="text-muted-foreground">
@@ -119,32 +137,32 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-2xl bg-foreground/3 p-4 text-center">
-            <FileText className="h-5 w-5 text-muted-foreground mx-auto mb-2" />
-            <p className="text-2xl font-display font-semibold tracking-tighter-text">
+          <Card size="sm" className="items-center text-center">
+            <RiFileTextLine className="mx-auto mb-2 size-5 text-muted-foreground" />
+            <p className="font-mono text-2xl font-semibold">
               {job.invoices_imported}
             </p>
             <p className="text-xs text-muted-foreground">Faktury</p>
-          </div>
-          <div className="rounded-2xl bg-foreground/3 p-4 text-center">
-            <Users className="h-5 w-5 text-muted-foreground mx-auto mb-2" />
-            <p className="text-2xl font-display font-semibold tracking-tighter-text">
+          </Card>
+          <Card size="sm" className="items-center text-center">
+            <RiGroupLine className="mx-auto mb-2 size-5 text-muted-foreground" />
+            <p className="font-mono text-2xl font-semibold">
               {job.contractors_created + job.contractors_updated}
             </p>
             <p className="text-xs text-muted-foreground">Kontrahenci</p>
-          </div>
-          <div className="rounded-2xl bg-foreground/3 p-4 text-center">
-            <Package className="h-5 w-5 text-muted-foreground mx-auto mb-2" />
-            <p className="text-2xl font-display font-semibold tracking-tighter-text">
+          </Card>
+          <Card size="sm" className="items-center text-center">
+            <RiBox3Line className="mx-auto mb-2 size-5 text-muted-foreground" />
+            <p className="font-mono text-2xl font-semibold">
               {job.products_created}
             </p>
             <p className="text-xs text-muted-foreground">Produkty</p>
-          </div>
+          </Card>
         </div>
 
         {warningList.length > 0 && (
-          <div className="rounded-2xl bg-orange-500/5 border border-orange-500/20 p-4">
-            <p className="text-xs font-medium text-orange-700 dark:text-orange-400 uppercase tracking-wider mb-2">
+          <div className="border border-amber-500/40 bg-card p-3">
+            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
               Ostrzeżenia ({warningList.length})
             </p>
             <ul className="text-sm text-muted-foreground space-y-1 max-h-32 overflow-y-auto">
@@ -161,12 +179,37 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
         <Button
           type="button"
           onClick={() => router.push('/dashboard?welcome=1')}
-          variant="glass-primary"
           size="lg"
           className="w-full"
         >
           Przejdź do panelu
-          <ArrowRight className="h-4 w-4 ml-2" />
+          <RiArrowRightLine />
+        </Button>
+      </div>
+    );
+  }
+
+  if (isInterruptedLegacy) {
+    return (
+      <div className="space-y-5">
+        <div className="space-y-3">
+          <div className="flex size-12 items-center justify-center bg-muted text-muted-foreground">
+            <RiForbidLine className="size-6" />
+          </div>
+          <h1 className="mb-2 text-2xl font-semibold">Import przerwany</h1>
+          <p role="status" className="text-muted-foreground">
+            {`${INTERRUPTED_LEGACY_NOTE}. Historię z KSeF pobieramy teraz sami — postęp zobaczysz w Imporcie danych.`}
+          </p>
+          {job.invoices_imported > 0 ? (
+            <p className="text-muted-foreground text-sm">
+              {`Zapisano ${countLabel(job.invoices_imported, ['fakturę', 'faktury', 'faktur'])}.`}
+            </p>
+          ) : null}
+        </div>
+
+        <Button type="button" onClick={() => router.push('/import-danych')} size="lg" className="w-full">
+          Przejdź do Importu danych
+          <RiArrowRightLine />
         </Button>
       </div>
     );
@@ -174,15 +217,15 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
 
   if (isFailed) {
     return (
-      <div className="rounded-3xl border border-red-500/20 bg-red-500/5 backdrop-blur-glass shadow-glass p-8 space-y-5">
-        <div className="text-center space-y-3">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10">
-            <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+      <div className="space-y-5">
+        <div className="space-y-3">
+          <div className="flex size-12 items-center justify-center bg-destructive/10 text-destructive">
+            <RiCloseCircleLine className="size-6" />
           </div>
-          <h1 className="text-2xl font-display font-semibold tracking-tighter-display">
+          <h1 className="mb-2 text-2xl font-semibold">
             Import się nie udał
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p role="alert" className="text-muted-foreground">
             {job.error_message ?? job.progress_message ?? 'Wystąpił nieoczekiwany błąd'}
           </p>
         </div>
@@ -191,7 +234,7 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
           <Button
             type="button"
             onClick={() => router.push('/onboarding/import-source')}
-            variant="glass"
+            variant="outline"
             size="lg"
             className="flex-1"
           >
@@ -200,7 +243,6 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
           <Button
             type="button"
             onClick={() => router.push('/dashboard?welcome=1')}
-            variant="glass-primary"
             size="lg"
             className="flex-1"
           >
@@ -212,37 +254,44 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
   }
 
   return (
-    <div className="rounded-3xl border border-glass-border bg-glass-white-strong backdrop-blur-glass-lg shadow-glass-lg p-8 lg:p-12 space-y-6">
-      <div className="text-center space-y-3">
-        <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-purple-500 to-blue-500">
-          <Sparkles className="h-8 w-8 text-white" />
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <div className="flex size-12 items-center justify-center bg-primary/10 text-primary">
+          <RiSparkling2Line className="size-6" />
         </div>
-        <h1 className="text-2xl font-display font-semibold tracking-tighter-display">
+        <h1 className="mb-2 text-2xl font-semibold">
           {STATUS_LABELS[job.status] ?? 'Import w toku'}
         </h1>
-        <p className="text-muted-foreground text-sm">
+        <p role="status" className="text-muted-foreground">
           {job.progress_message ?? 'Pracujemy nad Twoimi danymi...'}
         </p>
       </div>
 
       <div className="space-y-2">
-        <div className="h-2 rounded-full bg-foreground/5 overflow-hidden">
+        <div
+          className="h-1 overflow-hidden bg-muted"
+          role="progressbar"
+          aria-label="Postęp importu"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.min(100, Math.max(0, job.progress_percent))}
+        >
           <div
-            className="h-full bg-linear-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500 ease-apple"
+            className="h-full bg-primary transition-all duration-500"
             style={{
               width: `${Math.min(100, Math.max(0, job.progress_percent))}%`,
             }}
           />
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{job.progress_percent}%</span>
+          <span className="font-mono">{job.progress_percent}%</span>
           {job.invoices_found > 0 && <span>{job.invoices_found} faktur znalezionych</span>}
         </div>
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">
-        <Loader2 className="inline h-3 w-3 animate-spin mr-1" aria-hidden />
-        Możesz zamknąć tę stronę — skończymy w tle. Otrzymasz email gdy import będzie gotowy.
+      <p className="text-xs text-muted-foreground">
+        <RiLoader4Line className="mr-1 inline size-3 animate-spin" aria-hidden />
+        Możesz zamknąć tę stronę — skończymy w tle. Wynik zobaczysz w Imporcie danych.
       </p>
     </div>
   );

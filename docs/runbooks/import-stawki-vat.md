@@ -1,10 +1,10 @@
-# Import historii KSeF: stawki VAT, data sprzedaży i adnotacje (W9, C5a, C5b)
+# Import historii KSeF: stawki VAT, data sprzedaży, adnotacje i kwoty pozycji (W9, C5a, C5b, C5c)
 
 Plan „zero zgubionych faktur”, sesje C5a (stawki) i C5b (data sprzedaży,
 adnotacje, oznaczenia). Kod: `lib/xml/fa3-p12.ts` (stawki),
 `lib/xml/fa3-annotations.ts` (odczyt adnotacji, dat i oznaczeń),
 `lib/import/fa3-parser.ts` (import), `lib/import/fa3-content.ts` (co trafia
-na wiersz), `lib/exports/jpk-fa-generator.ts` (`JpkDocumentNotSupportedError`),
+na wiersz), `lib/import/fa3-line-amounts.ts` (kwoty pozycji, C5c), `lib/exports/jpk-fa-generator.ts` (`JpkDocumentNotSupportedError`),
 `lib/exports/jpk-fa-readiness.ts` (paczka Co-Pilot).
 
 ## Co import zapisuje jako stawkę pozycji
@@ -24,10 +24,10 @@ Dlaczego dosłownie, a nie „0” albo „23”: WDT i eksport mają w JPK_V7M 
 pola (K_21, K_22), a „22” → „23” zmieniłoby wyliczony podatek. Lepiej, żeby
 plik nie powstał, niż żeby sprzedaż trafiła do złego pola albo wypadła.
 
-Faktura z importu, której **netto pozycji nie sumuje się do netto z
-nagłówka** (np. ceny brutto: `P_11A` bez `P_11`, parser czyta tylko `P_11`),
-też jest odmawiana z numerem — inaczej sprzedaż po cichu wypadłaby z pól
-stawek. Odczyt cen brutto to C5c (decyzja Bartosza 06.10.2026: osobny PR).
+Faktura z importu, której pozycje **nie sumują się do netto albo VAT
+faktury**, jest odmawiana z numerem — inaczej sprzedaż po cichu wypadłaby
+z pól stawek albo JPK różniłby się od KSeF o grosze. Kwoty pozycji (także
+ceny brutto) — sekcja „Kwoty pozycji i ceny brutto (C5c)”.
 
 Zaimportowane **korekty, zaliczki i ROZ** import zapisuje jako zwykłe
 (`invoice_kind = regular`, rodzaj z pliku w `invoice_type`), bo nie zna ich
@@ -67,6 +67,53 @@ Import zapisuje je w `fa3_data.annotations` w kluczach FaktFlow, liczbami
 JPK_FA(4) umiałby wpisać `P_23` i `P_106E_*`, ale JPK_V7M (to samo
 `amountsOf`) nie ma tych oznaczeń ani kwot marży — odmowa obu plików jest
 celowa, nie „do poprawienia tylko w JPK_FA”.
+
+## Kwoty pozycji i ceny brutto (C5c)
+
+Podstawa: art. 106e ust. 7–11 ustawy o VAT. Prawdą są **sumy stawek
+z nagłówka** (`P_13_x` netto, `P_14_x` VAT): przy cenach brutto podatek liczy
+się od sumy brutto stawki (`KP = WB × SP / (100 + SP)`, ust. 7), netto stawki to
+`WB − KP` (ust. 9); przy cenach netto też od sumy (ust. 1 pkt 14), chyba że
+faktura podaje VAT przy pozycji (`P_11Vat`, ust. 10). Import dzieli VAT
+nagłówka na pozycje metodą największej reszty (każda pozycja dostaje swój
+udział w dół albo w górę) — dla faktur brutto **i netto** (decyzja Bartosza
+06.10.2026), więc JPK_FA i V7M mają co do grosza sumy z KSeF.
+
+| Plik | Pozycja w bazie | JPK_FA(4) `FakturaWiersz` |
+|---|---|---|
+| ceny netto (`P_9A`, `P_11`) | netto z pliku, VAT z podziału nagłówka | pola z pliku (`P_9A`, `P_11`) |
+| ceny brutto (`P_9B`, `P_11A`) | brutto z pliku, VAT z podziału, netto = brutto − VAT (**podział FaktFlow, nie dana z faktury**); cena netto pusta | `P_9B`, `P_11A` z pliku, bez wyliczonego netto; suma kontrolna tylko z `P_11` |
+| `P_11Vat` przy każdej pozycji, suma = `P_14_x` | VAT z pliku | jak wyżej (JPK_FA nie ma `P_11Vat`) |
+| `P_11` i `P_11A` przy pozycji | VAT = `P_11A − P_11` | oba pola |
+| `P_10` (rabat) | bez wpływu na kwoty (`P_11`/`P_11A` są po rabacie) | `P_10` z pliku |
+| faktura bez sum stawek (uproszczona), ceny netto albo brutto | VAT od sumy wartości każdej stawki (ust. 7 / ust. 1 pkt 14), zaokrąglony do grosza (ust. 11), podzielony; całość = `P_15`. Jedna stawka netto bez VAT pozycji, gdy suma ≠ `P_15` (wystawca zsumował VAT pozycji): VAT stawki z `P_15`, jeśli mieści się w podziale | pola z pliku |
+
+**Faktura bez sum stawek** (żadnego `P_13_x` / `P_14_x`): netto i VAT
+faktury (`invoices.net_total` / `vat_total`) import liczy z pozycji — parser nie
+ma ich skąd wziąć (przy cenach brutto dałby netto 0, przy zw „KPiR i CSV
+działają” byłoby nieprawdą). Gdy plik ma sumy innych stawek, brak sumy stawki
+liczy się jako 0: pozycje tej stawki sumujące się do 0 przechodzą, inne są
+zatrzymane.
+
+**Zatrzymane z numerem** (pozycje tej stawki zostają jak dotąd, nic nie
+zgadujemy; JPK_FA i V7M odmawiają, raport importu ostrzega): pozycje netto
+i brutto w jednej stawce; `P_11Vat` tylko przy części pozycji albo jego suma
+≠ VAT nagłówka (decyzja Bartosza 06.10: zatrzymać); VAT nagłówka poza
+możliwym zakresem podziału; brutto pozycji ≠ netto + VAT nagłówka; netto
+pozycji ≠ netto nagłówka (dokładnie, bez tolerancji); suma stawki bez pozycji;
+kwota nieczytelna; pozycja bez wartości; powtórzone `NrWierszaFa` przy cenach
+brutto; ceny brutto przy taksówkach (4%/3%). **Kwoty faktury nieznane**
+(`fa3_data.lineAmountTotalsUnknown`): pozycje stawki bez jej sum w nagłówku,
+a przy fakturze bez sum stawek — pozycje ≠ `P_15`, brak `P_15` albo pozycja
+nieczytelna. Komunikat mówi wtedy wprost, że **KPiR i CSV też ich nie
+pokażą** i fakturę trzeba wprowadzić z księgową.
+
+**Faktura z importu sprzed C5c** (bez `fa3_data.ksefLineFields`): JPK liczy
+ją jak dotąd z pozycji w bazie (kontrola VAT pozycji = VAT faktury co do
+grosza). Ponowny import tej samej faktury trafia w gałąź duplikatu i **nie
+przepisuje pozycji** — w odróżnieniu od dat i adnotacji C5b. Gdy taka faktura
+jest zatrzymana różnicą VAT, wyjście to JPK z księgową (KPiR i CSV działają);
+przepisanie pozycji starych importów to osobna decyzja.
 
 ## Co widzi klient
 
@@ -110,8 +157,15 @@ celowa, nie „do poprawienia tylko w JPK_FA”.
 
 ## Czego te sesje nie zmieniają (dalej otwarte)
 
-- **C5c** — ceny brutto (`P_9B`, `P_11A`, `P_11Vat`): dziś odmowa z numerem
-  (netto pozycji ≠ netto nagłówka). Warunek D-A4-1b-3 PR C.
+- **C5c-b** — import pliku JPK_FA (`jpk-fa-parser.ts`) czyta tylko `P_9A`/`P_11`
+  (szkice z netto 0 przy cenach brutto). **C5c-c** — własne faktury FaktFlow
+  mają `P_14_x` = suma VAT pozycji bez `P_11Vat` (art. 106e ust. 10 vs ust. 1
+  pkt 14) — pytanie do doradcy podatkowego. **C5c-e** — brak `P_8B` zapisuje
+  ilość 0. **PR C** — oryginał w cenach brutto nie da się dziś wyrazić treścią
+  FaktFlow (generatory piszą tylko `P_9A`/`P_11`, korekta odmawia bez ceny
+  netto): przed PR C zatrzymać albo ustalić regułę.
+- **C5b-d** (rozszerzone o C5c): cena brutto (`P_9B`) na PDF i karcie
+  faktury; dziś PDF drukuje cenę netto 0 dla pozycji z cenami brutto.
 - **C5b-b** — nabywca z `NrID` (zagraniczny bez VAT-UE) i `JST`/`GV` z pliku
   (dziś stałe 2). **C5b-c** — `ksef_accepted_at` = chwila importu, `notes`
   „[import]…” drukowane na PDF, Stopka z pliku pomijana. **C5b-d** — PDF bez

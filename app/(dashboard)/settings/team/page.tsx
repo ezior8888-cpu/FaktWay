@@ -1,5 +1,3 @@
-import { Users } from 'lucide-react';
-
 import { TeamManagement } from '@/components/team/team-management';
 import { emailsForUserIds } from '@/lib/auth/auth-users';
 import { getPageContextWithRole } from '@/lib/supabase/page-context';
@@ -133,28 +131,14 @@ export default async function TeamSettingsPage() {
     };
   });
 
+  // Zakładka „Zespół” (plan P14, bez odpowiednika w Finorze) — sekcje
+  // i wiersze Finory w `TeamManagement`.
   return (
-    <div className="space-y-8 max-w-4xl">
-      <div className="flex items-center gap-4">
-        <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-          <Users className="h-6 w-6 text-muted-foreground" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-display font-semibold tracking-tighter-display">
-            Zespół
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Zarządzaj członkami organizacji, zaproszeniami i prośbami o dostęp.
-          </p>
-        </div>
-      </div>
-
-      <TeamManagement
-        members={members}
-        invitations={invitations}
-        joinRequests={joinRequests}
-        currentRole={role}
-      />
-    </div>
+    <TeamManagement
+      members={members}
+      invitations={invitations}
+      joinRequests={joinRequests}
+      currentRole={role}
+    />
   );
 }

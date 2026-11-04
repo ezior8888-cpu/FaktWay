@@ -1,97 +1,87 @@
-import Link from 'next/link';
-import { Sparkles } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
+import { ImportCenter, ImportHeader } from '@/components/import-danych/import-center';
+import { IMPORT_HISTORY_COLUMNS, IMPORT_HISTORY_LIMIT } from '@/components/import-danych/import-model';
+import { pauseErrorFromParam } from '@/components/import-danych/ksef-history-model';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
+import { readKsefHistorySyncStatus } from '@/lib/ksef/history-sync/status';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ImportDanychPage() {
-  const { supabase, tenantId } = await getPageContext();
+type SearchParams = Record<string, string | string[] | undefined>;
+
+/**
+ * Import danych — centrum importu w stylu Accounts Finory (poprawka Bartosza
+ * 22.10.2026: import danych w stylu Finory).
+ *
+ * Decyzja Bartosza 22.10.2026: Magiczny import znika. Karta „Historia z KSeF”
+ * pokazuje automatyczne pobieranie całej historii z KSeF (sprzedaż i zakupy,
+ * potem na bieżąco sprzedaż spoza FaktWay), a „Przeprowadzka z innego
+ * programu” — import pliku CSV z czterech dużych programów.
+ *
+ * Tylko odczyty, wszystkie klientem użytkownika (RLS): `tenants` (flaga
+ * `has_ksef_credentials` i potwierdzenie certyfikatu `ksef_verified_at`
+ * + `ksef_verified_environment`, nigdy zaszyfrowany blob — AUD-103), ostatnie
+ * `import_jobs` (`import_jobs_tenant_isolation`) i stan synchronizacji
+ * historii (`readKsefHistorySyncStatus` — tylko kolumny dostępne dla klienta,
+ * bez szczegółów błędów). Wstrzymanie pobierania: formularz karty
+ * → `setKsefHistoryPausedAction` (właściciel, 2FA); błąd wraca jako
+ * `?wstrzymanie=blad`, brak 2FA jako `?wstrzymanie=2fa`.
+ *
+ * Poprawka po przeglądzie (decyzja Bartosza 22.10.2026): cron pobiera
+ * historię tylko firmom z certyfikatem potwierdzonym dla KSEF_ENV, więc karta
+ * dostaje to samo potwierdzenie (`hasConfiguredKsefProof`) — bez niego prosi
+ * o ponowne wgranie certyfikatu zamiast obiecywać start.
+ */
+export default async function ImportDanychPage({ searchParams }: { searchParams?: Promise<SearchParams> }) {
+  const { supabase, tenantId, role } = await getPageContext();
+  const params = (await searchParams) ?? {};
+  const pauseError = pauseErrorFromParam(params.wstrzymanie);
 
   if (!tenantId) {
     return (
-      <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
-        <div>
-          <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Import danych
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
-            Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
-          </p>
-        </div>
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 text-center text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_58%,transparent)]">
-          Import uruchomisz po założeniu organizacji i konfiguracji certyfikatu KSeF.
-        </div>
+      <div className="ff-page-fill flex flex-col gap-6">
+        <ImportHeader />
+        <Alert>
+          <AlertDescription>
+            Import uruchomisz po założeniu organizacji i konfiguracji certyfikatu KSeF.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('name, nip, has_ksef_credentials')
-    .eq('id', tenantId)
-    .single();
+  const [{ data: tenant }, history, ksefHistory] = await Promise.all([
+    supabase
+      .from('tenants')
+      .select('name, nip, has_ksef_credentials, ksef_verified_at, ksef_verified_environment')
+      .eq('id', tenantId)
+      .single(),
+    supabase
+      .from('import_jobs')
+      .select(IMPORT_HISTORY_COLUMNS)
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(IMPORT_HISTORY_LIMIT),
+    readKsefHistorySyncStatus(supabase, tenantId).catch((error: unknown) => {
+      console.error('[import-danych] stan historii KSeF:', error instanceof Error ? error.name : 'błąd');
+      return { ok: false } as const;
+    }),
+  ]);
 
-  const hasCredentials = !!tenant?.has_ksef_credentials;
+  if (history.error) console.error('[import-danych] historia importów:', history.error.message);
 
   return (
-    <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
-      <div>
-        <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-          Import danych
-        </h1>
-        <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
-          Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
-        </p>
-      </div>
-
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 sm:p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)] sm:mx-0">
-            <Sparkles className="h-6 w-6 text-[var(--ff-primary)]" />
-          </div>
-          <div className="flex-1 space-y-4 text-center sm:text-left">
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">
-                Magiczny Import historii
-              </h2>
-              <p className="mt-2 text-[14px] leading-relaxed text-[color-mix(in_srgb,var(--ff-on-surface-variant)_58%,transparent)]">
-                Pobierz faktury z KSeF w wybranym zakresie i uzupełnij kartotekę
-                kontrahentów oraz produktów bez ręcznego przepisywania.
-              </p>
-            </div>
-            {hasCredentials ? (
-              <Button asChild variant="glass-primary" size="lg" className="w-full sm:w-auto">
-                <Link
-                  href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
-                >
-                  <Sparkles className="mr-2 h-4 w-4 shrink-0" />
-                  Rozpocznij Magiczny Import
-                </Link>
-              </Button>
-            ) : (
-              <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 p-4 text-left text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)]">
-                Aby uruchomić import, najpierw wgraj certyfikat KSeF w{' '}
-                <Link
-                  href="/settings/ksef"
-                  className="font-semibold text-[var(--ff-primary)] underline underline-offset-2"
-                >
-                  ustawieniach KSeF
-                </Link>
-                .
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {tenant?.nip ? (
-        <p className="text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
-          Aktywna organizacja: <span className="font-medium">{tenant.name}</span>{' '}
-          · NIP <span className="font-mono">{tenant.nip}</span>
-        </p>
-      ) : null}
-    </div>
+    <ImportCenter
+      tenantId={tenantId}
+      tenantName={tenant?.name}
+      nip={tenant?.nip}
+      hasCertificate={!!tenant?.has_ksef_credentials}
+      certificateConfirmed={hasConfiguredKsefProof(tenant?.ksef_verified_at, tenant?.ksef_verified_environment)}
+      jobs={history.error ? null : (history.data ?? [])}
+      ksefHistory={ksefHistory.ok ? ksefHistory.status : null}
+      isOwner={role === 'owner'}
+      pauseError={pauseError}
+    />
   );
 }

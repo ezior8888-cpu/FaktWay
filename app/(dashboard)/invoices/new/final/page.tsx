@@ -1,17 +1,15 @@
 import { FinalInvoiceForm } from '@/components/invoices/final-form';
 import { SellerProfileBlock } from '@/components/invoices/seller-profile-block';
 import { createClient } from '@/lib/supabase/server';
-import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { loadTenantSellerForForms } from '@/lib/invoices/load-tenant-seller';
 import { findAdvancesAlreadySettled } from '@/lib/invoices/settled-advances';
 
 export default async function NewFinalInvoicePage() {
-  const seller = await loadTenantSellerForForms();
-  if (!seller) return <SellerProfileBlock />;
+  const loaded = await loadTenantSellerForForms();
+  if (!loaded) return <SellerProfileBlock />;
 
-  const tenantId = await getActiveOrgIdFromCookies();
-  if (!tenantId) return <SellerProfileBlock />;
-
+  // UX-01: sprzedawca, lista zaliczek i firma odsyłana przy zapisie — jedna firma.
+  const { seller, tenantId } = loaded;
   const supabase = await createClient();
   const { data: advances } = await supabase
     .from('invoices')
@@ -38,9 +36,7 @@ export default async function NewFinalInvoicePage() {
     // celowo: patrz komentarz wyżej
   }
 
-  return (
-    <div className="max-w-4xl">
-      <FinalInvoiceForm initialSeller={seller} advanceInvoices={available} />
-    </div>
-  );
+  // P5: szerokość daje siatka Finory w formularzu (dokument + kolumna 18rem).
+  // `key` montuje formularz od nowa po przełączeniu firmy w tej karcie (UX-01).
+  return <FinalInvoiceForm key={tenantId} initialSeller={seller} advanceInvoices={available} tenantId={tenantId} />;
 }

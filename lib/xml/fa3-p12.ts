@@ -1,14 +1,14 @@
 /**
- * Stawka VAT pozycji FA(3) (`P_12`, typ `TStawkaPodatku`) ↔ stawka FaktFlow
+ * Stawka VAT pozycji FA(3) (`P_12`, typ `TStawkaPodatku`) ↔ stawka FaktWay
  * (`VatRate`) — W9 z planu „zero zgubionych faktur” (sesja C5a).
  *
- * Generatory FaktFlow (fa3-generator, korekty, zaliczki/ROZ) zapisują 8 stawek
+ * Generatory FaktWay (fa3-generator, korekty, zaliczki/ROZ) zapisują 8 stawek
  * jako P_12: „23”, „8”, „5”, „0 KR”, „zw”, „oo”, „np I”, „np II”. Import
  * historii z KSeF zapisywał P_12 dosłownie, więc faktura z „0 KR” czy „np II”
  * miała w bazie stawkę, której eksporty nie znają — JPK_FA i JPK_V7M padały na
  * całym miesiącu. Tu jedno odwzorowanie odwrotne.
  *
- * Kody FA(3) bez odpowiednika w FaktFlow („0 WDT”, „0 EX”, „22”, „7” i ryczałt
+ * Kody FA(3) bez odpowiednika w FaktWay („0 WDT”, „0 EX”, „22”, „7” i ryczałt
  * taksówek „4”/„3”) zapisujemy DOSŁOWNIE: zamiana na „0” albo „23” przekłamałaby
  * JPK_V7M (WDT i eksport mają własne pola) i wyliczony VAT. JPK odmawia wtedy
  * z nazwą dokumentu (`JpkDocumentNotSupportedError`). Pozycja bez P_12 dostaje
@@ -24,14 +24,14 @@ const VAT_RATE_SET: Readonly<Record<VatRate, true>> = {
   '23': true, '8': true, '5': true, '0': true, zw: true, oo: true, np: true, np_ii: true,
 };
 
-/** Stawki FaktFlow (lustro `VatRate`, kompletność pilnuje `Record`). */
+/** Stawki FaktWay (lustro `VatRate`, kompletność pilnuje `Record`). */
 export const VAT_RATES = Object.keys(VAT_RATE_SET) as readonly VatRate[];
 
 export function isVatRate(value: unknown): value is VatRate {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(VAT_RATE_SET, value);
 }
 
-/** Stawka FaktFlow → `P_12` FA(3) — te same pary co w generatorach (test je spina). */
+/** Stawka FaktWay → `P_12` FA(3) — te same pary co w generatorach (test je spina). */
 export const FA3_P12_BY_VAT_RATE: Readonly<Record<VatRate, string>> = {
   '23': '23',
   '8': '8',
@@ -47,7 +47,7 @@ const VAT_RATE_BY_FA3_P12: ReadonlyMap<string, VatRate> = new Map(
   (Object.entries(FA3_P12_BY_VAT_RATE) as Array<[VatRate, string]>).map(([rate, p12]) => [p12, rate]),
 );
 
-/** Kody FA(3) bez odpowiednika w FaktFlow — zapisywane dosłownie, JPK ich nie wykazuje. */
+/** Kody FA(3) bez odpowiednika w FaktWay — zapisywane dosłownie, JPK ich nie wykazuje. */
 export const FA3_ONLY_VAT_RATES = ['0 WDT', '0 EX', '22', '7', '4', '3'] as const;
 export type Fa3OnlyVatRate = (typeof FA3_ONLY_VAT_RATES)[number];
 
@@ -61,7 +61,7 @@ function normalizeCode(raw: unknown): string {
   return raw == null ? '' : String(raw).replace(/\s+/g, ' ').trim();
 }
 
-/** `P_12` → stawka FaktFlow (8 kodów bez straty informacji); `null` dla innych. */
+/** `P_12` → stawka FaktWay (8 kodów bez straty informacji); `null` dla innych. */
 export function domainVatRateFromFa3P12(p12: unknown): VatRate | null {
   return VAT_RATE_BY_FA3_P12.get(normalizeCode(p12)) ?? null;
 }
@@ -122,7 +122,7 @@ function rateFromSingleBucket(header: Fa3RateHeader, among: readonly Fa3NetField
 
 /**
  * Stawka pozycji zaimportowanej z KSeF (do zapisu w `invoice_line_items.vat_rate`):
- *  - jeden z 8 kodów FaktFlow → stawka FaktFlow;
+ *  - jeden z 8 kodów FaktWay → stawka FaktWay;
  *  - kod FA(3) bez odpowiednika → ten kod dosłownie;
  *  - gołe „0” / „np” (FA(2)) → wariant z jedynej niezerowej sumy rodziny
  *    (P_13_6_1/2/3, P_13_8/9);
@@ -159,7 +159,7 @@ const LABELS: Readonly<Record<string, string>> = {
   [UNKNOWN_VAT_RATE]: 'pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury',
 };
 
-/** Opis kodu bez odpowiednika w FaktFlow (komunikaty i karta faktury); `null` dla stawek FaktFlow. */
+/** Opis kodu bez odpowiednika w FaktWay (komunikaty i karta faktury); `null` dla stawek FaktWay. */
 export function importedVatRateLabel(code: string): string | null {
   return LABELS[code] ?? null;
 }

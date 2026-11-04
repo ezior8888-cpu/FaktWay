@@ -8,6 +8,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface CertExpiryProps {
   tenantName: string;
   daysRemaining: number;
@@ -28,6 +30,7 @@ export default function CertExpiry({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={{ ...headingStyle, color: accentColor }}>
             {urgent ? '⚠️ PILNE: ' : ''}
             Certyfikat KSeF wygasa za {daysRemaining} {dayWord}
@@ -52,7 +55,7 @@ export default function CertExpiry({
               <br />
               2. Wygeneruj nowy certyfikat (typ 1 — uwierzytelnienie)
               <br />
-              3. Wgraj go w ustawieniach KSeF SaaS
+              3. Wgraj go w ustawieniach FaktWay
             </Text>
           </Section>
         </Container>

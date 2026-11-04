@@ -24,10 +24,13 @@ const user = {
 };
 const current = 'Synthetic-current!123';
 const nextPassword = 'Synthetic-next!456';
+// Token widżetu Turnstile idzie do GoTrue razem z hasłem (captcha-w-gotrue).
+const captchaToken = 'synthetic-turnstile-token';
 function form(nonce?: string) {
   const data = new FormData();
   data.set('current_password', current);
   data.set('new_password', nextPassword);
+  data.set('cf-turnstile-response', captchaToken);
   if (nonce !== undefined) data.set('nonce', nonce);
   return data;
 }
@@ -76,14 +79,14 @@ describe('password operations', () => {
     mocks.reauth.mockResolvedValue({ ok: false, error: 'rate_limited', retryAfter: 117 });
     expect(await action(form())).toEqual({ ok: false, error: 'rate_limited', retryAfter: 117 });
     expect(mocks.attempt).not.toHaveBeenCalled();
-    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current);
+    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current, captchaToken);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
   it.each([changePasswordAction, requestPasswordChangeNonceAction])('fails closed if the account limiter is unavailable', async (action) => {
     mocks.reauth.mockResolvedValue({ ok: false, error: 'verification_unavailable' });
     expect(await action(form())).toEqual({ ok: false, error: 'verification_unavailable' });
-    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current);
+    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current, captchaToken);
     expect(mocks.attempt).not.toHaveBeenCalled();
   });
   it.each([changePasswordAction, requestPasswordChangeNonceAction])('keeps wrong passwords and verification outages distinct', async (action) => {
@@ -115,7 +118,7 @@ describe('password operations', () => {
   it.each(['123456', '1234567890'])('passes a bounded nonce and current password on the original client', async (nonce) => {
     expect(await changePasswordAction(form(nonce))).toEqual({ ok: true });
     expect(mocks.update).toHaveBeenCalledExactlyOnceWith({ password: nextPassword, current_password: current, nonce });
-    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current);
+    expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith(current, captchaToken);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.audit).toHaveBeenCalledExactlyOnceWith({ action: 'auth.password_changed', tenantId: null, userId: id });
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain(current);

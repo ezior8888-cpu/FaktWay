@@ -33,7 +33,7 @@ describe('service worker: cache never crosses account boundaries', () => {
 
   it.each([
     '/_next/static/chunks/app-abc123.js', '/_next/static/css/app.css',
-    '/_next/static/media/font.woff2', '/favicon/favicon.svg',
+    '/_next/static/media/font.woff2', '/icons/icon-192x192.png', '/favicon.ico', '/icon.svg',
   ])('allows a known public static resource %s', (url) => {
     expect(isPublicStaticAsset(new URL(url, origin), origin)).toBe(true);
   });
@@ -62,7 +62,7 @@ describe('service worker integration', () => {
         { url: '/_next/static/chunks/app.js', revision: 'one' },
         { url: '/dashboard', revision: 'one' },
         { url: '/api/gdpr/export', revision: 'one' },
-        '/favicon/favicon.svg',
+        '/icon.svg',
       ],
       caches: { keys: async () => ['apis', 'pages-rsc', 'faktflow-public-static-v1'], delete: remove },
       addEventListener: (type: string, listener: (event: { waitUntil: (promise: Promise<unknown>) => void }) => void) => worker.events.set(type, listener),
@@ -77,7 +77,7 @@ describe('service worker integration', () => {
       }>;
     };
     expect(options.precacheEntries).toEqual([
-      { url: '/_next/static/chunks/app.js', revision: 'one' }, '/favicon/favicon.svg',
+      { url: '/_next/static/chunks/app.js', revision: 'one' }, '/icon.svg',
     ]);
     expect(options.runtimeCaching).toHaveLength(2);
     const staticRoute = options.runtimeCaching[0]!;

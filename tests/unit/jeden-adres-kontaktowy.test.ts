@@ -16,10 +16,10 @@ import { isPublicPath } from '@/lib/supabase/middleware';
 const ROOT = join(__dirname, '..', '..');
 const SCANNED = ['app', 'components', 'lib', 'content'];
 const EXTENSIONS = /\.(tsx?|mdx?)$/;
-// Adresy @faktflow.pl dozwolone poza jedną skrzynką: nadawcy maili z konwencji
-// w lib/email/send.ts (odpowiedzi idą na SUPPORT_EMAIL przez Reply-To).
-const ALLOWED_FAKTFLOW = new Set([SUPPORT_EMAIL, 'no-reply@app.faktflow.pl', 'hello@hello.faktflow.pl']);
-
+// Adresy @faktway.pl dozwolone poza jedną skrzynką: nadawcy maili z konwencji
+// w lib/email/send.ts (odpowiedzi idą na SUPPORT_EMAIL przez Reply-To) —
+// te same co RESEND_FROM_* na produkcji.
+const ALLOWED_FAKTWAY = new Set([SUPPORT_EMAIL, 'powiadomienia@faktway.pl', 'kontakt@faktway.pl']);
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -51,17 +51,25 @@ describe('jeden adres kontaktowy', () => {
     expect(scan(/ksef-saas\.pl/g)).toEqual([]);
   });
 
-  it('adresy @faktflow.pl tylko z listy (jedna skrzynka + nadawca no-reply)', () => {
-    const others = scan(/[a-z0-9._-]+@(?:[a-z0-9-]+\.)*faktflow\.pl/gi)
-      .filter((hit) => !ALLOWED_FAKTFLOW.has(hit.split(' ').at(-1) ?? ''));
+  it('adresy @faktway.pl tylko z listy (jedna skrzynka + nadawca no-reply)', () => {
+    const others = scan(/[a-z0-9._-]+@(?:[a-z0-9-]+\.)*faktway\.pl/gi)
+      .filter((hit) => !ALLOWED_FAKTWAY.has(hit.split(' ').at(-1) ?? ''));
     expect(others).toEqual([]);
   });
 
-  it('adres strony z NEXT_PUBLIC_APP_URL, bez końcowego ukośnika; domyślnie faktflow.pl', () => {
-    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://faktflow.pl/');
-    expect(siteUrl()).toBe('https://faktflow.pl');
+  // Zmiana marki 10.2026: ostatnie adresy w dawnej domenie (lustro tekstów RAISE
+  // z 00148) przepisała migracja 00151. Skrzynka w dawnej domenie dalej odbiera
+  // pocztę (ops/poczta/worker.mjs) — dla starych maili, nie dla nowych tekstów.
+  it('żadnych adresów @faktflow.pl (zmiana marki)', () => {
+    expect(scan(/[a-z0-9._-]+@(?:[a-z0-9-]+\.)*faktflow\.pl/gi)).toEqual([]);
+  });
+
+  it('adres strony z NEXT_PUBLIC_APP_URL, bez końcowego ukośnika; domyślnie faktway.pl', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://faktway.pl/');
+    expect(siteUrl()).toBe('https://faktway.pl');
     vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
-    expect(siteUrl()).toBe('https://faktflow.pl');
+    expect(siteUrl()).toBe('https://faktway.pl');
+    expect(SUPPORT_EMAIL).toBe('pomoc@faktway.pl');
   });
 });
 

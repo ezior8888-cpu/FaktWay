@@ -1,10 +1,13 @@
 'use client';
 
+// Plan Finora P15 (E10b): prymitywy Finory (`Button`, `Alert`). Logika bez
+// zmian: `useActionState(cancelGdprDeletionAction)`.
+
 import { useActionState, useEffect } from 'react';
+
+import { AuthMessage } from '@/components/auth/finora/auth-message';
 import { Button } from '@/components/ui/button';
-import {
-  authAlertErrorClass, authAlertSuccessClass, authPrimaryButtonClass, authSubtitleClass,
-} from '@/components/auth/auth-form-styles';
+
 import { cancelGdprDeletionAction, type GdprCancelState } from './actions';
 
 export function GdprCancelForm({ token }: { token: string }) {
@@ -14,18 +17,18 @@ export function GdprCancelForm({ token }: { token: string }) {
   }, [state.outcome]);
 
   if (state.outcome === 'canceled') {
-    return <div className={authAlertSuccessClass}>Żądanie usunięcia konta zostało anulowane. Twoje konto pozostaje aktywne.</div>;
+    return <AuthMessage tone="success">Żądanie usunięcia konta zostało anulowane. Twoje konto pozostaje aktywne.</AuthMessage>;
   }
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="token" value={token} />
-      <p className={authSubtitleClass}>
+      <p className="text-muted-foreground">
         Samo otwarcie linku nie zmienia Twojej decyzji. Użyj przycisku,
         aby anulować zaplanowane usunięcie konta.
       </p>
-      {state.outcome === 'invalid' && <div className={authAlertErrorClass}>Link jest nieprawidłowy, został już użyty lub usuwanie konta już się rozpoczęło.</div>}
-      {state.outcome === 'failed' && <div className={authAlertErrorClass}>Nie udało się potwierdzić anulowania. Spróbuj ponownie.</div>}
-      <Button type="submit" size="lg" className={authPrimaryButtonClass} disabled={pending}>
+      {state.outcome === 'invalid' && <AuthMessage tone="error">Link jest nieprawidłowy, został już użyty lub usuwanie konta już się rozpoczęło.</AuthMessage>}
+      {state.outcome === 'failed' && <AuthMessage tone="error">Nie udało się potwierdzić anulowania. Spróbuj ponownie.</AuthMessage>}
+      <Button type="submit" className="w-full" disabled={pending}>
         {pending ? 'Potwierdzanie...' : 'Zachowaj moje konto'}
       </Button>
     </form>

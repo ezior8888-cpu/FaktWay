@@ -18,8 +18,6 @@ export default async function ReminderSettingsPage() {
   const tenantName = tenant?.name ?? '';
 
   return (
-    <div className="max-w-3xl">
-      <ReminderSettingsForm initialSettings={settings} tenantName={tenantName} />
-    </div>
+    <ReminderSettingsForm initialSettings={settings} tenantName={tenantName} />
   );
 }

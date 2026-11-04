@@ -6,7 +6,7 @@ import { ArrowRight, Check, ShieldCheck } from 'lucide-react';
  *
  * Wcześniej był tu zdjęciowy JPG (`/marketing/hero.jpg`) w twardej ramce
  * `border + glow` — wyglądał nieostro i „doklejony". Zamiast tego pokazujemy
- * realistyczny podgląd faktury FaktFlow: ostry na każdym DPI (wektory + CSS),
+ * realistyczny podgląd faktury FaktWay: ostry na każdym DPI (wektory + CSS),
  * związany z produktem (faktura + status KSeF) i spójny z ciemnym motywem.
  */
 export function LandingHero() {
@@ -62,7 +62,7 @@ function InvoiceMockup() {
         <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
         <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
         <span className="ml-3 text-[11px] font-medium text-[var(--marketing-muted)]">
-          faktflow.pl · Faktura
+          faktway.pl · Faktura
         </span>
       </div>
 

@@ -2,8 +2,9 @@
  * Cache key conventions + TTL strategy (Faza 22).
  *
  * Reguła kluczy:
- *   `ff:<domain>:<scope>:<id>` (`ff` = FaktFlow namespace, izoluje od innych
- *   apek na tej samej instancji Redisa). `<scope>` opisuje typ danych.
+ *   `ff:<domain>:<scope>:<id>` (`ff` = namespace aplikacji — skrót po dawnej
+ *   nazwie, zostaje po zmianie marki na FaktWay, żeby nie unieważniać kluczy
+ *   w cache; izoluje od innych apek na tej samej instancji Redisa). `<scope>` opisuje typ danych.
  *
  * Reguła TTL:
  *   - Dane praktycznie niezmienne (NIP company, NIP whitelist) → 24h

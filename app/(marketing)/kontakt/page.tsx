@@ -1,66 +1,22 @@
 import type { Metadata } from 'next';
 import type { LucideIcon } from 'lucide-react';
-import { Mail, MapPin, MessageCircle } from 'lucide-react';
+import { BookOpen, Mail, MapPin, MessageCircle } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { SUPPORT_EMAIL } from '@/lib/site';
 
-// Faza 22: kontakt to czysto statyczna strona — cache na dobę.
+import { RevealGroup, RevealItem } from '@/components/site/motion';
+import { PageHero } from '@/components/site/page-hero';
+import { Container } from '@/components/site/ui';
+
+// Faza 22: kontakt to czysto statyczna strona, więc cache na dobę.
+// Czas odpowiedzi taki sam jak w regulaminie (lib/legal/documents/regulamin.ts).
 export const revalidate = 86400;
 
+// „| FaktWay” dopisuje szablon tytułu z layoutu stron marketingowych.
 export const metadata: Metadata = {
-  title: 'Kontakt — KSeF SaaS',
+  title: 'Kontakt',
 };
-
-const cardClass =
-  'block rounded-3xl border border-glass-border bg-glass-white p-7 shadow-glass backdrop-blur-glass transition-shadow duration-300 hover:shadow-glass-lg text-[var(--marketing-text)] no-underline';
-
-export default function ContactPage() {
-  return (
-    <div className="py-16 lg:py-24">
-      <div className="mx-auto max-w-3xl px-6">
-        <div className="mb-16 text-center">
-          <h1 className="font-editorial text-5xl font-semibold md:text-6xl">
-            Pomożemy
-          </h1>
-          <p className="mt-6 text-xl text-[var(--marketing-muted)]">
-            Czytamy każdą wiadomość. Odpowiadamy w ciągu 24h.
-          </p>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <ContactCard
-            icon={Mail}
-            title="Email"
-            value={SUPPORT_EMAIL}
-            href={`mailto:${SUPPORT_EMAIL}`}
-            note="Odpowiedź w 24h"
-          />
-          <ContactCard
-            icon={MessageCircle}
-            title="Live Chat"
-            value="W aplikacji"
-            href="/login"
-            note="Pon–Pt 9:00–17:00"
-          />
-          <ContactCard
-            icon={Mail}
-            title="Centrum pomocy"
-            value="Instrukcje krok po kroku"
-            href="/pomoc"
-            note="KSeF, faktury, import, konto"
-          />
-          <ContactCard
-            icon={MapPin}
-            title="Adres"
-            value="Poznań"
-            note="Polska 🇵🇱"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 type ContactCardProps = {
   icon: LucideIcon;
@@ -68,45 +24,86 @@ type ContactCardProps = {
   value: string;
   href?: string;
   note?: string;
-  /** Zewnętrzny URL (np. aplikacja produkcyjna). */
-  external?: boolean;
 };
 
-function ContactCard({
-  icon: Icon,
-  title,
-  value,
-  href,
-  note,
-  external,
-}: ContactCardProps) {
-  const inner = (
+const CARDS: ContactCardProps[] = [
+  {
+    icon: Mail,
+    title: 'Email',
+    value: SUPPORT_EMAIL,
+    href: `mailto:${SUPPORT_EMAIL}`,
+    note: 'Odpisuje człowiek, w dni robocze, zwykle w ciągu 2 dni roboczych',
+  },
+  {
+    icon: MessageCircle,
+    title: 'Czat pomocy',
+    value: 'W panelu, po zalogowaniu',
+    href: '/login',
+    note: 'Podpowiedzi z centrum pomocy. Odpowiada automat, a z czatu przejdziesz do człowieka',
+  },
+  {
+    icon: BookOpen,
+    title: 'Centrum pomocy',
+    value: 'Instrukcje krok po kroku',
+    href: '/pomoc',
+    note: 'KSeF, faktury, import, konto',
+  },
+  {
+    icon: MapPin,
+    title: 'Adres',
+    value: 'Poznań',
+    note: 'Polska',
+  },
+];
+
+export default function ContactPage() {
+  return (
     <>
-      <Icon className="mb-3 h-5 w-5 text-[var(--marketing-muted)]" />
-      <p className="text-xs font-medium uppercase tracking-wider text-[var(--marketing-muted)]">
-        {title}
-      </p>
-      <p className="mt-1 font-editorial text-lg font-semibold">
-        {value}
-      </p>
-      {note ? (
-        <p className="mt-1 text-xs text-[var(--marketing-muted)]">{note}</p>
-      ) : null}
+      <PageHero title="Pomożemy" lead="Czytamy każdą wiadomość. Odpowiadamy w dni robocze, zwykle w ciągu 2 dni roboczych." />
+
+      <section aria-label="Kanały kontaktu" className="pb-20 sm:pb-28">
+        <Container>
+          <RevealGroup as="ul" className="mx-auto grid max-w-4xl gap-6 sm:grid-cols-2">
+            {CARDS.map((card) => (
+              <RevealItem as="li" key={card.title}>
+                <ContactCard {...card} />
+              </RevealItem>
+            ))}
+          </RevealGroup>
+        </Container>
+      </section>
     </>
   );
+}
+
+function ContactCard({ icon: Icon, title, value, href, note }: ContactCardProps) {
+  const inner = (
+    <>
+      <span className="flex size-11 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+        <Icon aria-hidden className="size-5" />
+      </span>
+      <h2 className="mt-6 text-lg font-semibold tracking-tight">{title}</h2>
+      <p className={cn('mt-1 font-medium break-words', href ? 'text-primary' : 'text-foreground')}>{value}</p>
+      {note ? <p className="mt-2 text-sm text-muted-foreground">{note}</p> : null}
+    </>
+  );
+
+  const cardClass = 'block h-full rounded-3xl bg-card p-8 ring-1 ring-border';
 
   if (href) {
     return (
       <a
         href={href}
-        className={cn(cardClass)}
-        target={external ? '_blank' : undefined}
-        rel={external ? 'noopener noreferrer' : undefined}
+        className={cn(
+          cardClass,
+          'transition-shadow hover:shadow-lg hover:shadow-primary/5 hover:ring-primary/40',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        )}
       >
         {inner}
       </a>
     );
   }
 
-  return <div className={cn(cardClass, 'cursor-default')}>{inner}</div>;
+  return <div className={cardClass}>{inner}</div>;
 }

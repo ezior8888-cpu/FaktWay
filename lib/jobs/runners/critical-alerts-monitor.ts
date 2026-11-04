@@ -17,9 +17,15 @@
  *   9. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
  *  10. **KSeF reconciliation** — numer KSeF przy niezaakceptowanym statusie lub ROZ hold
  *  11. **Kopia bazy nieaktualna** — najnowsza udana kopia starsza niż 26 h (AUD-37)
- *  12. **Skrzynka KSeF zaległa** — firma bez przebiegu skrzynki > 6 h
+ *  12. **Skrzynka KSeF zaległa** — opóźnienie względem harmonogramu firmy (00160)
  *  13. **Opłacone bez faktury VAT** — płatność Stripe > 60 min bez dokumentu (AUD-40)
  *  14. **KSeF sending bez wyniku** — faktura w `sending` > 15 min od przejęcia wysyłki (#71)
+ *  15. **Historia KSeF stoi** — brak startu strumieni, przebieg bez sukcesu > 6 h,
+ *      zaległość bez postępu > 24 h, podejrzane błędy poświadczeń (decyzja
+ *      Bartosza 22.10.2026)
+ *  16. **Historia KSeF: faktury do operatora** — pozycje zablokowane z powodem
+ *      operatorskim i strumienie przy limicie (raz na dobę)
+ *  17. **Historia KSeF: 429 u wielu firm** — globalny bezpiecznik fan-outu
  *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
@@ -27,6 +33,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+import { OPERATOR_DUPLICATE_MESSAGES } from '@/lib/admin/ksef-operator-policy';
 import { alertCritical } from '@/lib/alerts/slack';
 import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
 import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
@@ -34,7 +41,10 @@ import { reconcileExpiredOpenCheckoutAttempts } from '@/lib/stripe/checkout-reco
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { configuredKsefEnvironment, requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { INBOX_ALARM_OVERDUE_MS } from '@/lib/ksef/inbox-schedule';
+import { readInboxAlarmCounts } from '@/lib/ksef/inbox-schedule-db';
+import { GLOBAL_429_TENANTS } from '@/lib/ksef/history-sync/constants';
 
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -255,7 +265,7 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
 
   await alertCritical(
     `${failures} Stripe payment failures w ostatniej godzinie`,
-    `Może to wskazywać na problem z Stripe API, błędne karty, lub fraud attempt.`,
+    `Może to wskazywać na problem z Stripe API, odmowy banków albo fraud attempt.`,
     {
       fields: [
         { label: 'Failures (1h)', value: String(failures) },
@@ -719,21 +729,70 @@ export async function checkKsefReconciliationAnomalies(): Promise<AlertCheckResu
   return { type: 'ksef_reconciliation', fired: true };
 }
 
+/** Wiersz I5D (00148), którego oryginał sprawdzono w innym albo nieznanym środowisku KSeF. */
+export const I5D_ENV_INVARIANT = 'I5D-env';
+
+/** PR C (00156, 5.8): przegląd pliku z oznaczeniem FaktWay (I5R) czeka na operatora co najmniej tyle — alarm krytyczny `I5R-72h`. */
+export const I5R_ALARM_INVARIANT = 'I5R-72h';
+const I5R_ALARM_AFTER_MS = 72 * 60 * 60 * 1000;
+
+/**
+ * Inwariant do alarmu dla wiersza strażnika. I5D (00148, D-A4-1b-3 PR B,
+ * decyzja 4) — faktura czeka na decyzję klienta: nie alarm, także gdy
+ * powiadomienie nie doszło. E-mail „czeka na Twoją decyzję” idzie raz i nikt
+ * go automatycznie nie ponawia; gdy nie doszedł — operator: „Przypomnij
+ * klientowi” (raport dzienny, /admin/ksef z kolumną „Powiadomienie klienta”). Wyjątek: dane oryginału sprawdzono w innym środowisku KSeF niż
+ * obecne (albo KSEF_ENV jest nieznane) — wtedy `I5D-env`, bo klient nie
+ * zapisze decyzji (RPC ENV). `null` — wiersz nie alarmuje.
+ *
+ * PR C (00156, spec v3 5.8): `I3K` (K zapisana decyzją bez sesji UPO albo bez daty nadania) nie alarmuje
+ * z monitora — to trwały sygnał w raporcie i KPI, a alarm Sentry idzie z akcji decyzji. `I5R`
+ * (przegląd pliku przez operatora; klient usłyszał „damy znać”) alarmuje dopiero po 72 h od ostatniego
+ * udanego sprawdzenia (`detail.checked_at`): młodsze `checked_at` → `null`; brak albo nieczytelna wartość →
+ * `I5R-72h` od razu (fail-closed: nie wiemy, od kiedy klient czeka). Zegar liczy od ostatniego sprawdzenia:
+ * „Tylko uzgodnij”, które pobierze plik, zapisuje nowe `checkedAt` i zaczyna 72 h od nowa (nowa ocena
+ * = nowy przegląd).
+ */
+function alertingInvariant(row: { invariant: string; detail?: unknown }, environment: string | null, now: number): string | null {
+  const detail = typeof row.detail === 'object' && row.detail !== null ? (row.detail as Record<string, unknown>) : null;
+  switch (row.invariant) {
+    case 'I5D':
+      return environment !== null && detail?.env === environment ? null : I5D_ENV_INVARIANT;
+    case 'I3K':
+      return null;
+    case 'I5R': {
+      const checkedAt = typeof detail?.checked_at === 'string' ? Date.parse(detail.checked_at) : Number.NaN;
+      return Number.isNaN(checkedAt) || now - checkedAt >= I5R_ALARM_AFTER_MS ? I5R_ALARM_INVARIANT : null;
+    }
+    default:
+      return row.invariant;
+  }
+}
+
 /**
  * W3 / cykl życia faktury (PR 4b): naruszenia strażnika `ksef_lifecycle_violations()`
  * (00131). I1 i klasa transient mają automat w `cron.ksef-lifecycle-reconcile`;
  * reszta (I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez
  * kodu, I5 stary wpis sent, I9 failed z numerem) to praca operatora w /admin/ksef.
+ * I5D (00148) — faktura czeka na decyzję klienta: nie alarm (e-mail idzie raz
+ * i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi” —
+ * widzi fakturę w raporcie i w /admin/ksef); I5D-env — alarm, bo klient nie
+ * zapisze decyzji. PR C (00156): I5R (przegląd pliku) — alarm `I5R-72h` po 72 h,
+ * I3K — bez alarmu z monitora (patrz `alertingInvariant`).
  */
 export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> {
   const { data, error } = await createAdminClient().rpc('ksef_lifecycle_violations');
   if (error) throw new Error(`ksef_lifecycle_violations: ${error.message}`);
-  const rows = (data ?? []) as Array<{ invariant: string }>;
-  if (rows.length === 0) {
+  const environment = configuredKsefEnvironment();
+  const now = Date.now();
+  const alerting = ((data ?? []) as Array<{ invariant: string; detail?: unknown }>)
+    .map((row) => alertingInvariant(row, environment, now))
+    .filter((inv): inv is string => inv !== null);
+  if (alerting.length === 0) {
     return { type: 'ksef_lifecycle_violations', fired: false };
   }
   const counts = new Map<string, number>();
-  for (const row of rows) counts.set(row.invariant, (counts.get(row.invariant) ?? 0) + 1);
+  for (const inv of alerting) counts.set(inv, (counts.get(inv) ?? 0) + 1);
   const invariants = [...counts.keys()].sort();
   // Nowy inwariant ma alarmować od razu, nawet gdy inny poszedł w oknie dedup.
   const alertKey = `ksef_lifecycle_violations:${invariants.join('+')}`;
@@ -742,7 +801,9 @@ export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> 
   }
   await alertCritical(
     'Strażnik cyklu życia faktury: naruszenia',
-    'Faktury w stanie sprzecznym z cyklem życia. I1 (queued bez zlecenia) i klasę transient naprawia cron ponowień; pozostałe wymagają operatora: I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez kodu z katalogu, I5 wpis sent starszy niż 48 h, I9 failed z numerem KSeF.',
+    'Faktury w stanie sprzecznym z cyklem życia. I1 (queued bez zlecenia) i klasę transient naprawia cron ponowień; pozostałe wymagają operatora: I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez kodu z katalogu, I5 wpis sent starszy niż 48 h, I9 failed z numerem KSeF. ' +
+      OPERATOR_DUPLICATE_MESSAGES.i5dEnv +
+      (counts.has(I5R_ALARM_INVARIANT) ? ` ${OPERATOR_DUPLICATE_MESSAGES.i5r72h}` : ''),
     {
       fields: invariants.map((inv) => ({ label: inv, value: String(counts.get(inv)) })),
       link: {
@@ -836,65 +897,263 @@ export async function checkStaleBackup(): Promise<AlertCheckResult> {
   return { type: 'stale_backup', fired: true };
 }
 
-/** Skrzynka KSeF bez pełnego przebiegu dłużej niż tyle godzin = alarm. */
-export const INBOX_STALE_HOURS = 6;
+/** Błędy certyfikatu naprawia klient; tyle firm i taki udział to już podejrzenie, że winny jest nasz klucz. */
+const INBOX_CREDENTIALS_SUSPICIOUS_MIN = 3;
+const INBOX_CREDENTIALS_SUSPICIOUS_SHARE = 0.2;
 
 /**
- * Zaległość skrzynki KSeF (AUD-18). Firma z poświadczeniami, której HWM
- * skrzynki (`ksef_inbox_cursor.window_to`) jest starszy niż próg, albo która
- * od podpięcia KSeF nie ma żadnego pełnego przebiegu. Łapie padające
- * przebiegi, zatrzymany cron i zaległość po stronie MF — wcześniej
- * niekompletne pobranie było tylko linijką w logu. W alarmie liczby, bez NIP.
+ * Zaległość skrzynki KSeF (AUD-18). Próg to opóźnienie względem harmonogramu
+ * firmy, nie stała liczba godzin: firma zimna po 5 h jest w normie, firma gorąca
+ * po 2 h nie. Liczy baza (00160), więc alarm działa też ponad limitem 1000 wierszy
+ * odpowiedzi. Firmy usunięte, nieaktywne i z wygasłym certyfikatem nie budzą:
+ * tych nikt nie odpytuje. W alarmie liczby, bez NIP.
  */
 export async function checkStaleInboxSync(): Promise<AlertCheckResult> {
-  const supabase = createAdminClient();
-  const { data: tenants, error } = await supabase
-    .from('tenants')
-    .select('id, ksef_verified_at')
-    .not('ksef_credentials_encrypted', 'is', null);
-  if (error) throw error;
-  const withKsef = (tenants ?? []) as { id: string; ksef_verified_at: string | null }[];
-  if (withKsef.length === 0) return { type: 'stale_inbox_sync', fired: false };
+  const environment = configuredKsefEnvironment();
+  if (!environment) return { type: 'stale_inbox_sync', fired: false };
 
-  const { data: cursors, error: cursorError } = await supabase
-    .from('ksef_inbox_cursor')
-    .select('tenant_id, window_to');
-  if (cursorError) throw cursorError;
-  const hwmByTenant = new Map(
-    ((cursors ?? []) as { tenant_id: string; window_to: string | null }[])
-      .map((row) => [row.tenant_id, row.window_to] as const),
-  );
-
-  const threshold = Date.now() - INBOX_STALE_HOURS * 60 * 60 * 1000;
-  let stale = 0;
-  let neverPolled = 0;
-  for (const tenant of withKsef) {
-    const hwm = hwmByTenant.get(tenant.id);
-    if (hwm) {
-      if (Date.parse(hwm) < threshold) stale += 1;
-    } else if (tenant.ksef_verified_at && Date.parse(tenant.ksef_verified_at) < threshold) {
-      neverPolled += 1;
-    }
+  const counts = await readInboxAlarmCounts(environment);
+  const credentialsSuspicious = counts.credentials >= INBOX_CREDENTIALS_SUSPICIOUS_MIN
+    && counts.credentials >= counts.live * INBOX_CREDENTIALS_SUSPICIOUS_SHARE;
+  if (counts.overdue + counts.failing + counts.hwmBehind + counts.unscheduled === 0 && !credentialsSuspicious) {
+    return { type: 'stale_inbox_sync', fired: false };
   }
-  if (stale + neverPolled === 0) return { type: 'stale_inbox_sync', fired: false };
 
   const shouldSend = await shouldSendAlert('stale_inbox_sync');
   if (!shouldSend) return { type: 'stale_inbox_sync', fired: false, reason: 'dedup' };
 
   await alertCritical(
     'Skrzynka KSeF nie pobiera faktur',
-    'Faktury kosztowe z KSeF nie są pobierane. Sprawdź kolejkę inbox.poll.tenant i cron.inbox-polling w workerze, Sentry i logi workera. Po naprawie skrzynka sama nadrobi zaległość od ostatniego pełnego przebiegu.',
+    'Faktury kosztowe z KSeF nie są pobierane zgodnie z harmonogramem. Sprawdź linię ksef.inbox.dispatch w logu workera, kolejkę inbox.poll.tenant i Sentry (docs/runbooks/skrzynka-ksef-pojemnosc.md). Po naprawie skrzynka sama nadrobi zaległość od ostatniego pełnego przebiegu.',
     {
       fields: [
-        { label: 'Firmy z zaległością', value: String(stale) },
-        { label: 'Firmy bez żadnego przebiegu', value: String(neverPolled) },
-        { label: 'Próg', value: `${INBOX_STALE_HOURS} h` },
+        { label: `Termin minął ponad ${Math.round(INBOX_ALARM_OVERDUE_MS / 60_000)} min temu`, value: String(counts.overdue) },
+        { label: 'Błędy po stronie KSeF albo naszej, bez sukcesu ponad normę poziomu', value: String(counts.failing) },
+        { label: 'HWM stoi ponad normę poziomu', value: String(counts.hwmBehind) },
+        { label: 'Bez harmonogramu (nikt nie odpytuje)', value: String(counts.unscheduled) },
+        { label: 'Podejrzane błędy certyfikatu', value: credentialsSuspicious ? String(counts.credentials) : '0' },
+        { label: 'Firmy z 429 w ostatniej godzinie', value: String(counts.rateLimited) },
+        { label: 'Żywe firmy z KSeF', value: String(counts.live) },
       ],
     },
   );
 
   await markAlertDelivered('stale_inbox_sync');
   return { type: 'stale_inbox_sync', fired: true };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026, 00155)
+// ═══════════════════════════════════════════════════════════════
+
+/** Przebieg historii bez sukcesu dłużej niż tyle godzin = alarm „stoi”. */
+export const KSEF_HISTORY_STALE_HOURS = 6;
+/** Zaległość bez postępu dłużej niż tyle godzin = alarm. */
+export const KSEF_HISTORY_BACKFILL_STUCK_HOURS = 24;
+/** Błędy poświadczeń naprawia klient — chyba że jest ich podejrzanie dużo. */
+const KSEF_HISTORY_CLIENT_FIXABLE = new Set(['credentials', 'certificate_expired', 'permission']);
+/** Powody zablokowania, które wymagają operatora (reszta ma ścieżkę klienta albo czeka na KSeF). */
+export const KSEF_HISTORY_OPERATOR_REASONS = [
+  'parse_failed', 'local_conflict', 'number_taken_local', 'file_import_mismatch', 'own_send_unresolved',
+  'save_failed', 'repair_failed', 'download_failed', 'archive_conflict', 'metadata_mismatch',
+] as const;
+const KSEF_HISTORY_BLOCKED_TTL_SECONDS = 24 * 60 * 60;
+
+interface HistoryStreamAlertRow {
+  tenant_id: string;
+  direction: 'outgoing' | 'incoming';
+  created_at: string;
+  backfill_completed_at: string | null;
+  backfill_issue: string | null;
+  backfill_progress_at: string | null;
+  last_success_at: string | null;
+  last_error_code: string | null;
+  last_error_at: string | null;
+  paused_until: string | null;
+  rate_limit_hits: number;
+  client_paused_at: string | null;
+}
+
+export interface KsefHistoryStaleClasses {
+  noStartOutgoing: number;
+  noStartIncoming: number;
+  stalled: number;
+  backfillStuck: number;
+  credentialsSuspicious: number;
+}
+
+/** Klasy alarmu „historia stoi” (czysta funkcja — testy). W wyniku tylko liczby. */
+export function ksefHistoryStaleClasses(input: {
+  tenants: Array<{ id: string; ksef_verified_at: string | null }>;
+  streams: HistoryStreamAlertRow[];
+  cursors: Array<{ tenant_id: string; last_page_at: string | null }>;
+  now: number;
+}): KsefHistoryStaleClasses {
+  const { tenants, streams, cursors, now } = input;
+  const hour = 3_600_000;
+  const out: KsefHistoryStaleClasses = { noStartOutgoing: 0, noStartIncoming: 0, stalled: 0, backfillStuck: 0, credentialsSuspicious: 0 };
+  const lastPage = new Map(cursors.map((c) => [c.tenant_id, c.last_page_at] as const));
+  const allOutgoing = streams.filter((s) => s.direction === 'outgoing');
+  const credentialStreams = allOutgoing.filter((s) => s.last_error_code === 'credentials');
+  let inboxWorksDespiteCredentials = 0;
+
+  for (const tenant of tenants) {
+    const outgoing = streams.find((s) => s.tenant_id === tenant.id && s.direction === 'outgoing');
+    const incoming = streams.find((s) => s.tenant_id === tenant.id && s.direction === 'incoming');
+    if (outgoing?.client_paused_at) continue;
+    if (!outgoing) {
+      if (tenant.ksef_verified_at && Date.parse(tenant.ksef_verified_at) < now - hour) out.noStartOutgoing += 1;
+      continue;
+    }
+    if (!incoming && Date.parse(outgoing.created_at) < now - 2 * hour) out.noStartIncoming += 1;
+
+    const lastOk = Date.parse(outgoing.last_success_at ?? outgoing.created_at);
+    const clientFixable = outgoing.last_error_code !== null && KSEF_HISTORY_CLIENT_FIXABLE.has(outgoing.last_error_code);
+    const rateLimited = outgoing.paused_until !== null && Date.parse(outgoing.paused_until) > now;
+    const longRateLimit = rateLimited && (outgoing.rate_limit_hits >= 4
+      || Date.parse(outgoing.paused_until!) > now + KSEF_HISTORY_STALE_HOURS * hour);
+    if (lastOk < now - KSEF_HISTORY_STALE_HOURS * hour && !clientFixable && (!rateLimited || longRateLimit)) {
+      out.stalled += 1;
+    }
+    for (const stream of [outgoing, incoming]) {
+      if (!stream || stream.backfill_completed_at || stream.backfill_issue === 'capacity') continue;
+      const progress = Date.parse(stream.backfill_progress_at ?? stream.created_at);
+      if (progress < now - KSEF_HISTORY_BACKFILL_STUCK_HOURS * hour) out.backfillStuck += 1;
+    }
+    if (outgoing.last_error_code === 'credentials' && outgoing.last_error_at) {
+      const page = lastPage.get(tenant.id);
+      // Skrzynka tej firmy pobiera faktury tym samym certyfikatem — błąd jest po naszej stronie.
+      if (page && Date.parse(page) > Date.parse(outgoing.last_error_at)) inboxWorksDespiteCredentials += 1;
+    }
+  }
+  const manyCredentialErrors = credentialStreams.length >= 3
+    && allOutgoing.length > 0 && credentialStreams.length / allOutgoing.length >= 0.2;
+  out.credentialsSuspicious = manyCredentialErrors ? credentialStreams.length : inboxWorksDespiteCredentials;
+  return out;
+}
+
+/**
+ * Historia KSeF stoi (punkt 5 i 8 krytyki): strumienie nie wystartowały,
+ * przebieg nie ma sukcesu od 6 h (poza błędami, które naprawia klient,
+ * i krótką pauzą po 429), zaległość bez postępu od doby, podejrzane błędy
+ * poświadczeń. Firmy wstrzymane przez klienta — pomijane.
+ */
+export async function checkStaleKsefHistorySync(): Promise<AlertCheckResult> {
+  const type = 'stale_ksef_history_sync';
+  const environment = configuredKsefEnvironment();
+  if (!environment) return { type, fired: false };
+  const supabase = createAdminClient();
+  const [tenantsRes, streamsRes, cursorsRes] = await Promise.all([
+    supabase.from('tenants').select('id, ksef_verified_at')
+      .not('ksef_credentials_encrypted', 'is', null)
+      .not('ksef_verified_at', 'is', null)
+      .eq('ksef_verified_environment', environment)
+      .is('deleted_at', null)
+      .eq('is_active', true),
+    supabase.from('ksef_history_sync')
+      .select('tenant_id, direction, created_at, backfill_completed_at, backfill_issue, backfill_progress_at, last_success_at, last_error_code, last_error_at, paused_until, rate_limit_hits, client_paused_at')
+      .eq('environment', environment),
+    supabase.from('ksef_inbox_cursor').select('tenant_id, last_page_at'),
+  ]);
+  for (const r of [tenantsRes, streamsRes, cursorsRes]) if (r.error) throw r.error;
+  const classes = ksefHistoryStaleClasses({
+    tenants: (tenantsRes.data ?? []) as Array<{ id: string; ksef_verified_at: string | null }>,
+    streams: (streamsRes.data ?? []) as HistoryStreamAlertRow[],
+    cursors: (cursorsRes.data ?? []) as Array<{ tenant_id: string; last_page_at: string | null }>,
+    now: Date.now(),
+  });
+  const total = Object.values(classes).reduce((a, b) => a + b, 0);
+  if (total === 0) return { type, fired: false };
+
+  if (!(await shouldSendAlert(type))) return { type, fired: false, reason: 'dedup' };
+  await alertCritical(
+    'Synchronizacja historii KSeF stoi',
+    'Synchronizacja historii KSeF stoi. Sprawdź `scripts/ops/ksef-historia.sh stan`, kolejkę ksef.history-sync.tenant i cron.ksef-history-sync, Sentry. Po naprawie pobieranie wznowi się od zapisanego miejsca (docs/runbooks/synchronizacja-historii-ksef.md).',
+    {
+      fields: [
+        { label: 'Bez startu sprzedaży (> 1 h od weryfikacji)', value: String(classes.noStartOutgoing) },
+        { label: 'Bez startu zakupów (> 2 h; zwykle przyczynę pokazuje stale_inbox_sync)', value: String(classes.noStartIncoming) },
+        { label: `Bez sukcesu > ${KSEF_HISTORY_STALE_HOURS} h`, value: String(classes.stalled) },
+        { label: `Zaległość bez postępu > ${KSEF_HISTORY_BACKFILL_STUCK_HOURS} h`, value: String(classes.backfillStuck) },
+        { label: 'Podejrzane błędy poświadczeń', value: String(classes.credentialsSuspicious) },
+      ],
+    },
+  );
+  await markAlertDelivered(type);
+  return { type, fired: true };
+}
+
+/**
+ * Faktury historii KSeF, których nie pobraliśmy z powodu wymagającego
+ * operatora, i strumienie przy limicie dziennika — raz na dobę.
+ */
+export async function checkKsefHistoryBlocked(): Promise<AlertCheckResult> {
+  const type = 'ksef_history_blocked';
+  const environment = configuredKsefEnvironment();
+  if (!environment) return { type, fired: false };
+  const supabase = createAdminClient();
+  const [countsRes, capacityRes] = await Promise.all([
+    supabase.from('ksef_history_item_counts')
+      .select('reason_code, item_count')
+      .eq('environment', environment)
+      .eq('status', 'blocked')
+      .in('reason_code', [...KSEF_HISTORY_OPERATOR_REASONS]),
+    supabase.from('ksef_history_sync')
+      .select('id', { count: 'exact', head: true })
+      .eq('environment', environment)
+      .eq('backfill_issue', 'capacity'),
+  ]);
+  if (countsRes.error) throw countsRes.error;
+  if (capacityRes.error || typeof capacityRes.count !== 'number') {
+    throw capacityRes.error ?? new Error('ksef_history_sync capacity count unavailable');
+  }
+  const byReason = new Map<string, number>();
+  for (const row of (countsRes.data ?? []) as Array<{ reason_code: string | null; item_count: number }>) {
+    if (!row.reason_code) continue;
+    byReason.set(row.reason_code, (byReason.get(row.reason_code) ?? 0) + (Number(row.item_count) || 0));
+  }
+  const blocked = [...byReason.values()].reduce((a, b) => a + b, 0);
+  const capacity = capacityRes.count;
+  if (blocked + capacity === 0) return { type, fired: false };
+
+  if (!(await shouldSendAlert(type))) return { type, fired: false, reason: 'dedup' };
+  await alertCritical(
+    'Historia KSeF: faktury do sprawdzenia',
+    'Synchronizacja historii KSeF odłożyła faktury, które wymagają operatora. Lista: `scripts/ops/ksef-historia.sh pozycje <firma>`; po wyjaśnieniu `odblokuj <firma> <powód> --tak` (docs/runbooks/synchronizacja-historii-ksef.md).',
+    {
+      fields: [
+        ...[...byReason.entries()].sort(([a], [b]) => a.localeCompare(b))
+          .map(([reason, count]) => ({ label: reason, value: String(count) })),
+        { label: 'Strumienie przy limicie 25 000', value: String(capacity) },
+      ],
+    },
+  );
+  await markAlertDelivered(type, KSEF_HISTORY_BLOCKED_TTL_SECONDS);
+  return { type, fired: true };
+}
+
+/** Wiele firm z 429 w ostatniej godzinie — ten sam warunek co bezpiecznik fan-outu. */
+export async function checkKsefHistoryRateLimited(): Promise<AlertCheckResult> {
+  const type = 'ksef_history_rate_limited';
+  const environment = configuredKsefEnvironment();
+  if (!environment) return { type, fired: false };
+  const { count, error } = await createAdminClient()
+    .from('ksef_history_sync')
+    .select('id', { count: 'exact', head: true })
+    .eq('environment', environment)
+    .eq('direction', 'outgoing')
+    .gte('rate_limited_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+  if (error || typeof count !== 'number') throw error ?? new Error('ksef_history_sync rate limit count unavailable');
+  if (count < GLOBAL_429_TENANTS) return { type, fired: false };
+
+  if (!(await shouldSendAlert(type))) return { type, fired: false, reason: 'dedup' };
+  await alertCritical(
+    'Historia KSeF: KSeF ogranicza tempo',
+    'KSeF ogranicza tempo wielu firmom — pobieranie historii wstrzymane automatycznie, żeby nie ryzykować blokady adresu. Wysyłka i skrzynka działają. Sprawdź `ksef-historia.sh stan`; w razie potrzeby `wstrzymaj-wszystko`.',
+    { fields: [{ label: 'Firmy z 429 w ostatniej godzinie', value: String(count) }] },
+  );
+  await markAlertDelivered(type);
+  return { type, fired: true };
 }
 
 /**
@@ -954,6 +1213,16 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
       step.run('check-stale-inbox-sync', () =>
         checkStaleInboxSync().catch(captureAndReturn('stale_inbox_sync')),
+      ),
+      // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): 18 → 21.
+      step.run('check-stale-ksef-history-sync', () =>
+        checkStaleKsefHistorySync().catch(captureAndReturn('stale_ksef_history_sync')),
+      ),
+      step.run('check-ksef-history-blocked', () =>
+        checkKsefHistoryBlocked().catch(captureAndReturn('ksef_history_blocked')),
+      ),
+      step.run('check-ksef-history-rate-limited', () =>
+        checkKsefHistoryRateLimited().catch(captureAndReturn('ksef_history_rate_limited')),
       ),
     ]);
 

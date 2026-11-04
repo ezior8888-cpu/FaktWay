@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface InvoiceFailedProps {
   invoiceId: string;
   errorMessage: string;
@@ -26,6 +28,7 @@ export default function InvoiceFailed({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>Faktura odrzucona przez KSeF</Heading>
 
           <Text style={textStyle}>
@@ -47,7 +50,7 @@ export default function InvoiceFailed({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            Wiadomość automatyczna z systemu KSeF SaaS.
+            Wiadomość automatyczna z systemu FaktWay.
           </Text>
         </Container>
       </Body>

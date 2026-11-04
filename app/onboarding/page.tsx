@@ -1,12 +1,20 @@
+// Plan Finora P15 (E10b, §2.2): kreator firmy po rejestracji w układzie
+// logowania Finory (`AuthSplitLayout`) zamiast dawnego szkła z mesh
+// gradientem. Logika bez zmian: `OnboardingForm` i akcje
+// `app/actions/organizations.ts`.
+
 import { cookies } from 'next/headers';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { RiArrowLeftSLine, RiCheckboxCircleLine } from '@remixicon/react';
 
-import { BrandWordmark } from '@/components/brand/brand-wordmark';
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout';
 import { OnboardingForm } from '@/components/onboarding/form';
+import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert';
 import { FIRST_COMPANY_CLOSED_MESSAGE, isSignupClosed } from '@/lib/feature-flags/signups';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
+import { LEGAL_GATE_PATH, needsTermsAcceptance } from '@/lib/legal/acceptance';
 
 interface OnboardingPageProps {
   searchParams: Promise<{
@@ -22,14 +30,10 @@ interface OnboardingPageProps {
  * zaakceptować zaproszenie.
  *
  * Baner „masz aktywną org” tylko przy `?action=new` (celowy flow z pulpitu),
- * żeby pierwszy ekran po rejestracji nie był zasłonięty zielonym paskiem.
+ * żeby pierwszy ekran po rejestracji nie był zasłonięty paskiem.
  *
  * Brak `redirect()` zapobiega soft-nav loop (URL pasek na /onboarding,
  * RSC zwracający redirect do /, browser wraca na /onboarding ad infinitum).
- *
- * BUG-007: wrapper `ff-dashboard` — panel NIP dostaje DOKŁADNIE ten sam
- * motyw co wnętrze aplikacji (tło --ff-bg, karta .ff-glass-pane, wordmark
- * jak w sidebarze), zamiast osobnego fioletowego „mesh glass".
  */
 export default async function OnboardingPage(props: OnboardingPageProps) {
   const sp = await props.searchParams;
@@ -37,7 +41,12 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
   if (sp.invite) query.set('invite', sp.invite);
   if (sp.action) query.set('action', sp.action);
   const returnTo = '/onboarding' + (query.size ? '?' + query.toString() : '');
-  await requireVerifiedUserForPage(returnTo);
+  const { user } = await requireVerifiedUserForPage(returnTo);
+  // Konto z Google zakłada się bez naszego formularza — tu łapiemy je przed
+  // utworzeniem pierwszej firmy (bramka śpi, dopóki dokumenty są robocze).
+  if (needsTermsAcceptance(user.app_metadata)) {
+    redirect(`${LEGAL_GATE_PATH}?next=${encodeURIComponent(returnTo)}`);
+  }
 
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
@@ -47,56 +56,50 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
   const showSignupsClosed = !hasActiveOrg && (await isSignupClosed());
 
   return (
-    <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">
-      <div className="ff-mesh-gradient" aria-hidden />
-      <div className="ff-orb-tr" aria-hidden />
-      <div className="ff-orb-bl" aria-hidden />
-
-      <div className="relative z-[1] w-full max-w-2xl space-y-4">
-        {showActiveOrgBanner ? (
-          <div
-            className="ff-glass-pane flex items-center justify-between gap-3 rounded-2xl px-5 py-3"
-            role="status"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <p className="truncate text-sm">
-                Masz już aktywną organizację. Możesz dodać kolejną poniżej albo
-                wrócić do panelu.
-              </p>
-            </div>
+    <AuthSplitLayout
+      panelTitle="Jeszcze chwila i wystawisz pierwszą fakturę"
+      panelText="Podaj NIP, a dane firmy pobierzemy z GUS. Masz zaproszenie? Dołączysz do firmy jednym kliknięciem."
+    >
+      {showActiveOrgBanner ? (
+        <Alert role="status" className="border-primary/30 px-3 py-2.5 pr-24">
+          <RiCheckboxCircleLine className="text-primary" />
+          <AlertDescription className="text-sm/relaxed text-foreground">
+            Masz już aktywną organizację. Możesz dodać kolejną poniżej albo
+            wrócić do panelu.
+          </AlertDescription>
+          <AlertAction>
             <Link
               href="/dashboard"
               prefetch={false}
-              className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+              className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-primary hover:underline"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Dashboard
+              <RiArrowLeftSLine className="size-4" />
+              Pulpit
             </Link>
-          </div>
-        ) : null}
+          </AlertAction>
+        </Alert>
+      ) : null}
 
-        {showSignupsClosed ? (
-          <div className="ff-glass-pane rounded-2xl px-5 py-3 text-sm" role="status">
+      {showSignupsClosed ? (
+        <Alert role="status" className="px-3 py-2.5">
+          <AlertDescription className="text-sm/relaxed text-foreground">
             {FIRST_COMPANY_CLOSED_MESSAGE}
-          </div>
-        ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        <div className="ff-glass-pane rounded-3xl p-8 lg:p-12">
-          <div className="mb-6 flex justify-center">
-            <BrandWordmark variant="app" href="/" />
-          </div>
-          <h1 className="mb-3 text-center text-3xl font-semibold tracking-tight">
-            {showActiveOrgBanner ? 'Dodaj kolejną organizację' : 'Witaj w FaktFlow'}
-          </h1>
-          <p className="mb-8 leading-relaxed text-muted-foreground">
-            Wybierz, jak chcesz zacząć: załóż nową organizację, akceptuj
-            zaproszenie albo poproś o dostęp do firmy, która już używa
-            FaktFlow.
-          </p>
-          <OnboardingForm initialInviteToken={sp.invite} />
-        </div>
+      <div>
+        <h1 className="mb-2 text-2xl font-semibold">
+          {showActiveOrgBanner ? 'Dodaj kolejną organizację' : 'Witaj w FaktWay'}
+        </h1>
+        <p className="text-muted-foreground">
+          Wybierz, jak chcesz zacząć: załóż nową organizację, akceptuj
+          zaproszenie albo poproś o dostęp do firmy, która już używa
+          FaktWay.
+        </p>
       </div>
-    </div>
+
+      <OnboardingForm initialInviteToken={sp.invite} />
+    </AuthSplitLayout>
   );
 }

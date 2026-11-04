@@ -52,7 +52,10 @@ const state = vi.hoisted(() => ({
   proposal: vi.fn(),
   failedCard: vi.fn(),
   push: vi.fn(),
+  sentry: vi.fn(),
 }));
+
+vi.mock('@sentry/nextjs', () => ({ captureException: state.sentry }));
 
 vi.mock('@/lib/ai/tenant-ai-budget', () => ({
   checkTenantAiBudget: (...args: unknown[]) => state.budget(...args),
@@ -260,6 +263,8 @@ beforeEach(() => {
   });
   state.failedCard.mockReset().mockReturnValue({});
   state.push.mockReset();
+  state.sentry.mockReset();
+  vi.mocked(ctx.logger.warn).mockClear();
 });
 
 describe('OCR — ponowienie joba nie dubluje wydatku', () => {
@@ -621,6 +626,29 @@ describe('B4 — OCR zawodzi', () => {
     await expect(runProcessOcr(event, ctx)).rejects.toThrow('Nie można sprawdzić, czy wydatek już istnieje');
     expect(state.jobUpdates).not.toContainEqual(expect.objectContaining({ status: 'failed' }));
     expect(state.push).not.toHaveBeenCalled();
+  });
+
+  // A5: push rzuca PushReadError przy awarii bazy. Tu „nieudane” jest już
+  // zapisane, a ponowienie joba od zera zapłaciłoby drugi raz za OCR i mogło
+  // nie dojść do karty — push jest dodatkiem do karty i statusu zadania.
+  it('błąd odczytu przy pushu „nie rozpoznano” — karta powstaje, job bez wyjątku (bez drugiego płatnego OCR); log i Sentry', async () => {
+    state.ocrFails = true;
+    const readError = Object.assign(new Error('Nie można odczytać subskrypcji push: database unavailable'), { name: 'PushReadError' });
+    state.push.mockRejectedValueOnce(readError);
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: false });
+    expect(state.extract).toHaveBeenCalledTimes(1);
+    expect(state.jobUpdates).toContainEqual(expect.objectContaining({ status: 'failed' }));
+    expect(state.failedCard).toHaveBeenCalledTimes(1);
+    expect(state.proposal).toHaveBeenCalledTimes(1);
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('push'),
+      expect.objectContaining({ ocrJobId: OCR_JOB, tenantId: TENANT, error: readError.message }),
+    );
+    expect(state.sentry).toHaveBeenCalledWith(readError, expect.objectContaining({
+      tags: expect.objectContaining({ job: 'process-ocr' }),
+      extra: expect.objectContaining({ ocrJobId: OCR_JOB, tenantId: TENANT }),
+    }));
   });
 });
 

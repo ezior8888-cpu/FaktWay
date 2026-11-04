@@ -1,8 +1,13 @@
 'use client';
 
 import { useRef, useState, useTransition, type FormEvent } from 'react';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
+import { refreshTurnstileToken, TurnstileWidget } from '@/components/auth/turnstile-widget';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import {
   changePasswordAction,
   requestPasswordChangeNonceAction,
@@ -32,6 +37,8 @@ export function PasswordChangeCard() {
   const [nonceSent, setNonceSent] = useState(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
+    // Turnstile wstrzymał wysyłkę do gotowego tokenu i wyśle formularz sam.
+    if (event.defaultPrevented) return;
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -57,8 +64,12 @@ export function PasswordChangeCard() {
   function sendNonce() {
     const form = formRef.current;
     if (!form) return;
+    const fields = new FormData(form);
     const data = new FormData();
-    data.set('current_password', new FormData(form).get('current_password') ?? '');
+    data.set('current_password', fields.get('current_password') ?? '');
+    // Hasło sprawdza GoTrue, a przy włączonej captcha wymaga tokenu (jednorazowego).
+    data.set('cf-turnstile-response', fields.get('cf-turnstile-response') ?? '');
+    refreshTurnstileToken(form);
     setResult(null);
     setNonceSent(false);
     startTransition(async () => {
@@ -78,64 +89,121 @@ export function PasswordChangeCard() {
   }
 
   const failure = result && !result.ok ? result : null;
-
+  // Układ `change-password-card.tsx` z Finory: nagłówek „Hasło” z opisem,
+  // pola z etykietą nad polem na całą szerokość, separator, przycisk.
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="space-y-4" aria-busy={isPending}>
-      {result?.ok && (
-        <div role="status" className="rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-          Hasło zmienione.
-        </div>
-      )}
-      {failure && (
-        <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          {ERROR_MESSAGES[failure.error]}
-          {failure.error === 'rate_limited' && failure.retryAfter && (
-            <span> Spróbuj ponownie za {failure.retryAfter} s.</span>
-          )}
-        </div>
-      )}
+    <form ref={formRef} onSubmit={onSubmit} aria-busy={isPending}>
+      <FieldGroup>
+        <Field orientation="responsive">
+          <FieldContent>
+            <FieldLabel>Hasło</FieldLabel>
+            <FieldDescription>
+              Zmień hasło — wymagamy minimum 12 znaków, mieszanki liter, cyfr i znaków specjalnych. Sprawdzamy też
+              w bazie wycieków.
+            </FieldDescription>
+          </FieldContent>
+        </Field>
 
-      <div>
-        <label htmlFor="current_password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-          Aktualne hasło
-        </label>
-        <Input id="current_password" name="current_password" type="password" required maxLength={1024} autoComplete="current-password" />
-      </div>
+        {result?.ok && (
+          <Alert role="status" className="border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
+            <AlertDescription className="text-green-800 dark:text-green-400/80">Hasło zmienione.</AlertDescription>
+          </Alert>
+        )}
+        {failure?.error === 'mfa_required' && (
+          <MfaStepUpNotice returnTo="/settings/security">{ERROR_MESSAGES.mfa_required}</MfaStepUpNotice>
+        )}
+        {failure && failure.error !== 'mfa_required' && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {ERROR_MESSAGES[failure.error]}
+              {failure.error === 'rate_limited' && failure.retryAfter && (
+                <span> Spróbuj ponownie za {failure.retryAfter} s.</span>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
-      <div>
-        <label htmlFor="new_password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-          Nowe hasło
-        </label>
-        <Input id="new_password" name="new_password" type="password" required minLength={12} maxLength={128} autoComplete="new-password" />
-        <p className="text-xs text-muted-foreground mt-1.5">
-          12–128 znaków, mała i duża litera, cyfra oraz znak specjalny.
-        </p>
-      </div>
-
-      {needsNonce && (
-        <div className="space-y-3 rounded-xl border p-4">
-          <p className="text-sm text-muted-foreground">
-            Kod potwierdzenia wyślemy na adres e-mail lub numer telefonu przypisany do konta.
-            To osobny kod do zmiany hasła.
-          </p>
-          <Button type="button" variant="outline" disabled={isPending} onClick={sendNonce}>
-            {nonceSent ? 'Wyślij ponownie kod' : 'Wyślij kod potwierdzenia'}
-          </Button>
-          {nonceSent && (
-            <p role="status" className="text-sm">
-              Kod został wysłany. Ponowna wysyłka jest możliwa najwcześniej po minucie.
-            </p>
-          )}
-          <div>
-            <label htmlFor="nonce" className="text-sm font-medium">Kod potwierdzenia</label>
-            <Input id="nonce" name="nonce" type="text" required minLength={6} maxLength={10} pattern="[0-9]{6,10}" inputMode="numeric" autoComplete="one-time-code" />
+        <Field orientation="responsive" className="flex-col!">
+          <FieldContent>
+            <FieldLabel htmlFor="current_password">Aktualne hasło</FieldLabel>
+          </FieldContent>
+          <div className="w-full!">
+            <Input
+              id="current_password"
+              name="current_password"
+              type="password"
+              required
+              maxLength={1024}
+              autoComplete="current-password"
+              placeholder="Aktualne hasło"
+            />
           </div>
-        </div>
-      )}
+        </Field>
 
-      <Button type="submit" disabled={isPending}>
-        {isPending ? 'Proszę czekać...' : 'Zmień hasło'}
-      </Button>
+        <Field orientation="responsive" className="flex-col!">
+          <FieldContent>
+            <FieldLabel htmlFor="new_password">Nowe hasło</FieldLabel>
+            <FieldDescription>12–128 znaków, mała i duża litera, cyfra oraz znak specjalny.</FieldDescription>
+          </FieldContent>
+          <div className="w-full!">
+            <Input
+              id="new_password"
+              name="new_password"
+              type="password"
+              required
+              minLength={12}
+              maxLength={128}
+              autoComplete="new-password"
+              placeholder="Nowe hasło"
+            />
+          </div>
+        </Field>
+
+        {needsNonce && (
+          <Field orientation="responsive" className="flex-col!">
+            <FieldContent>
+              <FieldLabel htmlFor="nonce">Kod potwierdzenia</FieldLabel>
+              <FieldDescription>
+                Kod potwierdzenia wyślemy na adres e-mail lub numer telefonu przypisany do konta. To osobny kod do
+                zmiany hasła.
+              </FieldDescription>
+            </FieldContent>
+            <div className="flex w-full! flex-col gap-3">
+              <div>
+                <Button type="button" variant="outline" disabled={isPending} onClick={sendNonce}>
+                  {nonceSent ? 'Wyślij ponownie kod' : 'Wyślij kod potwierdzenia'}
+                </Button>
+              </div>
+              {nonceSent && (
+                <p role="status" className="text-muted-foreground text-xs">
+                  Kod został wysłany. Ponowna wysyłka jest możliwa najwcześniej po minucie.
+                </p>
+              )}
+              <Input
+                id="nonce"
+                name="nonce"
+                type="text"
+                required
+                minLength={6}
+                maxLength={10}
+                pattern="[0-9]{6,10}"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+              />
+            </div>
+          </Field>
+        )}
+
+        <TurnstileWidget action="reauth" theme="auto" />
+
+        <Separator />
+
+        <div>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? 'Proszę czekać...' : 'Zmień hasło'}
+          </Button>
+        </div>
+      </FieldGroup>
     </form>
   );
 }

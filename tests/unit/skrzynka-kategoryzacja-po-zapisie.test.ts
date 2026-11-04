@@ -9,9 +9,9 @@ import type { JobContext } from '@/lib/jobs/registry';
  * przesuwało HWM i nigdy nie emitowało zdarzenia: faktury były w `/inbox`,
  * ale nie w `expenses`, KPiR, JPK, bez XML.
  *
- * Po naprawie: zdarzenia kategoryzacji wychodzą tuż po INSERT (z kluczem
- * `singletonKey` = id faktury, żeby cron uzupełniający nie dublował jobów),
- * a karta FLO, push i zdarzenie dla UI są „best effort” — ich błąd trafia
+ * Po naprawie: zdarzenia kategoryzacji wychodzą tuż po INSERT (z etykietą
+ * `singletonKey` = id faktury; dubli pilnuje wczesne wyjście w zadaniu i cron
+ * uzupełniający, `skrzynka-duble.test.ts`), a karta FLO, push i zdarzenie dla UI są „best effort” — ich błąd trafia
  * do logu i Sentry, nie przerywa przebiegu i nie blokuje HWM.
  */
 
@@ -38,6 +38,12 @@ vi.mock('@/lib/flo/functions/inbox-cursor', () => ({
   saveInboxHwm: db.saveInboxHwm,
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToTenant: db.sendPush }));
+// Harmonogram ma własny test (`skrzynka-przebieg-harmonogram`). Bez tej atrapy jego błąd
+// (brak bazy) szedłby do logu i Sentry i zasłaniałby asercje o błędach przebiegu.
+vi.mock('@/lib/ksef/inbox-schedule-db', () => ({
+  readInboxPollState: async () => null,
+  finishInboxPoll: async () => undefined,
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: async () => ({
     from: () => {
@@ -131,8 +137,8 @@ describe('skrzynka: kategoryzacja kosztów nie zależy od karty FLO ani pushu (K
     const categorize = eventsNamed(sendEvent, 'fan-out-auto-categorize-inbox');
     expect(categorize.map((e) => e.data.invoiceId)).toEqual(['id-1', 'id-2']);
     expect(categorize.every((e) => e.name === 'inbox/invoice-received')).toBe(true);
-    // Klucz pojedynczości per faktura: cron uzupełniający może wysłać to samo
-    // zdarzenie drugi raz, a pg-boss ma trzymać jeden job w kolejce.
+    // Etykieta per faktura w `pgboss.job`. Na kolejce `standard` pg-boss po niej nie
+    // deduplikuje: drugie zadanie kończy się jednym odczytem (`skrzynka-duble.test.ts`).
     expect(categorize.map((e) => e.singletonKey)).toEqual(['id-1', 'id-2']);
     expect(db.saveInboxHwm).toHaveBeenCalledWith(DATA.tenantId, expect.objectContaining({ saved: 2 }));
     expect(db.sentry).toHaveBeenCalled();

@@ -6,7 +6,7 @@
  * link w mailu działa nawet jak Supabase padnie.
  *
  * Format URL (RFC 8058 one-click):
- *   https://app.faktflow.pl/api/email/unsubscribe?t=<token>&c=<category>
+ *   https://faktway.pl/api/email/unsubscribe?t=<token>&c=<category>
  *
  * Token = `<base64url payload>.<base64url HMAC>`
  *

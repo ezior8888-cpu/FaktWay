@@ -38,6 +38,12 @@ import {
   KSEF_PAUSED_MESSAGE,
 } from '@/lib/ksef/submission-holds';
 import { describeKsefSendError, ksefSendTransactionStep, type KsefSendMode } from '@/lib/invoices/ksef-send-step';
+import { recordSendRefusal, type SendRefusalCode } from '@/lib/ksef/send-attempt-ledger';
+import {
+  resendMissingCredentialsMessage,
+  resendPausedMessage,
+  resendPauseUnknownMessage,
+} from '@/lib/invoices/ksef-send-policy';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
 import type { Invoice } from '@/types/invoice';
 import type {
@@ -87,9 +93,48 @@ function missingCredentialsMessage(kind: EnqueueKsefSubmitParams['auditKind']): 
   return 'Brak certyfikatu KSeF — najpierw wgraj go w Ustawieniach. Dokument zapisany jako szkic.';
 }
 
+/**
+ * Wynik decyzji z kodem odmowy (`refusal`) do dziennika prób. Kod nie
+ * wychodzi do wołającego — odpowiedź dla klienta jest ta sama co dotąd.
+ */
+type EnqueueDecision =
+  | { ok: true; mode: 'online_queued' | 'offline_queued' }
+  | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED'; refusal: SendRefusalCode };
+
+/**
+ * Kolejka wysyłki po zapisie szkicu. Odmowa przed kolejką (hamulce, MFA,
+ * certyfikat, wyłącznik, błąd kolejkowania) zostawia wiersz `refused`
+ * w dzienniku prób (`ksef_send_attempts`, 00150) — osobny licznik w centrum
+ * dowodzenia, poza skutecznością wysyłki (decyzja 13.10.2026). Zapis
+ * fail-open: awaria dziennika nie zmienia odpowiedzi dla klienta.
+ */
 export async function enqueueKsefSubmitAfterDraft(
   params: EnqueueKsefSubmitParams,
 ): Promise<KsefSubmitEnqueueResult> {
+  const refusal = (code: SendRefusalCode, message: string) =>
+    recordSendRefusal({
+      tenantId: params.tenantId,
+      invoiceId: params.invoiceId,
+      userId: params.userId,
+      code,
+      message,
+    });
+  let decision: EnqueueDecision;
+  try {
+    decision = await decideKsefSubmitEnqueue(params);
+  } catch (e) {
+    await refusal('ENQUEUE_ERROR', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    throw e;
+  }
+  if (decision.ok) return decision;
+  const { refusal: code, ...result } = decision;
+  await refusal(code, result.error);
+  return result;
+}
+
+async function decideKsefSubmitEnqueue(
+  params: EnqueueKsefSubmitParams,
+): Promise<EnqueueDecision> {
   const {
     tenantId,
     userId,
@@ -103,6 +148,8 @@ export async function enqueueKsefSubmitAfterDraft(
     auditKind,
     internalNumberForAudit,
   } = params;
+  // Ponowna wysyłka z `failed` (K3, A4b PR2b): odmowa zostawia fakturę z błędem wysyłki, nie szkicem.
+  const resend = params.mode?.kind === 'requeue';
 
   // Covers existing ROZ drafts and callers that bypass the final invoice action.
   // Do this before both online and Offline24 enqueue paths.
@@ -112,7 +159,7 @@ export async function enqueueKsefSubmitAfterDraft(
     finalData,
     finalAdvanceSettlementRows,
   })) {
-    return { ok: false, error: ROZ_SUBMISSION_HOLD_MESSAGE };
+    return { ok: false, refusal: 'ROZ_HOLD_RECONCILE', error: ROZ_SUBMISSION_HOLD_MESSAGE };
   }
 
   // Krok 5: korekty wstrzymane na KSeF produkcyjnym (AUD-03/04) i globalny
@@ -122,17 +169,20 @@ export async function enqueueKsefSubmitAfterDraft(
     isCorrectionHeldForEnv(ksefEnv) &&
     isCorrectionSubmission({ invoiceType: invoice.type, auditKind, correctionData })
   ) {
-    return { ok: false, error: KOR_HOLD_MESSAGE };
+    return { ok: false, refusal: 'KOR_HOLD', error: KOR_HOLD_MESSAGE };
   }
   try {
     if (await isKsefSubmissionPaused()) {
-      return { ok: false, error: KSEF_PAUSED_MESSAGE };
+      return { ok: false, refusal: 'KSEF_PAUSED', error: resend ? resendPausedMessage(auditKind) : KSEF_PAUSED_MESSAGE };
     }
   } catch {
     // Bez pewności, że wyłącznik jest zdjęty, nie kolejkujemy (fail-closed).
     return {
       ok: false,
-      error: 'Nie można sprawdzić, czy wysyłka do KSeF jest dostępna. Faktura została zapisana — spróbuj ponownie za chwilę.',
+      refusal: 'PAUSE_UNKNOWN',
+      error: resend
+        ? resendPauseUnknownMessage(auditKind)
+        : 'Nie można sprawdzić, czy wysyłka do KSeF jest dostępna. Faktura została zapisana — spróbuj ponownie za chwilę.',
     };
   }
 
@@ -141,7 +191,7 @@ export async function enqueueKsefSubmitAfterDraft(
     await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit');
   } catch (e) {
     if (e instanceof SensitiveMfaRequiredError) {
-      return { ok: false, code: 'MFA_REQUIRED', error: e.message };
+      return { ok: false, code: 'MFA_REQUIRED', refusal: 'MFA_REQUIRED', error: e.message };
     }
     throw e;
   }
@@ -154,6 +204,7 @@ export async function enqueueKsefSubmitAfterDraft(
     if (e instanceof KsefNotVerifiedError) {
       return {
         ok: false,
+        refusal: 'NOT_VERIFIED',
         code: 'KSEF_NOT_VERIFIED',
         error:
           'Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.',
@@ -173,31 +224,34 @@ export async function enqueueKsefSubmitAfterDraft(
   if (tenantErr) {
     return {
       ok: false,
+      refusal: 'INFRA',
       error: `Nie można sprawdzić ustawień KSeF: ${tenantErr.message}`,
     };
   }
 
   if (!tenantKsef?.ksef_credentials_encrypted) {
-    return { ok: false, error: missingCredentialsMessage(auditKind) };
+    return { ok: false, refusal: 'NO_CERTIFICATE', error: resend ? resendMissingCredentialsMessage(auditKind) : missingCredentialsMessage(auditKind) };
   }
 
   let decrypted: ReturnType<typeof decryptCredentials>;
   try {
     decrypted = decryptCredentials(credentialsBuffer(tenantKsef.ksef_credentials_encrypted), tenantId);
   } catch {
-    return { ok: false, error: 'Nie można odczytać credentials KSeF.' };
+    return { ok: false, refusal: 'CREDENTIALS_UNAVAILABLE', error: 'Nie można odczytać credentials KSeF.' };
   }
 
   const env = requireConfiguredKsefEnvironment();
   if (auditKind === 'correction' && env === 'production') {
     return {
       ok: false,
+      refusal: 'KOR_HOLD',
       error: 'Wysyłka korekt w PROD jest wstrzymana do uzgodnienia oryginału i wcześniejszych korekt. Dokument zapisano jako szkic.',
     };
   }
   if (auditKind === 'final' && env === 'production') {
     return {
       ok: false,
+      refusal: 'ROZ_HOLD_RECONCILE',
       error: 'Wysyłka faktury rozliczającej w PROD jest wstrzymana do czasu atomowego rozliczania zaliczek. Dokument zapisano jako szkic.',
     };
   }
@@ -210,6 +264,7 @@ export async function enqueueKsefSubmitAfterDraft(
   if (health.offline && env === 'production') {
     return {
       ok: false,
+      refusal: 'KSEF_UNAVAILABLE',
       error: 'KSeF jest niedostępny. Offline24 w PROD jest wstrzymany do zgodności kodów QR z MF; dokument zapisano jako szkic.',
     };
   }
@@ -219,6 +274,7 @@ export async function enqueueKsefSubmitAfterDraft(
   if (health.offline && auditKind !== 'regular') {
     return {
       ok: false,
+      refusal: 'KSEF_UNAVAILABLE',
       error: 'KSeF jest niedostępny. Dokument specjalny zapisano jako szkic; ponów wysyłkę po przywróceniu KSeF.',
     };
   }
@@ -232,7 +288,7 @@ export async function enqueueKsefSubmitAfterDraft(
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Nie udało się dodać do kolejki offline';
-      return { ok: false, error: msg };
+      return { ok: false, refusal: 'OFFLINE_QUEUE_ERROR', error: msg };
     }
 
     await logAudit({
@@ -257,7 +313,8 @@ export async function enqueueKsefSubmitAfterDraft(
   // Jedna transakcja (W16/W2): RPC przestawia status po stronie serwera, pg-boss
   // zapisuje zlecenie na tym samym połączeniu. Błąd zapisu zlecenia cofa status;
   // odmowa RPC (drugie kliknięcie, błąd treści przy ponowieniu) nie tworzy
-  // zlecenia. `singletonKey` = faktura: w kolejce czeka najwyżej jedno zlecenie.
+  // zlecenia. To RPC chroni przed drugim zleceniem; `singletonKey` = faktura jest
+  // tylko etykietą (`lib/jobs/enqueue.ts`).
   const mode: KsefSendMode = params.mode ?? { kind: 'enqueue' };
   // Właściciel przejęcia wysyłki (AUD-10): każde kolejkowanie to nowa próba.
   const sendAttemptId = randomUUID();
@@ -284,7 +341,7 @@ export async function enqueueKsefSubmitAfterDraft(
       { inTransaction: ksefSendTransactionStep(mode, { invoiceId, tenantId, attemptId: sendAttemptId }) },
     );
   } catch (e) {
-    return { ok: false, error: describeKsefSendError(e, mode) };
+    return { ok: false, refusal: 'ENQUEUE_REFUSED', error: describeKsefSendError(e, mode) };
   }
 
   await logAudit({

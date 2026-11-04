@@ -17,7 +17,7 @@ export const DISABLE_TARGETS = {
 };
 
 const HELP = [
-  '<b>Bramka FaktFlow</b>',
+  '<b>Bramka FaktWay</b>',
   '/status — zdrowie usług, KSeF, kopie, flagi',
   '/kolejki — zaległości zadań i faktury utknięte w wysyłce',
   '/wylacz ksef | flo | rejestracja — natychmiast wyłącza (bez TOTP)',
@@ -25,7 +25,7 @@ const HELP = [
   '/wdroz &lt;8 znaków SHA&gt; &lt;kod TOTP&gt; — wdraża web i worker',
 ].join('\n');
 
-/** „/wdroz@FaktFlowBot abc” → { cmd: 'wdroz', args: ['abc'] } */
+/** „/wdroz@FaktWayBot abc” → { cmd: 'wdroz', args: ['abc'] } */
 export function parseCommand(text) {
   const parts = String(text ?? '').trim().split(/\s+/);
   const m = /^\/([a-z]+)(?:@\w+)?$/i.exec(parts[0] ?? '');
@@ -53,7 +53,7 @@ export function formatStatus(s, apps, nowMs) {
     ? `${ago(s.backup.at, nowMs)}${backupAgeH > 26 ? ' ⚠️ nieaktualna' : ''}`
     : 'brak ⚠️';
   return [
-    '<b>Status FaktFlow</b>',
+    '<b>Status FaktWay</b>',
     `Web: ${escapeHtml(apps.web)} · Worker: ${escapeHtml(apps.worker)}`,
     `Heartbeat workera: ${ago(s?.heartbeat_at, nowMs)}`,
     `KSeF: ${escapeHtml(ksef)}`,

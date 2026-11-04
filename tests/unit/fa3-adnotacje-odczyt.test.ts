@@ -12,7 +12,7 @@ import {
 
 /**
  * C5b: odczyt Adnotacji i dat FA(3) z pliku innego programu. Wartości przychodzą
- * jako tekst (`parseTagValue: false` w parserze), a FaktFlow trzyma liczby 1|2.
+ * jako tekst (`parseTagValue: false` w parserze), a FaktWay trzyma liczby 1|2.
  * Nic nieczytelnego nie zamienia się na domyślne „nie” — idzie do problemów.
  */
 
@@ -108,7 +108,7 @@ describe('readFa3Annotations', () => {
   });
 });
 
-describe('invoiceAnnotationsFromFa3 → klucze FaktFlow (liczby 1|2)', () => {
+describe('invoiceAnnotationsFromFa3 → klucze FaktWay (liczby 1|2)', () => {
   it('flagi i zwolnienie z rodzajem; procedury jako nowe klucze', () => {
     expect(invoiceAnnotationsFromFa3({
       p16: 1, p17: 2, p18: 1, p18a: 1, p23: 2,
@@ -142,7 +142,7 @@ describe('exemptionMismatch (P_19 a stawki pozycji)', () => {
     ['podstawa bez pozycji zw', { vatExemptionBasis: 'x' }, ['23'], true],
     ['pozycja zw bez podstawy', {}, ['zw', '23'], true],
     ['bez zwolnienia', {}, ['23', '8'], false],
-    ['stawka spoza FaktFlow — rozstrzyga odmowa stawki, nie zwolnienia', { vatExemptionBasis: 'x' }, ['23', 'nieznana'], false],
+    ['stawka spoza FaktWay — rozstrzyga odmowa stawki, nie zwolnienia', { vatExemptionBasis: 'x' }, ['23', 'nieznana'], false],
   ])('%s', (_n, annotations, rates, mismatch) => {
     expect(exemptionMismatch(annotations, rates)).toBe(mismatch);
   });

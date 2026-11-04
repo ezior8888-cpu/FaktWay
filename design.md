@@ -32,7 +32,8 @@ components/marketing/
   faq-section.tsx                    # 'use client' — accordion FAQ
 
 components/brand/
-  faktflow-mark.tsx     # logo PNG: warianty hero / header
+  faktway-logo.tsx      # logo FaktWay (FaktWayLogo) i sam znak (FaktWayMark), wbudowany SVG
+  (ścieżki SVG: lib/brand/faktway-logo-paths.ts, generowane z docs/brand/logo/zrodla/aplikacja.py)
 
 components/ui/
   button.tsx            # CTA: variant glass-primary | glass
@@ -169,7 +170,7 @@ Semantyczne kolory stanów:
 ## 7. Zależności od reszty produktu (dla redesignu)
 
 - Linki wyjściowe z landing: **`/register`**, **`/login`**, **`/kalkulator-oszczednosci`**, **`/pricing`**, **`/blog`**, **`/vs/*`**, **`/kontakt`**, **`/legal/*`**, zewnętrzna dokumentacja.
-- Obraz marki: **`/public/brand/faktflow-mark.png`** (Next `Image`).
+- Obraz marki: logo FaktWay z `components/brand/faktway-logo.tsx` (zestaw i instrukcja: `docs/brand/logo/`).
 - Pełna zmiana wyglądu w Figma itd. **nie wymaga** zmiany URL — wdrożenie i tak trafia do `page.tsx` + ewentualnie `layout.tsx` i `components/marketing/*`.
 
 ---

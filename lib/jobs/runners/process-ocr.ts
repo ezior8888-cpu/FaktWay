@@ -3,6 +3,7 @@ import { requireTenantMember } from './tenant-boundary';
  * Job OCR zdjęcia wydatku (R2 → Claude Vision → kategoria KPiR → `expenses`).
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
 
 import { NonRetriableError } from '../errors';
@@ -178,7 +179,7 @@ export async function onProcessOcrExhausted(
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-c.ts
  */
-export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoRequested.create>[0], { step }: JobContext) {
+export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoRequested.create>[0], { step, logger }: JobContext) {
     const { ocrJobId, tenantId } = ocrProcessPhotoRequested.parse(data);
     const supabase = createAdminClient();
 
@@ -351,14 +352,26 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       });
 
       await requireTenantMember(job.created_by, tenantId);
-      await sendPushToUser(job.created_by, 'invoice_rejected', {
-        title: '❌ Nie udało się rozpoznać paragonu',
-        body:
-          ocrResult.error?.slice(0, 80) ??
-          'Spróbuj ponownie z lepszym zdjęciem',
-        url: '/expenses',
-        tag: `ocr-${ocrJobId}`,
-      });
+      // „Nieudane” już zapisane, karta niżej zostaje — push jest dodatkiem.
+      // Błąd (np. PushReadError: awaria bazy) nie może ponowić joba: ponowienie
+      // od zera zapłaciłoby drugi raz za OCR i mogło nie dojść do karty.
+      try {
+        await sendPushToUser(job.created_by, 'invoice_rejected', {
+          title: '❌ Nie udało się rozpoznać paragonu',
+          body:
+            ocrResult.error?.slice(0, 80) ??
+            'Spróbuj ponownie z lepszym zdjęciem',
+          url: '/expenses',
+          tag: `ocr-${ocrJobId}`,
+        });
+      } catch (e) {
+        logger.warn('OCR: push „nie rozpoznano” nieudany — karta i status zadania zostają', {
+          ocrJobId,
+          tenantId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        Sentry.captureException(e, { tags: { job: 'process-ocr', step: 'push-failed' }, extra: { ocrJobId, tenantId } });
+      }
 
       // Karta agenta zamiast samego powiadomienia: powiadomienie znika,
       // a klient musi wiedzieć, że zdjęcie ZOSTAŁO w archiwum. Bez tego

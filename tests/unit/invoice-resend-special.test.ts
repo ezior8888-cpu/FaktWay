@@ -49,7 +49,10 @@ const snapshot = finalizeInvoice({
 });
 
 function historical(status: string) {
-  return { ksef_status: status, direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: null, fa3_data: snapshot };
+  return {
+    ksef_status: status, direction: 'outgoing', invoice_kind: 'regular', invoice_type: 'VAT', last_error_code: null,
+    issue_date: '2026-10-01', fa3_data: snapshot, special_data: null,
+  };
 }
 
 beforeEach(() => {
@@ -114,7 +117,8 @@ describe('historical KSeF resend boundary', () => {
 
   it('rejects replay from other statuses before publishing', async () => {
     mocks.row = historical('accepted');
-    expect((await resendInvoiceAction(INVOICE_ID)).success).toBe(false);
+    // Dokładny komunikat odmowy statusu — sam `success: false` przeszedłby też przy ogólnym błędzie z catch.
+    expect(await resendInvoiceAction(INVOICE_ID)).toEqual({ success: false, error: KSEF_SEND_MESSAGES.status });
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 

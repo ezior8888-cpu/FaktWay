@@ -2,7 +2,7 @@
  * Resend webhook handler (Faza 26).
  *
  * Setup w Resend Dashboard → Webhooks → Add endpoint:
- *   URL: https://app.faktflow.pl/api/email/resend-webhook
+ *   URL: https://faktway.pl/api/email/resend-webhook
  *   Events subskrybuj: email.bounced, email.complained, email.delivery_delayed
  *
  * Resend używa **Svix** do signature verification (RFC 8037 / JWS-style).
@@ -61,7 +61,7 @@ interface ResendWebhookPayload {
 
 /**
  * Mail z ponagleniem trafia do kontrahenta klienta. Jego odbicie albo skarga
- * blokuje adres (lista odbić), ale nie wypisuje użytkownika FaktFlow, który
+ * blokuje adres (lista odbić), ale nie wypisuje użytkownika FaktWay, który
  * przypadkiem ma ten sam adres (AUD-80).
  */
 function isReminderToContractor(payload: ResendWebhookPayload): boolean {
@@ -212,7 +212,7 @@ async function handleComplaint(payload: ResendWebhookPayload, eventId: string) {
   // Duplicate receipts still retry the idempotent preference writes.
 
   // Skarga na ponaglenie pochodzi od kontrahenta — adres jest już na
-  // liście odbić, użytkownika FaktFlow nie wypisujemy.
+  // liście odbić, użytkownika FaktWay nie wypisujemy.
   if (isReminderToContractor(payload)) return;
 
   // Complaint = user kliknął "Spam" → INSTANT total unsubscribe.

@@ -173,6 +173,26 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
     expect(byCode.get('NOT_IN_KSEF')).toMatchObject({ class: 'transient', auto_requeue: false });
     expect(byCode.get('KSEF_NUMBER_TAKEN')).toMatchObject({ class: 'terminal', auto_requeue: false });
     expect(byCode.get('ENV_MISMATCH')).toMatchObject({ class: 'terminal', auto_requeue: false });
+    // 00147: dokument specjalny z datą wystawienia sprzed dzisiaj — tylko szkic.
+    expect(byCode.get('ISSUE_DATE_PASSED')).toMatchObject({ class: 'terminal', auto_requeue: false });
+  });
+
+  it('00147: ISSUE_DATE_PASSED bez dowodu wraca do szkicu; ponowienie odmówione; strażnik I4 kodu nie zgłasza', async () => {
+    const toDraft = await invoice({ ksef_status: 'failed', last_error_code: 'ISSUE_DATE_PASSED' });
+    const reset = await admin.rpc('reset_ksef_send', { p_invoice_id: toDraft, p_tenant_id: ORG, p_actor_user_id: ownerId });
+    expect(reset.error).toBeNull();
+    expect((await row(toDraft)).ksef_status).toBe('draft');
+
+    const noResend = await invoice({ ksef_status: 'failed', last_error_code: 'ISSUE_DATE_PASSED' });
+    const requeue = await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: noResend, p_tenant_id: ORG, p_attempt_id: ATTEMPT, p_actor_user_id: ownerId,
+    });
+    expect(requeue.error?.code).toBe('P0001');
+    expect((await row(noResend)).ksef_status).toBe('failed');
+
+    const { data } = await admin.rpc('ksef_lifecycle_violations');
+    const flagged = ((data ?? []) as Array<{ invoice_id: string }>).filter((v) => v.invoice_id === noResend);
+    expect(flagged).toEqual([]);
   });
 
   it('D-A4-2 (00143): ENV_MISMATCH bez dowodu wraca do szkicu; ponowienie w bieżącym środowisku odmówione; „tylko uzgodnij” przy otwartym wpisie działa', async () => {
@@ -504,5 +524,32 @@ describe.skipIf(!hasDatabase)('cykl życia faktury KSeF — RPC i dowód kontakt
 
     expect((await anonClient().rpc('ksef_lifecycle_violations')).error?.code).toBe('42501');
     expect((await (await signedIn(OWNER_EMAIL)).rpc('ksef_lifecycle_violations')).error?.code).toBe('42501');
+  });
+
+  // 00155 (decyzja Bartosza 22.10.2026): UPO istnieje tylko dla faktur wysłanych
+  // sesją FaktWay. Historia pobrana z KSeF (`origin = ksef_import`) bez związku
+  // z naszą wysyłką nie ma UPO — I3 jej nie zgłasza (przed 00155: zgłaszał każdą).
+  it('strażnik I3 (00155): historia z KSeF bez UPO pominięta; bez XML, z oryginałem 440 i z FaktWay — zgłaszane', async () => {
+    const historyNoUpo = await invoice({ origin: 'ksef_import', ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000155-00', ksef_environment: 'test', xml_storage_path: 'h.xml' });
+    const historyNoXml = await invoice({ origin: 'ksef_import', ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000156-00', ksef_environment: 'test' });
+    const historyLinked = await invoice({ origin: 'ksef_import', ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000157-00', ksef_environment: 'test', xml_storage_path: 'l.xml' });
+    const appNoUpo = await invoice({ ksef_status: 'accepted', ksef_number: '9480000014-20261001-000000000158-00', ksef_environment: 'test', xml_storage_path: 'a.xml' });
+    // Oryginał 440 (PR C): nasza próba wysyłki szkicu wskazuje numer KSeF tej faktury.
+    const draft = await invoice({});
+    const { error: subError } = await admin.from('ksef_submissions').insert({
+      tenant_id: ORG, invoice_id: draft, submission_type: 'online', status: 'duplicate',
+      session_reference_number: `SES-${counter}`, invoice_reference_number: `REF-${counter}`,
+      original_ksef_number: '9480000014-20261001-000000000157-00',
+    });
+    expect(subError).toBeNull();
+
+    const { data, error } = await admin.rpc('ksef_lifecycle_violations');
+    expect(error).toBeNull();
+    const i3 = new Set(((data ?? []) as Array<{ invariant: string; invoice_id: string }>)
+      .filter((v) => v.invariant === 'I3').map((v) => v.invoice_id));
+    expect(i3.has(historyNoUpo)).toBe(false);
+    expect(i3.has(historyNoXml)).toBe(true);
+    expect(i3.has(historyLinked)).toBe(true);
+    expect(i3.has(appNoUpo)).toBe(true);
   });
 });

@@ -91,9 +91,9 @@ it.each([
 ])('propagates a refusal from the authoritative reauth budget: $error', async ({ error, retryAfter }) => {
   const result = { ok: false, error, ...(retryAfter ? { retryAfter } : {}) };
   mocks.reauth.mockResolvedValue(result);
-  expect(await unenrollTotpAction('fixture')).toEqual(result);
+  expect(await unenrollTotpAction('fixture', 'synthetic-turnstile-token')).toEqual(result);
   expect(mocks.limit).not.toHaveBeenCalled();
-  expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith('fixture');
+  expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith('fixture', 'synthetic-turnstile-token');
   expect(mocks.factors).not.toHaveBeenCalled();
   noMutation();
 });
@@ -142,7 +142,7 @@ it('cleans codes before touching TOTP and leaves phone and WebAuthn factors alon
     { ...totp, id: 'fixture-webauthn', factor_type: 'webauthn' }, pending,
   ] }, error: null });
   expect(await unenrollTotpAction('x'.repeat(1024))).toEqual({ ok: true });
-  expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith('x'.repeat(1024));
+  expect(mocks.reauth).toHaveBeenCalledExactlyOnceWith('x'.repeat(1024), undefined);
   expect(mocks.unenroll.mock.calls).toEqual([[{ factorId: totp.id }], [{ factorId: pending.id }]]);
   expect(mocks.limit).not.toHaveBeenCalled();
   expect(mocks.reauth.mock.invocationCallOrder[0]).toBeLessThan(mocks.factors.mock.invocationCallOrder[0]);

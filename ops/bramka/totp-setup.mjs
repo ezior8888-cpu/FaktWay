@@ -5,6 +5,6 @@
 // 3. Wyczyść terminal. Sekret nie trafia do repo ani do logów bramki.
 import { newTotpSecret } from './src/totp.mjs';
 
-const { secret, uri } = newTotpSecret('FaktFlow bramka');
+const { secret, uri } = newTotpSecret('FaktWay bramka');
 console.log(`SEKRET (BRAMKA_TOTP_SECRET): ${secret}`);
 console.log(`URI do aplikacji: ${uri}`);

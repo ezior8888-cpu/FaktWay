@@ -1,5 +1,11 @@
 # Układ dashboardu po przebudowie — mapa dla obu torów
 
+> **19.10.2026 (wieczór, decyzja Bartosza): FLO nie ma już na Pulpicie.**
+> `/dashboard` to strona Finance szablonu Finora 1:1 na danych przykładowych
+> (`components/dashboard/finora/*`). Blokada przewijania `html.ff-route-dashboard`
+> i ukrywanie banera certyfikatu usunięte z `globals.css`. Miejsce FLO przyjdzie
+> z projektu Claude Design. Opis niżej (slot FLO z E4, szyna) jest historyczny.
+
 **Data:** 30 sierpnia 2026
 **Napisał:** tor silnika (Bartosz)
 **Dla kogo:** Masło i każdy model AI, który siada do `components/flo/*`,
@@ -44,8 +50,19 @@ Mapa własności z części IV.2 planu obowiązuje dalej, z **jedną zmianą**:
 - **`app/globals.css` przechodzi do Bartosza.** Motywu nie da się odwrócić bez
   tego pliku. Zmiana jest jawna, opisana tutaj, w `DZIENNIK-BARTOSZ.md`
   i w części VIII planu Masła.
-- **`lib/dashboard-nav-config.ts` dalej należy do Masła i NIE BYŁ RUSZANY.**
-  Nawigacja już jest 1:1 z prototypem. Pozycja „FLO” to nadal jego krok 2.
+- **`lib/dashboard-nav-config.ts` zmieniony w etapie E2 planu Finora**
+  (`docs/koordynacja/PLAN-FINORA.md`, §11 pkt 5) za potwierdzeniem Bartosza
+  z 17.10.2026. Plik był Masła; nowe sekcje (Pulpit, Sprzedaż, Koszty,
+  Księgowość), ikony Remix i reguły `isActiveNavPath` pilnuje
+  `tests/unit/dashboard-nav-config.test.ts`. Dolny pasek (Flo / Faktury /
+  Nowa / Miesiąc / Więcej) zostaje bez zmian pozycji. Etap E7 (20.10.2026)
+  dopisał sekcję „Analizy” (`/analizy/sprzedaz`, `/analizy/koszty`,
+  `prefetch: false`) razem ze stronami — zasada wpinania z §4 planu.
+- **Shell jest na szablonie Finora** (plan Finora, E2):
+  `app/(dashboard)/layout.tsx` oraz nowe `components/dashboard/app-sidebar.tsx`,
+  `app-header.tsx`, `command-menu.tsx`, `profile-menu.tsx`, `footer.tsx`.
+  Etykiety FLO w `lib/flo/functions/*` („Przeterminowane", „Skrzynka
+  odbiorcza") zostają — to zadanie toru silnika, nie szkieletu.
 
 Nadal wyłącznie Masła, nietknięte: `components/flo/*`, `app/(dashboard)/flo/*`,
 `app/(dashboard)/settings/flo/*`, `content/flo/*`, `e2e/flo-*.spec.ts`,
@@ -62,7 +79,7 @@ pełny wątek stał na `/flo`); ten akapit jest nadrzędny.
 
 | Trasa | Co się dzieje |
 |---|---|
-| `/dashboard` | wątek agenta w głównej kolumnie, prawa szyna: liczby miesiąca → „Zatwierdzone — czeka na wykonanie" → „Co Flo zrobił" |
+| `/dashboard` | od `lg` (E4 planu Finora): **slot FLO** o stałej wysokości `min(640px, 70dvh)` na pełnej szerokości — wątek agenta, prawa szyna: baner certyfikatu → „Zatwierdzone — czeka na wykonanie" → „Co Flo zrobił" — a pod nim **siatka kart Pulpitu** (Finora Finance). Poniżej `lg` sam wątek na pełny ekran, jak dotąd |
 | `/flo` | **przekierowanie na `/dashboard`**, z zachowaniem parametrów zapytania |
 
 `/flo` NIE zostało skasowane i nie wolno go kasować bez przejścia po
@@ -80,9 +97,10 @@ prowadziłaby do tego samego miejsca przez przekierowanie.
 ### Kto czym jest w tej kompozycji
 
 `app/(dashboard)/dashboard/page.tsx` (Bartosz) pobiera dane i składa ekran.
-Nie zna wnętrza wątku. Renderuje `FloScreen` (Masło) i wstrzykuje kartę
-z liczbami miesiąca przez **gniazdo `aside`** — prop dodany do `FloScreen`
-30.08.2026, zmiana przez DODANIE, bez propa ekran zachowuje się jak wcześniej.
+Nie zna wnętrza wątku. Renderuje `FloScreen` (Masło) i wstrzykuje do
+**gniazda `aside`** baner certyfikatu (prop dodany do `FloScreen` 30.08.2026,
+zmiana przez DODANIE, bez propa ekran zachowuje się jak wcześniej). Do E4 szła
+tam też karta z liczbami miesiąca — od E4 liczby są w kartach pod slotem.
 
 Nagłówek agenta jest wyłączony (`showHeader={false}`): panel ma własny pasek
 tytułu, a dwa nagłówki jeden nad drugim to szum.
@@ -177,13 +195,31 @@ app/globals.css                              paleta (Bartosz od 30.08.2026)
 lib/theme/theme.ts                           domyślny motyw = jasny
 lib/dashboard-page-title.ts                  tytuł strony w pasku nagłówka
 lib/dashboard/monthly-figures.ts             liczby miesiąca + seria wykresu
-app/(dashboard)/layout.tsx                   shell: sidebar, nagłówek, banery
+app/(dashboard)/layout.tsx                   shell na szablonie Finora (E2)
+components/dashboard/app-sidebar.tsx         sidebar 16 rem / 3 rem zwinięty (E2)
+components/dashboard/app-header.tsx          nagłówek 52 px (E2)
+components/dashboard/command-menu.tsx        paleta poleceń ⌘K (E2)
+components/dashboard/profile-menu.tsx        menu profilu (E2)
+components/dashboard/footer.tsx              stopka (E2)
+lib/dashboard-nav-config.ts                  menu: sekcje, ikony Remix (E2)
 app/(dashboard)/_components/
   dashboard-page-heading.tsx                 tytuł w nagłówku
   dashboard-verification-banner.tsx          baner braku certyfikatu
-app/(dashboard)/dashboard/page.tsx           RAMA: karta agenta + szyna
-components/dashboard/vat-summary-card.tsx    przeniesione na /przeplywy
-components/dashboard/sales-chart-card.tsx    przeniesione na /przeplywy
+app/(dashboard)/dashboard/page.tsx           RAMA: slot FLO + siatka Pulpitu (E4)
+components/dashboard/pulpit/                 karty Pulpitu Finory i ich ładowarki (E4)
+lib/dashboard/costs.ts                       koszty (jedna droga, §2.4 pkt 12)
+lib/dashboard/rankings.ts                    produkty i klienci (§2.4 pkt 13)
+lib/dashboard/receivables-aging.ts           należności według terminu
+lib/dashboard/recent-invoices.ts             ostatnie faktury
+lib/dashboard/pulpit-report.ts               karta „Ten miesiąc”
+lib/dashboard/vat-limit.ts                   limit zwolnienia z VAT (na lib/flo/functions/vat-limit.ts)
+app/(dashboard)/przeplywy/page.tsx           Przepływy = Cash Flow Finory (E5)
+components/przeplywy/                        karty Przepływów i ich ładowarki (E5;
+                                             dawne vat-summary-card, sales-chart-card
+                                             i monthly-figures-card usunięte)
+lib/dashboard/cash-flow.ts                   liczby /przeplywy „jak w KPiR”
+lib/dashboard/inflows.ts                     wpływy według oznaczonych wpłat
+lib/dashboard/cash-movements.ts              agregaty kart Przepływów
 
 --- poniżej wszystko należy do Masła ---
 app/(dashboard)/dashboard/_components/flo-card.tsx
@@ -206,34 +242,27 @@ Do 6 września 2026 panel na telefonie **nie istniał**: proxy przekierowywało
 każdy telefon na `/mobile` („aplikacja mobilna w przygotowaniu"). Ta sekcja
 opisuje, co się zmieniło, i — ważniejsze — czego NIE wolno cofnąć.
 
-### Przełącznik wpuszczania
+### Przełącznik wpuszczania (zdjęty 2 listopada 2026)
 
-`lib/mobile-access.ts` + `NEXT_PUBLIC_MOBILE_PANEL` (`off` | `allowlist` | `on`)
-i `NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST` (identyfikatory `sub` po przecinku).
-Brak zmiennej = `off` = zachowanie sprzed zmiany.
-
-**Prefiks `NEXT_PUBLIC_` nie jest pomyłką.** `proxy.ts` idzie pod Edge, gdzie
-Next wstawia wartości `process.env` w czasie BUDOWANIA, a `Dockerfile`
-przekazuje do builda wyłącznie argumenty `NEXT_PUBLIC_*`. Zmienna bez tego
-prefiksu byłaby w obrazie `undefined` i blokada nigdy by nie zeszła — bez
-żadnego komunikatu, który by na to wskazywał.
-
-W trybie `allowlist` telefon zawsze dociera do `/login` i `/register`, bo
-o wstępie decyduje `userId`, a tego przed zalogowaniem nie ma. Bez tej furtki
-konto z listy nie miałoby jak się zalogować.
+Od FaktWay 1.0 panel jest dostępny na każdym telefonie. Przełącznika
+`NEXT_PUBLIC_MOBILE_PANEL`, listy `NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST`
+i pliku `lib/mobile-access.ts` już nie ma, a `proxy.ts` nie przekierowuje
+telefonów na `/mobile`. Strona `/mobile` zostaje jako krótka instrukcja
+dodania FaktWay do ekranu głównego. Obchód wszystkich ekranów na telefonie:
+`e2e/tests/telefon-ekrany.spec.ts`, wyniki w `docs/qa/telefon-macierz.md`.
 
 ### Co gdzie mieszka na wąskim ekranie
 
 | Element | Komputer (`lg`+) | Telefon |
 |---|---|---|
-| Nawigacja | sidebar 280 px | dolny pasek: Flo · Faktury · **Nowa** · Miesiąc · Więcej |
+| Nawigacja | sidebar 16 rem (od E2, szablon Finora) | dolny pasek: Flo · Faktury · **Nowa** · Miesiąc · Więcej |
 | Tytuł w pasku | „Dashboard" + miesiąc | wordmark FaktFlow |
 | Przełącznik organizacji | kartonik + rozwijka | pigułka „● Nazwa" + arkusz z dołu |
 | Wylogowanie | ikona w pasku | arkusz „Więcej" |
 | Pomoc | pływający bąbelek | arkusz „Więcej" (bąbelek siadał na „Zapisz") |
 | Nagłówek agenta | ukryty (pasek ma tytuł) | **widoczny** — inaczej agent nigdzie się nie przedstawia |
 | Prawa szyna | jest | **nie ma** |
-| Liczby miesiąca | prawa szyna | `/przeplywy`, zakładka „Miesiąc" |
+| Liczby miesiąca | karty Pulpitu pod slotem FLO (od E4) | `/przeplywy`, zakładka „Miesiąc" |
 | Zatwierdzone + historia | prawa szyna | odznaka w nagłówku Flo → arkusz |
 | Baner certyfikatu | wariant szeroki, w szynie na `/dashboard` | wariant wąski na górze, do zamknięcia na dobę |
 
@@ -254,11 +283,11 @@ Nagłówek na telefonie ma awatar, imię, uczciwy podpis i dwie odznaki
 
 ### Tokeny, o których trzeba wiedzieć
 
-`--ff-safe-{t,b,l,r}` (bezpieczne obszary), `--ff-header-h` (56/80 px),
-`--ff-bottom-nav-h` (64/0 px), `--ff-sidebar-w` (0/280 px) — wszystkie
+`--ff-safe-{t,b,l,r}` (bezpieczne obszary), `--ff-header-h` (telefon / od `lg`: 52 px, od E2),
+`--ff-bottom-nav-h` (64/0 px), `--ff-sidebar-w` (0 / 16 rem, po zwinięciu 3 rem — od E2) — wszystkie
 w `app/globals.css`, przełączane jednym `@media (min-width: 1024px)`.
 Klasa `.ff-sticky-actions` zastąpiła dziesięć kopii `fixed bottom-0 …
-lg:left-[280px]`; jeśli zmienia się wysokość nawigacji, zmienia się w jednym
+lg:left-[280px]` (stara wartość; teraz szerokość sidebara z `--ff-sidebar-w`); jeśli zmienia się wysokość nawigacji, zmienia się w jednym
 miejscu.
 
 **Pułapka, która kosztowała pół dnia:** `.ff-route-template` miał
@@ -267,3 +296,35 @@ a niezerowy `transform` tworzy blok zawierający dla `position: fixed` — więc
 WSZYSTKIE przyklejone paski były przypięte do pudełka trasy, nie do okna
 (zmierzone: 112 px nad dolną krawędzią). Jest `backwards`. Nie zmieniaj tego
 z powrotem.
+
+---
+
+## PULPIT FINORY — październik 2026 (E4)
+
+**Data:** 19 października 2026 · **Napisał:** sesja planu Finora (E4) ·
+**Dla kogo:** Masło i każdy, kto siada do `/dashboard`.
+
+Plan: `docs/koordynacja/PLAN-FINORA.md`, P1 i §2.4.
+
+| Szerokość | Co jest na `/dashboard` |
+|---|---|
+| od `lg` | slot FLO na pełnej szerokości, kontener `h-[min(640px,70dvh)]` z `overflow-hidden` (wątek przewija się w sobie), pod nim siatka kart Finory; strona przewija się normalnie, stopka wraca |
+| poniżej `lg` | bez zmian: pełnoekranowy FLO z blokadą przewijania; siatka ukryta (`hidden lg:grid`), liczby miesiąca na `/przeplywy` |
+
+- **Blokada przewijania** (`html.ff-route-dashboard` w `globals.css`) działa
+  od E4 tylko w `@media (max-width: 1023.98px)`. `DashboardRouteFlags` bez
+  zmian — klasa jest ustawiana zawsze, CSS decyduje, czy blokuje.
+- **`ff-flo-legacy`** obejmuje sam slot FLO (korzeń każdej z trzech gałęzi),
+  nie siatkę kart. Karty stoją na presecie Finory.
+- **Szyna** (`aside` w `FloScreen`) niesie tylko baner certyfikatu.
+  `MonthlyFiguresCard` zniknął z Pulpitu, a w E5 także z `/przeplywy` (jego
+  liczby są w karcie „Podsumowanie podatku VAT”).
+  Reguła chowająca szeroki baner `.ff-shell-banner` od `lg` zostaje.
+- **Awaria agenta:** tekst „Liczby miesiąca są w kartach poniżej” (od `lg`)
+  albo „… w zakładce „Miesiąc”” (telefon) zamiast „Liczby miesiąca obok są
+  aktualne”.
+- **Strona nie liczy niczego na swoim poziomie.** Każda karta to osobny
+  Server Component w `Suspense` + `SectionErrorBoundary`; wyjątek strażnika
+  (EUR, środowisko KSeF) zabiera jedną kartę, slot FLO działa zawsze.
+- Wnętrze FLO (`components/flo/*`) nietknięte. Jeśli wątek źle wygląda
+  w wysokości 640 px, to sprawa dla Masła na punkcie kontrolnym.

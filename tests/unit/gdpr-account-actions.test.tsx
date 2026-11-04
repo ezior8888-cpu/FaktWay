@@ -17,7 +17,7 @@ vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.logAudit }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers({ origin: 'https://app.example.test' }) }));
 const created = { id: 'request-1', scheduledFor: new Date('2030-01-16'), cancelToken: 'ab'.repeat(32), alreadyScheduled: false };
-const form = () => { const data = new FormData(); data.set('current_password', 'test-password'); data.set('user_id', 'attacker-supplied-id'); return data; };
+const form = () => { const data = new FormData(); data.set('current_password', 'test-password'); data.set('user_id', 'attacker-supplied-id'); data.set('cf-turnstile-response', 'synthetic-turnstile-token'); return data; };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -154,7 +154,7 @@ describe('GDPR account actions', () => {
   it('password cancellation uses only the authenticated user, ignoring form user_id', async () => {
     expect(await cancelOwnGdprDeletionAction(form())).toEqual({ ok: true });
     expect(mocks.cancelOwnGdprRequest).toHaveBeenCalledExactlyOnceWith('session-user');
-    expect(mocks.reauthenticateWithPassword).toHaveBeenCalledWith('test-password');
+    expect(mocks.reauthenticateWithPassword).toHaveBeenCalledWith('test-password', 'synthetic-turnstile-token');
     expect(mocks.logAudit).toHaveBeenCalledWith(expect.objectContaining({ userId: 'session-user' }));
   });
 

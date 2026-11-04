@@ -1,23 +1,39 @@
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { authAlertErrorClass, authPrimaryButtonClass, authTitleClass } from '@/components/auth/auth-form-styles';
-import { GdprCancelForm } from './cancel-form';
+// Plan Finora P15 (E10b): anulowanie usunięcia konta w układzie logowania
+// Finory. Logika bez zmian: GET jest wyłącznie formularzem, decyzję zapisuje
+// `cancelGdprDeletionAction` dopiero po kliknięciu.
 
-export const dynamic = 'force-dynamic';
+// Next Imports
+import Link from 'next/link'
+
+// Component Imports
+import { AuthMessage } from '@/components/auth/finora/auth-message'
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
+import { Button } from '@/components/ui/button'
+
+import { GdprCancelForm } from './cancel-form'
+
+export const dynamic = 'force-dynamic'
 
 export default async function GdprCancelPage({ searchParams }: {
-  searchParams: Promise<{ token?: string; outcome?: string }>;
+  searchParams: Promise<{ token?: string; outcome?: string }>
 }) {
-  const { token } = await searchParams;
-  const cleanToken = typeof token === 'string' && /^[a-f0-9]{64}$/.test(token) ? token : null;
+  const { token } = await searchParams
+  const cleanToken = typeof token === 'string' && /^[a-f0-9]{64}$/.test(token) ? token : null
   // GET jest wyłącznie formularzem. Parametry query nie mogą deklarować sukcesu.
   return (
-    <div className="space-y-6">
-      <h2 className={authTitleClass}>Anulowanie usunięcia konta</h2>
+    <AuthSplitLayout
+      panelTitle='Zmieniłeś zdanie?'
+      panelText='Dopóki usuwanie konta się nie rozpoczęło, możesz je zachować jednym przyciskiem z linku w mailu.'
+    >
+      <div>
+        <h2 className='mb-2 text-2xl font-semibold'>Anulowanie usunięcia konta</h2>
+      </div>
       {cleanToken ? <GdprCancelForm token={cleanToken} /> : (
-        <div className={authAlertErrorClass}>Otwórz pełny link z maila albo zaloguj się i anuluj żądanie w ustawieniach konta.</div>
+        <AuthMessage tone='error'>Otwórz pełny link z maila albo zaloguj się i anuluj żądanie w ustawieniach konta.</AuthMessage>
       )}
-      <Button asChild size="lg" className={authPrimaryButtonClass}><Link href="/login">Przejdź do logowania</Link></Button>
-    </div>
-  );
+      <Button variant='outline' className='w-full' render={<Link href='/login' />} nativeButton={false}>
+        Przejdź do logowania
+      </Button>
+    </AuthSplitLayout>
+  )
 }

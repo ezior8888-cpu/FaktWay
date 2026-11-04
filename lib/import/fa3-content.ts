@@ -37,7 +37,7 @@ export interface ImportContent {
 /**
  * Data sprzedaży:
  * - zaliczka i korekta → NULL (P_6 to tam data otrzymania zaliczki albo stan
- *   po korekcie; FaktFlow nie zapisuje `sale_date` dla własnych ZAL/KOR);
+ *   po korekcie; FaktWay nie zapisuje `sale_date` dla własnych ZAL/KOR);
  * - jedna data w pliku (P_6, P_6_Do z OkresFa albo ta sama P_6A wszystkich
  *   pozycji) → ta data, także gdy równa dacie wystawienia (wiersz wierny plikowi);
  * - kilka dat — {P_6 albo P_6_Do} ∪ {P_6A}, a pozycja bez P_6A przy braku daty
@@ -83,13 +83,13 @@ export function fa3ImportContent(inv: ParsedInvoice): ImportContent {
 }
 
 /**
- * Powody, dla których JPK FaktFlow nie wykaże tej sprzedaży (te same co
+ * Powody, dla których JPK FaktWay nie wykaże tej sprzedaży (te same co
  * odmowa w `amountsOf`), do ostrzeżenia na początku raportu importu.
  */
 export function contentHeldReasons(inv: ParsedInvoice, content: ImportContent): string[] {
   const reasons: string[] = [];
   const cannot = [...annotationsJpkCannotExpress(content.annotations), ...markersJpkCannotExpress(content.markers)];
-  if (cannot.length) reasons.push(`oznaczenie, którego FaktFlow nie wykazuje w JPK — ${cannot.join(', ')}`);
+  if (cannot.length) reasons.push(`oznaczenie, którego FaktWay nie wykazuje w JPK — ${cannot.join(', ')}`);
   if (content.annotationProblems.length) {
     reasons.push(`adnotacji z KSeF nie udało się odczytać (${content.annotationProblems.join('; ')})`);
   }

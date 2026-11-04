@@ -49,7 +49,7 @@ function setup({ totpOk = true, plan, start } = {}) {
 }
 
 test('parsowanie poleceń, także z nazwą bota', () => {
-  assert.deepEqual(parseCommand('/wdroz@FaktFlowBot abcdef12 123456'), { cmd: 'wdroz', args: ['abcdef12', '123456'] });
+  assert.deepEqual(parseCommand('/wdroz@FaktWayBot abcdef12 123456'), { cmd: 'wdroz', args: ['abcdef12', '123456'] });
   assert.deepEqual(parseCommand('  /STATUS '), { cmd: 'status', args: [] });
   assert.equal(parseCommand('cześć'), null);
 });

@@ -15,6 +15,11 @@ export interface JobContext {
   logger: JobLogger;
   /** 0-based numer wykonania (parytet z `attempt` w Inngest). */
   attempt: number;
+  /**
+   * Id joba pg-boss tego wykonania (= `inngest_run_log.run_id`). Każde
+   * ponowienie to nowy job, więc nowe id. Brak poza workerem (testy, skrypty).
+   */
+  jobId?: string;
 }
 
 export interface JobDefinition<TData = unknown> {

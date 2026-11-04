@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Clock, Loader2, Save } from 'lucide-react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import {
   type ReminderSettingsPayload,
   updateReminderSettingsAction,
 } from '@/app/actions/reminders';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import type { Database } from '@/types/database';
 
 type SettingsRow = Database['public']['Tables']['reminder_settings']['Row'] | null;
@@ -26,7 +28,7 @@ export interface Settings {
   sender_name: string | null;
   /**
    * Dawne „Adres From”. Nie trafia już do „Od:” (Resend wysyła tylko z domen
-   * FaktFlow) — służy jako Reply-To, gdy `reply_to_email` jest pusty. Pola nie
+   * FaktWay) — służy jako Reply-To, gdy `reply_to_email` jest pusty. Pola nie
    * ma w formularzu; kolumna zostaje, bo część kont ma ją wypełnioną.
    */
   sender_email: string | null;
@@ -166,189 +168,174 @@ export function ReminderSettingsForm({
     return Math.min(max, Math.max(min, n));
   };
 
+  // Wygląd z Finory: przełączniki jak `notifications/quiet-hours-card.tsx`
+  // i `security-preferences-card.tsx`, pola liczbowe jak wiersze
+  // `general/index.tsx` (etykieta i opis po lewej, pole po prawej), sekcje
+  // rozdzielone `Separator`, zapis pod spodem jak w `change-password-card.tsx`.
   return (
-    <div className="space-y-8 pb-24">
+    <FieldGroup>
+      <Field orientation="horizontal" className="items-center!">
+        <FieldContent>
+          <FieldLabel htmlFor="reminders-enabled">
+            {settings.enabled ? 'Flo pilnuje terminów' : 'Flo nie pilnuje terminów'}
+          </FieldLabel>
+          <FieldDescription>
+            {settings.enabled
+              ? 'Po terminie przygotuję ponaglenie i pokażę Ci je do zatwierdzenia'
+              : 'Nie odezwę się w sprawie przeterminowanych faktur'}
+          </FieldDescription>
+          <FieldDescription>
+            Flo przygotowuje ponaglenia do przeterminowanych faktur. Wysyłasz je
+            Ty, jednym kliknięciem — nic nie wychodzi automatycznie.
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id="reminders-enabled"
+          checked={settings.enabled}
+          onCheckedChange={(v) => update('enabled', v)}
+        />
+      </Field>
+
+      <Separator />
+
       <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
-          Wkurzacz Dłużników
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Flo przygotowuje ponaglenia do przeterminowanych faktur. Wysyłasz je
-          Ty, jednym kliknięciem — nic nie wychodzi automatycznie.
-        </p>
+        <FieldLabel>Etapy przypomnień</FieldLabel>
+        <FieldDescription>Skonfiguruj kiedy i jakie przypomnienia wysyłać</FieldDescription>
       </div>
 
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-              {settings.enabled
-                ? 'Flo pilnuje terminów'
-                : 'Flo nie pilnuje terminów'}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {settings.enabled
-                ? 'Po terminie przygotuję ponaglenie i pokażę Ci je do zatwierdzenia'
-                : 'Nie odezwę się w sprawie przeterminowanych faktur'}
-            </p>
-          </div>
-          <Toggle
-            checked={settings.enabled}
-            onChange={(v) => update('enabled', v)}
-          />
-        </div>
-      </section>
-
-      <section className="space-y-5 rounded-3xl ff-glass-pane p-7 lg:p-8">
-        <div>
-          <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-            Etapy przypomnień
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Skonfiguruj kiedy i jakie przypomnienia wysyłać
-          </p>
-        </div>
-
-        {STAGE_META.map((meta, idx) => (
-          <div
-            key={meta.enabled}
-            className="flex flex-col gap-4 rounded-2xl border border-[var(--ff-glass-border)] bg-foreground/2 p-4 sm:flex-row sm:items-start"
-          >
-            <Toggle
+      {STAGE_META.map((meta, idx) => (
+        <div
+          key={meta.enabled}
+          className="flex flex-col gap-3 border p-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <Field orientation="horizontal" className="items-center! sm:w-auto sm:flex-1">
+            <Switch
+              id={`stage-${idx}`}
               checked={settings[meta.enabled]}
-              onChange={(v) => update(meta.enabled, v)}
+              onCheckedChange={(v) => update(meta.enabled, v)}
             />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{meta.name}</p>
-              <p className="text-xs text-muted-foreground">{meta.desc}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 sm:justify-end">
-              <Label htmlFor={`days-${idx}`} className="text-xs text-muted-foreground whitespace-nowrap">
-                Dni po terminie:
-              </Label>
-              <Input
-                id={`days-${idx}`}
-                type="number"
-                min={1}
-                max={90}
-                value={settings[meta.days]}
-                onChange={(e) =>
-                  update(
-                    meta.days,
-                    parseBoundedInt(e.target.value, settings[meta.days], 1, 90),
-                  )
-                }
-                className="h-9 w-20"
-                disabled={!settings[meta.enabled]}
-              />
-            </div>
+            <FieldContent>
+              <FieldLabel htmlFor={`stage-${idx}`}>{meta.name}</FieldLabel>
+              <FieldDescription>{meta.desc}</FieldDescription>
+            </FieldContent>
+          </Field>
+          <div className="flex shrink-0 items-center gap-2">
+            <FieldLabel htmlFor={`days-${idx}`} className="text-muted-foreground text-xs font-normal whitespace-nowrap">
+              Dni po terminie:
+            </FieldLabel>
+            <Input
+              id={`days-${idx}`}
+              type="number"
+              min={1}
+              max={90}
+              value={settings[meta.days]}
+              onChange={(e) =>
+                update(
+                  meta.days,
+                  parseBoundedInt(e.target.value, settings[meta.days], 1, 90),
+                )
+              }
+              className="w-20"
+              disabled={!settings[meta.enabled]}
+            />
           </div>
-        ))}
-      </section>
-
-      <section className="space-y-5 rounded-3xl ff-glass-pane p-7 lg:p-8">
-        <div>
-          <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-            Inteligentne reguły
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Anti-spam i smart pauzy
-          </p>
         </div>
+      ))}
 
-        <SmartToggle
-          label="Pauza po odpowiedzi klienta"
-          desc="Wstrzymaj przypomnienia jeśli klient odpisał na email"
-          checked={settings.pause_on_reply}
-          onChange={(v) => update('pause_on_reply', v)}
+      <Separator />
+
+      <div>
+        <FieldLabel>Inteligentne reguły</FieldLabel>
+        <FieldDescription>Anti-spam i smart pauzy</FieldDescription>
+      </div>
+
+      <SmartToggle
+        id="pause-on-reply"
+        label="Pauza po odpowiedzi klienta"
+        desc="Wstrzymaj przypomnienia jeśli klient odpisał na email"
+        checked={settings.pause_on_reply}
+        onChange={(v) => update('pause_on_reply', v)}
+      />
+
+      <SmartToggle
+        id="pause-on-partial-payment"
+        label="Pauza po częściowej płatności"
+        desc="Wstrzymaj jeśli klient zapłacił choć część (negocjacja w toku)"
+        checked={settings.pause_on_partial_payment}
+        onChange={(v) => update('pause_on_partial_payment', v)}
+      />
+
+      <SmartToggle
+        id="send-on-weekdays-only"
+        label="Wysyłaj tylko w dni robocze"
+        desc="Pomijaj soboty i niedziele"
+        checked={settings.send_on_weekdays_only}
+        onChange={(v) => update('send_on_weekdays_only', v)}
+      />
+
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel htmlFor="send-hour">Godzina wysyłki</FieldLabel>
+          <FieldDescription>Najlepiej rano przed godzinami pracy (6–18)</FieldDescription>
+        </FieldContent>
+        <Input
+          id="send-hour"
+          type="number"
+          min={6}
+          max={18}
+          value={settings.send_hour}
+          onChange={(e) =>
+            update(
+              'send_hour',
+              parseBoundedInt(e.target.value, settings.send_hour, 6, 18),
+            )
+          }
+          className="w-full sm:w-64"
         />
+      </Field>
 
-        <SmartToggle
-          label="Pauza po częściowej płatności"
-          desc="Wstrzymaj jeśli klient zapłacił choć część (negocjacja w toku)"
-          checked={settings.pause_on_partial_payment}
-          onChange={(v) => update('pause_on_partial_payment', v)}
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel htmlFor="max-reminders">Maks. przypomnień na fakturę</FieldLabel>
+          <FieldDescription>Limit etapów w kolejce (scheduler)</FieldDescription>
+        </FieldContent>
+        <Input
+          id="max-reminders"
+          type="number"
+          min={1}
+          max={20}
+          value={settings.max_reminders_per_invoice}
+          onChange={(e) =>
+            update(
+              'max_reminders_per_invoice',
+              parseBoundedInt(
+                e.target.value,
+                settings.max_reminders_per_invoice,
+                1,
+                20,
+              ),
+            )
+          }
+          className="w-full sm:w-64"
         />
+      </Field>
 
-        <SmartToggle
-          label="Wysyłaj tylko w dni robocze"
-          desc="Pomijaj soboty i niedziele"
-          checked={settings.send_on_weekdays_only}
-          onChange={(v) => update('send_on_weekdays_only', v)}
-        />
+      <Separator />
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
-              Godzina wysyłki
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Najlepiej rano przed godzinami pracy (6–18)
-            </p>
-          </div>
-          <Input
-            type="number"
-            min={6}
-            max={18}
-            value={settings.send_hour}
-            onChange={(e) =>
-              update(
-                'send_hour',
-                parseBoundedInt(e.target.value, settings.send_hour, 6, 18),
-              )
-            }
-            className="h-9 w-20 sm:text-right"
-          />
-        </div>
+      <div>
+        <FieldLabel>Dane nadawcy</FieldLabel>
+        <FieldDescription>
+          Nazwa pojawi się w stopce emaila i jako „Od:”. Wysyłamy z adresu
+          FaktWay w imieniu Twojej firmy — odpowiedzi klientów trafią na
+          adres poniżej.
+        </FieldDescription>
+      </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium">Maks. przypomnień na fakturę</p>
-            <p className="text-xs text-muted-foreground">
-              Limit etapów w kolejce (scheduler)
-            </p>
-          </div>
-          <Input
-            type="number"
-            min={1}
-            max={20}
-            value={settings.max_reminders_per_invoice}
-            onChange={(e) =>
-              update(
-                'max_reminders_per_invoice',
-                parseBoundedInt(
-                  e.target.value,
-                  settings.max_reminders_per_invoice,
-                  1,
-                  20,
-                ),
-              )
-            }
-            className="h-9 w-20 sm:text-right"
-          />
-        </div>
-      </section>
-
-      <section className="space-y-5 rounded-3xl ff-glass-pane p-7 lg:p-8">
-        <div>
-          <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-            Dane nadawcy
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Nazwa pojawi się w stopce emaila i jako „Od:”. Wysyłamy z adresu
-            FaktFlow w imieniu Twojej firmy — odpowiedzi klientów trafią na
-            adres poniżej.
-          </p>
-        </div>
-
-        <div>
-          <Label
-            htmlFor="sender-name"
-            className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground"
-          >
-            Imię i nazwisko / nazwa nadawcy
-          </Label>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="sender-name">Imię i nazwisko / nazwa nadawcy</FieldLabel>
+        </FieldContent>
+        <div className="w-full!">
           <Input
             id="sender-name"
             value={settings.sender_name ?? ''}
@@ -361,14 +348,14 @@ export function ReminderSettingsForm({
             placeholder={tenantName}
           />
         </div>
+      </Field>
 
-        <div>
-          <Label
-            htmlFor="reply-to"
-            className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground"
-          >
-            Email do odpowiedzi (Reply-To)
-          </Label>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="reply-to">Email do odpowiedzi (Reply-To)</FieldLabel>
+          <FieldDescription>Klient odpisuje tu, nie na nasz email systemowy</FieldDescription>
+        </FieldContent>
+        <div className="w-full!">
           <Input
             id="reply-to"
             type="email"
@@ -382,78 +369,41 @@ export function ReminderSettingsForm({
             }
             placeholder="kontakt@twoja-firma.pl"
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Klient odpisuje tu, nie na nasz email systemowy
-          </p>
         </div>
-      </section>
+      </Field>
 
-      <div className="ff-sticky-actions border-t border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)]">
-        <div className="mx-auto flex max-w-7xl justify-end">
-          <Button
-            variant="glass-primary"
-            size="lg"
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Zapisz ustawienia
-          </Button>
-        </div>
+      <Separator />
+
+      <div>
+        <Button type="button" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+          Zapisz ustawienia
+        </Button>
       </div>
-    </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-        checked ? 'bg-foreground' : 'bg-foreground/15'
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform ${
-          checked ? 'translate-x-5' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
+    </FieldGroup>
   );
 }
 
 function SmartToggle({
+  id,
   label,
   desc,
   checked,
   onChange,
 }: {
+  id: string;
   label: string;
   desc: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{desc}</p>
-      </div>
-      <Toggle checked={checked} onChange={onChange} />
-    </div>
+    <Field orientation="horizontal" className="items-center!">
+      <FieldContent>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <FieldDescription>{desc}</FieldDescription>
+      </FieldContent>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </Field>
   );
 }

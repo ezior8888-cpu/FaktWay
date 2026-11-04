@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/auth/admin-guard';
 import { AdminNav } from './_components/admin-nav';
 
 export const metadata: Metadata = {
-  title: 'Admin — FaktFlow',
+  title: 'Admin — FaktWay',
   description: 'Wewnętrzny panel operatora platformy.',
   // Bezwzględny zakaz indeksacji `/admin/*` — strona nie powinna trafić nawet
   // przypadkiem do Google ani archive.org.
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
  * Funkcje odczytu danych i akcje muszą sprawdzać uprawnienia przed użyciem service_role.
  *
  * Renderujemy własny header/footer (NIE używamy `(dashboard)/layout.tsx`),
- * żeby admin nie widział org-switchera, baneru weryfikacji KSeF i innych
- * elementów które są bez znaczenia w trybie operatorskim.
+ * żeby admin nie widział menu firm, dolnej nawigacji i innych elementów,
+ * które są bez znaczenia w trybie operatorskim.
  */
 export default async function AdminLayout({
   children,

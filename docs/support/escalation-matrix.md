@@ -40,6 +40,23 @@ Priorytet ocenia człowiek przy przeglądaniu eskalacji — AI go nie ustala.
 - **Zwroty / reklamacje płatności** — patrz `docs/support/refund-policy.md`.
 - **Żądania RODO** (eksport, usunięcie konta) — user robi to sam w
   ustawieniach. Eskalacja tylko, gdy user stracił dostęp do konta.
+- **Usunięcie firmy (organizacji)** — od 15.10.2026 tylko przez pomoc.
+  W aplikacji (Ustawienia → Konto i dane (RODO), sekcja „Usuń organizację
+  (firmę)”) jest sama instrukcja; właściciel widzi przycisk „Napisz do
+  pomocy”, który otwiera wiadomość na adres pomocy z tematem „Usunięcie
+  firmy, NIP …” (`components/settings/company-deletion.tsx`). Nic się przy
+  tym nie zapisuje. Aplikacja nie umie jeszcze wyłączyć ani usunąć firmy —
+  flagi `tenants.deleted_at` / `is_active` niczego nie blokują.
+  Postępowanie:
+  1. Upewnij się, że pisze właściciel: adres nadawcy = e-mail konta
+     z rolą `owner` w firmie o podanym NIP. NIP z tematu to tylko
+     podpowiedź — temat może wpisać każdy.
+  2. Zaproponuj eksport danych przed usunięciem (Księgowość → Eksport).
+  3. Abonament właściciel anuluje sam: Ustawienia → Abonament → panel
+     Stripe. Bez tego opłaty idą dalej.
+  4. Zgłoś sprawę Bartoszowi — wyłączenie dostępu i usunięcie danych firmy
+     wymaga decyzji i ręcznej procedury. Nie ustawiaj flag w bazie „na
+     próbę”: dają złudzenie usunięcia, a firma działa dalej.
 
 ## Po rozwiązaniu
 

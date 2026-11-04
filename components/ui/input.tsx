@@ -1,23 +1,16 @@
-import * as React from "react"
+import * as React from 'react'
 
-import { cn } from "@/lib/utils"
+import { Input as InputPrimitive } from '@base-ui/react/input'
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+import { cn } from '@/lib/utils'
+
+function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
   return (
-    <input
+    <InputPrimitive
       type={type}
-      data-slot="input"
+      data-slot='input'
       className={cn(
-        "flex h-11 w-full rounded-xl border border-glass-border " +
-          "bg-white/50 dark:bg-white/5 backdrop-blur-glass-sm px-4 py-2 " +
-          "text-sm placeholder:text-muted-foreground " +
-          "focus:outline-none focus:ring-2 focus:ring-foreground/20 " +
-          "focus:border-foreground/40 " +
-          "disabled:cursor-not-allowed disabled:opacity-50 " +
-          "transition-all duration-200 ease-apple " +
-          // Touch devices: większy + większa czcionka (16px = brak zoom na iOS focus)
-          "pointer-coarse:h-12 pointer-coarse:text-base",
-        "file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        'border-input file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 h-8 w-full min-w-0 rounded-none border bg-transparent px-2.5 py-1 text-xs transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs file:font-medium focus-visible:ring-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-1 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:text-[16px]', // E1: iOS powiększa pola <16px; wysokość dotykowa
         className
       )}
       {...props}

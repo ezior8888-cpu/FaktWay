@@ -1,369 +1,135 @@
 import Link from 'next/link';
-import {
-  User,
-  Bell,
-  Bot,
-  Building2,
-  CreditCard,
-  ShieldCheck,
-  History,
-  UserCog,
-  ChevronRight,
-  AlertTriangle,
-  Mail,
-  Plus,
-  Lock,
-  Receipt,
-} from 'lucide-react';
-import { DeleteAccountSection } from '@/components/settings/delete-account';
-import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
-import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { RiAddLine } from '@remixicon/react';
+
+import { BusinessStartForm } from '@/components/settings/business-start-form';
 import { CashMethodForm } from '@/components/settings/cash-method-form';
 import { CompanyProfileForm } from '@/components/settings/company-profile-form';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field';
+import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
+import { buttonVariants } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { readTenantBusinessStart } from '@/lib/invoices/business-start';
 import { readTenantCashMethod } from '@/lib/invoices/cash-method';
+import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Zakładka „Firma” = General z Finory (plan P14): profil firmy, zwolnienie
+ * z VAT, metoda kasowa, data rozpoczęcia działalności (#data-rozpoczecia —
+ * link z Pulpitu). Z General wylatują język, waluta, strefa czasowa i rok
+ * obrotowy (zawsze PL / PLN / Europe/Warsaw / rok kalendarzowy), a Profile
+ * Finory nie ma odpowiednika. Usunięcie firmy jest tylko w „Konto i dane”.
+ */
 export default async function SettingsPage() {
-  const { supabase, user, tenantId, role } = await getPageContext();
+  const { supabase, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, { data: authUser }, vatExemptionBasis, vatCashMethod] = await Promise.all([
+  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
       .eq('id', tenantId)
       .maybeSingle(),
-    supabase.auth.getUser(),
     // Osobno i odpornie — przed migracją 00091 kolumny nie ma.
     readTenantVatExemption(supabase, tenantId),
     // Odpornie — przed migracją 00094 kolumny nie ma.
     readTenantCashMethod(supabase, tenantId),
+    // Odpornie — przed migracją 00153 kolumny nie ma.
+    readTenantBusinessStart(supabase, tenantId),
   ]);
 
-  // `user` z `getPageContext` ma email + id; created_at potrzebne tylko tutaj.
-  const userCreatedAt = authUser.user?.created_at ?? null;
-  const isOwner = role === 'owner';
   // Edycja danych firmy (F-008): właściciel i administrator, jak ustawienia VAT.
-  const canEditCompany = isOwner || role === 'admin';
-  const addressJson = (tenant?.address_json ?? null) as { addressLine1?: string; addressLine2?: string } | null;
+  const canEditCompany = role === 'owner' || role === 'admin';
+  const addressJson = (
+    tenant?.address_json && typeof tenant.address_json === 'object' ? tenant.address_json : null
+  ) as { addressLine1?: string; addressLine2?: string } | null;
   const companyAddress = {
     name: tenant?.name ?? '',
     addressLine1: addressJson?.addressLine1 ?? '',
     addressLine2: addressJson?.addressLine2 ?? '',
   };
 
-  const settingsLinks = [
-    {
-      href: '/settings/flo',
-      label: 'Flo',
-      description: 'Kiedy i którędy agent ma się odzywać',
-      icon: Bot,
-    },
-    {
-      href: '/settings/ksef',
-      label: 'Ustawienia KSeF',
-      description: 'Certyfikat i połączenie z systemem KSeF',
-      icon: ShieldCheck,
-    },
-    ...(isOwner
-      ? [
-          {
-            href: '/settings/reminders',
-            label: 'Wkurzacz Dłużników',
-            description: 'Ponaglenia, które Flo przygotowuje do Twojej zgody',
-            icon: Mail,
-          },
-        ]
-      : []),
-    {
-      href: '/settings/accountant',
-      label: 'Co-Pilot Księgowego',
-      description: 'Auto-wysyłka paczek do biura rachunkowego',
-      icon: UserCog,
-    },
-    ...(isOwner || role === 'admin'
-      ? [
-          {
-            href: '/settings/team',
-            label: 'Zespół',
-            description: 'Członkowie organizacji, zaproszenia, prośby o dostęp',
-            icon: User,
-          },
-          {
-            href: '/settings/billing',
-            label: 'Subskrypcja i rozliczenia',
-            description: 'Plan, karta, faktury Stripe — 30 dni za darmo',
-            icon: CreditCard,
-          },
-        ]
-      : []),
-    {
-      href: '/settings/security',
-      label: 'Bezpieczeństwo',
-      description: 'Hasło, weryfikacja dwuetapowa (2FA), sesje',
-      icon: Lock,
-    },
-    {
-      href: '/settings/notifications',
-      label: 'Powiadomienia',
-      description: 'Push notifications na telefon i desktop',
-      icon: Bell,
-    },
-    {
-      href: '/settings/audit',
-      label: 'Historia aktywności',
-      description: 'Audit trail wszystkich operacji w koncie',
-      icon: History,
-    },
-  ];
-
   return (
-    <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
-          Ustawienia
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Zarządzaj kontem, firmą i bezpieczeństwem
-        </p>
+    <FieldGroup>
+      <div className="flex justify-between gap-2 max-sm:flex-col sm:items-center">
+        <div>
+          <FieldLabel>Dane firmy</FieldLabel>
+          <FieldDescription>
+            {canEditCompany
+              ? 'Nazwa i adres siedziby na kolejnych fakturach'
+              : 'Informacje o aktywnej organizacji (z onboardingu / GUS)'}
+          </FieldDescription>
+        </div>
+        <Link href="/onboarding?action=new" prefetch={false} className={buttonVariants({ variant: 'outline' })}>
+          <RiAddLine aria-hidden />
+          Dodaj kolejną organizację
+        </Link>
       </div>
 
-      {/* Profil użytkownika */}
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-            <User className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="flex-1 space-y-4">
-            <div>
-              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                Profil użytkownika
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Twoje dane konta i rola w organizacji
-              </p>
-            </div>
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel>NIP</FieldLabel>
+        </FieldContent>
+        <span className="font-mono text-sm">{tenant?.nip || '-'}</span>
+      </Field>
 
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Email
-                </dt>
-                <dd className="font-medium mt-1 truncate">
-                  {user.email ?? '-'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Rola
-                </dt>
-                <dd className="mt-1">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-foreground/5 border border-glass-border text-xs font-medium backdrop-blur-glass-sm capitalize">
-                    {role}
-                  </span>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  ID konta
-                </dt>
-                <dd className="font-mono text-xs text-muted-foreground mt-1">
-                  {user.id.slice(0, 8)}...{user.id.slice(-4)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Konto utworzone
-                </dt>
-                <dd className="text-sm text-muted-foreground mt-1">
-                  {userCreatedAt
-                    ? new Date(userCreatedAt).toLocaleDateString('pl-PL', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })
-                    : '-'}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </div>
-
-      {/* Dane firmy */}
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-            <Building2 className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0 space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                  Dane firmy
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {canEditCompany
-                    ? 'Nazwa i adres siedziby na kolejnych fakturach'
-                    : 'Informacje o aktywnej organizacji (z onboardingu / GUS)'}
-                </p>
-              </div>
-              <Link
-                href="/onboarding?action=new"
-                prefetch={false}
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-glass-border bg-foreground/5 px-4 py-2.5 text-sm font-medium hover:bg-foreground/10 transition-colors"
-              >
-                <Plus className="h-4 w-4" aria-hidden />
-                Dodaj kolejną organizację
-              </Link>
-            </div>
-
-            {canEditCompany ? (
-              <>
-                <div className="text-sm">
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">NIP</span>
-                  <div className="font-mono mt-1">{tenant?.nip ?? '-'}</div>
-                </div>
-                <CompanyProfileForm initial={companyAddress} />
-              </>
-            ) : (
-            <dl className="grid grid-cols-1 gap-4 text-sm">
-              <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Nazwa firmy
-                </dt>
-                <dd className="font-medium mt-1">
-                  {tenant?.name ?? 'Bez nazwy'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  NIP
-                </dt>
-                <dd className="font-mono mt-1">{tenant?.nip ?? '-'}</dd>
-              </div>
-              {tenant?.address_json &&
-                typeof tenant.address_json === 'object' &&
-                tenant.address_json !== null && (
-                  <div>
-                    <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      Adres siedziby
-                    </dt>
-                    <dd className="text-foreground mt-1 leading-relaxed">
-                      {
-                        (
-                          tenant.address_json as {
-                            addressLine1?: string;
-                            addressLine2?: string;
-                          }
-                        ).addressLine1
-                      }
-                      <br />
-                      {
-                        (
-                          tenant.address_json as {
-                            addressLine1?: string;
-                            addressLine2?: string;
-                          }
-                        ).addressLine2
-                      }
-                    </dd>
-                  </div>
-                )}
-            </dl>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Podatek VAT — zwolnienie (FA(3) P_19A) */}
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8 space-y-5">
-        <div className="flex items-start gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-            <Receipt className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0 space-y-4">
-            <div>
-              <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                Podatek VAT
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {vatExemptionBasis
-                  ? `Zwolniona z VAT — ${vatExemptionBasis}`
-                  : vatCashMethod
-                    ? 'Czynny podatnik VAT — metoda kasowa'
-                    : 'Czynny podatnik VAT'}
-              </p>
-            </div>
-            <VatExemptionForm
-              initialBasis={vatExemptionBasis}
-              canEdit={role === 'owner' || role === 'admin'}
-            />
-            <CashMethodForm
-              initialEnabled={vatCashMethod}
-              canEdit={role === 'owner' || role === 'admin'}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Linki do podstron */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider px-2">
-          Konfiguracja
-        </h2>
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] overflow-hidden">
-          {settingsLinks.map((link, idx) => {
-            const Icon = link.icon;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex items-center gap-4 p-5 transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] ${
-                  idx !== settingsLinks.length - 1
-                    ? 'border-b border-white/10'
-                    : ''
-                }`}
-              >
-                <div className="h-10 w-10 rounded-2xl bg-foreground/5 flex items-center justify-center shrink-0">
-                  <Icon className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">{link.label}</p>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {link.description}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Niebezpieczna strefa - tylko owner */}
-      {isOwner && (
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border-red-500/25 bg-red-500/10 p-7 lg:p-8 space-y-5">
-          <div className="flex items-start gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
-              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
-            </div>
-            <div className="flex-1 space-y-4">
-              <div>
-                <h2 className="text-lg font-display font-semibold tracking-tighter-text">
-                  Niebezpieczna strefa
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                  Trwałe usunięcie konta wraz ze wszystkimi danymi.
-                  Operacja nieodwracalna po 30 dniach.
-                </p>
-              </div>
-              <DeleteAccountSection tenantNip={tenant?.nip ?? ''} />
-            </div>
-          </div>
-        </div>
+      {canEditCompany ? (
+        <CompanyProfileForm initial={companyAddress} />
+      ) : (
+        <>
+          <Field orientation="responsive">
+            <FieldContent>
+              <FieldLabel>Nazwa firmy</FieldLabel>
+            </FieldContent>
+            <span className="text-sm font-medium">{tenant?.name ?? 'Bez nazwy'}</span>
+          </Field>
+          {addressJson ? (
+            <Field orientation="responsive">
+              <FieldContent>
+                <FieldLabel>Adres siedziby</FieldLabel>
+              </FieldContent>
+              <span className="text-sm leading-relaxed">
+                {addressJson.addressLine1}
+                <br />
+                {addressJson.addressLine2}
+              </span>
+            </Field>
+          ) : null}
+        </>
       )}
-    </div>
+
+      <Separator />
+
+      <div>
+        <FieldLabel>Podatek VAT</FieldLabel>
+        <FieldDescription>
+          {vatExemptionBasis
+            ? `Zwolniona z VAT — ${vatExemptionBasis}`
+            : vatCashMethod
+              ? 'Czynny podatnik VAT — metoda kasowa'
+              : 'Czynny podatnik VAT'}
+        </FieldDescription>
+      </div>
+
+      <VatExemptionForm initialBasis={vatExemptionBasis} canEdit={canEditCompany} />
+
+      <Separator />
+
+      <CashMethodForm initialEnabled={vatCashMethod} canEdit={canEditCompany} />
+
+      <Separator />
+
+      <div id="data-rozpoczecia" className="scroll-mt-24">
+        <BusinessStartForm initialStartedOn={businessStartedOn} canEdit={canEditCompany} today={todayInWarsaw()} />
+      </div>
+    </FieldGroup>
   );
 }

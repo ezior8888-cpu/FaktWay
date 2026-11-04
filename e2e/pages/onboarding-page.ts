@@ -18,7 +18,7 @@ export class OnboardingPage {
   readonly inviteTokenInput: Locator;
 
   constructor(private readonly page: Page) {
-    this.heading = page.getByRole('heading', { name: /witaj w faktflow|dodaj kolejn/i });
+    this.heading = page.getByRole('heading', { name: /witaj w faktway|dodaj kolejn/i });
     this.createTab = page.getByRole('tab', { name: /załóż firmę/i });
     this.inviteTab = page.getByRole('tab', { name: /mam zaproszenie/i });
     this.joinTab = page.getByRole('tab', { name: /poproś o dostęp/i });

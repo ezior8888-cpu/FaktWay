@@ -3,23 +3,33 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bell,
-  BellOff,
-  Loader2,
-  Monitor,
-  Smartphone,
-  Tablet,
-  Trash2,
-} from 'lucide-react';
+  RiComputerLine,
+  RiDeleteBinLine,
+  RiLoader4Line,
+  RiSmartphoneLine,
+  RiTabletLine,
+} from '@remixicon/react';
 import { toast } from 'sonner';
 
 import {
   unsubscribePushAction,
   updatePushPreferencesAction,
 } from '@/app/actions/push-subscriptions';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import type { Tables } from '@/types/database';
+
+/**
+ * Powiadomienia push. Wygląd z Finory: stan na tym urządzeniu jak wiersz
+ * `security/two-factor-card.tsx` (opis po lewej, przycisk po prawej), lista
+ * urządzeń jak `security/sessions-card.tsx` (ramka `border p-3`, ikona
+ * urządzenia w `bg-muted`), a rodzaje powiadomień jak przełączniki
+ * `notifications/quiet-hours-card.tsx`.
+ */
 
 type PushSubscription = Tables<'push_subscriptions'>;
 
@@ -67,81 +77,54 @@ export function NotificationsSettings({ subscriptions }: Props) {
   } = usePushNotifications();
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-display font-semibold tracking-tighter-display">
-          Powiadomienia
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Otrzymuj alerty bezpośrednio na telefon — bez konieczności otwierania
-          apki
-        </p>
-      </div>
-
-      {/* Status na tym urządzeniu */}
-      <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-4">
-            <div
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-                isSubscribed ? 'bg-green-500/10' : 'bg-foreground/5'
-              }`}
-            >
-              {isSubscribed ? (
-                <Bell className="h-6 w-6 text-green-600 dark:text-green-400" />
-              ) : (
-                <BellOff className="h-6 w-6 text-muted-foreground" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="font-medium">
-                {!isSupported
-                  ? 'Twoja przeglądarka nie wspiera powiadomień'
-                  : isSubscribed
-                    ? 'Powiadomienia włączone na tym urządzeniu'
-                    : 'Powiadomienia wyłączone na tym urządzeniu'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {!isSupported
-                  ? 'Spróbuj Chrome, Edge lub Safari 16.4+'
-                  : permission === 'denied'
-                    ? 'Powiadomienia są zablokowane w ustawieniach przeglądarki'
-                    : isSubscribed
-                      ? 'Otrzymasz alerty nawet gdy apka jest zamknięta'
-                      : 'Włącz aby dostawać alerty na telefon'}
-              </p>
-            </div>
-          </div>
-          {isSupported && permission !== 'denied' && (
+    <FieldGroup>
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel>
+            {!isSupported
+              ? 'Twoja przeglądarka nie wspiera powiadomień'
+              : isSubscribed
+                ? 'Powiadomienia włączone na tym urządzeniu'
+                : 'Powiadomienia wyłączone na tym urządzeniu'}
+          </FieldLabel>
+          <FieldDescription>
+            {!isSupported
+              ? 'Spróbuj Chrome, Edge lub Safari 16.4+'
+              : permission === 'denied'
+                ? 'Powiadomienia są zablokowane w ustawieniach przeglądarki'
+                : isSubscribed
+                  ? 'Otrzymasz alerty nawet gdy apka jest zamknięta'
+                  : 'Włącz aby dostawać alerty na telefon'}
+          </FieldDescription>
+        </FieldContent>
+        {isSupported && permission !== 'denied' && (
+          <div className="flex items-center gap-3">
+            {isSubscribed ? (
+              <Badge className="bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400">
+                Włączone
+              </Badge>
+            ) : null}
             <Button
-              variant={isSubscribed ? 'glass' : 'glass-primary'}
-              size="lg"
+              variant={isSubscribed ? 'outline' : 'default'}
               type="button"
               onClick={isSubscribed ? unsubscribe : subscribe}
               disabled={isLoading}
             >
-              {isLoading && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {isLoading && <RiLoader4Line className="animate-spin" aria-hidden />}
               {isSubscribed ? 'Wyłącz' : 'Włącz powiadomienia'}
             </Button>
-          )}
-        </div>
-      </section>
+          </div>
+        )}
+      </Field>
 
-      {/* Lista urządzeń */}
       {subscriptions.length > 0 && (
-        <section className="space-y-4 rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-7 lg:p-8">
+        <div className="flex flex-col gap-4">
           <div>
-            <h2 className="font-display text-lg font-semibold tracking-tighter-text">
-              Twoje urządzenia ({subscriptions.length})
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Każde urządzenie ma własne preferencje powiadomień
-            </p>
+            <FieldLabel>Twoje urządzenia ({subscriptions.length})</FieldLabel>
+            <FieldDescription>Każde urządzenie ma własne preferencje powiadomień</FieldDescription>
           </div>
 
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             {subscriptions.map((sub) => (
               <DeviceRow
                 key={sub.id}
@@ -150,9 +133,9 @@ export function NotificationsSettings({ subscriptions }: Props) {
               />
             ))}
           </div>
-        </section>
+        </div>
       )}
-    </div>
+    </FieldGroup>
   );
 }
 
@@ -166,12 +149,12 @@ function DeviceRow({
   const [isUpdating, startUpdate] = useTransition();
   const [isRemoving, startRemove] = useTransition();
 
-  const Icon =
+  const DeviceIcon =
     subscription.device_type === 'mobile'
-      ? Smartphone
+      ? RiSmartphoneLine
       : subscription.device_type === 'tablet'
-        ? Tablet
-        : Monitor;
+        ? RiTabletLine
+        : RiComputerLine;
 
   const togglePref = (
     key: (typeof NOTIFICATION_TYPES)[number]['key'],
@@ -193,19 +176,19 @@ function DeviceRow({
   };
 
   return (
-    <div className="space-y-3 rounded-2xl border border-glass-border/50 bg-foreground/2 p-4">
+    <div className="flex flex-col gap-3 border p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5">
-            <Icon className="h-4 w-4 text-muted-foreground" />
+          <div className="bg-muted flex size-10 shrink-0 items-center justify-center">
+            <DeviceIcon className="text-muted-foreground size-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium">
+            <p className="truncate text-sm font-medium">
               {subscription.device_name ?? 'Urządzenie'}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Dodane{' '}
-              {new Date(subscription.created_at).toLocaleDateString('pl-PL')}
+              {formatSettingsDate(subscription.created_at)}
             </p>
           </div>
         </div>
@@ -215,47 +198,32 @@ function DeviceRow({
           type="button"
           onClick={remove}
           disabled={isRemoving}
-          className="rounded-lg hover:bg-red-500/10 hover:text-red-600"
+          aria-label="Usuń urządzenie"
         >
-          {isRemoving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
+          {isRemoving ? <RiLoader4Line className="animate-spin" aria-hidden /> : <RiDeleteBinLine aria-hidden />}
         </Button>
       </div>
 
-      <div className="space-y-1 border-t border-glass-border/50 pt-2">
+      <FieldGroup className="gap-3 border-t pt-3">
         {NOTIFICATION_TYPES.map((type) => {
           const enabled = subscription[type.key];
+          const id = `push-${subscription.id}-${type.key}`;
           return (
-            <button
-              key={type.key}
-              type="button"
-              onClick={() => togglePref(type.key, enabled)}
-              disabled={isUpdating}
-              className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-foreground/2 disabled:opacity-50"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm">{type.label}</p>
-                <p className="text-xs text-muted-foreground">{type.desc}</p>
-              </div>
-              {/* Toggle pill */}
-              <div
-                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                  enabled ? 'bg-foreground' : 'bg-foreground/15'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform ${
-                    enabled ? 'translate-x-[18px]' : 'translate-x-0.5'
-                  }`}
-                />
-              </div>
-            </button>
+            <Field key={type.key} orientation="horizontal" className="items-center!">
+              <FieldContent>
+                <FieldLabel htmlFor={id}>{type.label}</FieldLabel>
+                <FieldDescription>{type.desc}</FieldDescription>
+              </FieldContent>
+              <Switch
+                id={id}
+                checked={enabled}
+                disabled={isUpdating}
+                onCheckedChange={() => togglePref(type.key, enabled)}
+              />
+            </Field>
           );
         })}
-      </div>
+      </FieldGroup>
     </div>
   );
 }

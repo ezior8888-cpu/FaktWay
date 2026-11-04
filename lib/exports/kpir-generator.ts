@@ -60,7 +60,7 @@ export async function generateKpirXlsx(data: KpirInputData): Promise<Buffer> {
   assertOutgoingInvoicesInPln(data.issuedInvoices);
   const workbook = new ExcelJS.Workbook();
 
-  workbook.creator = 'KSeF SaaS';
+  workbook.creator = 'FaktWay';
   workbook.created = new Date();
   workbook.modified = new Date();
 

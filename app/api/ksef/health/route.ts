@@ -1,22 +1,29 @@
 /**
  * GET /api/ksef/health — zwraca snapshot zdrowia KSeF API z Redis.
  *
- * Konsumowany przez `<KsefHealthBannerPoller />` co 30s, żeby user widział
- * zmianę statusu bez odświeżania strony. Endpoint jest publiczny — info
- * o stanie infrastruktury MF nie jest poufne, a wymaganie auth tylko
- * skomplikowałoby caching na edge.
+ * Konsumowany przez baner KSeF w panelu (`ksef-health-banner-client.tsx`),
+ * żeby user widział zmianę statusu bez odświeżania strony. Endpoint jest
+ * publiczny: proxy przepuszcza go bez sesji i bez wywołań GoTrue
+ * (`isNoSessionPath` w `lib/supabase/middleware.ts`). Stan infrastruktury MF
+ * nie jest poufny; pole `error` (tekst dla operatora) nie wychodzi.
  *
- * Cache-Control: no-store — Redis już daje 90s TTL, browser cache by tylko
- * przeszkadzał (chcemy 30s polling polegać na świeżej wartości z Redisa).
+ * Cache-Control: private, max-age=15 — karty jednej przeglądarki dzielą
+ * odpowiedź. Tyle samo trwa pamięć w procesie (`getPublicKsefHealth`); Redis
+ * daje snapshotowi 90 s TTL. Nie `public`: proxy pomija sesję tylko dla
+ * dokładnej ścieżki, a alias `/api/ksef/health/` (next.config ma
+ * `skipTrailingSlashRedirect`) trafia tu przez pełną bramkę i może nieść
+ * odświeżone ciasteczko sesji — tego nie wolno przechować we wspólnym cache.
  */
 
 import { NextResponse } from 'next/server';
 
-import { getKsefHealthSnapshot } from '@/lib/ksef/health-status';
+import { getPublicKsefHealth } from '@/lib/ksef/health-status';
 import type { KsefEnvironment } from '@/types/ksef';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+const CACHE_HEADERS = { 'Cache-Control': 'private, max-age=15' };
 
 function getCurrentEnv(): KsefEnvironment {
   const env = process.env.KSEF_ENV ?? 'test';
@@ -28,11 +35,11 @@ function getCurrentEnv(): KsefEnvironment {
 
 export async function GET() {
   const env = getCurrentEnv();
-  const snapshot = await getKsefHealthSnapshot(env);
+  const health = await getPublicKsefHealth(env);
 
   // null = Redis nieskonfigurowany / cron jeszcze nie pingnął — UI traktuje
   // jako "no banner", a my zwracamy defaultowy operational.
-  if (!snapshot) {
+  if (!health) {
     return NextResponse.json(
       {
         level: 'operational',
@@ -40,16 +47,12 @@ export async function GET() {
         responseTimeMs: null,
         consecutiveFailures: 0,
         isMfOutage: false,
-        error: null,
         env,
         stale: true,
       },
-      { headers: { 'Cache-Control': 'no-store' } },
+      { headers: CACHE_HEADERS },
     );
   }
 
-  return NextResponse.json(
-    { ...snapshot, stale: false },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+  return NextResponse.json({ ...health, stale: false }, { headers: CACHE_HEADERS });
 }

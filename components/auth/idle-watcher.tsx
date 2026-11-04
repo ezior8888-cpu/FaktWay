@@ -51,13 +51,16 @@ export function IdleWatcher() {
   });
 
   return (
-    <Dialog open={isWarning}>
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-      >
+    // E1: Base UI nie ma onEscapeKeyDown/onPointerDownOutside — okna nie da się
+    // zamknąć ani Escape, ani kliknięciem poza nim (tylko przyciski).
+    <Dialog
+      open={isWarning}
+      disablePointerDismissal
+      onOpenChange={(open, details) => {
+        if (!open && details.reason === 'escape-key') details.cancel();
+      }}
+    >
+      <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Sesja wygasa</DialogTitle>
           <DialogDescription>

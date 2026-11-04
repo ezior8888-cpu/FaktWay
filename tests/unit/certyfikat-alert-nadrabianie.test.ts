@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   audit: [] as Row[],
   auditReadError: null as { message: string } | null,
   adminEmail: (id: string) => `admin-${id}@firma.test` as string | null,
+  // Błąd odczytu właściciela albo adresu (baza, GoTrue) dla danej firmy; `null` — odczyt udany.
+  contactError: ((): Error | null => null) as (id: string) => Error | null,
   email: vi.fn(),
   push: vi.fn(),
   proposal: vi.fn(),
@@ -18,7 +20,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
-  getTenantAdminEmail: async (id: string) => mocks.adminEmail(id),
+  // Jak prawdziwe helpery: łagodny zamienia błąd odczytu na „brak adresu”, ścisły rzuca.
+  getTenantAdminEmail: async (id: string) => (mocks.contactError(id) ? null : mocks.adminEmail(id)),
+  readTenantOwnerContact: async (id: string) => {
+    const error = mocks.contactError(id);
+    if (error) throw error;
+    const email = mocks.adminEmail(id);
+    return { ownerUserId: email ? `user-${id}` : null, email };
+  },
 }));
 vi.mock('@/lib/email/send', () => ({ sendCertExpiryAlert: mocks.email }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToTenant: mocks.push }));
@@ -39,6 +48,10 @@ vi.mock('@/lib/supabase/server', () => ({
     from(table: string) {
       mocks.queriedTables.push(table);
       const predicates: Array<(r: Row) => boolean> = [];
+      // Lista firm idzie stronami po kluczu (sesja 27): order i limit działają
+      // jak w bazie, inaczej strony nie dowodziłyby niczego.
+      let sortKey: string | null = null;
+      let limitN: number | null = null;
       const q = {
         select: () => q,
         eq(k: string, v: unknown) { predicates.push((r) => r[k] === v); return q; },
@@ -47,14 +60,20 @@ vi.mock('@/lib/supabase/server', () => ({
         gte(k: string, v: string) { predicates.push((r) => String(r[k]) >= v); return q; },
         lte(k: string, v: string) { predicates.push((r) => String(r[k]) <= v); return q; },
         not() { return q; },
-        order() { return q; },
-        limit() { return q; },
+        order(k: string) { sortKey = k; return q; },
+        limit(n: number) { limitN = n; return q; },
         then(ok: (v: unknown) => unknown) {
           if (table === 'audit_logs' && mocks.auditReadError) {
             return Promise.resolve({ data: null, error: mocks.auditReadError }).then(ok);
           }
           const source = table === 'tenants' ? mocks.tenants : table === 'audit_logs' ? mocks.audit : [];
-          return Promise.resolve({ data: source.filter((r) => predicates.every((p) => p(r))), error: null }).then(ok);
+          let rows = source.filter((r) => predicates.every((p) => p(r)));
+          if (sortKey) {
+            const key = sortKey;
+            rows = [...rows].sort((a, b) => (String(a[key]) < String(b[key]) ? -1 : String(a[key]) > String(b[key]) ? 1 : 0));
+          }
+          if (limitN !== null) rows = rows.slice(0, limitN);
+          return Promise.resolve({ data: rows, error: null }).then(ok);
         },
       };
       return q;
@@ -99,6 +118,7 @@ beforeEach(() => {
   mocks.auditReadError = null;
   mocks.queriedTables = [];
   mocks.adminEmail = (id) => `admin-${id}@firma.test`;
+  mocks.contactError = () => null;
   mocks.email.mockResolvedValue({ sent: true });
   mocks.push.mockResolvedValue({ sent: 1, failed: 0 });
   mocks.proposal.mockResolvedValue({ status: 'created' });
@@ -207,5 +227,74 @@ describe('certyfikat KSeF — nadrabianie progów (AUD-53)', () => {
 
     expect(mocks.proposal).toHaveBeenCalledTimes(1);
     expect(mocks.queriedTables).not.toContain('ksef_health_log');
+  });
+});
+
+/**
+ * A5: błąd odczytu adresu właściciela (baza, GoTrue) był „brakiem adresu”:
+ * mail pomijany, a gdy doszedł push, próg zapisany jako dostarczony — mail
+ * o tym progu nie wychodził już nigdy, a operator widział „brak adresu”.
+ * Teraz błąd odczytu ponawia zadanie (jak błąd Resend), a mail ma klucz
+ * idempotencji: ponowienie przechodzi pętlę od nowa, a zapis w audit_logs
+ * jest fail-open.
+ */
+describe('certyfikat KSeF — błąd odczytu adresu i ponowienie (A5)', () => {
+  it('błąd odczytu adresu — ta firma bez maila i pusha (bez zapisu progu), pozostałe dostają; operator wie; zadanie rzuca na końcu, ponowienie wysyła jej mail, innym nie drugi raz', async () => {
+    const expiry = za(6.5);
+    mocks.tenants = [firma('t1', expiry), firma('t2', expiry), firma('t3', expiry)];
+    let failures = 1;
+    mocks.contactError = (id) =>
+      id === 't2' && failures-- > 0 ? new Error('Nie można odczytać e-maila właściciela firmy: upstream timeout') : null;
+
+    await expect(runCertExpiryAlert(ctx)).rejects.toThrow(/adresu właściciela \(1 firm: t2\)/);
+    expect(mocks.email.mock.calls.map((c) => c[0])).toEqual(['admin-t1@firma.test', 'admin-t3@firma.test']);
+    expect(mocks.push.mock.calls.map((c) => c[0])).toEqual(['t1', 't3']);
+    expect(mocks.audit.map((a) => a.tenant_id)).toEqual(['t1', 't3']);
+    expect(mocks.slack).toHaveBeenCalledTimes(1);
+    expect(mocks.slack.mock.calls[0]![0]).toMatchObject({
+      channel: 'urgent',
+      context: expect.objectContaining({ t2: expect.stringContaining('błąd odczytu adresu') }),
+    });
+    expect(ctx.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('nie można odczytać adresu właściciela'),
+      expect.objectContaining({ tenantId: 't2', error: expect.stringContaining('upstream timeout') }),
+    );
+
+    // Ponowienie zadania — pg-boss wykonuje cały handler od nowa.
+    await runCertExpiryAlert(ctx);
+
+    expect(mocks.email.mock.calls.map((c) => c[0])).toEqual(['admin-t1@firma.test', 'admin-t3@firma.test', 'admin-t2@firma.test']);
+    expect(mocks.audit.map((a) => a.tenant_id)).toEqual(['t1', 't3', 't2']);
+    expect(mocks.audit[2]!.metadata).toMatchObject({ threshold: 7, emailed: true });
+  });
+
+  it('prawdziwy brak adresu (konto bez e-maila) — bez wyjątku, push wystarcza jak dotąd', async () => {
+    mocks.tenants = [firma('t1', za(20))];
+    mocks.adminEmail = () => null;
+
+    await runCertExpiryAlert(ctx);
+
+    expect(mocks.email).not.toHaveBeenCalled();
+    expect(mocks.audit).toEqual([expect.objectContaining({ tenant_id: 't1', metadata: expect.objectContaining({ emailed: false, push_sent: 1 }) })]);
+  });
+
+  it('mail z kluczem idempotencji: firma, data wygaśnięcia, próg i liczba dni — ponowienie tego dnia ten sam klucz, następny dzień inny', async () => {
+    const expiry = za(6.5);
+    mocks.tenants = [firma('t1', expiry)];
+    // Niedostarczone (adres na liście odbić, bez pusha) — bez zapisu, więc każdy przebieg próbuje znowu.
+    mocks.email.mockResolvedValue({ sent: false, reason: 'bounced' });
+    mocks.push.mockResolvedValue({ sent: 0, failed: 0 });
+
+    await runCertExpiryAlert(ctx);
+    await runCertExpiryAlert(ctx);
+    vi.setSystemTime(new Date(NOW.getTime() + DAY));
+    await runCertExpiryAlert(ctx);
+
+    const keys = mocks.email.mock.calls.map((c) => (c[2] as { idempotencyKey?: string } | undefined)?.idempotencyKey);
+    expect(keys).toEqual([
+      `cert-expiry/t1/${Date.parse(expiry)}/7/7`,
+      `cert-expiry/t1/${Date.parse(expiry)}/7/7`,
+      `cert-expiry/t1/${Date.parse(expiry)}/7/6`,
+    ]);
   });
 });

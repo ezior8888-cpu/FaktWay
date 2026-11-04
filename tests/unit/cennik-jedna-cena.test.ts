@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { OFERTA, OFERTA_NAGLOWEK } from '@/lib/marketing/oferta';
 import {
   formatPln,
   MONTHLY_NET_PLN,
@@ -33,6 +34,9 @@ const FORBIDDEN: Array<[RegExp, string]> = [
   [/money-back/i, 'gwarancja zwrotu (usunięta 1.10.2026)'],
   [/60 dni gwarancji/i, 'gwarancja zwrotu (usunięta 1.10.2026)'],
   [/\+ ?VAT 23%/, 'cena „+ VAT” zamiast brutto'],
+  // Decyzja FaktWay 1.0: cena tylko z lib/billing/pricing.ts. Plik MDX nie umie
+  // jej zaimportować, więc pisze „abonament” i linkuje do cennika.
+  [/29,99|24,38|5,61 zł/, 'cena wpisana na sztywno'],
 ];
 
 // Pliki, które OPISUJĄ historię cennika (komentarze), a nie pokazują ceny.
@@ -46,7 +50,7 @@ function walk(dir: string): string[] {
   });
 }
 
-describe('cena FaktFlow', () => {
+describe('cena FaktWay', () => {
   it('29,99 zł brutto = 24,38 zł netto + 5,61 zł VAT', () => {
     expect(MONTHLY_PRICE_GROSS_GROSZE).toBe(2999);
     expect(MONTHLY_PRICE_NET_GROSZE).toBe(2438);
@@ -55,6 +59,11 @@ describe('cena FaktFlow', () => {
     expect([PRICE_GROSS, PRICE_NET, PRICE_VAT]).toEqual(['29,99 zł', '24,38 zł', '5,61 zł']);
     expect(PRICE_PER_MONTH_WITH_NET).toBe('29,99 zł/mc z VAT (24,38 zł netto)');
     expect(MONTHLY_NET_PLN).toBe(24.38);
+  });
+
+  it('zdanie oferty bierze cenę z PRICE_GROSS', () => {
+    expect(OFERTA).toContain(`za ${PRICE_GROSS} miesięcznie`);
+    expect(OFERTA_NAGLOWEK.po.replaceAll('\u00a0', ' ')).toContain(PRICE_GROSS);
   });
 
   it('format kwot', () => {

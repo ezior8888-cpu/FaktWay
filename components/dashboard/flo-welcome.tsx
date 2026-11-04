@@ -40,7 +40,7 @@ const PILNUJE = [
 
 export function FloWelcome() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 text-center">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center-safe overflow-y-auto px-6 py-8 text-center">
       <span
         aria-hidden
         className="flex size-[72px] shrink-0 items-center justify-center rounded-[22px] bg-[var(--ff-accent)] text-[32px] font-semibold text-[var(--ff-on-primary)]"
@@ -57,7 +57,7 @@ export function FloWelcome() {
         sprawa. Cisza znaczy, że wszystko gra.
       </p>
 
-      <section className="mt-8 w-full max-w-[34rem] overflow-hidden rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-inset)] text-left">
+      <section className="mt-8 w-full shrink-0 max-w-[34rem] overflow-hidden rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-inset)] text-left">
         <h3 className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ff-text-muted)]">
           Czego pilnuję
         </h3>

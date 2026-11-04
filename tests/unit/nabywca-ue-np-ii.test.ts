@@ -233,7 +233,7 @@ function wstawionaFaktura() {
 
 describe('akcje — zapis faktury dla firmy z UE (AUD-70)', () => {
   it('szkic: numer VAT-UE znormalizowany w buyer_data, bez NIP-u, kraj z formularza', async () => {
-    await expect(saveDraftAction(firmaUe)).resolves.toMatchObject({ success: true, invoiceId: 'inv-new' });
+    await expect(saveDraftAction(firmaUe, 'ten-1')).resolves.toMatchObject({ success: true, invoiceId: 'inv-new' });
     const row = wstawionaFaktura();
 
     expect(row.buyer_data).toEqual({
@@ -249,7 +249,7 @@ describe('akcje — zapis faktury dla firmy z UE (AUD-70)', () => {
   });
 
   it('kolumny bazy jak przy imporcie: B2B, typ „nip”, buyer_nip pusty', async () => {
-    await saveDraftAction(firmaUe);
+    await saveDraftAction(firmaUe, 'ten-1');
     expect(wstawionaFaktura()).toMatchObject({
       is_b2c: false,
       buyer_id_type: 'nip',
@@ -260,13 +260,13 @@ describe('akcje — zapis faktury dla firmy z UE (AUD-70)', () => {
   });
 
   it('pozycja np. II trafia do invoice_line_items ze stawką np_ii', async () => {
-    await saveDraftAction(firmaUe);
+    await saveDraftAction(firmaUe, 'ten-1');
     const linie = mocks.inserts.find((i) => i.table === 'invoice_line_items')?.payload as Array<{ vat_rate: string; vat_amount: number }>;
     expect(linie).toEqual([expect.objectContaining({ vat_rate: 'np_ii', vat_amount: 0 })]);
   });
 
   it('firma z Polski bez zmian: NIP w kolumnie i kraj PL', async () => {
-    await saveDraftAction(firmaPl);
+    await saveDraftAction(firmaPl, 'ten-1');
     const row = wstawionaFaktura();
     expect(row).toMatchObject({ buyer_nip: '5252241585', is_b2c: false, buyer_id_type: 'nip' });
     expect(row.buyer_data).toMatchObject({ nip: '5252241585', address: { countryCode: 'PL' } });
@@ -274,14 +274,14 @@ describe('akcje — zapis faktury dla firmy z UE (AUD-70)', () => {
   });
 
   it('np. II dla firmy z Polski — odmowa po stronie serwera, bez zapisu', async () => {
-    const r = await saveAndSendInvoiceAction(npII(firmaPl));
+    const r = await saveAndSendInvoiceAction(npII(firmaPl), 'ten-1');
     expect(r).toEqual({ success: false, error: NP_II_REQUIRES_EU_BUYER_MESSAGE });
     expect(mocks.inserts).toEqual([]);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
   it('wysyłka: faktura w kolejce daje XML FA(3) z KodUE/NrVatUE i np II, zgodny ze schematem', async () => {
-    await expect(saveAndSendInvoiceAction(firmaUe)).resolves.toMatchObject({ success: true });
+    await expect(saveAndSendInvoiceAction(firmaUe, 'ten-1')).resolves.toMatchObject({ success: true });
     const invoice = mocks.enqueue.mock.calls[0]![0].invoice as Invoice;
     expect(invoice.buyer.vatUeNumber).toBe('DE123456789');
     expect(invoice.buyer.nip).toBeUndefined();

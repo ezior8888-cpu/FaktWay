@@ -1,16 +1,20 @@
+import SettingsView from '@/components/settings/finora/settings-view';
+import { settingsTabsForRole } from '@/components/settings/finora/settings-tabs';
+import { getPageContext } from '@/lib/supabase/page-context';
+
 /**
- * Skórę wizualną nakładamy tylko tutaj (wrapper + reguły w `globals.css`),
- * bez zmiany logiki stron ani drugiego pełnoekranowego mesh / `ff-dashboard`
- * (unik „czarnego ekranu” i podwójnego compositingu).
+ * Ramka ustawień = strona Settings szablonu Finora (plan P14): zakładki po
+ * lewej, treść po prawej, na telefonie menu w Sheet. Zakładki to linki do
+ * istniejących adresów `/settings/*`; listę liczymy tutaj, na serwerze, z roli
+ * w aktywnej firmie. Każda strona dalej sama sprawdza uprawnienia i czyta
+ * dane klientem z sesji (RLS).
  */
-export default function SettingsLayout({
+export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="ff-settings-route w-full min-w-0 max-w-4xl text-[var(--ff-on-surface)]">
-      {children}
-    </div>
-  );
+  const { role } = await getPageContext();
+
+  return <SettingsView tabs={settingsTabsForRole(role)}>{children}</SettingsView>;
 }

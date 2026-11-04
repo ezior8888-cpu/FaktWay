@@ -328,6 +328,91 @@ describe('KSeF submit reference boundary', () => {
     },
   );
 
+  /**
+   * A4b PR2a: sprawdzenie sprzedawcy z ŻYWEGO profilu firmy tylko przed POST.
+   * Uzgodnienie wcześniejszej wysyłki (otwarty wpis sent/intent albo „tylko
+   * uzgodnij”) nie wysyła nowego pliku — zmiana nazwy firmy po wysyłce nie
+   * może go zablokować. Runner przekazuje `skipLiveTenantSeller` tylko przed
+   * uzgodnieniem; zamrożona kopia sprzedawcy jest sprawdzana zawsze.
+   */
+  describe('A4b PR2a: pominięcie żywego profilu firmy przed uzgodnieniem (`skipLiveTenantSeller`)', () => {
+    const special = (kind: 'advance' | 'final') => {
+      invoice.invoice_kind = kind;
+      setDocument(kind === 'advance' ? 'ZAL/1' : 'ROZ/1', kind === 'advance' ? 'ZAL' : 'ROZ');
+      invoice.advance_invoice_ids = kind === 'final' ? [parentId] : [];
+      // Profil firmy zmieniony po zleceniu; koperta i zamrożony sprzedawca bez zmian.
+      tenant.name = 'Nowa nazwa';
+      return {
+        ...input(), environment: 'test' as const, correctionData: undefined,
+        advanceData: kind === 'advance' ? advance : undefined,
+        finalData: kind === 'final' ? final : undefined,
+        finalAdvanceSettlementRows: kind === 'final' ? [{}] : undefined,
+      };
+    };
+
+    it.each(['advance', 'final'] as const)(
+      '%s: pominięcie = true → przepuszcza bez odczytu profilu firmy (jeden odczyt)',
+      async (kind) => {
+        const skip = vi.fn(async () => true);
+        await expect(assertSubmitReferences({ ...special(kind), skipLiveTenantSeller: skip })).resolves.toBe(kind);
+        expect(reads).toHaveLength(1);
+        expect(reads.some((r) => r.table === 'tenants')).toBe(false);
+        expect(skip).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(['advance', 'final'] as const)(
+      'strażnik: %s bez pominięcia (false albo brak opcji) → odmowa po odczycie profilu firmy',
+      async (kind) => {
+        await expect(assertSubmitReferences({ ...special(kind), skipLiveTenantSeller: async () => false }))
+          .rejects.toThrow('manual reconciliation');
+        expect(reads).toHaveLength(2);
+        expect(reads[1]?.table).toBe('tenants');
+        reads = [];
+        await expect(assertSubmitReferences(special(kind))).rejects.toThrow('manual reconciliation');
+        expect(reads).toHaveLength(2);
+        expect(reads[1]?.table).toBe('tenants');
+      },
+    );
+
+    it('strażnik: final z pominięciem nadal odrzuca kopertę ze zmienionym sprzedawcą (zamrożona kopia przed pominięciem)', async () => {
+      const changedSeller = { ...seller, address: { ...seller.address, addressLine1: 'ul. Inna 5' } };
+      await expect(assertSubmitReferences({
+        ...special('final'),
+        finalData: { ...final, seller: changedSeller },
+        skipLiveTenantSeller: async () => true,
+      })).rejects.toThrow('manual reconciliation');
+      expect(reads).toHaveLength(1);
+    });
+
+    it.each([
+      ['nazwa w seller_data', () => { invoice.seller_data = { ...(invoice.seller_data as object), name: 'Inna nazwa' }; }],
+      ['NIP w seller_nip', () => { invoice.seller_nip = '9999999999'; }],
+    ] as const)(
+      'strażnik: advance z pominięciem nadal porównuje zamrożoną kopię sprzedawcy (%s) — koperta bez zmian',
+      async (_name, breakFrozen) => {
+        // Koperta = zdarzenie (porównanie koperty przechodzi), zmieniona tylko kopia z wystawienia:
+        // pominięcie żywego profilu nie może ominąć porównania zamrożonego sprzedawcy.
+        const base = special('advance');
+        breakFrozen();
+        await expect(assertSubmitReferences({ ...base, skipLiveTenantSeller: async () => true }))
+          .rejects.toThrow('manual reconciliation');
+        expect(reads).toHaveLength(1);
+      },
+    );
+
+    it('strażnik: korekta i zwykła faktura nie pytają o pominięcie (opcja dotyczy tylko ZAL/ROZ)', async () => {
+      const skip = vi.fn(async () => true);
+      await expect(assertSubmitReferences({ ...input(), skipLiveTenantSeller: skip })).resolves.toBe('correction');
+      reads = [];
+      invoice.invoice_kind = 'regular';
+      setDocument('VAT/1', 'VAT');
+      await expect(assertSubmitReferences({ ...input(), correctionData: undefined, skipLiveTenantSeller: skip }))
+        .resolves.toBe('regular');
+      expect(skip).not.toHaveBeenCalled();
+    });
+  });
+
   it('rejects a ROZ event without frozen flags or with flags differing from the stored document (AUD-23)', async () => {
     invoice.invoice_kind = 'final';
     setDocument('ROZ/1', 'ROZ');

@@ -18,7 +18,7 @@ interface Props {
  * Tabela porównawcza — ciemny motyw marketingu (BUG-002 fix).
  * Wcześniej używała jasnych kolorów (text-stone-800, bg-emerald-50) na CIEMNYM
  * tle `.marketing-landing` → tekst niewidoczny („za mgłą"). Teraz wszystko
- * korzysta z tokenów --marketing-* i jest czytelne. Kolumna FaktFlow
+ * korzysta z tokenów --marketing-* i jest czytelne. Kolumna FaktWay
  * podświetlona emerald.
  */
 export function ComparisonTable({ competitorName, rows }: Props) {
@@ -63,7 +63,7 @@ export function ComparisonTable({ competitorName, rows }: Props) {
                       Standard jutra
                     </span>
                     <span className="text-base font-bold text-[var(--marketing-accent)]">
-                      FaktFlow
+                      FaktWay
                     </span>
                   </div>
                 </th>

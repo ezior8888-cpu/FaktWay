@@ -12,7 +12,12 @@ import { paidDateInPoland } from '@/lib/billing/self-invoice';
  * i status „unpaid”, choć karta była obciążona.
  */
 
-const sql = readFileSync('supabase/migrations/00110_billing_invoice_numbering.sql', 'utf8');
+// 00152 (nazwa FaktWay) przepisuje tę samą funkcję — niezmienniki AUD-69
+// muszą zostać w każdej definicji, także w ostatniej.
+const DEFINITIONS = [
+  'supabase/migrations/00110_billing_invoice_numbering.sql',
+  'supabase/migrations/00152_billing_invoice_faktway_name.sql',
+];
 
 describe('faktury za abonament (AUD-69)', () => {
   it.each([
@@ -23,7 +28,8 @@ describe('faktury za abonament (AUD-69)', () => {
     expect(paidDateInPoland(paidAt)).toBe(day);
   });
 
-  it('baza: kolejny numer w miesiącu z licznika, data Europe/Warsaw, status paid', () => {
+  it.each(DEFINITIONS)('baza (%s): kolejny numer w miesiącu z licznika, data Europe/Warsaw, status paid', (file) => {
+    const sql = readFileSync(file, 'utf8');
     expect(sql).toContain("(v_payment.paid_at AT TIME ZONE 'Europe/Warsaw')::date");
     expect(sql).toContain('ON CONFLICT (operator_tenant_id, period)');
     expect(sql).toContain("pg_catalog.lpad(v_seq::text, 4, '0')");

@@ -10,6 +10,18 @@ pnpm install
 
 Nie uruchamiaj `npm install` w katalogu głównym — npm nie obsługuje tego lockfile’a; przy globalnym `.npmrc` z opcjami pnpm (np. `store-dir`) npm bywa zgłaszany z błędami lub ostrzeżeniami.
 
+Lokalna baza (Supabase w Dockerze, migracje z repo, konto `dev@faktway.test`).
+Pierwszy raz potrzebny jest Docker: `brew install colima docker`.
+
+```bash
+pnpm db:local
+```
+
+Skrypt ustawia `.env.local` na lokalną bazę. Ma też `status`, `stop` i `reset`
+(kasuje lokalne dane) — opis w `scripts/dev/baza-lokalna.sh`.
+
+Baza i serwer jedną komendą (np. po restarcie Maca): `pnpm dev:local`.
+
 Serwer developerski:
 
 ```bash

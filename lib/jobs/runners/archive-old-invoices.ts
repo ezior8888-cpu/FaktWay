@@ -30,6 +30,9 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
         .lt('issue_date', issueBefore)
         .is('archived_at', null)
         .not('xml_storage_path', 'is', null)
+        // historia z KSeF: oryginał jest w KSeF; Glacier dla niej dopiero po
+        // potwierdzeniu konfiguracji AWS na produkcji — decyzja Bartosza 22.10.2026
+        .neq('origin', 'ksef_import')
         .limit(500);
 
       if (error) throw new Error(`Find candidates failed: ${error.message}`);

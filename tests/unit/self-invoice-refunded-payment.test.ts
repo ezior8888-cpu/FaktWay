@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   audit: vi.fn(),
   capture: vi.fn(),
   derivePlan: vi.fn(),
+  refusal: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: mocks.from }) }));
@@ -18,6 +19,7 @@ vi.mock('@/lib/billing/self-invoice', () => ({
 }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
 vi.mock('@/lib/stripe/billed-plan', () => ({ deriveBilledPlanFromPaidInvoice: mocks.derivePlan }));
+vi.mock('@/lib/ksef/send-attempt-ledger', () => ({ recordSendRefusal: mocks.refusal }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.capture }));
 vi.mock('@/lib/jobs/inngest-adapter', () => ({ toJobContext: vi.fn() }));
 vi.mock('@/lib/jobs/events', () => ({
@@ -365,4 +367,25 @@ describe('VAT self-invoice for a delayed payment job', () => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe('A5: nieudane zlecenie wysyłki faktury za abonament zostawia ślad w dzienniku prób', () => {
+  it('błąd kolejki przy emit-ksef-submit: wiersz ENQUEUE_ERROR dla faktury operatora, ten sam błąd idzie dalej', async () => {
+    const boom = new Error('pg-boss: connection terminated');
+    sentEvent.mockRejectedValueOnce(boom);
+
+    await expect(runSelfInvoicePayment(event, context)).rejects.toBe(boom);
+    expect(mocks.refusal).toHaveBeenCalledOnce();
+    expect(mocks.refusal).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'operator-tenant',
+      invoiceId: 'vat-invoice',
+      userId: null,
+      code: 'ENQUEUE_ERROR',
+    }));
+  });
+
+  it('udane zlecenie — bez wiersza w dzienniku', async () => {
+    await runSelfInvoicePayment(event, context);
+    expect(mocks.refusal).not.toHaveBeenCalled();
+  });
 });

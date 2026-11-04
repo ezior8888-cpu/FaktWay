@@ -83,9 +83,9 @@ Mimo wcześniejszych przypomnień, faktura {numerFaktury} z dnia {dataWystawieni
 
 Kwota do zapłaty: {kwotaDoZaplaty}
 
-W załączniku znajduje się przedsądowe wezwanie do zapłaty zgodne z art. 187 § 1 pkt 3 Kodeksu postępowania cywilnego.
+W załączniku znajduje się przedsądowe wezwanie do zapłaty.
 
-W przypadku braku wpłaty w terminie 7 dni od daty otrzymania niniejszego pisma, sprawa zostanie skierowana na drogę sądową, co wiązać się będzie z dodatkowymi kosztami obciążającymi dłużnika (koszty postępowania, odsetki ustawowe, koszty zastępstwa procesowego).
+W przypadku braku wpłaty w terminie 7 dni od daty otrzymania niniejszego pisma sprawa może zostać skierowana na drogę sądową. Przysługują nam wówczas odsetki ustawowe za opóźnienie, a w razie sporu sąd może obciążyć stronę przegrywającą kosztami postępowania.
 
 Numer rachunku bankowego do wpłaty:
 {rachunekBankowy}
@@ -110,12 +110,9 @@ To jest ostateczne wezwanie do zapłaty. Faktura {numerFaktury} pozostaje nieure
 
 Kwota: {kwotaDoZaplaty}
 
-W przypadku braku wpłaty w ciągu 3 dni roboczych od otrzymania tego emaila:
-- sprawa zostanie skierowana do sądu w trybie elektronicznego postępowania upominawczego (e-EPU)
-- zostaną naliczone odsetki ustawowe za opóźnienie
-- koszty postępowania sądowego obciążą dłużnika
+Jeżeli nie otrzymamy wpłaty w ciągu 3 dni roboczych od otrzymania tego e-maila, możemy skierować sprawę do sądu, np. w elektronicznym postępowaniu upominawczym (e-EPU). Przysługują nam odsetki ustawowe za opóźnienie, a w razie sporu sąd może obciążyć stronę przegrywającą kosztami postępowania.
 
-To ostatnia szansa na polubowne rozwiązanie. Prosimy o pilny kontakt lub zapłatę.
+Zależy nam na polubownym rozwiązaniu. Prosimy o pilny kontakt lub zapłatę.
 
 Jeśli płatność już wyszła, prosimy potraktować tę wiadomość jako nieaktualną.
 

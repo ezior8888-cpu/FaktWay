@@ -1,19 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/client';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
+import { InvoicePaymentPanel, type InvoicePaymentPanelData } from '@/components/invoices/invoice-payment-panel';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
+import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
+import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
+import { KsefDuplicateDecision } from '@/components/invoices/ksef-duplicate-decision';
+import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
+import { formatInvoiceDate } from '@/lib/invoices/display-date';
+import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
+import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
+import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
+import type { KsefEnvironment } from '@/types/ksef';
 
 export interface InvoiceDetailLine {
   ordinal: number;
@@ -22,6 +35,9 @@ export interface InvoiceDetailLine {
   quantity: string | number | null;
   unit_price_net: string | number | null;
   vat_rate: string | null;
+  /** E3 / P4: kwoty netto i VAT pozycji — podsumowanie VAT per stawka (`lib/invoices/vat-summary.ts`). */
+  net_amount: string | number | null;
+  vat_amount: string | number | null;
   gross_amount: string | number | null;
 }
 
@@ -63,24 +79,72 @@ export interface InvoiceDetailInitial {
   buyer_data: unknown;
   /** `invoices.payment_data` — `PaymentInfo` z faktury; `null` w starych rekordach. */
   payment_data: unknown;
+  /** `invoices.payment_status`: zmiana z Realtime przelicza panel płatności (serwer). */
+  payment_status?: string | null;
+  /** Panel „Zapłacone” (00158): liczy serwer; brak = faktura bez płatności do oznaczenia (szkic, zakup). */
+  payment_panel?: InvoicePaymentPanelData | null;
   lines: InvoiceDetailLine[];
+  /** E3 / P4: waluta faktury (kod ISO; brak w wierszu = PLN) — podpis kwot zamiast „PLN” na sztywno. */
+  currency: string;
+  /** E3 / P4: MPP (P_18A) — flaga wyliczona na serwerze z adnotacji dokumentu; `fa3_data` nie trafia do klienta. */
+  split_payment: boolean;
+  /** E3 / P4: „Do zapłaty” (`amountDueOf`): dla ROZ reszta po zaliczkach, nie brutto zamówienia. */
+  amount_due: number;
+  /** E3 / P4: pokazać link „Korekta” (ten sam predykat co lista faktur + brak korekty w toku). */
+  can_correct: boolean;
+  /**
+   * N1: pokazać „Ustaw jako cykliczną” (faktura spełnia warunki wzoru faktury
+   * cyklicznej — liczy serwer tym samym predykatem co akcja tworzenia).
+   * Brak pola = przycisk ukryty.
+   */
+  can_set_recurring?: boolean;
+  /** „Duplikuj” w karcie „Dokument”: zwykła faktura z FaktWay (ten sam predykat co menu „⋯” listy). */
+  can_duplicate?: boolean;
+  /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
+  qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
   /** Rola zalogowanej osoby w firmie faktury dopuszcza „Wyślij ponownie” / „Wróć do szkicu”. */
   can_manage_send: boolean;
   /** D-A4-1b-3: dane faktury, którą KSeF ma już pod tym numerem (nierozstrzygnięty 440). */
   ksef_duplicate_original: DuplicateOriginalView | null;
+  /** A4b PR2b: ponowienie z kopii (dane zapisane, rodzaj wstrzymany, data minęła) — bez treści dokumentu. */
+  ksef_resend_facts: KsefResendFacts;
+  /** `KSEF_ENV` aplikacji poprawny. */
+  ksef_environment_known: boolean;
+  /**
+   * D-A4-1b-3 PR B: decyzja klienta przy nierozstrzygniętym 440 (`decidable` —
+   * panel decyzji; `refused` — tekst odmowy jest już notą `ksef_duplicate_original`).
+   */
+  ksef_duplicate_decision: DuplicateDecisionView | null;
+  /** D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — baner każdego rodzaju (decyzja 9). */
+  ksef_retired_draft: RetiredDraftView | null;
+  /**
+   * D-A4-1b-3 PR C (INV-8): środowisko KSeF serwera pokazane klientowi — panel odsyła je do akcji
+   * razem z trybem i ofertą, a serwer odmawia `STALE`, gdy się zmieniło. Brak pola = `null`.
+   */
+  ksef_server_environment?: KsefEnvironment | null;
+  /**
+   * D-A4-1b-3 PR C (6.5): faktura zapisana z KSeF decyzją klienta albo operatora — skąd się wzięła
+   * (`importedOriginalProvenance(fa3_data)` liczy serwer; sama treść dokumentu nie trafia do klienta).
+   * Brak pola = `null`.
+   */
+  ksef_imported_original?: ImportedOriginalProvenance | null;
 }
 
 interface PaymentSnapshot {
   method?: string | null;
   dueDate?: string | null;
   bankAccount?: string | null;
+  bankName?: string | null;
+  /** Tylko faktury w walucie obcej, o ile dane go mają. */
+  swift?: string | null;
 }
 
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   transfer: 'Przelew',
   cash: 'Gotówka',
   card: 'Karta',
+  mobile: 'Płatność mobilna',
   other: 'Inna',
 };
 
@@ -99,23 +163,68 @@ function formatNumber(value: string | number | null, maxDigits = 2): string {
   });
 }
 
+/** Tytuł dokumentu wg rodzaju — te same nazwy co na PDF (`INVOICE_TYPE_LABEL` w rendererze). */
+const DOCUMENT_TITLE: Record<string, string> = {
+  VAT: 'Faktura VAT',
+  KOR: 'Faktura korygująca',
+  ZAL: 'Faktura zaliczkowa',
+  ROZ: 'Faktura rozliczeniowa',
+  UPR: 'Faktura uproszczona',
+  KOR_ZAL: 'Korekta faktury zaliczkowej',
+  KOR_ROZ: 'Korekta faktury rozliczeniowej',
+};
+
+function documentTitle(invoiceType: string | null, invoiceKind: string | null): string {
+  const byType = DOCUMENT_TITLE[invoiceType ?? ''];
+  if (byType) return byType;
+  if (invoiceKind === 'correction') return DOCUMENT_TITLE.KOR!;
+  if (invoiceKind === 'advance') return DOCUMENT_TITLE.ZAL!;
+  if (invoiceKind === 'final') return DOCUMENT_TITLE.ROZ!;
+  return 'Faktura';
+}
+
 function vatRateLabel(rate: string | null): string {
   if (!rate) return '—';
   // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — jak na PDF.
   if (rate === 'np_ii') return 'np. II';
   if (['zw', 'oo', 'np'].includes(rate)) return rate;
-  // W9: kod FA(3) z importu bez odpowiednika w FaktFlow („0 WDT”, „nieznana”…).
+  // W9: kod FA(3) z importu bez odpowiednika w FaktWay („0 WDT”, „nieznana”…).
   const imported = importedVatRateLabel(rate);
   if (imported) return `${rate} (${imported})`;
   return `${rate}%`;
 }
 
 /**
+ * Kolumny `invoices`, od których zależą fakty liczone TYLKO na serwerze: kod QR
+ * (`loadQr`: numer KSeF + hash pliku XML), prawo do korekty (`loadCanCorrect`: status, numer)
+ * i panel płatności (`loadPaymentPanel`: status płatności).
+ * Realtime niesie same kolumny wiersza, więc zmiana którejkolwiek z nich odświeża stronę
+ * (`router.refresh()`) — tak jak `PAYMENT_FACT_FIELDS` na liście faktur. Inne zmiany
+ * (np. podpowiedź błędu) są już w całości widoczne ze stanu lokalnego.
+ */
+const SERVER_FACT_FIELDS = ['ksef_status', 'ksef_number', 'xml_storage_path', 'payment_status'] as const;
+
+/**
  * Szczegóły faktury + nasłuch Realtime na UPDATE tego samego wiersza
  * (status KSeF, numer, ścieżka XML, błąd) — bez ręcznego odświeżania.
  */
 export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }) {
+  const router = useRouter();
   const [inv, setInv] = useState(initial);
+  // `router.refresh()` (np. po decyzji albo po odmowie wysyłki/usunięcia — C15) przynosi
+  // nowe `initial` z serwera: widok przyjmuje je w całości, inaczej baner szkicu wycofanego
+  // i panel decyzji zostałyby ze stanu z pierwszego renderu. Realtime działa dalej na nim.
+  const [seenInitial, setSeenInitial] = useState(initial);
+  if (initial !== seenInitial) {
+    setSeenInitial(initial);
+    setInv(initial);
+  }
+  // Bieżący stan dla uchwytu Realtime (porównanie faktów bez wywoływania go w aktualizatorze
+  // stanu — ten bywa uruchamiany dwa razy, a `router.refresh()` to efekt uboczny).
+  const invRef = useRef(inv);
+  useEffect(() => {
+    invRef.current = inv;
+  }, [inv]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -131,43 +240,55 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
-          setInv((prev) => ({
-            ...prev,
-            // Dane oryginału 440 pochodzą z chwili otwarcia strony — po zmianie
-            // stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
-            ksef_duplicate_original:
+          // C9: QR i „Korekta” liczy serwer — zmiana statusu, numeru albo pliku XML przynosi je
+          // przez `router.refresh()`; nowe `initial` przyjmuje zerowanie `seenInitial` wyżej
+          // (stan = serwer, więc kolejne zdarzenia o tych samych faktach już nie odświeżają).
+          const current = invRef.current;
+          if (SERVER_FACT_FIELDS.some((field) => field in row && String(row[field] ?? '') !== String(current[field] ?? ''))) {
+            router.refresh();
+          }
+          setInv((prev) => {
+            // Dane oryginału 440 i widok decyzji pochodzą z chwili otwarcia strony — po
+            // zmianie stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
+            const duplicateStale =
               (typeof row.ksef_status === 'string' && row.ksef_status !== prev.ksef_status) ||
               ('last_error_code' in row && row.last_error_code !== prev.last_error_code) ||
-              ('last_error' in row && row.last_error !== prev.last_error)
-                ? null
-                : prev.ksef_duplicate_original,
-            ksef_status:
-              typeof row.ksef_status === 'string'
-                ? row.ksef_status
-                : prev.ksef_status,
-            ksef_number:
-              (row.ksef_number as string | null | undefined) ?? prev.ksef_number,
-            ksef_accepted_at:
-              (row.ksef_accepted_at as string | null | undefined) ??
-              prev.ksef_accepted_at,
-            xml_storage_path:
-              (row.xml_storage_path as string | null | undefined) ??
-              prev.xml_storage_path,
-            last_error:
-              'last_error' in row
-                ? row.last_error as string | null
-                : prev.last_error,
-            last_error_code:
-              'last_error_code' in row
-                ? row.last_error_code as string | null
-                : prev.last_error_code,
-            last_error_field:
-              (row.last_error_field as string | null | undefined) ??
-              prev.last_error_field,
-            last_error_suggestion:
-              (row.last_error_suggestion as string | null | undefined) ??
-              prev.last_error_suggestion,
-          }));
+              ('last_error' in row && row.last_error !== prev.last_error);
+            return {
+              ...prev,
+              ksef_duplicate_original: duplicateStale ? null : prev.ksef_duplicate_original,
+              ksef_duplicate_decision: duplicateStale ? null : prev.ksef_duplicate_decision,
+              // Szkic wycofany zostaje wycofany, dopóki faktura jest szkicem; każdy inny stan — bez banera.
+              ksef_retired_draft:
+                typeof row.ksef_status === 'string' && row.ksef_status !== 'draft' ? null : prev.ksef_retired_draft,
+              ksef_status:
+                typeof row.ksef_status === 'string'
+                  ? row.ksef_status
+                  : prev.ksef_status,
+              ksef_number:
+                (row.ksef_number as string | null | undefined) ?? prev.ksef_number,
+              ksef_accepted_at:
+                (row.ksef_accepted_at as string | null | undefined) ??
+                prev.ksef_accepted_at,
+              xml_storage_path:
+                (row.xml_storage_path as string | null | undefined) ??
+                prev.xml_storage_path,
+              last_error:
+                'last_error' in row
+                  ? row.last_error as string | null
+                  : prev.last_error,
+              last_error_code:
+                'last_error_code' in row
+                  ? row.last_error_code as string | null
+                  : prev.last_error_code,
+              last_error_field:
+                (row.last_error_field as string | null | undefined) ??
+                prev.last_error_field,
+              last_error_suggestion:
+                (row.last_error_suggestion as string | null | undefined) ??
+                prev.last_error_suggestion,
+            };
+          });
         },
       )
       .on(
@@ -198,257 +319,376 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [initial.id]);
+  }, [initial.id, router]);
 
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
   const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
   const lines = inv.lines;
+  // Panel „W KSeF jest już faktura o tym numerze” (decyzja albo nota z danymi oryginału).
+  // Obok niego bez karty błędu: tekst runnera jest dla operatora, klient ma panel.
+  const duplicatePanel =
+    inv.ksef_status === 'failed' &&
+    inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
+    inv.ksef_duplicate_original !== null;
+  const decision = duplicatePanel && inv.ksef_duplicate_decision?.kind === 'decidable' ? inv.ksef_duplicate_decision : null;
+  const retired = inv.ksef_status === 'draft' ? inv.ksef_retired_draft : null;
+
+  const currency = inv.currency.trim().toUpperCase() || 'PLN';
+  const money = (value: string | number | null) => `${formatNumber(value)} ${currency}`;
+  // Wiersze stawek tylko gdy kwoty pozycji są komplet i zgadzają się z nagłówkiem
+  // (korekta `before_after` ma w pozycjach stan PO, a w nagłówku różnicę) — lepiej samo „Razem” niż złe liczby.
+  const vatRows = vatSummaryByRate(lines);
+  const showVatRows = vatRows !== null && vatRows.length > 0 && vatSummaryAgreesWithGross(vatRows, inv.gross_total);
+
+  // Te same props dla obu miejsc paska akcji: główna akcja w karcie „Status”, reszta w karcie „Dokument”.
+  const actionsInvoice = {
+    id: inv.id,
+    ksef_status: inv.ksef_status,
+    xml_storage_path: inv.xml_storage_path ?? null,
+    invoice_type: inv.invoice_type,
+    invoice_kind: inv.invoice_kind,
+    last_error_code: inv.last_error_code,
+    ksef_resend_facts: initial.ksef_resend_facts,
+    ksef_environment_known: initial.ksef_environment_known,
+    ksef_duplicate_panel: duplicatePanel,
+    ksef_retired: retired ? { deletable: retired.deletable, ...(retired.imported ? { imported: retired.imported } : {}) } : null,
+    can_correct: inv.can_correct,
+    can_set_recurring: inv.can_set_recurring ?? false,
+    can_duplicate: inv.can_duplicate ?? false,
+  };
 
   return (
-    <div className="max-w-4xl">
-      <Link
-        href="/invoices"
-        className="inline-flex items-center text-sm text-gray-600 mb-4 hover:underline"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1" /> Powrót do listy
-      </Link>
+    <div>
+      {/*
+        Układ Finory (`invoices-view/index.tsx`): dokument po lewej, kolumna 18rem po prawej od `lg`.
+        Prawa kolumna = karta akcji Finory (`invoice-actions.tsx`: Wyślij e-mailem, Pobierz PDF,
+        Drukuj + nasze XML i Korekta) i — nad nią — karta „Status” KSeF (P4). Kolejność w DOM =
+        kolejność na telefonie: karta „Status” NAD dokumentem, karta akcji pod nim. Każda akcja
+        jest w DOM raz.
+      */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_18rem] lg:grid-rows-[auto_1fr] print:block">
+        <Card
+          data-testid="karta-statusu"
+          className="h-max gap-4 shadow-none lg:col-start-2 lg:row-start-1 print:hidden"
+        >
+          <CardHeader>
+            <CardTitle>Status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <StatusBadge
+                status={inv.ksef_status}
+                errorCode={inv.last_error_code}
+                automaticResend={automaticResendExpected({
+                  status: inv.ksef_status,
+                  errorCode: inv.last_error_code,
+                  invoiceKind: inv.invoice_kind,
+                  // Fakty z propsów (odświeżane przez router.refresh), stan i kod z Realtime.
+                  facts: initial.ksef_resend_facts,
+                  environmentKnown: initial.ksef_environment_known,
+                })}
+              />
+            </div>
 
-      <div className="flex items-start justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {inv.internal_number ?? '(bez numeru)'}
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Wystawiona {inv.issue_date ?? '—'}
-            {inv.sale_date && inv.sale_date !== inv.issue_date
-              ? ` · Data sprzedaży: ${inv.sale_date}`
-              : ''}
-            {inv.invoice_type ? ` · ${inv.invoice_type}` : ''}
-          </p>
-        </div>
-        <StatusBadge status={inv.ksef_status} errorCode={inv.last_error_code} />
-      </div>
-
-      {inv.ksef_number && (
-        <Card className="p-4 mb-6 bg-green-50 border-green-200">
-          <p className="text-xs text-green-800 uppercase tracking-wide">
-            Numer KSeF
-          </p>
-          <p className="font-mono text-sm mt-1">{inv.ksef_number}</p>
-          {inv.ksef_accepted_at && (
-            <p className="text-xs text-green-800 mt-1">
-              Zaakceptowana: {formatWarsawDateTime(inv.ksef_accepted_at)}
-            </p>
-          )}
-        </Card>
-      )}
-
-      {inv.ksef_status === 'accepted' && inv.ksef_number && (
-        <div className="mb-6">
-          <UpoDownload
-            invoiceId={inv.id}
-            ksefNumber={inv.ksef_number}
-            upoStatus={inv.upo_status}
-          />
-        </div>
-      )}
-
-      {inv.last_error && (
-        <div className="mb-6">
-          <InvoiceErrorDisplay
-            errorMessage={inv.last_error}
-            errorCode={inv.last_error_code}
-            errorField={inv.last_error_field}
-            errorSuggestion={inv.last_error_suggestion}
-            invoiceId={inv.id}
-            showEditLink={
-              inv.ksef_status === 'rejected' ||
-              inv.ksef_status === 'failed'
-            }
-          />
-        </div>
-      )}
-
-      {inv.ksef_status === 'failed' &&
-        inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
-        inv.ksef_duplicate_original && (
-          <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
-            <h3 className="font-semibold text-sm text-amber-900">
-              {inv.ksef_duplicate_original.title}
-            </h3>
-            <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              {inv.ksef_duplicate_original.rows.map((row) => (
-                <div key={row.label} className="flex gap-2">
-                  <dt className="text-amber-800">{row.label}:</dt>
-                  <dd className="font-medium break-all">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="text-sm text-amber-900 mt-3">
-              {inv.ksef_duplicate_original.note}
-            </p>
-          </Card>
-        )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card className="p-4">
-          <h3 className="font-semibold mb-2 text-sm uppercase text-gray-500">
-            Sprzedawca
-          </h3>
-          <p className="font-medium">{seller.name ?? '—'}</p>
-          {seller.nip && (
-            <p className="text-xs text-gray-500">NIP: {seller.nip}</p>
-          )}
-          <p className="text-xs text-gray-600 mt-2 whitespace-pre-line">
-            {seller.address?.addressLine1 ?? ''}
-            {seller.address?.addressLine2
-              ? '\n' + seller.address.addressLine2
-              : ''}
-          </p>
-        </Card>
-
-        <Card className="p-4">
-          <h3 className="font-semibold mb-2 text-sm uppercase text-gray-500">
-            Nabywca
-          </h3>
-          <p className="font-medium">{buyer.name ?? '—'}</p>
-          {buyer.nip ? (
-            <p className="text-xs text-gray-500">NIP: {buyer.nip}</p>
-          ) : buyer.vatUeNumber ? (
-            <p className="text-xs text-gray-500">VAT UE: {buyer.vatUeNumber}</p>
-          ) : null}
-          <p className="text-xs text-gray-600 mt-2 whitespace-pre-line">
-            {buyer.address?.addressLine1 ?? ''}
-            {buyer.address?.addressLine2
-              ? '\n' + buyer.address.addressLine2
-              : ''}
-          </p>
-          {buyer.email && (
-            <p className="text-xs text-gray-500 mt-1">{buyer.email}</p>
-          )}
-        </Card>
-      </div>
-
-      <Card className="p-4 mb-6 overflow-x-auto">
-        <h3 className="font-semibold mb-3 text-sm uppercase text-gray-500">
-          Pozycje
-        </h3>
-        <table className="w-full text-sm">
-          <thead className="border-b text-left text-gray-500">
-            <tr>
-              <th className="pb-2 w-8">#</th>
-              <th className="pb-2">Nazwa</th>
-              <th className="pb-2 text-right w-28">Ilość</th>
-              <th className="pb-2 text-right w-28">Cena netto</th>
-              <th className="pb-2 text-right w-20">VAT</th>
-              <th className="pb-2 text-right w-28">Brutto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.length === 0 && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="py-4 text-center text-gray-400 text-xs"
-                >
-                  Brak pozycji
-                </td>
-              </tr>
+            {inv.ksef_status === 'accepted' && inv.ksef_number && (
+              <UpoDownload
+                invoiceId={inv.id}
+                ksefNumber={inv.ksef_number}
+                upoStatus={inv.upo_status}
+              />
             )}
-            {lines.map((line) => (
-              <tr key={line.ordinal} className="border-b last:border-b-0">
-                <td className="py-2">{line.ordinal}</td>
-                <td>{line.name ?? '—'}</td>
-                <td className="text-right tabular-nums">
-                  {formatNumber(line.quantity, 4)}{' '}
-                  <span className="text-gray-500 text-xs">
-                    {line.unit ?? ''}
-                  </span>
-                </td>
-                <td className="text-right tabular-nums">
-                  {formatNumber(line.unit_price_net, 4)}
-                </td>
-                <td className="text-right">{vatRateLabel(line.vat_rate)}</td>
-                <td className="text-right tabular-nums font-medium">
-                  {formatNumber(line.gross_amount, 2)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={5} className="pt-3 text-right font-medium">
-                RAZEM NETTO
-              </td>
-              <td className="pt-3 text-right tabular-nums">
-                {formatNumber(inv.net_total)}
-              </td>
-            </tr>
-            <tr>
-              <td colSpan={5} className="pt-1 text-right font-medium">
-                VAT
-              </td>
-              <td className="pt-1 text-right tabular-nums">
-                {formatNumber(inv.vat_total)}
-              </td>
-            </tr>
-            <tr>
-              <td colSpan={5} className="pt-1 text-right font-semibold">
-                RAZEM BRUTTO
-              </td>
-              <td className="pt-1 text-right font-bold tabular-nums">
-                {formatNumber(inv.gross_total)} PLN
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </Card>
 
-      {payment?.dueDate && (
-        <Card className="p-4 mb-6">
-          <h3 className="font-semibold mb-2 text-sm uppercase text-gray-500">
-            Płatność
-          </h3>
-          <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-            <div>
-              <dt className="text-xs text-gray-500">Forma</dt>
-              <dd>{PAYMENT_METHOD_LABEL[payment.method ?? ''] ?? payment.method ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-gray-500">Termin płatności</dt>
-              <dd className="tabular-nums">{payment.dueDate}</dd>
-            </div>
-            {payment.bankAccount && (
-              <div>
-                <dt className="text-xs text-gray-500">Rachunek</dt>
-                <dd className="font-mono text-xs break-all">{payment.bankAccount}</dd>
+            {inv.payment_panel && (
+              <InvoicePaymentPanel
+                invoice={{ id: inv.id, number: inv.internal_number }}
+                data={inv.payment_panel}
+              />
+            )}
+
+            {/* PR C (6.5): faktura zapisana z KSeF decyzją — skąd się wzięła i co dalej (wpłaty, przypomnienia). */}
+            {inv.ksef_imported_original && <ImportedOriginalNote provenance={inv.ksef_imported_original} />}
+
+            {inv.last_error && !duplicatePanel && (
+              <InvoiceErrorDisplay
+                errorMessage={inv.last_error}
+                errorCode={inv.last_error_code}
+                errorField={inv.last_error_field}
+                errorSuggestion={inv.last_error_suggestion}
+                invoiceId={inv.id}
+                showEditLink={
+                  inv.ksef_status === 'rejected' ||
+                  inv.ksef_status === 'failed'
+                }
+              />
+            )}
+
+            {duplicatePanel && inv.ksef_duplicate_original && (
+              <div className="border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  {inv.ksef_duplicate_original.title}
+                </h3>
+                <dl className="mt-3 grid grid-cols-1 gap-y-1 text-sm">
+                  {inv.ksef_duplicate_original.rows.map((row) => (
+                    <div key={row.label} className="flex flex-wrap gap-x-2">
+                      <dt className="text-amber-800 dark:text-amber-200">{row.label}:</dt>
+                      <dd className="font-medium break-all">{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {decision ? (
+                  <KsefDuplicateDecision invoiceId={inv.id} view={decision} env={initial.ksef_server_environment} />
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-amber-900 dark:text-amber-100">
+                      {inv.ksef_duplicate_original.note}
+                    </p>
+                    {inv.ksef_duplicate_original.link && (
+                      <p className="mt-2 text-sm">
+                        <Link
+                          href={inv.ksef_duplicate_original.link.href}
+                          className="font-medium text-amber-900 underline underline-offset-2 hover:no-underline dark:text-amber-100"
+                        >
+                          {inv.ksef_duplicate_original.link.label}
+                        </Link>
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             )}
-          </dl>
-        </Card>
-      )}
 
-      {inv.notes && (
-        <Card className="p-4 mb-6">
-          <h3 className="font-semibold mb-2 text-sm uppercase text-gray-500">
-            Uwagi
-          </h3>
-          <p className="text-sm whitespace-pre-wrap">{inv.notes}</p>
-        </Card>
-      )}
+            {/* Baner ma własny odstęp od dołu (`mb-6`) — w karcie odstępy daje `space-y-4`. */}
+            {retired && (
+              <div className="[&>*]:mb-0">
+                <RetiredDraftBanner view={retired} />
+              </div>
+            )}
 
-      <InvoiceActions
-        invoice={{
-          id: inv.id,
-          ksef_status: inv.ksef_status,
-          xml_storage_path: inv.xml_storage_path ?? null,
-          invoice_type: inv.invoice_type,
-          invoice_kind: inv.invoice_kind,
-          last_error_code: inv.last_error_code,
-        }}
-        canManageSend={inv.can_manage_send}
-      />
+            <InvoiceActions
+              section="primary"
+              invoice={actionsInvoice}
+              canManageSend={inv.can_manage_send}
+            />
+          </CardContent>
+        </Card>
+
+        <Card
+          data-testid="dokument-faktury"
+          className="gap-6 py-0 shadow-none lg:col-start-1 lg:row-span-2 lg:row-start-1 print:ring-0"
+        >
+          {/* Nagłówek dokumentu Finory (`invoice-document.tsx`): wystawca po lewej, numer i daty po prawej. */}
+          <div className="bg-muted/50 flex flex-wrap items-start justify-between gap-6 p-6">
+            <div className="min-w-0 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-semibold uppercase">{seller.name ?? '—'}</span>
+              </div>
+              <div className="text-muted-foreground space-y-1 text-sm">
+                {seller.address?.addressLine1 && <p>{seller.address.addressLine1}</p>}
+                {seller.address?.addressLine2 && <p>{seller.address.addressLine2}</p>}
+                {seller.nip && <p>NIP: {seller.nip}</p>}
+              </div>
+            </div>
+            <div className="space-y-4 sm:text-right">
+              <h1 className="text-lg font-semibold">
+                {documentTitle(inv.invoice_type, inv.invoice_kind)} nr {inv.internal_number ?? '(bez numeru)'}
+              </h1>
+              <div className="text-muted-foreground space-y-1 text-sm">
+                <p>Data wystawienia: {formatInvoiceDate(inv.issue_date)}</p>
+                {inv.sale_date && <p>Data sprzedaży: {formatInvoiceDate(inv.sale_date)}</p>}
+                {payment?.dueDate && <p>Termin płatności: {formatInvoiceDate(payment.dueDate)}</p>}
+              </div>
+            </div>
+          </div>
+
+          <CardContent className="space-y-6 px-6 pb-6">
+            <div className="flex flex-wrap justify-between gap-6">
+              <div className="min-w-0">
+                <h2 className="font-medium">Nabywca:</h2>
+                <div className="text-muted-foreground mt-2 space-y-1 text-sm">
+                  <p className="text-foreground">{buyer.name ?? '—'}</p>
+                  {buyer.address?.addressLine1 && <p>{buyer.address.addressLine1}</p>}
+                  {buyer.address?.addressLine2 && <p>{buyer.address.addressLine2}</p>}
+                  {buyer.nip ? (
+                    <p>NIP: {buyer.nip}</p>
+                  ) : buyer.vatUeNumber ? (
+                    <p>VAT UE: {buyer.vatUeNumber}</p>
+                  ) : null}
+                  {buyer.email && <p>{buyer.email}</p>}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-medium">Płatność:</h2>
+                <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  <dt className="text-foreground">Do zapłaty:</dt>
+                  <dd className="font-medium tabular-nums">{money(inv.amount_due)}</dd>
+                  {payment?.method && (
+                    <>
+                      <dt className="text-foreground">Forma płatności:</dt>
+                      <dd>{PAYMENT_METHOD_LABEL[payment.method] ?? payment.method}</dd>
+                    </>
+                  )}
+                  {payment?.bankAccount && (
+                    <>
+                      <dt className="text-foreground">Rachunek:</dt>
+                      <dd className="break-all">{payment.bankAccount}</dd>
+                    </>
+                  )}
+                  {payment?.bankName && (
+                    <>
+                      <dt className="text-foreground">Bank:</dt>
+                      <dd>{payment.bankName}</dd>
+                    </>
+                  )}
+                  {currency !== 'PLN' && payment?.swift && (
+                    <>
+                      <dt className="text-foreground">SWIFT:</dt>
+                      <dd>{payment.swift}</dd>
+                    </>
+                  )}
+                  {inv.split_payment && (
+                    <>
+                      <dt className="text-foreground">MPP:</dt>
+                      <dd>Mechanizm podzielonej płatności</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+            </div>
+
+            {/* Telefon: tabela pozycji przewija się w poziomie w kontenerze `Table` (to dokument, nie lista). */}
+            <Table className="min-w-[40rem] border">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Lp.</TableHead>
+                  <TableHead>Nazwa</TableHead>
+                  <TableHead className="text-right">Ilość</TableHead>
+                  <TableHead>J.m.</TableHead>
+                  <TableHead className="text-right">Cena netto</TableHead>
+                  <TableHead className="text-right">VAT</TableHead>
+                  <TableHead className="text-right">Netto</TableHead>
+                  <TableHead className="pr-4 text-right">Brutto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-muted-foreground py-4 text-center text-xs">
+                      Brak pozycji
+                    </TableCell>
+                  </TableRow>
+                )}
+                {lines.map((line) => (
+                  <TableRow key={line.ordinal}>
+                    <TableCell className="pl-4">{line.ordinal}</TableCell>
+                    <TableCell className="font-medium whitespace-normal">{line.name ?? '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(line.quantity, 4)}</TableCell>
+                    <TableCell className="text-muted-foreground">{line.unit ?? ''}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(line.unit_price_net, 4)}</TableCell>
+                    <TableCell className="text-right">{vatRateLabel(line.vat_rate)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(line.net_amount)}</TableCell>
+                    <TableCell className="pr-4 text-right font-medium tabular-nums">
+                      {formatNumber(line.gross_amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {/*
+              Stopka dokumentu Finory: po lewej (zamiast „Salesperson”) podsumowanie VAT per stawka,
+              po prawej sumy. Kolumna sum szersza niż w Finorze (`max-w-64`, nie `max-w-56`):
+              „Razem brutto:” i kwota z kodem waluty nie mieszczą się w 14rem (§7.2).
+            */}
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div className="min-w-0 flex-1 basis-72">
+                {showVatRows && vatRows && (
+                  <div data-testid="podsumowanie-vat">
+                    <Table className="border">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="pl-4">Stawka</TableHead>
+                          <TableHead className="text-right">Netto</TableHead>
+                          <TableHead className="text-right">VAT</TableHead>
+                          <TableHead className="pr-4 text-right">Brutto</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {vatRows.map((row) => (
+                          <TableRow key={row.rate}>
+                            <TableCell className="pl-4">{vatRateLabel(row.rate)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatNumber(row.net)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatNumber(row.vat)}</TableCell>
+                            <TableCell className="pr-4 text-right tabular-nums">{formatNumber(row.gross)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+              <div className="w-full max-w-64 space-y-1.5 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Razem netto:</span>
+                  <span className="font-medium tabular-nums">{money(inv.net_total)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">VAT:</span>
+                  <span className="font-medium tabular-nums">{money(inv.vat_total)}</span>
+                </div>
+                <Separator className="my-2" />
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-medium">Razem brutto:</span>
+                  <span className="font-medium tabular-nums">{money(inv.gross_total)}</span>
+                </div>
+              </div>
+            </div>
+
+            {inv.notes && (
+              <>
+                <Separator />
+                <p className="text-sm">
+                  <span className="font-medium">Uwagi:</span>{' '}
+                  <span className="text-muted-foreground whitespace-pre-wrap">{inv.notes}</span>
+                </p>
+              </>
+            )}
+
+            {inv.ksef_number && (
+              <>
+                <Separator />
+                <div className="flex flex-wrap items-end justify-between gap-6">
+                  <div className="min-w-0 space-y-1 text-sm">
+                    <p className="text-muted-foreground text-xs tracking-wide uppercase">Numer KSeF</p>
+                    <p className="font-mono break-all">{inv.ksef_number}</p>
+                    {inv.ksef_accepted_at && (
+                      <p className="text-muted-foreground text-xs">
+                        Zaakceptowana: {formatWarsawDateTime(inv.ksef_accepted_at)}
+                      </p>
+                    )}
+                  </div>
+                  <InvoiceQr qr={inv.qr} />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Karta akcji Finory (`invoice-actions.tsx`): `h-max shadow-none print:hidden`, przyciski na całą szerokość. */}
+        <Card
+          data-testid="karta-dokumentu"
+          className="h-max shadow-none lg:col-start-2 lg:row-start-2 print:hidden"
+        >
+          <CardContent className="space-y-4">
+            <InvoiceActions
+              section="secondary"
+              invoice={actionsInvoice}
+              canManageSend={inv.can_manage_send}
+              buyerEmail={buyer.email ?? null}
+            />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

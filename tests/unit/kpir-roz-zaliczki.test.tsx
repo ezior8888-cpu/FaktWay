@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ admin: vi.fn() }));
+// Strona KPiR pyta o tryb danych (dane przykładowe przed weryfikacją KSeF) — tu firma zweryfikowana.
+vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null }) }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // Strony: sesja = ta sama atrapa bazy; karty panelu spoza tematu — puste.
@@ -14,16 +16,14 @@ vi.mock('@/lib/dashboard/monthly-figures', async (importOriginal) => ({
   getMonthlyFigures: async () => ({ monthName: '', totalNet: 0, totalVat: 0, totalGross: 0, vatDueLabel: '', daysToVatDue: 0 }),
   getSalesSeries: async () => ({ months: [], currentSeries: [], prevSeries: [], currentMonthKey: '' }),
 }));
-vi.mock('@/components/dashboard/monthly-figures-card', () => ({ MonthlyFiguresCard: () => null }));
-vi.mock('@/components/dashboard/sales-chart-card', () => ({ SalesChartCard: () => null }));
-vi.mock('@/components/dashboard/vat-summary-card', () => ({ VatSummaryCard: () => null }));
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import PrzeplywyPage from '@/app/(dashboard)/przeplywy/page';
 import KpirPage from '@/app/(dashboard)/reports/kpir/page';
-import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
+import { getKpirData, kpirTotals } from '@/lib/reports/kpir-data';
 import { KpirView } from '@/components/expenses/kpir-view';
+import { KpirFinanceCard } from '@/components/przeplywy/finora/chart-finance';
+import { getCashFlowData, type CashFlowData } from '@/lib/dashboard/cash-flow';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
@@ -80,6 +80,8 @@ function database() {
         gte(key: string, value: string) { predicates.push((r) => String(r[key]) >= value); return query; },
         lte(key: string, value: string) { predicates.push((r) => String(r[key]) <= value); return query; },
         gt(key: string, value: string) { predicates.push((r) => String(r[key]) > value); return query; },
+        lt(key: string, value: string) { predicates.push((r) => String(r[key]) < value); return query; },
+        is(key: string, value: unknown) { filters.push(['is', key, value]); predicates.push((r) => (r[key] ?? null) === value); return query; },
         order(key?: string) { sortKey = key ?? null; return query; },
         limit() { return query; },
         range(from: number, to: number) { window = [from, to]; return query; },
@@ -102,6 +104,21 @@ function database() {
 }
 
 const client = () => database() as unknown as SupabaseClient;
+
+/** Karta „Przychody i koszty / Ten miesiąc” z `/przeplywy` dla wyniku `getCashFlowData`. */
+function przeplywyHtml(data: CashFlowData): string {
+  return renderToStaticMarkup(
+    <KpirFinanceCard
+      months={data.months}
+      revenue={data.revenue}
+      costs={data.costs}
+      profit={data.profit}
+      report={data.report}
+      revenueChangePct={data.revenueChangePct}
+      costsHint="none"
+    />,
+  );
+}
 
 function faktura(o: Row): Row {
   return {
@@ -244,12 +261,22 @@ describe('KPiR w aplikacji i „Przepływy”', () => {
     expect(html).not.toContain(formatPlMoney(36000));
     expect(html).toContain(formatPlMoney(25000));
     expect(html).toContain(`zamówienie ${formatPlMoney(35000)}, minus zaliczki${' '}${formatPlMoney(10000)}`);
+    // Ta sama reguła w funkcji sum, z której liczy widok (plan Finora E8).
+    expect(kpirTotals([], wiersze)).toMatchObject({ col_7: 26000, totalRevenue: 26000, profit: 26000 });
   });
 
-  it('Przepływy: przychód i dochód miesiąca bez dubla', () => {
-    const html = renderToStaticMarkup(
-      <CashFlowDashboard invoices={wiersze} expenses={[]} pendingReviewCount={0} />,
+  it('Przepływy: przychód i dochód miesiąca bez dubla', async () => {
+    // Te same faktury co `wiersze`, ale w bazie: od E5 przychód `/przeplywy`
+    // liczy `getCashFlowData` (zaliczki ROZ czyta sama).
+    tables.invoices.push(
+      faktura({ id: 'zal', internal_number: 'ZAL/1', invoice_kind: 'advance', issue_date: '2020-01-10', net_total: 10000 }),
+      faktura({ id: 'roz', internal_number: 'ROZ/1', invoice_kind: 'final', issue_date: `${ym}-10`, net_total: 35000, advance_invoice_ids: ['zal'] }),
+      faktura({ id: 'fv', internal_number: 'FV/1', issue_date: `${ym}-12`, net_total: 1000 }),
     );
+    const data = await getCashFlowData(client() as never, 'firma-a');
+    expect(data.report.revenue).toBe(26000);
+    expect(data.report.profit).toBe(26000);
+    const html = przeplywyHtml(data);
     expect(html).toContain(formatPlMoney(26000));
     expect(html).not.toContain(formatPlMoney(36000));
   });
@@ -276,6 +303,32 @@ describe('strony — podpięcie odczytu zaliczek', () => {
     );
   });
 
+  const okres = () => ({ month: String(now.getMonth() + 1), year: String(now.getFullYear()) });
+
+  it('KPiR (getKpirData): każda ROZ dostaje sumę SWOICH zaliczek, przychód okresu 30 000', async () => {
+    const data = await getKpirData(client(), 'firma-a', okres());
+    const zaliczki = new Map(data.invoices.map((inv) => [inv.internal_number, inv.settled_advances_net]));
+    expect(zaliczki).toEqual(new Map([['ROZ/1', 10000], ['ROZ/2', 3000], ['FV/1', null]]));
+    expect(data).toMatchObject({ currencyBlocked: null, settledError: null });
+    const sumy = kpirTotals(data.expenses, data.invoices);
+    expect(sumy.totalRevenue).toBe(30000);
+    expect(sumy.totalRevenue).not.toBe(43000);
+  });
+
+  it('KPiR (getKpirData): błąd odczytu zaliczek → settledError, nie zero zaliczek', async () => {
+    failWhen = zapytanieOZaliczki;
+    const data = await getKpirData(client(), 'firma-a', okres());
+    expect(data.settledError).toContain('Nie można odczytać zaliczek rozliczonych fakturą końcową');
+    expect(data.currencyBlocked).toBeNull();
+  });
+
+  it('KPiR (getKpirData): sprzedaż w EUR wstrzymuje raport i nie czyta zaliczek', async () => {
+    tables.invoices.find((row) => row.id === 'fv-1')!.currency = 'EUR';
+    const data = await getKpirData(client(), 'firma-a', okres());
+    expect(data.currencyBlocked).toContain('Raport wstrzymany');
+    expect(queries.some((q) => zapytanieOZaliczki(q.table, q.filters))).toBe(false);
+  });
+
   it('KPiR: strona odejmuje każdej ROZ jej własne zaliczki (także sprzed miesięcy)', async () => {
     const page = await KpirPage({
       searchParams: Promise.resolve({ month: String(now.getMonth() + 1), year: String(now.getFullYear()) }),
@@ -296,7 +349,7 @@ describe('strony — podpięcie odczytu zaliczek', () => {
   });
 
   it('Przepływy: przychód miesiąca 30 000, nie 43 000; każda ROZ ze swoimi zaliczkami', async () => {
-    const html = renderToStaticMarkup(await PrzeplywyPage());
+    const html = przeplywyHtml(await getCashFlowData(client() as never, 'firma-a'));
     expect(html).toContain(formatPlMoney(30000));
     expect(html).not.toContain(formatPlMoney(43000));
     expect(html).not.toContain(formatPlMoney(37000)); // obie ROZ z zaliczką 3 000
@@ -304,7 +357,7 @@ describe('strony — podpięcie odczytu zaliczek', () => {
 
   it('Przepływy: błąd odczytu zaliczek idzie do granicy błędu, nie do zera', async () => {
     failWhen = zapytanieOZaliczki;
-    await expect(PrzeplywyPage()).rejects.toThrow(/zaliczek/);
+    await expect(getCashFlowData(client() as never, 'firma-a')).rejects.toThrow(/zaliczek/);
   });
 
   it('KPiR: faktura sprzedaży EUR wstrzymuje raport z kwotami PLN', async () => {
@@ -319,6 +372,6 @@ describe('strony — podpięcie odczytu zaliczek', () => {
 
   it('Przepływy: faktura sprzedaży EUR zatrzymuje obliczenie przychodu', async () => {
     tables.invoices.find((row) => row.id === 'fv-1')!.currency = 'EUR';
-    await expect(PrzeplywyPage()).rejects.toThrow(/potwierdzonej waluty PLN/);
+    await expect(getCashFlowData(client() as never, 'firma-a')).rejects.toThrow(/potwierdzonej waluty PLN/);
   });
 });

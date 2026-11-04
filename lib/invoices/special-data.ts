@@ -60,5 +60,5 @@ export function specialDataInsertError(
 ): string | null {
   if (!error || error.code !== '23514' || !error.message?.includes(SHAPE_CONSTRAINT)) return null;
   return `Nie zapisaliśmy ${documentLabel}: dane potrzebne do wysyłki do KSeF są niepełne. ` +
-    'Nic nie zostało wysłane. Spróbuj zapisać jeszcze raz; jeśli błąd wróci, napisz do pomocy FaktFlow.';
+    'Nic nie zostało wysłane. Spróbuj zapisać jeszcze raz; jeśli błąd wróci, napisz do pomocy FaktWay.';
 }

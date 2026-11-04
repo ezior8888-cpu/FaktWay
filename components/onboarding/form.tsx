@@ -1,29 +1,36 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+// Plan Finora P15 (E10b): kreator na prymitywach Finory (`Tabs`, `Alert`,
+// `InputGroup`, `Button`, ikony Remix) zamiast szkła. Logika i akcje bez
+// zmian; `id` pól (`nip`, `invite-token`, `nip-join`) i nazwy zakładek
+// pilnuje `e2e/pages/onboarding-page.ts`.
+
+import { useState, useTransition, type ReactNode } from 'react';
 import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowRight,
-  Building2,
-  CheckCircle2,
-  Loader2,
-  Mail,
-  Search,
-  ShieldCheck,
-  UserPlus,
-} from 'lucide-react';
+  RiAlertLine,
+  RiArrowRightLine,
+  RiBuilding2Line,
+  RiCheckboxCircleLine,
+  RiErrorWarningLine,
+  RiLoader4Line,
+  RiMailLine,
+  RiSearchLine,
+  RiShieldCheckLine,
+  RiUserAddLine,
+} from '@remixicon/react';
 
 import {
   acceptInvitationAction,
   requestJoinAction,
   skipOnboardingWithoutNipAction,
 } from '@/app/actions/organizations';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 
 import {
   completeOnboardingAction,
@@ -42,69 +49,53 @@ export function OnboardingForm({
   const [tab, setTab] = useState<Tab>(initialInviteToken ? 'invite' : 'create');
 
   return (
-    <div className="space-y-6">
-      <div
-        role="tablist"
-        className="grid grid-cols-3 gap-1 p-1 rounded-2xl border border-glass-border bg-foreground/5"
-      >
-        <TabButton
-          active={tab === 'create'}
-          onClick={() => setTab('create')}
-          icon={<Building2 className="h-4 w-4" />}
-          label="Załóż firmę"
-        />
-        <TabButton
-          active={tab === 'invite'}
-          onClick={() => setTab('invite')}
-          icon={<Mail className="h-4 w-4" />}
-          label="Mam zaproszenie"
-        />
-        <TabButton
-          active={tab === 'join'}
-          onClick={() => setTab('join')}
-          icon={<UserPlus className="h-4 w-4" />}
-          label="Poproś o dostęp"
-        />
-      </div>
+    <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="gap-6">
+      <TabsList className="w-full">
+        <OnboardingTab value="create" icon={<RiBuilding2Line />} label="Załóż firmę" />
+        <OnboardingTab value="invite" icon={<RiMailLine />} label="Mam zaproszenie" />
+        <OnboardingTab value="join" icon={<RiUserAddLine />} label="Poproś o dostęp" />
+      </TabsList>
 
-      {tab === 'create' ? <CreateOrgPanel /> : null}
-      {tab === 'invite' ? (
+      <TabsContent value="create">
+        <CreateOrgPanel />
+      </TabsContent>
+      <TabsContent value="invite">
         <AcceptInvitePanel initialToken={initialInviteToken ?? ''} />
-      ) : null}
-      {tab === 'join' ? <RequestJoinPanel /> : null}
-    </div>
+      </TabsContent>
+      <TabsContent value="join">
+        <RequestJoinPanel />
+      </TabsContent>
+    </Tabs>
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
+function OnboardingTab({ value, icon, label }: { value: Tab; icon: ReactNode; label: string }) {
+  // Na telefonie zostaje sama ikona (trzy etykiety nie mieszczą się w 375 px),
+  // więc nazwę zakładki niesie `aria-label`.
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
-        active
-          ? 'bg-background text-foreground shadow-glass-sm'
-          : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
+    <TabsTrigger value={value} aria-label={label}>
       {icon}
       <span className="hidden sm:inline">{label}</span>
-    </button>
+    </TabsTrigger>
   );
 }
+
+/** Błąd akcji — `Alert` Finory w wariancie `destructive`. */
+function FormError({ children }: { children: ReactNode }) {
+  return (
+    <Alert variant="destructive" className="border-destructive/30">
+      <RiErrorWarningLine />
+      <AlertDescription className="text-sm/relaxed text-destructive">{children}</AlertDescription>
+    </Alert>
+  );
+}
+
+/** Wyjaśnienie nad polem — wyciszony blok. */
+function Note({ children }: { children: ReactNode }) {
+  return <p className="border bg-muted/50 p-3 text-sm/relaxed text-muted-foreground">{children}</p>;
+}
+
+const FIELD_LABEL_CLASS = 'leading-5';
 
 // ═══════════════════════════════════════════════════════════════
 // Panel: Załóż firmę
@@ -171,37 +162,37 @@ function CreateOrgPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Label
-          htmlFor="nip"
-          className="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-        >
-          NIP firmy
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="nip" className={FIELD_LABEL_CLASS}>
+          NIP firmy*
         </Label>
-        <div className="relative">
-          <Input
+        <InputGroup className="h-10">
+          <InputGroupInput
             id="nip"
             value={nipInput}
             onChange={(e) => setNipInput(e.target.value.replace(/\D/g, ''))}
             placeholder="Wpisz 10 cyfr NIP"
             maxLength={10}
+            inputMode="numeric"
             disabled={isSearching || !!company}
-            className="pr-14 font-mono text-lg h-14"
+            className="font-mono text-base"
           />
-          <Button
-            onClick={handleLookup}
-            variant="ghost"
-            size="icon"
-            disabled={nipInput.length !== 10 || isSearching || !!company}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-xl"
-          >
-            {isSearching ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Search className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
+          <InputGroupAddon align="inline-end" className="pr-1.5">
+            <Button
+              onClick={handleLookup}
+              variant="ghost"
+              size="icon"
+              aria-label="Szukaj firmy w GUS"
+              disabled={nipInput.length !== 10 || isSearching || !!company}
+            >
+              {isSearching ? (
+                <RiLoader4Line className="size-5 animate-spin" />
+              ) : (
+                <RiSearchLine className="size-5" />
+              )}
+            </Button>
+          </InputGroupAddon>
+        </InputGroup>
         <p className="text-xs text-muted-foreground">
           Pobierzemy dane firmy z bazy GUS REGON. NIP nie nadaje uprawnień —
           sam NIP jest publiczny, a dostęp do organizacji wymaga zaproszenia
@@ -209,27 +200,22 @@ function CreateOrgPanel() {
         </p>
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-xl p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-foreground">{error}</p>
-        </div>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       {info && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 backdrop-blur-xl p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-sm text-foreground space-y-2">
+        <Alert role="status" className="border-amber-500/40">
+          <RiAlertLine className="text-amber-700 dark:text-amber-400" />
+          <AlertDescription className="space-y-2 text-sm/relaxed text-foreground">
             <p>{info}</p>
             {duplicates.length > 0 && (
               <ul className="space-y-1 text-xs">
                 {duplicates.slice(0, 3).map((d) => (
                   <li key={d.organizationId} className="flex items-center gap-2">
-                    <Building2 className="h-3 w-3 text-muted-foreground" />
+                    <RiBuilding2Line className="size-3 text-muted-foreground" />
                     <span className="font-medium">{d.name}</span>
                     {d.ksefVerified ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
-                        <ShieldCheck className="h-3 w-3" />
+                      <span className="inline-flex items-center gap-1 text-primary">
+                        <RiShieldCheckLine className="size-3" />
                         KSeF zweryfikowany
                       </span>
                     ) : null}
@@ -237,28 +223,28 @@ function CreateOrgPanel() {
                 ))}
               </ul>
             )}
-          </div>
-        </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {company && (
         <div className="space-y-5 pt-2">
-          <div className="rounded-2xl border border-green-500/20 bg-green-500/5 backdrop-blur-xl p-5">
-            <div className="flex items-center gap-2.5 text-green-700 dark:text-green-400 mb-4">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium text-sm">
+          <div className="border border-primary/30 bg-card p-4">
+            <div className="mb-4 flex items-center gap-2.5 text-primary">
+              <RiCheckboxCircleLine className="size-5" />
+              <span className="text-sm font-medium">
                 Znaleziono w bazie GUS
               </span>
             </div>
             <dl className="grid grid-cols-1 gap-4 text-sm">
               <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                <dt className="text-xs text-muted-foreground">
                   Nazwa firmy
                 </dt>
                 <dd className="font-medium mt-1">{company.name}</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                <dt className="text-xs text-muted-foreground">
                   Adres siedziby
                 </dt>
                 <dd className="text-foreground mt-1 leading-relaxed">
@@ -276,11 +262,10 @@ function CreateOrgPanel() {
             disabled={isSubmitting}
             className="w-full"
             size="lg"
-            variant="glass-primary"
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <RiLoader4Line className="animate-spin" />
                 Tworzę nową organizację...
               </>
             ) : (
@@ -288,13 +273,14 @@ function CreateOrgPanel() {
                 {duplicates.length > 0
                   ? 'Mimo to załóż osobną organizację'
                   : 'Załóż organizację'}
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <RiArrowRightLine />
               </>
             )}
           </Button>
 
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => {
               setCompany(null);
               setNipInput('');
@@ -302,17 +288,17 @@ function CreateOrgPanel() {
               setInfo(null);
               setDuplicates([]);
             }}
-            className="block w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="w-full text-muted-foreground"
           >
             ← Wpisz inny NIP
-          </button>
+          </Button>
         </div>
       )}
 
       {/* BUG-007: wejście do aplikacji bez NIP-u — organizacja-szkic.
           Widoczne dopóki user nie potwierdził firmy z GUS. */}
       {!company && (
-        <div className="border-t border-glass-border pt-5 text-center">
+        <div className="border-t pt-5 text-center">
           <Button
             type="button"
             variant="ghost"
@@ -322,7 +308,7 @@ function CreateOrgPanel() {
           >
             {isSkipping ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <RiLoader4Line className="animate-spin" />
                 Otwieram aplikację...
               </>
             ) : (
@@ -366,18 +352,15 @@ function AcceptInvitePanel({ initialToken }: { initialToken: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm text-muted-foreground leading-relaxed">
-        Otrzymałeś zaproszenie do organizacji w FaktFlow? Wklej token z linku
+      <Note>
+        Otrzymałeś zaproszenie do organizacji w FaktWay? Wklej token z linku
         z maila albo kliknij link bezpośrednio — ten formularz służy jako
         backup, gdy klient pocztowy zerwał link.
-      </div>
+      </Note>
 
-      <div className="space-y-2">
-        <Label
-          htmlFor="invite-token"
-          className="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-        >
-          Token zaproszenia
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="invite-token" className={FIELD_LABEL_CLASS}>
+          Token zaproszenia*
         </Label>
         <Input
           id="invite-token"
@@ -388,29 +371,23 @@ function AcceptInvitePanel({ initialToken }: { initialToken: string }) {
         />
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-xl p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-foreground">{error}</p>
-        </div>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <Button
         onClick={handleAccept}
         disabled={isPending || !token.trim()}
         className="w-full"
         size="lg"
-        variant="glass-primary"
       >
         {isPending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <RiLoader4Line className="animate-spin" />
             Sprawdzam zaproszenie...
           </>
         ) : (
           <>
             Akceptuję zaproszenie
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <RiArrowRightLine />
           </>
         )}
       </Button>
@@ -447,7 +424,7 @@ function RequestJoinPanel() {
       }
       if (r.existingOrgs.length === 0) {
         setInfo(
-          'Nie znaleziono organizacji z tym NIP-em w FaktFlow. Możesz po prostu założyć ją sam (zakładka „Załóż firmę").',
+          'Nie znaleziono organizacji z tym NIP-em w FaktWay. Możesz po prostu założyć ją sam (zakładka „Załóż firmę").',
         );
         return;
       }
@@ -473,78 +450,71 @@ function RequestJoinPanel() {
 
   if (sentToOrgId) {
     return (
-      <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 backdrop-blur-xl p-5 space-y-2">
-        <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-          <CheckCircle2 className="h-5 w-5" />
-          <span className="font-medium">Prośba wysłana</span>
-        </div>
-        <p className="text-sm text-foreground leading-relaxed">
+      <Alert role="status" className="border-primary/30 px-3 py-2.5">
+        <RiCheckboxCircleLine className="text-primary" />
+        <AlertTitle className="text-sm text-primary">Prośba wysłana</AlertTitle>
+        <AlertDescription className="text-sm/relaxed text-foreground">
           Właściciele organizacji <strong>{chosenOrg?.name}</strong> dostaną
           notyfikację. Otrzymasz email kiedy zaakceptują lub odrzucą prośbę.
-        </p>
-      </div>
+        </AlertDescription>
+      </Alert>
     );
   }
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm text-muted-foreground leading-relaxed">
-        Twoja firma jest już w FaktFlow, ale nikt Cię nie zaprosił? Wpisz NIP
+      <Note>
+        Twoja firma jest już w FaktWay, ale nikt Cię nie zaprosił? Wpisz NIP
         — pokażemy listę organizacji z tym NIP-em i wyślemy prośbę o dostęp do
         wybranej. Prośbę zatwierdza właściciel/admin tej organizacji.
-      </div>
+      </Note>
 
-      <div className="space-y-2">
-        <Label
-          htmlFor="nip-join"
-          className="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-        >
-          NIP organizacji
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="nip-join" className={FIELD_LABEL_CLASS}>
+          NIP organizacji*
         </Label>
-        <div className="relative">
-          <Input
+        <InputGroup className="h-10">
+          <InputGroupInput
             id="nip-join"
             value={nipInput}
             onChange={(e) => setNipInput(e.target.value.replace(/\D/g, ''))}
             placeholder="Wpisz 10 cyfr NIP"
             maxLength={10}
+            inputMode="numeric"
             disabled={isSearching || matches !== null}
-            className="pr-14 font-mono text-lg h-14"
+            className="font-mono text-base"
           />
-          <Button
-            onClick={handleSearch}
-            variant="ghost"
-            size="icon"
-            disabled={
-              nipInput.length !== 10 || isSearching || matches !== null
-            }
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-xl"
-          >
-            {isSearching ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Search className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
+          <InputGroupAddon align="inline-end" className="pr-1.5">
+            <Button
+              onClick={handleSearch}
+              variant="ghost"
+              size="icon"
+              aria-label="Szukaj organizacji po NIP"
+              disabled={
+                nipInput.length !== 10 || isSearching || matches !== null
+              }
+            >
+              {isSearching ? (
+                <RiLoader4Line className="size-5 animate-spin" />
+              ) : (
+                <RiSearchLine className="size-5" />
+              )}
+            </Button>
+          </InputGroupAddon>
+        </InputGroup>
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-xl p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-foreground">{error}</p>
-        </div>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       {info && (
-        <div className="rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm text-foreground">
-          {info}
-        </div>
+        <Alert role="status">
+          <AlertDescription className="text-sm/relaxed text-foreground">{info}</AlertDescription>
+        </Alert>
       )}
 
       {matches && matches.length > 0 && !chosenOrg && (
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+          <p className="text-xs text-muted-foreground">
             Wybierz organizację, do której prosisz o dostęp
           </p>
           {matches.map((m) => (
@@ -552,14 +522,14 @@ function RequestJoinPanel() {
               type="button"
               key={m.organizationId}
               onClick={() => setChosenOrg(m)}
-              className="w-full flex items-center gap-3 rounded-2xl border border-glass-border bg-foreground/3 hover:bg-foreground/5 p-4 text-left transition-colors"
+              className="flex w-full items-center gap-3 border bg-card p-3 text-left transition-colors hover:bg-muted"
             >
-              <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+              <RiBuilding2Line className="size-5 shrink-0 text-muted-foreground" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{m.name}</p>
                 {m.ksefVerified ? (
-                  <p className="text-xs text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1 mt-0.5">
-                    <ShieldCheck className="h-3 w-3" />
+                  <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-primary">
+                    <RiShieldCheckLine className="size-3" />
                     Zweryfikowana w KSeF
                   </p>
                 ) : (
@@ -568,7 +538,7 @@ function RequestJoinPanel() {
                   </p>
                 )}
               </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              <RiArrowRightLine className="size-4 text-muted-foreground" />
             </button>
           ))}
         </div>
@@ -576,28 +546,27 @@ function RequestJoinPanel() {
 
       {chosenOrg && (
         <div className="space-y-3">
-          <div className="rounded-2xl border border-glass-border p-4 bg-foreground/3 flex items-center gap-3">
-            <Building2 className="h-5 w-5 text-muted-foreground" />
+          <div className="flex items-center gap-3 border bg-card p-3">
+            <RiBuilding2Line className="size-5 text-muted-foreground" />
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{chosenOrg.name}</p>
               <p className="text-xs text-muted-foreground">
                 Wybrana organizacja
               </p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setChosenOrg(null)}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground"
             >
               zmień
-            </button>
+            </Button>
           </div>
 
-          <div className="space-y-2">
-            <Label
-              htmlFor="join-message"
-              className="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-            >
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="join-message" className={FIELD_LABEL_CLASS}>
               Wiadomość (opcjonalnie)
             </Label>
             <Textarea
@@ -614,17 +583,16 @@ function RequestJoinPanel() {
             disabled={isSending}
             className="w-full"
             size="lg"
-            variant="glass-primary"
           >
             {isSending ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <RiLoader4Line className="animate-spin" />
                 Wysyłam prośbę...
               </>
             ) : (
               <>
                 Wyślij prośbę o dostęp
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <RiArrowRightLine />
               </>
             )}
           </Button>

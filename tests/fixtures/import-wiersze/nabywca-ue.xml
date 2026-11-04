@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PR C0: ceny-brutto.xml (ta sama faktura FaktFlow na cenach brutto) ze zmianami: Podmiot2 <NIP> → <KodUE>DE</KodUE><NrVatUE>123456789</NrVatUE> (nabywca z UE: buyer_data.vatUeNumber, is_b2c), FormaPlatnosci 6 → 2 (karta), bez TerminPlatnosci (termin = data wystawienia, payment_due_date NULL), NrWierszaFa 1/3/5 (ordinal z pliku); P_2 FV/C0/BRUTTO → FV/C0/UE. Przypadek, którego podstawowe fikstury nie przypinały. Plik statyczny: nie regenerować. -->
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaFa>2026-09-10T08:00:00Z</DataWytworzeniaFa>
+    <SystemInfo>KSeF SaaS v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>1234567890</NIP>
+      <Nazwa>Firma testowa sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Testowa 1</AdresL1>
+      <AdresL2>00-001 Warszawa</AdresL2>
+    </Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <KodUE>DE</KodUE>
+      <NrVatUE>123456789</NrVatUE>
+      <Nazwa>Nabywca testowy sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Testowa 2</AdresL1>
+      <AdresL2>00-002 Warszawa</AdresL2>
+    </Adres>
+    <JST>2</JST>
+    <GV>2</GV>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-09-10</P_1>
+    <P_2>FV/C0/UE</P_2>
+    <P_6>2026-09-10</P_6>
+    <P_13_1>81.29</P_13_1>
+    <P_14_1>18.70</P_14_1>
+    <P_15>99.99</P_15>
+    <Adnotacje>
+      <P_16>2</P_16>
+      <P_17>2</P_17>
+      <P_18>2</P_18>
+      <P_18A>2</P_18A>
+      <Zwolnienie>
+        <P_19N>1</P_19N>
+      </Zwolnienie>
+      <NoweSrodkiTransportu>
+        <P_22N>1</P_22N>
+      </NoweSrodkiTransportu>
+      <P_23>2</P_23>
+      <PMarzy>
+        <P_PMarzyN>1</P_PMarzyN>
+      </PMarzy>
+    </Adnotacje>
+    <RodzajFaktury>VAT</RodzajFaktury>
+    <FaWiersz>
+      <NrWierszaFa>1</NrWierszaFa>
+      <P_7>Usługa brutto 1</P_7>
+      <P_8A>usł.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9B>33.33</P_9B>
+      <P_11A>33.33</P_11A>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>3</NrWierszaFa>
+      <P_7>Usługa brutto 2</P_7>
+      <P_8A>usł.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9B>33.33</P_9B>
+      <P_11A>33.33</P_11A>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>5</NrWierszaFa>
+      <P_7>Usługa brutto 3</P_7>
+      <P_8A>usł.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9B>33.33</P_9B>
+      <P_11A>33.33</P_11A>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <Platnosc>
+      <FormaPlatnosci>2</FormaPlatnosci>
+      <RachunekBankowy>
+        <NrRB>61109010140000071219812874</NrRB>
+      </RachunekBankowy>
+    </Platnosc>
+  </Fa>
+</Faktura>

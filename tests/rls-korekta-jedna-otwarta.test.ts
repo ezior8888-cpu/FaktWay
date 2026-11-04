@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import { isOpenCorrectionConflict } from '@/lib/invoices/ksef-send-step';
+
 import { getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
@@ -138,6 +140,37 @@ describe.skipIf(!hasDatabase)('K4 (00133 + 00135): jedna korekta w toku na faktu
 
     const back = await admin.from('invoices').update({ ksef_status: 'draft' }).eq('id', first.id);
     expect(back.error?.code).toBe('23505');
+  });
+
+  it('strażnik (A4b PR2a, I5 crona): uzgodnienie odrzuconej korekty przy drugiej w toku — 23505 rozpoznany jako konflikt korekt, stan i audyt wycofane', async () => {
+    const parent = await acceptedParent();
+    const first = await correction(parent, 'draft');
+    const { error: rejectError } = await admin.from('invoices')
+      .update({ ksef_status: 'rejected', last_error_code: 'KSEF_REJECTED' })
+      .eq('id', first.id);
+    expect(rejectError).toBeNull();
+    const second = await correction(parent, 'draft');
+    expect(second.error).toBeNull();
+
+    // Jak cron (aktor = automat): rejected → queued tylko w trybie uzgodnienia; wyzwalacz 00135 odbija.
+    const { error } = await admin.rpc('requeue_ksef_send', {
+      p_invoice_id: first.id, p_tenant_id: ORG, p_attempt_id: 'cron-a4b', p_actor_user_id: null, p_reconcile_only: true,
+    });
+    expect(error?.code).toBe('23505');
+    // Cron łapie wąsko tylko ten tekst (skippedConflict); każdy inny 23505 idzie do errors i Sentry.
+    expect(isOpenCorrectionConflict(error)).toBe(true);
+
+    const { data: still, error: readError } = await admin.from('invoices').select('ksef_status').eq('id', first.id).single();
+    expect(readError).toBeNull();
+    expect(still?.ksef_status).toBe('rejected');
+    // Audyt `invoice.send_requeued` pisze RPC w tej samej transakcji — wycofany razem z nią,
+    // więc automat nie liczy tej próby do limitu i ponowi ją w następnym przebiegu.
+    const { count, error: auditError } = await admin.from('audit_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('entity_id', first.id)
+      .eq('action', 'invoice.send_requeued');
+    expect(auditError).toBeNull();
+    expect(count).toBe(0);
   });
 
   it('korekty różnych rodziców i zwykłe faktury nie przeszkadzają sobie', async () => {

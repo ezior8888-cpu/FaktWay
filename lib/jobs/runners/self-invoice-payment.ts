@@ -33,6 +33,7 @@ import { isSelfInvoicingConfigured } from '@/lib/billing/operator-config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { deriveBilledPlanFromPaidInvoice } from '@/lib/stripe/billed-plan';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { recordSendRefusal } from '@/lib/ksef/send-attempt-ledger';
 
 import {
   billingPaymentSucceeded,
@@ -195,6 +196,7 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
         paidAt: authoritativePaidAt,
         stripeInvoiceId,
         plan,
+        paymentMethodType: data.paymentMethodType,
       });
       if (!draft) {
         throw new NonRetriableError(
@@ -225,18 +227,32 @@ export async function runSelfInvoicePayment(data: Parameters<typeof billingPayme
     }
 
     // 6. Emit submit event do istniejącego KSeF pipeline'u (Faza 23).
-    await step.sendEvent('emit-ksef-submit', {
-      name: 'invoice/submit.requested',
-      data: invoiceSubmitRequested.create({
+    // A5: nieudane zlecenie zostawia wiersz w dzienniku prób (fail-open) — ponowienie
+    // zatrzyma się na „VAT invoice linked without confirmed KSeF enqueue”, więc bez
+    // tego wiersza faktura za abonament nie pojawia się na liście błędów wysyłki.
+    try {
+      await step.sendEvent('emit-ksef-submit', {
+        name: 'invoice/submit.requested',
+        data: invoiceSubmitRequested.create({
+          tenantId: insertResult.operatorTenantId,
+          invoiceId: insertResult.invoiceId,
+          invoice: insertResult.invoice,
+          nip: insertResult.operatorNip,
+          environment: requireConfiguredKsefEnvironment(),
+          // Właściciel przejęcia wysyłki (AUD-10, 00124).
+          sendAttemptId: randomUUID(),
+        }).data,
+      });
+    } catch (e) {
+      await recordSendRefusal({
         tenantId: insertResult.operatorTenantId,
         invoiceId: insertResult.invoiceId,
-        invoice: insertResult.invoice,
-        nip: insertResult.operatorNip,
-        environment: requireConfiguredKsefEnvironment(),
-        // Właściciel przejęcia wysyłki (AUD-10, 00124).
-        sendAttemptId: randomUUID(),
-      }).data,
-    });
+        userId: null,
+        code: 'ENQUEUE_ERROR',
+        message: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      });
+      throw e;
+    }
 
     // Enqueue KSeF jest poza transakcją faktury. Brak znacznika po 15 min
     // zgłasza monitor i wymaga ręcznego ustalenia, czy event dotarł.

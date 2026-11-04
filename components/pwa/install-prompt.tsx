@@ -44,7 +44,7 @@ export function InstallPrompt() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-display text-sm font-semibold tracking-tighter-text">
-                Zainstaluj KSeF SaaS
+                Zainstaluj FaktWay
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                 {isIOS

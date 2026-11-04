@@ -1,10 +1,17 @@
 'use client';
 
+// Plan Finora P15 (E10b): ekran przejściowy (sekunda „Sprawdzam link…”, albo
+// błąd starego linku) na karcie Finory, bez animowanego tła: strona żyje
+// chwilę, a tło z kanwą to drugi efekt obok czyszczenia adresu. Logika bez
+// zmian (`finishSignInFromFragment`).
+
 import { useEffect, useRef, useState } from 'react';
 
+import { FaktWayLogo } from '@/components/brand/faktway-logo';
+import { buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { finishSignInFromFragment, type FinishSignInResult } from '@/lib/auth/finish-sign-in';
-
-import '@/styles/zova.css';
+import { cn } from '@/lib/utils';
 
 /**
  * Czyści historyczne linki z tokenami w kotwicy bez zmiany bieżącej sesji.
@@ -35,26 +42,33 @@ export default function FinishPage() {
   }, []);
 
   return (
-    <div className="zova flex min-h-screen items-center justify-center px-5 text-center">
-      <div className="flex max-w-[420px] flex-col items-center gap-4">
-        {blad ? (
-          <>
-            <h1 className="z-h4">Nie udało się dokończyć logowania</h1>
-            <p className="z-body text-[var(--z-muted)]">{blad}</p>
-            <a
-              href="/login"
-              className="z-body mt-2 inline-flex items-center rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white"
-            >
-              Wróć do logowania
-            </a>
-            <a href="/forgot-password" className="z-body text-[var(--z-muted)] underline">
-              Poproś o nowy link do zmiany hasła
-            </a>
-          </>
-        ) : (
-          <p className="z-lead text-[var(--z-muted)]">Sprawdzam link…</p>
-        )}
-      </div>
+    <div className="ff-dashboard flex min-h-dvh items-center justify-center p-6 text-foreground">
+      <Card className="w-full max-w-lg gap-6 py-8">
+        <CardHeader className="gap-6 px-8">
+          {/* Logo jak w `AuthLogo`: wbudowany SVG, bez `next/image`. */}
+          <FaktWayLogo className="h-8 w-fit" />
+          {blad ? (
+            <CardTitle className="text-2xl font-semibold">
+              <h1>Nie udało się dokończyć logowania</h1>
+            </CardTitle>
+          ) : null}
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 px-8">
+          {blad ? (
+            <>
+              <p className="text-muted-foreground">{blad}</p>
+              <a href="/login" className={cn(buttonVariants(), 'w-full')}>
+                Wróć do logowania
+              </a>
+              <a href="/forgot-password" className={cn(buttonVariants({ variant: 'ghost' }), 'w-full')}>
+                Poproś o nowy link do zmiany hasła
+              </a>
+            </>
+          ) : (
+            <p role="status" className="text-muted-foreground">Sprawdzam link…</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

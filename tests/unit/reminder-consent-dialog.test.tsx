@@ -140,3 +140,10 @@ it('keeps preparation failures separate from approval and delivery', async () =>
   await vi.waitFor(() => expect(elements(render()).some((item) => item.props.children === 'Sprawdź adres.')).toBe(true));
   expect(mock.approve).not.toHaveBeenCalled(); expect(mock.sent).not.toHaveBeenCalled();
 });
+it('przy zatwierdzeniu prosi o sprawdzenie aktualnego salda (poprawka Bartosza 21.10.2026)', async () => {
+  // Zdanie przeszło tu z usuniętej noty nad kaflami „Po terminie”: saldo
+  // sprawdza się w chwili zgody na wysyłkę, nie przy przeglądaniu listy.
+  const SALDO = 'Przed zatwierdzeniem sprawdź aktualne saldo faktury — wpłata mogła już wpłynąć.';
+  await buildPreview();
+  expect(elements(render()).some((item) => item.props.children === SALDO)).toBe(true);
+});

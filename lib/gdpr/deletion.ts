@@ -1,9 +1,12 @@
 import { createHash, randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { createClient } from '@/lib/supabase/server';
+import { deleteUserSupportConversations } from '@/lib/support/retention';
 import { findOrganizationsBlockingDeletion, GdprDeletionBlockedError } from './deletion-blockers';
 
-export const GDPR_COOLING_OFF_DAYS = 14;
+import { GDPR_COOLING_OFF_DAYS } from './deletion-constants';
+
+export { GDPR_COOLING_OFF_DAYS };
 
 type GdprStatus = 'pending' | 'processing' | 'canceled' | 'executed' | 'failed';
 interface GdprRequestRow {
@@ -187,6 +190,10 @@ export async function executeGdprRequest(requestId: string): Promise<{ ok: boole
     )('gdpr_user_deletion_blockers', { p_user_id: userId });
     if (fkCheck.error || !Array.isArray(fkCheck.data)) throw new Error('deletion_blockers_check_failed');
     if (fkCheck.data.length > 0) throw new Error(`user_still_referenced: ${fkCheck.data.join(', ')}`);
+    // Czat pomocy: FK user_id ma ON DELETE SET NULL, więc deleteUser zostawiłby
+    // rozmowy z treścią bez właściciela. Po sprawdzeniach (odmowa = brak skutków),
+    // przed anonimizacją i deleteUser; błąd zostawia konto nietknięte.
+    await deleteUserSupportConversations(admin, userId);
     const anonRpc = await (
       admin.rpc as unknown as (
         fn: 'anonymize_user_audit_logs', args: { p_user_id: string },

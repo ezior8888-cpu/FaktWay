@@ -1,7 +1,13 @@
-// Cloudflare Email Worker dla faktflow.pl — B-3 Recepcja w trybie „tylko powiadom”
+// Cloudflare Email Worker dla faktway.pl — B-3 Recepcja w trybie „tylko powiadom”
 // (krok 10 planu automatyzacji, 06_PLAN_B § 3, MAN-18/19).
 //
-// Każda wiadomość na adres w faktflow.pl:
+// Zmiana marki FaktFlow → FaktWay: w okresie przejściowym worker obsługuje OBIE
+// domeny (faktway.pl i faktflow.pl). Nie zakłada żadnej z nich: bierze adres
+// odbiorcy z wiadomości (`message.to`), więc ten sam kod podpina się pod Email
+// Routing każdej strefy, a powiadomienie pokazuje dokładnie ten adres, na który
+// ktoś napisał.
+//
+// Każda wiadomość na adres w obsługiwanej domenie:
 //   1. idzie dalej do skrzynek z FORWARD_TO (adresy zweryfikowane w Email Routing),
 //   2. wysyła do Telegrama powiadomienie: adres docelowy, kategoria, pilność.
 //
@@ -43,11 +49,15 @@ export function parseList(raw) {
   return String(raw ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-/** Treść powiadomienia — bez nadawcy, tematu i treści wiadomości. */
+/**
+ * Treść powiadomienia — bez nadawcy, tematu i treści wiadomości. Adres docelowy
+ * pokazujemy w całości (`pomoc@faktway.pl` albo `pomoc@faktflow.pl`): operator
+ * ma widzieć, którą domeną klient się posłużył.
+ */
 export function formatNotice({ recipient, category }) {
-  const local = String(recipient ?? '').split('@')[0] || '?';
+  const address = String(recipient ?? '').trim() || '?';
   return [
-    `${category.urgent ? '🔴' : '📩'} Nowa wiadomość na ${local}@faktflow.pl`,
+    `${category.urgent ? '🔴' : '📩'} Nowa wiadomość na ${address}`,
     `Kategoria: ${category.label}${category.urgent ? ' · pilne' : ''}`,
     category.note ? `Uwaga: ${category.note}` : '',
     'Treść jest w skrzynce pomocy — tu jej celowo nie ma.',

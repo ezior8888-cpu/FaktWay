@@ -81,7 +81,12 @@ describe('portal księgowej — lista (F-063)', () => {
   });
 
   it('„Pobierz XML” tylko przy dokumencie z plikiem', () => {
-    expect(html.match(/Pobierz XML/g)).toHaveLength(1);
+    // Plan Finora §7.2: tabela od `lg` i karty poniżej to ten sam zbiór
+    // dokumentów — warunek liczymy w KAŻDYM z widoków osobno.
+    const [, table = '', cards = ''] = html.split(/data-view="(?:table|cards)"/);
+    expect(table.match(/Pobierz XML/g)).toHaveLength(1);
+    expect(cards.match(/Pobierz XML/g)).toHaveLength(1);
+    expect(html.match(/Pobierz XML/g)).toHaveLength(2);
     expect(html).toContain('/accountant/t/download/i1');
     expect(html).not.toContain('/download/i2');
   });

@@ -32,7 +32,7 @@ function invoiceFor(id: string): Invoice {
     },
     lines: [{
       ordinal: 1,
-      name: 'FaktFlow — subskrypcja miesięczna (wrzesień 2026)',
+      name: 'FaktWay — subskrypcja miesięczna (wrzesień 2026)',
       unit: 'usł.',
       quantity: 1,
       unitPriceNet: 47.97,
@@ -45,7 +45,7 @@ function invoiceFor(id: string): Invoice {
     vatTotal: 11.03,
     grossTotal: 59,
     payment: { amountDue: 59, currency: 'PLN', dueDate: '2026-09-24', method: 'card' },
-    notes: 'Faktura za subskrypcję FaktFlow. Płatność Stripe: ' + id + '.',
+    notes: 'Faktura za subskrypcję FaktWay. Płatność Stripe: ' + id + '.',
   };
 }
 

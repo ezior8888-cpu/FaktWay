@@ -1,5 +1,5 @@
 /**
- * Operator (FaktFlow Sp. z o.o.) konfiguracja dla self-invoicing (Faza 25 Krok 4).
+ * Operator (spółka prowadząca FaktWay) — konfiguracja dla self-invoicing (Faza 25 Krok 4).
  *
  * Self-invoicing: nasza apka używa swojego własnego KSeF pipeline'u żeby
  * wystawić fakturę VAT klientowi za jego subskrypcję. Wymaga:

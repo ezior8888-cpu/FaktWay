@@ -1,143 +1,171 @@
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { AuthDivider } from '@/components/auth/auth-divider';
-import {
-  authAlertErrorClass,
-  authAlertSuccessClass,
-  authGoogleButtonClass,
-  authInputClass,
-  authLabelClass,
-  authLinkClass,
-  authMutedTextClass,
-  authPrimaryButtonClass,
-  authSubtitleClass,
-  authTitleClass,
-} from '@/components/auth/auth-form-styles';
-import { TurnstileWidget } from '@/components/auth/turnstile-widget';
-import { loginWithEmail, loginWithGoogle } from './actions';
+// Plan Finora P15 (E10b): `src/views/pages/auth/login/index.tsx` +
+// `login-form.tsx` szablonu. Układ i klasy 1:1; logika nasza i bez zmian:
+// formularz idzie do `loginWithEmail`, Google do `loginWithGoogle` (przycisk
+// tylko przy włączonym Google w GoTrue — #281), Turnstile zostaje.
+// Wylatuje Facebook. „Zapamiętaj mnie” wróciło z logowaniem biometrią: domyślnie
+// włączone na telefonie, wyłączone na komputerze; przy nim `IdleWatcher`
+// nie wylogowuje po 60 min bezczynności.
+
+// Next Imports
+import { headers } from 'next/headers'
+import Link from 'next/link'
+
+// Component Imports
+import { AuthMessage } from '@/components/auth/finora/auth-message'
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { GoogleIcon } from '@/components/auth/finora/google-icon'
+import { PasswordInput } from '@/components/auth/finora/password-input'
+import { HoneypotField } from '@/components/auth/honeypot-field'
+import { PasskeyLogin } from '@/components/auth/passkey-login'
+import { TurnstileWidget } from '@/components/auth/turnstile-widget'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+
+// Lib Imports
+import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers'
+import { safeRedirectPath } from '@/lib/auth/safe-redirect'
+import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent'
+import { SUPPORT_EMAIL } from '@/lib/site'
+
+import { loginWithEmail, loginWithGoogle } from './actions'
+
+/** Nazwa odsyłacza do resetu hasła — komunikat `oauth_disabled` ją cytuje. */
+const FORGOT_PASSWORD_LABEL = 'Nie pamiętasz hasła?'
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_fields: 'Wypełnij email i hasło.',
   invalid_credentials: 'Nieprawidłowy email lub hasło. Upewnij się, że email jest potwierdzony.',
   oauth_failed: 'Nie udało się zalogować przez Google. Spróbuj ponownie.',
+  oauth_disabled: `Logowanie przez Google jest teraz wyłączone. Zaloguj się emailem i hasłem. Jeśli konto zakładałeś przez Google i nie masz hasła, ustaw je przez „${FORGOT_PASSWORD_LABEL}” albo napisz do nas: ${SUPPORT_EMAIL}.`,
   auth_callback_failed: 'Link z maila wygasł lub był już użyty. Zarejestruj się ponownie albo poproś o nowy link.',
   rate_limited: 'Zbyt wiele prób logowania. Poczekaj kilka minut i spróbuj ponownie.',
   bot_check_failed: 'Nie udało się potwierdzić, że nie jesteś botem. Odśwież stronę i spróbuj ponownie.',
-};
+}
 
 const SUCCESS_MESSAGES: Record<string, string> = {
-  check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
-  account_deleted: 'Zapisaliśmy żądanie usunięcia firmy. Zostałeś wylogowany — konto zostanie trwale usunięte po upływie okresu retencji (30 dni), o ile nie cofniesz decyzji z pomocą techniczną.',
+  check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową, wysłaliśmy link aktywacyjny.',
+  // Bez `account_deleted` od 15.10.2026: usuwanie firmy z aplikacji jest
+  // wstrzymane (idzie przez pomoc — components/settings/company-deletion.tsx),
+  // a komunikat obiecywał trwałe usunięcie po 30 dniach, którego nic nie
+  // wykonywało.
   session_expired: 'Wylogowaliśmy Cię po godzinie bezczynności. Zaloguj się ponownie, aby kontynuować.',
-};
+}
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string; redirect?: string; retry?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; success?: string; redirect?: string; retry?: string; notice?: string }>
 }) {
-  const { error, success, retry, notice } = await searchParams;
-  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null;
+  const { error, success, retry, notice, redirect: redirectParam } = await searchParams
+  const isPhone = isPhoneUserAgent((await headers()).get('user-agent'))
+  const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null
   const errorMsg = error
     ? error === 'rate_limited' && retryMinutes
       ? `Zbyt wiele prób logowania. Spróbuj ponownie za ~${retryMinutes} min.`
       : ERROR_MESSAGES[error] ?? error
-    : null;
-  const successMsg = success ? SUCCESS_MESSAGES[success] ?? null : null;
+    : null
+  const successMsg = success ? SUCCESS_MESSAGES[success] ?? null : null
+  const googleEnabled = await isGoogleLoginEnabled()
 
   return (
-    <div className="space-y-6">
+    <AuthSplitLayout
+      panelTitle='Witaj ponownie!'
+      panelText='Zaloguj się, żeby wystawić fakturę, sprawdzić płatności i odebrać faktury kosztowe z KSeF.'
+    >
       <div>
-        <h2 className={authTitleClass}>Zaloguj się</h2>
-        <p className={authSubtitleClass}>
-          Wprowadź email i hasło, aby kontynuować
+        <h2 className='mb-2 text-2xl font-semibold'>Zaloguj się</h2>
+        <p className='text-muted-foreground'>
+          {googleEnabled ? 'Witaj ponownie! Wybierz, jak chcesz się zalogować:' : 'Witaj ponownie! Wpisz e‑mail i hasło:'}
         </p>
       </div>
 
-      {successMsg && <div className={authAlertSuccessClass}>{successMsg}</div>}
-      {errorMsg && <div className={authAlertErrorClass}>{errorMsg}</div>}
+      {successMsg && <AuthMessage tone='success'>{successMsg}</AuthMessage>}
+      {errorMsg && <AuthMessage tone='error'>{errorMsg}</AuthMessage>}
       {notice === 'logout_local_only' && (
-        <div role="status" className={authAlertSuccessClass}>
+        <AuthMessage tone='success'>
           Wylogowaliśmy tę przeglądarkę. Nie udało się potwierdzić wylogowania na pozostałych urządzeniach.
-        </div>
+        </AuthMessage>
       )}
 
-      <form action={loginWithGoogle}>
-        <Button
-          type="submit"
-          variant="outline"
-          size="lg"
-          className={authGoogleButtonClass}
-        >
-          <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden>
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-          </svg>
-          Zaloguj przez Google
-        </Button>
-      </form>
+      <PasskeyLogin redirectTo={safeRedirectPath(redirectParam ?? null)} withSeparator={!googleEnabled} />
 
-      <AuthDivider />
+      {googleEnabled && (
+        <>
+          <form action={loginWithGoogle} className='flex flex-wrap gap-4 sm:gap-6'>
+            <Button type='submit' variant='outline' className='grow'>
+              <GoogleIcon />
+              Zaloguj przez Google
+            </Button>
+          </form>
 
-      <form action={loginWithEmail} className="space-y-4">
-        <div>
-          <label htmlFor="email" className={authLabelClass}>
-            Email
-          </label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className={authInputClass}
-          />
-        </div>
-        <div>
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <label htmlFor="password" className={authLabelClass} style={{ marginBottom: 0 }}>
-              Hasło
-            </label>
-            <Link href="/forgot-password" className={`text-[11px] ${authLinkClass}`}>
-              Zapomniałeś hasła?
-            </Link>
+          <div className='flex items-center gap-4'>
+            <Separator className='flex-1' />
+            <p>lub e‑mailem</p>
+            <Separator className='flex-1' />
           </div>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            className={authInputClass}
-          />
-        </div>
-        <TurnstileWidget action="login" theme="light" />
-        <Button type="submit" size="lg" className={authPrimaryButtonClass}>
-          Zaloguj się
-        </Button>
-      </form>
+        </>
+      )}
 
-      <p className={`text-center ${authMutedTextClass}`}>
-        Nie masz konta?{' '}
-        <Link href="/register" className={authLinkClass}>
-          Zarejestruj się
-        </Link>
-      </p>
-    </div>
-  );
+      <div className='space-y-4'>
+        <form action={loginWithEmail}>
+          <FieldGroup className='gap-4'>
+            {/* Email */}
+            <Field className='gap-2'>
+              <FieldLabel htmlFor='email' className='leading-5'>
+                Adres e‑mail*
+              </FieldLabel>
+              <Input
+                type='email'
+                id='email'
+                name='email'
+                required
+                autoComplete='username webauthn'
+                placeholder='Wpisz adres e‑mail'
+              />
+            </Field>
+            {/* Password */}
+            <Field className='w-full gap-2'>
+              <FieldLabel htmlFor='password' className='leading-5'>
+                Hasło*
+              </FieldLabel>
+              <PasswordInput id='password' name='password' required autoComplete='current-password' />
+            </Field>
+            {/* Zapamiętaj mnie i Forgot Password. Całe pole etykiety ma co najmniej 44 px. */}
+            <div className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
+              <label data-testid='remember-me-field' className='flex min-h-[44px] cursor-pointer items-center gap-2 text-base'>
+                <Checkbox name='remember' defaultChecked={isPhone} />
+                Zapamiętaj mnie
+              </label>
+              <Link href='/forgot-password' className='text-base text-nowrap hover:underline'>
+                {FORGOT_PASSWORD_LABEL}
+              </Link>
+            </div>
+            <HoneypotField />
+            <TurnstileWidget action='login' theme='light' />
+            <Field>
+              <Button className='w-full' type='submit'>
+                Zaloguj się
+              </Button>
+            </Field>
+          </FieldGroup>
+        </form>
+        <p className='text-center text-muted-foreground'>
+          Nie masz konta?{' '}
+          <Link href='/register' className='text-foreground underline underline-offset-4 hover:text-primary'>
+            Utwórz konto
+          </Link>
+        </p>
+        {/* Pierwsze logowanie Google zakłada konto, więc zgoda musi być widoczna i tu. */}
+        <p className='text-center text-sm text-muted-foreground'>
+          Zakładając konto akceptujesz <Link href='/legal/regulamin' className='underline'>regulamin</Link> i{' '}
+          <Link href='/legal/umowa-powierzenia' className='underline'>umowę powierzenia</Link> oraz potwierdzasz
+          zapoznanie się z{' '}
+          <Link href='/legal/polityka-prywatnosci' className='underline'>polityką prywatności</Link>.
+        </p>
+      </div>
+    </AuthSplitLayout>
+  )
 }

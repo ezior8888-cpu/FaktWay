@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateTaxOfficeAction } from '@/app/actions/tax-office';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { TAX_OFFICES, taxOfficeName } from '@/lib/exports/tax-offices';
 
 const LIST_ID = 'tax-office-options';
@@ -37,38 +37,41 @@ export function TaxOfficeForm({ initialCode }: { initialCode: string | null }) {
     });
   };
 
+  // Wygląd: pole jak w `change-password-card.tsx` Finory (etykieta nad polem
+  // na całą szerokość), przycisk pod spodem.
   return (
-    <div className="space-y-3">
+    <FieldGroup>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="tax-office">Urząd skarbowy firmy</FieldLabel>
+          <FieldDescription>
+            Urząd, do którego firma składa JPK — ten sam, w którym rozlicza VAT. Bez niego eksport plików JPK
+            nie poda urzędu. Nie wiesz, który? Sprawdź na podatki.gov.pl albo zapytaj księgową.
+          </FieldDescription>
+        </FieldContent>
+        <div className="w-full!">
+          <Input
+            id="tax-office"
+            list={LIST_ID}
+            value={value}
+            disabled={pending}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Wpisz miasto albo kod, np. Kraków lub 1213"
+            autoComplete="off"
+          />
+          <datalist id={LIST_ID}>
+            {TAX_OFFICES.map(([code, name]) => (
+              <option key={code} value={`${code} — ${name}`} />
+            ))}
+          </datalist>
+        </div>
+      </Field>
       <div>
-        <Label
-          htmlFor="tax-office"
-          className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground"
-        >
-          Urząd skarbowy firmy
-        </Label>
-        <Input
-          id="tax-office"
-          list={LIST_ID}
-          value={value}
-          disabled={pending}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Wpisz miasto albo kod, np. Kraków lub 1213"
-          autoComplete="off"
-        />
-        <datalist id={LIST_ID}>
-          {TAX_OFFICES.map(([code, name]) => (
-            <option key={code} value={`${code} — ${name}`} />
-          ))}
-        </datalist>
+        <Button type="button" onClick={save} disabled={pending}>
+          {pending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+          Zapisz
+        </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Urząd, do którego firma składa JPK — ten sam, w którym rozlicza VAT. Bez niego eksport plików JPK
-        nie poda urzędu. Nie wiesz, który? Sprawdź na podatki.gov.pl albo zapytaj księgową.
-      </p>
-      <Button type="button" onClick={save} disabled={pending} className="gap-2">
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Zapisz
-      </Button>
-    </div>
+    </FieldGroup>
   );
 }

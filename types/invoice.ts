@@ -114,6 +114,7 @@ export type PaymentMethod =
   | 'transfer' // przelew
   | 'cash' // gotówka
   | 'card' // karta
+  | 'mobile' // płatność mobilna, FA(3) FormaPlatnosci 7; dziś tylko abonament opłacony BLIK-iem
   | 'other';
 
 export interface PaymentInfo {
@@ -162,19 +163,19 @@ export interface InvoiceAnnotations {
   simplifiedProcedure?: 1 | 2;
   /**
    * P_19A/B/C - podstawa prawna zwolnienia (np. „art. 113 ust. 1 ustawy o VAT”).
-   * Wymagana, gdy którakolwiek pozycja ma stawkę 'zw'. Na fakturze z FaktFlow
+   * Wymagana, gdy którakolwiek pozycja ma stawkę 'zw'. Na fakturze z FaktWay
    * pochodzi z ustawień firmy (`tenants.vat_exemption_basis`), nie z formularza;
    * na fakturze z importu KSeF — z pliku (C5b).
    */
   vatExemptionBasis?: string;
   /**
    * Rodzaj podstawy zwolnienia z pliku KSeF (C5b): P_19A przepis ustawy,
-   * P_19B przepis dyrektywy, P_19C inna podstawa. Brak = P_19A (faktury FaktFlow).
+   * P_19B przepis dyrektywy, P_19C inna podstawa. Brak = P_19A (faktury FaktWay).
    */
   vatExemptionBasisKind?: 'P_19A' | 'P_19B' | 'P_19C';
-  /** P_22 - dostawa nowych środków transportu (tylko z importu KSeF; FaktFlow jej nie wystawia). */
+  /** P_22 - dostawa nowych środków transportu (tylko z importu KSeF; FaktWay jej nie wystawia). */
   newMeansOfTransport?: 1 | 2;
-  /** PMarzy - procedura marży z importu KSeF (FaktFlow jej nie wystawia); brak = P_PMarzyN. */
+  /** PMarzy - procedura marży z importu KSeF (FaktWay jej nie wystawia); brak = P_PMarzyN. */
   marginScheme?: 'P_PMarzy_2' | 'P_PMarzy_3_1' | 'P_PMarzy_3_2' | 'P_PMarzy_3_3';
 }
 

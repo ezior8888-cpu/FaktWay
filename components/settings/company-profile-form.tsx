@@ -1,17 +1,20 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateCompanyProfileAction } from '@/app/actions/company-profile';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 
 /**
  * Edycja nazwy i adresu siedziby firmy (F-008). Dane trafiają na każdą
  * KOLEJNĄ fakturę; wystawione faktury mają własną kopię i się nie zmieniają.
+ *
+ * Wygląd: pola jak w `change-password-card.tsx` Finory (etykieta nad polem
+ * na całą szerokość, przycisk pod spodem).
  */
 export function CompanyProfileForm({
   initial,
@@ -35,39 +38,52 @@ export function CompanyProfileForm({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 text-sm">
-      <div className="space-y-1.5">
-        <Label htmlFor="company-name">Nazwa firmy</Label>
-        <Input id="company-name" value={name} maxLength={512} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="company-address-1">Ulica i numer</Label>
-        <Input
-          id="company-address-1"
-          value={addressLine1}
-          maxLength={512}
-          onChange={(e) => setAddressLine1(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="company-address-2">Kod pocztowy i miejscowość</Label>
-        <Input
-          id="company-address-2"
-          value={addressLine2}
-          maxLength={512}
-          placeholder="00-001 Warszawa"
-          onChange={(e) => setAddressLine2(e.target.value)}
-        />
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Zmiana dotyczy kolejnych faktur. Wystawione faktury zachowują dane z dnia wystawienia. NIP nie podlega zmianie.
-      </p>
+    <FieldGroup>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="company-name">Nazwa firmy</FieldLabel>
+        </FieldContent>
+        <div className="w-full!">
+          <Input id="company-name" value={name} maxLength={512} onChange={(e) => setName(e.target.value)} />
+        </div>
+      </Field>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="company-address-1">Ulica i numer</FieldLabel>
+        </FieldContent>
+        <div className="w-full!">
+          <Input
+            id="company-address-1"
+            value={addressLine1}
+            maxLength={512}
+            onChange={(e) => setAddressLine1(e.target.value)}
+          />
+        </div>
+      </Field>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="company-address-2">Kod pocztowy i miejscowość</FieldLabel>
+          <FieldDescription>
+            Zmiana dotyczy kolejnych faktur. Wystawione faktury zachowują dane z dnia wystawienia. NIP nie podlega
+            zmianie.
+          </FieldDescription>
+        </FieldContent>
+        <div className="w-full!">
+          <Input
+            id="company-address-2"
+            value={addressLine2}
+            maxLength={512}
+            placeholder="00-001 Warszawa"
+            onChange={(e) => setAddressLine2(e.target.value)}
+          />
+        </div>
+      </Field>
       <div>
         <Button onClick={save} disabled={pending}>
-          {pending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          {pending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
           Zapisz dane firmy
         </Button>
       </div>
-    </div>
+    </FieldGroup>
   );
 }

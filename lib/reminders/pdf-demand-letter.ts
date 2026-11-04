@@ -49,6 +49,41 @@ export interface DemandLetterData {
 
 type PdfKitDoc = InstanceType<typeof PDFDocument>;
 
+/**
+ * Pierwszy akapit pisma. Bez „na podstawie art. 187 § 1 pkt 3 KPC” — ten
+ * przepis dotyczy treści pozwu, a podstawą wezwania jest sama umowa
+ * (przegląd prawny 15.10.2026, tests/unit/wezwania-podstawa-prawna.test.ts).
+ */
+export function demandLetterOpening(invoiceNumber: string): string {
+  return `Niniejszym wzywam Państwa do zapłaty zaległej kwoty wynikającej z faktury VAT nr ${invoiceNumber}.`;
+}
+
+/**
+ * Akapit o skutkach braku zapłaty.
+ *  - Odsetki „w transakcjach handlowych” i rekompensata z art. 10 ust. 1 —
+ *    tylko gdy dłużnik ma NIP (transakcja między przedsiębiorcami); wobec
+ *    konsumenta — zwykłe odsetki ustawowe za opóźnienie (art. 481 KC).
+ *  - „Może zostać skierowana” zamiast „zostanie”: o pozwie decyduje klient,
+ *    a koszty zasądza sąd (art. 98 KPC) — pismo ich nie przesądza.
+ */
+export function demandLetterConsequences(data: Pick<DemandLetterData, 'buyerNip' | 'grossAmount'>): string {
+  const b2b = Boolean(data.buyerNip);
+  const interest = b2b
+    ? 'odsetek ustawowych za opóźnienie w transakcjach handlowych'
+    : 'odsetek ustawowych za opóźnienie';
+  const compensation = b2b
+    ? `
+- rekompensaty za koszty odzyskiwania należności (${recoveryCompensationEur(data.grossAmount)} EUR zgodnie z art. 10 ust. 1 ustawy o przeciwdziałaniu nadmiernym opóźnieniom w transakcjach handlowych)`
+    : '';
+  return `W przypadku braku wpłaty w wyznaczonym terminie sprawa może zostać skierowana na drogę postępowania sądowego. Wierzycielowi przysługuje wówczas żądanie zapłaty:
+
+- ${interest}${compensation}
+
+a w razie sporu sąd może obciążyć stronę przegrywającą kosztami postępowania, w tym kosztami zastępstwa procesowego (art. 98 Kodeksu postępowania cywilnego).
+
+Mam nadzieję, że niniejsze wezwanie pozwoli polubownie zakończyć sprawę.`;
+}
+
 export async function generateDemandLetterPdf(
   data: DemandLetterData,
 ): Promise<Buffer> {
@@ -117,7 +152,7 @@ export async function generateDemandLetterPdf(
       doc.moveDown(2);
       doc.fillColor('#000').font('Helvetica').fontSize(11);
 
-      const paragraph1 = `Niniejszym, na podstawie art. 187 § 1 pkt 3 Kodeksu postępowania cywilnego, wzywam Państwa do zapłaty zaległej kwoty wynikającej z faktury VAT nr ${data.invoiceNumber}.`;
+      const paragraph1 = demandLetterOpening(data.invoiceNumber);
 
       doc.text(paragraph1, { lineGap: 4 });
 
@@ -199,14 +234,7 @@ export async function generateDemandLetterPdf(
       doc.moveDown(2);
       doc.fillColor('#000').fontSize(11);
 
-      const consequences = `W przypadku braku wpłaty w wyznaczonym terminie, sprawa zostanie skierowana na drogę postępowania sądowego, co wiązać się będzie z poniesieniem przez Państwa dodatkowych kosztów, w tym:
-
-- kosztów postępowania sądowego
-- odsetek ustawowych za opóźnienie w transakcjach handlowych
-- kosztów zastępstwa procesowego (zgodnie z art. 98 KPC)${data.buyerNip ? `
-- rekompensaty za koszty odzyskiwania należności (${recoveryCompensationEur(data.grossAmount)} EUR zgodnie z art. 10 ust. 1 ustawy o przeciwdziałaniu nadmiernym opóźnieniom w transakcjach handlowych)` : ''}
-
-Mam nadzieję, że niniejsze wezwanie pozwoli polubownie zakończyć sprawę.`;
+      const consequences = demandLetterConsequences(data);
 
       doc.text(consequences, { lineGap: 4 });
 

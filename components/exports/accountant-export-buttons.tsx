@@ -101,11 +101,8 @@ export function AccountantExportButtons({
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label
-          htmlFor="accountant-export-month"
-          className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block"
-        >
+      <div className="space-y-1.5">
+        <Label htmlFor="accountant-export-month" className="text-muted-foreground">
           Wybierz miesiąc
         </Label>
         <Input
@@ -113,13 +110,13 @@ export function AccountantExportButtons({
           type="month"
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="rounded-xl border border-glass-border bg-white/50 dark:bg-white/10 backdrop-blur-glass-sm max-w-[240px]"
+          className="max-w-[240px]"
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Button
-          variant="glass"
+          variant="outline"
           size="lg"
           type="button"
           onClick={() => handleExport('jpk_fa')}
@@ -127,15 +124,15 @@ export function AccountantExportButtons({
           className="justify-start"
         >
           {isLoadingJpk ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+            <Loader2 className="animate-spin shrink-0" aria-hidden />
           ) : (
-            <FileText className="h-4 w-4 mr-2 shrink-0" />
+            <FileText className="shrink-0" aria-hidden />
           )}
           Pobierz JPK_FA(4)
         </Button>
 
         <Button
-          variant="glass"
+          variant="outline"
           size="lg"
           type="button"
           onClick={() => handleExport('kpir_excel')}
@@ -143,9 +140,9 @@ export function AccountantExportButtons({
           className="justify-start"
         >
           {isLoadingKpir ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+            <Loader2 className="animate-spin shrink-0" aria-hidden />
           ) : (
-            <Download className="h-4 w-4 mr-2 shrink-0" />
+            <Download className="shrink-0" aria-hidden />
           )}
           Pobierz KPiR Excel
         </Button>

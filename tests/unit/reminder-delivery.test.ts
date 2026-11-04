@@ -91,7 +91,7 @@ describe('read-only reminder preview preparation', () => {
       to: 'chosen@example.test', from: 'Fixture seller <fallback@example.test>', replyTo: null,
     });
   });
-  // Resend wysyła tylko z domen zweryfikowanych na koncie FaktFlow. Adres
+  // Resend wysyła tylko z domen zweryfikowanych na koncie FaktWay. Adres
   // firmy w „Od:” (formularz podpowiadał faktury@twoja-firma.pl) kończył się
   // odmową i spaloną zgodą; adres w naszej domenie dawał podszycie się.
   it('adres firmy z dawnego pola „Adres From” trafia do Reply-To, nie do From', async () => {
@@ -100,14 +100,14 @@ describe('read-only reminder preview preparation', () => {
       from: 'Firma <fallback@example.test>', replyTo: 'faktury@twoja-firma.test',
     });
   });
-  it('adres w naszej domenie w ustawieniach nie pozwala podszyć się pod FaktFlow', async () => {
-    rows.reminder_settings = { tenant_id: tenantId, sender_name: 'FaktFlow Bezpieczeństwo', sender_email: 'security@app.faktflow.test', reply_to_email: null };
+  it('adres w naszej domenie w ustawieniach nie pozwala podszyć się pod FaktWay', async () => {
+    rows.reminder_settings = { tenant_id: tenantId, sender_name: 'FaktWay Bezpieczeństwo', sender_email: 'security@app.faktflow.test', reply_to_email: null };
     const delivery = await buildReminderDelivery(tenantId, invoiceId, 'stage_1');
-    expect(delivery.from).toBe('FaktFlow Bezpieczeństwo <fallback@example.test>');
+    expect(delivery.from).toBe('FaktWay Bezpieczeństwo <fallback@example.test>');
     expect(delivery.from).not.toContain('security@');
   });
   it('czyta nadawcę z RESEND_FROM_TRANSACTIONAL w formacie „Nazwa <adres>”', async () => {
-    vi.stubEnv('RESEND_FROM_TRANSACTIONAL', 'FaktFlow <no-reply@app.faktflow.test>');
+    vi.stubEnv('RESEND_FROM_TRANSACTIONAL', 'FaktWay <no-reply@app.faktflow.test>');
     expect((await buildReminderDelivery(tenantId, invoiceId, 'stage_1')).from).toBe('Fixture sender <no-reply@app.faktflow.test>');
   });
   it('shows the actual development recipient and modified subject before consent', async () => {

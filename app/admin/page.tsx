@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  CircleAlert,
   CloudOff,
   FileText,
   Inbox,
@@ -16,8 +17,10 @@ import {
 } from 'lucide-react';
 
 import { countLifecycleViolations } from '@/lib/admin/ksef-lifecycle';
-import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
+import { getAdminFunnelWeekly, getAdminOverviewMetrics } from '@/lib/admin/metrics';
 import { cn } from '@/lib/utils';
+
+import { FunnelCard } from './_components/funnel-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +32,8 @@ export default async function AdminDashboardPage() {
   const metrics = await getAdminOverviewMetrics();
   // Strażnik cyklu życia (00131) — brak funkcji na starej bazie nie może wyłączyć panelu.
   const lifecycleViolations = await countLifecycleViolations().catch(() => null);
+  // To samo dla lejka (00161): brak funkcji albo błąd bazy nie wyłącza panelu.
+  const funnel = await getAdminFunnelWeekly().catch(() => null);
 
   const ksef = metrics.ksefHealth;
   const ksefLevel = ksef?.level ?? 'unknown';
@@ -58,7 +63,9 @@ export default async function AdminDashboardPage() {
           icon={ShieldCheck}
           label="Aktywne organizacje"
           value={fmt(metrics.activeTenants)}
-          sublabel={`${fmt(metrics.deletedTenants)} oczekuje na hard delete`}
+          // Firm z flagą `deleted_at` nic nie usuwa ani nie blokuje (przegląd 15.10.2026) —
+          // te firmy działają dalej, a ich właściciele mogą myśleć, że je usunęli.
+          sublabel={`${fmt(metrics.deletedTenants)} z flagą „usunięta” — działają dalej`}
           tone="default"
         />
         <Kpi
@@ -90,6 +97,8 @@ export default async function AdminDashboardPage() {
         lastCheckedAt={ksef?.lastCheckedAt ?? null}
       />
 
+      <FunnelCard rows={funnel} />
+
       {/* Quick navigation tiles */}
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <NavTile
@@ -119,6 +128,12 @@ export default async function AdminDashboardPage() {
                 : 'Brak naruszeń'
           }
           tone={lifecycleViolations ? 'warning' : 'default'}
+        />
+        <NavTile
+          href="/admin/centrum/bledy"
+          icon={CircleAlert}
+          title="Błędy wysyłki"
+          description="Każda nieudana próba wysyłki do KSeF (dziennik prób A5): incydenty, odmowy przed kolejką, przerwane wykonania, UPO."
         />
         <NavTile
           href="/admin/support"

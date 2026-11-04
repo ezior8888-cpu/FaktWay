@@ -19,7 +19,6 @@ import matter from 'gray-matter';
  */
 
 export type HelpCategoryId =
-  | 'flo'
   | 'start'
   | 'ksef'
   | 'faktury'
@@ -36,17 +35,13 @@ export interface HelpCategory {
   icon: string;
 }
 
+/*
+ * FaktWay 1.0: bez kategorii o FLO. Sześć artykułów o agencie leży
+ * w `content/flo/pomoc`, poza `content/help`, więc nie ma ich w `/pomoc`,
+ * w generowanych stronach ani w bazie wiedzy czatu; stare adresy przekierowuje
+ * next.config.ts.
+ */
 export const HELP_CATEGORIES: HelpCategory[] = [
-  {
-    // Agent jest teraz głównym elementem produktu, więc ma własną półkę
-    // w bazie wiedzy — w „Pierwszych krokach” sześć artykułów o nim
-    // przykryłoby wszystko inne.
-    id: 'flo',
-    label: 'Agent Flo',
-    description:
-      'Co robi sam, o co pyta, jak cofnąć jego zmianę i jak go wyciszyć.',
-    icon: 'smart_toy',
-  },
   {
     id: 'start',
     label: 'Pierwsze kroki',
@@ -56,25 +51,25 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   {
     id: 'ksef',
     label: 'KSeF',
-    description: 'Jak działa KSeF, certyfikat, błędy, tryb Offline24.',
+    description: 'Jak działa KSeF, certyfikat, błędy, co gdy KSeF nie działa.',
     icon: 'cloud_sync',
   },
   {
     id: 'faktury',
     label: 'Faktury',
-    description: 'Wystawianie, korekty, zaliczki, faktury walutowe.',
+    description: 'Wystawianie, korekty, zaliczki, klienci z zagranicy.',
     icon: 'receipt_long',
   },
   {
     id: 'ocr-kpir',
-    label: 'OCR i KPiR',
-    description: 'Skanowanie paragonów, kategoryzacja kosztów, KPiR.',
+    label: 'Koszty i KPiR',
+    description: 'Paragony ze zdjęcia, kategoryzacja kosztów, KPiR.',
     icon: 'document_scanner',
   },
   {
     id: 'rozliczenia',
     label: 'Subskrypcja',
-    description: 'Plany, płatności, trial, faktury za FaktFlow.',
+    description: 'Cena, płatności, okres próbny.',
     icon: 'credit_card',
   },
   {
@@ -146,8 +141,23 @@ function parseArticle(file: string): HelpArticle | null {
   };
 }
 
+/**
+ * Lista liczona raz na proces: pliki są w obrazie (`outputFileTracingIncludes`)
+ * i zmieniają się tylko z wdrożeniem, a layout panelu bierze z niej tytuły przy
+ * każdym renderze (sesja 9 planu skalowania, CPU-14). W `next dev` bez pamięci,
+ * żeby edycja `.mdx` była widoczna od razu.
+ */
+let allArticlesMemo: HelpArticle[] | null = null;
+
 /** Wszystkie artykuły, posortowane (kategoria → order → tytuł). */
 export function getAllHelpArticles(): HelpArticle[] {
+  if (process.env.NODE_ENV === 'development') return readAllHelpArticles();
+  allArticlesMemo ??= readAllHelpArticles();
+  // Kopia tablicy: wołający może ją sortować albo filtrować w miejscu bez psucia pamięci.
+  return [...allArticlesMemo];
+}
+
+function readAllHelpArticles(): HelpArticle[] {
   const dir = helpDirPath();
   if (!fs.existsSync(dir)) return [];
   const categoryRank = new Map(

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mocks = vi.hoisted(() => ({ getPageContext: vi.fn() }));
+// Strona KPiR pyta o tryb danych (dane przykładowe przed weryfikacją KSeF) — tu firma zweryfikowana.
+vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null }) }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: mocks.getPageContext }));
 vi.mock('@/components/expenses/kpir-view', () => ({
   KpirView: ({ invoices, expenses }: {
@@ -14,6 +16,8 @@ vi.mock('@/components/expenses/kpir-view', () => ({
 }));
 
 import KpirPage from '@/app/(dashboard)/reports/kpir/page';
+import { getKpirData } from '@/lib/reports/kpir-data';
+import type { PageContext } from '@/lib/supabase/page-context';
 
 type Row = Record<string, unknown>;
 const fixtureRows: Row[] = [
@@ -133,6 +137,65 @@ describe('KPiR KSeF provenance', () => {
     }];
     await expect(KpirPage({ searchParams: Promise.resolve({ month: '9', year: '2026' }) }))
       .rejects.toThrow('provenance is malformed');
+  });
+
+  describe('getKpirData — the same guards on the extracted read (Finora E8)', () => {
+    const db = () => ({ from }) as unknown as PageContext['supabase'];
+    const period = { month: '9', year: '2026' };
+
+    it('returns only invoices of the configured environment', async () => {
+      rows = [rows[0]!];
+      const data = await getKpirData(db(), 'tenant-a', period);
+      expect(data.invoices.map((invoice) => invoice.internal_number)).toEqual(['TEST-DOCUMENT']);
+      expect(data).toMatchObject({ month: 9, year: 2026, periodStart: '2026-09-01', periodEnd: '2026-09-30' });
+    });
+
+    it('rejects another environment or NULL, and an unset environment before any read', async () => {
+      await expect(getKpirData(db(), 'tenant-a', period)).rejects.toThrow('require KSeF environment reconciliation');
+      expect(from).toHaveBeenCalledExactlyOnceWith('invoices');
+      from.mockClear();
+      vi.stubEnv('KSEF_ENV', '');
+      await expect(getKpirData(db(), 'tenant-a', period)).rejects.toThrow('not safely configured');
+      expect(from).not.toHaveBeenCalled();
+    });
+
+    it('keeps manual/OCR and same-environment inbox costs, drops a PROD-linked cost, blocks bad provenance', async () => {
+      rows = [
+        rows[0]!,
+        { id: 'test-source', tenant_id: 'tenant-a', direction: 'incoming', currency: 'PLN', ksef_status: 'accepted', ksef_environment: 'test', issue_date: '2026-08-10' },
+        { id: 'prod-source', tenant_id: 'tenant-a', direction: 'incoming', currency: 'PLN', ksef_status: 'accepted', ksef_environment: 'production', issue_date: '2026-08-10' },
+      ];
+      expenseRows = [
+        { id: 'manual', tenant_id: 'tenant-a', source: 'manual', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' },
+        { id: 'ocr-cost', tenant_id: 'tenant-a', source: 'ocr_photo', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' },
+        { id: 'test-cost', tenant_id: 'tenant-a', source: 'ksef_inbox', ksef_invoice_id: 'test-source', is_deductible: true, issue_date: '2026-09-10' },
+        { id: 'prod-cost', tenant_id: 'tenant-a', source: 'ksef_inbox', ksef_invoice_id: 'prod-source', is_deductible: true, issue_date: '2026-09-10' },
+      ];
+      const data = await getKpirData(db(), 'tenant-a', period);
+      expect(data.expenses.map((expense) => expense.id).sort()).toEqual(['manual', 'ocr-cost', 'test-cost']);
+
+      expenseRows = [{ id: 'unknown-source', tenant_id: 'tenant-a', source: null, ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' }];
+      await expect(getKpirData(db(), 'tenant-a', period)).rejects.toThrow('provenance is malformed');
+      expenseRows = [{ id: 'unlinked', tenant_id: 'tenant-a', source: 'ksef_inbox', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10' }];
+      await expect(getKpirData(db(), 'tenant-a', period)).rejects.toThrow('no linked invoice');
+    });
+
+    it('reads all 1200 invoices and expenses beyond the PostgREST cap, in book order', async () => {
+      rows = Array.from({ length: 1200 }, (_, i) => ({
+        ...rows[0], id: `invoice-${String(i).padStart(4, '0')}`,
+        internal_number: `INVOICE-${String(i).padStart(4, '0')}`,
+      })).reverse();
+      expenseRows = Array.from({ length: 1200 }, (_, i) => ({
+        id: `expense-${String(i).padStart(4, '0')}`, tenant_id: 'tenant-a',
+        source: 'manual', ksef_invoice_id: null, is_deductible: true, issue_date: '2026-09-10',
+      })).reverse();
+      const data = await getKpirData(db(), 'tenant-a', period);
+      expect(data.invoices).toHaveLength(1200);
+      expect(data.expenses).toHaveLength(1200);
+      expect(data.invoices[0]?.internal_number).toBe('INVOICE-0000');
+      expect(data.invoices[1199]?.internal_number).toBe('INVOICE-1199');
+      expect(data.expenses[0]?.id).toBe('expense-0000');
+    });
   });
 
   it('includes all 1200 monthly expenses and invoices beyond the PostgREST cap', async () => {

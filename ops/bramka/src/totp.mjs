@@ -96,8 +96,8 @@ export function createTotpVerifier(secretBase32, { now = () => Date.now(), maxFa
 }
 
 /** Nowy sekret (160 bitów) i URI do zeskanowania w aplikacji uwierzytelniającej. */
-export function newTotpSecret(label = 'FaktFlow bramka') {
+export function newTotpSecret(label = 'FaktWay bramka') {
   const secret = base32Encode(randomBytes(20));
-  const uri = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=FaktFlow&algorithm=SHA1&digits=6&period=30`;
+  const uri = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=FaktWay&algorithm=SHA1&digits=6&period=30`;
   return { secret, uri };
 }

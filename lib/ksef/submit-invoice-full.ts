@@ -10,6 +10,7 @@ import { generateFA3Xml, InvoiceValidationError } from '@/lib/xml/fa3-generator'
 import { claimXmlGeneratedAt } from '@/lib/ksef/xml-generated-at';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
+import { assertSpecialIssueDateToday } from '@/lib/ksef/special-issue-date';
 import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
 import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
 
@@ -126,6 +127,8 @@ export async function submitInvoiceFullFlow(
   //         zawiodły jednocześnie (np. klient_już-uploadował, my retryujemy
   //         z `immutable=true`), traktujemy to jako sukces idempotentny.
   const attemptId = sendAttemptId ?? null;
+  // Data w `P_1` dokumentu specjalnego (z jego danych, jak generator); zwykła faktura — bez sprawdzenia (B1/B2).
+  const specialIssueDate = correctionData?.issueDate ?? advanceData?.issueDate ?? finalPayload?.finalData.issueDate;
   const alreadyUploaded = await invoiceXmlExistsForId(
     tenantId,
     invoiceId,
@@ -154,14 +157,19 @@ export async function submitInvoiceFullFlow(
     configuredEnv,
     { tenantId, invoiceId },
     {
-      onSessionOpened: ({ sessionReferenceNumber }) =>
-        recordKsefSubmissionIntent({
+      onSessionOpened: async ({ sessionReferenceNumber }) => {
+        // 00147: dokument specjalny tylko w dniu wystawienia — drugie sprawdzenie
+        // tuż przed plikiem i przed zamiarem (uwierzytelnienie i sesja trwają
+        // do kilkudziesięciu sekund). Błąd = bez wysyłki, sesja zamykana.
+        if (specialIssueDate !== undefined) assertSpecialIssueDateToday(specialIssueDate);
+        await recordKsefSubmissionIntent({
           tenantId,
           invoiceId,
           sessionReferenceNumber,
           payloadHash: uploadResult.sha256Hash,
           xmlStoragePath: uploadResult.storagePath,
-        }),
+        });
+      },
       onInvoiceNotAccepted: ({ sessionReferenceNumber }, error) =>
         abandonKsefSubmissionIntent({
           tenantId,

@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { classify, formatNotice, handleEmail, shouldNotify } from './worker.mjs';
 
-function fakeMessage({ to = 'pomoc@faktflow.pl', from = 'klient@example.com', subject = '' } = {}) {
+function fakeMessage({ to = 'pomoc@faktway.pl', from = 'klient@example.com', subject = '' } = {}) {
   const calls = { forward: [], reject: null };
   return {
     calls,
@@ -34,17 +34,34 @@ test('kategorie i pilność z tematu', () => {
 });
 
 test('powiadomienie nie zawiera nadawcy, tematu ani treści', () => {
-  const text = formatNotice({ recipient: 'pomoc@faktflow.pl', category: classify('Usunięcie danych Jan Kowalski NIP 1234567890') });
-  assert.match(text, /^🔴 Nowa wiadomość na pomoc@faktflow\.pl/);
+  const text = formatNotice({ recipient: 'pomoc@faktway.pl', category: classify('Usunięcie danych Jan Kowalski NIP 1234567890') });
+  assert.match(text, /^🔴 Nowa wiadomość na pomoc@faktway\.pl/);
   assert.match(text, /RODO \/ dane osobowe · pilne/);
   assert.match(text, /1 miesiąc/);
   assert.doesNotMatch(text, /Kowalski|1234567890/);
 });
 
-test('raporty DMARC i odbicia nie budzą nikogo', () => {
-  assert.equal(shouldNotify({ recipient: 'dmarc@faktflow.pl', sender: 'reports@google.com' }), false);
-  assert.equal(shouldNotify({ recipient: 'pomoc@faktflow.pl', sender: 'MAILER-DAEMON@example.com' }), false);
-  assert.equal(shouldNotify({ recipient: 'pomoc@faktflow.pl', sender: 'klient@example.com' }), true);
+test('powiadomienie pokazuje pełny adres odbiorcy — nowa i dawna domena', () => {
+  const category = classify('Dzień dobry');
+  const nowa = formatNotice({ recipient: 'pomoc@faktway.pl', category });
+  const dawna = formatNotice({ recipient: 'pomoc@faktflow.pl', category });
+  assert.match(nowa, /^📩 Nowa wiadomość na pomoc@faktway\.pl\n/);
+  assert.doesNotMatch(nowa, /faktflow/);
+  assert.match(dawna, /^📩 Nowa wiadomość na pomoc@faktflow\.pl\n/);
+  assert.doesNotMatch(dawna, /faktway/);
+  // Inny adres w dowolnej domenie nie jest podmieniany na zaszytą domenę.
+  assert.match(formatNotice({ recipient: 'rodo@faktway.pl', category }), /na rodo@faktway\.pl\n/);
+  // Brak adresu: znak zapytania zamiast zmyślonej domeny.
+  assert.match(formatNotice({ recipient: '', category }), /na \?\n/);
+  assert.match(formatNotice({ recipient: undefined, category }), /na \?\n/);
+});
+
+test('raporty DMARC i odbicia nie budzą nikogo — w obu domenach', () => {
+  for (const domain of ['faktway.pl', 'faktflow.pl']) {
+    assert.equal(shouldNotify({ recipient: `dmarc@${domain}`, sender: 'reports@google.com' }), false);
+    assert.equal(shouldNotify({ recipient: `pomoc@${domain}`, sender: 'MAILER-DAEMON@example.com' }), false);
+    assert.equal(shouldNotify({ recipient: `pomoc@${domain}`, sender: 'klient@example.com' }), true);
+  }
 });
 
 test('wiadomość: przekazanie do wszystkich skrzynek i powiadomienie do każdego czatu', async () => {
@@ -57,6 +74,30 @@ test('wiadomość: przekazanie do wszystkich skrzynek i powiadomienie do każdeg
   assert.deepEqual(sent.map((s) => s.body.chat_id), ['111', '222']);
   assert.match(sent[0].body.text, /KSeF \/ faktury · pilne/);
   assert.doesNotMatch(sent[0].body.text, /klient@example\.com|wysłana/);
+});
+
+test('wiadomość na pomoc@faktway.pl i na pomoc@faktflow.pl: powiadomienie z adresem, na który przyszła', async () => {
+  for (const to of ['pomoc@faktway.pl', 'pomoc@faktflow.pl']) {
+    const msg = fakeMessage({ to, subject: 'Faktura odrzucona przez KSeF' });
+    const ctx = fakeCtx();
+    const sent = [];
+    await handleEmail(msg, ENV, ctx, async (url, init) => { sent.push(JSON.parse(init.body)); return { ok: true }; });
+    await Promise.all(ctx.waits);
+    assert.deepEqual(msg.calls.forward, ['bartosz@example.com', 'igor@example.com'], to);
+    assert.equal(sent.length, 2, to);
+    assert.match(sent[0].text, new RegExp(`^🔴 Nowa wiadomość na ${to.replace('.', '\\.')}\\n`), to);
+    assert.match(sent[0].text, /KSeF \/ faktury · pilne/);
+  }
+});
+
+test('DMARC na dawnej domenie: poczta przekazana, bez powiadomienia', async () => {
+  const msg = fakeMessage({ to: 'dmarc@faktflow.pl', from: 'reports@google.com', subject: 'Report domain: faktflow.pl' });
+  const ctx = fakeCtx();
+  const sent = [];
+  await handleEmail(msg, ENV, ctx, async (url, init) => { sent.push(init.body); return { ok: true }; });
+  await Promise.all(ctx.waits);
+  assert.equal(msg.calls.forward.length, 2);
+  assert.equal(sent.length, 0);
 });
 
 test('brak skrzynek docelowych: wiadomość odrzucona z informacją, nie zgubiona po cichu', async () => {

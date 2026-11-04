@@ -63,7 +63,7 @@ Alternatywa: monitor typu **Push** w Uptime Kuma (heartbeat 60 s) — ale Kuma s
 1. Raport dzienny przyjdzie następnego dnia o 06:00. Żeby sprawdzić od razu, z kontenera
    workera (`docker exec -it <worker> sh`):
    ```bash
-   node --conditions=react-server --import tsx -e "import('./lib/alerts/telegram.ts').then(m => m.sendTelegramMessage('Test FaktFlow ✅', { silent: true })).then(n => console.log('dostarczono do', n, 'czatów'))"
+   node --import ./lib/jobs/server-only-hook.mjs --import tsx -e "require('./lib/alerts/telegram.ts').sendTelegramMessage('Test FaktFlow ✅', { silent: true }).then(n => console.log('dostarczono do', n, 'czatów'))"
    ```
    Oczekiwane: `dostarczono do 2 czatów`.
 2. Healthchecks.io: check zmienia się na „up” w ciągu ~1 minuty od startu workera.

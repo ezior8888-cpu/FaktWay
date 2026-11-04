@@ -17,7 +17,7 @@ sequenceDiagram
     U->>N: kliknij "Wypróbuj" na /pricing
     N->>S: createCheckoutSession (trial 30 dni)
     S-->>U: redirect Stripe Checkout
-    U->>S: dane karty
+    U->>S: dane karty albo kod BLIK (po włączeniu STRIPE_BLIK_RECURRING)
     S-->>N: redirect /settings/billing?success
 
     Note over S,N: Reszta dzieje się przez webhooki
@@ -61,7 +61,8 @@ sequenceDiagram
 3. **Self-invoicing = my wystawiamy fakturę przez nasz własny pipeline KSeF (Fazy 23).** `FAKTFLOW_OPERATOR_TENANT_ID` env var = nasza firma. Klient dostaje prawdziwą fakturę VAT w `/invoices` jak każdą inną.
 4. **Idempotency wszędzie** — `stripe_webhook_events` zapamiętuje `event.id`; każdy webhook re-delivery jest no-op. Bez tego Stripe by zdublował płatności przy retry.
 5. **Dunning** = email retry schedule po nieudanej płatności. Stripe próbuje sam 4× przez 3 tygodnie; my dokładamy emaile (Faza 25).
-6. **Customer Portal Stripe robi UI** — anulowanie, zmiana karty, faktury historyczne. Nie reimplementujemy.
+6. **Customer Portal Stripe robi UI** — anulowanie, zmiana metody płatności, faktury historyczne. Nie reimplementujemy.
+7. **BLIK cykliczny za przełącznikiem** `STRIPE_BLIK_RECURRING=on`: Checkout dostaje listę metod i wersję API na to jedno żądanie, faktura za abonament ma formę „mobilna” (FA(3): 7). Procedura: [`docs/runbooks/stripe-blik.md`](../runbooks/stripe-blik.md).
 
 ## Powiązany kod
 
@@ -76,5 +77,5 @@ sequenceDiagram
 ## Env vars (zob. [current_state.md](../../.claude/projects/-Users-mokryrys-dev-ksef-saas/memory/current_state.md))
 
 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`,
-`STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`, `FAKTFLOW_OPERATOR_TENANT_ID`,
-`FAKTFLOW_OPERATOR_BANK_ACCOUNT`.
+`STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`, `STRIPE_BLIK_RECURRING`,
+`FAKTFLOW_OPERATOR_TENANT_ID`, `FAKTFLOW_OPERATOR_BANK_ACCOUNT`.

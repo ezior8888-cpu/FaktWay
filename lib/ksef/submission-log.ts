@@ -25,7 +25,14 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import { mergeDuplicateCheck, parseDuplicateCheck, type KsefDuplicateCheck } from './duplicate-check';
+import {
+  DUPLICATE_ORIGINAL_OFFERS,
+  mergeDuplicateCheck,
+  parseDuplicateCheck,
+  type DuplicateDecisionChoice,
+  type DuplicateOriginalOffer,
+  type KsefDuplicateCheck,
+} from './duplicate-check';
 
 export interface KsefSubmissionReferences {
   sessionReferenceNumber: string;
@@ -447,13 +454,122 @@ export async function markKsefSubmissionsNumberTaken(params: {
     .update({
       status: 'number_taken' satisfies SubmissionStatus,
       error_code: 'NUMBER_TAKEN',
-      error_message: `Numer faktury zajęty w KSeF przez fakturę ${params.originalKsefNumber} spoza FaktFlow`.slice(0, 500),
+      error_message: `Numer faktury zajęty w KSeF przez fakturę ${params.originalKsefNumber} spoza FaktWay`.slice(0, 500),
       completed_at: new Date().toISOString(),
     })
     .eq('tenant_id', params.tenantId)
     .eq('invoice_id', params.invoiceId)
     .in('status', ['intent', 'sent', 'duplicate']);
   if (error) throw new Error('Nie można zapisać werdyktu „numer zajęty” w historii wysyłki KSeF');
+}
+
+/** Szkic wycofany (wpis `number_taken`): numer KSeF oryginału i decyzja klienta, jeśli była. */
+export interface KsefNumberTaken {
+  /** K — `null`, gdy faktura ma tylko wpisy `number_taken` bez znacznika 440. */
+  originalKsefNumber: string | null;
+  /** `original_check.decision.choice` (00148); `null` — automatyczny „numer zajęty”. */
+  decision: DuplicateDecisionChoice | null;
+  /**
+   * PR C (00156, 5.4): `decision.importedInvoiceId` — faktura K zapisana z KSeF,
+   * na którą przeszedł numer (szkic wycofany bez numeru; PDF i e-mail odsyłają
+   * do PDF K, 5.12). `null` — decyzja bez zapisu oryginału albo jej brak.
+   */
+  importedInvoiceId: string | null;
+  /** PR C: `decision.retiredInternalNumber` — dawny numer dokumentu (`{nrOld}`). */
+  retiredInternalNumber: string | null;
+  /** PR C: `decision.offer` (znana oferta); `null` przy decyzjach PR B. */
+  offer: DuplicateOriginalOffer | null;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function takenDecision(check: unknown): DuplicateDecisionChoice | null {
+  if (!isRecord(check) || !isRecord(check.decision)) return null;
+  const choice = check.decision.choice;
+  return choice === 'same_sale' || choice === 'other_sale' ? choice : null;
+}
+
+/** Klucze decyzji z zapisem oryginału (00156) — tylko poprawne wartości (id jak wzorzec I3K), reszta `null`. */
+function takenImport(check: unknown): Pick<KsefNumberTaken, 'importedInvoiceId' | 'retiredInternalNumber' | 'offer'> {
+  const decision = isRecord(check) && isRecord(check.decision) ? check.decision : null;
+  const imported = decision?.importedInvoiceId;
+  const retired = decision?.retiredInternalNumber;
+  const offer = decision?.offer;
+  return {
+    importedInvoiceId: typeof imported === 'string' && UUID.test(imported) ? imported : null,
+    retiredInternalNumber: typeof retired === 'string' && retired.trim() !== '' ? retired : null,
+    offer: typeof offer === 'string' && (DUPLICATE_ORIGINAL_OFFERS as readonly string[]).includes(offer)
+      ? (offer as DuplicateOriginalOffer)
+      : null,
+  };
+}
+
+/** Czas do sortowania (ms) i mikrosekundy ponad ms (`timestamptz` z PostgREST ma 6 cyfr ułamka). */
+function timeOf(value: string | null): number | null {
+  if (!value) return null;
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? null : t;
+}
+function microsOf(value: string | null): number {
+  const m = value ? /:\d{2}\.\d{3}(\d{1,3})/.exec(value) : null;
+  return m ? Number(m[1]!.padEnd(3, '0')) : 0;
+}
+
+/**
+ * D-A4-1b-3 PR B (decyzje Bartosza 07.10.2026 (2), (3)): czy faktura jest
+ * szkicem wycofanym — ma wpis `number_taken` (decyzja klienta „ta sama /
+ * inna sprzedaż” albo automatyczny werdykt KSEF_NUMBER_TAKEN). Numer jest
+ * zajęty w KSeF, więc runner kończy taki job bez zapisu, a e-maila do
+ * nabywcy nie wysyłamy.
+ *
+ * Wybór wpisu jak w wyzwalaczu `guard_ksef_retired_draft` (00148, krok 2):
+ * najpierw z decyzją, potem z numerem oryginału (`markKsefSubmissionsNumberTaken`
+ * zamyka też wpisy bez znacznika), potem `completed_at` malejąco (brak na
+ * końcu), potem `id`. Sortowanie w TypeScript — w zapytaniu tylko `.eq`.
+ * Filtr po firmie I fakturze. Rzuca przy błędzie bazy (fail-closed:
+ * „nie wiem” to nie „zwykły szkic”).
+ */
+export async function findKsefNumberTaken(tenantId: string, invoiceId: string): Promise<KsefNumberTaken | null> {
+  const { data, error } = await createAdminClient()
+    .from('ksef_submissions')
+    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+    .select('id, original_ksef_number, original_check, completed_at')
+    .eq('tenant_id', tenantId)
+    .eq('invoice_id', invoiceId)
+    .eq('status', 'number_taken' satisfies SubmissionStatus);
+  if (error) throw new Error('Nie można sprawdzić, czy numer faktury jest zajęty w KSeF (historia wysyłki)');
+  type TakenRow = { id: string; original_ksef_number: string | null; original_check: unknown; completed_at: string | null };
+  const rows = ((data ?? []) as unknown as TakenRow[]).map((r) => ({
+    ...r,
+    decided: isRecord(r.original_check) && Object.prototype.hasOwnProperty.call(r.original_check, 'decision'),
+  }));
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => {
+    if (a.decided !== b.decided) return a.decided ? -1 : 1;
+    const withKa = a.original_ksef_number != null;
+    const withKb = b.original_ksef_number != null;
+    if (withKa !== withKb) return withKa ? -1 : 1;
+    const ta = timeOf(a.completed_at);
+    const tb = timeOf(b.completed_at);
+    if (ta !== tb) {
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return tb - ta;
+    }
+    if (ta !== null) {
+      const micro = microsOf(b.completed_at) - microsOf(a.completed_at);
+      if (micro !== 0) return micro;
+    }
+    return a.id === b.id ? 0 : a.id < b.id ? -1 : 1;
+  });
+  const row = rows[0]!;
+  return {
+    originalKsefNumber: row.original_ksef_number ?? null,
+    decision: takenDecision(row.original_check),
+    ...takenImport(row.original_check),
+  };
 }
 
 /**
@@ -502,7 +618,7 @@ export async function recordKsefAcceptedSession(params: {
 
 /**
  * Inna faktura SPRZEDAŻY tej firmy z danym numerem KSeF (np. import historii)
- * — wtedy cudzy 440 dotyczy dokumentu znanego w FaktFlow i rozstrzyga
+ * — wtedy cudzy 440 dotyczy dokumentu znanego w FaktWay i rozstrzyga
  * operator. Tylko wychodzące (D-A4-1b-3, A0): faktura zakupowa z tym numerem
  * (np. sprzedaż firmy samej sobie odebrana skrzynką) nie jest zapisem naszej
  * sprzedaży i nie może zatrzymać porównania treści oryginału.
@@ -525,11 +641,38 @@ export async function findTenantInvoiceByKsefNumber(
   return data ? { id: data.id as string, internalNumber: (data.internal_number as string | null) ?? null } : null;
 }
 
+/** Ile razy `recordKsefDuplicateCheck` scala od nowa, gdy SQL zmienił znacznik między odczytem a zapisem. */
+const DUPLICATE_CHECK_WRITE_ATTEMPTS = 3;
+
+/**
+ * Klucze `original_check`, które dopisuje SQL pod blokadą wiersza, gdy runner
+ * nie trzyma wysyłki (00156): `importGate.release` (`release_ksef_original_review`,
+ * 4.7 krok 8) i `recheckNeeded` (`flag_ksef_original_recheck`, 4.7b krok 5).
+ * Oba tylko dochodzą (raz zapisane — `already_released` / `already`), więc
+ * „wiersz bez klucza w chwili zapisu” znaczy „wiersz bez zmian od odczytu”.
+ * Ścieżki PostgREST (`->`, `->>`): brak klucza i JSON `null` dają SQL-owy NULL.
+ */
+const SQL_WRITTEN_CHECK_PATHS = [
+  { path: 'original_check->importGate->>release', present: (c: Record<string, unknown>) => isRecord(c.importGate) && c.importGate.release != null },
+  { path: 'original_check->>recheckNeeded', present: (c: Record<string, unknown>) => c.recheckNeeded != null },
+] as const;
+
 /**
  * D-A4-1b-3 (00144): dane oryginału przy duplikacie 440, którego automat nie
  * rozstrzygnął — na otwartym wpisie próby ze znacznikiem 440 tego numeru KSeF.
  * Zamknięte wpisy (decyzja, `number_taken`, akceptacja) nie są nadpisywane.
  * Rzuca przy błędzie bazy (fail-closed: bez danych nie ma werdyktu).
+ *
+ * PR C (rozstrzygnięcia commitu 3, fix 5; INV-25, INV-26): zapis warunkowy.
+ * Runner trzyma wysyłkę (00124), ale `release_ksef_original_review`
+ * i `flag_ksef_original_recheck` (operator, akcja klienta) piszą znacznik bez
+ * przejęcia. Zapis bez warunku nadpisałby je starszym obrazem — zgubione
+ * oddanie decyzji albo zgubiony `recheckNeeded`. Dlatego UPDATE trafia tylko
+ * w wiersz, który nadal nie ma kluczy nieobecnych przy odczycie; gdy znacznik
+ * się zmienił (zero zapisanych wierszy, a wiersz jest), ponowny odczyt
+ * i ponowne scalenie `mergeDuplicateCheck` — ono decyduje, co z oddania
+ * i znacznika przechodzi do nowego zapisu. Postgres sprawdza warunek UPDATE
+ * jeszcze raz po zdjęciu blokady wiersza, więc zapis nie mija się z SQL.
  */
 export async function recordKsefDuplicateCheck(params: {
   tenantId: string;
@@ -540,26 +683,41 @@ export async function recordKsefDuplicateCheck(params: {
   const supabase = createAdminClient();
   // Sprawdzenie, które nie pobrało oryginału, nie kasuje danych z wcześniejszego
   // udanego (`mergeDuplicateCheck`) — odczyt bieżącego zapisu przed nadpisaniem.
-  // Jedna próba naraz (przejęcie wysyłki, 00124), więc odczyt i zapis się nie mijają.
-  const { data: current, error: readError } = await supabase
-    .from('ksef_submissions')
-    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
-    .select('original_check')
-    .eq('tenant_id', params.tenantId)
-    .eq('invoice_id', params.invoiceId)
-    .eq('original_ksef_number', params.originalKsefNumber)
-    .in('status', ['intent', 'sent'])
-    .order('attempted_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (readError) throw new Error('Nie można odczytać danych oryginału duplikatu KSeF');
-  const previous = parseDuplicateCheck((current as { original_check?: unknown } | null)?.original_check);
-  const { error } = await supabase
-    .from('ksef_submissions')
-    .update({ original_check: mergeDuplicateCheck(previous, params.check) } as Record<string, unknown>)
-    .eq('tenant_id', params.tenantId)
-    .eq('invoice_id', params.invoiceId)
-    .eq('original_ksef_number', params.originalKsefNumber)
-    .in('status', ['intent', 'sent']);
-  if (error) throw new Error('Nie można zapisać danych oryginału duplikatu KSeF');
+  for (let attempt = 1; attempt <= DUPLICATE_CHECK_WRITE_ATTEMPTS; attempt++) {
+    const { data: current, error: readError } = await supabase
+      .from('ksef_submissions')
+      // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+      .select('id, original_check')
+      .eq('tenant_id', params.tenantId)
+      .eq('invoice_id', params.invoiceId)
+      .eq('original_ksef_number', params.originalKsefNumber)
+      .in('status', ['intent', 'sent'])
+      .order('attempted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (readError) throw new Error('Nie można odczytać danych oryginału duplikatu KSeF');
+    const row = current as { id?: unknown; original_check?: unknown } | null;
+    // Brak otwartego wpisu (decyzja albo werdykt go zamknęły) — nic do zapisu, jak dotąd.
+    if (!row) return;
+    const raw = isRecord(row.original_check) ? row.original_check : {};
+    const previous = parseDuplicateCheck(row.original_check);
+
+    let update = supabase
+      .from('ksef_submissions')
+      .update({ original_check: mergeDuplicateCheck(previous, params.check) } as Record<string, unknown>)
+      .eq('tenant_id', params.tenantId)
+      .eq('invoice_id', params.invoiceId)
+      .eq('original_ksef_number', params.originalKsefNumber)
+      .in('status', ['intent', 'sent']);
+    for (const { path, present } of SQL_WRITTEN_CHECK_PATHS) {
+      if (!present(raw)) update = update.is(path, null);
+    }
+    const { data: written, error } = await update.select('id');
+    if (error) throw new Error('Nie można zapisać danych oryginału duplikatu KSeF');
+    const ids = Array.isArray(written) ? (written as Array<{ id?: unknown }>).map((r) => r.id) : [];
+    // Odczytany znacznik dostał nasz zapis — reszta otwartych wpisów tego numeru (jeśli są) też, o ile się nie zmieniły.
+    if (ids.includes(row.id)) return;
+  }
+  // SQL zmieniał znacznik przy każdej próbie — fail-closed, runner ponowi werdykt od zera.
+  throw new Error('Nie można zapisać danych oryginału duplikatu KSeF — znacznik zmieniał się w trakcie zapisu');
 }

@@ -2,7 +2,7 @@
  * Stripe webhook endpoint (Faza 25 Krok 3).
  *
  * Setup w Stripe Dashboard → Webhooks → Add endpoint:
- *   URL:  https://app.faktflow.pl/api/stripe/webhook
+ *   URL:  https://faktway.pl/api/stripe/webhook
  *   Events: subscribe TYLKO do tych których obsługujemy (lista w `HANDLED_EVENTS`).
  *
  * Bezpieczeństwo:

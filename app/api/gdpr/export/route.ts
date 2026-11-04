@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit/log';
+import { mfaStepUpHref } from '@/lib/auth/mfa-step-up';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
 import { collectUserData } from '@/lib/gdpr/data-collector';
 
@@ -8,11 +9,27 @@ const PRIVATE_HEADERS = {
   'Referrer-Policy': 'no-referrer',
 };
 
-/** Download a bounded account snapshot; organization invoices have a separate export. */
-export async function GET(): Promise<NextResponse> {
+/** Zwykły link w panelu, nie `fetch`: goły JSON byłby dla klienta martwym błędem. */
+function isBrowserNavigation(request: Request): boolean {
+  return request.headers.get('sec-fetch-dest') === 'document'
+    || (request.headers.get('accept') ?? '').includes('text/html');
+}
+
+/**
+ * Download a bounded account snapshot; organization invoices have a separate export.
+ * Pełne MFA: plik zawiera dane całego konta, więc sama sesja po biometrii
+ * (z „zapamiętaj mnie” otwarta długo) nie wystarcza.
+ */
+export async function GET(request: Request): Promise<NextResponse> {
   try {
-    const context = await getVerifiedUserContext();
+    const context = await getVerifiedUserContext({ fullMfa: true });
     if (!context.ok) {
+      if (context.reason === 'mfa_required' && isBrowserNavigation(request)) {
+        return new NextResponse(null, {
+          status: 303,
+          headers: { ...PRIVATE_HEADERS, Location: mfaStepUpHref('/settings/account') },
+        });
+      }
       const status = context.reason === 'unauthenticated' ? 401
         : context.reason === 'mfa_required' ? 403 : 503;
       return NextResponse.json({ error: context.reason }, { status, headers: PRIVATE_HEADERS });
@@ -31,7 +48,7 @@ export async function GET(): Promise<NextResponse> {
     });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `faktflow-export-${context.user.id.slice(0, 8)}-${timestamp}.json`;
+    const filename = `faktway-export-${context.user.id.slice(0, 8)}-${timestamp}.json`;
     return new NextResponse(JSON.stringify(data, null, 2), {
       status: 200,
       headers: {

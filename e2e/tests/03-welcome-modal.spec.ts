@@ -8,7 +8,7 @@ test.describe('Welcome modal (Faza 19)', () => {
     await page.goto('/dashboard?welcome=1');
 
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/witaj w faktflow/i)).toBeVisible();
+    await expect(page.getByText(/witaj w faktway/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /wystaw pierwszą fakturę/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /sfotografuj paragon/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /importuj historię/i })).toBeVisible();

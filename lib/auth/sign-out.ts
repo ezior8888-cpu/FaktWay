@@ -1,7 +1,14 @@
 import 'server-only';
 
 import { cookies } from 'next/headers';
+import { PASSKEY_OFFER_COOKIE, REMEMBER_ME_COOKIE } from '@/lib/auth/device-cookies';
+import { PASSKEY_SESSION_COOKIE } from '@/lib/auth/passkey/session-marker';
 import { createClient } from '@/lib/supabase/server';
+
+/** Logowanie biometrią i „Zapamiętaj mnie” nie przeżywają wylogowania. */
+const DEVICE_LOGIN_COOKIES: ReadonlySet<string> = new Set([
+  PASSKEY_SESSION_COOKIE, REMEMBER_ME_COOKIE, PASSKEY_OFFER_COOKIE,
+]);
 
 export interface SignOutResult {
   userId: string | null;
@@ -18,6 +25,16 @@ function isCurrentAuthCookie(name: string, storageKey: string): boolean {
   return [storageKey, storageKey + '-code-verifier'].some((base) =>
     name === base || (name.startsWith(base + '.') && /^\d+$/.test(name.slice(base.length + 1))),
   );
+}
+
+/** Dla wylogowań poza `signOutCurrentSession` (po zmianie hasła z linku). Najlepsza próba. */
+export async function clearDeviceLoginCookies(): Promise<void> {
+  try {
+    const store = await cookies();
+    for (const name of DEVICE_LOGIN_COOKIES) store.set(name, '', { path: '/', maxAge: 0 });
+  } catch {
+    // Sesji już nie ma, a znacznik bez niej nic nie otwiera.
+  }
 }
 
 /** Local logout must still complete when Auth refuses global revocation. */
@@ -48,7 +65,7 @@ export async function signOutCurrentSession(): Promise<SignOutResult> {
     const storageKey = 'sb-' + url.hostname.split('.')[0] + '-auth-token';
     const store = await cookies();
     for (const cookie of store.getAll()) {
-      if (isCurrentAuthCookie(cookie.name, storageKey)) {
+      if (isCurrentAuthCookie(cookie.name, storageKey) || DEVICE_LOGIN_COOKIES.has(cookie.name)) {
         store.set(cookie.name, '', { path: '/', maxAge: 0 });
       }
     }

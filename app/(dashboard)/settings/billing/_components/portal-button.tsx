@@ -1,7 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { RiExternalLinkLine, RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -10,20 +10,22 @@ import { openCustomerPortalAction } from '../actions';
 
 interface Props {
   disabled?: boolean;
+  /** Wersja zgody na BLIK pokazanej przy przycisku: trafia do audytu otwarcia portalu. */
+  blikStatementVersion?: string | null;
 }
 
 /**
  * Przycisk otwierający Stripe Customer Portal w nowym tabie. Klient sam
- * zmienia plan/kartę/anuluje, my dostajemy webhook'a i synchronizujemy
+ * zmienia plan i metodę płatności albo anuluje, my dostajemy webhook'a i synchronizujemy
  * lokalną subscription.
  */
-export function PortalButton({ disabled }: Props) {
+export function PortalButton({ disabled, blikStatementVersion = null }: Props) {
   const [isPending, startTransition] = useTransition();
 
   const handle = () => {
     startTransition(async () => {
       try {
-        await openCustomerPortalAction();
+        await openCustomerPortalAction(blikStatementVersion);
       } catch (e) {
         const err = e as Error;
         if (err.message?.includes('NEXT_REDIRECT')) return;
@@ -34,15 +36,14 @@ export function PortalButton({ disabled }: Props) {
 
   return (
     <Button
-      variant="glass"
-      size="sm"
+      variant="outline"
       onClick={handle}
       disabled={disabled || isPending}
     >
       {isPending ? (
-        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+        <RiLoader4Line className="animate-spin" aria-hidden />
       ) : (
-        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+        <RiExternalLinkLine aria-hidden />
       )}
       Zarządzaj subskrypcją
     </Button>

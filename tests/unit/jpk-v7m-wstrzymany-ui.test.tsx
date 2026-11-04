@@ -8,6 +8,7 @@ vi.mock('@/app/actions/exports', () => ({
 }));
 
 import { ExportsCenter } from '@/components/exports/exports-center';
+import { SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 
 /** Centrum eksportu: JPK_V7M nie do wyboru, a klient widzi dlaczego. */
 describe('Centrum eksportu — JPK_V7M wstrzymany', () => {
@@ -22,5 +23,15 @@ describe('Centrum eksportu — JPK_V7M wstrzymany', () => {
   it('notka wyjaśnia powód wyłączenia', () => {
     expect(html).toContain('JPK_V7M jest chwilowo wyłączony');
     expect(html).toContain('JPK_V7M(3)');
+  });
+
+  // Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): `jpk_v7m` był na liście
+  // dwa razy (ręcznie doklejony do enuma, który już go miał) — powód stał na ekranie podwójnie,
+  // a React zgłaszał dwa elementy z tym samym kluczem.
+  it('każdy powód wyłączenia dokładnie raz', () => {
+    for (const reason of Object.values(SUSPENDED_EXPORT_FORMATS)) {
+      expect(html.split(reason).length - 1).toBe(1);
+    }
+    expect(html.match(/JPK_V7M jest chwilowo wyłączony/g)).toHaveLength(1);
   });
 });

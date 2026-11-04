@@ -203,7 +203,7 @@ describe('buildTelegramReport — raport dzienny', () => {
   it('zawiera same agregaty i pogrubiony nagłówek', () => {
     const report = buildTelegramReport(metrics);
 
-    expect(report.startsWith('📊 <b>FaktFlow — raport dzienny</b>')).toBe(true);
+    expect(report.startsWith('📊 <b>FaktWay — raport dzienny</b>')).toBe(true);
     expect(report).toContain('wystawione 12, przyjęte 11, nieudane 1, offline 0');
     expect(report).toContain('7 min niedostępności');
     expect(report).toContain('Błędy: audyt 0, joby 2');

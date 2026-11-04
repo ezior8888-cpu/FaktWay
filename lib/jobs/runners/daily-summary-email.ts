@@ -79,7 +79,7 @@ function buildHtml(metrics: DailyMetrics): string {
 </head>
 <body>
   <div class="container">
-    <h1>📊 Daily summary — FaktFlow</h1>
+    <h1>📊 Daily summary — FaktWay</h1>
     <p class="period">${periodLabel}</p>
 
     <h2>Acquisition</h2>
@@ -121,7 +121,7 @@ function buildHtml(metrics: DailyMetrics): string {
         : ''
     }
 
-    <p class="footer">FaktFlow operations dashboard · Generowany ${new Date().toLocaleString('pl-PL')}</p>
+    <p class="footer">FaktWay operations dashboard · Generowany ${new Date().toLocaleString('pl-PL')}</p>
   </div>
 </body>
 </html>`;
@@ -154,7 +154,7 @@ export async function runDailySummaryEmail({ step, logger }: JobContext) {
     }
 
     const html = buildHtml(metrics);
-    const subject = `📊 FaktFlow daily: ${metrics.invoicesIssued} faktur, ${metrics.paymentsSucceeded} płatności`;
+    const subject = `📊 FaktWay daily: ${metrics.invoicesIssued} faktur, ${metrics.paymentsSucceeded} płatności`;
 
     const results = await step.run('send-emails', async () => {
       const sent: Array<{ email: string; ok: boolean }> = [];
@@ -197,7 +197,7 @@ export function buildTelegramReport(metrics: DailyMetrics): string {
     metrics.ksefDowntimeMinutes > 0
       ? `⚠️ ${fmtNum(metrics.ksefDowntimeMinutes)} min niedostępności (maks. ${fmtNum(metrics.ksefMaxConsecutiveFailures)} nieudanych prób z rzędu)`
       : '✅ dostępny przez całą dobę';
-  const header = `📊 <b>FaktFlow — raport dzienny</b> (${day(metrics.period.from)} → ${day(metrics.period.to)})`;
+  const header = `📊 <b>FaktWay — raport dzienny</b> (${day(metrics.period.from)} → ${day(metrics.period.to)})`;
   const body = [
     `Rejestracje: ${fmtNum(metrics.signups)} · nowe firmy: ${fmtNum(metrics.newTenants)} · pierwsza faktura: ${fmtNum(metrics.firstInvoiceCount)}`,
     `Faktury: wystawione ${fmtNum(metrics.invoicesIssued)}, przyjęte ${fmtNum(metrics.invoicesAccepted)}, nieudane ${fmtNum(metrics.invoicesFailed)}, offline ${fmtNum(metrics.invoicesOfflineQueued)}`,

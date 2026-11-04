@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { PRICE_PER_MONTH } from '@/lib/billing/pricing';
+import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
 
 /**
  * Wspólny układ podstron /vs/* — ciemny motyw marketingu (BUG-002 fix).
@@ -27,7 +27,7 @@ export function VsHero({ competitorName, eyebrow, subtitle }: VsHeroProps) {
         </div>
 
         <h1 className="marketing-hero-title text-4xl md:text-6xl lg:text-7xl">
-          FaktFlow vs{' '}
+          FaktWay vs{' '}
           <span className="marketing-gradient-emerald">{competitorName}</span>
         </h1>
         <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[var(--marketing-muted)] md:text-xl">
@@ -112,7 +112,7 @@ export function VsChooseColumns({
       </div>
       <div className="marketing-emerald-card rounded-2xl p-7">
         <h3 className="mb-5 text-lg font-semibold text-[var(--marketing-accent)]">
-          Wybierz FaktFlow, jeśli&hellip;
+          Wybierz FaktWay, jeśli&hellip;
         </h3>
         <ul className="space-y-3">
           {whenChooseUs.map((item) => (
@@ -151,19 +151,18 @@ export function VsMigrationCta({ competitorName, copy }: VsMigrationCtaProps) {
         />
         <div className="relative px-8 py-16 text-center text-emerald-950 lg:px-16 lg:py-24">
           <h3 className="mx-auto max-w-3xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
-            Migracja z {competitorName}{' '}
-            <span className="font-editorial italic">w 5 minut.</span>
+            Przeprowadzka z {competitorName}
           </h3>
           <p className="mx-auto mt-5 max-w-xl text-base font-medium text-emerald-950/80 md:text-lg">
             {copy ??
-              `Magiczny Import pobierze Twoje faktury bezpośrednio z KSeF oraz zaimportuje historię z eksportów CSV ${competitorName}. Zero ręcznej pracy.`}
+              `FaktWay sam pobierze Twoje faktury z KSeF, a starsze wgrasz plikiem CSV z ${competitorName}.`}
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">
             <Link
               href="/register"
               className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-emerald-700 shadow-lg transition-transform hover:scale-105"
             >
-              Wypróbuj 30 dni za darmo
+              Wypróbuj {TRIAL_DAYS} dni za darmo
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-950/70">

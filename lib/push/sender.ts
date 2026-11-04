@@ -71,11 +71,28 @@ const NOTIFY_COLUMNS: Record<
   inbox_new: 'notify_inbox_new',
 };
 
+/**
+ * Odczyt bazy (subskrypcje, członkowie firmy) nieudany — to NIE jest „brak
+ * subskrypcji”. Dawniej zwracało `{ sent: 0 }`, zadanie kończyło się sukcesem
+ * i push przepadał po cichu (A5). Wołający ponawia zadanie albo łapie błąd
+ * jawnie, gdy push jest dodatkiem do kanału, który już wyszedł.
+ */
+export class PushReadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PushReadError';
+  }
+}
+
+type PushResult = { sent: number; failed: number };
+type SubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: string };
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 export async function sendPushToUser(
   userId: string,
   type: NotificationType,
   payload: PushPayload,
-): Promise<{ sent: number; failed: number }> {
+): Promise<PushResult> {
   if (!configureVapidIfNeeded()) {
     return { sent: 0, failed: 0 };
   }
@@ -90,10 +107,53 @@ export async function sendPushToUser(
     .eq('is_active', true)
     .eq(notifyCol, true);
 
-  if (error || !subscriptions?.length) {
+  if (error) throw new PushReadError(`Nie można odczytać subskrypcji push: ${error.message}`);
+  return deliver(supabase, subscriptions ?? [], payload);
+}
+
+/**
+ * Push do wszystkich aktywnych członków firmy. Subskrypcje całej firmy jednym
+ * odczytem PRZED pierwszą wysyłką: błąd w połowie zostawiałby część wysłaną,
+ * a ponowienie zadania dzwoniłoby jej odbiorcom drugi raz (`renotify`).
+ */
+export async function sendPushToTenant(
+  tenantId: string,
+  type: NotificationType,
+  payload: PushPayload,
+): Promise<PushResult> {
+  if (!configureVapidIfNeeded()) {
     return { sent: 0, failed: 0 };
   }
 
+  const supabase = createAdminClient();
+  const { data: rows, error } = await supabase
+    .from('memberships')
+    .select('user_id')
+    .eq('organization_id', tenantId)
+    .eq('status', 'active');
+
+  if (error) throw new PushReadError(`Nie można odczytać członków firmy do pusha: ${error.message}`);
+  const ids = [...new Set((rows ?? []).map((r) => r.user_id))];
+  if (ids.length === 0) return { sent: 0, failed: 0 };
+
+  const { data: subscriptions, error: subscriptionsError } = await supabase
+    .from('push_subscriptions')
+    .select('id, endpoint, p256dh, auth')
+    .in('user_id', ids)
+    .eq('is_active', true)
+    .eq(NOTIFY_COLUMNS[type], true);
+
+  if (subscriptionsError) {
+    throw new PushReadError(`Nie można odczytać subskrypcji push firmy: ${subscriptionsError.message}`);
+  }
+  return deliver(supabase, subscriptions ?? [], payload);
+}
+
+async function deliver(
+  supabase: AdminClient,
+  subscriptions: SubscriptionRow[],
+  payload: PushPayload,
+): Promise<PushResult> {
   // AUD-61: wiersze sprzed walidacji w akcji — adres spoza usług push
   // przeglądarek nie dostaje żądania z serwera.
   const deliverable = subscriptions.filter((sub) => isAllowedPushEndpoint(sub.endpoint));
@@ -140,32 +200,4 @@ export async function sendPushToUser(
   const sent = outcomes.filter((o) => o === 'sent').length;
   const failed = outcomes.filter((o) => o === 'failed').length;
   return { sent, failed };
-}
-
-export async function sendPushToTenant(
-  tenantId: string,
-  type: NotificationType,
-  payload: PushPayload,
-): Promise<{ sent: number; failed: number }> {
-  const supabase = createAdminClient();
-  const { data: rows, error } = await supabase
-    .from('memberships')
-    .select('user_id')
-    .eq('organization_id', tenantId)
-    .eq('status', 'active');
-
-  if (error || !rows?.length) {
-    return { sent: 0, failed: 0 };
-  }
-
-  const ids = [...new Set(rows.map((r) => r.user_id))];
-
-  const results = await Promise.all(
-    ids.map((id) => sendPushToUser(id, type, payload)),
-  );
-
-  return results.reduce(
-    (acc, r) => ({ sent: acc.sent + r.sent, failed: acc.failed + r.failed }),
-    { sent: 0, failed: 0 },
-  );
 }

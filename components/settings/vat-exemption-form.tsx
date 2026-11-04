@@ -1,20 +1,32 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateVatExemptionAction } from '@/app/actions/vat-exemption';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { VAT_EXEMPTION_PRESETS } from '@/lib/invoices/vat-exemption';
 
 const CUSTOM = 'inna';
 
+const BASIS_OPTIONS: { label: string; value: string }[] = [
+  ...VAT_EXEMPTION_PRESETS.map((p) => ({ label: p.label, value: p.value })),
+  { label: 'Inna podstawa (np. zwolnienie przedmiotowe z art. 43)', value: CUSTOM },
+];
+
 /**
  * Zwolnienie z VAT firmy. Podstawa trafia do każdej faktury ze stawką „zw”
  * jako P_19A w FA(3). Firma zwolniona dostaje „zw” jako domyślną stawkę.
+ *
+ * Wygląd: przełącznik jak w Finorze (`security-preferences-card.tsx`), wybór
+ * podstawy jak `Select` z `general/index.tsx` — na całą szerokość
+ * (`flex-col!`, jak pola w `change-password-card.tsx`), bo nazwy podstaw
+ * prawnych są długie.
  */
 export function VatExemptionForm({
   initialBasis,
@@ -43,63 +55,75 @@ export function VatExemptionForm({
   };
 
   return (
-    <div className="space-y-4">
-      <label className="flex items-center gap-3 text-sm">
-        <input
-          type="checkbox"
+    <FieldGroup>
+      <Field orientation="horizontal" className="items-center!">
+        <FieldContent>
+          <FieldLabel htmlFor="vat-exempt">Moja firma jest zwolniona z VAT</FieldLabel>
+          <FieldDescription>
+            Zwolnienie podmiotowe albo przedmiotowe. Faktury dostaną stawkę „zw” i podstawę zwolnienia.
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id="vat-exempt"
           checked={exempt}
           disabled={!canEdit || pending}
-          onChange={(e) => setExempt(e.target.checked)}
-          className="h-4 w-4"
+          onCheckedChange={(checked) => setExempt(checked)}
         />
-        Moja firma jest zwolniona z VAT
-      </label>
+      </Field>
 
       {exempt ? (
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="vat-exemption-basis" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Podstawa prawna zwolnienia
-            </Label>
-            <select
-              id="vat-exemption-basis"
+        <Field orientation="responsive" className="flex-col!">
+          <FieldContent>
+            <FieldLabel htmlFor="vat-exemption-basis">Podstawa prawna zwolnienia</FieldLabel>
+            <FieldDescription>
+              Ta podstawa trafi na każdą fakturę ze stawką „zw” (pole P_19A w KSeF). Nowe pozycje faktury dostaną
+              stawkę „zw” domyślnie.
+            </FieldDescription>
+          </FieldContent>
+          <div className="flex w-full! flex-col gap-3">
+            <Select
+              items={BASIS_OPTIONS}
               value={choice}
               disabled={!canEdit || pending}
-              onChange={(e) => setChoice(e.target.value)}
-              className="h-10 w-full rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface)] px-3 text-sm text-[var(--ff-text)]"
+              onValueChange={(value) => value && setChoice(value)}
             >
-              {VAT_EXEMPTION_PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-              <option value={CUSTOM}>Inna podstawa (np. zwolnienie przedmiotowe z art. 43)</option>
-            </select>
+              <SelectTrigger id="vat-exemption-basis" className="w-full">
+                <SelectValue placeholder="Podstawa prawna zwolnienia" />
+              </SelectTrigger>
+              <SelectContent className="p-1" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {BASIS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {choice === CUSTOM ? (
+              <Input
+                value={custom}
+                disabled={!canEdit || pending}
+                onChange={(e) => setCustom(e.target.value)}
+                placeholder="np. art. 43 ust. 1 pkt 29 lit. c ustawy o VAT"
+                maxLength={256}
+                aria-label="Inna podstawa prawna zwolnienia"
+              />
+            ) : null}
           </div>
-          {choice === CUSTOM ? (
-            <Input
-              value={custom}
-              disabled={!canEdit || pending}
-              onChange={(e) => setCustom(e.target.value)}
-              placeholder="np. art. 43 ust. 1 pkt 29 lit. c ustawy o VAT"
-              maxLength={256}
-            />
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            Ta podstawa trafi na każdą fakturę ze stawką „zw” (pole P_19A w KSeF). Nowe pozycje faktury dostaną
-            stawkę „zw” domyślnie.
-          </p>
-        </div>
+        </Field>
       ) : null}
 
       {canEdit ? (
-        <Button type="button" onClick={save} disabled={pending} className="gap-2">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Zapisz
-        </Button>
+        <div>
+          <Button type="button" onClick={save} disabled={pending}>
+            {pending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+            Zapisz
+          </Button>
+        </div>
       ) : (
-        <p className="text-xs text-muted-foreground">Zmienić to może właściciel albo administrator firmy.</p>
+        <FieldDescription>Zmienić to może właściciel albo administrator firmy.</FieldDescription>
       )}
-    </div>
+    </FieldGroup>
   );
 }

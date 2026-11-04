@@ -1,7 +1,7 @@
 {
   "name": "faktflow-bramka",
   "private": true,
-  "description": "Bot Telegrama dla operatorów FaktFlow (B-2). docs/runbooks/bramka-telegram.md",
+  "description": "Bot Telegrama dla operatorów FaktWay (B-2). docs/runbooks/bramka-telegram.md",
   "type": "module",
   "engines": {
     "node": ">=22"

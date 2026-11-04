@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 
+import { requireCodeForAccessGrant } from '@/lib/auth/access-grant-mfa';
 import {
   exportsCoPilotSendPackage,
   exportsGenerateRequested,
@@ -14,6 +15,7 @@ import {
   requireUserAndTenant,
 } from '@/lib/supabase/auth-context';
 import { downloadFromR2 } from '@/lib/storage/r2';
+import { exportIncludesFor } from '@/lib/exports/export-scope';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import type { Database } from '@/types/database';
 
@@ -109,6 +111,9 @@ export async function startExportAction(params: {
     return { success: false, error: 'Data końcowa < początkowa' };
   }
 
+  // Zakres z reguły formatu (FIR-01) — nie wprost z tego, co przysłał klient.
+  const scope = exportIncludesFor(params.format, params);
+
   const { data: job, error } = await supabase
     .from('export_jobs')
     .insert({
@@ -118,9 +123,9 @@ export async function startExportAction(params: {
       trigger_source: 'manual',
       period_start: startDay,
       period_end: endDay,
-      include_issued: params.includeIssued ?? true,
-      include_received: params.includeReceived ?? false,
-      include_corrections: params.includeCorrections ?? true,
+      include_issued: scope.includeIssued,
+      include_received: scope.includeReceived,
+      include_corrections: scope.includeCorrections,
       status: 'pending',
     })
     .select('id')
@@ -272,7 +277,12 @@ export async function updateAccountantSettingsAction(settings: {
   include_received_invoices: boolean;
   include_corrections: boolean;
   cc_emails?: string[];
-}): Promise<{ success: true } | { success: false; error: string }> {
+}): Promise<
+  | { success: true }
+  // `mfaStepUp`: konto ma 2FA, a ta sesja (logowanie biometrią) kodu nie podała. Formularz pokazuje
+  // wtedy przejście na ekran kodu (`MfaStepUpNotice`), nie sam tekst błędu.
+  | { success: false; error: string; mfaStepUp?: true }
+> {
   let ctx;
   try {
     ctx = await requireOrgRole(['owner', 'admin']);
@@ -282,7 +292,7 @@ export async function updateAccountantSettingsAction(settings: {
     }
     throw e;
   }
-  const { supabase, tenantId } = ctx;
+  const { supabase, tenantId, user } = ctx;
 
   if (settings.co_pilot_enabled && !settings.accountant_email?.trim()) {
     return { success: false, error: 'Email księgowego wymagany' };
@@ -313,6 +323,12 @@ export async function updateAccountantSettingsAction(settings: {
       error: 'Wybierz co najmniej jeden rozpoznawalny format eksportu',
     };
   }
+
+  // Adres księgowej i kopie dostają co miesiąc JPK i KPiR firmy, a "Wyślij teraz" zapisuje te
+  // ustawienia przed wysyłką. Sesja po biometrii potrzebuje więc kodu (jak przy zaproszeniach).
+  // `triggerCoPilotNowAction` adresu nie przyjmuje (bierze go z zapisanych ustawień), więc kroku nie ma.
+  const stepUp = await requireCodeForAccessGrant(supabase, user.id, 'Zmiana ustawień wysyłki dla księgowej');
+  if (stepUp) return stepUp;
 
   const upsertPayload: AccountantSettingsUpsertPayload = {
     tenant_id: tenantId,
@@ -384,7 +400,7 @@ export async function triggerCoPilotNowAction(
   if (!settings?.accountant_email?.trim()) {
     return {
       success: false,
-      error: 'Skonfiguruj księgowego w Ustawienia → Co-Pilot',
+      error: 'Skonfiguruj księgową w Ustawienia → Księgowa',
     };
   }
 

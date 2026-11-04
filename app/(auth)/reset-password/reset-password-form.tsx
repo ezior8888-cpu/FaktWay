@@ -1,10 +1,16 @@
 'use client';
 
+// Plan Finora P15 (E10b): pola nowego hasła na `Field` + pole hasła Finory
+// (oko). Logika bez zmian: `useActionState(resetPasswordAction)`.
+
 import Link from 'next/link';
 import { useActionState } from 'react';
+
+import { AuthMessage } from '@/components/auth/finora/auth-message';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { PasswordInput } from '@/components/auth/finora/password-input';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { authAlertErrorClass, authAlertSuccessClass, authInputClass, authLabelClass, authLinkClass, authPrimaryButtonClass } from '@/components/auth/auth-form-styles';
+
 import { resetPasswordAction } from './actions';
 
 const ERRORS = {
@@ -18,41 +24,55 @@ const ERRORS = {
   restart_required: 'Potwierdzenie zostało wykorzystane lub zapis nie został potwierdzony. Poproś o nowy link.',
 } as const;
 
+const linkClass = 'text-foreground hover:underline';
+
 export function ResetPasswordForm() {
   const [result, action, pending] = useActionState(resetPasswordAction, null);
   if (result?.ok) {
     return (
-      <div role="status" className="space-y-4">
-        <div className={authAlertSuccessClass}>Hasło zostało zmienione.</div>
-        {!result.globalSignOutConfirmed && <p className={authAlertErrorClass}>
+      <div className="space-y-4">
+        <AuthMessage tone="success">Hasło zostało zmienione.</AuthMessage>
+        {result.passkeys === 'removed' && <AuthMessage tone="success">
+          Usunęliśmy zapisane urządzenia do logowania biometrią. Zaloguj się hasłem i dodaj je ponownie
+          w Ustawieniach, w zakładce Bezpieczeństwo.
+        </AuthMessage>}
+        {result.passkeys === 'failed' && <AuthMessage tone="error">
+          Nie udało się usunąć zapisanych urządzeń do logowania biometrią. Po zalogowaniu otwórz Ustawienia,
+          zakładkę Bezpieczeństwo, i usuń te, których nie rozpoznajesz. Jeśli to się nie uda, skontaktuj się z pomocą.
+        </AuthMessage>}
+        {!result.globalSignOutConfirmed && <AuthMessage tone="error">
           Nie udało się potwierdzić odwołania pozostałych sesji. Skontaktuj się z pomocą.
-        </p>}
-        {!result.localSessionCleared && <p className={authAlertErrorClass}>
+        </AuthMessage>}
+        {!result.localSessionCleared && <AuthMessage tone="error">
           Nie udało się wylogować tej przeglądarki. Wyloguj się w ustawieniach konta.
-        </p>}
-        <Link className={authLinkClass} href={result.localSessionCleared ? '/login' : '/settings/security'}>
+        </AuthMessage>}
+        <Link className={linkClass} href={result.localSessionCleared ? '/login' : '/settings/security'}>
           {result.localSessionCleared ? 'Zaloguj się nowym hasłem' : 'Ustawienia bezpieczeństwa'}
         </Link>
       </div>
     );
   }
   return (
-    <form action={action} className="space-y-4">
-      {result && <div role="alert" className={authAlertErrorClass}>{ERRORS[result.error]}</div>}
-      {result && result.error === 'mfa_required' && (
-        <Link href="/login/two-factor?redirect=%2Freset-password" className={authLinkClass}>Potwierdź 2FA</Link>
-      )}
-      <div>
-        <label htmlFor="new_password" className={authLabelClass}>Nowe hasło</label>
-        <Input id="new_password" name="new_password" type="password" required minLength={12} maxLength={128} autoComplete="new-password" className={authInputClass} disabled={pending} />
-      </div>
-      <div>
-        <label htmlFor="confirm_password" className={authLabelClass}>Powtórz nowe hasło</label>
-        <Input id="confirm_password" name="confirm_password" type="password" required minLength={12} maxLength={128} autoComplete="new-password" className={authInputClass} disabled={pending} />
-      </div>
-      <Button type="submit" size="lg" className={authPrimaryButtonClass} disabled={pending}>
-        {pending ? 'Zapisuję…' : 'Zapisz nowe hasło'}
-      </Button>
+    <form action={action}>
+      <FieldGroup className="gap-4">
+        {result && <AuthMessage tone="error">{ERRORS[result.error]}</AuthMessage>}
+        {result && result.error === 'mfa_required' && (
+          <Link href="/login/two-factor?redirect=%2Freset-password" className={linkClass}>Potwierdź 2FA</Link>
+        )}
+        <Field className="w-full gap-2">
+          <FieldLabel htmlFor="new_password" className="leading-5">Nowe hasło*</FieldLabel>
+          <PasswordInput id="new_password" name="new_password" required minLength={12} maxLength={128} autoComplete="new-password" disabled={pending} />
+        </Field>
+        <Field className="w-full gap-2">
+          <FieldLabel htmlFor="confirm_password" className="leading-5">Powtórz nowe hasło*</FieldLabel>
+          <PasswordInput id="confirm_password" name="confirm_password" required minLength={12} maxLength={128} autoComplete="new-password" disabled={pending} />
+        </Field>
+        <Field>
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending ? 'Zapisuję…' : 'Zapisz nowe hasło'}
+          </Button>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }

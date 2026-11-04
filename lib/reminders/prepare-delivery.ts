@@ -85,10 +85,10 @@ export async function buildReminderDelivery(
   const senderName = text(settings?.sender_name, 200) || text(tenant.name, 200);
   if (!senderName || /[<>\r\n\x00-\x1f\x7f]/.test(senderName)) throw new Error('Nieprawidłowa nazwa nadawcy.');
   // „Od:” zawsze z NASZEJ zweryfikowanej domeny. Resend wysyła tylko z domen
-  // zweryfikowanych na koncie FaktFlow: adres firmy klienta (formularz
+  // zweryfikowanych na koncie FaktWay: adres firmy klienta (formularz
   // podpowiadał „faktury@twoja-firma.pl”) kończył się odmową dostawcy
   // i spaloną jednorazową zgodą na etap, a adres w naszej domenie pozwalał
-  // firmie podszyć się pod FaktFlow. Adres firmy idzie do Reply-To.
+  // firmie podszyć się pod FaktWay. Adres firmy idzie do Reply-To.
   const fromEmail = email(platformSenderAddress());
   const replyToRaw = text(settings?.reply_to_email, 254) || text(settings?.sender_email, 254);
   const replyTo = replyToRaw ? email(replyToRaw) : null;

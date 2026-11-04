@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface GdprDeletionScheduledProps {
   userEmail: string;
   /** Format 'DD MMMM YYYY' — moment hard delete. */
@@ -37,13 +39,14 @@ export default function GdprDeletionScheduled({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             Żądanie usunięcia konta — RODO
           </Heading>
 
           <Text style={textStyle}>
             Otrzymaliśmy Twoje żądanie usunięcia konta <strong>{userEmail}</strong>{' '}
-            z FaktFlow zgodnie z art. 17 RODO (prawo do bycia zapomnianym).
+            z FaktWay zgodnie z art. 17 RODO (prawo do bycia zapomnianym).
           </Text>
 
           <Section style={boxStyle}>
@@ -95,7 +98,7 @@ export default function GdprDeletionScheduled({
             Masz pytania? Napisz: <strong>{supportEmail}</strong>
           </Text>
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Wiadomość transakcyjna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość transakcyjna.
           </Text>
         </Container>
       </Body>

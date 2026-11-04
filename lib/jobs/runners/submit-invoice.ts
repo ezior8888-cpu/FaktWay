@@ -2,9 +2,13 @@ import { createHash } from 'node:crypto';
 import { assertJobIdentity, requireInvoiceTenant } from './tenant-boundary';
 import * as Sentry from '@sentry/nextjs';
 import { NonRetriableError, RetryAfterError } from '../errors';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { SUPPORT_EMAIL } from '@/lib/site';
+import { IssueDatePassedError, issueDatePassedMessage } from '@/lib/ksef/special-issue-date';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { KsefEnvironment } from '@/types/ksef';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { recordFirstInvoiceAccepted } from '@/lib/analytics/funnel';
 import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { invoiceSubmitRequested } from '../events';
@@ -37,17 +41,26 @@ import {
 } from '@/lib/ksef/submit';
 import {
   compareDuplicate,
+  faktflowOriginalVerdictMessage,
   hexHashToBase64,
+  knownNumberVerdictMessage,
   numberTakenMessage,
   operatorVerdictMessage,
   summarizeInvoiceXml,
 } from '@/lib/ksef/duplicate-verdict';
-import type { DuplicateCheckReason, KsefDuplicateCheck } from '@/lib/ksef/duplicate-check';
-import { archiveImportedKsefXml, KsefXmlArchiveConflictError } from '@/lib/import/ksef-xml-archive';
+import {
+  KSEF_ORIGINAL_ALARM_KINDS,
+  type DuplicateCheckReason,
+  type KsefDuplicateCheck,
+  type KsefOriginalImportGate,
+} from '@/lib/ksef/duplicate-check';
+import { evaluateOriginalGate } from '@/lib/ksef/duplicate-original-gate';
+import { archiveImportedKsefXml, decodeKsefXml, KsefXmlArchiveConflictError } from '@/lib/import/ksef-xml-archive';
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
 import {
   abandonKsefSubmissionIntent,
   closeKsefAttempt,
+  findKsefNumberTaken,
   findKsefSessionRow,
   findOpenKsefSubmission,
   findOpenKsefSubmissionIntents,
@@ -95,7 +108,7 @@ import {
  * Odpowiedź 440 „duplikat”, której NIE da się przypisać do naszej wcześniejszej
  * wysyłki tej faktury (inny numer sesji albo brak historii). KSeF wykrywa
  * duplikat po numerze faktury sprzedawcy, a ten numer mógł zostać użyty poza
- * FaktFlow — przypięcie cudzego numeru KSeF byłoby błędnym zapisem prawnym.
+ * FaktWay — przypięcie cudzego numeru KSeF byłoby błędnym zapisem prawnym.
  * Stan neutralny „do uzgodnienia” (jak wstrzymana ROZ), bez komunikatu
  * „odrzucona”. Znacznik w treści błędu, bo przechodzi przez oba backendy jobów.
  */
@@ -193,7 +206,7 @@ function isStaleSubmission(attemptedAt: string | null | undefined): boolean {
 }
 
 const ROZ_RECONCILIATION_MESSAGE =
-  'Wysyłka faktury rozliczającej została wstrzymana. Przed kolejną próbą ręcznie uzgodnij jej status z KSeF.';
+  'Wysyłka faktur rozliczeniowych do KSeF jest tymczasowo wstrzymana — po zdjęciu blokady tej faktury sami nie wyślemy (co dalej — na dole strony).';
 
 /** Fresh DB read outside Inngest steps, including the accepted status. */
 async function currentSubmissionState(
@@ -250,10 +263,10 @@ async function assertSubmissionNotHeld(
       correctionData: data.correctionData,
     })
   ) {
-    throw new NonRetriableError(heldErrorMessage(KOR_HOLD));
+    throw new NonRetriableError(heldErrorMessage(KOR_HOLD, stored.invoice_kind));
   }
   if (await isKsefSubmissionPaused()) {
-    throw new NonRetriableError(heldErrorMessage(KSEF_PAUSED));
+    throw new NonRetriableError(heldErrorMessage(KSEF_PAUSED, stored.invoice_kind));
   }
 }
 
@@ -399,6 +412,33 @@ function alertReconcile(message: string, extra: Record<string, unknown>): void {
 }
 
 /**
+ * D-A4-1b-3 PR B (decyzje Bartosza 07.10.2026 (2), (3); spec §2.7.2): job
+ * wraca do szkicu wycofanego — wpis `number_taken` (decyzja klienta albo
+ * automatyczny „numer zajęty”). Numer ma w KSeF inna faktura (K), więc
+ * każda wysyłka skończyłaby się 440. Wyjście bez zapisu: bez przejęcia,
+ * bez `failed` (I7 wznowiłby wtedy pełną wysyłkę) i bez `invoice/submit.failed`.
+ * Ślad: ostrzeżenie w logu i w Sentry (W3 — nic nie kończy się bez śladu).
+ */
+function reportRetiredExit(
+  logger: JobContext['logger'],
+  where: 'run' | 'claim' | 'exhausted' | 'exhausted-invalid-payload',
+  extra: { tenantId: string; invoiceId: string; originalKsefNumber: string | null; reconcileOnly: boolean },
+): void {
+  logger.warn('Szkic wycofany (numer zajęty w KSeF) — job kończy się bez wysyłki i bez zapisu', { ...extra, where });
+  Sentry.captureMessage('KSeF: zlecenie wysyłki szkicu wycofanego (numer zajęty) — zakończone bez zapisu', {
+    level: 'warning',
+    tags: { job: 'submit-invoice', kind: 'retired-number-taken' },
+    extra: { ...extra, where },
+  });
+}
+
+/** Wynik joba na szkicu wycofanym (spec §2.7.2). */
+interface RetiredOutcome {
+  retired: true;
+  originalKsefNumber: string | null;
+}
+
+/**
  * Obsługa po wyczerpaniu prób (Etap 7) — pg-boss `onExhausted`.
  *
  * Jedna klasyfikacja: `classifySendError` (katalog `ksef_error_codes`, 00131).
@@ -433,6 +473,18 @@ export async function onSubmitInvoiceExhausted(
         const state = await currentSubmissionState(ids);
         if (state.direction !== 'outgoing' || state.ksef_status === 'accepted') {
           return { handled: false as const, reason: 'invalid-payload' as const };
+        }
+        // D-A4-1b-3 PR B: szkic wycofany zostaje szkicem — bez INVALID_EVENT.
+        if (state.ksef_status === 'draft') {
+          const taken = await findKsefNumberTaken(ids.tenantId, ids.invoiceId);
+          if (taken) {
+            reportRetiredExit(logger, 'exhausted-invalid-payload', {
+              ...ids,
+              originalKsefNumber: taken.originalKsefNumber,
+              reconcileOnly: (data as { reconcileOnly?: unknown } | null)?.reconcileOnly === true,
+            });
+            return { handled: false as const, reason: 'retired-number-taken' as const };
+          }
         }
         const marked = await step.run('mark-as-failed-invalid-event', () =>
           markFailureUnlessAccepted(
@@ -476,6 +528,21 @@ export async function onSubmitInvoiceExhausted(
           storedEnvironment: current.ksef_environment ?? null,
         });
         return { handled: false as const, reason: 'accepted-reconciliation' as const };
+      }
+      // D-A4-1b-3 PR B (§2.7.2): szkic wycofany (wpis `number_taken`) — przed
+      // ENV_MISMATCH i każdą klasą porażki: bez zapisu `failed` (wyzwalacz 00148
+      // i tak by go odrzucił) i bez `invoice/submit.failed`.
+      if (current.ksef_status === 'draft') {
+        const taken = await findKsefNumberTaken(tenantId, invoiceId);
+        if (taken) {
+          reportRetiredExit(logger, 'exhausted', {
+            tenantId,
+            invoiceId,
+            originalKsefNumber: taken.originalKsefNumber,
+            reconcileOnly: parsed.data.reconcileOnly === true,
+          });
+          return { handled: false as const, reason: 'retired-number-taken' as const };
+        }
       }
       // Zdarzenie z innego środowiska KSeF niż skonfigurowane (#63, Codex):
       // faktura dostaje kod `ENV_MISMATCH` zamiast zostać w `queued`/`sending`
@@ -711,7 +778,7 @@ export async function onSubmitInvoiceExhausted(
  * D-A4-2: komunikat dla klienta przy `ENV_MISMATCH` — gdzie zlecono wysyłkę,
  * jakie środowisko jest teraz i co zrobić. Bez dowodu kontaktu: szkic
  * i decyzja klienta. Z dowodem (wcześniejsza próba mogła dotrzeć do KSeF):
- * nie wystawiać ponownie — szkic zablokowany, uzgadnia operator.
+ * nie wystawiać ponownie — szkic zablokowany, sprawdza pomoc FaktWay (decyzja 07.10.2026).
  */
 function envMismatchMessage(
   eventEnvironment: string,
@@ -720,9 +787,9 @@ function envMismatchMessage(
 ): string {
   const what = configuredEnvironment
     ? `Tej wysyłki nie wykonaliśmy: zlecono ją w środowisku KSeF „${eventEnvironment}”, a obecne to „${configuredEnvironment}”.`
-    : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktFlow nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
+    : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktWay nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
   if (contacted) {
-    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie, uzgodni ją operator FaktFlow.`;
+    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
   }
   return configuredEnvironment
     ? `${what} Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.`
@@ -803,6 +870,9 @@ export async function runSubmitInvoice(
         ksefNumber: alreadyDone.ksef_number,
       });
       await reconcileAcceptedOfflineQueue(parsed.data);
+      // Ponowienie po awarii tuż po zapisie akceptacji: kroki niżej już się nie wykonają,
+      // a pierwszej faktury firmy nie wolno zgubić (powtórka ma ten sam uuid).
+      await recordFirstInvoiceAccepted({ tenantId, invoiceId });
       return {
         alreadyAccepted: true as const,
         ksefNumber: alreadyDone.ksef_number,
@@ -827,6 +897,22 @@ export async function runSubmitInvoice(
       await reconcileAcceptedOfflineQueue(parsed.data);
       return { alreadyAccepted: true as const, ksefNumber: current.ksef_number };
     }
+    // D-A4-1b-3 PR B (§2.7.2): szkic wycofany (wpis `number_taken`) — przed
+    // blokadą ROZ i hamulcami. Inaczej stare zlecenie pod hamulcem skończyłoby
+    // się `failed KSEF_PAUSED`, a I7 wznowiłby potem pełną wysyłkę (440).
+    // Błąd odczytu rzuca zwykły Error — ponowienie, nic nie wysłane.
+    if (current.ksef_status === 'draft') {
+      const taken = await findKsefNumberTaken(tenantId, invoiceId);
+      if (taken) {
+        reportRetiredExit(logger, 'run', {
+          tenantId,
+          invoiceId,
+          originalKsefNumber: taken.originalKsefNumber,
+          reconcileOnly: parsed.data.reconcileOnly === true,
+        });
+        return { retired: true as const, originalKsefNumber: taken.originalKsefNumber };
+      }
+    }
     if (isHeldRozSubmission(parsed.data, current)) {
       throw new NonRetriableError(ROZ_SUBMISSION_HOLD_MESSAGE);
     }
@@ -845,6 +931,11 @@ export async function runSubmitInvoice(
       advanceData: parsed.data.advanceData,
       finalData: parsed.data.finalData,
       finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
+      // A4b PR2a: przed uzgodnieniem bez porównania z bieżącym profilem firmy —
+      // tylko gdy będzie co uzgadniać. Granica przed POST sprawdza go zawsze.
+      skipLiveTenantSeller: async () => parsed.data.reconcileOnly === true
+        || (await findOpenKsefSubmission(tenantId, invoiceId)) !== null
+        || (await findOpenKsefSubmissionIntents(tenantId, invoiceId)).length > 0,
     });
 
     logger.info('Rozpoczynam wysyłkę faktury', {
@@ -1004,16 +1095,35 @@ export async function runSubmitInvoice(
     // Wygrywa, gdy faktura jest wolna, gdy trzyma ją ta sama próba (ponowienie
     // tego samego zdarzenia) albo gdy dzierżawa innej próby wygasła. Ponowienie
     // najpierw uzgadnia poprzednią wysyłkę po numerze referencyjnym (C-18).
-    const claimed = await step.run('mark-as-sending', async (): Promise<boolean> => {
+    const claimed = await step.run('mark-as-sending', async (): Promise<boolean | RetiredOutcome> => {
       const { data, error: claimError } = await (await createAdminClient()).rpc('claim_ksef_send', {
         p_invoice_id: invoiceId,
         p_tenant_id: tenantId,
         p_owner: parsed.data.sendAttemptId ?? null,
         p_lease_seconds: KSEF_SEND_LEASE_SECONDS,
       });
-      if (claimError) throw new Error('Nie można przejąć wysyłki faktury');
+      if (claimError) {
+        // D-A4-1b-3 PR B (§2.7.2, wyścig): decyzja klienta zapadła między
+        // odczytem stanu a przejęciem — wyzwalacz c_guard_ksef_retired_draft
+        // (00148) odmawia P0001. Szkic wycofany kończy job bez zapisu;
+        // inna odmowa (albo błąd odczytu historii) — zwykłe ponowienie.
+        if (claimError.code === 'P0001') {
+          const taken = await findKsefNumberTaken(tenantId, invoiceId);
+          if (taken) return { retired: true, originalKsefNumber: taken.originalKsefNumber };
+        }
+        throw new Error('Nie można przejąć wysyłki faktury');
+      }
       return typeof data === 'string' && data.length > 0;
     });
+    if (typeof claimed === 'object' && claimed !== null && claimed.retired) {
+      reportRetiredExit(logger, 'claim', {
+        tenantId,
+        invoiceId,
+        originalKsefNumber: claimed.originalKsefNumber,
+        reconcileOnly: parsed.data.reconcileOnly === true,
+      });
+      return { retired: true as const, originalKsefNumber: claimed.originalKsefNumber };
+    }
     // Starsze punkty kontrolne Inngest zapisały tu `undefined` — tylko jawne
     // `false` oznacza, że wysyłkę trzyma inna próba.
     if (claimed === false) {
@@ -1151,11 +1261,13 @@ export async function runSubmitInvoice(
     // i dla uzgadniania po referencji (także zamiaru z A2). KSeF ma już fakturę
     // tej firmy o tym numerze; rozstrzygamy, czyja to treść:
     //   1. sesja oryginału jest w historii tej faktury i ma ten sam skrót → nasza;
-    //   2. numer KSeF oryginału ma inna faktura firmy w FaktFlow → operator;
-    //   3. pobieramy oryginał i porównujemy z naszymi plikami: identyczny → nasza
-    //      (`accepted` z numerem oryginału); z FaktFlow albo ta sama treść
+    //   2. pobieramy oryginał i porównujemy z naszymi plikami: identyczny → nasza
+    //      (`accepted` z numerem oryginału); z FaktWay albo ta sama treść
     //      z innego programu → operator; inny program, inna treść →
-    //      KSEF_NUMBER_TAKEN (klient wystawia z nowym numerem).
+    //      KSEF_NUMBER_TAKEN (klient wystawia z nowym numerem);
+    //   3. numer KSeF oryginału ma inna faktura sprzedaży firmy w FaktWay (Y) →
+    //      bez przyjęcia numeru, `known-number` z danymi pobranego oryginału
+    //      (D-A4-1b-3 PR B: decyzja klienta przy braku własnej historii).
     // Wpis naszej próby dostaje znacznik 440 (numer i sesja oryginału) i zostaje
     // OTWARTY do werdyktu: jest dowodem kontaktu, a ponowienie (cron I5, „Tylko
     // uzgodnij”) weryfikuje treść od nowa — bez drugiej wysyłki i bez STALE.
@@ -1299,17 +1411,14 @@ export async function runSubmitInvoice(
         }
       }
 
-      // 2. Numer KSeF oryginału zna już inna faktura tej firmy (np. import historii).
+      // 2. Numer KSeF oryginału zna już inna faktura sprzedaży tej firmy (Y, np.
+      // import historii). D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (1)): werdykt
+      // nie kończy się tu — pobieramy, archiwizujemy i opisujemy K z tą samą
+      // obsługą błędów co pozostałe powody (klient zdecyduje, widząc dane K
+      // i odnośnik do Y). Pomijamy tylko przyjęcie numeru: Y ma już K, a druga
+      // faktura z tym samym numerem KSeF to podwójna sprzedaż w JPK
+      // (`idx_invoices_ksef_number_unique` nie jest unikalny, 00004).
       const known = await findTenantInvoiceByKsefNumber(tenantId, original, invoiceId);
-      if (known) {
-        await recordCheck('known-number', { knownInvoice: known });
-        alertOperator('known-number', { otherInvoice: known.internalNumber });
-        throw verdict(
-          SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
-          `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w FaktFlow ten numer KSeF ma faktura ` +
-            `${known.internalNumber ?? 'bez numeru'} — do uzgodnienia przez operatora; nie wystawiaj jej ponownie.`,
-        );
-      }
 
       // 3. Oryginał z KSeF.
       const credentials = await getTenantKsefCredentials(tenantId);
@@ -1327,11 +1436,14 @@ export async function runSubmitInvoice(
         // 21164 tuż po przyjęciu oryginału też bywa chwilowe — w obrębie ponowień joba.
         const transient = !api || api.isRetryable || api.status === 401 ||
           codes.includes(KSEF_INVOICE_NOT_YET_AVAILABLE) || codes.includes(KSEF_INVOICE_NOT_FOUND);
-        await recordCheck(transient ? 'download-pending' : 'download-refused', { httpStatus: api?.status ?? null });
+        await recordCheck(transient ? 'download-pending' : 'download-refused', {
+          httpStatus: api?.status ?? null,
+          knownInvoice: known,
+        });
         if (transient) throw pending(unverified, ksefRetryDelayFor(downloadError, attempt));
         // 403 (token bez InvoiceRead) i inne 4xx: operator. Wpis zostaje otwarty
         // ze znacznikiem 440 — „Tylko uzgodnij” i cron I5 powtórzą weryfikację.
-        alertOperator('download-refused', { status: api?.status });
+        alertOperator('download-refused', { status: api?.status, otherInvoice: known?.internalNumber ?? null });
         throw verdict(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, unverified);
       }
       const originalSha256Hex = createHash('sha256').update(originalBytes).digest('hex');
@@ -1345,7 +1457,8 @@ export async function runSubmitInvoice(
       const attemptRow = ourSession ? await findKsefSessionRow(tenantId, invoiceId, ourSession) : null;
       const currentHash = error.ourInvoiceHash ?? hexHashToBase64(attemptRow?.requestPayloadHash);
       const originalHash = Buffer.from(originalSha256Hex, 'hex').toString('base64');
-      if (currentHash && currentHash === originalHash) {
+      // Przy znanym numerze bez przyjęcia (Y ma już K) — dalej do zapisu dla klienta.
+      if (!known && currentHash && currentHash === originalHash) {
         const path = attemptRow?.xmlStoragePath
           ?? invoiceXmlKeyFor({ tenantId, invoiceId, issueDate: invoice.issueDate, attemptId: parsed.data.sendAttemptId ?? null });
         await recordOriginalSession(path, originalSha256Hex);
@@ -1358,7 +1471,7 @@ export async function runSubmitInvoice(
         try {
           ourXml = await downloadInvoiceXml(attemptRow.xmlStoragePath, attemptRow.requestPayloadHash, tenantId);
         } catch (readError) {
-          await recordCheck('storage-pending', originalData);
+          await recordCheck('storage-pending', { ...originalData, knownInvoice: known });
           throw pending(
             `KSeF ma już fakturę o tym numerze (numer KSeF ${original}); nie udało się odczytać naszego pliku do porównania ` +
               `(${readError instanceof Error ? readError.message : 'magazyn'}). Do uzgodnienia; nie wystawiaj faktury ponownie.`,
@@ -1373,7 +1486,7 @@ export async function runSubmitInvoice(
         earlierHashesBase64: payloads.map((p) => hexHashToBase64(p.hash)),
         ourXml,
       });
-      if (cmp.verdict === 'identical') {
+      if (!known && cmp.verdict === 'identical') {
         // Wcześniejsza próba o tej samej treści: jej plik, a gdy wpis go nie zna
         // (sprzed 00134) — archiwum pobranego oryginału (KOD I liczy skrót z niego).
         let path = payloads.find((p) => hexHashToBase64(p.hash) === cmp.matchedHash)?.xmlStoragePath ?? null;
@@ -1387,11 +1500,18 @@ export async function runSubmitInvoice(
         await recordOriginalSession(path, originalSha256Hex);
         return accept('verified-duplicate', path, originalSha256Hex);
       }
-      if (cmp.verdict === 'operator' || !ourXml) {
+      if (known || cmp.verdict === 'operator' || !ourXml) {
         // Bez naszego pliku nie wolno orzec „numer zajęty” (mogłaby to być ta sama sprzedaż).
-        const reason: DuplicateCheckReason = cmp.verdict === 'operator' && cmp.reason ? cmp.reason : 'no-own-file';
+        // Znany numer KSeF wygrywa z faktflow-original i same-content-other-program.
+        const reason: DuplicateCheckReason = known
+          ? 'known-number'
+          : cmp.verdict === 'operator' && cmp.reason ? cmp.reason : 'no-own-file';
+        // Przy znanym numerze `ownHistory` = „K może być naszą wysyłką tego
+        // dokumentu”: sesja K w historii, bajty K = plik którejś próby albo
+        // bieżący plik (`identical`). Wtedy klient nie decyduje (00148).
         const ownHistory = Boolean(originalSessionRow)
-          || payloads.some((p) => p.hash.toLowerCase() === originalSha256Hex);
+          || payloads.some((p) => p.hash.toLowerCase() === originalSha256Hex)
+          || (known !== null && cmp.verdict === 'identical');
         // Bajty oryginału pod kluczem importu historii (ten sam obiekt zobaczy
         // Magiczny import) — z nich zapis oryginału po decyzji klienta.
         let archivePath: string;
@@ -1399,35 +1519,71 @@ export async function runSubmitInvoice(
           archivePath = (await archiveImportedKsefXml(tenantId, original, originalBytes)).storagePath;
         } catch (archiveError) {
           if (archiveError instanceof KsefXmlArchiveConflictError) {
-            await recordCheck('archive-conflict', { ...originalData, ownHistory });
+            await recordCheck('archive-conflict', { ...originalData, ownHistory, knownInvoice: known });
             alertOperator('archive-conflict');
             throw verdict(
               SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
-              `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w archiwum FaktFlow jest pod tym numerem inny plik — ` +
+              `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w archiwum FaktWay jest pod tym numerem inny plik — ` +
                 'do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.',
             );
           }
-          await recordCheck('archive-pending', { ...originalData, ownHistory });
+          await recordCheck('archive-pending', { ...originalData, ownHistory, knownInvoice: known });
           throw pending(
             `KSeF ma już fakturę o tym numerze (numer KSeF ${original}); nie udało się zapisać jej pliku w archiwum ` +
               `(${archiveError instanceof Error ? archiveError.message : 'magazyn'}). Do uzgodnienia; nie wystawiaj faktury ponownie.`,
             getKsefRetryDelay(attempt),
           );
         }
+        // D-A4-1b-3 PR C (5.1): plik z oznaczeniem FaktWay — brama pochodzenia na
+        // zarchiwizowanych bajtach. `importable`: klient zapisze oryginał sam;
+        // `review`: przegląd operatora (I5R). Czysta i deterministyczna (nigdy nie
+        // rzuca), więc ponowienie od zera zapisuje tę samą ocenę. NIP firmy ze
+        // zdarzenia (F3) — reguła `seller`.
+        const importGate: KsefOriginalImportGate | null = reason === 'faktflow-original'
+          ? evaluateOriginalGate({
+            xml: decodeKsefXml(originalBytes),
+            ksefNumber: original,
+            internalNumber: invoice.internalNumber ?? '',
+            tenantNip: nip,
+          }).gate
+          : null;
         await recordCheck(reason, {
           ...originalData,
           summary: cmp.summary,
           archivePath,
           sameContentExceptHeader: ourXml ? cmp.sameContentExceptHeader : null,
           ownHistory,
+          knownInvoice: known,
           acquiredAt: (await originalAcquisition(originalSessionRow?.invoiceReferenceNumber ?? null)) ?? null,
+          // Klucz tylko przy faktflow-original — inne powody zostają bez bramy (brak klucza, nie `undefined`).
+          ...(importGate ? { importGate } : {}),
         });
-        alertOperator(reason, { sameContentExceptHeader: cmp.sameContentExceptHeader });
+        // Alarm `ksef-duplicate-known-number` zostaje — operator sprawdza Y w każdym przypadku.
+        alertOperator(reason, {
+          sameContentExceptHeader: cmp.sameContentExceptHeader,
+          ...(known ? { otherInvoice: known.internalNumber, ownHistory } : {}),
+          ...(importGate ? { importGate: { kind: importGate.kind, problems: importGate.problems } } : {}),
+        });
+        if (importGate?.kind === 'review') {
+          // Odcisk [kind, faktura]: ponowienie (cron I5, „Tylko uzgodnij”) nie mnoży zgłoszeń (5.11).
+          // Marka w treści: FaktWay (spec 5.1 ma tu jeszcze starą nazwę sprzed zmiany marki — nazwa-produktu.test.ts).
+          Sentry.captureMessage('KSeF: plik z oznaczeniem FaktWay do przeglądu operatora', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', area: 'ksef.duplicate-decision', kind: KSEF_ORIGINAL_ALARM_KINDS.provenanceReview },
+            fingerprint: [KSEF_ORIGINAL_ALARM_KINDS.provenanceReview, invoiceId],
+            extra: { tenantId, invoiceId, originalKsefNumber: original, problems: importGate.problems },
+          });
+        }
         throw verdict(
           SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
-          cmp.verdict === 'operator'
-            ? operatorVerdictMessage(original, cmp)
-            : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktFlow, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
+          known
+            ? knownNumberVerdictMessage(original, known, ownHistory)
+            : importGate
+              // Bez „operatora” i bez obietnicy decyzji (reguła 07.10.2026) — tekst trafia też do e-maila i karty FLO.
+              ? faktflowOriginalVerdictMessage(original, importGate.kind)
+              : cmp.verdict === 'operator'
+                ? operatorVerdictMessage(original, cmp)
+                : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
         );
       }
       // Oryginał z innego programu o innej treści: numer zajęty. Wszystkie wpisy
@@ -1564,7 +1720,7 @@ export async function runSubmitInvoice(
       }
       // Ponownie tuż przed wysyłką: wyłącznik mógł zostać włączony między krokami.
       await assertSubmissionNotHeld(parsed.data, current, env);
-      await assertSubmitReferences({
+      const documentKind = await assertSubmitReferences({
         supabase: await createAdminClient(),
         tenantId,
         invoiceId,
@@ -1575,6 +1731,18 @@ export async function runSubmitInvoice(
         finalData: parsed.data.finalData,
         finalAdvanceSettlementRows: parsed.data.finalAdvanceSettlementRows,
       });
+      // Decyzja Bartosza 06.10.2026 (00147): KOR/ZAL/ROZ tylko w dniu wystawienia.
+      // Ponowienie pg-boss albo oczekiwanie na przejęcie może przenieść POST za
+      // północ — w KSeF dokument wystawia się w dniu wysyłki. Tu, przed
+      // `submitInvoiceFullFlow`: uzgodnienie (wyżej) nie wysyła, więc działa dalej.
+      // Drugie sprawdzenie — w haku sesji tuż przed plikiem (`IssueDatePassedError`).
+      // Zwykła faktura bez zmian (B1/B2); do zdjęcia, gdy B2 obejmie wszystkie rodzaje.
+      if (documentKind !== 'regular') {
+        const today = todayInWarsaw();
+        if (invoice.issueDate !== today) {
+          throw new NonRetriableError(issueDatePassedMessage(invoice.issueDate, today));
+        }
+      }
       const credentials = await getTenantKsefCredentials(tenantId);
 
       try {
@@ -1604,6 +1772,11 @@ export async function runSubmitInvoice(
         );
         return { ...submitted, via: 'submit' };
       } catch (error) {
+        // Północ wypadła po bezpieczniku wyżej, przed plikiem (hak sesji) — pliku
+        // nie wysłano; ponowienie dałoby tę samą odmowę.
+        if (error instanceof IssueDatePassedError) {
+          throw new NonRetriableError(error.message, { cause: error });
+        }
         if (error instanceof KsefNotVerifiedError) {
           throw new NonRetriableError(
             'Organizacja nie ma zweryfikowanego certyfikatu KSeF (Ustawienia → KSeF). Wysyłka do KSeF jest zablokowana.',
@@ -1798,13 +1971,13 @@ export async function runSubmitInvoice(
 
     await step.run('analytics-invoice-accepted', async () => {
       await trackServer({
-        distinctId: tenantId,
+        tenantId,
         event: ANALYTICS_EVENTS.invoiceAccepted,
-        properties: {
-          ksef_env: env,
-          internal_number: invoice.internalNumber ?? null,
-        },
+        properties: { ksef_env: env },
+        dedupeKey: invoiceId,
+        timestamp: result.acquisitionTimestamp,
       });
+      await recordFirstInvoiceAccepted({ tenantId, invoiceId });
     });
 
     await step.sendEvent('trigger-upo-download', {

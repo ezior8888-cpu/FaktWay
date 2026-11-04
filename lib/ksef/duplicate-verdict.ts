@@ -6,8 +6,8 @@
  * oryginału pobrany z KSeF z naszymi plikami.
  *
  * Kierunek bezpieczny prawnie: „numer zajęty” (klient wystawia z nowym
- * numerem) tylko wtedy, gdy oryginał NIE pochodzi z FaktFlow. Każda
- * wątpliwość — oryginał z FaktFlow o innej treści albo innej dacie
+ * numerem) tylko wtedy, gdy oryginał NIE pochodzi z FaktWay. Każda
+ * wątpliwość — oryginał z FaktWay o innej treści albo innej dacie
  * wytworzenia — idzie do operatora, bo może to być nasza wcześniejsza
  * wysyłka tej samej sprzedaży (ponowne wystawienie = dwie faktury).
  *
@@ -16,7 +16,9 @@
 
 import { createHash } from 'node:crypto';
 
-/** `<SystemInfo>` w nagłówku każdego pliku FA(3) z FaktFlow (fa3-generator, korekty, ZAL/ROZ). */
+import { DUPLICATE_DECISION_TEXTS } from './duplicate-decision';
+
+/** `<SystemInfo>` w nagłówku każdego pliku FA(3) z FaktWay (fa3-generator, korekty, ZAL/ROZ). */
 export const FAKTFLOW_SYSTEM_INFO = 'KSeF SaaS v1.0';
 
 export type DuplicateVerdict =
@@ -27,7 +29,7 @@ export type DuplicateVerdict =
   | 'identical'
   /**
    * Nie wolno rozstrzygnąć automatycznie — operator: oryginał wygenerował
-   * FaktFlow (może to być nasza wcześniejsza wysyłka tej sprzedaży) albo ma
+   * FaktWay (może to być nasza wcześniejsza wysyłka tej sprzedaży) albo ma
    * tę samą treść co nasza faktura, tylko inny nagłówek (ta sama sprzedaż).
    */
   | 'operator'
@@ -142,17 +144,51 @@ function describeOriginal(ksefNumber: string, s: OriginalInvoiceSummary): string
   return parts.join(', ');
 }
 
-/** Komunikat `KSEF_NUMBER_TAKEN` dla klienta (trafia do `last_error`). */
+/**
+ * Komunikat `KSEF_NUMBER_TAKEN` dla klienta (trafia do `last_error`). Szkic po
+ * „Wróć do szkicu” jest wycofany (wpis `number_taken`, 00148): nie wyślesz go,
+ * a zwykłej faktury i zaliczki nie usuniesz — stąd bez „usuń go” (decyzje
+ * Bartosza 07.10.2026 (3) i (9)). Tekst: `DUPLICATE_DECISION_TEXTS`, przegląd prawnika.
+ */
 export function numberTakenMessage(invoiceNumber: string, ksefNumber: string, s: OriginalInvoiceSummary): string {
-  return (
-    `W KSeF jest już faktura Twojej firmy o numerze ${invoiceNumber} (${describeOriginal(ksefNumber, s)})` +
-    `${s.systemInfo ? `, wystawiona w programie „${s.systemInfo}”` : ', wystawiona poza FaktFlow'}. ` +
-    'Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie (zmiany: korekta tamtej faktury). ' +
-    'Jeśli to inna sprzedaż — wróć do szkicu, usuń go i wystaw fakturę z nowym numerem.'
-  );
+  const T = DUPLICATE_DECISION_TEXTS;
+  const opis = describeOriginal(ksefNumber, s);
+  return s.systemInfo
+    ? T.NUMBER_TAKEN_LAST_ERROR(invoiceNumber, opis, s.systemInfo)
+    : T.NUMBER_TAKEN_LAST_ERROR_UNKNOWN_PROGRAM(invoiceNumber, opis);
 }
 
-/** Komunikat werdyktu „operator” (trafia do `last_error`; klient widzi „zajmujemy się”). */
+/**
+ * Komunikat werdyktu `known-number` (D-A4-1b-3 PR B, C16; trafia do `last_error`):
+ * numer KSeF oryginału ma już dokument Y w FaktWay. Gdy oryginał nie może być
+ * naszą wysyłką tego dokumentu, klient rozstrzyga na karcie faktury; gdy może
+ * (`ownHistory`), klient decyzji nie dostaje — tekst nie mówi, że sprawa czeka
+ * na niego. Bez „operatora” (reguła 07.10.2026).
+ */
+export function knownNumberVerdictMessage(
+  ksefNumber: string,
+  known: { id: string; internalNumber: string | null },
+  ownHistory: boolean,
+): string {
+  const y = known.internalNumber ?? 'bez numeru';
+  return ownHistory
+    ? DUPLICATE_DECISION_TEXTS.KNOWN_NUMBER_LAST_ERROR_OWN(ksefNumber, y)
+    : DUPLICATE_DECISION_TEXTS.KNOWN_NUMBER_LAST_ERROR(ksefNumber, y);
+}
+
+/**
+ * D-A4-1b-3 PR C (5.1 punkt 3): `last_error` werdyktu `faktflow-original` —
+ * `DUPLICATE_DECISION_TEXTS.FAKTFLOW.LAST_ERROR(K)` przy bramie `importable`,
+ * `LAST_ERROR_REVIEW(K)` przy `review` (bez „operatora” i bez obietnicy decyzji;
+ * trafia też do e-maila „odrzucona” i karty FLO). `operatorVerdictMessage`
+ * zostaje dla `same-content-other-program`.
+ */
+export function faktflowOriginalVerdictMessage(ksefNumber: string, gateKind: 'importable' | 'review'): string {
+  const FF = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
+  return gateKind === 'review' ? FF.LAST_ERROR_REVIEW(ksefNumber) : FF.LAST_ERROR(ksefNumber);
+}
+
+/** Komunikat werdyktu „operator” (trafia do `last_error`; przy panelu duplikatu klient go nie widzi — karta błędu jest ukryta). */
 export function operatorVerdictMessage(ksefNumber: string, cmp: DuplicateComparison): string {
   const original = describeOriginal(ksefNumber, cmp.summary);
   if (cmp.reason === 'same-content-other-program') {
@@ -162,7 +198,7 @@ export function operatorVerdictMessage(ksefNumber: string, cmp: DuplicateCompari
     );
   }
   return (
-    `KSeF ma już fakturę o tym numerze (${original}) wygenerowaną przez FaktFlow, ` +
+    `KSeF ma już fakturę o tym numerze (${original}) wygenerowaną przez FaktWay, ` +
     `ale ${cmp.sameContentExceptHeader ? 'z inną datą wytworzenia (treść zgodna)' : 'o innej treści'}. ` +
     'Najpewniej to wcześniejsza wysyłka tej faktury — do uzgodnienia przez operatora; nie wystawiaj jej ponownie.'
   );

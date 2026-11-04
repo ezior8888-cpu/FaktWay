@@ -1,148 +1,75 @@
-import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card';
-import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
-import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
-import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
-import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
-import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
-import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
-import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import {
-  formatPlMoney,
-  getMonthlyFigures,
-  getSalesSeries,
-} from '@/lib/dashboard/monthly-figures';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import { getPageContext } from '@/lib/supabase/page-context';
+  AktywnoscSlot,
+  KosztySlot,
+  OperacjeSlot,
+  PierscienSlot,
+  SpodziewaneSlot,
+  WplywySlot,
+  WykresSlot,
+  ZrodlaSlot,
+  type PrzeplywySlotProps
+} from '@/components/przeplywy/finora-1do1/sloty'
+import { kontekstDanych } from '@/lib/demo/tryb-danych'
+import { getPageContext } from '@/lib/supabase/page-context'
 
 /**
- * WŁAŚCICIEL: Bartosz (tor silnika) — rama panelu.
+ * Przepływy = strona Cash Flow szablonu Finora 1:1 (decyzja Bartosza
+ * 21.10.2026): ta sama siatka, karty, wykresy i animacje. Od E6
+ * PLAN-PRAWDZIWE-DANE karty pokazują prawdziwe wpłaty i koszty firmy (sloty
+ * `components/przeplywy/finora-1do1/sloty.tsx`), a przed weryfikacją KSeF —
+ * dane przykładowe czytane tymi samymi loaderami z atrapy bazy. Tryb liczy
+ * wyłącznie `kontekstDanych`; strona nie woła sama żadnej funkcji danych.
  *
- * Od 30.08.2026 stoją tu też podsumowanie VAT i wykres sprzedaży, przeniesione
- * z dashboardu, który oddał całą powierzchnię agentowi FLO.
+ * Ładowanie (poprawka Bartosza 23.10.2026): dane wszystkich kart naraz,
+ * strona renderuje się RAZ, w całości — bez szkieletów kart wskakujących po
+ * kolei; wejście treści animuje `ff-route-content` (ten sam ruch co szablon
+ * trasy), a `loading.tsx` tej trasy nie pokazuje obcego szkieletu.
  *
- * Kwoty w podsumowaniu VAT i na wykresie sprzedaży pochodzą wyłącznie
- * z faktur przyjętych w aktywnym środowisku KSeF. Szkice lokalne mają
- * oddzielny licznik, a kolejki bez potwierdzonej proweniencji nie powiększają
- * wartości podatkowych.
+ * Dawne karty (`components/przeplywy/przeplywy-grid.tsx`,
+ * `components/przeplywy/finora/*`) zostają w kodzie jako wzór logiki.
  */
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
-export default async function PrzeplywyPage() {
-  const { supabase, tenantId } = await getPageContext();
-  const environment = requireConfiguredKsefEnvironment();
+const CashFlowDashboard = async () => {
+  const pageCtx = await getPageContext()
+  const { supabase, tenantId, nowIso, tryb, kosztyKsefOd } = await kontekstDanych(pageCtx, new Date())
+  const props: PrzeplywySlotProps = { supabase, tenantId, nowIso, tryb, kosztyKsefOd }
 
-  const now = new Date();
-  // Miesiąc i rok w czasie polskim, bez `toISOString()` z lokalnej północy
-  // (w strefie polskiej cofało początek o dzień: 1 maja → 30 kwietnia),
-  // a serwer chodzi w UTC.
-  const [year, month] = todayInWarsaw(now).split('-').map(Number);
-  const chartStart = new Date(Date.UTC(year, month - 1 - 5, 1));
-  const sixMonthsAgo = chartStart.toISOString().slice(0, 10);
-  // C-21: szacunek podatku liczy się od 1 stycznia, a wykres pokazuje sześć
-  // miesięcy — dane od wcześniejszej z tych dat. Bez tego od lipca kafelek
-  // mówił „od 1 maja · bez wcześniejszych miesięcy roku”.
-  const yearStart = `${year}-01-01`;
-  const dataFrom = yearStart < sixMonthsAgo ? yearStart : sixMonthsAgo;
-
-  const [invoices, expenses] = await Promise.all([
-    readCompletePages('cash-flow invoices', (from, to) =>
-      supabase
-        .from('invoices')
-        .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids, currency', { count: 'exact' })
-        .eq('tenant_id', tenantId)
-        .eq('direction', 'outgoing')
-        .eq('ksef_status', 'accepted')
-        .eq('ksef_environment', environment)
-        .gte('issue_date', dataFrom)
-        .order('id', { ascending: true })
-        .range(from, to),
-    ),
-    readCompletePages('cash-flow expenses', (from, to) =>
-      supabase
-        .from('expenses')
-        .select('id, source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column, is_reviewed, ocr_extracted_data', { count: 'exact' })
-        .eq('tenant_id', tenantId)
-        .eq('is_deductible', true)
-        .gte('issue_date', dataFrom)
-        .order('id', { ascending: true })
-        .range(from, to),
-    ),
-  ]);
-  const visibleExpenses = await filterExpensesForKsefEnvironment(
-    supabase, tenantId, environment, expenses,
-  );
-  invoices.sort((a, b) =>
-    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
-  visibleExpenses.sort((a, b) =>
-    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
-  // C-11: sumy w złotych — faktura sprzedaży albo koszt KSeF w walucie obcej
-  // bez przeglądu i kursu zatrzymuje stronę (`error.tsx`).
-  assertOutgoingInvoicesInPln(invoices);
-  await assertKsefExpensesReadyForPln(visibleExpenses, async (ids) => {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('id, currency')
-      .eq('tenant_id', tenantId)
-      .in('id', ids);
-    if (error) throw new Error('Nie można sprawdzić walut faktur KSeF');
-    return new Map((data ?? []).map((row) => [row.id as string, row.currency as string | null]));
-  });
-
-  // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie
-  // (`kpirRevenueNet`). Błąd odczytu leci do `error.tsx` — zerowa suma
-  // zaliczek zawyżyłaby dochód i szacowany podatek.
-  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
-  const invoiceRows = invoices.map((inv) => ({
-    ...inv,
-    settled_advances_net: settled.get(inv.id) ?? null,
-  }));
-
-  const { count: pendingReviewCount } = await supabase
-    .from('expenses')
-    .select('*', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId)
-    .eq('is_reviewed', false);
-
-  const [figures, series] = await Promise.all([
-    getMonthlyFigures(supabase, tenantId, now),
-    getSalesSeries(supabase, tenantId, now),
-  ]);
+  // Sloty nie odrzucają (błąd loadera = karta błędu), więc `Promise.all` = `allSettled`.
+  const [wykres, pierscien, wplywy, koszty, zrodla, spodziewane, aktywnosc, operacje] = await Promise.all([
+    WykresSlot({ ...props, className: 'col-span-full xl:col-span-4' }),
+    PierscienSlot({ ...props, className: 'col-span-full xl:col-span-2' }),
+    WplywySlot({ ...props, className: 'col-span-full sm:col-span-3' }),
+    KosztySlot({ ...props, className: 'col-span-full sm:col-span-3' }),
+    ZrodlaSlot({ ...props, className: 'col-span-full lg:col-span-2' }),
+    SpodziewaneSlot({ ...props, className: 'col-span-full lg:col-span-2' }),
+    AktywnoscSlot({ ...props, className: 'col-span-full lg:col-span-2' }),
+    OperacjeSlot({ ...props, className: 'col-span-full' })
+  ])
 
   return (
-    <div className="flex flex-col gap-7">
-      {/* Liczby miesiąca stoją na komputerze w prawej szynie dashboardu.
-          Na telefonie szyny nie ma, a dolna nawigacja prowadzi tutaj pod
-          nazwą „Miesiąc” — więc tu jest ich drugi (i na telefonie jedyny)
-          adres. Od `lg` byłyby dublem szyny, stąd `lg:hidden`. */}
-      <div className="lg:hidden">
-        <MonthlyFiguresCard figures={figures} />
+    <div className='ff-route-content'>
+      {/* Odstępstwo od Finory (WCAG 1.3.1): niewidoczny nagłówek strony dla czytników. */}
+      <h1 className='sr-only'>Przepływy pieniężne</h1>
+      <div className='grid grid-cols-6 gap-6'>
+        {wykres}
+
+        {pierscien}
+
+        {wplywy}
+
+        {koszty}
+
+        {zrodla}
+
+        {spodziewane}
+
+        {aktywnosc}
+
+        {operacje}
       </div>
-
-      <CashFlowDashboard
-        invoices={invoiceRows}
-        expenses={visibleExpenses}
-        pendingReviewCount={pendingReviewCount ?? 0}
-        dataFrom={dataFrom}
-      />
-
-      <VatSummaryCard
-        monthName={figures.monthName}
-        netLabel={formatPlMoney(figures.totalNet)}
-        vatLabel={formatPlMoney(figures.totalVat)}
-        grossLabel={formatPlMoney(figures.totalGross)}
-        vatDueLabel={figures.vatDueLabel}
-        daysToVatDue={figures.daysToVatDue}
-      />
-
-      <SalesChartCard
-        months={series.months}
-        currentSeries={series.currentSeries}
-        prevSeries={series.prevSeries}
-        currentMonthKey={series.currentMonthKey}
-        year={now.getFullYear()}
-      />
     </div>
-  );
+  )
 }
+
+export default CashFlowDashboard

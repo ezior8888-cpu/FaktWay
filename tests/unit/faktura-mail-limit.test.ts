@@ -13,7 +13,7 @@ import { emailInvoiceAction } from '@/components/invoices/actions-detail';
 
 /**
  * AUD-102: wysyłka faktury mailem na dowolny adres nie miała limitu —
- * przejęte konto mogło rozsyłać z domeny FaktFlow setki maili z PDF.
+ * przejęte konto mogło rozsyłać z domeny FaktWay setki maili z PDF.
  * Limit: 30 wysyłek na godzinę na firmę, sprawdzany PRZED generowaniem PDF.
  */
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * AUD-59: wyszukiwanie firmy po NIP w onboardingu (GUS + lista firm z tym
- * NIP-em w FaktFlow) nie miało limitu — zalogowany mógł seryjnie sprawdzać,
+ * NIP-em w FaktWay) nie miało limitu — zalogowany mógł seryjnie sprawdzać,
  * które firmy są klientami, i zasypywać je prośbami o dostęp. Lista jest
  * potrzebna do „poproś o dostęp”, więc zostaje; dochodzi limit 20 wyszukiwań
  * na godzinę na użytkownika — przed GUS i przed bazą.

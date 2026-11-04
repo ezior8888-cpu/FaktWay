@@ -6,7 +6,7 @@ vi.mock('@/lib/email/preferences', () => ({ canSendTo: async () => ({ ok: true }
 
 /**
  * AUD-97: bez zmiennych RESEND_FROM_* nadawcą był `onboarding@resend.dev` —
- * domena dostawcy, nie FaktFlow (i adres, którego Resend nie przyjmie poza
+ * domena dostawcy, nie FaktWay (i adres, którego Resend nie przyjmie poza
  * kontem testowym). Pusta zmienna też nie była traktowana jak brak.
  */
 
@@ -20,18 +20,18 @@ beforeEach(() => {
 });
 
 describe('nadawca maili', () => {
-  it('bez konfiguracji — domena FaktFlow, nie resend.dev', async () => {
+  it('bez konfiguracji — domena FaktWay, nie resend.dev', async () => {
     const { sendEmail } = await import('@/lib/email/send');
     await sendEmail({ to: 'klient@example.test', subject: 'x', html: '<p>x</p>' });
     const from = String(s.send.mock.calls[0]![0].from);
-    expect(from).toContain('<no-reply@app.faktflow.pl>');
+    expect(from).toContain('<powiadomienia@faktway.pl>');
     expect(from).not.toContain('resend.dev');
   });
 
   it('ustawiona zmienna wygrywa', async () => {
-    vi.stubEnv('RESEND_FROM_TRANSACTIONAL', 'FaktFlow <faktury@faktflow.pl>');
+    vi.stubEnv('RESEND_FROM_TRANSACTIONAL', 'FaktWay <faktury@faktflow.pl>');
     const { sendEmail } = await import('@/lib/email/send');
     await sendEmail({ to: 'klient@example.test', subject: 'x', html: '<p>x</p>' });
-    expect(s.send.mock.calls[0]![0].from).toBe('FaktFlow <faktury@faktflow.pl>');
+    expect(s.send.mock.calls[0]![0].from).toBe('FaktWay <faktury@faktflow.pl>');
   });
 });

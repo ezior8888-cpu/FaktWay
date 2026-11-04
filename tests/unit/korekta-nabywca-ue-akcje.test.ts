@@ -336,7 +336,7 @@ describe('getCorrectionParentContextAction — nabywca z UE', () => {
 
 describe('saveCorrectionDraftAction — nabywca z UE', () => {
   it('przed/po: kolumny nabywcy jak przy zwykłej fakturze dla firmy z UE, pozycje np. II', async () => {
-    const res = await saveCorrectionDraftAction(payload());
+    const res = await saveCorrectionDraftAction(payload(), tenantId);
     expect(res).toMatchObject({ success: true });
     const invoice = insertOf('invoices') as Row;
     expect(invoice).toMatchObject({
@@ -352,7 +352,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
   });
 
   it('numer VAT-UE od klienta w innej postaci — zapisany kanoniczny z faktury pierwotnej', async () => {
-    const res = await saveCorrectionDraftAction(payload({ buyer: euBuyer('de123456789') }));
+    const res = await saveCorrectionDraftAction(payload({ buyer: euBuyer('de123456789') }), tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoices')).toMatchObject({ buyer_data: { vatUeNumber: 'DE123456789' } });
   });
@@ -363,7 +363,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
       buyer: b2bBuyer,
       linesBefore: [{ ...npIiLine, vatRate: '23' }],
       linesAfter: [{ ...npIiLine, vatRate: '23', unitPriceNet: 800 }],
-    }));
+    }), tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoices')).toMatchObject({ is_b2c: false, buyer_id_type: 'nip', buyer_nip: sellerNip });
   });
@@ -381,7 +381,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
       buyer: buyer(),
       linesBefore: [{ ...npIiLine, vatRate: 'np' }],
       linesAfter: [{ ...npIiLine, vatRate: 'np', unitPriceNet: 800 }],
-    }));
+    }), tenantId);
     expect(res).toMatchObject({ success: false, error: expect.stringContaining('nabywcę') });
     expectNoWrite();
   });
@@ -391,7 +391,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
     const res = await saveCorrectionDraftAction(payload({
       linesBefore: [{ ...npIiLine, vatRate: 'np' }],
       linesAfter: [{ ...npIiLine, vatRate: 'np', unitPriceNet: 800 }],
-    }));
+    }), tenantId);
     expect(res).toMatchObject({ success: false, error: expect.stringContaining('nabywcę') });
     expectNoWrite();
   });
@@ -402,7 +402,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
       buyer: b2bBuyer,
       linesBefore: [{ ...npIiLine, vatRate: '23' }],
       linesAfter: [{ ...npIiLine, unitPriceNet: 800 }],
-    }));
+    }), tenantId);
     expect(res).toMatchObject({ success: false, error: expect.stringContaining(NP_II_CORRECTION_BUYER_MESSAGE) });
     expectNoWrite();
   });
@@ -410,7 +410,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
   it('odrzuca np. II dla Irlandii Płn. (XI)', async () => {
     const xiAddress = { ...deAddress, countryCode: 'XI' };
     setParent(euParty('XI123456789', xiAddress), ['np_ii']);
-    const res = await saveCorrectionDraftAction(payload({ buyer: euBuyer('XI123456789', xiAddress) }));
+    const res = await saveCorrectionDraftAction(payload({ buyer: euBuyer('XI123456789', xiAddress) }), tenantId);
     expect(res).toMatchObject({ success: false, error: expect.stringContaining(NP_II_NOT_FOR_XI_MESSAGE) });
     expectNoWrite();
   });
@@ -418,7 +418,7 @@ describe('saveCorrectionDraftAction — nabywca z UE', () => {
   it('anulowanie faktury np. II — pozycje z bazy, stawka np_ii', async () => {
     const res = await saveCorrectionDraftAction(payload({
       correctionType: 'cancellation', linesBefore: undefined, linesAfter: undefined,
-    }));
+    }), tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoice_line_items')).toEqual([
       expect.objectContaining({ vat_rate: 'np_ii', quantity: -1, net_amount: -1000 }),
@@ -436,7 +436,7 @@ describe('korekta kwotowa — stawka bez VAT wyznacza serwer', () => {
   });
 
   it('faktura np. II, klient bez stawki: zapis z np_ii (nie „0 KR”)', async () => {
-    const res = await saveCorrectionDraftAction(amountPayload(amountChange()));
+    const res = await saveCorrectionDraftAction(amountPayload(amountChange()), tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoice_line_items')).toEqual([
       expect.objectContaining({ vat_rate: 'np_ii', net_amount: -100, vat_amount: 0, gross_amount: -100 }),
@@ -444,7 +444,7 @@ describe('korekta kwotowa — stawka bez VAT wyznacza serwer', () => {
   });
 
   it('faktura np. II, klient z tą samą stawką: wysyłka (TEST) niesie np_ii w danych korekty', async () => {
-    const res = await saveAndSendCorrectionAction(amountPayload(amountChange({ vatRate: 'np_ii' })));
+    const res = await saveAndSendCorrectionAction(amountPayload(amountChange({ vatRate: 'np_ii' })), tenantId);
     expect(res).toMatchObject({ success: true });
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
     const { correctionData, invoice } = mocks.enqueue.mock.calls[0]![0];
@@ -460,7 +460,7 @@ describe('korekta kwotowa — stawka bez VAT wyznacza serwer', () => {
       linesBefore: [{ name: 'Inna', unit: 'szt.', quantity: 1, unitPriceNet: 1, vatRate: 'oo' }],
       linesAfter: undefined,
       amountChange: amountChange({ vatRate: 'np_ii' }),
-    }));
+    }), tenantId);
     expect(res).toMatchObject({ success: true });
     const { correctionData } = mocks.enqueue.mock.calls[0]![0];
     expect(correctionData.linesBefore.map((l: { vatRate: string }) => l.vatRate)).toEqual(['np_ii']);
@@ -474,21 +474,21 @@ describe('korekta kwotowa — stawka bez VAT wyznacza serwer', () => {
     ['np i np. II razem, VAT 0 (stawka niejednoznaczna)', ['np', 'np_ii'], {}, 'niejednoznaczna'],
   ])('odrzuca: %s', async (_label, rates, change, fragment) => {
     setParent(euParty('DE123456789'), rates);
-    const res = await saveCorrectionDraftAction(amountPayload(amountChange(change)));
+    const res = await saveCorrectionDraftAction(amountPayload(amountChange(change)), tenantId);
     expect(res).toMatchObject({ success: false, error: expect.stringContaining(fragment) });
     expectNoWrite();
   });
 
   it('faktura z 23% i np. II: korekta z VAT 23% przechodzi jako 23', async () => {
     setParent(euParty('DE123456789'), ['23', 'np_ii']);
-    const res = await saveCorrectionDraftAction(amountPayload(amountChange({ vatDelta: -23, grossDelta: -123 })));
+    const res = await saveCorrectionDraftAction(amountPayload(amountChange({ vatDelta: -23, grossDelta: -123 })), tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoice_line_items')).toEqual([expect.objectContaining({ vat_rate: '23' })]);
   });
 
   it('faktura dla firmy z NIP ze stawką oo: korekta kwotowa z oo', async () => {
     setParent(b2bParty, ['oo']);
-    const res = await saveCorrectionDraftAction({ ...amountPayload(amountChange()), buyer: b2bBuyer });
+    const res = await saveCorrectionDraftAction({ ...amountPayload(amountChange()), buyer: b2bBuyer }, tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoice_line_items')).toEqual([expect.objectContaining({ vat_rate: 'oo' })]);
   });
@@ -497,7 +497,7 @@ describe('korekta kwotowa — stawka bez VAT wyznacza serwer', () => {
     setParent(b2bParty, ['23']);
     const res = await saveCorrectionDraftAction({
       ...amountPayload(amountChange({ vatDelta: -23, grossDelta: -123 })), buyer: b2bBuyer,
-    });
+    }, tenantId);
     expect(res).toMatchObject({ success: true });
     expect(insertOf('invoice_line_items')).toEqual([expect.objectContaining({ vat_rate: '23' })]);
   });
@@ -507,7 +507,7 @@ describe('wstrzymanie wysyłki KOR w PROD obejmuje korektę dla firmy z UE', () 
   it('PROD: brak zapisu i kolejki', async () => {
     vi.stubEnv('KSEF_ENV', 'production');
     parent.ksef_environment = 'production';
-    const res = await saveAndSendCorrectionAction(payload());
+    const res = await saveAndSendCorrectionAction(payload(), tenantId);
     expect(res).toMatchObject({ success: false, error: expect.stringContaining('PROD') });
     expectNoWrite();
   });

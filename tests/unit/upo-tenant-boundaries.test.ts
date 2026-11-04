@@ -53,6 +53,17 @@ const oldInvoice = (patch: Row = {}): Row => invoice({
 const receipt = (patch: Row = {}): Row => ({ id: RECEIPT, tenant_id: A, invoice_id: ID, ksef_number: REF, ksef_environment: 'test',
   status: 'pending', download_attempts: 0, last_error: null, created_at: '2000-01-01', ...patch });
 let tables: Record<string, Row[]>;
+/**
+ * Lustro `public.ksef_upo_expected(invoices)` z 00155 (decyzja Bartosza
+ * 22.10.2026): UPO tylko dla faktur wysłanych sesją FaktWay; wiersz z historii
+ * KSeF (`origin = ksef_import`) — tylko gdy wskazuje go nasza próba wysyłki.
+ */
+function upoExpected(inv: Row | undefined): boolean {
+  if (!inv) return false;
+  if (inv.origin !== 'ksef_import') return true;
+  return (tables.ksef_submissions ?? []).some((s) => s.tenant_id === inv.tenant_id && (s.invoice_id === inv.id
+    || (inv.ksef_number != null && (s.response_ksef_number === inv.ksef_number || s.original_ksef_number === inv.ksef_number))));
+}
 let errors: Set<string>;
 let calls: Query[];
 let beforeQuery: ((query: Query) => void) | undefined;
@@ -89,7 +100,21 @@ function client() {
       return { data: one ? result[0] ?? null : result, error: null };
     };
     const builder = {
-      select: (cols = '') => { q.columns = cols; joinInvoice = cols.includes('invoices('); return builder; },
+      select: (cols = '') => { q.columns = cols; joinInvoice = /invoices(!inner)?\(/.test(cols); return builder; },
+      // Pole wyliczane PostgREST (00155): `.filter('ksef_upo_expected','eq','true')`
+      // na fakturach i `.filter('invoices.ksef_upo_expected', …)` na osadzeniu `invoices!inner`.
+      filter: (column: string, operator: string, value: unknown) => {
+        expect(operator).toBe('eq'); expect(value).toBe('true');
+        q.filters.push([`filter:${column}`, value]);
+        if (column === 'ksef_upo_expected') {
+          expect(q.table).toBe('invoices');
+          predicates.push((r) => upoExpected(r));
+        } else if (column === 'invoices.ksef_upo_expected') {
+          expect(q.table).toBe('upo_receipts'); expect(q.columns).toContain('invoices!inner(');
+          predicates.push((r) => upoExpected((tables.invoices ?? []).find((inv) => inv.id === r.invoice_id)));
+        } else throw new Error(`Unexpected computed filter: ${column}`);
+        return builder;
+      },
       eq: (key: string, value: unknown) => { q.filters.push([key, value]); predicates.push((r) => r[key] === value); return builder; },
       gt: (key: string, value: string) => { q.filters.push([key, value]); predicates.push((r) => String(r[key]) > value); return builder; },
       in: (key: string, value: unknown[]) => { q.filters.push([key, value]); predicates.push((r) => value.includes(r[key])); return builder; },
@@ -264,6 +289,28 @@ describe('UPO worker boundaries', () => {
 });
 
 describe('UPO retry cron boundaries', () => {
+  // 00155 (decyzja Bartosza 22.10.2026): historia z KSeF nie ma UPO — przed
+  // poprawką cron co godzinę zlecał pobranie UPO dla każdej takiej faktury.
+  it('does not request UPO for an accepted invoice downloaded from KSeF history without our send', async () => {
+    tables.invoices = [oldInvoice({ origin: 'ksef_import' })];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 0, dispatched: 0 });
+    expectNoExternalEffects();
+    expect(calls.filter((q) => q.table === 'invoices' && q.operation === 'select')
+      .every((q) => q.filters.some(([key]) => key === 'filter:ksef_upo_expected'))).toBe(true);
+  });
+  it('still requests UPO for a KSeF-history row linked to our send (440 original, PR C)', async () => {
+    tables.invoices = [oldInvoice({ origin: 'ksef_import' })];
+    tables.ksef_submissions = [{ tenant_id: A, invoice_id: OTHER, original_ksef_number: REF, response_ksef_number: null }];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });
+  });
+  it('does not retry a stale receipt of a KSeF-history invoice (embedded computed filter)', async () => {
+    tables.invoices = [oldInvoice({ origin: 'ksef_import' })];
+    tables.upo_receipts = [receipt()];
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 0 });
+    expect(sendEvent).not.toHaveBeenCalled();
+    const scan = calls.find((q) => q.table === 'upo_receipts' && q.columns?.includes('invoices!inner('));
+    expect(scan?.filters).toContainEqual(['filter:invoices.ksef_upo_expected', 'true']);
+  });
   it('finds an old accepted outgoing invoice without a receipt after the submit event was lost', async () => {
     tables.invoices = [oldInvoice()];
     await expect(runUpoRetryStale(context)).resolves.toMatchObject({ missing: 1, dispatched: 1 });

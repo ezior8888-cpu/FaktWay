@@ -12,7 +12,7 @@ import type { Invoice } from '@/types/invoice';
  * worker) albo zapis wpisu się nie udał, ponowienie nie wiedziało o tamtej
  * wysyłce: wysyłało fakturę drugi raz, KSeF odpowiadał 440 z numerem sesji,
  * której nie było w historii, i faktura kończyła jako `failed
- * KSEF_DUPLICATE_RECONCILE` — przyjęta w KSeF, a w FaktFlow „do uzgodnienia
+ * KSEF_DUPLICATE_RECONCILE` — przyjęta w KSeF, a w FaktWay „do uzgodnienia
  * przez operatora”.
  *
  * Teraz po otwarciu sesji, PRZED wysłaniem faktury, powstaje wpis `intent`
@@ -408,13 +408,16 @@ describe('A2b: „Tylko uzgodnij” stwierdza, że KSeF nie ma faktury — wynik
     expect(m.ksef.invoicePosts).toBe(1); // tylko pierwsza, nieudana próba — uzgodnienie nie wysyła
     expect(submissions()).toEqual([expect.objectContaining({ status: 'abandoned', error_code: 'NOT_IN_SESSION' })]);
 
-    const failed = { direction: 'outgoing', status: 'failed', errorCode: 'NOT_IN_KSEF', invoiceKind: 'regular' };
+    const failed = {
+      direction: 'outgoing', status: 'failed', errorCode: 'NOT_IN_KSEF', invoiceKind: 'regular',
+      facts: { sendData: 'stored', kindHeld: false, issueDatePassed: false }, environmentKnown: true,
+    } as const;
     expect(decideResend(failed)).toMatchObject({ allowed: true });
     const buttons = operatorInvoiceButtons({ ...failed, openSent: false, evidence: false });
     expect(buttons.requeue.enabled).toBe(true);
     expect(buttons.reset.enabled).toBe(true);
     // Klient: oba przyciski i zdanie bez obietnicy automatycznego ponowienia.
-    expect(failedInvoiceButtons({ status: 'failed', errorCode: 'NOT_IN_KSEF', invoiceKind: 'regular', canManage: true }))
+    expect(failedInvoiceButtons({ ...failed, canManage: true }))
       .toEqual({ resend: true, reset: true, settings: false, info: KSEF_SEND_MESSAGES.notInKsef });
     expect(error.message).toContain(KSEF_SEND_MESSAGES.notInKsef);
   });

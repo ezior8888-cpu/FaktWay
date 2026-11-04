@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PR C0: generateCorrectionInvoiceXml (FaktFlow, KOR przed/po) jak w tests/unit/korekta-nr-ksef-xsd.test.ts. Plik statyczny: nie regenerować. -->
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaFa>2026-10-02T10:00:00Z</DataWytworzeniaFa>
+    <SystemInfo>KSeF SaaS v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>1234567890</NIP>
+      <Nazwa>Firma testowa sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Testowa 1</AdresL1>
+      <AdresL2>00-001 Warszawa</AdresL2>
+    </Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <NIP>1111111111</NIP>
+      <Nazwa>Nabywca testowy sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Testowa 2</AdresL1>
+      <AdresL2>00-002 Warszawa</AdresL2>
+    </Adres>
+    <JST>2</JST>
+    <GV>2</GV>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-10-02</P_1>
+    <P_2>FK/C0/1</P_2>
+    <P_13_1>-200.00</P_13_1>
+    <P_14_1>-46.00</P_14_1>
+    <P_15>-246.00</P_15>
+    <Adnotacje>
+      <P_16>2</P_16>
+      <P_17>2</P_17>
+      <P_18>2</P_18>
+      <P_18A>2</P_18A>
+      <Zwolnienie>
+        <P_19N>1</P_19N>
+      </Zwolnienie>
+      <NoweSrodkiTransportu>
+        <P_22N>1</P_22N>
+      </NoweSrodkiTransportu>
+      <P_23>2</P_23>
+      <PMarzy>
+        <P_PMarzyN>1</P_PMarzyN>
+      </PMarzy>
+    </Adnotacje>
+    <RodzajFaktury>KOR</RodzajFaktury>
+    <PrzyczynaKorekty>Zmiana ilości po reklamacji</PrzyczynaKorekty>
+    <TypKorekty>2</TypKorekty>
+    <DaneFaKorygowanej>
+      <DataWystFaKorygowanej>2026-09-30</DataWystFaKorygowanej>
+      <NrFaKorygowanej>FV/C0/23</NrFaKorygowanej>
+      <NrKSeF>1</NrKSeF>
+      <NrKSeFFaKorygowanej>1234567890-20260930-0100001AF629-AF</NrKSeFFaKorygowanej>
+    </DaneFaKorygowanej>
+    <FaWiersz>
+      <NrWierszaFa>1</NrWierszaFa>
+      <P_7>Usługa wdrożeniowa</P_7>
+      <P_8A>szt.</P_8A>
+      <P_8B>10.0000</P_8B>
+      <P_9A>100.0000</P_9A>
+      <P_11>1000.00</P_11>
+      <P_12>23</P_12>
+      <StanPrzed>1</StanPrzed>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>2</NrWierszaFa>
+      <P_7>Usługa wdrożeniowa</P_7>
+      <P_8A>szt.</P_8A>
+      <P_8B>8.0000</P_8B>
+      <P_9A>100.0000</P_9A>
+      <P_11>800.00</P_11>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <Platnosc>
+      <TerminPlatnosci>
+        <Termin>2026-10-16</Termin>
+      </TerminPlatnosci>
+      <FormaPlatnosci>6</FormaPlatnosci>
+    </Platnosc>
+  </Fa>
+</Faktura>

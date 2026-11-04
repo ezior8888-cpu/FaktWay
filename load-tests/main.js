@@ -13,7 +13,7 @@ import { journey as bulkJourney } from './scenarios/bulk-importer.js';
 // "N concurrent users" z Definition of Done.
 //
 //   k6 run load-tests/main.js -e PROFILE=target \
-//     -e BASE_URL=https://test.faktflow.pl \
+//     -e BASE_URL=https://test.faktway.pl \
 //     -e LOAD_TEST_PASSWORD=... -e TURNSTILE_BYPASS_TOKEN=...
 
 export const options = standaloneOptions();

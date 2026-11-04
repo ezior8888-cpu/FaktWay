@@ -128,6 +128,8 @@ export function ReminderConsentDialog({ source, onClose, onSent }: {
                   className="break-all underline underline-offset-4">Pobierz i sprawdź: {prepared.preview.attachment.filename}</a>
               </div>
             ) : <p className="text-xs text-muted-foreground">Bez załączników.</p>}
+            {/* Poprawka Bartosza 21.10.2026: zdanie z usuniętej noty „Po terminie” stoi przy zgodzie. */}
+            <p className="text-xs text-muted-foreground">Przed zatwierdzeniem sprawdź aktualne saldo faktury — wpłata mogła już wpłynąć.</p>
             <label htmlFor={id + '-confirm'} className="flex items-start gap-2">
               <input id={id + '-confirm'} type="checkbox" checked={confirmed} disabled={busy || expired}
                 onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />

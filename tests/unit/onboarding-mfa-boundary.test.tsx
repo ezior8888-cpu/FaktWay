@@ -4,11 +4,12 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(), createAdminClient: vi.fn(), cookies: vi.fn(), setCookie: vi.fn(),
   getSession: vi.fn(), getUser: vi.fn(), getClaims: vi.fn(), from: vi.fn(), rpc: vi.fn(),
   audit: vi.fn(), gus: vi.fn(), stripe: vi.fn(), enqueue: vi.fn(), upload: vi.fn(),
+  pause: vi.fn(), revalidate: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient, createAdminClient: mocks.createAdminClient }));
 vi.mock('next/headers', () => ({ cookies: mocks.cookies }));
 vi.mock('next/navigation', () => ({ redirect: (path: string) => { throw new Error('redirect:' + path); } }));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
 vi.mock('@/lib/dashboard-shell-data', () => ({
@@ -22,24 +23,22 @@ vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: mocks.enqueue }));
 vi.mock('@/lib/import/file-storage', () => ({ uploadImportFile: mocks.upload }));
 vi.mock('@/lib/jobs/error-message', () => ({ formatJobSendError: () => 'fixture failure' }));
 vi.mock('@/lib/jobs/events', () => ({
-  importKsefHistoryRequested: { create: (data: unknown) => ({ name: 'ksef', data }) },
   importFileUploaded: { create: (data: unknown) => ({ name: 'file', data }) },
 }));
+vi.mock('@/lib/ksef/history-sync/client-pause', () => ({ setKsefHistoryClientPause: mocks.pause }));
 vi.mock('@/components/onboarding/form', () => ({ OnboardingForm: () => null }));
 vi.mock('@/components/onboarding/import-source-selector', () => ({ ImportSourceSelector: () => null }));
-vi.mock('@/components/onboarding/magic-import-form', () => ({ MagicImportForm: () => null }));
 vi.mock('@/components/onboarding/import-progress-view', () => ({ ImportProgressView: () => null }));
 vi.mock('@/components/invite/invite-accept-form', () => ({ InviteAcceptForm: () => null }));
-vi.mock('@/components/brand/brand-wordmark', () => ({ BrandWordmark: () => null }));
+vi.mock('@/components/brand/faktway-logo', () => ({ FaktWayLogo: () => null, FaktWayMark: () => null }));
 vi.mock('next/link', () => ({ default: () => null }));
 vi.mock('lucide-react', () => ({ ArrowLeft: () => null, CheckCircle2: () => null }));
 
 import { createOrganizationAction, skipOnboardingWithoutNipAction, acceptInvitationAction, requestJoinAction } from '@/app/actions/organizations';
 import { lookupNipAction } from '@/components/onboarding/actions';
-import { startMagicImportAction, startFileImportAction } from '@/app/onboarding/magic-import/actions';
+import { setKsefHistoryPausedAction, startFileImportAction } from '@/app/actions/import-danych';
 import OnboardingPage from '@/app/onboarding/page';
 import ImportSourcePage from '@/app/onboarding/import-source/page';
-import MagicImportPage from '@/app/onboarding/magic-import/page';
 import ProgressPage from '@/app/onboarding/progress/[jobId]/page';
 import InviteLandingPage from '@/app/invite/[token]/page';
 import { getVerifiedUserContext } from '@/lib/auth/verified-user';
@@ -55,6 +54,7 @@ let aal: string;
 let factorType: string | null;
 let selectedOrg: string | null;
 let activeMember: boolean;
+let memberRole: string;
 type QueryLog = { table: string; operation: string; filters: Record<string, unknown>; payload?: unknown };
 let queries: QueryLog[];
 
@@ -64,7 +64,7 @@ function query(table: string) {
   const result = (many = false) => {
     let data: unknown = null;
     if (table === 'memberships') {
-      data = activeMember ? { id: 'member', user_id: userId, role: 'owner', status: 'active', organization_id: org } : null;
+      data = activeMember ? { id: 'member', user_id: userId, role: memberRole, status: 'active', organization_id: org } : null;
     } else if (table === 'tenants') {
       data = { id: org, nip: company.nip, name: company.name, ksef_credentials_encrypted: 'fixture-encrypted' };
     } else if (table === 'import_jobs') {
@@ -92,7 +92,7 @@ function query(table: string) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
-  aal = 'aal2'; factorType = 'totp'; selectedOrg = org; activeMember = true; queries = [];
+  aal = 'aal2'; factorType = 'totp'; selectedOrg = org; activeMember = true; memberRole = 'owner'; queries = [];
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: token, user: { id: 'forged', factors: [] } } }, error: null });
   mocks.getUser.mockImplementation(async () => ({ data: { user: {
     id: userId, email: 'user@example.test',
@@ -111,6 +111,7 @@ beforeEach(() => {
   mocks.rpc.mockResolvedValue({ data: org, error: null });
   mocks.upload.mockResolvedValue('fixture/import.csv');
   mocks.gus.mockResolvedValue({ kind: 'success', data: company });
+  mocks.pause.mockResolvedValue({ ok: true, pausedAt: '2026-10-22T10:00:00Z' });
 });
 
 function uploadForm(tenantId = org) {
@@ -125,7 +126,6 @@ const actions = [
   { name: 'accept invitation', invoke: () => acceptInvitationAction(inviteToken) },
   { name: 'request membership', invoke: () => requestJoinAction({ organizationId: org }) },
   { name: 'GUS lookup', invoke: () => lookupNipAction(company.nip) },
-  { name: 'KSeF import', invoke: () => startMagicImportAction(org, 3) },
   { name: 'file import', invoke: () => startFileImportAction(uploadForm()) },
 ];
 function expectNoEffects() {
@@ -138,6 +138,7 @@ function expectNoEffects() {
   expect(mocks.enqueue).not.toHaveBeenCalled();
   expect(mocks.audit).not.toHaveBeenCalled();
   expect(mocks.setCookie).not.toHaveBeenCalled();
+  expect(mocks.pause).not.toHaveBeenCalled();
 }
 
 // The entry points, optional MFA helper and tenant guard are real; only IO is mocked.
@@ -185,15 +186,23 @@ it('accepts an invitation without requiring existing membership and preserves th
   expect(mocks.rpc).toHaveBeenCalledWith('accept_organization_invitation', { p_token_hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
   expect(mocks.setCookie).toHaveBeenCalledWith(expect.objectContaining({ value: org }));
 });
-describe.each(['ksef', 'file'])('%s import', (kind) => {
-  const invoke = (tenantId = org) => kind === 'ksef' ? startMagicImportAction(tenantId, 3) : startFileImportAction(uploadForm(tenantId));
+describe('file import', () => {
+  const invoke = (tenantId = org) => startFileImportAction(uploadForm(tenantId));
   it.each(['aal2', 'no-factor'])('works for a verified active member with %s', async (state) => {
     if (state === 'no-factor') { aal = 'aal1'; factorType = null; }
     await expect(invoke()).resolves.toEqual({ success: true, importJobId: 'job' });
     expect(queries[0]).toMatchObject({ table: 'memberships', filters: { user_id: userId, organization_id: org, status: 'active' } });
     expect(queries).toContainEqual(expect.objectContaining({ table: 'import_jobs', operation: 'insert', payload: expect.objectContaining({ tenant_id: org, triggered_by: userId }) }));
     expect(mocks.enqueue).toHaveBeenCalledOnce();
-    expect(mocks.upload).toHaveBeenCalledTimes(kind === 'file' ? 1 : 0);
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(mocks.revalidate).toHaveBeenCalledWith('/import-danych');
+  });
+  // Decyzja Bartosza 22.10.2026: tylko cztery programy — JPK_FA i nieznane źródła odpadają przed IO.
+  it.each(['jpk_fa', 'ksef_history', 'other'])('rejects the %s source before import IO', async (source) => {
+    const form = uploadForm(); form.set('source', source);
+    await expect(startFileImportAction(form)).resolves.toEqual({ success: false, error: 'Nieobsługiwane źródło pliku.' });
+    expect(queries.every((entry) => entry.table === 'memberships')).toBe(true);
+    expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.upload).not.toHaveBeenCalled();
   });
   it('rejects a revoked or missing membership before import IO', async () => {
     activeMember = false;
@@ -211,7 +220,6 @@ describe.each(['ksef', 'file'])('%s import', (kind) => {
 const pages = [
   { name: 'onboarding', invoke: () => OnboardingPage({ searchParams: Promise.resolve({ invite: inviteToken, action: 'invite' as const }) }), returnTo: '/onboarding?invite=' + inviteToken + '&action=invite' },
   { name: 'import source', invoke: () => ImportSourcePage(), returnTo: '/onboarding/import-source' },
-  { name: 'magic import', invoke: () => MagicImportPage({ searchParams: Promise.resolve({ tenantId: org }) }), returnTo: '/onboarding/magic-import?tenantId=' + org },
   { name: 'progress', invoke: () => ProgressPage({ params: Promise.resolve({ jobId: 'job' }) }), returnTo: '/onboarding/progress/job' },
   { name: 'invitation', invoke: () => InviteLandingPage({ params: Promise.resolve({ token: inviteToken }) }), returnTo: '/invite/' + inviteToken },
 ];
@@ -240,6 +248,111 @@ it('the bootstrap helper does not read an organization or instantiate service-ro
 it('progress explicitly scopes the job to the active organization', async () => {
   await ProgressPage({ params: Promise.resolve({ jobId: 'job' }) });
   expect(queries).toContainEqual(expect.objectContaining({ table: 'import_jobs', filters: { id: 'job', tenant_id: org } }));
+});
+// Poprawka po przeglądzie (decyzja Bartosza 22.10.2026): dawny import z KSeF
+// (tu „pending” — jego kolejki już nie ma) nie „importuje w tle” — panel mówi,
+// że zastąpiło go automatyczne pobieranie historii.
+it('progress of a legacy KSeF import does not promise finishing in the background', async () => {
+  const page = await ProgressPage({ params: Promise.resolve({ jobId: 'job' }) });
+  const props = (page as { props: { panelTitle: string; panelText: string } }).props;
+  expect(props.panelText).not.toMatch(/skończymy w tle/);
+  expect(props.panelText).toContain('Imporcie danych');
+  expect(props.panelTitle).not.toBe('Importujemy Twoje dane');
+});
+
+// Decyzja Bartosza 22.10.2026: wstrzymanie pobierania historii z KSeF — tylko
+// właściciel z potwierdzonym 2FA (ta sama granica co wgrywanie certyfikatu).
+// Każda odmowa wraca na `/import-danych?wstrzymanie=blad` bez zapisu.
+describe('KSeF history pause', () => {
+  const PAUSE_ERROR = 'redirect:/import-danych?wstrzymanie=blad';
+  function pauseForm(value: string | null = '1') {
+    const form = new FormData();
+    if (value !== null) form.set('paused', value);
+    return form;
+  }
+
+  it.each(['totp', 'phone', 'webauthn'])('denies AAL1 with verified %s before any IO', async (factor) => {
+    aal = 'aal1'; factorType = factor;
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);
+    expectNoEffects();
+  });
+  it('denies a missing session before IO', async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);
+    expectNoEffects();
+  });
+  it('fails closed on an Auth outage', async () => {
+    mocks.getClaims.mockRejectedValue(new Error('internal-sensitive-error'));
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);
+    expectNoEffects();
+  });
+  // Poprawka po przeglądzie (decyzja Bartosza 22.10.2026): właściciel bez
+  // potwierdzonego 2FA dostaje osobny wynik (`?wstrzymanie=2fa`) — ekran mówi,
+  // co włączyć, zamiast „spróbuj ponownie”, które nigdy by nie pomogło.
+  it.each(['1', '0'])('requires enrolled and verified MFA even for an owner without a factor (paused=%s)', async (value) => {
+    aal = 'aal1'; factorType = null;
+    await expect(setKsefHistoryPausedAction(pauseForm(value))).rejects.toThrow(/^redirect:\/import-danych\?wstrzymanie=2fa$/);
+    expect(mocks.pause).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+  it('an AAL2 token without a TOTP factor is also sent to set up 2FA', async () => {
+    aal = 'aal2'; factorType = null;
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(/^redirect:\/import-danych\?wstrzymanie=2fa$/);
+    expect(mocks.pause).not.toHaveBeenCalled();
+  });
+  // Logowanie biometrią (FW1): właściciel ma 2FA i wszedł do panelu ze znacznikiem.
+  // „Ustaw 2FA” byłoby tu nieprawdą, więc prowadzimy prosto na ekran kodu i z powrotem.
+  it('a passkey session (panel marker) goes to the code screen and back, without writing', async () => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'fixture-service-role-key-do-testow');
+    const { createPasskeySessionMarker } = await import('@/lib/auth/passkey/session-marker');
+    const marker = await createPasskeySessionMarker({ sub: userId, sessionId: 'session-a' });
+    aal = 'aal1'; factorType = 'totp';
+    mocks.getClaims.mockImplementation(async () => ({ data: { claims: { sub: userId, aal, session_id: 'session-a' } }, error: null }));
+    mocks.cookies.mockResolvedValue({
+      get: (key: string) => key === ACTIVE_ORG_COOKIE ? { value: org }
+        : key === 'ksef.passkey_session' ? { value: marker } : undefined,
+      set: mocks.setCookie,
+    });
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow('redirect:/login/two-factor?redirect=%2Fimport-danych&potwierdzenie=1');
+    expect(mocks.pause).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+  it.each(['admin', 'member', 'accountant'])('denies the %s role', async (role) => {
+    memberRole = role;
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);
+    expect(mocks.pause).not.toHaveBeenCalled();
+  });
+  it.each([null, '', 'tak', 'true'])('rejects the paused value %s before auth', async (value) => {
+    await expect(setKsefHistoryPausedAction(pauseForm(value))).rejects.toThrow(PAUSE_ERROR);
+    expectNoEffects();
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+  it('denies when the KSeF environment is not safely configured', async () => {
+    vi.stubEnv('KSEF_ENV', 'nieznane');
+    await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);
+    expect(mocks.pause).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['write-failed', () => mocks.pause.mockResolvedValue({ ok: false, reason: 'write-failed' })],
+    ['throw', () => mocks.pause.mockRejectedValue(new Error('db down'))],
+  ])('a failed write (%s) comes back as the error message', async (_name, arrange) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      arrange();
+      await expect(setKsefHistoryPausedAction(pauseForm())).rejects.toThrow(PAUSE_ERROR);
+      expect(mocks.pause).toHaveBeenCalledOnce();
+    } finally {
+      error.mockRestore();
+    }
+  });
+  it.each([['1', true], ['0', false]] as const)('a verified owner sets paused=%s for the active organization', async (value, paused) => {
+    // Sukces wraca na czysty adres (bez starego „?wstrzymanie=blad”).
+    await expect(setKsefHistoryPausedAction(pauseForm(value))).rejects.toThrow(/^redirect:\/import-danych$/);
+    expect(mocks.pause).toHaveBeenCalledExactlyOnceWith({ tenantId: org, environment: 'test', paused, userId });
+    expect(mocks.revalidate).toHaveBeenCalledWith('/import-danych');
+    expect(mocks.getClaims.mock.invocationCallOrder[0]).toBeLessThan(mocks.pause.mock.invocationCallOrder[0]!);
+  });
 });
 
 afterEach(() => {

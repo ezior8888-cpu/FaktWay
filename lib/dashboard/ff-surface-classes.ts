@@ -1,5 +1,5 @@
 /**
- * Panele i tabele dashboardu — metryki 1:1 z prototypu „FaktFlow Dashboard".
+ * Panele i tabele dashboardu — metryki 1:1 z prototypu „FaktWay Dashboard".
  *
  * Prototyp opisuje tabelę jako: karta `#12171f` w ramce `#1c2230` (radius 16),
  * pasek narzędzi i nagłówek oddzielone tą samą ramką, wiersze rozdzielone

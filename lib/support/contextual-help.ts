@@ -20,7 +20,7 @@ interface RouteHelp {
 const ROUTE_HELP: RouteHelp[] = [
   {
     prefix: '/settings/billing',
-    slugs: ['plany-i-cennik', 'okres-probny-trial', 'platnosci-i-faktury-za-faktflow'],
+    slugs: ['plany-i-cennik', 'okres-probny-trial', 'platnosci-i-faktury-za-faktway'],
   },
   {
     prefix: '/settings/security',
@@ -32,7 +32,7 @@ const ROUTE_HELP: RouteHelp[] = [
   },
   {
     prefix: '/settings/ksef',
-    slugs: ['konfiguracja-certyfikatu-ksef', 'srodowisko-testowe-ksef'],
+    slugs: ['podlaczenie-ksef-krok-po-kroku', 'konfiguracja-certyfikatu-ksef', 'srodowisko-testowe-ksef'],
   },
   {
     prefix: '/settings/accountant',
@@ -51,6 +51,34 @@ const ROUTE_HELP: RouteHelp[] = [
     slugs: ['jak-wystawic-pierwsza-fakture', 'statusy-faktury-i-upo', 'najczestsze-bledy-ksef'],
   },
   {
+    prefix: '/inbox',
+    slugs: ['statusy-faktury-i-upo', 'kategoryzacja-kosztow', 'czym-jest-ksef'],
+  },
+  {
+    prefix: '/contractors',
+    slugs: ['jak-wystawic-pierwsza-fakture'],
+  },
+  {
+    prefix: '/payments/overdue',
+    slugs: ['statusy-faktury-i-upo'],
+  },
+  {
+    prefix: '/przeplywy',
+    slugs: ['pierwsze-kroki-w-faktway', 'ksiega-przychodow-i-rozchodow'],
+  },
+  {
+    prefix: '/analizy/koszty',
+    slugs: ['kategoryzacja-kosztow', 'ksiega-przychodow-i-rozchodow'],
+  },
+  {
+    prefix: '/analizy/sprzedaz',
+    slugs: ['statusy-faktury-i-upo', 'pierwsze-kroki-w-faktway'],
+  },
+  {
+    prefix: '/import-danych',
+    slugs: ['magic-import-z-innych-programow'],
+  },
+  {
     prefix: '/expenses',
     slugs: ['skanowanie-paragonow-ocr', 'kategoryzacja-kosztow'],
   },
@@ -60,7 +88,7 @@ const ROUTE_HELP: RouteHelp[] = [
   },
   {
     prefix: '/dashboard',
-    slugs: ['pierwsze-kroki-w-faktflow', 'czym-jest-ksef'],
+    slugs: ['pierwsze-kroki-w-faktway', 'czym-jest-ksef'],
   },
 ];
 

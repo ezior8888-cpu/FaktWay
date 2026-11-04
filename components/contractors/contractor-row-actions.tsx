@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Pencil, Trash2 } from 'lucide-react';
+import { RiDeleteBinLine, RiLoader4Line, RiPencilLine } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { deleteContractorAction, updateContractorAction } from '@/app/actions/contractors';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -66,13 +67,27 @@ export function ContractorRowActions({ contractor }: Props) {
   };
 
   return (
-    <div className="flex items-center justify-end gap-1">
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)} aria-label="Edytuj kontrahenta">
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="sm" onClick={remove} disabled={deleting} aria-label="Usuń kontrahenta">
-        {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-      </Button>
+    <div className="flex items-center justify-center gap-1">
+      <Tooltip>
+        <TooltipTrigger
+          render={<Button variant="ghost" size="icon" onClick={() => setOpen(true)} aria-label="Edytuj kontrahenta" />}
+        >
+          <RiPencilLine className="size-4.5" />
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Edytuj</p>
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={<Button variant="ghost" size="icon" onClick={remove} disabled={deleting} aria-label="Usuń kontrahenta" />}
+        >
+          {deleting ? <RiLoader4Line className="size-4.5 animate-spin" /> : <RiDeleteBinLine className="size-4.5" />}
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Usuń</p>
+        </TooltipContent>
+      </Tooltip>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -105,7 +120,7 @@ export function ContractorRowActions({ contractor }: Props) {
               Anuluj
             </Button>
             <Button onClick={save} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {saving && <RiLoader4Line className="animate-spin" aria-hidden />}
               Zapisz
             </Button>
           </DialogFooter>

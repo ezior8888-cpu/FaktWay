@@ -4,9 +4,17 @@ import { Eye, Download } from 'lucide-react';
 import { AccountantExportButtons } from '@/components/exports/accountant-export-buttons';
 import { loadAccountantPortal } from '@/lib/accountant/load-accountant-portal';
 import { AccountantInvoiceList } from '@/components/accountant/invoice-list';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatTimestampDatePl } from '@/lib/format/iso-date';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Portal księgowej (oglądają go ludzie spoza firmy). Plan Finora §2.2/E8:
+ * tylko Card i Table Finory, bez szkieletu panelu. `referrer: 'no-referrer'`
+ * z `app/accountant/layout.tsx` zostaje — token jest w adresie.
+ */
 export default async function AccountantPortalPage({
   params,
 }: {
@@ -21,58 +29,52 @@ export default async function AccountantPortalPage({
   const { access, tenant, invoices } = data;
 
   return (
-    <div className="min-h-screen bg-mesh-surface p-4 lg:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-
-        {/* Header card */}
-        <div className="rounded-3xl border border-white/55 dark:border-white/14 bg-white/62 dark:bg-[rgba(15,10,30,0.62)] backdrop-blur-[40px] shadow-[0_16px_48px_0_rgba(31,38,135,0.12)] p-8 lg:p-10">
-          <div className="flex items-start justify-between gap-6 flex-wrap">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                Faktury udostępnione przez
-              </p>
-              <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight">
-                {tenant?.name}
-              </h1>
-              <p className="text-sm text-muted-foreground font-mono">
-                NIP: {tenant?.nip}
-              </p>
+    <div className="bg-background text-foreground min-h-screen p-4 lg:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <Card className="shadow-none">
+          <CardContent className="flex flex-wrap items-start justify-between gap-6">
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs">Faktury udostępnione przez</p>
+              <h1 className="text-2xl font-semibold tracking-tight">{tenant?.name}</h1>
+              <p className="text-muted-foreground font-mono text-sm">NIP: {tenant?.nip}</p>
             </div>
-            <div className="text-right space-y-1.5">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-foreground/5 border border-white/55 dark:border-white/14 text-xs font-medium">
+            <div className="space-y-1.5 text-right">
+              <Badge variant="secondary" className="font-normal">
                 {access.access_level === 'download' ? (
                   <>
-                    <Download className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>Z pobieraniem</span>
+                    <Download aria-hidden />
+                    Z pobieraniem
                   </>
                 ) : (
                   <>
-                    <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>Tylko podgląd</span>
+                    <Eye aria-hidden />
+                    Tylko podgląd
                   </>
                 )}
-              </div>
-              <p className="text-xs text-muted-foreground">
+              </Badge>
+              <p className="text-muted-foreground text-xs">
                 Dostęp dla:{' '}
-                <span className="font-medium text-foreground">{access.accountant_name}</span>
+                <span className="text-foreground font-medium">{access.accountant_name}</span>
               </p>
-              <p className="text-xs text-muted-foreground">
-                Wygasa: {new Date(access.expires_at).toLocaleDateString('pl-PL')}
+              <p className="text-muted-foreground text-xs">
+                Wygasa: {formatTimestampDatePl(access.expires_at)}
               </p>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {access.access_level === 'download' ? (
-          <section className="rounded-3xl border border-glass-border bg-glass-white backdrop-blur-glass shadow-glass p-6">
-            <h2 className="text-lg font-display font-semibold mb-4 tracking-tighter-text">
-              Pobierz dane księgowe
-            </h2>
-            <AccountantExportButtons
-              tenantId={access.tenant_id}
-              accessToken={rawToken}
-            />
-          </section>
+          <Card className="shadow-none">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Pobierz dane księgowe</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AccountantExportButtons
+                tenantId={access.tenant_id}
+                accessToken={rawToken}
+              />
+            </CardContent>
+          </Card>
         ) : null}
 
         <AccountantInvoiceList
@@ -81,8 +83,8 @@ export default async function AccountantPortalPage({
           token={rawToken}
         />
 
-        <div className="text-center pt-4 pb-2">
-          <p className="text-xs text-muted-foreground">Powered by KSeF SaaS</p>
+        <div className="pt-4 pb-2 text-center">
+          <p className="text-muted-foreground text-xs">Powered by FaktWay</p>
         </div>
       </div>
     </div>

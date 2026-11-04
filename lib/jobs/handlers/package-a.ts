@@ -1,5 +1,5 @@
 /**
- * Paczka A (Etap 7.3): 12 cronów utrzymaniowych — rejestracje pg-boss.
+ * Paczka A (Etap 7.3): 14 cronów utrzymaniowych — rejestracje pg-boss.
  *
  * Runnery żyją w lib/jobs/runners/*. Kolejki cron.* planuje worker wg
  * CRON_JOBS z lib/jobs/queues.ts (harmonogramy przeniesione 1:1 z dawnych
@@ -21,6 +21,7 @@ import { runKsefLifecycleReconcile } from '../runners/ksef-lifecycle-reconcile';
 import { runKsefLifecycleReport } from '../runners/ksef-lifecycle-report';
 import { runNightlyValidationRecheck } from '../runners/nightly-validation-recheck';
 import { runRetentionDelete } from '../runners/retention-delete';
+import { runSupportChatRetention } from '../runners/support-chat-retention';
 import { runVerifyBackup } from '../runners/verify-backup';
 import { registerJob, type JobContext } from '../registry';
 
@@ -41,7 +42,9 @@ function cronJob(
 
 cronJob('cron.archive-old-invoices', runArchiveOldInvoices);
 cronJob('cron.cert-expiry-alert', runCertExpiryAlert);
-cronJob('cron.cleanup-audit-logs', runCleanupAuditLogs);
+// Sprzątanie dzienników paczkami (00157): ponowienie od zera powtarza cały
+// 10-minutowy budżet, więc 1 retry (błąd przejściowy); resztę bierze następna noc.
+cronJob('cron.cleanup-audit-logs', runCleanupAuditLogs, 1);
 cronJob('cron.cleanup-old-backups', runCleanupOldBackups);
 cronJob('cron.daily-db-snapshot', runDailyDbSnapshot);
 cronJob('cron.gdpr-process-deletions', runGdprProcessDeletions);
@@ -57,4 +60,6 @@ cronJob(
   1, // parytet: retries: 1 w konfiguracji Inngest tego joba
 );
 cronJob('cron.retention-delete', runRetentionDelete);
+// Retencja czatu pomocy (polityka prywatności, 24 mies.): przebieg idempotentny.
+cronJob('cron.support-chat-retention', runSupportChatRetention);
 cronJob('cron.verify-backup', runVerifyBackup);

@@ -2,6 +2,8 @@ import { NonRetriableError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { EnqueueKsefSubmitParams } from '@/lib/invoices/ksef-submit-enqueue';
+import type { KsefSendMode } from '@/lib/invoices/ksef-send-step';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 
@@ -16,6 +18,7 @@ import type { Invoice } from '@/types/invoice';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const USER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const mocks = vi.hoisted(() => ({
   flag: vi.fn(),
@@ -30,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   sendEvent: vi.fn(),
   invoice: {} as Record<string, unknown>,
   updates: [] as Array<Record<string, unknown>>,
+  /** Blob certyfikatu firmy (`tenants.ksef_credentials_encrypted`); null = brak certyfikatu. */
+  blob: null as unknown,
 }));
 
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: mocks.flag }));
@@ -72,7 +77,9 @@ vi.mock('@/lib/supabase/admin-queries', () => ({
   updateInvoiceStatus: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createAdminClient: async () => {
+  // Prawdziwy `createAdminClient` jest synchroniczny (`lib/supabase/server.ts`):
+  // runner woła go z `await`, enqueue bez — mock musi obsłużyć obie drogi.
+  createAdminClient: () => {
     let patch: Record<string, unknown> | null = null;
     const q = {
       select: () => q,
@@ -93,19 +100,43 @@ vi.mock('@/lib/supabase/server', () => ({
         return Promise.resolve({ data: null, error: null }).then(resolve);
       },
     };
+    // Blob certyfikatu czyta enqueue kluczem serwisowym (00112, AUD-103).
+    const tenants = {
+      select: () => tenants,
+      eq: () => tenants,
+      single: async () => ({ data: { ksef_credentials_encrypted: mocks.blob }, error: null }),
+    };
     // Przejęcie wysyłki (AUD-10, 00124) — w tych testach zawsze wolne.
-    return { from: () => q, rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? '2026-10-02T12:00:00.000000+00:00' : null, error: null }), };
+    return {
+      from: (table: string) => (table === 'tenants' ? tenants : q),
+      rpc: async (fn: string) => ({ data: fn === 'claim_ksef_send' ? '2026-10-02T12:00:00.000000+00:00' : null, error: null }),
+    };
   },
 }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
-import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import {
+  enqueueKsefSubmitAfterDraft,
+  type KsefSubmitEnqueueResult,
+} from '@/lib/invoices/ksef-submit-enqueue';
+import {
+  resendMissingCredentialsMessage,
+  resendPausedMessage,
+  resendPauseUnknownMessage,
+} from '@/lib/invoices/ksef-send-policy';
+import { onSubmitInvoiceExhausted, runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
+import { classifySendError } from '@/lib/ksef/send-error-codes';
+import {
+  heldErrorMessage,
+  KOR_HOLD,
+  KOR_HOLD_JOB_MESSAGE,
   KOR_HOLD_MESSAGE,
+  KSEF_PAUSED,
+  KSEF_PAUSED_JOB_MESSAGE,
   KSEF_PAUSED_MESSAGE,
+  KSEF_PAUSED_SPECIAL_JOB_MESSAGE,
 } from '@/lib/ksef/submission-holds';
 import {
   assertPgBossWorkerBackend,
@@ -116,17 +147,33 @@ import { isAnthropicMocked, isGusMocked, isKsefMocked, isResendMocked } from '@/
 
 const noDatabaseAccess = { from: vi.fn() } as unknown as SupabaseClient;
 
-function enqueueParams(type: Invoice['type'], auditKind: 'regular' | 'correction') {
+function enqueueParams(
+  type: Invoice['type'],
+  auditKind: EnqueueKsefSubmitParams['auditKind'],
+  mode?: KsefSendMode,
+) {
   return {
     supabase: noDatabaseAccess,
     tenantId: TENANT,
-    userId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    userId: USER,
     invoiceId: ID,
     nip: '1234567890',
     environment: 'test' as const,
     invoice: { type, internalNumber: 'FK/1' } as Invoice,
     auditKind,
+    ...(mode ? { mode } : {}),
   };
+}
+
+/** „Wyślij ponownie” klienta przy fakturze `failed` (K3): ten sam enqueue w trybie ponowienia. */
+function resendParams(type: Invoice['type'], auditKind: EnqueueKsefSubmitParams['auditKind']) {
+  return enqueueParams(type, auditKind, { kind: 'requeue', actorUserId: USER });
+}
+
+/** Treść odmowy enqueue; sukces tam, gdzie test oczekuje odmowy, to błąd testu. */
+function refusal(result: KsefSubmitEnqueueResult): string {
+  if (result.ok) throw new Error(`oczekiwano odmowy, jest ${result.mode}`);
+  return result.error;
 }
 
 const ctx: JobContext = {
@@ -169,6 +216,7 @@ beforeEach(() => {
     fa3_data: { type: 'VAT', internalNumber: 'FV/1', issueDate: '2026-10-01' },
   };
   mocks.updates = [];
+  mocks.blob = null;
   vi.stubEnv('KSEF_ENV', 'test');
 });
 
@@ -193,6 +241,100 @@ describe('wyłącznik wysyłek przy kolejkowaniu', () => {
     const result = await enqueueKsefSubmitAfterDraft(enqueueParams('VAT', 'regular'));
     expect(result.ok).toBe(false);
     expect(mocks.verification).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A4b PR2b (spec §2.3): „Wyślij ponownie” przy fakturze `failed` idzie przez
+ * ten sam enqueue w trybie `requeue`. Odmowa nie zmienia stanu — faktura
+ * zostaje z błędem wysyłki, nie wraca do szkicu — więc tekst nie może mówić
+ * „zapisana jako szkic” (do PR2b mówiły tak: `KSEF_PAUSED_MESSAGE`, tekst
+ * awarii odczytu wyłącznika i `missingCredentialsMessage` w enqueue). Teksty
+ * pierwszej wysyłki szkicu (test wyłącznika wyżej, wyczerpanie prób niżej)
+ * zostają celowo bez zmian — pilnują ich strażniki.
+ */
+describe('ponowienie z failed — prawdziwe teksty odmowy enqueue (A4b PR2b)', () => {
+  it('włączony wyłącznik przy ponowieniu zwykłej faktury: bez „szkicu”, faktura zostaje z błędem wysyłki', async () => {
+    mocks.flag.mockResolvedValue(true);
+    const error = refusal(await enqueueKsefSubmitAfterDraft(resendParams('VAT', 'regular')));
+    expect(error).not.toMatch(/szkic/);
+    expect(error).toMatch(/nie wykonaliśmy/);
+    expect(error).toMatch(/zostaje z błędem wysyłki/);
+    expect(error).toBe(resendPausedMessage('regular'));
+    expect(mocks.flag).toHaveBeenCalledWith('killAllKsefSubmissions');
+    expect(mocks.verification).not.toHaveBeenCalled();
+    expect(mocks.health).not.toHaveBeenCalled();
+    expect(mocks.offline).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ZAL', 'advance'],
+    ['KOR', 'correction'],
+  ] as const)('włączony wyłącznik przy ponowieniu dokumentu specjalnego (%s, KSeF TEST): z kopii tylko dziś, w dniu wystawienia', async (type, kind) => {
+    mocks.flag.mockResolvedValue(true);
+    const error = refusal(await enqueueKsefSubmitAfterDraft(resendParams(type, kind)));
+    // Tekst specjalny może kazać „wrócić do szkicu” po dacie — ale nie twierdzi, że dokument nim jest.
+    expect(error).not.toMatch(/jako szkic|została zapisana/);
+    expect(error).toMatch(/nie wykonaliśmy/);
+    expect(error).toMatch(/zostaje z błędem wysyłki/);
+    expect(error).toMatch(/tylko dziś, w dniu wystawienia/);
+    expect(error).toBe(resendPausedMessage(kind));
+    expect(error).not.toBe(resendPausedMessage('regular'));
+    expect(mocks.verification).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['VAT', 'regular'],
+    ['ZAL', 'advance'],
+  ] as const)('awaria odczytu wyłącznika przy ponowieniu (%s): „nie wykonaliśmy”, nie „zapisana” (fail-closed)', async (type, kind) => {
+    mocks.flag.mockRejectedValue(new Error('baza niedostępna'));
+    const error = refusal(await enqueueKsefSubmitAfterDraft(resendParams(type, kind)));
+    expect(error).not.toMatch(/zapisana/);
+    expect(error).toMatch(/nie wykonaliśmy/);
+    expect(error).toBe(resendPauseUnknownMessage(kind));
+    expect(mocks.verification).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['VAT', 'regular'],
+    ['ZAL', 'advance'],
+  ] as const)('brak certyfikatu przy ponowieniu (%s): faktura zostaje z błędem wysyłki, nie „zapisana jako szkic”', async (type, kind) => {
+    mocks.blob = null;
+    const error = refusal(await enqueueKsefSubmitAfterDraft(resendParams(type, kind)));
+    expect(error).not.toMatch(/jako szkic|została zapisana/);
+    expect(error).toMatch(/nie wykonaliśmy/);
+    expect(error).toMatch(/zostaje z błędem wysyłki/);
+    expect(error).toBe(resendMissingCredentialsMessage(kind));
+    expect(mocks.verification).toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('strażnik: pierwsza wysyłka szkicu (jawny tryb enqueue, także faktura zaliczkowa) zostaje przy KSEF_PAUSED_MESSAGE', async () => {
+    mocks.flag.mockResolvedValue(true);
+    expect(await enqueueKsefSubmitAfterDraft(enqueueParams('VAT', 'regular', { kind: 'enqueue' })))
+      .toEqual({ ok: false, error: KSEF_PAUSED_MESSAGE });
+    expect(await enqueueKsefSubmitAfterDraft(enqueueParams('ZAL', 'advance')))
+      .toEqual({ ok: false, error: KSEF_PAUSED_MESSAGE });
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('strażnik: pierwsza wysyłka szkicu — awaria odczytu wyłącznika nadal mówi o zapisanej fakturze', async () => {
+    mocks.flag.mockRejectedValue(new Error('baza niedostępna'));
+    const error = refusal(await enqueueKsefSubmitAfterDraft(enqueueParams('VAT', 'regular')));
+    expect(error).toMatch(/Faktura została zapisana/);
+  });
+
+  it.each([
+    ['VAT', 'regular'],
+    ['ZAL', 'advance'],
+  ] as const)('strażnik: pierwsza wysyłka szkicu bez certyfikatu (%s) — nadal „zapisana jako szkic”', async (type, kind) => {
+    mocks.blob = null;
+    const error = refusal(await enqueueKsefSubmitAfterDraft(enqueueParams(type, kind)));
+    expect(error).toMatch(/zapisan[ya] jako szkic/);
     expect(mocks.send).not.toHaveBeenCalled();
   });
 });
@@ -256,8 +398,73 @@ describe('hamulce w jobie wysyłki', () => {
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(NonRetriableError);
     expect((error as Error).message).toMatch(/^\[KOR_HOLD\] /);
+    // A4b PR2b: KOR_HOLD nie ma przycisków klienta (decyzja a), a I7 wznawia
+    // tylko KSEF_PAUSED — tekst nad przyciskami nie obiecuje automatu.
+    expect((error as Error).message).not.toMatch(/automatycznie/);
     expect(mocks.health).not.toHaveBeenCalled();
     expect(mocks.fullFlow).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ZAL', 'advance'],
+    ['KOR', 'correction'],
+  ] as const)('włączony wyłącznik przy dokumencie specjalnym (%s, KSeF TEST): automat tylko w dniu wystawienia — także w last_error', async (type, kind) => {
+    mocks.flag.mockResolvedValue(true);
+    mocks.invoice.invoice_type = type;
+    mocks.invoice.invoice_kind = kind;
+    const error = await runSubmitInvoice(submitEvent(type), ctx).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(NonRetriableError);
+    const message = (error as Error).message;
+    expect(message).toMatch(/^\[KSEF_PAUSED\] /);
+    expect(message).not.toMatch(/wyjdzie automatycznie po przywróceniu/);
+    expect(message).toMatch(/w dniu ich wystawienia/);
+    expect(mocks.health).not.toHaveBeenCalled();
+    expect(mocks.fullFlow).not.toHaveBeenCalled();
+
+    // Wyczerpanie prób: ten tekst trafia do `last_error` nad przyciskami; kod bez zmian.
+    mocks.invoice.ksef_status = 'queued';
+    await onSubmitInvoiceExhausted(error as Error, submitEvent(type), ctx);
+    const failure = mocks.updates.find((u) => 'last_error' in u);
+    expect(failure).toMatchObject({ ksef_status: 'failed', last_error_code: 'KSEF_PAUSED' });
+    expect(failure?.last_error).toMatch(/w dniu ich wystawienia/);
+  });
+
+  it('strażnik: zwykła faktura przy włączonym wyłączniku zostaje przy dotychczasowym tekście joba', async () => {
+    mocks.flag.mockResolvedValue(true);
+    const error = await runSubmitInvoice(submitEvent(), ctx).catch((e: unknown) => e);
+    expect((error as Error).message).toBe(`[KSEF_PAUSED] ${KSEF_PAUSED_JOB_MESSAGE}`);
+  });
+});
+
+/**
+ * A4b PR2b (spec §2.5): `last_error` hamulca stoi nad przyciskami
+ * (`invoice-detail-view.tsx`). KOR_HOLD nie ma automatu ani przycisków
+ * klienta (decyzja a; I7 wznawia tylko KSEF_PAUSED), a KSEF_PAUSED przy
+ * KOR/ZAL wznawia się tylko w dniu wystawienia (decyzja b). Znaczniki `[KOD]`
+ * zostają — klasyfikator (`send-error-codes.ts`) ich nie zmienia.
+ */
+describe('teksty hamulców joba nie obiecują automatu, którego nie ma (A4b PR2b)', () => {
+  it('KOR_HOLD: „tej próby nie wykonaliśmy” i „sami nie wyślemy”, bez „automatycznie”', () => {
+    expect(KOR_HOLD_JOB_MESSAGE).not.toMatch(/automatycznie/);
+    expect(KOR_HOLD_JOB_MESSAGE).toMatch(/nie wykonaliśmy/);
+    expect(KOR_HOLD_JOB_MESSAGE).toMatch(/sami nie wyślemy/);
+    expect(heldErrorMessage(KOR_HOLD, 'correction')).toBe(`[KOR_HOLD] ${KOR_HOLD_JOB_MESSAGE}`);
+    expect(classifySendError(new NonRetriableError(heldErrorMessage(KOR_HOLD, 'correction'))).code).toBe('KOR_HOLD');
+  });
+
+  it.each(['advance', 'correction'])('KSEF_PAUSED przy dokumencie specjalnym (%s): automat tylko w dniu wystawienia, znacznik bez zmian', (kind) => {
+    const message = heldErrorMessage(KSEF_PAUSED, kind);
+    expect(message).toMatch(/^\[KSEF_PAUSED\] /);
+    expect(message).not.toMatch(/wyjdzie automatycznie po przywróceniu/);
+    expect(message).toMatch(/w dniu ich wystawienia/);
+    expect(message).toBe(`[KSEF_PAUSED] ${KSEF_PAUSED_SPECIAL_JOB_MESSAGE}`);
+    expect(classifySendError(new NonRetriableError(message)).code).toBe('KSEF_PAUSED');
+  });
+
+  it('strażnik: KSEF_PAUSED zwykłej faktury — tekst i znacznik bez zmian', () => {
+    expect(heldErrorMessage(KSEF_PAUSED)).toBe(`[KSEF_PAUSED] ${KSEF_PAUSED_JOB_MESSAGE}`);
+    expect(heldErrorMessage(KSEF_PAUSED, 'regular')).toBe(`[KSEF_PAUSED] ${KSEF_PAUSED_JOB_MESSAGE}`);
+    expect(classifySendError(new NonRetriableError(heldErrorMessage(KSEF_PAUSED))).code).toBe('KSEF_PAUSED');
   });
 });
 

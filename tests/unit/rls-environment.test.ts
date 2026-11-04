@@ -45,10 +45,47 @@ describe('separate RLS test configuration', () => {
       'tests/rls-kolejkowanie-wysylki.test.ts',
       // 00132: wyzwalacze po zacieśnieniu — klient nigdy nie pisze ksef_status.
       'tests/rls-cykl-wyzwalacze.test.ts',
+      // Sekcja 4a skryptu kontroli (zaległości Offline24) na schemacie po wszystkich migracjach.
+      'tests/rls-kontrola-offline24.test.ts',
       // 00133 (K4): jedna otwarta korekta na fakturę pierwotną.
       'tests/rls-korekta-jedna-otwarta.test.ts',
       // 00137 (A4b): special_data — kształt, zapis jednorazowy, przejścia 00131.
       'tests/rls-dane-specjalne.test.ts',
+      // 00148 (D-A4-1b-3 PR B): decyzja klienta przy cudzym 440, wycofany szkic, I5D.
+      'tests/rls-decyzja-duplikatu.test.ts',
+      // 00156 (D-A4-1b-3 PR C, dawniej rezerwacja 00149): zapis oryginału z oznaczeniem FaktWay, przegląd, oddanie, I5R/I3K.
+      'tests/rls-zapis-oryginalu.test.ts',
+      // 00156: procedura „Brak daty nadania” (I3K no_date) — skrypt SQL przez psql, jedna transakcja z audytem.
+      'tests/rls-oryginal-data-nadania.test.ts',
+      // 00150 (A5): dziennik prób wysyłki — tylko serwis, bez DELETE, nie jest dowodem kontaktu.
+      'tests/rls-dziennik-prob-wysylki.test.ts',
+      // Sekcja 12 skryptu kontroli (dziennik prób z 00150) liczy jak /admin/centrum/bledy.
+      'tests/rls-kontrola-dziennik-prob.test.ts',
+      // A5: procedura operatora dla faktury, która utknęła w wysyłce (I2/I1) — skrypt SQL przez psql.
+      'tests/rls-zwolnij-utknieta-wysylke.test.ts',
+      // 00152: faktura za abonament w obu nazwach produktu (FaktFlow, FaktWay).
+      'tests/rls-faktura-abonamentu-faktway.test.ts',
+      // Plan Finora E3: dzieci faktur (korekta, ROZ) przez prawdziwy PostgREST.
+      'tests/rls-dzieci-faktur.test.ts',
+      // Plan Finora E3 / C1: filtr płatności listy faktur (kilka or()) przez PostgREST.
+      'tests/rls-lista-faktur-platnosc.test.ts',
+      // 00153 (plan Finora E4, limit VAT): GRANT SELECT nowej kolumny tenants, CHECK, izolacja.
+      'tests/rls-data-rozpoczecia.test.ts',
+      // 00154 (plan Finora E9, N1): faktury cykliczne — izolacja firm, jeden okres, CHECK-i, SET NULL.
+      'tests/rls-faktury-cykliczne.test.ts',
+      // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
+      // CHECK-i, ksef_upo_expected i filtr osadzenia `invoices!inner` przez PostgREST.
+      'tests/rls-historia-ksef.test.ts',
+      // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
+      'tests/rls-sprzatanie-dziennikow.test.ts',
+      'tests/rls-zaplacone.test.ts',
+      'tests/rls-passkeys.test.ts',
+      'tests/rls-skrzynka-harmonogram.test.ts',
+      // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej faktury
+      // w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji przez psql.
+      'tests/rls-lejek-analityka.test.ts',
+      // 00163 (krok kodu przy dostępie osób trzecich).
+      'tests/rls-krok-kodu.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

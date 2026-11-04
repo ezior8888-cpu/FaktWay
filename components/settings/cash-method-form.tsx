@@ -1,15 +1,20 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateCashMethodAction } from '@/app/actions/cash-method';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 
 /**
  * Metoda kasowa VAT firmy. Na każdej fakturze: P_16 = 1 w KSeF i wyrazy
  * „metoda kasowa” (art. 106e ust. 1 pkt 16).
+ *
+ * Wygląd: wiersz z przełącznikiem z Finory (`security-preferences-card.tsx`
+ * — etykieta i opis po lewej, `Switch` po prawej).
  */
 export function CashMethodForm({
   initialEnabled,
@@ -34,27 +39,30 @@ export function CashMethodForm({
   };
 
   return (
-    <div className="space-y-3">
-      <label className="flex items-center gap-3 text-sm">
-        <input
-          type="checkbox"
+    <FieldGroup>
+      <Field orientation="horizontal" className="items-center!">
+        <FieldContent>
+          <FieldLabel htmlFor="cash-method">Rozliczam VAT metodą kasową</FieldLabel>
+          <FieldDescription>
+            Dla małych podatników VAT, którzy wybrali metodę kasową (art. 21 ustawy o VAT). Każda faktura dostanie
+            wtedy wymagane wyrazy „metoda kasowa”. Nie dotyczy firm zwolnionych z VAT.
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id="cash-method"
           checked={enabled}
           disabled={!canEdit || pending}
-          onChange={(e) => setEnabled(e.target.checked)}
-          className="h-4 w-4"
+          onCheckedChange={(checked) => setEnabled(checked)}
         />
-        Rozliczam VAT metodą kasową
-      </label>
-      <p className="text-xs text-muted-foreground">
-        Dla małych podatników VAT, którzy wybrali metodę kasową (art. 21 ustawy o VAT). Każda faktura dostanie
-        wtedy wymagane wyrazy „metoda kasowa”. Nie dotyczy firm zwolnionych z VAT.
-      </p>
+      </Field>
       {canEdit ? (
-        <Button type="button" onClick={save} disabled={pending} className="gap-2" variant="outline">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Zapisz metodę rozliczania
-        </Button>
+        <div>
+          <Button type="button" variant="outline" onClick={save} disabled={pending}>
+            {pending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+            Zapisz metodę rozliczania
+          </Button>
+        </div>
       ) : null}
-    </div>
+    </FieldGroup>
   );
 }

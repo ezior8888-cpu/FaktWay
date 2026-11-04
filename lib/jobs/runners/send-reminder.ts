@@ -78,7 +78,7 @@ export async function runSendReminder(data: Parameters<typeof remindersSendReque
       attachments: delivery.attachment ? [{ filename: delivery.attachment.filename,
         content: delivery.attachment.contentBase64 }] : undefined,
       // Po tym znaczniku webhook Resend odróżnia skargę kontrahenta od skargi
-      // użytkownika FaktFlow i nie wypisuje użytkownika o tym samym adresie.
+      // użytkownika FaktWay i nie wypisuje użytkownika o tym samym adresie.
       tags: [{ name: REMINDER_TAG.name, value: REMINDER_TAG.value }],
     }, { idempotencyKey: 'reminder/' + approvalId });
     if (result.error || !result.data?.id) throw new Error('Nie można potwierdzić przyjęcia wiadomości przez dostawcę poczty.');

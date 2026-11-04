@@ -1,42 +1,61 @@
 import {
-  AlertTriangle,
-  CalendarDays,
-  CheckCircle2,
-  CreditCard,
-  ShieldAlert,
-  Sparkles,
-} from 'lucide-react';
+  RiAlertLine,
+  RiCheckboxCircleLine,
+  RiShieldLine,
+  RiSparklingLine,
+  type RemixiconComponentType,
+} from '@remixicon/react';
 
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET } from '@/lib/billing/pricing';
+import { Separator } from '@/components/ui/separator';
+import { paymentFailureAdvice } from '@/lib/billing/payment-failure';
+import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import {
+  buildBlikDisclosure,
+  isBlikAvailable,
+  trialPaymentHint,
+  trialPaymentMethodLabel,
+  trialPaymentRetryHint,
+} from '@/lib/billing/trial-payment';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import {
   getActiveSubscription,
+  getLatestPaymentFailureReason,
   isInTrial,
   trialDaysRemaining,
   type ActiveSubscription,
 } from '@/lib/stripe/subscription';
+import { plural } from '@/lib/i18n/plural';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
 
+import { BlikTerms } from './_components/blik-terms';
 import { PlanCards } from './_components/plan-cards';
 import { PortalButton } from './_components/portal-button';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Zakładka „Abonament” (plan P14, bez odpowiednika w Finorze) — sekcje
+ * i wiersze ustawień Finory: komunikaty w `Alert`, plan i daty jako wiersze
+ * `Field` (etykieta i opis po lewej, wartość po prawej).
+ */
 
 interface SearchParams {
   checkout?: 'success' | 'canceled';
   error?: string;
 }
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-}
+const fmtDate = formatSettingsDate;
 
 function fmtPlan(plan: ActiveSubscription['plan']): string {
   // Plan roczny nie jest już sprzedawany (decyzja z 1 października 2026);
@@ -44,9 +63,11 @@ function fmtPlan(plan: ActiveSubscription['plan']): string {
   return plan === 'monthly' ? `Miesięczny (${PRICE_PER_MONTH})` : 'Roczny (plan wycofany)';
 }
 
+type Tone = 'success' | 'warning' | 'danger' | 'default';
+
 function statusLabel(status: ActiveSubscription['status']): {
   label: string;
-  tone: 'success' | 'warning' | 'danger' | 'default';
+  tone: Tone;
 } {
   switch (status) {
     case 'trialing':
@@ -69,6 +90,28 @@ function statusLabel(status: ActiveSubscription['status']): {
   }
 }
 
+// Kolory odznak i komunikatów jak w Finorze (`bg-green-600/10 text-green-800`…).
+const TONE_BADGE: Record<Tone, string | undefined> = {
+  success: 'bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400',
+  warning: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
+  danger: 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400',
+  default: undefined,
+};
+
+const TONE_ALERT: Record<Tone, string | undefined> = {
+  success: 'border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400',
+  warning: 'border-none bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
+  danger: undefined,
+  default: undefined,
+};
+
+const TONE_ALERT_TEXT: Record<Tone, string | undefined> = {
+  success: 'text-green-800 dark:text-green-400/80',
+  warning: 'text-amber-800 dark:text-amber-400/80',
+  danger: undefined,
+  default: undefined,
+};
+
 const ERROR_MESSAGES: Record<string, string> = {
   'not-configured':
     'Stripe nie jest skonfigurowany. Skontaktuj się z administratorem.',
@@ -79,6 +122,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   'plan-unavailable': 'Ten plan nie jest już dostępny. Wybierz plan miesięczny.',
   'mfa-required':
     'Zmiany w płatnościach wymagają weryfikacji dwuetapowej. Włącz ją w Ustawieniach → Bezpieczeństwo.',
+  'statement-required':
+    'Zaznacz oświadczenie pod ceną (zamówienie i akceptacja Regulaminu), żeby przejść do płatności.',
 };
 
 export default async function BillingPage(props: {
@@ -91,42 +136,44 @@ export default async function BillingPage(props: {
   const subscription = stripeConfigured
     ? await getActiveSubscription(ctx.tenantId).catch(() => null)
     : null;
+  // Przyczyna tylko do podpowiedzi: jej brak daje tekst ogólny, nie błąd strony.
+  const paymentFailureReason =
+    subscription?.status === 'past_due' || subscription?.status === 'unpaid'
+      ? await getLatestPaymentFailureReason(ctx.tenantId).catch(() => null)
+      : null;
 
   const canManage = ctx.role === 'owner' || ctx.role === 'admin';
   const errorMsg = params.error ? ERROR_MESSAGES[params.error] : null;
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="font-display text-3xl font-semibold tracking-tighter-display">
-          Subskrypcja i rozliczenia
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Zarządzaj planem, kartą, fakturami. Płatności obsługuje Stripe (PSD2 +
-          3D-Secure).
-        </p>
-      </header>
+    <FieldGroup>
+      <div>
+        <FieldLabel>Subskrypcja i rozliczenia</FieldLabel>
+        <FieldDescription>
+          Zarządzaj planem, metodą płatności i fakturami. Płatności obsługuje Stripe.
+        </FieldDescription>
+      </div>
 
       {/* Status banery */}
       {params.checkout === 'success' ? (
         <Banner
-          icon={CheckCircle2}
+          icon={RiCheckboxCircleLine}
           tone="success"
           title="Subskrypcja aktywna"
-          description="Dziękujemy! Trial 30 dni właśnie się rozpoczął. Karta zostanie obciążona dopiero po jego zakończeniu."
+          description="Dziękujemy! Trial 30 dni właśnie się rozpoczął. Pierwsza płatność dopiero po jego zakończeniu."
         />
       ) : null}
       {params.checkout === 'canceled' ? (
         <Banner
-          icon={AlertTriangle}
+          icon={RiAlertLine}
           tone="warning"
           title="Subskrypcja niedokończona"
-          description="Anulowałeś Checkout. Możesz spróbować ponownie — żadne pieniądze nie zostały pobrane."
+          description={`Płatność nie została dokończona, żadne pieniądze nie zostały pobrane. Możesz spróbować ponownie. ${trialPaymentRetryHint()}`.trim()}
         />
       ) : null}
       {errorMsg ? (
         <Banner
-          icon={AlertTriangle}
+          icon={RiAlertLine}
           tone="danger"
           title="Błąd"
           description={errorMsg}
@@ -135,7 +182,7 @@ export default async function BillingPage(props: {
 
       {!stripeConfigured ? (
         <Banner
-          icon={ShieldAlert}
+          icon={RiShieldLine}
           tone="warning"
           title="Stripe nie skonfigurowany"
           description={
@@ -146,7 +193,7 @@ export default async function BillingPage(props: {
 
       {!canManage ? (
         <Banner
-          icon={ShieldAlert}
+          icon={RiShieldLine}
           tone="default"
           title="Brak uprawnień do edycji"
           description="Subskrypcją zarządza właściciel lub admin organizacji. Możesz zobaczyć stan, ale nie zmienić planu."
@@ -155,131 +202,139 @@ export default async function BillingPage(props: {
 
       {/* Active subscription view */}
       {subscription ? (
-        <ActiveSubscriptionCard
+        <ActiveSubscriptionSection
           subscription={subscription}
           canManage={canManage}
+          paymentFailureReason={paymentFailureReason}
         />
       ) : stripeConfigured ? (
         // Brak subskrypcji + Stripe OK = pokaż plan selection
-        <section className="space-y-4">
-          <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/5 p-4 backdrop-blur-glass">
-            <p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-300">
-              <Sparkles className="h-4 w-4" />
-              30 dni za darmo
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Wybierz plan. Karta wymagana, ale obciążymy ją dopiero po 30
-              dniach trialu. Anulujesz kiedy chcesz.
-            </p>
-          </div>
+        <>
+          <Banner
+            icon={RiSparklingLine}
+            tone="success"
+            title="30 dni za darmo"
+            description={`Wybierz plan. Podajesz ${trialPaymentMethodLabel('biernik')}, ale pierwsza płatność dopiero po ${TRIAL_DAYS} dniach trialu. Anulujesz, kiedy chcesz.`}
+          />
 
-          {canManage ? <PlanCards /> : null}
-        </section>
+          {canManage ? (
+            <PlanCards
+              blikDisclosure={isBlikAvailable() ? buildBlikDisclosure() : null}
+              paymentHint={trialPaymentHint()}
+            />
+          ) : null}
+        </>
       ) : null}
-    </div>
+    </FieldGroup>
   );
 }
 
-function ActiveSubscriptionCard({
+/** Kiedy BLIK dodany w portalu zostanie obciążony pierwszy raz. */
+function blikNextCharge(subscription: ActiveSubscription, inTrial: boolean): string {
+  if (subscription.cancel_at_period_end) {
+    return `tylko jeśli wznowisz subskrypcję przed ${fmtDate(subscription.current_period_end)}`;
+  }
+  if (subscription.status === 'past_due') return 'zaległa kwota, przy najbliższej próbie pobrania';
+  if (subscription.status === 'unpaid') return 'zaległa kwota, gdy opłacisz fakturę';
+  return fmtDate(inTrial ? subscription.trial_end : subscription.current_period_end);
+}
+
+function ActiveSubscriptionSection({
   subscription,
   canManage,
+  paymentFailureReason,
 }: {
   subscription: ActiveSubscription;
   canManage: boolean;
+  paymentFailureReason: string | null;
 }) {
   const status = statusLabel(subscription.status);
   const inTrial = isInTrial(subscription);
   const trialLeft = trialDaysRemaining(subscription);
+  const failureAdvice = paymentFailureAdvice(paymentFailureReason, subscription.status);
+  // Portal pozwala dodać BLIK, a Stripe wymaga warunków przed kodem także przy formularzu
+  // hostowanym. Mail po odmowie prowadzi tu, na stronę z przyciskiem. Wycofany plan roczny
+  // zostaje bez warunków: zgoda mówi o płatnościach co miesiąc.
+  const blikTerms =
+    canManage && subscription.plan === 'monthly' && isBlikAvailable() ? buildBlikDisclosure() : null;
 
   return (
-    <section className="space-y-4">
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 lg:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold">Bieżący plan</h2>
-              <Badge
-                variant={
-                  status.tone === 'success'
-                    ? 'secondary'
-                    : status.tone === 'danger'
-                      ? 'destructive'
-                      : 'outline'
-                }
-                className={cn(
-                  'text-xs',
-                  status.tone === 'warning' &&
-                    'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                )}
-              >
-                {status.label}
+    <>
+      <Separator />
+
+      <Field orientation="responsive">
+        <FieldContent>
+          <div className="flex flex-wrap items-center gap-2">
+            <FieldLabel>Bieżący plan</FieldLabel>
+            <Badge variant={TONE_BADGE[status.tone] ? 'default' : 'secondary'} className={TONE_BADGE[status.tone]}>
+              {status.label}
+            </Badge>
+            {subscription.cancel_at_period_end ? (
+              <Badge variant="outline">
+                Anulowana, wygasa {fmtDate(subscription.current_period_end)}
               </Badge>
-              {subscription.cancel_at_period_end ? (
-                <Badge variant="outline" className="text-xs">
-                  Anulowana, wygasa {fmtDate(subscription.current_period_end)}
-                </Badge>
-              ) : null}
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {fmtPlan(subscription.plan)}
-            </p>
+            ) : null}
           </div>
-          {canManage ? <PortalButton /> : null}
-        </div>
+          <FieldDescription>{fmtPlan(subscription.plan)}</FieldDescription>
+        </FieldContent>
+        {canManage ? <PortalButton blikStatementVersion={blikTerms?.version ?? null} /> : null}
+      </Field>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          {inTrial && trialLeft !== null ? (
-            <Stat
-              icon={Sparkles}
-              label="Trial kończy się za"
-              value={`${trialLeft} dni`}
-              sublabel={fmtDate(subscription.trial_end)}
-              tone={trialLeft <= 3 ? 'warning' : 'default'}
-            />
-          ) : (
-            <Stat
-              icon={CalendarDays}
-              label="Następne odnowienie"
-              value={fmtDate(subscription.current_period_end)}
-              sublabel={
-                subscription.cancel_at_period_end
-                  ? 'Subskrypcja wygaśnie po tej dacie'
-                  : `Karta zostanie obciążona automatycznie`
-              }
-            />
-          )}
-          <Stat
-            icon={CreditCard}
-            label="Plan"
-            value={subscription.plan === 'monthly' ? 'Miesięczny' : 'Roczny'}
-            sublabel={
-              subscription.plan === 'monthly'
-                ? PRICE_PER_MONTH_WITH_NET
-                : 'plan wycofany'
-            }
-          />
-          <Stat
-            icon={CalendarDays}
-            label="Okres bieżący"
-            value={fmtDate(subscription.current_period_start)}
-            sublabel={`do ${fmtDate(subscription.current_period_end)}`}
-          />
-        </div>
+      {blikTerms ? (
+        <BlikTerms
+          title="Zmieniasz metodę płatności na BLIK?"
+          rows={[
+            { label: 'Przy dodaniu BLIK-a płacisz', value: blikTerms.dueToday },
+            { label: 'Następna płatność', value: blikNextCharge(subscription, inTrial) },
+            { label: 'Potem', value: blikTerms.cycle },
+          ]}
+          banks={blikTerms.banks}
+          consent={blikTerms.consent}
+        />
+      ) : null}
 
-        {subscription.status === 'past_due' || subscription.status === 'unpaid' ? (
-          <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-              <AlertTriangle className="h-4 w-4" />
-              Płatność nie została pobrana
-            </p>
-            <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              Stripe ponowi próbę automatycznie. Możesz też zaktualizować kartę
-              w panelu klienta.
-            </p>
-          </div>
-        ) : null}
-      </div>
-    </section>
+      {inTrial && trialLeft !== null ? (
+        <StatRow
+          label="Trial kończy się za"
+          value={`${trialLeft} ${plural(trialLeft, ['dzień', 'dni', 'dni'])}`}
+          sublabel={fmtDate(subscription.trial_end)}
+          tone={trialLeft <= 3 ? 'warning' : 'default'}
+        />
+      ) : (
+        <StatRow
+          label="Następne odnowienie"
+          value={fmtDate(subscription.current_period_end)}
+          sublabel={
+            subscription.cancel_at_period_end
+              ? 'Subskrypcja wygaśnie po tej dacie'
+              : 'Pobierzemy płatność automatycznie z Twojej metody płatności'
+          }
+        />
+      )}
+      <StatRow
+        label="Plan"
+        value={subscription.plan === 'monthly' ? 'Miesięczny' : 'Roczny'}
+        sublabel={
+          subscription.plan === 'monthly'
+            ? PRICE_PER_MONTH_WITH_NET
+            : 'plan wycofany'
+        }
+      />
+      <StatRow
+        label="Okres bieżący"
+        value={fmtDate(subscription.current_period_start)}
+        sublabel={`do ${fmtDate(subscription.current_period_end)}`}
+      />
+
+      {subscription.status === 'past_due' || subscription.status === 'unpaid' ? (
+        <Banner
+          icon={RiAlertLine}
+          tone="warning"
+          title="Płatność nie została pobrana"
+          description={[failureAdvice.reason, failureAdvice.action].filter(Boolean).join(' ')}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -289,61 +344,49 @@ function Banner({
   title,
   description,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
-  tone: 'success' | 'warning' | 'danger' | 'default';
+  icon: RemixiconComponentType;
+  tone: Tone;
   title: string;
   description: string;
 }) {
-  const palette = {
-    success:
-      'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300',
-    warning:
-      'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300',
-    danger: 'border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-300',
-    default: 'border-glass-border bg-foreground/3 text-foreground',
-  }[tone];
-
   return (
-    <div className={cn('rounded-2xl border p-4 backdrop-blur-glass', palette)}>
-      <div className="flex items-start gap-3">
-        <Icon className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">{title}</p>
-          <p className="mt-0.5 text-sm opacity-90">{description}</p>
-        </div>
-      </div>
-    </div>
+    <Alert
+      role={tone === 'danger' ? 'alert' : 'status'}
+      variant={tone === 'danger' ? 'destructive' : 'default'}
+      className={TONE_ALERT[tone]}
+    >
+      <Icon aria-hidden />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription className={TONE_ALERT_TEXT[tone]}>{description}</AlertDescription>
+    </Alert>
   );
 }
 
-function Stat({
-  icon: Icon,
+function StatRow({
   label,
   value,
   sublabel,
   tone = 'default',
 }: {
-  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
   sublabel?: string;
   tone?: 'default' | 'warning';
 }) {
   return (
-    <div
-      className={cn(
-        'rounded-2xl border border-glass-border bg-foreground/3 p-3 backdrop-blur-glass',
-        tone === 'warning' && 'border-amber-500/30 bg-amber-500/5',
-      )}
-    >
-      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-        <Icon className="h-3 w-3" />
-        {label}
-      </div>
-      <p className="mt-1 font-medium text-sm">{value}</p>
-      {sublabel ? (
-        <p className="mt-0.5 text-xs text-muted-foreground">{sublabel}</p>
-      ) : null}
-    </div>
+    <Field orientation="responsive">
+      <FieldContent>
+        <FieldLabel>{label}</FieldLabel>
+        {sublabel ? <FieldDescription>{sublabel}</FieldDescription> : null}
+      </FieldContent>
+      <span
+        className={cn(
+          'text-sm font-medium',
+          tone === 'warning' && 'text-amber-700 dark:text-amber-400',
+        )}
+      >
+        {value}
+      </span>
+    </Field>
   );
 }
