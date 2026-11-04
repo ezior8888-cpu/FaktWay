@@ -89,7 +89,8 @@ describe('strona KPiR', () => {
     const page = await KpirPage({ searchParams: Promise.resolve(wrzesien) });
     const html = renderToStaticMarkup(page);
 
-    expect(page.props.className).toContain('ff-page-fill');
+    // Zawartość zakładki (`.ff-tab-panel`); pełny arkusz daje `reports/layout.tsx`.
+    expect(page.props.className).toContain('ff-tab-panel');
     expect(html).toContain('Raport wstrzymany');
     // Powód bez powtórzonego przedrostka, z wielkiej litery.
     expect(html).not.toContain('Raport wstrzymany:');
@@ -100,7 +101,8 @@ describe('strona KPiR', () => {
     expect(html).toContain('href="/invoices"');
     expect(html).toContain('aria-label="Miesiąc KPiR"');
     expect(html).toContain('Wrzesień 2026');
-    expect(html).toContain('aria-label="Księgowość"');
+    // Zakładki Księgowości są w `reports/layout.tsx` (od 25.10.2026), nie w stronie.
+    expect(html).not.toContain('aria-label="Księgowość"');
     // Żadnych kwot: ani karty wyniku, ani pierścienia, ani wierszy, ani eksportu.
     expect(html).not.toContain('zł');
     expect(html).not.toContain('Eksport KPiR');
@@ -123,7 +125,8 @@ describe('strona KPiR', () => {
     const page = await KpirPage({ searchParams: Promise.resolve(wrzesien) });
     const html = renderToStaticMarkup(page);
 
-    expect(page.props.className).toContain('ff-page-fill');
+    // Zawartość zakładki (`.ff-tab-panel`); pełny arkusz daje `reports/layout.tsx`.
+    expect(page.props.className).toContain('ff-tab-panel');
     expect(html).toContain('Nie można odczytać zaliczek rozliczonych fakturą końcową');
     expect(html).not.toContain('awaria odczytu');
     expect(html).toContain('Kwoty faktur rozliczeniowych mogą być zawyżone.');

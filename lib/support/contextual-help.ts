@@ -32,7 +32,7 @@ const ROUTE_HELP: RouteHelp[] = [
   },
   {
     prefix: '/settings/ksef',
-    slugs: ['konfiguracja-certyfikatu-ksef', 'srodowisko-testowe-ksef'],
+    slugs: ['podlaczenie-ksef-krok-po-kroku', 'konfiguracja-certyfikatu-ksef', 'srodowisko-testowe-ksef'],
   },
   {
     prefix: '/settings/accountant',

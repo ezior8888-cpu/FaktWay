@@ -34,6 +34,7 @@ import {
   generateWaproCsv,
 } from '@/lib/exports/csv-generators';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
+import { exportScopeFor, UnknownExportFormatError, type ExportScope } from '@/lib/exports/export-scope';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
 import {
@@ -76,13 +77,6 @@ interface GeneratedExportMeta {
   mimeType: string;
   sizeBytes: number;
   fileHash: string;
-}
-
-function resolveExportDirection(job: ExportJobRow): 'issued' | 'received' | 'both' {
-  if (job.include_issued && job.include_received) return 'both';
-  if (job.include_issued) return 'issued';
-  if (job.include_received) return 'received';
-  return 'issued';
 }
 
 function safeNip(nip: string): string {
@@ -299,6 +293,21 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
       throw new NonRetriableError(SUSPENDED_EXPORT_FORMATS[job.format]!);
     }
 
+    // FIR-01: zakres z reguły formatu, nie z flag joba — Co-Pilot zapisuje
+    // ustawienia paczki w każdym jobie, a KPiR ma zawsze całą sprzedaż.
+    let scope: ExportScope;
+    try {
+      scope = exportScopeFor(job.format, {
+        includeIssued: job.include_issued,
+        includeReceived: job.include_received,
+        includeCorrections: job.include_corrections,
+      });
+    } catch (error) {
+      // Format spoza reguły (baza przed kodem) — ponowienie nic nie zmieni.
+      if (error instanceof UnknownExportFormatError) throw new NonRetriableError(error.message);
+      throw error;
+    }
+
     await step.run('mark-generating', async () => {
       const { error } = await supabase
         .from('export_jobs')
@@ -306,6 +315,11 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
           status: 'generating',
           started_at: new Date().toISOString(),
           progress_message: 'Pobieranie danych z bazy...',
+          // Wiersz mówi, co plik obejmuje: czyta go ponowienie z historii
+          // i ostrzeżenie o fakturach dodanych po eksporcie (widok 00155).
+          include_issued: scope.includeIssued,
+          include_received: scope.includeReceived,
+          include_corrections: scope.includeCorrections,
         })
         .eq('id', exportJobId);
 
@@ -315,15 +329,14 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     // Nowe ID od pobrania do zapisu: Inngest nie może użyć memoizowanych
     // wyników sprzed kontroli waluty przy wznowieniu starszego eksportu.
     const data = await step.run('fetch-invoices-currency-guard', async () => {
-      const direction = resolveExportDirection(job);
       try {
         return await fetchInvoicesForExport({
           tenantId: job.tenant_id,
           periodStart: job.period_start,
           periodEnd: job.period_end,
-          direction,
-          includeCorrections: job.include_corrections,
-          includeExpenses: job.format === 'kpir_excel' || String(job.format) === 'jpk_v7m',
+          direction: scope.invoiceDirection,
+          includeCorrections: scope.includeCorrections,
+          includeExpenses: scope.includeExpenses,
         });
       } catch (error) {
         // Ponowienie nie zmieni waluty kosztu — to czeka na przegląd (C-11).
@@ -338,8 +351,7 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
     // JPK_FA bez faktur wystawionych nie istnieje (schemat wymaga co najmniej
     // jednej) — same zakupy w okresie to też „brak faktur” dla tego pliku.
     // KPiR i JPK_V7M mają sens także z samymi kosztami (#71).
-    const hasExpensesForFormat =
-      (format === 'kpir_excel' || format === 'jpk_v7m') && data.expenses.length > 0;
+    const hasExpensesForFormat = scope.includeExpenses && data.expenses.length > 0;
     const empty =
       format === 'jpk_fa'
         ? data.issuedInvoices.length === 0

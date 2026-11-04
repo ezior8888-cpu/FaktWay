@@ -18,6 +18,8 @@ import { InvoiceForm } from '@/components/invoices/invoice-form';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 
 const POS = '3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d';
+/** Firma, dla której strona wyrenderowała formularz — zapis odsyła ją akcji (UX-01). */
+const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 /**
  * Plan Finora N1: podkład (`?cykliczna=`, `?wzor=`) wpisany od razu
@@ -91,7 +93,7 @@ describe('formularz faktury — podkład i pozycja cykliczna', () => {
   it('podkład w polach od pierwszego renderu; pozycja i okres dochodzą do „Wystaw i wyślij” (C3)', async () => {
     await act(async () => {
       root.render(
-        <InvoiceForm initialValues={podklad} recurringInvoiceId={POS} recurringPeriod="2026-11" suggestedNumber="FV/9/10/2026" />,
+        <InvoiceForm tenantId={TENANT} initialValues={podklad} recurringInvoiceId={POS} recurringPeriod="2026-11" suggestedNumber="FV/9/10/2026" />,
       );
     });
     expect(input('buyerName').value).toBe('Klient Podkład');
@@ -104,6 +106,7 @@ describe('formularz faktury — podkład i pozycja cykliczna', () => {
 
     await wystaw();
     expect(m.send).toHaveBeenCalledTimes(1);
+    expect(m.send.mock.calls[0]![1]).toBe(TENANT);
     expect(m.send.mock.calls[0]![0]).toMatchObject({
       recurringInvoiceId: POS,
       recurringPeriod: '2026-11',
@@ -113,7 +116,7 @@ describe('formularz faktury — podkład i pozycja cykliczna', () => {
 
   it('z pozycji cyklicznej nie ma szkicu: bez „Szkic” i „Zapisz szkic”, z wyjaśnieniem (C2)', async () => {
     await act(async () => {
-      root.render(<InvoiceForm initialValues={podklad} recurringInvoiceId={POS} recurringPeriod="2026-11" />);
+      root.render(<InvoiceForm tenantId={TENANT} initialValues={podklad} recurringInvoiceId={POS} recurringPeriod="2026-11" />);
     });
     const etykiety = przyciski();
     expect(etykiety).not.toContain('Szkic');
@@ -125,12 +128,13 @@ describe('formularz faktury — podkład i pozycja cykliczna', () => {
 
   it('„Duplikuj” (podkład bez pozycji) — bez ukrytego pola i bez recurringInvoiceId w zapisie', async () => {
     await act(async () => {
-      root.render(<InvoiceForm initialValues={podklad} />);
+      root.render(<InvoiceForm tenantId={TENANT} initialValues={podklad} />);
     });
     expect(container.querySelector('input[name="recurringInvoiceId"]')).toBeNull();
     expect(container.querySelector('input[name="recurringPeriod"]')).toBeNull();
     expect(container.textContent).not.toContain('szkic nie zamyka okresu');
     await zapiszSzkic();
     expect(m.saveDraft.mock.calls[0]![0]).not.toHaveProperty('recurringInvoiceId');
+    expect(m.saveDraft.mock.calls[0]![1]).toBe(TENANT);
   });
 });

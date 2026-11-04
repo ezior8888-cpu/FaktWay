@@ -411,6 +411,7 @@ function matchesTerm(row: Row, term: OrFilterTerm): boolean {
   if (term.op === 'is') return value === null || value === undefined;
   if (value === null || value === undefined) return false;
   if (term.op === 'eq') return String(value) === term.value;
+  if (term.op === 'not_null') return true;
   return term.value.includes(String(value));
 }
 

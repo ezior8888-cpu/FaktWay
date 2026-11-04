@@ -8,6 +8,7 @@ import {
   getUnsubscribedCategories,
   type EmailCategory,
 } from '@/lib/email/preferences';
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { createClient } from '@/lib/supabase/server';
 import type { Tables } from '@/types/database';
 
@@ -21,10 +22,8 @@ export const dynamic = 'force-dynamic';
  * (w Finorze w tym miejscu stoją „Quiet hours”).
  */
 export default async function NotificationsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Ten sam użytkownik co w layoucie (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
+  const [supabase, user] = await Promise.all([createClient(), getDashboardSessionUser()]);
   if (!user) redirect('/login');
 
   const [{ data: subscriptions }, unsubscribed, consents] = await Promise.all([

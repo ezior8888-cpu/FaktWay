@@ -2,17 +2,34 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
+import { forgetFirstTouchCookie } from '@/lib/analytics/attribution-server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
+import {
+  clearedCookieOptions,
+  PASSKEY_OFFER_COOKIE,
+  passkeyOfferCookieOptions,
+  REMEMBER_ME_COOKIE,
+  REMEMBER_ME_VALUE,
+  rememberMeCookieOptions,
+} from '@/lib/auth/device-cookies';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
+import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
 import { createClient } from '@/lib/supabase/server';
 import { signOutCurrentSession } from '@/lib/auth/sign-out';
+
+/** Wybór z tego logowania zastępuje poprzedni: odznaczone pole działa od razu. */
+async function applyRememberMe(remember: boolean): Promise<void> {
+  const store = await cookies();
+  if (remember) store.set(REMEMBER_ME_COOKIE, REMEMBER_ME_VALUE, rememberMeCookieOptions());
+  else store.set(REMEMBER_ME_COOKIE, '', clearedCookieOptions());
+}
 
 /**
  * Server Action: logowanie email+hasło.
@@ -61,6 +78,12 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
     redirect(isGoTrueCaptchaRejection(error) ? '/login?error=bot_check_failed' : '/login?error=invalid_credentials');
   }
 
+  await applyRememberMe(formData.get('remember') !== null);
+  // Jednorazowa propozycja „Włącz logowanie biometrią” w panelu (PasskeyEnrollOffer).
+  if (isPhoneUserAgent((await headers()).get('user-agent'))) {
+    (await cookies()).set(PASSKEY_OFFER_COOKIE, '1', passkeyOfferCookieOptions());
+  }
+
   const {
     data: { user: signedIn },
   } = await supabase.auth.getUser();
@@ -77,7 +100,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
       metadata: { method: 'password' },
     });
     await trackServer({
-      distinctId: signedIn.id,
+      userId: signedIn.id,
       event: ANALYTICS_EVENTS.loginCompleted,
       properties: { method: 'password' },
     });
@@ -110,6 +133,10 @@ export async function loginWithGoogle(): Promise<void> {
   const headersList = await headers();
   const origin = headersList.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL;
 
+  // Pole „Zapamiętaj mnie” jest w formularzu e-mail, więc tu decyduje jego domyślna
+  // wartość: telefon tak, komputer nie.
+  await applyRememberMe(isPhoneUserAgent(headersList.get('user-agent')));
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -131,6 +158,7 @@ export async function loginWithGoogle(): Promise<void> {
 export async function signOut(): Promise<void> {
   const result = await signOutCurrentSession();
   if (!result.localSessionCleared) throw new Error('Nie udało się wylogować tej przeglądarki. Spróbuj ponownie.');
+  await forgetFirstTouchCookie();
   if (result.userId) {
     await logAudit({
       action: 'auth.logout', tenantId: null, userId: result.userId,

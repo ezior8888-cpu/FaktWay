@@ -7,6 +7,7 @@ import { getSalesInvoices } from '@/lib/analytics-finance/sales';
 import { getCostsWithKsefPurchases } from '@/lib/dashboard/costs';
 import { getInflows } from '@/lib/dashboard/inflows';
 import { fetchProductLines } from '@/lib/dashboard/rankings';
+import { getReceivables } from '@/lib/dashboard/receivables';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { PageContext } from '@/lib/supabase/page-context';
 
@@ -16,8 +17,8 @@ import type { PageContext } from '@/lib/supabase/page-context';
  * Klient z sesji (RLS, §2.4 pkt 9). Okno: `analyticsDataRange` (najstarszy
  * miesiąc wyboru − 1 albo 180 dni wstecz, do końca bieżącego miesiąca).
  * Koszty: faktury zakupu z KSeF + wydatki spoza KSeF (E10, D-K) — ta sama
- * definicja co Pulpit i Przepływy. Należności: wpływy od dziś według
- * terminów płatności (E11, D-W) — ta sama definicja co karta Pulpitu.
+ * definicja co Pulpit i Przepływy. Należności: `getReceivables`, także po
+ * terminie (D-W odwołane 02.11.2026) — ta sama definicja co karta Pulpitu.
  */
 
 type Supabase = PageContext['supabase'];
@@ -28,7 +29,10 @@ export const loadCostsWindow = cache((supabase: Supabase, tenantId: string, nowI
 export const loadSalesWindow = cache((supabase: Supabase, tenantId: string, nowIso: string) =>
   getSalesInvoices(supabase, tenantId, analyticsDataRange(new Date(nowIso))));
 
-/** Wpływy z dniem od dziś (przyszłe terminy) — karta „Należności”. */
+export const loadReceivables = cache((supabase: Supabase, tenantId: string, nowIso: string) =>
+  getReceivables(supabase, tenantId, new Date(nowIso)));
+
+/** Tylko tryb `przyklad`: wpływy z dniem od dziś (przyszłe terminy) — karta „Należności”. */
 export const loadUpcomingInflows = cache((supabase: Supabase, tenantId: string, nowIso: string) =>
   getInflows(supabase, tenantId, { from: todayInWarsaw(new Date(nowIso)) }));
 

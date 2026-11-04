@@ -99,6 +99,25 @@ export async function getActiveSubscription(
   return result.data ?? null;
 }
 
+/**
+ * Przyczyna ostatniej nieudanej płatności firmy (`stripe_payments.failure_reason`):
+ * kod odmowy Stripe, który `paymentFailureAdvice` zamienia na tekst dla klienta.
+ */
+export async function getLatestPaymentFailureReason(
+  tenantId: string,
+): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .from('stripe_payments')
+    .select('failure_reason')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'failed')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`payment failure lookup failed: ${error.message}`);
+  return data?.failure_reason ?? null;
+}
+
 /** Czy subskrypcja jest w trakcie 30-dniowego trialu. */
 export function isInTrial(sub: ActiveSubscription | null): boolean {
   if (!sub) return false;

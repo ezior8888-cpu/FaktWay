@@ -184,7 +184,7 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
                 <DialogDescription>
                   Pełen zwrot kwoty{' '}
                   <strong>{fmtAmount(payment.amountCents, payment.currency)}</strong>{' '}
-                  na kartę klienta. Operacja nieodwracalna. Klient dostanie email z
+                  na metodę płatności klienta. Operacja nieodwracalna. Klient dostanie email z
                   potwierdzeniem.
                 </DialogDescription>
               </DialogHeader>

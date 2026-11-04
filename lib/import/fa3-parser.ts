@@ -54,7 +54,7 @@ export interface ParsedInvoice {
 
   paymentDueDate?: string;
   /**
-   * E11 (D-W): `Platnosc/DataZaplaty` faktury z `Zaplacono = 1` — faktura
+   * E11: `Platnosc/DataZaplaty` faktury z `Zaplacono = 1` — faktura
    * wystawiona po zapłacie. Trafia do `fa3_data.parsed`, skąd karty wpływów
    * biorą prawdziwy dzień zapłaty. Brak pola = plik nie mówi o zapłacie
    * (albo daty nie dało się odczytać — wtedy ostrzeżenie).
@@ -731,7 +731,7 @@ function parsePlatnosc(
     warnings.push(`Nieczytelny termin płatności: ${paymentDueDate}`);
   }
 
-  // E11 (D-W): „Zaplacono = 1” + „DataZaplaty” — faktura opłacona przed wystawieniem.
+  // E11: „Zaplacono = 1” + „DataZaplaty” — faktura opłacona przed wystawieniem.
   // Daty, której nie da się odczytać, nie zgadujemy: ostrzeżenie i brak pola.
   let paidDate: string | undefined;
   if (String(p.Zaplacono ?? '').trim() === '1' && p.DataZaplaty != null) {

@@ -17,9 +17,9 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'FaktWay vs iFirma 2026 — UI, push i KSeF',
+  title: 'FaktWay vs iFirma 2026: interfejs, push i KSeF',
   description:
-    'Porównanie FaktWay z iFirmą: interfejs, powiadomienia push, KSeF 2.0, OCR, cennik i migracja dla JDG oraz biur rachunkowych.',
+    'Porównanie FaktWay z iFirmą: interfejs, powiadomienia push, KSeF 2.0, odczyt dokumentów, cennik i migracja dla JDG oraz biur rachunkowych.',
 };
 
 const COMPARISON_ROWS = [
@@ -43,7 +43,7 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Interfejs i UX',
-    feature: 'Layout 2026 (glass / gesty / spacing)',
+    feature: 'Odświeżony wygląd panelu (2026)',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const, note: 'starszy UI' },
   },
@@ -73,14 +73,14 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Powiadomienia',
-    feature: 'Push: przypomnienia o płatności',
+    feature: 'Push: wpłata na fakturze',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const, note: 'email/SMS' },
   },
   {
     category: 'Powiadomienia',
     feature: 'Ciche godziny / kanały per użytkownik',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'partial' as const, note: 'wybór powiadomień, bez cichych godzin' },
     competitor: { status: 'partial' as const },
   },
   {
@@ -91,38 +91,38 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Mobile',
-    feature: 'Capture z aparatu + przycinanie',
-    ksefSaas: { status: 'yes' as const },
+    feature: 'Zdjęcie z aparatu',
+    ksefSaas: { status: 'partial' as const, note: 'bez przycinania' },
     competitor: { status: 'partial' as const },
   },
   {
-    category: 'OCR i KPiR',
-    feature: 'OCR wielostronicowy kosztów',
-    ksefSaas: { status: 'yes' as const },
+    category: 'Koszty i KPiR',
+    feature: 'Odczyt wielostronicowych kosztów',
+    ksefSaas: { status: 'partial' as const, note: 'plik do 10 MB' },
     competitor: { status: 'partial' as const },
   },
   {
-    category: 'OCR i KPiR',
-    feature: 'Confidence score dla pól OCR',
-    ksefSaas: { status: 'yes' as const },
+    category: 'Koszty i KPiR',
+    feature: 'Ocena pewności dla każdego pola',
+    ksefSaas: { status: 'no' as const },
     competitor: { status: 'no' as const },
   },
   {
-    category: 'OCR i KPiR',
-    feature: 'Auto-kategoryzacja KPiR',
+    category: 'Koszty i KPiR',
+    feature: 'Podpowiedź kolumny KPiR',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const },
   },
   {
     category: 'Workflow',
-    feature: 'Magiczny Import (KSeF + CSV)',
+    feature: 'Historia z KSeF i import CSV z 4 programów',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const },
   },
   {
     category: 'Workflow',
-    feature: 'Wkurzacz Dłużników',
-    ksefSaas: { status: 'yes' as const },
+    feature: 'Przypomnienia i przedsądowe wezwania',
+    ksefSaas: { status: 'yes' as const, note: 'po Twoim zatwierdzeniu' },
     competitor: { status: 'partial' as const },
   },
   {
@@ -133,20 +133,20 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Cennik',
-    feature: 'Jedna stawka „KSeF + OCR + workflow”',
+    feature: 'Jedna stawka za całość',
     ksefSaas: { status: 'note' as const, note: PRICE_PER_MONTH },
     competitor: { status: 'note' as const, note: 'pakiety modułowe' },
   },
   {
     category: 'Integracje',
     feature: 'Webhooks / API dla automatyzacji',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const },
     competitor: { status: 'partial' as const },
   },
   {
     category: 'Hosting',
     feature: 'Dane w UE (GDPR)',
-    ksefSaas: { status: 'yes' as const, note: 'Frankfurt' },
+    ksefSaas: { status: 'yes' as const, note: 'Niemcy' },
     competitor: { status: 'yes' as const, note: 'PL' },
   },
   {
@@ -162,14 +162,14 @@ export default function IfirmaPage() {
     <article>
       <VsHero
         competitorName="iFirma"
-        subtitle="23 wiersze porównania, historia marki, głosy użytkowników, rozbicie cen i migracja — z naciskiem na odświeżenie UI oraz push jako kanał operacyjny."
+        subtitle="Tabela porównania, historia marki, głosy użytkowników, rozbicie cen i migracja, z naciskiem na odświeżony interfejs oraz powiadomienia push."
       />
 
       <VsTldr>
         <span className="font-editorial font-medium text-[var(--marketing-text)]">
           iFirma
         </span>{' '}
-        to jedna z najstarszych marek fakturowych w Polsce — stabilna,
+        to jedna z najstarszych marek fakturowych w Polsce: stabilna,
         rozpoznawalna, z szeroką gamą funkcji &bdquo;wszystko w jednym
         panelu&rdquo;. Jednak w rozmowach z przedsiębiorcami mobilnymi pojawiają
         się dwa wątki:{' '}
@@ -181,8 +181,8 @@ export default function IfirmaPage() {
         <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
           FaktWay
         </span>{' '}
-        stawia na świeży UI, PWA z pushami i flow zaprojektowany pod KSeF 2.0
-        oraz OCR w jednym pakiecie — bo przecież &bdquo;widziałem status
+        stawia na świeży interfejs, powiadomienia push i wysyłkę zaprojektowaną
+        pod KSeF 2.0 w jednym pakiecie, bo &bdquo;widziałem status
         wysyłki&rdquo; nie może być funkcją premium.
       </VsTldr>
 
@@ -194,7 +194,7 @@ export default function IfirmaPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            iFirma funkcjonuje na rynku od lat — przez dekadę zdążyła przejść przez wiele iteracji funkcjonalnych i
+            iFirma funkcjonuje na rynku od lat: przez dekadę zdążyła przejść przez wiele iteracji funkcjonalnych i
             integracji z polskimi systemami bankowymi. To ogromna zaleta dla użytkowników, którzy cenią
             przewidywalność marki i szeroką dokumentację. Jednocześnie długa historia produktu często oznacza
             narastającą złożoność menu, starsze wzorce UI oraz techniczny dług w warstwie front-end, który trudno
@@ -204,13 +204,13 @@ export default function IfirmaPage() {
             Hosting i przetwarzanie danych utrzymywane są zwykle w polskiej infrastrukturze, co jest plusem przy
             negocjacjach z księgową i przy wymaganiach dotyczących lokalizacji kopii zapasowych. W erze KSeF 2.0
             kluczowe staje się jednak nie tylko „gdzie stoi serwer”, ale jak szybko widzisz błąd walidacji FA(3) na
-            telefonie — i czy możesz go naprawić jednym gestem, zamiast przeklikiwać pięć ekranów zaprojektowanych
+            telefonie i czy naprawisz go bez przeklikiwania pięciu ekranów zaprojektowanych
             w czasach, gdy smartfon był jeszcze gadżetem.
           </p>
           <p>
-            FaktWay nie próbuje sklonować całej historii iFirma — celujemy w superscieżkę mikrofirmy: faktura,
-            koszt, KPiR, KSeF, windykacja, księgowa. Dzięki temu możemy poświęcić więcej uwagi detalom UX (spacing,
-            focus, dark mode) oraz kanałom realtime (push), które w codziennym życiu przedsiębiorcy zastępują
+            FaktWay nie próbuje sklonować całej historii iFirma. Celujemy w główną ścieżkę mikrofirmy: faktura,
+            koszt, KPiR, KSeF, przypomnienia, księgowa. Dzięki temu możemy poświęcić więcej uwagi detalom (focus,
+            tryb ciemny) oraz powiadomieniom push, które w codziennym życiu przedsiębiorcy zastępują
             „sprawdzę maila wieczorem”.
           </p>
         </section>
@@ -222,9 +222,9 @@ export default function IfirmaPage() {
         />
         <div className="grid gap-10 md:grid-cols-3 md:gap-12">
           {[
-            { q: 'Wszystko jest, tylko szukanie tej jednej opcji zajmuje mi za dużo czasu — czuję, że to UI z poprzedniej epoki.', meta: 'Wątek forum · 2025' },
-            { q: 'Mail przychodzi, ale wolałbym push jak w banku — wtedy od razu wiem, że KSeF przyjął fakturę.', meta: 'Komentarz LinkedIn · 2024' },
-            { q: 'Jak już się nauczyłem, działa stabilnie — ale onboarding nowej osoby w firmie zajął tydzień.', meta: 'Grupa Facebook · 2025' },
+            { q: 'Wszystko jest, tylko szukanie tej jednej opcji zajmuje mi za dużo czasu. Czuję, że to UI z poprzedniej epoki.', meta: 'Wątek forum · 2025' },
+            { q: 'Mail przychodzi, ale wolałbym push jak w banku. Wtedy od razu wiem, że KSeF przyjął fakturę.', meta: 'Komentarz LinkedIn · 2024' },
+            { q: 'Jak już się nauczyłem, działa stabilnie, ale onboarding nowej osoby w firmie zajął tydzień.', meta: 'Grupa Facebook · 2025' },
           ].map((o) => (
             <figure
               key={o.meta}
@@ -242,7 +242,7 @@ export default function IfirmaPage() {
           ))}
         </div>
         <p className="mt-8 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
-          Cytaty są stylizowane i nie identyfikują konkretnych osób — traktuj je jako ilustrację typowych frustracji UX / powiadomień, a nie jako ocenę sądową produktu konkurenta.
+          Cytaty są stylizowane i nie identyfikują konkretnych osób. Traktuj je jako ilustrację typowych frustracji UX / powiadomień, a nie jako ocenę sądową produktu konkurenta.
         </p>
 
         <VsSectionHeader
@@ -256,19 +256,18 @@ export default function IfirmaPage() {
             uwagi, tym wyższe ryzyko pomyłki NIP, stawki VAT lub numeru faktury zaliczkowej. Przy KSeF 2.0 błąd
             walidacji oznacza stratę czasu na poprawkę, a czasem także problem z płynnością, jeśli kontrahent
             czeka na poprawny dokument. Nowoczesny layout z wyraźnymi stanami focusu i czytelną hierarchią sekcji
-            redukuje ten koszt — szczególnie u przedsiębiorców pracujących wieczorami na laptopie w półświetle.
+            redukuje ten koszt, szczególnie u przedsiębiorców pracujących wieczorami na laptopie w półświetle.
           </p>
           <p>
             Push z kolei zmienia model uwagi: zamiast „sprawdzę skrzynkę co godzinę”, dostajesz atomowy komunikat o
             statusie KSeF lub przypomnieniu o płatności. To nie zastępuje pełnego audytu w panelu, ale obniża latency
-            Twojej reakcji — a przy windykacji i łańcuchu dostaw latency przekłada się bezpośrednio na cash flow.
+            Twojej reakcji, a przy windykacji i łańcuchu dostaw latency przekłada się bezpośrednio na cash flow.
             Dlatego w tabeli eksponujemy brak pushy jako twardy wiersz, a nie marketingowy przymiotnik.
           </p>
           <p>
-            Starszy UI bywa jednocześnie zaletą dla użytkowników przyzwyczajonych do konkretnych ścieżek — jeśli
+            Starszy UI bywa jednocześnie zaletą dla użytkowników przyzwyczajonych do konkretnych ścieżek: jeśli
             pracujesz 10 lat w tym samym menu, zmiana może boleć. FaktWay adresuje osoby, które wolą odświeżone
-            wzorce nawigacji i są gotowe na migrację pod warunkiem, że onboarding i Magiczny Import skrócą czas
-            przejścia z tygodni do dni.
+            wzorce nawigacji i są gotowe na migrację, gdy historię z KSeF pobieramy sami, a resztę wgrywasz plikiem.
           </p>
         </section>
 
@@ -292,14 +291,14 @@ export default function IfirmaPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            iFirma tradycyjnie sprzedaje szeroki zestaw funkcji w modelu modułowym — to pozwala dopasować ofertę do biura rachunkowego, ale bywa mniej przejrzyste dla JDG, która chce po prostu KSeF + OCR + KPiR w jednym pakiecie. Przy porównaniu zawsze rozłóż cennik na: abonament bazowy, limity dokumentów, moduły kadrowe, integracje premium oraz ewentualne opłaty za szkolenie użytkowników.
+            iFirma tradycyjnie sprzedaje szeroki zestaw funkcji w modelu modułowym. To pozwala dopasować ofertę do biura rachunkowego, ale bywa mniej przejrzyste dla JDG, która chce po prostu KSeF, koszty ze zdjęcia i KPiR w jednym pakiecie. Przy porównaniu zawsze rozłóż cennik na: abonament bazowy, limity dokumentów, moduły kadrowe, integracje premium oraz ewentualne opłaty za szkolenie użytkowników.
           </p>
           <ul className="space-y-0 border-t border-zinc-100">
             {[
               { k: 'Warstwa wejścia', v: 'często atrakcyjna dla prostych faktur sprzedaży, ale bez pełnego stacku mobilnego i push.' },
-              { k: 'Warstwa rozszerzeń', v: 'dodatkowe moduły, wyższe limity, integracje — koszt skokowy przy wzroście skali biura.' },
+              { k: 'Warstwa rozszerzeń', v: 'dodatkowe moduły, wyższe limity, integracje: koszt skokowy przy wzroście skali biura.' },
               { k: 'Koszty ukryte', v: 'czas pracy na szkoleniu nowych osób w złożonym UI oraz czas na ręczne sprawdzanie statusów, jeśli brak push.' },
-              { k: 'FaktWay', v: `jedna stawka ${PRICE_PER_MONTH}, push + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli prostszy TCO dla mikrofirmy.` },
+              { k: 'FaktWay', v: `jedna stawka ${PRICE_PER_MONTH}, powiadomienia push, koszty ze zdjęcia i KSeF w jednym programie, ${TRIAL_DAYS} dni za darmo, czyli prostszy koszt dla mikrofirmy.` },
             ].map((item, i) => (
               <li
                 key={item.k}
@@ -318,7 +317,7 @@ export default function IfirmaPage() {
             ))}
           </ul>
           <p>
-            Pamiętaj, że cenniki zmieniają się kwartalnie — zanim podejmiesz decyzję migracyjną, pobierz aktualny PDF z witryny iFirmy i porównaj go z naszym pricingiem oraz kalkulatorem oszczędności.
+            Pamiętaj, że cenniki się zmieniają: zanim podejmiesz decyzję migracyjną, pobierz aktualny PDF z witryny iFirmy i porównaj go z naszym pricingiem oraz kalkulatorem oszczędności.
           </p>
         </section>
       </div>
@@ -348,11 +347,11 @@ export default function IfirmaPage() {
         <ol className="space-y-0 border-t border-zinc-100">
           {[
             { k: 'Audyt danych', v: 'wypisz moduły iFirmy, z których korzystasz (sprzedaż, koszty, ZUS, księgowa) oraz integracje z bankiem.' },
-            { k: 'Eksport', v: 'pobierz CSV/JPK/XML zgodnie z instrukcją eksportu; zrób drugą kopię na nośnik zewnętrzny.' },
-            { k: 'Import KSeF', v: 'zsynchronizuj historię wysyłek FA, żeby uniknąć duplikatów referencyjnych numerów.' },
-            { k: 'Test UX', v: 'przejdź 10 najczęstszych scenariuszy (faktura zaliczkowa, korekta, koszt OCR) i zmierz czas przed/po.' },
-            { k: 'Push i uprawnienia', v: 'skonfiguruj powiadomienia przeglądarki oraz PWA na telefonie pracowników terenowych.' },
-            { k: 'Hypercare', v: 'przez 14 dni monitoruj log błędów KSeF i zgłoszenia księgowej — po stabilizacji wyłącz rutynowe logowanie do starego panelu.' },
+            { k: 'Eksport', v: 'pobierz plik CSV zgodnie z instrukcją eksportu i zrób drugą kopię na nośnik zewnętrzny.' },
+            { k: 'Import KSeF', v: 'po wgraniu certyfikatu FaktWay sam pobiera historię z KSeF.' },
+            { k: 'Test', v: 'przejdź 10 najczęstszych scenariuszy (faktura, zaliczka, koszt ze zdjęcia) i zmierz czas przed i po.' },
+            { k: 'Push i uprawnienia', v: 'skonfiguruj powiadomienia przeglądarki i dodaj FaktWay do ekranu głównego telefonu.' },
+            { k: 'Hypercare', v: 'przez 14 dni sprawdzaj statusy faktur i pytania księgowej. Po stabilizacji przestań logować się do starego panelu.' },
           ].map((step, i) => (
             <li
               key={step.k}
@@ -378,7 +377,7 @@ export default function IfirmaPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            Strony porównawcze rankują lepiej, gdy łączą tabelę funkcji z narracją ekspercką: historia produktu, hosting, cennik, migracja, cytaty użytkowników i sekcję o ryzyku operacyjnym. Dzięki temu wyszukiwarka widzi nie tylko listę checkboxów, ale kontekst decyzyjny mikrofirmy — czyli dokładnie to, czego szuka użytkownik wpisując długie zapytanie z nazwą konkurenta.
+            Strony porównawcze rankują lepiej, gdy łączą tabelę funkcji z narracją ekspercką: historia produktu, hosting, cennik, migracja, cytaty użytkowników i sekcję o ryzyku operacyjnym. Dzięki temu wyszukiwarka widzi nie tylko listę checkboxów, ale kontekst decyzyjny mikrofirmy, czyli dokładnie to, czego szuka użytkownik wpisując długie zapytanie z nazwą konkurenta.
           </p>
           <p>
             Powiąż lekturę z{' '}
@@ -405,14 +404,14 @@ export default function IfirmaPage() {
             , żeby zbudować graf wewnętrznych powiązań tematycznych.
           </p>
           <p>
-            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktWay), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej — napisz na {SUPPORT_EMAIL} z informacją o liczbie podmiotów.
+            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktWay), napisz na {SUPPORT_EMAIL} z informacją o liczbie podmiotów.
           </p>
         </section>
       </div>
 
       <VsMigrationCta
         competitorName="iFirma"
-        copy="Załóż konto, włącz PWA, przetestuj push przy pierwszej wysyłce FA(3) i zobacz, czy Twój dzień pracy staje się krótszy jeszcze przed pełnym importem historii."
+        copy="Załóż konto, dodaj FaktWay do ekranu głównego, włącz powiadomienia push i sprawdź je przy pierwszej wysyłce FA(3)."
       />
     </article>
   );

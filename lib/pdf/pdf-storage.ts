@@ -23,7 +23,8 @@ import {
 // numer, data i numer KSeF faktury korygowanej (art. 106j ust. 2).
 // v5: identyfikator cache zależy od KODU I i podpisu pod nim. Uzupełnienie
 // hasha XML lub nadanie numeru KSeF nie może zwrócić starego PDF bez QR.
-const PDF_RENDERER_VERSION = 5;
+// v6 (02.11): stopka z adresem strony, bez długiego myślnika.
+const PDF_RENDERER_VERSION = 6;
 
 function parseYearMonth(issueDate: string): { year: string; month: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {

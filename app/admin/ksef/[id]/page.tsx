@@ -5,7 +5,12 @@ import { ArrowLeft } from 'lucide-react';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { listInvoiceAttempts } from '@/lib/admin/centrum/attempts';
 import { attemptMessage, effectiveStatus, STAGE_LABELS, STATUS_LABELS } from '@/lib/admin/centrum/send-errors';
-import { getInvoiceLifecycle } from '@/lib/admin/ksef-lifecycle';
+import { getInvoiceLifecycle, type InvoiceLifecycle } from '@/lib/admin/ksef-lifecycle';
+import {
+  gateProblemsText,
+  OPERATOR_DUPLICATE_MESSAGES,
+  operatorDuplicateRefusalReason,
+} from '@/lib/admin/ksef-operator-policy';
 
 import { OperatorActions } from '../_components/operator-actions';
 
@@ -28,8 +33,96 @@ function Field({ label, value, mono = false }: { label: string; value: string | 
 }
 
 /**
+ * Co karta mówi o ofercie i blokadzie decyzji (widok polityki, actor operator): oferta i tryb, przegląd pliku
+ * z wynikiem suchego przebiegu, powód odmowy albo zapisana decyzja. Teksty operatora z `OPERATOR_DUPLICATE_MESSAGES`.
+ */
+function offerSummary(data: InvoiceLifecycle): string | null {
+  const view = data.duplicateDecision;
+  if (!view) return null;
+  switch (view.kind) {
+    case 'decidable':
+      return `oferta ${view.offer ?? 'powód PR B'} · tryb ${view.mode ?? 'decide_ksef_duplicate (9 argumentów)'}`;
+    case 'review': {
+      const recordable = data.originalRecordable;
+      const record = recordable?.ok === true
+        ? 'plik da się zapisać'
+        : OPERATOR_DUPLICATE_MESSAGES.notBuildable(recordable?.ok === false ? recordable.detail : 'plik nie został sprawdzony');
+      return `oferta ${view.offer} (przegląd pliku, I5R) · ${record}`;
+    }
+    case 'refused':
+      return `odmowa ${view.refusal}: ${operatorDuplicateRefusalReason(view.refusal, view.detail)}`;
+    case 'decided':
+      return `decyzja zapisana${view.mode ? ` · tryb ${view.mode}` : ''}${view.offer ? ` · oferta ${view.offer}` : ''}`;
+  }
+}
+
+/** Sekcja „Zapis oryginału” (PR C, 6.6): ocena pliku, oferta, oddanie, znacznik „sprawdź ponownie”, K po decyzji i I3K. */
+function OriginalImportSection({ data }: { data: InvoiceLifecycle }) {
+  const { submissions, importedOriginal } = data;
+  const rows = submissions.filter((s) => s.originalCheck?.reason === 'faktflow-original');
+  if (rows.length === 0) return null;
+  const M = OPERATOR_DUPLICATE_MESSAGES;
+  // `{nrK}` w tekstach I3K: numer faktury z KSeF — numer, który przeszedł z dokumentu na K (`retiredInternalNumber`).
+  const nrK = rows.find((s) => s.originalDecision?.importedInvoiceId)?.originalDecision?.retiredInternalNumber
+    ?? importedOriginal?.ksefNumber
+    ?? data.invoice.id;
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold text-lg">Zapis oryginału z oznaczeniem FaktWay</h2>
+      {rows.map((s) => {
+        const c = s.originalCheck!;
+        const open = s.status === 'sent' || s.status === 'intent';
+        const gate = c.importGate ?? null;
+        const decision = s.originalDecision;
+        const fields: Array<[string, string | null]> = [
+          ['Wpis próby', `${s.status ?? '—'}${open ? ' (otwarty — bieżący)' : ' (zamknięty — historyczny)'}`],
+          ['Ocena pliku', gate
+            ? `${gate.kind} · reguły v${gate.rules}${gate.problems.length > 0 ? ` · ${gateProblemsText(gate.problems)}` : ''}`
+            : 'brak oceny pliku (znacznik sprzed 00156 — recheck-needed)'],
+          ['Podgląd pliku', gate?.preview
+            ? `okres ${gate.preview.period} · pozycji ${gate.preview.lineCount} · brutto ${gate.preview.totals.gross} · nabywca: ${gate.preview.buyerIdKind}`
+            : null],
+          ['Oddanie decyzji klientowi', gate?.release
+            ? `${when(gate.release.at)} · ${gate.release.actorUserId ? `user ${gate.release.actorUserId.slice(0, 8)}…` : 'operator'} · ${gate.release.note ?? ''}`
+            : null],
+          ['Do ponownego sprawdzenia', c.recheckNeeded ? M.recheckPending(c.recheckNeeded.kind, when(c.recheckNeeded.at)) : null],
+          ['Oferta i blokada', open ? offerSummary(data) : null],
+          ['Decyzja (tryb, oferta)', decision ? `tryb ${decision.mode ?? '—'} · oferta ${decision.offer ?? '—'}` : null],
+          ['Dawny numer dokumentu', decision?.retiredInternalNumber ?? null],
+        ];
+        return (
+          <dl key={s.id} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 rounded-2xl border border-glass-border bg-foreground/3 p-4 text-sm">
+            {fields.filter(([, v]) => v).map(([label, value]) => (
+              <div key={label} className="flex gap-2">
+                <dt className="text-muted-foreground">{label}:</dt>
+                <dd className="font-mono text-xs break-all">{value}</dd>
+              </div>
+            ))}
+            {decision?.importedInvoiceId ? (
+              <div className="flex gap-2 md:col-span-2">
+                <dt className="text-muted-foreground">Faktura z KSeF zapisana w FaktWay:</dt>
+                <dd className="font-mono text-xs break-all">
+                  <Link href={`/admin/ksef/${decision.importedInvoiceId}`} className="hover:underline">{decision.importedInvoiceId}</Link>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        );
+      })}
+      {importedOriginal && (importedOriginal.noSession || importedOriginal.noDate) ? (
+        <div className="space-y-1 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          {importedOriginal.noSession ? <p>{M.noSession(nrK)}</p> : null}
+          {importedOriginal.noDate ? <p>{M.noDate(nrK)}</p> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * Karta faktury dla operatora: stan, historia wysyłek, ślad audytu, akcje (PR 3c).
  * D-A4-1b-3 PR B: decyzja klienta przy 440 i ślad powiadomień w sekcji `original_check`.
+ * PR C: sekcja „Zapis oryginału” (ocena pliku, oferta, oddanie, I3K) i przyciski przeglądu pliku.
  */
 export default async function AdminKsefInvoicePage(props: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -38,7 +131,7 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
   if (!data) notFound();
   // A5 (00150): każde wykonanie joba wysyłki i odmowa przed kolejką — także porażki sprzed wysłania pliku.
   const attempts = await listInvoiceAttempts(id);
-  const { invoice, submissions, audit, openSent, evidence, resendFacts, environment, duplicateDecision, duplicateNotice } = data;
+  const { invoice, submissions, audit, openSent, evidence, resendFacts, environment, duplicateDecision, duplicateNotice, originalRecordable } = data;
   // Chwila odczytu dla reguły 24 h „Przypomnij klientowi” — ta sama w renderze serwera i klienta.
   const now = new Date();
 
@@ -100,8 +193,10 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
           evidence={evidence}
           facts={resendFacts}
           environmentKnown={environment !== null}
+          environment={environment}
           duplicateDecision={duplicateDecision}
           duplicateNotice={duplicateNotice}
+          originalRecordable={originalRecordable}
           now={now}
         />
       </section>
@@ -198,6 +293,8 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
           </div>
         )}
       </section>
+
+      <OriginalImportSection data={data} />
 
       {submissions.some((s) => s.originalCheck) && (
         <section className="space-y-3">

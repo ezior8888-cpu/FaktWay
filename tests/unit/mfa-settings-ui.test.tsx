@@ -68,14 +68,19 @@ it('still offers turning off active MFA and provides a support contact', () => {
 });
 
 it.each([true, false])('does not query recovery codes on the settings page with enabled=%s', async (isEnabled) => {
-  mocks.listFactors.mockResolvedValue({ data: {
-    totp: isEnabled ? [{ id: 'factor-fixture', factor_type: 'totp', status: 'verified' }] : [],
-  }, error: null });
+  // Czynniki MFA z odczytu użytkownika (`user.factors`), bez drugiego
+  // `getUser()` w `mfa.listFactors()` — sesja 9 planu skalowania.
+  mocks.getUser.mockResolvedValue({ data: { user: {
+    id: 'user-fixture',
+    factors: isEnabled ? [{ id: 'factor-fixture', factor_type: 'totp', status: 'verified' }] : [],
+  } }, error: null });
   const markup = renderToStaticMarkup(await SecuritySettingsPage({
     searchParams: Promise.resolve({ notice: 'admin_mfa_required' }),
   }));
   expect(markup).toContain('Panel administratora wymaga weryfikacji dwuetapowej.');
   expect(markup).toContain('potwierdź kod z aplikacji TOTP');
+  expect(markup).toContain(isEnabled ? 'Wyłącz aplikację TOTP' : 'Włącz 2FA');
   expect(markup).not.toContain('zapisz kody ratunkowe');
   expect(mocks.countRecovery).not.toHaveBeenCalled();
+  expect(mocks.listFactors).not.toHaveBeenCalled();
 });

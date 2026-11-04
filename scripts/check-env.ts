@@ -43,8 +43,6 @@ const SPECS: VarSpec[] = [
   { name: 'NEXT_PUBLIC_APP_URL', feature: 'Rdzeń aplikacji', level: 'required' },
   { name: 'NEXT_PUBLIC_APP_ENV', feature: 'Rdzeń aplikacji', level: 'required', note: 'MUSI być "production" na prod (bramki SEC-1)' },
   { name: 'NEXT_PUBLIC_APP_DOMAIN', feature: 'Rdzeń aplikacji', level: 'optional' },
-  { name: 'NEXT_PUBLIC_MOBILE_PANEL', feature: 'Panel na telefonie', level: 'optional', note: "off | allowlist | on; brak = off (telefony na /mobile)" },
-  { name: 'NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', feature: 'Panel na telefonie', level: 'optional', note: 'identyfikatory userów po przecinku; działa tylko przy trybie allowlist' },
 
   // ── Baza + logowanie (Supabase) ──
   { name: 'NEXT_PUBLIC_SUPABASE_URL', feature: 'Baza + logowanie', level: 'required' },
@@ -126,6 +124,7 @@ const SPECS: VarSpec[] = [
   { name: 'STRIPE_PRICE_MONTHLY', feature: 'Billing (Stripe)', level: 'deferred' },
   { name: 'STRIPE_PRICE_ANNUAL', feature: 'Billing (Stripe)', level: 'deferred' },
   { name: 'STRIPE_API_VERSION', feature: 'Billing (Stripe)', level: 'optional' },
+  { name: 'STRIPE_BLIK_RECURRING', feature: 'Billing (Stripe)', level: 'optional', note: 'włącza tylko „on”: BLIK obok karty przy próbie; najpierw docs/runbooks/stripe-blik.md' },
   { name: 'FAKTFLOW_OPERATOR_TENANT_ID', feature: 'Self-invoicing', level: 'deferred', note: 'Faza 37+ (nasza firma jako sprzedawca)' },
   { name: 'FAKTFLOW_OPERATOR_BANK_ACCOUNT', feature: 'Self-invoicing', level: 'deferred' },
   { name: 'GUS_API_KEY', feature: 'GUS (dane firm)', level: 'required', note: 'bez klucza: sandbox GUS (stare, zanonimizowane dane) — przy KSEF_ENV=production JPK_FA odmawia (adres siedziby z GUS), a podpowiedzi kontrahentów idą z danych testowych' },

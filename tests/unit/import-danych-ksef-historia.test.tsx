@@ -346,7 +346,7 @@ describe('powody odłożenia i blokady — każdy z wyjściem', () => {
       invoiceHref: null,
     });
     expect(blockedReasonText(blockedItem('number_conflict'))).toEqual({
-      text: 'W FaktWay jest szkic o numerze FV/10/2026. Zmień jego numer albo usuń szkic — wtedy pobierzemy tę fakturę sami.',
+      text: 'W FaktWay jest szkic o numerze FV/10/2026, np. z importu pliku. Szkic nie liczy się w przychodzie ani w KPiR — usuń go, a pobierzemy oryginał z KSeF sami.',
       invoiceHref: '/invoices/inv-1',
       mentionsSupport: false,
     });
@@ -539,7 +539,7 @@ describe('karta „Historia z KSeF”', () => {
     expect(t).toContain('Ta faktura jest w KSeF, a w FaktWay czeka na Twoją decyzję przy duplikacie.');
     expect(t).toContain('To prawdopodobnie faktura wysłana właśnie z FaktWay — sprawdzimy ją ponownie za godzinę.');
     expect(t).toContain('Faktura w walucie EUR.');
-    expect(t).toContain('W FaktWay jest szkic o numerze FV/10/2026.');
+    expect(t).toContain('W FaktWay jest szkic o numerze FV/10/2026, np. z importu pliku.');
     expect(t).toContain(`napisz na ${SUPPORT_EMAIL}.`);
     expect(html).toContain(`href="mailto:${SUPPORT_EMAIL}"`);
     expect(html).toContain('href="/invoices/inv-1"');

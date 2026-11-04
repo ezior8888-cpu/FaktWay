@@ -32,8 +32,16 @@ const money = (n: number) => `${formatPlMoney(n)} zł`
 
 export const EXPENSE_COSTS_NOTE = 'Tylko koszty w KPiR'
 
-export async function ExpensesGrossCell({ supabase, tenantId, month }: ExpenseStatsProps) {
-  return loadStatCell('Wydatki w miesiącu', async () => {
+export async function ExpensesGrossCell({
+  supabase,
+  tenantId,
+  month,
+  label = 'Wydatki w miesiącu'
+}: ExpenseStatsProps & {
+  /** Kafle sekcji Kosztów liczą bieżący miesiąc niezależnie od filtra tabeli — „w tym miesiącu”. */
+  label?: string
+}) {
+  return loadStatCell(label, async () => {
     const stats = await loadMonthTotals(supabase, tenantId, month)
     return {
       value: formatPlCompactMoney(stats.gross),

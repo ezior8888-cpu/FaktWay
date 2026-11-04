@@ -472,11 +472,13 @@ async function violationsOf(invoiceId: string): Promise<Array<{ invariant: strin
     .map((v) => ({ invariant: v.invariant, detail: v.detail }));
 }
 
+type FactsOptions = Parameters<typeof import('@/lib/ksef/duplicate-decision-facts').loadDuplicateDecisionFacts>[4];
+
 /** Werdykt polityki TS na faktach z loadera (klient serwisu, jak operator). */
-async function tsVerdict(invoiceId: string): Promise<string> {
+async function tsVerdict(invoiceId: string, options?: FactsOptions): Promise<string> {
   const { loadDuplicateDecisionFacts } = await import('@/lib/ksef/duplicate-decision-facts');
   const { duplicateDecisionOptions } = await policy();
-  const facts = await loadDuplicateDecisionFacts(admin, ORG, invoiceId);
+  const facts = await loadDuplicateDecisionFacts(admin, ORG, invoiceId, undefined, options);
   const view = duplicateDecisionOptions({ facts, actor: 'operator', canManage: true, environment: 'test', now: new Date() });
   return view.kind === 'refused' ? view.refusal : view.kind;
 }
@@ -1035,7 +1037,13 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
         name: 'original_check NULL (znacznik sprzed 00144) → no-check', setup: () => pendingDuplicate({ check: null }),
         code: 'P0001', text: (p) => ['no-check', p.number],
       },
-      ...(['faktflow-original', 'same-content-other-program', 'download-refused'] as const).map((reason): RefusalCase => ({
+      // PR C (00156, spec 7.4): faktflow-original z SystemInfo FaktFlow (F28) bez importGate przechodzi `allows`
+      // (4.2) i dostaje blokadę recheck-needed (4.5 krok 11c) — nie `reason`. Dwa pozostałe powody bez zmian.
+      {
+        name: 'faktflow-original bez importGate (sprzed 00156) → recheck-needed', setup: () => pendingDuplicate({ reason: 'faktflow-original' }),
+        code: 'P0001', text: (p) => ['recheck-needed', p.number],
+      },
+      ...(['same-content-other-program', 'download-refused'] as const).map((reason): RefusalCase => ({
         name: `powód ${reason} → reason`, setup: () => pendingDuplicate({ reason }),
         code: 'P0001', text: (p) => ['reason', p.number],
       })),
@@ -1253,7 +1261,8 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
         },
       },
       { name: 'zaliczka', code: 'kind', setup: () => pendingDuplicate({ kind: 'advance' }) },
-      { name: 'faktflow-original', code: 'reason', setup: () => pendingDuplicate({ reason: 'faktflow-original' }) },
+      // PR C (00156, spec 7.4): intencja bez zmian (I5, bez I5D), kod recheck-needed — znacznik bez importGate (4.5 krok 11c).
+      { name: 'faktflow-original', code: 'recheck-needed', setup: () => pendingDuplicate({ reason: 'faktflow-original' }) },
       { name: 'original_check NULL', code: 'no-check', setup: () => pendingDuplicate({ check: null }) },
       {
         name: 'drugi oryginał (inny K)', code: 'conflicting-originals',
@@ -1269,7 +1278,10 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       expect(invariants).toContain('I5');
       expect(invariants).not.toContain('I5D');
       expect(await blocker(p.id)).toBe(code);
-      expect(await tsVerdict(p.id)).toBe(code);
+      // PR C (5.4, 5.5 krok 1): przy znaczniku faktflow-original polityka TS wymaga odczytanej blokady SQL
+      // (bez niej state-unknown) — dla tego wiersza ładowarka czyta ją kluczem serwisowym; recheck-needed
+      // TS i tak liczy sam z JSON (lustro 11c). Powody PR B bez zmian (bez odczytu blokady).
+      expect(await tsVerdict(p.id, code === 'recheck-needed' ? { sqlBlocker: 'admin' } : undefined)).toBe(code);
     });
 
     it('R5 strażnik: RESULT_UNCERTAIN ze starym wpisem sent — I5, nie I5D', async () => {
@@ -1286,7 +1298,9 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
   // ─── R6: zgodność jsonb ──────────────────────────────────────────────────
 
   it('R6: ksef_duplicate_check_allows = duplicateCheckAllows = oczekiwanie wspólnej tabeli (każdy wiersz)', async () => {
-    const { DUPLICATE_CHECK_CASES } = await import('./unit/helpers/ksef-duplicate-decision-cases');
+    // PR C: R6 zostaje strażnikiem PR B — iteruje tabelę bez wierszy `faktflow-original`, bo SQL 00148 i polityka
+    // TS dopuszczają je dopiero po 00156 i implementacji grupy B; pełną tabelę (R-C15) sprawdza `rls-zapis-oryginalu`.
+    const { PR_B_DUPLICATE_CHECK_CASES: DUPLICATE_CHECK_CASES } = await import('./unit/helpers/ksef-duplicate-decision-cases');
     expect(DUPLICATE_CHECK_CASES.length).toBeGreaterThan(0);
 
     const sql: Array<{ name: string; sql: unknown; error: string | null; allows: boolean }> = [];

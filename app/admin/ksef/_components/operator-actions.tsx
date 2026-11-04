@@ -11,6 +11,7 @@ import {
   operatorInvoiceButtons,
   type OperatorButtonsInput,
 } from '@/lib/admin/ksef-operator-policy';
+import type { KsefEnvironment } from '@/types/ksef';
 
 import { operatorRemindDuplicateDecisionAction, operatorRequeueAction, operatorResetAction } from '../actions';
 import { OperatorDuplicateDecision } from './operator-duplicate-decision';
@@ -18,6 +19,8 @@ import { OperatorDuplicateDecision } from './operator-duplicate-decision';
 interface Props extends OperatorButtonsInput {
   invoiceId: string;
   internalNumber: string | null;
+  /** PR C (INV-8): `KSEF_ENV` serwera w chwili odczytu karty — okno decyzji wysyła je razem z trybem i ofertą. */
+  environment?: KsefEnvironment | null;
 }
 
 const BUTTON_LABELS = {
@@ -26,12 +29,16 @@ const BUTTON_LABELS = {
   reset: 'Wróć do szkicu',
   decide: OPERATOR_DUPLICATE_MESSAGES.decideButton,
   remind: OPERATOR_DUPLICATE_MESSAGES.remindButton,
+  record: OPERATOR_DUPLICATE_MESSAGES.recordButton,
+  release: OPERATOR_DUPLICATE_MESSAGES.releaseButton,
 } as const;
 
 /**
  * Przyciski operatora: te same RPC co u klienta, z aktorem = operator (PR 3c).
  * D-A4-1b-3 PR B: „Zapisz decyzję klienta” i „Przypomnij klientowi” przy
  * nierozstrzygniętym 440 (widok polityki w `duplicateDecision`).
+ * PR C: w przeglądzie pliku z oznaczeniem FaktWay (widok `review`) w miejsce „Zapisz decyzję klienta” — „Zapisz
+ * fakturę z KSeF w FaktWay” i „Oddaj decyzję klientowi” (`OperatorDuplicateDecision`).
  */
 export function OperatorActions(props: Props) {
   const router = useRouter();
@@ -84,11 +91,21 @@ export function OperatorActions(props: Props) {
           <RotateCcw className="h-4 w-4 mr-2" />
           Wróć do szkicu
         </Button>
-        {buttons.decide.enabled && props.duplicateDecision?.kind === 'decidable' ? (
+        {props.duplicateDecision?.kind === 'review' ? (
           <OperatorDuplicateDecision
             invoiceId={props.invoiceId}
             internalNumber={props.internalNumber}
             view={props.duplicateDecision}
+            env={props.environment ?? null}
+            recordable={props.originalRecordable ?? null}
+            disabled={pending}
+          />
+        ) : buttons.decide.enabled && props.duplicateDecision?.kind === 'decidable' ? (
+          <OperatorDuplicateDecision
+            invoiceId={props.invoiceId}
+            internalNumber={props.internalNumber}
+            view={props.duplicateDecision}
+            env={props.environment ?? null}
             disabled={pending}
           />
         ) : (
@@ -109,7 +126,7 @@ export function OperatorActions(props: Props) {
         </Button>
       </div>
       <ul className="space-y-1 text-xs text-muted-foreground">
-        {(['requeue', 'reconcile', 'reset', 'decide', 'remind'] as const)
+        {(['requeue', 'reconcile', 'reset', 'decide', 'remind', 'record', 'release'] as const)
           .filter((key) => buttons[key].reason)
           .map((key) => (
             <li key={key}>

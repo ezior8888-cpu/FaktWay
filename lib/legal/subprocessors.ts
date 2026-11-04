@@ -84,7 +84,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
     name: 'PostHog, Inc.',
     seat: 'USA',
     purpose:
-      'analityka korzystania z serwisu: w przeglądarce wyłącznie po wyrażeniu zgody; zdarzenia z serwera bez danych z dokumentów, z pseudonimowym identyfikatorem',
+      'analityka korzystania z serwisu wyłącznie po wyrażeniu zgody: zdarzenia z przeglądarki i z serwera, bez danych z dokumentów, z pseudonimowym identyfikatorem',
     location: 'region danych UE (Niemcy)',
     transfer: SCC_OR_DPF,
     roles: ['own_data'],

@@ -10,8 +10,10 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
+import { InvoicePaymentPanel, type InvoicePaymentPanelData } from '@/components/invoices/invoice-payment-panel';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
+import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
 import { KsefDuplicateDecision } from '@/components/invoices/ksef-duplicate-decision';
 import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
@@ -21,9 +23,10 @@ import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
-import type { DuplicateDecisionView, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
+import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
+import type { KsefEnvironment } from '@/types/ksef';
 
 export interface InvoiceDetailLine {
   ordinal: number;
@@ -76,6 +79,10 @@ export interface InvoiceDetailInitial {
   buyer_data: unknown;
   /** `invoices.payment_data` — `PaymentInfo` z faktury; `null` w starych rekordach. */
   payment_data: unknown;
+  /** `invoices.payment_status`: zmiana z Realtime przelicza panel płatności (serwer). */
+  payment_status?: string | null;
+  /** Panel „Zapłacone” (00158): liczy serwer; brak = faktura bez płatności do oznaczenia (szkic, zakup). */
+  payment_panel?: InvoicePaymentPanelData | null;
   lines: InvoiceDetailLine[];
   /** E3 / P4: waluta faktury (kod ISO; brak w wierszu = PLN) — podpis kwot zamiast „PLN” na sztywno. */
   currency: string;
@@ -91,6 +98,8 @@ export interface InvoiceDetailInitial {
    * Brak pola = przycisk ukryty.
    */
   can_set_recurring?: boolean;
+  /** „Duplikuj” w karcie „Dokument”: zwykła faktura z FaktWay (ten sam predykat co menu „⋯” listy). */
+  can_duplicate?: boolean;
   /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
   qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
@@ -109,6 +118,17 @@ export interface InvoiceDetailInitial {
   ksef_duplicate_decision: DuplicateDecisionView | null;
   /** D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — baner każdego rodzaju (decyzja 9). */
   ksef_retired_draft: RetiredDraftView | null;
+  /**
+   * D-A4-1b-3 PR C (INV-8): środowisko KSeF serwera pokazane klientowi — panel odsyła je do akcji
+   * razem z trybem i ofertą, a serwer odmawia `STALE`, gdy się zmieniło. Brak pola = `null`.
+   */
+  ksef_server_environment?: KsefEnvironment | null;
+  /**
+   * D-A4-1b-3 PR C (6.5): faktura zapisana z KSeF decyzją klienta albo operatora — skąd się wzięła
+   * (`importedOriginalProvenance(fa3_data)` liczy serwer; sama treść dokumentu nie trafia do klienta).
+   * Brak pola = `null`.
+   */
+  ksef_imported_original?: ImportedOriginalProvenance | null;
 }
 
 interface PaymentSnapshot {
@@ -124,6 +144,7 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   transfer: 'Przelew',
   cash: 'Gotówka',
   card: 'Karta',
+  mobile: 'Płatność mobilna',
   other: 'Inna',
 };
 
@@ -175,12 +196,13 @@ function vatRateLabel(rate: string | null): string {
 
 /**
  * Kolumny `invoices`, od których zależą fakty liczone TYLKO na serwerze: kod QR
- * (`loadQr`: numer KSeF + hash pliku XML) i prawo do korekty (`loadCanCorrect`: status, numer).
+ * (`loadQr`: numer KSeF + hash pliku XML), prawo do korekty (`loadCanCorrect`: status, numer)
+ * i panel płatności (`loadPaymentPanel`: status płatności).
  * Realtime niesie same kolumny wiersza, więc zmiana którejkolwiek z nich odświeża stronę
  * (`router.refresh()`) — tak jak `PAYMENT_FACT_FIELDS` na liście faktur. Inne zmiany
  * (np. podpowiedź błędu) są już w całości widoczne ze stanu lokalnego.
  */
-const SERVER_FACT_FIELDS = ['ksef_status', 'ksef_number', 'xml_storage_path'] as const;
+const SERVER_FACT_FIELDS = ['ksef_status', 'ksef_number', 'xml_storage_path', 'payment_status'] as const;
 
 /**
  * Szczegóły faktury + nasłuch Realtime na UPDATE tego samego wiersza
@@ -330,9 +352,10 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     ksef_resend_facts: initial.ksef_resend_facts,
     ksef_environment_known: initial.ksef_environment_known,
     ksef_duplicate_panel: duplicatePanel,
-    ksef_retired: retired ? { deletable: retired.deletable } : null,
+    ksef_retired: retired ? { deletable: retired.deletable, ...(retired.imported ? { imported: retired.imported } : {}) } : null,
     can_correct: inv.can_correct,
     can_set_recurring: inv.can_set_recurring ?? false,
+    can_duplicate: inv.can_duplicate ?? false,
   };
 
   return (
@@ -376,6 +399,16 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               />
             )}
 
+            {inv.payment_panel && (
+              <InvoicePaymentPanel
+                invoice={{ id: inv.id, number: inv.internal_number }}
+                data={inv.payment_panel}
+              />
+            )}
+
+            {/* PR C (6.5): faktura zapisana z KSeF decyzją — skąd się wzięła i co dalej (wpłaty, przypomnienia). */}
+            {inv.ksef_imported_original && <ImportedOriginalNote provenance={inv.ksef_imported_original} />}
+
             {inv.last_error && !duplicatePanel && (
               <InvoiceErrorDisplay
                 errorMessage={inv.last_error}
@@ -404,7 +437,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                   ))}
                 </dl>
                 {decision ? (
-                  <KsefDuplicateDecision invoiceId={inv.id} view={decision} />
+                  <KsefDuplicateDecision invoiceId={inv.id} view={decision} env={initial.ksef_server_environment} />
                 ) : (
                   <>
                     <p className="mt-3 text-sm text-amber-900 dark:text-amber-100">

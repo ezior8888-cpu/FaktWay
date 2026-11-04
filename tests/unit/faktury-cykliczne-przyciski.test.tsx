@@ -33,7 +33,7 @@ import { rowMenuEntries } from '@/app/(dashboard)/invoices/_components/invoice-r
 import {
   defaultRecurringName,
   templateLabel,
-} from '@/app/(dashboard)/invoices/recurring/_components/recurring-invoice-sheet';
+} from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoice-sheet';
 // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — karta „Stali klienci” to teraz kopia
 // Finory z `finora-1do1/`, a wiersze przygotowuje adapter `toSubscriptionItems`.
 import { toSubscriptionItems } from '@/components/analizy/adapters';
@@ -184,6 +184,37 @@ describe('podgląd faktury (P4): „Ustaw jako cykliczną” w karcie „Dokumen
   it('bez flagi albo z false — przycisku nie ma', () => {
     expect(render(false)).not.toContain('Ustaw jako cykliczną');
     expect(render(undefined)).not.toContain('Ustaw jako cykliczną');
+  });
+});
+
+describe('podgląd faktury: „Duplikuj” w karcie „Dokument” (telefon nie ma menu „⋯” tabeli)', () => {
+  const FACTS: KsefResendFacts = { sendData: 'stored', kindHeld: false, issueDatePassed: false };
+  const render = (canDuplicate: boolean | undefined) =>
+    renderToStaticMarkup(
+      <InvoiceActions
+        section="secondary"
+        invoice={{
+          id: ID,
+          ksef_status: 'accepted',
+          xml_storage_path: null,
+          invoice_type: 'VAT',
+          invoice_kind: 'regular',
+          ksef_resend_facts: FACTS,
+          ksef_environment_known: true,
+          can_duplicate: canDuplicate,
+        }}
+      />,
+    );
+
+  it('link do formularza z wzorem, gdy strona policzyła, że fakturę wolno zduplikować', () => {
+    const html = render(true);
+    expect(html).toContain('Duplikuj');
+    expect(html).toContain(`href="${duplicateInvoiceHref(ID)}"`);
+  });
+
+  it('bez flagi albo z false: przycisku nie ma', () => {
+    expect(render(false)).not.toContain('Duplikuj');
+    expect(render(undefined)).not.toContain('Duplikuj');
   });
 });
 

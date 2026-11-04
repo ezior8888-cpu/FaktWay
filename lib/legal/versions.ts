@@ -20,10 +20,15 @@
  * zastąpione, nie dopisane.
  */
 export const CONTRACT_VERSION = '2026-10-21';
-export const PRIVACY_POLICY_VERSION = '2026-10-21';
+// 2026-11-02: zdarzenia z serwera wyłącznie za zgodą, źródło wejścia (pomiar FaktWay 1.0).
+// 2026-11-02: dane logowania biometrią (klucz publiczny i nazwa urządzenia).
+export const PRIVACY_POLICY_VERSION = '2026-11-02';
 // 2026-10-22: cookie `sidebar_state` (menu boczne panelu, plan Finora).
 // 2026-10-25: Turnstile także przy potwierdzaniu hasła w ustawieniach.
-export const COOKIE_POLICY_VERSION = '2026-10-25';
+// 2026-11-02: cookie `ff_first_touch` i zapis daty wyboru (pomiar FaktWay 1.0).
+// 2026-11-02: logowanie biometrią i „Zapamiętaj mnie” (trzy cookies, klucz localStorage).
+// 2026-11-03: klucz localStorage z identyfikatorami kluczy biometrii telefonu (bez kodu QR).
+export const COOKIE_POLICY_VERSION = '2026-11-03';
 
 /**
  * Oświadczenie przy rejestracji / w bramce (obowiązkowe). Znaczniki linków
@@ -50,6 +55,18 @@ export const MARKETING_STATEMENT = {
 } as const;
 
 /**
+ * Zgoda na analitykę z banera (dobrowolna, art. 6 ust. 1 lit. a RODO i art. 399
+ * Prawa komunikacji elektronicznej). Baner pokazuje dokładnie ten tekst, a wpis
+ * `analytics.consent_changed` w audit_logs niesie jego wersję.
+ */
+export const ANALYTICS_STATEMENT = {
+  version: '2026-11-02',
+  text:
+    'Za Twoją zgodą zbieramy statystyki użycia (PostHog, hostowane w UE) i zapamiętujemy, ' +
+    'skąd do nas trafiłeś, żeby naprawiać błędy i ulepszać FaktWay. Decyzję zmienisz w każdej chwili.',
+} as const;
+
+/**
  * Żądanie rozpoczęcia świadczenia przed upływem terminu na odstąpienie
  * (art. 15 ust. 3 i art. 35 ustawy o prawach konsumenta). Dotyczy tylko
  * konsumenta i przedsiębiorcy na prawach konsumenta — dla pozostałych jest
@@ -63,4 +80,25 @@ export const CHECKOUT_STATEMENT = {
     'rozpoczęcia świadczenia przed upływem 14 dni na odstąpienie od umowy i przyjmuję do ' +
     'wiadomości, że w razie odstąpienia zapłacę za usługę świadczoną do chwili odstąpienia ' +
     '(okres próbny jest bezpłatny).',
+} as const;
+
+/**
+ * Zgoda na cykliczne płatności BLIK-iem, zaznaczana razem z `CHECKOUT_STATEMENT`,
+ * gdy włączony jest `STRIPE_BLIK_RECURRING` (lib/billing/trial-payment.ts). Przy
+ * hostowanym Checkout warunki mandatu pokazuje sprzedawca, PRZED kodem BLIK
+ * (docs.stripe.com/payments/blik/recurring-payments). Wersję zapisuje audyt
+ * `legal.checkout_statement_accepted`.
+ *
+ * Anulowanie i zmiana metody kończą pobrania, ale nie upoważnienie: to kończy odpięcie
+ * metody albo cofnięcie w banku (docs.stripe.com/payments/blik, „Cancel mandates”),
+ * a kod niczego nie odpina. Żadne wcześniejsze brzmienie nie było pokazane klientom
+ * (przełącznik nigdy nie był włączony), więc nie ma zapisów zgód na inną treść.
+ */
+export const BLIK_RECURRING_STATEMENT = {
+  version: '2026-11-02',
+  text:
+    'Jeśli na stronie płatności wybiorę BLIK, zgadzam się na cykliczne płatności: FaktWay będzie co miesiąc ' +
+    'pobierać opłatę za subskrypcję z mojego konta bankowego bez ponownego kodu BLIK i bez zatwierdzania ' +
+    'każdej płatności w aplikacji banku. Pobrania zakończę, anulując subskrypcję albo zmieniając metodę ' +
+    'płatności. Upoważnienie mogę też cofnąć w aplikacji banku.',
 } as const;

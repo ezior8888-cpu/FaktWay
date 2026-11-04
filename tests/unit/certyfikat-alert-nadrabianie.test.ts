@@ -48,6 +48,10 @@ vi.mock('@/lib/supabase/server', () => ({
     from(table: string) {
       mocks.queriedTables.push(table);
       const predicates: Array<(r: Row) => boolean> = [];
+      // Lista firm idzie stronami po kluczu (sesja 27): order i limit działają
+      // jak w bazie, inaczej strony nie dowodziłyby niczego.
+      let sortKey: string | null = null;
+      let limitN: number | null = null;
       const q = {
         select: () => q,
         eq(k: string, v: unknown) { predicates.push((r) => r[k] === v); return q; },
@@ -56,14 +60,20 @@ vi.mock('@/lib/supabase/server', () => ({
         gte(k: string, v: string) { predicates.push((r) => String(r[k]) >= v); return q; },
         lte(k: string, v: string) { predicates.push((r) => String(r[k]) <= v); return q; },
         not() { return q; },
-        order() { return q; },
-        limit() { return q; },
+        order(k: string) { sortKey = k; return q; },
+        limit(n: number) { limitN = n; return q; },
         then(ok: (v: unknown) => unknown) {
           if (table === 'audit_logs' && mocks.auditReadError) {
             return Promise.resolve({ data: null, error: mocks.auditReadError }).then(ok);
           }
           const source = table === 'tenants' ? mocks.tenants : table === 'audit_logs' ? mocks.audit : [];
-          return Promise.resolve({ data: source.filter((r) => predicates.every((p) => p(r))), error: null }).then(ok);
+          let rows = source.filter((r) => predicates.every((p) => p(r)));
+          if (sortKey) {
+            const key = sortKey;
+            rows = [...rows].sort((a, b) => (String(a[key]) < String(b[key]) ? -1 : String(a[key]) > String(b[key]) ? 1 : 0));
+          }
+          if (limitN !== null) rows = rows.slice(0, limitN);
+          return Promise.resolve({ data: rows, error: null }).then(ok);
         },
       };
       return q;

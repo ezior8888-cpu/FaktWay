@@ -15,7 +15,7 @@ import CardHeaderWithMenu, { type CardMenuItem } from '@/components/dashboard/fi
 import { cn } from '@/lib/utils'
 
 /**
- * PLAN-PRAWDZIWE-DANE E6: źródła = kontrahenci (klienci z wpływów — od E11 według terminów płatności, dostawcy
+ * PLAN-PRAWDZIWE-DANE E6: źródła = kontrahenci (klienci z oznaczonych wpłat, dostawcy
  * z kosztów) z propsów; nazwa jest linkiem do kontrahentów tylko w trybie
  * prawdziwym (E7 pkt 3), wygląd wiersza bez zmian. Długa nazwa firmy jest
  * przycinana, żeby wiersz nie urósł o linię.
@@ -35,16 +35,30 @@ type Props = {
   }[]
   /** Tekst pustej listy (karta bez pozycji). */
   empty?: string
+  /** Dokąd iść z pustej listy (oznaczenie zapłaty przy fakturze). */
+  emptyLink?: { label: string; href: string } | null
   menuItems?: CardMenuItem[]
   className?: string
 }
 
-const TopCashFlowSourcesCard = ({ title, sources, empty, menuItems, className }: Props) => {
+const TopCashFlowSourcesCard = ({ title, sources, empty, emptyLink, menuItems, className }: Props) => {
   return (
     <Card className={cn(className)}>
       <CardHeaderWithMenu title={title} menuItems={menuItems} />
       <CardContent className='flex flex-1 flex-col justify-evenly gap-5'>
-        {sources.length === 0 && empty ? <span className='text-muted-foreground text-sm'>{empty}</span> : null}
+        {sources.length === 0 && empty ? (
+          <span className='text-muted-foreground text-sm'>
+            {empty}
+            {emptyLink ? (
+              <>
+                {' '}
+                <Link href={emptyLink.href} className='text-foreground font-medium underline underline-offset-2'>
+                  {emptyLink.label}
+                </Link>
+              </>
+            ) : null}
+          </span>
+        ) : null}
         {sources.map((source, index) => (
           <div key={index} className='flex items-center justify-between gap-4'>
             <div className='flex min-w-0 items-center gap-3'>

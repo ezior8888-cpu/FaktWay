@@ -118,6 +118,8 @@ export const dashboardMobileTabs: DashboardMobileTab[] = [
   // 19.10.2026: Pulpit bez FLO (miejsce FLO przyjdzie z projektu Claude Design).
   { href: "/dashboard", label: "Pulpit", icon: RiDashboardLine },
   { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
+  // „Nowa” prowadzi do wyboru dokumentu: rodzaje faktur i, od 25.10.2026,
+  // „Wydatek” ze zdjęcia (na telefonie ludzie głównie wrzucają koszty).
   { href: "/invoices/new", label: "Nowa", icon: RiAddLine, emphasis: true },
   { href: "/przeplywy", label: "Miesiąc", icon: RiWallet3Line },
   { href: null, label: "Więcej", icon: RiMoreLine },

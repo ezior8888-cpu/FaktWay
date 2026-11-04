@@ -6,6 +6,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -60,6 +61,9 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
     });
   };
 
+  const needsCode = (result && !result.ok && result.error === 'mfa_required')
+    || (cancellation && !cancellation.ok && cancellation.error === 'mfa_required');
+
   // Wygląd z Finory (`views/settings/privacy`): „Export my data” (opis
   // i przycisk), separator, „Delete account” jako wiersz z przyciskiem
   // destrukcyjnym; potwierdzenie hasłem w miejscu, jak pola
@@ -77,6 +81,13 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
           Pobierz dane (JSON)
         </a>
       </div>
+
+      {/* Sesja po biometrii: usunięcie i anulowanie konta wymagają prawdziwego kodu. */}
+      {needsCode && (
+        <MfaStepUpNotice returnTo="/settings/account">
+          Ta operacja wymaga kodu z aplikacji. Po potwierdzeniu wrócisz tutaj.
+        </MfaStepUpNotice>
+      )}
 
       {cancellation?.ok && (
         <Alert role="status" className="border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">

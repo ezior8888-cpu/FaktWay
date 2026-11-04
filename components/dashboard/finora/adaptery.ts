@@ -1,6 +1,6 @@
 import { PULPIT_EMPTY } from '@/components/dashboard/pulpit/card-states';
 import type { InflowTerms } from '@/lib/dashboard/inflow-terms';
-import { INFLOW_NOTE } from '@/lib/dashboard/inflow-labels';
+import type { ReceivablesAging } from '@/lib/dashboard/receivables-aging';
 import { buildMonthReport } from '@/lib/dashboard/pulpit-report';
 import type { TopClient, TopProduct } from '@/lib/dashboard/rankings';
 import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
@@ -248,25 +248,24 @@ export function limitVatProps(o: VatLimitOverview, tryb: TrybDanych): LiniaDane 
   };
 }
 
-// ─── Należności według terminów płatności ─────────────────────────────────
+// ─── Należności według terminu ────────────────────────────────────────────
 
 /**
- * E11 (decyzja D-W): przyszłe terminy faktur sprzedaży bez prawdziwej
- * zapłaty — zakładamy zapłatę w terminie, więc karta nie mówi o zaległościach.
- * Karta nie ma miejsca na podpis — opis idzie do dymku tytułu i czytnika ekranu.
+ * Należności to faktury bez oznaczonej zapłaty, także po terminie (FaktWay 1.0
+ * §3 pkt 3, D-W odwołane 02.11.2026). Karta nie ma miejsca na podpis: opis idzie
+ * do dymku tytułu i czytnika ekranu.
  */
 export const NALEZNOSCI_NOTA =
-  `Faktury sprzedaży z terminem płatności od dziś, bez potwierdzonej zapłaty — ${INFLOW_NOTE}.`;
+  'Faktury z FaktWay bez oznaczonej zapłaty, bez importów i faktur skorygowanych. Gdy klient zapłaci, dotknij „Zapłacone” przy fakturze.';
 
 /**
  * Krótkie nazwy kolumn (miejsce jak „Komputer”), pełne w dymku i dla czytnika
- * ekranu. Strzałka nie ocenia (dawniej ↗ w terminie, ↙ po terminie): każda
- * kolumna to pieniądze, które wpłyną — ↗ jak strzałka wpływu w Przepływach.
+ * ekranu. Strzałka ocenia: w terminie ↗, po terminie ↙.
  */
-const KOLUMNY: Record<InflowTerms['buckets'][number]['key'], { name: string; trend: 'up' | 'down' }> = {
-  thisWeek: { name: 'Ten tydzień', trend: 'up' },
-  upTo30: { name: 'Do 30 dni', trend: 'up' },
-  later: { name: 'Później', trend: 'up' },
+const KOLUMNY: Record<ReceivablesAging['buckets'][number]['key'], { name: string; trend: 'up' | 'down' }> = {
+  notDue: { name: 'W terminie', trend: 'up' },
+  upTo30: { name: '1-30 dni', trend: 'down' },
+  over30: { name: '31+ dni', trend: 'down' },
 };
 
 /** Kolory kolumn Finory, po kolei. */
@@ -282,22 +281,18 @@ export interface NaleznosciDane {
   visitorData: TotalVisitorsColumn[];
 }
 
-/**
- * Plakietka (dawne „X% zaległe”): prawdziwa liczba w tym samym miejscu —
- * ile faktur czeka na termin. Tytuł „Należności” zostaje: przyszłe terminy
- * to należności, a dłuższy tytuł nie mieści się obok „Szczegóły” w kolumnie
- * 1/3 na `xl`. „Szczegóły” prowadzą do Przepływów (Spodziewane wpływy), nie
- * do listy zaległości.
- */
-export function naleznosciProps(a: InflowTerms, tryb: TrybDanych): NaleznosciDane {
-  const faktury = (n: number) => `${n} ${plural(n, ['faktura', 'faktury', 'faktur'])}`;
+const faktury = (n: number) => `${n} ${plural(n, ['faktura', 'faktury', 'faktur'])}`;
+
+/** Plakietka mówi, ile z sumy jest po terminie; „Szczegóły” prowadzą do listy, na której oznaczysz zapłatę. */
+export function naleznosciProps(a: ReceivablesAging, tryb: TrybDanych): NaleznosciDane {
+  const overdue = a.buckets.filter((b) => b.key !== 'notDue').reduce((sum, b) => sum + b.pct, 0);
   return {
     title: 'Należności',
     total: formatPlCompactMoney(a.total),
-    totalTitle: `${zl(a.total)} · ${faktury(a.count)} · ${INFLOW_NOTE}`,
-    badge: a.count === 0 && synchronizacja(tryb) ? POBIERAMY_KROTKO : faktury(a.count),
+    totalTitle: `${zl(a.total)} · ${faktury(a.count)}`,
+    badge: a.count === 0 && synchronizacja(tryb) ? POBIERAMY_KROTKO : `${overdue}% zaległe`,
     note: NALEZNOSCI_NOTA,
-    detailsHref: '/przeplywy',
+    detailsHref: '/payments/overdue',
     visitorData: a.buckets.map((b, i) => ({
       name: KOLUMNY[b.key].name,
       nameTitle: b.label,
@@ -306,6 +301,38 @@ export function naleznosciProps(a: InflowTerms, tryb: TrybDanych): NaleznosciDan
       amount: formatPlCompactNumber(b.amount, 2),
       amountTitle: `${zl(b.amount)} · ${faktury(b.count)}`,
       trend: KOLUMNY[b.key].trend,
+      color: KOLORY_KOLUMN[i] ?? 'bg-chart-1',
+    })),
+  };
+}
+
+const KOLUMNY_PRZYKLADU: Record<InflowTerms['buckets'][number]['key'], { name: string; trend: 'up' | 'down' }> = {
+  thisWeek: { name: 'Ten tydzień', trend: 'up' },
+  upTo30: { name: 'Do 30 dni', trend: 'up' },
+  later: { name: 'Później', trend: 'up' },
+};
+
+/**
+ * Tylko tryb `przyklad`: atrapa bazy nie ma wpłat, a miniony termin gra w niej
+ * rolę wpłaty (`przykladoweWplywy`), więc jej należności to same przyszłe terminy
+ * w trzech kolumnach. Prawdziwa firma ma `naleznosciProps` z zaległościami.
+ */
+export function naleznosciPrzykladProps(a: InflowTerms, tryb: TrybDanych): NaleznosciDane {
+  return {
+    title: 'Należności',
+    total: formatPlCompactMoney(a.total),
+    totalTitle: `${zl(a.total)} · ${faktury(a.count)}`,
+    badge: a.count === 0 && synchronizacja(tryb) ? POBIERAMY_KROTKO : faktury(a.count),
+    note: 'Faktury sprzedaży z terminem płatności dziś lub później, bez oznaczonej zapłaty.',
+    detailsHref: '/przeplywy',
+    visitorData: a.buckets.map((b, i) => ({
+      name: KOLUMNY_PRZYKLADU[b.key].name,
+      nameTitle: b.label,
+      pct: b.pct,
+      // Dwie cyfry znaczące: kolumna ma miejsce jak dawne „23.8” (pełna kwota w dymku).
+      amount: formatPlCompactNumber(b.amount, 2),
+      amountTitle: `${zl(b.amount)} · ${faktury(b.count)}`,
+      trend: KOLUMNY_PRZYKLADU[b.key].trend,
       color: KOLORY_KOLUMN[i] ?? 'bg-chart-1',
     })),
   };

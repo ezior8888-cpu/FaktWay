@@ -4,11 +4,16 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * Poprawka Bartosza 21.10.2026: na telefonie koło „Nowa” (plus, /invoices/new)
- * nachodziło na własny napis, bo stało wyniesione ponad krawędź paska
- * (`-mt-5`), a napis podciągnięty pod nie (`-mt-3`). Teraz koło stoi
- * dokładnie tam, gdzie był napis, a napis zostaje tylko dla czytników ekranu
- * (`sr-only`) — link nadal ma nazwę dostępną „Nowa”.
+ * Dolny pasek telefonu.
+ *
+ * Poprawka Bartosza 21.10.2026: koło plusa stoi w pasku na miejscu napisu
+ * (bez `-mt-5`), napis zostaje tylko dla czytników ekranu (`sr-only`).
+ *
+ * Poprawka Bartosza 25.10.2026:
+ *  - koło ugina się i obraca pod palcem (`[data-ff-plus]`, framer-motion);
+ *  - „podświetla się i nic się nie dzieje, dopiero za drugim razem”: samo
+ *    dotknięcie (`pointerdown`) nie może zapalić slotu — zapala go dopiero
+ *    trwająca nawigacja; wybór w arkuszu „Więcej” zamyka arkusz od razu.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -41,6 +46,7 @@ function mount(pathname: string) {
   const root = createRoot(host);
   act(() => root.render(<BottomNav />));
   return {
+    host,
     bar: host.querySelector('nav[aria-label="Nawigacja główna"]')!,
     unmount() {
       act(() => root.unmount());
@@ -49,7 +55,7 @@ function mount(pathname: string) {
   };
 }
 
-/** Nazwa dostępna linku: tekst bez elementów `aria-hidden` (jak w przeglądarce). */
+/** Nazwa dostępna: tekst bez elementów `aria-hidden` (jak w przeglądarce). */
 function nazwaDostepna(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
   if (!(node instanceof Element) || node.getAttribute('aria-hidden') === 'true') return '';
@@ -64,13 +70,14 @@ function widocznyTekst(node: Node): string {
   return [...node.childNodes].map(widocznyTekst).join('').trim();
 }
 
-describe('Dolna nawigacja — koło „Nowa” zasłania napis', () => {
+describe('Dolna nawigacja — koło „Nowa”', () => {
   it('koło nie jest wyniesione (bez -mt-5), a napis jest tylko dla czytników (sr-only)', () => {
     const m = mount('/dashboard');
     const link = m.bar.querySelector<HTMLAnchorElement>('a[href="/invoices/new"]')!;
     expect(link).not.toBeNull();
 
-    const circle = link.querySelector<HTMLElement>('span[aria-hidden="true"]')!;
+    const circle = link.querySelector<HTMLElement>('[data-ff-plus]')!;
+    expect(circle.getAttribute('aria-hidden')).toBe('true');
     expect(circle.className).toContain('rounded-full');
     expect(circle.className).not.toContain('-mt-5');
 
@@ -86,12 +93,11 @@ describe('Dolna nawigacja — koło „Nowa” zasłania napis', () => {
     m.unmount();
   });
 
-  it('slot „Nowa” ma dolny bezpieczny obszar jak pozostałe — koło nie zjeżdża w strefę paska domowego iPhone’a', () => {
+  it('każdy slot ma dolny bezpieczny obszar — koło nie zjeżdża w strefę paska domowego iPhone’a', () => {
     const m = mount('/dashboard');
-    const slots = [...m.bar.querySelectorAll<HTMLElement>('a, button')];
-    const nowa = m.bar.querySelector<HTMLAnchorElement>('a[href="/invoices/new"]')!;
-    expect(nowa.className).toContain('pb-[var(--ff-safe-b)]');
-    for (const slot of slots) expect(slot.className, slot.textContent ?? '').toContain('pb-[var(--ff-safe-b)]');
+    for (const slot of m.bar.querySelectorAll<HTMLElement>(':scope > a, :scope > button')) {
+      expect(slot.className, slot.textContent ?? '').toContain('pb-[var(--ff-safe-b)]');
+    }
     m.unmount();
   });
 
@@ -108,9 +114,43 @@ describe('Dolna nawigacja — koło „Nowa” zasłania napis', () => {
     expect(linkNa.getAttribute('aria-current')).toBe('page');
     na.unmount();
   });
+});
 
-  it('pozostałe sloty bez zmian: widoczne podpisy, bez sr-only', () => {
+describe('Dolna nawigacja — podświetlenie tylko przy prawdziwej nawigacji', () => {
+  it('samo dotknięcie (pointerdown bez kliknięcia) nie zapala slotu', () => {
     const m = mount('/dashboard');
+    const faktury = m.bar.querySelector<HTMLAnchorElement>('a[href="/invoices"]')!;
+    const pulpit = m.bar.querySelector<HTMLAnchorElement>('a[href="/dashboard"]')!;
+    const before = faktury.className;
+
+    act(() => {
+      faktury.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    });
+
+    expect(faktury.className).toBe(before);
+    expect(faktury.className).not.toContain('text-[var(--ff-accent)]');
+    expect(pulpit.className).toContain('text-[var(--ff-accent)]');
+    m.unmount();
+  });
+
+  it('wybór w arkuszu „Więcej” zamyka arkusz od razu, a „Więcej” czeka na stronę', () => {
+    const m = mount('/dashboard');
+    const more = [...m.bar.querySelectorAll('button')].find((b) => b.textContent === 'Więcej')!;
+    act(() => more.click());
+    const row = document.querySelector<HTMLAnchorElement>('a[href="/contractors"]')!;
+    expect(row).not.toBeNull();
+
+    act(() => {
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(more.querySelector('[data-link-pending]')).not.toBeNull();
+    m.unmount();
+  });
+
+  it('linki slotów: aria-current na swojej trasie, widoczne podpisy', () => {
+    const m = mount('/invoices');
     for (const tab of dashboardMobileTabs.filter((t) => !t.emphasis)) {
       const slot =
         tab.href === null
@@ -120,6 +160,8 @@ describe('Dolna nawigacja — koło „Nowa” zasłania napis', () => {
       expect(widocznyTekst(slot)).toBe(tab.label);
       expect(slot.querySelector('.sr-only')).toBeNull();
     }
+    expect(m.bar.querySelector('a[href="/invoices"]')?.getAttribute('aria-current')).toBe('page');
+    expect(m.bar.querySelector('a[href="/dashboard"]')?.hasAttribute('aria-current')).toBe(false);
     m.unmount();
   });
 });

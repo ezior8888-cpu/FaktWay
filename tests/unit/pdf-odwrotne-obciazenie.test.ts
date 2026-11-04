@@ -65,7 +65,7 @@ describe('PDF: „odwrotne obciążenie” tak jak P_18 w XML', () => {
 
   it('zmiana wyglądu PDF unieważnia zapisane wcześniej pliki (nowa wersja w ścieżce)', () => {
     const draftKey = buildInvoicePdfKey('ten-1', 'inv-1', '2026-10-01');
-    expect(draftKey).toMatch(/^ten-1\/2026\/10\/inv-1\.v5\.[0-9a-f]{32}\.pdf$/);
+    expect(draftKey).toMatch(/^ten-1\/2026\/10\/inv-1\.v6\.[0-9a-f]{32}\.pdf$/);
     expect(buildInvoicePdfKey('ten-1', 'inv-1', '2026-10-01', 'https://qr.ksef.mf.gov.pl/invoice/1234567890/hash', 'KSEF-1'))
       .not.toBe(draftKey);
   });

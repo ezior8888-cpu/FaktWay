@@ -11,6 +11,12 @@ const positions = new Map<string, number>();
  * zmienia `pathname`, więc flaga przeżyłaby do następnego kliknięcia linku.
  */
 let popKey: string | null = null;
+/**
+ * Ścieżka podzakładki, w którą właśnie kliknięto (`a[data-ff-keep-scroll]`,
+ * `SectionTabs`). Zmiana tabeli w karcie sekcji nie wraca na górę ekranu
+ * (poprawka Bartosza 25.10.2026: „nie chcę, żeby cała strona się zmieniała”).
+ */
+let keepScrollFor: string | null = null;
 
 /** Ile klatek czekamy, aż treść przywracanej strony urośnie do zapamiętanej pozycji. */
 const RESTORE_FRAMES = 30;
@@ -30,7 +36,9 @@ function shellScroller(): HTMLElement | null {
  * nic sama. Next po zmianie zakładki woła `scrollIntoView()` na nowej stronie,
  * czyli dociąga do krawędzi szablonu trasy — bez górnego odstępu i bez banera
  * KSeF nad nim — a przy „Wstecz” nie przywraca niczego. Stąd dwie reguły:
- *  - przejście linkiem: nowa strona zaczyna się od samej góry;
+ *  - przejście linkiem: nowa strona zaczyna się od samej góry — poza
+ *    podzakładką sekcji (`a[data-ff-keep-scroll]`), która zmienia tylko
+ *    tabelę w karcie i zostawia ekran tam, gdzie był;
  *  - „Wstecz” / „Dalej” (gest cofania na iPhonie): wracamy tam, gdzie klient
  *    był, np. w to samo miejsce listy faktur po obejrzeniu jednej z nich.
  *
@@ -59,12 +67,17 @@ export function ShellScrollMemory() {
     };
     // `scroll` to główne źródło, ale przeglądarka wysyła je dopiero przy
     // malowaniu klatki; kliknięcie linku zapisuje pozycję przed nawigacją.
+    const onClick = (e: MouseEvent) => {
+      remember();
+      const link = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>('a[data-ff-keep-scroll]') : null;
+      keepScrollFor = link ? new URL(link.href, window.location.href).pathname : null;
+    };
     scroller.addEventListener('scroll', remember, { passive: true });
-    document.addEventListener('click', remember, { capture: true });
+    document.addEventListener('click', onClick, { capture: true });
     window.addEventListener('popstate', onPop);
     return () => {
       scroller.removeEventListener('scroll', remember);
-      document.removeEventListener('click', remember, { capture: true });
+      document.removeEventListener('click', onClick, { capture: true });
       window.removeEventListener('popstate', onPop);
     };
   }, []);
@@ -78,7 +91,10 @@ export function ShellScrollMemory() {
     keyRef.current = pathname;
 
     const restoring = popKey === urlKey();
+    const keep = keepScrollFor === pathname;
     popKey = null;
+    keepScrollFor = null;
+    if (keep && !restoring) return;
     if (!restoring) {
       scroller.scrollTop = 0;
       return;

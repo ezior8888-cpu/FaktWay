@@ -1,4 +1,3 @@
-import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -9,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
  */
 export default function KpirLoading() {
   return (
-    <div className="ff-page-fill flex flex-col gap-6" aria-busy="true">
+    <div className="ff-tab-panel flex flex-1 flex-col gap-6" aria-busy="true">
       <h1 className="sr-only">Książka przychodów i rozchodów</h1>
       <div className="flex justify-end gap-2">
         <Skeleton className="h-9 w-48 max-sm:flex-1" />
@@ -22,9 +21,8 @@ export default function KpirLoading() {
         <Skeleton className="h-80 xl:col-span-2 xl:h-96" />
         <Skeleton className="h-80 max-sm:hidden xl:h-96" />
       </div>
-      <Card className="flex-1 pt-0">
-        <KsiegowoscTabs active="kpir" />
-        <div className="flex flex-col gap-3 px-4 pt-2">
+      <Card className="flex-1">
+        <div className="flex flex-col gap-3 px-4">
           <Skeleton className="h-9 w-72 max-w-full" />
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <Skeleton key={i} className="h-12" />

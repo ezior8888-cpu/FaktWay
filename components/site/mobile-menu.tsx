@@ -44,7 +44,7 @@ export function MobileMenu({ links }: { links: ReadonlyArray<{ label: string; hr
       {open ? (
         <div
           id="menu-telefon"
-          className="absolute inset-x-0 top-14 z-50 rounded-2xl bg-popover p-2 text-popover-foreground shadow-xl ring-1 ring-border"
+          className="absolute inset-x-0 top-14 z-50 origin-top rounded-2xl bg-popover p-2 text-popover-foreground shadow-2xl shadow-black/15 ring-1 ring-border animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 motion-reduce:animate-none"
         >
           <ul className="flex flex-col">
             {[...links, { label: 'Zaloguj się', href: '/login' }].map((link) => (

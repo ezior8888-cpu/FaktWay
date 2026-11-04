@@ -1,3 +1,4 @@
+import { CookieSettings } from '@/components/legal/cookie-settings';
 import { CompanyDeletion } from '@/components/settings/company-deletion';
 import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Separator } from '@/components/ui/separator';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Zakładka „Konto i dane (RODO)” = Privacy & Data z Finory
  * (`views/settings/privacy`): eksport danych (art. 15), usunięcie konta
- * (art. 17) i — jedyne miejsce w aplikacji — usunięcie firmy.
+ * (art. 17), zgoda na analitykę i, jedyne miejsce w aplikacji, usunięcie firmy.
  */
 export default async function AccountSettingsPage() {
   const { supabase, tenantId, role, user } = await getPageContext();
@@ -40,6 +41,20 @@ export default async function AccountSettingsPage() {
           year: 'numeric', month: 'long', day: 'numeric',
         }),
       } : null} />
+
+      <Separator />
+
+      {/* Odwołanie zgody ma być tak samo łatwe jak jej udzielenie (art. 7 ust. 3 RODO). */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <FieldLabel>Analityka</FieldLabel>
+          <FieldDescription>
+            Statystyki użycia i to, skąd do nas trafiłeś. Decyzja obowiązuje na Twoim koncie na każdym urządzeniu.
+            Wyłączenie działa od razu i usuwa zapisane źródło wejścia.
+          </FieldDescription>
+        </div>
+        <CookieSettings />
+      </div>
 
       <Separator />
 

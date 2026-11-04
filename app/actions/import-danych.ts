@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { mfaStepUpHref } from '@/lib/auth/mfa-step-up';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { uploadImportFile } from '@/lib/import/file-storage';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
@@ -187,6 +188,8 @@ const PAUSE_MFA_PATH = '/import-danych?wstrzymanie=2fa';
 export async function setKsefHistoryPausedAction(formData: FormData): Promise<void> {
   const outcome = await changeKsefHistoryPause(formData);
   if (outcome === 'mfa') redirect(PAUSE_MFA_PATH);
+  // Sesja po biometrii ma już 2FA: „włącz” byłoby nieprawdą, wystarczy podać kod.
+  if (outcome === 'mfa_code') redirect(mfaStepUpHref('/import-danych'));
   if (outcome !== 'ok') redirect(PAUSE_ERROR_PATH);
   revalidatePath('/import-danych');
   redirect('/import-danych');
@@ -197,7 +200,7 @@ export async function setKsefHistoryPausedAction(formData: FormData): Promise<vo
  * i potwierdzonego 2FA (bez zapisu); `error` — każda inna odmowa albo błąd
  * (bez szczegółów dla klienta).
  */
-async function changeKsefHistoryPause(formData: FormData): Promise<'ok' | 'mfa' | 'error'> {
+async function changeKsefHistoryPause(formData: FormData): Promise<'ok' | 'mfa' | 'mfa_code' | 'error'> {
   const raw = formData.get('paused');
   if (raw !== '1' && raw !== '0') return 'error';
   const paused = raw === '1';
@@ -214,6 +217,7 @@ async function changeKsefHistoryPause(formData: FormData): Promise<'ok' | 'mfa' 
   // Ten sam warunek co przy zmianie certyfikatu KSeF: MFA włączone i potwierdzone w tej sesji.
   const mfa = await getVerifiedMfaState(supabase).catch(() => null);
   if (!mfa || mfa.status === 'unauthenticated' || mfa.user.id !== user.id) return 'error';
+  if (mfa.status === 'challenge_required') return 'mfa_code';
   if (mfa.status !== 'verified') return 'mfa';
 
   const environment = configuredKsefEnvironment();

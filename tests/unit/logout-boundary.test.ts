@@ -10,7 +10,7 @@ vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@/lib/security/turnstile', () => ({ verifyTurnstile: vi.fn() }));
 vi.mock('@/lib/rate-limit/auth', () => ({ checkLoginRateLimit: vi.fn() }));
-import { signOutCurrentSession } from '@/lib/auth/sign-out';
+import { clearDeviceLoginCookies, signOutCurrentSession } from '@/lib/auth/sign-out';
 import { signOut } from '@/app/(auth)/login/actions';
 import { forceSignOutInactive } from '@/lib/auth/inactivity-logout';
 
@@ -92,6 +92,12 @@ describe('logout uses the real SDK and clears only the current browser session',
       metadata: expect.objectContaining({ local_session_cleared: true, global_sign_out_confirmed: false }),
     }));
   });
+  it.each([signOut, forceSignOutInactive])('real action also clears the first-touch cookie, so it never reaches the next person on a shared computer', async (action) => {
+    await seedSdk(204);
+    jar.set('ff_first_touch', '{"channel":"google_ads"}');
+    await expect(action()).rejects.toThrow('REDIRECT:/login');
+    expect([...jar.keys()]).toEqual(['ksef.active_org', 'sb-other-auth-token']);
+  });
   it('does not attribute the cookie user identity when Auth cannot verify it', async () => {
     await seedSdk(500, true);
     expect(await signOutCurrentSession()).toEqual({ userId: null, localSessionCleared: true, globalSignOutConfirmed: false });
@@ -103,6 +109,27 @@ describe('logout uses the real SDK and clears only the current browser session',
     jar = new Map([...owned, ...unrelated].map((name) => [name, 'synthetic']));
     expect(await signOutCurrentSession()).toEqual({ userId: null, localSessionCleared: true, globalSignOutConfirmed: false });
     expect([...jar.keys()]).toEqual(unrelated);
+  });
+  // Logowanie biometrią (FW1): znacznik sesji i „zapamiętaj mnie” nie mogą
+  // przeżyć wylogowania, nawet gdy Auth jest niedostępny.
+  it.each([204, 500])('clears the passkey marker, remember-me and offer cookies after remote HTTP %s', async (status) => {
+    await seedSdk(status);
+    jar.set('ksef.passkey_session', 'v1.fixture'); jar.set('ksef.remember_me', '1'); jar.set('ksef.passkey_offer', '1');
+    expect((await signOutCurrentSession()).localSessionCleared).toBe(true);
+    expect([...jar.keys()]).toEqual(['ksef.active_org', 'sb-other-auth-token']);
+  });
+  it('clears the passkey cookies even when session initialization fails', async () => {
+    mocks.client.mockRejectedValue(new Error('synthetic-private-error'));
+    jar = new Map([['ksef.passkey_session', 'v1.fixture'], ['ksef.remember_me', '1'], ['theme', 'dark']]);
+    expect((await signOutCurrentSession()).localSessionCleared).toBe(true);
+    expect([...jar.keys()]).toEqual(['theme']);
+  });
+  it('clearDeviceLoginCookies (wylogowanie po zmianie hasła z linku) nie rusza innych ciasteczek i nie rzuca', async () => {
+    jar = new Map([['ksef.passkey_session', 'v1.fixture'], ['ksef.remember_me', '1'], ['ksef.active_org', 'other-cookie']]);
+    await clearDeviceLoginCookies();
+    expect([...jar.keys()]).toEqual(['ksef.active_org']);
+    mocks.cookies.mockRejectedValue(new Error('poza żądaniem'));
+    await expect(clearDeviceLoginCookies()).resolves.toBeUndefined();
   });
   it.each([signOut, forceSignOutInactive])('does not redirect or write logout success when cookie cleanup fails', async (action) => {
     await seedSdk(204);

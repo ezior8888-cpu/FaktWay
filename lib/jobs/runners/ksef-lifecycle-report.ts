@@ -28,6 +28,12 @@ export const LIFECYCLE_REPORT_ACTIONS = [
   'invoice.ksef_duplicate_decided',
   'invoice.operator_duplicate_decision',
   'invoice.ksef_duplicate_decision_notified',
+  // D-A4-1b-3 PR C (00156): zapis oryginału z KSeF decyzją, oddanie decyzji klientowi po przeglądzie pliku (RPC i operator)
+  // i trwały znacznik „sprawdź ponownie”. I5R i I3K idą do „Naruszeń strażnika” (nie są I5D) bez zmian kodu raportu.
+  'invoice.ksef_original_imported',
+  'invoice.ksef_original_review_released',
+  'invoice.operator_original_release',
+  'invoice.ksef_original_recheck_flagged',
 ] as const;
 
 /** I5D (00148): faktury czekające na decyzję klienta przy nierozstrzygniętym 440. */

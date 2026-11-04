@@ -30,6 +30,7 @@ import { runInboxBackfill } from '../runners/inbox-backfill';
 import { runInboxPolling, runInboxPollTenant } from '../runners/inbox-polling';
 import { runKsefHistorySync, runKsefHistorySyncTenant } from '../runners/ksef-history-sync';
 import { LOCAL_CONCURRENCY as KSEF_HISTORY_LOCAL_CONCURRENCY } from '@/lib/ksef/history-sync/constants';
+import { inboxPollSlots } from '@/lib/ksef/inbox-schedule';
 import {
   runOfflineQueueFailure,
   runOfflineQueueSuccess,
@@ -92,18 +93,24 @@ registerJob<Record<string, never>>({
 // ═══════════════════════════════════════════════════════════════
 registerJob<Record<string, never>>({
   queue: 'cron.inbox-polling',
-  maxRetries: DEFAULT_JOB_RETRIES,
+  // Bez ponowień: ponowieniem jest następny takt za minutę, a firmy z dzierżawą
+  // i tak by nie wróciły.
+  maxRetries: 0,
   handler: (_data, ctx: JobContext) => runInboxPolling(ctx),
 });
 
 registerJob<Parameters<typeof runInboxPollTenant>[0]>({
   queue: 'inbox.poll.tenant',
-  maxRetries: 2,
-  // Jeden przebieg na NIP (`groupId` z fan-outu): stan skrzynki (HWM) jest
+  // Bez ponowień pg-boss: ponowieniem jest termin w harmonogramie, zależny od
+  // rodzaju błędu (`nextInboxPollAfterError`). Worker padnięty w trakcie zadania
+  // to dalej ponowienie z `QUEUE_POLICY`, a przebieg jest idempotentny.
+  maxRetries: 0,
+  // Jeden przebieg na NIP (`groupId` z rozsyłki): stan skrzynki (HWM) jest
   // per firma, a równoległe przebiegi dublowały powiadomienia (AUD-91).
   groupConcurrency: 1,
-  // Kilka skrzynek naraz zamiast firma po firmie (AUD-36).
-  localConcurrency: 4,
+  // Pojemność: docs/runbooks/skrzynka-ksef-pojemnosc.md. Zmiana bez wdrożenia
+  // kodu: `KSEF_INBOX_POLL_SLOTS` (restart workera).
+  localConcurrency: inboxPollSlots(),
   handler: (data, ctx) => runInboxPollTenant(data, ctx),
 });
 

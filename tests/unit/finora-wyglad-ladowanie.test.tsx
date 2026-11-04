@@ -49,7 +49,7 @@ const { getCostsWithKsefPurchases, sumCostsByMonth } = await import('@/lib/dashb
 const { warsawMonthWindow } = await import('@/lib/dashboard/rankings');
 const { getInflows } = await import('@/lib/dashboard/inflows');
 const { inflowTerms } = await import('@/lib/dashboard/inflow-terms');
-const { buildCashFlowChart, nextMonthStart, yearsWindowStart } = await import('@/lib/dashboard/cash-movements');
+const { buildCashFlowChart, nextMonthStart, przykladoweWplywy, yearsWindowStart } = await import('@/lib/dashboard/cash-movements');
 const { todayInWarsaw } = await import('@/lib/format/warsaw-date');
 
 /** Piątek 23.10.2026, 10:00 w Warszawie. */
@@ -188,7 +188,7 @@ describe('dane przykładowe w kształcie wykresów Finory', () => {
   it('Przepływy: wpływy „Miesięcznie” jak w Finorze (±10%), pięć lat „Rocznie”', async () => {
     const db = sb();
     const range = { from: yearsWindowStart(today), toExclusive: nextMonthStart(today) };
-    const chart = buildCashFlowChart(await getInflows(db, T, range), await getCostsWithKsefPurchases(db, T, range), today);
+    const chart = buildCashFlowChart(przykladoweWplywy(await getInflows(db, T, range), today), await getCostsWithKsefPurchases(db, T, range), today);
     // Finora Sty–Cze: 3200, 2800, 3500, 2600, 3800, 3000 (× 10 zł); bieżący miesiąc liczy się do wczoraj.
     const finora = [32_000, 28_000, 35_000, 26_000, 38_000, 30_000];
     chart.month.slice(0, 6).forEach((b, i) => expect(Math.abs(b.inflow / finora[i]! - 1), b.label).toBeLessThan(0.1));

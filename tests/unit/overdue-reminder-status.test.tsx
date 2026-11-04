@@ -10,7 +10,9 @@ vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironmen
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: vi.fn() }));
 vi.mock('@/components/reminders/reminder-consent-dialog', () => ({ ReminderConsentDialog: () => null }));
 vi.mock('@/app/actions/reminders', () => ({ toggleInvoiceRemindersAction: vi.fn() }));
-import OverduePage from '@/app/(dashboard)/payments/overdue/page';
+vi.mock('@/app/actions/invoice-payments', () => ({ markInvoicePaidAction: vi.fn(), undoInvoicePaidAction: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+import OverduePage from '@/app/(dashboard)/(faktury)/payments/overdue/page';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const FOREIGN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -244,7 +246,9 @@ describe('overdue reminder status', () => {
     const productionRows = (count: number) => Array.from({ length: count }, (_, index) => ({
       ...invoice('prod-' + index, TENANT), internal_number: 'PROD-' + index,
     }));
-    const CAP_NOTE = /Faktur po terminie<\/p><p[^>]*>średnio 22 dni po terminie<br\/>Pokazujemy pierwsze 100, od najdłużej zaległych<\/p>/;
+    // Od 25.10.2026 liczby „Po terminie” stoją w pasku nad tabelą (`PanelStats`:
+    // etykieta, liczba, podpis), nie w osobnych kaflach zakładki.
+    const CAP_NOTE = /Faktur po terminie<\/dt><dd[^>]*>100<\/dd><dd[^>]*>średnio 22 dni po terminie<br\/>Pokazujemy pierwsze 100, od najdłużej zaległych<\/dd>/;
 
     // Jedna faktura: bez noty.
     let page = await OverduePage();
@@ -294,7 +298,7 @@ describe('overdue reminder status', () => {
     // Poprawka Bartosza 21.10.2026: zastrzeżenie przeszło z noty nad kaflami
     // do podpisu kafla „Przypomnień wysłanych w miesiącu” (ten atrapowy klient nie
     // zna `.gte`, więc licznik kafla jest tu nieodczytany — zdanie stoi pod tą linią).
-    expect(html).toMatch(/Przypomnień wysłanych w miesiącu<\/p><p[^>]*>Nie udało się odczytać — odśwież za chwilę<br\/>Stan przypomnień jest orientacyjny<\/p>/);
+    expect(html).toMatch(/Przypomnień wysłanych w miesiącu<\/dt><dd[^>]*>—<\/dd><dd[^>]*>Nie udało się odczytać — odśwież za chwilę<br\/>Stan przypomnień jest orientacyjny<\/dd>/);
     expect(html).not.toContain('Stan przypomnień jest orientacyjny.');
     expect(html).not.toContain('FOREIGN-1');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Przypomnienie już zlecone"/);
@@ -376,6 +380,26 @@ describe('overdue reminder status', () => {
     expect(await markup()).toContain('href="/settings/reminders"');
     mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role: 'member', isActive: true }] });
     expect(await markup()).not.toContain('href="/settings/reminders"');
+  });
+
+  // „Zapłacone” (00158): ta sama lista ról co w `mark_invoice_paid`. Księgowa widzi
+  // należność, ale nie oznacza, więc przycisk, który RPC i tak by odrzuciło, nie powstaje.
+  it.each([
+    ['owner', true],
+    ['admin', true],
+    ['member', true],
+    ['accountant', false],
+  ])('role %s: the "Zapłacone" button present = %s', async (role, expected) => {
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role, isActive: true }] });
+    const html = await markup();
+    expect(html.includes('aria-label="Zapłacone: oznacz fakturę VISIBLE-1"')).toBe(expected);
+    // Etykieta zaczyna się od widocznego tekstu (WCAG 2.5.3), a pole dotyku ma 44 px.
+    if (expected) expect(html).toMatch(/max-lg:min-h-\[44px\][^"]*max-lg:min-w-\[44px\]/);
+  });
+
+  it('marks nothing without a membership in the active organization', async () => {
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: FOREIGN, role: 'owner', isActive: false }] });
+    expect(await markup()).not.toContain('Zapłacone: oznacz fakturę');
   });
 
   it('leaves fresh preparation available only when the status read succeeds and finds no pending row', async () => {

@@ -21,8 +21,10 @@ import {
   checkKsefHistoryBlocked,
   checkKsefHistoryRateLimited,
   checkStaleKsefHistorySync,
+  KSEF_HISTORY_OPERATOR_REASONS,
   ksefHistoryStaleClasses,
 } from '@/lib/jobs/runners/critical-alerts-monitor';
+import { KSEF_HISTORY_RECHECK_BLOCKED_REASONS } from '@/lib/ksef/history-sync/db';
 
 const NOW = new Date('2026-10-22T12:00:00.000Z');
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString();
@@ -147,6 +149,14 @@ describe('alarmy w monitorze', () => {
       { label: 'Strumienie przy limicie 25 000', value: '1' },
     ]);
     expect(m.cacheSet).toHaveBeenCalledWith(expect.stringContaining('ksef_history_blocked'), expect.any(String), 86400);
+  });
+
+  // Strażnik ZAP-01 (ksef-historia-pobieranie.test.ts, reguła 4) dopuszcza dla posiadacza
+  // spoza ksiąg każdy powód sprawdzany ponownie — wyjście ma tylko wtedy, gdy każdy poza
+  // `number_conflict` (droga klienta: usuń szkic) budzi operatora (recenzja #339).
+  it('każdy powód sprawdzany ponownie poza number_conflict budzi operatora', () => {
+    const client = KSEF_HISTORY_RECHECK_BLOCKED_REASONS.filter((r) => !(KSEF_HISTORY_OPERATOR_REASONS as readonly string[]).includes(r));
+    expect(client).toEqual(['number_conflict']);
   });
 
   it('„faktury do operatora”: tylko powody klienta — cisza', async () => {

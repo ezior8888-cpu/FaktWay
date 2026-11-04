@@ -276,6 +276,30 @@ export function buildVatLimitOverview(
   };
 }
 
+/** Etykieta błędu odczytu sprzedaży do limitu VAT. */
+export const VAT_LIMIT_READ_ERROR = 'Nie można odczytać sprzedaży do limitu VAT';
+
+/** „Dziś”, limit roczny i okno odczytu licznika (opis przy `getVatLimit`). */
+export interface VatLimitPlan {
+  today: string;
+  annualLimit: number;
+  from: string;
+  toExclusive: string;
+}
+
+export function vatLimitPlan(now: Date): VatLimitPlan {
+  const today = todayInWarsaw(now);
+  const params = paramsFor(utcDay(today));
+  if (!params) throw new Error('Brak parametrów limitu zwolnienia z VAT na ten rok');
+  const year = Number(today.slice(0, 4));
+  return {
+    today,
+    annualLimit: params.vatExemptionLimit,
+    from: vatLimitReadStart(year),
+    toExclusive: `${year + 1}-01-01`,
+  };
+}
+
 /**
  * Licznik limitu zwolnienia z VAT dla Pulpitu. Rok i „dziś” w Europe/Warsaw.
  *
@@ -290,18 +314,12 @@ export async function getVatLimit(
   tenantId: string,
   now: Date = new Date(),
 ): Promise<VatLimitOverview> {
-  const today = todayInWarsaw(now);
-  const params = paramsFor(utcDay(today));
-  if (!params) throw new Error('Brak parametrów limitu zwolnienia z VAT na ten rok');
-
-  const year = Number(today.slice(0, 4));
-  const start = vatLimitReadStart(year);
-  const endExclusive = `${year + 1}-01-01`;
+  const plan = vatLimitPlan(now);
   const environment = requireConfiguredKsefEnvironment();
 
-  await assertAcceptedEnvironmentKnown(supabase, tenantId, start, endExclusive);
+  await assertAcceptedEnvironmentKnown(supabase, tenantId, plan.from, plan.toExclusive);
   const [rows, startedOn] = await Promise.all([
-    readCompletePages<VatLimitInvoiceRow>('Nie można odczytać sprzedaży do limitu VAT', (from, to) =>
+    readCompletePages<VatLimitInvoiceRow>(VAT_LIMIT_READ_ERROR, (from, to) =>
       supabase
         .from('invoices')
         .select(INVOICE_COLUMNS, { count: 'exact' })
@@ -309,8 +327,8 @@ export async function getVatLimit(
         .eq('direction', OUTGOING)
         .eq('ksef_status', 'accepted')
         .eq('ksef_environment', environment)
-        .gte('issue_date', start)
-        .lt('issue_date', endExclusive)
+        .gte('issue_date', plan.from)
+        .lt('issue_date', plan.toExclusive)
         .order('id', { ascending: true })
         .range(from, to)),
     readTenantBusinessStart(supabase, tenantId),
@@ -319,5 +337,5 @@ export async function getVatLimit(
   assertOutgoingInvoicesInPln(rows);
   const settled = await fetchSettledAdvancesTotals(supabase, tenantId, rows);
 
-  return buildVatLimitOverview(rows, settled, startedOn, today, params.vatExemptionLimit);
+  return buildVatLimitOverview(rows, settled, startedOn, plan.today, plan.annualLimit);
 }

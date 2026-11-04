@@ -53,6 +53,23 @@ KSEF_CREDENTIALS_ENCRYPTION_KEY=...
 Playwright sam podnosi dev server na porcie 3100 (zob. `playwright.config.ts`).
 Jeśli już masz coś na 3100 — ustaw `E2E_PORT=3200` w env.
 
+## Telefon
+
+`tests/telefon-ekrany.spec.ts` loguje lokalne konto dev (`pnpm db:local`),
+przechodzi po wszystkich ekranach panelu w projekcie `mobile-iphone` albo
+`mobile-pixel` i sprawdza brak poziomego przewijania, uciętych przycisków
+i błędów strony. Cele dotykowe mniejsze niż 44x44 trafiają do raportu
+`test-results/telefon-raport-<projekt>.json`, nie oblewają testu.
+
+```bash
+E2E_PORT=3108 pnpm test:e2e e2e/tests/telefon-ekrany.spec.ts --project=mobile-iphone
+# tylko wybrane trasy:
+TELEFON_TRASY=/settings/account,/inbox E2E_PORT=3108 pnpm test:e2e e2e/tests/telefon-ekrany.spec.ts --project=mobile-iphone
+```
+
+Na hostach innych niż localhost test jest pomijany. Wyniki ostatniego obchodu:
+`docs/qa/telefon-macierz.md`.
+
 ## Mocki
 
 Aktywowane przez env vars w `webServer.env` (playwright.config.ts):

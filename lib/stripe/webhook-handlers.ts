@@ -18,6 +18,11 @@ import { sendJobEvent } from '@/lib/jobs/enqueue';
 import type Stripe from 'stripe';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import {
+  recordPaymentSucceeded,
+  recordSubscriptionEnded,
+  recordTrialStarted,
+} from '@/lib/analytics/funnel';
 import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import {
@@ -29,6 +34,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import {
   mapInvoiceToPaymentRow,
 } from './event-mapping';
+import { readPaymentDeclineCode } from './payment-decline';
 import { verifyPaidInvoicePaymentReferences } from './payment-reference-proof';
 import { syncCurrentStripeSubscription } from './subscription-sync';
 import { RetryablePreEffectWebhookError } from './webhook-errors';
@@ -101,14 +107,19 @@ export async function handleSubscriptionUpserted(
 
   if (isCreate && status !== 'canceled' && status !== 'incomplete_expired') {
     await trackServer({
-      distinctId: tenantId,
+      tenantId,
       event: ANALYTICS_EVENTS.subscriptionCreated,
-      properties: {
-        status,
-        price_id: subscription.items.data[0]?.price.id ?? null,
-      },
-      setPersonProperties: { plan: 'active' },
+      properties: { status },
+      setPersonProperties: { plan: status === 'trialing' ? 'trial' : 'active' },
+      dedupeKey: subscription.id,
+      timestamp: subscription.created ? new Date(subscription.created * 1000) : undefined,
     });
+  }
+
+  // Próba naprawdę się zaczęła, nawet gdy to opóźnione „created” po rezygnacji:
+  // zdarzenie niesie chwilę ze Stripe, więc nie ogłasza niczego nowego.
+  if (isCreate && status !== 'incomplete_expired') {
+    await recordTrialStarted(tenantId, subscription);
   }
 }
 
@@ -139,12 +150,7 @@ export async function handleSubscriptionDeleted(
     },
   });
 
-  await trackServer({
-    distinctId: tenantId,
-    event: ANALYTICS_EVENTS.subscriptionCanceled,
-    properties: { subscription_id: subscription.id },
-    setPersonProperties: { plan: 'canceled' },
-  });
+  await recordSubscriptionEnded(tenantId, subscription);
 }
 // ─── 3. invoice.payment_succeeded ─────────────────────────────────────
 
@@ -241,19 +247,15 @@ export async function handleInvoicePaymentSucceeded(
       taxCents: ((invoice as unknown as { total_taxes?: Array<{ amount?: number | null }> | null }).total_taxes ?? []).reduce((s, t) => s + (t.amount ?? 0), 0),
       currency: (invoice.currency ?? 'pln').toLowerCase(),
       paidAt: persistedPaidAt,
+      paymentMethodType: proof.paymentMethodType,
     }),
   });
 
-  // Analytics — payment_succeeded. Subskrypcja jest per-tenant, więc
-  // `distinctId = tenantId` (UUID nie koliduje z userId).
-  await trackServer({
-    distinctId: mapping.tenantId,
-    event: ANALYTICS_EVENTS.paymentSucceeded,
-    properties: {
-      amount_cents: invoice.amount_paid,
-      currency: (invoice.currency ?? 'pln').toLowerCase(),
-      stripe_invoice_id: invoice.id ?? '',
-    },
+  await recordPaymentSucceeded({
+    tenantId: mapping.tenantId,
+    stripeInvoiceId: invoice.id ?? paymentId,
+    amountPaidCents: invoice.amount_paid,
+    paidAt: persistedPaidAt,
   });
 }
 
@@ -268,6 +270,15 @@ export async function handleInvoicePaymentFailed(
   const supabase = createAdminClient();
   const existingStatus = await readStripePaymentStatus(supabase, invoice.id, true);
   if (existingStatus === 'succeeded' || isRefundedPaymentStatus(existingStatus)) return;
+
+  // Kod odmowy (np. `recurring_not_supported_by_bank`) mówi klientowi, co zrobić.
+  // Zastępuje błąd finalizacji tylko wtedy, gdy Stripe go podał.
+  const declineCode = await readPaymentDeclineCode(
+    typeof mapping.row.stripe_payment_intent_id === 'string'
+      ? mapping.row.stripe_payment_intent_id : null,
+  );
+  const failedRow = declineCode ? { ...mapping.row, failure_reason: declineCode } : mapping.row;
+
   const { data, error } = await (supabase as unknown as {
     from: (n: string) => {
       upsert: (
@@ -282,7 +293,7 @@ export async function handleInvoicePaymentFailed(
     };
   })
     .from('stripe_payments')
-    .upsert(mapping.row, { onConflict: 'stripe_invoice_id' })
+    .upsert(failedRow, { onConflict: 'stripe_invoice_id' })
     .select('id, status');
 
   if (error) {
@@ -303,7 +314,7 @@ export async function handleInvoicePaymentFailed(
   const paymentId = persistedPayment.id;
 
   const failureReason =
-    (mapping.row.failure_reason as string | null | undefined) ?? null;
+    (failedRow.failure_reason as string | null | undefined) ?? null;
 
   await logAuditSystem({
     action: 'billing.payment.failed',
@@ -329,14 +340,11 @@ export async function handleInvoicePaymentFailed(
     }),
   });
 
+  // Stripe ponawia obciążenie tej samej faktury, a każda próba to osobne zdarzenie.
   await trackServer({
-    distinctId: mapping.tenantId,
+    tenantId: mapping.tenantId,
     event: ANALYTICS_EVENTS.paymentFailed,
-    properties: {
-      amount_cents: invoice.amount_due,
-      currency: (invoice.currency ?? 'pln').toLowerCase(),
-      failure_reason: failureReason,
-    },
+    dedupeKey: `${invoice.id}:${invoice.attempt_count ?? 0}`,
   });
 }
 
