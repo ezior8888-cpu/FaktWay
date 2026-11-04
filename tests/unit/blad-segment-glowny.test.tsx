@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, startTransition, use, useState, type ReactNode } from 'react';
+import { act, startTransition, use, useInsertionEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { ErrorBoundary, type ErrorComponent } from 'next/dist/client/components/error-boundary';
 import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
@@ -49,16 +49,21 @@ import { THEME_STORAGE_KEY } from '@/lib/theme/theme';
 const rootErrorComponent = RootError as ErrorComponent;
 const dashboardErrorComponent = DashboardError as ErrorComponent;
 
-type Dane = 'padl-layout' | 'padla-strona' | 'ok';
+type Dane = 'padl-layout' | 'padla-strona' | 'padl-plik-js' | 'ok';
 
 // „Serwer”: co zwróci następne pobranie RSC i kiedy odpowie.
 let serwer: Dane = 'ok';
 let odpowiedzSerwera: Promise<void> = Promise.resolve();
 
 const refresh = vi.fn();
+const reload = vi.fn();
+
+// Jak webpack, gdy nie pobierze pliku JS strony.
+const bladPlikuJs = () => Object.assign(new Error('Loading chunk 123 failed.'), { name: 'ChunkLoadError' });
 
 function Strona({ dane }: { dane: Dane }) {
   if (dane === 'padla-strona') throw new Error('Nie udało się odczytać danych strony');
+  if (dane === 'padl-plik-js') throw bladPlikuJs();
   return <p>Pulpit wczytany</p>;
 }
 
@@ -76,6 +81,7 @@ const trasaPanelu = (dane: Dane) => (
 );
 
 function StronaMarketingowa({ dane }: { dane: Dane }) {
+  if (dane === 'padl-plik-js') throw bladPlikuJs();
   if (dane !== 'ok') throw new Error('Nie udało się wyrenderować strony');
   return <p>Cennik wczytany</p>;
 }
@@ -113,6 +119,8 @@ let host: HTMLDivElement | null = null;
 
 beforeEach(() => {
   refresh.mockClear();
+  reload.mockClear();
+  vi.stubGlobal('location', { ...window.location, reload });
   sentry.captureException.mockReset();
   serwer = 'ok';
   odpowiedzSerwera = Promise.resolve();
@@ -126,16 +134,21 @@ afterEach(() => {
   host?.remove();
   host = null;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const tik = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-async function mount(start: Dane, trasa: (dane: Dane) => ReactNode = trasaPanelu) {
+async function mount(
+  start: Dane,
+  trasa: (dane: Dane) => ReactNode = trasaPanelu,
+  owijka: (dzieci: ReactNode) => ReactNode = (dzieci) => dzieci,
+) {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
   await act(async () => {
-    root!.render(<Router start={start} trasa={trasa} />);
+    root!.render(owijka(<Router start={start} trasa={trasa} />));
   });
   return host;
 }
@@ -170,6 +183,8 @@ describe('app/error.tsx — awaria layoutu panelu', () => {
     // gdy padła sama strona główna, ten sam adres nie zdjąłby błędu z granicy.
     const linki = [...el.querySelectorAll('a')];
     expect(linki.map((a) => a.getAttribute('href'))).toEqual(['/']);
+    // `data-slot`: po nim `globals.css` ustawia wcięcie przycisku tego rozmiaru.
+    expect(linki[0]!.dataset.slot).toBe('button');
     const klik = new MouseEvent('click', { bubbles: true, cancelable: true });
     act(() => {
       linki[0]!.dispatchEvent(klik);
@@ -189,6 +204,7 @@ describe('app/error.tsx — awaria layoutu panelu', () => {
     await kliknij(el);
 
     expect(refresh).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
     expect(el.querySelector('[data-testid="powloka-panelu"]')?.textContent).toContain('Pulpit wczytany');
     expect(el.textContent).not.toContain('Coś poszło nie tak');
   });
@@ -238,7 +254,22 @@ describe('app/error.tsx — awaria layoutu panelu', () => {
 describe('app/error.tsx — motyw po pełnym wczytaniu', () => {
   // Po awarii przy pełnym wczytaniu (HTTP 500) Next składa dokument w przeglądarce,
   // a skrypt `THEME_BOOT_SCRIPT` wstawiony przez React się nie wykonuje (sprawdzone
-  // na zbudowanym Next 16.4.1, opis w PR). Tu: `<html>` bez klasy, jak w tym dokumencie.
+  // na zbudowanym Next 16.4.1, opis w PR). React przejmuje wtedy `<html>` przy
+  // zatwierdzeniu i zdejmuje mu atrybuty, więc klasa dodana w renderze znika. Dopiero
+  // potem idą efekty układu, a rodzic dostaje swój po dzieciach: widzi stan sprzed malowania.
+  let darkPrzedMalowaniem: boolean | undefined;
+
+  function JakDokumentPo500({ children }: { children: ReactNode }) {
+    useInsertionEffect(() => {
+      document.documentElement.removeAttribute('class');
+      document.documentElement.removeAttribute('style');
+    }, []);
+    useLayoutEffect(() => {
+      darkPrzedMalowaniem = document.documentElement.classList.contains('dark');
+    }, []);
+    return children;
+  }
+
   afterEach(() => {
     localStorage.removeItem(THEME_STORAGE_KEY);
     document.documentElement.classList.remove('dark');
@@ -247,8 +278,10 @@ describe('app/error.tsx — motyw po pełnym wczytaniu', () => {
 
   it('klient z ciemnym motywem dostaje ciemną kartę i zostaje na ciemnym po udanym ponowieniu', async () => {
     localStorage.setItem(THEME_STORAGE_KEY, 'dark');
-    const el = await mount('padl-layout');
+    darkPrzedMalowaniem = undefined;
+    const el = await mount('padl-layout', trasaPanelu, (dzieci) => <JakDokumentPo500>{dzieci}</JakDokumentPo500>);
 
+    expect(darkPrzedMalowaniem).toBe(true);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('dark');
 
@@ -277,7 +310,7 @@ describe('app/error.tsx — motyw po pełnym wczytaniu', () => {
 describe('app/error.tsx i karta panelu razem', () => {
   it('ponowienie na karcie panelu przy trwającej awarii layoutu kończy się kartą główną, a nie błędem bez granicy', async () => {
     const el = await mount('padla-strona');
-    // Karta panelu: w powłoce, nagłówek drugiego poziomu (h1 ma powłoka), bez linku.
+    // Karta panelu: w powłoce, `h2` i bez linku, jak przed wydzieleniem karty.
     expect(el.querySelector('[data-testid="powloka-panelu"]')).not.toBeNull();
     expect(el.querySelector('h2')?.textContent).toBe('Coś poszło nie tak');
     expect(el.querySelectorAll('a')).toHaveLength(0);
@@ -294,6 +327,24 @@ describe('app/error.tsx i karta panelu razem', () => {
     serwer = 'ok';
     await kliknij(el);
     expect(el.querySelector('[data-testid="powloka-panelu"]')?.textContent).toContain('Pulpit wczytany');
+  });
+});
+
+describe('nieudane pobranie pliku JS', () => {
+  // Odrzucony plik zostaje w pamięci klienta RSC do końca życia dokumentu, więc odświeżenie
+  // bez przeładowania nigdy się nie uda. Na `main` poza panelem kończyło się to na
+  // `global-error`, którego przycisk przeładowuje stronę.
+  it.each([
+    ['poza panelem', trasaMarketingowa],
+    ['w panelu', trasaPanelu],
+  ])('%s: przycisk przeładowuje stronę zamiast odświeżać dane', async (_nazwa, trasa) => {
+    const el = await mount('padl-plik-js', trasa);
+    expect(el.textContent).toContain('Coś poszło nie tak');
+
+    await kliknij(el);
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
 

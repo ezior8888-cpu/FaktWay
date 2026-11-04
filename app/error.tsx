@@ -48,7 +48,13 @@ export default function RootError({
         heading="h1"
         extraAction={
           // eslint-disable-next-line @next/next/no-html-link-for-pages -- komentarz wyżej: `<Link>` nie zdjąłby błędu
-          <a href="/" className={cn(buttonVariants({ variant: 'outline', size: 'lg' }))}>
+          <a
+            href="/"
+            data-slot="button"
+            data-variant="outline"
+            data-size="lg"
+            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }))}
+          >
             Strona główna
           </a>
         }

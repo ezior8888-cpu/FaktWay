@@ -21,7 +21,7 @@ export function SegmentErrorCard({
 }: {
   error: Error & { digest?: string };
   reset: () => void;
-  /** `h1`, gdy karta jest jedyną treścią strony. */
+  /** `h1` na stronie bez powłoki; karta w panelu zostaje przy `h2`. */
   heading?: 'h1' | 'h2';
   /** Wyjście obok ponowienia, gdy wokół karty nie ma nawigacji. */
   extraAction?: ReactNode;
@@ -56,17 +56,23 @@ export function SegmentErrorCard({
               w `reports/kpir/error.tsx`. Gdy przy ponowieniu z panelu padnie
               jego layout (ta sama awaria bazy), błąd trafia do `app/error.tsx`,
               jak po F5. Wyłączony do odpowiedzi serwera: kolejne kliknięcia
-              nie wysyłają następnych odświeżeń. Testy:
+              nie wysyłają następnych odświeżeń. Wyjątek: odrzucony plik JS zostaje
+              w pamięci klienta RSC do końca życia dokumentu, więc tu pomoże tylko
+              przeładowanie, jak w `global-error.tsx`. Testy:
               `panel-blad-ponow.test.tsx`, `blad-segment-glowny.test.tsx`. */}
           <Button
             size="lg"
             disabled={isPending}
-            onClick={() =>
+            onClick={() => {
+              if (error?.name === 'ChunkLoadError') {
+                window.location.reload();
+                return;
+              }
               startTransition(() => {
                 router.refresh();
                 reset();
-              })
-            }
+              });
+            }}
           >
             <RiRefreshLine aria-hidden />
             Spróbuj ponownie
