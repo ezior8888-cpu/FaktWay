@@ -36,13 +36,13 @@ type PhotoResult = ReturnType<typeof photoBannerResult>;
 
 function render(
   params: string,
-  latestExpenseAt: string | null = null,
   failedOcrJobIds?: string[],
+  readOcrJobIds?: string[],
 ) {
   search = new URLSearchParams(params);
   return renderToStaticMarkup(
     <FloPhotoBanner
-      latestExpenseAt={latestExpenseAt}
+      readOcrJobIds={readOcrJobIds}
       failedOcrJobIds={failedOcrJobIds}
     />,
   );
@@ -77,7 +77,7 @@ describe('FloPhotoBanner', () => {
   });
 
   it('porażkę odczytu mówi wprost i nie twierdzi, że paragon odczytano', () => {
-    const html = render('paragon=job-1', null, ['job-1']);
+    const html = render('paragon=job-1', ['job-1']);
 
     expect(html).toContain(FAILED_SENTENCE);
     // Zdjęcie jest bezpieczne, a droga wyjścia czeka w karcie silnika.
@@ -88,10 +88,22 @@ describe('FloPhotoBanner', () => {
   });
 
   it('porażka innego zdjęcia nie dotyczy paragonu z adresu', () => {
-    const html = render('paragon=job-1', null, ['job-2']);
+    const html = render('paragon=job-1', ['job-2']);
 
     expect(html).toContain('Mam Twoje zdjęcie');
     expect(html).not.toContain(FAILED_SENTENCE);
+  });
+
+  it('karta kosztu tego zadania: już przy pierwszym renderze „odczytany”, bez migania', () => {
+    // Bez zegara ten sam wynik na serwerze i w przeglądarce.
+    expect(render('paragon=job-1', [], ['job-1'])).toContain('Paragon odczytany');
+  });
+
+  it('koszt z innego zdjęcia nie znaczy, że odczytano ten paragon', () => {
+    const html = render('paragon=job-1', [], ['job-2']);
+
+    expect(html).toContain('Mam Twoje zdjęcie');
+    expect(html).not.toContain('Paragon odczytany');
   });
 
   it('mówi spokojnym tonem, bez wykrzykników i bez słowa „błąd”', () => {
@@ -102,7 +114,7 @@ describe('FloPhotoBanner', () => {
       ['paragon=job-1', ['job-1']],
     ];
     for (const [params, failed] of cases) {
-      const html = render(params, null, failed);
+      const html = render(params, failed);
       expect(html).not.toContain('!');
       expect(html).not.toMatch(/błąd|awaria/i);
     }
@@ -119,53 +131,28 @@ describe('FloPhotoBanner', () => {
 });
 
 describe('FloPhotoBanner — wybór zdania', () => {
-  const STARTED = Date.parse('2026-08-26T12:00:00.000Z');
-
-  it('porażka nie zależy od czasu — ten sam wynik na serwerze i w przeglądarce', () => {
-    for (const startedAt of [null, STARTED]) {
-      expect(
-        photoBannerResult({
-          paragon: 'job-1',
-          failedOcrJobIds: ['job-1'],
-          latestExpenseAt: null,
-          startedAt,
-        }),
-      ).toBe('failed');
-    }
-  });
-
-  it('porażka wygrywa z kosztem, który doszedł w tym samym czasie', () => {
+  it('porażka tego zadania', () => {
     expect(
-      photoBannerResult({
-        paragon: 'job-1',
-        failedOcrJobIds: ['job-1'],
-        latestExpenseAt: '2026-08-26T12:00:10.000Z',
-        startedAt: STARTED,
-      }),
+      photoBannerResult({ paragon: 'job-1', failedOcrJobIds: ['job-1'], readOcrJobIds: [] }),
     ).toBe('failed');
   });
 
-  it('koszt młodszy niż wejście na ekran to odczyt udany', () => {
+  it('porażka wygrywa z kartą kosztu tego samego zadania (wyścig dwóch przebiegów)', () => {
     expect(
-      photoBannerResult({
-        paragon: 'job-1',
-        failedOcrJobIds: ['job-2'],
-        latestExpenseAt: '2026-08-26T12:00:10.000Z',
-        startedAt: STARTED,
-      }),
+      photoBannerResult({ paragon: 'job-1', failedOcrJobIds: ['job-1'], readOcrJobIds: ['job-1'] }),
+    ).toBe('failed');
+  });
+
+  it('karta kosztu tego zadania to odczyt udany', () => {
+    expect(
+      photoBannerResult({ paragon: 'job-1', failedOcrJobIds: ['job-2'], readOcrJobIds: ['job-1'] }),
     ).toBe('read');
   });
 
-  it('zapas jednego cyklu odpytywania: koszt sprzed 5 s to odczyt, sprzed 15 s już nie', () => {
-    // Odczyt mógł skończyć się tuż przed wejściem na ekran (powiadomienie
-    // przyszło szybciej niż przekierowanie z udostępniania).
-    const at = (ms: number) => new Date(STARTED + ms).toISOString();
-    const result = (latestExpenseAt: string) =>
-      photoBannerResult({ paragon: 'job-1', failedOcrJobIds: [], latestExpenseAt, startedAt: STARTED });
-
-    expect(result(at(-5_000))).toBe('read');
-    expect(result(at(-14_999))).toBe('read');
-    expect(result(at(-15_000))).toBeNull();
+  it('karty innych zadań nie mówią nic o tym paragonie', () => {
+    expect(
+      photoBannerResult({ paragon: 'job-1', failedOcrJobIds: ['job-2'], readOcrJobIds: ['job-3'] }),
+    ).toBeNull();
   });
 
   it('mocniejszy wynik: porażka > odczyt > brak, niezależnie od kolejności', () => {
@@ -181,17 +168,6 @@ describe('FloPhotoBanner — wybór zdania', () => {
     for (const [a, b, expected] of cases) {
       expect(strongerPhotoBannerResult(a, b)).toBe(expected);
     }
-  });
-
-  it('stary koszt z wątku nie udaje odczytu nowego paragonu', () => {
-    expect(
-      photoBannerResult({
-        paragon: 'job-1',
-        failedOcrJobIds: [],
-        latestExpenseAt: '2026-08-26T11:00:00.000Z',
-        startedAt: STARTED,
-      }),
-    ).toBeNull();
   });
 
   it('porażka ma pierwszeństwo przed „dłużej niż zwykle”', () => {
@@ -226,13 +202,13 @@ describe('FloPhotoBanner — odpytywanie w przeglądarce', () => {
   let container: HTMLDivElement;
 
   function mount(props: {
-    latestExpenseAt?: string | null;
+    readOcrJobIds?: string[];
     failedOcrJobIds?: string[];
   }) {
     act(() =>
       root.render(
         <FloPhotoBanner
-          latestExpenseAt={props.latestExpenseAt ?? null}
+          readOcrJobIds={props.readOcrJobIds}
           failedOcrJobIds={props.failedOcrJobIds}
         />,
       ),
@@ -281,29 +257,39 @@ describe('FloPhotoBanner — odpytywanie w przeglądarce', () => {
     expect(container.textContent).toContain(FAILED_SENTENCE);
   });
 
-  it('po odczycie (wniosek z czasu) odświeża dalej — karta porażki tego paragonu może go poprawić', () => {
-    // Koszt młodszy niż wejście mógł przyjść z INNEGO zdjęcia.
-    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z' });
-    advance(15_000);
-    expect(router.refresh).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain('Paragon odczytany');
-
-    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z', failedOcrJobIds: ['job-1'] });
-    advance(60_000);
-    expect(router.refresh).toHaveBeenCalledTimes(1);
-    expect(vi.getTimerCount()).toBe(0);
-    expect(container.textContent).toContain(FAILED_SENTENCE);
-  });
-
-  it('po odczycie odświeża najwyżej trzy minuty, potem cisza — zdanie zostaje', () => {
-    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z' });
+  it('po odczycie TEGO paragonu nie odświeża i nie mówi „dłużej niż zwykle”', () => {
+    mount({ readOcrJobIds: ['job-1'] });
     advance(10 * 60_000);
 
-    // Co 15 s do trzeciej minuty włącznie.
-    expect(router.refresh).toHaveBeenCalledTimes(12);
+    expect(router.refresh).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
     expect(container.textContent).toContain('Paragon odczytany');
     expect(container.textContent).not.toContain('dłużej niż zwykle');
+  });
+
+  it('koszt z innego zdjęcia: czyta dalej, odświeża, po trzech minutach mówi „dłużej niż zwykle”', () => {
+    mount({ readOcrJobIds: ['job-2'] });
+    expect(container.textContent).toContain('Czytam paragon');
+
+    advance(10 * 60_000);
+    // Co 15 s do trzeciej minuty włącznie.
+    expect(router.refresh).toHaveBeenCalledTimes(12);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(container.textContent).not.toContain('Paragon odczytany');
+    expect(container.textContent).toContain('dłużej niż zwykle');
+  });
+
+  it('gdy karta kosztu dojdzie w trakcie, odświeżanie staje', () => {
+    mount({});
+    advance(15_000);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+
+    mount({ readOcrJobIds: ['job-1'] });
+    advance(60_000);
+
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(container.textContent).toContain('Paragon odczytany');
   });
 
   it('zamknięta karta porażki nie cofa paska do „czytam” ani nie wznawia odświeżania', () => {
@@ -320,7 +306,7 @@ describe('FloPhotoBanner — odpytywanie w przeglądarce', () => {
   });
 
   it('potwierdzony koszt znika z wątku, a pasek dalej mówi „odczytany”', () => {
-    mount({ latestExpenseAt: '2026-08-26T12:00:05.000Z' });
+    mount({ readOcrJobIds: ['job-1'] });
     mount({});
     expect(container.textContent).toContain('Paragon odczytany');
     expect(container.textContent).not.toContain('Czytam paragon');

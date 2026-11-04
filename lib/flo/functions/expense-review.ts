@@ -261,6 +261,8 @@ function storedCents(amount: number): number {
 export interface BuildExpenseProposalInput {
   tenantId: string;
   expenseId: string;
+  /** Zadanie OCR, z którego powstał koszt — po nim baner poznaje swój paragon. */
+  ocrJobId?: string;
   facts: OcrFacts;
   history: SellerHistory;
   /** Co agent ustawił sam — potrzebne do cofnięcia. */
@@ -337,6 +339,8 @@ export function buildExpenseReviewProposal(
     priority: assessment.needsQuestion ? 40 : 60,
     payload: {
       expenseId: input.expenseId,
+      // Ten sam klucz co w karcie porażki — czyta go `readOcrCard` dla banera.
+      ...(input.ocrJobId ? { ocrJobId: input.ocrJobId } : {}),
       facts,
       issues: assessment.issues,
       // Bez kursu nie ma czego potwierdzać: „Zgadza się” oznaczyłoby jako

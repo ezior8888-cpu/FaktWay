@@ -42,7 +42,7 @@ function extractedInvoiceToJson(data: ExtractedInvoice, fx: RateStamp | null = n
 
 /** Kolumny zapisanego wydatku, z których job kończy zadanie bez ponownego OCR. */
 const SAVED_EXPENSE_COLUMNS =
-  'id, seller_name, seller_nip, net_amount, vat_amount, gross_amount, issue_date, kpir_column, category_label, is_reviewed, ocr_extracted_data' as const;
+  'id, seller_name, seller_nip, net_amount, vat_amount, gross_amount, issue_date, kpir_column, category_label, is_reviewed, is_deductible, ocr_extracted_data' as const;
 
 type SavedExpense = Pick<
   Database['public']['Tables']['expenses']['Row'],
@@ -56,6 +56,7 @@ type SavedExpense = Pick<
   | 'kpir_column'
   | 'category_label'
   | 'is_reviewed'
+  | 'is_deductible'
   | 'ocr_extracted_data'
 >;
 
@@ -86,6 +87,8 @@ async function findOcrJobExpense(
 interface ExpenseReviewSource {
   facts: OcrFacts;
   applied: { kpirColumn: string | null; categoryLabel: string | null };
+  /** `expenses.is_deductible` wiersza — odcisk karty musi się z nim zgadzać. */
+  deductible: boolean;
   /** Kwota do powiadomienia: „123.00 PLN” albo „100.00 EUR (bez kursu)”. */
   amountLabel: string;
 }
@@ -121,8 +124,10 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
       // nie meldunek „zaksięgowałem”.
       confidence: trace.success ? (trace.data.ocr_confidence ?? null) : 0,
       categoryLabel: expense.category_label,
+      amountCurrency: withoutRate ? currency : HOME_CURRENCY,
     },
     applied: { kpirColumn: expense.kpir_column, categoryLabel: expense.category_label },
+    deductible: expense.is_deductible,
     amountLabel: withoutRate
       ? `${expense.gross_amount.toFixed(2)} ${currency} (bez kursu)`
       : `${expense.gross_amount.toFixed(2)} PLN`,
@@ -130,8 +135,47 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
 }
 
 /**
+ * Karta „nie odczytałem” po wyczerpaniu prób (E17). Dodatek do statusu zadania,
+ * który jest już zapisany: awaria karty kończy się logiem i Sentry, nie wyjątkiem.
+ *
+ * Najwyżej jedna karta na zadanie. `createProposal` widzi tylko karty otwarte
+ * i zatwierdzone, więc ponowione wywołanie (pg-boss powtarza job, gdy worker
+ * padnie przed jego zamknięciem) wskrzesiłoby kartę, którą klient już zamknął.
+ */
+async function createExhaustedFailedCard(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ocrJobId: string,
+  logger: JobContext['logger'],
+): Promise<void> {
+  try {
+    const proposal = buildOcrFailedProposal(tenantId, ocrJobId);
+    const { data: existing, error } = await supabase
+      .from('flo_proposals')
+      .select('status')
+      .eq('tenant_id', tenantId)
+      .eq('topic_key', proposal.topicKey)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!existing) await createProposal(proposal);
+  } catch (e) {
+    logger.warn('OCR: karta „nie odczytałem” po wyczerpaniu prób nieudana — status zadania zostaje', {
+      ocrJobId,
+      tenantId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    Sentry.captureException(e, {
+      tags: { job: 'process-ocr', step: 'exhausted-failed-card' },
+      extra: { ocrJobId, tenantId },
+    });
+  }
+}
+
+/**
  * Obsługa po wyczerpaniu prób (pg-boss `onExhausted`, `lib/jobs/run-job.ts`):
- * zadanie OCR dostaje wynik, żeby UI przestało pokazywać „przetwarzanie”.
+ * zadanie OCR dostaje wynik, żeby UI przestało pokazywać „przetwarzanie”,
+ * a klient kartę z drogą wyjścia, gdy wydatek nie powstał.
  *
  * Nie przy każdym wyczerpaniu: ponowienia samego pg-boss (utrata heartbeatu,
  * zamknięcie workera) tej funkcji nie wołają — zadanie zostaje wtedy
@@ -140,6 +184,7 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
 export async function onProcessOcrExhausted(
   error: Error,
   data: { ocrJobId: string; tenantId: string },
+  { logger }: Pick<JobContext, 'logger'>,
 ): Promise<void> {
   const { ocrJobId, tenantId } = data;
   const supabase = createAdminClient();
@@ -161,7 +206,7 @@ export async function onProcessOcrExhausted(
     return;
   }
 
-  const { error: updateError } = await supabase
+  const { data: marked, error: updateError } = await supabase
     .from('ocr_jobs')
     .update({
       status: 'failed',
@@ -171,8 +216,16 @@ export async function onProcessOcrExhausted(
       completed_at: new Date().toISOString(),
     })
     .eq('id', ocrJobId)
-    .eq('tenant_id', tenantId);
+    .eq('tenant_id', tenantId)
+    .select('source_file_path')
+    .maybeSingle();
   if (updateError) throw new Error(`Nie można oznaczyć zadania OCR: ${updateError.message}`);
+
+  // Karta mówi „zdjęcie zostało w archiwum”. Bez zadania tej firmy (zły ładunek)
+  // albo bez wgranego pliku byłaby nieprawdą, więc wtedy zostaje sam status.
+  if (!marked?.source_file_path || marked.source_file_path === 'pending') return;
+
+  await createExhaustedFailedCard(supabase, tenantId, ocrJobId, logger);
 }
 
 /**
@@ -249,9 +302,11 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         const proposal = buildExpenseReviewProposal({
           tenantId,
           expenseId,
+          ocrJobId,
           facts: source.facts,
           history,
           applied: source.applied,
+          deductible: source.deductible,
         });
         if (mode.kind === 'saved') {
           const { data: existing, error } = await supabase
@@ -489,11 +544,16 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
           issueDate: extractedData.issue_date,
           confidence: extractedData.ocr_confidence,
           categoryLabel: categorization.category_label,
+          // Waluta KWOT, nie dokumentu: po przeliczeniu kursem są już w złotych.
+          amountCurrency: cost.kind === 'missing_rate' ? currency : HOME_CURRENCY,
         },
         applied: {
           kpirColumn: categorization.kpir_column,
           categoryLabel: categorization.category_label,
         },
+        // Tak samo jak w zapisie wyżej: bez kursu `is_deductible: false`, inaczej
+        // domyślne TRUE z bazy (00034).
+        deductible: cost.kind !== 'missing_rate',
         amountLabel:
           cost.kind === 'pln'
             ? `${cost.gross.toFixed(2)} PLN`

@@ -127,6 +127,11 @@ vi.mock('@/lib/supabase/admin', () => ({
         },
         maybeSingle: async () => {
           if (table === 'tenants') return { data: { vat_exemption_basis: null }, error: null };
+          // UPDATE … RETURNING zadania (onProcessOcrExhausted).
+          if (table === 'ocr_jobs') {
+            if (state.jobUpdateError) return { data: null, error: { message: 'zapis odrzucony' } };
+            return { data: rowsOf(state.jobRow ? [state.jobRow] : [])[0] ?? null, error: null };
+          }
           if (table === 'flo_proposals') {
             if (state.cardReadError) return { data: null, error: { message: 'database unavailable' } };
             const rows = rowsOf(state.cards);
@@ -182,7 +187,7 @@ function savedRow(id: string, over: Row = {}): Row {
     id, tenant_id: TENANT, ocr_job_id: OCR_JOB,
     seller_name: 'Stacja Paliw', seller_nip: '5260001246',
     net_amount: 100, vat_amount: 23, gross_amount: 123, issue_date: '2026-09-28',
-    kpir_column: 'col_13', category_label: 'Paliwo', is_reviewed: false,
+    kpir_column: 'col_13', category_label: 'Paliwo', is_reviewed: false, is_deductible: true,
     ocr_extracted_data: { currency: 'PLN', ocr_confidence: 0.95 },
     ...over,
   };
@@ -320,8 +325,11 @@ describe('pierwszy przebieg — karta, powiadomienie i ślad odczytu jak dotąd'
         sellerName: 'Stacja Paliw', sellerNip: '5260001246',
         netAmount: 100, vatAmount: 23, grossAmount: 123,
         issueDate: '2026-09-28', confidence: 0.95, categoryLabel: 'Paliwo',
+        amountCurrency: 'PLN',
       },
       applied: { kpirColumn: 'col_13', categoryLabel: 'Paliwo' },
+      deductible: true,
+      ocrJobId: OCR_JOB,
     }));
     expect(state.proposal).toHaveBeenCalledTimes(1);
     expect(pushBodies('invoice_accepted')).toEqual(['Stacja Paliw • 123.00 PLN']);
@@ -335,15 +343,16 @@ describe('pierwszy przebieg — karta, powiadomienie i ślad odczytu jak dotąd'
   });
 
   it.each([
-    ['waluta z kursem NBP', true, { netAmount: 425.67, vatAmount: 0, grossAmount: 425.67 }, 'Figma Inc. • 425.67 PLN'],
-    ['waluta bez kursu NBP', false, { netAmount: 100, vatAmount: 0, grossAmount: 100 }, 'Figma Inc. • 100.00 EUR (bez kursu)'],
-  ])('%s — karta i powiadomienie jak dotąd', async (_label, rateFound, amounts, body) => {
+    ['waluta z kursem NBP', true, { netAmount: 425.67, vatAmount: 0, grossAmount: 425.67, amountCurrency: 'PLN' }, 'Figma Inc. • 425.67 PLN'],
+    ['waluta bez kursu NBP', false, { netAmount: 100, vatAmount: 0, grossAmount: 100, amountCurrency: 'EUR' }, 'Figma Inc. • 100.00 EUR (bez kursu)'],
+  ])('%s — karta dostaje walutę kwot i stan KPiR, powiadomienie jak dotąd', async (_label, rateFound, amounts, body) => {
     state.extractData = { seller_name: 'Figma Inc.', currency: 'EUR', net_amount: 100, vat_amount: 0, gross_amount: 100 };
     if (!rateFound) state.nbp.mockResolvedValue({ found: false, reason: 'no_table_before' });
 
     await runProcessOcr(event, ctx);
     expect(state.review).toHaveBeenCalledWith(expect.objectContaining({
       facts: expect.objectContaining({ sellerName: 'Figma Inc.', ...amounts }),
+      deductible: rateFound,
     }));
     expect(pushBodies('invoice_accepted')).toEqual([body]);
   });
@@ -491,20 +500,27 @@ describe('E15 — ponowienie po zapisie: bez płatnego OCR, karta i powiadomieni
   });
 
   it.each([
-    ['złotówki', { currency: 'PLN', ocr_confidence: 0.95 }, 123, 'Stacja Paliw • 123.00 PLN', 0.95],
-    ['waluta z kursem NBP', { currency: 'EUR', ocr_confidence: 0.9, fx: { currency: 'EUR', mid: 4.3, tableNo: 'X', effectiveDate: '2026-09-26' } }, 430.5, 'Stacja Paliw • 430.50 PLN', 0.9],
-    ['waluta bez kursu', { currency: 'EUR', ocr_confidence: 0.9 }, 100, 'Stacja Paliw • 100.00 EUR (bez kursu)', 0.9],
-    ['dawny wpis bez waluty', { ocr_confidence: 0.8 }, 123, 'Stacja Paliw • 123.00 PLN', 0.8],
-    ['ślad bez pewności odczytu', { currency: 'PLN' }, 123, 'Stacja Paliw • 123.00 PLN', null],
-    ['nieczytelny ślad OCR — pewność 0 (karta-pytanie)', null, 123, 'Stacja Paliw • 123.00 PLN', 0],
-  ])('kwota i pewność z zapisanego śladu: %s', async (_label, trace, gross, body, confidence) => {
+    ['złotówki', { currency: 'PLN', ocr_confidence: 0.95 }, 123, 'Stacja Paliw • 123.00 PLN', 0.95, 'PLN'],
+    ['waluta z kursem NBP', { currency: 'EUR', ocr_confidence: 0.9, fx: { currency: 'EUR', mid: 4.3, tableNo: 'X', effectiveDate: '2026-09-26' } }, 430.5, 'Stacja Paliw • 430.50 PLN', 0.9, 'PLN'],
+    ['waluta bez kursu', { currency: 'EUR', ocr_confidence: 0.9 }, 100, 'Stacja Paliw • 100.00 EUR (bez kursu)', 0.9, 'EUR'],
+    ['dawny wpis bez waluty', { ocr_confidence: 0.8 }, 123, 'Stacja Paliw • 123.00 PLN', 0.8, 'PLN'],
+    ['ślad bez pewności odczytu', { currency: 'PLN' }, 123, 'Stacja Paliw • 123.00 PLN', null, 'PLN'],
+    ['nieczytelny ślad OCR — pewność 0 (karta-pytanie)', null, 123, 'Stacja Paliw • 123.00 PLN', 0, 'PLN'],
+  ])('kwota, waluta i pewność z zapisanego śladu: %s', async (_label, trace, gross, body, confidence, amountCurrency) => {
     state.expenses.push(savedRow('exp-1', { ocr_extracted_data: trace, gross_amount: gross }));
 
     await runProcessOcr(event, ctx);
     expect(pushBodies('invoice_accepted')).toEqual([body]);
     expect(state.review).toHaveBeenCalledWith(expect.objectContaining({
-      facts: expect.objectContaining({ confidence, grossAmount: gross }),
+      facts: expect.objectContaining({ confidence, grossAmount: gross, amountCurrency }),
     }));
+  });
+
+  it.each([true, false])('stan KPiR do karty prosto z wiersza: is_deductible = %s', async (isDeductible) => {
+    state.expenses.push(savedRow('exp-1', { is_deductible: isDeductible }));
+
+    await runProcessOcr(event, ctx);
+    expect(state.review).toHaveBeenCalledWith(expect.objectContaining({ deductible: isDeductible, ocrJobId: OCR_JOB }));
   });
 });
 
@@ -658,36 +674,41 @@ describe('onProcessOcrExhausted — po wyczerpaniu prób', () => {
     await expect(runProcessOcr(event, ctx)).rejects.toThrow();
     state.jobUpdates = [];
 
-    await onProcessOcrExhausted(new Error('karta agenta niedostępna'), event);
+    await onProcessOcrExhausted(new Error('karta agenta niedostępna'), event, ctx);
     expect(state.jobUpdates).toEqual([expect.objectContaining({ status: 'completed', expense_id: 'exp-1' })]);
     expect(state.expenses).toHaveLength(1);
+    expect(state.failedCard).not.toHaveBeenCalled();
   });
 
   it.each([
     ['innego zadania', savedRow('exp-inne', { ocr_job_id: OTHER_JOB })],
     ['innej firmy', savedRow('exp-inne', { tenant_id: OTHER_TENANT })],
-  ])('wydatek nie powstał (jest tylko wydatek %s) — „nieudane”, jak dotąd', async (_label, other) => {
+  ])('wydatek nie powstał (jest tylko wydatek %s) — „nieudane” i karta porażki', async (_label, other) => {
     state.expenses.push(other);
-    await onProcessOcrExhausted(new Error('OCR niedostępny'), event);
+    await onProcessOcrExhausted(new Error('OCR niedostępny'), event, ctx);
     expect(state.jobUpdates).toEqual([expect.objectContaining({ status: 'failed', error_message: 'OCR niedostępny' })]);
+    expect(state.failedCard).toHaveBeenCalledWith(TENANT, OCR_JOB);
+    expect(state.proposal).toHaveBeenCalledTimes(1);
   });
 
-  it('nie da się sprawdzić, czy wydatek jest — rzuca, bez „nieudane” w ciemno', async () => {
+  it('nie da się sprawdzić, czy wydatek jest — rzuca, bez „nieudane” w ciemno i bez karty', async () => {
     state.readErrorFrom = 1;
 
-    await expect(onProcessOcrExhausted(new Error('OCR niedostępny'), event))
+    await expect(onProcessOcrExhausted(new Error('OCR niedostępny'), event, ctx))
       .rejects.toThrow('Nie można sprawdzić, czy wydatek już istnieje');
     expect(state.jobUpdates).toEqual([]);
+    expect(state.failedCard).not.toHaveBeenCalled();
   });
 
   it.each([
     ['wydatek jest', [savedRow('exp-1')]],
     ['wydatku nie ma', []],
-  ])('zapis statusu zadania odrzucony (%s) — rzuca zamiast milczeć', async (_label, rows) => {
+  ])('zapis statusu zadania odrzucony (%s) — rzuca zamiast milczeć, bez karty', async (_label, rows) => {
     state.expenses.push(...rows);
     state.jobUpdateError = true;
 
-    await expect(onProcessOcrExhausted(new Error('OCR niedostępny'), event))
+    await expect(onProcessOcrExhausted(new Error('OCR niedostępny'), event, ctx))
       .rejects.toThrow('Nie można oznaczyć zadania OCR');
+    expect(state.failedCard).not.toHaveBeenCalled();
   });
 });
