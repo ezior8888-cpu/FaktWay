@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Szybka kontrola przed pushem: typy, eslint zmienionych plików i testy
+# Vitest związane ze zmienionymi plikami (`vitest related`). To siatka
+# bezpieczeństwa, nie zamiennik `pnpm run ci && pnpm build` z AGENTS.md.
+#
+# Włącza go `scripts/dev/przygotuj-worktree.sh` (git config core.hooksPath
+# .githooks). Milczy, gdy wszystko gra. Trwa od kilku sekund do ok. 3 minut
+# (zmiana w pliku importowanym wszędzie uruchamia większość testów).
+# Pominięcie w razie potrzeby: SKIP_PREPUSH=1 git push   albo   git push --no-verify
+set -uo pipefail
+
+[ "${SKIP_PREPUSH:-}" = 1 ] && exit 0
+cd "$(git rev-parse --show-toplevel)" || exit 0
+[ -d node_modules ] || { echo "pre-push: brak node_modules, kontrola pominięta (pnpm install)" >&2; exit 0; }
+
+zero=0000000000000000000000000000000000000000
+changed=""
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue          # usuwanie gałęzi
+  base="$(git merge-base origin/main "$local_sha" 2>/dev/null)" || continue
+  changed+="$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha")"$'\n'
+done
+code="$(printf '%s' "$changed" | grep -E '\.(ts|tsx|js|mjs|cjs)$' | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
+[ -n "$code" ] || exit 0
+
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+fail() {
+  echo "pre-push: $1 — push zatrzymany. Ostatnie linie:" >&2
+  tail -40 "$log" >&2
+  echo "(pominięcie: SKIP_PREPUSH=1 git push)" >&2
+  exit 1
+}
+
+pnpm -s typecheck >"$log" 2>&1 || fail "pnpm typecheck czerwony"
+# shellcheck disable=SC2086
+printf '%s\n' "$code" | xargs pnpm -s eslint --no-warn-ignored >"$log" 2>&1 || fail "eslint zmienionych plików czerwony"
+# shellcheck disable=SC2086
+printf '%s\n' "$code" | xargs pnpm -s vitest related --run --passWithNoTests >"$log" 2>&1 || fail "vitest related czerwony"
+exit 0
