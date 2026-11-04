@@ -70,10 +70,10 @@ zawsze.
 
 | # | Co | Gdzie | Koszt | Zawęża? |
 |---|---|---|---|---|
-| 1.1 | Stabilne testy MFA: fałszywy podpis zawsze inny (zmiana pierwszego znaku podpisu) | PR `claude/usp-1-falszywy-podpis-mfa` | N | nie |
-| 1.2 | Test `db-backup.sh` pomijany przy bashu < 4 (macOS) | PR `claude/usp-1-test-kopii-bash4` | N | nie |
-| 1.3 | `scripts/dev/przygotuj-worktree.sh` + hook SessionStart w `.claude/settings.json` (w gicie) + `.githooks/pre-push` | PR `claude/usp-1-hooki-worktree` | N | nie: cisza, gdy gra |
-| 1.4 | Renovate bez automatycznego scalania i z 3-dniową kwarantanną nowych wersji | PR `claude/usp-1-renovate` | N | nie |
+| 1.1 | Stabilne testy MFA: fałszywy podpis zawsze inny (zmiana pierwszego znaku podpisu) | #370 | N | nie |
+| 1.2 | Test `db-backup.sh` pomijany przy bashu < 4 (macOS) | #371 | N | nie |
+| 1.3 | `scripts/dev/przygotuj-worktree.sh` + hook SessionStart w `.claude/settings.json` (w gicie) + `.githooks/pre-push` | #372 | N | nie: cisza, gdy gra |
+| 1.4 | Renovate bez automatycznego scalania i z 3-dniową kwarantanną nowych wersji | #373 | N | nie |
 | 1.5 | Pluginy i MCP: diff `~/.claude/settings.json` | sekcja 5.1, klika Bartosz | N | **zdejmuje** ok. 160 nazw skilli z każdej rozmowy |
 | 1.6 | Pamięć: nowy indeks ok. 500 słów, lista plików do usunięcia | sekcja 5.2, decyduje Bartosz | N | **zdejmuje** ok. 850 słów |
 | 1.7 | Instalacja Renovate | sekcja 6, klika Bartosz | N | nie |
@@ -165,7 +165,7 @@ prywatna): `side-session-notes/…/pamiec-propozycja.md`. Usuwanie tylko po
 
 ## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
 
-Najpierw scal PR 1.4: obecny `renovate.json` scala sam poprawki (patch)
+Najpierw scal #373 (1.4): obecny `renovate.json` scala sam poprawki (patch)
 i próbuje to robić gałęzią prosto do `main`, co łamie zasadę „scala tylko
 Bartosz” i i tak nie przejdzie przez ochronę `main`.
 
@@ -184,7 +184,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 
 | Data | Etap | PR | Stan |
 |---|---|---|---|
-| 04.11.2026 | Analiza, plan, etap 1 (1.1–1.4) | ten PR i PR z etapu 1 | PR otwarte, czekają na CI i Bartosza; 1.5–1.7 czekają na jego decyzję |
+| 04.11.2026 | Analiza, plan, etap 1 (1.1–1.4) | #374 (plan), #370, #371, #372, #373 | PR otwarte, lokalnie `pnpm run ci` zielone na wszystkich pięciu razem; 1.5–1.7 czekają na decyzję Bartosza |
 
 **Następny krok:** decyzje Bartosza z sekcji 5 i instalacja Renovate
 (sekcja 6). Po „idź dalej”: etap 2 od 2.1 (`AGENTS.md` + runbooki) i 2.3,
