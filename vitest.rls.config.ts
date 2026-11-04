@@ -46,6 +46,9 @@ export default defineConfig({
       // 00163 (krok kodu przy dostępie osób trzecich): adres wysyłki i link dla księgowej,
       // przyjęcie prośby i zmiana roli odmawiają sesji AAL1 konta z 2FA; cofnięcie działa.
       'tests/rls-krok-kodu.test.ts',
+      // 00164 (C-12): jeden wiersz `xml_documents` na fakturę, wyścig równoległych
+      // zapisów i dowód bez nadpisania przez prawdziwy PostgREST.
+      'tests/rls-xml-dowod-jeden-wiersz.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
