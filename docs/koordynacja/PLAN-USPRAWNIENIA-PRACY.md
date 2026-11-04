@@ -1,0 +1,192 @@
+# Plan usprawnień pracy (Claude, Codex, CI, wdrożenia)
+
+> **„Kontynuuj plan usprawnień”**: przeczytaj ten plik, zrób checklistę
+> (sekcja 0) i pracuj od „Następny krok” na końcu dziennika (sekcja 7).
+> Jeden punkt = jedna gałąź `claude/usp-<etap>-<temat>` = jeden PR. Po etapie
+> raport i stop (punkt 10 protokołu w `AGENTS.md`).
+
+## Po co ten plan
+
+Zlecenie Bartosza (03.11.2026, „zrobimy to wszystko”): praca w FaktWay ma być
+przyjemniejsza, kod lepszy, błędów jak najmniej, a Claude ma myśleć szeroko,
+a nie według coraz dłuższej listy reguł. Analiza: 04.11.2026, `main` @ `7a249d3f`.
+
+## 0. Checklista startowa (każda sesja)
+
+1. `git fetch origin`, gałąź od `origin/main`. Nigdy od lokalnego `main`.
+2. `bash scripts/dev/przygotuj-worktree.sh` (po scaleniu PR z etapu 1 robi to
+   sam hook SessionStart).
+3. Przeczytaj w `AGENTS.md` „Protokół naprawy błędu” i „Co NIE robić”.
+4. `gh pr list --state open --json number,title,headRefName,files` i sprawdź,
+   czy nikt nie rusza Twoich plików.
+5. Sprawdź, czy punkt nadal ma sens: `main` idzie do przodu.
+
+## 1. Zasady tego planu
+
+1. **Nie zawężać myślenia Claude.** Ładowane zawsze (`AGENTS.md`, indeks
+   pamięci) zawiera tylko niezmienniki, bezpieczeństwo i stos. Procedury są
+   w `docs/runbooks/` i ładują się na żądanie. Co da się sprawdzić automatem
+   (hook, skrypt, test, CI), sprawdza automat, a reguła w prompcie znika.
+2. **Hooki są szybkie i milczą, gdy wszystko gra.** Odzywają się jedną linią,
+   gdy coś zrobiły albo coś jest czerwone.
+3. **Codex Igora czyta `AGENTS.md`, nie zna skilli Claude.** Skill to cienka
+   nakładka (kilka linii) z odnośnikiem do runbooka, nigdy jedyne miejsce
+   procedury. Żadnych gotowych paczek skilli z internetu.
+4. **Tanio.** Rutynę robią skrypty i harmonogram; Claude wchodzi, gdy coś jest
+   czerwone. Subagenty: Sonnet do mechanicznego, Opus do projektu, SQL
+   i recenzji.
+5. **Poza repo nic bez zgody.** Globalne ustawienia Claude, aplikacja Claude,
+   GitHub (aplikacje, reguły gałęzi), serwery, Coolify, usuwanie pamięci:
+   sesja pokazuje dokładną zmianę (sekcja 5) i czeka.
+6. **Mac zamrożony.** Zmiany na telefon tylko za `max-sm:`/`sm:` albo
+   `@media (hover: none) and (pointer: coarse)`.
+
+## 2. Fakty sprawdzone 04.11.2026
+
+| Fakt z przeglądu 03.11 | Stan 04.11 |
+|---|---|
+| `AGENTS.md` 4 301 słów, 644 linie | potwierdzone |
+| `MEMORY.md` 1 340 słów, 43 pliki pamięci | potwierdzone; ok. 32 tys. słów w plikach, z czego 14 tys. w trzech starych (fazy, masterplan, migracja Hetzner). Indeks ładuje się zawsze, pliki na żądanie |
+| pluginy `gitlab`, `github` (MCP: zły nagłówek), `posthog`, `logo-design` | potwierdzone; do tego plugin `design` z aplikacji z 7 serwerami MCP bez logowania (Asana, Atlassian, Figma, Intercom, Linear, Notion, Slack) |
+| `.claude/` poza gitem, zero hooków | potwierdzone |
+| Renovate nigdy nie otworzył PR | potwierdzone (zero PR autora `app/renovate`); alerty: 1 krytyczny, 7 wysokich, 15 średnich, 4 niskie; PR #365 zamyka 27 z nich |
+| `db-backup-skrypt.test.ts` pada na bashu 3.2 | potwierdzone (22 przypadki) |
+| `panel-mfa.test.ts` niestabilny (ok. 1/1000) | potwierdzone, dokładnie 1/1024; ta sama pułapka w `middleware-mfa-boundary.test.ts` i (uśpiona) w `passkey-session-marker.test.ts` |
+| lint: 30 ostrzeżeń | potwierdzone (0 błędów), 18 s |
+| brak workflowów z `schedule` | potwierdzone |
+| giganty 2 033 / 1 778 / 1 315 linii | potwierdzone |
+| PR #368 zmienia pliki strony głównej | **scalony** (`7a249d3f`), blokada zniknęła |
+| świeży worktree: `pnpm install` | 13 s z pamięcią podręczną pnpm; `pnpm typecheck` 14 s na zimno, 3 s na ciepło |
+| `vitest related` | 6 s dla `lib/supabase/middleware.ts`, 56 s dla `lib/auth/passkey/session-marker.ts` (165 plików testów) |
+| worktree | 58 katalogów, 55 GB |
+
+## 3. Etapy
+
+Koszt utrzymania: N = prawie zero, Ś = do poprawki raz na kwartał,
+W = wymaga opieki. „Zawęża?” = czy trafia do kontekstu, który Claude czyta
+zawsze.
+
+### Etap 1: szybkie (04.11.2026)
+
+| # | Co | Gdzie | Koszt | Zawęża? |
+|---|---|---|---|---|
+| 1.1 | Stabilne testy MFA: fałszywy podpis zawsze inny (zmiana pierwszego znaku podpisu) | PR `claude/usp-1-falszywy-podpis-mfa` | N | nie |
+| 1.2 | Test `db-backup.sh` pomijany przy bashu < 4 (macOS) | PR `claude/usp-1-test-kopii-bash4` | N | nie |
+| 1.3 | `scripts/dev/przygotuj-worktree.sh` + hook SessionStart w `.claude/settings.json` (w gicie) + `.githooks/pre-push` | PR `claude/usp-1-hooki-worktree` | N | nie: cisza, gdy gra |
+| 1.4 | Renovate bez automatycznego scalania i z 3-dniową kwarantanną nowych wersji | PR `claude/usp-1-renovate` | N | nie |
+| 1.5 | Pluginy i MCP: diff `~/.claude/settings.json` | sekcja 5.1, klika Bartosz | N | **zdejmuje** ok. 160 nazw skilli z każdej rozmowy |
+| 1.6 | Pamięć: nowy indeks ok. 500 słów, lista plików do usunięcia | sekcja 5.2, decyduje Bartosz | N | **zdejmuje** ok. 850 słów |
+| 1.7 | Instalacja Renovate | sekcja 6, klika Bartosz | N | nie |
+
+Hook przed pushem robi: (a) blokadę wartości z `.agents/infra.env` w nowych
+liniach (repo publiczne, adresy już raz wyciekły), (b) `pnpm typecheck`,
+(c) `eslint` zmienionych plików, (d) `vitest related`. Wartości nie są nigdzie
+wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
+
+### Etap 2: rdzeń i strażnicy
+
+| # | Co | Koszt | Zawęża? |
+|---|---|---|---|
+| 2.1 | `AGENTS.md` do ok. 1 500 słów: zostają projekt, stos, konwencje, niezmienniki bezpieczeństwa i compliance, protokół naprawy, „Co NIE robić”, mapa „co gdzie robisz” z odnośnikami. Wychodzą do runbooków: scalanie PR (`docs/runbooks/scalanie-pr.md`), migracje (`wgrywanie-migracji.md`), wdrożenie i weryfikacja (rozszerzenie `deploy-production.md`), pułapki Coolify (`coolify-pulapki.md`) | Ś | **zdejmuje** ok. 2 800 słów |
+| 2.2 | Skille w `.claude/skills/` (w gicie, po kilka linii, odnośnik do runbooka): `/wdrozenie`, `/migracja`, `/naprawa`, `/fa3-ksef`, `/telefon-review`. Operacyjne (`wdrozenie`, `migracja`) z `disable-model-invocation: true`, czyli tylko na polecenie. Opisy wąskie, jedno zdanie | N | lekko: 5 jednozdaniowych opisów |
+| 2.3 | `pnpm db:push:prod` kończy się błędem z odnośnikiem do runbooka (dziś pułapka nr 1 w `AGENTS.md`, chroni też Codexa) | N | **zdejmuje** regułę |
+| 2.4 | Lint: 30 ostrzeżeń do zera, potem `--max-warnings 0` w CI; `eslint --cache` lokalnie (`.eslintcache` w `.gitignore`) | N | nie |
+| 2.5 | Cichy hook PostToolUse po `Edit`/`Write`: eslint na jednym pliku, odzywa się tylko przy błędzie | N | nie |
+| 2.6 | Strażnik migracji (test Vitest): numer pliku = wiersz w rejestrze `CLAUDE-DO-CODEXA.md`, numery unikalne, „następny wolny” większy od największego, nagłówek mówi „przed”/„PO wdrożeniu”, `DROP`/`TRUNCATE`/`DELETE FROM` tylko z adnotacją | Ś | **zdejmuje** część reguł z 2.1 |
+| 2.7 | Zgodność `types/database.ts` z migracjami: job CI stawia bazę z migracji (jak `rls`), generuje typy i porównuje | Ś | nie |
+| 2.8 | Szybsze testy: pomiar importów (69 s z 198 s), potem `--shard` na 3 maszyny w CI; `vitest related` już w hooku 1.3 | Ś | nie |
+| 2.9 | Strażnik tekstów na całe UI (`app/`, `components/`, `lib/marketing`, maile): długi myślnik, plakietka nad nagłówkiem, „FaktFlow”. Rozszerza `nazwa-produktu`, nie dubluje | Ś | **zdejmuje** `feedback-teksty-bez-slopu` z pamięci |
+| 2.10 | `scripts/ops/scal-zielone.sh`: zbiorcze scalenie gotowych PR wg `AGENTS.md` (gałąź `claude/scalenie-…`, `--no-ff` po kolei, `pnpm run ci && pnpm build`, PR z tabelą). Uruchamia Bartosz albo sesja na jego polecenie | Ś | nie |
+| 2.11 | `/code-review` przed każdym PR jako drugi czytelnik (punkt 8 protokołu); w `AGENTS.md` jedna linia | N | jedna linia |
+| 2.12 | Wspólne uprawnienia tylko do odczytu w `.claude/settings.json` (`gh pr view`, `git log`, `pnpm vitest`…), mniej pytań o zgodę; reguły `deny` dla `git push --force` | N | nie |
+
+### Etap 3: większe i niezależne (każde osobna sesja z pełnym briefem)
+
+| # | Co | Koszt | Uwagi |
+|---|---|---|---|
+| 3.1 | Build obrazów `runner` i `worker` w GitHub Actions do GHCR, wdrożenie przez API Coolify (worker, potem aplikacja), kontrola po wdrożeniu, blokada przy niewgranych migracjach. Na start tylko `workflow_dispatch` | W | zmiana w Coolify (źródło obrazu, token API) tylko za zgodą; zdejmuje z `app-1` 12–18 min i 4,5 GB swapu; to też etap 1a planu skalowania |
+| 3.2 | Wizualne testy dymne Playwright `toHaveScreenshot`: iPhone 13 (WebKit) i desktop 1440 (Chromium), `reducedMotion: 'reduce'`; strona główna, menu hamburgera, `#telefon`, `/login`, pulpit, lista faktur. Plus `@axe-core/playwright` na tych samych ekranach (pomysł 4.3) | Ś | pilnuje zamrożonego Maca automatem zamiast reguły |
+| 3.3 | Raport poranny na Telegram (launchd 8:00 na Macu): `kontrola-faktur-ksef.sh`, dysk i WAL na `db-1`, kopia i restore-drill, PR i CI, alerty zależności | Ś | launchd = zmiana poza repo, plik `.plist` w repo, instaluje Bartosz |
+| 3.4 | Workflow z `schedule`: nocny test KSeF TEST (NIP `1234567890`), czujka zmian schematu FA(3) MF, cotygodniowy restore-drill z alarmem | Ś | sekrety KSeF TEST w GitHubie = zgoda Bartosza |
+| 3.5 | Błąd krytyczny zakłada issue (deduplikacja po kodzie błędu); Bartosz dodaje `agent:napraw` | Ś | korzysta z `critical-alerts-monitor` i `agent.yml`, nie dubluje |
+| 3.6 | Sprzątanie: archiwizacja sesji po scaleniu PR (ustawienie aplikacji, za zgodą), cotygodniowe usuwanie `.next` w worktree bezczynnych > 7 dni (`scripts/dev/sprzataj-worktree.sh`) | N | |
+| 3.7 | Później: podział `submit-invoice.ts`, `duplicate-decision.ts`, `invoice-form.tsx` z listą niezmienników spisaną przed zmianą; stopniowe `noUncheckedIndexedAccess` (katalog po katalogu) | W | każdy gigant osobna sesja |
+
+## 4. Pomysły z przeglądu 04.11
+
+| # | Pomysł | Koszt | Zawęża? | Decyzja |
+|---|---|---|---|---|
+| 4.1 | Blokada adresów z `infra.env` w pre-push (lokalnie, bez publikowania wartości) | N | nie | **zrobione w 1.3** |
+| 4.2 | Renovate z `minimumReleaseAge` 3 dni (ochrona przed przejętymi paczkami npm) | N | nie | **w 1.4** |
+| 4.3 | `@axe-core/playwright` przy testach wizualnych | N | nie | w 3.2 |
+| 4.4 | Knip (nieużywane pliki, eksporty, zależności): najpierw raport tygodniowy, nie blokada | Ś (fałszywe trafienia przy MDX, workerze, skryptach) | nie | etap 2, po 2.4 |
+| 4.5 | Budżet First Load JS w jobie `build` (liczba z wyjścia `next build`, próg jako liczba w repo) | N | nie | etap 2; zamyka otwarty wątek „lazy-load PostHog” |
+| 4.6 | Cache `.tsbuildinfo` i `.eslintcache` w CI (`actions/cache`) | N | nie | przy 2.8 |
+| 4.7 | Subagent `weryfikator` (Opus, tylko odczyt) w `.claude/agents/` | N | lekko | **odrzucone na razie**: `/code-review` robi to samo |
+| 4.8 | Styl odpowiedzi „raport” | N | **tak**, ładowany zawsze | **odrzucone**: format raportu jest w protokole |
+| 4.9 | Reguły gitleaks dla adresów serwerów | — | — | **odrzucone**: wartości musiałyby być w publicznym repo; 4.1 robi to lokalnie |
+| 4.10 | Dependabot obok Renovate | — | — | po instalacji Renovate wyłączyć PR wersji Dependabota (alerty zostają), inaczej podwójne PR |
+| 4.11 | `pnpm approve-builds`: `sharp` i `unrs-resolver` celowo w `ignoredBuiltDependencies` | — | — | bez zmian, tylko notatka |
+
+## 5. Do decyzji Bartosza (poza repo)
+
+### 5.1 Pluginy i MCP (`~/.claude/settings.json`)
+
+```diff
+   "enabledPlugins": {
+-    "gitlab@claude-plugins-official": true,
+-    "github@claude-plugins-official": true,
+-    "posthog@claude-plugins-official": true,
+-    "logo-design@logo-design-skill": true
++    "gitlab@claude-plugins-official": false,
++    "github@claude-plugins-official": false,
++    "posthog@claude-plugins-official": false,
++    "logo-design@logo-design-skill": false
+   },
+```
+
+- `gitlab`: repo jest na GitHubie.
+- `github`: serwer MCP się nie łączy (zły nagłówek autoryzacji), a `gh` działa
+  i jest w uprawnieniach.
+- `posthog`: ok. 160 nazw skilli w każdej rozmowie. Przy pracy nad analityką
+  włącza się go na chwilę.
+- `logo-design`: logo jest gotowe (#321).
+- Plugin `design` (7 serwerów MCP bez logowania) i `cowork-plugin-management`
+  pochodzą z aplikacji Claude, nie z `settings.json`: wyłącza się je
+  w aplikacji (Ustawienia → Pluginy).
+- W `~/.claude/settings.local.json` jest `Bash(git push:*)` globalnie. Zostaje
+  (push jest potrzebny), hook 1.3 jest siatką.
+
+### 5.2 Pamięć
+
+Projekt nowego indeksu i lista plików do usunięcia są poza repo (pamięć jest
+prywatna): `side-session-notes/…/pamiec-propozycja.md`. Usuwanie tylko po
+„tak” Bartosza.
+
+## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
+
+Najpierw scal PR 1.4: obecny `renovate.json` scala sam poprawki (patch)
+i próbuje to robić gałęzią prosto do `main`, co łamie zasadę „scala tylko
+Bartosz” i i tak nie przejdzie przez ochronę `main`.
+
+1. Otwórz https://github.com/apps/renovate i kliknij **Install** (albo
+   **Configure**, jeśli już jest).
+2. Wybierz konto `ezior8888-cpu` → **Only select repositories** → `ksef-saas`
+   → **Install**.
+3. Pierwszy PR to zwykle „Configure Renovate” albo od razu „Dependency
+   Dashboard” (issue). Nic nie scalaj w ciemno: `renovate.json` już jest.
+4. Sprawdzenie po godzinie: `gh issue list --search "Dependency Dashboard"`
+   i `gh pr list --author app/renovate`.
+5. Każdy PR Renovate przechodzi 11 kontroli CI jak każdy inny. Limit to
+   6 otwartych naraz i 4 na godzinę.
+
+## 7. Dziennik sesji
+
+| Data | Etap | PR | Stan |
+|---|---|---|---|
+| 04.11.2026 | Analiza, plan, etap 1 (1.1–1.4) | ten PR i PR z etapu 1 | PR otwarte, czekają na CI i Bartosza; 1.5–1.7 czekają na jego decyzję |
+
+**Następny krok:** decyzje Bartosza z sekcji 5 i instalacja Renovate
+(sekcja 6). Po „idź dalej”: etap 2 od 2.1 (`AGENTS.md` + runbooki) i 2.3,
+potem 2.6, 2.4, reszta po kolei; etap 3 równolegle osobnymi sesjami (3.1
+i 3.2 najpierw).
