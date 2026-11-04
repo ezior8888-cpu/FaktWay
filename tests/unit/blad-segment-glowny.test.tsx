@@ -175,6 +175,10 @@ describe('app/error.tsx — awaria layoutu panelu', () => {
       linki[0]!.dispatchEvent(klik);
     });
     expect(klik.defaultPrevented).toBe(false);
+    // Przez `cn`: sam `buttonVariants` zostawia `border-transparent` obok `border-border`
+    // i w jasnym motywie przycisk nie ma ramki (zdjęcie z prawdziwego buildu, PR).
+    expect(linki[0]!.className).toContain('border-border');
+    expect(linki[0]!.className).not.toContain('border-transparent');
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
     expect(sentry.captureException.mock.calls[0]?.[0]).toMatchObject({ message: 'Nie udało się odczytać członkostw' });
   });

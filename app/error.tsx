@@ -5,6 +5,7 @@ import { useLayoutEffect } from 'react';
 import { SegmentErrorCard } from '@/components/segment-error-card';
 import { buttonVariants } from '@/components/ui/button';
 import { applyTheme, readStoredTheme } from '@/lib/theme/theme';
+import { cn } from '@/lib/utils';
 
 /**
  * Błąd poniżej głównego layoutu, na każdej grupie tras. Przede wszystkim awaria
@@ -47,7 +48,7 @@ export default function RootError({
         heading="h1"
         extraAction={
           // eslint-disable-next-line @next/next/no-html-link-for-pages -- komentarz wyżej: `<Link>` nie zdjąłby błędu
-          <a href="/" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+          <a href="/" className={cn(buttonVariants({ variant: 'outline', size: 'lg' }))}>
             Strona główna
           </a>
         }
