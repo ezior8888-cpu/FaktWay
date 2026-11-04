@@ -97,6 +97,10 @@ export class KsefApiError extends Error {
  * `application/problem+json` (`errors[].code`) albo starszym
  * `exception.exceptionDetailList[].exceptionCode` (oba w `open-api.json` MF);
  * atrapy w repo mają jeszcze `exceptionDetailList` na wierzchu.
+ *
+ * Nigdy nie rzuca: to dane z zewnątrz, a getter `ksefCode` czyta job wysyłki
+ * tuż przed `NonRetriableError` — wyjątek stąd zamieniłby ostateczną odmowę
+ * w ponawianie. Kształt spoza schematu daje pustą listę.
  */
 export function ksefErrorCodes(body: unknown): number[] {
   // Ciało jako tekst: `ksefFetch` parsuje już `application/problem+json`, ale
@@ -111,16 +115,36 @@ export function ksefErrorCodes(body: unknown): number[] {
   }
   if (!body || typeof body !== 'object') return [];
   const b = body as {
-    errors?: Array<{ code?: unknown }>;
-    exception?: { exceptionDetailList?: Array<{ exceptionCode?: unknown }> };
-    exceptionDetailList?: Array<{ exceptionCode?: unknown }>;
+    errors?: unknown;
+    exception?: { exceptionDetailList?: unknown } | null;
+    exceptionDetailList?: unknown;
   };
   const codes = [
-    ...(b.errors ?? []).map((e) => e.code),
-    ...(b.exception?.exceptionDetailList ?? []).map((e) => e.exceptionCode),
-    ...(b.exceptionDetailList ?? []).map((e) => e.exceptionCode),
+    ...errorEntries(b.errors).map((e) => e?.code),
+    ...errorEntries(b.exception?.exceptionDetailList).map((e) => e?.exceptionCode),
+    ...errorEntries(b.exceptionDetailList).map((e) => e?.exceptionCode),
   ];
-  return codes.map(Number).filter((c) => Number.isInteger(c));
+  return codes.map(toKsefCode).filter((c) => c !== null);
+}
+
+/** Lista pozycji błędu; cokolwiek innego niż tablica to brak pozycji. */
+function errorEntries(value: unknown): Array<Record<string, unknown> | null | undefined> {
+  return Array.isArray(value) ? value : [];
+}
+
+/** Górna granica kodu: `ksef_send_attempts.ksef_code` to `integer`, większa liczba wywaliłaby zapis wiersza. */
+const MAX_KSEF_CODE = 2_147_483_647;
+
+/**
+ * Wartość z odpowiedzi jako kod KSeF: dodatnia liczba całkowita, także zapisana
+ * tekstem. Reszta to brak kodu. Bez samego `Number()`, bo ono robi z `null`
+ * i `''` zero (w dzienniku `ksef_code=0`, w panelu błędów „HTTP 4000”),
+ * z `true` jedynkę, a z `[21184]` prawdziwy kod.
+ */
+function toKsefCode(value: unknown): number | null {
+  const code =
+    typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isInteger(code) && code > 0 && code <= MAX_KSEF_CODE ? code : null;
 }
 
 /**

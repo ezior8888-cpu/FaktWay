@@ -26,6 +26,7 @@ vi.mock('@/lib/ksef/encryption', () => ({
 }));
 
 import { KsefApiError, ksefErrorCodes, ksefFetch } from '@/lib/ksef/client';
+import { classifyHistoryError, historyKsefErrorCodes } from '@/lib/ksef/history-sync/errors';
 import { ksefErrorCodes as ksefErrorCodesFromSubmit, submitInvoice } from '@/lib/ksef/submit';
 import type { KsefAuth } from '@/lib/ksef/auth';
 
@@ -35,8 +36,117 @@ const PROBLEM_21184 = {
   errors: [{ code: 21184, description: 'Sesja tymczasowo niedostępna.' }],
 };
 
+/**
+ * Odpowiedzi spoza schematu MF. Parser daje wtedy „brak kodu”, nigdy wyjątku:
+ * `submit-invoice.ts` czyta `error.ksefCode` tuż przed `NonRetriableError`,
+ * a `submit.ts` woła parser przy każdym błędzie wysyłki, więc TypeError
+ * zamieniłby ostateczną odmowę w ponawianie.
+ */
+const MALFORMED: Array<[string, unknown]> = [
+  ['errors jako obiekt pól', { errors: { pole: ['x'] } }],
+  ['errors jako tekst', { errors: 'x' }],
+  ['errors jako liczba', { errors: 5 }],
+  ['errors: [null]', { errors: [null] }],
+  ['errors: pozycja to tekst', { errors: ['x'] }],
+  ['exception.exceptionDetailList jako obiekt', { exception: { exceptionDetailList: { a: 1 } } }],
+  ['exception.exceptionDetailList: [null]', { exception: { exceptionDetailList: [null] } }],
+  ['exception jako tekst', { exception: 'x' }],
+  ['exception: null', { exception: null }],
+  ['exceptionDetailList jako tekst', { exceptionDetailList: 'x' }],
+  ['exceptionDetailList: [null]', { exceptionDetailList: [null] }],
+  ['JSON w tekście: errors jako obiekt', JSON.stringify({ errors: { pole: ['x'] } })],
+  ['JSON w tekście: tablica', '[1,2]'],
+  ['JSON w tekście: null', 'null'],
+  ['JSON w tekście: liczba', '5'],
+];
+
+/**
+ * Wartości, które nie są kodem KSeF. Samo `Number()` robi z `null` i `''` zero
+ * (w dzienniku `ksef_code=0`, w panelu błędów „HTTP 4000”), z `true` jedynkę,
+ * a z `[21184]` prawdziwy kod.
+ */
+const NOT_A_CODE: Array<[string, unknown]> = [
+  ['null', null],
+  ['pusty tekst', ''],
+  ['same spacje', '  '],
+  ['zero', 0],
+  ['tekst „0”', '0'],
+  ['ujemny', -1],
+  ['tekst „-1”', '-1'],
+  ['ułamek', 1.5],
+  ['tekst „1.5”', '1.5'],
+  ['true', true],
+  ['tablica z kodem', [21184]],
+  ['obiekt', {}],
+  ['tekst', 'abc'],
+  ['zapis naukowy w tekście', '1e5'],
+  ['zapis szesnastkowy w tekście', '0x10'],
+  // `ksef_send_attempts.ksef_code` to integer: większa liczba wywaliłaby zapis wiersza.
+  ['poza zakresem kolumny integer', 2_147_483_648],
+  ['tekst poza zakresem kolumny integer', '2147483648'],
+  ['poza bezpiecznym zakresem liczb', 1e30],
+];
+
+const everyShape = (value: unknown) => [
+  { errors: [{ code: value }] },
+  { exception: { exceptionDetailList: [{ exceptionCode: value }] } },
+  { exceptionDetailList: [{ exceptionCode: value }] },
+];
+
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('odczyt kodu z danych spoza schematu MF', () => {
+  // Kopia w `history-sync/errors.ts` ma działać tak samo, dopóki nie zniknie.
+  describe.each([
+    ['ksefErrorCodes', ksefErrorCodes],
+    ['historyKsefErrorCodes (kopia)', historyKsefErrorCodes],
+  ])('%s', (_name, parse) => {
+    it.each(MALFORMED)('%s — pusta lista, bez wyjątku', (_label, body) => {
+      expect(parse(body)).toEqual([]);
+    });
+
+    it.each(NOT_A_CODE)('kod: %s — odrzucony w każdym kształcie', (_label, value) => {
+      for (const body of everyShape(value)) expect(parse(body)).toEqual([]);
+    });
+
+    it('zła wartość nie przesłania dobrej', () => {
+      expect(parse({ errors: [{ code: null }, null, { code: 21405 }] })).toEqual([21405]);
+    });
+
+    it('kod graniczny kolumny integer i kod jako tekst przechodzą', () => {
+      expect(parse({ errors: [{ code: 2_147_483_647 }, { code: '21405' }] })).toEqual([2_147_483_647, 21405]);
+    });
+  });
+
+  it.each(MALFORMED)('getter ksefCode: %s — null, bez wyjątku', (_label, body) => {
+    expect(new KsefApiError(400, body as never, 'x').ksefCode).toBeNull();
+  });
+
+  it.each(NOT_A_CODE)('getter ksefCode: kod %s — null', (_label, value) => {
+    for (const body of everyShape(value)) {
+      expect(new KsefApiError(400, body as never, 'x').ksefCode).toBeNull();
+    }
+  });
+});
+
+describe('historia KSeF: błąd spoza schematu nie wywraca klasyfikacji', () => {
+  const ctx = { phase: 'metadata', certificateExpiry: null, now: new Date('2026-11-04T12:00:00Z') } as const;
+  const error = (body: unknown) =>
+    new KsefApiError(400, body as never, 'KSeF API POST /invoices/query/metadata failed: 400');
+
+  it.each([
+    ['errors jako obiekt pól', { errors: { pole: ['x'] } }],
+    ['code: null', { errors: [{ code: null }] }],
+  ])('%s — skutek jak dla 400 bez kodu, szczegół „kody:-”', (_label, body) => {
+    expect(classifyHistoryError(error(body), ctx)).toEqual({
+      kind: 'session',
+      code: 'internal',
+      detail: 'HTTP 400 /invoices/query/metadata kody:-',
+      invalidateSession: false,
+    });
+  });
 });
 
 describe('KsefApiError.ksefCode (F-093)', () => {
@@ -119,5 +229,30 @@ describe('ksefFetch: odpowiedź application/problem+json', () => {
     expect(err).toBeInstanceOf(KsefApiError);
     expect((err as KsefApiError).isRetryable).toBe(true);
     expect((err as KsefApiError).message).toContain('21184');
+  });
+
+  it('400 spoza schematu MF z prawdziwego ksefFetch — ostateczna odmowa, nie TypeError', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/sessions/online')) {
+        return new Response(JSON.stringify({ referenceNumber: 'SESJA-1' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/invoices')) {
+        return new Response(JSON.stringify({ errors: { pole: ['x'] } }), {
+          status: 400,
+          headers: { 'content-type': 'application/problem+json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    const auth = { type: 'token', nip: '1234567890', token: 'x' } as unknown as KsefAuth;
+
+    const err = await submitInvoice('<Faktura/>', auth, 'test').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(KsefApiError);
+    expect((err as KsefApiError).isRetryable).toBe(false);
+    expect((err as KsefApiError).ksefCode).toBeNull();
   });
 });
