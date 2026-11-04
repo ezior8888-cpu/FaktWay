@@ -1,6 +1,6 @@
 # Lista kontrolna przed startem — sprawy prawne
 
-Stan na 20.10.2026 (po zmianie nazwy na FaktWay), uzupełniona 23.10.2026 (rejestracja, newsletter). Każdy punkt ma właściciela. Dokumenty dla klientów
+Stan na 20.10.2026 (po zmianie nazwy na FaktWay). Każdy punkt ma właściciela. Dokumenty dla klientów
 (regulamin, umowa powierzenia, polityki) obiecują rzeczy z tej listy —
 **dopóki punkt nie jest zrobiony, dokument mija się z rzeczywistością.**
 
@@ -11,25 +11,6 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
 - [ ] 🔴 **Usługodawca istnieje** (JDG / spółka) i jego dane są w
   `lib/legal/entity.ts`. Do tego czasu strony `/legal/*` mają baner
   „wersja robocza”, a bramka akceptacji regulaminu śpi. — Igor, Bartosz
-- [ ] 🔴 **Rejestracja przy braku danych usługodawcy — decyzja teraz, nie w dniu startu.** Stan
-  23.10.2026: formularz `/register` jest otwarty, a polityka prywatności,
-  do której prowadzi zgoda, mówi „Administratorem danych osobowych … jest
-  [DO UZUPEŁNIENIA …]” (tożsamość usługodawcy i administratora: art. 5
-  ustawy o świadczeniu usług drogą elektroniczną, art. 13 RODO).
-  Akceptacja zapisuje się jako robocza (`draft: true`), a po uzupełnieniu
-  `lib/legal/entity.ts` bramka wymusi ją ponownie. Regulamin obiecuje
-  jednak zawarcie umowy o prowadzenie Konta z chwilą jego utworzenia
-  (§ 5 ust. 2) i potwierdzenie e-mailem z treścią dokumentów (§ 5 ust. 6),
-  które w trybie roboczym nie wychodzi (`lib/legal/record.ts`). Do wyboru:
-  zamknąć rejestrację flagą `disableSignups` (`/wylacz rejestracja`
-  w bramce Telegrama albo `UPDATE` z `docs/runbooks/hamulce-ksef.md`)
-  do czasu uzupełnienia danych — albo odhaczyć punkt z dopiskiem
-  „rejestracja zostaje otwarta do uzupełnienia danych”. Przy zamkniętej
-  rejestracji nowa osoba nie założy konta także z zaproszenia (hook GoTrue
-  z migracji 00102 blokuje każde zakładanie konta; zaproszenia przyjmą
-  tylko osoby, które już mają konto). Punkt wygasa sam po zrobieniu punktu
-  wyżej (dane w `lib/legal/entity.ts`). — decyzja: Igor, Bartosz;
-  flaga: Bartosz
 - [ ] 🔴 **Przegląd prawnika** regulaminu, umowy powierzenia, polityk
   i pytań z memo (artefakt „Pakiet prawny”). — Igor
 - [ ] 🔴 **Szablon strony Zova** (Framer Marketplace, 19 USD) — potwierdzić
@@ -70,23 +51,6 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
   cykl do 60 dni): przy zakupie Storage Box ustawić retencję ≤ 60 dni
   (`db-backup.sh` wysyła przez `rclone copy`, więc kopie tam same nie
   znikają); kopie `manual` usuwać w tym samym terminie. — Bartosz
-- [ ] 🟠 **Newsletter — zbudować albo usunąć z dokumentów.** Polityka
-  prywatności (pkt 2 i pkt 3, wiersz „Newsletter”), regulamin (§ 3 ust. 1
-  pkt 10) i rejestr czynności (A8) opisują go jako działający, a formularz
-  nie jest nigdzie podpięty (`tests/unit/newsletter-wstrzymany.test.ts`);
-  tabela `newsletter_subscribers` ma 0 wierszy (Bartosz, 23.10.2026), więc
-  nie ma kogo powiadamiać. Albo zbudować: double opt-in, zapis wersji
-  zgody, link wypisu, usuwanie wiersza przy usunięciu konta (dziś tabelę
-  obejmuje tylko eksport RODO w `lib/gdpr/data-collector.ts`, usuwanie
-  konta jej nie czyści) i newsletter w celu Resend w
-  `lib/legal/subprocessors.ts`. Albo usunąć z polityki, regulaminu
-  i rejestru (nowe wersje w `lib/legal/versions.ts`) razem z kodem
-  newslettera: atrapą `components/marketing/blog-newsletter.tsx` oraz
-  formularzem i akcją zapisu pilnowanymi przez test wyżej (test trzeba
-  zmienić w tym samym PR). Usunięcie tabeli `newsletter_subscribers`
-  (i jej sekcji w eksporcie RODO) to migracja — Bartosz. Rozstrzygnąć
-  przed wysłaniem dokumentów do prawnika (sekcja 1), żeby przegląd objął
-  wersję docelową. — Igor, Bartosz
 - [x] **Retencja rozmów czatu pomocy — 24 miesiące** i usuwanie przy
   usunięciu konta (polityka, pkt 3) — `cron.support-chat-retention`.
 - [ ] 🟠 **Tabela `legal_acceptances`** wyłączona z czyszczenia
