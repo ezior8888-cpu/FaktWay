@@ -1,7 +1,10 @@
 'use client';
 
+import { useLayoutEffect } from 'react';
+
 import { SegmentErrorCard } from '@/components/segment-error-card';
 import { buttonVariants } from '@/components/ui/button';
+import { applyTheme, readStoredTheme } from '@/lib/theme/theme';
 
 /**
  * Błąd poniżej głównego layoutu, na każdej grupie tras. Przede wszystkim awaria
@@ -25,6 +28,17 @@ export default function RootError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Po awarii przy pełnym wczytaniu (HTTP 500) Next składa dokument
+  // w przeglądarce, a React nie wykonuje wstawionego przez siebie
+  // `THEME_BOOT_SCRIPT`. Przed malowaniem, żeby ciemny motyw nie mignął jasną kartą.
+  useLayoutEffect(() => {
+    try {
+      applyTheme(readStoredTheme());
+    } catch {
+      // Zablokowany localStorage: motyw domyślny, jak w `THEME_BOOT_SCRIPT`.
+    }
+  }, []);
+
   return (
     <main className="ff-dashboard flex min-h-dvh items-center justify-center p-6 text-foreground">
       <SegmentErrorCard

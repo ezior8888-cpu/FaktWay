@@ -7,9 +7,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sentry = vi.hoisted(() => ({ captureException: vi.fn() }));
 vi.mock('@sentry/nextjs', () => sentry);
+// `<Link>` w App Routerze zatrzymuje domyślne przejście i nawiguje miękko. Tu sam ten
+// skutek: Vitest wziąłby wersję Pages Routera, która bez routera udaje zwykły <a>,
+// a wersja z `app-dir` nie ładuje się bez bundlera Next.
+vi.mock('next/link', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: (props: Record<string, unknown>) =>
+      createElement('a', { ...props, onClick: (e: MouseEvent) => e.preventDefault() }),
+  };
+});
 
 import DashboardError from '@/app/(dashboard)/error';
 import RootError from '@/app/error';
+import { THEME_STORAGE_KEY } from '@/lib/theme/theme';
 
 /**
  * Strona błędu segmentu głównego (`app/error.tsx`, decyzja Bartosza z 03.11,
@@ -217,6 +228,45 @@ describe('app/error.tsx — awaria layoutu panelu', () => {
       await tik();
     });
     expect(el.textContent).toContain('Pulpit wczytany');
+  });
+});
+
+describe('app/error.tsx — motyw po pełnym wczytaniu', () => {
+  // Po awarii przy pełnym wczytaniu (HTTP 500) Next składa dokument w przeglądarce,
+  // a skrypt `THEME_BOOT_SCRIPT` wstawiony przez React się nie wykonuje (sprawdzone
+  // na zbudowanym Next 16.4.1, opis w PR). Tu: `<html>` bez klasy, jak w tym dokumencie.
+  afterEach(() => {
+    localStorage.removeItem(THEME_STORAGE_KEY);
+    document.documentElement.classList.remove('dark');
+    document.documentElement.style.colorScheme = '';
+  });
+
+  it('klient z ciemnym motywem dostaje ciemną kartę i zostaje na ciemnym po udanym ponowieniu', async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+    const el = await mount('padl-layout');
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.style.colorScheme).toBe('dark');
+
+    await kliknij(el);
+    expect(el.textContent).toContain('Pulpit wczytany');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  it('bez zapisanego motywu zostaje jasny', async () => {
+    await mount('padl-layout');
+
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('niedostępny localStorage nie wywraca karty', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Odmowa dostępu', 'SecurityError');
+    });
+    const el = await mount('padl-layout');
+
+    expect(el.querySelector('h1')?.textContent).toBe('Coś poszło nie tak');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });
 
