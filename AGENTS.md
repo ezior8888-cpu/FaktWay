@@ -22,6 +22,13 @@
 > zrób checklistę (sekcja 0) i TYLKO wskazaną sesję według „Protokołu
 > naprawy błędu” niżej, a na końcu dopisz wiersz w dzienniku (sekcja 6)
 > z numerem PR.
+>
+> **„Kontynuuj plan księgowość JDG”** (samodzielna księgowość JDG, etap 2
+> FaktWay 1.0): przeczytaj
+> [`docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md),
+> zrób checklistę startową (sekcja 0) i TYLKO krok z „Następny krok”
+> w dzienniku (sekcja 15). Po kroku wiersz w dzienniku z numerem PR, nowy
+> „Następny krok”, raport i STOP.
 
 ## Projekt
 

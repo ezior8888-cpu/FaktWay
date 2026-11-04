@@ -1,0 +1,134 @@
+{
+  "wersja_szablonu": 1,
+  "id": "",
+  "tytul": "",
+  "rok": 2027,
+  "policzyla": "",
+  "data": "",
+  "uwagi": "",
+  "zalozenia": {
+    "forma": null,
+    "vat": null,
+    "start_dzialalnosci": null,
+    "chorobowe": null,
+    "etat_obok": null,
+    "nadwyzka_vat_z_poprzedniego_roku_gr": null,
+    "opis": ""
+  },
+  "parametry": [
+    { "nazwa": "placa_minimalna", "okres": "2026", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "placa_minimalna", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "prognozowane_przecietne_wynagrodzenie", "okres": "2026", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "prognozowane_przecietne_wynagrodzenie", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "przecietne_wynagrodzenie_iv_kw", "okres": "2025", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "przecietne_wynagrodzenie_iv_kw", "okres": "2026", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_emerytalna", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_rentowa", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_chorobowa", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_wypadkowa", "okres": "2026-04-01/2027-03-31", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_wypadkowa", "okres": "2027-04-01/2028-03-31", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_fp_fs", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_60000", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_300000", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_ponad_300000", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_60000", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_300000", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_ponad_300000", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_minimalna", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_minimalna", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "limit_odliczenia_zdrowotnej_liniowy", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_prog", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_stawka_do_progu", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_stawka_ponad_prog", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_kwota_zmniejszajaca", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "liniowy_stawka", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "ryczalt_prog_najmu", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "limit_zwolnienia_vat", "okres": "2027", "wartosc": "", "zrodlo": "" }
+  ],
+  "miesiace": [
+    {
+      "miesiac": "",
+      "wejscie": {
+        "dzialalnosc": null,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": null,
+            "netto_gr": null,
+            "stawka_ryczaltu": null,
+            "stawka_vat": null,
+            "vat_gr": null,
+            "korekta_do": null,
+            "opis": ""
+          }
+        ],
+        "koszty": [
+          {
+            "data": null,
+            "kpir_gr": null,
+            "netto_gr": null,
+            "vat_gr": null,
+            "odliczenie_vat_proc": null,
+            "opis": ""
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": {
+          "podstawa_gr": null,
+          "emerytalna_gr": null,
+          "rentowe_gr": null,
+          "chorobowa_gr": null,
+          "wypadkowa_gr": null,
+          "razem_gr": null,
+          "fundusz_pracy_gr": null
+        },
+        "zdrowotna": {
+          "przychod_narastajaco_gr": null,
+          "prog": null,
+          "podstawa_gr": null,
+          "skladka_gr": null
+        },
+        "ryczalt_odliczenia": {
+          "spoleczne_zaplacone_gr": null,
+          "zdrowotna_50_proc_gr": null,
+          "nadwyzka_z_poprzednich_gr": null,
+          "odliczono_gr": null,
+          "nadwyzka_na_kolejne_gr": null
+        },
+        "ryczalt": {
+          "przychod_wg_stawek_gr": {},
+          "podstawa_wg_stawek_gr": {},
+          "ryczalt_gr": null
+        },
+        "pit": {
+          "przychod_narastajaco_gr": null,
+          "koszty_narastajaco_gr": null,
+          "dochod_narastajaco_gr": null,
+          "spoleczne_narastajaco_gr": null,
+          "zdrowotna_narastajaco_gr": null,
+          "podstawa_narastajaco_gr": null,
+          "podatek_narastajaco_gr": null,
+          "zaliczka_gr": null
+        },
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": {
+          "limit_gr": null,
+          "sprzedaz_narastajaco_gr": null
+        },
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    }
+  ]
+}
