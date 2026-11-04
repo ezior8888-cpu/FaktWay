@@ -152,9 +152,10 @@ export async function uploadCertificateAction(data: {
       return fail('save_failed', GENERIC_ERROR);
     }
 
-    // Limit 5 prób na godzinę liczy tylko próby, które dochodzą do KSeF. Bez Redisa (produkcja ma
-    // wyłączony Upstash) limiter liczy w pamięci procesu: aplikacja to jeden proces, więc limit jest
-    // realny. Dawniej każdy `fallback` był odmową, czyli upload certyfikatu nie działał w ogóle.
+    // Limit 5 prób na godzinę liczy tylko próby, które dochodzą do KSeF. Produkcja ma Redisa
+    // (`lib/cache/redis.ts`); pamięć procesu liczy tylko przy jego braku albo awarii i `fallback`
+    // nie jest tu odmową. Certyfikat wgra wtedy jednak tylko sesja już potwierdzona kodem, bo podanie
+    // kodu i włączenie 2FA bez Redisa odmawiają (`lib/rate-limit/mfa.ts`, bramka MFA wyżej).
     // `countDenied: false`: kliknięcie w trakcie blokady jej nie wydłuża, więc "za około N min"
     // jest prawdą. Próba nieudana z winy KSeF wraca do limitu niżej (`budget.refund`).
     const budget = await checkRateLimit({

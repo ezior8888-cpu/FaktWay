@@ -3,7 +3,7 @@
 Kilka rzeczy może zablokować dostęp user-a do konta. Ten runbook listuje
 najczęstsze + procedurę odblokowania.
 
-> Aktualizacja 2026-09-14 dotyczy §2 (MFA), 2026-10-23 — §1 krok 2 (Redis na app-1, klucze). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
+> Aktualizacja 2026-09-14 dotyczy §2 (MFA), 2026-10-23 i 2026-11-04 — §1 krok 2 (Redis na app-1, klucze), 2026-11-02 — §7 (biometria, wraz z wierszem w macierzy). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
 
 ## Macierz scenariuszy
 
@@ -60,12 +60,14 @@ Po przekroczeniu user dostaje 429 z `Retry-After`.
    Redis z Coolify ma hasło (zasób Redis w Coolify); bez niego `redis-cli`
    zwróci `NOAUTH`. Podaj je przez zmienną `REDISCLI_AUTH`, nie przez `-a`,
    i nie wpisuj go do repo. `<IP>` to adres, który widzi aplikacja
-   (`X-Real-Ip` od Traefika, `lib/auth/get-client-ip.ts`); aplikacja go nie
-   loguje, więc zapytaj użytkownika o jego publiczne IP. E-mail wpisz bez
-   spacji i małymi literami (`tr` nie zmienia liter spoza ASCII). Limity MFA
-   i zmiany hasła (`rl:mfa:account:…`, `rl:password:attempt|send|recoveryUse:…`)
-   mają inne klucze i okna — przeczytaj `mfa.ts` i `password.ts`, zanim je
-   wyczyścisz.
+   (`X-Real-Ip` od Traefika, `lib/auth/get-client-ip.ts`). Odmowa logowania
+   nie zostawia adresu, a `audit_logs.ip_address` z udanych akcji liczony jest
+   inaczej (`lib/audit/log.ts`), więc zapytaj użytkownika o jego publiczne IP.
+   E-mail wpisz bez spacji i małymi literami (`tr` nie zmienia liter spoza
+   ASCII). Limity MFA, zmiany hasła i biometrii (`rl:mfa:account:…`,
+   `rl:password:attempt|send|recoveryUse:account:…`, `rl:passkey_*:…`) mają
+   inne klucze i okna — przeczytaj `mfa.ts`, `password.ts` i `passkey.ts`,
+   zanim je wyczyścisz.
 3. **Jeśli legit user (np. dyrektor zapomniał laptopa)** — zresetuj hasło
    z admin panelu: `/admin/users/<userId>` → "Send password reset". User dostanie
    email z linkiem (omija rate limit logowania).
@@ -89,7 +91,7 @@ stanowią obecnie sposobu logowania.
 Weryfikacja i konfiguracja TOTP współdzielą limit pięciu operacji na konto
 w stałym oknie 300 s od pierwszej próby. Próba po przekroczeniu nie przedłuża
 okna. Niedostępność limitera blokuje operację; diagnoza jego dostępności
-i uprawnień EVAL należy do operatora używanego SRH/Valkey.
+i uprawnień EVAL należy do operatora Redisa na `app-1` (nakładka SRH, §1 krok 2).
 
 ### Obsługa zgłoszenia
 

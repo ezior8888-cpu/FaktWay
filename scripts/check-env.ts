@@ -80,7 +80,7 @@ const SPECS: VarSpec[] = [
   { name: 'ANTHROPIC_SUPPORT_MODEL', feature: 'AI (OCR + chat)', level: 'optional', note: 'default w kodzie' },
 
   // ── Cache + rate limiting (produkcja: redis:7.2 + serverless-redis-http na app-1, API zgodne z Upstash) ──
-  { name: 'UPSTASH_REDIS_REST_URL', feature: 'Cache + limity (Redis)', level: 'optional', note: 'na produkcji ustawiony (własny Redis na app-1, nie chmura Upstash); bez niego cache passthrough, ale m.in. 2FA, operacje na haśle, usunięcie konta RODO i wgranie certyfikatu KSeF odmawiają (fail-closed) — pełna lista w nagłówku lib/cache/redis.ts' },
+  { name: 'UPSTASH_REDIS_REST_URL', feature: 'Cache + limity (Redis)', level: 'optional', note: 'na produkcji ustawiony (własny Redis na app-1, nie chmura Upstash); bez niego cache passthrough, ale m.in. kod TOTP i włączanie 2FA, operacje na haśle i usunięcie konta RODO odmawiają (fail-closed) — pełna lista w nagłówku lib/cache/redis.ts' },
   { name: 'UPSTASH_REDIS_REST_TOKEN', feature: 'Cache + limity (Redis)', level: 'optional' },
 
   // ── Ochrona przed botami ──

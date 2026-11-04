@@ -334,7 +334,7 @@ agenta z weryfikacją Bartosza, nie obietnica.
 
 **B3. Sonda zdrowia KSeF bez Redisa (S2) i baner awarii**
 
-> **Stan 23.10.2026 — przesłanka S2 nieaktualna. Przelicz zakres, zanim
+> **Stan 23.10.2026 (dowód powtórzony 04.11) — przesłanka S2 nieaktualna. Przelicz zakres, zanim
 > zaczniesz.** Worker MA Redisa (własny, na `app-1`). Dowód bez SSH:
 > w publicznym `GET /api/status/components` komponent `ksef` ma
 > `lastCheckedAt` starszy od `generatedAt` i przeskakujący co ~30 s, a jego

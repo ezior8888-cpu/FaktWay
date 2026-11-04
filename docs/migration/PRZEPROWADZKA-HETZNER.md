@@ -159,6 +159,8 @@ Hetzner Console → **Servers → Add Server**. Dla KAŻDEGO z trzech serwerów:
 | `ops-1` | **CX23** | 2 vCPU / 4 GB / 40 GB | 6,75 € | Coolify + Redis + MinIO + Uptime Kuma |
 | `db-1` | **CPX32** | 4 vCPU / 8 GB / 160 GB | 43,65 € | Supabase (baza + logowanie) |
 
+> **Stan faktyczny (23.10.2026):** Redis stoi na `app-1`, nie na `ops-1` (sekcja 5).
+
 **Dlaczego `db-1` skacze cenowo, a nie tylko specyfikacją:** linia CX33
 (dawny odpowiednik 8 GB w tańszej serii CX) była w chwili zakupu wyprzedana
 we WSZYSTKICH sprawdzonych lokalizacjach — jedyna dostępna opcja z 8 GB to
@@ -373,7 +375,7 @@ Po komendzie `free -h` w wierszu `Swap:` zobaczysz `4,0Gi` — gotowe.
 wybranego wariantu kosztowego). **Jeśli jedziesz na wariancie budżetowym
 (§1.7, `db-1` też na CX23)** — zrób DOKŁADNIE tę samą komendę również na
 `db-1` (stack Supabase na 4 GB potrzebuje tego bufora jeszcze bardziej niż
-sam build). Na `ops-1` swap jest opcjonalny (Redis/MinIO/Kuma są lekkie),
+sam build). Na `ops-1` swap jest opcjonalny (MinIO/Kuma są lekkie; Redis stoi na `app-1`, sekcja 5),
 ale nie zaszkodzi zrobić go wszędzie — to 2 minuty i zero minusów.
 
 ✅ **Weryfikacja etapu:** wszystkie 3 serwery w Coolify świecą na zielono,
@@ -643,7 +645,7 @@ XML; pobierz PDF (drugi raz — z cache). R2 zostawiamy na 30 dni jako zapas.
 
 1. **GlitchTip — ŚWIADOMIE ODKŁADAMY.** To ciężka usługa (własny Postgres +
    Redis + procesy Django, łącznie ~2 GB RAM), a `ops-1` ma 4 GB zajęte
-   przez Coolify, Redis i MinIO. Na etapie testów **zostaw Sentry** (darmowy
+   przez Coolify i MinIO (Redis stoi na `app-1`, sekcja 5). Na etapie testów **zostaw Sentry** (darmowy
    plan w zupełności wystarcza na 5-10 osób) — nic nie zmieniasz w kodzie.
    GlitchTipa wstawisz jednym kliknięciem PO powiększeniu `ops-1` (Rescale,
    §11, docelowo ~8 GB) — najlepiej gdy zbliżysz się do limitu darmowego Sentry

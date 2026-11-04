@@ -66,7 +66,7 @@ w słowach Bartosza = Centrum + Analityk; **nie** nowy cron.
 | `pgboss.job`, `pgboss.archive`, `pgboss.schedule`, `pgboss.queue` | stan kolejek, ponowienia, `output` jobów, crony | pg-boss | schemat niewidoczny dla PostgREST; wzorzec dostępu: funkcje `ops.*` z 00100 (czytają `pgboss.job`), tylko dla roli serwisowej |
 | `ksef_error_codes` | 19 kodów: `class` (terminal/transient/hold/reconcile/setup), `auto_requeue`, `client_message` | 00131 | — (źródło prawdy dla etykiet i klas; **nie kopiować** do kodu UI) |
 | `ksef_lifecycle_violations()` | naruszenia I1–I9 z `invoice_id`, `invariant`, szczegóły | 00131/00132 | — |
-| `ksef_health_log` | pingi KSeF: `level`, `consecutive_failures`, `response_time_ms`, `is_mf_outage` | worker (`recordKsefPing`: przy zmianie poziomu i co 5 min; stan 23.10.2026 — worker ma Redisa) | wynik insertu nie jest sprawdzany — zanim oprzesz widok na tej tabeli, potwierdź `count(*)`, `max(recorded_at)` (plan, B3) |
+| `ksef_health_log` | pingi KSeF: `level`, `consecutive_failures`, `response_time_ms`, `is_mf_outage` | worker (`recordKsefPing`: przy zmianie poziomu i co 5 min; stan 23.10.2026 — worker ma Redisa) | wynik insertu nie jest sprawdzany — zanim oprzesz widok na tej tabeli, potwierdź `count(*)`, `max(recorded_at)` (plan, B3). S11 zakłada wiersz na każdy ping i poziom `ok`, a tabela ich nie ma — do decyzji (plan, B3 pkt c) |
 | `upo_receipts`, `xml_documents` | dowody per faktura | worker | — |
 | `ksef_offline_queue` | kolejka Offline24 (wyłączona na PROD, AUD-14) | worker | — |
 
@@ -399,7 +399,7 @@ z `audit_logs` + `invoices`; po A5 z wierszy prób.
 | S8 Czas do sygnału | od `attempted_at` porażki do pierwszego alarmu/wpisu widocznego operatorowi | ≤ 15 min | definicja „zgubiona po cichu” z planu |
 | S9 Ponowienia automatu | liczba `send_requeued` z `user_id NULL` / dobę i faktur `TRANSIENT_EXHAUSTED` | informacyjna; `TRANSIENT_EXHAUSTED` = 0 bez znanej awarii KSeF | pokazuje, ile pracy robi automat |
 | S10 Skrzynka | p95 od `DataPrzeslania` faktury przychodzącej w KSeF do wiersza `received` | ≤ 30 min | odbiór co 15 min |
-| S11 Dostępność KSeF | odsetek czasu w poziomie `operational`, liczony z odcinków między kolejnymi wierszami `ksef_health_log` (wiersz przy zmianie poziomu i co 5 min, nie przy każdym pingu; jak przestoje w `lib/observability/business-metrics.ts`) | kontekst, bez celu | tłumaczy S1/S4, nie jest naszym SLO |
+| S11 Dostępność KSeF | odsetek pingów `ok` z `ksef_health_log` | kontekst, bez celu | tłumaczy S1/S4, nie jest naszym SLO |
 
 Budżet błędów S1: 0,5 % wysyłek w miesiącu; przekroczenie = zatrzymanie
 nowych funkcji wysyłki do czasu naprawy (zasada po bramce z planu).

@@ -2,10 +2,11 @@
  * KSeF health status — Redis-backed snapshot pisany przez cron
  * `ksef-health-check` co 30s, czytany przez UI banner.
  *
- * Decyzja: nie używamy `validation_cache` ani innej tabeli DB. Status musi
- * być natychmiastowy do odczytu (banner renderuje się na każdym żądaniu
- * dashboard), a 30s update granularity nie zasługuje na write w DB —
- * audit log + WAL by puchły bez sensu.
+ * Decyzja: bieżącego statusu nie trzymamy w `validation_cache` ani innej tabeli
+ * DB. Status musi być natychmiastowy do odczytu (banner renderuje się na każdym
+ * żądaniu dashboard), a 30s update granularity nie zasługuje na write w DB —
+ * audit log + WAL by puchły bez sensu. Do historii `ksef_health_log` idzie
+ * osobno wiersz przy zmianie poziomu i co 5 min (`persistHealthLogIfRelevant`).
  *
  * Stan kompresujemy do trzech kategorii:
  *   - `operational` — KSeF odpowiada < 2s, status 2xx

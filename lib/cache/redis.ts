@@ -12,18 +12,30 @@
  * (np. server action → categorization → ai-classifier → ...), nawet gdy
  * build nie woła Redisa.
  *
- * Brak konfiguracji (np. lokalny dev bez Redisa): `getRedis()` rzuca,
- * a `lib/cache/index.ts` łapie błąd i przechodzi w passthrough (bez cache).
+ * Brak konfiguracji (np. lokalny dev bez Redisa): `lib/cache/index.ts` nie woła
+ * wtedy `getRedis()` i przechodzi w passthrough (bez cache); przy awarii łapie
+ * błąd i robi to samo.
  * To NIE znaczy, że cała aplikacja działa bez Redisa. Bez niego (i przy jego
  * awarii) odmawiają — to jedyna pełna lista, inne pliki odsyłają tutaj:
  *   - limitery MFA i hasła (`lib/rate-limit/mfa.ts`, `password.ts`,
- *     fail-closed): logowanie z 2FA, włączanie 2FA, zmiana i reset hasła,
- *     ponowne uwierzytelnienie (`lib/auth/reauth.ts`: wyłączenie 2FA,
- *     usunięcie konta RODO i jego anulowanie);
- *   - akcje, które `fallback: true` z ogólnego limitera
- *     (`lib/rate-limit/index.ts` liczy wtedy w pamięci) traktują jak odmowę:
- *     wgranie certyfikatu KSeF (`components/settings/actions.ts`) i podgląd
- *     przypomnienia o płatności (`app/actions/reminders.ts`).
+ *     fail-closed): kod TOTP (przy logowaniu i przy potwierdzeniu po biometrii),
+ *     włączanie 2FA, zmiana i reset hasła, ponowne uwierzytelnienie
+ *     (`lib/auth/reauth.ts`: wyłączenie 2FA, usunięcie konta RODO i jego
+ *     anulowanie hasłem; anulowanie linkiem z maila działa);
+ *   - podgląd przypomnienia o płatności (`app/actions/reminders.ts`): jedyna
+ *     akcja, która `fallback: true` z ogólnego limitera
+ *     (`lib/rate-limit/index.ts` liczy wtedy w pamięci) traktuje jak odmowę.
+ * Skutek pośredni: kodu nie da się podać ani włączyć 2FA, więc to, co wymaga
+ * potwierdzonego 2FA (`getVerifiedMfaState`), działa tylko w sesji już
+ * potwierdzonej kodem: wgranie certyfikatu KSeF, wstrzymanie historii KSeF
+ * i `/admin` (także dla konta bez 2FA), a na koncie z 2FA również płatności,
+ * nadawanie dostępu, eksport danych konta i urządzenia biometrii. Przy fladze
+ * `requireMfaForSensitive` także wysyłka do KSeF i płatności właściciela
+ * albo admina.
+ * Przechodzą (limit w pamięci procesu): logowanie hasłem konta bez 2FA,
+ * rejestracja, logowanie biometrią (daje AAL1, nie AAL2) i pozostałe ogólne limity.
+ * Nie odmawia, ale gaśnie: monitor KSeF (`lib/ksef/health-status.ts`): baner,
+ * `ksef_health_log` i alarm `ksef_down`; przy awarii `recordKsefPing` rzuca.
  */
 
 import { Redis } from '@upstash/redis';
