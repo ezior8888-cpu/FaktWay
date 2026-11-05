@@ -1,6 +1,6 @@
-// Wygenerowane 26.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00156
-// (m.in. 00155 synchronizacja historii KSeF, 00156 zapis oryginału z KSeF). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 20.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00154
+// (m.in. 00153 data rozpoczęcia działalności, 00154 faktury cykliczne). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -2249,263 +2249,6 @@ export type Database = {
           response_time_ms?: number | null
         }
         Relationships: []
-      }
-      ksef_history_items: {
-        Row: {
-          acquisition_at: string | null
-          attempts: number
-          counterparty_name: string | null
-          counterparty_nip: string | null
-          currency: string | null
-          detail: string | null
-          direction: string
-          discovered_at: string
-          environment: string
-          first_deferred_at: string | null
-          gross_amount: number | null
-          id: string
-          invoice_hash: string | null
-          invoice_id: string | null
-          invoice_number: string
-          invoice_type: string | null
-          issue_date: string
-          ksef_number: string
-          next_attempt_at: string | null
-          permanent_storage_at: string | null
-          reason_code: string | null
-          resolved_at: string | null
-          status: string
-          tenant_id: string
-          updated_at: string
-        }
-        Insert: {
-          acquisition_at?: string | null
-          attempts?: number
-          counterparty_name?: string | null
-          counterparty_nip?: string | null
-          currency?: string | null
-          detail?: string | null
-          direction: string
-          discovered_at?: string
-          environment: string
-          first_deferred_at?: string | null
-          gross_amount?: number | null
-          id?: string
-          invoice_hash?: string | null
-          invoice_id?: string | null
-          invoice_number: string
-          invoice_type?: string | null
-          issue_date: string
-          ksef_number: string
-          next_attempt_at?: string | null
-          permanent_storage_at?: string | null
-          reason_code?: string | null
-          resolved_at?: string | null
-          status?: string
-          tenant_id: string
-          updated_at?: string
-        }
-        Update: {
-          acquisition_at?: string | null
-          attempts?: number
-          counterparty_name?: string | null
-          counterparty_nip?: string | null
-          currency?: string | null
-          detail?: string | null
-          direction?: string
-          discovered_at?: string
-          environment?: string
-          first_deferred_at?: string | null
-          gross_amount?: number | null
-          id?: string
-          invoice_hash?: string | null
-          invoice_id?: string | null
-          invoice_number?: string
-          invoice_type?: string | null
-          issue_date?: string
-          ksef_number?: string
-          next_attempt_at?: string | null
-          permanent_storage_at?: string | null
-          reason_code?: string | null
-          resolved_at?: string | null
-          status?: string
-          tenant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ksef_history_items_invoice_same_tenant_fk"
-            columns: ["tenant_id", "invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["tenant_id", "id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_invoice_same_tenant_fk"
-            columns: ["tenant_id", "invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices_overdue"
-            referencedColumns: ["tenant_id", "id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_tenant_dashboard_summary"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_verification_status"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ksef_history_sync: {
-        Row: {
-          backfill_completed_at: string | null
-          backfill_cursor: string
-          backfill_issue: string | null
-          backfill_issue_at: string | null
-          backfill_page_offset: number
-          backfill_progress_at: string | null
-          backfill_window_end: string
-          boundary_at: string
-          client_paused_at: string | null
-          client_paused_by: string | null
-          consecutive_failures: number
-          created_at: string
-          direction: string
-          environment: string
-          history_floor: string
-          id: string
-          last_enqueued_at: string | null
-          last_error_at: string | null
-          last_error_code: string | null
-          last_error_detail: string | null
-          last_run_at: string | null
-          last_success_at: string | null
-          lease_until: string | null
-          live_checked_at: string | null
-          live_hwm: string | null
-          live_issue: string | null
-          live_issue_at: string | null
-          live_page_offset: number
-          paused_until: string | null
-          rate_limit_hits: number
-          rate_limited_at: string | null
-          tenant_id: string
-          updated_at: string
-        }
-        Insert: {
-          backfill_completed_at?: string | null
-          backfill_cursor: string
-          backfill_issue?: string | null
-          backfill_issue_at?: string | null
-          backfill_page_offset?: number
-          backfill_progress_at?: string | null
-          backfill_window_end: string
-          boundary_at: string
-          client_paused_at?: string | null
-          client_paused_by?: string | null
-          consecutive_failures?: number
-          created_at?: string
-          direction: string
-          environment: string
-          history_floor: string
-          id?: string
-          last_enqueued_at?: string | null
-          last_error_at?: string | null
-          last_error_code?: string | null
-          last_error_detail?: string | null
-          last_run_at?: string | null
-          last_success_at?: string | null
-          lease_until?: string | null
-          live_checked_at?: string | null
-          live_hwm?: string | null
-          live_issue?: string | null
-          live_issue_at?: string | null
-          live_page_offset?: number
-          paused_until?: string | null
-          rate_limit_hits?: number
-          rate_limited_at?: string | null
-          tenant_id: string
-          updated_at?: string
-        }
-        Update: {
-          backfill_completed_at?: string | null
-          backfill_cursor?: string
-          backfill_issue?: string | null
-          backfill_issue_at?: string | null
-          backfill_page_offset?: number
-          backfill_progress_at?: string | null
-          backfill_window_end?: string
-          boundary_at?: string
-          client_paused_at?: string | null
-          client_paused_by?: string | null
-          consecutive_failures?: number
-          created_at?: string
-          direction?: string
-          environment?: string
-          history_floor?: string
-          id?: string
-          last_enqueued_at?: string | null
-          last_error_at?: string | null
-          last_error_code?: string | null
-          last_error_detail?: string | null
-          last_run_at?: string | null
-          last_success_at?: string | null
-          lease_until?: string | null
-          live_checked_at?: string | null
-          live_hwm?: string | null
-          live_issue?: string | null
-          live_issue_at?: string | null
-          live_page_offset?: number
-          paused_until?: string | null
-          rate_limit_hits?: number
-          rate_limited_at?: string | null
-          tenant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ksef_history_sync_client_paused_by_fkey"
-            columns: ["client_paused_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_tenant_dashboard_summary"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_verification_status"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       ksef_inbox_cursor: {
         Row: {
@@ -5394,70 +5137,6 @@ export type Database = {
           },
         ]
       }
-      ksef_history_export_changes: {
-        Row: {
-          environment: string | null
-          item_count: number | null
-          period: string | null
-          tenant_id: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_tenant_dashboard_summary"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_verification_status"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ksef_history_item_counts: {
-        Row: {
-          direction: string | null
-          environment: string | null
-          item_count: number | null
-          reason_code: string | null
-          status: string | null
-          tenant_id: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "mv_tenant_dashboard_summary"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_verification_status"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ksef_history_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       mv_tenant_dashboard_summary: {
         Row: {
           current_month_accepted: number | null
@@ -5679,23 +5358,6 @@ export type Database = {
         }
         Returns: Json
       }
-      decide_ksef_duplicate_original: {
-        Args: {
-          p_actor_user_id: string
-          p_choice: string
-          p_env: string
-          p_import: Json
-          p_invoice_id: string
-          p_mode: string
-          p_note: string
-          p_offer: string
-          p_original_ksef_number: string
-          p_original_sha256: string
-          p_tenant_id: string
-          p_via: string
-        }
-        Returns: Json
-      }
       deny_join_request: { Args: { p_request_id: string }; Returns: undefined }
       enqueue_ksef_send: {
         Args: {
@@ -5803,17 +5465,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      flag_ksef_original_recheck: {
-        Args: {
-          p_actor_user_id: string
-          p_invoice_id: string
-          p_kind: string
-          p_original_ksef_number: string
-          p_original_sha256: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
       flo_record_usage: {
         Args: {
           p_cost_usd: number
@@ -5871,52 +5522,9 @@ export type Database = {
         Args: { p_check: Json; p_choice: string }
         Returns: boolean
       }
-      ksef_duplicate_cross_tenant: {
-        Args: {
-          p_internal_number: string
-          p_ksef_number: string
-          p_tenant_id: string
-        }
-        Returns: boolean
-      }
-      ksef_duplicate_decide_core: {
-        Args: {
-          p_actor_user_id: string
-          p_choice: string
-          p_env: string
-          p_import: Json
-          p_invoice_id: string
-          p_mode: string
-          p_note: string
-          p_offer: string
-          p_original_ksef_number: string
-          p_original_sha256: string
-          p_tenant_id: string
-          p_via: string
-        }
-        Returns: Json
-      }
       ksef_duplicate_decision_blocker: {
         Args: { p_invoice_id: string; p_tenant_id: string }
         Returns: string
-      }
-      ksef_duplicate_decision_blocker_for_session: {
-        Args: { p_invoice_id: string }
-        Returns: string
-      }
-      ksef_duplicate_gate_ok: { Args: { p_gate: Json }; Returns: boolean }
-      ksef_duplicate_original_offer: {
-        Args: { p_check: Json; p_own_history_db: boolean }
-        Returns: string
-      }
-      ksef_duplicate_own_history: {
-        Args: {
-          p_invoice_id: string
-          p_original_session: string
-          p_sha256: string
-          p_tenant_id: string
-        }
-        Returns: boolean
       }
       ksef_error_class: { Args: { p_code: string }; Returns: string }
       ksef_has_contact_evidence: {
@@ -5932,17 +5540,6 @@ export type Database = {
           tenant_id: string
         }[]
       }
-      ksef_original_import_mismatch: {
-        Args: {
-          p_import: Json
-          p_inv: Database["public"]["Tables"]["invoices"]["Row"]
-          p_marker: Database["public"]["Tables"]["ksef_submissions"]["Row"]
-          p_offer: string
-          p_tenant_id: string
-          p_tenant_nip: string
-        }
-        Returns: string
-      }
       ksef_send_audit: {
         Args: {
           p_action: string
@@ -5952,10 +5549,6 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: undefined
-      }
-      ksef_upo_expected: {
-        Args: { i: Database["public"]["Tables"]["invoices"]["Row"] }
-        Returns: boolean
       }
       list_public_tables: {
         Args: never
@@ -6012,18 +5605,6 @@ export type Database = {
       release_ksef_enqueue: {
         Args: { p_invoice_id: string; p_reason: string; p_tenant_id: string }
         Returns: boolean
-      }
-      release_ksef_original_review: {
-        Args: {
-          p_actor_user_id: string
-          p_env: string
-          p_invoice_id: string
-          p_note: string
-          p_original_ksef_number: string
-          p_original_sha256: string
-          p_tenant_id: string
-        }
-        Returns: Json
       }
       release_stripe_subscription_sync: {
         Args: {
