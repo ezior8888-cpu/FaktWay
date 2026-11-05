@@ -394,5 +394,6 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 | Data | Krok | PR | Stan | Wdrożone (SHA) | Uwagi |
 |---|---|---|---|---|---|
 | 4.11.2026 | plan | — | gotowy | — | rozpoznanie kodu (`7a249d3f`) i przepisów; plan poza gitem |
+| 5.11.2026 | K0 | #375 | gotowy, PR otwarty | — | plan w repo i fraza w `AGENTS.md`; `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`; arkusz `docs/ksiegowosc/ZLOTE-PRZYPADKI.md` i pusty `tests/fixtures/ksiegowosc/zlote/szablon.json` (bez kwot); D1, D2 i D9 czekają na odpowiedź Bartosza; 00164 zajmuje szkic #369 |
 
-**Następny krok:** K0. Przenieś ten plik do `docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md` i dopisz frazę „Kontynuuj plan księgowość JDG” w `AGENTS.md` (blok na górze, wzór Finory). Przygotuj `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md` (sekcja 11) i szablon złotych przypadków G1-G14 dla księgowej. Poproś Bartosza o potwierdzenie D1, D2 i D9. Potem K1.
+**Następny krok:** K1, parametry i kalendarz (sekcja 12): `lib/ksiegowosc/parametry/{index,2026,2027}.ts` ze źródłami, kalendarz i `taxDeadline` przeniesione z `lib/flo/tax-params.ts` (FLO importuje z nowego modułu), atrapy ZUS usunięte, limit VAT dla pulpitu z nowego modułu, `mikrorachunek.ts`, wyłącznik `ksiegowosc` (globalny i dla firmy). Gałąź `claude/ksiegowosc-k1-parametry` od świeżego `origin/main`, po scaleniu #375. Numer migracji dla flagi (jeśli będzie potrzebna) z rejestru po sprawdzeniu otwartych PR: 00164 zajmuje szkic #369. Odpowiedzi prawnika i księgowej nie blokują K1.
