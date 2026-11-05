@@ -15,11 +15,11 @@ export function InstallPrompt() {
   useEffect(() => {
     if (!canInstall) return;
     const t = setTimeout(() => setShowDelayed(true), 30_000);
-    return () => clearTimeout(t);
-  }, [canInstall]);
-
-  useEffect(() => {
-    if (!canInstall) setShowDelayed(false);
+    // Gdy instalacja przestaje być możliwa, kolejne pojawienie się znów czeka 30 s.
+    return () => {
+      clearTimeout(t);
+      setShowDelayed(false);
+    };
   }, [canInstall]);
 
   if (!canInstall || !showDelayed) return null;

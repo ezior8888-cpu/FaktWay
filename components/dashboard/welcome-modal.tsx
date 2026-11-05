@@ -35,6 +35,7 @@ export function WelcomeModal() {
 
   useEffect(() => {
     if (searchParams.get('welcome') === '1') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- otwarcie po hydratacji, gdy URL ma ?welcome=1; stan początkowy jak na serwerze (zamknięty)
       setOpen(true);
     }
   }, [searchParams]);

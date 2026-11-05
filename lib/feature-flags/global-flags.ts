@@ -30,6 +30,7 @@ export const GLOBAL_FLAGS: readonly GlobalFlag[] = [
   'disableSignups',
   'killFloAgent',
   'requireMfaForSensitive',
+  'killKsiegowosc',
 ] as const;
 
 /** Kill-switch musi reagować szybko, ale nie kosztem zapytania na każdy request. */
