@@ -379,11 +379,11 @@ export function CorrectionInvoiceForm({
   // bridge URL-param → form-state (pre-select rodzica korekty), więc wzorzec
   // jest pożądany. Refaktor na `useSyncExternalStore` byłby przesadą dla
   // jednego pre-fillu; suppress z explicit komentarzem.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
   useEffect(() => {
     if (!validPreselect || userDismissedPrefillRef.current) return;
     const row = parentInvoices.find((p) => p.id === validPreselect);
     if (!row) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
     void loadParentContext(row);
   }, [validPreselect, parentInvoices, loadParentContext]);
 
