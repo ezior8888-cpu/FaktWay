@@ -121,7 +121,7 @@ const HOLD_MARKER = /^\[[A-Z_]+\] /;
 interface SubmitOutcome {
   ksefNumber: string;
   xmlStoragePath: string;
-  /** Znane przy świeżej wysyłce; przy uzgodnieniu liczone z pliku w magazynie. */
+  /** Skrót pliku tej próby: z zapisu przy świeżej wysyłce, inaczej z historii wysyłek. Brak = wpis sprzed 01.10.2026. */
   xmlSha256Hash?: string;
   xmlSizeBytes?: number;
   acquisitionTimestamp?: string;
@@ -1642,6 +1642,7 @@ export async function runSubmitInvoice(
           acquisitionTimestamp: status.acquisitionTimestamp,
           // D5: plik tej właśnie próby; klucz historyczny tylko dla wpisów sprzed 00134.
           xmlStoragePath: previous.xmlStoragePath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+          xmlSha256Hash: previous.payloadHash ?? undefined,
           sessionReferenceNumber: previous.sessionReferenceNumber,
           invoiceReferenceNumber: previous.invoiceReferenceNumber,
           via: 'reference-reconcile',
@@ -1946,15 +1947,29 @@ export async function runSubmitInvoice(
 
       // AUD-12: wiersz xml_documents (PDF z kodem KOD I, „Pobierz XML”, portal
       // księgowej). Fail-soft jak historia wysyłki — akceptacji nie cofamy,
-      // brak wiersza widać w Sentry.
+      // brak wiersza widać w Sentry. Bez wiersza PDF nie ma KODU I, a mail do
+      // nabywcy odmawia: ścieżka operatora w runbooku ksef-error-codes.md.
       try {
-        await recordXmlDocument({
-          tenantId,
-          invoiceId,
-          storagePath: result.xmlStoragePath,
-          sha256Hash: result.xmlSha256Hash,
-          sizeBytes: result.xmlSizeBytes,
-        });
+        if (result.xmlSha256Hash) {
+          await recordXmlDocument({
+            tenantId,
+            invoiceId,
+            storagePath: result.xmlStoragePath,
+            sha256Hash: result.xmlSha256Hash,
+            sizeBytes: result.xmlSizeBytes,
+            // Świeża wysyłka zapisała te bajty i wysłała je w tym przebiegu; pozostałe
+            // drogi znają plik tylko z historii, więc porównują go z magazynem.
+            verifyStoredBytes: result.via !== 'submit',
+          });
+        } else {
+          // C-12: wpis `sent` bez skrótu (historia sprzed 01.10.2026). Skrót policzony
+          // z obecnego pliku nie dowodzi, że to ten plik poszedł do KSeF.
+          Sentry.captureMessage('KSeF: faktura przyjęta, a wpis wysyłki jest bez skrótu XML — bez wiersza xml_documents', {
+            level: 'warning',
+            tags: { area: 'ksef.xml-documents', kind: 'no-payload-hash' },
+            extra: { tenantId, invoiceId, via: result.via },
+          });
+        }
       } catch (e) {
         logger.error('Nie zapisano xml_documents dla przyjętej faktury', {
           invoiceId,

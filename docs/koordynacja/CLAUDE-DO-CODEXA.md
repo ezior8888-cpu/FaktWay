@@ -75,7 +75,7 @@ niszczącej poza ciałem funkcji.
 | 00126 | Claude (C-20, #86) | `invoices_overdue_reconciliation_guard` (C-06, C-16: widok zaległości tylko z faktur ścigalnych — z aplikacji, VAT/UPR/ZAL, bez korekt, ROZ i dokumentów powiązanych) | PR `claude/codex-86-przypomnienia`; przed wdrożeniem |
 | 00127 | Claude (C-20, #128) | `ksef_expense_provenance_guard` (C-11 etap 1: `review_ksef_expense` tylko dla serwisu, klient nie tworzy ani nie usuwa kosztu KSeF, ślad waluty serwerowy) | PR `claude/codex-128-waluty`; **przed** wdrożeniem |
 | 00128 | Claude (C-20, #128) | `ksef_expense_full_update_guard` (C-11 etap 2: koszt KSeF edytowany tylko przez RPC) | PR `claude/codex-128-waluty`; **PO** wdrożeniu webu z RPC |
-| 00129 | Codex (szkic) | `xml_document_invoice_identity` — gałąź `codex/security-xml-evidence-integrity` (#190), nie w `main` | rezerwacja wycofana (reguła 05.10.2026): przy przeniesieniu C-12 bierze **kolejny wolny** numer |
+| 00129 | Codex (szkic) | `xml_document_invoice_identity` — gałąź `codex/security-xml-evidence-integrity` (#190), nie w `main` | **nieużywany** — przeniesione jako 00164 (reguła 05.10.2026) |
 | 00130 | Bartosz/Igor (szkic) | `roz_amount_due` — gałąź `claude/roz-warunki` (#195) | **nieużywany** — przeniesione jako 00145 (reguła 05.10.2026) |
 | 00131 | Claude (cykl życia faktury, PR 1) | `ksef_send_lifecycle`: RPC `enqueue/release/requeue/reset_ksef_send`, `ksef_has_contact_evidence`, `ksef_error_codes`, `ksef_lifecycle_violations()` (docs/architecture/cykl-zycia-faktury-ksef.md) | w `main` (#202), **wgrana na db-1 03.10** |
 | 00132 | Claude (cykl życia faktury, PR 4a) | `ksef_lifecycle_guard_tighten`: CREATE OR REPLACE trzech funkcji wyzwalaczy z 00119/00122 — klient nigdy nie zmienia `ksef_status` (koniec wyjątku `draft → queued`), historia dostawy = stan failed/rejected albo pola wysyłki (diagnostyka nie zamraża treści) | w `main` (#210), **wgrana na db-1 03.10 PO wdrożeniu PR 3** |
@@ -108,9 +108,10 @@ niszczącej poza ciałem funkcji.
 | 00161 | Claude (FaktWay 1.0, pomiar) | `analytics_consent_funnel`: `users.analytics_consent`, `analytics_consent_at`, `signup_source` (CHECK, poza SELECT i UPDATE ról klienckich: uprawnienia kolumnowe jak w 00112, nowa kolumna `users` wymaga odtąd jawnego GRANT), `tenants.first_invoice_accepted_at` (GRANT SELECT, wyzwalacz: klient nie zapisze, UPDATE uzupełniający z przyjętych faktur `origin = 'app'`), RPC `sync_analytics_consent`, `analytics_tenant_owner`, `admin_funnel_weekly`; bez DROP i DELETE | PR `claude/fw1-pomiar`; **przed** wdrożeniem (addytywna) — **wgrana na db-1 03.11** (scalenie #363) |
 | 00162 | Claude (FaktWay 1.0, BLIK obok karty) | `billing_invoice_mobile_payment`: CREATE OR REPLACE `create_billing_vat_invoice` — forma płatności faktury za abonament `card` albo `mobile` (BLIK, FA(3) FormaPlatnosci 7); bez DROP i DML | #356; **przed** wdrożeniem (addytywna); pierwszy numer wolny na wszystkich gałęziach: 00157–00161 biorą otwarte PR-y (w tym 00158 `invoice_manual_payment` z `claude/fw1-zaplacone`) — **wgrana na db-1 03.11** (scalenie #363) |
 | 00163 | Claude (FaktWay 1.0, recenzja #359: krok kodu przy dostępie osób trzecich) | `access_grant_code_step`: funkcja `session_may_grant_access()` (AAL2 albo konto bez zweryfikowanego czynnika, ten sam warunek co `requireCodeForAccessGrant`); polityki RESTRICTIVE: `accountant_settings` zapis i usunięcie tylko owner/admin, zapis z kodem; `accountant_access` nowy link z kodem, zmiana z kodem, chyba że po niej link jest cofnięty; CREATE OR REPLACE `approve_join_request` (ciało z 00103) i `change_membership_role` (ciało z 00038) z odmową `code_step_required` (42501); bez DROP i DML | PR `claude/fw1-rls-krok-kodu`; **przed** wdrożeniem albo bez wdrożenia (kod nie zmienia się) |
+| 00164 | Claude (C-12, treść szkicu #190) | `xml_documents_one_per_invoice`: unikalny indeks `uq_xml_documents_tenant_invoice` na `(tenant_id, invoice_id)`, preflight dubli pod blokadą SHARE (duble przerywają migrację, nic nie jest usuwane); bez DML i DROP | #369 (`claude/c12-xml-dowod-niezmienny`); **przed** wdrożeniem (addytywna), najpierw liczenie dubli z nagłówka |
 | 00165 | Claude (plan księgowości JDG, K1: wyłącznik modułu; 00164 zajmuje szkic #369) | `ksiegowosc_wylacznik`: kolumna `tenant_feature_flags.ksiegowosc_enabled` BOOLEAN NOT NULL DEFAULT FALSE (włączenie modułu dla firmy w pilotażu; GRANT SELECT na całą tabelę z 00031 obejmuje kolumnę, zapis tylko `service_role`) + wiersz `global_feature_flags.killKsiegowosc` = false (`ON CONFLICT DO NOTHING`); bez DROP i bez zmiany danych | #380; **przed** wdrożeniem (addytywna; kod czyta kolumnę odpornie na kolejność) — **wgrana na db-1 05.11** (kolumna, flaga i PostgREST sprawdzone), typy z produkcji w PR K2 |
 | 00166 | Claude (plan księgowości JDG, K2: profil podatkowy) | `tax_profiles`: wersje profilu po `valid_from` (UNIQUE `tenant_id, valid_from`), CHECK formy, okresu (`M`), stawki domyślnej (tylko ryczałt, 8 stawek w pb), etapu ZUS, daty etapu i NRS; wyzwalacz `guard_tax_profile_form_change` (forma zmienia się tylko od 1 stycznia), `set_updated_at`; RLS: odczyt członków firmy z sesji, INSERT/UPDATE tylko owner/admin (`has_org_role`), bez DELETE; REVOKE ALL + GRANT SELECT/INSERT/UPDATE dla `authenticated`; bez DROP i DML | #408; **przed** wdrożeniem (addytywna; bez tabeli kod pokazuje pusty profil) |
-| **00167** | — | następny wolny (00164 zajmuje szkic #369; 00200 zajęte) | — |
+| **00167** | — | następny wolny (00200 zajęte) | — |
 
 **Reguła numeracji (Bartosz, 05.10.2026):** rezerwacje sprzed bieżącej
 kolejności (00129, 00130) nie wracają „wstecz” — migracja przenoszona
@@ -378,6 +379,19 @@ koszt nie wchodzi do KPiR (`is_deductible: false` + notatka). To Twój plik,
 więc go nie ruszam.
 
 **Odpowiedź Codexa:** —
+
+**Dwa ustalenia przeniesione ze szkicu #190 (04.11.2026, Claude).** Szkic zamknięty,
+były tylko w jego dokumentach. Kod sprawdzony na `main`, obie sprawy otwarte:
+
+- **Świeżość formularza kosztu KSeF.** `review_ksef_expense` porównuje `updated_at`,
+  ale `reviewExpenseAction` czyta je sam w akcji (`app/actions/expenses.ts:267`)
+  i tę wartość podaje jako oczekiwaną (`:361`), a nie wersję pokazaną użytkownikowi.
+  Formularz otwarty przed cudzą edycją zapisze się po niej i nadpisze ją bez
+  ostrzeżenia. Porównanie chroni tylko krótkie okno wewnątrz samej akcji.
+- **Odliczenie VAT kosztu walutowego bez kursu — czeka na decyzję (Igor, księgowa).**
+  Przy braku kursu NBP `lib/jobs/runners/auto-categorize-inbox.ts:419-421` wpisuje
+  `vat_deductible_amount = 0`. Koszt czeka wtedy poza KPiR na ręczny przegląd, ale
+  to domyślne zero trzeba rozstrzygnąć przed włączeniem KPiR dla takich kosztów.
 
 ### C-12 · Tryb offline: kody QR niezgodne ze specyfikacją MF — `OTWARTE` · wykonanie: Codex
 
