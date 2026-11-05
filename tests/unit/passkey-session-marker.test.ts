@@ -20,9 +20,14 @@ const SERVICE_ROLE = 'fixture-service-role-key-do-testow';
 const subject = { sub: 'user-a', sessionId: 'session-a' };
 const NOW = Date.UTC(2026, 10, 2, 12, 0, 0);
 
-function flipLastCharacter(marker: string): string {
-  const last = marker.at(-1)!;
-  return marker.slice(0, -1) + (last === 'A' ? 'B' : 'A');
+/**
+ * Zmienia pierwszy znak podpisu, zawsze na inny. Nie ostatni: ostatni znak
+ * base64url niesie dwa bity dopełnienia, które dekoder pomija, więc „A” → „B”
+ * na końcu dawało ten sam podpis.
+ */
+function forgeSignature(marker: string): string {
+  const at = marker.lastIndexOf('.') + 1;
+  return marker.slice(0, at) + (marker[at] === 'A' ? 'B' : 'A') + marker.slice(at + 1);
 }
 
 beforeEach(() => {
@@ -47,7 +52,7 @@ describe('znacznik sesji passkey', () => {
 
   it('odrzuca sfałszowany podpis', async () => {
     const marker = await createPasskeySessionMarker(subject, () => NOW);
-    await expect(verifyPasskeySessionMarker(flipLastCharacter(marker), subject, () => NOW)).resolves.toBe(false);
+    await expect(verifyPasskeySessionMarker(forgeSignature(marker), subject, () => NOW)).resolves.toBe(false);
   });
 
   it('odrzuca znacznik innej sesji tego samego konta', async () => {
