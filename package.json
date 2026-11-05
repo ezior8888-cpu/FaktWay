@@ -2,7 +2,7 @@
   "name": "ksef-saas",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "next dev",
     "dev:local": "bash scripts/dev/baza-lokalna.sh && next dev",
