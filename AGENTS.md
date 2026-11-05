@@ -22,6 +22,11 @@
 > zrób checklistę (sekcja 0) i TYLKO wskazaną sesję według „Protokołu
 > naprawy błędu” niżej, a na końcu dopisz wiersz w dzienniku (sekcja 6)
 > z numerem PR.
+>
+> **„Kontynuuj plan usprawnień”** (hooki, skille, strażnicy, CI, wygoda
+> pracy): przeczytaj
+> [`docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md),
+> zrób checklistę (sekcja 0) i pracuj od „Następny krok” w dzienniku (sekcja 7).
 
 ## Projekt
 
