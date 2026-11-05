@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { validateNipLiveAction } from '@/app/actions/validation';
 import type { CachedValidationResult } from '@/lib/validation/cache';
@@ -50,8 +50,11 @@ export function useNipValidation(
 
   const enabledRef = useRef(enabled);
   const countryCodeRef = useRef(countryCode);
-  enabledRef.current = enabled;
-  countryCodeRef.current = countryCode;
+  // Aktualizacja po commicie, przed efektami, które wołają `validate`.
+  useLayoutEffect(() => {
+    enabledRef.current = enabled;
+    countryCodeRef.current = countryCode;
+  });
 
   const [status, setStatus] = useState<
     'idle' | 'validating' | 'success' | 'error'
