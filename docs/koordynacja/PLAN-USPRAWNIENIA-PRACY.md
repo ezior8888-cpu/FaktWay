@@ -160,8 +160,7 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 ### 5.2 Pamięć
 
 Projekt nowego indeksu i lista plików do usunięcia są poza repo (pamięć jest
-prywatna): `side-session-notes/…/pamiec-propozycja.md`. Usuwanie tylko po
-„tak” Bartosza.
+prywatna): `side-session-notes/…/pamiec-propozycja.md`. Zrobione 05.11 (dziennik).
 
 ## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
 
@@ -186,8 +185,9 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 |---|---|---|---|
 | 04.11.2026 | Analiza, plan, etap 1 (1.1–1.4) | #374 (plan), #370, #371, #372, #373 | PR otwarte, lokalnie `pnpm run ci` zielone na wszystkich pięciu razem; 1.5–1.7 czekają na decyzję Bartosza |
 | 05.11.2026 | 1.5 pluginy (zgoda Bartosza) | — | `gitlab`, `github`, `posthog`, `logo-design` wyłączone w `~/.claude/settings.json` (zostają zainstalowane, włącza się je na chwilę); plugin `design` z aplikacji czeka na kliknięcie Bartosza |
+| 05.11.2026 | 1.6 pamięć (zgoda Bartosza) | — | `MEMORY.md` 1 387 → 279 słów; 13 plików przeniesionych do `memory-archiwum-2026-11-04/` (obok katalogu pamięci, z kopią starego indeksu); `coolify-operacje.md` zostaje do 2.1 |
 
-**Następny krok:** decyzja o pamięci (5.2), wyłączenie pluginu `design` w aplikacji i instalacja Renovate
+**Następny krok:** wyłączenie pluginu `design` w aplikacji i instalacja Renovate
 (sekcja 6). Po „idź dalej”: etap 2 od 2.1 (`AGENTS.md` + runbooki) i 2.3,
 potem 2.6, 2.4, reszta po kolei; etap 3 równolegle osobnymi sesjami (3.1
 i 3.2 najpierw).
