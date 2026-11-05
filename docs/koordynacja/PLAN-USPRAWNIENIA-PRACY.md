@@ -217,9 +217,9 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 05.11.2026 | 2.1 `AGENTS.md` + runbooki | #378 | 4 379 → 1 953 słów (cel 1 500 nie osiągnięty: konwencje i protokół to niezmienniki); 367 linii procedur dosłownie w 4 runbookach, 0 zgubionych; stos na #374, #372, #376 |
 | 05.11.2026 | Scalenie etapu 1 i 2.1/2.3/2.6 (polecenie Bartosza) | #379 | `5e63f1fa`; #370–#374 i #376–#378 oznaczone przez GitHub jako scalone; bez migracji i bez wdrożenia (kod aplikacji bez zmian) |
 | 05.11.2026 | 1.7 Renovate zainstalowany (Bartosz, tryb „Scan and Alert”) | — | „Dependency Dashboard” jeszcze nie powstał w chwili wpisu |
-| 05.11.2026 | 2.4 lint 30 → 17, próg `--max-warnings 17`, `--cache` | #LINT | 17 zostało: ostrzeżenia kompilatora React w komponentach klienta, każde zmienia zachowanie, więc osobny PR z oceną przypadków (2.4b) |
-| 05.11.2026 | 2.5 hook lintu po edycji | #HOOK | ok. 0,5 s, cisza gdy czysto; 2.12 (uprawnienia) czeka na zgodę, sekcja 5.3 |
+| 05.11.2026 | 2.4 lint 30 → 17, próg `--max-warnings 17`, `--cache` | #398 | 17 zostało: ostrzeżenia kompilatora React w komponentach klienta, każde zmienia zachowanie, więc osobny PR z oceną przypadków (2.4b) |
+| 05.11.2026 | 2.5 hook lintu po edycji | #399 | ok. 0,5 s, cisza gdy czysto; 2.12 (uprawnienia) czeka na zgodę, sekcja 5.3 |
 
 **Następny krok:** Bartosz: zgoda na uprawnienia (5.3), plugin `design`
-w aplikacji, scalenie #LINT i #HOOK. Sesja po „idź dalej”: 2.2 (skille),
+w aplikacji, scalenie #398 i #399. Sesja po „idź dalej”: 2.2 (skille),
 2.4b (17 ostrzeżeń React), 2.9, 2.10, 2.11, 2.7, 2.8.
