@@ -3,7 +3,7 @@
 > Opisuje wdrożenia przez **Vercela**, z którego zrezygnowaliśmy w sierpniu
 > 2026. Produkcja stoi teraz na **Hetznerze pod Coolify**.
 >
-> **Aktualna procedura: `AGENTS.md`, sekcja „Infrastruktura i dostępy".**
+> **Aktualna procedura: [`wdrozenie-produkcji.md`](wdrozenie-produkcji.md)** (niezmienniki: `AGENTS.md`, „Infrastruktura i dostępy").
 >
 > Zostawiony wyłącznie jako zapis tego, jak było. Nie wykonuj poleceń
 > z tego pliku na produkcji.
