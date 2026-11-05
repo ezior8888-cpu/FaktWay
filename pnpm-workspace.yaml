@@ -12,7 +12,7 @@ overrides:
   # WebAuthn: parser i schematy (asn1-ecc) muszą być z tej samej kopii asn1-schema, inaczej każda
   # asercja ES256 pada na „Cannot get schema for ECDSASigValue”. Pilnuje tests/unit/passkey-login-route.test.ts.
   '@simplewebauthn/server>@peculiar/asn1-schema': '^2.11.1'
-  '@grpc/proto-loader>protobufjs': '>=8.6.0'
+  '@grpc/proto-loader>protobufjs': '>=8.8.1'
   '@aws-sdk/xml-builder>fast-xml-parser': '>=5.7.0'
   'fast-xml-builder@<1.1.7': '>=1.1.7'
   'protobufjs@<8.6.0': '>=8.6.0'
