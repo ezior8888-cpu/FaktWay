@@ -176,7 +176,9 @@ export type AuditAction =
   | 'legal.email_consent_granted'
   | 'legal.email_consent_withdrawn'
   // Zgoda na analitykę (00161): kto, kiedy i na jakie brzmienie (ANALYTICS_STATEMENT).
-  | 'analytics.consent_changed';
+  | 'analytics.consent_changed'
+  // Profil podatkowy (00166, plan księgowości JDG K2): wersja przed i po zapisie.
+  | 'tax_profile.saved';
 
 export interface AuditLogEntry {
   action: AuditAction;
