@@ -120,10 +120,10 @@ it.each([
   expect(anonymous.status).toBe(401);
   expect(await anonymous.json()).toEqual({ error: 'not_authenticated' });
 
-  // Z sesją pełna bramka: getClaims + getUser(token) + getClaims(token).
-  // Sesja 8 planu skalowania ma to zmniejszyć do 1 — wtedy zmień świadomie.
+  // Z sesją pełna bramka: getClaims + getUser(token) + getClaims(token). Od sesji 8
+  // planu skalowania dzielą jedno wywołanie GoTrue (`lib/supabase/auth-user-fetch.ts`).
   authCalls = [];
   const signedIn = await updateSession(request(path, true));
   expect(signedIn.status).toBe(200);
-  expect(authCalls).toEqual(['/auth/v1/user', '/auth/v1/user', '/auth/v1/user']);
+  expect(authCalls).toEqual(['/auth/v1/user']);
 });
