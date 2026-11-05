@@ -186,8 +186,12 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 04.11.2026 | Analiza, plan, etap 1 (1.1–1.4) | #374 (plan), #370, #371, #372, #373 | PR otwarte, lokalnie `pnpm run ci` zielone na wszystkich pięciu razem; 1.5–1.7 czekają na decyzję Bartosza |
 | 05.11.2026 | 1.5 pluginy (zgoda Bartosza) | — | `gitlab`, `github`, `posthog`, `logo-design` wyłączone w `~/.claude/settings.json` (zostają zainstalowane, włącza się je na chwilę); plugin `design` z aplikacji czeka na kliknięcie Bartosza |
 | 05.11.2026 | 1.6 pamięć (zgoda Bartosza) | — | `MEMORY.md` 1 387 → 279 słów; 13 plików przeniesionych do `memory-archiwum-2026-11-04/` (obok katalogu pamięci, z kopią starego indeksu); `coolify-operacje.md` zostaje do 2.1 |
+| 05.11.2026 | 2.3 `db:push:prod` wyłączony | #376 | z `SUPABASE_DB_URL` skrypt naprawdę wołał `supabase db push` (test czerwony 4/4); `.mjs` i `.sh` kończą się błędem z odnośnikiem |
+| 05.11.2026 | 2.6 strażnik migracji | #377 | `tests/unit/migracje-rejestr.test.ts`; repo i otwarte #369, #195, #190 przechodzą |
+| 05.11.2026 | 2.1 `AGENTS.md` + runbooki | #378 | 4 379 → 1 930 słów (cel 1 500 nie osiągnięty: konwencje i protokół to niezmienniki); 367 linii procedur dosłownie w 4 runbookach, 0 zgubionych; stos na #374, #372, #376 |
 
-**Następny krok:** wyłączenie pluginu `design` w aplikacji i instalacja Renovate
-(sekcja 6). Po „idź dalej”: etap 2 od 2.1 (`AGENTS.md` + runbooki) i 2.3,
-potem 2.6, 2.4, reszta po kolei; etap 3 równolegle osobnymi sesjami (3.1
-i 3.2 najpierw).
+**Następny krok:** Bartosz: plugin `design` w aplikacji, instalacja Renovate
+(po #373), scalenie etapu 1 i #376–#378 (kolejność: #370–#374, #376, #377,
+potem #378). Sesja: po „idź dalej” 2.4 (lint do zera), 2.12 (uprawnienia),
+2.5 (hook lintu po edycji, dopiero po 2.4), potem 2.2 (skille, bo odsyłają
+do runbooków z #378), 2.9, 2.10, 2.11, 2.7, 2.8.
