@@ -8,7 +8,7 @@
     "dev:local": "bash scripts/dev/baza-lokalna.sh && next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 17 --cache --cache-location .tmp/eslintcache",
     "typecheck": "tsc --noEmit",
     "ci": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:vitest",
     "ksef:test-auth": "tsx scripts/test-ksef-auth.ts",
