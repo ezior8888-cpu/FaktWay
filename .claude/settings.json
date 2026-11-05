@@ -12,6 +12,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/dev/lint-po-edycji.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
