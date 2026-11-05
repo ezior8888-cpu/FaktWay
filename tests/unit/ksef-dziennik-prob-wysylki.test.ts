@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Sentry from '@sentry/nextjs';
 
 import type { Invoice } from '@/types/invoice';
 import { KsefApiError } from '@/lib/ksef/client';
@@ -250,6 +251,48 @@ describe('A5: wiersz dziennika dla porażki przed wysłaniem pliku', () => {
 
     expect(rows()).toHaveLength(1);
     expect(rows()[0]).toMatchObject({ status: 'failed', stage: 'xml', error_code: 'XSD_INVALID', error_class: 'terminal', retryable: false });
+  });
+});
+
+describe('F-093: kod KSeF w dzienniku prób i w Sentry', () => {
+  const rejected = (body: unknown) =>
+    new KsefApiError(400, body as never, 'KSeF API POST /sessions/online/SES-1/invoices failed: 400');
+
+  it.each([
+    ['problem+json', { title: 'Bad Request', status: 400, errors: [{ code: 21405, description: 'Błąd walidacji.' }] }],
+    ['starszy kształt', { exception: { exceptionDetailList: [{ exceptionCode: 21405, exceptionDescription: 'Błąd walidacji.' }] } }],
+    ['JSON w tekście', JSON.stringify({ errors: [{ code: 21405 }] })],
+  ])('%s: liczba w ksef_code i w Sentry, bez ponowień', async (_label, body) => {
+    mocks.fullFlow.mockRejectedValue(rejected(body));
+
+    await run([job(JOB_1)] as never);
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ status: 'failed', ksef_http_status: 400, ksef_code: 21405, retryable: false });
+    expect(mocks.bossSend).not.toHaveBeenCalled();
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ extra: expect.objectContaining({ ksefCode: 21405, status: 400 }) }),
+    );
+  });
+
+  it('kod nieczytelny (code: null): ksef_code pusty, nie 0 — panel błędów nie pokaże „HTTP 4000”', async () => {
+    mocks.fullFlow.mockRejectedValue(rejected({ errors: [{ code: null }] }));
+
+    await run([job(JOB_1)] as never);
+
+    expect(rows()[0]).toMatchObject({ status: 'failed', ksef_http_status: 400, ksef_code: null, retryable: false });
+  });
+
+  it('errors jako obiekt pól: ostateczna odmowa, nie TypeError z ponawianiem', async () => {
+    mocks.fullFlow.mockRejectedValue(rejected({ errors: { pole: ['x'] } }));
+
+    await run([job(JOB_1)] as never);
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ status: 'failed', ksef_http_status: 400, ksef_code: null, retryable: false });
+    expect(String(rows()[0]!.error_message)).toContain('NonRetriableError');
+    expect(mocks.bossSend).not.toHaveBeenCalled();
   });
 });
 
