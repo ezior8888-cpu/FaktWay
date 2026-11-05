@@ -188,7 +188,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 05.11.2026 | 1.6 pamięć (zgoda Bartosza) | — | `MEMORY.md` 1 387 → 279 słów; 13 plików przeniesionych do `memory-archiwum-2026-11-04/` (obok katalogu pamięci, z kopią starego indeksu); `coolify-operacje.md` zostaje do 2.1 |
 | 05.11.2026 | 2.3 `db:push:prod` wyłączony | #376 | z `SUPABASE_DB_URL` skrypt naprawdę wołał `supabase db push` (test czerwony 4/4); `.mjs` i `.sh` kończą się błędem z odnośnikiem |
 | 05.11.2026 | 2.6 strażnik migracji | #377 | `tests/unit/migracje-rejestr.test.ts`; repo i otwarte #369, #195, #190 przechodzą |
-| 05.11.2026 | 2.1 `AGENTS.md` + runbooki | #378 | 4 379 → 1 930 słów (cel 1 500 nie osiągnięty: konwencje i protokół to niezmienniki); 367 linii procedur dosłownie w 4 runbookach, 0 zgubionych; stos na #374, #372, #376 |
+| 05.11.2026 | 2.1 `AGENTS.md` + runbooki | #378 | 4 379 → 1 953 słów (cel 1 500 nie osiągnięty: konwencje i protokół to niezmienniki); 367 linii procedur dosłownie w 4 runbookach, 0 zgubionych; stos na #374, #372, #376 |
 
 **Następny krok:** Bartosz: plugin `design` w aplikacji, instalacja Renovate
 (po #373), scalenie etapu 1 i #376–#378 (kolejność: #370–#374, #376, #377,
