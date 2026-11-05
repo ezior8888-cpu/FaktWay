@@ -66,7 +66,7 @@ vi.mock('@/lib/cache/redis', async (importOriginal) => {
 
 /**
  * TEST-3 (audyt przedlaunchowy): rate limiter chroni login/register/reset przed
- * brute-force. Krytyczne: (a) gdy Redis padł, limit liczy pamięć procesu (AUD-62) —
+ * brute-force. Krytyczne: (a) gdy Redisa brak, limit liczy pamięć procesu (AUD-62) —
  * rate-limit NIE może zablokować logowania całej apce; (b) hash identyfikatora — nie trzymamy
  * plaintext IP/email w Redis.
  */

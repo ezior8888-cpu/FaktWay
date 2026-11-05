@@ -3,7 +3,7 @@
 Kilka rzeczy może zablokować dostęp user-a do konta. Ten runbook listuje
 najczęstsze + procedurę odblokowania.
 
-> Aktualizacja 2026-09-14 dotyczy §2 (MFA), 2026-10-23 i 2026-11-04 — §1 krok 2 (Redis na app-1, klucze), 2026-11-02 — §7 (biometria, wraz z wierszem w macierzy). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
+> Aktualizacja 2026-09-14 i 2026-11-04 (operator limitera) dotyczy §2 (MFA), 2026-10-23 i 2026-11-04 — §1 krok 2 (Redis na app-1, klucze), 2026-11-02 — §7 (biometria, wraz z wierszem w macierzy). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
 
 ## Macierz scenariuszy
 
@@ -60,9 +60,9 @@ Po przekroczeniu user dostaje 429 z `Retry-After`.
    Redis z Coolify ma hasło (zasób Redis w Coolify); bez niego `redis-cli`
    zwróci `NOAUTH`. Podaj je przez zmienną `REDISCLI_AUTH`, nie przez `-a`,
    i nie wpisuj go do repo. `<IP>` to adres, który widzi aplikacja
-   (`X-Real-Ip` od Traefika, `lib/auth/get-client-ip.ts`). Odmowa logowania
-   nie zostawia adresu, a `audit_logs.ip_address` z udanych akcji liczony jest
-   inaczej (`lib/audit/log.ts`), więc zapytaj użytkownika o jego publiczne IP.
+   (`X-Real-Ip` od Traefika, `lib/auth/get-client-ip.ts`). Odmowa na kroku
+   hasła nie zostawia adresu, a `audit_logs.ip_address` liczony jest inaczej
+   (`lib/audit/log.ts`), więc zapytaj użytkownika o jego publiczne IP.
    E-mail wpisz bez spacji i małymi literami (`tr` nie zmienia liter spoza
    ASCII). Limity MFA, zmiany hasła i biometrii (`rl:mfa:account:…`,
    `rl:password:attempt|send|recoveryUse:account:…`, `rl:passkey_*:…`) mają

@@ -350,7 +350,8 @@ agenta z weryfikacją Bartosza, nie obietnica.
 > `recordKsefPing` rzuca już na `redis.del`/`incr`, więc milknie wszystko
 > naraz: baner, `isKsefHealthy` (zwraca `true`), `ksef_health_log` i alarm
 > `ksef_down`; (b) błąd insertu — wynik niesprawdzany, a heartbeat
-> w Redisie i tak się przesuwa; (c) decyzja: zapis każdego pingu ALBO S11
+> w Redisie i tak się przesuwa; (c) decyzja: zapis każdego pingu (i `ok`
+> w S11 zamienione na `operational`) ALBO S11
 > w briefie Centrum liczone jako czas w poziomach (wiersze są tylko przy
 > zmianie poziomu i co 5 min).
 

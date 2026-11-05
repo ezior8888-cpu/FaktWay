@@ -5,8 +5,8 @@
  * (Hetzner) z nakładką `hiett/serverless-redis-http`, która wystawia REST API
  * zgodne z Upstash. Korzystają z niego aplikacja i worker jobów. Nazwy
  * UPSTASH_REDIS_REST_URL / _TOKEN i biblioteka zostały z czasów Vercela —
- * to zgodność API, nie dostawca: Upstash Inc. nie przetwarza naszych danych
- * (dlatego nie ma go w `lib/legal/subprocessors.ts`).
+ * to zgodność API, nie dostawca: produkcja nie wysyła danych do Upstash
+ * (stan 23.10.2026; dlatego nie ma go w `lib/legal/subprocessors.ts`).
  *
  * Lazy init: bez tego `next build` padałby przy importowaniu łańcucha
  * (np. server action → categorization → ai-classifier → ...), nawet gdy
@@ -29,13 +29,15 @@
  * potwierdzonego 2FA (`getVerifiedMfaState`), działa tylko w sesji już
  * potwierdzonej kodem: wgranie certyfikatu KSeF, wstrzymanie historii KSeF
  * i `/admin` (także dla konta bez 2FA), a na koncie z 2FA również płatności,
- * nadawanie dostępu, eksport danych konta i urządzenia biometrii. Przy fladze
- * `requireMfaForSensitive` także wysyłka do KSeF i płatności właściciela
- * albo admina.
+ * nadawanie dostępu (także ustawienia wysyłki dla księgowej), eksport danych
+ * konta i urządzenia biometrii. Przy fladze `requireMfaForSensitive` także
+ * wysyłka do KSeF i płatności właściciela albo admina.
  * Przechodzą (limit w pamięci procesu): logowanie hasłem konta bez 2FA,
  * rejestracja, logowanie biometrią (daje AAL1, nie AAL2) i pozostałe ogólne limity.
  * Nie odmawia, ale gaśnie: monitor KSeF (`lib/ksef/health-status.ts`): baner,
- * `ksef_health_log` i alarm `ksef_down`; przy awarii `recordKsefPing` rzuca.
+ * `isKsefHealthy` (zwraca `true`, więc wysyłka nie odkłada ponowień przy
+ * awarii KSeF), status publiczny (`operational`), `ksef_health_log` i alarm
+ * `ksef_down`; przy awarii `recordKsefPing` rzuca.
  */
 
 import { Redis } from '@upstash/redis';

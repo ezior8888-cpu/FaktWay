@@ -17,7 +17,7 @@
  * Redis NIE jest osobnym dostawcą: to własny redis:7.2 z nakładką
  * `hiett/serverless-redis-http` na serwerze app-1, więc mieści się we wpisie
  * Hetzner. Zmienne nazywają się UPSTASH_REDIS_REST_* tylko dlatego, że
- * nakładka udaje API Upstash — Upstash Inc. nie widzi danych (stan 23.10.2026).
+ * nakładka udaje API Upstash — produkcja nie wysyła danych do Upstash (stan 23.10.2026).
  * Wpis potrzebny dopiero wtedy, gdy UPSTASH_REDIS_REST_URL wskaże usługę
  * zewnętrzną (np. *.upstash.io).
  */
