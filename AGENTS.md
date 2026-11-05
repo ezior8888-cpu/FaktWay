@@ -567,6 +567,13 @@ lub w stanie „detached HEAD". Wtedy `git push` na `main` NIE przejdzie.
 Sprawdź `git status` na starcie; jeśli nie jesteś na `main`, wypchnij swoją
 gałąź i otwórz pull request zamiast walczyć z `main`.
 
+**Świeży worktree** (zależności, `.env.local`, dowiązanie `.agents/infra.env`,
+hook przed pushem) przygotowuje `bash scripts/dev/przygotuj-worktree.sh`.
+W Claude Code uruchamia go sam hook SessionStart; Codex woła go ręcznie.
+`git push` uruchamia `.githooks/pre-push` (adresy z `infra.env`, typy, eslint,
+`vitest related`; do ok. 3 minut, więc daj poleceniu dłuższy limit czasu).
+Pominięcie: `SKIP_PREPUSH=1 git push`.
+
 **Kilka sesji w jednym katalogu.** Inna sesja potrafi zacommitować coś na
 Twojej gałęzi (zdarzyło się 02.10). Przed każdym pushem przejrzyj
 `git log --format='%h %an %s' origin/main..HEAD`. Cudzy commit usuwasz
