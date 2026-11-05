@@ -75,6 +75,7 @@ import {
   type KsefSubmissionIntent,
 } from '@/lib/ksef/submission-log';
 import { downloadInvoiceXml, invoiceXmlKey, invoiceXmlKeyFor, uploadInvoiceXml } from '@/lib/storage/r2';
+import { XmlArchiveConflictError } from '@/lib/storage/xml-archive-conflict';
 import {
   heldErrorMessage,
   isCorrectionHeldForEnv,
@@ -121,7 +122,7 @@ const HOLD_MARKER = /^\[[A-Z_]+\] /;
 interface SubmitOutcome {
   ksefNumber: string;
   xmlStoragePath: string;
-  /** Znane przy świeżej wysyłce; przy uzgodnieniu liczone z pliku w magazynie. */
+  /** Skrót pliku tej próby: z zapisu przy świeżej wysyłce, inaczej z historii wysyłek. Brak = wpis sprzed 01.10.2026. */
   xmlSha256Hash?: string;
   xmlSizeBytes?: number;
   acquisitionTimestamp?: string;
@@ -1493,7 +1494,6 @@ export async function runSubmitInvoice(
         if (!path) {
           const stored = await uploadInvoiceXml(tenantId, invoiceId, invoice.issueDate, originalBytes.toString('utf8'), {
             attemptId: `ksef-${originalSha256Hex.slice(0, 40)}`,
-            immutable: false,
           });
           path = stored.storagePath;
         }
@@ -1642,6 +1642,7 @@ export async function runSubmitInvoice(
           acquisitionTimestamp: status.acquisitionTimestamp,
           // D5: plik tej właśnie próby; klucz historyczny tylko dla wpisów sprzed 00134.
           xmlStoragePath: previous.xmlStoragePath ?? invoiceXmlKey(tenantId, invoiceId, invoice.issueDate),
+          xmlSha256Hash: previous.payloadHash ?? undefined,
           sessionReferenceNumber: previous.sessionReferenceNumber,
           invoiceReferenceNumber: previous.invoiceReferenceNumber,
           via: 'reference-reconcile',
@@ -1772,6 +1773,21 @@ export async function runSubmitInvoice(
         );
         return { ...submitted, via: 'submit' };
       } catch (error) {
+        // C-12: pod kluczem tej próby leży inny plik, a do KSeF nic jeszcze nie
+        // poszło (zapis jest przed sesją, a próba z kontaktem idzie uzgodnieniem).
+        // Ponowienie dałoby ten sam konflikt; nowe kolejkowanie (cron I6 albo
+        // „Wyślij ponownie”) dostaje nowy `sendAttemptId`, więc i nowy klucz.
+        if (error instanceof XmlArchiveConflictError) {
+          Sentry.captureMessage('KSeF: pod kluczem próby jest inny plik XML — bez nadpisania, nowa próba', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', kind: 'xml-archive-conflict' },
+            extra: { tenantId, invoiceId, storagePath: error.storagePath },
+          });
+          const code = SEND_ERROR_CODES.INFRA;
+          throw new NonRetriableError(`[${code}] ${KSEF_SEND_MESSAGES.xmlArchiveConflict}`, {
+            cause: new KsefSendVerdictError(code, KSEF_SEND_MESSAGES.xmlArchiveConflict),
+          });
+        }
         // Północ wypadła po bezpieczniku wyżej, przed plikiem (hak sesji) — pliku
         // nie wysłano; ponowienie dałoby tę samą odmowę.
         if (error instanceof IssueDatePassedError) {
@@ -1946,15 +1962,29 @@ export async function runSubmitInvoice(
 
       // AUD-12: wiersz xml_documents (PDF z kodem KOD I, „Pobierz XML”, portal
       // księgowej). Fail-soft jak historia wysyłki — akceptacji nie cofamy,
-      // brak wiersza widać w Sentry.
+      // brak wiersza widać w Sentry. Bez wiersza PDF nie ma KODU I, a mail do
+      // nabywcy odmawia: ścieżka operatora w runbooku ksef-error-codes.md.
       try {
-        await recordXmlDocument({
-          tenantId,
-          invoiceId,
-          storagePath: result.xmlStoragePath,
-          sha256Hash: result.xmlSha256Hash,
-          sizeBytes: result.xmlSizeBytes,
-        });
+        if (result.xmlSha256Hash) {
+          await recordXmlDocument({
+            tenantId,
+            invoiceId,
+            storagePath: result.xmlStoragePath,
+            sha256Hash: result.xmlSha256Hash,
+            sizeBytes: result.xmlSizeBytes,
+            // Świeża wysyłka zapisała te bajty i wysłała je w tym przebiegu; pozostałe
+            // drogi znają plik tylko z historii, więc porównują go z magazynem.
+            verifyStoredBytes: result.via !== 'submit',
+          });
+        } else {
+          // C-12: wpis `sent` bez skrótu (historia sprzed 01.10.2026). Skrót policzony
+          // z obecnego pliku nie dowodzi, że to ten plik poszedł do KSeF.
+          Sentry.captureMessage('KSeF: faktura przyjęta, a wpis wysyłki jest bez skrótu XML — bez wiersza xml_documents', {
+            level: 'warning',
+            tags: { area: 'ksef.xml-documents', kind: 'no-payload-hash' },
+            extra: { tenantId, invoiceId, via: result.via },
+          });
+        }
       } catch (e) {
         logger.error('Nie zapisano xml_documents dla przyjętej faktury', {
           invoiceId,

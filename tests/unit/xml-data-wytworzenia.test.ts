@@ -6,10 +6,12 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   submit: vi.fn(),
   row: { xml_generated_at: null as string | null },
+  failClaim: false,
+  failRead: false,
 }));
 
 vi.mock('@/lib/auth/ksef-verification-guard', () => ({ requireKsefVerificationForBackgroundJob: vi.fn(async () => undefined) }));
-vi.mock('@/lib/storage/r2', () => ({ invoiceXmlExistsForId: vi.fn(async () => false), uploadInvoiceXml: mocks.upload }));
+vi.mock('@/lib/storage/r2', () => ({ uploadInvoiceXml: mocks.upload }));
 vi.mock('@/lib/ksef/submit', () => ({ submitInvoice: mocks.submit }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
@@ -22,7 +24,12 @@ vi.mock('@/lib/supabase/admin', () => ({
         eq: () => q,
         is: () => q,
         maybeSingle: async () => {
-          if (patch && mocks.row.xml_generated_at === null) mocks.row.xml_generated_at = String(patch.xml_generated_at);
+          if (patch) {
+            if (mocks.failClaim) return { data: null, error: { message: 'db down' } };
+            if (mocks.row.xml_generated_at === null) mocks.row.xml_generated_at = String(patch.xml_generated_at);
+            return { data: { ...mocks.row }, error: null };
+          }
+          if (mocks.failRead) return { data: null, error: { message: 'db down' } };
           return { data: { ...mocks.row }, error: null };
         },
       });
@@ -60,6 +67,8 @@ const faktura = () =>
 beforeEach(() => {
   vi.useRealTimers();
   mocks.row.xml_generated_at = null;
+  mocks.failClaim = false;
+  mocks.failRead = false;
   mocks.upload.mockReset().mockResolvedValue({ storagePath: 'x.xml', sha256Hash: 'h', sizeBytes: 1 });
   mocks.submit.mockReset().mockResolvedValue({ ksefNumber: 'K', acquisitionTimestamp: '2026-10-01T10:00:00Z' });
 });
@@ -76,6 +85,42 @@ describe('DataWytworzeniaFa stała między próbami (AUD-46)', () => {
     const [first, second] = mocks.upload.mock.calls.map((c) => c[3] as string);
     expect(first).toContain('2026-10-01T10:00:00');
     expect(second).toBe(first);
+  });
+
+  // C-12: plik jest niezmienny, więc awaria bazy nie może dać pliku z chwilą t1,
+  // skoro ponowienie odczyta t2 — bajty tej próby różniłyby się już zawsze.
+  it('błąd odczytu chwili: bez pliku i bez wysyłki; ponowienie buduje plik z zapisaną chwilą', async () => {
+    mocks.failRead = true;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-01T10:00:00Z'));
+
+    await expect(submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test')).rejects.toThrow('xml_generated_at');
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+
+    mocks.failRead = false;
+    vi.setSystemTime(new Date('2026-10-01T10:07:00Z'));
+    await submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test');
+
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    const retried = mocks.upload.mock.calls[0]![3] as string;
+    expect(retried).toContain(String(mocks.row.xml_generated_at).slice(0, 19));
+  });
+
+  it('nieudany zapis chwili i brak zapisanej wartości: bez pliku', async () => {
+    mocks.failClaim = true;
+
+    await expect(submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test')).rejects.toThrow('xml_generated_at');
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('nieudany zapis chwili przy już zapisanej wartości: plik z tą wartością', async () => {
+    mocks.failClaim = true;
+    mocks.row.xml_generated_at = '2026-10-01T09:30:00.000Z';
+
+    await submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test');
+
+    expect(mocks.upload.mock.calls[0]![3] as string).toContain('2026-10-01T09:30:00');
   });
 
   it('migracja: kolumna dodawana bez zmian istniejących danych', () => {

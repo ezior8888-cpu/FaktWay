@@ -26,8 +26,8 @@ import DashboardError from '@/app/(dashboard)/error';
  * dopóki serwer nie odpowie, React trzyma poprzedni ekran.
  *
  * Poza modelem: przy ponowieniu Next renderuje od nowa także layout panelu.
- * Gdy padnie i on (ta sama awaria bazy), błąd trafia do `global-error.tsx`,
- * tak samo jak po F5 — sprawdzone na zbudowanym Next 16.4.1 (PR).
+ * Gdy padnie i on (ta sama awaria bazy), błąd trafia do `app/error.tsx`,
+ * tak samo jak po F5 — test: `blad-segment-glowny.test.tsx`.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
