@@ -36,7 +36,7 @@ const SETTLEMENT_COLUMNS = 'id, invoice_kind, advance_invoice_ids';
  * przechodzą bez zmian.
  */
 function remainder(
-  settled: Map<string, SettledAdvanceTotals>,
+  settled: ReadonlyMap<string, SettledAdvanceTotals>,
   row: { id: string },
   amount: number | string | null,
   part: keyof SettledAdvanceTotals,
@@ -67,7 +67,8 @@ export interface MonthlyFigures {
   hasPrevMonth: boolean;
 }
 
-type InvoiceSummary = {
+/** Wiersz przyjętej faktury sprzedaży, z którego liczą `buildMonthlyFigures` i `buildSalesSeries`. */
+export type InvoiceSummary = {
   id: string;
   issue_date: string;
   invoice_kind: string | null;
@@ -115,6 +116,10 @@ function monthStartUtc(year: number, monthIndex: number): Date {
   return new Date(Date.UTC(year, monthIndex, 1));
 }
 
+/** Komunikaty strażnika środowiska; `ENVIRONMENT_UNKNOWN` rzuca też wspólny odczyt Pulpitu (`sales-history.ts`). */
+const ENVIRONMENT_CHECK_FAILED = 'Nie można sprawdzić środowiska faktur KSeF';
+export const ENVIRONMENT_UNKNOWN = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
+
 /**
  * An accepted invoice with no stored environment could belong to TEST or
  * production. A zero-only dashboard would hide that historical ambiguity.
@@ -139,10 +144,10 @@ export async function assertAcceptedEnvironmentKnown(
     .gte('issue_date', start)
     .lt('issue_date', endExclusive);
   if (error || typeof count !== 'number') {
-    throw new Error('Nie można sprawdzić środowiska faktur KSeF');
+    throw new Error(ENVIRONMENT_CHECK_FAILED);
   }
   if (count > 0) {
-    throw new Error('Przyjęte faktury wymagają uzgodnienia środowiska KSeF');
+    throw new Error(ENVIRONMENT_UNKNOWN);
   }
 }
 
@@ -174,7 +179,7 @@ async function fetchAcceptedInvoices(
   return rows;
 }
 
-async function countLocalDrafts(
+export async function countLocalDrafts(
   supabase: PageContext['supabase'],
   tenantId: string,
   start: string,
@@ -202,42 +207,78 @@ async function countLocalDrafts(
  */
 export { formatPlInt, formatPlMoney } from '@/lib/format/pl';
 
+/** Etykieta błędu odczytu liczb miesiąca (karta „Faktury w KSeF”). */
+export const MONTHLY_FIGURES_READ_ERROR = 'Nie można odczytać liczb miesiąca';
+
+/** Okna `getMonthlyFigures`: odczyt od poprzedniego miesiąca albo 1 stycznia, szkice z bieżącego miesiąca. */
+export interface MonthlyFiguresRange {
+  /** Wcześniejszy z: 1. dzień poprzedniego miesiąca, 1 stycznia. */
+  from: string;
+  /** 1. dzień następnego miesiąca (wyłącznie). */
+  toExclusive: string;
+  /** 1. dzień bieżącego miesiąca — od niego liczą się szkice. */
+  monthStart: string;
+}
+
+export function monthlyFiguresRange(now: Date): MonthlyFiguresRange {
+  const { year, monthIndex } = warsawCalendar(now);
+  const prevMonthStartIso = monthStartIso(year, monthIndex - 1);
+  const yearStartIso = monthStartIso(year, 0);
+  return {
+    from: prevMonthStartIso < yearStartIso ? prevMonthStartIso : yearStartIso,
+    toExclusive: monthStartIso(year, monthIndex + 1),
+    monthStart: monthStartIso(year, monthIndex),
+  };
+}
+
 export async function getMonthlyFigures(
   supabase: PageContext['supabase'],
   tenantId: string,
   now: Date = new Date(),
 ): Promise<MonthlyFigures> {
+  const range = monthlyFiguresRange(now);
+  const environment = requireConfiguredKsefEnvironment();
+
+  await assertAcceptedEnvironmentKnown(
+    supabase, tenantId, range.from, range.toExclusive,
+  );
+  const [acceptedInvoices, draftCount] = await Promise.all([
+    fetchAcceptedInvoices(
+      supabase, tenantId, environment, range.from, range.toExclusive,
+      MONTHLY_FIGURES_READ_ERROR,
+    ),
+    countLocalDrafts(supabase, tenantId, range.monthStart, range.toExclusive),
+  ]);
+
+  // ROZ bez rozliczonych zaliczek (AUD-26). Okno odczytu to poprzedni miesiąc
+  // i rok do dziś, więc jedno odczytanie obejmuje wszystkie trzy zbiory.
+  const settled = await fetchSettledAdvancesTotals(supabase, tenantId, acceptedInvoices);
+  return buildMonthlyFigures(now, acceptedInvoices, draftCount, settled);
+}
+
+/**
+ * Liczby miesiąca z przyjętych faktur okna `monthlyFiguresRange` (już po
+ * strażnikach środowiska i waluty), liczby szkiców i rozliczonych zaliczek.
+ * Wspólne dla `getMonthlyFigures` i wspólnego odczytu Pulpitu.
+ */
+export function buildMonthlyFigures(
+  now: Date,
+  acceptedInvoices: readonly InvoiceSummary[],
+  draftCount: number,
+  settled: ReadonlyMap<string, SettledAdvanceTotals>,
+): MonthlyFigures {
   const { today, year, monthIndex } = warsawCalendar(now);
   const startOfMonthIso = monthStartIso(year, monthIndex);
   const prevMonthStartIso = monthStartIso(year, monthIndex - 1);
   const nextMonthStartIso = monthStartIso(year, monthIndex + 1);
   const yearStartIso = monthStartIso(year, 0);
-  const readStartIso = prevMonthStartIso < yearStartIso ? prevMonthStartIso : yearStartIso;
-  const environment = requireConfiguredKsefEnvironment();
 
-  await assertAcceptedEnvironmentKnown(
-    supabase, tenantId, readStartIso, nextMonthStartIso,
-  );
-  const [acceptedInvoices, draftCount] = await Promise.all([
-    fetchAcceptedInvoices(
-      supabase, tenantId, environment, readStartIso, nextMonthStartIso,
-      'Nie można odczytać liczb miesiąca',
-    ),
-    countLocalDrafts(supabase, tenantId, startOfMonthIso, nextMonthStartIso),
-  ]);
   const monthInvoices = acceptedInvoices.filter((invoice) =>
     invoice.issue_date >= startOfMonthIso);
   const prevInvoices = acceptedInvoices.filter((invoice) =>
     invoice.issue_date >= prevMonthStartIso && invoice.issue_date < startOfMonthIso);
   const ytdInvoices = acceptedInvoices.filter((invoice) =>
     invoice.issue_date >= yearStartIso);
-
-  // ROZ bez rozliczonych zaliczek (AUD-26). Bieżący miesiąc zawiera się w YTD,
-  // więc jedno odczytanie obejmuje wszystkie trzy zbiory.
-  const settled = await fetchSettledAdvancesTotals(supabase, tenantId, [
-    ...prevInvoices,
-    ...ytdInvoices,
-  ]);
 
   const acceptedCount = monthInvoices.length;
   const totalNet =
@@ -333,18 +374,20 @@ export interface SalesSeriesOptions {
   withPrevYear?: boolean;
 }
 
-/**
- * Miesiące kalendarzowe (domyślnie sześć, z bieżącym) + to samo okno rok
- * wcześniej (linia odniesienia). Wywołanie bez `options` zwraca dokładnie
- * to, co przed planem Finora E4 (6 miesięcy, brutto, z rokiem wcześniej),
- * plus `netSeries` i `vatSeries`.
- */
-export async function getSalesSeries(
-  supabase: PageContext['supabase'],
-  tenantId: string,
-  now: Date = new Date(),
-  options: SalesSeriesOptions = {},
-): Promise<SalesSeries> {
+/** Etykieta błędu odczytu serii sprzedaży (Finanse, VAT należny, Przychód netto). */
+export const SALES_SERIES_READ_ERROR = 'Nie można odczytać wykresu sprzedaży';
+
+/** Miesiące i okna odczytu serii sprzedaży — z nich liczy `buildSalesSeries`. */
+export interface SalesSeriesPlan {
+  today: string;
+  months: { key: string; prevKey: string; label: string }[];
+  /** Okno bieżące `[from, toExclusive)` po `issue_date`. */
+  current: { from: string; toExclusive: string };
+  /** To samo okno rok wcześniej; `null` przy `withPrevYear: false`. */
+  previous: { from: string; toExclusive: string } | null;
+}
+
+export function salesSeriesPlan(now: Date, options: SalesSeriesOptions = {}): SalesSeriesPlan {
   const monthCount = options.months ?? 6;
   const withPrevYear = options.withPrevYear ?? true;
   if (!Number.isSafeInteger(monthCount) || monthCount < 1) {
@@ -367,30 +410,50 @@ export async function getSalesSeries(
     });
   }
 
-  const windowStartIso = `${months[0]!.key}-01`;
-  const prevYearStartIso = `${months[0]!.prevKey}-01`;
-  const nextMonthStartIso = monthStartIso(year, monthIndex + 1);
-  const prevYearEndIso = monthStartIso(year - 1, monthIndex + 1);
+  return {
+    today,
+    months,
+    current: { from: `${months[0]!.key}-01`, toExclusive: monthStartIso(year, monthIndex + 1) },
+    previous: withPrevYear
+      ? { from: `${months[0]!.prevKey}-01`, toExclusive: monthStartIso(year - 1, monthIndex + 1) }
+      : null,
+  };
+}
+
+/**
+ * Miesiące kalendarzowe (domyślnie sześć, z bieżącym) + to samo okno rok
+ * wcześniej (linia odniesienia). Wywołanie bez `options` zwraca dokładnie
+ * to, co przed planem Finora E4 (6 miesięcy, brutto, z rokiem wcześniej),
+ * plus `netSeries` i `vatSeries`.
+ */
+export async function getSalesSeries(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  now: Date = new Date(),
+  options: SalesSeriesOptions = {},
+): Promise<SalesSeries> {
+  const plan = salesSeriesPlan(now, options);
+  const { current: currentRange, previous: previousRange } = plan;
   const environment = requireConfiguredKsefEnvironment();
   await Promise.all([
     assertAcceptedEnvironmentKnown(
-      supabase, tenantId, windowStartIso, nextMonthStartIso,
+      supabase, tenantId, currentRange.from, currentRange.toExclusive,
     ),
-    ...(withPrevYear
+    ...(previousRange
       ? [assertAcceptedEnvironmentKnown(
-          supabase, tenantId, prevYearStartIso, prevYearEndIso,
+          supabase, tenantId, previousRange.from, previousRange.toExclusive,
         )]
       : []),
   ]);
   const [current, previous] = await Promise.all([
     fetchAcceptedInvoices(
-      supabase, tenantId, environment, windowStartIso, nextMonthStartIso,
-      'Nie można odczytać wykresu sprzedaży',
+      supabase, tenantId, environment, currentRange.from, currentRange.toExclusive,
+      SALES_SERIES_READ_ERROR,
     ),
-    withPrevYear
+    previousRange
       ? fetchAcceptedInvoices(
-          supabase, tenantId, environment, prevYearStartIso, prevYearEndIso,
-          'Nie można odczytać wykresu sprzedaży',
+          supabase, tenantId, environment, previousRange.from, previousRange.toExclusive,
+          SALES_SERIES_READ_ERROR,
         )
       : Promise.resolve<InvoiceSummary[]>([]),
   ]);
@@ -399,9 +462,25 @@ export async function getSalesSeries(
     ...current,
     ...previous,
   ]);
+  return buildSalesSeries(plan, current, previous, settled);
+}
+
+/**
+ * Serie z przyjętych faktur okien `plan` (już po strażnikach środowiska
+ * i waluty) i rozliczonych zaliczek. Wspólne dla `getSalesSeries`
+ * i wspólnego odczytu Pulpitu.
+ */
+export function buildSalesSeries(
+  plan: SalesSeriesPlan,
+  current: readonly InvoiceSummary[],
+  previous: readonly InvoiceSummary[],
+  settled: ReadonlyMap<string, SettledAdvanceTotals>,
+): SalesSeries {
+  const { today, months } = plan;
+  const withPrevYear = plan.previous !== null;
 
   const sumByMonth = (
-    rows: InvoiceSummary[],
+    rows: readonly InvoiceSummary[],
     pick: (inv: InvoiceSummary) => number,
   ) => {
     const map = new Map<string, number>();

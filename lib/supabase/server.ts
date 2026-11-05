@@ -37,6 +37,12 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll();
         },
+        // Drugi argument `setAll` (nagłówki anty-cache od `@supabase/ssr`)
+        // pomijamy świadomie: `cookies()` z `next/headers` nie ustawia nagłówków
+        // odpowiedzi. Sesję odświeża wcześniej proxy i to ono dokłada
+        // `Cache-Control: private, no-store…` (`lib/supabase/middleware.ts`).
+        // Trasa GET, która mimo to zapisze tu ciasteczko (np. skasowanie sesji
+        // po odmowie GoTrue), sama ustawia `Cache-Control` swojej odpowiedzi.
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
@@ -73,6 +79,7 @@ export async function createClientForOrg(orgId: string | null | undefined) {
         getAll() {
           return cookieStore.getAll();
         },
+        // Bez nagłówków z drugiego argumentu — zob. `createClient`.
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>

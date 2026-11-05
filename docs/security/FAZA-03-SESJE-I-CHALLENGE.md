@@ -15,6 +15,8 @@ Właściwe środowisko aplikacji to **Hetzner/Coolify**. Dokument opisuje lokaln
 
 Challenge i enrollment potwierdzają po `mfa.verify` rzeczywiście zweryfikowane AAL2 i zgodność użytkownika. Enrollment akceptuje tylko własny oczekujący TOTP. Nie tworzymy własnego JWT, ciasteczka „MFA zaliczone” ani wyjątku dla odzyskiwania. [Model MFA Supabase](https://supabase.com/docs/guides/auth/auth-mfa).
 
+Uzupełnienie z listopada 2026 (FaktWay 1.0, logowanie biometrią): jest teraz jeden świadomy wyjątek od zdania wyżej. Znacznik `ksef.passkey_session` (`lib/auth/passkey/session-marker.ts`, HMAC po `sub`, `session_id` i czasie) przepuszcza do panelu sesję AAL1 po asercji WebAuthn z weryfikacją użytkownika. Dotyczy tylko bramki panelu (`lib/auth/panel-mfa.ts`). `getVerifiedMfaState` bez zmian zwraca `challenge_required`, więc `/admin`, certyfikat KSeF, płatności, hasło, 2FA, urządzenia i eksport danych konta dalej wymagają kodu TOTP.
+
 ## Weryfikacja lokalna
 
 - **103 pliki / 1700 testów Vitest PASS**, pełny typecheck PASS, lint 25 zmienionych plików TS/TSX bez ostrzeżeń PASS.

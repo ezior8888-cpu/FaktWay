@@ -71,6 +71,7 @@ import {
   ensureOutgoingStreams,
   KSEF_HISTORY_RECHECK_BLOCKED_REASONS,
   loadStreams,
+  loadStreamsForTenants,
   readCounts,
   releaseLease,
   selectDownloadQueue,
@@ -105,6 +106,7 @@ import {
   type HistoryDirection,
 } from '@/lib/ksef/history-sync/windows';
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
+import { forEachPageById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import type { JobContext } from '@/lib/jobs/registry';
@@ -227,114 +229,127 @@ export async function runKsefHistorySync({ step, logger }: JobContext): Promise<
     return { ...result, breaker: true };
   }
 
-  // 2. Firmy: certyfikat, NIP zweryfikowany w tym środowisku, aktywne, nieusunięte.
-  const tenants = await step.run('list-tenants', async () => {
-    const { data, error } = await admin
-      .from('tenants')
-      .select('id, nip, ksef_verified_at, ksef_certificate_expiry, business_started_on')
-      .not('ksef_credentials_encrypted', 'is', null)
-      .not('ksef_verified_at', 'is', null)
-      .eq('ksef_verified_environment', env)
-      .is('deleted_at', null)
-      .eq('is_active', true);
-    if (error) throw new Error(`Historia KSeF: odczyt firm: ${error.message}`);
-    return (data ?? []) as TenantRow[];
-  });
-  result.tenants = tenants.length;
-  if (tenants.length === 0) return result;
-
-  // 3. Strumienie sprzedaży (ON CONFLICT DO NOTHING).
-  result.created += await step.run('ensure-outgoing-streams', () => ensureOutgoingStreams(history, env,
-    tenants.map((t) => ({ tenantId: t.id, initial: initialOutgoingStream(now, historyFloorFor(t.business_started_on)) }))));
-
-  // 4. Strumienie zakupów — dopiero gdy skrzynka ma HWM (granica U).
-  let streams = await step.run('load-streams', () => loadStreams(history, env));
-  const withoutIncoming = tenants.filter((t) => !streams.some((s) => s.tenant_id === t.id && s.direction === 'incoming'));
-  if (withoutIncoming.length > 0) {
-    result.created += await step.run('ensure-incoming-streams', async () => {
-      const rows: Array<{ tenantId: string; initial: ReturnType<typeof initialIncomingStream> }> = [];
-      for (const part of chunks(withoutIncoming, TENANTS_PER_QUERY)) {
-        const { data, error } = await admin
-          .from('ksef_inbox_cursor')
-          .select('tenant_id, window_to')
-          .in('tenant_id', part.map((t) => t.id));
-        if (error) throw new Error(`Historia KSeF: odczyt kursora skrzynki: ${error.message}`);
-        const hwmByTenant = new Map(((data ?? []) as Array<{ tenant_id: string; window_to: string | null }>)
-          .map((r) => [r.tenant_id, r.window_to] as const));
-        for (const tenant of part) {
-          const hwm = hwmByTenant.get(tenant.id);
-          if (!hwm) continue;
-          rows.push({ tenantId: tenant.id, initial: initialIncomingStream(now, historyFloorFor(tenant.business_started_on), hwm) });
-        }
-      }
-      return ensureIncomingStreams(history, env, rows);
-    });
-    streams = await step.run('reload-streams', () => loadStreams(history, env));
-  }
-
-  // 5. Liczniki do szacunku przebiegu.
-  const counts = await step.run('read-counts', () => readCounts(history, env, ['pending', 'deferred', 'blocked', 'skipped']));
-
-  // 6. Wybór firm z pracą.
+  // 2.–6. Firmy (certyfikat, NIP zweryfikowany w tym środowisku, aktywne,
+  // nieusunięte) stronami po kluczu (sesja 27 planu skalowania, JOB-11).
+  // Dawniej jedno zapytanie oddawało najwyżej 1000 firm (PGRST_DB_MAX_ROWS),
+  // a strumienie i liczniki czytane dla całego środowiska były ucięte jeszcze
+  // wcześniej — firmy po cichu wypadały z cyklu. Strumienie, kursory skrzynki
+  // i liczniki czytamy dla BIEŻĄCEJ strony firm (paczki `in.(…)` w db.ts),
+  // a plan fan-outu (sloty, kolejność po `lastRunAt`, zlecenia w kolejce) jest
+  // globalny — liczymy go raz, po wszystkich stronach.
   const candidates: Array<FanOutCandidate & { nip: string }> = [];
   const budget = historyBudget(now);
   // Czas slotów zajęty przez zlecenia poprzednich cykli, które jeszcze nie
   // ruszyły — nowy fan-out mieści się w reszcie, więc przekroczenie szacunku
   // nie narasta z cyklu na cykl (próg „zaległe” heartbeatu).
   let inFlightSeconds = 0;
-  for (const tenant of tenants) {
-    const outgoing = streams.find((s) => s.tenant_id === tenant.id && s.direction === 'outgoing');
-    const incoming = streams.find((s) => s.tenant_id === tenant.id && s.direction === 'incoming');
-    if (!outgoing) continue;
-    if (certificateExpired(tenant.ksef_certificate_expiry, now)) {
-      if (await step.run('record-certificate-expired', () => recordCertificateExpired(history, outgoing, now))) {
-        result.certificateExpired += 1;
-      }
-      continue;
-    }
-    if (outgoing.last_error_code === 'certificate_expired' && tenant.ksef_certificate_expiry) {
-      await step.run('clear-renewed-certificate', () => clearRenewedCertificate(history, outgoing));
-    }
-    const nowMs = now.getTime();
-    if (outgoing.client_paused_at) continue;
-    if (outgoing.paused_until && Date.parse(outgoing.paused_until) > nowMs) continue;
-    if (outgoing.lease_until && Date.parse(outgoing.lease_until) > nowMs) continue;
-    const enqueuedMs = outgoing.last_enqueued_at ? Date.parse(outgoing.last_enqueued_at) : null;
-    const runMs = outgoing.last_run_at ? Date.parse(outgoing.last_run_at) : null;
-    const waitingInQueue = enqueuedMs !== null && (runMs === null || runMs < enqueuedMs) && enqueuedMs >= nowMs - HOUR_MS;
+  await forEachPageById<TenantRow>(
+    'Historia KSeF: odczyt firm',
+    (afterId, limit) => step.run('list-tenants', async () => {
+      let query = admin
+        .from('tenants')
+        .select('id, nip, ksef_verified_at, ksef_certificate_expiry, business_started_on')
+        .not('ksef_credentials_encrypted', 'is', null)
+        .not('ksef_verified_at', 'is', null)
+        .eq('ksef_verified_environment', env)
+        .is('deleted_at', null)
+        .eq('is_active', true);
+      if (afterId) query = query.gt('id', afterId);
+      return query.order('id', { ascending: true }).limit(limit);
+    }),
+    async (tenants) => {
+      result.tenants += tenants.length;
+      const tenantIds = tenants.map((t) => t.id);
 
-    const liveDue = isLiveDue(outgoing.live_checked_at, now) && liveWindow(outgoing, now) !== null;
-    // Niższy początek historii (poprawiona data rozpoczęcia) otwiera zaległość —
-    // obniża go przebieg firmy pod dzierżawą, cron tylko go zleca.
-    const floor = historyFloorFor(tenant.business_started_on);
-    const backfillOpen = [outgoing, incoming]
-      .filter((s) => backfillEligible(s, now) || (s !== undefined && lowerHistoryFloor(s, floor) !== null)).length;
-    const metadataCalls = Math.min(budget.metadata, (liveDue ? 1 : 0) + backfillOpen);
-    const pending = sumCounts(counts, tenant.id, (r) => r.status === 'pending');
-    // Pobrania idą PO odkrywaniu w tym samym przebiegu: przy otwartej
-    // zaległości zapytanie zapełnia kolejkę, więc szacujemy pełny budżet
-    // pobrań, nie stan kolejki sprzed przebiegu (poprawka po przeglądzie,
-    // decyzja Bartosza 22.10.2026). Firma tylko z bieżącą sprzedażą — kolejka.
-    const downloads = backfillOpen > 0 && metadataCalls > 0
-      ? budget.downloads
-      : Math.min(budget.downloads, pending);
-    const estimateSeconds = estimateRunSeconds({ metadataCalls, downloads });
-    if (waitingInQueue) {
-      inFlightSeconds += estimateSeconds;
-      continue;
-    }
-    const recheckable = sumCounts(counts, tenant.id, (r) => r.status === 'deferred'
-      || (r.status === 'blocked' && (KSEF_HISTORY_RECHECK_BLOCKED_REASONS as readonly string[]).includes(r.reason_code ?? ''))
-      || (r.status === 'skipped' && r.reason_code === 'retired_draft'));
-    const dbWork = recheckable > 0 && (runMs === null || runMs < nowMs - DB_ONLY_RUN_INTERVAL_MS);
-    if (metadataCalls === 0 && downloads === 0 && !dbWork) continue;
-    candidates.push({
-      tenantId: tenant.id,
-      nip: tenant.nip,
-      lastRunAt: outgoing.last_run_at,
-      estimateSeconds,
-    });
-  }
+      // 3. Strumienie sprzedaży (ON CONFLICT DO NOTHING).
+      result.created += await step.run('ensure-outgoing-streams', () => ensureOutgoingStreams(history, env,
+        tenants.map((t) => ({ tenantId: t.id, initial: initialOutgoingStream(now, historyFloorFor(t.business_started_on)) }))));
+
+      // 4. Strumienie zakupów — dopiero gdy skrzynka ma HWM (granica U).
+      let streams = await step.run('load-streams', () => loadStreamsForTenants(history, env, tenantIds));
+      const withoutIncoming = tenants.filter((t) => !streams.some((s) => s.tenant_id === t.id && s.direction === 'incoming'));
+      if (withoutIncoming.length > 0) {
+        result.created += await step.run('ensure-incoming-streams', async () => {
+          const rows: Array<{ tenantId: string; initial: ReturnType<typeof initialIncomingStream> }> = [];
+          for (const part of chunks(withoutIncoming, TENANTS_PER_QUERY)) {
+            const { data, error } = await admin
+              .from('ksef_inbox_cursor')
+              .select('tenant_id, window_to')
+              .in('tenant_id', part.map((t) => t.id));
+            if (error) throw new Error(`Historia KSeF: odczyt kursora skrzynki: ${error.message}`);
+            const hwmByTenant = new Map(((data ?? []) as Array<{ tenant_id: string; window_to: string | null }>)
+              .map((r) => [r.tenant_id, r.window_to] as const));
+            for (const tenant of part) {
+              const hwm = hwmByTenant.get(tenant.id);
+              if (!hwm) continue;
+              rows.push({ tenantId: tenant.id, initial: initialIncomingStream(now, historyFloorFor(tenant.business_started_on), hwm) });
+            }
+          }
+          return ensureIncomingStreams(history, env, rows);
+        });
+        streams = await step.run('reload-streams', () => loadStreamsForTenants(history, env, tenantIds));
+      }
+
+      // 5. Liczniki do szacunku przebiegu.
+      const counts = await step.run('read-counts', () => readCounts(history, env, ['pending', 'deferred', 'blocked', 'skipped'], tenantIds));
+
+      // 6. Wybór firm z pracą.
+      for (const tenant of tenants) {
+        const outgoing = streams.find((s) => s.tenant_id === tenant.id && s.direction === 'outgoing');
+        const incoming = streams.find((s) => s.tenant_id === tenant.id && s.direction === 'incoming');
+        if (!outgoing) continue;
+        if (certificateExpired(tenant.ksef_certificate_expiry, now)) {
+          if (await step.run('record-certificate-expired', () => recordCertificateExpired(history, outgoing, now))) {
+            result.certificateExpired += 1;
+          }
+          continue;
+        }
+        if (outgoing.last_error_code === 'certificate_expired' && tenant.ksef_certificate_expiry) {
+          await step.run('clear-renewed-certificate', () => clearRenewedCertificate(history, outgoing));
+        }
+        const nowMs = now.getTime();
+        if (outgoing.client_paused_at) continue;
+        if (outgoing.paused_until && Date.parse(outgoing.paused_until) > nowMs) continue;
+        if (outgoing.lease_until && Date.parse(outgoing.lease_until) > nowMs) continue;
+        const enqueuedMs = outgoing.last_enqueued_at ? Date.parse(outgoing.last_enqueued_at) : null;
+        const runMs = outgoing.last_run_at ? Date.parse(outgoing.last_run_at) : null;
+        const waitingInQueue = enqueuedMs !== null && (runMs === null || runMs < enqueuedMs) && enqueuedMs >= nowMs - HOUR_MS;
+
+        const liveDue = isLiveDue(outgoing.live_checked_at, now) && liveWindow(outgoing, now) !== null;
+        // Niższy początek historii (poprawiona data rozpoczęcia) otwiera zaległość —
+        // obniża go przebieg firmy pod dzierżawą, cron tylko go zleca.
+        const floor = historyFloorFor(tenant.business_started_on);
+        const backfillOpen = [outgoing, incoming]
+          .filter((s) => backfillEligible(s, now) || (s !== undefined && lowerHistoryFloor(s, floor) !== null)).length;
+        const metadataCalls = Math.min(budget.metadata, (liveDue ? 1 : 0) + backfillOpen);
+        const pending = sumCounts(counts, tenant.id, (r) => r.status === 'pending');
+        // Pobrania idą PO odkrywaniu w tym samym przebiegu: przy otwartej
+        // zaległości zapytanie zapełnia kolejkę, więc szacujemy pełny budżet
+        // pobrań, nie stan kolejki sprzed przebiegu (poprawka po przeglądzie,
+        // decyzja Bartosza 22.10.2026). Firma tylko z bieżącą sprzedażą — kolejka.
+        const downloads = backfillOpen > 0 && metadataCalls > 0
+          ? budget.downloads
+          : Math.min(budget.downloads, pending);
+        const estimateSeconds = estimateRunSeconds({ metadataCalls, downloads });
+        if (waitingInQueue) {
+          inFlightSeconds += estimateSeconds;
+          continue;
+        }
+        const recheckable = sumCounts(counts, tenant.id, (r) => r.status === 'deferred'
+          || (r.status === 'blocked' && (KSEF_HISTORY_RECHECK_BLOCKED_REASONS as readonly string[]).includes(r.reason_code ?? ''))
+          || (r.status === 'skipped' && r.reason_code === 'retired_draft'));
+        const dbWork = recheckable > 0 && (runMs === null || runMs < nowMs - DB_ONLY_RUN_INTERVAL_MS);
+        if (metadataCalls === 0 && downloads === 0 && !dbWork) continue;
+        candidates.push({
+          tenantId: tenant.id,
+          nip: tenant.nip,
+          lastRunAt: outgoing.last_run_at,
+          estimateSeconds,
+        });
+      }
+    },
+  );
+  if (result.tenants === 0) return result;
 
   // 7. Fan-out w limicie slotów (najdawniej obsłużone pierwsze), pomniejszonym
   // o zlecenia wciąż czekające w kolejce.

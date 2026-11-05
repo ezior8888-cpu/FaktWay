@@ -8,6 +8,7 @@ import { collectUserData } from '@/lib/gdpr/data-collector';
 import { GET } from '@/app/api/gdpr/export/route';
 
 const USER = '11111111-1111-4111-8111-111111111111';
+const apiRequest = () => new Request('https://faktway.pl/api/gdpr/export', { headers: { accept: 'application/json' } });
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const PRIVATE = 'private-row-and-auth-diagnostic';
 type Row = Record<string, unknown>;
@@ -35,7 +36,7 @@ beforeEach(() => {
     ],
     // Sekcje osobowe z AUD-76 (format 3) — tu puste; zakres sprawdza rodo-eksport-pelny.
     users: [{ id: USER, name: 'Own' }],
-    email_preferences: [], push_subscriptions: [], support_conversations: [], support_messages: [],
+    email_preferences: [], push_subscriptions: [], user_passkeys: [], support_conversations: [], support_messages: [],
     organization_join_requests: [], organization_invitations: [], gdpr_deletion_requests: [],
     newsletter_subscribers: [], email_bounces: [],
   };
@@ -115,15 +116,41 @@ describe('account export endpoint', () => {
     ['unauthenticated', 401], ['mfa_required', 403], ['verification_failed', 503],
   ])('rejects %s before creating privileged clients', async (reason, status) => {
     mocks.verified.mockResolvedValue({ ok: false, reason });
-    const response = await GET();
+    const response = await GET(apiRequest());
     expect(response.status).toBe(status);
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(mocks.admin).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();
   });
 
+  // Logowanie biometrią (FW1): eksport wymaga prawdziwego kodu, a link w panelu
+  // to zwykła nawigacja. Goły JSON 403 byłby dla klienta martwym błędem.
+  it('asks the shared context for full MFA, not the panel marker', async () => {
+    await GET(apiRequest());
+    expect(mocks.verified).toHaveBeenCalledWith({ fullMfa: true });
+  });
+
+  it('sends a browser navigation without the code to the code screen and back to the account page', async () => {
+    mocks.verified.mockResolvedValue({ ok: false, reason: 'mfa_required' });
+    const navigation = new Request('https://faktway.pl/api/gdpr/export', {
+      headers: { 'sec-fetch-dest': 'document', accept: 'text/html' },
+    });
+    const response = await GET(navigation);
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/login/two-factor?redirect=%2Fsettings%2Faccount&potwierdzenie=1');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it('keeps a JSON refusal for API clients', async () => {
+    mocks.verified.mockResolvedValue({ ok: false, reason: 'mfa_required' });
+    const response = await GET(apiRequest());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: 'mfa_required' });
+  });
+
   it('returns a private download and audits the actual scope', async () => {
-    const response = await GET();
+    const response = await GET(apiRequest());
     expect(response.status).toBe(200);
     expect(response.headers.get('content-disposition')).toMatch(/^attachment;/);
     expect(response.headers.get('referrer-policy')).toBe('no-referrer');
@@ -137,7 +164,7 @@ describe('account export endpoint', () => {
     mocks.admin.mockImplementation(() => { throw new Error(PRIVATE); });
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const response = await GET();
+      const response = await GET(apiRequest());
       expect(response.status).toBe(500);
       expect(response.headers.get('cache-control')).toContain('no-store');
       expect(await response.json()).toEqual({ error: 'export_failed' });

@@ -91,6 +91,8 @@ export async function POST(req: Request): Promise<Response> {
   // Konwersacja: istniejąca (ownership check) albo nowa.
   let conversationId: string;
   let history: SupportTurn[] = [];
+  // Prośba klienta o człowieka nie może zamienić się w „czat nie wiedział”.
+  let klientProsilOCzlowieka = false;
 
   if (parsed.conversationId) {
     const conv = await getOwnedConversation(parsed.conversationId, user.id);
@@ -101,6 +103,7 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
     conversationId = conv.id;
+    klientProsilOCzlowieka = conv.escalation_reason === 'user_requested';
     const msgs = await getMessages(conversationId);
     history = msgs
       .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -164,7 +167,7 @@ export async function POST(req: Request): Promise<Response> {
         // Auto-kategoryzacja + eskalacja (Krok 7).
         const patch: Record<string, unknown> = {};
         if (meta.category) patch.category = meta.category;
-        if (meta.uncertain) {
+        if (meta.uncertain && !klientProsilOCzlowieka) {
           patch.status = 'escalated';
           patch.escalated_at = new Date().toISOString();
           patch.escalation_reason = 'ai_uncertain';

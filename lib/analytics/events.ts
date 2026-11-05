@@ -39,6 +39,7 @@ export const ANALYTICS_EVENTS = {
   invoiceRejected: 'invoice_rejected',
   invoiceCorrectionCreated: 'invoice_correction_created',
   invoiceOfflineQueued: 'invoice_offline_queued',
+  invoiceMarkedPaid: 'invoice_marked_paid',
   expenseAdded: 'expense_added',
   ocrScanCompleted: 'ocr_scan_completed',
   contractorAdded: 'contractor_added',
@@ -84,6 +85,21 @@ export const ANALYTICS_EVENTS = {
 export type AnalyticsEventName =
   (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
 
+/**
+ * Zdarzenia lejka FaktWay (docs/analytics/lejek-faktway.md). Bramka zgody
+ * dokleja do nich kanał `source`, a surowe dane wejścia do właściwości osoby.
+ */
+export const FUNNEL_EVENTS: ReadonlySet<AnalyticsEventName> = new Set([
+  ANALYTICS_EVENTS.signupCompleted,
+  ANALYTICS_EVENTS.ksefConfigured,
+  ANALYTICS_EVENTS.firstInvoiceSent,
+  ANALYTICS_EVENTS.trialStarted,
+  ANALYTICS_EVENTS.paymentSucceeded,
+  ANALYTICS_EVENTS.subscriptionCanceled,
+  ANALYTICS_EVENTS.paymentChurn,
+  ANALYTICS_EVENTS.trialEnded,
+]);
+
 /** Wartości properties — proste typy, serializowalne do PostHog. */
 export type AnalyticsProperties = Record<
   string,
@@ -126,6 +142,7 @@ export const EVENT_CATEGORY: Record<AnalyticsEventName, AnalyticsCategory> = {
   invoice_rejected: 'engagement',
   invoice_correction_created: 'engagement',
   invoice_offline_queued: 'engagement',
+  invoice_marked_paid: 'engagement',
   expense_added: 'engagement',
   ocr_scan_completed: 'engagement',
   contractor_added: 'engagement',
@@ -146,7 +163,6 @@ export const EVENT_CATEGORY: Record<AnalyticsEventName, AnalyticsCategory> = {
   pwa_installed: 'engagement',
 
   trial_started: 'revenue',
-  trial_ended: 'revenue',
   checkout_started: 'revenue',
   checkout_completed: 'revenue',
   payment_succeeded: 'revenue',
@@ -161,6 +177,7 @@ export const EVENT_CATEGORY: Record<AnalyticsEventName, AnalyticsCategory> = {
 
   subscription_canceled: 'churn',
   payment_churn: 'churn',
+  trial_ended: 'churn',
   account_deletion_requested: 'churn',
   account_deleted: 'churn',
 };

@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Wpływy `/przeplywy` (plan Finora §2.4 pkt 14, etap E5; od E11 decyzja D-W):
- * `getInflows` liczy fakturę sprzedaży w dniu prawdziwej zapłaty, inaczej
- * w dniu terminu płatności (bez terminu — wystawienia). Tu brzegi odczytu:
- * dzień w Warszawie, strony, firma, nabywca, zaliczka + ROZ. Reguła D-W
- * (termin, FA(3), import, korekta, waluta) — `wplywy-wg-terminow.test.tsx`.
+ * Wpływy `/przeplywy` (plan Finora §2.4 pkt 14, etap E5): `getInflows` daje
+ * fakturę sprzedaży w dniu prawdziwej zapłaty, inaczej w dniu terminu płatności
+ * (bez terminu — wystawienia). Tu brzegi odczytu: dzień w Warszawie, strony,
+ * firma, nabywca, zaliczka + ROZ. Reguła dnia (termin, FA(3), import, korekta,
+ * waluta) — `wplywy-wg-terminow.test.tsx`; co jest wpływem —
+ * `wplywy-prawdziwe-pieniadze.test.tsx`.
  */
 
 const env = vi.hoisted(() => ({ value: 'production' as string }));
@@ -17,6 +18,8 @@ import { getInflows } from '@/lib/dashboard/inflows';
 import { orPredicate } from '@/lib/demo/fake-postgrest';
 import { paidThisMonth } from '@/lib/invoices/list-stats';
 import type { PageContext } from '@/lib/supabase/page-context';
+
+import { withJsonAliases } from '../helpers/json-alias';
 
 type Row = Record<string, unknown>;
 type Supabase = PageContext['supabase'];
@@ -122,7 +125,7 @@ function client(tables: Record<string, Row[]>, options: ClientOptions = {}) {
           });
           const start = range?.[0] ?? 0;
           const wanted = range ? range[1] - range[0] + 1 : matching.length;
-          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity));
+          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity)).map((r) => withJsonAliases(columns, r));
           const count = countRequested && !options.withholdCount ? matching.length : null;
           return Promise.resolve({ data: head ? null : data, count, error: null }).then(resolve, reject);
         },
@@ -167,9 +170,8 @@ describe('getInflows — brzegi odczytu wpływów', () => {
     expect(entries.map((e) => [e.date, e.amount])).toEqual([['2026-10-01', 300], ['2026-10-02', 100]]);
   });
 
-  it('same prawdziwe wpłaty faktur z FaktWay — ta sama suma co kafel „Opłacone” listy faktur', async () => {
-    // E11: kafel „Opłacone” liczy tylko `paid_at` faktur z FaktWay; przy takich danych obie drogi są zgodne.
-    // (Import z historii KSeF i termin bez zapłaty to wpływ według D-W, ale nie „Opłacone”.)
+  it('prawdziwe wpłaty — ta sama suma co kafel „Opłacone” listy faktur', async () => {
+    // Kafel „Opłacone” liczy `paid_at`, a wpływy prawdziwe pieniądze: obie drogi są zgodne.
     const rows = [
       paid(100, '2026-10-02T08:00:00Z'),
       paid(200.5, '2026-10-31T23:30:00Z'),
@@ -178,6 +180,27 @@ describe('getInflows — brzegi odczytu wpływów', () => {
     ];
     const { supabase } = sb({ invoices: rows });
     expect(sum(await getInflows(supabase, TENANT, OCTOBER))).toBe(await paidThisMonth(supabase, TENANT, NOW));
+  });
+
+  // Recenzja PR #358, pkt 2: kafel i Przepływy czytają tę samą drogą (`getInflows`), więc nawet z importem
+  // z FA(3) (`paid_at` puste) i korektami przed zapłatą oraz po niej mówią tę samą kwotę.
+  it('kafel „Opłacone” zgadza się z wpływami przy imporcie z FA(3) i korektach przed i po zapłacie', async () => {
+    const przed = paid(1000, '2026-10-12T10:00:00Z', { issue_date: '2026-09-10', payment_due_date: null });
+    const po = paid(1230, '2026-10-02T10:00:00Z');
+    const korekta = (parent: Row, gross: number, issued: string) => invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: gross, parent_invoice_id: parent.id,
+      issue_date: issued, payment_due_date: null,
+    });
+    const { supabase } = sb({ invoices: [
+      przed,
+      korekta(przed, -300, '2026-09-28'),
+      po,
+      korekta(po, -123, '2026-10-10'),
+      invoice({ origin: 'ksef_import', gross_total: 500, fa3_data: { parsed: { paidDate: '2026-10-03' } } }),
+    ] });
+    const wplywy = sum(await getInflows(supabase, TENANT, OCTOBER));
+    expect(wplywy).toBe(700 + 1107 + 500);
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(wplywy);
   });
 
   it.each([

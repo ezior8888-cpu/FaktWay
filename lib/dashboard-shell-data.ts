@@ -37,7 +37,8 @@ type MembershipTenantRow = {
 };
 
 /**
- * Jedno wywołanie `getUser()` na request RSC (deduplikacja z layoutem / listą org).
+ * Jedno wywołanie `getUser()` na request RSC (deduplikacja z layoutem / listą org,
+ * `getPageContext` i stronami, które potrzebują pełnego użytkownika).
  */
 export const getDashboardSessionUser = cache(async () => {
   const supabase = await createClient();
@@ -174,7 +175,7 @@ export async function getDashboardOrgSwitcherProps(): Promise<{
  * Dowód KSeF firmy `tenantId` — tej samej, z której strona czyta dane
  * (`getPageContext().tenantId`, PLAN-PRAWDZIWE-DANE §4 „Uwaga do F”), a nie
  * firmy z cookie. Z wierszy członkostwa użytkownika (`cache()` na żądanie —
- * layout już je przeczytał, więc bez nowego zapytania). `null`: firmy nie ma
+ * layout albo `getPageContext` już je przeczytał, więc bez nowego zapytania). `null`: firmy nie ma
  * w aktywnych członkostwach. Interpretuje go `lib/demo/tryb-danych.ts`.
  */
 export async function getTenantKsefProof(

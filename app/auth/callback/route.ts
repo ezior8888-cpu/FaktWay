@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { recordGoogleSignupIfNew } from '@/lib/analytics/funnel';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
 import { getTrustedAppOrigin } from '@/lib/auth/trusted-origin';
 import { createClient } from '@/lib/supabase/server';
@@ -24,8 +25,9 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) return redirect('/login?error=auth_callback_failed');
+    await recordGoogleSignupIfNew(data?.user);
     return redirect(next);
   } catch {
     return redirect('/login?error=auth_callback_failed');

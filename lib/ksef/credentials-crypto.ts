@@ -93,6 +93,18 @@ export function isCredentialsV2(blob: Buffer): boolean {
   return blob.length > V2_HEADER && blob.subarray(0, V2_MAGIC.length).equals(V2_MAGIC);
 }
 
+/**
+ * Czy blob jest w v2 i zaszyfrowany BIEŻĄCYM kluczem — tylko taki
+ * przeszyfrowanie może pominąć. Sama magia „KSC2” nie wystarcza: przy
+ * rotacji v2 zaszyfrowane kluczem z `_PREVIOUS` też ją ma, a po usunięciu
+ * starego klucza nie dałoby się go odczytać.
+ */
+export function isEncryptedWithCurrentKey(blob: Buffer): boolean {
+  if (!isCredentialsV2(blob)) return false;
+  const fingerprint = blob.subarray(V2_MAGIC.length, V2_MAGIC.length + FINGERPRINT_LENGTH);
+  return fingerprint.equals(currentKey().fingerprint);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // TYPY
 // ═══════════════════════════════════════════════════════════════

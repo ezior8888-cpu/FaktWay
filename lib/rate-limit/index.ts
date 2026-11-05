@@ -16,7 +16,11 @@ export type RateLimitBucket =
   | 'invoice_email'
   | 'invitation'
   | 'batch_pdf'
-  | 'ksef_certificate';
+  | 'ksef_certificate'
+  | 'passkey_login_options'
+  | 'passkey_login_verify'
+  | 'passkey_manage'
+  | 'ksef_inbox_check';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */
@@ -27,6 +31,13 @@ export interface RateLimitConfig {
   limit: number;
   /** Długość okna w sekundach. */
   windowSeconds: number;
+  /**
+   * Czy odmowa też dopisuje znacznik do okna. Domyślnie tak (dla większości kubełków odmowa ma
+   * kosztować, żeby brute-force nie opłacał się dalej). Przy `false` odmowa niczego nie dopisuje:
+   * kliknięcie w trakcie blokady jej nie wydłuża, a `retryAfter` jest czasem, po którym próba
+   * naprawdę przejdzie. Dla kubełków, w których klient jest uczciwym człowiekiem, a nie atakiem.
+   */
+  countDenied?: boolean;
 }
 
 export interface RateLimitResult {
@@ -40,6 +51,12 @@ export interface RateLimitResult {
    * liczyłaby osobno. Kto potrzebuje limitu wspólnego, traktuje flagę jak odmowę.
    */
   fallback?: boolean;
+  /**
+   * Tylko przy `allowed: true`. Zwraca tę jedną próbę do limitu, np. gdy nie powiodła się z winy
+   * kogoś innego niż klient (KSeF zwrócił 5xx). Idempotentny, nie rzuca: gdy zwrot się nie uda,
+   * próba zostaje zużyta, tak jak przed jego dodaniem.
+   */
+  refund?: () => Promise<void>;
 }
 
 /**
@@ -79,8 +96,12 @@ export async function checkRateLimit(
     const remaining = Math.max(0, config.limit - count);
 
     if (allowed) {
-      return { allowed: true, remaining, retryAfter: 0 };
+      return { allowed: true, remaining, retryAfter: 0, refund: () => removeRedisHit(key, member) };
     }
+
+    // Kubełek bez liczenia odmów: znacznik tej odmowy znika od razu. Gdy usunięcie się nie uda,
+    // zostaje jak zawsze (odmowa liczy się do okna), a limit dalej działa.
+    if (config.countDenied === false) await removeRedisHit(key, member);
 
     // Najstarszy timestamp w oknie wyznacza moment, w którym slot się zwolni.
     const oldest = (await redis.zrange(key, 0, 0, {
@@ -102,6 +123,15 @@ export async function checkRateLimit(
   }
 }
 
+/** Usuwa jeden znacznik z okna w Redisie. Nie rzuca: wywołuje się go po fakcie, a limit ma działać dalej. */
+async function removeRedisHit(key: string, member: string): Promise<void> {
+  try {
+    await getRedis().zrem(key, member);
+  } catch (err) {
+    console.error('[rate-limit] Redis error przy zwrocie próby:', err);
+  }
+}
+
 /** Okna w pamięci procesu: klucz → znaczniki czasu żądań w oknie. */
 const memoryWindows = new Map<string, number[]>();
 /** Górna granica kluczy — przy zalewie unikalnych IP najstarsze wypadają. */
@@ -112,7 +142,10 @@ function checkInMemory(config: RateLimitConfig): RateLimitResult {
   const now = Date.now();
   const windowStart = now - config.windowSeconds * 1000;
   const hits = (memoryWindows.get(key) ?? []).filter((t) => t > windowStart);
-  hits.push(now);
+  const full = hits.length >= config.limit;
+  // Odmowa bez liczenia: okno zostaje takie, jakie było (tylko odświeżamy jego miejsce w kolejce kluczy).
+  const record = !(full && config.countDenied === false);
+  if (record) hits.push(now);
   memoryWindows.delete(key);
   memoryWindows.set(key, hits);
   if (memoryWindows.size > MAX_MEMORY_KEYS) {
@@ -120,10 +153,21 @@ function checkInMemory(config: RateLimitConfig): RateLimitResult {
     if (oldest !== undefined) memoryWindows.delete(oldest);
   }
 
-  if (hits.length <= config.limit) {
-    return { allowed: true, remaining: config.limit - hits.length, retryAfter: 0, fallback: true };
+  if (!full) {
+    let refunded = false;
+    const refund = async () => {
+      if (refunded) return;
+      refunded = true;
+      const current = memoryWindows.get(key);
+      const index = current?.lastIndexOf(now) ?? -1;
+      if (index >= 0) current!.splice(index, 1);
+    };
+    return { allowed: true, remaining: config.limit - hits.length, retryAfter: 0, fallback: true, refund };
   }
-  const retryAfter = Math.max(1, Math.ceil((hits[0]! + config.windowSeconds * 1000 - now) / 1000));
+  // Domyślnie czekamy do wygaśnięcia najstarszego znacznika (jak zawsze). Bez liczenia odmów okno
+  // ma dokładnie `limit` znaczników, a miejsce zwalnia ten, po którego wygaśnięciu zostaje ich `limit - 1`.
+  const unlocking = (record ? hits[0] : hits[Math.max(0, hits.length - config.limit)]) ?? now;
+  const retryAfter = Math.max(1, Math.ceil((unlocking + config.windowSeconds * 1000 - now) / 1000));
   return { allowed: false, remaining: 0, retryAfter, fallback: true };
 }
 

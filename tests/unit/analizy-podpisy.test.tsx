@@ -142,13 +142,12 @@ describe('E4, E10: podpisy kart kosztów mówią, że to faktury z KSeF i wydatk
 describe('E4: podpisy kart sprzedaży', () => {
   const p = props({ invoices: [invoice('a')], invoice_line_items: [] });
 
-  // E11 (D-W): zastrzeżenie Z16 („wpłat jeszcze nie oznaczamy”) zastąpione założeniem nazwanym w podpisie.
-  it('Należności: „według terminów płatności”, krótsze od dawnego zastrzeżenia, pełne zdanie w dymku', async () => {
+  // Od 00158 klient oznacza zapłatę sam: podpis mówi, co liczymy, a dymek, jak zdjąć zapłaconą fakturę.
+  it('Należności: faktury bez oznaczonej zapłaty, pełne zdanie w dymku', async () => {
     const out = html(await sprzedaz.ReceivablesSlot(p));
-    expect(description(out)).toBe('Faktury sprzedaży · według terminów płatności');
-    expect(description(out).length).toBeLessThanOrEqual('Faktury z FaktWay · wpłat jeszcze nie oznaczamy'.length);
-    expect(out).toContain('title="Faktury sprzedaży z terminem płatności od dziś, bez potwierdzonej zapłaty — według terminów płatności. Termin, który minął, liczymy jako wpływ w Przepływach."');
-    expect(out).not.toMatch(/oznacz|nie potwierdzamy/);
+    expect(description(out)).toBe('Faktury z FaktWay bez oznaczonej zapłaty');
+    expect(out).toContain('title="Faktury z FaktWay bez oznaczonej zapłaty, bez importów i faktur skorygowanych. Gdy klient zapłaci, dotknij „Zapłacone” przy fakturze."');
+    expect(out).not.toMatch(/nie potwierdzamy/);
   });
 
   it('Przychody a koszty po stronie sprzedaży: ten sam podpis', async () => {

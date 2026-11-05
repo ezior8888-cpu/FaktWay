@@ -16,9 +16,9 @@ import { cn } from '@/lib/utils'
 /**
  * PLAN-PRAWDZIWE-DANE E6: „Nadchodzące rachunki” → „Spodziewane wpływy”
  * (faktury z terminem w 30 dni) z propsów; nazwa jest linkiem do faktury
- * tylko w trybie prawdziwym (E7 pkt 3). Opis danych (`note`: od E11
- * „według terminów płatności”) nie ma miejsca w podtytule — idzie do jego
- * dymku i do czytnika ekranu.
+ * tylko w trybie prawdziwym (E7 pkt 3). Opis danych (`note`: otwarte faktury
+ * bez oznaczonej zapłaty) nie ma miejsca w podtytule — idzie do jego dymku
+ * i do czytnika ekranu.
  */
 type Props = {
   title: string

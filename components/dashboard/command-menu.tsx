@@ -30,6 +30,28 @@ import {
 
 const DEBOUNCE_MS = 250;
 
+/*
+ * Na telefonie lupa stoi po prawej stronie paska, a miejsce przy menu zajmuje
+ * logo (poprawka Bartosza 03.11.2026). Paleta zostaje jedna, z jednym skrótem
+ * ⌘K, więc przycisk z drugiej strony paska otwiera ją zdarzeniem.
+ */
+const OPEN_EVENT = 'ff:command-menu-open';
+
+/** Przycisk z lupą na telefonie (`AppHeader`): otwiera tę samą paletę co ⌘K. */
+export function CommandMenuPhoneTrigger() {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="sm:hidden"
+      aria-label="Szukaj"
+      onClick={() => window.dispatchEvent(new Event(OPEN_EVENT))}
+    >
+      <RiSearchLine aria-hidden />
+    </Button>
+  );
+}
+
 type RemoteState =
   | { status: 'idle' }
   | { status: 'loading' }
@@ -80,6 +102,12 @@ export function CommandMenu() {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onOpenChange]);
 
+  useEffect(() => {
+    const onOpenRequest = () => onOpenChange(true);
+    window.addEventListener(OPEN_EVENT, onOpenRequest);
+    return () => window.removeEventListener(OPEN_EVENT, onOpenRequest);
+  }, [onOpenChange]);
+
   // Wyszukiwanie zdalne: debounce 250 ms + ochrona przed spóźnioną odpowiedzią.
   useEffect(() => {
     const id = ++requestId.current;
@@ -128,15 +156,6 @@ export function CommandMenu() {
         <RiSearchLine aria-hidden />
         <span className="text-muted-foreground text-sm">Szukaj lub przejdź…</span>
         <Kbd>⌘K</Kbd>
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="sm:hidden"
-        aria-label="Szukaj"
-        onClick={() => setOpen(true)}
-      >
-        <RiSearchLine aria-hidden />
       </Button>
       <CommandDialog
         open={open}

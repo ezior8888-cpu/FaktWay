@@ -87,7 +87,7 @@ function props(tables: Record<string, Row[]>, month = '2026-10') {
 }
 
 describe('karty analizy sprzedaży', () => {
-  it('z danymi: kafle, ostatnia faktura i należności według terminów płatności', async () => {
+  it('z danymi: kafle, ostatnia faktura i należności z zaległościami', async () => {
     const p = props({ invoices: [invoice('a')], invoice_line_items: [] });
     const stats = html(await sprzedaz.SalesStatsSlot(p));
     expect(stats).toContain('Sprzedano (netto)');
@@ -96,16 +96,15 @@ describe('karty analizy sprzedaży', () => {
     const recent = html(await sprzedaz.RecentSalesSlot(p));
     expect(recent).toContain('FV/a · 05.10.2026');
 
-    // E11 (D-W): termin 01.10 minął — zakładamy zapłatę w terminie, to już wpływ, nie zaległość.
-    // Należności to przyszły termin (20.10, po niedzieli 18.10 → „Do 30 dni”).
+    // D-W odwołane 02.11.2026: termin 01.10 minął, a wpłaty nie ma, więc to należność po terminie.
     const receivables = html(await sprzedaz.ReceivablesSlot(props({
       invoices: [invoice('a'), invoice('b', { payment_due_date: '2026-10-20' })],
     })));
-    expect(receivables).toContain('Ten tydzień');
-    expect(receivables).toContain('Do 30 dni');
+    expect(receivables).toContain('Do zapłaty');
+    expect(receivables).toContain('2460,00 zł · 2 faktury');
+    expect(receivables).toContain('Po terminie');
     expect(receivables).toContain('1230,00 zł · 1 faktura');
-    expect(receivables).not.toContain('Po terminie');
-    expect(receivables).not.toContain('Najstarsza zaległość');
+    expect(receivables).toContain('Najstarsza zaległość');
   });
 
   it('faktura w EUR zabiera karty sprzedaży z polską treścią, karty kosztów działają', async () => {

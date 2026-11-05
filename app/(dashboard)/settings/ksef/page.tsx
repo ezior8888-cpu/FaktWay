@@ -1,22 +1,24 @@
 import Link from 'next/link';
-import { RiGoogleLine, RiHistoryLine, RiLockLine, RiShieldCheckLine } from '@remixicon/react';
+import { RiGoogleLine, RiHistoryLine, RiShieldCheckLine } from '@remixicon/react';
 
-import { CertificateUpload } from '@/components/settings/certificate-upload';
-import { CompleteNipForm } from '@/components/settings/complete-nip-form';
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from '@/components/ui/field';
 import { formatSettingsDate } from '@/components/settings/finora/format-date';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
+import { ksefApplicationUrl } from '@/lib/ksef/application-url';
+import { configuredKsefEnvironment, hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 import { getPageContext } from '@/lib/supabase/page-context';
+
+import { CertificateStep } from './_components/certificate-step';
+import { ConditionsStep } from './_components/conditions-step';
+import { ConnectedStep } from './_components/connected-step';
+import { FilesStep } from './_components/files-step';
+import { deriveWizardStep, isConnected, needsReconfirmation, type WizardMfa } from './_components/wizard-model';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,56 +30,71 @@ const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:tex
 /**
  * Zakładka „KSeF” = Connected Accounts z Finory (`views/settings/
  * connected-accounts`): połączenie z KSeF jako wiersz instytucji
- * (`connected-institution-row.tsx`), certyfikat, historia faktur z KSeF
- * i logowanie przez Google. Banków u nas nie ma.
+ * (`connected-institution-row.tsx`), kreator podłączenia, historia faktur
+ * z KSeF i logowanie przez Google. Banków u nas nie ma.
  *
- * Decyzja Bartosza 22.10.2026: Magiczny import znika — po wgraniu
- * certyfikatu FaktWay sam pobiera historię z KSeF. Tu tylko o tym mówimy
- * i prowadzimy do postępu w Imporcie danych (tam też wstrzymanie).
+ * Kreator zastąpił formularz z dwoma polami pliku (FAKTWAY-1-0, sekcja 3
+ * pkt 1): krok liczy serwer (`wizard-model.ts`), a `?krok=` mówi tylko, czy
+ * klient ma już pliki z Aplikacji Podatnika. Ta sama droga służy odnowieniu.
+ *
+ * Decyzja Bartosza 22.10.2026: Magiczny import znika, po podłączeniu
+ * FaktWay sam pobiera historię z KSeF. Tu tylko o tym mówimy i prowadzimy do
+ * postępu w Imporcie danych (tam też wstrzymanie).
  */
-export default async function KsefSettingsPage() {
+export default async function KsefSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ krok?: string | string[] }>;
+}) {
+  const requested = (await searchParams).krok;
   const { supabase, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, { data: authUser }] = await Promise.all([
+  const [{ data: tenant }, user, mfaState] = await Promise.all([
     supabase
       .from('tenants')
-      .select('name, nip, has_ksef_credentials, ksef_certificate_expiry')
+      .select('name, nip, has_ksef_credentials, ksef_certificate_expiry, ksef_verified_at, ksef_verified_environment')
       .eq('id', tenantId)
       .single(),
-    supabase.auth.getUser(),
+    // Ten sam użytkownik co w `getPageContext` (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
+    getDashboardSessionUser(),
+    // Bez wyniku (błąd Auth) kreator pokazuje „spróbuj ponownie”, nie udaje, że 2FA jest.
+    getVerifiedMfaState(supabase).catch(() => null),
   ]);
 
-  // Sama flaga obecności — zaszyfrowany blob nie wychodzi do klienta (AUD-103).
+  // Sama flaga obecności: zaszyfrowany blob nie wychodzi do klienta (AUD-103).
   const hasCredentials = !!tenant?.has_ksef_credentials;
-  const hasNip = !!tenant?.nip?.trim();
+  // „Połączono” wymaga dowodu w środowisku aplikacji, tak jak Import danych i cron historii
+  // (`hasConfiguredKsefProof`). Certyfikat z innego środowiska albo ze starym znacznikiem
+  // niczego nie pobiera, więc klient ma go wgrać ponownie, a nie czytać, że jest dobrze.
+  const confirmed = hasConfiguredKsefProof(tenant?.ksef_verified_at, tenant?.ksef_verified_environment);
+  const connected = isConnected({ hasCredentials, confirmed });
+  const reconfirm = needsReconfirmation({ hasCredentials, confirmed });
+  const nip = tenant?.nip?.trim() ?? '';
+  const hasNip = nip.length > 0;
+  const isOwner = role === 'owner';
+  const mfa: WizardMfa = mfaState && mfaState.status !== 'unauthenticated' ? mfaState.status : 'unknown';
 
   // Tylko odczyt: czy konto ma tożsamość Google (logowanie „Zaloguj przez Google”).
-  const user = authUser?.user ?? null;
   const providers = Array.isArray(user?.app_metadata?.providers) ? (user.app_metadata.providers as unknown[]) : [];
   const hasGoogle =
     (user?.identities ?? []).some((identity) => identity.provider === 'google') || providers.includes('google');
 
-  // BUG-007: organizacja-szkic (pomiń NIP w onboardingu) — zamiast uploadu
-  // certyfikatu pokazujemy uzupełnienie NIP-u. Server action i tak odmawia
-  // uploadu przy pustym NIP (guard w uploadCertificateAction).
+  const step = deriveWizardStep({
+    hasNip,
+    isOwner,
+    mfa,
+    hasCredentials,
+    confirmed,
+    requested: typeof requested === 'string' ? requested : null,
+  });
+  const env = configuredKsefEnvironment();
+
+  // BUG-007: organizacja-szkic (pomiń NIP w onboardingu): zamiast reszty strony
+  // krok 1 kreatora prosi o uzupełnienie NIP-u. Akcja podłączenia i tak odmawia przy pustym NIP.
   if (!hasNip) {
     return (
       <FieldGroup>
-        <Alert className={AMBER_ALERT}>
-          <AlertTitle>Organizacja bez NIP-u</AlertTitle>
-          <AlertDescription className={AMBER_TEXT}>
-            Certyfikat KSeF jest przypisany do NIP-u firmy — bez niego nie
-            można go wgrać ani wysyłać faktur.
-          </AlertDescription>
-        </Alert>
-
-        <div>
-          <FieldLabel>Przypisz NIP do organizacji</FieldLabel>
-          <FieldDescription>
-            Wpisz NIP — dane firmy pobierzemy automatycznie z bazy GUS REGON.
-          </FieldDescription>
-        </div>
-        <CompleteNipForm />
+        <ConditionsStep hasNip={false} nip="" isOwner={isOwner} mfa={mfa} />
       </FieldGroup>
     );
   }
@@ -100,19 +117,21 @@ export default async function KsefSettingsPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-medium">KSeF</p>
-                <Badge className={hasCredentials ? BADGE_OK : BADGE_WARN}>
-                  {hasCredentials ? 'Skonfigurowano połączenie' : 'Brak certyfikatu'}
+                <Badge className={connected ? BADGE_OK : BADGE_WARN}>
+                  {connected ? 'Skonfigurowano połączenie' : reconfirm ? 'Wymaga potwierdzenia' : 'Brak certyfikatu'}
                 </Badge>
               </div>
               <p className="text-muted-foreground truncate text-xs">
-                NIP: <span className="font-mono">{tenant?.nip}</span>
+                NIP: <span className="font-mono">{nip}</span>
               </p>
               <p className="text-muted-foreground text-xs">
-                {hasCredentials
+                {connected
                   ? tenant?.ksef_certificate_expiry
                     ? `Certyfikat ważny do: ${formatSettingsDate(tenant.ksef_certificate_expiry)}`
                     : 'Certyfikat wgrany'
-                  : 'Wgraj certyfikat aby móc wysyłać faktury do KSeF'}
+                  : reconfirm
+                    ? 'Certyfikat wgrany, ale trzeba go potwierdzić ponownie'
+                    : 'Podłącz KSeF, aby móc wysyłać faktury'}
               </p>
             </div>
           </div>
@@ -121,31 +140,19 @@ export default async function KsefSettingsPage() {
 
       <Separator />
 
-      <div>
-        <FieldLabel>Wgrywanie certyfikatu</FieldLabel>
-        <FieldDescription>
-          Potrzebujesz certyfikatu KSeF typu 1 (uwierzytelnianie) — pobierz go
-          z Modułu Certyfikatów w Aplikacji Podatnika KSeF.
-        </FieldDescription>
-      </div>
-      <Alert role="note">
-        <RiLockLine aria-hidden />
-        <AlertDescription>
-          Certyfikat i klucz prywatny są szyfrowane AES-256-GCM przed zapisem
-          w bazie. Ich zmianę zatwierdza właściciel po weryfikacji dwuetapowej.
-        </AlertDescription>
-      </Alert>
-      {role === 'owner' ? (
-        <>
-          <FieldDescription>
-            Do zmiany certyfikatu potrzebujesz potwierdzonego logowania dwuetapowego.{' '}
-            <Link href="/settings/security">Ustaw 2FA</Link>
-          </FieldDescription>
-          <CertificateUpload />
-        </>
-      ) : (
-        <FieldDescription>Certyfikat KSeF może zmienić wyłącznie właściciel organizacji.</FieldDescription>
-      )}
+      {step === 'warunki' ? <ConditionsStep hasNip nip={nip} isOwner={isOwner} mfa={mfa} /> : null}
+      {step === 'certyfikat' ? (
+        <CertificateStep nip={nip} env={env} applicationUrl={ksefApplicationUrl(env)} />
+      ) : null}
+      {step === 'pliki' ? <FilesStep reconfirm={reconfirm} /> : null}
+      {step === 'polaczono' ? (
+        <ConnectedStep
+          name={tenant?.name ?? ''}
+          nip={nip}
+          validTo={tenant?.ksef_certificate_expiry ?? null}
+          isOwner={isOwner}
+        />
+      ) : null}
 
       <Separator />
 
@@ -157,17 +164,17 @@ export default async function KsefSettingsPage() {
             na bieżąco faktury wystawione poza FaktWay. Pobieranie możesz wstrzymać w Imporcie danych.
           </FieldDescription>
         </FieldContent>
-        {hasCredentials ? (
+        {connected && step !== 'polaczono' ? (
           <Link href="/import-danych" className={buttonVariants({ variant: 'outline' })}>
             <RiHistoryLine aria-hidden />
             Zobacz postęp
           </Link>
         ) : null}
       </Field>
-      {hasCredentials ? null : (
+      {connected ? null : (
         <Alert role="note" className={AMBER_ALERT}>
           <AlertDescription className={AMBER_TEXT}>
-            Aby FaktWay pobrał historię, najpierw wgraj certyfikat powyżej — KSeF wymaga
+            Aby FaktWay pobrał historię, najpierw podłącz KSeF kreatorem powyżej: KSeF wymaga
             uwierzytelnienia przy pobieraniu historii.
           </AlertDescription>
         </Alert>

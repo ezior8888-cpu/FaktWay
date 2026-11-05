@@ -39,6 +39,7 @@ vi.mock('@/app/(auth)/login/actions', () => ({ signOut: async () => {} }));
 vi.mock('@/app/actions/organizations', () => ({ setActiveOrganizationAction: mocks.switchOrg }));
 vi.mock('@/components/dashboard/command-menu', () => ({
   CommandMenu: () => <button type="button">Szukaj lub przejdź…</button>,
+  CommandMenuPhoneTrigger: () => <button type="button" aria-label="Szukaj" />,
 }));
 
 const { AppHeader } = await import('@/components/dashboard/app-header');
@@ -72,7 +73,11 @@ describe('AppHeader — pasek górny 1:1 z Finory', () => {
     expect(html).toContain('data-slot="separator"');
     expect(html).toContain('Szukaj lub przejdź…');
     expect(html).not.toContain('<h1');
-    expect(html).not.toMatch(/FaktWay|Fakt<\/span>/);
+    // Telefon (poprawka Bartosza 03.11.2026): logo zamiast lupy, tylko poniżej `sm`.
+    // Od `sm` w górę pasek dalej nie ma wordmarku.
+    const phoneLogo = /<a[^>]*aria-label="FaktWay, pulpit"[^>]*>[\s\S]*?<\/a>/;
+    expect(html.match(phoneLogo)?.[0]).toMatch(/class="[^"]*\bsm:hidden/);
+    expect(html.replace(phoneLogo, '')).not.toMatch(/FaktWay|Fakt<\/span>/);
   });
 
   it('prawa strona w kolejności Finory: dzwonek z kropką, motyw, zębatka do ustawień, profil', () => {
@@ -83,6 +88,11 @@ describe('AppHeader — pasek górny 1:1 z Finory', () => {
     expect(bell).toBeGreaterThan(-1);
     expect(gear).toBeGreaterThan(bell);
     expect(profile).toBeGreaterThan(gear);
+    // Telefon: lupa po prawej przed dzwonkiem, zębatka tylko od `sm` (Ustawienia są w menu profilu).
+    const search = html.indexOf('aria-label="Szukaj"');
+    expect(search).toBeGreaterThan(-1);
+    expect(search).toBeLessThan(bell);
+    expect(html.match(/<a[^>]*aria-label="Ustawienia"[^>]*>/)?.[0]).toContain('max-sm:hidden');
     // Dzwonek i profil są prawdziwymi wyzwalaczami menu (props wyzwalacza dochodzą do przycisku).
     expect(html).toMatch(/<button[^>]*aria-haspopup="menu"[^>]*aria-label="Powiadomienia"|<button[^>]*aria-label="Powiadomienia"[^>]*aria-haspopup="menu"/);
     // Czerwona kropka na dzwonku. Finora: `top-1.75 right-2` wobec 32-pikselowego przycisku;

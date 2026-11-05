@@ -172,7 +172,7 @@ afterEach(() => {
 
 describe('A4b (00137): korekta zapisuje na wierszu dane zdarzenia wysyłki', () => {
   it.each(VARIANTS)('%s: „Zapisz i wyślij” — special_data równe correctionData ze zlecenia', async (_name, extra) => {
-    const result = await saveAndSendCorrectionAction(payload(extra));
+    const result = await saveAndSendCorrectionAction(payload(extra), TENANT);
     expect(result).toMatchObject({ success: true, invoiceId: 'inv-1' });
     expect(st.events).toHaveLength(1);
     const correctionData = st.events[0]?.data.correctionData;
@@ -186,10 +186,10 @@ describe('A4b (00137): korekta zapisuje na wierszu dane zdarzenia wysyłki', () 
   });
 
   it.each(VARIANTS)('%s: szkic zapisuje ten sam kształt co „Zapisz i wyślij”', async (_name, extra) => {
-    await saveAndSendCorrectionAction(payload(extra));
+    await saveAndSendCorrectionAction(payload(extra), TENANT);
     const sent = st.inserted[0]?.special_data;
     st.inserted = [];
-    const draft = await saveCorrectionDraftAction(payload(extra));
+    const draft = await saveCorrectionDraftAction(payload(extra), TENANT);
     expect(draft).toEqual({ success: true, invoiceId: 'inv-1' });
     expect(st.inserted[0]?.special_data).toBeDefined();
     expect(plain(st.inserted[0]?.special_data)).toEqual(plain(sent));
@@ -201,7 +201,7 @@ describe('A4b (00137): korekta zapisuje na wierszu dane zdarzenia wysyłki', () 
       code: '23514',
       message: 'new row for relation "invoices" violates check constraint "invoices_special_data_shape"',
     };
-    const result = await saveAndSendCorrectionAction(payload(VARIANTS[0]![1]));
+    const result = await saveAndSendCorrectionAction(payload(VARIANTS[0]![1]), TENANT);
     expect(result.success).toBe(false);
     const error = (result as { error: string }).error;
     expect(error).toContain('FK/1/10/2026');

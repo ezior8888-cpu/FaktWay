@@ -38,7 +38,7 @@ vi.mock('@/lib/supabase/auth-context', () => {
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { searchCommandPaletteAction } from '@/app/actions/command-search';
-import { CommandMenu } from '@/components/dashboard/command-menu';
+import { CommandMenu, CommandMenuPhoneTrigger } from '@/components/dashboard/command-menu';
 import { buildPaletteNavEntries, normalizeSearchQuery } from '@/lib/command-palette';
 import { dashboardNavItems, dashboardSettingsNavItem } from '@/lib/dashboard-nav-config';
 import { ActionAuthError } from '@/lib/supabase/auth-context';
@@ -214,6 +214,11 @@ describe('CommandMenu', () => {
     expect(html).toContain('Szukaj lub przejdź…');
     expect(html).toContain('<kbd');
     expect(html).toContain('⌘K');
+  });
+
+  it('na telefonie lupa jest osobnym przyciskiem po prawej stronie paska (03.11.2026)', () => {
+    const html = renderToStaticMarkup(<CommandMenuPhoneTrigger />);
     expect(html).toContain('aria-label="Szukaj"');
+    expect(html).toMatch(/class="[^"]*\bsm:hidden/);
   });
 });

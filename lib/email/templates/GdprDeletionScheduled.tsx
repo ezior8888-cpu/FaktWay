@@ -98,7 +98,7 @@ export default function GdprDeletionScheduled({
             Masz pytania? Napisz: <strong>{supportEmail}</strong>
           </Text>
           <Text style={footerStyle}>
-            FaktWay — faktury KSeF dla mikrofirm. Wiadomość transakcyjna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość transakcyjna.
           </Text>
         </Container>
       </Body>

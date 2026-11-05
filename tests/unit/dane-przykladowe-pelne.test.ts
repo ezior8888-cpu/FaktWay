@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * Pulpitu i Przepływów (§6.1, §6.2). Każdy loader ma dać pełny, niepusty
  * wynik („pełna okazałość” przed weryfikacją KSeF), a liczby mają być
  * spójne jak w prawdziwej firmie usługowej: zysk < przychód, koszty <
- * przychód, wpływy według terminów płatności (E11, D-W — bez oznaczonych
+ * przychód, wpływy według terminów płatności (`przykladoweWplywy` — bez oznaczonych
  * wpłat), daty względem `now` (strefa Warszawa). Od poprawki Bartosza
  * 23.10.2026 miesiące mają kształt wykresów Finory (zob. nagłówek
  * `lib/demo/dane-przykladowe.ts`) — dawne widełki 25–45 tys. zł i 30–40%
@@ -27,6 +27,7 @@ const {
   buildCashFlowChart,
   cashFlowOperations,
   monthFlows,
+  przykladoweWplywy,
   nextMonthStart,
   receivedInflows,
   topCashFlowSources,
@@ -160,7 +161,7 @@ describe('T4 Pulpit: loadery kart na atrapie dają pełne wyniki', () => {
     expect(await readTenantBusinessStart(demo(), T)).toBe('2021-10-01');
   });
 
-  // E11 (D-W): Należności to przyszłe terminy (`inflowTerms`), nie faktury po terminie.
+  // Atrapa bez wpłat: Należności to przyszłe terminy (`inflowTerms`), nie faktury po terminie.
   it('Należności: wszystkie trzy kolumny terminów, suma kolumn = suma karty', async () => {
     const today = todayInWarsaw(NOW);
     const terms = inflowTerms(await getInflows(demo(), T, { from: today }), today);
@@ -195,7 +196,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('wykres: 7 tygodni, 7 miesięcy z wpłatami i kosztami, lata od pierwszego z danymi', async () => {
     const sb = demo();
-    const chart = buildCashFlowChart(await getInflows(sb, T, years), await getCostsWithKsefPurchases(sb, T, years), today);
+    const chart = buildCashFlowChart(przykladoweWplywy(await getInflows(sb, T, years), today), await getCostsWithKsefPurchases(sb, T, years), today);
     expect(chart.week).toHaveLength(7);
     expect(chart.week.some((b) => b.inflow > 0)).toBe(true);
     expect(chart.week.some((b) => b.outflow > 0)).toBe(true);
@@ -208,7 +209,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('kafle miesiąca: „Wpłynęło” ma krzywą z kilku dni, ostatni punkt = kwota kafla; koszty miesiąca', async () => {
     const sb = demo();
-    const { inflow, outflow } = monthFlows(await getInflows(sb, T, recent), await getCostsWithKsefPurchases(sb, T, recent), today);
+    const { inflow, outflow } = monthFlows(przykladoweWplywy(await getInflows(sb, T, recent), today), await getCostsWithKsefPurchases(sb, T, recent), today);
     expect(inflow.amount).toBeGreaterThan(0);
     expect(inflow.changePct).not.toBeNull();
     expect(new Set(inflow.daily.map((p) => p.value)).size).toBeGreaterThanOrEqual(3);
@@ -219,7 +220,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('źródła: co najmniej 5 po każdej stronie, malejąco', async () => {
     const sb = demo();
-    const inflows = await getInflows(sb, T, recent);
+    const inflows = przykladoweWplywy(await getInflows(sb, T, recent), today);
     const costs = await getCostsWithKsefPurchases(sb, T, recent);
     const wplywy = topCashFlowSources(inflows, [], today);
     const wydatki = topCashFlowSources([], costs, today);
@@ -240,7 +241,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('operacje: co najmniej 8 w 12 miesiącach (dwie strony tabeli), od najnowszej', async () => {
     const sb = demo();
-    const ops = cashFlowOperations(await getInflows(sb, T, recent), await getCostsWithKsefPurchases(sb, T, recent), today);
+    const ops = cashFlowOperations(przykladoweWplywy(await getInflows(sb, T, recent), today), await getCostsWithKsefPurchases(sb, T, recent), today);
     expect(ops.length).toBeGreaterThanOrEqual(8);
     expect(ops.some((o) => o.direction === 'in')).toBe(true);
     expect(ops.some((o) => o.direction === 'out' && o.status === 'pending')).toBe(true);
@@ -296,7 +297,7 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
     }
   });
 
-  // E11 (D-W): klient nic nie oznacza — demo bez `paid_at`, jak prawdziwa firma po weryfikacji.
+  // Pliki `lib/demo` bez zmian: atrapa nie ma `paid_at`, miniony termin gra rolę wpłaty (`przykladoweWplywy`).
   it('faktury: bez oznaczonych wpłat, status jak wyzwalacz 00073 dla wpłaty 0, vat_total = brutto − netto', async () => {
     const invoices = await wszystkie(demo(), 'invoices');
     const today = todayInWarsaw(NOW);
@@ -358,7 +359,7 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
       expect(clients).toHaveLength(5);
       expect(clients.every((c) => c.changePct !== null)).toBe(true);
 
-      const inflows = await getInflows(sb, T, recent);
+      const inflows = przykladoweWplywy(await getInflows(sb, T, recent), today);
       // Okno do końca miesiąca ma też terminy po dziś — karty liczą tylko wpływy do dziś.
       expect(receivedInflows(inflows, today).length).toBeGreaterThan(0);
       expect(topCashFlowSources(inflows, [], today).length).toBe(5);

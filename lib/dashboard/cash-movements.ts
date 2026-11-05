@@ -8,16 +8,16 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Czyste agregaty kart `/przeplywy` (plan Finora §5 P2) na wynikach
- * `getInflows` (wpływy według terminów płatności, E11 / D-W) i
- * `getCostsWithKsefPurchases` (koszty brutto: wydatki i faktury zakupu
- * z KSeF bez wydatku, E10). Bez własnego odczytu bazy: każda karta liczy
+ * `getInflows` i `getCostsWithKsefPurchases` (koszty brutto: wydatki i faktury
+ * zakupu z KSeF bez wydatku, E10). Bez własnego odczytu bazy: każda karta liczy
  * z tych samych zbiorów, więc liczby się nie rozjeżdżają.
  *
- * Wpływ = faktura sprzedaży w dniu `InflowEntry.date` (prawdziwa zapłata,
- * termin płatności albo dzień wystawienia). Wykres, kafel, źródła i operacje
- * liczą tylko wpływy, które już były (`receivedInflows`: dzień ≤ dziś, bez
- * terminu dziś) — termin od dziś to jeszcze nie wpływ, tylko „Spodziewane
- * wpływy” (`upcomingInflows`).
+ * Wpływ = prawdziwe pieniądze (`receivedInflows`, FaktWay 1.0 §3 pkt 3): faktura
+ * zapłacona w dniu zapłaty (kwota po korektach in minus wystawionych do tego dnia,
+ * `getInflows`) i korekta in minus wystawiona po zapłacie, w dniu jej wystawienia.
+ * Wykres, kafel, źródła i operacje liczą tylko je. Otwarta faktura
+ * z terminem od dziś to „Spodziewane wpływy” (`upcomingInflows`), a z minionym
+ * terminem należność po terminie, nie wpływ.
  * Wydatek = brutto dokumentu kosztowego (`CostEntry.outflow`) w dniu jego
  * wystawienia — koszty nie mają w bazie dnia zapłaty (N7).
  *
@@ -95,7 +95,7 @@ export interface FlowBucket {
   inflow: number;
   /** Wydatki brutto, PLN. */
   outflow: number;
-  /** Liczba wpływów (faktur) w okresie — 0 znaczy „brak faktur z terminem”, nie „0 zł”. */
+  /** Liczba wpływów (faktur) w okresie: 0 znaczy „brak oznaczonych wpłat”, nie „0 zł”. */
   inflowCount: number;
 }
 
@@ -120,14 +120,28 @@ interface Movement {
 }
 
 /**
- * Wpływy, które już były: dzień wpływu ≤ dziś (D-W), poza wpływami
- * spodziewanymi (`isExpectedInflow` — termin od dziś bez prawdziwej
- * zapłaty). Termin dziś jest jeszcze w Spodziewanych wpływach i Należnościach,
- * na wykres i do kafla trafia od jutra — jedna faktura nigdy nie jest
- * jednocześnie wpływem, który był, i spodziewanym.
+ * Wpływy, czyli prawdziwe pieniądze do dziś: zapłata (`paid`) albo korekta in
+ * minus wystawiona po zapłacie faktury (`correction`; korekta wystawiona do dnia
+ * zapłaty siedzi już w kwocie `paid`). Faktura bez wpłaty nie jest wpływem,
+ * nawet gdy jej termin minął (D-W odwołane 02.11.2026), więc jedna faktura nigdy
+ * nie jest jednocześnie wpływem i spodziewanym.
  */
 export function receivedInflows(inflows: readonly InflowEntry[], today: string): InflowEntry[] {
-  return inflows.filter((i) => i.date <= today && !isExpectedInflow(i, today));
+  return inflows.filter((i) => (i.basis === 'paid' || i.basis === 'correction') && i.date <= today);
+}
+
+/**
+ * Tylko tryb `przyklad`. Atrapa bazy (`lib/demo`) nie ma wpłat, a demo ma pokazać
+ * kartom pełną okazałość, więc w firmie-atrapie miniony termin gra rolę wpłaty:
+ * te same dni i kwoty, co zawsze, teraz jako `paid` (termin dziś i później zostają
+ * spodziewane). Prawdziwa firma nigdy tędy nie idzie: dla niej termin to nie pieniądze.
+ */
+export function przykladoweWplywy(inflows: readonly InflowEntry[], today: string): InflowEntry[] {
+  return inflows.map((i) => {
+    if (i.basis === 'paid' || i.basis === 'correction') return i;
+    if (i.date > today || isExpectedInflow(i, today)) return i;
+    return { ...i, basis: i.amount < 0 ? 'correction' as const : 'paid' as const, outstanding: 0 };
+  });
 }
 
 function movementsOf(inflows: readonly InflowEntry[], costs: readonly CostEntry[]): Movement[] {
@@ -396,10 +410,10 @@ export interface UpcomingInflow {
 export const UPCOMING_DAYS = 30;
 
 /**
- * Faktury sprzedaży z terminem od dziś do dziś + `days` włącznie i bez
- * prawdziwej zapłaty (`isExpectedInflow`, D-W), najbliższy termin pierwszy.
- * Termin, który minął, to już wpływ (zakładamy zapłatę w terminie), a faktura
- * bez terminu wpływa w dniu wystawienia — żadna z nich tu nie trafia.
+ * Otwarte faktury sprzedaży z terminem od dziś do dziś + `days` włącznie
+ * (`isExpectedInflow`), najbliższy termin pierwszy. Termin, który minął, to
+ * należność po terminie, a faktura bez terminu nie mówi, kiedy spodziewać się
+ * pieniędzy, więc żadna z nich tu nie trafia.
  */
 export function upcomingInflows(
   inflows: readonly InflowEntry[],
@@ -430,12 +444,12 @@ export function upcomingInflows(
 
 /**
  * Wpływ: „paid” — prawdziwa zapłata (`paid_at` albo data zapłaty z FA(3)),
- * „due” — według terminu płatności, „issued” — faktura bez terminu, według
- * dnia wystawienia (E11, D-W). Wydatek „reviewed” / „pending” (opisany albo
- * do akceptacji); faktura zakupu z KSeF bez wydatku „ksef” — nie ma jej
- * w Wydatkach, więc nie jest ani zatwierdzona, ani do akceptacji (E10).
+ * „correction” — korekta in minus wystawiona po zapłacie faktury. Wydatek „reviewed” /
+ * „pending” (opisany albo do akceptacji); faktura zakupu z KSeF bez wydatku
+ * „ksef” — nie ma jej w Wydatkach, więc nie jest ani zatwierdzona, ani do
+ * akceptacji (E10).
  */
-export type OperationStatus = 'paid' | 'due' | 'issued' | 'reviewed' | 'pending' | 'ksef';
+export type OperationStatus = 'paid' | 'correction' | 'reviewed' | 'pending' | 'ksef';
 
 export interface CashFlowOperation {
   /** Unikalny w liście: `in:<id faktury>` albo `out:<id wydatku lub faktury zakupu>`. */
@@ -479,7 +493,7 @@ export function cashFlowOperations(
       nip: i.buyerNip,
       reference: i.internalNumber,
       category: INFLOW_CATEGORY[i.invoiceKind ?? ''] ?? 'Sprzedaż',
-      status: i.basis,
+      status: i.basis === 'correction' ? 'correction' : 'paid',
       amount: i.amount,
       href: `/invoices/${i.id}`,
     })),

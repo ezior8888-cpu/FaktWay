@@ -27,8 +27,9 @@ export function fakeSupabase(db: MemoryDb) {
     from(name: string) {
       db.touched.push(name);
       const filters: Array<(r: Row) => boolean> = [];
-      let op: 'select' | 'insert' | 'update' | 'delete' = 'select';
+      let op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
       let payload: Row | Row[] | null = null;
+      let conflictKey = 'id';
       let head = false;
       let withCount = false;
       let byId = false;
@@ -38,6 +39,20 @@ export function fakeSupabase(db: MemoryDb) {
         await new Promise((r) => setTimeout(r, 0));
         const failure = db.failures[`${name}:${op}`];
         if (failure) return { data: null, count: null, error: failure };
+        if (op === 'upsert') {
+          const row = payload as Row;
+          const hit = rows().find((r) => r[conflictKey] === row[conflictKey]);
+          if (hit) {
+            Object.assign(hit, row);
+            return { data: [hit], count: null, error: null };
+          }
+          const created = {
+            id: `00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`,
+            ...row,
+          };
+          rows().push(created);
+          return { data: [created], count: null, error: null };
+        }
         const hits = rows().filter((r) => filters.every((f) => f(r)));
         if (byId) hits.sort((a, b) => String(a.id).localeCompare(String(b.id)));
         if (op === 'insert') {
@@ -75,6 +90,24 @@ export function fakeSupabase(db: MemoryDb) {
           filters.push((r) => String(r[k]) <= v);
           return q;
         },
+        // `is` tylko dla null (PostgREST `is.null`), brak klucza liczy się jak NULL.
+        is: (k: string, v: null) => {
+          filters.push((r) => (r[k] ?? null) === v);
+          return q;
+        },
+        // `gt`: liczby (kwoty) tylko dla liczb; teksty (daty ISO) jak dotąd leksykograficznie,
+        // a brak wartości (kolumna z `DEFAULT now()` w bazie, której atrapa nie ustawia)
+        // przechodzi: na tym stoją testy wyzwań WebAuthn (`expires_at`).
+        gt: (k: string, v: number | string) => {
+          filters.push((r) =>
+            typeof v === 'number' ? typeof r[k] === 'number' && r[k] > v : String(r[k]) > v,
+          );
+          return q;
+        },
+        lt: (k: string, v: string) => {
+          filters.push((r) => r[k] != null && String(r[k]) < v);
+          return q;
+        },
         in: (k: string, vs: unknown[]) => {
           filters.push((r) => vs.includes(r[k]));
           return q;
@@ -99,6 +132,12 @@ export function fakeSupabase(db: MemoryDb) {
         update: (p: Row) => {
           op = 'update';
           payload = p;
+          return q;
+        },
+        upsert: (p: Row, opts?: { onConflict?: string }) => {
+          op = 'upsert';
+          payload = p;
+          conflictKey = opts?.onConflict ?? 'id';
           return q;
         },
         delete: () => {

@@ -12,6 +12,7 @@ import {
   cashFlowOperations,
   monthFlows,
   nextMonthStart,
+  przykladoweWplywy,
   topCashFlowSources,
   upcomingInflows,
   yearsWindowStart,
@@ -64,14 +65,14 @@ import UpcomingBillsCard from './widget-upcoming-bills';
  * wpływy i koszty OSOBNO (strażnik jednego źródła nie zabiera kafla
  * drugiego), każde w dwóch oknach — 12 miesięcy (kafle, źródła, operacje,
  * tabela) i 5 lat (wykres, zakładka „Rocznie”); React `cache()` — jedno
- * zapytanie na żądanie. Wpływy według terminów płatności (E11, D-W): okno
- * wpływów nie ma końca, więc ten sam odczyt 12 miesięcy daje też przyszłe
- * terminy do „Spodziewanych wpływów”; karty „do dziś” odcinają je same
- * (`receivedInflows` w `cash-movements`).
+ * zapytanie na żądanie. Okno wpływów nie ma końca, więc ten sam odczyt
+ * 12 miesięcy daje też przyszłe terminy do „Spodziewanych wpływów”; karty
+ * wpływów biorą same prawdziwe pieniądze (`receivedInflows` w `cash-movements`).
  *
  * Oba tryby idą tymi samymi slotami: w trybie `przyklad` `supabase` to
  * atrapa bazy (`kontekstDanych`), w pozostałych — sesja klienta (RLS).
- * Tryb decyduje tylko o linkach wierszy i tekście pustego stanu.
+ * Tryb decyduje o linkach wierszy, tekście pustego stanu i o tym, że atrapa
+ * bez wpłat liczy miniony termin jak wpłatę (`przykladoweWplywy`).
  */
 
 export interface PrzeplywySlotProps {
@@ -100,23 +101,31 @@ function movementsRange(nowIso: string, span: Span) {
 }
 
 /** Wpływy od początku okna, bez końca (przyszłe terminy też — Spodziewane wpływy). */
-const loadInflows = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
-  getInflows(supabase, tenantId, { from: movementsRange(nowIso, span).from }));
+const loadInflows = cache(async (
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  nowIso: string,
+  span: Span,
+  tryb: TrybDanych,
+) => {
+  const entries = await getInflows(supabase, tenantId, { from: movementsRange(nowIso, span).from });
+  return tryb === 'przyklad' ? przykladoweWplywy(entries, todayInWarsaw(new Date(nowIso))) : entries;
+});
 
 /** E10 (D-K): koszty = faktury zakupu z KSeF + wydatki spoza KSeF (KPiR bez zmian). */
 const loadCosts = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
   getCostsWithKsefPurchases(supabase, tenantId, movementsRange(nowIso, span)));
 
-async function loadMovements(supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) {
+async function loadMovements(supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span, tryb: TrybDanych) {
   const [inflows, costs] = await Promise.all([
-    loadInflows(supabase, tenantId, nowIso, span),
+    loadInflows(supabase, tenantId, nowIso, span, tryb),
     loadCosts(supabase, tenantId, nowIso, span),
   ]);
   return { inflows, costs, today: todayInWarsaw(new Date(nowIso)) };
 }
 
-const loadOperations = cache(async (supabase: PageContext['supabase'], tenantId: string, nowIso: string) => {
-  const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+const loadOperations = cache(async (supabase: PageContext['supabase'], tenantId: string, nowIso: string, tryb: TrybDanych) => {
+  const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent', tryb);
   return cashFlowOperations(inflows, costs, today);
 });
 
@@ -175,7 +184,7 @@ const KOLORY_TERMINOW = [
 
 async function WykresKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Przepływy pieniężne', className, async () => {
-    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'years');
+    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'years', tryb);
     const dane = wykresProps(buildCashFlowChart(inflows, costs, today), tryb);
     return (
       <CashFlowCard
@@ -216,17 +225,12 @@ async function PierscienKarta({ supabase, tenantId, nowIso, tryb, className }: S
   });
 }
 
-/**
- * Tytuł kafla wpływów (recenzja 2): nie „Wpłynęło” — klient nic nie oznacza
- * (D-W), więc kwota to wpływy według terminów płatności, nie potwierdzone
- * pieniądze. Założenie w nawiasie jak „(brutto)” w kaflu kosztów obok;
- * mieści się w szerokości podpisu „wobec poprzedniego miesiąca” (ta sama linia).
- */
-const TYTUL_WPLYWOW = 'Wpływy w tym miesiącu (wg terminów)';
+/** Tytuł kafla wpływów: kwota to prawdziwe pieniądze, oznaczone wpłaty (D-W odwołane 02.11.2026). */
+const TYTUL_WPLYWOW = 'Wpłynęło w tym miesiącu';
 
 async function WplywyKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte(TYTUL_WPLYWOW, className, async () => {
-    const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
+    const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent', tryb);
     const today = todayInWarsaw(new Date(nowIso));
     const flow = monthFlows(inflows, [], today).inflow;
     return (
@@ -262,7 +266,7 @@ async function KosztyKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, cla
 
 async function ZrodlaKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Największe źródła przepływów', className, async () => {
-    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent', tryb);
     const dane = zrodlaProps(topCashFlowSources(inflows, costs, today), tryb);
     return (
       <TopCashFlowSourcesCard
@@ -273,6 +277,7 @@ async function ZrodlaKarta({ supabase, tenantId, nowIso, tryb, className }: Slot
           iconClassName: KOLORY_ZRODEL[i],
         }))}
         empty={dane.empty}
+        emptyLink={dane.emptyLink}
         menuItems={[ODSWIEZ, { label: 'Kontrahenci', href: '/contractors' }]}
         className={className}
       />
@@ -282,7 +287,7 @@ async function ZrodlaKarta({ supabase, tenantId, nowIso, tryb, className }: Slot
 
 async function SpodziewaneKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Spodziewane wpływy', className, async () => {
-    const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
+    const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent', tryb);
     const upcoming = upcomingInflows(inflows, todayInWarsaw(new Date(nowIso)));
     const dane = wplywySpodziewaneProps(upcoming.items, tryb);
     return (
@@ -301,7 +306,7 @@ async function SpodziewaneKarta({ supabase, tenantId, nowIso, tryb, className }:
 
 async function AktywnoscKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Ostatnia aktywność', className, async () => {
-    const dane = aktywnoscProps((await loadOperations(supabase, tenantId, nowIso)).slice(0, 5), tryb);
+    const dane = aktywnoscProps((await loadOperations(supabase, tenantId, nowIso, tryb)).slice(0, 5), tryb);
     return (
       <RecentActivityCard
         title="Ostatnia aktywność"
@@ -311,6 +316,7 @@ async function AktywnoscKarta({ supabase, tenantId, nowIso, tryb, className }: S
           iconClassName: KOLORY_AKTYWNOSCI[i],
         }))}
         empty={dane.empty}
+        emptyLink={dane.emptyLink}
         menuItems={[ODSWIEZ, { label: 'Wydatki', href: '/expenses' }]}
         className={className}
       />
@@ -320,7 +326,7 @@ async function AktywnoscKarta({ supabase, tenantId, nowIso, tryb, className }: S
 
 async function OperacjeKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Wszystkie operacje', className, async () => {
-    const dane = tabelaProps(await loadOperations(supabase, tenantId, nowIso), tryb);
+    const dane = tabelaProps(await loadOperations(supabase, tenantId, nowIso, tryb), tryb);
     return (
       <Card className={cn('py-0 shadow-none', className)}>
         <TransactionDatatable key={tenantId} data={dane.rows} emptyMessage={dane.empty} />

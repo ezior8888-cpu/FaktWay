@@ -17,9 +17,9 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'FaktWay vs inFakt 2026 — gross invoices, OCR AI i cennik',
+  title: 'FaktWay vs inFakt 2026: gross invoices, odczyt dokumentów i cennik',
   description:
-    'Porównanie FaktWay z inFakt: faktury brutto, limity AI-OCR, pakiety cenowe, KSeF 2.0, mobile i migracja. Dla mikrofirm i freelancerów.',
+    'Porównanie FaktWay z inFakt: faktury brutto, limity odczytu dokumentów, pakiety cenowe, KSeF 2.0, telefon i migracja. Dla mikrofirm i freelancerów.',
 };
 
 const COMPARISON_ROWS = [
@@ -38,48 +38,48 @@ const COMPARISON_ROWS = [
   {
     category: 'KSeF 2026',
     feature: 'Tryb Offline24 (awarie MF)',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const, note: 'wstrzymany, ponawiamy wysyłkę' },
     competitor: { status: 'partial' as const, note: 'ograniczony' },
   },
   {
     category: 'Faktury i dokumenty',
-    feature: 'Faktury gross (brutto) kosztowe — pełny flow',
-    ksefSaas: { status: 'yes' as const },
+    feature: 'Faktury gross (brutto) kosztowe',
+    ksefSaas: { status: 'partial' as const, note: 'odczyt brutto i VAT ze zdjęcia' },
     competitor: { status: 'no' as const, note: 'brak dedykowanego flow' },
   },
   {
     category: 'Faktury i dokumenty',
     feature: 'Import gross z zagranicy (EUR/USD)',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const },
     competitor: { status: 'partial' as const, note: 'ręczne korekty VAT' },
   },
   {
     category: 'Faktury i dokumenty',
-    feature: 'Paragon + NIP — jedna sesja OCR',
+    feature: 'Paragon z NIP: odczyt ze zdjęcia',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const },
   },
   {
-    category: 'OCR i AI',
-    feature: 'OCR wielostronicowy PDF bez limitu stron',
-    ksefSaas: { status: 'yes' as const },
+    category: 'Odczyt dokumentów',
+    feature: 'Odczyt wielostronicowego PDF',
+    ksefSaas: { status: 'partial' as const, note: 'plik do 10 MB' },
     competitor: { status: 'partial' as const, note: 'limit stron / kolejka' },
   },
   {
-    category: 'OCR i AI',
-    feature: 'AI-OCR: rozpoznanie tabel pozycji',
+    category: 'Odczyt dokumentów',
+    feature: 'Odczyt tabel pozycji',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const, note: 'proste layouty' },
   },
   {
-    category: 'OCR i AI',
-    feature: 'Confidence score per pole',
-    ksefSaas: { status: 'yes' as const },
+    category: 'Odczyt dokumentów',
+    feature: 'Ocena pewności dla każdego pola',
+    ksefSaas: { status: 'no' as const },
     competitor: { status: 'no' as const },
   },
   {
-    category: 'OCR i AI',
-    feature: 'Uczenie OCR z historii poprawek',
+    category: 'Odczyt dokumentów',
+    feature: 'Podpowiedź kolumny KPiR uczy się z poprawek',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const },
   },
@@ -91,8 +91,8 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Mobile i PWA',
-    feature: 'Capture z aparatu + crop',
-    ksefSaas: { status: 'yes' as const },
+    feature: 'Zdjęcie z aparatu',
+    ksefSaas: { status: 'partial' as const, note: 'bez przycinania' },
     competitor: { status: 'partial' as const },
   },
   {
@@ -103,14 +103,14 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Workflow',
-    feature: 'Magiczny Import (KSeF + CSV konkurencji)',
-    ksefSaas: { status: 'yes' as const, note: '5–10 min' },
+    feature: 'Historia z KSeF i import CSV z 4 programów',
+    ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const, note: 'CSV ręcznie' },
   },
   {
     category: 'Workflow',
-    feature: 'Wkurzacz Dłużników + szablony KPC',
-    ksefSaas: { status: 'yes' as const },
+    feature: 'Przypomnienia i przedsądowe wezwania',
+    ksefSaas: { status: 'yes' as const, note: 'po Twoim zatwierdzeniu' },
     competitor: { status: 'partial' as const, note: 'przypomnienia email' },
   },
   {
@@ -127,20 +127,20 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Cennik',
-    feature: 'Pełne AI-OCR w cenie bazowej',
-    ksefSaas: { status: 'yes' as const },
+    feature: 'Odczyt dokumentów w cenie bazowej',
+    ksefSaas: { status: 'yes' as const, note: 'z limitem dziennym i miesięcznym' },
     competitor: { status: 'no' as const, note: 'wyższy tier / limit' },
   },
   {
     category: 'Integracje',
     feature: 'Webhooks / status faktury',
-    ksefSaas: { status: 'yes' as const },
+    ksefSaas: { status: 'no' as const },
     competitor: { status: 'partial' as const },
   },
   {
     category: 'Hosting',
     feature: 'Dane w UE (GDPR)',
-    ksefSaas: { status: 'yes' as const, note: 'Frankfurt' },
+    ksefSaas: { status: 'yes' as const, note: 'Niemcy' },
     competitor: { status: 'yes' as const, note: 'PL cloud' },
   },
   {
@@ -157,7 +157,7 @@ const COMPARISON_ROWS = [
   },
   {
     category: 'Raportowanie',
-    feature: 'Podgląd błędów FA przed wysyłką (diff)',
+    feature: 'Podgląd błędów FA przed wysyłką',
     ksefSaas: { status: 'yes' as const },
     competitor: { status: 'partial' as const },
   },
@@ -168,7 +168,7 @@ export default function InfaktPage() {
     <article>
       <VsHero
         competitorName="inFakt"
-        subtitle="24 wiersze tabeli plus przewodnik migracji i rozbicie cenowe — pod kątem mikrofirm, które żyją z paragonów i faktur brutto."
+        subtitle="Tabela funkcji, przewodnik migracji i rozbicie cenowe, pod kątem mikrofirm, które żyją z paragonów i faktur brutto."
       />
 
       <VsTldr>
@@ -179,16 +179,16 @@ export default function InfaktPage() {
         integracją KSeF, ale w praktyce wielu przedsiębiorców odbija się od
         trzech ścian: braku wygodnego flow dla{' '}
         <strong className="font-semibold">faktur gross</strong> (kosztowych w
-        cenach brutto), <strong className="font-semibold">ograniczeń AI-OCR</strong>{' '}
+        cenach brutto), <strong className="font-semibold">ograniczeń odczytu dokumentów</strong>{' '}
         na trudnych PDF-ach oraz{' '}
         <strong className="font-semibold">drogiego stacku</strong>, gdzie
         &bdquo;pełna moc&rdquo; siedzi w wyższych pakietach i dodatkach.{' '}
         <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
           FaktWay
         </span>{' '}
-        stawia na jedną, przewidywalną stawkę, OCR inspirowany pracą w terenie
-        i flow zaprojektowany pod KSeF 2.0 od pierwszego dnia — bez dopłat za
-        &bdquo;inteligentne&rdquo; funkcje, które i tak są potrzebne przy KPiR.
+        stawia na jedną, przewidywalną stawkę, koszty ze zdjęcia
+        i wysyłkę zaprojektowaną pod KSeF 2.0 od pierwszego dnia, bez dopłat za
+        funkcje, które i tak są potrzebne przy KPiR.
       </VsTldr>
 
       <div className="mx-auto max-w-[1280px] px-6 lg:px-8">
@@ -199,13 +199,13 @@ export default function InfaktPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            inFakt zbudował pozycję na polskim rynku SaaS księgowym jeszcze w erze, gdy KSeF był raczej obietnicą legislacyjną niż codziennym obowiązkiem. Produkt wyrosł z prostego fakturowania online, stopniowo rozszerzany o rozliczenia ZUS, magazyn czy współpracę z biurem rachunkowym. To doświadczenie widać po stronie stabilności biznesowej i rozpoznawalności marki — dla wielu księgowych &bdquo;inFakt&rdquo; to domyślny punkt odniesienia przy onboardingu klienta.
+            inFakt zbudował pozycję na polskim rynku SaaS księgowym jeszcze w erze, gdy KSeF był raczej obietnicą legislacyjną niż codziennym obowiązkiem. Produkt wyrosł z prostego fakturowania online, stopniowo rozszerzany o rozliczenia ZUS, magazyn czy współpracę z biurem rachunkowym. To doświadczenie widać po stronie stabilności biznesowej i rozpoznawalności marki: dla wielu księgowych &bdquo;inFakt&rdquo; to domyślny punkt odniesienia przy onboardingu klienta.
           </p>
           <p>
             Z perspektywy architektury, typowy hosting inFakt to polskie centra danych i ścisłe trzymanie się lokalnych standardów compliance, co jest plusem dla firm szukających &bdquo;100% PL&rdquo;. Jednocześnie przy KSeF 2.0 liczy się nie tylko lokalizacja serwera, ale przepływ danych: jak szybko system odróżnia fałszywie pozytywny status wysyłki od realnego UPO, jak radzi sobie z wielostronicowymi fakturami kosztowymi i czy pozwala pracować na fakturach gross bez obejść w arkuszu. Tu właśnie pojawiają się różnice kultury produktowej: inFakt ewoluował z klasycznego e-fakturowania, podczas gdy FaktWay projektujemy od zera pod mikrofirmę, która skanuje dokumenty w aucie i chce zamknąć KPiR tego samego dnia.
           </p>
           <p>
-            Warto też pamiętać, że &bdquo;historia produktu&rdquo; to nie tylko data założenia firmy, ale tempo wdrażania zmian ministerialnych. KSeF 2.0 wymusza krótsze SLA na poprawki, więcej telemetrii po stronie API MF oraz większą odporność na weekendowe maintenance. W takim środowisku liczy się, czy Twój dostawca traktuje OCR i walidację FA(3) jako rdzeń subskrypcji, czy jako moduł premium — i ile realnie zapłacisz, zanim &bdquo;zwykła&rdquo; faktura kosztowa przestanie być walką z formularzem.
+            Warto też pamiętać, że &bdquo;historia produktu&rdquo; to nie tylko data założenia firmy, ale tempo wdrażania zmian ministerialnych. KSeF 2.0 wymusza krótsze SLA na poprawki, więcej telemetrii po stronie API MF oraz większą odporność na weekendowe maintenance. W takim środowisku liczy się, czy Twój dostawca traktuje odczyt dokumentów i walidację FA(3) jako rdzeń subskrypcji, czy jako moduł premium, i ile realnie zapłacisz, zanim &bdquo;zwykła&rdquo; faktura kosztowa przestanie być walką z formularzem.
           </p>
         </section>
 
@@ -221,7 +221,7 @@ export default function InfaktPage() {
               meta: 'Opinia z forum branżowego · 2025',
             },
             {
-              q: 'AI OCR pomaga, ale na skanach wielostronicowych kończy się na ręcznym przepisywaniu pozycji.',
+              q: 'Odczyt dokumentów pomaga, ale na skanach wielostronicowych kończy się na ręcznym przepisywaniu pozycji.',
               meta: 'Komentarz z LinkedIn · 2025',
             },
             {
@@ -249,7 +249,7 @@ export default function InfaktPage() {
           ))}
         </div>
         <p className="mt-8 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
-          Powyższe cytaty są stylizowanymi skrótami typowych wątków z publicznych dyskusji — nie cytują konkretnej osoby ani nie są gwarancją aktualnego stanu produktu konkurenta. Zawsze zweryfikuj funkcje na własnym koncie trial przed decyzją migracyjną.
+          Powyższe cytaty są stylizowanymi skrótami typowych wątków z publicznych dyskusji: nie cytują konkretnej osoby ani nie są gwarancją aktualnego stanu produktu konkurenta. Zawsze zweryfikuj funkcje na własnym koncie trial przed decyzją migracyjną.
         </p>
 
         <VsSectionHeader
@@ -259,13 +259,13 @@ export default function InfaktPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            Gross invoices — czyli dokumenty kosztowe w cenach brutto, często z paragonów albo z importu zagranicznego — nie są ciekawostką dla jednej branży. To codzienność usług remontowych, transportu, gastronomii i freelancingu B2B, gdzie kontrahent wystawia brutto, a Ty musisz rozłożyć VAT i koszt bez błędu. Jeśli system nie prowadzi Cię przez ten flow jak przez checklistę KSeF, tracisz czas na korekty i podwójne wpisy w KPiR.
+            Gross invoices, czyli dokumenty kosztowe w cenach brutto, często z paragonów albo z importu zagranicznego, nie są ciekawostką dla jednej branży. To codzienność usług remontowych, transportu, gastronomii i freelancingu B2B, gdzie kontrahent wystawia brutto, a Ty musisz rozłożyć VAT i koszt bez błędu. Jeśli system nie prowadzi Cię przez ten flow jak przez checklistę KSeF, tracisz czas na korekty i podwójne wpisy w KPiR.
           </p>
           <p>
-            AI-OCR z kolei nie może być &bdquo;ładną ikonką&rdquo; w cenniku. Musi radzić sobie z krzywym skanem, drugą stroną faktury z regulaminem na odwrocie i tabelą pozycji, gdzie każda linia ma inną stawkę VAT. Ograniczenia modelu — limit stron, brak confidence score, brak uczenia z poprawek — przekładają się bezpośrednio na godziny Twojej pracy albo koszt księgowej. Dlatego w tabeli porównawczej celowo eksponujemy wiersze, które bolą najczęściej w rozmowach z naszymi beta-użytkownikami.
+            Odczyt dokumentów z kolei nie może być &bdquo;ładną ikonką&rdquo; w cenniku. Musi radzić sobie z krzywym skanem, drugą stroną faktury z regulaminem na odwrocie i tabelą pozycji, gdzie każda linia ma inną stawkę VAT. Ograniczenia, takie jak limit stron albo brak uczenia z poprawek, przekładają się bezpośrednio na godziny Twojej pracy albo koszt księgowej. Dlatego w tabeli porównawczej celowo eksponujemy te wiersze.
           </p>
           <p>
-            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR, dodatkowe firmy czy wyższe limity dokumentów bywa nieprzewidywalna. FaktWay trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu — stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
+            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR czy wyższe limity dokumentów bywa nieprzewidywalna. FaktWay trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu, stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
           </p>
         </section>
 
@@ -289,14 +289,14 @@ export default function InfaktPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            Poniższy podział ma charakter edukacyjny i opiera się na typowym schemacie &bdquo;pakiet + moduły&rdquo;, który wielokrotnie widzimy u polskich SaaS księgowych — nie jest prawnym opisem cennika konkurenta. Zanim podejmiesz decyzję, pobierz aktualny cennik inFakt i porównaj limity (liczba firm, użytkowników, dokumentów, integracji) linia po linii.
+            Poniższy podział ma charakter edukacyjny i opiera się na typowym schemacie &bdquo;pakiet + moduły&rdquo;, który wielokrotnie widzimy u polskich SaaS księgowych, i nie jest prawnym opisem cennika konkurenta. Zanim podejmiesz decyzję, pobierz aktualny cennik inFakt i porównaj limity (liczba firm, użytkowników, dokumentów, integracji) linia po linii.
           </p>
           <ul className="space-y-0 border-t border-zinc-100">
             {[
               { k: 'Baza (najczęściej reklamowana stawka)', v: 'proste faktury sprzedaży, podstawowe rozliczenia, często sensowny start dla jednoosobowej działalności bez dużej skrzynki kosztowej.' },
-              { k: 'Wyższe pakiety', v: 'więcej dokumentów, wielofirmowość, rozbudowane uprawnienia dla biura — tu cena rośnie skokowo, bo łączy się z limitami API i raportowania.' },
-              { k: 'AI / OCR / automatyzacje', v: 'często jako osobny moduł albo feature-gating — dokładnie te elementy, które w FaktWay traktujemy jako standard przy mikrofirmie z dużą liczbą kosztów.' },
-              { k: 'FaktWay (referencja)', v: `jedna stawka ${PRICE_PER_MONTH}, pełny OCR w pakiecie, Magiczny Import, Wkurzacz, Co-Pilot księgowego i ${TRIAL_DAYS} dni za darmo — bez tajnych „upgrade’ów”, żeby domknąć miesiąc.` },
+              { k: 'Wyższe pakiety', v: 'więcej dokumentów, wielofirmowość, rozbudowane uprawnienia dla biura: tu cena rośnie skokowo, bo łączy się z limitami API i raportowania.' },
+              { k: 'Odczyt dokumentów i automatyzacje', v: 'często jako osobny moduł albo feature-gating, dokładnie te elementy, które w FaktWay traktujemy jako standard przy mikrofirmie z dużą liczbą kosztów.' },
+              { k: 'FaktWay (referencja)', v: `jedna stawka ${PRICE_PER_MONTH}, odczyt dokumentów w pakiecie (z limitem dziennym i miesięcznym), historia z KSeF i import z innych programów, przypomnienia, Co-Pilot księgowego i ${TRIAL_DAYS} dni za darmo, bez tajnych „upgrade’ów”, żeby domknąć miesiąc.` },
             ].map((item, i) => (
               <li
                 key={item.k}
@@ -315,7 +315,7 @@ export default function InfaktPage() {
             ))}
           </ul>
           <p>
-            Jeśli porównujesz oferty, policz nie tylko miesięczny abonament, ale też koszt godziny Twojej pracy przy ręcznym poprawianiu OCR i koszt błędów wysyłki do KSeF. Często okazuje się, że &bdquo;tańszy pakiet&rdquo; jest droższy o 10&ndash;20 godzin rocznie — dokładnie ten mechanizm modelujemy w kalkulatorze oszczędności na landing page.
+            Jeśli porównujesz oferty, policz nie tylko miesięczny abonament, ale też koszt godziny Twojej pracy przy ręcznym poprawianiu odczytanych danych i koszt błędów wysyłki do KSeF. Ten mechanizm modelujemy w kalkulatorze oszczędności.
           </p>
         </section>
       </div>
@@ -326,13 +326,13 @@ export default function InfaktPage() {
           'Masz etatową księgową, która zna produkt „na pamięć” i pilnuje limitów',
           'Większość dokumentów to proste faktury netto B2B',
           'Potrzebujesz głębokiej integracji z ekosystemem, w którym inFakt jest już osadzony',
-          'Akceptujesz dopłaty za moduły AI/OCR w zamian za markę „znaną z rynku”',
+          'Akceptujesz dopłaty za moduły odczytu dokumentów w zamian za markę „znaną z rynku”',
         ]}
         whenChooseUs={[
-          'Masz gross invoices i paragony, które muszą wejść do KPiR bez obejść',
-          'OCR na trudnych PDF-ach to Twój bottleneck, nie „nice to have”',
+          'Masz paragony i faktury kosztowe, które muszą wejść do KPiR ze zdjęcia',
+          'Przepisywanie dokumentów to Twój bottleneck, nie „nice to have”',
           'Chcesz przewidywalny rachunek: jedna stawka, pełne funkcje KSeF-first',
-          'Pracujesz mobilnie i chcesz push + offline capture w jednym produkcie',
+          'Pracujesz z telefonu i chcesz powiadomienia push i zdjęcia dokumentów w jednym produkcie',
         ]}
       />
 
@@ -345,11 +345,11 @@ export default function InfaktPage() {
         <ol className="space-y-0 border-t border-zinc-100">
           {[
             { k: 'Spisz checklistę', v: 'lista NIP-ów, użytkowników, integracji bankowych i okresów, które muszą wejść do nowego systemu bez luki w JPK.' },
-            { k: 'Eksport z inFakt', v: 'pobierz CSV / JPK / ZIP zgodnie z dokumentacją eksportu — zachowaj kopie na dysku zewnętrznym (audyt RODO).' },
-            { k: 'KSeF jako źródło prawdy', v: 'uruchom Magiczny Import: historia z KSeF (np. ostatnie 24 miesiące) + pliki z konkurencji — to skraca czas migracji z godzin do minut.' },
-            { k: 'Walidacja brutto/netto', v: 'dla faktur gross przejdź próbkę 20 dokumentów i porównaj kwoty VAT z oryginałem — upewnij się, że nowy flow nie wymusza ręcznych korekt.' },
-            { k: 'Cut-over', v: 'ustal dzień przełączenia wysyłki nowych FA(3) tylko z FaktWay, wyłącz duplikaty webhooków i poinformuj kontrahentów o ewentualnej zmianie numeracji.' },
-            { k: 'Hypercare', v: 'przez 2 tygodnie monitoruj kolejkę KSeF, statusy UPO i raporty błędów — po stabilizacji zaplanuj szkolenie księgowej z Co-Pilotem.' },
+            { k: 'Eksport z inFakt', v: 'pobierz plik CSV zgodnie z dokumentacją eksportu i zachowaj kopie na dysku zewnętrznym (audyt RODO).' },
+            { k: 'KSeF jako źródło prawdy', v: 'po wgraniu certyfikatu FaktWay sam pobiera historię z KSeF, a starsze faktury wgrywasz plikiem CSV z inFaktu.' },
+            { k: 'Walidacja brutto/netto', v: 'dla faktur gross przejdź próbkę 20 dokumentów i porównaj kwoty VAT z oryginałem.' },
+            { k: 'Cut-over', v: 'ustal dzień przełączenia wysyłki nowych FA(3) tylko z FaktWay i poinformuj kontrahentów o ewentualnej zmianie numeracji.' },
+            { k: 'Hypercare', v: 'przez 2 tygodnie sprawdzaj statusy faktur i UPO, a po stabilizacji pokaż księgowej Co-Pilota.' },
           ].map((step, i) => (
             <li
               key={step.k}
@@ -368,7 +368,7 @@ export default function InfaktPage() {
           ))}
         </ol>
         <p className="mt-6 font-editorial text-sm italic leading-relaxed text-[var(--marketing-muted)]">
-          Jeśli potrzebujesz checklisty PDF lub wsparcia przy imporcie wielofirmowym, zostaw zgłoszenie na {SUPPORT_EMAIL} — dopasujemy scenariusz do Twojej skali.
+          Jeśli potrzebujesz wsparcia przy imporcie wielofirmowym, napisz na {SUPPORT_EMAIL}.
         </p>
 
         <VsSectionHeader
@@ -378,7 +378,7 @@ export default function InfaktPage() {
         />
         <section className="space-y-5 leading-relaxed text-[var(--marketing-muted)]">
           <p>
-            Użytkownicy szukający &bdquo;inFakt vs &hellip;&rdquo;, &bdquo;inFakt KSeF 2.0&rdquo;, &bdquo;inFakt OCR cena&rdquo; mają wysoką intencję migracyjną — ale też wysokie oczekiwanie merytoryczne. Dlatego ta strona celowo miesza twardą tabelę funkcji z narracją o TCO, gross invoices i limitach OCR: to są sygnały jakościowe, które Google coraz częściej wiąże z E-E-A-T (doświadczenie, ekspertyza, autorytet, wiarygodność). Nie obiecujemy magii — pokazujemy, które decyzje produktowe realnie wpływają na Twój dzień pracy.
+            Użytkownicy szukający &bdquo;inFakt vs &hellip;&rdquo;, &bdquo;inFakt KSeF 2.0&rdquo;, &bdquo;inFakt OCR cena&rdquo; mają wysoką intencję migracyjną, ale też wysokie oczekiwanie merytoryczne. Dlatego ta strona celowo miesza twardą tabelę funkcji z narracją o TCO, gross invoices i limitach odczytu: to są sygnały jakościowe, które Google coraz częściej wiąże z E-E-A-T (doświadczenie, ekspertyza, autorytet, wiarygodność). Nie obiecujemy cudów, pokazujemy, które decyzje produktowe realnie wpływają na Twój dzień pracy.
           </p>
           <p>
             Jeśli jesteś na etapie due diligence, zestaw tę stronę z naszym{' '}
@@ -395,21 +395,21 @@ export default function InfaktPage() {
             >
               cennikiem
             </Link>{' '}
-            oraz regulaminem. Dla biur rachunkowych przygotowujemy osobny scenariusz wielomiesięczny (tokeny księgowe, pakiet eksportów) —{' '}
+            oraz regulaminem. Prowadzisz biuro rachunkowe?{' '}
             <Link
               href="/kontakt"
               className="font-editorial italic underline decoration-emerald-400 decoration-2 underline-offset-[4px] transition-all hover:decoration-[3px]"
             >
               napisz
             </Link>
-            , ile firm planujesz przenieść w Q1/Q2, a zaproponujemy harmonogram techniczny.
+            , ile firm planujesz przenieść.
           </p>
         </section>
       </div>
 
       <VsMigrationCta
         competitorName="inFakt"
-        copy="Magiczny Import zaciąga historię z KSeF i pliki eksportu inFakt. Przez 30 dni trialu sprawdzisz, czy Twój najgorszy PDF przechodzi przez OCR bez Excela."
+        copy={`FaktWay sam pobiera historię z KSeF, a pliki eksportu inFakt wgrywasz jednym ruchem. Przez ${TRIAL_DAYS} dni sprawdzisz, jak odczyt radzi sobie z Twoimi dokumentami.`}
       />
     </article>
   );

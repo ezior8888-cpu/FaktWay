@@ -80,7 +80,7 @@ function WELCOME_TEMPLATE(name: string) {
 ${baseStyle}
 <h1>Cześć ${safe},</h1>
 <p>Cieszę się, że jesteś z nami. Jestem Bartek, współzałożyciel FaktWay.</p>
-<p>Konto jest bezpłatne. Gdy uruchomisz subskrypcję, pierwsze 30 dni nic nie płacisz — kartę podajesz przy uruchomieniu, a pierwsza płatność przychodzi dopiero po tym okresie.</p>
+<p>Konto jest bezpłatne. Gdy uruchomisz subskrypcję, pierwsze 30 dni nic nie płacisz. Metodę płatności podajesz przy uruchomieniu, a pierwsza płatność przychodzi dopiero po tym okresie.</p>
 <p>Najszybszy sposób żeby zobaczyć wartość:</p>
 <ol>
   <li><a href="${APP_BASE}/invoices/new">Wystaw pierwszą fakturę</a> (30 sekund)</li>

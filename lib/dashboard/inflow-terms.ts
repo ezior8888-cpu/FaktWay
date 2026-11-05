@@ -4,13 +4,14 @@ import { largestRemainderPercents } from '@/lib/dashboard/receivables-aging';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
- * Karta Należności Pulpitu i Analiz (PLAN-PRAWDZIWE-DANE E11, decyzja D-W
- * 23.10.2026): faktury sprzedaży z PRZYSZŁYM terminem płatności (od dziś)
- * i bez prawdziwej zapłaty, według terminu. Zakładamy zapłatę w terminie,
- * więc termin, który minął, to już wpływ (Przepływy), a nie zaległość — karta
- * nie twierdzi, że ktoś zalega. Kwota: reszta do zapłaty po wpłatach
- * częściowych (`InflowEntry.outstanding`). Czysty podział wyniku
- * `getInflows` — wpływów nie liczymy tu drugi raz.
+ * Spodziewane wpływy według terminu: otwarte faktury sprzedaży z terminem od
+ * dziś (`isExpectedInflow`). Kwota: reszta do zapłaty po wpłatach częściowych
+ * (`InflowEntry.outstanding`). Czysty podział wyniku `getInflows`.
+ *
+ * Trzy kolumny `inflowTerms` zostały tylko na kartach Należności w danych
+ * przykładowych (`lib/demo` bez wpłat). Prawdziwa firma widzi tam należności
+ * z zaległościami (`getReceivables`, `receivablesAging`): decyzję D-W odwołano
+ * 02.11.2026, więc miniony termin to należność po terminie, a nie wpływ.
  */
 
 export type InflowTermKey = 'thisWeek' | 'upTo30' | 'later';
@@ -49,7 +50,7 @@ function sundayOf(iso: string): string {
   return addDaysToIsoDate(iso, (7 - d.getUTCDay()) % 7) ?? iso;
 }
 
-/** Wpływ, którego jeszcze nie było: termin od dziś, bez prawdziwej zapłaty, z resztą do zapłaty. */
+/** Spodziewany wpływ: otwarta faktura z terminem dziś lub później i z resztą do zapłaty. */
 export function isExpectedInflow(entry: InflowEntry, today: string): boolean {
   return entry.basis === 'due' && entry.outstanding > 0 && entry.date >= today;
 }

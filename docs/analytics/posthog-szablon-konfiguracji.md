@@ -21,7 +21,7 @@ NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
 
 Zapisz plik i **zrestartuj** `pnpm dev` (zmienne `NEXT_PUBLIC_*` ładowane przy starcie builda / dev).
 
-**Uwaga (zgoda):** capture jest **wyłączony tylko** gdy w localStorage jest `ff_analytics_consent` = `"denied"`. Jeśli wcześniej kliknąłeś „Tylko niezbędne”, w konsoli: `localStorage.removeItem('ff_analytics_consent')` i odśwież stronę.
+**Uwaga (zgoda):** capture działa **tylko** gdy w localStorage jest `ff_analytics_consent` = `"granted"`. Jeśli wcześniej kliknąłeś „Tylko niezbędne”, kliknij „Włącz analitykę” na `/legal/cookies`. Zdarzenia z serwera czytają zgodę z `users.analytics_consent`.
 
 ---
 
@@ -70,6 +70,7 @@ U nas to jest **zbudowane tak**:
 
 - Nie wklejaj jawnego `phc_…` do `app/layout.tsx`, `browser-posthog.ts` ani innych plików **commitowanych** do Gita.
 - Nie duplikuj drugiego `posthog.init` — tylko `initPosthogBrowser()` w `instrumentation-client.ts`.
+- **Ustawienia projektu, które obiecuje polityka prywatności (nie kod, sprawdź po założeniu projektu i po zmianie planu):** retencja zdarzeń 24 miesiące oraz odrzucanie adresu IP klienta („Discard client IP data”). Opcja `ip: false` w SDK nie działa, więc zdanie „bez adresu IP” trzyma tylko to ustawienie.
 - **Scroll depth (3/3 w wizardzie):** w PostHog → **Project settings → Web analytics** włącz „Scroll depth” (to ustawienie projektu, nie kod).
 - **Nie modyfikuj `proxy.ts` pod PostHog** — to Edge proxy (sesja Supabase). Wizard pisze „proxy.ts”, ale chodzi o **inny** typ aplikacji. U nas:
   - `new PostHog(token, { host })` → **`lib/analytics/posthog-node-client.ts`** (token z env)

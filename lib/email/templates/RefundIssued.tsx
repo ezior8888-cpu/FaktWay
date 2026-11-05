@@ -36,8 +36,8 @@ export default function RefundIssued({
 
           <Text style={textStyle}>
             Cześć {tenantName}, wystawiliśmy zwrot na kwotę{' '}
-            <strong>{amountLabel}</strong>. Środki powinny wrócić na Twoją kartę
-            w ciągu 5-10 dni roboczych (czas zależy od banku).
+            <strong>{amountLabel}</strong>. Środki wrócą na metodę płatności,
+            którą zapłaciłeś, w ciągu 5-10 dni roboczych (czas zależy od banku).
           </Text>
 
           {reason ? (
@@ -48,13 +48,13 @@ export default function RefundIssued({
           ) : null}
 
           <Text style={textStyle}>
-            Jeśli masz dodatkowe pytania — odpisz na ten email.
+            Jeśli masz dodatkowe pytania, odpisz na ten email.
           </Text>
 
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktWay — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>

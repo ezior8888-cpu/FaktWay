@@ -5,8 +5,7 @@ import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
-import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
-import { trackServer } from '@/lib/analytics/server';
+import { recordSignupCompleted } from '@/lib/analytics/funnel';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
@@ -121,14 +120,10 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
       console.error('[inngest] user/registered send failed', e);
     }
 
-    await trackServer({
-      distinctId: authUser.id,
-      event: ANALYTICS_EVENTS.signupCompleted,
-      properties: { method: 'password' },
-      setPersonProperties: {
-        plan: 'trial',
-      },
-    });
+    // Zajęty adres: GoTrue zwraca konto bez tożsamości, z losowym id. To nie rejestracja.
+    if ((authUser.identities?.length ?? 0) > 0) {
+      await recordSignupCompleted({ user: authUser, method: 'password' });
+    }
   }
 
   // Potwierdzenie email włączone w Supabase → session = null, trzeba kliknąć link z maila.

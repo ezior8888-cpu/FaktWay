@@ -24,11 +24,17 @@ vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: async () => {
     const query = (table: string) => {
       const q: Record<string, unknown> = {};
+      // Lista firm idzie stronami po kluczu (sesja 27): kursor `gt('id', …)`
+      // musi działać, inaczej każda strona oddaje te same firmy.
+      let afterId: string | null = null;
       Object.assign(q, {
         select: () => q,
         eq: () => q,
         in: () => q,
-        gt: () => q,
+        gt: (column: string, value: string) => {
+          if (column === 'id') afterId = value;
+          return q;
+        },
         gte: () => q,
         lte: () => q,
         order: () => q,
@@ -43,7 +49,7 @@ vi.mock('@/lib/supabase/server', () => ({
                 ? [
                     { id: 't1', nip: '1', name: 'Firma 1', ksef_certificate_expiry: new Date(Date.now() + 6.5 * 864e5).toISOString() },
                     { id: 't2', nip: '2', name: 'Firma 2', ksef_certificate_expiry: new Date(Date.now() + 6.5 * 864e5).toISOString() },
-                  ]
+                  ].filter((t) => afterId === null || t.id > afterId)
                 : [],
             error: null,
           }).then(ok),

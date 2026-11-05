@@ -8,6 +8,7 @@ import { sendSlackAlert } from '@/lib/alerts/slack';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { sendCertExpiryAlert } from '@/lib/email/send';
 import { createProposal } from '@/lib/flo/proposals';
+import { readAllById } from '@/lib/pagination/keyset';
 import {
   buildCertProposal,
   dueCertThreshold,
@@ -73,18 +74,24 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
     const now = new Date();
     let totalAlerts = 0;
 
+    // Stronami po kluczu (sesja 27 planu skalowania, JOB-11): jedno zapytanie
+    // oddawało najwyżej 1000 firm (PGRST_DB_MAX_ROWS). Certyfikaty wydaje się
+    // falą (start KSeF, onboarding), więc w oknie 30 dni bywa ich ponad 1000
+    // — reszta nie dostawała ostrzeżenia wcale. Okno liczone raz, to samo
+    // dla wszystkich stron.
     const tenants = await step.run('find-tenants', async (): Promise<CertTenant[]> => {
       const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, name, ksef_certificate_expiry')
-        .gt('ksef_certificate_expiry', now.toISOString())
-        .lte('ksef_certificate_expiry', new Date(now.getTime() + HORIZON_DAYS * DAY).toISOString());
-
-      if (error) {
-        throw new Error(`Cert expiry query failed: ${error.message}`);
-      }
-      return (data ?? []) as CertTenant[];
+      const from = now.toISOString();
+      const to = new Date(now.getTime() + HORIZON_DAYS * DAY).toISOString();
+      return readAllById<CertTenant>('Cert expiry query failed', (afterId, limit) => {
+        let query = supabase
+          .from('tenants')
+          .select('id, name, ksef_certificate_expiry')
+          .gt('ksef_certificate_expiry', from)
+          .lte('ksef_certificate_expiry', to);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
     });
 
     // Które progi już poszły. Błąd odczytu rzuca: „nie wiem, co wysłałem”
@@ -118,7 +125,9 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
     /** Firmy, których adresu nie dało się odczytać — po przebiegu zadanie rzuca (ponowienie). */
     const contactErrors: string[] = [];
 
-    // Sekwencyjnie, żeby nie DDOS-ować Resend — kilkadziesiąt firm dziennie.
+    // Sekwencyjnie, żeby nie DDOS-ować Resend — zwykle kilkadziesiąt firm
+    // dziennie, w dniu fali wygasania ponad 1000 (kilka wywołań sieciowych
+    // na firmę; mieści się w expireIn joba, 4 h).
     for (const tenant of tenants) {
       const due = dueCertThreshold(tenant.ksef_certificate_expiry, now);
       if (due === null) continue;

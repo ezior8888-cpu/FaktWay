@@ -118,6 +118,8 @@ export const KNOWN_AUDIT_ACTIONS = [
   'auth.logout',
   'auth.signup',
   'auth.password_reset_requested',
+  'auth.passkey_added',
+  'auth.passkey_removed',
   // Tenants
   'tenant.created',
   'tenant.updated',

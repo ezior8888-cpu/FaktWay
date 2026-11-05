@@ -21,6 +21,7 @@ export function InvoicesPullToRefresh({
   summary,
   facts,
   today,
+  canMarkPaid = false,
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
@@ -32,6 +33,8 @@ export function InvoicesPullToRefresh({
   facts?: InvoiceFactsById;
   /** Dziś w Europe/Warsaw (RRRR-MM-DD). */
   today?: string;
+  /** Rola pozwala oznaczać zapłatę. */
+  canMarkPaid?: boolean;
 }) {
   const router = useRouter();
   // `router.refresh()` nie zwraca obietnicy; przejście mówi, kiedy nowy
@@ -47,6 +50,7 @@ export function InvoicesPullToRefresh({
         summary={summary}
         facts={facts}
         today={today}
+        canMarkPaid={canMarkPaid}
       />
     </PullToRefresh>
   );

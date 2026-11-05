@@ -43,11 +43,6 @@ COPY . .
 ARG NEXT_PUBLIC_APP_DOMAIN
 ARG NEXT_PUBLIC_APP_ENV
 ARG NEXT_PUBLIC_APP_URL
-# Przełącznik wpuszczania telefonów do panelu (zob. lib/mobile-access.ts).
-# Musi być build-argiem: proxy.ts idzie pod Edge, a tam Next wstawia
-# wartości env w czasie budowania, nie odczytuje ich w locie.
-ARG NEXT_PUBLIC_MOBILE_PANEL
-ARG NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST
 ARG NEXT_PUBLIC_POSTHOG_HOST
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ARG NEXT_PUBLIC_SENTRY_DSN
@@ -55,13 +50,13 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+# Opcjonalny: strony statyczne przy `next build` mówią o BLIK-u (`lib/marketing/oferta.ts`).
+ARG STRIPE_BLIK_RECURRING
 # Opcjonalny: source maps do GlitchTip/Sentry (build działa bez niego).
 ARG SENTRY_AUTH_TOKEN
 ENV NEXT_PUBLIC_APP_DOMAIN=$NEXT_PUBLIC_APP_DOMAIN \
     NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
-    NEXT_PUBLIC_MOBILE_PANEL=$NEXT_PUBLIC_MOBILE_PANEL \
-    NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST=$NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST \
     NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST \
     NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
@@ -127,9 +122,12 @@ USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
-# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
-CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]
+# `server-only-hook.mjs`: moduły z `import 'server-only'` rzucają poza warunkiem
+# `react-server`, więc hak podmienia sam `server-only` na pusty moduł. NIE wracaj
+# do globalnego `--conditions=react-server`: psuje `react-dom/server` i render
+# maili (RUN-01). Ten sam ciąg ma `worker:dev` — pilnuje tego test
+# tests/unit/worker-start-jak-dockerfile.test.ts.
+CMD ["node", "--import", "./lib/jobs/server-only-hook.mjs", "--import", "tsx", "lib/jobs/worker.ts"]
 
 # ── runner: minimalny obraz produkcyjny ──
 # MUSI zostać ostatnim etapem pliku: `docker build` bez `--target` buduje

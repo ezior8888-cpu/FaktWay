@@ -17,6 +17,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { POSTGREST_MAX_ROWS } from '@/lib/pagination/keyset';
+
 import type { HistoryDirection, InitialStream } from './windows';
 
 export type KsefHistoryEnvironment = 'test' | 'demo' | 'production';
@@ -267,17 +269,56 @@ export async function ensureIncomingStreams(
   return ensureStreams(client, rows.map((r) => incomingStreamInsert(r.tenantId, environment, r.initial)));
 }
 
-/** Strumienie środowiska (opcjonalnie jednej firmy). */
+/** Strumienie jednej firmy w środowisku (najwyżej 2: sprzedaż i zakupy). */
 export async function loadStreams(
   client: HistoryClient,
   environment: KsefHistoryEnvironment,
-  tenantId?: string,
+  tenantId: string,
 ): Promise<KsefHistorySyncRow[]> {
-  let query = client.from('ksef_history_sync').select('*').eq('environment', environment);
-  if (tenantId) query = query.eq('tenant_id', tenantId);
-  const { data, error } = await query;
+  const { data, error } = await client
+    .from('ksef_history_sync')
+    .select('*')
+    .eq('environment', environment)
+    .eq('tenant_id', tenantId);
   if (error) throw dbError('odczyt strumieni', error);
   return (data ?? []) as KsefHistorySyncRow[];
+}
+
+/** Firmy na jedno zapytanie strumieni: `in.(…)` ze 100 uuid to ok. 3,9 KB adresu. */
+export const STREAM_TENANTS_PER_QUERY = 100;
+
+/**
+ * Strumienie wskazanych firm (cron: bieżąca strona firm, sesja 27 planu
+ * skalowania). Dawniej cron czytał strumienie CAŁEGO środowiska jednym
+ * zapytaniem — od ok. 500 firm (2 strumienie na firmę) PostgREST ucinał
+ * odpowiedź do 1000 wierszy bez błędu, a firma bez wczytanego strumienia
+ * sprzedaży po cichu wypadała z cyklu.
+ *
+ * Paczki po 100 firm: UNIQUE (tenant_id, environment, direction) daje
+ * najwyżej 2 wiersze na firmę, czyli ≤ 200 na odpowiedź. Więcej = schemat
+ * się zmienił — wyjątek zamiast liczenia na niepełnej liście.
+ */
+export async function loadStreamsForTenants(
+  client: HistoryClient,
+  environment: KsefHistoryEnvironment,
+  tenantIds: readonly string[],
+): Promise<KsefHistorySyncRow[]> {
+  const out: KsefHistorySyncRow[] = [];
+  for (let i = 0; i < tenantIds.length; i += STREAM_TENANTS_PER_QUERY) {
+    const part = tenantIds.slice(i, i + STREAM_TENANTS_PER_QUERY);
+    const { data, error } = await client
+      .from('ksef_history_sync')
+      .select('*')
+      .eq('environment', environment)
+      .in('tenant_id', part);
+    if (error) throw dbError('odczyt strumieni', error);
+    const rows = (data ?? []) as KsefHistorySyncRow[];
+    if (rows.length > part.length * 2) {
+      throw dbError('odczyt strumieni', { message: `${rows.length} wierszy dla ${part.length} firm — więcej niż 2 kierunki na firmę` });
+    }
+    out.push(...rows);
+  }
+  return out;
 }
 
 /**
@@ -538,17 +579,53 @@ export async function countStreamItems(
   return count;
 }
 
-/** Liczniki środowiska z widoku (cron: szacunek przebiegu; alarm: zablokowane). */
+/**
+ * Najwięcej grup widoku `ksef_history_item_counts` na firmę w jednym
+ * środowisku: CHECK `ksef_history_items_status_reason` (00155) dopuszcza na
+ * kierunek pending ×3 (bez powodu + 2 powody), imported ×3 (bez powodu + 2),
+ * skipped ×3, deferred ×2 i blocked ×12 — razem 23, a kierunki są dwa.
+ * Pilnuje tego tests/unit/strony-po-kluczu-historia.test.ts (czyta CHECK z migracji).
+ */
+export const KSEF_HISTORY_COUNT_GROUPS_PER_TENANT = 46;
+
+/**
+ * Firmy na jedno zapytanie liczników: 21 × 46 = 966 wierszy, mniej niż limit
+ * PostgREST. Widok nie ma kolumny `id`, więc zamiast stron po kluczu cała
+ * odpowiedź musi się zmieścić poniżej limitu.
+ */
+export const COUNT_TENANTS_PER_QUERY = Math.floor((POSTGREST_MAX_ROWS - 1) / KSEF_HISTORY_COUNT_GROUPS_PER_TENANT);
+
+/**
+ * Liczniki wskazanych firm z widoku (cron: szacunek przebiegu dla bieżącej
+ * strony firm). Dawniej jedno zapytanie dla CAŁEGO środowiska — przy kilku
+ * grupach na firmę PostgREST ucinał odpowiedź do 1000 wierszy już od
+ * ok. 125–330 firm, a ucięta firma dostawała `pending` = 0 i zaniżony
+ * szacunek (sesja 27 planu skalowania).
+ */
 export async function readCounts(
   client: HistoryClient,
   environment: KsefHistoryEnvironment,
   statuses: KsefHistoryItemStatus[],
+  tenantIds: readonly string[],
 ): Promise<KsefHistoryCountRow[]> {
-  const { data, error } = await client
-    .from('ksef_history_item_counts')
-    .select('tenant_id, environment, direction, status, reason_code, item_count')
-    .eq('environment', environment)
-    .in('status', statuses);
-  if (error) throw dbError('liczniki dziennika', error);
-  return (data ?? []) as KsefHistoryCountRow[];
+  const out: KsefHistoryCountRow[] = [];
+  for (let i = 0; i < tenantIds.length; i += COUNT_TENANTS_PER_QUERY) {
+    const part = tenantIds.slice(i, i + COUNT_TENANTS_PER_QUERY);
+    const { data, error } = await client
+      .from('ksef_history_item_counts')
+      .select('tenant_id, environment, direction, status, reason_code, item_count')
+      .eq('environment', environment)
+      .in('status', statuses)
+      .in('tenant_id', part);
+    if (error) throw dbError('liczniki dziennika', error);
+    const rows = (data ?? []) as KsefHistoryCountRow[];
+    // Odpowiedź równa limitowi jest nieodróżnialna od uciętej; więcej grup niż
+    // dopuszcza CHECK = schemat się zmienił. W obu przypadkach liczby byłyby
+    // zaniżone po cichu — wyjątek.
+    if (rows.length >= POSTGREST_MAX_ROWS || rows.length > part.length * KSEF_HISTORY_COUNT_GROUPS_PER_TENANT) {
+      throw dbError('liczniki dziennika', { message: `${rows.length} grup dla ${part.length} firm — odpowiedź mogła zostać ucięta` });
+    }
+    out.push(...rows);
+  }
+  return out;
 }

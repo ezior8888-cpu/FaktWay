@@ -2,8 +2,11 @@ import Link from 'next/link';
 
 import { FooterHelpButton } from '@/components/dashboard/footer-help-button';
 
+// Na telefonie link ma 44 px wysokości: bez tego trzy linki stopki miały po 17 px
+// i trudno było w nie trafić kciukiem. Piksele, nie `min-h-11`: korzeń ma tu
+// 14 px, więc `h-11` daje 38,5 px.
 const LINK_CLASS =
-  'text-muted-foreground transition-colors duration-300 hover:text-foreground';
+  'text-muted-foreground transition-colors duration-300 hover:text-foreground max-sm:inline-flex max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:items-center max-sm:justify-center';
 
 /**
  * Stopka panelu (plan Finora P0, E2) — wygląd `Footer.tsx` z szablonu, treść

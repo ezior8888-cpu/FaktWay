@@ -334,7 +334,8 @@ async function decideKsefSubmitEnqueue(
   // Jedna transakcja (W16/W2): RPC przestawia status po stronie serwera, pg-boss
   // zapisuje zlecenie na tym samym połączeniu. Błąd zapisu zlecenia cofa status;
   // odmowa RPC (drugie kliknięcie, błąd treści przy ponowieniu) nie tworzy
-  // zlecenia. `singletonKey` = faktura: w kolejce czeka najwyżej jedno zlecenie.
+  // zlecenia. To RPC chroni przed drugim zleceniem; `singletonKey` = faktura jest
+  // tylko etykietą (`lib/jobs/enqueue.ts`).
   const mode: KsefSendMode = params.mode ?? { kind: 'enqueue' };
   // Właściciel przejęcia wysyłki (AUD-10): każde kolejkowanie to nowa próba.
   const sendAttemptId = randomUUID();

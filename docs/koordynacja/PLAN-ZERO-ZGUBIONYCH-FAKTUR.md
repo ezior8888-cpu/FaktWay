@@ -252,12 +252,8 @@ agenta z weryfikacją Bartosza, nie obietnica.
   Teksty klienta PR C i komunikaty P0001 z 00156: przegląd prawnika przed
   KSeF PROD (punkt bramki, sekcja 8). Runbook: `ksef-error-codes.md`, sekcja
   „D-A4-1b-3 PR C”; kontrola: `kontrola-faktur-ksef.sh`, sekcja 10 (h) do (p).
-  **PR D** („Sprawdź ponownie” dla powodów bez danych oryginału) zrobiony
-  w stosie na #248: właściciel albo administrator zleca uzgodnienie
-  (`requeue_ksef_send(p_reconcile_only)`, zdarzenie z `reconcileOnly: true`, runner
-  nie wysyła), cooldown 10 minut z audytu `invoice.duplicate_recheck`, wskazówka
-  o `InvoiceRead` przy 403; bez migracji (runbook `ksef-error-codes.md`,
-  „Sprawdź ponownie”). Dalej: **PR E** (K na wierszu X przy tej samej treści, C5). Bez decyzji
+  Dalej: **PR D** („Sprawdź ponownie” dla powodów bez danych oryginału)
+  i **PR E** (K na wierszu X przy tej samej treści, C5). Bez decyzji
   w panelu zostają: KOR/ZAL/ROZ (D-A4-1b-3-S), `same-content-other-program`
   (D-A4-1b-2), `archive-conflict` (runbook).
   Zapisane osobno przy PR C (nie naprawiane w nim; szczegóły w runbooku):
@@ -479,6 +475,11 @@ agenta z weryfikacją Bartosza, nie obietnica.
   (kolumna/filtr), komunikaty zamiast wyjątków na pulpicie; przećwiczone
   na kopii bazy (I3).
 - DoD: próbne przełączenie na kopii bez „Coś poszło nie tak”.
+- Z pomiaru FaktWay 1.0 (#357, 00161): w kroku przełączenia wyzeruj
+  `tenants.first_invoice_accepted_at` i policz ją od nowa z faktur nowego
+  środowiska (SQL w `docs/analytics/lejek-faktway.md`, „Przełączenie TEST →
+  PROD”). Inaczej `/admin` pokaże „Fakturę” z TEST, a pierwsza prawdziwa
+  faktura nie wyśle `first_invoice_sent`.
 - Z D-A4-2 (04.10.2026): przed zmianą `KSEF_ENV` hamulec i pusta kolejka,
   a faktury `failed` z kodami przejściowymi i `KSEF_PAUSED` rozstrzygnięte
   (szkic albo wysyłka na TEST) — cron I6/I7 wznawia je nowym zdarzeniem
@@ -661,20 +662,6 @@ są odhaczone (z datą i numerem PR/raportu):
       prawnika nie dotyczą. Zmiana tekstu P0001 po przeglądzie wymaga nowej
       migracji i tej samej zmiany w lustrze TS (strażnik
       `tests/unit/zapis-oryginalu-migracja.test.ts`).
-- [ ] Teksty „Sprawdź ponownie” D-A4-1b-3 PR D przejrzane przez prawnika
-      (rozszerzenie punktów wyżej); TEST bez blokady. Ta sama migawka
-      (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 18 tekstów
-      `DUPLICATE_DECISION_TEXTS.RECHECK`: wstęp z numerem KSeF i dniem nadania
-      (`INTRO`), co robi przycisk (`WHAT_NEXT`), przycisk i „Nie wystawiaj tej
-      faktury ponownie” (`BUTTON`, `NO_REISSUE`), wskazówka przy 403: dane
-      logowania KSeF w FaktWay bez uprawnienia `InvoiceRead`, sprawdź je
-      w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach
-      (`HINT_403`, certyfikat, nie token), dane z innego
-      środowiska KSeF (`ENV_MISMATCH`), prośba o właściciela lub administratora
-      (`ROLE`), sprawdzanie w toku i cooldown (`IN_FLIGHT`, `COOLDOWN`,
-      `QUEUED`), odmowy (`NOT_AVAILABLE`, `CANNOT`, `PAUSED`, `PAUSE_UNKNOWN`,
-      `ENV_UNKNOWN`, `NO_CERTIFICATE`, `REFUSED`) i błąd ogólny (`GENERIC`). Bez nowych
-      komunikatów bazy (PR D nie ma migracji).
 - [ ] `scripts/ops/kontrola-faktur-ksef.sh` uruchamiany codziennie przez
       14 dni bez „nieznanych” stanów.
 
@@ -721,7 +708,7 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 | 14.10.2026 | A5 — dokument cyklu życia | #262 | `cykl-zycia-faktury-ksef.md`: `offline_queued` bez wyjścia do `sending` od 02.10, jedyne wyjście `failed OFFLINE_DEADLINE_EXCEEDED` z crona kolejki (kod spoza katalogu — I4) | w wydaniu #257–#263; luka #5 (wyjście dla stojących faktur) po sekcji 4a z produkcji |
 | 14.10.2026 | A5 — certyfikat | #263 | `cert-expiry-alert`: ścisły odczyt adresu — błąd bazy/GoTrue nie jest „brakiem adresu” (dawniej push zamykał próg, a mail nie wychodził nigdy); firma z błędem odłożona i na liście operatora, pozostałe dalej, zadanie rzuca na końcu (ponowienie); mail z kluczem idempotencji (próg + liczba dni); mutanty 12/12 | w wydaniu #257–#263; wdrożenie: worker; błąd Resend dalej zatrzymuje kolejne firmy w pętli (osobne ustalenie); `getTenantAdminEmail`/`getTenantOwnerUserId` bez wołających |
 | 26.10.2026 | D-A4-1b-3 PR C | #248 | zapis oryginału z oznaczeniem FaktWay/FaktFlow (`faktflow-original`) przy nierozstrzygniętym 440: klient decyduje na karcie („ta sama” / „inna sprzedaż”, a przy wcześniejszej wersji tego dokumentu albo tej samej treści jeden przycisk „Zapisz fakturę z KSeF”), a jedna transakcja zapisuje K jako przyjętą fakturę sprzedaży (`origin='ksef_import'`, numer FV/N) i zdejmuje numer z wycofanego X (decyzje Bartosza 08.10 C1–C8, 09–10.10 N1–N6); brama pochodzenia (16 jawnych reguł) liczona przez runner i zapisana na znaczniku; plik nie z generatora → przegląd operatora (I5R, alarm po 72 h) z zapisem albo oddaniem decyzji klientowi; ponowne sprawdzenie (`recheck-needed`) przy archiwum/rozjeździe; inna firma z tym samym NIP i numer znany po werdykcie → blokady; PDF szkicu bez numeru odmawiany z odnośnikiem do K; I3K (brak sesji albo daty) + skrypt `oryginal-ksef-data-nadania.sh`; migracja **00156** (dawniej 00149 — przeniesiona, bo 00151 i 00155 nadpisały po niej funkcje PR C; ciała z 00151/00155 + zmiany PR C, ścieżka PR B bez zmian); czerwone przed naprawą: 1487 jednostkowych (commit 2), 69/70 testów bazy (commit 4, PGRST202); scalenie main (330 commitów, marka FaktWay); testy bazy uruchamiane lokalnie na izolowanym Supabase (kopia joba „RLS isolation”) | **00156 przed wdrożeniem**; typy 00156 w kolejnym PR; przed KSeF PROD przegląd tekstów przez prawnika (82 nowe, lista w sekcji 8); zapisane: D-A4-1b-3-MI, -UPO, -SYS, -DATE, -PDF, -PAY, -CAT, -LIST, -EVID, -XEDIT, -KORB2C, -KORZW, -FLO-NUM, GEN-PESEL-KRAJ, C5b-d+, IDX-ENV, -TESTENV (opis w runbooku i opisie PR); dalej w bloku A: PR D („Sprawdź ponownie” dla powodów bez danych oryginału) |
-| 26.10.2026 | D-A4-1b-3 PR D | #336 | „Sprawdź ponownie” dla `KSEF_DUPLICATE_RECONCILE` bez danych oryginału (brak zapisu sprawdzenia, pobranie 403/5xx, magazyn, archiwum, dane z innego środowiska KSeF): przycisk dla właściciela i administratora zleca `requeue_ksef_send(p_reconcile_only)` (runner nigdy nie wysyła), cooldown 10 minut z audytu `invoice.duplicate_recheck`, przy 403 wskazówka o `InvoiceRead`, członek firmy widzi dane i prośbę o właściciela; wspólny rdzeń `reconcileOnlyBlocker` z „Tylko uzgodnij” operatora; znaleziona luka: `enqueueKsefSubmitAfterDraft` nie dawał `reconcileOnly` do zdarzenia (runner wysłałby fakturę), a Offline24 wysłałby ją przy awarii KSeF: oba zamknięte; czerwone przed naprawą: 86 testów jednostkowych (commit „czerwone testy”), macierz A4: powody RECHECK mają wyjście klienta; **bez migracji**; stos na #248 | po scaleniu #248 i tego PR: wdrożenie worker → web, zapytanie o `invoice.duplicate_recheck` z runbooku; przed KSeF PROD przegląd 17 nowych tekstów przez prawnika (lista w sekcji 8); zapisane: 440 bez numeru oryginału nie ma panelu, więc ani przycisku (wyjście: „Tylko uzgodnij”/I5); dalej w bloku A: PR E (K na wierszu X, C5) i A5 |
+| 27–29.10.2026 | ZAP-01 (przegląd architektury 26.10) | #339 | historia KSeF nie gubi sprzedaży przeniesionej plikiem: szkic z importu CSV/JPK (`draft`, bez numeru KSeF i środowiska) o tym samym numerze i danych dawał `skipped/already_present` (stan końcowy), a przychód, KPiR, JPK i Pulpit liczą tylko `accepted` w środowisku — sprzedaż znikała bez komunikatu. `inSalesBooks` w `lib/ksef/history-sync/classify.ts`: `already_present`/`imported` tylko z posiadaczem w księgach (wyjątek: dawny `ksef_import` bez środowiska); szkic do usunięcia (`draft`, bez prób wysyłki) → `number_conflict` z tekstem „usuń go” (bez „zmień numer” — szkicu nie da się edytować); szkic z pliku w wysyłce albo `failed`/`rejected` z próbą → `own_send_pending` (po 48 h `own_send_unresolved`); szkic z próbą (np. wycofany 440 bez numeru oryginału — klient go nie usunie, 00148; usuwa serwis za zgodą Bartosza), bez statusu, z numerem KSeF, inne środowisko, `failed`/`rejected` bez próby → `local_conflict` (operator, alarm, procedura w runbooku §4a); `number_conflict` przy statusie NULL także w gałęzi `app` → operator. Strażnik (pochodzenie × status × środowisko × numer KSeF × dane × próby wysyłki): 4 reguły, czerwony na `main`; runbook §4, §4a–§4c; `ksef-historia.sh stan` pkt 8 (z listą firm) i pkt 9 (`number_conflict` na firmę, wiek z `discovered_at`), tylko odczyt. Recenzja niezależna (#339): 5 uwag poprawionych w tym PR | bez migracji (CHECK 00155 zna oba powody); **decyzje Bartosza**: otwarcie pozycji `already_present` sprzed poprawki (`stan` pkt 8, §4c — wariant A albo B z opisu PR) i potwierdzenie, że szkic z INNYMI danymi daje `number_conflict` zamiast `file_import_mismatch`; zapisane: **ZAP-01-a** setki szkiców z CSV: usuwanie po jednym, lista klienta 20 pozycji, bez akcji zbiorczej i bez alarmu — akcja „usuń szkice z pliku, których oryginał jest w KSeF” albo RPC zastępujące szkic oryginałem (decyzja Bartosza; procedura do tego czasu: runbook §4b); **ZAP-01-b** karta historii w fazie `live` pisze „Cała historia sprzedaży pobrana” i „Automatycznie” mimo blokad klienta (`status.ts`, `ksef-history-model.ts`), Pulpit i KPiR bez sygnału — wszystkie powody blokady; **ZAP-01-c** po usunięciu szkicu pozycja ok. 1 h bez linku z tym samym „usuń go” (zerowanie FK podbija `updated_at`, usunięty szkic idzie na koniec kolejki sprawdzeń), przy N blokadach do ceil(N/50) h, a pobranie oryginałów 5/10 na przebieg; **ZAP-01-d** `lib/invoices/next-number.ts` po usunięciu najnowszego szkicu z CSV może podpowiedzieć numer zajęty w KSeF (440); **ZAP-01-e** zakupy, krok 1b: kopia bez numeru KSeF → `already_present` bez sprawdzenia kosztów (uśpione); **ZAP-01-f** `lib/reports/kpir-data.ts` nie woła `assertAcceptedEnvironmentKnown` — przyjęte bez środowiska znikają z KPiR po cichu |
 
 ---
 

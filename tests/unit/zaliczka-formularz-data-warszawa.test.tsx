@@ -19,6 +19,8 @@ import { AdvanceInvoiceForm } from '@/components/invoices/advance-form';
  * (na przełomie miesiąca — poprzedni okres VAT), a wysyłka, która wymaga
  * dzisiejszej daty, odmawiała klientowi, który niczego nie zmieniał.
  */
+/** Firma formularza (UX-01) — w tym teście tylko wymagany prop. */
+const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const seller = {
   nip: '1234567890', name: 'Firma testowa',
   address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' },
@@ -46,7 +48,7 @@ async function render() {
   document.body.appendChild(host);
   root = createRoot(host);
   await act(async () => {
-    root!.render(<AdvanceInvoiceForm initialSeller={seller} />);
+    root!.render(<AdvanceInvoiceForm initialSeller={seller} tenantId={TENANT} />);
   });
   return host;
 }

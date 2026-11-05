@@ -20,7 +20,7 @@ import { FILE_SOURCES } from './import-model';
  * „Historia z KSeF” wyżej), więc karty KSeF tu nie ma. Plik zostaje tylko
  * dla czterech dużych programów — bez „Inny program (JPK_FA)”. Każda karta
  * otwiera to samo okno `FileImportDialog` co onboarding
- * (`startFileImportAction`, 10 MB, przejście na stronę postępu).
+ * (`startFileImportAction`, plik do 1 MB, przejście na stronę postępu).
  *
  * Siatka: dwie kolumny, od `xl` cztery — na telefonie karty stoją parami.
  */

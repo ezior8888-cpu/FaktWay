@@ -1,15 +1,15 @@
 import type { Metadata } from 'next';
 
 import { SiteShell } from '@/components/site/site-shell';
-import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
+import { OFERTA } from '@/lib/marketing/oferta';
 
-import { FloSection } from './_components/flo-section';
 import { Hero } from './_components/hero';
+import { Phone } from './_components/phone-section';
 import { CallToAction, Faq, Features, Pricing } from './_components/sections';
 
 export const metadata: Metadata = {
-  title: 'FaktWay: faktury w KSeF bez stresu',
-  description: `Wystawiasz fakturę, a FaktWay wysyła ją do KSeF, pilnuje potwierdzenia i płatności. Do tego FLO, agent AI, który przygotowuje robotę za Ciebie. ${TRIAL_DAYS} dni za darmo, potem ${PRICE_PER_MONTH}.`,
+  title: 'FaktWay: program do faktur z KSeF',
+  description: OFERTA,
 };
 
 /**
@@ -18,9 +18,9 @@ export const metadata: Metadata = {
  * grafik ani tekstów, tylko ogólny układ sekcji. Bez opinii klientów,
  * logotypów i liczb, bo nie mamy prawdziwych (tests/unit/strona-glowna).
  *
- * Strona jest o FaktWay, a agent FLO to dodatek. FLO jest opisany jako
- * dostępny, więc strona może wyjść dopiero razem z nim (decyzja Bartosza
- * z 23.10.2026). Wcześniej byłaby obietnicą bez pokrycia (art. 5 u.p.n.p.r.).
+ * FaktWay 1.0 (decyzja z 29.10.2026): bez FLO, asystenta i AI w obietnicach,
+ * jedno zdanie oferty, każda funkcja ma pokrycie w kodzie. Niebieski pas po
+ * dawnej sekcji FLO opisuje telefon, żeby strona nie straciła rytmu.
  *
  * Osobna grupa tras, bo `(landing)/layout.tsx` owija strony w motyw Zova,
  * a ta strona używa motywu aplikacji (jasny i ciemny).
@@ -30,7 +30,7 @@ export default function HomePage() {
     <SiteShell>
       <Hero />
       <Features />
-      <FloSection />
+      <Phone />
       <Pricing />
       <Faq />
       <CallToAction />

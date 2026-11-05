@@ -3,7 +3,7 @@
 import { useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiLoader4Line, RiPrinterLine, RiRepeatLine } from '@remixicon/react';
+import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiFileCopyLine, RiLoader4Line, RiPrinterLine, RiRepeatLine } from '@remixicon/react';
 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
-import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
+import { duplicateInvoiceHref, setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 
 interface Props {
@@ -54,6 +54,12 @@ interface Props {
      * pojawia się „Ustaw jako cykliczną” (arkusz na `/invoices/recurring?wzor=`).
      */
     can_set_recurring?: boolean;
+    /**
+     * „Duplikuj”: zwykła faktura wystawiona w FaktWay (liczy serwer predykatem
+     * z listy faktur). Na telefonie lista nie ma menu „⋯” z tabeli, więc to
+     * jest jedyna droga do duplikatu poza komputerem.
+     */
+    can_duplicate?: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -260,6 +266,15 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
         >
           <RiEditLine />
           Korekta
+        </Link>
+      )}
+      {invoice.can_duplicate && (
+        <Link
+          href={duplicateInvoiceHref(invoice.id)}
+          className={cn(buttonVariants({ variant: 'outline' }), full)}
+        >
+          <RiFileCopyLine />
+          Duplikuj
         </Link>
       )}
       {invoice.can_set_recurring && (

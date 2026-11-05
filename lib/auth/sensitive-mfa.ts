@@ -12,15 +12,27 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
  * odcięłoby od wysyłki każdego właściciela bez MFA.
  *
  * Błąd odczytu flagi nie blokuje — to dodatkowa warstwa, nie wyłącznik.
+ *
+ * Logowanie biometrią: sesja AAL1 konta z 2FA wchodzi do panelu ze znacznikiem
+ * (`lib/auth/panel-mfa.ts`). Dawniej taka sesja nie docierała tu wcale, więc
+ * flaga wyłączona nic nie ryzykowała. Płatności i certyfikat proszą teraz o kod
+ * niezależnie od flagi i roli. Wysyłka do KSeF nie: biometria to dwa składniki,
+ * a kod przy każdej fakturze przekreśliłby sens logowania bez kodu.
  */
 
 export type SensitiveOperation = 'ksef_submit' | 'certificate' | 'billing';
 
+/** `challenge`: konto ma 2FA, ta sesja go nie potwierdziła. `enrollment`: konto nie ma 2FA. */
+export type SensitiveMfaReason = 'challenge' | 'enrollment';
+
+const MESSAGES: Record<SensitiveMfaReason, string> = {
+  enrollment: 'Ta operacja wymaga weryfikacji dwuetapowej. Włącz ją w Ustawieniach → Bezpieczeństwo i zaloguj się ponownie.',
+  challenge: 'Ta operacja wymaga weryfikacji dwuetapowej. Otwórz Ustawienia → Bezpieczeństwo, potwierdź kodem z aplikacji i spróbuj ponownie.',
+};
+
 export class SensitiveMfaRequiredError extends Error {
-  constructor(readonly operation: SensitiveOperation) {
-    super(
-      'Ta operacja wymaga weryfikacji dwuetapowej. Włącz ją w Ustawieniach → Bezpieczeństwo i zaloguj się ponownie.',
-    );
+  constructor(readonly operation: SensitiveOperation, readonly reason: SensitiveMfaReason = 'enrollment') {
+    super(MESSAGES[reason]);
     this.name = 'SensitiveMfaRequiredError';
   }
 }
@@ -31,6 +43,11 @@ export async function assertSensitiveMfa(
   ctx: { tenantId: string; userId: string },
   operation: SensitiveOperation,
 ): Promise<void> {
+  if (operation !== 'ksef_submit') {
+    const state = await getVerifiedMfaState(await createClient()).catch(() => null);
+    if (!state || state.status === 'challenge_required') throw new SensitiveMfaRequiredError(operation, 'challenge');
+  }
+
   let required: boolean;
   try {
     required = await getGlobalFlagForExecution('requireMfaForSensitive');
@@ -50,5 +67,6 @@ export async function assertSensitiveMfa(
   if (!role || !GUARDED_ROLES.has(role)) return;
 
   const state = await getVerifiedMfaState(await createClient()).catch(() => null);
-  if (state?.status !== 'verified') throw new SensitiveMfaRequiredError(operation);
+  if (state?.status === 'challenge_required') throw new SensitiveMfaRequiredError(operation, 'challenge');
+  if (state?.status !== 'verified') throw new SensitiveMfaRequiredError(operation, 'enrollment');
 }

@@ -7,6 +7,7 @@ import {
 } from '@/lib/legacy-host-redirect';
 import { siteUrl } from '@/lib/site';
 import { updateSession } from '@/lib/supabase/middleware';
+import { isTelemetryTunnelPath, passTelemetryTunnel } from '@/lib/telemetry-tunnel';
 
 /**
  * Next.js 16+ Proxy (konwencja zamiast root `middleware.ts`) — każde żądanie
@@ -36,6 +37,8 @@ export async function proxy(request: NextRequest) {
     });
     if (target) return NextResponse.redirect(target, 308);
   }
+  // Tunele PostHog i Sentry: bez sesji i bez ciasteczek (`lib/telemetry-tunnel.ts`).
+  if (isTelemetryTunnelPath(request.nextUrl.pathname)) return passTelemetryTunnel(request);
   return await updateSession(request);
 }
 
@@ -46,5 +49,9 @@ export const config = {
   // cichym błędem dekodera w przeglądarce.
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|mp4|webm|mov|woff|woff2)$).*)',
+    // Tunel PostHog w całości, także pliki z rozszerzeniem z listy wyżej
+    // i każdy zapis wielkości liter (Next przepisuje `/Ingest/…` tak samo):
+    // tylko proxy zdejmuje z niego ciasteczka (`lib/telemetry-tunnel.ts`).
+    '/:tunnel([iI][nN][gG][eE][sS][tT])/:path*',
   ],
 };

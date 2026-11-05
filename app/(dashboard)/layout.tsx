@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
-import { assertDashboardShellAccess } from '@/lib/dashboard-shell-data';
+import { after } from 'next/server';
+import { assertDashboardShellAccess, getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import DashboardProfileMenu from '@/app/(dashboard)/_components/dashboard-profile-menu';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
@@ -14,15 +15,17 @@ import { ShellScrollMemory } from '@/components/dashboard/shell-scroll-memory';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
+import { PasskeyEnrollOfferGate } from '@/components/auth/passkey-enroll-offer-gate';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
 import { AnalyticsIdentify } from '@/components/analytics/analytics-identify';
 import { SupportWidget } from '@/components/support/support-widget';
 import { PortalContainerProvider } from '@/components/ui/portal-container';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { REMEMBER_ME_COOKIE, REMEMBER_ME_VALUE } from '@/lib/auth/device-cookies';
 import { getAllHelpArticles } from '@/lib/help/articles';
+import { noteTenantActivityThrottled } from '@/lib/ksef/inbox-activity';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
-import { createClient } from '@/lib/supabase/server';
 
 /**
  * Dashboard layout dla wszystkich chronionych podstron `(dashboard)/...`.
@@ -49,18 +52,27 @@ export default async function DashboardLayout({
 }) {
   await assertDashboardShellAccess();
 
-  // Identity dla PostHog (Faza 31 Krok 5). `assertDashboardShellAccess`
-  // już potwierdziło sesję i aktywną org — tu tylko czytamy id-ki dla
-  // `<AnalyticsIdentify>`. Oba odczyty są lekkie (sesja w cache, cookie).
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const activeOrg = await getActiveOrgIdFromCookies();
+  // Identity dla PostHog (Faza 31 Krok 5) i imię do menu. `assertDashboardShellAccess`
+  // już potwierdziło sesję i aktywną org — tu ten sam użytkownik z `cache()`
+  // na żądanie (bez drugiego wywołania GoTrue) i aktywna org z cookie.
+  const [user, activeOrg] = await Promise.all([
+    getDashboardSessionUser(),
+    getActiveOrgIdFromCookies(),
+  ]);
+
+  // Harmonogram skrzynki: ktoś z firmy jest aktywny (firma gorąca przez 24 h).
+  // `assertDashboardShellAccess` potwierdziło członkostwo w tej firmie. Po odpowiedzi
+  // i najwyżej raz na godzinę na firmę, więc wejście na panel za to nie płaci.
+  if (activeOrg) {
+    after(() => noteTenantActivityThrottled(activeOrg));
+  }
 
   // Stan paska bocznego (rozwinięty / zwinięty do ikon) z ciasteczka, które
   // zapisuje `SidebarProvider` — bez tego pasek „skakałby" po hydracji.
-  const sidebarOpen = (await cookies()).get('sidebar_state')?.value !== 'false';
+  const cookieStore = await cookies();
+  const sidebarOpen = cookieStore.get('sidebar_state')?.value !== 'false';
+  // „Zapamiętaj mnie” (także logowanie biometrią): bez wylogowania po bezczynności.
+  const rememberedDevice = cookieStore.get(REMEMBER_ME_COOKIE)?.value === REMEMBER_ME_VALUE;
 
   // Imię do menu avatara, jeśli GoTrue je ma (Google OAuth: `full_name`).
   const metaName: unknown =
@@ -137,7 +149,8 @@ export default async function DashboardLayout({
           <InstallPrompt />
           <PrefetchDashboardRoutes />
           <PrefetchExportsRoute />
-          <IdleWatcher />
+          {!rememberedDevice && <IdleWatcher />}
+          <PasskeyEnrollOfferGate />
           {user && activeOrg && (
             <AnalyticsIdentify
               userId={user.id}

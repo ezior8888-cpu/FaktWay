@@ -176,7 +176,11 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
         },
         eq(c: string, v: unknown) { predicates.push((r) => r[c] === v); return builder; },
         neq(c: string, v: unknown) { predicates.push((r) => r[c] !== v); return builder; },
-        gt(c: string, v: number) { predicates.push((r) => Number(r[c]) > v); return builder; },
+        /** Liczba — porównanie liczb (`gross_total > 0`); napis — tekstowo jak `gte` (`id > ostatni`, strony po kluczu). */
+        gt(c: string, v: number | string) {
+          predicates.push((r) => (typeof v === 'number' ? Number(r[c]) > v : r[c] != null && String(r[c]) > v));
+          return builder;
+        },
         gte(c: string, v: string) { predicates.push((r) => r[c] != null && String(r[c]) >= v); return builder; },
         lt(c: string, v: string) { predicates.push((r) => r[c] != null && String(r[c]) < v); return builder; },
         in(c: string, v: unknown[]) { predicates.push((r) => v.includes(r[c])); return builder; },

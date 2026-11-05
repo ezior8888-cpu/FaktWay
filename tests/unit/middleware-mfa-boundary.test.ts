@@ -1,3 +1,4 @@
+import { createHmac, hkdfSync } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
@@ -16,13 +17,12 @@ let refresh: boolean;
 beforeEach(() => {
   vi.resetAllMocks(); aal = 'aal1'; factors = [factor]; refresh = false;
   vi.stubEnv('NEXT_PUBLIC_APP_ENV', 'production');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'off');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', '');
   mocks.create.mockImplementation((_url: string, _key: string, options: {
-    cookies: { setAll: (values: { name: string; value: string; options: { path: string; httpOnly: boolean } }[]) => void };
+    cookies: { setAll: (values: { name: string; value: string; options: { path: string; httpOnly: boolean } }[], headers: Record<string, string>) => void };
   }) => {
     mocks.getClaims.mockImplementation(async (token?: string) => {
-      if (!token && refresh) options.cookies.setAll([{ name: 'fixture-session', value: 'refreshed', options: { path: '/', httpOnly: true } }]);
+      // Drugi argument jak w prawdziwym `@supabase/ssr` (applyServerStorage).
+      if (!token && refresh) options.cookies.setAll([{ name: 'fixture-session', value: 'refreshed', options: { path: '/', httpOnly: true } }], { 'Cache-Control': 'private, no-cache, no-store, must-revalidate, max-age=0', Expires: '0', Pragma: 'no-cache' });
       return { data: { claims: { sub: userId, aal } }, error: null };
     });
     return { auth: {
@@ -126,9 +126,7 @@ function phoneRequest(path: string) {
   });
 }
 
-it.each(['on', 'allowlist'])('mobile rollout %s still challenges enrolled AAL1 before company data', async (mode) => {
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', mode);
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+it('phone still challenges enrolled AAL1 before company data', async () => {
   refresh = true;
   const response = await updateSession(phoneRequest('/invoices'));
   expect(response.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Finvoices');
@@ -137,20 +135,94 @@ it.each(['on', 'allowlist'])('mobile rollout %s still challenges enrolled AAL1 b
   expect(mocks.localAal).not.toHaveBeenCalled();
 });
 
-it.each(['off', 'on', 'allowlist'])('mobile mode %s cannot exempt a private API from MFA', async (mode) => {
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', mode);
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+it('phone cannot exempt a private API from MFA', async () => {
   const response = await updateSession(phoneRequest('/api/gdpr/export'));
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: 'mfa_required' });
   expect(mocks.from).not.toHaveBeenCalled();
 });
 
-it('lets an allowed phone with verified MFA continue to its protected page', async () => {
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL', 'allowlist');
-  vi.stubEnv('NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST', userId);
+it('lets a phone with verified MFA continue to its protected page', async () => {
   aal = 'aal2';
   const response = await updateSession(phoneRequest('/invoices'));
   expect(response.headers.get('x-middleware-next')).toBe('1');
   expect(mocks.getUser).toHaveBeenCalledWith('signed-fixture');
+});
+
+// Logowanie biometrią (FW1): znacznik liczony niezależnie od kodu aplikacji,
+// ta sama derywacja co w `tests/unit/passkey-session-marker.test.ts`.
+const SERVICE_ROLE = 'fixture-service-role-key-do-testow';
+const SESSION_ID = 'fixture-session-id';
+function passkeyMarker(sub = userId, sessionId = SESSION_ID): string {
+  const expiry = String(Math.floor(Date.now() / 1000) + 3600);
+  const key = Buffer.from(hkdfSync('sha256', SERVICE_ROLE, Buffer.alloc(0), 'faktway/passkey-session-marker/v1', 32));
+  const mac = createHmac('sha256', key).update(['v1', sub, sessionId, expiry].join('\n')).digest('base64url');
+  return ['v1', expiry, mac].join('.');
+}
+/** Zmienia pierwszy znak podpisu, zawsze na inny (dawne `.slice(0, -2) + 'AA'` raz na ~1024 nic nie zmieniało). */
+function forged(marker: string): string {
+  const at = marker.lastIndexOf('.') + 1;
+  return marker.slice(0, at) + (marker[at] === 'A' ? 'B' : 'A') + marker.slice(at + 1);
+}
+function markedRequest(path: string, marker: string) {
+  return new NextRequest('https://app.example.test' + path, {
+    headers: { cookie: `${ACTIVE_ORG_COOKIE}=${org}; ksef.passkey_session=${marker}` },
+  });
+}
+function withSessionClaims() {
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', SERVICE_ROLE);
+  mocks.create.mockImplementation(() => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: userId, aal: 'aal1', session_id: SESSION_ID } }, error: null });
+    return { auth: {
+      getSession: mocks.getSession, getUser: mocks.getUser, getClaims: mocks.getClaims,
+      mfa: { getAuthenticatorAssuranceLevel: mocks.localAal },
+    }, from: mocks.from };
+  });
+}
+
+it.each(['/invoices', '/api/invoices/fixture/pdf'])('valid passkey marker of this session passes the panel gate at %s', async (path) => {
+  withSessionClaims();
+  const response = await updateSession(markedRequest(path, passkeyMarker()));
+  expect(response.status).toBe(200);
+  expect(response.headers.get('x-middleware-next')).toBe('1');
+});
+
+it.each([
+  ['another session', () => passkeyMarker(userId, 'other-session')],
+  ['another account', () => passkeyMarker('other-user', SESSION_ID)],
+  ['a forged signature', () => forged(passkeyMarker())],
+])('passkey marker of %s still gets the challenge', async (_name, marker) => {
+  withSessionClaims();
+  const page = await updateSession(markedRequest('/invoices', marker()));
+  expect(page.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Finvoices');
+  const api = await updateSession(markedRequest('/api/invoices/fixture/pdf', marker()));
+  expect(api.status).toBe(403);
+  expect(await api.json()).toEqual({ error: 'mfa_required' });
+});
+
+it('/admin ignores the passkey marker and asks for the real code, keeping the deep link', async () => {
+  withSessionClaims();
+  const response = await updateSession(markedRequest('/admin/users', passkeyMarker()));
+  expect(response.headers.get('location')).toBe('https://app.example.test/login/two-factor?redirect=%2Fadmin%2Fusers');
+});
+
+it('passkey login endpoints are public, registration is not', async () => {
+  mocks.create.mockImplementation(() => {
+    mocks.getClaims.mockResolvedValue({ data: null, error: null });
+    return { auth: {
+      getSession: mocks.getSession, getUser: mocks.getUser, getClaims: mocks.getClaims,
+      mfa: { getAuthenticatorAssuranceLevel: mocks.localAal },
+    }, from: mocks.from };
+  });
+  for (const path of ['/api/auth/passkey/login/options', '/api/auth/passkey/login/verify']) {
+    const response = await updateSession(request(path, false, 'POST'));
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+  }
+  for (const path of ['/api/auth/passkey', '/api/auth/passkey/register/options', '/api/auth/passkey/register/verify', '/api/auth/passkey/fixture-id']) {
+    const response = await updateSession(request(path, false, 'POST'));
+    expect(response.status).toBe(401);
+  }
+  // Prefiks nie otwiera sąsiednich nazw.
+  const lookalike = await updateSession(request('/api/auth/passkey/loginx', false, 'POST'));
+  expect(lookalike.status).toBe(401);
 });

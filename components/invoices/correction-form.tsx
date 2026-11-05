@@ -189,6 +189,8 @@ const TYPOLOGY_KOREKTY_LABELS = {
 export interface CorrectionInvoiceFormProps {
   parentInvoices: CorrectionParentInvoiceRow[];
   preselectedParentId?: string;
+  /** Firma, dla której wyrenderowano listę faktur pierwotnych — zapis odsyła ją jako `expectedTenantId` (UX-01). */
+  tenantId: string;
 }
 
 // Daty w czasie polskim, nie UTC (F-013).
@@ -301,6 +303,7 @@ const defaultLineRow: InvoiceLineDraft = {
 export function CorrectionInvoiceForm({
   parentInvoices,
   preselectedParentId,
+  tenantId,
 }: CorrectionInvoiceFormProps) {
   const validPreselect = useMemo(() => {
     const id = preselectedParentId?.trim();
@@ -376,11 +379,11 @@ export function CorrectionInvoiceForm({
   // bridge URL-param → form-state (pre-select rodzica korekty), więc wzorzec
   // jest pożądany. Refaktor na `useSyncExternalStore` byłby przesadą dla
   // jednego pre-fillu; suppress z explicit komentarzem.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
   useEffect(() => {
     if (!validPreselect || userDismissedPrefillRef.current) return;
     const row = parentInvoices.find((p) => p.id === validPreselect);
     if (!row) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
     void loadParentContext(row);
   }, [validPreselect, parentInvoices, loadParentContext]);
 
@@ -501,6 +504,7 @@ export function CorrectionInvoiceForm({
       parentRow={selectedParent}
       defaults={defaults}
       onPickOther={handleBackToPick}
+      tenantId={tenantId}
     />
   );
 }
@@ -559,9 +563,10 @@ interface CorrectionFillFormProps {
   parentRow: CorrectionParentInvoiceRow;
   defaults: CorrectionFormIn;
   onPickOther: () => void;
+  tenantId: string;
 }
 
-function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFillFormProps) {
+function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: CorrectionFillFormProps) {
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isSending, startSending] = useTransition();
@@ -607,7 +612,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
         );
         return;
       }
-      const result = await saveCorrectionDraftAction(parsed.data);
+      const result = await saveCorrectionDraftAction(parsed.data, tenantId);
       if (result.success) {
         toast.success('Zapisano szkic');
         router.push(`/invoices/${result.invoiceId}`);
@@ -621,7 +626,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
     form.handleSubmit(
       async (data) => {
         startSending(async () => {
-          const result = await saveAndSendCorrectionAction(data);
+          const result = await saveAndSendCorrectionAction(data, tenantId);
           if (result.success) {
             toast.success('Korekta wysłana do kolejki KSeF');
             router.push(`/invoices/${result.invoiceId}`);

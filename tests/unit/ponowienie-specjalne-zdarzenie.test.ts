@@ -275,14 +275,14 @@ function withoutAttempt(data: unknown): Row {
 
 /** Prawdziwe „Zapisz i wyślij” korekty — pierwsze zdarzenie i zapisany wiersz. */
 async function sendCorrection(extra: Partial<CorrectionInvoiceSchemaIn>) {
-  const result = await saveAndSendCorrectionAction(correctionInput(extra));
+  const result = await saveAndSendCorrectionAction(correctionInput(extra), TENANT);
   expect(result).toMatchObject({ success: true, invoiceId: NEW_ID });
   expect(st.events).toHaveLength(1);
   return { first: st.events[0] as CapturedEvent, insert: st.inserted[0] as Row, row: storedRow(st.inserted[0]) };
 }
 
 async function sendAdvance() {
-  const result = await saveAndSendAdvanceAction(advanceInput);
+  const result = await saveAndSendAdvanceAction(advanceInput, TENANT);
   expect(result).toMatchObject({ success: true, invoiceId: NEW_ID });
   expect(st.events).toHaveLength(1);
   return { first: st.events[0] as CapturedEvent, insert: st.inserted[0] as Row, row: storedRow(st.inserted[0]) };
@@ -290,7 +290,7 @@ async function sendAdvance() {
 
 /** ROZ ma tylko szkic (wysyłka wstrzymana do C4) — wiersz z INSERT szkicu. */
 async function saveFinal() {
-  const result = await saveFinalAction(finalInput);
+  const result = await saveFinalAction(finalInput, TENANT);
   expect(result).toMatchObject({ success: true, invoiceId: NEW_ID });
   return { insert: st.inserted[0] as Row, row: storedRow(st.inserted[0]) };
 }

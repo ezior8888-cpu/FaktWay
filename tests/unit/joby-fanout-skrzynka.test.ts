@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // zostawiał pierwszą, a ponowienie dublowało powiadomienie. Teraz wszystkie
 // kolejki jednego zdarzenia w jednej transakcji pg-boss. (2) Fan-out skrzynki
 // szedł bez `groupId`, więc limit „na NIP” nie działał — dwa przebiegi tej
-// samej firmy mogły iść równolegle.
+// samej firmy mogły iść równolegle. Grupę w zleceniu pilnuje teraz
+// `skrzynka-rozsylka.test.ts` (rozsyłka według harmonogramu, 00160).
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -59,32 +60,6 @@ describe('fan-out do kilku kolejek', () => {
 });
 
 describe('fan-out skrzynki', () => {
-  it('każde zdarzenie inbox/poll.tenant ma groupId = NIP firmy', async () => {
-    vi.resetModules();
-    vi.doMock('@/lib/supabase/server', () => ({
-      createAdminClient: async () => ({
-        from: () => {
-          const q = {
-            select: () => q,
-            // Firmy z certyfikatem i NIP-em zweryfikowanym w bieżącym środowisku (#63).
-            not: () => q,
-            eq: () => Promise.resolve({ data: [{ id: 't1', nip: '1234567890' }, { id: 't2', nip: '5260001246' }], error: null }),
-          };
-          return q;
-        },
-      }),
-    }));
-    const { runInboxPolling } = await import('@/lib/jobs/runners/inbox-polling');
-    const sendEvent = vi.fn();
-    await runInboxPolling({
-      attempt: 0,
-      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-      step: { run: async (_n: string, fn: () => unknown) => fn(), sleep: vi.fn(), sendEvent, scheduleAfter: vi.fn() },
-    } as never);
-    const events = sendEvent.mock.calls[0]![1] as { name: string; groupId?: string }[];
-    expect(events.map((e) => e.groupId)).toEqual(['1234567890', '5260001246']);
-  });
-
   it('worker przepuszcza jeden przebieg skrzynki na NIP naraz', async () => {
     vi.resetModules();
     const { getRegisteredJobs } = await import('@/lib/jobs/registry');

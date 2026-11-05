@@ -1,5 +1,4 @@
 import { ExportHistorySkeleton } from '@/components/exports/export-history';
-import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -11,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
  */
 export default function ExportsLoading() {
   return (
-    <div className="ff-page-fill flex flex-col gap-6" aria-busy="true">
+    <div className="ff-tab-panel flex flex-1 flex-col gap-6" aria-busy="true">
       <h1 className="sr-only">Eksport danych księgowych</h1>
 
       <Card className="shadow-none">
@@ -41,9 +40,8 @@ export default function ExportsLoading() {
         </CardContent>
       </Card>
 
-      <Card className="flex-1 pt-0">
-        <KsiegowoscTabs active="eksport" />
-        <div className="flex w-full flex-1 flex-col pt-2">
+      <Card className="flex-1">
+        <div className="flex w-full flex-1 flex-col">
           <ExportHistorySkeleton />
         </div>
       </Card>

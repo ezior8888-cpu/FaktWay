@@ -19,8 +19,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * PLAN-PRAWDZIWE-DANE E6: ostatnie wpłaty i koszty z FaktWay z propsów
- * (kontrahent, „Termin · DD.MM.RRRR” albo „Wpłata · …” przy prawdziwej
- * zapłacie — E11, numer dokumentu w dymku); nazwa jest
+ * (kontrahent, „Wpłata · DD.MM.RRRR”, numer dokumentu w dymku); nazwa jest
  * linkiem do faktury albo wydatku tylko w trybie prawdziwym (E7 pkt 3).
  */
 type Props = {
@@ -37,16 +36,30 @@ type Props = {
   }[]
   /** Tekst pustej listy (karta bez pozycji). */
   empty?: string
+  /** Dokąd iść z pustej listy (oznaczenie zapłaty przy fakturze). */
+  emptyLink?: { label: string; href: string } | null
   menuItems?: CardMenuItem[]
   className?: string
 }
 
-const RecentActivityCard = ({ title, activity, empty, menuItems, className }: Props) => {
+const RecentActivityCard = ({ title, activity, empty, emptyLink, menuItems, className }: Props) => {
   return (
     <Card className={cn(className)}>
       <CardHeaderWithMenu title={title} menuItems={menuItems} />
       <CardContent className='flex flex-1 flex-col justify-between gap-4'>
-        {activity.length === 0 && empty ? <span className='text-muted-foreground text-sm'>{empty}</span> : null}
+        {activity.length === 0 && empty ? (
+          <span className='text-muted-foreground text-sm'>
+            {empty}
+            {emptyLink ? (
+              <>
+                {' '}
+                <Link href={emptyLink.href} className='text-foreground font-medium underline underline-offset-2'>
+                  {emptyLink.label}
+                </Link>
+              </>
+            ) : null}
+          </span>
+        ) : null}
         {activity.map((item, index) => (
           <div key={index} className='flex items-center justify-between gap-2'>
             <div className='flex min-w-0 items-center justify-between gap-3'>

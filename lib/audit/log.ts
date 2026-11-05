@@ -34,6 +34,8 @@ export type AuditAction =
   | 'auth.mfa_challenge_failed'
   | 'auth.mfa_recovery_code_used'
   | 'auth.mfa_recovery_codes_regenerated'
+  | 'auth.passkey_added'
+  | 'auth.passkey_removed'
   | 'gdpr.export_requested'
   | 'gdpr.deletion_requested'
   | 'gdpr.deletion_canceled'
@@ -86,6 +88,10 @@ export type AuditAction =
   | 'invoice.operator_original_release'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
+  // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
+  // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
+  | 'invoice.marked_paid'
+  | 'invoice.paid_undone'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'
@@ -105,7 +111,8 @@ export type AuditAction =
   // Ostrzeżenie o wygasającym certyfikacie dostarczone (mail albo push) —
   // zadanie cert-expiry-alert czyta stąd, które progi już wysłało (AUD-53).
   | 'ksef.cert_expiry_alert'
-  // Faza 23 sekcja 3 — audyt każdej interakcji z KSeF API.
+  // Faza 23 sekcja 3 — audyt interakcji z KSeF API. Odpytywanie (`*.poll`):
+  // wiersz błędu żądania i wiersz podsumowania z `metadata.summary` (EXT-03).
   | 'ksef.session.open'
   | 'ksef.session.close'
   | 'ksef.invoice.send'
@@ -136,6 +143,8 @@ export type AuditAction =
   // Faza 25 — Stripe billing lifecycle.
   | 'billing.customer.created'
   | 'billing.checkout.session_created'
+  /** Stripe nie zaoferował BLIK-a mimo `STRIPE_BLIK_RECURRING=on` (odmowa albo filtr). */
+  | 'billing.checkout.blik_unavailable'
   | 'billing.subscription.created'
   | 'billing.subscription.updated'
   | 'billing.subscription.synced'
@@ -168,7 +177,9 @@ export type AuditAction =
   | 'legal.terms_accepted'
   | 'legal.checkout_statement_accepted'
   | 'legal.email_consent_granted'
-  | 'legal.email_consent_withdrawn';
+  | 'legal.email_consent_withdrawn'
+  // Zgoda na analitykę (00161): kto, kiedy i na jakie brzmienie (ANALYTICS_STATEMENT).
+  | 'analytics.consent_changed';
 
 export interface AuditLogEntry {
   action: AuditAction;
