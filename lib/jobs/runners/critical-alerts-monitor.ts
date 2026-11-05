@@ -52,10 +52,11 @@ const ALERT_DEDUP_TTL_SECONDS = 30 * 60; // 30 min
 const ALERT_DEDUP_KEY_PREFIX = 'alerts:critical:lastsent';
 
 /**
- * Znaczniki „wysłano” w pamięci procesu — bez Redisa (cała produkcja) cache
- * nic nie pamiętał i ten sam alarm szedł co 5 minut (N2). Monitor chodzi
- * w jednym, długo żyjącym procesie workera, więc pamięć procesu wystarcza;
- * restart workera najwyżej powtórzy alarm raz.
+ * Znaczniki „wysłano” w pamięci procesu — zapas na brak albo awarię Redisa:
+ * cache wtedy nic nie pamięta i ten sam alarm szedłby co 5 minut (N2).
+ * Na produkcji worker ma Redisa (stan 23.10.2026), więc to ścieżka awaryjna.
+ * Monitor chodzi w jednym, długo żyjącym procesie workera, więc pamięć
+ * procesu wystarcza; restart workera najwyżej powtórzy alarm raz.
  */
 const deliveredLocally = new Map<string, number>();
 

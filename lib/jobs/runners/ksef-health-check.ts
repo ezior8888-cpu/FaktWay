@@ -6,10 +6,11 @@
  * pomiędzy. Concurrency: 1 — żeby dwie iteracje nie nadpisywały sobie nawzajem
  * statusu w Redis.
  *
- * Zakaz wpływu na DB ani logikę faktur: cron tylko sonduje KSeF
+ * Zakaz wpływu na dane i logikę faktur: cron tylko sonduje KSeF
  * (`KSEF_HEALTH_PROBE_PATH` w `lib/ksef/health-check.ts` — KSeF 2.0 nie ma `/health`)
- * i zapisuje snapshot w Redis. Nigdy nie pisze do `invoices`, `audit_logs`
- * ani innych tabel. Sygnał dla UI baner + sygnał dla `submit-invoice`
+ * i zapisuje snapshot w Redis, a przy zmianie poziomu i co 5 min także wiersz
+ * w `ksef_health_log` (`recordKsefPing`). Nigdy nie pisze do `invoices`,
+ * `audit_logs` ani innych tabel. Sygnał dla UI baner + sygnał dla `submit-invoice`
  * (decyzja "czy spróbować vs offline queue").
  */
 

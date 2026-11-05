@@ -2,9 +2,9 @@
  * Przerwa techniczna `maintenanceMode` (AUD-63) — „blokuje panel” (00060).
  *
  * Czyta ją proxy przy żądaniach zalogowanych do panelu, więc odczyt jest
- * pamiętany w procesie przez `TTL_MS` — Redis (Upstash) nie działa na
- * produkcji, a bez tego każde żądanie byłoby zapytaniem do bazy. Włączenie
- * dociera do panelu w najwyżej pół minuty.
+ * pamiętany w procesie przez `TTL_MS` — bez tego każde żądanie byłoby
+ * zapytaniem do bazy, a pamięć procesu nie dokłada proxy zależności od Redisa.
+ * Włączenie dociera do panelu w najwyżej pół minuty.
  *
  * Błąd odczytu: ostatnia znana wartość, a bez niej panel działa (fail-open,
  * decyzja z 02.10.2026). Przerwa „zawsze przy błędzie” zamieniałaby każdą

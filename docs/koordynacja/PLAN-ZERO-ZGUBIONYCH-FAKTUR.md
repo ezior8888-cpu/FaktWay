@@ -134,7 +134,7 @@ NISKIE.
 | M7 | Faktury przychodzące nie odebrane (VAT naliczony, terminy) | skrzynka co 15 min, backfill, alarm > 6 h | W10 (`isTruncated` na ostatniej stronie), S12 (legacy bez środowiska zatrzymuje skrzynkę) | E1 |
 | M8 | JPK/KPiR z błędnych danych | sumy różnicy w KOR; XSD JPK | W9 (`P_12` surowe z importu wywala JPK), S18/S19 (eksport/pulpit padają na jednym dokumencie) | C5, F2 |
 | M9 | Zabity worker / restart w trakcie wysyłki | heartbeat pg-boss, przejęcie 15 min, uzgodnienie po referencji | S4 (graceful 30 s vs SIGKILL 10 s → podwójne wykonanie jobów bez idempotencji poza wysyłką) | G1 |
-| M10 | Operator nie wie, że coś stoi | alarmy krytyczne, raport dzienny | S2 (sonda zdrowia KSeF martwa bez Redisa), brak runbooku per kod | G2, I2 |
+| M10 | Operator nie wie, że coś stoi | alarmy krytyczne, raport dzienny | S2 (sonda zdrowia KSeF martwa bez Redisa — 23.10: worker ma Redisa, patrz B3), brak runbooku per kod | G2, I2 |
 
 ---
 
@@ -333,6 +333,28 @@ agenta z weryfikacją Bartosza, nie obietnica.
   albo tekst o północy, który przestał być prawdą.
 
 **B3. Sonda zdrowia KSeF bez Redisa (S2) i baner awarii**
+
+> **Stan 23.10.2026 (dowód powtórzony 04.11) — przesłanka S2 nieaktualna. Przelicz zakres, zanim
+> zaczniesz.** Worker MA Redisa (własny, na `app-1`). Dowód bez SSH:
+> w publicznym `GET /api/status/components` komponent `ksef` ma
+> `lastCheckedAt` starszy od `generatedAt` i przeskakujący co ~30 s, a jego
+> `detail` NIE brzmi „No recent ping (cron starting up)” — ta gałąź (brak
+> snapshotu: brak Redisa albo martwy worker, TTL 90 s) podaje bieżący czas
+> przy każdym żądaniu. Snapshot zapisuje wyłącznie cron workera
+> `ksef-health-check` przez `recordKsefPing` (`lib/ksef/health-status.ts`).
+> Sonda więc żyje, baner i `isKsefHealthy` czytają świeży stan, a
+> `ksef_health_log` dostaje wiersz przy zmianie poziomu i co 5 min — o ile
+> insert przechodzi. Do potwierdzenia przez Bartosza (odczyt):
+> `SELECT count(*), max(recorded_at) FROM ksef_health_log;` (albo wykres
+> 24 h w `/admin/system`). Z B3 zostaje realnie: (a) AWARIA Redisa —
+> `recordKsefPing` rzuca już na `redis.del`/`incr`, więc milknie wszystko
+> naraz: baner, `isKsefHealthy` (zwraca `true`), `ksef_health_log` i alarm
+> `ksef_down`; (b) błąd insertu — wynik niesprawdzany, a heartbeat
+> w Redisie i tak się przesuwa; (c) decyzja: zapis każdego pingu (i `ok`
+> w S11 zamienione na `operational`) ALBO S11
+> w briefie Centrum liczone jako czas w poziomach (wiersze są tylko przy
+> zmianie poziomu i co 5 min).
+
 - Problem: `ksef-health-check` nic nie zapisuje bez Redisa; `isKsefHealthy`
   zawsze `true`; alarm „KSeF niedostępny” martwy.
 - Zakres: zapis do `ksef_health_log` (tabela istnieje) przy każdym pingu;
