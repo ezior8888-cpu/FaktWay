@@ -371,6 +371,11 @@ export function buildExpenseReviewProposal(
   };
 }
 
+/** Klucz tematu karty „nie odczytałem” — jeden dla zadania OCR. */
+export function ocrFailedTopicKey(ocrJobId: string): string {
+  return `expense.review:ocr:${ocrJobId}`;
+}
+
 /** Karta po nieudanym odczycie — zawsze z drogą wyjścia, nigdy bez. */
 export function buildOcrFailedProposal(
   tenantId: string,
@@ -382,7 +387,7 @@ export function buildOcrFailedProposal(
   return {
     tenantId,
     kind: 'expense.review',
-    topicKey: `expense.review:ocr:${ocrJobId}`,
+    topicKey: ocrFailedTopicKey(ocrJobId),
     title: copy.title,
     body: copy.body,
     fingerprint: fingerprintOf({ ocrJobId }),
@@ -653,8 +658,8 @@ registerFloHandler('expense.review', async (ctx) => {
  * DLACZEGO NIE OZNACZAMY ZADANIA JAKO NIEUDANEGO: tak samo jak istniejący
  * strażnik zadań, nie mutujemy cudzego stanu. Zadanie mogło być tylko wolne,
  * a przedwczesne oznaczenie go jako błąd zatruwa kolejkę. Tworzymy kartę;
- * jeśli odczyt jednak dojdzie, karta zostanie zastąpiona meldunkiem o wyniku
- * (ten sam klucz tematu).
+ * jeśli odczyt jednak dojdzie, job zamknie kartę porażki tego zadania
+ * (`closeFailedCard` w `process-ocr.ts`) — karta kosztu ma INNY klucz tematu.
  *
  * WOŁANE Z DWÓCH MIEJSC: z pulsu agenta (raz dziennie, jako siatka
  * bezpieczeństwa) i ze strażnika zadań co piętnaście minut, bo to on ma

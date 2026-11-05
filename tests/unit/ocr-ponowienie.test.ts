@@ -79,6 +79,7 @@ vi.mock('@/lib/flo/proposals', () => ({ createProposal: state.proposal }));
 vi.mock('@/lib/flo/functions/expense-review', () => ({
   buildExpenseReviewProposal: (input: unknown) => state.review(input),
   buildOcrFailedProposal: state.failedCard,
+  ocrFailedTopicKey: (ocrJobId: string) => `expense.review:ocr:${ocrJobId}`,
   readSellerHistory: async () => null,
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));

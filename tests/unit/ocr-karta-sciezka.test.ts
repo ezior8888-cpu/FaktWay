@@ -30,6 +30,7 @@ const h = vi.hoisted(() => ({
   seq: 0,
   nbp: { status: 404, rates: [] as unknown[] },
   extract: vi.fn(),
+  download: vi.fn(),
   push: vi.fn(),
   sentry: vi.fn(),
 }));
@@ -48,7 +49,7 @@ vi.mock('@/lib/ocr/engine', () => ({
   extractInvoiceFromImage: (...args: unknown[]) => h.extract(...args),
 }));
 vi.mock('@/lib/storage/expenses', () => ({
-  downloadExpensePhoto: async () => ({ buffer: Buffer.from('x'), mimeType: 'image/jpeg' }),
+  downloadExpensePhoto: (...args: unknown[]) => h.download(...args),
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: h.push }));
 
@@ -249,6 +250,7 @@ beforeEach(() => {
       : new Response('Not Found', { status: h.nbp.status });
   }));
   h.extract.mockReset().mockImplementation(async () => receipt());
+  h.download.mockReset().mockResolvedValue({ buffer: Buffer.from('x'), mimeType: 'image/jpeg' });
   h.push.mockReset();
   h.sentry.mockReset();
   vi.mocked(ctx.logger.warn).mockClear();
@@ -475,18 +477,22 @@ describe('karta sukcesu niesie numer zadania OCR (baner bez wniosku z czasu)', (
   });
 });
 
-describe('onProcessOcrExhausted — karta porażki po wyczerpaniu prób', () => {
-  const ocrDown = new Error('Anthropic: HTTP 529');
-  const jobRow = () => h.tables.ocr_jobs![0]!;
+// Silnik OCR nie rzuca (błędy modelu wracają jako `success: false` i kończą się
+// krokiem flo-failed-card), więc do wyczerpania prób prowadzą awarie dookoła:
+// magazyn plików, NBP, baza. Tu: magazyn plików.
+const ocrDown = new Error('R2: HTTP 503');
+const jobRow = () => h.tables.ocr_jobs![0]!;
 
-  it('po awarii OCR klient dostaje kartę z drogą wyjścia, a baner poznaje ją po numerze zadania', async () => {
-    h.extract.mockRejectedValue(ocrDown);
-    await expect(runProcessOcr(event, ctx)).rejects.toThrow('HTTP 529');
+describe('onProcessOcrExhausted — karta porażki po wyczerpaniu prób', () => {
+  it('po awarii magazynu klient dostaje kartę z drogą wyjścia, a baner poznaje ją po numerze zadania', async () => {
+    h.download.mockRejectedValue(ocrDown);
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('R2: HTTP 503');
     expect(cards()).toEqual([]);
+    expect(h.extract).not.toHaveBeenCalled();
 
     await onProcessOcrExhausted(ocrDown, event, ctx);
 
-    expect(jobRow()).toMatchObject({ status: 'failed', error_message: 'Anthropic: HTTP 529' });
+    expect(jobRow()).toMatchObject({ status: 'failed', error_message: 'R2: HTTP 503' });
     const card = onlyCard();
     expect(card.topic_key).toBe(`expense.review:ocr:${OCR_JOB}`);
     expect(card.title).toBe('Nie odczytałem tego zdjęcia');
@@ -549,10 +555,10 @@ describe('onProcessOcrExhausted — karta porażki po wyczerpaniu prób', () => 
     expect(cards()).toEqual([]);
     expect(ctx.logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('karta'),
-      expect.objectContaining({ ocrJobId: OCR_JOB, tenantId: TENANT, error: 'baza niedostępna' }),
+      expect.objectContaining({ ocrJobId: OCR_JOB, tenantId: TENANT, error: expect.stringContaining('baza niedostępna') }),
     );
     expect(h.sentry).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'baza niedostępna' }),
+      expect.objectContaining({ message: expect.stringContaining('baza niedostępna') }),
       expect.objectContaining({
         tags: expect.objectContaining({ job: 'process-ocr', step: 'exhausted-failed-card' }),
         extra: { ocrJobId: OCR_JOB, tenantId: TENANT },
@@ -601,5 +607,89 @@ describe('onProcessOcrExhausted — karta porażki po wyczerpaniu prób', () => 
     expect(cards()).toEqual([]);
     expect(h.tables.flo_shadow).toHaveLength(1);
     expect(h.sentry).not.toHaveBeenCalled();
+  });
+});
+
+describe('karta porażki a ponowne doręczenie tego samego joba', () => {
+  // pg-boss rozlicza paczkę jobów po całości: gdy worker zginie w jej trakcie,
+  // job, który już przeszedł onExhausted, wraca i handler rusza od zera.
+  const failedTopic = `expense.review:ocr:${OCR_JOB}`;
+  const failedCards = () => cards().filter((card) => card.topic_key === failedTopic);
+  const openCards = () => cards().filter((card) => card.status === 'open');
+
+  async function exhaustedFirst() {
+    h.download.mockRejectedValueOnce(ocrDown);
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('R2: HTTP 503');
+    await onProcessOcrExhausted(ocrDown, event, ctx);
+    expect(failedCards()).toEqual([expect.objectContaining({ status: 'open' })]);
+  }
+
+  it('job wraca i zapisuje koszt — „nie odczytałem” zamknięte, w wątku zostaje karta kosztu', async () => {
+    await exhaustedFirst();
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-2' });
+
+    expect(failedCards()).toEqual([expect.objectContaining({ status: 'expired', dismissed_reason: 'stale' })]);
+    expect(openCards().map((card) => toProposalView(card)?.ocrCard)).toEqual([{ failed: false, ocrJobId: OCR_JOB }]);
+  });
+
+  it('klient zamknął kartę porażki — zamknięcie przez job nie nadpisuje jego decyzji', async () => {
+    await exhaustedFirst();
+    failedCards()[0]!.status = 'dismissed';
+
+    await runProcessOcr(event, ctx);
+
+    expect(failedCards()).toEqual([expect.objectContaining({ status: 'dismissed' })]);
+  });
+
+  it('job wraca z „nie rozpoznano”, a klient już zamknął kartę — bez drugiej karty (krok flo-failed-card)', async () => {
+    await exhaustedFirst();
+    failedCards()[0]!.status = 'dismissed';
+    h.extract.mockResolvedValue({
+      success: false, error: 'Nie da się odczytać zdjęcia', inputTokens: 0, outputTokens: 0, processingTimeMs: 1,
+    });
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: false });
+
+    expect(failedCards()).toEqual([expect.objectContaining({ status: 'dismissed' })]);
+  });
+
+  it('zamknięcie karty porażki pada — job rzuca po zapisie, ponowienie bez OCR kończy sprawę', async () => {
+    await exhaustedFirst();
+    h.failures['flo_proposals:update'] = { message: 'chwilowy błąd bazy', times: 1 };
+
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('Nie można zamknąć karty porażki');
+    expect(h.tables.expenses).toHaveLength(1);
+    expect(h.extract).toHaveBeenCalledTimes(1);
+
+    await runProcessOcr(event, ctx);
+
+    expect(h.extract).toHaveBeenCalledTimes(1);
+    expect(failedCards()).toEqual([expect.objectContaining({ status: 'expired' })]);
+    expect(openCards()).toHaveLength(1);
+  });
+
+  it('onExhausted przy zapisanym wydatku też zamyka otwartą kartę porażki', async () => {
+    await exhaustedFirst();
+    h.tables.expenses!.push({ id: 'exp-z-innego-przebiegu', tenant_id: TENANT, ocr_job_id: OCR_JOB });
+
+    await onProcessOcrExhausted(new Error('karta agenta niedostępna'), event, ctx);
+
+    expect(jobRow()).toMatchObject({ status: 'completed', expense_id: 'exp-z-innego-przebiegu' });
+    expect(failedCards()).toEqual([expect.objectContaining({ status: 'expired' })]);
+  });
+
+  it('onExhausted przy zapisanym wydatku: awaria zamknięcia karty to log i Sentry, nie wyjątek', async () => {
+    await exhaustedFirst();
+    h.tables.expenses!.push({ id: 'exp-z-innego-przebiegu', tenant_id: TENANT, ocr_job_id: OCR_JOB });
+    h.failures['flo_proposals:update'] = { message: 'baza niedostępna' };
+
+    await expect(onProcessOcrExhausted(new Error('x'), event, ctx)).resolves.toBeUndefined();
+
+    expect(jobRow()).toMatchObject({ status: 'completed' });
+    expect(h.sentry).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('baza niedostępna') }),
+      expect.objectContaining({ tags: expect.objectContaining({ step: 'exhausted-close-failed-card' }) }),
+    );
   });
 });

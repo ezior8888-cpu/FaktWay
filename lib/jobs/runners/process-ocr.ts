@@ -14,6 +14,7 @@ import { createProposal } from '@/lib/flo/proposals';
 import {
   buildExpenseReviewProposal,
   buildOcrFailedProposal,
+  ocrFailedTopicKey,
   readSellerHistory,
   type OcrFacts,
 } from '@/lib/flo/functions/expense-review';
@@ -135,47 +136,76 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
 }
 
 /**
- * Karta „nie odczytałem” po wyczerpaniu prób (E17). Dodatek do statusu zadania,
- * który jest już zapisany: awaria karty kończy się logiem i Sentry, nie wyjątkiem.
- *
- * Najwyżej jedna karta na zadanie. `createProposal` widzi tylko karty otwarte
- * i zatwierdzone, więc ponowione wywołanie (pg-boss powtarza job, gdy worker
- * padnie przed jego zamknięciem) wskrzesiłoby kartę, którą klient już zamknął.
+ * Karta „nie odczytałem” tego zadania — najwyżej jedna, także gdy klient już ją
+ * zamknął. `createProposal` widzi tylko karty otwarte i zatwierdzone, a pg-boss
+ * potrafi doręczyć ten sam job jeszcze raz (paczkę rozlicza dopiero po całości,
+ * więc śmierć workera w jej trakcie wraca job, który już skończył). Bez tego
+ * odczytu karta zamknięta przez klienta wróciłaby jako nowa. Błąd odczytu rzuca.
  */
-async function createExhaustedFailedCard(
+async function createFailedCardOnce(
   supabase: ReturnType<typeof createAdminClient>,
   tenantId: string,
   ocrJobId: string,
+): Promise<void> {
+  const { data: existing, error } = await supabase
+    .from('flo_proposals')
+    .select('status')
+    .eq('tenant_id', tenantId)
+    .eq('topic_key', ocrFailedTopicKey(ocrJobId))
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Nie można sprawdzić karty porażki: ${error.message}`);
+  if (!existing) await createProposal(buildOcrFailedProposal(tenantId, ocrJobId));
+}
+
+/**
+ * Wydatek z tego zadania jest w bazie, więc otwarta karta „nie odczytałem”
+ * (z wcześniejszego doręczenia tego joba) mówi nieprawdę, a jej „Wpisz ręcznie”
+ * prowadzi do drugiego kosztu w KPiR. Zamykamy ją tak, jak producenci FLO
+ * zamykają pytanie, na które odpowiedział świat (`stale`), i tylko otwartą,
+ * żeby nie nadpisać decyzji klienta. Błąd zapisu rzuca.
+ */
+async function closeFailedCard(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ocrJobId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('flo_proposals')
+    .update({ status: 'expired', dismissed_reason: 'stale' })
+    .eq('tenant_id', tenantId)
+    .eq('topic_key', ocrFailedTopicKey(ocrJobId))
+    .eq('status', 'open');
+  if (error) throw new Error(`Nie można zamknąć karty porażki: ${error.message}`);
+}
+
+/**
+ * Karta po wyczerpaniu prób to dodatek do statusu zadania, który jest już
+ * zapisany: jej awaria kończy się logiem i Sentry, nie wyjątkiem.
+ */
+async function bestEffortCard(
+  step: string,
+  ids: { ocrJobId: string; tenantId: string },
   logger: JobContext['logger'],
+  fn: () => Promise<void>,
 ): Promise<void> {
   try {
-    const proposal = buildOcrFailedProposal(tenantId, ocrJobId);
-    const { data: existing, error } = await supabase
-      .from('flo_proposals')
-      .select('status')
-      .eq('tenant_id', tenantId)
-      .eq('topic_key', proposal.topicKey)
-      .limit(1)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!existing) await createProposal(proposal);
+    await fn();
   } catch (e) {
-    logger.warn('OCR: karta „nie odczytałem” po wyczerpaniu prób nieudana — status zadania zostaje', {
-      ocrJobId,
-      tenantId,
+    logger.warn('OCR: karta FLO po wyczerpaniu prób nieudana — status zadania zostaje', {
+      ...ids,
       error: e instanceof Error ? e.message : String(e),
     });
-    Sentry.captureException(e, {
-      tags: { job: 'process-ocr', step: 'exhausted-failed-card' },
-      extra: { ocrJobId, tenantId },
-    });
+    Sentry.captureException(e, { tags: { job: 'process-ocr', step }, extra: ids });
   }
 }
 
 /**
  * Obsługa po wyczerpaniu prób (pg-boss `onExhausted`, `lib/jobs/run-job.ts`):
  * zadanie OCR dostaje wynik, żeby UI przestało pokazywać „przetwarzanie”,
- * a klient kartę z drogą wyjścia, gdy wydatek nie powstał.
+ * a gdy wydatek nie powstał — kartę z drogą wyjścia w `flo_proposals` (E17).
+ * Wątku FLO nie montuje dziś żaden ekran (Pulpit bez FLO od 19.10), więc
+ * klient widzi status zadania w Wydatkach, a kartę dopiero po powrocie wątku.
  *
  * Nie przy każdym wyczerpaniu: ponowienia samego pg-boss (utrata heartbeatu,
  * zamknięcie workera) tej funkcji nie wołają — zadanie zostaje wtedy
@@ -203,6 +233,9 @@ export async function onProcessOcrExhausted(
       .eq('id', ocrJobId)
       .eq('tenant_id', tenantId);
     if (updateError) throw new Error(`Nie można oznaczyć zadania OCR: ${updateError.message}`);
+    await bestEffortCard('exhausted-close-failed-card', data, logger, () =>
+      closeFailedCard(supabase, tenantId, ocrJobId),
+    );
     return;
   }
 
@@ -225,7 +258,9 @@ export async function onProcessOcrExhausted(
   // albo bez wgranego pliku byłaby nieprawdą, więc wtedy zostaje sam status.
   if (!marked?.source_file_path || marked.source_file_path === 'pending') return;
 
-  await createExhaustedFailedCard(supabase, tenantId, ocrJobId, logger);
+  await bestEffortCard('exhausted-failed-card', data, logger, () =>
+    createFailedCardOnce(supabase, tenantId, ocrJobId),
+  );
 }
 
 /**
@@ -290,6 +325,11 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
 
         if (error) throw new Error(error.message);
       });
+
+      // Także przed wyjściem dla przejrzanego kosztu: koszt jest, więc „nie
+      // odczytałem” nie może stać w wątku. Błąd ponawia job od zapisanego
+      // wydatku, bez drugiego płatnego OCR (E15).
+      await step.run('close-failed-card', () => closeFailedCard(supabase, tenantId, ocrJobId));
 
       // Klient już przejrzał koszt (karta albo formularz) — karta i powiadomienie
       // byłyby szumem, a `undo` nowej karty cofnęłoby jego decyzję.
@@ -431,9 +471,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       // Karta agenta zamiast samego powiadomienia: powiadomienie znika,
       // a klient musi wiedzieć, że zdjęcie ZOSTAŁO w archiwum. Bez tego
       // wyrzuca paragon i po miesiącu nie ma czego odtwarzać.
-      await step.run('flo-failed-card', async () => {
-        await createProposal(buildOcrFailedProposal(tenantId, ocrJobId));
-      });
+      await step.run('flo-failed-card', () => createFailedCardOnce(supabase, tenantId, ocrJobId));
 
       return { success: false as const };
     }
