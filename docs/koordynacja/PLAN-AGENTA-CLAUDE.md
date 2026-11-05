@@ -71,7 +71,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E12 | Koszty samochodu osobowego (50% VAT, 75% PIT) — aplikacja odlicza 100% VAT i nie stosuje limitu | ⏳ decyzja | 4.4 |
 | E15 | Job OCR po B4: ponowienie bez płatnego OCR, karta i powiadomienie z zapisanego wydatku, `onProcessOcrExhausted` bez „nieudane” w ciemno | ✅ 03.10 | #192 (razem z B4) |
 | E16 | Resztki OCR i karty wydatku: karta przy braku kursu (`deductible: 1` → „stale”, kwota w walucie jako „zł”, `unknown_seller` nieosiągalne); status odczytu OCR (błąd bazy = „Job nie istnieje”); baner „odczytany” nad kartą porażki; zawieszone „przetwarzanie” (decyzja); dubel przy ponownym wgraniu zdjęcia (decyzja) | ✅ 03.10 kod / ⏳ decyzje | #198; decyzje Bartosza w 5 |
-| E17 | Podpięcie E16 w `process-ocr` (po scaleniu #192 i #198): waluta kwot i `is_deductible` do karty (świeża ścieżka i `reviewSourceFromSaved`), `ocrJobId` w karcie sukcesu (baner bez wniosku z czasu), karta porażki w `onProcessOcrExhausted` | ⬜ czeka na scalenie | 5 |
+| E17 | Podpięcie E16 w `process-ocr` (po scaleniu #192 i #198): waluta kwot i `is_deductible` do karty (świeża ścieżka i `reviewSourceFromSaved`), `ocrJobId` w karcie sukcesu (baner bez wniosku z czasu), karta porażki w `onProcessOcrExhausted` | ✅ 05.11 kod / ⏳ scalenie | #416 (osobne ustalenia w opisie PR) |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
 
