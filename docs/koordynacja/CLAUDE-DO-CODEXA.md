@@ -26,6 +26,11 @@ konflikty, konwencje, rzeczy przekazane „przez płot”.
 
 Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 
+Pilnuje tego `tests/unit/migracje-rejestr.test.ts`: wiersz dla każdej migracji
+od 00083, unikalne numery, „następny wolny” za największym użytym, a od 00164
+nagłówek „PRZED”/„PO wdrożeniu” i linia `-- DROP/DML: …` przy operacji
+niszczącej poza ciałem funkcji.
+
 | Numer | Kto | Plik | Stan (28.09) |
 |---|---|---|---|
 | 00083–00085 | Codex (#62) | `stripe_customer_claim`, `stripe_failed_payment_reference_rotation`, `stripe_checkout_session_id` | PR otwarty |
