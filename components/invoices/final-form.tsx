@@ -157,7 +157,8 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: F
     [advanceInvoices],
   );
 
-  const selectedIds = useWatch({ control: form.control, name: 'advanceInvoiceIds' }) ?? [];
+  const watchedAdvanceIds = useWatch({ control: form.control, name: 'advanceInvoiceIds' });
+  const selectedIds = useMemo(() => watchedAdvanceIds ?? [], [watchedAdvanceIds]);
   const watchedLines =
     useWatch({ control: form.control, name: 'lines' }) ??
     ([] as FinalInvoiceSchemaIn['lines']);

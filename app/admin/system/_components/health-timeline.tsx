@@ -45,8 +45,9 @@ export function HealthTimeline({ entries, windowHours }: Props) {
   }
 
   // Zbuduj segmenty: każde przejście level → level robi segment.
-  const start = Date.now() - windowHours * 60 * 60 * 1000;
+  // eslint-disable-next-line react-hooks/purity -- komponent serwerowy: renderuje się raz na żądanie, „teraz” to wejście, nie stan
   const end = Date.now();
+  const start = end - windowHours * 60 * 60 * 1000;
   const totalMs = end - start;
 
   const segments: Array<{
