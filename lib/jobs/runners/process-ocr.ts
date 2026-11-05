@@ -14,6 +14,7 @@ import { createProposal } from '@/lib/flo/proposals';
 import {
   buildExpenseReviewProposal,
   buildOcrFailedProposal,
+  ocrFailedTopicKey,
   readSellerHistory,
   type OcrFacts,
 } from '@/lib/flo/functions/expense-review';
@@ -42,7 +43,7 @@ function extractedInvoiceToJson(data: ExtractedInvoice, fx: RateStamp | null = n
 
 /** Kolumny zapisanego wydatku, z których job kończy zadanie bez ponownego OCR. */
 const SAVED_EXPENSE_COLUMNS =
-  'id, seller_name, seller_nip, net_amount, vat_amount, gross_amount, issue_date, kpir_column, category_label, is_reviewed, ocr_extracted_data' as const;
+  'id, seller_name, seller_nip, net_amount, vat_amount, gross_amount, issue_date, kpir_column, category_label, is_reviewed, is_deductible, ocr_extracted_data' as const;
 
 type SavedExpense = Pick<
   Database['public']['Tables']['expenses']['Row'],
@@ -56,6 +57,7 @@ type SavedExpense = Pick<
   | 'kpir_column'
   | 'category_label'
   | 'is_reviewed'
+  | 'is_deductible'
   | 'ocr_extracted_data'
 >;
 
@@ -86,6 +88,8 @@ async function findOcrJobExpense(
 interface ExpenseReviewSource {
   facts: OcrFacts;
   applied: { kpirColumn: string | null; categoryLabel: string | null };
+  /** `expenses.is_deductible` wiersza — odcisk karty musi się z nim zgadzać. */
+  deductible: boolean;
   /** Kwota do powiadomienia: „123.00 PLN” albo „100.00 EUR (bez kursu)”. */
   amountLabel: string;
 }
@@ -121,8 +125,10 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
       // nie meldunek „zaksięgowałem”.
       confidence: trace.success ? (trace.data.ocr_confidence ?? null) : 0,
       categoryLabel: expense.category_label,
+      amountCurrency: withoutRate ? currency : HOME_CURRENCY,
     },
     applied: { kpirColumn: expense.kpir_column, categoryLabel: expense.category_label },
+    deductible: expense.is_deductible,
     amountLabel: withoutRate
       ? `${expense.gross_amount.toFixed(2)} ${currency} (bez kursu)`
       : `${expense.gross_amount.toFixed(2)} PLN`,
@@ -130,8 +136,76 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
 }
 
 /**
+ * Karta „nie odczytałem” tego zadania — najwyżej jedna, także gdy klient już ją
+ * zamknął. `createProposal` widzi tylko karty otwarte i zatwierdzone, a pg-boss
+ * potrafi doręczyć ten sam job jeszcze raz (paczkę rozlicza dopiero po całości,
+ * więc śmierć workera w jej trakcie wraca job, który już skończył). Bez tego
+ * odczytu karta zamknięta przez klienta wróciłaby jako nowa. Błąd odczytu rzuca.
+ */
+async function createFailedCardOnce(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ocrJobId: string,
+): Promise<void> {
+  const { data: existing, error } = await supabase
+    .from('flo_proposals')
+    .select('status')
+    .eq('tenant_id', tenantId)
+    .eq('topic_key', ocrFailedTopicKey(ocrJobId))
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Nie można sprawdzić karty porażki: ${error.message}`);
+  if (!existing) await createProposal(buildOcrFailedProposal(tenantId, ocrJobId));
+}
+
+/**
+ * Wydatek z tego zadania jest w bazie, więc otwarta karta „nie odczytałem”
+ * (z wcześniejszego doręczenia tego joba) mówi nieprawdę, a jej „Wpisz ręcznie”
+ * prowadzi do drugiego kosztu w KPiR. Zamykamy ją tak, jak producenci FLO
+ * zamykają pytanie, na które odpowiedział świat (`stale`), i tylko otwartą,
+ * żeby nie nadpisać decyzji klienta. Błąd zapisu rzuca.
+ */
+async function closeFailedCard(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ocrJobId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('flo_proposals')
+    .update({ status: 'expired', dismissed_reason: 'stale' })
+    .eq('tenant_id', tenantId)
+    .eq('topic_key', ocrFailedTopicKey(ocrJobId))
+    .eq('status', 'open');
+  if (error) throw new Error(`Nie można zamknąć karty porażki: ${error.message}`);
+}
+
+/**
+ * Karta po wyczerpaniu prób to dodatek do statusu zadania, który jest już
+ * zapisany: jej awaria kończy się logiem i Sentry, nie wyjątkiem.
+ */
+async function bestEffortCard(
+  step: string,
+  ids: { ocrJobId: string; tenantId: string },
+  logger: JobContext['logger'],
+  fn: () => Promise<void>,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    logger.warn('OCR: karta FLO po wyczerpaniu prób nieudana — status zadania zostaje', {
+      ...ids,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    Sentry.captureException(e, { tags: { job: 'process-ocr', step }, extra: ids });
+  }
+}
+
+/**
  * Obsługa po wyczerpaniu prób (pg-boss `onExhausted`, `lib/jobs/run-job.ts`):
- * zadanie OCR dostaje wynik, żeby UI przestało pokazywać „przetwarzanie”.
+ * zadanie OCR dostaje wynik, żeby UI przestało pokazywać „przetwarzanie”,
+ * a gdy wydatek nie powstał — kartę z drogą wyjścia w `flo_proposals` (E17).
+ * Wątku FLO nie montuje dziś żaden ekran (Pulpit bez FLO od 19.10), więc
+ * klient widzi status zadania w Wydatkach, a kartę dopiero po powrocie wątku.
  *
  * Nie przy każdym wyczerpaniu: ponowienia samego pg-boss (utrata heartbeatu,
  * zamknięcie workera) tej funkcji nie wołają — zadanie zostaje wtedy
@@ -140,6 +214,7 @@ function reviewSourceFromSaved(expense: SavedExpense): ExpenseReviewSource {
 export async function onProcessOcrExhausted(
   error: Error,
   data: { ocrJobId: string; tenantId: string },
+  { logger }: Pick<JobContext, 'logger'>,
 ): Promise<void> {
   const { ocrJobId, tenantId } = data;
   const supabase = createAdminClient();
@@ -158,10 +233,13 @@ export async function onProcessOcrExhausted(
       .eq('id', ocrJobId)
       .eq('tenant_id', tenantId);
     if (updateError) throw new Error(`Nie można oznaczyć zadania OCR: ${updateError.message}`);
+    await bestEffortCard('exhausted-close-failed-card', data, logger, () =>
+      closeFailedCard(supabase, tenantId, ocrJobId),
+    );
     return;
   }
 
-  const { error: updateError } = await supabase
+  const { data: marked, error: updateError } = await supabase
     .from('ocr_jobs')
     .update({
       status: 'failed',
@@ -171,8 +249,18 @@ export async function onProcessOcrExhausted(
       completed_at: new Date().toISOString(),
     })
     .eq('id', ocrJobId)
-    .eq('tenant_id', tenantId);
+    .eq('tenant_id', tenantId)
+    .select('source_file_path')
+    .maybeSingle();
   if (updateError) throw new Error(`Nie można oznaczyć zadania OCR: ${updateError.message}`);
+
+  // Karta mówi „zdjęcie zostało w archiwum”. Bez zadania tej firmy (zły ładunek)
+  // albo bez wgranego pliku byłaby nieprawdą, więc wtedy zostaje sam status.
+  if (!marked?.source_file_path || marked.source_file_path === 'pending') return;
+
+  await bestEffortCard('exhausted-failed-card', data, logger, () =>
+    createFailedCardOnce(supabase, tenantId, ocrJobId),
+  );
 }
 
 /**
@@ -238,6 +326,11 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         if (error) throw new Error(error.message);
       });
 
+      // Także przed wyjściem dla przejrzanego kosztu: koszt jest, więc „nie
+      // odczytałem” nie może stać w wątku. Błąd ponawia job od zapisanego
+      // wydatku, bez drugiego płatnego OCR (E15).
+      await step.run('close-failed-card', () => closeFailedCard(supabase, tenantId, ocrJobId));
+
       // Klient już przejrzał koszt (karta albo formularz) — karta i powiadomienie
       // byłyby szumem, a `undo` nowej karty cofnęłoby jego decyzję.
       if (mode.kind === 'saved' && mode.isReviewed) return { success: true as const, expenseId };
@@ -249,9 +342,11 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         const proposal = buildExpenseReviewProposal({
           tenantId,
           expenseId,
+          ocrJobId,
           facts: source.facts,
           history,
           applied: source.applied,
+          deductible: source.deductible,
         });
         if (mode.kind === 'saved') {
           const { data: existing, error } = await supabase
@@ -376,9 +471,7 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       // Karta agenta zamiast samego powiadomienia: powiadomienie znika,
       // a klient musi wiedzieć, że zdjęcie ZOSTAŁO w archiwum. Bez tego
       // wyrzuca paragon i po miesiącu nie ma czego odtwarzać.
-      await step.run('flo-failed-card', async () => {
-        await createProposal(buildOcrFailedProposal(tenantId, ocrJobId));
-      });
+      await step.run('flo-failed-card', () => createFailedCardOnce(supabase, tenantId, ocrJobId));
 
       return { success: false as const };
     }
@@ -489,11 +582,16 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
           issueDate: extractedData.issue_date,
           confidence: extractedData.ocr_confidence,
           categoryLabel: categorization.category_label,
+          // Waluta KWOT, nie dokumentu: po przeliczeniu kursem są już w złotych.
+          amountCurrency: cost.kind === 'missing_rate' ? currency : HOME_CURRENCY,
         },
         applied: {
           kpirColumn: categorization.kpir_column,
           categoryLabel: categorization.category_label,
         },
+        // Tak samo jak w zapisie wyżej: bez kursu `is_deductible: false`, inaczej
+        // domyślne TRUE z bazy (00034).
+        deductible: cost.kind !== 'missing_rate',
         amountLabel:
           cost.kind === 'pln'
             ? `${cost.gross.toFixed(2)} PLN`

@@ -48,6 +48,7 @@ vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn() }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: state.proposal }));
 vi.mock('@/lib/flo/functions/expense-review', () => ({
   buildExpenseReviewProposal: () => ({}), buildOcrFailedProposal: () => ({}), readSellerHistory: async () => null,
+  ocrFailedTopicKey: (ocrJobId: string) => `expense.review:ocr:${ocrJobId}`,
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireTenantMember: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/admin', () => ({
