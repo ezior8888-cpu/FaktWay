@@ -10,6 +10,7 @@
 > | „Kontynuuj plan zero zgubionych faktur, sesja N” | [`PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md), tylko sesja N, dziennik w sekcji 9 |
 > | „Kontynuuj plan Finora” | [`PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md), dziennik w sekcji 12 |
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |
+> | „Kontynuuj plan księgowość JDG” | [`PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md), tylko krok z „Następny krok”, dziennik w sekcji 15, potem raport i STOP |
 > | „Kontynuuj plan usprawnień” | [`PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md), dziennik w sekcji 7 |
 >
 > Sesje „sesja N” robią TYLKO wskazaną sesję, według „Protokołu naprawy błędu” niżej.
