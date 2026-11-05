@@ -17,7 +17,7 @@
  *   9. **Stale VAT enqueue** — faktura powiązana, ale brak potwierdzenia emisji > 15 min
  *  10. **KSeF reconciliation** — numer KSeF przy niezaakceptowanym statusie lub ROZ hold
  *  11. **Kopia bazy nieaktualna** — najnowsza udana kopia starsza niż 26 h (AUD-37)
- *  12. **Skrzynka KSeF zaległa** — firma bez przebiegu skrzynki > 6 h
+ *  12. **Skrzynka KSeF zaległa** — opóźnienie względem harmonogramu firmy (00160)
  *  13. **Opłacone bez faktury VAT** — płatność Stripe > 60 min bez dokumentu (AUD-40)
  *  14. **KSeF sending bez wyniku** — faktura w `sending` > 15 min od przejęcia wysyłki (#71)
  *  15. **Historia KSeF stoi** — brak startu strumieni, przebieg bez sukcesu > 6 h,
@@ -42,6 +42,8 @@ import { cacheGet, cacheSet } from '@/lib/cache';
 import { OFFLINE_QUEUE_OPEN_STATUSES } from '@/lib/ksef/offline-queue-status';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { configuredKsefEnvironment, requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { INBOX_ALARM_OVERDUE_MS } from '@/lib/ksef/inbox-schedule';
+import { readInboxAlarmCounts } from '@/lib/ksef/inbox-schedule-db';
 import { GLOBAL_429_TENANTS } from '@/lib/ksef/history-sync/constants';
 
 import type { JobContext } from '@/lib/jobs/registry';
@@ -264,7 +266,7 @@ async function checkPaymentFailures(): Promise<AlertCheckResult> {
 
   await alertCritical(
     `${failures} Stripe payment failures w ostatniej godzinie`,
-    `Może to wskazywać na problem z Stripe API, błędne karty, lub fraud attempt.`,
+    `Może to wskazywać na problem z Stripe API, odmowy banków albo fraud attempt.`,
     {
       fields: [
         { label: 'Failures (1h)', value: String(failures) },
@@ -731,6 +733,10 @@ export async function checkKsefReconciliationAnomalies(): Promise<AlertCheckResu
 /** Wiersz I5D (00148), którego oryginał sprawdzono w innym albo nieznanym środowisku KSeF. */
 export const I5D_ENV_INVARIANT = 'I5D-env';
 
+/** PR C (00156, 5.8): przegląd pliku z oznaczeniem FaktWay (I5R) czeka na operatora co najmniej tyle — alarm krytyczny `I5R-72h`. */
+export const I5R_ALARM_INVARIANT = 'I5R-72h';
+const I5R_ALARM_AFTER_MS = 72 * 60 * 60 * 1000;
+
 /**
  * Inwariant do alarmu dla wiersza strażnika. I5D (00148, D-A4-1b-3 PR B,
  * decyzja 4) — faktura czeka na decyzję klienta: nie alarm, także gdy
@@ -739,11 +745,29 @@ export const I5D_ENV_INVARIANT = 'I5D-env';
  * klientowi” (raport dzienny, /admin/ksef z kolumną „Powiadomienie klienta”). Wyjątek: dane oryginału sprawdzono w innym środowisku KSeF niż
  * obecne (albo KSEF_ENV jest nieznane) — wtedy `I5D-env`, bo klient nie
  * zapisze decyzji (RPC ENV). `null` — wiersz nie alarmuje.
+ *
+ * PR C (00156, spec v3 5.8): `I3K` (K zapisana decyzją bez sesji UPO albo bez daty nadania) nie alarmuje
+ * z monitora — to trwały sygnał w raporcie i KPI, a alarm Sentry idzie z akcji decyzji. `I5R`
+ * (przegląd pliku przez operatora; klient usłyszał „damy znać”) alarmuje dopiero po 72 h od ostatniego
+ * udanego sprawdzenia (`detail.checked_at`): młodsze `checked_at` → `null`; brak albo nieczytelna wartość →
+ * `I5R-72h` od razu (fail-closed: nie wiemy, od kiedy klient czeka). Zegar liczy od ostatniego sprawdzenia:
+ * „Tylko uzgodnij”, które pobierze plik, zapisuje nowe `checkedAt` i zaczyna 72 h od nowa (nowa ocena
+ * = nowy przegląd).
  */
-function alertingInvariant(row: { invariant: string; detail?: unknown }, environment: string | null): string | null {
-  if (row.invariant !== 'I5D') return row.invariant;
-  const detail = typeof row.detail === 'object' && row.detail !== null ? (row.detail as { env?: unknown }) : null;
-  return environment !== null && detail?.env === environment ? null : I5D_ENV_INVARIANT;
+function alertingInvariant(row: { invariant: string; detail?: unknown }, environment: string | null, now: number): string | null {
+  const detail = typeof row.detail === 'object' && row.detail !== null ? (row.detail as Record<string, unknown>) : null;
+  switch (row.invariant) {
+    case 'I5D':
+      return environment !== null && detail?.env === environment ? null : I5D_ENV_INVARIANT;
+    case 'I3K':
+      return null;
+    case 'I5R': {
+      const checkedAt = typeof detail?.checked_at === 'string' ? Date.parse(detail.checked_at) : Number.NaN;
+      return Number.isNaN(checkedAt) || now - checkedAt >= I5R_ALARM_AFTER_MS ? I5R_ALARM_INVARIANT : null;
+    }
+    default:
+      return row.invariant;
+  }
 }
 
 /**
@@ -754,14 +778,16 @@ function alertingInvariant(row: { invariant: string; detail?: unknown }, environ
  * I5D (00148) — faktura czeka na decyzję klienta: nie alarm (e-mail idzie raz
  * i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi” —
  * widzi fakturę w raporcie i w /admin/ksef); I5D-env — alarm, bo klient nie
- * zapisze decyzji.
+ * zapisze decyzji. PR C (00156): I5R (przegląd pliku) — alarm `I5R-72h` po 72 h,
+ * I3K — bez alarmu z monitora (patrz `alertingInvariant`).
  */
 export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> {
   const { data, error } = await createAdminClient().rpc('ksef_lifecycle_violations');
   if (error) throw new Error(`ksef_lifecycle_violations: ${error.message}`);
   const environment = configuredKsefEnvironment();
+  const now = Date.now();
   const alerting = ((data ?? []) as Array<{ invariant: string; detail?: unknown }>)
-    .map((row) => alertingInvariant(row, environment))
+    .map((row) => alertingInvariant(row, environment, now))
     .filter((inv): inv is string => inv !== null);
   if (alerting.length === 0) {
     return { type: 'ksef_lifecycle_violations', fired: false };
@@ -777,7 +803,8 @@ export async function checkKsefLifecycleViolations(): Promise<AlertCheckResult> 
   await alertCritical(
     'Strażnik cyklu życia faktury: naruszenia',
     'Faktury w stanie sprzecznym z cyklem życia. I1 (queued bez zlecenia) i klasę transient naprawia cron ponowień; pozostałe wymagają operatora: I2 sending ponad dzierżawę, I3 accepted bez UPO/XML, I4 failed bez kodu z katalogu, I5 wpis sent starszy niż 48 h, I9 failed z numerem KSeF. ' +
-      OPERATOR_DUPLICATE_MESSAGES.i5dEnv,
+      OPERATOR_DUPLICATE_MESSAGES.i5dEnv +
+      (counts.has(I5R_ALARM_INVARIANT) ? ` ${OPERATOR_DUPLICATE_MESSAGES.i5r72h}` : ''),
     {
       fields: invariants.map((inv) => ({ label: inv, value: String(counts.get(inv)) })),
       link: {
@@ -871,59 +898,43 @@ export async function checkStaleBackup(): Promise<AlertCheckResult> {
   return { type: 'stale_backup', fired: true };
 }
 
-/** Skrzynka KSeF bez pełnego przebiegu dłużej niż tyle godzin = alarm. */
-export const INBOX_STALE_HOURS = 6;
+/** Błędy certyfikatu naprawia klient; tyle firm i taki udział to już podejrzenie, że winny jest nasz klucz. */
+const INBOX_CREDENTIALS_SUSPICIOUS_MIN = 3;
+const INBOX_CREDENTIALS_SUSPICIOUS_SHARE = 0.2;
 
 /**
- * Zaległość skrzynki KSeF (AUD-18). Firma z poświadczeniami, której HWM
- * skrzynki (`ksef_inbox_cursor.window_to`) jest starszy niż próg, albo która
- * od podpięcia KSeF nie ma żadnego pełnego przebiegu. Łapie padające
- * przebiegi, zatrzymany cron i zaległość po stronie MF — wcześniej
- * niekompletne pobranie było tylko linijką w logu. W alarmie liczby, bez NIP.
+ * Zaległość skrzynki KSeF (AUD-18). Próg to opóźnienie względem harmonogramu
+ * firmy, nie stała liczba godzin: firma zimna po 5 h jest w normie, firma gorąca
+ * po 2 h nie. Liczy baza (00160), więc alarm działa też ponad limitem 1000 wierszy
+ * odpowiedzi. Firmy usunięte, nieaktywne i z wygasłym certyfikatem nie budzą:
+ * tych nikt nie odpytuje. W alarmie liczby, bez NIP.
  */
 export async function checkStaleInboxSync(): Promise<AlertCheckResult> {
-  const supabase = createAdminClient();
-  const { data: tenants, error } = await supabase
-    .from('tenants')
-    .select('id, ksef_verified_at')
-    .not('ksef_credentials_encrypted', 'is', null);
-  if (error) throw error;
-  const withKsef = (tenants ?? []) as { id: string; ksef_verified_at: string | null }[];
-  if (withKsef.length === 0) return { type: 'stale_inbox_sync', fired: false };
+  const environment = configuredKsefEnvironment();
+  if (!environment) return { type: 'stale_inbox_sync', fired: false };
 
-  const { data: cursors, error: cursorError } = await supabase
-    .from('ksef_inbox_cursor')
-    .select('tenant_id, window_to');
-  if (cursorError) throw cursorError;
-  const hwmByTenant = new Map(
-    ((cursors ?? []) as { tenant_id: string; window_to: string | null }[])
-      .map((row) => [row.tenant_id, row.window_to] as const),
-  );
-
-  const threshold = Date.now() - INBOX_STALE_HOURS * 60 * 60 * 1000;
-  let stale = 0;
-  let neverPolled = 0;
-  for (const tenant of withKsef) {
-    const hwm = hwmByTenant.get(tenant.id);
-    if (hwm) {
-      if (Date.parse(hwm) < threshold) stale += 1;
-    } else if (tenant.ksef_verified_at && Date.parse(tenant.ksef_verified_at) < threshold) {
-      neverPolled += 1;
-    }
+  const counts = await readInboxAlarmCounts(environment);
+  const credentialsSuspicious = counts.credentials >= INBOX_CREDENTIALS_SUSPICIOUS_MIN
+    && counts.credentials >= counts.live * INBOX_CREDENTIALS_SUSPICIOUS_SHARE;
+  if (counts.overdue + counts.failing + counts.hwmBehind + counts.unscheduled === 0 && !credentialsSuspicious) {
+    return { type: 'stale_inbox_sync', fired: false };
   }
-  if (stale + neverPolled === 0) return { type: 'stale_inbox_sync', fired: false };
 
   const shouldSend = await shouldSendAlert('stale_inbox_sync');
   if (!shouldSend) return { type: 'stale_inbox_sync', fired: false, reason: 'dedup' };
 
   await alertCritical(
     'Skrzynka KSeF nie pobiera faktur',
-    'Faktury kosztowe z KSeF nie są pobierane. Sprawdź kolejkę inbox.poll.tenant i cron.inbox-polling w workerze, Sentry i logi workera. Po naprawie skrzynka sama nadrobi zaległość od ostatniego pełnego przebiegu.',
+    'Faktury kosztowe z KSeF nie są pobierane zgodnie z harmonogramem. Sprawdź linię ksef.inbox.dispatch w logu workera, kolejkę inbox.poll.tenant i Sentry (docs/runbooks/skrzynka-ksef-pojemnosc.md). Po naprawie skrzynka sama nadrobi zaległość od ostatniego pełnego przebiegu.',
     {
       fields: [
-        { label: 'Firmy z zaległością', value: String(stale) },
-        { label: 'Firmy bez żadnego przebiegu', value: String(neverPolled) },
-        { label: 'Próg', value: `${INBOX_STALE_HOURS} h` },
+        { label: `Termin minął ponad ${Math.round(INBOX_ALARM_OVERDUE_MS / 60_000)} min temu`, value: String(counts.overdue) },
+        { label: 'Błędy po stronie KSeF albo naszej, bez sukcesu ponad normę poziomu', value: String(counts.failing) },
+        { label: 'HWM stoi ponad normę poziomu', value: String(counts.hwmBehind) },
+        { label: 'Bez harmonogramu (nikt nie odpytuje)', value: String(counts.unscheduled) },
+        { label: 'Podejrzane błędy certyfikatu', value: credentialsSuspicious ? String(counts.credentials) : '0' },
+        { label: 'Firmy z 429 w ostatniej godzinie', value: String(counts.rateLimited) },
+        { label: 'Żywe firmy z KSeF', value: String(counts.live) },
       ],
     },
   );

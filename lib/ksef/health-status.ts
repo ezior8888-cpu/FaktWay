@@ -181,6 +181,52 @@ export async function getKsefHealthSnapshot(
 }
 
 /**
+ * Snapshot bez `error` — to, co wolno pokazać w przeglądarce. `error` to tekst
+ * dla operatora (komunikaty sieci, adresy). Lista pól jawna, żeby nowe pole
+ * snapshotu nie trafiło do przeglądarki samo.
+ */
+export type KsefHealthPublic = Pick<
+  KsefHealthSnapshot,
+  'level' | 'lastCheckedAt' | 'responseTimeMs' | 'consecutiveFailures' | 'isMfOutage' | 'env'
+>;
+
+export function toPublicKsefHealth(snapshot: KsefHealthSnapshot): KsefHealthPublic {
+  return {
+    level: snapshot.level,
+    lastCheckedAt: snapshot.lastCheckedAt,
+    responseTimeMs: snapshot.responseTimeMs,
+    consecutiveFailures: snapshot.consecutiveFailures,
+    isMfOutage: snapshot.isMfOutage,
+    env: snapshot.env,
+  };
+}
+
+const PUBLIC_MEMO_TTL_MS = 15_000;
+
+let publicMemo: {
+  env: KsefEnvironment;
+  at: number;
+  value: Promise<KsefHealthPublic | null>;
+} | null = null;
+
+/**
+ * Odczyt dla `/api/ksef/health`, trasy bez sesji (proxy jej nie sprawdza).
+ * Wynik pamiętany w procesie przez 15 s, razem z `null` przy awarii Redisa:
+ * inaczej każde anonimowe żądanie byłoby odczytem Redisa przez HTTP. Cron
+ * pisze snapshot co 30 s, więc 15 s nie opóźnia baneru o nic istotnego.
+ * Pamiętamy obietnicę, więc równoczesne żądania czekają na jeden odczyt.
+ */
+export function getPublicKsefHealth(env: KsefEnvironment): Promise<KsefHealthPublic | null> {
+  const now = Date.now();
+  if (publicMemo && publicMemo.env === env && now - publicMemo.at < PUBLIC_MEMO_TTL_MS) {
+    return publicMemo.value;
+  }
+  const value = getKsefHealthSnapshot(env).then((s) => (s ? toPublicKsefHealth(s) : null));
+  publicMemo = { env, at: now, value };
+  return value;
+}
+
+/**
  * Helper dla submit-invoice job — szybkie sprawdzenie "czy w ogóle warto
  * próbować wysłać". Gdy `down`, lepiej od razu rzucić do offline queue niż
  * tracić retry-budget na zapowiedzianą porażkę.

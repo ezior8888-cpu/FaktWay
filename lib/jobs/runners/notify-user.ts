@@ -19,9 +19,16 @@ import {
 import { sendPushToUser } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { DUPLICATE_DECISION_TEXTS, duplicateMarker } from '@/lib/ksef/duplicate-decision';
+import {
+  DUPLICATE_DECISION_TEXTS,
+  duplicateMarker,
+  duplicateNoticeVariant,
+  ownHistoryInSubmissions,
+  type DuplicateNoticeVariant,
+} from '@/lib/ksef/duplicate-decision';
 import {
   duplicateNoticeKey,
+  duplicateReviewNoticeKey,
   findDuplicateNotices,
   recordDuplicateNotice,
 } from '@/lib/ksef/duplicate-decision-notice';
@@ -254,6 +261,16 @@ type DuplicateDecisionNotice =
   | { skipped: true; reason: 'duplicate-env' | 'already-notified' }
   | { notified: boolean; emailed: boolean; push: { sent: number; failed: number } | { skipped: true; reason: 'no-owner' } };
 
+/** Tytuł i treść pusha według wariantu (INV-24: ten sam wariant co e-mail i panel). */
+function duplicateNoticePush(variant: DuplicateNoticeVariant, invoiceNumber: string): { title: string; body: string } {
+  const FF = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
+  if (variant === 'review') return { title: FF.NOTICE_PUSH_TITLE_REVIEW(invoiceNumber), body: FF.NOTICE_PUSH_BODY_REVIEW };
+  return {
+    title: DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_TITLE(invoiceNumber),
+    body: variant === 'record' ? FF.NOTICE_PUSH_BODY_RECORD : DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_BODY,
+  };
+}
+
 /**
  * D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (5), spec §2.8): „Faktura {nr}
  * czeka na Twoją decyzję” — DOKŁADNIE RAZ na fakturę i numer KSeF oryginału.
@@ -277,6 +294,15 @@ type DuplicateDecisionNotice =
  * przypomnienia — decyzja 5, spec §7 p. 11). Wyjście operatora: „Przypomnij klientowi”
  * w `/admin/ksef/<id>`; tabela I5D i karta faktury pokazują, ile powiadomień
  * o tym K doszło (0 × = klient nie wie).
+ *
+ * PR C (00156, spec v3 5.7, INV-24): wariant (`pair` / `record` / `released` / `review`) z TEJ SAMEJ
+ * funkcji co panel (`duplicateNoticeVariant`) — własna historia (`ownHistoryInSubmissions`) liczona
+ * z kolumn wpisów, które czyta panel, nigdy `null`. Blokada `provenance-review` (przegląd pliku, I5R):
+ * klient dostaje RAZ „sprawdzamy fakturę z KSeF” (własny klucz `…/sprawdzamy` i rodzina śladów
+ * `review`; klient niczego nie decyduje, więc środowisko znacznika go nie wstrzymuje), nigdy „czeka na
+ * Twoją decyzję”. Każda inna blokada (też `recheck-needed`, `known-now`, `cross-tenant`) — ścieżka
+ * ogólna jak dotąd (`last_error` = `FAKTFLOW.LAST_ERROR*` nie obiecuje decyzji).
+ * Ponowienie po każdym kroku: jak wyżej (klucze Resend stałe w obrębie wariantu).
  */
 async function notifyDuplicateDecision(
   invoiceId: string,
@@ -284,15 +310,17 @@ async function notifyDuplicateDecision(
   logger: JobContext['logger'],
 ): Promise<DuplicateDecisionNotice> {
   const supabase = createAdminClient();
-  // 1. Blokada z bazy (00148) — autorytatywna, obejmuje też wiersze `payments`.
-  if (await readDuplicateDecisionBlocker(supabase, invoiceId, tenantId)) return { pending: false };
+  // 1. Blokada z bazy (00148, 00156) — autorytatywna, obejmuje też wiersze `payments`.
+  //    NULL = czeka na decyzję klienta; `provenance-review` = przegląd pliku („sprawdzamy”); inna = ścieżka ogólna.
+  const blocker = await readDuplicateDecisionBlocker(supabase, invoiceId, tenantId);
+  if (blocker !== null && blocker !== 'provenance-review') return { pending: false };
 
-  // 2. Znacznik 440 (K) i numer dokumentu.
+  // 2. Znacznik 440 (K), numer dokumentu i kolumny, z których panel liczy własną historię w bazie (F43).
   const [{ data: rows, error: rowsError }, { data: invoice, error: invoiceError }] = await Promise.all([
     supabase
       .from('ksef_submissions')
       // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
-      .select('id, status, original_ksef_number, original_check, attempted_at')
+      .select('id, status, original_ksef_number, original_check, attempted_at, session_reference_number, request_payload_hash, original_session_reference_number')
       .eq('invoice_id', invoiceId)
       .eq('tenant_id', tenantId),
     supabase
@@ -304,22 +332,44 @@ async function notifyDuplicateDecision(
   ]);
   if (rowsError) throw new Error(`Nie można odczytać historii wysyłki przed powiadomieniem: ${rowsError.message}`);
   if (invoiceError) throw new Error(`Nie można odczytać faktury przed powiadomieniem: ${invoiceError.message}`);
-  type MarkerRow = { id: string; status: string; original_ksef_number: string | null; original_check: unknown; attempted_at: string | null };
-  const marker = duplicateMarker((rows ?? []) as unknown as MarkerRow[]);
+  type MarkerRow = {
+    id: string;
+    status: string;
+    original_ksef_number: string | null;
+    original_check: unknown;
+    attempted_at: string | null;
+    session_reference_number: string | null;
+    request_payload_hash: string | null;
+    original_session_reference_number: string | null;
+  };
+  const submissions = (rows ?? []) as unknown as MarkerRow[];
+  const marker = duplicateMarker(submissions);
   const ksefNumber = marker?.original_ksef_number ?? null;
   // Blokada NULL zawsze ma znacznik; bez niego — ostrożnie jak dotąd (bez wiadomości).
   if (!marker || !ksefNumber) return { pending: false };
   const check = marker.original_check;
-  const checkEnv = typeof check === 'object' && check !== null ? (check as { env?: unknown }).env : undefined;
-  // Dane oryginału z innego środowiska KSeF — klient nie zapisze decyzji (RPC ENV); operator dostaje I5D-env.
-  if (checkEnv !== configuredKsefEnvironment()) return { skipped: true, reason: 'duplicate-env' };
+  // Wariant jak w panelu (INV-24). Baza ma ostatnie słowo: blokada NULL = faktura czeka na decyzję, więc znacznik,
+  // którego lustro TS (`allows`) nie rozpoznaje (rozjazd TS↔SQL), też dostaje powiadomienie PR B (`pair`), a nie milczenie.
+  const variant = duplicateNoticeVariant(check, ownHistoryInSubmissions(submissions, marker), blocker)
+    ?? (blocker === null ? 'pair' : null);
+  if (variant === null) return { pending: false };
 
-  // 3. Raz na (fakturę, K) — decyzja 5.
-  const notices = await findDuplicateNotices(tenantId, invoiceId, ksefNumber);
+  // Dane oryginału z innego środowiska KSeF — klient nie zapisze decyzji (RPC ENV); operator dostaje I5D-env.
+  // „Sprawdzamy” niczego od klienta nie wymaga, więc środowisko go nie wstrzymuje.
+  if (variant !== 'review') {
+    const checkEnv = typeof check === 'object' && check !== null ? (check as { env?: unknown }).env : undefined;
+    if (checkEnv !== configuredKsefEnvironment()) return { skipped: true, reason: 'duplicate-env' };
+  }
+
+  // 3. Raz na (fakturę, K) w swojej rodzinie śladów — decyzja 5.
+  const family = variant === 'review' ? 'review' : 'decision';
+  const notices = await findDuplicateNotices(tenantId, invoiceId, ksefNumber, family);
   if (notices.count > 0) return { skipped: true, reason: 'already-notified' };
 
   const invoiceNumber = (invoice as { internal_number: string | null } | null)?.internal_number?.trim() || 'bez numeru';
-  const idempotencyKey = duplicateNoticeKey(invoiceId, ksefNumber, null);
+  const idempotencyKey = variant === 'review'
+    ? duplicateReviewNoticeKey(invoiceId, ksefNumber)
+    : duplicateNoticeKey(invoiceId, ksefNumber, null);
 
   // 4. Właściciel i jego adres — wariant ścisły: błąd odczytu rzuca (pg-boss
   // ponawia), bo to jedyne automatyczne powiadomienie; prawdziwy brak = null.
@@ -338,7 +388,7 @@ async function notifyDuplicateDecision(
   const mail = email
     ? await sendInvoiceDuplicateDecisionEmail(
         email,
-        { invoiceId, invoiceNumber, ksefNumber, reminder: false },
+        { invoiceId, invoiceNumber, ksefNumber, reminder: false, variant },
         { idempotencyKey },
       ).catch((e: unknown) => {
         mailFailure.error = e;
@@ -348,10 +398,11 @@ async function notifyDuplicateDecision(
   const emailed = mail.sent === true;
 
   // 6. Push do właściciela (preferencja `notify_invoice_rejected`).
+  const pushText = duplicateNoticePush(variant, invoiceNumber);
   const push = ownerId
     ? await sendPushToUser(ownerId, 'invoice_rejected', {
-        title: DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_TITLE(invoiceNumber),
-        body: DUPLICATE_DECISION_TEXTS.NOTICE.PUSH_BODY,
+        title: pushText.title,
+        body: pushText.body,
         url: `/invoices/${invoiceId}`,
         tag: `invoice-${invoiceId}`,
       })
@@ -376,6 +427,7 @@ async function notifyDuplicateDecision(
       emailed,
       pushSent,
       reminder: null,
+      variant,
     });
   }
   return { notified: delivered, emailed, push };

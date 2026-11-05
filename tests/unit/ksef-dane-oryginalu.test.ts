@@ -3,9 +3,21 @@ import { describe, expect, it } from 'vitest';
 import {
   describeDuplicateOriginal,
   mergeDuplicateCheck,
+  ORIGINAL_RECHECK_KINDS,
+  originalAssignedDay,
   parseDuplicateCheck,
+  parseImportGate,
   type KsefDuplicateCheck,
+  type KsefOriginalImportGate,
 } from '@/lib/ksef/duplicate-check';
+
+import {
+  faktflowGate,
+  faktflowPreview,
+  faktflowRelease,
+  faktflowReviewGate,
+  withoutKey,
+} from './helpers/ksef-duplicate-decision-cases';
 
 /**
  * D-A4-1b-3, PR A: dane oryginału przy nierozstrzygniętym 440
@@ -228,5 +240,225 @@ describe('U2b–U2d: notatki karty bez „zajmujemy się” i operatora, z adres
       'faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF. ' +
       'Nie wystawiaj tej faktury ponownie.',
     );
+  });
+});
+
+/**
+ * D-A4-1b-3 PR C (00149, spec v3 5.1 punkt 4, INV-25, INV-26): brama pochodzenia
+ * oryginału (`original_check.importGate`) i trwały znacznik „sprawdź ponownie”
+ * (`recheckNeeded`) przy odczycie z bazy, dzień nadania numeru oraz zachowanie
+ * oddania decyzji (`release`) przy kolejnym sprawdzeniu. Czyste funkcje
+ * `lib/ksef/duplicate-check.ts`, bez bazy i KSeF.
+ */
+const asGate = (gate: Record<string, unknown>): KsefOriginalImportGate => gate as unknown as KsefOriginalImportGate;
+const wire = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+describe('U2e (PR C): parseImportGate — sprawdza to, co czyta oferta (lustro ksef_duplicate_gate_ok)', () => {
+  const releaseGate = faktflowReviewGate(['rates'], { release: faktflowRelease() });
+
+  it('poprawna brama wraca bez zmian: importable, review i review z oddaniem (release w całości, z aktorem i notatką)', () => {
+    for (const gate of [faktflowGate(), faktflowReviewGate(['rates', 'amounts']), releaseGate]) {
+      expect(parseImportGate(wire(gate)), JSON.stringify(gate.kind)).toEqual(gate);
+    }
+  });
+
+  it('podgląd pliku zostaje bez przebudowy (także o nieznanym kształcie albo null); rules informacyjnie, dowolna liczba', () => {
+    const odd = { period: '10.2026', dziwny: [1, 2, { a: 1 }] };
+    expect(parseImportGate(wire(faktflowGate({ preview: odd })))?.preview).toEqual(odd);
+    expect(parseImportGate(wire(faktflowReviewGate(['parse'], { preview: null })))?.preview).toBeNull();
+    expect(parseImportGate(wire(faktflowGate({ rules: 7 })))?.rules).toBe(7);
+  });
+
+  it.each([
+    ['null', null],
+    ['napis', 'importable'],
+    ['tablica', []],
+    ['wersja 2', faktflowGate({ v: 2 })],
+    ['wersja napisem', faktflowGate({ v: '1' })],
+    ['bez rules', withoutKey(faktflowGate(), 'rules')],
+    ['rules napisem', faktflowGate({ rules: '1' })],
+    ['kind nieznany', faktflowGate({ kind: 'cokolwiek' })],
+    ['bez kind', withoutKey(faktflowGate(), 'kind')],
+    ['problems nie tablicą', faktflowGate({ problems: 'rates' })],
+    ['bez problems', withoutKey(faktflowGate(), 'problems')],
+    ['element problems nie jest napisem', faktflowReviewGate([], { problems: ['rates', 1] })],
+    ['importable z problemem', faktflowGate({ problems: ['rates'] })],
+    ['review bez problemów', faktflowReviewGate([])],
+  ])('zły kształt (%s) → null, czyli brak klucza importGate = recheck-needed', (_name, gate) => {
+    // Ta sama funkcja musi przyjąć poprawną bramę — wynik `null` nie może być odpowiedzią na wszystko.
+    expect(parseImportGate(wire(faktflowGate()))).not.toBeNull();
+    expect(parseImportGate(wire(gate))).toBeNull();
+  });
+
+  it.each([
+    ['via client', { via: 'client' }],
+    ['via Operator wielką literą', { via: 'Operator' }],
+    ['at pustym napisem', { at: '' }],
+    ['at liczbą', { at: 1760000000 }],
+    ['actorUserId liczbą', { actorUserId: 7 }],
+    ['note liczbą', { note: 7 }],
+  ])('release o złym kształcie (%s): klucz release pominięty, reszta bramy zostaje', (_name, over) => {
+    expect(parseImportGate(wire(releaseGate))?.release).toEqual(faktflowRelease());
+    const gate = faktflowReviewGate(['rates'], { release: faktflowRelease(over) });
+    expect(parseImportGate(wire(gate))).toEqual(withoutKey(gate, 'release'));
+  });
+
+  // M5: SQL (`ksef_duplicate_original_offer`, 4.4) sprawdza przy `release.at` tylko typ (napis), nie format daty.
+  // Reguła TS: `parseImportGate` zachowuje oddanie, którego `at` jest DOWOLNYM niepustym napisem — inaczej po
+  // ponownym sprawdzeniu (mergeDuplicateCheck) oferta TS (`released`) rozjechałaby się z SQL (też `released`).
+  it.each(['nie data', 'wczoraj po południu', '2026-13-45', '08.10.2026'])('release.at „%s” (napis, nie data): release ZOSTAJE w bramie', (at) => {
+    const release = faktflowRelease({ at });
+    const gate = faktflowReviewGate(['rates'], { release });
+    expect(parseImportGate(wire(releaseGate))?.release).toEqual(faktflowRelease());
+    expect(parseImportGate(wire(gate))).toEqual(gate);
+    expect(parseImportGate(wire(gate))?.release).toEqual(release);
+  });
+
+  it.each([
+    ['null', null],
+    ['tablica', []],
+    ['napis', 'operator'],
+    ['pusty obiekt', {}],
+  ])('release %s: klucz release pominięty, brama poprawna', (_name, release) => {
+    expect(parseImportGate(wire(releaseGate))?.release).toEqual(faktflowRelease());
+    const gate = faktflowReviewGate(['rates'], { release });
+    expect(parseImportGate(wire(gate))).toEqual(withoutKey(gate, 'release'));
+  });
+
+  it('release z aktorem i notatką null (oddanie bez danych aktora) jest poprawne', () => {
+    const release = faktflowRelease({ actorUserId: null, note: null });
+    expect(parseImportGate(wire(faktflowReviewGate(['rates'], { release })))?.release).toEqual(release);
+  });
+});
+
+describe('U2f (PR C): parseDuplicateCheck — importGate i recheckNeeded wracają z zapisu tylko w poprawnym kształcie', () => {
+  const gateFull = faktflowReviewGate(['rates', 'amounts'], { release: faktflowRelease() });
+  const flagged = { kind: 'gate-drift', at: '2026-10-09T08:00:00.000Z' };
+
+  it('zapis runnera z bramą, oddaniem i znacznikiem wraca bez zmian', () => {
+    const c = { ...check(), importGate: asGate(gateFull), recheckNeeded: flagged };
+    expect(parseDuplicateCheck(wire(c))).toEqual(c);
+    const importable = { ...check(), importGate: asGate(faktflowGate()) };
+    expect(parseDuplicateCheck(wire(importable))).toEqual(importable);
+  });
+
+  it.each(ORIGINAL_RECHECK_KINDS)('recheckNeeded z rodzajem %s wraca', (kind) => {
+    const c = { ...check(), recheckNeeded: { kind, at: '2026-10-09T08:00:00.000Z' } };
+    expect(parseDuplicateCheck(wire(c))).toEqual(c);
+  });
+
+  it('zły kształt bramy albo znacznika → klucz pominięty (brak bramy = recheck-needed w blokadzie)', () => {
+    // Poprawny zapis przechodzi — dopiero wtedy odrzucenia mają sens.
+    expect(parseDuplicateCheck(wire({ ...check(), importGate: gateFull, recheckNeeded: flagged }))).toHaveProperty('importGate');
+    for (const importGate of [null, 'importable', faktflowGate({ v: 2 }), faktflowGate({ kind: 'cokolwiek' }), faktflowGate({ problems: ['rates'] }), faktflowReviewGate([])]) {
+      expect(parseDuplicateCheck(wire({ ...check(), importGate })), JSON.stringify(importGate)).not.toHaveProperty('importGate');
+    }
+    for (const recheckNeeded of [null, 'gate-drift', [], { kind: 'cokolwiek', at: flagged.at }, { kind: 'gate-drift' }, { kind: 'gate-drift', at: 5 }]) {
+      expect(parseDuplicateCheck(wire({ ...check(), recheckNeeded })), JSON.stringify(recheckNeeded)).not.toHaveProperty('recheckNeeded');
+    }
+  });
+
+  it('zapis bez bramy (sprzed 00149) wraca bez klucza importGate i recheckNeeded', () => {
+    expect(parseDuplicateCheck(wire({ ...check(), importGate: gateFull }))).toHaveProperty('importGate');
+    const old = parseDuplicateCheck(wire(check()));
+    expect(old).not.toHaveProperty('importGate');
+    expect(old).not.toHaveProperty('recheckNeeded');
+  });
+});
+
+describe('U2g (PR C): originalAssignedDay — dzień nadania numeru KSeF oryginałowi (Europe/Warsaw)', () => {
+  it('acquiredAt w polskim dniu, nie w UTC; bez niego data z numeru KSeF; bez obu null', () => {
+    expect(originalAssignedDay({ acquiredAt: '2026-09-28T22:30:00.000Z' }, K)).toBe('2026-09-29');
+    expect(originalAssignedDay({ acquiredAt: '2026-12-31T23:30:00.000Z' }, K)).toBe('2027-01-01');
+    expect(originalAssignedDay({ acquiredAt: '2026-09-28T07:15:00.000Z' }, K)).toBe('2026-09-28');
+    expect(originalAssignedDay({ acquiredAt: null }, K)).toBe('2026-09-28');
+    expect(originalAssignedDay(null, K)).toBe('2026-09-28');
+    expect(originalAssignedDay({ acquiredAt: 'nie data' }, K)).toBe('2026-09-28');
+    expect(originalAssignedDay({ acquiredAt: null }, 'KSEF-BEZ-DATY')).toBeNull();
+    expect(originalAssignedDay(null, 'KSEF-BEZ-DATY')).toBeNull();
+  });
+
+  it('ten sam dzień co wiersz „Numer nadany w KSeF” karty (describeDuplicateOriginal)', () => {
+    for (const acquiredAt of ['2026-09-28T22:30:00.000Z', null, '2026-12-31T23:30:00.000Z']) {
+      const row = describeDuplicateOriginal('FV/1', K, check({ acquiredAt })).rows.find((r) => r.label === 'Numer nadany w KSeF');
+      expect(originalAssignedDay({ acquiredAt }, K)).toBe(row?.value);
+    }
+  });
+});
+
+describe('U2h (PR C): mergeDuplicateCheck — oddanie decyzji (release) przechodzi tylko przy tym samym pliku i tej samej ocenie review (INV-26); recheckNeeded nigdy', () => {
+  const release = faktflowRelease();
+  const reviewGate = (problems: string[], over: Record<string, unknown> = {}) => asGate(faktflowReviewGate(problems, over));
+  const released = (over: Partial<KsefDuplicateCheck> = {}) =>
+    check({ importGate: reviewGate(['rates', 'amounts'], { release }), recheckNeeded: { kind: 'gate-drift', at: '2026-10-09T08:00:00.000Z' }, ...over });
+  /** Nowy werdykt: ten sam plik (sha256, env), nowe `checkedAt`, nowa ocena — z innym podglądem i wersją reguł. */
+  const fresh = (over: Partial<KsefDuplicateCheck> = {}) =>
+    check({ checkedAt: '2026-10-11T12:00:00Z', importGate: reviewGate(['amounts', 'rates'], { rules: 2, preview: faktflowPreview({ lineCount: 5 }) }), ...over });
+
+  it('ten sam plik, środowisko i ta sama ocena review (problems jako zbiór) → release z poprzedniego zapisu; reszta bramy i checkedAt z nowego; recheckNeeded znika', () => {
+    const merged = mergeDuplicateCheck(released(), fresh());
+    expect(merged.importGate).toEqual({ ...fresh().importGate, release });
+    expect(merged.checkedAt).toBe('2026-10-11T12:00:00Z');
+    expect(merged).not.toHaveProperty('recheckNeeded');
+    expect(merged.recheck).toBeNull();
+  });
+
+  it('inny plik, środowisko, ocena albo powód → przegląd od nowa, bez release', () => {
+    // Warunek dodatni — bez niego brak release poniżej nic nie dowodzi.
+    expect(mergeDuplicateCheck(released(), fresh()).importGate?.release).toEqual(release);
+    const cases: Array<[string, KsefDuplicateCheck, KsefDuplicateCheck]> = [
+      ['inny SHA-256', released(), fresh({ sha256: 'b'.repeat(64) })],
+      ['inne środowisko', released(), fresh({ env: 'production' })],
+      ['inne problemy (zbiór)', released(), fresh({ importGate: reviewGate(['amounts']) })],
+      ['dodatkowy problem', released(), fresh({ importGate: reviewGate(['rates', 'amounts', 'totals']) })],
+      ['nowa ocena importable', released(), fresh({ importGate: asGate(faktflowGate()) })],
+      ['poprzednia brama w złym kształcie', released({ importGate: asGate(faktflowReviewGate(['rates', 'amounts'], { v: 2, release })) }), fresh()],
+      ['poprzednia brama bez release', released({ importGate: reviewGate(['rates', 'amounts']) }), fresh()],
+      ['nowy zapis bez bramy', released(), check({ checkedAt: '2026-10-11T12:00:00Z' })],
+    ];
+    for (const [name, previous, next] of cases) {
+      const merged = mergeDuplicateCheck(previous, next);
+      expect(merged.importGate?.release, name).toBeUndefined();
+      expect(merged, name).not.toHaveProperty('recheckNeeded');
+    }
+  });
+
+  it('powód nowego zapisu inny niż faktflow-original (known-number) — zapis w całości, bez bramy poprzedniego', () => {
+    // Warunek dodatni: przy tym samym powodzie release przechodzi (inaczej brak bramy poniżej nic nie dowodzi).
+    expect(mergeDuplicateCheck(released(), fresh()).importGate?.release).toEqual(release);
+    const known = check({ reason: 'known-number', knownInvoice: { id: 'y', internalNumber: 'FV/Y' }, checkedAt: '2026-10-11T12:00:00Z' });
+    const merged = mergeDuplicateCheck(released(), known);
+    expect(merged).toEqual({ ...known, recheck: null });
+  });
+});
+
+describe('U2i (PR C, INV-16): mergeDuplicateCheck — znana data nadania K zostaje przy kolejnym werdykcie tego samego pliku (INV-16)', () => {
+  const ACQ = '2026-09-28T07:15:00.000Z';
+  const previous = (over: Partial<KsefDuplicateCheck> = {}) =>
+    check({ acquiredAt: ACQ, importGate: asGate(faktflowReviewGate(['rates'], { release: faktflowRelease() })), ...over });
+  /** Kolejny werdykt: pytanie o datę w KSeF nie powiodło się (429/5xx), więc `acquiredAt` jest `null`. */
+  const next = (over: Partial<KsefDuplicateCheck> = {}) =>
+    check({ checkedAt: '2026-10-11T12:00:00Z', acquiredAt: null, importGate: asGate(faktflowReviewGate(['rates'])), ...over });
+
+  it('(a) ten sam plik i środowisko, nowa data nieznana → data z poprzedniego zapisu; znacznik „sprawdź ponownie” nadal znika', () => {
+    const merged = mergeDuplicateCheck(previous({ recheckNeeded: { kind: 'gate-drift', at: '2026-10-09T08:00:00.000Z' } }), next());
+    expect(merged.acquiredAt).toBe(ACQ);
+    expect(merged.checkedAt).toBe('2026-10-11T12:00:00Z');
+    expect(merged).not.toHaveProperty('recheckNeeded');
+    expect(merged.recheck).toBeNull();
+  });
+
+  it('(b) inny plik albo inne środowisko → data zostaje nieznana (to nie jest ten sam K)', () => {
+    // Warunek dodatni: przy tym samym pliku data wraca — inaczej `null` poniżej nic nie dowodzi.
+    expect(mergeDuplicateCheck(previous(), next()).acquiredAt).toBe(ACQ);
+    expect(mergeDuplicateCheck(previous(), next({ sha256: 'b'.repeat(64) })).acquiredAt).toBeNull();
+    expect(mergeDuplicateCheck(previous(), next({ env: 'production' })).acquiredAt).toBeNull();
+    expect(mergeDuplicateCheck(previous({ sha256: null }), next({ sha256: null })).acquiredAt).toBeNull();
+    expect(mergeDuplicateCheck(previous({ acquiredAt: null }), next()).acquiredAt).toBeNull();
+  });
+
+  it('(c) nowy werdykt ma własną datę → wygrywa nowa', () => {
+    const NEW = '2026-09-28T07:16:00.000Z';
+    expect(mergeDuplicateCheck(previous(), next({ acquiredAt: NEW })).acquiredAt).toBe(NEW);
   });
 });

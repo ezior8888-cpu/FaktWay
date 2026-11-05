@@ -939,7 +939,10 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
     it.each([
       ['wpłaty na dokumencie (paid_amount)', () => { m.invoice = pendingRow({ paid_amount: 100 }); }, 'decyzja zablokowana'],
       ['dane oryginału z innego środowiska KSeF', () => { m.openSent = duplicateRows(duplicateCheck({ env: 'production' })); }, 'original_check.env „production” ≠ KSEF_ENV „test”'],
-      ['powód faktflow-original (PR C)', () => { m.openSent = duplicateRows(duplicateCheck({ reason: 'faktflow-original', summary: { ...duplicateCheck().summary, systemInfo: 'KSeF SaaS v1.0' } })); }, 'Powód faktflow-original'],
+      // PR C: znacznik faktflow-original z SystemInfo FaktWay, ale bez oceny pliku (sprzed 00156) to `recheck-needed`
+      // (lustro kroku 11c) — „Zapisz decyzję klienta” odmawia tekstem `recheckPending(null, null)`; operator czyta
+      // blokadę SQL (`{ sqlBlocker: 'admin' }`), ale bez RPC decyzji i bez audytu. Wcześniej: „Powód faktflow-original”.
+      ['powód faktflow-original z SystemInfo FaktWay, bez oceny pliku (PR C: recheck-needed)', () => { m.openSent = duplicateRows(duplicateCheck({ reason: 'faktflow-original', summary: { ...duplicateCheck().summary, systemInfo: 'KSeF SaaS v1.0' } })); }, OPERATOR_DUPLICATE_MESSAGES.recheckPending(null, null)],
     ])('%s → powód wyłączenia przycisku dla operatora; bez RPC i audytu', async (_l, arrange, reason) => {
       arrange();
 
@@ -948,6 +951,7 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
       expect(result.success).toBe(false);
       expect(result.success ? '' : result.error).toContain(reason);
       expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(rpcCallsOf('decide_ksef_duplicate_original')).toEqual([]);
       expect(m.audit).not.toHaveBeenCalled();
     });
 

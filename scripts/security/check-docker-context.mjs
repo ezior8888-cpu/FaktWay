@@ -31,7 +31,7 @@ export const privatePaths = [
 ];
 export const requiredPaths = [
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json',
-  'app/globals.css', 'app/api/health/route.ts', 'lib/jobs/worker.ts',
+  'app/globals.css', 'app/api/health/route.ts', 'lib/jobs/worker.ts', 'lib/jobs/server-only-hook.mjs',
   'lib/xml/schemas/fa3/schemat-local.xsd', 'lib/exports/schemas/jpk-v7m3/schemat-local.xsd',
   'lib/pdf/fonts/Roboto-Regular.ttf', 'content/help/pierwsze-kroki-w-faktway.mdx',
   'public/marketing/hero.jpg', 'README.md',

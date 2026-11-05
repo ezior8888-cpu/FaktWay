@@ -56,6 +56,7 @@ Błędy jobów idą do Sentry (worker od 01.10.2026).
 | Zadania czekają w `created` | logi workera (czy kolejka „aktywna”), limity `groupConcurrency` | jeśli worker żyje, a kolejka stoi — restart workera |
 | Faktury wiszą w „Wysyłanie” | `docs/runbooks/hamulce-ksef.md`, „Faktura utknęła w wysyłce (I1/I2)”; `ksef_submissions` | żywe zlecenie w pg-boss — czekać (worker przejmie po dzierżawie i uzgodni po numerach referencyjnych, #126); bez zlecenia ponad 30 min — `./scripts/ops/zwolnij-utknieta-wysylke.sh <id>` |
 | Wyłączyć crony (test, przełączanie) | — | `WORKER_DISABLE_SCHEDULES=true` na workerze — worker czyści też zapisany harmonogram |
+| Skrzynka KSeF nie nadąża (`stale_inbox_sync`, rośnie `oldestLagSeconds` w linii `ksef.inbox.dispatch`) | `docs/runbooks/skrzynka-ksef-pojemnosc.md` | więcej slotów: `KSEF_INBOX_POLL_SLOTS` i restart workera; wzór pojemności w tym runbooku |
 | Sentry „Powiadomienie o wyniku wysyłki faktury nie doszło do klienta” (A5 #3) | `extra`: `invoiceId`, `tenantId`, kolejka (`…succeeded.notify` = przyjęta, `…failed.notify` = odrzucona albo czeka na decyzję), `error`; trzy próby: od razu, po 5 min, po 30 min | klient nie dostał e-maila (push mógł dojść — e-mail ponawiany osobno). Daj znać klientowi ręcznie o stanie faktury; przy duplikacie 440 — „Przypomnij klientowi” w `/admin/ksef/<id>`. Ostrzeżenie „Karta FLO nieudana” w logu workera nie zatrzymuje powiadomienia |
 
 **Nie kasuj** wierszy w `pgboss.*` ręcznie bez uzgodnienia — to także historia

@@ -45,8 +45,11 @@ vi.mock('@/lib/import/ksef-xml-archive', async (importOriginal) => ({
 vi.mock('@/lib/import/fa3-parser', () => ({ parseFa3Xml: m.parse }));
 vi.mock('@/lib/import/import-engine', () => ({ processImportedInvoicesDetailed: m.engine }));
 
+import { INVOICE_ORIGINS } from '@/lib/flo/functions/import-history';
 import { KsefApiError } from '@/lib/ksef/client';
-import { classifyForProcessing, itemPatchFor, type ClassifyContext } from '@/lib/ksef/history-sync/classify';
+import { classifyDiscovered, classifyForProcessing, itemPatchFor, type ClassifyContext } from '@/lib/ksef/history-sync/classify';
+import { KSEF_HISTORY_RECHECK_BLOCKED_REASONS } from '@/lib/ksef/history-sync/db';
+import type { InvoiceMetadata } from '@/types/ksef';
 import { KsefXmlArchiveConflictError } from '@/lib/import/ksef-xml-archive';
 import { runKsefHistorySyncTenant } from '@/lib/jobs/runners/ksef-history-sync';
 
@@ -136,7 +139,7 @@ beforeEach(() => {
     const invoiceId = `inv-${inv.ksefNumber}`;
     // Pełny zapis silnika: nagłówek, pozycje i wiersz `xml_documents` (KOD I).
     db.tables.invoices!.push({
-      id: invoiceId, tenant_id: TENANT, direction: params.invoiceDirection, origin: 'ksef_import',
+      id: invoiceId, tenant_id: TENANT, direction: params.invoiceDirection, origin: 'ksef_import', ksef_status: 'accepted',
       ksef_number: inv.ksefNumber ?? N, ksef_environment: 'test', internal_number: inv.invoiceNumber,
       xml_storage_path: 'x.xml', fa3_data: { annotations: {}, import: { importJobId: params.importJobId } },
     });
@@ -251,14 +254,57 @@ describe('classifyForProcessing', () => {
 
   describe('krok 3 — numer faktury zajęty w FaktWay', () => {
     const holder = (patch: Row) => { db.tables.invoices = [local({ internal_number: 'FV/1/09/2026', buyer_nip: '1111111111', issue_date: '2026-09-10', gross_total: 123, ...patch })]; };
-    it('przeniesiona plikiem, te same dane → already_present (wiersza nie ruszamy)', async () => {
-      holder({ origin: 'file_import', ksef_status: 'draft' });
+    // ZAP-01: do 27.10 ten test wymagał `already_present` dla `ksef_status: 'draft'`
+    // i utrwalał zgubienie sprzedaży (szkic z pliku nie liczy się w księgach).
+    // `already_present` zostaje tylko dla wiersza przyjętego w tym środowisku.
+    it('przeniesiona plikiem i przyjęta w tym środowisku, te same dane → already_present (wiersza nie ruszamy)', async () => {
+      holder({ origin: 'file_import', ksef_status: 'accepted', ksef_environment: 'test' });
       expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'resolve', reason: 'already_present', invoiceId: 'lok-1' });
       expect(db.log.filter((q) => q.table === 'invoices' && q.op !== 'select')).toEqual([]);
     });
-    it('przeniesiona plikiem, inne dane → file_import_mismatch', async () => {
+    it('przeniesiona plikiem i przyjęta, inne dane → file_import_mismatch', async () => {
       holder({ origin: 'file_import', gross_total: 124 });
       expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'block', reason: 'file_import_mismatch' });
+    });
+    it('ZAP-01: szkic z importu CSV (draft, bez środowiska) → number_conflict, nie already_present', async () => {
+      holder({ origin: 'file_import', ksef_status: 'draft', ksef_environment: null });
+      expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'number_conflict', invoiceId: 'lok-1' });
+      // Inne dane niż w KSeF — to dalej szkic poza księgami (do 27.10: `file_import_mismatch`
+      // z alarmem operatora); prawnie wiąże oryginał z KSeF, więc ta sama droga: klient usuwa szkic.
+      holder({ origin: 'file_import', ksef_status: 'draft', ksef_environment: null, gross_total: 124 });
+      expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'number_conflict', invoiceId: 'lok-1' });
+      expect(db.log.filter((q) => q.table === 'invoices' && q.op !== 'select')).toEqual([]);
+    });
+    it('ZAP-01: wiersz spoza ksiąg, który nie jest szkicem (inne środowisko, bez środowiska, odrzucony) → local_conflict', async () => {
+      for (const patch of [
+        { ksef_status: 'accepted', ksef_environment: 'production' },
+        { ksef_status: 'accepted', ksef_environment: null },
+        { ksef_status: 'rejected', ksef_environment: null },
+      ]) {
+        holder({ origin: 'file_import', ...patch });
+        expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'local_conflict', invoiceId: 'lok-1' });
+      }
+    });
+    // Recenzja #339: `number_conflict` każe klientowi usunąć szkic, a usunąć da się
+    // tylko `draft` bez wycofania 440 (draft-actions.ts, wyzwalacz 00148).
+    it('ZAP-01: szkic z pliku wysłany z FaktWay (440 bez numeru oryginału) → operator, nie „usuń szkic”', async () => {
+      holder({ origin: 'file_import', ksef_status: 'draft', ksef_environment: null });
+      db.tables.ksef_submissions = [{
+        id: 's-440', tenant_id: TENANT, invoice_id: 'lok-1', status: 'number_taken',
+        original_ksef_number: null, response_ksef_number: null, request_payload_hash: null,
+      }];
+      expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'local_conflict', invoiceId: 'lok-1' });
+    });
+    it('ZAP-01: szkic z pliku w wysyłce → czekamy jak na fakturę FaktWay; po nieudanej wysyłce z próbą — też', async () => {
+      holder({ origin: 'file_import', ksef_status: 'queued', ksef_environment: null });
+      expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'defer', reason: 'own_send_pending', invoiceId: 'lok-1' });
+      holder({ origin: 'file_import', ksef_status: 'failed', ksef_environment: null });
+      db.tables.ksef_submissions = [{ id: 's-9', tenant_id: TENANT, invoice_id: 'lok-1', status: 'failed' }];
+      expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'defer', reason: 'own_send_pending', invoiceId: 'lok-1' });
+    });
+    it('ZAP-01: wiersz spoza FaktWay bez statusu (NULL) → local_conflict — usunąć da się tylko `draft`', async () => {
+      holder({ origin: 'file_import', ksef_status: null, ksef_environment: null });
+      expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'local_conflict', invoiceId: 'lok-1' });
     });
     it('inny numer KSeF przy tym numerze → number_taken_local', async () => {
       holder({ origin: 'file_import', ksef_number: 'INNY-KSEF' });
@@ -328,10 +374,166 @@ describe('odłożone i zablokowane', () => {
     expect(item()).toMatchObject({ status: 'imported' });
   });
 
+  it('ZAP-01: szkic z importu CSV o tym numerze → blokada dla klienta, bez pobrania; po usunięciu szkicu pobieramy oryginał', async () => {
+    db.tables.ksef_history_items = [itemRow({ tenant_id: TENANT })];
+    db.tables.invoices = [{
+      id: 'szkic-csv', tenant_id: TENANT, direction: 'outgoing', origin: 'file_import', ksef_status: 'draft',
+      ksef_number: null, ksef_environment: null, internal_number: 'FV/1/09/2026', buyer_nip: '1111111111',
+      issue_date: '2026-09-10', gross_total: 123, fa3_data: { import: { importJobId: 'import-csv-1' } },
+    }];
+    await runKsefHistorySyncTenant(event, ctx);
+    expect(item()).toMatchObject({ status: 'blocked', reason_code: 'number_conflict', invoice_id: 'szkic-csv' });
+    expect(downloads()).toEqual([]);
+    expect(m.engine).not.toHaveBeenCalled();
+
+    // Klient usuwa szkic (FK ON DELETE SET NULL) — następne sprawdzenie (co godzinę) odblokowuje i pobiera.
+    db.tables.invoices = [];
+    item().invoice_id = null;
+    item().updated_at = '2026-10-22T05:00:00.000Z';
+    await runKsefHistorySyncTenant(event, ctx);
+    expect(item()).toMatchObject({ status: 'imported', reason_code: null, invoice_id: `inv-${N}` });
+    expect(downloads()).toHaveLength(1);
+  });
+
   it('wycofany szkic: sprawdzany raz na dobę; po przeniesieniu numeru przez PR C — do pobrania', async () => {
     db.tables.ksef_history_items = [itemRow({ tenant_id: TENANT, status: 'skipped', reason_code: 'retired_draft', updated_at: '2026-10-21T08:00:00.000Z', resolved_at: '2026-10-21T08:00:00.000Z' })];
     await runKsefHistorySyncTenant(event, ctx);
     expect(item()).toMatchObject({ status: 'imported' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Strażnik ZAP-01: sprzedaż „już w FaktWay” = sprzedaż w księgach
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * ZAP-01 (przegląd architektury 26.10.2026): historia uznawała sprzedaż za
+ * obecną, gdy jakikolwiek wiersz miał jej numer i dane — także szkic z importu
+ * CSV, którego nie liczy przychód, KPiR, JPK ani Pulpit. Oryginał z KSeF nie
+ * trafiał do bazy, a sprzedaż znikała z ksiąg bez komunikatu.
+ *
+ * Strażnik przechodzi przez każdy kształt posiadacza (pochodzenie × status
+ * KSeF × środowisko × numer KSeF × dane × zapis strumienia) w obu miejscach
+ * klasyfikacji i pilnuje dwóch rzeczy w sprzedaży:
+ *  1. `skipped/already_present` i `imported` tylko z posiadaczem w księgach —
+ *     filtr przychodu, KPiR i Pulpitu: `ksef_status = 'accepted'` w środowisku
+ *     strumienia (`lib/analytics-finance/sales.ts`, `lib/reports/kpir-data.ts`).
+ *     Jedyny wyjątek: dawny import KSeF bez środowiska — Pulpit i przychód
+ *     zatrzymują się na nim komunikatem (`assertAcceptedEnvironmentKnown`),
+ *     operator widzi go w `ksef-historia.sh stan` (punkt 6).
+ *  2. Posiadacz spoza ksiąg (i spoza FaktWay) nie kończy pozycji: blokada
+ *     z powodem sprawdzanym ponownie co godzinę, odłożenie albo pobranie.
+ *  3. Szkic bez numeru KSeF (klient może go usunąć) daje powód klienta
+ *     `number_conflict`, nie operatorski `local_conflict`.
+ */
+describe('strażnik ZAP-01: sprzedaż „już w FaktWay” jest w księgach', () => {
+  // CHECK invoices_ksef_status_check (00018) + NULL.
+  const STATUSES = ['draft', 'queued', 'sending', 'accepted', 'rejected', 'received', 'failed', 'offline_queued', null];
+  const ENVIRONMENTS = ['test', 'production', null];
+  const KSEF_NUMBERS = [N, ` ${N}`, null, 'INNY-KSEF'];
+  const STREAMS = ['strumien-out', 'stary'];
+  const ctxFor = (): ClassifyContext => ({
+    admin: historyClient(db) as never, tenantId: TENANT, environment: 'test', direction: 'outgoing', streamId: 'strumien-out',
+  });
+  const inBooks = (h: Row) => h.ksef_status === 'accepted'
+    && (h.ksef_environment === 'test' || (h.ksef_environment === null && h.origin === 'ksef_import'));
+  const shapes = (): Row[] => INVOICE_ORIGINS.flatMap((origin) => STATUSES.flatMap((ksef_status) =>
+    ENVIRONMENTS.flatMap((ksef_environment) => STREAMS.map((importJobId) => ({
+      id: 'lok-1', tenant_id: TENANT, direction: 'outgoing', origin, ksef_status, ksef_environment,
+      internal_number: 'FV/1/09/2026', buyer_nip: '1111111111', issue_date: '2026-09-10', gross_total: 123,
+      xml_storage_path: 'x.xml', fa3_data: { annotations: {}, import: { importJobId } },
+    })))));
+  const label = (h: Row) => `${String(h.origin)}/${String(h.ksef_status)}/${String(h.ksef_environment)}/${String(h.ksef_number)}/${String(h.gross_total)}/${String((h.fa3_data as { import: { importJobId: string } }).import.importJobId)}`;
+
+  beforeEach(() => {
+    // Pełny zapis posiadacza — gałęzie „zapis tego strumienia” i „naprawa” rozstrzygają, a nie pobierają.
+    db.tables.invoice_line_items = [{ id: 'l-1', invoice_id: 'lok-1' }];
+    db.tables.xml_documents = [{ id: 'x-1', tenant_id: TENANT, invoice_id: 'lok-1' }];
+  });
+
+  // Próby wysyłki posiadacza: brak albo wycofanie 440 bez numeru oryginału
+  // (duplicate-decision.ts) — klient takiego szkicu nie usunie (wyzwalacz 00148).
+  const ATTEMPTS: Row[][] = [[], [{
+    id: 's-440', tenant_id: TENANT, invoice_id: 'lok-1', status: 'number_taken',
+    original_ksef_number: null, response_ksef_number: null, request_payload_hash: null,
+  }]];
+
+  it('classifyForProcessing: już obecna tylko przy posiadaczu w księgach; posiadacz spoza ksiąg nie kończy pozycji', async () => {
+    const violations: string[] = [];
+    let present = 0;
+    let clientDrafts = 0;
+    for (const base of shapes()) {
+      for (const ksef_number of KSEF_NUMBERS) {
+        for (const gross_total of [123, 124]) {
+          for (const attempts of ATTEMPTS) {
+            for (const reason_code of [null, 'repair_content']) {
+              const holder: Row = { ...base, ksef_number, gross_total };
+              db.tables.invoices = [holder];
+              db.tables.ksef_submissions = attempts;
+              const outcome = await classifyForProcessing(ctxFor(), itemRow({ tenant_id: TENANT, reason_code }) as never);
+              const at = `${label(holder)}/próby:${attempts.length} → ${outcome.action}/${String('reason' in outcome ? outcome.reason : '')}`;
+              const counted = outcome.action === 'resolve'
+                && (outcome.reason === 'already_present' || outcome.status === 'imported');
+              if (counted) present += 1;
+              // 1. „Już w FaktWay” tylko przy posiadaczu w księgach.
+              if (counted && !inBooks(holder)) violations.push(at);
+              const terminal = outcome.action === 'resolve'
+                || (outcome.action === 'block' && !KSEF_HISTORY_RECHECK_BLOCKED_REASONS.includes(outcome.reason));
+              // 2. Posiadacz spoza ksiąg nie kończy pozycji — blokada sprawdzana ponownie albo czekanie.
+              if (holder.origin !== 'app' && !inBooks(holder) && terminal) violations.push(`koniec bez wyjścia: ${at}`);
+              // 3. Szkic, który klient może usunąć (`draft`, bez prób wysyłki, bez numeru KSeF),
+              //    dostaje powód klienta z tekstem i linkiem, nie operatora.
+              const deletableDraft = holder.ksef_status === 'draft' && attempts.length === 0;
+              const clientDraft = holder.origin !== 'app' && !inBooks(holder) && deletableDraft
+                && !String(holder.ksef_number ?? '').trim();
+              if (clientDraft) clientDrafts += 1;
+              if (clientDraft && !(outcome.action === 'block' && outcome.reason === 'number_conflict')) {
+                violations.push(`szkic bez drogi klienta: ${at}`);
+              }
+              // 4. „Usuń szkic” (`number_conflict`) tylko, gdy da się go usunąć: `deleteDraftInvoiceAction`
+              //    usuwa wyłącznie `draft`, a wycofanego szkicu 440 klient nie usunie (recenzja #339).
+              //    Reszta powodów sprawdzanych ponownie budzi operatora (ksef-historia-alarm.test.ts).
+              if (outcome.action === 'block' && outcome.reason === 'number_conflict' && !deletableDraft) {
+                violations.push(`„usuń szkic” bez możliwości usunięcia: ${at}`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(clientDrafts).toBeGreaterThan(0);
+    expect(violations).toEqual([]);
+    expect(present).toBeGreaterThan(0); // strażnik nie jest pusty
+  });
+
+  it('classifyDiscovered: już obecna tylko przy posiadaczu w księgach; posiadacz spoza ksiąg nie kończy pozycji', async () => {
+    const page: InvoiceMetadata[] = [{
+      ksefNumber: N, invoiceNumber: 'FV/1/09/2026', issueDate: '2026-09-10', invoicingDate: '2026-09-10T10:00:00Z',
+      acquisitionDate: '2026-09-10T10:00:01Z', permanentStorageDate: '2026-09-10T10:00:05Z', invoicingMode: 'Online',
+      invoiceType: 'Vat', seller: { nip: NIP, name: 'Sprzedawca' }, buyer: { identifier: { type: 'Nip', value: '1111111111' }, name: 'Nabywca' },
+      netAmount: 100, grossAmount: 123, vatAmount: 23, currency: 'PLN', invoiceHash: HASH_B64,
+      formCode: { systemCode: 'FA (3)', schemaVersion: '1-0E', value: 'FA' },
+    } as InvoiceMetadata];
+    const violations: string[] = [];
+    let present = 0;
+    for (const base of shapes()) {
+      for (const xml_storage_path of ['x.xml', null]) {
+        const holder: Row = { ...base, ksef_number: N, xml_storage_path };
+        db.tables.invoices = [holder];
+        const [row] = await classifyDiscovered(ctxFor(), page, DAY_NOW);
+        if (!row) continue; // faktura FaktWay — bez wiersza
+        const counted = (row.status === 'skipped' && row.reason_code === 'already_present') || row.status === 'imported';
+        if (counted) present += 1;
+        if (counted && !inBooks(holder)) violations.push(`${label(holder)}/${String(xml_storage_path)} → ${row.status}/${String(row.reason_code)}`);
+        const terminal = row.status === 'skipped' || row.status === 'imported'
+          || (row.status === 'blocked' && !(KSEF_HISTORY_RECHECK_BLOCKED_REASONS as readonly string[]).includes(String(row.reason_code)));
+        if (holder.origin !== 'app' && !inBooks(holder) && terminal) {
+          violations.push(`${label(holder)}/${String(xml_storage_path)} → koniec bez wyjścia: ${row.status}/${String(row.reason_code)}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(present).toBeGreaterThan(0);
   });
 });
 
@@ -421,7 +623,7 @@ describe('pobranie → archiwum → odczyt → silnik', () => {
     }
     expect(item()).toMatchObject({ status: 'blocked', reason_code: 'save_failed', attempts: 3, detail: 'Błąd zapisu faktury FV/1: unikalność' });
 
-    db.tables.invoices = [{ id: 'stara', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_number: 'NAPRAWA-1', ksef_environment: 'test', xml_storage_path: null, fa3_data: {} }];
+    db.tables.invoices = [{ id: 'stara', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_status: 'accepted', ksef_number: 'NAPRAWA-1', ksef_environment: 'test', xml_storage_path: null, fa3_data: {} }];
     db.tables.ksef_history_items = [itemRow({ tenant_id: TENANT, ksef_number: 'NAPRAWA-1', reason_code: 'repair_content', invoice_id: 'stara', attempts: 2 })];
     m.engine.mockResolvedValue(engineResult({ invoicesImported: 0, invoicesFailed: 1, warnings: ['nie uzupełniono'] }));
     await runKsefHistorySyncTenant(event, ctx);
@@ -430,7 +632,7 @@ describe('pobranie → archiwum → odczyt → silnik', () => {
   });
 
   it('naprawa bez błędu → `imported repaired`', async () => {
-    db.tables.invoices = [{ id: 'stara', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_number: N, ksef_environment: 'test', xml_storage_path: null, fa3_data: {} }];
+    db.tables.invoices = [{ id: 'stara', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_status: 'accepted', ksef_number: N, ksef_environment: 'test', xml_storage_path: null, fa3_data: {} }];
     db.tables.ksef_history_items = [itemRow({ tenant_id: TENANT, reason_code: 'repair_content', invoice_id: 'stara' })];
     m.engine.mockResolvedValueOnce(engineResult({ invoicesImported: 0, invoicesFailed: 0 }));
     await runKsefHistorySyncTenant(event, ctx);
@@ -440,7 +642,7 @@ describe('pobranie → archiwum → odczyt → silnik', () => {
   it('silnik zapisał fakturę, ale nie oryginał XML (`xml_documents`) — nie `imported`; następny przebieg uzupełnia ją silnikiem i liczy jako pobraną z notatką JPK', async () => {
     m.engine.mockImplementationOnce(async (params: { importJobId: string }) => {
       db.tables.invoices!.push({
-        id: 'inv-czesciowa', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_number: N,
+        id: 'inv-czesciowa', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_status: 'accepted', ksef_number: N,
         ksef_environment: 'test', internal_number: 'FV/1/09/2026', xml_storage_path: 'x.xml',
         fa3_data: { annotations: {}, import: { importJobId: params.importJobId } },
       });
@@ -469,7 +671,7 @@ describe('pobranie → archiwum → odczyt → silnik', () => {
 
   it('sam nagłówek bez pozycji (przerwany zapis) — nie `imported`; po 3 próbach uzupełnienia `save_failed` dla operatora', async () => {
     db.tables.invoices = [{
-      id: 'inv-naglowek', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_number: N,
+      id: 'inv-naglowek', tenant_id: TENANT, direction: 'outgoing', origin: 'ksef_import', ksef_status: 'accepted', ksef_number: N,
       ksef_environment: 'test', internal_number: 'FV/1/09/2026', xml_storage_path: 'x.xml',
       fa3_data: { annotations: {}, import: { importJobId: 'strumien-out' } },
     }];

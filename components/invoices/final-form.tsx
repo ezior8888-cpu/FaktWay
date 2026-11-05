@@ -91,6 +91,8 @@ export interface AdvanceOptionRow {
 export interface FinalInvoiceFormProps {
   initialSeller: SellerData;
   advanceInvoices: AdvanceOptionRow[];
+  /** Firma, dla której wyrenderowano formularz, sprzedawcę i zaliczki — zapis odsyła ją jako `expectedTenantId` (UX-01). */
+  tenantId: string;
 }
 
 // E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
@@ -107,7 +109,7 @@ function advanceLabel(row: AdvanceOptionRow): string {
   return num;
 }
 
-export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoiceFormProps) {
+export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: FinalInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -155,7 +157,8 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
     [advanceInvoices],
   );
 
-  const selectedIds = useWatch({ control: form.control, name: 'advanceInvoiceIds' }) ?? [];
+  const watchedAdvanceIds = useWatch({ control: form.control, name: 'advanceInvoiceIds' });
+  const selectedIds = useMemo(() => watchedAdvanceIds ?? [], [watchedAdvanceIds]);
   const watchedLines =
     useWatch({ control: form.control, name: 'lines' }) ??
     ([] as FinalInvoiceSchemaIn['lines']);
@@ -236,7 +239,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const onSave = form.handleSubmit(
     (data) =>
       startSave(async () => {
-        const r = await saveFinalAction(data);
+        const r = await saveFinalAction(data, tenantId);
         if (r.success) {
           toast.success('Zapisano szkic faktury rozliczającej');
           router.push(`/invoices/${r.invoiceId}`);
@@ -248,7 +251,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
   const onSend = form.handleSubmit(
     (data) =>
       startSend(async () => {
-        const r = await saveAndSendFinalAction(data);
+        const r = await saveAndSendFinalAction(data, tenantId);
         if (r.success) {
           toast.success('Faktura rozliczająca w kolejce KSeF');
           router.push(`/invoices/${r.invoiceId}`);

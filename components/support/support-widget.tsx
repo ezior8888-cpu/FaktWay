@@ -2,9 +2,9 @@
 
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { usePortalContainer } from '@/components/ui/portal-container';
 import { cn } from '@/lib/utils';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/client';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { getContextualArticleSlugs } from '@/lib/support/contextual-help';
 import { OTWORZ_POMOC } from '@/lib/support/open-support-event';
 import { parseMeta, stripMetaLine } from '@/lib/support/meta';
@@ -41,6 +42,11 @@ import {
  *
  * Chat: streaming odpowiedzi z `/api/support/chat`. Cytowania KB pokazujemy
  * jako klikalne chipsy prowadzące do `/pomoc/<slug>`.
+ *
+ * FaktWay 1.0, decyzja 3: czat to podpowiedź z bazy wiedzy, oznaczona jako
+ * automat (art. 50 ust. 1 AI Act), z przejściem do człowieka. `ContactHuman`
+ * stoi pod rozmową cały czas, bo eskalacja wymaga rozmowy i działającej akcji
+ * serwera: przy błędzie czatu klient nie zostaje bez drogi.
  */
 
 interface ChatMessage {
@@ -68,6 +74,9 @@ const VIDEO_TUTORIALS = [
   'Import z Fakturowni',
 ];
 
+/** Nic się nie zmienia po zamontowaniu, więc subskrypcja jest pusta. */
+const subscribeNothing = () => () => {};
+
 export function SupportWidget({
   articleTitles,
 }: {
@@ -89,16 +98,16 @@ export function SupportWidget({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [csatGiven, setCsatGiven] = useState<boolean | null>(null);
-  const [escalated, setEscalated] = useState(false);
+  const [escalation, setEscalation] = useState<'idle' | 'done' | 'failed'>('idle');
   const [, startAction] = useTransition();
+  // Osobno od oceny: akcja czeka na zapis i alerty, a klient ma widzieć, że prośba idzie.
+  const [escalating, startEscalation] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const [portalReady, setPortalReady] = useState(false);
+  // false na serwerze i przy hydratacji, true w przeglądarce: to samo co dawny
+  // setState w useLayoutEffect, bez dodatkowego renderu z efektu.
+  const portalReady = useSyncExternalStore(subscribeNothing, () => true, () => false);
   const kontener = usePortalContainer();
-
-  useLayoutEffect(() => {
-    setPortalReady(true);
-  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -225,7 +234,7 @@ export function SupportWidget({
               {/* Art. 50 ust. 1 AI Act (od 2.08.2026): rozmówca ma wiedzieć,
                   że pisze z systemem AI — widoczne przez całą rozmowę. */}
               <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                Asystent AI
+                Odpowiada automat (AI)
               </span>
             </div>
             <button
@@ -262,7 +271,8 @@ export function SupportWidget({
             {/* CSAT + eskalacja — po pierwszej odpowiedzi AI */}
             {hasAiReply && !isStreaming && conversationId && (
               <ConversationFooter
-                escalated={escalated}
+                escalation={escalation}
+                escalating={escalating}
                 csatGiven={csatGiven}
                 onCsat={(positive) => {
                   setCsatGiven(positive);
@@ -271,14 +281,18 @@ export function SupportWidget({
                   });
                 }}
                 onEscalate={() => {
-                  setEscalated(true);
-                  startAction(() => {
-                    void escalateConversationAction(conversationId);
+                  // „Zgłoszono” dopiero po zapisie: odmowa (np. wygasła sesja)
+                  // albo błąd sieci nie może udawać, że ktoś się odezwie.
+                  startEscalation(async () => {
+                    const result = await escalateConversationAction(conversationId).catch(() => null);
+                    setEscalation(result?.ok ? 'done' : 'failed');
                   });
                 }}
               />
             )}
           </div>
+
+          <ContactHuman />
 
           {/* Input */}
           <form
@@ -331,6 +345,18 @@ export function SupportWidget({
   return createPortal(shell, target);
 }
 
+/** Droga do człowieka widoczna przez całą rozmowę, także gdy sam czat nie działa. */
+function ContactHuman() {
+  return (
+    <p className="shrink-0 border-t border-glass-border px-4 py-2 text-xs text-muted-foreground">
+      Wolisz człowieka? Napisz:{' '}
+      <a href={`mailto:${SUPPORT_EMAIL}`} className="underline underline-offset-2 hover:text-foreground">
+        {SUPPORT_EMAIL}
+      </a>
+    </p>
+  );
+}
+
 function WelcomeState({
   onPick,
   contextualSlugs,
@@ -346,14 +372,13 @@ function WelcomeState({
     <div className="space-y-5">
       <div>
         <p className="text-sm">
-          Cześć! Jestem asystentem AI FaktWay — automatycznym programem, nie
-          człowiekiem. Odpowiem na pytania o KSeF, faktury, OCR i rozliczenia
-          w kilka sekund.
+          Cześć! Odpowiada automat (AI), nie człowiek. Podpowiadam na podstawie
+          centrum pomocy FaktWay: KSeF, faktury, koszty ze zdjęcia i abonament.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Moje odpowiedzi mogą zawierać błędy i nie są poradą podatkową ani
-          prawną. W każdej chwili możesz poprosić o kontakt z człowiekiem.
-          Treść rozmowy przetwarza dostawca AI (Anthropic) —{' '}
+          prawną. W każdej chwili możesz napisać do człowieka, adres jest pod
+          rozmową. Treść rozmowy przetwarza dostawca AI (Anthropic):{' '}
           <Link href="/legal/polityka-prywatnosci#cele" target="_blank" className="underline underline-offset-2">
             szczegóły
           </Link>
@@ -428,12 +453,14 @@ function WelcomeState({
 }
 
 function ConversationFooter({
-  escalated,
+  escalation,
+  escalating,
   csatGiven,
   onCsat,
   onEscalate,
 }: {
-  escalated: boolean;
+  escalation: 'idle' | 'done' | 'failed';
+  escalating: boolean;
   csatGiven: boolean | null;
   onCsat: (positive: boolean) => void;
   onEscalate: () => void;
@@ -468,19 +495,25 @@ function ConversationFooter({
         </p>
       )}
 
-      {escalated ? (
+      {escalation === 'done' ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <UserRound className="h-3.5 w-3.5" />
-          Zgłoszono do zespołu — odezwiemy się mailem.
+          Zgłoszono do zespołu. Odezwiemy się mailem.
+        </p>
+      ) : escalation === 'failed' ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <UserRound className="h-3.5 w-3.5 shrink-0" />
+          Nie udało się zgłosić rozmowy. Napisz do nas na adres poniżej.
         </p>
       ) : (
         <button
           type="button"
           onClick={onEscalate}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          disabled={escalating}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:no-underline disabled:opacity-70"
         >
           <UserRound className="h-3.5 w-3.5" />
-          Połącz z człowiekiem
+          {escalating ? 'Zgłaszam…' : 'Połącz z człowiekiem'}
         </button>
       )}
     </div>

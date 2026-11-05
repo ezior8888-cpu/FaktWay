@@ -11,6 +11,7 @@ import type { JobContext } from '@/lib/jobs/registry';
  */
 
 type Settings = {
+  id: string;
   tenant_id: string;
   co_pilot_enabled: boolean;
   send_day_of_month: number;
@@ -41,6 +42,9 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => {
       const eqs: Array<[string, unknown]> = [];
+      // Lista firm idzie stronami po kluczu (sesja 27): kursor, porządek i limit jak w bazie.
+      let afterId: string | null = null;
+      let limitN: number | null = null;
       let patch: Partial<Settings> | null = null;
       let casPeriod: { start: string; end: string } | null = null;
       const q: Record<string, unknown> = {};
@@ -48,7 +52,10 @@ vi.mock('@/lib/supabase/admin', () => ({
         const tenant = eqs.find(([k]) => k === 'tenant_id')?.[1] as string | undefined;
         if (!patch) {
           // Kopie, jak z prawdziwej bazy — job nie może widzieć późniejszych zmian wiersza.
-          const rows = state.settings.filter((s) => eqs.every(([k, v]) => s[k as keyof Settings] === v));
+          const rows = state.settings
+            .filter((s) => eqs.every(([k, v]) => s[k as keyof Settings] === v) && (afterId === null || s.id > afterId))
+            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            .slice(0, limitN ?? undefined);
           return { data: structuredClone(rows), error: null };
         }
         if (casPeriod && tenant && state.failReserveFor.has(tenant)) return { data: null, error: { message: 'chwilowy błąd bazy' } };
@@ -68,6 +75,9 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: () => q,
         update: (v: Partial<Settings>) => { patch = v; return q; },
         eq: (k: string, v: unknown) => { eqs.push([k, v]); return q; },
+        gt: (k: string, v: string) => { if (k === 'id') afterId = v; return q; },
+        order: () => q,
+        limit: (n: number) => { limitN = n; return q; },
         or: () => { casPeriod = { start: patch!.last_sent_period_start!, end: patch!.last_sent_period_end! }; return q; },
         then: (ok: (v: unknown) => unknown, err?: (e: unknown) => unknown) => Promise.resolve(run()).then(ok, err),
       });
@@ -85,6 +95,7 @@ const ctx: JobContext = {
 };
 
 const firma = (tenant_id: string, last: string | null = '2026-08-01'): Settings => ({
+  id: `ustawienia-${tenant_id}`,
   tenant_id,
   co_pilot_enabled: true,
   send_day_of_month: 5,

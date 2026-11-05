@@ -26,6 +26,12 @@ vi.mock('@/lib/flo/functions/expense-inbox', () => ({
   buildInboxSummaryProposal: () => null,
   classifyInboxDocuments: () => [],
 }));
+// Harmonogram ma własny test (`skrzynka-przebieg-harmonogram`). Bez tej atrapy jego błąd
+// (brak bazy) szedłby do logu i Sentry i zasłaniałby asercje o błędach przebiegu.
+vi.mock('@/lib/ksef/inbox-schedule-db', () => ({
+  readInboxPollState: async () => null,
+  finishInboxPoll: async () => undefined,
+}));
 vi.mock('@/lib/flo/functions/inbox-cursor', () => ({
   readInboxHwm: async () => st.hwm,
   saveInboxHwm: vi.fn(async (_tenantId: string, state: unknown) => { st.saved.push(state); }),

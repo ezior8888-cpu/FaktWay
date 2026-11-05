@@ -11,9 +11,12 @@ vi.mock('@/components/invoices/actions', () => ({
 
 import { InvoiceForm } from '@/components/invoices/invoice-form';
 
+/** Firma formularza (UX-01) — w tym teście tylko wymagany prop. */
+const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
 /** AUD-70: trzy rodzaje nabywcy i stawka „np. II” w formularzu zwykłej faktury. */
 describe('formularz faktury — nabywca z UE i np. II', () => {
-  const html = renderToStaticMarkup(<InvoiceForm />);
+  const html = renderToStaticMarkup(<InvoiceForm tenantId={TENANT} />);
 
   it('wybór rodzaju nabywcy: firma z Polski, osoba prywatna, firma z UE', () => {
     expect(html).toContain('Firma z Polski (NIP)');

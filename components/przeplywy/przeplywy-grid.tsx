@@ -277,7 +277,7 @@ export async function SourcesSlotCard({ supabase, tenantId, nowIso, className }:
 
 export async function UpcomingSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Spodziewane wpływy', className, async () => {
-    // E11 (D-W): spodziewane wpływy to przyszłe terminy z `getInflows` (wspólna reguła kart Finory).
+    // Spodziewane wpływy to otwarte faktury z terminem od dziś z `getInflows` (wspólna reguła kart Finory).
     const today = todayInWarsaw(new Date(nowIso));
     const upcoming = upcomingInflows(await getInflows(supabase, tenantId, { from: today }), today);
     return (

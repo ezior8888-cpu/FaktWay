@@ -16,6 +16,7 @@ import {
   triggerCoPilotNowAction,
   updateAccountantSettingsAction,
 } from '@/app/actions/exports';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { exportScopeFor, UnknownExportFormatError } from '@/lib/exports/export-scope';
 import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
 import { plural } from '@/lib/i18n/plural';
 import { cn } from '@/lib/utils';
@@ -125,6 +127,9 @@ export function CoPilotSettingsForm({
 
   const [isSaving, startSave] = useTransition();
   const [isTriggering, startTrigger] = useTransition();
+  // Odmowa „potrzebny kod” (sesja po biometrii): komunikat z przejściem na ekran kodu zamiast
+  // samego powiadomienia, bo bez wyjścia to ślepy zaułek (jak w Zespole i Dostępie księgowej).
+  const [stepUp, setStepUp] = useState<string | null>(null);
 
   const saveDisabled = isSaving;
   const triggerDisabled =
@@ -133,6 +138,7 @@ export function CoPilotSettingsForm({
     !settings.accountant_email.trim();
 
   const handleSave = () => {
+    setStepUp(null);
     startSave(async () => {
       const result = await updateAccountantSettingsAction({
         co_pilot_enabled: settings.co_pilot_enabled,
@@ -152,6 +158,8 @@ export function CoPilotSettingsForm({
       if (result.success) {
         toast.success('Ustawienia zapisane');
         router.refresh();
+      } else if (result.mfaStepUp) {
+        setStepUp(result.error);
       } else {
         toast.error(result.error ?? 'Błąd zapisu');
       }
@@ -164,6 +172,7 @@ export function CoPilotSettingsForm({
       return;
     }
 
+    setStepUp(null);
     startTrigger(async () => {
       // `triggerCoPilotNowAction` czyta ustawienia z bazy — bez zapisu
       // przełącznik/email w UI nie trafiały do DB i ręczne wysłanie kończyło się błędem.
@@ -183,7 +192,8 @@ export function CoPilotSettingsForm({
           settings.cc_emails.length > 0 ? settings.cc_emails : undefined,
       });
       if (!saveResult.success) {
-        toast.error(saveResult.error ?? 'Nie udało się zapisać ustawień');
+        if (saveResult.mfaStepUp) setStepUp(saveResult.error);
+        else toast.error(saveResult.error ?? 'Nie udało się zapisać ustawień');
         return;
       }
 
@@ -224,6 +234,12 @@ export function CoPilotSettingsForm({
   // sekcje rozdzielone `Separator`, przyciski pod spodem.
   return (
     <FieldGroup>
+      {stepUp ? (
+        <MfaStepUpNotice returnTo="/settings/accountant">
+          {stepUp} Po potwierdzeniu wrócisz tutaj i zapiszesz zmiany jeszcze raz.
+        </MfaStepUpNotice>
+      ) : null}
+
       <Field orientation="horizontal" className="items-center!">
         <FieldContent>
           <FieldLabel htmlFor="co-pilot-enabled">
@@ -379,6 +395,12 @@ export function CoPilotSettingsForm({
 
       <div>
         <FieldLabel>Co dołączać do paczki</FieldLabel>
+        {/* FIR-01: reguła formatu z `lib/exports/export-scope.ts` — pola nie okrajają KPiR. */}
+        <FieldDescription>
+          KPiR zawsze ma całą sprzedaż (z zaliczkami, rozliczeniami i korektami) i koszty, a JPK_FA — tylko
+          faktury wystawione. Pola niżej dotyczą pliku CSV i JPK_FA. Bez „Faktur korygujących” oba pliki mają
+          tylko zwykłe faktury, bez zaliczek i rozliczeń.
+        </FieldDescription>
       </div>
 
       <CheckboxRow
@@ -587,6 +609,20 @@ const BADGE_OK = 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-
 const BADGE_ERROR = 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400';
 const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400';
 
+/**
+ * Plik z kosztami (KPiR) bez liczby faktur: `invoices_count` liczy tylko
+ * sprzedaż — jak w historii eksportów.
+ */
+function showsInvoiceCount(format: ExportJobPreviewRow['format']): boolean {
+  try {
+    return !exportScopeFor(format).includeExpenses;
+  } catch (error) {
+    // Format spoza reguły (baza przed kodem): licznik jak dawniej, bez wywracania strony.
+    if (error instanceof UnknownExportFormatError) return true;
+    throw error;
+  }
+}
+
 function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
   const statusDefaults = {
     completed: { label: 'Wysłane', className: BADGE_OK },
@@ -622,8 +658,12 @@ function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
             {formatLabel} • {periodLabel}
           </p>
           <p className="text-muted-foreground text-xs">
-            {job.invoices_count} {plural(job.invoices_count ?? 0, ['faktura', 'faktury', 'faktur'])}
-            {emailed ? ` • wysłano ${emailed}` : ''}
+            {[
+              showsInvoiceCount(job.format)
+                ? `${job.invoices_count} ${plural(job.invoices_count ?? 0, ['faktura', 'faktury', 'faktur'])}`
+                : null,
+              emailed ? `wysłano ${emailed}` : null,
+            ].filter(Boolean).join(' • ')}
           </p>
         </div>
       </div>

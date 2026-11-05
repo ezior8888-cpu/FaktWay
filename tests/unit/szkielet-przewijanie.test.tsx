@@ -96,6 +96,37 @@ describe('ShellScrollMemory — przewijanie panelu przy zmianie trasy', () => {
   });
 });
 
+describe('ShellScrollMemory — podzakładka sekcji zmienia tylko tabelę (25.10.2026)', () => {
+  it('kliknięcie zakładki z `data-ff-keep-scroll` nie wraca na górę ekranu', () => {
+    const tab = document.createElement('a');
+    tab.href = '/invoices/recurring';
+    tab.setAttribute('data-ff-keep-scroll', '');
+    document.body.append(tab);
+    setScrollTop(520);
+    tab.click();
+    window.history.pushState(null, '', '/invoices/recurring');
+    goTo('/invoices/recurring');
+    expect(scroller.scrollTop).toBe(520);
+    tab.remove();
+  });
+
+  it('zwykły link po podzakładce znowu zaczyna od góry', () => {
+    const tab = document.createElement('a');
+    tab.href = '/invoices/recurring';
+    tab.setAttribute('data-ff-keep-scroll', '');
+    document.body.append(tab);
+    setScrollTop(520);
+    tab.click();
+    window.history.pushState(null, '', '/invoices/recurring');
+    goTo('/invoices/recurring');
+    document.body.click();
+    window.history.pushState(null, '', '/przeplywy');
+    goTo('/przeplywy');
+    expect(scroller.scrollTop).toBe(0);
+    tab.remove();
+  });
+});
+
 describe('blokada przewijania dokumentu w panelu', () => {
   const css = readFileSync('app/globals.css', 'utf8');
   const layout = readFileSync('app/(dashboard)/layout.tsx', 'utf8');

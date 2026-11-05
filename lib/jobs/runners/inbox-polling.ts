@@ -7,8 +7,29 @@ import {
   inboxInvoiceReceivedAutoCategorize,
   inboxPollTenant,
 } from '../events';
+import { classifyInboxPollError } from '@/lib/ksef/inbox-poll-errors';
+import {
+  INBOX_CATCH_UP_INTERVAL_MS,
+  inboxActivityTier,
+  inboxDispatchLimit,
+  inboxOldestLagSeconds,
+  inboxPollSlots,
+  inboxRateLimitBrake,
+  isInboxPollJobRedundant,
+  nextInboxPollAfterError,
+  nextInboxPollAfterSuccess,
+  type InboxPollErrorClass,
+} from '@/lib/ksef/inbox-schedule';
+import {
+  dispatchDueInboxPolls,
+  finishInboxPoll,
+  readInboxPollBacklog,
+  readInboxPollState,
+  type InboxPollState,
+} from '@/lib/ksef/inbox-schedule-db';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
+import { recordKsefPollSummary } from '@/lib/ksef/poll-audit';
 import { createProposal } from '@/lib/flo/proposals';
 import {
   buildInboxSummaryProposal,
@@ -28,11 +49,12 @@ export { INBOX_MAX_WINDOW_MS, nextInboxHwm };
 /**
  * Polling skrzynki KSeF - dwa joby:
  *
- *   1. `inboxPollingJob` (cron co 15 min) - wybiera aktywnych tenantów i robi
- *      fan-out eventów `inbox/poll.tenant`. Nie pollinguje sam, żeby uniknąć
- *      jednego monolitycznego joba >60min.
- *   2. `inboxPollTenantJob` (event handler) - per-tenant polling, filtr
- *      istniejących faktur, insert nowych jako direction='incoming'.
+ *   1. `runInboxPolling` (cron co minutę, 00160) - bierze firmy należne według
+ *      harmonogramu do limitu slotów i wysyła zlecenia `inbox/poll.tenant`.
+ *      Częstotliwość zależy od aktywności firmy (`lib/ksef/inbox-schedule.ts`),
+ *      reszta należnych czeka na następny takt.
+ *   2. `runInboxPollTenant` (zlecenie) - przebieg jednej firmy, filtr istniejących
+ *      faktur, insert nowych jako direction='incoming', termin następnego przebiegu.
  *
  * Idempotencja:
  *   - KSeF zwraca tę samą fakturę przy kolejnych pollach jeśli w zakresie dat
@@ -129,52 +151,53 @@ async function findExistingInboxNumbers(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CRON: wybór aktywnych tenantów + fan-out
+// CRON: takt rozsyłki według harmonogramu
 // ═══════════════════════════════════════════════════════════════
 
 /**
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ *
+ * Ponowienie od zera jest bezpieczne: wybór firm i zapis zleceń to jedna
+ * transakcja na paczkę (`dispatchDueInboxPolls`), więc po błędzie albo śmierci
+ * procesu firmy z zatwierdzonej paczki mają dzierżawę, a reszta jest dalej
+ * należna. Ponowieniem jest następny takt za minutę.
  */
 export async function runInboxPolling({ step, logger }: JobContext) {
     const env = requireConfiguredKsefEnvironment();
-    // Polling wymaga certyfikatu oraz znacznika zweryfikowanego NIP-u.
-    const tenants = await step.run('list-active-tenants', async () => {
-      const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, nip')
-        .not('ksef_credentials_encrypted', 'is', null)
-        .not('ksef_verified_at', 'is', null)
-        .eq('ksef_verified_environment', env);
+    const startedAt = Date.now();
+    const slots = inboxPollSlots();
 
-      if (error) throw new Error(`Failed to list tenants: ${error.message}`);
-      return data ?? [];
-    });
-
-    logger.info(`Polling dla ${tenants.length} tenantów`);
-
-    if (tenants.length === 0) {
-      return { polled: 0 };
+    const backlog = await step.run('read-backlog', () => readInboxPollBacklog(env));
+    const braking = inboxRateLimitBrake(backlog);
+    const limit = inboxDispatchLimit({ slots, inFlight: backlog.inFlight, braking });
+    if (braking) {
+      logger.warn('Skrzynka: dużo firm z 429, rozsyłka zwolniona', {
+        rateLimitedRecent: backlog.rateLimitedRecent,
+        polledRecent: backlog.polledRecent,
+      });
     }
 
-    // Fan-out - Inngest dystrybuuje eventy równolegle z `concurrency.limit`
-    // w per-tenant jobie poniżej.
-    // `groupId` = NIP: bez niego limit „jeden przebieg na NIP” w pg-boss nie
-    // działa, a dwa równoległe przebiegi tej samej firmy dublują powiadomienia
-    // (AUD-91).
-    const events = tenants.map((tenant) => ({
-      ...inboxPollTenant.create({
-        tenantId: tenant.id,
-        nip: tenant.nip,
-        environment: env,
-      }),
-      groupId: tenant.nip,
+    const sent = limit > 0 && backlog.due > 0
+      ? await step.run('dispatch-due', () => dispatchDueInboxPolls(env, limit))
+      : 0;
+
+    // Jedna linia na takt, tylko liczby (jak `process.metrics`): z niej widać, czy
+    // skrzynka nadąża. Runbook: docs/runbooks/skrzynka-ksef-pojemnosc.md.
+    console.log(JSON.stringify({
+      msg: 'ksef.inbox.dispatch',
+      due: backlog.due,
+      sent,
+      inFlight: backlog.inFlight,
+      limit,
+      slots,
+      oldestLagSeconds: inboxOldestLagSeconds(backlog.oldestDueAt, new Date()),
+      rateLimitedRecent: backlog.rateLimitedRecent,
+      braking,
+      durationMs: Date.now() - startedAt,
     }));
 
-    await step.sendEvent('fan-out-polling', events);
-
-    return { polled: tenants.length };
+    return { polled: sent };
 }
 
 
@@ -182,28 +205,154 @@ export async function runInboxPolling({ step, logger }: JobContext) {
 // PER-TENANT: polling + diff + insert
 // ═══════════════════════════════════════════════════════════════
 
+/** Wynik samego pobrania, z tym co potrzebne do terminu następnego przebiegu. */
+interface InboxPollOutcome {
+  fetched: number;
+  newlyAdded: number;
+  /** KSeF nie podał HWM: okno stoi, więc to nie jest sukces. */
+  hwmMissing: boolean;
+  /** Okno ucięte limitem zakresu API: reszta zaległości czeka na następne okno. */
+  catchingUp: boolean;
+}
+
 /**
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-d.ts
+ *
+ * Harmonogram nie może zatrzymać pobierania: błąd odczytu albo zapisu stanu idzie
+ * do logu i Sentry, a faktury i HWM zostają. Bez zapisu terminu firma wraca po
+ * wygaśnięciu dzierżawy. Ponowienie od zera po każdym kroku opisuje
+ * tests/unit/skrzynka-przebieg-harmonogram.test.ts.
  */
-export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant.create>[0], { step, logger }: JobContext) {
-    const { tenantId, nip } = data;
+export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant.create>[0], ctx: JobContext) {
+    const { tenantId } = data;
+    const { step, logger } = ctx;
     const env = requireConfiguredKsefEnvironment();
     if (data.environment !== env) {
       throw new Error('KSeF inbox event environment does not match configured environment');
     }
+    const startedAt = new Date();
+
+    let state: InboxPollState | null = null;
+    try {
+      state = await step.run('read-schedule', () => readInboxPollState(tenantId));
+    } catch (e) {
+      reportScheduleFailure(e, tenantId, ctx);
+    }
+    // Drugie zadanie tej samej firmy (dzierżawa wygasła, gdy pierwsze czekało):
+    // kończy się tym jednym odczytem, bez KSeF.
+    if (isInboxPollJobRedundant(state, startedAt)) {
+      logger.info('Skrzynka: zadanie zbędne, firma już obsłużona', { tenantId });
+      return { fetched: 0, newlyAdded: 0, skipped: 'not-due' as const };
+    }
+
+    let outcome: InboxPollOutcome;
+    try {
+      outcome = await pollTenantInbox(data, env, ctx);
+    } catch (error) {
+      const failure = classifyInboxPollError(error);
+      await planNextPoll({ tenantId, startedAt, state, errorClass: failure.errorClass, retryAfterMs: failure.retryAfterMs, ctx });
+      // Nasz błąd ma trafić do Sentry i dziennika przebiegów. Zły certyfikat i awaria
+      // KSeF to zwykły stan: ponowieniem jest termin w harmonogramie.
+      if (failure.errorClass === 'other') throw error;
+      logger.warn('Skrzynka: przebieg nieudany, następna próba według harmonogramu', {
+        tenantId,
+        errorClass: failure.errorClass,
+        detail: failure.detail,
+      });
+      return { fetched: 0, newlyAdded: 0, failed: failure.errorClass };
+    }
+
+    await planNextPoll({
+      tenantId,
+      startedAt,
+      state,
+      errorClass: outcome.hwmMissing ? 'ksef' : null,
+      newInvoices: outcome.newlyAdded,
+      catchingUp: outcome.catchingUp,
+      ctx,
+    });
+    return { fetched: outcome.fetched, newlyAdded: outcome.newlyAdded };
+}
+
+function reportScheduleFailure(e: unknown, tenantId: string, { logger }: JobContext): void {
+  logger.error('Skrzynka: harmonogram niedostępny, przebieg idzie dalej', {
+    tenantId,
+    error: e instanceof Error ? e.message : String(e),
+  });
+  Sentry.captureException(e, {
+    tags: { job: 'inbox-poll-tenant', step: 'schedule' },
+    extra: { tenantId },
+  });
+}
+
+/** Poziom i termin po przebiegu. Błąd zapisu nie cofa pobranych faktur. */
+async function planNextPoll(input: {
+  tenantId: string;
+  startedAt: Date;
+  state: InboxPollState | null;
+  errorClass: InboxPollErrorClass | null;
+  retryAfterMs?: number | null;
+  newInvoices?: number;
+  catchingUp?: boolean;
+  ctx: JobContext;
+}): Promise<void> {
+  const { tenantId, state, errorClass, retryAfterMs, catchingUp, startedAt, ctx } = input;
+  const newInvoices = input.newInvoices ?? 0;
+  const now = new Date();
+  // Bez stanu (awaria odczytu, zlecenie sprzed wdrożenia) firma liczy się jak gorąca:
+  // lepiej jeden przebieg za dużo niż firma odsunięta na dobę przez chwilową awarię.
+  const tier = state
+    ? inboxActivityTier({
+        now,
+        lastInvoiceAt: newInvoices > 0 ? now : state.last_invoice_at,
+        lastActivityAt: state.last_activity_at,
+        subscriptionActive: state.subscription_active,
+      })
+    : 'hot';
+  let nextPollAt: Date;
+  if (errorClass) {
+    nextPollAt = nextInboxPollAfterError({
+      tenantId,
+      tier,
+      errorClass,
+      consecutiveErrors: (state?.consecutive_errors ?? 0) + 1,
+      retryAfterMs,
+      now,
+    });
+  } else if (catchingUp) {
+    nextPollAt = new Date(now.getTime() + INBOX_CATCH_UP_INTERVAL_MS);
+  } else {
+    nextPollAt = nextInboxPollAfterSuccess({ tenantId, tier, now });
+  }
+  try {
+    await ctx.step.run('plan-next-poll', () =>
+      finishInboxPoll({ tenantId, startedAt, nextPollAt, tier, newInvoices, errorClass }),
+    );
+  } catch (e) {
+    reportScheduleFailure(e, tenantId, ctx);
+  }
+}
+
+async function pollTenantInbox(
+  data: Parameters<typeof inboxPollTenant.create>[0],
+  env: KsefEnvironment,
+  { step, logger }: JobContext,
+): Promise<InboxPollOutcome> {
+    const { tenantId, nip } = data;
 
     const window = await step.run('inbox-window', async () =>
       inboxQueryWindow(await readInboxHwm(tenantId), new Date()),
     );
     if (!window) {
       logger.info('Skrzynka: brak okna do pobrania (HWM nie starszy niż teraz)', { tenantId });
-      return { fetched: 0, newlyAdded: 0 };
+      return { fetched: 0, newlyAdded: 0, hwmMissing: false, catchingUp: false };
     }
 
-    const { invoices: newInvoices, hwm } = await step.run('query-ksef', async () => {
+    const { invoices: newInvoices, hwm, requests } = await step.run('query-ksef', async () => {
       const credentials = await getTenantKsefCredentials(tenantId);
-      // Faza 23 sekcja 3: audit log każdej query do KSeF /invoices/query/metadata.
+      // Faza 23 sekcja 3 + EXT-03: strona `/invoices/query/metadata` trafia do
+      // audytu tylko przy błędzie; przebieg, który dodał faktury — niżej.
       return queryReceivedInvoices(
         credentials,
         new Date(window.from),
@@ -216,16 +365,19 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
     // HWM przesuwamy dopiero po zapisie faktur — na każdej ścieżce, także bez
     // nowych faktur. Błąd wcześniej = HWM stoi, kolejny przebieg zapyta o to
     // samo okno, a duble odsieje `filter-existing`.
-    const finish = async (fetched: number, newlyAdded: number) => {
+    const finish = async (fetched: number, newlyAdded: number): Promise<InboxPollOutcome> => {
       if (!hwm) {
         logger.warn('KSeF nie podał HWM skrzynki — okno zostaje na miejscu', { tenantId });
-        return { fetched, newlyAdded };
+        return { fetched, newlyAdded, hwmMissing: true, catchingUp: false };
       }
       const nextHwm = nextInboxHwm(hwm, window);
       await step.run('advance-hwm', () =>
         saveInboxHwm(tenantId, { windowFrom: window.from, hwm: nextHwm, fetched, saved: newlyAdded }),
       );
-      return { fetched, newlyAdded };
+      // Okno skończyło się przed „teraz” (limit zakresu API): zaległość ponad 90 dni
+      // nadrabiają kolejne przebiegi, bez czekania na rytm poziomu firmy.
+      const catchingUp = Date.parse(window.to) < Date.now() - INBOX_CATCH_UP_INTERVAL_MS;
+      return { fetched, newlyAdded, hwmMissing: false, catchingUp };
     };
 
     if (newInvoices.length === 0) {
@@ -349,12 +501,34 @@ export async function runInboxPollTenant(data: Parameters<typeof inboxPollTenant
     const insertedNumbers = new Set(insertedInvoices.map((row) => row.ksef_number as string));
     const newlyAddedInvoices = freshInvoices.filter((inv) => insertedNumbers.has(inv.ksefNumber));
 
+    // EXT-03 (sesja 26 planu skalowania): jeden wiersz audytu na przebieg,
+    // który dodał faktury, zamiast wiersza na każdą stronę co 15 minut.
+    // Przebieg bez nowych faktur nie zapisuje nic. Ponowienie (pg-boss
+    // powtarza cały handler) nie dopisze drugiego wiersza: zapisane faktury
+    // odsieje `filter-existing`. Awaria procesu między zapisem faktur a tym
+    // wierszem zostawia faktury bez wiersza — ich przyjęcie widać w nich samych.
+    if (insertedInvoices.length > 0) {
+      await recordKsefPollSummary({
+        tenantId,
+        action: 'inbox.poll',
+        metadata: {
+          windowFrom: window.from,
+          windowTo: window.to,
+          hwm,
+          requests,
+          fetched: newInvoices.length,
+          added: insertedInvoices.length,
+        },
+      });
+    }
+
     // K2 (rewizja 03.10.2026): kategoryzacja kosztu i archiwum XML idą
     // NATYCHMIAST po zapisie — przed kartą FLO i pushem. Wcześniej błąd karty
     // wywracał job, ponowienie widziało faktury „już w DB”, przesuwało HWM i
     // nikt nigdy nie emitował tego zdarzenia: faktura w /inbox, ale bez kosztu
-    // w KPiR i bez XML. `singletonKey` = id faktury: cron `inbox-backfill` może
-    // wysłać to samo zdarzenie drugi raz, a pg-boss trzyma w kolejce jeden job.
+    // w KPiR i bez XML. `singletonKey` to tylko etykieta (na kolejce `standard`
+    // pg-boss po nim nie deduplikuje, `lib/jobs/enqueue.ts`): cron `inbox-backfill`
+    // pomija faktury z czekającym zadaniem, a dubel kończy się jednym odczytem.
     // Błąd TEJ emisji ma wywrócić job: HWM stoi, ponowienie nic nie zapisze
     // (filter-existing), a brakujące zdarzenia dośle cron po 15 minutach
     // (znacznik `fa3_data._pendingFullFetch`).

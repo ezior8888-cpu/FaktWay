@@ -21,7 +21,9 @@
 
 import { cookies } from 'next/headers';
 
-import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
+// Bramka panelu: sesja po biometrii przechodzi jak `verified`. Operacje wrażliwe
+// dokładają `getVerifiedMfaState` wprost (certyfikat, 2FA, hasło) albo `assertSensitiveMfa`.
+import { getRequestPanelMfaState } from '@/lib/auth/panel-mfa-request';
 import { createAdminClient, createClient } from './server';
 import { ACTIVE_ORG_COOKIE, isUuid } from './active-org';
 
@@ -47,12 +49,57 @@ export interface AuthContext {
 }
 
 /**
+ * UX-01 (WZR-02): formularz wyrenderowano dla innej firmy niż aktywna teraz —
+ * np. przełącznik firm w drugiej karcie zmienił ciasteczko. Jeden tekst dla
+ * wszystkich akcji wystawiania: która firma jest aktywna (gdy nazwa się
+ * odczyta) i obie drogi wyjścia. Przełącznik w karcie z odmową pokazuje
+ * jeszcze starą firmę, więc „z powrotem” działa tylko tam, gdzie ją zmieniono.
+ */
+export function tenantChangedMessage(activeName: string | null): string {
+  const now = activeName ? ` (teraz: ${activeName})` : '';
+  return `Aktywna firma zmieniła się od otwarcia formularza${now}. `
+    + 'Przełącz firmę z powrotem w karcie, w której ją zmieniono, i zapisz ponownie '
+    + '— albo odśwież tę stronę i wypełnij formularz dla aktywnej firmy.';
+}
+
+/**
+ * Nazwa AKTYWNEJ firmy do komunikatu odmowy — członkostwo jest już
+ * sprawdzone. Nigdy nie czytamy nazwy firmy z pola formularza: to id
+ * z przeglądarki, a klient serwisowy pokazałby nazwę dowolnej firmy.
+ * Błąd odczytu = komunikat bez nazwy, odmowa zostaje.
+ */
+async function activeOrgName(
+  admin: ReturnType<typeof createAdminClient>,
+  activeOrg: string,
+): Promise<string | null> {
+  try {
+    const { data } = await admin.from('tenants').select('name').eq('id', activeOrg).maybeSingle();
+    const name: unknown = data?.name;
+    return typeof name === 'string' && name.trim() ? name.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Firma, dla której strona wyrenderowała formularz (UX-01). Przychodzi
+ * z przeglądarki, więc służy WYŁĄCZNIE do porównania z firmą z ciasteczka —
+ * nigdy nie wybiera firmy. Brak pola albo inna wartość = odmowa.
+ */
+export interface FormTenantCheck {
+  expectedTenantId: unknown;
+}
+
+/**
  * Wymaga zalogowanego usera + ważnej aktywnej organizacji
  * (cookie + aktywne membership). Rzuca `ActionAuthError` w razie problemu.
+ *
+ * Z `formTenant` (akcje tworzące dokument z formularza) dodatkowo wymaga,
+ * żeby formularz był wyrenderowany dla tej samej firmy, co aktywna teraz.
  */
-export async function requireUserAndActiveOrg(): Promise<AuthContext> {
+export async function requireUserAndActiveOrg(formTenant?: FormTenantCheck): Promise<AuthContext> {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await getRequestPanelMfaState(supabase).catch(() => null);
   if (!state) {
     throw new ActionAuthError('Nie udało się zweryfikować sesji. Zaloguj się ponownie.');
   }
@@ -86,6 +133,13 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
     throw new ActionAuthError('Brak dostępu do aktywnej organizacji');
   }
 
+  // Przed każdym odczytem danych firmy: dokument z formularza firmy A nie może
+  // powstać jako dokument firmy B. Karta bez pola (otwarta przed wdrożeniem)
+  // też dostaje odmowę, niezależnie od tego, czy ID akcji się zmieni.
+  if (formTenant && formTenant.expectedTenantId !== activeOrg) {
+    throw new ActionAuthError(tenantChangedMessage(await activeOrgName(admin, activeOrg)));
+  }
+
   return {
     supabase,
     user: { id: user.id, email: user.email ?? null },
@@ -101,7 +155,7 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
  */
 export async function requireVerifiedUser(): Promise<Pick<AuthContext, 'supabase' | 'user'>> {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await getRequestPanelMfaState(supabase).catch(() => null);
   if (!state) {
     throw new ActionAuthError('Nie udało się zweryfikować sesji. Zaloguj się ponownie.');
   }
@@ -134,7 +188,7 @@ export type ApiOrgContext =
 
 export async function resolveApiUserAndActiveOrg(): Promise<ApiOrgContext> {
   const supabase = await createClient();
-  const state = await getVerifiedMfaState(supabase).catch(() => null);
+  const state = await getRequestPanelMfaState(supabase).catch(() => null);
   if (!state) return { ok: false, status: 401, error: 'session_verification_failed' };
   if (state.status === 'unauthenticated') {
     return { ok: false, status: 401, error: 'not_authenticated' };

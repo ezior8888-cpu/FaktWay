@@ -13,7 +13,7 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: 'Kalkulator oszczędności: sprawdź, ile zaoszczędzisz',
   description:
-    'Oblicz ile godzin i pieniędzy zaoszczędzisz z automatyczną kategoryzacją KPiR i OCR faktur. Bezpłatny kalkulator dla mikrofirm i freelancerów.',
+    'Oblicz ile godzin i pieniędzy zaoszczędzisz z podpowiedzią kolumny KPiR i odczytem faktur ze zdjęcia. Bezpłatny kalkulator dla mikrofirm i freelancerów.',
 };
 
 // Kafle „80% mniej czasu” i „11 dni średniego DSO z Wkurzaczem” usunięte

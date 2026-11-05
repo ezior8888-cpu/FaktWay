@@ -69,12 +69,12 @@ describe('KPiR — ekran błędu', () => {
     const el = await mount(error, reset);
 
     expect(sentry.captureException).toHaveBeenCalledWith(error);
-    expect(el.querySelector('.ff-page-fill')).not.toBeNull();
+    expect(el.querySelector('.ff-tab-panel')).not.toBeNull();
     expect(el.textContent).toContain('Nie udało się wczytać KPiR');
     expect(el.textContent).toContain('Kod błędu: abc123');
-    const tabs = el.querySelector('nav[aria-label="Księgowość"]');
-    expect(tabs).not.toBeNull();
-    expect(tabs!.querySelector('[aria-current="page"]')?.textContent).toContain('KPiR');
+    // Rząd zakładek stoi nad granicą błędu, w `reports/layout.tsx` (od 25.10.2026),
+    // więc z ekranu błędu nadal da się przejść do Eksportu — tu go nie dublujemy.
+    expect(el.querySelector('nav[aria-label="Księgowość"]')).toBeNull();
     expect(el.querySelector('a[href^="mailto:"]')?.getAttribute('href')).toBe(`mailto:${SUPPORT_EMAIL}?subject=KPiR`);
 
     const retry = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Spróbuj ponownie'));

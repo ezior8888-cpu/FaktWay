@@ -64,11 +64,14 @@ async function retrieveCharge(id: string): Promise<Stripe.Charge> {
  * The signed invoice proves which payment attempt it reports. Fresh PI and
  * Charge objects must prove each other and the same Customer and amount.
  * Unsupported or contradictory shapes stay for operator reconciliation.
+ *
+ * `paymentMethodType` (np. `card`, `blik`) nie jest częścią dowodu: nic tu nie
+ * zależy od metody, a faktura za abonament potrzebuje go do formy płatności.
  */
 export async function verifyPaidInvoicePaymentReferences(
   invoice: Stripe.Invoice,
   signed: References,
-): Promise<{ paymentIntentId: string; chargeId: string }> {
+): Promise<{ paymentIntentId: string; chargeId: string; paymentMethodType?: string }> {
   let paymentIntentId = signed.paymentIntentId;
   let chargeId = signed.chargeId;
   if (!paymentIntentId && !chargeId) {
@@ -136,5 +139,9 @@ export async function verifyPaidInvoicePaymentReferences(
     );
   }
 
-  return { paymentIntentId, chargeId };
+  return {
+    paymentIntentId,
+    chargeId,
+    paymentMethodType: charge.payment_method_details?.type,
+  };
 }

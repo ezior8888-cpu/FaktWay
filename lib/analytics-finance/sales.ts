@@ -53,6 +53,24 @@ function amount(value: number | string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Etykieta błędu odczytu faktur sprzedaży (Analizy, karta „Średnia faktura”). */
+export const SALES_INVOICES_READ_ERROR = 'Nie można odczytać faktur sprzedaży';
+
+/** Wiersz faktury, z którego `saleInvoicesOf` składa `SaleInvoice`. */
+export interface SaleInvoiceRow {
+  id: string;
+  issue_date: string;
+  internal_number?: string | null;
+  net_total: number | string | null;
+  gross_total: number | string | null;
+  invoice_kind?: string | null;
+  buyer_nip?: string | null;
+  buyer_data: unknown;
+  is_b2c?: boolean | null;
+  origin?: string | null;
+  invoice_type?: string | null;
+}
+
 /** Faktury sprzedaży z zakresu `[from, toExclusive)` po `issue_date`, po dacie i id. */
 export async function getSalesInvoices(
   supabase: PageContext['supabase'],
@@ -61,7 +79,7 @@ export async function getSalesInvoices(
 ): Promise<SaleInvoice[]> {
   const environment = requireConfiguredKsefEnvironment();
   await assertAcceptedEnvironmentKnown(supabase, tenantId, range.from, range.toExclusive);
-  const rows = await readCompletePages('Nie można odczytać faktur sprzedaży', (start, end) => supabase
+  const rows = await readCompletePages(SALES_INVOICES_READ_ERROR, (start, end) => supabase
     .from('invoices')
     .select(SALES_COLUMNS, { count: 'exact' })
     .eq('tenant_id', tenantId)
@@ -76,6 +94,18 @@ export async function getSalesInvoices(
   if (rows.length === 0) return [];
 
   const settled = await fetchSettledAdvancesTotals(supabase, tenantId, rows);
+  return saleInvoicesOf(rows, settled);
+}
+
+/**
+ * Wiersze faktur (już po strażnikach środowiska i waluty) jako `SaleInvoice`,
+ * ROZ bez rozliczonych zaliczek, po dacie i id. Wspólne dla
+ * `getSalesInvoices` i wspólnego odczytu Pulpitu.
+ */
+export function saleInvoicesOf(
+  rows: readonly SaleInvoiceRow[],
+  settled: ReadonlyMap<string, { net: number }>,
+): SaleInvoice[] {
   return rows
     .map((row): SaleInvoice => ({
       id: row.id,

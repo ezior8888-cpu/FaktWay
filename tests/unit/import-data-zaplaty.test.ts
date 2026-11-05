@@ -4,8 +4,8 @@ import { parseFa3Xml } from '@/lib/import/fa3-parser';
 import { buildImportFa3Json, importedInvoiceContent } from '@/lib/import/imported-invoice-row';
 
 /**
- * PLAN-PRAWDZIWE-DANE E11 (decyzja Bartosza D-W, 23.10.2026): wpływ faktury
- * sprzedaży liczymy w dniu prawdziwej zapłaty, jeśli ją znamy — a faktura
+ * PLAN-PRAWDZIWE-DANE E11: wpływ faktury sprzedaży to prawdziwa zapłata
+ * (odwołanie D-W, 02.11.2026), a faktura
  * FA(3) wystawiona po zapłacie mówi to sama (`Platnosc/Zaplacono = 1`
  * + `DataZaplaty`). Parser importu dotąd tych pól nie czytał, więc data
  * ginęła. Teraz trafia do `ParsedInvoice.paidDate`, a z nim do

@@ -53,6 +53,10 @@ describe('separate RLS test configuration', () => {
       'tests/rls-dane-specjalne.test.ts',
       // 00148 (D-A4-1b-3 PR B): decyzja klienta przy cudzym 440, wycofany szkic, I5D.
       'tests/rls-decyzja-duplikatu.test.ts',
+      // 00156 (D-A4-1b-3 PR C, dawniej rezerwacja 00149): zapis oryginału z oznaczeniem FaktWay, przegląd, oddanie, I5R/I3K.
+      'tests/rls-zapis-oryginalu.test.ts',
+      // 00156: procedura „Brak daty nadania” (I3K no_date) — skrypt SQL przez psql, jedna transakcja z audytem.
+      'tests/rls-oryginal-data-nadania.test.ts',
       // 00150 (A5): dziennik prób wysyłki — tylko serwis, bez DELETE, nie jest dowodem kontaktu.
       'tests/rls-dziennik-prob-wysylki.test.ts',
       // Sekcja 12 skryptu kontroli (dziennik prób z 00150) liczy jak /admin/centrum/bledy.
@@ -72,6 +76,20 @@ describe('separate RLS test configuration', () => {
       // 00155 (synchronizacja historii KSeF, decyzja Bartosza 22.10.2026): izolacja,
       // CHECK-i, ksef_upo_expected i filtr osadzenia `invoices!inner` przez PostgREST.
       'tests/rls-historia-ksef.test.ts',
+      // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
+      'tests/rls-sprzatanie-dziennikow.test.ts',
+      'tests/rls-zaplacone.test.ts',
+      'tests/rls-passkeys.test.ts',
+      'tests/rls-skrzynka-harmonogram.test.ts',
+      // 00161 (pomiar FaktWay 1.0): zgoda i źródło w `users`, data pierwszej faktury
+      // w `tenants`, lejek `admin_funnel_weekly`, uzupełnienie z migracji przez psql.
+      'tests/rls-lejek-analityka.test.ts',
+      // 00163 (krok kodu przy dostępie osób trzecich).
+      'tests/rls-krok-kodu.test.ts',
+      // 00165 (plan księgowości JDG, K1): wyłącznik modułu księgowości.
+      'tests/rls-ksiegowosc-wylacznik.test.ts',
+      // 00166 (plan księgowości JDG, K2): profil podatkowy.
+      'tests/rls-ksiegowosc-profil.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

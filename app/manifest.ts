@@ -2,12 +2,13 @@
 // Next.js generuje /manifest.webmanifest z tego pliku
 import type { MetadataRoute } from 'next';
 
+import { OFERTA } from '@/lib/marketing/oferta';
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'FaktWay — Faktury',
+    name: 'FaktWay: faktury',
     short_name: 'FaktWay',
-    description:
-      'Wystawiaj faktury i wysyłaj do KSeF jednym kliknięciem',
+    description: OFERTA,
     /**
      * `/dashboard`, nie `/invoices`. `APP_HOME` w `lib/supabase/middleware.ts`
      * wskazuje dashboard, a od 30.08.2026 to właśnie on JEST ekranem agenta.

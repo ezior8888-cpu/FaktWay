@@ -8,6 +8,8 @@
  * nie startuje — zamiast udawać, że zadania gdzieś trafiają.
  */
 
+import { isBypassAllowedEnv } from '@/lib/security/environment';
+
 export type JobsBackend = 'pgboss';
 
 /** Backend z konfiguracji albo `null` przy nieznanej wartości — bez wyjątku (health). */
@@ -46,6 +48,42 @@ export function getJobsDatabaseUrl(): string {
     );
   }
   return url;
+}
+
+const DEFAULT_JOBS_SCHEMA = 'pgboss';
+const TEST_JOBS_SCHEMA = /^pgboss_[a-z0-9_]{1,40}$/;
+
+/** Testy obciążenia i testy na bazie mogą mieć osobną kolejkę, ale nigdy produkcja. */
+function nonProductionOverride(env: Record<string, string | undefined>): boolean {
+  return isBypassAllowedEnv() && env.NODE_ENV !== 'production';
+}
+
+/**
+ * Schemat pg-boss. Na produkcji zawsze `pgboss`. Test obciążenia skrzynki
+ * (`load-tests/ksef-inbox/`) i test na bazie idą w osobnym schemacie, bo lokalna
+ * baza bywa wspólna, a cudzy worker wziąłby ich zadania.
+ */
+export function getJobsSchema(env: Record<string, string | undefined> = process.env): string {
+  const raw = env.JOBS_PGBOSS_SCHEMA?.trim();
+  if (!raw) return DEFAULT_JOBS_SCHEMA;
+  if (!nonProductionOverride(env) || !TEST_JOBS_SCHEMA.test(raw)) {
+    throw new Error('JOBS_PGBOSS_SCHEMA jest tylko dla testów poza produkcją (pgboss_<nazwa>).');
+  }
+  return raw;
+}
+
+/**
+ * Crony do zaplanowania przez worker: `null` = wszystkie. Test obciążenia
+ * skrzynki uruchamia prawdziwy worker tylko z cronem rozsyłki, bo pozostałe
+ * (retencja, maile, kopie) pracowałyby na wspólnej lokalnej bazie.
+ */
+export function getWorkerCronAllowlist(env: Record<string, string | undefined> = process.env): Set<string> | null {
+  const raw = env.WORKER_ONLY_CRONS?.trim();
+  if (!raw) return null;
+  if (!nonProductionOverride(env)) {
+    throw new Error('WORKER_ONLY_CRONS jest tylko dla testów poza produkcją.');
+  }
+  return new Set(raw.split(',').map((queue) => queue.trim()).filter(Boolean));
 }
 
 /** Port healthchecku HTTP workera (Coolify + ewentualny push do Kumy). */

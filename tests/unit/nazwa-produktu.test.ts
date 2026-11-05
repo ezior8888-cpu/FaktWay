@@ -3,6 +3,9 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import manifest from '@/app/manifest';
+import { OFERTA } from '@/lib/marketing/oferta';
+
 /**
  * Plan Finora, D8: produkt nazywa się FaktWay (zmiana nazwy 17.10.2026,
  * wcześniej FaktFlow, a jeszcze wcześniej robocze „KSeF SaaS”). Interfejs,
@@ -24,6 +27,7 @@ const SCANNED = ['app', 'components', 'lib', 'content', 'hooks', 'types', 'publi
 const EXTENSIONS = /\.(tsx?|mjs|js|mdx?|json|webmanifest|css|txt)$/;
 
 // D4: pliki FLO zmienia ich właściciel (Masło, tor silnika) — nie ten test.
+// `content/flo/pomoc` to artykuły o FLO zdjęte z publicznej pomocy (FaktWay 1.0).
 const OWNED_ELSEWHERE = [
   'components/flo/',
   'app/(dashboard)/flo/',
@@ -35,10 +39,15 @@ const OWNED_ELSEWHERE = [
 
 // Teksty, które baza ma u siebie i porównuje albo zwraca dosłownie.
 // Zmieniają się razem z migracją, która przepisze te funkcje bazy:
-// Dziś żadnych: fakturę za abonament przyjmuje w obu nazwach migracja 00152
+// Fakturę za abonament przyjmuje w obu nazwach migracja 00152
 // (`lib/billing/self-invoice.ts` pisze FaktWay), a lustro odmów decyzji
 // o duplikacie (`DUPLICATE_DECISION_SQL_TEXTS`) przepisała na FaktWay 00151.
+// Zostaje wzorzec przyszłego `<SystemInfo>` (D-A4-1b-3-SYS): funkcja bazy
+// z 00156 (powód `faktflow-original`) dopasowuje go dosłownie (`~ '^FaktFlow [0-9]'`),
+// a lustro w TS (`FAKTFLOW_SYSTEM_INFO_NEXT`) musi być identyczne. To nie tekst
+// dla klienta; zmienia się razem z migracją i decyzją o nowym SystemInfo generatora.
 const DB_BOUND = new Map<string, string[]>([
+  ['lib/ksef/duplicate-decision.ts', ['FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/']],
 ]);
 
 function walk(dir: string): string[] {
@@ -74,6 +83,15 @@ function oldNameHits(): string[] {
 describe('nazwa produktu: FaktWay (plan Finora, D8)', () => {
   it('aplikacja nie pisze starych nazw (FaktFlow, KSeF SaaS)', () => {
     expect(oldNameHits()).toEqual([]);
+  });
+
+  it('metadane stron przed logowaniem: nazwa FaktWay, bez starych nazw w zdaniu oferty', () => {
+    expect(manifest().name).toContain('FaktWay');
+    expect(manifest().short_name).toBe('FaktWay');
+    expect(OFERTA).not.toMatch(OLD_NAMES);
+    const layout = readFileSync(join(ROOT, 'app/layout.tsx'), 'utf8');
+    expect(layout).toContain("title: 'FaktWay'");
+    expect(layout).toContain("applicationName: 'FaktWay'");
   });
 
   it('wyjątki z bazy nadal są w kodzie (inaczej usuń je z listy)', () => {

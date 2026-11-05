@@ -1,10 +1,12 @@
 import {
+  RiAlarmWarningLine,
   RiBox3Line,
   RiCalendarLine,
   RiCarLine,
   RiFileEditLine,
   RiFileList3Line,
   RiHourglassLine,
+  RiMoneyDollarCircleLine,
   RiMoreLine,
   RiPercentLine,
   RiPriceTag3Line,
@@ -21,6 +23,7 @@ import {
   isOtherSlice,
   RECURRING_LIST_LIMIT,
   receivablesRows,
+  receivablesRowsPrzyklad,
   recentCostItems,
   recentSaleItems,
   salesAvgDaily,
@@ -307,10 +310,25 @@ describe('wiersze w miejscu „Spending Streaks”', () => {
     });
   });
 
-  // E11 (D-W): należności to przyszłe terminy (`inflowTerms`) — dawne „Po terminie” (czerwone)
-  // i „Najstarsza zaległość” zniknęły, bo zakładamy zapłatę w terminie.
-  it('należności: trzy przedziały terminów, kwota i liczba faktur, ikony bez czerwieni', () => {
-    const rows = receivablesRows({
+  // D-W odwołane 02.11.2026: faktura bez wpłaty z minionym terminem to należność po terminie, nie wpływ.
+  it('należności: do zapłaty, po terminie (czerwone) i najstarsza zaległość', () => {
+    const rows = receivablesRows({ total: 13_575.6, count: 6, overdue: 1230, overdueCount: 1, oldestOverdueDays: 12 });
+    expect(rows.map((r) => [r.title, r.value, r.icon, r.iconClassName])).toEqual([
+      ['Do zapłaty', '13\u00a0575,60 zł · 6 faktur', RiMoneyDollarCircleLine, 'text-foreground'],
+      ['Po terminie', '1230,00 zł · 1 faktura', RiAlarmWarningLine, 'text-destructive'],
+      ['Najstarsza zaległość', '12 dni', RiHourglassLine, 'text-foreground'],
+    ]);
+    const bezZaleglosci = receivablesRows({ total: 100, count: 1, overdue: 0, overdueCount: 0, oldestOverdueDays: null });
+    expect(bezZaleglosci.map((r) => [r.title, r.value, r.iconClassName])).toEqual([
+      ['Do zapłaty', '100,00 zł · 1 faktura', 'text-foreground'],
+      ['Po terminie', '0,00 zł · 0 faktur', 'text-foreground'],
+      ['Najstarsza zaległość', 'Brak zaległości', 'text-foreground'],
+    ]);
+  });
+
+  // Dane przykładowe nie mają wpłat (`lib/demo`): ich należności to same przyszłe terminy.
+  it('należności w danych przykładowych: trzy przedziały terminów, kwota i liczba faktur, ikony bez czerwieni', () => {
+    const rows = receivablesRowsPrzyklad({
       total: 13_575.6,
       count: 6,
       buckets: [

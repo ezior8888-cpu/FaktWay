@@ -23,6 +23,7 @@ import {
   resolvePaymentState,
   type InvoiceRow,
 } from './invoice-row-types';
+import { MarkPaidButton } from './use-invoice-payment';
 import { saveBlob } from '@/lib/download';
 import { shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
@@ -39,13 +40,15 @@ interface Props {
   facts?: InvoiceListRowFacts;
   /** Dziś w Europe/Warsaw (RRRR-MM-DD) — „po terminie” liczone przy renderze. */
   today?: string;
+  /** „Zapłacone”: tylko gdy rola pozwala; bez tego karta nie pokazuje przycisku. */
+  onMarkPaid?: (invoice: SwipeableInvoiceRowInvoice, facts: InvoiceListRowFacts | undefined) => void;
 }
 
 /**
  * Wiersz faktury z gestem poziomym (framer-motion `drag="x"` + `animate` ze
  * springiem), karta w stylu Finory. Na touch: swipe w lewo → pobierz XML.
  */
-export function SwipeableInvoiceRow({ invoice, facts, today }: Props) {
+export function SwipeableInvoiceRow({ invoice, facts, today, onMarkPaid }: Props) {
   const x = useMotionValue(0);
   const [isResetting, setIsResetting] = useState(false);
   const [isDownloading, startDownload] = useTransition();
@@ -159,6 +162,15 @@ export function SwipeableInvoiceRow({ invoice, facts, today }: Props) {
           ) : null}
         </Link>
       </motion.div>
+      {/*
+        Poza kartą z gestem i poza linkiem: dotknięcie nie otwiera faktury, a przesunięcie
+        rozpoczęte na przycisku nie ciągnie karty. `bg-card` przykrywa warstwę „Pobierz XML”.
+      */}
+      {onMarkPaid && facts?.canMarkPaid ? (
+        <div className="bg-card relative flex justify-end px-4 pb-3">
+          <MarkPaidButton number={invoice.internal_number} onClick={() => onMarkPaid(invoice, facts)} />
+        </div>
+      ) : null}
     </div>
   );
 }

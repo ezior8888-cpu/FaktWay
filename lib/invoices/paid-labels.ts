@@ -8,8 +8,7 @@
 /** Podpis każdej karty z wpływami. */
 export const PAID_NOTE = 'według oznaczonych wpłat';
 /**
- * Pusty stan, gdy w okresie nie ma żadnej opłaconej faktury — nigdy „0 zł”.
- * Bez wezwania do „oznaczania”: klient nie ma dziś takiej czynności (N6), więc
- * tekst mówi tylko, jak jest (PLAN-PRAWDZIWE-DANE E0, Z8).
+ * Pusty stan, gdy w okresie nie ma żadnej opłaconej faktury; nigdy „0 zł”.
+ * Prowadzi do oznaczenia zapłaty: przycisk „Zapłacone” stoi przy fakturze (00158).
  */
-export const PAID_EMPTY_STATE = 'Wpłat jeszcze nie oznaczono';
+export const PAID_EMPTY_STATE = 'Oznacz wpłatę przy fakturze';

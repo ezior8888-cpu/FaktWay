@@ -8,6 +8,7 @@ import { IssueDatePassedError, issueDatePassedMessage } from '@/lib/ksef/special
 import type { JobContext } from '@/lib/jobs/registry';
 import type { KsefEnvironment } from '@/types/ksef';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { recordFirstInvoiceAccepted } from '@/lib/analytics/funnel';
 import { trackServer } from '@/lib/analytics/server';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { invoiceSubmitRequested } from '../events';
@@ -40,14 +41,21 @@ import {
 } from '@/lib/ksef/submit';
 import {
   compareDuplicate,
+  faktflowOriginalVerdictMessage,
   hexHashToBase64,
   knownNumberVerdictMessage,
   numberTakenMessage,
   operatorVerdictMessage,
   summarizeInvoiceXml,
 } from '@/lib/ksef/duplicate-verdict';
-import type { DuplicateCheckReason, KsefDuplicateCheck } from '@/lib/ksef/duplicate-check';
-import { archiveImportedKsefXml, KsefXmlArchiveConflictError } from '@/lib/import/ksef-xml-archive';
+import {
+  KSEF_ORIGINAL_ALARM_KINDS,
+  type DuplicateCheckReason,
+  type KsefDuplicateCheck,
+  type KsefOriginalImportGate,
+} from '@/lib/ksef/duplicate-check';
+import { evaluateOriginalGate } from '@/lib/ksef/duplicate-original-gate';
+import { archiveImportedKsefXml, decodeKsefXml, KsefXmlArchiveConflictError } from '@/lib/import/ksef-xml-archive';
 import { ksefSessionCache } from '@/lib/ksef/session-cache';
 import {
   abandonKsefSubmissionIntent,
@@ -862,6 +870,9 @@ export async function runSubmitInvoice(
         ksefNumber: alreadyDone.ksef_number,
       });
       await reconcileAcceptedOfflineQueue(parsed.data);
+      // Ponowienie po awarii tuż po zapisie akceptacji: kroki niżej już się nie wykonają,
+      // a pierwszej faktury firmy nie wolno zgubić (powtórka ma ten sam uuid).
+      await recordFirstInvoiceAccepted({ tenantId, invoiceId });
       return {
         alreadyAccepted: true as const,
         ksefNumber: alreadyDone.ksef_number,
@@ -1523,6 +1534,19 @@ export async function runSubmitInvoice(
             getKsefRetryDelay(attempt),
           );
         }
+        // D-A4-1b-3 PR C (5.1): plik z oznaczeniem FaktWay — brama pochodzenia na
+        // zarchiwizowanych bajtach. `importable`: klient zapisze oryginał sam;
+        // `review`: przegląd operatora (I5R). Czysta i deterministyczna (nigdy nie
+        // rzuca), więc ponowienie od zera zapisuje tę samą ocenę. NIP firmy ze
+        // zdarzenia (F3) — reguła `seller`.
+        const importGate: KsefOriginalImportGate | null = reason === 'faktflow-original'
+          ? evaluateOriginalGate({
+            xml: decodeKsefXml(originalBytes),
+            ksefNumber: original,
+            internalNumber: invoice.internalNumber ?? '',
+            tenantNip: nip,
+          }).gate
+          : null;
         await recordCheck(reason, {
           ...originalData,
           summary: cmp.summary,
@@ -1531,19 +1555,35 @@ export async function runSubmitInvoice(
           ownHistory,
           knownInvoice: known,
           acquiredAt: (await originalAcquisition(originalSessionRow?.invoiceReferenceNumber ?? null)) ?? null,
+          // Klucz tylko przy faktflow-original — inne powody zostają bez bramy (brak klucza, nie `undefined`).
+          ...(importGate ? { importGate } : {}),
         });
         // Alarm `ksef-duplicate-known-number` zostaje — operator sprawdza Y w każdym przypadku.
         alertOperator(reason, {
           sameContentExceptHeader: cmp.sameContentExceptHeader,
           ...(known ? { otherInvoice: known.internalNumber, ownHistory } : {}),
+          ...(importGate ? { importGate: { kind: importGate.kind, problems: importGate.problems } } : {}),
         });
+        if (importGate?.kind === 'review') {
+          // Odcisk [kind, faktura]: ponowienie (cron I5, „Tylko uzgodnij”) nie mnoży zgłoszeń (5.11).
+          // Marka w treści: FaktWay (spec 5.1 ma tu jeszcze starą nazwę sprzed zmiany marki — nazwa-produktu.test.ts).
+          Sentry.captureMessage('KSeF: plik z oznaczeniem FaktWay do przeglądu operatora', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', area: 'ksef.duplicate-decision', kind: KSEF_ORIGINAL_ALARM_KINDS.provenanceReview },
+            fingerprint: [KSEF_ORIGINAL_ALARM_KINDS.provenanceReview, invoiceId],
+            extra: { tenantId, invoiceId, originalKsefNumber: original, problems: importGate.problems },
+          });
+        }
         throw verdict(
           SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
           known
             ? knownNumberVerdictMessage(original, known, ownHistory)
-            : cmp.verdict === 'operator'
-              ? operatorVerdictMessage(original, cmp)
-              : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
+            : importGate
+              // Bez „operatora” i bez obietnicy decyzji (reguła 07.10.2026) — tekst trafia też do e-maila i karty FLO.
+              ? faktflowOriginalVerdictMessage(original, importGate.kind)
+              : cmp.verdict === 'operator'
+                ? operatorVerdictMessage(original, cmp)
+                : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
         );
       }
       // Oryginał z innego programu o innej treści: numer zajęty. Wszystkie wpisy
@@ -1931,13 +1971,13 @@ export async function runSubmitInvoice(
 
     await step.run('analytics-invoice-accepted', async () => {
       await trackServer({
-        distinctId: tenantId,
+        tenantId,
         event: ANALYTICS_EVENTS.invoiceAccepted,
-        properties: {
-          ksef_env: env,
-          internal_number: invoice.internalNumber ?? null,
-        },
+        properties: { ksef_env: env },
+        dedupeKey: invoiceId,
+        timestamp: result.acquisitionTimestamp,
       });
+      await recordFirstInvoiceAccepted({ tenantId, invoiceId });
     });
 
     await step.sendEvent('trigger-upo-download', {

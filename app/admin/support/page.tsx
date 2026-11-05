@@ -8,12 +8,14 @@ import {
   MessagesSquare,
   Moon,
   UserPlus,
+  UserRound,
   XCircle,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
+  getEscalatedConversations,
   getInactiveUsers,
   getPendingJoinRequests,
   getRecentlyFailedInvoices,
@@ -56,18 +58,15 @@ function fmtRelative(iso: string | null): string {
 export default async function AdminSupportPage() {
   await requireAdmin();
 
-  const [signups, inactive, failed, pendingJoins, conversations] =
+  const [signups, inactive, failed, pendingJoins, conversations, escalated] =
     await Promise.all([
       getRecentSignups(SIGNUPS_WINDOW_HOURS),
       getInactiveUsers(INACTIVE_DAYS),
       getRecentlyFailedInvoices(FAILED_WINDOW_HOURS),
       getPendingJoinRequests(),
       getSupportConversations(25),
+      getEscalatedConversations(),
     ]);
-
-  const escalatedCount = conversations.filter(
-    (c) => c.status === 'escalated',
-  ).length;
 
   // Onboarding completion rate (z 24h signups)
   const completionPct =
@@ -168,14 +167,20 @@ export default async function AdminSupportPage() {
         {inactive.length > 0 && <InactiveTable items={inactive} />}
       </Section>
 
+      {/* Czekają na człowieka: klient widział „Odezwiemy się mailem” */}
+      <Section
+        icon={UserRound}
+        title="Prośby o kontakt i eskalacje czatu"
+        count={escalated.length}
+        emptyHint="Nikt nie czeka na odpowiedź człowieka."
+      >
+        {escalated.length > 0 && <SupportConversationsTable items={escalated} />}
+      </Section>
+
       {/* AI support conversations */}
       <Section
         icon={MessagesSquare}
-        title={
-          escalatedCount > 0
-            ? `Konwersacje AI support — ${escalatedCount} eskalowanych`
-            : 'Konwersacje AI support'
-        }
+        title="Konwersacje AI support"
         count={conversations.length}
         emptyHint="Brak konwersacji z asystentem AI."
       >
@@ -465,6 +470,11 @@ const SUPPORT_CATEGORY_LABELS: Record<string, string> = {
   other: 'Inne',
 };
 
+const ESCALATION_REASON_LABELS: Record<string, string> = {
+  user_requested: 'Klient poprosił o człowieka',
+  ai_uncertain: 'Czat nie znał odpowiedzi',
+};
+
 function SupportConversationsTable({
   items,
 }: {
@@ -475,9 +485,11 @@ function SupportConversationsTable({
       <table className="w-full text-sm">
         <thead className="border-b border-glass-border">
           <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <th className="px-4 py-2.5 font-medium">Klient</th>
             <th className="px-4 py-2.5 font-medium">Temat</th>
             <th className="px-4 py-2.5 font-medium">Kategoria</th>
             <th className="px-4 py-2.5 font-medium">Status</th>
+            <th className="px-4 py-2.5 font-medium">Powód eskalacji</th>
             <th className="px-4 py-2.5 font-medium">Ocena</th>
             <th className="px-4 py-2.5 font-medium">Rozpoczęto</th>
           </tr>
@@ -488,6 +500,15 @@ function SupportConversationsTable({
               key={c.id}
               className="border-b border-glass-border last:border-0 hover:bg-foreground/5"
             >
+              <td className="px-4 py-2.5 text-xs">
+                {c.userEmail ? (
+                  <a href={`mailto:${c.userEmail}`} className="underline underline-offset-2">
+                    {c.userEmail}
+                  </a>
+                ) : (
+                  '—'
+                )}
+              </td>
               <td className="max-w-xs truncate px-4 py-2.5">
                 {c.subject ?? '(bez tematu)'}
               </td>
@@ -510,6 +531,11 @@ function SupportConversationsTable({
                 ) : (
                   <Badge variant="outline">Otwarte</Badge>
                 )}
+              </td>
+              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                {c.escalationReason
+                  ? (ESCALATION_REASON_LABELS[c.escalationReason] ?? c.escalationReason)
+                  : '—'}
               </td>
               <td className="px-4 py-2.5">
                 {c.csatPositive === null

@@ -163,17 +163,17 @@ afterEach(() => {
 
 describe('zaliczka (ZAL) — wysyłka tylko z dzisiejszą datą wystawienia', () => {
   it.each(NOT_TODAY)('%s (%s) — odmowa bez zapisu i bez kolejki', async (_label, date) => {
-    expectRefusedForDate(await saveAndSendAdvanceAction(advanceInput(date)));
+    expectRefusedForDate(await saveAndSendAdvanceAction(advanceInput(date), tenantId));
   });
 
   it('dziś w Polsce (choć w UTC jeszcze wczoraj) — zapis i kolejka', async () => {
-    const r = await saveAndSendAdvanceAction(advanceInput(TODAY));
+    const r = await saveAndSendAdvanceAction(advanceInput(TODAY), tenantId);
     expect(r).toMatchObject({ success: true, invoiceId: newInvoiceId });
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
   });
 
   it('szkic zaliczki z inną datą nadal się zapisuje', async () => {
-    const r = await saveAdvanceAction(advanceInput('2026-10-05'));
+    const r = await saveAdvanceAction(advanceInput('2026-10-05'), tenantId);
     expect(r).toMatchObject({ success: true });
     expect(inserted()).toBe(true);
     expect(mocks.enqueue).not.toHaveBeenCalled();
@@ -182,17 +182,17 @@ describe('zaliczka (ZAL) — wysyłka tylko z dzisiejszą datą wystawienia', ()
 
 describe('korekta (KOR) — wysyłka tylko z dzisiejszą datą wystawienia', () => {
   it.each(NOT_TODAY)('%s (%s) — odmowa bez zapisu i bez kolejki', async (_label, date) => {
-    expectRefusedForDate(await saveAndSendCorrectionAction(correctionInput(date)));
+    expectRefusedForDate(await saveAndSendCorrectionAction(correctionInput(date), tenantId));
   });
 
   it('dziś w Polsce — zapis i kolejka', async () => {
-    const r = await saveAndSendCorrectionAction(correctionInput(TODAY));
+    const r = await saveAndSendCorrectionAction(correctionInput(TODAY), tenantId);
     expect(r).toMatchObject({ success: true, invoiceId: newInvoiceId });
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
   });
 
   it('szkic korekty z inną datą nadal się zapisuje', async () => {
-    const r = await saveCorrectionDraftAction(correctionInput('2026-10-05'));
+    const r = await saveCorrectionDraftAction(correctionInput('2026-10-05'), tenantId);
     expect(r).toMatchObject({ success: true });
     expect(inserted()).toBe(true);
   });
@@ -202,18 +202,18 @@ describe('rozliczenie (ROZ) — wysyłka tylko z dzisiejszą datą wystawienia',
   // Wysyłka ROZ jest wstrzymana hamulcem ROZ_HOLD. Kontrola daty stoi przed
   // hamulcem, żeby przetrwała jego zdjęcie (C4) bez osobnej pamięci o niej.
   it.each(NOT_TODAY)('%s (%s) — odmowa z powodu daty, bez zapisu i bez kolejki', async (_label, date) => {
-    expectRefusedForDate(await saveAndSendFinalAction(finalInput(date)));
+    expectRefusedForDate(await saveAndSendFinalAction(finalInput(date), tenantId));
   });
 
   it('dziś w Polsce — nadal hamulec ROZ, bez zapisu', async () => {
-    const r = await saveAndSendFinalAction(finalInput(TODAY));
+    const r = await saveAndSendFinalAction(finalInput(TODAY), tenantId);
     expect(r).toEqual({ success: false, error: ROZ_SUBMISSION_HOLD_MESSAGE });
     expect(inserted()).toBe(false);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
   it('szkic rozliczenia z inną datą nadal się zapisuje', async () => {
-    const r = await saveFinalAction(finalInput('2026-10-05'));
+    const r = await saveFinalAction(finalInput('2026-10-05'), tenantId);
     expect(r).toMatchObject({ success: true });
     expect(inserted()).toBe(true);
   });

@@ -69,23 +69,21 @@ export type Item = {
   direction: 'in' | 'out'
   /** Kwota bez znaku; znak i kolor z `direction`. */
   amount: number
-  status: 'paid' | 'due' | 'issued' | 'reviewed' | 'pending' | 'ksef'
+  status: 'paid' | 'correction' | 'reviewed' | 'pending' | 'ksef'
   /** „Otwórz fakturę” / „Otwórz wydatek”. */
   openLabel: string
   /** `null` w danych przykładowych — demo nie ma prawdziwych dokumentów. */
   href: string | null
 }
 
-// Statusy po polsku: wpływ „Opłacona” TYLKO przy prawdziwej zapłacie, inaczej „Wg terminu” (termin płatności)
-// albo „Wg wystawienia” (faktura bez terminu) — E11, decyzja D-W: wpływy według terminów płatności, bez
-// twierdzenia o zaległości. Koszt „Zatwierdzony” albo „Do akceptacji” (opisanie, nie zapłata), faktura
-// zakupu z KSeF bez wydatku „Z KSeF” (E10 — nie ma jej w Wydatkach, więc nie ma czego akceptować).
+// Statusy po polsku: wpływ to „Opłacona” (prawdziwa zapłata) albo „Korekta” (korekta in minus zapłaconej
+// faktury). Koszt „Zatwierdzony” albo „Do akceptacji” (opisanie, nie zapłata), faktura zakupu z KSeF
+// bez wydatku „Z KSeF” (E10 — nie ma jej w Wydatkach, więc nie ma czego akceptować).
 // Bez `capitalize` z Finory: wielowyrazowe etykiety („Do akceptacji”, „Bez kategorii”) dostałyby
 // wielką literę w każdym słowie; wielką literę na początku daje adapter.
 const STATUS_LABELS: Record<Item['status'], string> = {
   paid: 'Opłacona',
-  due: 'Wg terminu',
-  issued: 'Wg wystawienia',
+  correction: 'Korekta',
   reviewed: 'Zatwierdzony',
   pending: 'Do akceptacji',
   ksef: 'Z KSeF'
@@ -150,11 +148,9 @@ const columns: ColumnDef<Item>[] = [
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
         reviewed:
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
-        // „Wg terminu” / „Wg wystawienia” (E11) i „Z KSeF” (E10): ten sam wygląd co „Zatwierdzony” —
-        // bez nowego koloru (zasada Bartosza 23.10.2026), bez bursztynu „do zrobienia”.
-        due:
-          'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
-        issued:
+        // „Korekta” i „Z KSeF” (E10): ten sam wygląd co „Zatwierdzony” — bez nowego koloru
+        // (zasada Bartosza 23.10.2026), bez bursztynu „do zrobienia”.
+        correction:
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
         ksef:
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',

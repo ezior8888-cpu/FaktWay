@@ -19,18 +19,14 @@ const przeplywyAdaptery = await import('@/components/przeplywy/finora-1do1/adapt
 const pulpit = await import('@/components/dashboard/finora/sloty');
 
 /**
- * Recenzja E11 (D-W), poprawki 2:
+ * Recenzja E11, poprawki 2, po odwołaniu D-W (02.11.2026):
  *
- * 1. Korekta wystawiona PRZED dniem wpływu faktury (zakładana zapłata
- *    w terminie) zmienia kwotę, którą nabywca zapłaci w tym terminie — w KSeF
- *    nie ma anulowania, „anulowana” faktura to korekta do zera. Spodziewane
- *    wpływy i Należności nie mogą pokazywać faktury pierwotnej w pełnej
- *    kwocie, a wykres nie może pokazać korekty jako osobnego wpływu w innym
- *    dniu niż zapłata, której dotyczy. Korekta PO dniu wpływu (zwrot,
- *    dopłata) zostaje osobnym ruchem w swoim dniu.
- * 2. Jedna faktura jest albo wpływem, który już był (wykres, kafel, źródła,
- *    operacje), albo spodziewanym (Spodziewane wpływy, Należności) — nigdy
- *    jednym i drugim. Termin dziś to jeszcze wpływ spodziewany.
+ * 1. Korekta wystawiona PRZED terminem faktury bez wpłaty zmienia kwotę, którą
+ *    nabywca zapłaci — w KSeF nie ma anulowania, „anulowana” faktura to korekta
+ *    do zera. Spodziewane wpływy nie mogą pokazywać faktury pierwotnej w pełnej
+ *    kwocie, a wykres nie może pokazać korekty jako osobnego wpływu.
+ * 2. Jedna faktura jest albo wpływem (wykres, kafel, źródła, operacje), albo
+ *    spodziewanym wpływem — nigdy jednym i drugim.
  */
 
 const TENANT = 'firma-a';
@@ -102,7 +98,7 @@ const ANULOWANA = [
   korekta('ka', 'a', -1230, { issue_date: '2026-10-02', payment_due_date: '2026-10-16' }),
 ];
 
-describe('korekta przed dniem wpływu zmienia kwotę tego wpływu', () => {
+describe('korekta przed terminem zmienia kwotę spodziewanego wpływu', () => {
   it('korekta do zera: faktury nie ma w spodziewanych, choć dni korekty są przed zakresem', async () => {
     const entries = await getInflows(sb(ANULOWANA), TENANT, { from: TODAY });
     expect(movements.upcomingInflows(entries, TODAY, 60).count).toBe(0);
@@ -129,7 +125,7 @@ describe('korekta przed dniem wpływu zmienia kwotę tego wpływu', () => {
     expect(movements.monthFlows(entries, [], TODAY).inflow.amount).toBe(0);
   });
 
-  it('korekta po dniu wpływu (zakładana zapłata już była) to osobny ruch w swoim dniu', async () => {
+  it('korekta po terminie faktury bez wpłaty: osobna pozycja, ale nie ruch pieniędzy (nikt nic nie zapłacił)', async () => {
     const entries = await getInflows(sb([
       sprzedaz('a', { issue_date: '2026-09-01', payment_due_date: '2026-09-15' }),
       korekta('ka', 'a', -123, { issue_date: '2026-10-05', payment_due_date: null }),
@@ -138,22 +134,23 @@ describe('korekta przed dniem wpływu zmienia kwotę tego wpływu', () => {
       ['a', '2026-09-15', 1230],
       ['ka', '2026-10-05', -123],
     ]);
+    expect(movements.receivedInflows(entries, TODAY)).toEqual([]);
   });
 
-  it('Pulpit i Przepływy pokazują tę samą kwotę spodziewaną (ta sama reguła korekt)', async () => {
+  it('Spodziewane wpływy pokazują kwotę po korekcie; Należności pomijają fakturę skorygowaną (RECEIVABLES_NOTE)', async () => {
     const dane = [
       sprzedaz('a', { payment_due_date: '2026-11-10', buyer_data: { name: 'Alfa Przykład', nip: '1234567890' } }),
       korekta('ka', 'a', -369, { issue_date: '2026-10-02', payment_due_date: '2026-10-16' }),
     ];
-    const pulpitOut = await prerender(
-      <pulpit.NaleznosciSlot supabase={sb(dane)} tenantId={TENANT} nowIso={NOW_ISO} tryb="prawdziwe" kosztyKsefOd={null} />,
-    );
     const przeplywyOut = await prerender(
       <przeplywy.SpodziewaneSlot supabase={sb(dane)} tenantId={TENANT} nowIso={NOW_ISO} tryb="prawdziwe" kosztyKsefOd={null} />,
     );
-    expect(pulpitOut).toContain('861,00 zł');
     expect(przeplywyOut).toContain('861,00 zł');
     expect(przeplywyOut).not.toContain('1230,00 zł');
+    const pulpitOut = await prerender(
+      <pulpit.NaleznosciSlot supabase={sb(dane)} tenantId={TENANT} nowIso={NOW_ISO} tryb="prawdziwe" kosztyKsefOd={null} />,
+    );
+    expect(pulpitOut).toContain('0 faktur');
   });
 
   it('bez faktur z terminem od dziś nie ma dodatkowego odczytu korekt', async () => {
@@ -163,7 +160,7 @@ describe('korekta przed dniem wpływu zmienia kwotę tego wpływu', () => {
   });
 });
 
-describe('jedna faktura: wpływ, który był, albo spodziewany — nie oba', () => {
+describe('jedna faktura: wpływ albo spodziewany — nie oba', () => {
   const entries = [
     { id: 'dzis', date: TODAY, basis: 'due' as const, amount: 1000, outstanding: 1000 },
     { id: 'wczoraj', date: '2026-10-22', basis: 'due' as const, amount: 400, outstanding: 400 },
@@ -180,17 +177,17 @@ describe('jedna faktura: wpływ, który był, albo spodziewany — nie oba', () 
     consumers: false,
   }));
 
-  it('termin dziś: w Spodziewanych i Należnościach, a nie na wykresie, w kaflu i w operacjach', () => {
+  it('termin dziś: spodziewany, a nie na wykresie, w kaflu i w operacjach; wpływ to sama wpłata', () => {
     expect(movements.upcomingInflows(entries, TODAY).items.map((i) => i.id)).toEqual(['dzis']);
     expect(inflowTerms(entries, TODAY).total).toBe(1000);
-    expect(movements.receivedInflows(entries, TODAY).map((e) => e.id).sort()).toEqual(['wczoraj', 'wystawiona-dzis', 'zaplata-dzis']);
-    expect(movements.monthFlows(entries, [], TODAY).inflow.amount).toBe(700);
-    expect(movements.cashFlowOperations(entries, [], TODAY).map((o) => o.id)).not.toContain('in:dzis');
+    expect(movements.receivedInflows(entries, TODAY).map((e) => e.id)).toEqual(['zaplata-dzis']);
+    expect(movements.monthFlows(entries, [], TODAY).inflow.amount).toBe(250);
+    expect(movements.cashFlowOperations(entries, [], TODAY).map((o) => o.id)).toEqual(['in:zaplata-dzis']);
     const chart = movements.buildCashFlowChart(entries, [], TODAY);
-    expect(chart.month.at(-1)?.inflow).toBe(700);
+    expect(chart.month.at(-1)?.inflow).toBe(250);
   });
 
-  it('pusty kafel, gdy jedyna faktura ma termin dziś: nie twierdzi, że faktur z terminem nie ma', () => {
+  it('pusty kafel, gdy jedyna faktura ma termin dziś: prowadzi do oznaczenia zapłaty', () => {
     const tylkoDzis = entries.filter((e) => e.id === 'dzis');
     const dane = przeplywyAdaptery.wplywyMiesiacaProps(
       movements.monthFlows(tylkoDzis, [], TODAY).inflow,
@@ -201,13 +198,13 @@ describe('jedna faktura: wpływ, który był, albo spodziewany — nie oba', () 
     // Krzywa 8 tygodni (zrzuty 24.10.2026) też bez terminu dziś — to jeszcze nie wpływ.
     expect(dane.chartData.every((p) => p.value === 0)).toBe(true);
     expect(`${dane.comparison} ${dane.amountTitle}`).not.toMatch(/brak faktur/i);
-    expect(dane.comparison).toBe('Brak wpływów wg terminów');
-    expect(dane.amountTitle).toContain('Spodziewanych wpływach');
+    expect(dane.comparison).toBe('Oznacz wpłatę przy fakturze');
+    expect(dane.amountTitle).toContain('Zapłacone');
     expect(dane.comparison.length).toBeLessThanOrEqual('wobec poprzedniego miesiąca'.length);
   });
 
-  it('suma: wpływy do dziś + spodziewane = wszystkie faktury, bez podwójnego liczenia', () => {
+  it('suma: wpływy + spodziewane, bez podwójnego liczenia; po terminie i bez terminu ani tu, ani tu', () => {
     const received = movements.receivedInflows(entries, TODAY).reduce((s, e) => s + e.amount, 0);
-    expect(received + inflowTerms(entries, TODAY).total).toBe(1700);
+    expect(received + inflowTerms(entries, TODAY).total).toBe(1250);
   });
 });

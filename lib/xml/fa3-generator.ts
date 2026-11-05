@@ -109,10 +109,11 @@ const P_13_ORDER: readonly string[] = [
 // Mapa FormaPlatnosci → enum TFormaPlatnosci (xsd linie 1324-1365).
 // UWAGA: XSD wartości to 1..7, nie 1..10. 'other' nie ma reprezentacji
 // w enum-ie – emitujemy alternatywnie <PlatnoscInna>1</PlatnoscInna>.
-const PAYMENT_METHOD_MAP: Record<'transfer' | 'cash' | 'card', string> = {
+const PAYMENT_METHOD_MAP: Record<'transfer' | 'cash' | 'card' | 'mobile', string> = {
   cash: '1', // gotówka
   card: '2', // karta
   transfer: '6', // przelew
+  mobile: '7', // mobilna (BLIK)
 };
 
 // ═══════════════════════════════════════════════════════════════

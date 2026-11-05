@@ -24,6 +24,8 @@ const m = vi.hoisted(() => ({
   role: 'owner',
   env: 'test' as string | null,
   rpc: vi.fn(),
+  // PR C: blokada SQL dla sesji klienta (`ksef_duplicate_decision_blocker_for_session`) — czytana tylko przy powodzie `faktflow-original`.
+  sessionRpc: vi.fn(),
   adminFrom: vi.fn(),
   captureMessage: vi.fn(),
   captureException: vi.fn(),
@@ -33,7 +35,7 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/auth-context', () => {
   class ActionAuthError extends Error {}
   const ctx = async () => ({
-    supabase: { from: (table: string) => m.db!.from(table) },
+    supabase: { from: (table: string) => m.db!.from(table), rpc: (fn: string, args: unknown) => m.sessionRpc(fn, args) },
     user: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
     tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     role: m.role,
@@ -181,6 +183,7 @@ beforeEach(() => {
   m.role = 'owner';
   m.env = 'test';
   seed();
+  m.sessionRpc.mockResolvedValue({ data: null, error: null });
   m.rpc.mockImplementation(async (_fn: string, args: Record<string, unknown>) => ({
     data: {
       invoice_id: args.p_invoice_id,
@@ -309,12 +312,24 @@ describe('decideKsefDuplicateAction — decyzja klienta przy nierozstrzygniętym
     expect(m.rpc).not.toHaveBeenCalled();
   });
 
-  it('U3e: powód faktflow-original (decyzja w PR C) — odmowa bez RPC, ogólny tekst (nota PR A zostaje na karcie)', async () => {
-    seed({ submissions: [markerRow(TENANT, X_ID, { original_check: duplicateCheck({ reason: 'faktflow-original', summary: { ...(duplicateCheck().summary as Row), systemInfo: 'KSeF SaaS v1.0' } }) })] });
+  // PR C: zapis oryginału z FaktFlow i jego odmowy są w `zapis-oryginalu-akcja.test.ts`. Tu zostaje znacznik
+  // `faktflow-original` BEZ oceny pliku (sprzed 00149 / stary runner): nie ma jeszcze czego pokazać ani zapisać —
+  // `recheck-needed` (cron „Tylko uzgodnij” zrobi nowy werdykt), odmowa bez RPC. Wcześniej: `reason` i ogólny tekst.
+  it('U3e (PR C): powód faktflow-original bez importGate — odmowa recheck-needed z numerem dokumentu, bez RPC', async () => {
+    seed({
+      submissions: [markerRow(TENANT, X_ID, {
+        original_check: duplicateCheck({
+          reason: 'faktflow-original',
+          archivePath: `${TENANT}/ksef-import/${K}.xml`,
+          summary: { ...(duplicateCheck().summary as Row), systemInfo: 'KSeF SaaS v1.0' },
+          sameContentExceptHeader: false,
+        }),
+      })],
+    });
 
     const r = await decide();
 
-    expect(r).toEqual({ success: false, error: CLIENT.generic });
+    expect(r).toEqual({ success: false, error: fillExpected('recheck-needed', NR) });
     expect(m.rpc).not.toHaveBeenCalled();
   });
 

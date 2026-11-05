@@ -2,7 +2,6 @@ import { KpirView } from '@/components/expenses/kpir-view';
 import { KpirBlocked } from '@/components/reports/kpir/kpir-blocked';
 import { blockingSaleInvoices, kpirMonthTitle } from '@/components/reports/kpir/kpir-model';
 import { KpirToolbar } from '@/components/reports/kpir/kpir-toolbar';
-import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Card } from '@/components/ui/card';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { kpirPrzykladowe, trybDanych } from '@/lib/demo/tryb-danych';
@@ -18,8 +17,9 @@ export const dynamic = 'force-dynamic';
  * środowiska KSeF albo proweniencji ma wywrócić stronę do `error.tsx`, a nie
  * pokazać księgi z niepełnymi danymi.
  *
- * Powłoka jak na Kosztach: `ff-page-fill`, tytuł dla czytników, pasek
- * miesiąca, karty, na końcu karta z zakładkami sięgająca stopki. Dzieci
+ * Zawartość zakładki „KPiR” (rząd zakładek Księgowości stoi nad nią
+ * w `reports/layout.tsx`): tytuł dla czytników, pasek miesiąca, karty, na
+ * końcu karta księgi sięgająca stopki. Dzieci
  * korzenia to zwykłe warunki (bez fragmentu): test strefy czasowej szuka
  * wśród nich `KpirView` po liczbowym `month`, więc pasek i blokada dostają
  * `period`. Waluta nie do potwierdzenia: pasek miesiąca i „Raport
@@ -41,7 +41,7 @@ export default async function KpirPage({
     const { month, year } = resolveKpirPeriod(sp);
     const demo = kpirPrzykladowe(month, year);
     return (
-      <div className="ff-page-fill flex flex-col gap-6">
+      <div className="ff-tab-panel flex flex-1 flex-col gap-6">
         <h1 className="sr-only">Książka przychodów i rozchodów</h1>
         <KpirView key={`${year}-${month}`} month={month} year={year} expenses={demo.expenses} invoices={demo.invoices} today={todayInWarsaw()} demo />
       </div>
@@ -54,14 +54,13 @@ export default async function KpirPage({
   const blocked = blockedMessage !== null;
 
   return (
-    <div className="ff-page-fill flex flex-col gap-6">
+    <div className="ff-tab-panel flex flex-1 flex-col gap-6">
       <h1 className="sr-only">Książka przychodów i rozchodów</h1>
       {blocked ? (
         <KpirToolbar period={period} currentMonth={today.slice(0, 7)} monthTitle={kpirMonthTitle(data.month, data.year)} />
       ) : null}
       {blocked ? (
-        <Card className="flex-1 pt-0">
-          <KsiegowoscTabs active="kpir" />
+        <Card className="flex-1">
           <KpirBlocked
             message={blockedMessage}
             period={period}

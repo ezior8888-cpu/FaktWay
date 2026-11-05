@@ -17,8 +17,10 @@ import {
 } from 'lucide-react';
 
 import { countLifecycleViolations } from '@/lib/admin/ksef-lifecycle';
-import { getAdminOverviewMetrics } from '@/lib/admin/metrics';
+import { getAdminFunnelWeekly, getAdminOverviewMetrics } from '@/lib/admin/metrics';
 import { cn } from '@/lib/utils';
+
+import { FunnelCard } from './_components/funnel-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +32,8 @@ export default async function AdminDashboardPage() {
   const metrics = await getAdminOverviewMetrics();
   // Strażnik cyklu życia (00131) — brak funkcji na starej bazie nie może wyłączyć panelu.
   const lifecycleViolations = await countLifecycleViolations().catch(() => null);
+  // To samo dla lejka (00161): brak funkcji albo błąd bazy nie wyłącza panelu.
+  const funnel = await getAdminFunnelWeekly().catch(() => null);
 
   const ksef = metrics.ksefHealth;
   const ksefLevel = ksef?.level ?? 'unknown';
@@ -92,6 +96,8 @@ export default async function AdminDashboardPage() {
         isMfOutage={ksef?.isMfOutage ?? false}
         lastCheckedAt={ksef?.lastCheckedAt ?? null}
       />
+
+      <FunnelCard rows={funnel} />
 
       {/* Quick navigation tiles */}
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

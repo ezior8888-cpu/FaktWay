@@ -14,10 +14,10 @@ import type { InflowEntry } from '@/lib/dashboard/inflows';
 
 /**
  * Czyste agregaty kart `/przeplywy` (plan Finora P2, etap E5) na wynikach
- * `getInflows` (od E11: według terminów płatności, D-W) i `getCosts` (§2.4
- * pkt 12). Brzegi: korekta kosztu in minus, zaliczka + ROZ jako dwa wpływy,
- * B2C, przełom miesiąca i roku, „dziś” w Warszawie. Wpływy z dniem po dziś
- * to Spodziewane wpływy — wykres, kafel, źródła i operacje ich nie liczą.
+ * `getInflows` i `getCosts` (§2.4 pkt 12). Brzegi: korekta kosztu in minus,
+ * zaliczka + ROZ jako dwa wpływy, B2C, przełom miesiąca i roku, „dziś”
+ * w Warszawie. Wykres, kafel, źródła i operacje liczą same prawdziwe pieniądze,
+ * a otwarte faktury z terminem od dziś to Spodziewane wpływy.
  */
 
 let seq = 0;
@@ -114,7 +114,7 @@ describe('monthFlows — Wpłynęło / Wydano w tym miesiącu', () => {
       [cost('2026-10-05', 40), cost('2026-09-30', 80)],
       TODAY,
     );
-    // E11 (D-W): wpływ z dniem po dziś (25.10) jeszcze nie wpłynął — kafel i krzywa kończą się dziś.
+    // Wpływ z dniem po dziś (25.10) jeszcze nie wpłynął — kafel i krzywa kończą się dziś.
     // Koszty bez zmian: cały miesiąc, jak słupek miesiąca na wykresie.
     expect(inflowFlow).toMatchObject({ amount: 150, prevAmount: 120, count: 2 });
     expect(inflowFlow.changePct).toBeCloseTo(25);
@@ -188,7 +188,7 @@ describe('topCashFlowSources — skąd i dokąd płyną pieniądze', () => {
 });
 
 describe('upcomingInflows — spodziewane wpływy w 30 dni', () => {
-  // E11 (D-W): wejście to wpływy według terminu (`getInflows`), nie należności `getReceivables`.
+  // Wejście to otwarte faktury z `getInflows`, nie należności `getReceivables`.
   const receivable = (id: string, dueDate: string | null, outstanding: number): InflowEntry => inflow(dueDate ?? '2026-10-01', 100, {
     id, internalNumber: `FV/${id}`, buyerName: 'Gamma spółka akcyjna', basis: dueDate ? 'due' : 'issued', dueDate, outstanding,
   });
@@ -199,8 +199,8 @@ describe('upcomingInflows — spodziewane wpływy w 30 dni', () => {
         receivable('a', '2026-11-19', 30), // +30 — w oknie
         receivable('b', '2026-11-20', 40), // +31 — poza
         receivable('c', '2026-10-20', 10), // dziś
-        receivable('d', '2026-10-19', 99), // termin minął — to już wpływ (D-W), nie spodziewany
-        receivable('e', null, 77), // bez terminu — wpływ w dniu wystawienia
+        receivable('d', '2026-10-19', 99), // termin minął — należność po terminie, nie spodziewany wpływ
+        receivable('e', null, 77), // bez terminu — nie wiadomo, kiedy spodziewać się pieniędzy
         receivable('f', '2026-10-21', 20),
       ],
       TODAY,

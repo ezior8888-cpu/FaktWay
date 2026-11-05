@@ -115,7 +115,7 @@ export async function runTrialCountdownEmails({ step, logger }: JobContext) {
 
     for (const sub of subscriptions) {
       if (!sub.trial_end) continue;
-      // Mail mówi „karta zostanie obciążona” — przy anulowanym trialu to nieprawda.
+      // Mail mówi „pobierzemy płatność” — przy anulowanym trialu to nieprawda.
       if (sub.cancel_at_period_end) {
         skipped++;
         continue;

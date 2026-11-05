@@ -52,8 +52,8 @@ export function HelpSearch({ items }: { items: HelpSearchItem[] }) {
           <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-lg shadow-primary/5 ring-1 ring-border">
             {results.length === 0 ? (
               <p className="px-5 py-4 text-sm text-muted-foreground">
-                Brak wyników dla „{query}”. Spróbuj innych słów albo zapytaj
-                asystenta AI w panelu.
+                Brak wyników dla „{query}”. Spróbuj innych słów albo napisz do
+                nas przez stronę kontaktu.
               </p>
             ) : (
               results.map((it) => (

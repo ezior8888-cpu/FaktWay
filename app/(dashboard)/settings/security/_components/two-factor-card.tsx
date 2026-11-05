@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import {
   enrollTotpAction,
@@ -59,6 +60,10 @@ function RecoveryUnavailableNotice() {
 }
 
 function ErrorText({ children }: { children: string }) {
+  // Sesja po biometrii: sama treść błędu nie mówi, gdzie podać kod, więc dajemy przejście.
+  if (children === MFA_ERROR_MESSAGES.mfa_required) {
+    return <MfaStepUpNotice returnTo="/settings/security">{children}</MfaStepUpNotice>;
+  }
   return (
     <p role="alert" className="text-destructive text-xs">
       {children}

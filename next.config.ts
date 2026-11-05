@@ -156,12 +156,22 @@ const nextConfig: NextConfig = {
         destination: '/import-danych',
         permanent: true,
       },
+      // FaktWay 1.0: artykuły o FLO zniknęły z publicznej pomocy
+      // (content/flo/pomoc). Stare linki i wyniki wyszukiwarki lądują na
+      // stronie głównej zamiast na 404.
+      {
+        source: '/pomoc/flo-:slug',
+        destination: '/',
+        permanent: true,
+      },
     ];
   },
 
   // PostHog reverse proxy (Faza 31) — ruch analityczny leci przez naszą
   // domenę pod `/ingest`, omijając ad-blockery blokujące `*.posthog.com`.
   // Region EU (zgodność z hostingiem Supabase / R2).
+  // Next przekazuje celowi nagłówki żądania — ciasteczka zdejmuje proxy
+  // (`lib/telemetry-tunnel.ts`); nowe ścieżki tunelu dopisz też tam.
   async rewrites() {
     return [
       {
@@ -212,8 +222,9 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.
-  // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
-  // side errors will fail.
+  // Proxy (`proxy.ts`) obejmuje tunel i przepuszcza go bez sesji i bez ciasteczek
+  // (`lib/telemetry-tunnel.ts`). Wrapper Sentry, który omijał proxy na tej
+  // ścieżce, przy `output: standalone` i Next ≥ 16 jest wyłączony — nie licz na niego.
   tunnelRoute: '/monitoring',
 
   webpack: {

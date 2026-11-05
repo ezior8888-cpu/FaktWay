@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logAudit } from '@/lib/audit/log';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
-import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 // Plik 'use server' eksportuje tylko akcje — komunikat i typ K4 żyją w czystym module.
 import {
@@ -58,12 +58,16 @@ interface TenantSnap {
   } | null;
 }
 
-async function tenantContext(): Promise<{
+/**
+ * `formTenant` — zapis korekty z formularza: firma formularza musi być firmą
+ * aktywną teraz (UX-01). Odczyt faktury pierwotnej woła bez niego.
+ */
+async function tenantContext(formTenant?: FormTenantCheck): Promise<{
   supabase: SupabaseClient;
   userId: string;
   tenant: TenantSnap;
 }> {
-  const { supabase, user, tenantId } = await requireUserAndActiveOrg();
+  const { supabase, user, tenantId } = await requireUserAndActiveOrg(formTenant);
 
   const { data: raw, error } = await supabase
     .from('tenants')
@@ -841,11 +845,16 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
   }
 }
 
+/**
+ * `expectedTenantId` — firma, dla której strona wyrenderowała formularz
+ * (UX-01); tylko do porównania z firmą z ciasteczka. Także w wysyłce.
+ */
 export async function saveCorrectionDraftAction(
   raw: CorrectionInvoiceSchemaIn,
+  expectedTenantId: string,
 ): Promise<CorrectionActionResult> {
   try {
-    const { supabase, tenant, userId } = await tenantContext();
+    const { supabase, tenant, userId } = await tenantContext({ expectedTenantId });
     const normalized = await normalizePayload(supabase, tenant, raw);
     if ('error' in normalized && typeof normalized.error === 'string') {
       return { success: false, error: normalized.error };
@@ -875,6 +884,7 @@ export async function saveCorrectionDraftAction(
 
 export async function saveAndSendCorrectionAction(
   raw: CorrectionInvoiceSchemaIn,
+  expectedTenantId: string,
 ): Promise<CorrectionActionResult> {
   try {
     // Original XML and the cumulative state after earlier KOR are not yet
@@ -885,7 +895,7 @@ export async function saveAndSendCorrectionAction(
         error: 'Wysyłka korekt w PROD jest wstrzymana do uzgodnienia oryginału i wcześniejszych korekt. Możesz zapisać szkic.',
       };
     }
-    const { supabase, tenant, userId } = await tenantContext();
+    const { supabase, tenant, userId } = await tenantContext({ expectedTenantId });
     const normalized = await normalizePayload(supabase, tenant, raw);
     if ('error' in normalized && typeof normalized.error === 'string') {
       return { success: false, error: normalized.error };

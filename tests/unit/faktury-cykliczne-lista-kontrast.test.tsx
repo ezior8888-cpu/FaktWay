@@ -21,8 +21,8 @@ vi.mock('@/app/actions/recurring-invoices', () => ({
 }));
 vi.mock('@/app/actions/recurring-invoice-templates', () => ({ searchRecurringTemplatesAction: vi.fn() }));
 
-import { RecurringInvoicesView } from '@/app/(dashboard)/invoices/recurring/_components/recurring-invoices-view';
-import { RECURRING_STATUS_STYLES } from '@/app/(dashboard)/invoices/recurring/_components/recurring-status-badge';
+import { RecurringInvoicesView } from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoices-view';
+import { RECURRING_STATUS_STYLES } from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-status-badge';
 import type { RecurringInvoiceListItem } from '@/lib/invoices/recurring/queries';
 
 import { color, contrast, oklch, over, rowBackgrounds, themes } from './helpers/kontrast';

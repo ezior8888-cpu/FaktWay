@@ -110,8 +110,8 @@ const openKor = { id: 'kor-1', tenant_id: tenantId, parent_invoice_id: parentId,
 
 describe('K4 — druga korekta tej samej faktury', () => {
   it.each([
-    ['szkic', () => saveCorrectionDraftAction(payload)],
-    ['zapis i wysyłka', () => saveAndSendCorrectionAction(payload)],
+    ['szkic', () => saveCorrectionDraftAction(payload, tenantId)],
+    ['zapis i wysyłka', () => saveAndSendCorrectionAction(payload, tenantId)],
     ['kontekst rodzica dla formularza', () => getCorrectionParentContextAction(parentId)],
   ])('%s: rodzic z otwartą korektą → odmowa z numerem i stanem tej korekty, bez zapisu i zlecenia', async (_l, action) => {
     corrections = [openKor];
@@ -128,13 +128,13 @@ describe('K4 — druga korekta tej samej faktury', () => {
 
   it('korekta odrzucona przez KSeF nie blokuje — szkic drugiej zapisuje się', async () => {
     corrections = [{ ...openKor, ksef_status: 'rejected' }];
-    const result = await saveCorrectionDraftAction(payload);
+    const result = await saveCorrectionDraftAction(payload, tenantId);
     expect(result.success).toBe(true);
     expect(inserts).toBe(1);
   });
 
   it('bez wcześniejszych korekt zapis przechodzi', async () => {
-    const result = await saveCorrectionDraftAction(payload);
+    const result = await saveCorrectionDraftAction(payload, tenantId);
     expect(result.success).toBe(true);
     expect(inserts).toBe(1);
   });

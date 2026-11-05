@@ -14,6 +14,7 @@ import {
 import { jpkFaBlocker } from '@/lib/exports/jpk-fa-readiness';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { replacementForFormat } from '@/lib/exports/suspended-formats';
+import { readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { downloadFromR2, getSignedInvoiceUrl } from '@/lib/storage/r2';
 import type { Database } from '@/types/database';
@@ -149,16 +150,23 @@ export async function runCoPilotMonthly({ step }: JobContext) {
 
     const dayOfMonth = await step.run('warsaw-day', () => dayOfMonthInWarsaw(new Date()));
 
-    const tenantsToProcess = await step.run('find-tenants', async () => {
-      const { data, error } = await supabase
-        .from('accountant_settings')
-        .select('*')
-        .eq('co_pilot_enabled', true)
-        .eq('send_day_of_month', dayOfMonth);
-
-      if (error) throw new Error(error.message);
-      return (data ?? []) as AccountantSettingsRow[];
-    });
+    // Stronami po kluczu (sesja 27 planu skalowania, JOB-11): jedno zapytanie
+    // oddawało najwyżej 1000 firm (PGRST_DB_MAX_ROWS). Domyślny dzień wysyłki
+    // to 5., więc reszta traciła paczkę za cały miesiąc — jutro filtr dnia
+    // już jej nie łapie. Błąd dowolnej strony = wyjątek przed pierwszą
+    // rezerwacją; ponowienie (cały handler od nowa) pomija firmy już
+    // zarezerwowane dzięki warunkowi na okresie niżej.
+    const tenantsToProcess = await step.run('find-tenants', () =>
+      readAllById<AccountantSettingsRow>('Co-Pilot: odczyt ustawień firm', (afterId, limit) => {
+        let query = supabase
+          .from('accountant_settings')
+          .select('*')
+          .eq('co_pilot_enabled', true)
+          .eq('send_day_of_month', dayOfMonth);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      }),
+    );
 
     if (tenantsToProcess.length === 0) {
       return {

@@ -436,9 +436,11 @@ export function blockedReasonText(item: KsefHistoryBlockedItem): ReasonText {
         invoiceHref: null,
         mentionsSupport: false,
       };
+    // ZAP-01: także szkic z importu pliku (CSV/JPK) — ma ten sam numer, ale nie liczy się w księgach.
+    // Bez „zmień numer”: szkicu nie da się edytować (brak trasy edycji), wyjściem jest usunięcie.
     case 'number_conflict':
       return {
-        text: `W FaktWay jest szkic o numerze ${item.invoiceNumber}. Zmień jego numer albo usuń szkic — wtedy pobierzemy tę fakturę sami.`,
+        text: `W FaktWay jest szkic o numerze ${item.invoiceNumber}, np. z importu pliku. Szkic nie liczy się w przychodzie ani w KPiR — usuń go, a pobierzemy oryginał z KSeF sami.`,
         invoiceHref: invoiceHref(item.localInvoiceId),
         mentionsSupport: false,
       };

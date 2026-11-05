@@ -47,6 +47,6 @@ describe('sendSlackAlert', () => {
   it('błąd Telegrama nie wywraca nadawcy (fail-soft jak Slack)', async () => {
     mocks.telegram.mockRejectedValue(new Error('fixture'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(sendSlackAlert({ channel: 'urgent', text: 'x' })).resolves.toBeUndefined();
+    await expect(sendSlackAlert({ channel: 'urgent', text: 'x' })).resolves.toBe(false);
   });
 });

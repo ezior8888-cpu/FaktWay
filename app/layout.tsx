@@ -16,6 +16,7 @@ import './globals.css';
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
 import { SentryClientInit } from '@/components/sentry-client-init';
 import { Toaster } from '@/components/ui/sonner';
+import { OFERTA } from '@/lib/marketing/oferta';
 import { THEME_BOOT_SCRIPT } from '@/lib/theme/theme';
 import { siteUrl } from '@/lib/site';
 
@@ -51,7 +52,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: 'FaktWay',
-  description: 'Faktury KSeF dla mikrofirm',
+  description: OFERTA,
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
   applicationName: 'FaktWay',
   appleWebApp: {

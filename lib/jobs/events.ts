@@ -133,16 +133,17 @@ export const invoiceSubmitFailed = jobEvent<{
   }>('invoice/submit.failed');
 
 /**
- * Fan-out z `inbox-polling-cron` do per-tenant handlera.
- * Cron nie robi sam polling'u dla wszystkich tenantów w jednym uruchomieniu
- * (pojedynczy job przetwarzający 1000 tenantów trwałby >60min i łatwo by się
- * wywalał). Zamiast tego wybiera aktywnych tenantów i dla każdego emituje ten
- * event — worker pg-boss rozkłada je z limitem równoległości kolejki.
+ * Przebieg skrzynki jednej firmy. Zlecenia tworzy takt `cron.inbox-polling`
+ * dla firm należnych według harmonogramu (00160).
+ * `dueAt` = termin z harmonogramu: `started_on − dueAt` w `pgboss.job` to
+ * opóźnienie względem harmonogramu (runbook `skrzynka-ksef-pojemnosc.md`).
+ * Opcjonalne, bo zlecenia sprzed wdrożenia go nie mają.
  */
 export const inboxPollTenant = jobEvent<{
     tenantId: string;
     nip: string;
     environment: 'test' | 'demo' | 'production';
+    dueAt?: string;
   }>('inbox/poll.tenant');
 
 /** Znaleziono nową fakturę w skrzynce KSeF (subject2 = nabywca). */
@@ -261,6 +262,11 @@ export const billingPaymentSucceeded = jobEvent<{
     taxCents: number;
     currency: string;
     paidAt: string;
+    /**
+     * Rodzaj metody ze sprawdzonego Charge (`card`, `blik`): forma płatności na
+     * fakturze. Job sprzed BLIK-a go nie ma, wtedy płatność mogła być tylko kartą.
+     */
+    paymentMethodType?: string;
   }>('billing/payment.succeeded');
 
 export const billingPaymentFailed = jobEvent<{

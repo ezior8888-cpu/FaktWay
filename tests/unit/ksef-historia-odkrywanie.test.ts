@@ -130,7 +130,8 @@ describe('classifyDiscovered — strona KSeF → dziennik', () => {
   });
   const local = (n: number, patch: Row = {}): Row => ({
     id: `inv-${n}`, tenant_id: TENANT, direction: 'outgoing', ksef_number: meta(n).ksefNumber,
-    ksef_environment: 'test', origin: 'app', xml_storage_path: 'x.xml', fa3_data: { annotations: {} }, ...patch,
+    // Faktura z numerem KSeF jest przyjęta (ZAP-01: `already_present` tylko z posiadaczem w księgach).
+    ksef_status: 'accepted', ksef_environment: 'test', origin: 'app', xml_storage_path: 'x.xml', fa3_data: { annotations: {} }, ...patch,
   });
 
   it('każdy wiersz tabeli klasyfikacji', async () => {

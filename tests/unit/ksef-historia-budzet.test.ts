@@ -22,6 +22,7 @@ beforeEach(() => {
   db = historyDb({
     invoices: [],
     ksef_inbox_cursor: [{ tenant_id: TENANT, window_to: ago(10) }],
+    ksef_inbox_schedule: [],
   });
 });
 
@@ -49,6 +50,28 @@ describe('sygnały ustępowania (tylko stan lokalny)', () => {
     const s = await readYieldSignals(admin(), TENANT, NOW);
     expect(s.yieldAll).toBe(true);
     expect(s.reasons).toContain('skrzynka nadrabia zaległość');
+  });
+
+  // Od harmonogramu skrzynki (00160) HWM firmy zimnej bywa starszy niż godzina
+  // zgodnie z planem. Stały próg 60 min zatrzymałby historię takich firm na zawsze.
+  it('firma zimna z HWM sprzed 5 h: to norma, historia pracuje', async () => {
+    db.tables.ksef_inbox_cursor = [{ tenant_id: TENANT, window_to: ago(300) }];
+    db.tables.ksef_inbox_schedule = [{ tenant_id: TENANT, activity_tier: 'cold' }];
+    await expect(readYieldSignals(admin(), TENANT, NOW)).resolves.toMatchObject({ yieldAll: false });
+  });
+
+  it('firma uśpiona z HWM sprzed 20 h: to norma; sprzed 3 dni: skrzynka nadrabia', async () => {
+    db.tables.ksef_inbox_schedule = [{ tenant_id: TENANT, activity_tier: 'dormant' }];
+    db.tables.ksef_inbox_cursor = [{ tenant_id: TENANT, window_to: ago(20 * 60) }];
+    expect((await readYieldSignals(admin(), TENANT, NOW)).yieldAll).toBe(false);
+    db.tables.ksef_inbox_cursor = [{ tenant_id: TENANT, window_to: ago(3 * 24 * 60) }];
+    expect((await readYieldSignals(admin(), TENANT, NOW)).reasons).toContain('skrzynka nadrabia zaległość');
+  });
+
+  it('firma gorąca z HWM sprzed 2 h: skrzynka nadrabia, jak dawniej', async () => {
+    db.tables.ksef_inbox_cursor = [{ tenant_id: TENANT, window_to: ago(120) }];
+    db.tables.ksef_inbox_schedule = [{ tenant_id: TENANT, activity_tier: 'hot' }];
+    expect((await readYieldSignals(admin(), TENANT, NOW)).reasons).toContain('skrzynka nadrabia zaległość');
   });
 
   it('brak kursora skrzynki to nie zaległość', async () => {

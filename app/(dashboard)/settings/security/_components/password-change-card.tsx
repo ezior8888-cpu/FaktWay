@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition, type FormEvent } from 'react';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import { refreshTurnstileToken, TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -108,7 +109,10 @@ export function PasswordChangeCard() {
             <AlertDescription className="text-green-800 dark:text-green-400/80">Hasło zmienione.</AlertDescription>
           </Alert>
         )}
-        {failure && (
+        {failure?.error === 'mfa_required' && (
+          <MfaStepUpNotice returnTo="/settings/security">{ERROR_MESSAGES.mfa_required}</MfaStepUpNotice>
+        )}
+        {failure && failure.error !== 'mfa_required' && (
           <Alert variant="destructive">
             <AlertDescription>
               {ERROR_MESSAGES[failure.error]}

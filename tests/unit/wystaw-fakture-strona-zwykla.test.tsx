@@ -54,19 +54,21 @@ describe('strona /invoices/new/regular — sprzedawca w nagłówku', () => {
       nip: '1234567890', name: 'Firma',
       address: { countryCode: 'PL', addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa' },
     };
-    m.loadSeller.mockResolvedValue(seller);
+    m.loadSeller.mockResolvedValue({ tenantId: 'tenant-a', seller });
     renderToStaticMarkup(await NewRegularInvoicePage({}));
     expect(m.formProps.at(-1)).toMatchObject({
       seller,
       suggestedNumber: 'FV/1/10/2026',
       prefill: null,
       vatExempt: false,
+      // UX-01: firma tej strony idzie do formularza, a zapis odsyła ją akcji.
+      tenantId: 'tenant-a',
     });
   });
 
   it('błąd odczytu sprzedawcy nie blokuje formularza (seller = null)', async () => {
     m.loadSeller.mockRejectedValue(new Error('admin client unavailable'));
     renderToStaticMarkup(await NewRegularInvoicePage({}));
-    expect(m.formProps.at(-1)).toMatchObject({ seller: null, suggestedNumber: 'FV/1/10/2026' });
+    expect(m.formProps.at(-1)).toMatchObject({ seller: null, suggestedNumber: 'FV/1/10/2026', tenantId: 'tenant-a' });
   });
 });

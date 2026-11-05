@@ -182,6 +182,30 @@ export function receivableBaseFilterOps(environment: KsefEnvironment): PaymentFi
   ];
 }
 
+/** Data zapłaty z FA(3) zapisana przy imporcie (`ParsedInvoice.paidDate`), jak w `lib/dashboard/inflows.ts`. */
+export const FA3_PAID_DATE_COLUMN = 'fa3_data->parsed->>paidDate';
+
+/**
+ * Warunki filtra „Opłacone” listy faktur. Zapłata jest faktem bez względu na
+ * pochodzenie i rodzaj dokumentu: „Zapłacone” działa też na imporcie, historii
+ * KSeF i korekcie (00158), a data zapłaty z FA(3) to faktura wystawiona po zapłacie.
+ * Te same warunki co `isSettledSale` w `lib/invoices/list-row-facts.ts`.
+ */
+export function settledFilterOps(environment: KsefEnvironment): PaymentFilterOp[] {
+  return [
+    { op: 'eq', column: 'direction', value: 'outgoing' },
+    { op: 'eq', column: 'ksef_status', value: 'accepted' },
+    { op: 'eq', column: 'ksef_environment', value: environment },
+    {
+      op: 'or',
+      anyOf: [
+        [{ op: 'eq', column: 'payment_status', value: 'paid' }],
+        [{ op: 'not_null', column: FA3_PAID_DATE_COLUMN }],
+      ],
+    },
+  ];
+}
+
 function isOpenPaymentStatus(status: string | null): boolean {
   return (OPEN_PAYMENT_STATUSES as readonly (string | null)[]).includes(status);
 }

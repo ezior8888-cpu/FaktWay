@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 
-import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Card } from '@/components/ui/card';
 
 import { RecentExports } from './export-history';
@@ -25,15 +24,15 @@ export function ExportsHeading() {
   return <h1 className="sr-only">Eksport danych księgowych</h1>;
 }
 
-/** Powłoka strony: karta z zakładkami jest bezpośrednim dzieckiem korzenia `flex-col`. */
+/** Zawartość zakładki „Eksport”: rząd zakładek Księgowości stoi nad nią w `reports/layout.tsx`. */
 export function ExportsScreen({ form, history }: { form: ReactNode; history: ReactNode }) {
   return (
-    <div className="ff-page-fill flex flex-col gap-6">
+    <div className="ff-tab-panel flex flex-1 flex-col gap-6">
       <ExportsHeading />
       {form}
-      <Card className="flex-1 pt-0">
-        <KsiegowoscTabs active="eksport" />
-        <div className="flex w-full flex-1 flex-col pt-2">{history}</div>
+      {/* Nagłówek „Historia” ma sama historia; `id` — kotwica karty (testy, link). */}
+      <Card id="historia" className="flex-1">
+        <div className="flex w-full flex-1 flex-col">{history}</div>
       </Card>
     </div>
   );

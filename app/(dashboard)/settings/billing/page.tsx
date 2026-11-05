@@ -17,10 +17,19 @@ import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET } from '@/lib/billing/pricing';
+import { paymentFailureAdvice } from '@/lib/billing/payment-failure';
+import { PRICE_PER_MONTH, PRICE_PER_MONTH_WITH_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import {
+  buildBlikDisclosure,
+  isBlikAvailable,
+  trialPaymentHint,
+  trialPaymentMethodLabel,
+  trialPaymentRetryHint,
+} from '@/lib/billing/trial-payment';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import {
   getActiveSubscription,
+  getLatestPaymentFailureReason,
   isInTrial,
   trialDaysRemaining,
   type ActiveSubscription,
@@ -29,6 +38,7 @@ import { plural } from '@/lib/i18n/plural';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
 
+import { BlikTerms } from './_components/blik-terms';
 import { PlanCards } from './_components/plan-cards';
 import { PortalButton } from './_components/portal-button';
 
@@ -126,6 +136,11 @@ export default async function BillingPage(props: {
   const subscription = stripeConfigured
     ? await getActiveSubscription(ctx.tenantId).catch(() => null)
     : null;
+  // Przyczyna tylko do podpowiedzi: jej brak daje tekst ogólny, nie błąd strony.
+  const paymentFailureReason =
+    subscription?.status === 'past_due' || subscription?.status === 'unpaid'
+      ? await getLatestPaymentFailureReason(ctx.tenantId).catch(() => null)
+      : null;
 
   const canManage = ctx.role === 'owner' || ctx.role === 'admin';
   const errorMsg = params.error ? ERROR_MESSAGES[params.error] : null;
@@ -135,8 +150,7 @@ export default async function BillingPage(props: {
       <div>
         <FieldLabel>Subskrypcja i rozliczenia</FieldLabel>
         <FieldDescription>
-          Zarządzaj planem, kartą, fakturami. Płatności obsługuje Stripe (PSD2 +
-          3D-Secure).
+          Zarządzaj planem, metodą płatności i fakturami. Płatności obsługuje Stripe.
         </FieldDescription>
       </div>
 
@@ -146,7 +160,7 @@ export default async function BillingPage(props: {
           icon={RiCheckboxCircleLine}
           tone="success"
           title="Subskrypcja aktywna"
-          description="Dziękujemy! Trial 30 dni właśnie się rozpoczął. Karta zostanie obciążona dopiero po jego zakończeniu."
+          description="Dziękujemy! Trial 30 dni właśnie się rozpoczął. Pierwsza płatność dopiero po jego zakończeniu."
         />
       ) : null}
       {params.checkout === 'canceled' ? (
@@ -154,7 +168,7 @@ export default async function BillingPage(props: {
           icon={RiAlertLine}
           tone="warning"
           title="Subskrypcja niedokończona"
-          description="Anulowałeś Checkout. Możesz spróbować ponownie — żadne pieniądze nie zostały pobrane."
+          description={`Płatność nie została dokończona, żadne pieniądze nie zostały pobrane. Możesz spróbować ponownie. ${trialPaymentRetryHint()}`.trim()}
         />
       ) : null}
       {errorMsg ? (
@@ -191,6 +205,7 @@ export default async function BillingPage(props: {
         <ActiveSubscriptionSection
           subscription={subscription}
           canManage={canManage}
+          paymentFailureReason={paymentFailureReason}
         />
       ) : stripeConfigured ? (
         // Brak subskrypcji + Stripe OK = pokaż plan selection
@@ -199,26 +214,49 @@ export default async function BillingPage(props: {
             icon={RiSparklingLine}
             tone="success"
             title="30 dni za darmo"
-            description="Wybierz plan. Karta wymagana, ale obciążymy ją dopiero po 30 dniach trialu. Anulujesz kiedy chcesz."
+            description={`Wybierz plan. Podajesz ${trialPaymentMethodLabel('biernik')}, ale pierwsza płatność dopiero po ${TRIAL_DAYS} dniach trialu. Anulujesz, kiedy chcesz.`}
           />
 
-          {canManage ? <PlanCards /> : null}
+          {canManage ? (
+            <PlanCards
+              blikDisclosure={isBlikAvailable() ? buildBlikDisclosure() : null}
+              paymentHint={trialPaymentHint()}
+            />
+          ) : null}
         </>
       ) : null}
     </FieldGroup>
   );
 }
 
+/** Kiedy BLIK dodany w portalu zostanie obciążony pierwszy raz. */
+function blikNextCharge(subscription: ActiveSubscription, inTrial: boolean): string {
+  if (subscription.cancel_at_period_end) {
+    return `tylko jeśli wznowisz subskrypcję przed ${fmtDate(subscription.current_period_end)}`;
+  }
+  if (subscription.status === 'past_due') return 'zaległa kwota, przy najbliższej próbie pobrania';
+  if (subscription.status === 'unpaid') return 'zaległa kwota, gdy opłacisz fakturę';
+  return fmtDate(inTrial ? subscription.trial_end : subscription.current_period_end);
+}
+
 function ActiveSubscriptionSection({
   subscription,
   canManage,
+  paymentFailureReason,
 }: {
   subscription: ActiveSubscription;
   canManage: boolean;
+  paymentFailureReason: string | null;
 }) {
   const status = statusLabel(subscription.status);
   const inTrial = isInTrial(subscription);
   const trialLeft = trialDaysRemaining(subscription);
+  const failureAdvice = paymentFailureAdvice(paymentFailureReason, subscription.status);
+  // Portal pozwala dodać BLIK, a Stripe wymaga warunków przed kodem także przy formularzu
+  // hostowanym. Mail po odmowie prowadzi tu, na stronę z przyciskiem. Wycofany plan roczny
+  // zostaje bez warunków: zgoda mówi o płatnościach co miesiąc.
+  const blikTerms =
+    canManage && subscription.plan === 'monthly' && isBlikAvailable() ? buildBlikDisclosure() : null;
 
   return (
     <>
@@ -239,8 +277,21 @@ function ActiveSubscriptionSection({
           </div>
           <FieldDescription>{fmtPlan(subscription.plan)}</FieldDescription>
         </FieldContent>
-        {canManage ? <PortalButton /> : null}
+        {canManage ? <PortalButton blikStatementVersion={blikTerms?.version ?? null} /> : null}
       </Field>
+
+      {blikTerms ? (
+        <BlikTerms
+          title="Zmieniasz metodę płatności na BLIK?"
+          rows={[
+            { label: 'Przy dodaniu BLIK-a płacisz', value: blikTerms.dueToday },
+            { label: 'Następna płatność', value: blikNextCharge(subscription, inTrial) },
+            { label: 'Potem', value: blikTerms.cycle },
+          ]}
+          banks={blikTerms.banks}
+          consent={blikTerms.consent}
+        />
+      ) : null}
 
       {inTrial && trialLeft !== null ? (
         <StatRow
@@ -256,7 +307,7 @@ function ActiveSubscriptionSection({
           sublabel={
             subscription.cancel_at_period_end
               ? 'Subskrypcja wygaśnie po tej dacie'
-              : `Karta zostanie obciążona automatycznie`
+              : 'Pobierzemy płatność automatycznie z Twojej metody płatności'
           }
         />
       )}
@@ -280,7 +331,7 @@ function ActiveSubscriptionSection({
           icon={RiAlertLine}
           tone="warning"
           title="Płatność nie została pobrana"
-          description="Stripe ponowi próbę automatycznie. Możesz też zaktualizować kartę w panelu klienta."
+          description={[failureAdvice.reason, failureAdvice.action].filter(Boolean).join(' ')}
         />
       ) : null}
     </>

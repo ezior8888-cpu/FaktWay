@@ -16,6 +16,7 @@ import {
 } from '@/lib/admin/ksef-lifecycle';
 import {
   hasOpenSubmission,
+  OPERATOR_DUPLICATE_MESSAGES,
   OPERATOR_MESSAGES,
   operatorInvoiceButtons,
   operatorIssueDateMessage,
@@ -35,6 +36,8 @@ import {
   DUP_PROGRAM,
   DUP_SHA,
   knownNumberCheck,
+  faktflowFacts,
+  faktflowReviewGate,
   knownNumberFacts,
   validCheck,
   type DuplicateFactsShape,
@@ -280,8 +283,10 @@ describe('hasOpenSubmission (A2): czy „Tylko uzgodnij” ma co uzgadniać', ()
  */
 const NOW = new Date('2026-10-07T12:00:00.000Z');
 const DECIDE_NOT_PENDING = 'Faktura nie czeka na decyzję klienta (stan albo kod inny niż failed / KSEF_DUPLICATE_RECONCILE).';
+// PR C: brzmienie 6.6 (spec v3) zamiast „faktflow-original … runbook” z PR B — `faktflow-original` ma teraz
+// decyzję klienta, przegląd pliku (I5R) albo automat (recheck-needed); runbook zostaje dla cross-tenant.
 const DUPLICATE_REQUEUE_PR_B =
-  'KSeF ma już fakturę o tym numerze — ponowienie powtórzy 440. Powody no-own-file i known-number z danymi oryginału: decyzja klienta („Zapisz decyzję klienta” po rozmowie z klientem, „Przypomnij klientowi”). Pobranie oryginału nieudane (download-*, storage-pending, archive-pending), known-number bez danych albo known-stale: „Tylko uzgodnij” przy otwartym wpisie. faktflow-original, same-content-other-program, archive-conflict: runbook KSEF_DUPLICATE_RECONCILE.';
+  'KSeF ma już fakturę o tym numerze — ponowienie powtórzy 440. Powody no-own-file, known-number i faktflow-original z oceną pliku: decyzja klienta („Zapisz decyzję klienta” po rozmowie z klientem, „Przypomnij klientowi”). faktflow-original w przeglądzie (I5R): „Zapisz fakturę z KSeF w FaktWay” albo „Oddaj decyzję klientowi”. faktflow-original bez oceny pliku albo „do ponownego sprawdzenia” (recheck-needed), pobranie oryginału nieudane (download-*, storage-pending, archive-pending), known-number bez danych, known-stale, known-now: cron „Tylko uzgodnij” po 48 h (możesz od razu „Tylko uzgodnij” przy otwartym wpisie). same-content-other-program, archive-conflict, cross-tenant: runbook KSEF_DUPLICATE_RECONCILE.';
 
 /** Widok „do decyzji” (2.2.1) — tak, jak go oddaje `duplicateDecisionOptions` dla operatora. */
 function decidable(reason: 'no-own-file' | 'known-number') {
@@ -355,8 +360,9 @@ describe('D-A4-1b-3 PR B: „Zapisz decyzję klienta” i „Przypomnij klientow
     expect(summarizeViolations([{ invariant: 'I5D' }, { invariant: 'I5D' }])).toEqual([
       { invariant: 'I5D', label: INVARIANT_LABELS.I5D, count: 2 },
     ]);
+    // PR C: I5D obejmuje też faktflow-original z oceną pliku (blokada NULL, oferta pair / record / released).
     expect(INVARIANT_LABELS.I5D).toBe(
-      'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number) — bez automatu i bez alarmu; e-mail idzie raz i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi”',
+      'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number, faktflow-original z oceną pliku) — bez automatu i bez alarmu; e-mail idzie raz i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi”',
     );
     const row = (invariant: string, invoiceId: string, detail: Record<string, unknown> = {}) => ({
       invariant, label: INVARIANT_LABELS[invariant] ?? invariant, invoiceId, tenantId: 't-1', tenantName: 'Firma Testowa',
@@ -468,10 +474,94 @@ describe('D-A4-1b-3 PR B: powody wyłączenia z prawdziwej polityki (duplicateDe
       expect(b.decide).toEqual({ enabled: false, reason: staleText });
     }
 
+    // PR C: ta sama fikstura (SystemInfo obcego programu — `allows` odmawia) nadal daje `reason`, ale z nowym tekstem 6.6.
     const other = await buttonsFor(decisionFacts({ check: validCheck({ reason: 'faktflow-original' }) }));
     expect(other.decide).toEqual({
       enabled: false,
-      reason: 'Powód faktflow-original: decyzji klienta w panelu jeszcze nie ma (faktflow-original — PR C; same-content-other-program — D-A4-1b-2; archive-conflict — runbook; download-*/storage-pending/archive-pending i known-number bez danych — „Tylko uzgodnij”; ownHistory — runbook).',
+      reason: 'Powód faktflow-original: decyzji klienta w panelu nie ma (same-content-other-program — D-A4-1b-2; archive-conflict — runbook; download-*/storage-pending/archive-pending i known-number bez danych — „Tylko uzgodnij”; ownHistory przy no-own-file albo known-number — runbook; faktflow-original bez SystemInfo FaktWay albo z niepełnymi danymi — runbook).',
     });
+  });
+});
+
+/**
+ * PR C: przycisk „Zapisz decyzję klienta” w widoku `review` (przegląd pliku z oznaczeniem FaktWay,
+ * I5R) zastępują dwa przyciski operatora (spec v3 6.6, kontrakt I5): „Zapisz fakturę z KSeF w FaktWay”
+ * (`recordButton`) — włączony tylko, gdy suchy przebieg strony mówi, że plik da się zapisać
+ * (`originalRecordable`), inaczej wyłączony z `notBuildable(detail)` — oraz „Oddaj decyzję klientowi”
+ * (`releaseButton`) — tylko przy `review-pair` (plik w historii dokumentu albo ta sama treść
+ * to plik z FaktWay: oddanie niedostępne, `reviewRecordOnly`). „Przypomnij klientowi” w przeglądzie
+ * nic nie da (`remindReview`). Przyciski liczone z prawdziwego widoku polityki.
+ */
+describe('PR C: przyciski przeglądu pliku (widok review) — zapis i oddanie', () => {
+  const pending = {
+    direction: 'outgoing', invoiceKind: 'regular', openSent: true, evidence: true, facts: STORED, environmentKnown: true,
+    status: 'failed', errorCode: 'KSEF_DUPLICATE_RECONCILE', now: NOW, duplicateNotice: null,
+  };
+  const reviewView = async (offer: 'review-pair' | 'review-record') => duplicateDecisionOptionsOf(faktflowFacts({
+    check: { importGate: faktflowReviewGate(['rates']), ...(offer === 'review-record' ? { ownHistory: true } : {}) },
+    sqlBlocker: 'provenance-review',
+  }));
+  const duplicateDecisionOptionsOf = async (facts: DuplicateFactsShape) => {
+    const { duplicateDecisionOptions } = await import('@/lib/ksef/duplicate-decision');
+    return duplicateDecisionOptions({ facts, actor: 'operator', canManage: false, environment: 'test', now: NOW });
+  };
+  const buttons = async (offer: 'review-pair' | 'review-record', originalRecordable?: { ok: true } | { ok: false; detail: string }) =>
+    operatorInvoiceButtons({ ...pending, duplicateDecision: await reviewView(offer), ...(originalRecordable ? { originalRecordable } : {}) });
+
+  it('widok polityki jest widokiem `review` z ofertą i `releasable` zgodnymi z oferta (podstawa dalszych asercji)', async () => {
+    expect(await reviewView('review-pair')).toMatchObject({ kind: 'review', offer: 'review-pair', releasable: true });
+    expect(await reviewView('review-record')).toMatchObject({ kind: 'review', offer: 'review-record', releasable: false });
+  });
+
+  it('review-pair, plik zapisywalny: oba przyciski włączone z etykietami 6.6; „Zapisz decyzję klienta” i „Przypomnij klientowi” wyłączone', async () => {
+    const b = await buttons('review-pair', { ok: true });
+
+    expect(b.record).toEqual({ enabled: true, reason: null, label: OPERATOR_DUPLICATE_MESSAGES.recordButton });
+    expect(b.release).toEqual({ enabled: true, reason: null, label: OPERATOR_DUPLICATE_MESSAGES.releaseButton });
+    expect(b.decide.enabled).toBe(false);
+    expect(b.remind).toEqual({ enabled: false, reason: OPERATOR_DUPLICATE_MESSAGES.remindReview });
+  });
+
+  it('review-pair, pliku nie da się zapisać: zapis wyłączony z notBuildable(powód), oddanie nadal dostępne (wyjście operatora)', async () => {
+    const b = await buttons('review-pair', { ok: false, detail: 'currency' });
+
+    expect(b.record).toEqual({ enabled: false, reason: OPERATOR_DUPLICATE_MESSAGES.notBuildable('currency'), label: OPERATOR_DUPLICATE_MESSAGES.recordButton });
+    expect(b.release).toEqual({ enabled: true, reason: null, label: OPERATOR_DUPLICATE_MESSAGES.releaseButton });
+  });
+
+  it('review-record, plik zapisywalny: zapis włączony, oddanie wyłączone z reviewRecordOnly (to plik z FaktWay)', async () => {
+    const b = await buttons('review-record', { ok: true });
+
+    expect(b.record).toEqual({ enabled: true, reason: null, label: OPERATOR_DUPLICATE_MESSAGES.recordButton });
+    expect(b.release).toEqual({ enabled: false, reason: OPERATOR_DUPLICATE_MESSAGES.reviewRecordOnly, label: OPERATOR_DUPLICATE_MESSAGES.releaseButton });
+    expect(b.remind.enabled).toBe(false);
+  });
+
+  it('review-record, pliku nie da się zapisać: oba przyciski wyłączone (runbook „Zapis oryginału odmówiony”, Bartosz)', async () => {
+    const b = await buttons('review-record', { ok: false, detail: 'seller' });
+
+    expect(b.record).toEqual({ enabled: false, reason: OPERATOR_DUPLICATE_MESSAGES.notBuildable('seller'), label: OPERATOR_DUPLICATE_MESSAGES.recordButton });
+    expect(b.release.enabled).toBe(false);
+  });
+
+  it('bez wyniku suchego przebiegu (strona go nie policzyła) zapis jest wyłączony — fail-closed, nigdy „zapisywalny z domysłu”', async () => {
+    const b = await buttons('review-pair');
+
+    expect(b.record.enabled).toBe(false);
+    expect(b.record.reason).toBeTruthy();
+    // Oddanie nie zależy od zapisywalności pliku.
+    expect(b.release.enabled).toBe(true);
+  });
+
+  it.each([
+    ['decidable (para)', () => faktflowFacts({ sqlBlocker: null })],
+    ['refused (recheck-needed: brak oceny pliku)', () => faktflowFacts({ check: { importGate: undefined }, sqlBlocker: 'recheck-needed' })],
+  ])('poza widokiem review (%s) zapis i oddanie są wyłączone bez powodu — nie dotyczą tej faktury', async (_label, facts) => {
+    const b = operatorInvoiceButtons({
+      ...pending, duplicateDecision: await duplicateDecisionOptionsOf(facts()), originalRecordable: { ok: true },
+    });
+
+    expect(b.record).toEqual({ enabled: false, reason: null, label: OPERATOR_DUPLICATE_MESSAGES.recordButton });
+    expect(b.release).toEqual({ enabled: false, reason: null, label: OPERATOR_DUPLICATE_MESSAGES.releaseButton });
   });
 });

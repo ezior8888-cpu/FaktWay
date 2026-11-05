@@ -19,6 +19,7 @@ import {
 import { downloadInvoiceXmlAction } from '@/components/invoices/actions-detail';
 import { deleteDraftInvoiceAction } from '@/components/invoices/draft-actions';
 import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
+import { MarkPaidButton } from '@/components/invoices/use-invoice-payment';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Dialog,
@@ -100,10 +101,12 @@ interface Props {
   facts: InvoiceListRowFacts | undefined;
   /** Tylko testy: menu otwarte od razu. */
   defaultMenuOpen?: boolean;
+  /** „Zapłacone” (`facts.canMarkPaid`): tylko gdy rola pozwala. */
+  onMarkPaid?: (invoice: InvoiceRow, facts: InvoiceListRowFacts | undefined) => void;
 }
 
-/** Kolumna „Akcje”: Podgląd, PDF i menu „⋯” (Finora: podgląd + RowActions). */
-export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: Props) {
+/** Kolumna „Akcje”: „Zapłacone”, Podgląd, PDF i menu „⋯” (Finora: podgląd + RowActions). */
+export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false, onMarkPaid }: Props) {
   const router = useRouter();
   const [pdfPending, startPdf] = useTransition();
   const [xmlPending, startXml] = useTransition();
@@ -139,7 +142,16 @@ export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: P
   };
 
   return (
-    <div className="flex items-center justify-center gap-1">
+    <div className="flex items-center justify-end gap-1">
+      {onMarkPaid && facts?.canMarkPaid ? (
+        // Bez ikony poniżej `2xl`: przy 1280 px obok menu bocznego tabela inaczej nie mieści się bez przewijania.
+        <MarkPaidButton
+          number={invoice.internal_number}
+          iconClassName="max-2xl:hidden"
+          className="max-2xl:px-2"
+          onClick={() => onMarkPaid(invoice, facts)}
+        />
+      ) : null}
       <Tooltip>
         <TooltipTrigger
           render={

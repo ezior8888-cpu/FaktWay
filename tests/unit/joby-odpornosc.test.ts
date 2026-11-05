@@ -27,7 +27,7 @@ vi.mock('pg-boss', () => ({
     on = vi.fn();
   },
 }));
-vi.mock('@/lib/jobs/config', () => ({ getJobsDatabaseUrl: () => 'postgres://fixture' }));
+vi.mock('@/lib/jobs/config', () => ({ getJobsDatabaseUrl: () => 'postgres://fixture', getJobsSchema: () => 'pgboss' }));
 vi.mock('@/lib/jobs/run-log', () => ({ recordJobRun: vi.fn(async () => undefined) }));
 vi.mock('@/lib/jobs/sentry', () => ({ reportExhaustedJob: vi.fn() }));
 

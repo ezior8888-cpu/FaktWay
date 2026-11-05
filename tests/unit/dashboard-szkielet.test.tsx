@@ -245,6 +245,17 @@ describe('Footer — stopka panelu', () => {
     // Pływający bąbelek pomocy (prawy dolny róg) nie może zasłaniać „Pomocy”.
     expect(html).toContain('lg:pr-[100px]');
   });
+
+  it('Regulamin, Polityka prywatności i Pomoc mają na telefonie cel dotykowy 44 px', () => {
+    const html = renderToStaticMarkup(<Footer />);
+    const targets = html.match(/<(?:a|button)\b[^>]*class="[^"]*"/g) ?? [];
+
+    expect(targets).toHaveLength(3);
+    for (const tag of targets) {
+      expect(tag).toContain('max-sm:min-h-[44px]');
+      expect(tag).toContain('max-sm:min-w-[44px]');
+    }
+  });
 });
 
 // Pasek górny i menu profilu (1:1 z Finory, 21.10.2026): tests/unit/finora-pasek-gorny.test.tsx.

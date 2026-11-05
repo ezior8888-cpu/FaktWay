@@ -16,6 +16,8 @@ const ctx = vi.hoisted(() => ({
   role: 'owner' as 'owner' | 'admin' | 'member' | 'accountant',
   tenant: {} as Record<string, unknown>,
   user: null as Record<string, unknown> | null,
+  /** Stan 2FA dla kreatora KSeF; `null` = Auth nie odpowiada (kreator pokazuje „spróbuj ponownie”). */
+  mfa: null as 'verified' | 'challenge_required' | null,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -37,6 +39,13 @@ function fakeSupabase() {
   };
 }
 
+// Pełny użytkownik (tożsamości, dostawcy logowania) — ten sam odczyt co w
+// `getPageContext`, z `cache()` na żądanie (sesja 9 planu skalowania).
+vi.mock('@/lib/dashboard-shell-data', async (original) => ({
+  ...(await original<typeof import('@/lib/dashboard-shell-data')>()),
+  getDashboardSessionUser: async () => ctx.user,
+}));
+
 vi.mock('@/lib/supabase/page-context', () => ({
   getPageContext: async () => ({
     supabase: fakeSupabase(),
@@ -46,11 +55,24 @@ vi.mock('@/lib/supabase/page-context', () => ({
   }),
 }));
 
+vi.mock('@/lib/auth/verified-mfa', () => ({
+  getVerifiedMfaState: async () => {
+    if (!ctx.mfa) throw new Error('mfa_session_unavailable');
+    return { status: ctx.mfa, user: { id: 'user-fixture' } };
+  },
+}));
+
 vi.mock('@/app/actions/cash-method', () => ({ updateCashMethodAction: vi.fn() }));
 vi.mock('@/app/actions/vat-exemption', () => ({ updateVatExemptionAction: vi.fn() }));
 vi.mock('@/app/actions/company-profile', () => ({ updateCompanyProfileAction: vi.fn() }));
 vi.mock('@/app/actions/business-start', () => ({ updateBusinessStartAction: vi.fn() }));
 vi.mock('@/components/settings/actions', () => ({ uploadCertificateAction: vi.fn() }));
+// Krok 1 kreatora KSeF osadza kartę 2FA z Bezpieczeństwa, a ta ciągnie akcje serwerowe.
+vi.mock('@/app/(dashboard)/settings/security/actions', () => ({
+  enrollTotpAction: vi.fn(),
+  unenrollTotpAction: vi.fn(),
+  verifyTotpEnrollmentAction: vi.fn(),
+}));
 vi.mock('@/components/onboarding/actions', () => ({ lookupNipAction: vi.fn() }));
 vi.mock('@/app/actions/organizations', () => ({
   completeCompanyNipAction: vi.fn(),
@@ -76,7 +98,9 @@ const { AuditLog } = await import('@/app/(dashboard)/settings/audit/_components/
 const { AccountantAccessList } = await import('@/components/settings/accountant-list');
 const { TeamManagement } = await import('@/components/team/team-management');
 const { EmailPreferences } = await import('@/app/(dashboard)/settings/notifications/_components/email-preferences');
+const { mfaStepUpHref } = await import('@/lib/auth/mfa-step-up');
 const { formatSettingsDate } = await import('@/components/settings/finora/format-date');
+const { RECONFIRM_CERTIFICATE_TEXT } = await import('@/app/(dashboard)/settings/ksef/_components/wizard-model');
 
 const hrefs = (role: Parameters<typeof settingsTabsForRole>[0]) => settingsTabsForRole(role).map((t) => t.href);
 
@@ -85,6 +109,7 @@ beforeEach(() => {
   ctx.role = 'owner';
   ctx.tenant = {};
   ctx.user = null;
+  ctx.mfa = null;
 });
 
 describe('zakładki ustawień liczone z roli (jak dawne settings/page.tsx)', () => {
@@ -200,11 +225,21 @@ describe('zakładka Firma (Finora General)', () => {
  * Import historii” z przyciskiem startu zastępuje „Historia faktur z KSeF”
  * (FaktWay pobiera historię sam) z linkiem „Zobacz postęp” do Importu danych.
  */
+/** Certyfikat zapisany i potwierdzony w środowisku aplikacji (vitest ustawia KSEF_ENV=test). */
+const POLACZONA_FIRMA = {
+  name: 'Firma',
+  nip: '1234567890',
+  has_ksef_credentials: true,
+  ksef_certificate_expiry: '2027-03-01T00:00:00Z',
+  ksef_verified_at: '2026-10-01T10:00:00Z',
+  ksef_verified_environment: 'test',
+};
+
 describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('połączenie z certyfikatem, historia faktur z KSeF i logowanie Google', async () => {
-    ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: true, ksef_certificate_expiry: '2027-03-01T00:00:00Z' };
+    ctx.tenant = { ...POLACZONA_FIRMA };
     ctx.user = { identities: [{ provider: 'google' }], app_metadata: { providers: ['email', 'google'] } };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Skonfigurowano połączenie');
     expect(html).toContain('Certyfikat ważny do: 01.03.2027');
     expect(html).toContain('Historia faktur z KSeF');
@@ -221,9 +256,9 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('bez certyfikatu: ostrzeżenie zamiast linku do postępu, Google niepołączony', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
     ctx.user = { identities: [{ provider: 'email' }], app_metadata: { providers: ['email'] } };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Brak certyfikatu');
-    expect(html).toContain('najpierw wgraj certyfikat');
+    expect(html).toContain('najpierw podłącz KSeF kreatorem');
     expect(html).toContain('Historia faktur z KSeF');
     expect(html).not.toContain('Zobacz postęp');
     expect(html).not.toContain('Magiczny');
@@ -232,7 +267,7 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
 
   it('firma bez NIP-u: uzupełnienie NIP zamiast certyfikatu', async () => {
     ctx.tenant = { name: 'Szkic', nip: '' };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Organizacja bez NIP-u');
     expect(html).toContain('id="complete-nip"');
     expect(html).not.toContain('Wgraj i zweryfikuj certyfikat');
@@ -241,9 +276,90 @@ describe('zakładka KSeF (Finora Connected Accounts)', () => {
   it('członek nie wgra certyfikatu', async () => {
     ctx.role = 'member';
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
-    const html = renderToStaticMarkup(await KsefSettingsPage());
+    const html = renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Certyfikat KSeF może zmienić wyłącznie właściciel organizacji.');
     expect(html).not.toContain('Wgraj i zweryfikuj certyfikat');
+  });
+});
+
+/**
+ * Recenzja #361, pkt 2: „Połączono z KSeF” tylko z dowodem w środowisku aplikacji
+ * (`hasConfiguredKsefProof`, ta sama reguła co Import danych i cron historii).
+ * Certyfikat z innego środowiska albo ze starym znacznikiem nie pobiera historii,
+ * a Import danych każe go wgrać ponownie, więc kreator nie może mówić inaczej.
+ */
+describe('zakładka KSeF: dowód połączenia', () => {
+  const render = async (search: { krok?: string } = {}) =>
+    renderToStaticMarkup(await KsefSettingsPage({ searchParams: Promise.resolve(search) }));
+
+  it('certyfikat potwierdzony w środowisku aplikacji: „Połączono z KSeF”', async () => {
+    ctx.tenant = { ...POLACZONA_FIRMA };
+    const html = await render();
+    expect(html).toContain('Połączono z KSeF');
+    expect(html).toContain('data-testid="ksef-step-polaczono"');
+    expect(html).toContain('Skonfigurowano połączenie');
+    expect(html).not.toContain(RECONFIRM_CERTIFICATE_TEXT);
+  });
+
+  it.each([
+    ['certyfikat z innego środowiska (TEST przełączony na produkcję)', { ksef_verified_environment: 'production' }],
+    ['stary znacznik bez środowiska', { ksef_verified_environment: null }],
+    ['brak znacznika potwierdzenia', { ksef_verified_at: null, ksef_verified_environment: null }],
+  ])('%s: bez „Połączono”, krok z plikami i jedno zdanie wyjaśnienia', async (_name, proof) => {
+    ctx.mfa = 'verified';
+    ctx.tenant = { ...POLACZONA_FIRMA, ...proof };
+    const html = await render();
+
+    expect(html).not.toContain('Połączono z KSeF');
+    expect(html).not.toContain('data-testid="ksef-step-polaczono"');
+    expect(html).not.toContain('Skonfigurowano połączenie');
+    expect(html).toContain('data-testid="ksef-step-pliki"');
+    expect(html).toContain(RECONFIRM_CERTIFICATE_TEXT);
+    expect(html).toContain('Wymaga potwierdzenia');
+    // Jak w Imporcie danych: nie ma czego oglądać, dopóki certyfikat nie zostanie potwierdzony.
+    expect(html).not.toContain('Zobacz postęp');
+    expect(html).toContain('najpierw podłącz KSeF kreatorem');
+    expect(html).not.toMatch(/[—–]/);
+  });
+
+  it('bez kodu z aplikacji warunki (krok 1) idą przed wgrywaniem, także dla takiej firmy', async () => {
+    ctx.mfa = 'challenge_required';
+    ctx.tenant = { ...POLACZONA_FIRMA, ksef_verified_environment: 'production' };
+    const html = await render();
+
+    expect(html).toContain('data-testid="ksef-step-warunki"');
+    expect(html).not.toContain('Połączono z KSeF');
+  });
+
+  it('sesja po biometrii: "Potwierdź kodem z aplikacji" prowadzi na ekran kodu z wyjaśnieniem i powrotem do kreatora', async () => {
+    ctx.mfa = 'challenge_required';
+    ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
+    const html = await render();
+
+    const href = mfaStepUpHref('/settings/ksef');
+    expect(href).toContain('potwierdzenie=1');
+    expect(html).toContain(`href="${href.replaceAll('&', '&amp;')}"`);
+    expect(html).not.toContain('href="/login/two-factor?redirect=/settings/ksef"');
+    expect(html).toContain('Potwierdź kodem z aplikacji');
+  });
+
+  it('klient może wrócić po nowy certyfikat (?krok=certyfikat) także bez dowodu', async () => {
+    ctx.mfa = 'verified';
+    ctx.tenant = { ...POLACZONA_FIRMA, ksef_verified_environment: 'production' };
+    const html = await render({ krok: 'certyfikat' });
+
+    expect(html).toContain('data-testid="ksef-step-certyfikat"');
+    expect(html).not.toContain('Połączono z KSeF');
+  });
+
+  it('firma bez poświadczeń nie dostaje zdania o ponownym potwierdzeniu', async () => {
+    ctx.mfa = 'verified';
+    ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
+    const html = await render({ krok: 'pliki' });
+
+    expect(html).toContain('data-testid="ksef-step-pliki"');
+    expect(html).not.toContain(RECONFIRM_CERTIFICATE_TEXT);
+    expect(html).toContain('Brak certyfikatu');
   });
 });
 
@@ -295,7 +411,10 @@ describe('przeniesione ekrany bez wyglądu prototypu (plan §9 pkt 5)', () => {
     'components/settings/accountant-list.tsx',
     'components/settings/business-start-form.tsx',
     'components/settings/cash-method-form.tsx',
-    'components/settings/certificate-upload.tsx',
+    'app/(dashboard)/settings/ksef/_components/certificate-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/conditions-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/connected-step.tsx',
+    'app/(dashboard)/settings/ksef/_components/files-step.tsx',
     'components/settings/company-deletion.tsx',
     'components/settings/company-profile-form.tsx',
     'components/settings/complete-nip-form.tsx',

@@ -1,6 +1,6 @@
 ---
 title: 'Przenosiny z Fakturowni bez utraty danych'
-description: 'Eksport, import i kontrola numeracji. Krok po kroku, w kilka minut.'
+description: 'Certyfikat, plik z eksportem i kontrola numeracji. Krok po kroku.'
 date: '2026-05-06'
 readTime: 5
 tags:
@@ -9,45 +9,45 @@ tags:
   - Fakturownia
 ---
 
-Ten guide zakłada, że masz już konto w KSeF MF oraz dostęp do eksportu z Fakturownia (CSV / JPK / ZIP — zależnie od tego, co generuje Twój plan). **Pięć minut** to realny czas na **techniczne podpięcie importu**, o ile masz pod ręką pliki; reszta to już jakość danych po stronie źródła, a nie magia przycisku.
+Ten poradnik zakłada, że masz już dostęp do KSeF oraz eksport faktur z Fakturowni w pliku CSV. Faktury, które są w KSeF, FaktWay pobierze sam, a plikiem przenosisz te sprzed KSeF.
 
-## Minuta 0–1: checklista przed importem
+## Krok 1: lista przed przeprowadzką
 
-- NIP firmy i środowisko KSeF (test vs produkcja).
-- Plik eksportu kontrahentów + faktur z Fakturownia (najnowszy eksport, nie starszy niż tydzień).
-- Uprawnienia: kto zatwierdza pierwszą wysyłkę testową do KSeF po migracji.
+- NIP firmy i certyfikat KSeF.
+- Plik eksportu faktur z Fakturowni (najnowszy eksport, nie starszy niż tydzień).
+- Kto w firmie zatwierdza pierwszą wysyłkę do KSeF po przeprowadzce.
 
-## Minuta 1–2: Magiczny Import — KSeF jako źródło prawdy
+## Krok 2: historia z KSeF pobiera się sama
 
-W panelu onboardingu wybierasz **Magiczny Import**. System najpierw pobiera historię dokumentów **bezpośrednio z KSeF** (zakres czasu ustalasz w kreatorze). To rozwiązuje największy ból migracji: **nie musisz wierzyć na ślepo CSV**, bo numery referencyjne i statusy wysyłki są porównywane z tym, co faktycznie widzi MF.
+Po wgraniu certyfikatu KSeF (Ustawienia → KSeF) FaktWay **sam pobiera historię sprzedaży i zakupów**. Nic nie musisz uruchamiać, a postęp widzisz w menu **Import danych**, w karcie „Historia z KSeF”. To rozwiązuje największy ból przeprowadzki: faktury z KSeF masz bezpośrednio ze źródła, a nie z pliku.
 
-## Minuta 2–4: import pliku z Fakturownia
+## Krok 3: plik z Fakturowni
 
-W drugim kroku wgrywasz **CSV / eksport JPK** z Fakturownia. Kreator mapuje pola (kontrahent, numery faktur, kwoty VAT). Jeśli któryś wiersz ma konflikt (np. podwójny numer wewnętrzny), zobaczysz go na liście do ręcznej decyzji — zamiast cichego pominięcia połowy pliku.
+W menu **Import danych**, w sekcji „Przeprowadzka z innego programu”, wybierasz Fakturownię i wgrywasz plik CSV (do 10 MB). Kontrahenci i produkty z pliku dodają się sami. Faktury przeniesione z pliku nie są wysyłane do KSeF. Postęp i wynik zobaczysz na ekranie importu.
 
-> **Wskazówka:** po imporcie zrób zrzut ekranu z podsumowaniem (zaimportowano / pominięto / do weryfikacji) i zachowaj go w dokumentacji — przyda się przy audycie.
+> **Wskazówka:** po imporcie zrób zrzut ekranu z podsumowaniem i zachowaj go w dokumentacji, przyda się przy audycie.
 
-## Minuta 4–5: weryfikacja próbki
+## Krok 4: sprawdzenie próbki
 
-Zaznacz **10 losowych faktur sprzedaży i 10 kosztów**: porównaj kwoty brutto / VAT z PDF-ami z maila. Jeśli się zgadza — możesz przełączyć się na wystawianie nowych dokumentów już tylko z FaktWay. Jeśli nie — najczęściej winny jest **zły separator w CSV** albo ręczne korekty w starym systemie — wróć do eksportu i powtórz import (idempotentnie, bez duplikatów dzięki kluczom z KSeF).
+Wybierz **10 losowych faktur sprzedaży i 10 kosztów**: porównaj kwoty brutto i VAT z PDF-ami z maila. Jeśli się zgadza, możesz przełączyć się na wystawianie nowych dokumentów już tylko z FaktWay. Jeśli nie, najczęściej winny jest **zły separator w CSV** albo ręczne korekty w starym systemie.
 
 ## Po imporcie: co jeszcze warto zrobić tego samego dnia
 
-1. **Wyślij jedną fakturę testową** do KSeF na kwotę symboliczną lub do swojej drugiej działalności — sprawdź pełną ścieżkę UPO.
-2. **Poinformuj księgową** o zmianie narzędzia i sposobie eksportu JPK_FA / KPiR (w FaktWay: jeden klik do pakietu).
-3. **Wyłącz duplikaty** w starym programie — żeby przez tydzień nie wystawiać dokumentów „w dwóch miejscach”.
+1. **Wystaw pierwszą fakturę z FaktWay** i sprawdź pełną ścieżkę do UPO.
+2. **Poinformuj księgową** o zmianie narzędzia i sposobie eksportu JPK_FA oraz KPiR.
+3. **Przestań wystawiać w starym programie**, żeby przez tydzień nie mieć dokumentów „w dwóch miejscach”.
 
 ## Najczęstsze pytania
 
-**Czy przeniosę załączniki PDF?**  
-Zależy od tego, co zawierał eksport; KSeF przechowuje strukturę FA — pliki lokalne dobierz wg potrzeb retencji.
+**Czy przeniosę załączniki PDF?**
+Zależy od tego, co zawierał eksport. KSeF przechowuje strukturę faktury, a pliki lokalne dobierz wg potrzeb retencji.
 
-**Czy muszę zamykać konto w Fakturowni?**  
-Nie od razu — sensowny jest **równoległy okres** (np. 30 dni), żeby móc porównać raporty.
+**Czy muszę zamykać konto w Fakturowni?**
+Nie od razu. Sensowny jest **równoległy okres** (np. 30 dni), żeby móc porównać raporty.
 
-**Co z numeracją faktur?**  
-Ustal z księgową ciągłość numeracji lub datę „cięcia” — systemy różnie to obsługują; ważne, żeby nie dublować numerów w tym samym NIP.
+**Co z numeracją faktur?**
+Ustal z księgową ciągłość numeracji lub datę „cięcia”. Systemy różnie to obsługują, a ważne jest, żeby nie dublować numerów w tym samym NIP.
 
 ## Podsumowanie
 
-Migracja w 5 minut to **efekt dobrego przygotowania plików**, nie obietnica bez pracy przy starych danych. Jeśli eksport jest czysty, FaktWay robi resztę: import z KSeF + import z Fakturownia + walidacja przed pierwszą produkcyjną wysyłką. Dalsze kroki — już tylko praca na żywym KSeF.
+Szybka przeprowadzka to **efekt dobrego przygotowania plików**, nie obietnica bez pracy przy starych danych. Jeśli eksport jest czysty, FaktWay robi resztę: pobiera historię z KSeF, wczytuje plik z Fakturowni i waliduje każdą nową fakturę przed wysyłką.
