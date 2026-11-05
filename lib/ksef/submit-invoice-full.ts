@@ -12,7 +12,7 @@ import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { assertSpecialIssueDateToday } from '@/lib/ksef/special-issue-date';
 import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
-import { invoiceXmlExistsForId, uploadInvoiceXml } from '@/lib/storage/r2';
+import { uploadInvoiceXml } from '@/lib/storage/r2';
 
 import {
   requireKsefVerificationForBackgroundJob,
@@ -117,31 +117,19 @@ export async function submitInvoiceFullFlow(
   //    - sukces KSeF → mamy archive z SHA-256 integrity check
   //    - odrzucenie KSeF → też mamy historię próby (audit / retry)
   //
-  //    Idempotency dwuwarstwowa, oparta o deterministyczny generator FA(3):
-  //      a) HEAD przed PUT — przy retry wykrywamy istnienie obiektu i wyłączamy
-  //         `IfNoneMatch: '*'`, żeby drugi PUT nie wracał `PreconditionFailed`
-  //         w środku flow (a wtedy `submit-to-ksef` retryowałby w nieskończoność).
-  //      b) `IfNoneMatch: '*'` na pierwszym wgraniu — gwarantuje, że dwa
-  //         równoczesne calle z różnych instancji nie nadpiszą się nawzajem.
-  //      c) Obsługa `PreconditionFailed` w `r2.uploadXmlDocument` — gdyby a) i b)
-  //         zawiodły jednocześnie (np. klient_już-uploadował, my retryujemy
-  //         z `immutable=true`), traktujemy to jako sukces idempotentny.
+  //    Każdy zapis idzie z `IfNoneMatch: '*'`, także przy ponowieniu: plik, który
+  //    mógł pójść do KSeF, nigdy nie jest nadpisywany (D5, C-12). Ponowienie tej
+  //    samej próby zastaje 412 i `r2.uploadXmlDocument` porównuje bajty: te same
+  //    idą dalej, inne dają `XmlArchiveConflictError` PRZED otwarciem sesji KSeF.
   const attemptId = sendAttemptId ?? null;
   // Data w `P_1` dokumentu specjalnego (z jego danych, jak generator); zwykła faktura — bez sprawdzenia (B1/B2).
   const specialIssueDate = correctionData?.issueDate ?? advanceData?.issueDate ?? finalPayload?.finalData.issueDate;
-  const alreadyUploaded = await invoiceXmlExistsForId(
-    tenantId,
-    invoiceId,
-    invoice.issueDate,
-    attemptId,
-  );
-
   const uploadResult = await uploadInvoiceXml(
     tenantId,
     invoiceId,
     invoice.issueDate,
     xml,
-    { immutable: !alreadyUploaded, attemptId },
+    { attemptId },
   );
 
   // 4. Wysyłka do KSeF (rate-limited, z enkrypcją i auto-close sesji).

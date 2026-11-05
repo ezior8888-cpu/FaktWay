@@ -20,7 +20,6 @@ const ATTEMPT_KEY = `${T}/2026/10/${ID}/${ATTEMPT}.xml`;
 
 const m = vi.hoisted(() => ({
   upload: vi.fn(),
-  exists: vi.fn(),
   submit: vi.fn(),
   recordSent: vi.fn(),
   findOpen: vi.fn(),
@@ -36,7 +35,6 @@ vi.mock('@/lib/storage/r2-client', () => ({ getR2Config: () => ({ bucketName: 'b
 vi.mock('@/lib/storage/r2', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/storage/r2')>(),
   uploadInvoiceXml: m.upload,
-  invoiceXmlExistsForId: m.exists,
   listInvoiceAttemptXmls: m.listAttempts,
 }));
 vi.mock('@/lib/auth/ksef-verification-guard', () => ({
@@ -122,7 +120,7 @@ const ctx: JobContext = {
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   step: { run: async (_n, fn) => fn(), sleep: vi.fn(), sendEvent: vi.fn(), scheduleAfter: vi.fn() },
 };
-// Pełna faktura: runner przechodzi PRAWDZIWY przepływ (generator FA(3), HEAD, PUT),
+// Pełna faktura: runner przechodzi PRAWDZIWY przepływ (generator FA(3), PUT),
 // zamockowane są tylko granice — magazyn, walidator XSD, KSeF, baza.
 const event = (sendAttemptId?: string) => ({
   invoiceId: ID, tenantId: T, nip: '1234567890', environment: 'test' as const,
@@ -133,7 +131,6 @@ const event = (sendAttemptId?: string) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
-  m.exists.mockResolvedValue(false);
   m.upload.mockImplementation(async (_t: string, _i: string, _d: string, _xml: string, o?: { attemptId?: string | null }) => ({
     storagePath: invoiceXmlKeyFor({ tenantId: T, invoiceId: ID, issueDate: '2026-10-01', attemptId: o?.attemptId }),
     sha256Hash: 'h'.repeat(64), sizeBytes: 10, etag: '"e"',
@@ -162,26 +159,28 @@ describe('klucze XML', () => {
 });
 
 describe('submitInvoiceFullFlow (D5)', () => {
-  it('z sendAttemptId: HEAD i PUT pod kluczem próby, wpis sent zna ten plik', async () => {
+  it('z sendAttemptId: zapis pod kluczem próby, wpis sent zna ten plik', async () => {
     const result = await submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test', null, null, null, ATTEMPT);
 
-    expect(m.exists).toHaveBeenCalledWith(T, ID, '2026-10-01', ATTEMPT);
-    expect(m.upload.mock.calls[0]![4]).toMatchObject({ attemptId: ATTEMPT, immutable: true });
+    expect(m.upload.mock.calls[0]![4]).toEqual({ attemptId: ATTEMPT });
     expect(result.xmlStoragePath).toBe(ATTEMPT_KEY);
     expect(m.recordSent).toHaveBeenCalledWith(expect.objectContaining({ xmlStoragePath: ATTEMPT_KEY }));
   });
 
   it('bez sendAttemptId (stare zdarzenie): klucz historyczny per faktura', async () => {
     const result = await submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test');
-    expect(m.exists).toHaveBeenCalledWith(T, ID, '2026-10-01', null);
+    expect(m.upload.mock.calls[0]![4]).toEqual({ attemptId: null });
     expect(result.xmlStoragePath).toBe(LEGACY_KEY);
     expect(m.recordSent).toHaveBeenCalledWith(expect.objectContaining({ xmlStoragePath: LEGACY_KEY }));
   });
 
-  it('ponowienie tej samej próby: HEAD widzi plik → PUT bez IfNoneMatch, ten sam klucz', async () => {
-    m.exists.mockResolvedValue(true);
+  // C-12: dawniej HEAD wyłączał ochronę i ponowienie nadpisywało plik. Bajty po
+  // 412 porównuje `r2.ts` (`xml-storage-immutability`, `xml-submit-archive-integrity`).
+  it('ponowienie tej samej próby: ten sam klucz i ten sam zapis, bez wyłączania ochrony', async () => {
     await submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test', null, null, null, ATTEMPT);
-    expect(m.upload.mock.calls[0]![4]).toMatchObject({ attemptId: ATTEMPT, immutable: false });
+    await submitInvoiceFullFlow(T, ID, faktura(), {} as KsefAuth, 'test', null, null, null, ATTEMPT);
+
+    expect(m.upload.mock.calls.map((c) => c[4])).toEqual([{ attemptId: ATTEMPT }, { attemptId: ATTEMPT }]);
   });
 });
 

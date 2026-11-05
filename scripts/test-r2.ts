@@ -161,30 +161,25 @@ async function main() {
         `(łącznie ${listing.documents.length} w ${year}-${month})`,
     );
 
-    // ─── immutability (IfNoneMatch=*) ───────────────────────────
+    // ─── niezmienność (IfNoneMatch=*, C-12) ─────────────────────
+    // Ten test sprawdza to, czego atrapy nie potwierdzą: warunkowy PUT na
+    // prawdziwym magazynie (produkcyjny MinIO, 412 na zajętym kluczu).
+    const retried = await uploadInvoiceXml(tenantId, invoiceId, issueDate, invoiceXml);
+    if (retried.storagePath !== invoicePath) {
+      fail('ponowienie z tymi samymi bajtami powinno trafić w ten sam klucz');
+    }
+    ok('ponowienie z tymi samymi bajtami: sukces po porównaniu pliku');
+
     try {
-      await uploadInvoiceXml(tenantId, invoiceId, issueDate, invoiceXml);
-      fail('drugi upload na ten sam klucz powinien rzucić PreconditionFailed');
+      await uploadInvoiceXml(tenantId, invoiceId, issueDate, `${invoiceXml}<!-- inny -->`);
+      fail('inne bajty pod tym samym kluczem powinny rzucić XmlArchiveConflictError');
     } catch (err) {
       const name = (err as { name?: string }).name;
-      if (name !== 'PreconditionFailed') {
-        fail(`oczekiwałem PreconditionFailed, dostałem: ${name ?? err}`);
+      if (name !== 'XmlArchiveConflictError') {
+        fail(`oczekiwałem XmlArchiveConflictError, dostałem: ${name ?? err}`);
       }
-      ok('drugi upload zablokowany przez IfNoneMatch=* (immutability)');
+      ok('inne bajty pod tym samym kluczem: konflikt, plik bez zmian');
     }
-
-    // ─── override (immutable=false) działa ──────────────────────
-    const overridden = await uploadInvoiceXml(
-      tenantId,
-      invoiceId,
-      issueDate,
-      invoiceXml,
-      { immutable: false },
-    );
-    if (overridden.storagePath !== invoicePath) {
-      fail('immutable=false powinno nadpisać ten sam klucz');
-    }
-    ok('uploadInvoiceXml({ immutable: false }): nadpisanie działa (retry-path)');
   } finally {
     // ─── cleanup ────────────────────────────────────────────────
     try {
