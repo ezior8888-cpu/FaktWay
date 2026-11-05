@@ -27,11 +27,19 @@ const eslintConfig = defineConfig([
     // (callback-refs w `nip-validated-input.tsx`, `Date.now()` w
     // defaultach formularzy). Refaktor tych wzorców jest świadomie
     // odłożony do osobnej iteracji — lint pokazuje je w PR-ze, więc nie
-    // znikają z radaru.
+    // znikają z radaru. Próg w `package.json` (`lint --max-warnings`) to
+    // liczba ostrzeżeń, które zostały: nowe zatrzymują CI. Przy naprawie
+    // zmniejsz próg, nigdy go nie podnoś.
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/refs": "warn",
       "react-hooks/purity": "warn",
+      // Argument z „_” na początku jest celowo nieużywany (np. podpis
+      // funkcji wspólny z innymi implementacjami): ostrzeżenie byłoby szumem.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
     },
   },
   {
