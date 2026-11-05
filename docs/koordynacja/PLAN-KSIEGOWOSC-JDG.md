@@ -74,15 +74,15 @@ Przygotowanie: 4.11.2026, odczyt kodu `origin/main` @ `7a249d3f` (po #368) i prz
 
 | # | Decyzja | Stan |
 |---|---|---|
-| D1 | Zakres v1 jak w sekcji 1 | do potwierdzenia |
-| D2 | Kolejność: parametry, profil, ewidencja ryczałtu, silniki ryczałtu, terminy, VAT z wysyłką, skala i liniowy, pilot | do potwierdzenia |
+| D1 | Zakres v1 jak w sekcji 1 | zapadła: Bartosz potwierdził bez zmian 5.11.2026 (K0) |
+| D2 | Kolejność: parametry, profil, ewidencja ryczałtu, silniki ryczałtu, terminy, VAT z wysyłką, skala i liniowy, pilot | zapadła: Bartosz potwierdził bez zmian 5.11.2026 (K0) |
 | D3 | Profil podatkowy w nowej tabeli `tax_profiles` z historią (`valid_from`). Nie w `flo_prefs.tax_profile`, bo nic go nie zapisuje, i nie w kolejnych kolumnach `tenants`. Status VAT zostaje w `tenants.vat_exemption_basis`, bo używa go KSeF | zapadła |
 | D4 | Stawka ryczałtu na pozycji faktury w `invoice_line_items.ryczalt_rate`. Kolumna istnieje od 00001 i jest nieużywana. Domyślna stawka pochodzi z profilu albo produktu. **Stawkę wybiera klient, program jej nie dobiera** (opis i odnośnik do podatki.gov.pl) | zapadła |
 | D5 | Ewidencja i KPiR liczone na żywo z faktur i kosztów (jak dziś `lib/reports/kpir-data.ts`), do tego nowa tabela wpisów ręcznych. `kpir_entries` zostaje nietknięta; DROP tylko za zgodą Bartosza | zapadła |
 | D6 | Rozliczenie miesiąca to migawka w `tax_settlements`. Szkic liczy się od nowa, zatwierdzone jest niezmienne. Zmiana danych po zatwierdzeniu tworzy nową wersję i komunikat dla klienta | zapadła |
 | D7 | Parametry tylko z `lib/ksiegowosc/parametry/`: rok po roku, źródło i data przy każdej liczbie, flaga „sprawdziła księgowa” dla każdej sekcji. Atrapy z `lib/flo/tax-params.ts` (ZUS 400/700/1600) usuwamy. Brak sprawdzonych parametrów oznacza brak kwoty i komunikat z wyjściem | zapadła |
 | D8 | Bez porad. Liczymy z danych klienta, nie zalecamy formy ani stawki i nie piszemy w trybie rozkazującym („Według Twoich danych wychodzi 1 234 zł, termin 20 marca”). Model językowy nie liczy i nie objaśnia przepisów (`lib/flo/tax-topic.ts`) | zapadła |
-| D9 | Wysyłka JPK_V7M przez API MF. Klient wpisuje dane autoryzujące przy każdej wysyłce i nie zapisujemy ich. Najpierw próba na środowisku testowym i opinia prawnika. Do tego czasu plik do pobrania | do potwierdzenia |
+| D9 | Wysyłka JPK_V7M przez API MF. Klient wpisuje dane autoryzujące przy każdej wysyłce i nie zapisujemy ich. Najpierw próba na środowisku testowym i opinia prawnika. Do tego czasu plik do pobrania | zapadła: Bartosz potwierdził bez zmian 5.11.2026 (K0) |
 | D10 | Wyłączniki: globalny `killKsiegowosc` w `global_feature_flags`, blokada w kodzie dla każdej sekcji, włączenie dla konkretnej firmy (pilot). Wzór warstw z `lib/flo/kind-switch.ts`, ale osobny moduł | zapadła |
 | D11 | Klientom włączamy dopiero po bramie z sekcji 11: spółka, prawnik, OC, księgowa, pilot | zapadła |
 | D12 | Kwoty w silnikach w groszach jako liczby całkowite; zaokrąglenia według sekcji 4 | zapadła |
@@ -394,6 +394,6 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 | Data | Krok | PR | Stan | Wdrożone (SHA) | Uwagi |
 |---|---|---|---|---|---|
 | 4.11.2026 | plan | — | gotowy | — | rozpoznanie kodu (`7a249d3f`) i przepisów; plan poza gitem |
-| 5.11.2026 | K0 | #375 | gotowy, PR otwarty | — | plan w repo i fraza w `AGENTS.md`; `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`; arkusz `docs/ksiegowosc/ZLOTE-PRZYPADKI.md` i pusty `tests/fixtures/ksiegowosc/zlote/szablon.json` (bez kwot); D1, D2 i D9 czekają na odpowiedź Bartosza; 00164 zajmuje szkic #369 |
+| 5.11.2026 | K0 | #375 | gotowy, PR otwarty | — | plan w repo i fraza w `AGENTS.md`; `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`; arkusz `docs/ksiegowosc/ZLOTE-PRZYPADKI.md` i pusty `tests/fixtures/ksiegowosc/zlote/szablon.json` (bez kwot); D1, D2 i D9 Bartosz potwierdził bez zmian; 00164 zajmuje szkic #369 |
 
 **Następny krok:** K1, parametry i kalendarz (sekcja 12): `lib/ksiegowosc/parametry/{index,2026,2027}.ts` ze źródłami, kalendarz i `taxDeadline` przeniesione z `lib/flo/tax-params.ts` (FLO importuje z nowego modułu), atrapy ZUS usunięte, limit VAT dla pulpitu z nowego modułu, `mikrorachunek.ts`, wyłącznik `ksiegowosc` (globalny i dla firmy). Gałąź `claude/ksiegowosc-k1-parametry` od świeżego `origin/main`, po scaleniu #375. Numer migracji dla flagi (jeśli będzie potrzebna) z rejestru po sprawdzeniu otwartych PR: 00164 zajmuje szkic #369. Odpowiedzi prawnika i księgowej nie blokują K1.
