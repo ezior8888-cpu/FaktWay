@@ -149,13 +149,18 @@ function toKsefCode(value: unknown): number | null {
 
 /**
  * Czy odpowiedź jest JSON-em: `application/json` albo typ z przyrostkiem
- * `+json` — KSeF zwraca błędy także jako `application/problem+json`
- * (RFC 9457), a sprawdzanie samego `application/json` zostawiało je tekstem
- * i kod błędu (np. 21184) był nie do odczytania.
+ * `+json`. KSeF zwraca błędy także jako `application/problem+json` (RFC 9457),
+ * a stary warunek `includes('application/json')` zostawiał je tekstem: kody
+ * z tekstu czyta od D-A4-1a `ksefErrorCodes`, ale getter `ksefCode` dawał
+ * `null`, a `KsefApiError.body` nie miało struktury.
+ *
+ * Warunek obejmuje wszystko, co parsował stary (także dwa nagłówki sklejone
+ * przez `Headers.get` w `application/json, application/json`), więc żadna
+ * odpowiedź 2xx nie zamienia się w tekst. Nieudany `JSON.parse` zostawia tekst.
  */
 function isJsonContentType(contentType: string | null): boolean {
-  const mediaType = contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
-  return mediaType === 'application/json' || /^application\/[^/]+\+json$/.test(mediaType);
+  const value = contentType?.toLowerCase() ?? '';
+  return value.includes('application/json') || /^\s*application\/[^/;,\s]+\+json\b/.test(value);
 }
 
 /**

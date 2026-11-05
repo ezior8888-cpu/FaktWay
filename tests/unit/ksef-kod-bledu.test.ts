@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * getter dawał zawsze `null` (do Sentry z joba wysyłki szło `ksefCode: null`).
  *
  * Przy okazji: `ksefFetch` parsował JSON tylko dla `application/json`, więc
- * odpowiedź `application/problem+json` zostawała tekstem i żaden odczyt kodu
- * jej nie widział — także obsługa 21184 „Sesja tymczasowo niedostępna”
- * (F-050), której test podmienia `ksefFetch` i tego nie łapał.
+ * odpowiedź `application/problem+json` zostawała tekstem. Kody z tekstu czyta
+ * od D-A4-1a `ksefErrorCodes` (dlatego 21184 z F-050 działało), ale getter
+ * dawał dla tekstu `null`, a `KsefApiError.body` nie miało struktury.
  */
 
 vi.mock('@/lib/ksef/session-cache', () => ({
@@ -39,8 +39,8 @@ const PROBLEM_21184 = {
 /**
  * Odpowiedzi spoza schematu MF. Parser daje wtedy „brak kodu”, nigdy wyjątku:
  * `submit-invoice.ts` czyta `error.ksefCode` tuż przed `NonRetriableError`,
- * a `submit.ts` woła parser przy każdym błędzie wysyłki, więc TypeError
- * zamieniłby ostateczną odmowę w ponawianie.
+ * a `submit.ts` woła parser przy każdym HTTP 400 na wysyłkę pliku, więc
+ * TypeError zamieniłby ostateczną odmowę w ponawianie.
  */
 const MALFORMED: Array<[string, unknown]> = [
   ['errors jako obiekt pól', { errors: { pole: ['x'] } }],
@@ -87,6 +87,19 @@ const NOT_A_CODE: Array<[string, unknown]> = [
   ['poza bezpiecznym zakresem liczb', 1e30],
 ];
 
+/** Kształty MF i atrap → wszystkie kody w kolejności (getter daje pierwszy). */
+const SHAPES: Array<[string, unknown, number[]]> = [
+  ['problem+json', { title: 'Bad Request', status: 400, errors: [{ code: 21405, description: 'Błąd walidacji.' }] }, [21405]],
+  ['exception.exceptionDetailList', { exception: { serviceCode: 'x', exceptionDetailList: [{ exceptionCode: 21184, exceptionDescription: 'Sesja tymczasowo niedostępna.' }] } }, [21184]],
+  ['atrapa: lista na wierzchu', { exceptionDetailList: [{ exceptionCode: 21001, exceptionDescription: 'Service temporarily unavailable' }] }, [21001]],
+  ['kod jako tekst', { errors: [{ code: '21405' }] }, [21405]],
+  ['tekst zamiast JSON', 'Bad Gateway', []],
+  ['JSON w tekście (D-A4-1a)', JSON.stringify({ errors: [{ code: 440 }] }), [440]],
+  ['JSON w tekście: starszy kształt', JSON.stringify({ exception: { exceptionDetailList: [{ exceptionCode: 21164 }] } }), [21164]],
+  ['JSON bez kodów', { title: 'Bad Request', status: 400 }, []],
+  ['trzy kształty naraz', { errors: [{ code: 21405 }], exception: { exceptionDetailList: [{ exceptionCode: 21184 }] }, exceptionDetailList: [{ exceptionCode: 21001 }] }, [21405, 21184, 21001]],
+];
+
 const everyShape = (value: unknown) => [
   { errors: [{ code: value }] },
   { exception: { exceptionDetailList: [{ exceptionCode: value }] } },
@@ -103,6 +116,10 @@ describe('odczyt kodu z danych spoza schematu MF', () => {
     ['ksefErrorCodes', ksefErrorCodes],
     ['historyKsefErrorCodes (kopia)', historyKsefErrorCodes],
   ])('%s', (_name, parse) => {
+    it.each(SHAPES)('kształt: %s', (_label, body, codes) => {
+      expect(parse(body)).toEqual(codes);
+    });
+
     it.each(MALFORMED)('%s — pusta lista, bez wyjątku', (_label, body) => {
       expect(parse(body)).toEqual([]);
     });
@@ -150,17 +167,9 @@ describe('historia KSeF: błąd spoza schematu nie wywraca klasyfikacji', () => 
 });
 
 describe('KsefApiError.ksefCode (F-093)', () => {
-  it.each([
-    ['problem+json', { title: 'Bad Request', status: 400, errors: [{ code: 21405, description: 'Błąd walidacji.' }] }, 21405],
-    ['exception.exceptionDetailList', { exception: { serviceCode: 'x', exceptionDetailList: [{ exceptionCode: 21184, exceptionDescription: 'Sesja tymczasowo niedostępna.' }] } }, 21184],
-    ['atrapa: lista na wierzchu', { exceptionDetailList: [{ exceptionCode: 21001, exceptionDescription: 'Service temporarily unavailable' }] }, 21001],
-    ['kod jako tekst', { errors: [{ code: '21405' }] }, 21405],
-    ['tekst zamiast JSON', 'Bad Gateway', null],
-    ['JSON w tekście (D-A4-1a)', JSON.stringify({ errors: [{ code: 440 }] }), 440],
-    ['JSON bez kodów', { title: 'Bad Request', status: 400 }, null],
-  ])('%s → %s', (_label, body, code) => {
+  it.each(SHAPES)('%s → pierwszy kod albo null', (_label, body, codes) => {
     const err = new KsefApiError(400, body as never, 'KSeF API POST /x failed: 400');
-    expect(err.ksefCode).toBe(code);
+    expect(err.ksefCode).toBe(codes[0] ?? null);
   });
 
   it('kilka kodów — getter daje pierwszy, ksefErrorCodes wszystkie', () => {
@@ -179,6 +188,9 @@ describe('ksefFetch: odpowiedź application/problem+json', () => {
     'application/problem+json',
     'application/problem+json; charset=utf-8',
     'Application/JSON; charset=utf-8',
+    // Dwa nagłówki sklejone przez `Headers.get` — stary warunek `includes` je parsował.
+    'application/json, application/json',
+    'application/problem+json, application/problem+json',
   ])('%s — ciało błędu sparsowane, kod do odczytu', async (contentType) => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(PROBLEM_21184), {
       status: 400,
@@ -206,6 +218,17 @@ describe('ksefFetch: odpowiedź application/problem+json', () => {
     expect((err as KsefApiError).ksefCode).toBe(21184);
   });
 
+  it('odpowiedź 2xx ze zdublowanym nagłówkiem application/json — obiekt jak przed zmianą warunku', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ referenceNumber: 'SESJA-1' }), {
+      status: 201,
+      headers: { 'content-type': 'application/json, application/json' },
+    })));
+
+    await expect(ksefFetch('/sessions/online', { env: 'test', method: 'POST' })).resolves.toEqual({ referenceNumber: 'SESJA-1' });
+  });
+
+  // Pilnuje regresji prawdziwej ścieżki; przechodzi też na main, bo od D-A4-1a
+  // kody z tekstu czyta `ksefErrorCodes`.
   it('21184 jako problem+json z prawdziwego ksefFetch — wysyłka ponawialna (F-050)', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.endsWith('/sessions/online')) {
