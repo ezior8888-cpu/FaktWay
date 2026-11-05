@@ -27,9 +27,9 @@ const eslintConfig = defineConfig([
     // (callback-refs w `nip-validated-input.tsx`, `Date.now()` w
     // defaultach formularzy). Refaktor tych wzorców jest świadomie
     // odłożony do osobnej iteracji — lint pokazuje je w PR-ze, więc nie
-    // znikają z radaru. Próg w `package.json` (`lint --max-warnings`) to
-    // liczba ostrzeżeń, które zostały: nowe zatrzymują CI. Przy naprawie
-    // zmniejsz próg, nigdy go nie podnoś.
+    // znikają z radaru. Od 05.11.2026 ostrzeżeń jest zero, a `lint` ma
+    // `--max-warnings 0`: każde nowe zatrzymuje CI. Świadomy wyjątek to
+    // `eslint-disable-next-line <reguła> -- <powód>` przy jednej linii.
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/refs": "warn",
