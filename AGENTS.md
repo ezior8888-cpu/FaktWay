@@ -162,6 +162,12 @@ Dawne sekcje tego pliku przeniesione są dosłownie; odnośniki typu
 | wdrożyć, zdiagnozować nieudane wdrożenie, sprawdzić po wdrożeniu | [`wdrozenie-produkcji.md`](docs/runbooks/wdrozenie-produkcji.md) („Kolejność przy pełnym wydaniu”, „Wdrożenie produkcji”, „Kiedy wdrożenie padnie”, „Weryfikacja po wdrożeniu”) | `./scripts/ops/wdroz-produkcje.sh`, `./scripts/ops/kontrola-faktur-ksef.sh` |
 | zmienić `Dockerfile`, Coolify, zmienne, serwer; wejść w panel | [`coolify-pulapki.md`](docs/runbooks/coolify-pulapki.md) („Pułapki”) | tunel: `ssh -i $K -N -L 8000:localhost:8000 root@$OPS` |
 | zobaczyć błędy wysyłki do KSeF | [`centrum-bledy-wysylki.md`](docs/runbooks/centrum-bledy-wysylki.md) | `/admin/centrum/bledy` (konto z `ADMIN_EMAILS` + 2FA) |
+| zmienić generator FA(3) albo wysyłkę KSeF | [`fa3-ksef.md`](docs/runbooks/fa3-ksef.md) | `pnpm verify:fa3` |
+| zmienić coś „na telefon” | [`zmiany-na-telefon.md`](docs/runbooks/zmiany-na-telefon.md) (Mac zamrożony) | obchód z `e2e/README.md`, „Telefon” |
+
+W Claude Code te same procedury otwierają skille `/wdrozenie`, `/migracja`,
+`/naprawa`, `/fa3-ksef`, `/telefon-review` (`.claude/skills/`, odnośniki do
+runbooków; operacyjne tylko na polecenie).
 
 ## Praca w worktree
 

@@ -62,6 +62,17 @@ export function czyMikrorachunekZNip(numer: string): boolean {
   return reszta97(`${cyfry.slice(2)}${KRAJ_PL}${cyfry.slice(0, 2)}`) === 1;
 }
 
+/**
+ * Czy 26 cyfr (ze spacjami albo bez) to poprawny polski numer rachunku (NRB):
+ * reszta z 97 numeru IBAN z „PL” musi wynosić 1. Do rachunku składkowego ZUS
+ * (NRS) w profilu podatkowym.
+ */
+export function czyRachunekNrb(numer: string): boolean {
+  const cyfry = numer.replace(/\s/g, '');
+  if (!/^\d{26}$/.test(cyfry)) return false;
+  return reszta97(`${cyfry.slice(2)}${KRAJ_PL}${cyfry.slice(0, 2)}`) === 1;
+}
+
 /** Zapis do wyświetlenia: „LK NNNN NNNN NNNN NNNN NNNN NNNN”. */
 export function formatujRachunek(numer: string): string {
   const cyfry = numer.replace(/\s/g, '');
