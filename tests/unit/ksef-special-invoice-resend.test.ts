@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  exists: vi.fn(),
   upload: vi.fn(),
   submit: vi.fn(),
 }));
@@ -10,8 +9,10 @@ vi.mock('@/lib/auth/ksef-verification-guard', () => ({
   requireKsefVerificationForBackgroundJob: vi.fn(async () => undefined),
 }));
 vi.mock('@/lib/storage/r2', () => ({
-  invoiceXmlExistsForId: mocks.exists,
   uploadInvoiceXml: mocks.upload,
+}));
+vi.mock('@/lib/ksef/xml-generated-at', () => ({
+  claimXmlGeneratedAt: vi.fn(async () => new Date('2026-10-01T10:00:00.000Z')),
 }));
 vi.mock('@/lib/ksef/submit', () => ({ submitInvoice: mocks.submit }));
 
@@ -66,7 +67,6 @@ function kopia(type: InvoiceInput['type']) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('KSEF_ENV', 'test');
-  mocks.exists.mockResolvedValue(false);
   mocks.upload.mockResolvedValue({ storagePath: 'x.xml', sha256Hash: 'h' });
   mocks.submit.mockResolvedValue({ ksefNumber: 'K', acquisitionTimestamp: '2026-09-25T10:00:00Z' });
 });
@@ -99,7 +99,6 @@ describe('ponowna wysyłka dokumentów specjalnych z samej kopii', () => {
     await expect(submitInvoiceFullFlow(
       T, ID, kopia('ROZ'), AUTH, 'test', null, null, finalPayload,
     )).rejects.toThrow(/Wysyłka faktur rozliczających jest tymczasowo wstrzymana/);
-    expect(mocks.exists).not.toHaveBeenCalled();
     expect(mocks.upload).not.toHaveBeenCalled();
     expect(mocks.submit).not.toHaveBeenCalled();
   });

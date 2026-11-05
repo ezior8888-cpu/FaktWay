@@ -41,7 +41,7 @@ z kolumny „Luka” są w nim wypisane jawnie.
 | `KSEF_UNAVAILABLE` | transient | 5xx, timeout | Wyślij ponownie / Wróć do szkicu (KOR/ZAL¹ tylko w dniu wystawienia; po dacie, bez danych albo przy wstrzymanym rodzaju — tylko Wróć do szkicu z powodem) | I6: co godzinę przez 24 h; KOR/ZAL¹ tylko w dniu wystawienia | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | — |
 | `KSEF_RATE_LIMIT` | transient | 429 | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
 | `KSEF_SESSION` | transient | 401/403, 21184 | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
-| `INFRA` | transient | baza / PostgREST / R2 przed POST | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
+| `INFRA` | transient | baza / PostgREST / R2 przed POST; inny plik pod kluczem próby (`xml-archive-conflict` w Sentry, C-12: nic nie poszło do KSeF, nowa próba ma nowy klucz) | jak wyżej | I6 (KOR/ZAL¹ jak wyżej) | jak wyżej | — |
 | `CREDENTIALS_UNAVAILABLE` | transient | klucz po rotacji, deszyfrowanie | Wyślij ponownie / szkic (KOR/ZAL¹ tylko w dniu wystawienia; po dacie, bez danych albo przy wstrzymanym rodzaju — tylko Wróć do szkicu z powodem); komunikat: bez automatu | — (alarm) | napraw klucz → Wyślij ponownie (KOR/ZAL¹ w dniu wystawienia) | — |
 | `TRANSIENT_EXHAUSTED` | transient | 24 h ponowień bez skutku | jak wyżej | — | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | — |
 | `NOT_IN_KSEF` | transient | „tylko uzgodnij”: KSeF nie ma faktury (A2b) | Wyślij ponownie / Wróć do szkicu (KOR/ZAL¹ tylko w dniu wystawienia; po dacie, bez danych albo przy wstrzymanym rodzaju — tylko Wróć do szkicu z powodem) | — (decyzja o dacie: B1/B2) | Wyślij ponownie / szkic (KOR/ZAL¹ w dniu wystawienia) | — |

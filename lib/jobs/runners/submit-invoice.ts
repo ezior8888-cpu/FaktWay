@@ -75,6 +75,7 @@ import {
   type KsefSubmissionIntent,
 } from '@/lib/ksef/submission-log';
 import { downloadInvoiceXml, invoiceXmlKey, invoiceXmlKeyFor, uploadInvoiceXml } from '@/lib/storage/r2';
+import { XmlArchiveConflictError } from '@/lib/storage/xml-archive-conflict';
 import {
   heldErrorMessage,
   isCorrectionHeldForEnv,
@@ -1493,7 +1494,6 @@ export async function runSubmitInvoice(
         if (!path) {
           const stored = await uploadInvoiceXml(tenantId, invoiceId, invoice.issueDate, originalBytes.toString('utf8'), {
             attemptId: `ksef-${originalSha256Hex.slice(0, 40)}`,
-            immutable: false,
           });
           path = stored.storagePath;
         }
@@ -1773,6 +1773,21 @@ export async function runSubmitInvoice(
         );
         return { ...submitted, via: 'submit' };
       } catch (error) {
+        // C-12: pod kluczem tej próby leży inny plik, a do KSeF nic jeszcze nie
+        // poszło (zapis jest przed sesją, a próba z kontaktem idzie uzgodnieniem).
+        // Ponowienie dałoby ten sam konflikt; nowe kolejkowanie (cron I6 albo
+        // „Wyślij ponownie”) dostaje nowy `sendAttemptId`, więc i nowy klucz.
+        if (error instanceof XmlArchiveConflictError) {
+          Sentry.captureMessage('KSeF: pod kluczem próby jest inny plik XML — bez nadpisania, nowa próba', {
+            level: 'warning',
+            tags: { job: 'submit-invoice', kind: 'xml-archive-conflict' },
+            extra: { tenantId, invoiceId, storagePath: error.storagePath },
+          });
+          const code = SEND_ERROR_CODES.INFRA;
+          throw new NonRetriableError(`[${code}] ${KSEF_SEND_MESSAGES.xmlArchiveConflict}`, {
+            cause: new KsefSendVerdictError(code, KSEF_SEND_MESSAGES.xmlArchiveConflict),
+          });
+        }
         // Północ wypadła po bezpieczniku wyżej, przed plikiem (hak sesji) — pliku
         // nie wysłano; ponowienie dałoby tę samą odmowę.
         if (error instanceof IssueDatePassedError) {
