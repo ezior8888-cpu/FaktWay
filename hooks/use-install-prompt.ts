@@ -29,6 +29,7 @@ export function useInstallPrompt() {
     const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       nav.standalone === true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- odczyt API przeglądarki (matchMedia, userAgent, localStorage) po zamontowaniu; na serwerze ich nie ma
     setIsStandalone(standalone);
 
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
