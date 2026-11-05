@@ -1073,6 +1073,50 @@ trigger: `pnpm trigger:submit` (skrypt). Faktura zapisana z KSeF decyzją przy 4
 (K, `origin = 'ksef_import'`) bez sesji oryginału: sekcja „UPO faktury zapisanej
 z KSeF” w „D-A4-1b-3 PR C”.
 
+### "Faktura przyjęta bez wiersza `xml_documents`" (C-12, 00164)
+
+Objaw: PDF jest podglądem bez KODU I, mail do nabywcy odmawia („brak kodu QR
+KSeF”), w Sentry tag `area: ksef.xml-documents`. Akceptacja i numer KSeF zostają,
+brakuje tylko dowodu pliku. Wiersz raz zapisany się nie zmienia, więc automat
+go nie naprawi.
+
+| W Sentry | Co to znaczy |
+|---|---|
+| `kind: no-payload-hash` | wpis `sent` bez skrótu; kod zapisuje skrót od pierwszego zapisu `sent` (01.10.2026), więc to historia albo ręczna zmiana |
+| `XmlDocumentConflictError` | plik w magazynie ma inny skrót niż wpis wysyłki albo istniejący wiersz wskazuje inny plik |
+| inny błąd | chwilowa awaria magazynu lub bazy w chwili zapisu |
+
+Lista takich faktur (tylko odczyt):
+
+```sql
+SELECT i.id, i.tenant_id, i.ksef_number, i.xml_storage_path, i.ksef_accepted_at
+  FROM public.invoices i
+  LEFT JOIN public.xml_documents x ON x.invoice_id = i.id AND x.tenant_id = i.tenant_id
+ WHERE i.ksef_status = 'accepted' AND i.direction = 'outgoing' AND x.id IS NULL;
+```
+
+Naprawa ręczna, zapis na produkcji tylko za zgodą Bartosza:
+
+1. Pobierz oryginał z KSeF po numerze (`fetchInvoiceXmlBytes` z
+   `lib/ksef/history-fetcher.ts`) i policz SHA-256 z bajtów. Rozstrzyga plik z KSeF,
+   nie magazyn.
+2. Porównaj z plikiem spod `invoices.xml_storage_path`. Zgodny: dopisz wiersz
+   z tą samą ścieżką (PDF szuka go po `xml_storage_path`):
+
+   ```sql
+   INSERT INTO public.xml_documents (invoice_id, tenant_id, storage_provider, storage_path, sha256_hash, file_size_bytes)
+   VALUES (:invoice_id, :tenant_id, 'r2', :xml_storage_path, :sha256, :rozmiar)
+   ON CONFLICT (tenant_id, invoice_id) DO NOTHING;
+   ```
+
+3. Niezgodny albo pliku nie ma: zapisz oryginał przez `archiveImportedKsefXml`
+   (`<firma>/ksef-import/<numer KSeF>.xml`, niczego nie nadpisuje), ustaw na fakturze
+   `xml_storage_path` na tę ścieżkę i dopisz wiersz jak wyżej. Stary plik zostaje.
+4. Istniejący wiersz wskazuje inny plik: nie zmieniaj go bez Bartosza. Porównaj
+   jego skrót z oryginałem z KSeF; to osobna sprawa do wyjaśnienia.
+
+Faktura nie wymaga ponownej wysyłki. Klient do tego czasu pobierze ją z KSeF.
+
 ### "W historii wysyłek wisi zamiar `intent`" (A2, 00136)
 
 Wpis `intent` w `ksef_submissions` powstaje po otwarciu sesji KSeF, PRZED
