@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 import {
   AlertTriangle,
@@ -44,7 +44,9 @@ export function NipValidatedInput({
   });
 
   const onValidationCompleteRef = useRef(onValidationComplete);
-  onValidationCompleteRef.current = onValidationComplete;
+  useLayoutEffect(() => {
+    onValidationCompleteRef.current = onValidationComplete;
+  });
 
   useEffect(() => {
     validate(value);

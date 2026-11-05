@@ -29,7 +29,6 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 
 const invoiceId = '11111111-1111-4111-8111-111111111111';
 const tenantId = '22222222-2222-4222-8222-222222222222';
-let writes: number;
 const supabase = {
   from(table: string) {
     if (table !== 'tenants') throw new Error(`Unexpected table: ${table}`);
@@ -37,7 +36,7 @@ const supabase = {
       select: () => query,
       eq: () => query,
       single: async () => ({ data: { ksef_credentials_encrypted: 'ZmFrZQ==' }, error: null }),
-      update: () => { writes += 1; return query; },
+      update: () => query,
     };
     return query;
   },
@@ -50,7 +49,6 @@ const base = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  writes = 0;
   mocks.decrypt.mockReturnValue({ type: 'xades', certificatePem: 'fixture-pem' });
   mocks.health.mockResolvedValue({ offline: true, isMfOutage: true, reason: 'KSeF down' });
   mocks.environment.mockReturnValue('test');

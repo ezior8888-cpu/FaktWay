@@ -29,8 +29,8 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': '>=7.29.6 <8'
   'adm-zip@<0.6.1': '0.6.1'
   'hono@<4.13.5': '^4.13.5'
-  'fast-uri@<4.1.5': '4.1.5'
-  'ip-address@<10.7.1': '10.7.1'
+  'fast-uri@<4.2.3': '4.2.3'
+  'ip-address@<10.7.4': '10.7.4'
   'postcss@<8.5.23': '^8.5.23'
   'source-map-js@<1.2.2': '^1.2.2'
   'qs@>=6.0.0 <6.16.0': '^6.16.0'
@@ -54,3 +54,10 @@ overrides:
   'tar@>=7.0.0 <7.5.21': '^7.5.21'
   'fflate@>=0.8.0 <0.8.3': '^0.8.3'
   'zod@>=4.0.0 <4.6.6': '^4.6.6'
+  # Alerty Dependabot z 03.11.2026. jsdom 29.1.1 (przypięty) ciągnie undici ^7.25.0, a poprawka jest w 7.30.1.
+  'undici@>=7.0.0 <7.30.1': '7.30.1'
+  # @tailwindcss/typography żąda ^6.0.10, więc 6.1.5 mieści się w jego zakresie.
+  'postcss-selector-parser@<6.1.5': '^6.1.5'
+  # Poprawka tylko w nowej wersji głównej (glob 14 / minimatch 11); rodzice (Sentry, Serwist, archiver, ESLint) jej jeszcze nie mają.
+  'glob@>=9.0.0 <14.0.2': '14.0.2'
+  'minimatch@<11.0.1': '11.0.1'

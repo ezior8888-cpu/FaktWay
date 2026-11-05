@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * Eventy traktowane jako "aktywność" — resetują timer.
@@ -45,12 +45,15 @@ export function useInactivityTimeout(
   const timeoutMs = options.timeoutMs ?? 60 * 60 * 1000;
   const warningMs = options.warningMs ?? 60 * 1000;
   const onTimeoutRef = useRef(options.onTimeout);
-  onTimeoutRef.current = options.onTimeout;
+  useLayoutEffect(() => {
+    onTimeoutRef.current = options.onTimeout;
+  });
 
   const [isWarning, setIsWarning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(Math.floor(warningMs / 1000));
 
-  const lastResetRef = useRef<number>(Date.now());
+  // Czas startu ustawia efekt montowania (Date.now w renderze jest nieczyste).
+  const lastResetRef = useRef<number>(0);
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -97,6 +100,8 @@ export function useInactivityTimeout(
 
   // Setup eventów + initial scheduling.
   useEffect(() => {
+    lastResetRef.current = Date.now();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- start timerów przy montowaniu (system zewnętrzny); setState tylko w ich wywołaniach zwrotnych
     scheduleTimers();
 
     const onActivity = () => {

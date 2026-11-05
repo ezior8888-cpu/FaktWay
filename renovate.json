@@ -61,6 +61,7 @@
   ],
   "vulnerabilityAlerts": {
     "enabled": true,
+    "groupName": "security updates",
     "minimumReleaseAge": null,
     "labels": ["dependencies", "security"],
     "automerge": false

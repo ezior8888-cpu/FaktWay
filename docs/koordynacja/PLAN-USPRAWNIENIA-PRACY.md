@@ -162,6 +162,32 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 Projekt nowego indeksu i lista plików do usunięcia są poza repo (pamięć jest
 prywatna): `side-session-notes/…/pamiec-propozycja.md`. Zrobione 05.11 (dziennik).
 
+### 5.3 Wspólne uprawnienia w `.claude/settings.json` (punkt 2.12)
+
+Klasyfikator trybu auto słusznie nie pozwala sesji samej dopisać sobie reguł
+`allow`. Propozycja do zgody Bartosza (tylko odczyt i testy; `deny` blokuje
+nadpisanie historii i push prosto na `main`):
+
+```json
+"permissions": {
+  "allow": [
+    "Bash(git status:*)", "Bash(git log:*)", "Bash(git diff:*)", "Bash(git show:*)",
+    "Bash(git branch:*)", "Bash(git fetch:*)", "Bash(git merge-base:*)", "Bash(git rev-parse:*)",
+    "Bash(gh pr view:*)", "Bash(gh pr list:*)", "Bash(gh pr checks:*)", "Bash(gh pr diff:*)",
+    "Bash(gh issue list:*)", "Bash(gh issue view:*)", "Bash(gh run list:*)", "Bash(gh run view:*)",
+    "Bash(pnpm typecheck)", "Bash(pnpm lint:*)", "Bash(pnpm eslint:*)", "Bash(pnpm exec eslint:*)",
+    "Bash(pnpm vitest:*)", "Bash(pnpm exec vitest:*)", "Bash(pnpm test)", "Bash(pnpm run ci)",
+    "Bash(pnpm build)", "Bash(bash scripts/dev/przygotuj-worktree.sh)"
+  ],
+  "deny": [
+    "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push --force-with-lease:*)",
+    "Bash(git push origin main:*)", "Bash(git push origin HEAD:main:*)"
+  ]
+}
+```
+
+Po „tak” Bartosz wkleja to sam albo pozwala sesji zapisać (zgoda w czacie).
+
 ## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
 
 Najpierw scal #373 (1.4): obecny `renovate.json` scala sam poprawki (patch)
@@ -170,7 +196,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 
 1. Otwórz https://github.com/apps/renovate i kliknij **Install** (albo
    **Configure**, jeśli już jest).
-2. Wybierz konto `ezior8888-cpu` → **Only select repositories** → `ksef-saas`
+2. Wybierz konto `ezior8888-cpu` → **Only select repositories** → `FaktWay` (do 05.11.2026 `ksef-saas`)
    → **Install**.
 3. Pierwszy PR to zwykle „Configure Renovate” albo od razu „Dependency
    Dashboard” (issue). Nic nie scalaj w ciemno: `renovate.json` już jest.
@@ -189,9 +215,17 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 05.11.2026 | 2.3 `db:push:prod` wyłączony | #376 | z `SUPABASE_DB_URL` skrypt naprawdę wołał `supabase db push` (test czerwony 4/4); `.mjs` i `.sh` kończą się błędem z odnośnikiem |
 | 05.11.2026 | 2.6 strażnik migracji | #377 | `tests/unit/migracje-rejestr.test.ts`; repo i otwarte #369, #195, #190 przechodzą |
 | 05.11.2026 | 2.1 `AGENTS.md` + runbooki | #378 | 4 379 → 1 953 słów (cel 1 500 nie osiągnięty: konwencje i protokół to niezmienniki); 367 linii procedur dosłownie w 4 runbookach, 0 zgubionych; stos na #374, #372, #376 |
+| 05.11.2026 | Scalenie etapu 1 i 2.1/2.3/2.6 (polecenie Bartosza) | #379 | `5e63f1fa`; #370–#374 i #376–#378 oznaczone przez GitHub jako scalone; bez migracji i bez wdrożenia (kod aplikacji bez zmian) |
+| 05.11.2026 | 1.7 Renovate zainstalowany (Bartosz, tryb „Scan and Alert”) | — | „Dependency Dashboard” jeszcze nie powstał w chwili wpisu |
+| 05.11.2026 | 2.4 lint 30 → 17, próg `--max-warnings 17`, `--cache` | #398 | 17 zostało: ostrzeżenia kompilatora React w komponentach klienta, każde zmienia zachowanie, więc osobny PR z oceną przypadków (2.4b) |
+| 05.11.2026 | 2.5 hook lintu po edycji | #399 | ok. 0,5 s, cisza gdy czysto; 2.12 (uprawnienia) czeka na zgodę, sekcja 5.3 |
+| 05.11.2026 | Renovate po instalacji | #400 | Dependency Dashboard (#397) i 16 osobnych PR bezpieczeństwa (#381–#396); #400 składa je w jeden; tryb Mend „Scan and Alert” (domyślny „Scan Only” nie otwiera PR) |
+| 05.11.2026 | Scalenie #365, #398, #399, #400 (polecenie Bartosza) | #402 | auto-merge metodą merge; wdrożenie (zależności z #365) czeka na polecenie Bartosza |
+| 05.11.2026 | 2.2 skille + 2 runbooki | #403 | `/wdrozenie`, `/migracja`, `/naprawa`, `/telefon-review` tylko ręcznie, `/fa3-ksef` także dla modelu; `fa3-ksef.md` i `zmiany-na-telefon.md` przeniesione z prywatnej pamięci Claude, żeby widział je Codex |
+| 05.11.2026 | 2.4b lint 17 → 0, `--max-warnings 0` | #404 | 8 poprawek (refy w useLayoutEffect, useSyncExternalStore, useWatch, useMemo, sprzątanie efektu), 7 świadomych wzorców z `eslint-disable-next-line … -- powód`; bez zmian klas |
 
-**Następny krok:** Bartosz: plugin `design` w aplikacji, instalacja Renovate
-(po #373), scalenie etapu 1 i #376–#378 (kolejność: #370–#374, #376, #377,
-potem #378). Sesja: po „idź dalej” 2.4 (lint do zera), 2.12 (uprawnienia),
-2.5 (hook lintu po edycji, dopiero po 2.4), potem 2.2 (skille, bo odsyłają
-do runbooków z #378), 2.9, 2.10, 2.11, 2.7, 2.8.
+**Następny krok:** Bartosz: zgoda na uprawnienia (5.3), plugin `design`
+w aplikacji, wdrożenie po #402, scalenie #403 i #404. Sesja po
+„idź dalej”: 2.9 (strażnik tekstów), 2.10 (skrypt zbiorczego scalania),
+2.11 (`/code-review` w protokole), 2.7 (typy bazy w CI), 2.8 (szybsze testy),
+potem etap 3 osobnymi sesjami.

@@ -43,7 +43,6 @@ const environment = hasDatabase ? getRlsTestEnvironment() : null;
 
 const url = environment?.url ?? '';
 const anonKey = environment?.anonKey ?? '';
-const serviceRole = environment?.serviceRoleKey ?? '';
 
 const admin: SupabaseClient = environment
   ? createClient(environment.url, environment.serviceRoleKey)

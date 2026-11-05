@@ -1,6 +1,4 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
-import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
@@ -9,7 +7,6 @@ import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
-import type { Database } from '@/types/database';
 
 /**
  * Odczyt KPiR za miesiąc (`/reports/kpir`) — wyjęty ze strony do funkcji
