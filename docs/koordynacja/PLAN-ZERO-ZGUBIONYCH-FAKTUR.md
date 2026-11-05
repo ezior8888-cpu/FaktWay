@@ -1,324 +1,187 @@
-# Plan „zero zgubionych faktur” — ostatnia runda napraw wysyłki KSeF
+# Plan „zero zgubionych faktur” (wersja 2)
 
-Stan na 04.10.2026. Właściciel: Bartosz. Wykonawcy: sesje agenta (jedna
-sesja = jeden blok albo jedna sesja z tego planu). Obowiązuje
-**„Protokół naprawy błędu”** z `AGENTS.md` bez wyjątków: czerwony test
-na prawdziwej ścieżce → naprawa → `pnpm run ci && pnpm build` → PR według
-szablonu → raport i stop. Ten plan mówi *co* i *w jakiej kolejności*;
-protokół mówi *jak*.
+Stan na 05.11.2026, `main` 9f152212. Właściciel: Bartosz. Obowiązuje „Protokół naprawy błędu” z `AGENTS.md`: ten plan mówi *co* i *w jakiej kolejności*, protokół mówi *jak*.
 
-> Jak zacząć sesję z tego planu: „Kontynuuj plan zero zgubionych faktur,
-> sesja N”. Sesja czyta ten plik, `docs/architecture/cykl-zycia-faktury-ksef.md`
-> i raport rewizji `docs/automation/13_REWIZJA_2026-10-03.md` (plik poza
-> gitem — jeśli go nie ma, poproś Bartosza), robi TYLKO swoją sesję, na
-> końcu dopisuje w sekcji 9 wiersz „zrobione / co zostało” i numer PR.
+Historia: `PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md` (dziennik sesji), `PLAN-ZERO-ZGUBIONYCH-FAKTUR-ARCHIWUM.md` (wersja 1 dosłownie, w tym blok A i decyzje D-A4-1b-3).
+
+> **Start sesji N** („Kontynuuj plan zero zgubionych faktur, sesja N”):
+> 1. Przeczytaj sekcje 0–4 i tylko swoją kartę, nie cały plik:
+>    `P=docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md; sed -n '1,/^## 5\./p' $P; awk -v s=N '$0 ~ "^### "s"\\."{f=1;print;next} /^##/{f=0} f' $P`
+> 2. Dziennik i archiwum czytasz tylko po kodzie: `grep -n 'KOD' <plik> | cut -c1-600`.
+> 3. Robisz TYLKO swoją sesję. Na końcu poprawiasz jej wiersz w sekcji 0, nowe ustalenia wpisujesz do sekcji 8, a wiersz dopisujesz na końcu dziennika.
 
 ---
 
-## 1. Cel i definicja sukcesu
+## 0. Następny krok i status
 
-**Cel biznesowy:** klient FaktFlow nigdy nie dostaje kary ani odsetek
-z powodu tego, co zrobiła (albo czego nie zrobiła) aplikacja.
+**Ustalenia z 05.11.2026 (Igor):** data przejścia na KSeF PROD nie jest potwierdzona. Plan nie czeka na prawnika: pracujemy na założeniach z karty B1, opartych na źródłach pierwotnych (sekcja 1), a całość pokazujemy prawnikowi na końcu (sekcja 9).
 
-**Co oznacza „faktura zgubiona po cichu”:** stan faktury w FaktFlow różni
-się od stanu prawnego (KSeF, termin wystawienia, treść dokumentu), a przez
-15 minut nikt — ani automat, ani klient, ani operator — nie dostał o tym
-sygnału **z wyjściem** (co zrobić). Każdy taki przypadek to kandydat na karę:
-faktura nie wystawiona w terminie (art. 106na), wystawiona dwa razy
-(duplikat w KSeF), wystawiona z błędną treścią (korekta liczona od złego
-stanu, zła stawka, zły nabywca), bez dowodu (UPO/XML) albo w złym
-środowisku (TEST zamiast PROD).
+**Następny krok:**
+1. **A4-D:** dokończyć #336, ostatnią otwartą pracę z bloku A.
+2. **H1a:** bez niej żadna sesja nie ma dowodu na prawdziwym KSeF.
+3. **B3**, potem **B2** na założeniach z B1.
 
-**Definicja sukcesu (mierzalna, do odhaczenia w sekcji 8):**
+Stan sprawdzony w kodzie 05.11.2026. „Nieustalone” znaczy, że sprawdzenie nie dało pewnego wyniku.
 
-1. Każdy stan końcowy faktury wychodzącej ma **wyjście**: automat (cron),
-   klient (przycisk z komunikatem, co dalej) albo operator (`/admin/ksef`).
-   Żaden kod błędu z katalogu `ksef_error_codes` nie jest ślepą uliczką.
-2. Strażnik `ksef_lifecycle_violations()` zwraca **0 wierszy** poza I5D
-   (faktury czekające na decyzję klienta, od 00148 — stan, nie naruszenie;
-   `I5D-env` = 0) przez 14 kolejnych dni produkcji, a alarm „Strażnik cyklu
-   życia” nie odezwał się ani razu bez znanej przyczyny.
-3. Każda faktura `accepted` ma w ciągu 24 h numer KSeF, plik XML tej
-   próby, wpis `xml_documents` i UPO (I3 = 0).
-4. Każdy dokument, który wychodzi do KSeF, przeszedł **ten sam** zestaw
-   kontroli treści, co formularz: granice XSD, data wystawienia, stawki,
-   nabywca — nie ma pola, które formularz przepuszcza, a KSeF odrzuca.
-5. Scenariusze z sekcji 7 (duplikat 440, odrzucenie 450, zabity worker
-   w trakcie `sending`, awaria bazy w kolejkowaniu, reset + poprawa + ponowna
-   wysyłka, druga korekta) są **zautomatyzowane na prawdziwym KSeF TEST**
-   i przechodzą w CI co tydzień.
+| Sesja | Stan | Dowód albo uwaga |
+|---|---|---|
+| A1–A3, A4a, A4b, A5 | zrobione | #219–#263, dziennik |
+| D-A4-1b-3: A0, A, PR B, PR C | zrobione | #229, #230, #245, #248 |
+| A4-D (D-A4-1b-3 PR D) | w toku | #336: szkic, 244 commity za `main`, konflikt tylko w dokumentach |
+| B1 | założenia robocze | `cykl-zycia-faktury-ksef.md` §9 (D7–D9); prawnik na końcu (sekcja 9) |
+| B2 | częściowo | `ISSUE_DATE_PASSED` tylko dla KOR, ZAL, ROZ (#242) |
+| B3 | częściowo | baner jest (z planu skalowania); `isKsefHealthy` = `true` przy braku danych (`health-status.ts:234`); brak Latarni |
+| C1 | nie | brak wspólnego modułu granic |
+| C2 | nie | sprzedawca korekty z przeglądarki (`correction-actions.ts:259`); generator bez `PrefiksPodatnika`; S7, S8 częściowo |
+| C3 | nie | generator korekt odmawia `zw` (`fa3-correction-generator.ts:285`) |
+| C4 | nie | hamulce aktywne (`kind-holds.ts:9`) |
+| C5 | częściowo | C5a–c zrobione (#231, #239, #241); S18, S19 nieustalone |
+| C6 (nowa) | nie | okres JPK po `issue_date` (`data-fetcher.ts:286`) |
+| D1 | nie | bez limitu prób na wpis, przycisku operatora i podziału I3 |
+| D2 | częściowo | skrót z `xml_storage_path` faktury (`lib/pdf/invoice-data.ts:252`) |
+| E1 | nie | `break` przy `hasMore` przed `isTruncated` (`inbox.ts:114`); wiersz bez środowiska rzuca błąd (`inbox-polling.ts:142`) |
+| E2 | skreślona | decyzja Bartosza 22.10: Magiczny import znika |
+| F1 | nie | brak runbooka przełączenia |
+| F2 | częściowo | pulpit i analizy mają kontrolę środowiska, `kpir-data.ts` i portal księgowej nie |
+| G1 | nie | `stopBoss()` bez limitu czasu (`boss.ts:50`) |
+| G2 | częściowo | wysyłka ma `localConcurrency: 5` (`package-d.ts:67`), reszta `batchSize` |
+| G3 | nieustalone | runnery `retention-delete.ts`, `archive-old-invoices.ts` istnieją, warunków z karty nie sprawdzono |
+| H1a, H1b, H2 | nie | brak workflow i skryptu; `e2e-staging.yml` nie dotyka KSeF |
+| I1 | częściowo | narzędzie jest, brak śladu wykonanej rotacji |
+| I2 | częściowo | tabela kod → wyjście jest (#224), brak ćwiczenia |
+| I3 | częściowo | procedura jest, brak śladu wykonanej próby |
+| J | częściowo | S17 otwarte (`getOcrJobStatusAction`, `upo-actions`); S15, S20, S21 prawdopodobnie załatwione; S5, S23 nieustalone |
+
+---
+
+## 1. Terminy, podstawa prawna i data PROD
+
+| Data | Co | Źródło | Uwaga |
+|---|---|---|---|
+| 1.01.2027 | KSeF obowiązuje wszystkich, koniec wyjątku do 10 tys. zł miesięcznie | [MF: terminy](https://ksef.podatki.gov.pl/informacje-ogolne-ksef-20/podstawy-prawne-oraz-kluczowe-terminy/) | nasza grupa docelowa |
+| 1.01.2027 | w obowiązującej ustawie wchodzą kary z art. 106ni | t.j. Dz.U. 2026 poz. 1263, przypis do art. 106ni | sprawdzać przy każdym przeglądzie |
+| 31.12.2027 (projekt) | rząd przyjął 20.10.2026 projekt odroczenia kar, idzie do parlamentu | [gov.pl](https://www.gov.pl/web/finanse/rada-ministrow-za-odroczeniem-kar-za-bledy-w-ksef-i-przedluzeniem-odwrotnego-obciazenia-vat) | nie zdejmuje obowiązku KSeF |
+| 1.01.2027 | numer KSeF w płatnościach (art. 108g) | [Dz.U. 2025 poz. 1203](https://api.sejm.gov.pl/eli/acts/DU/2025/1203/text.pdf) | poza tym planem, wskazać właściciela |
+
+**Podstawa prawna, odczyt 05.11.2026:** [t.j. Dz.U. 2026 poz. 1263](https://api.sejm.gov.pl/eli/acts/DU/2026/1263/text.pdf) z 28.09.2026. Technika: [dokumentacja KSeF](https://github.com/CIRFMF/ksef-docs), [Latarnia](https://github.com/CIRFMF/ksef-latarnia), [FAQ MF](https://ksef.podatki.gov.pl/pytania-i-odpowiedzi-ksef-20/).
+
+| Przepis | Co mówi |
+|---|---|
+| art. 106i ust. 1 | fakturę wystawia się najpóźniej 15. dnia miesiąca po dostawie lub usłudze (z wyjątkami) |
+| art. 106na ust. 1 | fakturę ustrukturyzowaną uznaje się za wystawioną w dniu przesłania do KSeF |
+| art. 106nda ust. 1, 2 | offline24 to możliwość podatnika; przesłanie najpóźniej w następnym dniu roboczym po wystawieniu |
+| art. 106nda ust. 6, 7 | przy wydaniu nabywcy poza KSeF: dwa kody, drugi wymaga certyfikatu |
+| art. 106nda ust. 10, 16 | faktura przesłana później niż data P_1 jest fakturą offline24, datą wystawienia zostaje P_1; ust. 16 odsyła do ust. 4, 6 pkt 1, 8–10, 12, 13 |
+| art. 106ne | komunikaty o awarii w BIP i w oprogramowaniu interfejsowym, informacja o niedostępności w BIP |
+| art. 106nf ust. 4 | awaria: przesłanie w 7 dni roboczych od jej końca |
+| art. 106ng | awaria całkowita: faktura poza KSeF, bez dosyłania |
+| art. 106nh ust. 2 | niedostępność: przesłanie najpóźniej w następnym dniu roboczym po jej końcu |
+| art. 106ni ust. 1 | kara do 100% VAT z faktury, a bez VAT do 18,7% należności: (1) nie wystawił w KSeF, (2) wystawił niezgodnie ze wzorem w awarii, niedostępności albo offline24, (3) nie przesłał w terminie |
+| art. 19a ust. 1 | obowiązek podatkowy powstaje z chwilą dostawy lub wykonania usługi (z wyjątkami) |
+| art. 108 ust. 1 | kto wystawi fakturę z wykazanym VAT, ma obowiązek go zapłacić |
+
+**D0. Data przejścia na KSeF PROD nie jest potwierdzona.** Plan jej nie zakłada i na nią nie czeka. Bramka wymaga 14 dni obserwacji, więc przy celu 1.01.2027 obserwacja musiałaby ruszyć najpóźniej 17.12.2026. Rekomendacja na czas wyboru daty: pierwsze wydanie z korektami (KOR) i bez faktur rozliczających (ROZ, komunikat w produkcie), bo ROZ wymaga jeszcze #195.
+
+---
+
+## 2. Zasady
+
+Lekcje z rundy października, każda kosztowała realny czas:
+
+1. Jeden PR od `origin/main`, bez stosów (#206, #208: treść poszła do gałęzi zamiast do `main`).
+2. Plik `'use server'` eksportuje tylko funkcje asynchroniczne, reszta w `lib/**`. Build obowiązkowy przy każdym dotknięciu akcji.
+3. Fixture zdarzenia to pełny, poprawny payload, inaczej `INVALID_EVENT` udaje inny błąd.
+4. Wyzwalacz, RPC, RLS: testy na bazie (`tests/rls-*.test.ts`). Asercja sprawdza skutek, nie kod błędu.
+5. Test niestabilny to defekt testu: osobny mały PR od razu. Bez `vi.resetModules` i `vi.doMock` w locie.
+6. Decyzje współdzielone w czystych modułach (`ksef-send-policy.ts`, `ksef-operator-policy.ts`, `send-error-classes.ts`): przycisk i akcja decydują z tej samej tabeli.
+7. Migracje: numer z rejestru, nagłówek przed/PO wdrożeniu, zero `DROP TABLE/COLUMN`, `UPDATE` danych tylko za zgodą, typy bazy z produkcji.
+8. Nowy kod albo blokada najpierw w `ksef-operator-policy.ts` i `ksef-error-codes.md`.
+9. Produkcję czytasz tylko przez `scripts/ops/kontrola-faktur-ksef.sh` i procedury z `AGENTS.md`.
+
+Nowe w wersji 2:
+
+10. Każda sesja dopisuje swój scenariusz do H1, jeśli da się go sprawdzić na KSeF TEST. „Zrobione” wymaga zielonego przebiegu.
+11. Nowe ustalenie trafia do sekcji 8 z przydziałem: bramka, sesja albo po bramce. Samo „zapisane” w dzienniku nie wystarcza.
+12. Gdy sesja wymaga więcej niż 2 PR: stop i pytanie do Bartosza (A4 urosła z jednej sesji do kilkunastu PR).
+
+Oszczędność limitu, bez zmiany dowodów:
+
+13. Sesja nie czyta całego planu, dziennika ani archiwum.
+14. Szukanie w kodzie: `git grep` albo tańszy model. Projekt i decyzja zostają w głównym wątku.
+15. Recenzja wielosoczewkowa zostaje dla runnera, RPC, wyzwalaczy, migracji i XML. Dokumenty, skrypty tylko do odczytu i teksty: jeden przegląd.
+
+Czego nie robić: nie dodawać funkcji; nie zdejmować hamulców na próbę; nie naprawiać dwóch rzeczy w jednym PR; nie uznawać za naprawione niczego bez testu na prawdziwej ścieżce; nie pisać `ksef_status` poza RPC z 00131 i workerem; nie budować statystyk ani pulpitów (tor centrum dowodzenia).
+
+---
+
+## 3. Cel i mapa ryzyk
+
+**Cel:** klient FaktWay nie dostaje kary ani odsetek z powodu tego, co zrobiła albo czego nie zrobiła aplikacja. Faktura „zgubiona po cichu” to stan w FaktWay inny niż stan prawny, o którym przez 15 minut nikt nie dostał sygnału z wyjściem.
+
+**Definicja sukcesu:**
+1. Każdy stan końcowy faktury wychodzącej ma wyjście: automat, klient albo operator (`/admin/ksef`).
+2. `ksef_lifecycle_violations()` bez I5D = 0 przez 14 dni produkcji (I5D-env = 0), alarm strażnika bez nieznanej przyczyny.
+3. Każda faktura `accepted` ma w 24 h numer, XML próby, wpis `xml_documents` i UPO (I3 = 0).
+4. Dokument wychodzący do KSeF przechodzi te same kontrole treści co formularz.
+5. Scenariusze z sekcji 6 przechodzą co tydzień w CI.
 6. Przełączenie TEST → PROD ma runbook przećwiczony na kopii bazy.
 
-Czego ten plan nie obiecuje: zera błędów w aplikacji. Obiecuje, że błąd
-w wysyłce **nie zostaje niewidoczny** i **nie kończy się karą**, bo każda
-ścieżka ma kontrolę przed wysyłką, uzgodnienie po wysyłce i alarm w środku.
+Plan nie obiecuje zera błędów. Obiecuje, że błąd w wysyłce nie zostaje niewidoczny i nie kończy się karą.
+
+| # | Ryzyko | Skutek prawny (sprawdzone 05.11.2026) | Sesje |
+|---|---|---|---|
+| M1 | Faktura nie wyszła w dniu P_1 | Z mocy art. 106nda ust. 16 to faktura offline24, datą wystawienia zostaje P_1. Kara grozi za przekroczenie terminu (art. 106ni ust. 1 pkt 3), nie za samą różnicę dat. Zewnętrzną granicą jest też termin z art. 106i | B1, B2 |
+| M6 | Awaria KSeF | Trzy tryby: niedostępność (art. 106nh, następny dzień roboczy po końcu), awaria (art. 106nf, 7 dni roboczych), awaria całkowita (art. 106ng, bez dosyłania). MF publikuje je w Latarni | B1, B3 |
+| M3 | Błędna treść przyjęta przez KSeF | Korekta, możliwa zaległość VAT | C1–C4 |
+| M8 | Zły okres albo dane w JPK i KPiR | Zaległość i odsetki (art. 19a). Szczegóły reguły okresu potwierdza księgowa | C5, C6 |
+| M4 | Złe środowisko | Dokument z TEST nie jest fakturą, a z PROD nie da się go cofnąć | F1, F2 |
+| M2 | Duplikat | KSeF odrzuca (440) po NIP sprzedawcy, rodzaju i numerze przez 10 lat; art. 106ni go nie wymienia. Ryzyko to ta sama sprzedaż pod innym numerem: VAT z obu faktur (art. 108) | H1 (A2 zrobione) |
+| M5 | Brak UPO lub XML | Ryzyko dowodowe, nie kara: art. 106ni ust. 1 tego nie wymienia. MF: KSeF archiwizuje faktury 10 lat | D1, D2 |
+| M7 | Nieodebrane faktury zakupu | Odliczenie VAT i koszty, nie kara | E1 |
+| M9, M10 | Zabity worker, operator nie wie | Operacyjne | G1, B3, I2 |
 
 ---
 
-## 2. Zasady tej rundy (uzupełnienie protokołu z AGENTS.md)
+## 4. Kolejność
 
-Lekcje z 03–04.10.2026, które kosztowały realny czas:
+```
+A4-D (#336) ───────────────────────────────────────┐
+H1a (od razu) ─► sesje dopisują scenariusze ─► H1b ┤
+B3 ─► B2 (na założeniach z B1) ────────────────────┤
+C1 ─► C2 ─► C3 ─► C4 ──────────────────────────────┼─► bramka, na końcu prawnik (sekcja 9)
+C6, D1, E1, F1, F2 (niezależne) ───────────────────┤
+G1 ─► H2 ──────────────────────────────────────────┤
+I1, I3 (operacje, w dowolnym momencie) ────────────┘
+Po bramce: PR E, reszta C5, D2, G2, G3, I2, blok J.
+```
 
-1. **Jeden PR od `origin/main`, bez stosów.** Stos PR na GitHubie nie
-   przestawia bazy po scaleniu bazowego; dwa razy treść poszła do gałęzi
-   zamiast do `main` (#206, #208). Kolejny PR dopiero po scaleniu
-   poprzedniego, albo po `gh pr edit N --base main` zrobionym przez agenta.
-2. **Plik `'use server'` eksportuje wyłącznie funkcje asynchroniczne.**
-   Komunikaty, typy, czyste funkcje idą do `lib/**`. `pnpm typecheck`
-   tego nie łapie, `pnpm build` tak — dlatego build jest obowiązkowy
-   przy każdym dotknięciu akcji, nie tylko `app/`.
-3. **Fixture zdarzenia = pełny, poprawny payload** (`sendAttemptId` jako
-   UUID, faktura z `finalizeInvoice`). Niepoprawny payload w teście kończy
-   się `INVALID_EVENT` i udaje inny błąd.
-4. **Testy na bazie dla wszystkiego, co ma wyzwalacz, RPC albo RLS**
-   (`tests/rls-*.test.ts`, job CI „RLS isolation”). DELETE z roli klienta
-   może skończyć się „0 wierszy” przez RLS zanim dojdzie do wyzwalacza —
-   asercja sprawdza skutek (wiersz zostaje), nie konkretny kod błędu.
-5. **Test niestabilny pod pełnym biegiem to defekt testu** (S22 z
-   `vi.resetModules`). Naprawia się go osobnym, małym PR od razu.
-6. **Czyste moduły dla decyzji współdzielonych** (`lib/invoices/ksef-send-policy.ts`,
-   `lib/admin/ksef-operator-policy.ts`, `lib/ksef/send-error-classes.ts`):
-   przycisk i akcja podejmują tę samą decyzję z tej samej tabeli.
-7. **Bez `vi.resetModules`/`vi.doMock` w locie** — stan testu steruje się
-   hoisted wartością w jednej atrapie.
-8. **Migracje:** numer z rejestru, nagłówek „przed/PO wdrożeniu”, zero
-   `DROP TABLE/COLUMN`, `UPDATE` na danych tylko za zgodą; typy bazy po
-   wgraniu generowane z produkcji (odstępstwo tylko jawne, z domknięciem
-   w następnym PR — jak #215 → #217).
-9. **Operator ma wyjście dla każdego kodu klasy reconcile.** Zanim
-   dodasz nowy kod albo blokadę, dopisz go do tabeli w `/admin/ksef`
-   (`lib/admin/ksef-operator-policy.ts`) i do `docs/runbooks/ksef-error-codes.md`.
-10. **Produkcja czytana tylko skryptem** `scripts/ops/kontrola-faktur-ksef.sh`
-    i procedurami z `AGENTS.md`; żadnych ręcznych odczytów danych klientów
-    poza nimi.
+Równolegle tylko bez wspólnych plików, np. C1 z E1 albo D1 z F1. B2 i H1 prowadzi jedna linia sesji. Otwarte PR z sekcji 8 rozstrzyga sesja, do której są przypisane.
 
 ---
 
-## 3. Stan wyjścia (co już jest)
+## 5. Karty sesji
 
-Zrobione i wdrożone 03–04.10.2026 (migracje 00131–00134 na db-1):
+Każda sesja to 1 PR (wyjątkowo 2, gdy migracja musi iść osobno), czerwony test najpierw.
 
-| Obszar | Co | PR |
-|---|---|---|
-| Katalog kodów i RPC przejść | `ksef_error_codes`, `enqueue/requeue/reset/release_ksef_send`, `ksef_has_contact_evidence`, strażnik I1–I5, I9 | #202 |
-| Worker | klasyfikacja błędów jednym katalogiem; `rejected` tylko dla błędu treści; kody i zwolnienie przejęcia przy każdej porażce; zamykanie historii po 450/440; oczekiwanie bez zużycia próby | #204 |
-| Kolejkowanie | `draft → queued` w jednej transakcji z zleceniem pg-boss; klient nie pisze `ksef_status` | #205 |
-| Klient | „Wyślij ponownie” / „Wróć do szkicu” wg klasy kodu i roli; etykiety stanu | #206/#207 |
-| Operator | `/admin/ksef`: naruszenia, `failed` per kod, karta faktury, „Wyślij ponownie / Tylko uzgodnij / Wróć do szkicu” | #208/#209 |
-| Wyzwalacze | 00132: klient nigdy nie zmienia stanu; diagnostyka nie zamraża treści | #210 |
-| Automat | cron co 15 min: I1, ponowienia klasy transient przez 24 h, wznowienie po hamulcu; raport dzienny; alarm strażnika; martwe kolejki usunięte | #211 |
-| Korekty | 00133 + 00135: jedna korekta w toku; łańcuch korekt — „stan przed” po ostatniej przyjętej KOR (prawdziwe K4) | #212, #217 |
-| Magazyn XML | klucz per próba (D5), wpis `sent` zna swój plik, retencja prób | #215 |
-| Uzgodnienie | tryb „tylko uzgodnij” w runnerze; okno 48 h dla zalegających wpisów `sent` (STALE) | #216 |
-| Wcześniej | K1 (faktura za abonament), K2 (skrzynka: kategoryzacja i XML), W1, W2, W3, W16, S1, S14, S22 | #199–#201, #213, #214 |
+### B1. Założenia prawne i produktowe (bez kodu)
+Założenia robocze z 05.11.2026, zapisane w `docs/architecture/cykl-zycia-faktury-ksef.md` §9. Sesje na nich pracują, prawnik widzi je na końcu (sekcja 9). Przepisy: sekcja 1.
 
-#216 i #217 scalone 04.10.2026; 00135 wgrana na db-1 04.10 (strażnik 0),
-worker i aplikacja wdrożone na `2dbf13a` (razem z A1, #219). Hamulce nadal włączone na PROD: `KOR_HOLD` (korekty),
-`ROZ_HOLD` (faktury rozliczające), Offline24 wyłączony (AUD-14).
+Co ustalono ze źródeł:
+- KSeF przyjmuje fakturę z P_1 wcześniejszą niż dzień przesłania i sam może przypisać tryb offline (`ksef-docs/tryby-offline.md`). Odrzuca tylko P_1 późniejszą niż data przyjęcia (`faktury/weryfikacja-faktury.md`). FAQ MF: data przesłania jest datą wystawienia, o ile zgadza się z P_1.
+- Ust. 16 nie odsyła do ust. 6 pkt 2 i ust. 7, więc taka faktura nie wymaga drugiego kodu ani certyfikatu. Nie odsyła też do ust. 2, ale jest „fakturą z ust. 1”, a art. 106ni ust. 1 pkt 3 karze za nieprzesłanie takiej faktury w terminie. Działamy, jakby termin obowiązywał.
+- Ogłoszona awaria przesuwa termin dosłania (`tryby-offline.md`, „Termin przesłania przy kolejnych zdarzeniach”).
 
-Nienaprawione z rewizji (tematy tego planu): W4–W15, S2–S13, S15–S21, S23,
-NISKIE.
+Założenia:
+- **(a)** Fakturę, która nie wyszła w dniu P_1, wysyłamy bez zmian do końca następnego dnia roboczego. Potem zatrzymanie i nowy dokument z nową datą.
+- **(b)** Offline24 z wydaniem dokumentu nabywcy przed wysłaniem (drugi kod, certyfikat Offline) nie wchodzi do pierwszego wydania: art. 106nda ust. 1 daje uprawnienie podatnikowi, nie obowiązek programowi. Tekst mówi, co klient może zrobić poza aplikacją.
+- **(c)** Awarię komunikujemy banerem i mailem według stanu Latarni (B3).
+- **(d)** `ISSUE_DATE_PASSED` dla KOR, ZAL, ROZ (decyzja Bartosza 06.10) zostaje bez zmian, dopóki Bartosz nie zdecyduje inaczej.
 
----
-
-## 4. Mapa źródeł kar — skąd realnie bierze się kara
-
-| # | Mechanizm kary | Dziś chroni | Luka | Sesja |
-|---|---|---|---|---|
-| M1 | Faktura nie trafiła do KSeF w dniu wystawienia (art. 106na: datą wystawienia jest data przesłania; faktura „z wczoraj” wysłana dziś to dokument offline wymagający trybu i oznaczeń) | kontrola „dziś” w zwykłej fakturze i szkicu; automat ponawia przez 24 h | ZAL/KOR/ROZ bez kontroli „dziś” (W5); faktura `failed` przez noc wychodzi nazajutrz **z wczorajszą datą** bez trybu offline; brak decyzji, co robić po północy | A1, B1, B2 |
-| M2 | Duplikat w KSeF (ta sama faktura dwa razy) | uzgodnienie po referencji przed POST, 440 → własny duplikat, `singletonKey`, przejęcie 00124 | okno POST → zapis referencji (awaria między) → 440 bez sesji w historii → `failed KSEF_DUPLICATE_RECONCILE` (wyjście operatora, nie automatu) | A2, H1 |
-| M3 | Błędna treść dokumentu przyjęta przez KSeF (stawka, nabywca, kwoty korekty) | XSD lokalnie; AUD-03/21 sumy różnicy; łańcuch korekt (#217) | W4 (granice XSD w ZAL/KOR), W6 (`unit` > 20), W7 (`zw` w KOR), W8 (prefiks PL dla UE/np II), S6 (sprzedawca z przeglądarki w KOR), S7 (paszport = PL), S8 (VAT-UE) | C1–C4 |
-| M4 | Faktura w złym środowisku (TEST na PROD lub odwrotnie) | `ksef_environment` na wierszu, ENV_MISMATCH, 00117 | go-live: przełączenie `KSEF_ENV` bez runbooku (W15, S13) | F1 |
-| M5 | Brak dowodu (UPO/XML) przy kontroli | `xml_documents`, UPO job, I3 | W12 (UPO wiecznie ponawiane bez limitu / nigdy), D5 wdrożone ale bez kontroli skrótu w PDF dla starych plików | D1 |
-| M6 | Awaria KSeF dłuższa niż doba | ponowienia 24 h → `TRANSIENT_EXHAUSTED` | brak trybu offline na PROD (AUD-14) = po dobie klient musi wiedzieć, że musi działać ręcznie; brak komunikatu w aplikacji o awarii | B2, B3 |
-| M7 | Faktury przychodzące nie odebrane (VAT naliczony, terminy) | skrzynka co 15 min, backfill, alarm > 6 h | W10 (`isTruncated` na ostatniej stronie), S12 (legacy bez środowiska zatrzymuje skrzynkę) | E1 |
-| M8 | JPK/KPiR z błędnych danych | sumy różnicy w KOR; XSD JPK | W9 (`P_12` surowe z importu wywala JPK), S18/S19 (eksport/pulpit padają na jednym dokumencie) | C5, F2 |
-| M9 | Zabity worker / restart w trakcie wysyłki | heartbeat pg-boss, przejęcie 15 min, uzgodnienie po referencji | S4 (graceful 30 s vs SIGKILL 10 s → podwójne wykonanie jobów bez idempotencji poza wysyłką) | G1 |
-| M10 | Operator nie wie, że coś stoi | alarmy krytyczne, raport dzienny | S2 (sonda zdrowia KSeF martwa bez Redisa), brak runbooku per kod | G2, I2 |
-
----
-
-## 5. Sesje
-
-Każda sesja: **1 PR** (wyjątkowo 2, gdy migracja musi iść osobno),
-czerwony test najpierw, DoD z tabeli. „Dni” to orientacyjny czas sesji
-agenta z weryfikacją Bartosza, nie obietnica.
-
-### Blok A — domknięcie cyklu życia (wysyłka nie ginie)
-
-**A1. Data wystawienia a dzień wysyłki — jedna reguła dla wszystkich dokumentów (M1, W5)**
-- Problem: zwykła faktura i szkic wymagają `issueDate == dziś (Europe/Warsaw)`;
-  ZAL, KOR, ROZ nie (`advance-actions.ts`, `correction-actions.ts`,
-  `final-actions.ts`), a formularz zaliczki liczy datę w UTC.
-- Czerwony test: `saveAndSendAdvanceAction` z `issueDate` wczorajszą
-  przechodzi dziś → ma odmówić z tym samym komunikatem co `draft-actions.ts:77`.
-  Test formularza (`tests/unit/daty-formularzy-warszawa.test.ts:59-63`
-  utrwala błędne zachowanie — poprawić, nie dopisać).
-- Zakres: wspólna funkcja `assertIssueDateIsToday(invoice)` w
-  `lib/invoices/issue-date.ts`, użyta w 5 akcjach; formularze ZAL/KOR/ROZ
-  z `todayInWarsaw`.
-- DoD: wszystkie akcje tworzące i szkic odmawiają innej daty; raport
-  w PR z listą miejsc.
-
-**A2. Okno POST → zapis referencji (M2)**
-- Problem: `recordKsefSubmissionSent` idzie po odpowiedzi na POST; awaria
-  między POST a INSERT = wysłana faktura bez wpisu `sent` → kolejna próba
-  wysyła drugi raz → 440 bez sesji w historii → `failed` dla operatora.
-- Czerwony test: `submitInvoiceFullFlow` z `recordKsefSubmissionSent`
-  rzucającym po udanym POST, potem druga próba → oczekiwane: druga próba
-  **nie** robi POST, tylko uzgadnia (po zapisie „zamiaru” przed POST).
-- Rozwiązanie: wpis `ksef_submissions` ze statusem `intent` (nowy, 00136)
-  PRZED POST, z `sendAttemptId` i kluczem XML; po odpowiedzi `sent`
-  z referencjami; runner traktuje `intent` starszy niż 15 min bez referencji
-  jak „nie wiadomo, co KSeF dostał” → uzgodnienie po **numerze faktury
-  sprzedawcy i NIP** (zapytanie o faktury sesji/listę) zanim wyśle.
-  Jeśli API KSeF 2.0 nie daje wyszukania po numerze — zostaje 440 jako
-  siatka, ale wpis `intent` zapewnia, że sesja z 440 jest „własna”.
-- DoD: scenariusz „awaria po POST” kończy się `accepted` z numerem KSeF
-  bez drugiego POST; test na KSeF TEST w H1.
-
-**A3. Tryb „tylko uzgodnij” i STALE — domknięcie po #216**
-- Po scaleniu #216: cron I5 (zalegające `sent`) może zlecać uzgodnienie
-  automatycznie (`requeue_ksef_send(reconcile_only)`), bo runner nie wyśle
-  od nowa; dopisać do `ksef-lifecycle-reconcile.ts` z limitem 1 próba /
-  dobę / faktura i alarm po trzeciej.
-- Czerwony test: runner cyklu życia z wierszem `failed RESULT_UNCERTAIN`
-  + `sent` sprzed 3 dni → jedno zlecenie `reconcileOnly`.
-- DoD: I5 znika z listy „tylko alarm”; `/admin/ksef` pokazuje wpisy STALE.
-
-**A4. Kody bez wyjścia — przegląd katalogu**
-- Dla każdego z 19 kodów: tabela (kod → kto ma wyjście → gdzie przycisk →
-  test) w `docs/runbooks/ksef-error-codes.md`. Dziś bez pełnego wyjścia:
-  `ENQUEUE_LOST`, `ENV_MISMATCH`, `INVALID_EVENT` (operator ma tylko
-  „Tylko uzgodnij” / szkic); `KOR_HOLD`, `ROZ_HOLD_RECONCILE` (hamulce do
-  C4).
-- Zakres: dane zdarzenia wysyłki na wierszu faktury (00137) zapisywane przy
-  tworzeniu dokumentu specjalnego → zdarzenie wysyłki da się odtworzyć →
-  „Wyślij ponownie” i cron dla KOR/ZAL z kopii w dniu wystawienia (decyzja b);
-  ROZ i KOR na PROD czekają na C4. Po projekcie A4b
-  (05.10.2026): jedna kolumna `special_data` zamiast trzech — KOR
-  `{correctionData}`, ROZ `{finalData, finalAdvanceSettlementRows}`; ZAL nie
-  dostaje kopii, bo jej koperta jest już w `fa3_data.advanceEnvelope` (od
-  02.10) i granica wysyłki ją porównuje. Zapis jednorazowy wyzwalaczem
-  zamiast dopisania kolumn do list ROW z 00132. PR1: kolumna, zapis, porównanie
-  na granicy wysyłki; PR2: ponowienie z kopii (bez migracji).
-- Czerwony test: ZAL / TEST KOR z kopią w dniu wystawienia → `decideResend`
-  dozwolone; KOR_HOLD/ROZ_HOLD — bez przycisków klienta (decyzja a), operator;
-  runner odtwarza XML identyczny (skrót) z pierwszej próby.
-- DoD: `operatorInvoiceButtons` i `failedInvoiceButtons` nie mają gałęzi
-  „dokument specjalny: tylko szkic” — spełnione: operator w A4b PR2a (#243),
-  klient w A4b PR2b.
-- Podział (04.10.2026): **A4a** — katalog wyjść (tabela w runbooku,
-  macierz `tests/unit/ksef-wyjscia-kodow.test.ts`, „Wyślij ponownie”
-  operatora dla ENQUEUE_LOST / INVALID_EVENT / RESULT_UNCERTAIN, akcja
-  = przycisk); **A4b** — dane specjalne na wierszu (00137) i ponowienie
-  KOR/ZAL/ROZ; decyzje D-A4-1 (cudzy 440) i D-A4-2 (ENV_MISMATCH) w runbooku
-  `ksef-error-codes.md`.
-- **D-A4-1b-3 — decyzja klienta przy nierozstrzygniętym 440** (stan
-  25.10.2026; część PR B opisana wg stanu 07.10.2026): A0 (#229) i A — dane oryginału na wpisie (#230, 00144) —
-  scalone; wierny import C5a–C5c (#231, #239, #241) scalony. **PR B** —
-  decyzja klienta „ta sama sprzedaż” / „inna sprzedaż” (00148, przed
-  wdrożeniem; numer PR w dzienniku, sekcja 9): powody `no-own-file`
-  i `known-number` (runner pobiera oryginał także przy znanym numerze),
-  tylko zwykła faktura; nic nie importujemy, wpłaty blokują decyzję
-  (07.10 (A)); szkic wycofany przy każdym wpisie `number_taken` — bez
-  wysyłki, bez e-maila do nabywcy, bez zmiany numeru przez klienta, zwykła
-  i ZAL bez usunięcia, KOR i ROZ usuwalne (07.10 (2), (3), (9)–(11)); I5D
-  „czeka na klienta” osobno od I5 — bez automatu i bez alarmu, poza
-  `I5D-env` (07.10 (4)); e-mail raz na fakturę i numer KSeF oryginału
-  oraz „Przypomnij klientowi” raz na 24 h (07.10 (5), (12)); teksty klienta
-  i komunikaty P0001 — przegląd prawnika przed KSeF PROD (punkt bramki,
-  sekcja 8). **PR C0** (#246) i **C0b** (#247) to warunki PR C (mapowanie
-  wiersza importu do czystego modułu, odczyt plików z generatora bez strat).
-  **PR C, zapis oryginału z oznaczeniem FaktWay** (`faktflow-original`,
-  00156 przed wdrożeniem; numer PR w dzienniku, sekcja 9; migracja 00156
-  zamiast rezerwacji 00149, bo 00151 i 00155 przepisały te same funkcje):
-  runner ocenia pobrany plik bramą pochodzenia (16 jawnych reguł, wynik
-  w `original_check.importGate`); przy ocenie `importable` klient (albo
-  operator na jego prośbę) zapisuje decyzję, a `decide_ksef_duplicate_original`
-  w jednej transakcji wycofuje dokument X bez numeru i zapisuje oryginał K
-  jako przyjętą fakturę sprzedaży z numerem X (pozycje, `xml_documents`,
-  sesja i `upo_receipts`; data nadania z KSeF albo NULL z alarmem, nigdy
-  `now()`). Dwa przyciski „ta sama” / „inna” zapisują K (C1, C2); przy
-  własnej historii pliku albo tej samej treści jeden przycisk (C3, C5).
-  Plik z oceną `review` idzie do przeglądu operatora (I5R, alarm krytyczny
-  po 72 h od `checkedAt`): zapis K albo oddanie decyzji klientowi (bez
-  zapisu K, jak w PR B). Znacznik bez oceny pliku albo po odmowie przy zapisie
-  to `recheck-needed` (I5, cron robi nowy werdykt); `cross-tenant` kończy
-  się runbookiem i decyzją Bartosza, `known-now` powtórzeniem werdyktu.
-  Szkic wycofany po zapisie K jest bez numeru, PDF i e-mail odmawiają
-  (C8), K ma kartę z notatką o pochodzeniu; I3K (brak sesji UPO albo daty)
-  to trwały sygnał, a datę uzupełnia `scripts/ops/oryginal-ksef-data-nadania.sh`.
-  Teksty klienta PR C i komunikaty P0001 z 00156: przegląd prawnika przed
-  KSeF PROD (punkt bramki, sekcja 8). Runbook: `ksef-error-codes.md`, sekcja
-  „D-A4-1b-3 PR C”; kontrola: `kontrola-faktur-ksef.sh`, sekcja 10 (h) do (p).
-  Dalej: **PR D** („Sprawdź ponownie” dla powodów bez danych oryginału)
-  i **PR E** (K na wierszu X przy tej samej treści, C5). Bez decyzji
-  w panelu zostają: KOR/ZAL/ROZ (D-A4-1b-3-S), `same-content-other-program`
-  (D-A4-1b-2), `archive-conflict` (runbook).
-  Zapisane osobno przy PR C (nie naprawiane w nim; szczegóły w runbooku):
-  **D-A4-1b-3-MI** (szkic wycofany Z numerem blokuje Magiczny import oryginału),
-  **-UPO** (brak skryptu ręcznego UPO, `upo-retry-stale` bez limitu prób),
-  **-SYS** (`SystemInfo` jest jedyną podstawą powodu; zmiana przed KSeF PROD),
-  **-DATE** (werdykt bez daty nie alarmuje w runnerze), **-PDF** (PDF zwykłego
-  szkicu bez oznaczenia), **-PAY** (brak blokady wpłaty na szkic wycofany),
-  **-CAT** (komunikat katalogu „damy znać” przy `pair`), **-LIST** (lista
-  pokazuje X jako „(bez numeru)”), **-EVID** (decyzje PR B tylko w `audit_logs`),
-  **-XEDIT** (treść szkicu wycofanego zmienialna surowym PATCH), **-KORB2C**
-  (brak korekty dla nabywcy bez NIP i VAT-UE), **-KORZW** (brak korekty K
-  z pozycją `zw`, stawką FA(3) spoza FaktWay albo bez ceny netto), **-FLO-NUM** (audyt numeracji FLO
-  liczy tylko `origin = 'app'`), **-TESTENV** (wspólny KSeF TEST), a także
-  GEN-PESEL-KRAJ, C5b-d+, IDX-ENV. Reguła `totals` bramy jest ścisła co do
-  grosza (pierwotna specyfikacja dopuszczała 0,01 zł): plik „importable”,
-  którego nie da się zapisać, krążyłby w ponownym sprawdzaniu bez wyjścia.
-
-**A5. Ślad per próba — kontrakt danych dla centrum dowodzenia (M10)**
-- Problem: porażka przed POST (poświadczenia, XML, upload, przejęcie) nie
-  zostawia wiersza w `ksef_submissions`; na fakturze zostaje tylko ostatnia
-  (`last_error*`), więc historia prób nie istnieje w bazie, a operator
-  i centrum dowodzenia (osobny tor Masła/Codexa,
-  `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`) nie widzą, ile razy i na czym
-  faktura padła.
-- Czerwony test: runner z `KsefCredentialsError` → oczekiwany wiersz
-  `ksef_submissions` ze `status = failed`, `stage = credentials`,
-  `send_attempt_id` zdarzenia; druga próba tej samej faktury nie traktuje
-  go jako otwartej wysyłki.
-- Zakres (po A2, bo A2 wprowadza wiersz `intent`): kolumny
-  `send_attempt_id` (UNIQUE), `stage`, `error_class`, `job_id`,
-  `worker_sha`, `sentry_event_id`, `ksef_http_status` (numer z rejestru,
-  przed wdrożeniem); wiersz tworzony na początku próby i uzupełniany;
-  `findOpenKsefSubmission` filtruje `status IN ('sent','intent')`; jedna
-  linia JSON per etap w logu workera; `ops_alert_log` zapisywany
-  w `markAlertDelivered` monitora alarmów (decyzja D7 briefu).
-- DoD: każda próba (udana i nie) ma dokładnie jeden wiersz; test na bazie
-  dla UNIQUE i filtra otwartej wysyłki; `/admin/ksef/[id]` pokazuje próby
-  sprzed POST. Kontrakt kolumn uzgodniony w `CLAUDE-DO-CODEXA.md` (C-22)
-  PRZED tą sesją.
-
-### Blok B — awaria KSeF i tryb offline (M1, M6) — najgroźniejsze prawnie
-
-**B1. Decyzja prawna i produktowa (Bartosz + prawnik, bez kodu)**
-- Pytania do rozstrzygnięcia i zapisania w `docs/architecture/cykl-zycia-faktury-ksef.md`
-  sekcja 9: (a) co robimy z fakturą, która nie wyszła w dniu wystawienia —
-  tryb offline24 z kodem QR II i certyfikatem offline, czy nowy dokument
-  z nową datą (klient decyduje?); (b) czy w ogóle oferujemy Offline24 na
-  PROD; (c) jak komunikujemy klientowi awarię KSeF (baner, mail).
-- Bez tej decyzji sesje B2–B3 nie startują.
-
-**B2. Północ: co z fakturami `queued`/`failed`, które nie wyszły tego dnia**
-- Dziś: automat ponawia do 24 h; faktura z datą wczorajszą wychodzi nazajutrz
-  jako zwykła (KSeF przyjmie, ale prawnie to dokument offline bez oznaczeń).
-- Zakres (wg B1): cron o 23:45 Europe/Warsaw oznacza niewysłane faktury
-  z dzisiejszą datą: albo wstrzymuje je (`failed ISSUE_DATE_PASSED`, nowy
-  kod klasy terminal — klient wraca do szkicu i wystawia z nową datą), albo
-  przełącza w tryb offline (jeśli B1 = tak). Komunikat w aplikacji i mail.
-- Czerwony test: faktura `failed INFRA` z `issue_date = wczoraj` nie jest
-  ponawiana przez automat; klient widzi dlaczego i co zrobić.
-- Częściowo zrobione przed B2 (decyzja Bartosza 06.10.2026, A4b): kod
-  `ISSUE_DATE_PASSED` (00147) i bezpiecznik w workerze (przed wysyłką i w haku
-  sesji tuż przed plikiem) — tylko
-  dla dokumentów specjalnych (KOR, ZAL, ROZ). B2 rozszerza go na zwykłe faktury
-  (po decyzji B1) i dokłada cron 23:45 oraz maila.
+### B2. Termin dosłania zamiast północy
+- Dziś: automat ponawia zwykłą fakturę przez 24 h bez związku z terminem prawnym, klient nie widzi terminu.
+- Zakres wg założenia B1(a): jedna funkcja terminu (koniec następnego dnia roboczego po P_1, kalendarz z `lib/ksiegowosc/kalendarz.ts`, przedłużenie o ogłoszoną awarię z B3). Automat ponawia do terminu, przed terminem alarm dla klienta i operatora, po terminie `ISSUE_DATE_PASSED` także dla zwykłej faktury, komunikat i mail. Jeśli prawnik odrzuci to założenie: cron 23:45 z wersji 1 (archiwum, B2).
+- Czerwony test: faktura `failed INFRA` z P_1 w piątek: automat ponawia w sobotę i w poniedziałek, we wtorek nie; to samo ze świętem w środku tygodnia. Klient widzi dlaczego i co zrobić.
+- Osobne małe PR z rejestru: `-PDF`, `-XEDIT`, `OFFLINE`, tekst `draft-invoice-actions.tsx:48` (obiecuje kolejkę offline, która jest wyłączona).
 - Bezpiecznik daty jest w czterech miejscach: runner (`submit-invoice.ts`,
   przed wysyłką), hak otwarcia sesji (`submit-invoice-full.ts`, tuż przed
   plikiem), builder ponowień (`ksefResendFacts` w
@@ -332,28 +195,18 @@ agenta z weryfikacją Bartosza, nie obietnica.
   dostaną przycisk, którego worker odmówi, odmowę, której worker już nie ma,
   albo tekst o północy, który przestał być prawdą.
 
-**B3. Sonda zdrowia KSeF bez Redisa (S2) i baner awarii**
-- Problem: `ksef-health-check` nic nie zapisuje bez Redisa; `isKsefHealthy`
-  zawsze `true`; alarm „KSeF niedostępny” martwy.
-- Zakres: zapis do `ksef_health_log` (tabela istnieje) przy każdym pingu;
-  `isKsefHealthy` z bazy; baner na pulpicie „KSeF niedostępny od HH:MM —
-  wysyłki ponawiamy automatycznie” z `lib/ksef/health-status.ts`.
-- Czerwony test: `tests/unit/*health*` z atrapą bez Redisa → log w bazie,
-  `isKsefHealthy === false` po 3 porażkach.
+### B3. Stan KSeF: Latarnia i własna sonda
+- Stan: baner `ksef-health-banner-client.tsx` jest. `isKsefHealthy` zwraca `true` przy braku danych, zapis do `ksef_health_log` odpada bez Redisa. Na produkcji Redis jest (odczyt 25.10), więc to brak odporności, nie dzisiejsza awaria.
+- Zakres: odczyt `GET /status` i `/messages` z Latarni (`https://api-latarnia.ksef.mf.gov.pl`, test: `api-latarnia-test`, bez autoryzacji, stany `AVAILABLE`, `MAINTENANCE`, `FAILURE`, `TOTAL_FAILURE`, repo `CIRFMF/ksef-latarnia`). Tryb prawny bierzemy z Latarni, własna sonda mówi tylko „nie odpowiada”. Zapis do `ksef_health_log` przy każdym przebiegu. Tekst banera wg stanu i B1(c); przy `TOTAL_FAILURE` inna instrukcja.
+- Czerwony test: atrapa bez Redisa → log w bazie, `isKsefHealthy === false` po 3 porażkach; atrapa Latarni z `FAILURE` → baner i przedłużony termin B2.
 
-### Blok C — treść dokumentu (M3, M8)
+### C1. Granice XSD w formularzach ZAL/KOR/ROZ (W4, W6)
+- `lib/validators/invoice-validators.ts` kontra `lib/schemas/invoice-form.ts`: `P_7` 512, `PrzyczynaKorekty` 256, adres 512, znaki sterujące. Dziś faktura pada w jobie jako `failed` z technicznym komunikatem.
+- `P_8A` ma w XSD 256 znaków (`schemat.xsd:3129`), a 50 to kolumna `VARCHAR(50)`. Moduł rozdziela limity XSD i bazy. „unit > 20” z wersji 1 było błędem.
+- Czerwony test: generator FA(3) + XSD dla każdej granicy (golden files w `tests/xml/`); formularz odmawia tych samych wartości.
+- DoD: jeden moduł granic (`lib/xml/fa3-limits.ts`) importowany przez schematy formularzy, walidatory i generatory.
 
-**C1. Granice XSD w formularzach ZAL/KOR/ROZ (W4, W6)**
-- `lib/validators/invoice-validators.ts` vs `lib/schemas/invoice-form.ts`:
-  P_7/P_7Z 512, `PrzyczynaKorekty` 256, adres 512, znaki sterujące, `unit`
-  ≤ 50 (baza VARCHAR(50)); dziś faktura pada w jobie jako `failed` z technicznym
-  komunikatem.
-- Czerwony test: generator FA(3) + XSD dla każdej granicy (golden files
-  w `tests/xml/`); formularz odmawia tych samych wartości.
-- DoD: jeden moduł granic (`lib/xml/fa3-limits.ts`) importowany przez
-  schematy formularzy, walidatory i generatory.
-
-**C2. Nabywca i sprzedawca — prawda w dokumencie (W8, S6, S7, S8)**
+### C2. Nabywca i sprzedawca — prawda w dokumencie (W8, S6, S7, S8)
 - W8: `Podmiot1/PrefiksPodatnika = PL` dla UE / np II w XML, JPK_FA `P_4A`, PDF.
 - S6: sprzedawca w KOR z `requireTenantSeller` (jak ZAL/ROZ), nie z przeglądarki.
 - S7: paszport nabywcy → `KodKraju` z formularza, nie `PL` na sztywno.
@@ -361,8 +214,9 @@ agenta z weryfikacją Bartosza, nie obietnica.
   bez spacji/prefiksu podwójnego.
 - Czerwony test: po jednym na pozycję (XSD + golden); DoD: PDF, XML, JPK
   pokazują to samo.
+- Stan: S6 otwarte (`correction-actions.ts:259` bierze sprzedawcę z przeglądarki), W8 otwarte (generator nie pisze `PrefiksPodatnika`), S7 i S8 częściowo.
 
-**C3. `zw` w korektach i firmy zwolnione z VAT (W7)**
+### C3. `zw` w korektach i firmy zwolnione z VAT (W7)
 - Problem: firma z art. 113 nie wystawi żadnej korekty (`zw` w wierszach =
   „wymagane ręczne uzgodnienie”).
 - Zakres: KOR ze stawką `zw` i podstawą zwolnienia (P_19/P_19A) w generatorze
@@ -379,7 +233,7 @@ agenta z weryfikacją Bartosza, nie obietnica.
   netto (ceny brutto, brak P_9A): korekta dalej odmówi, klient dostaje
   `CORRECTION_RATE`, sprawa do Bartosza.
 
-**C4. Zdjęcie `KOR_HOLD` i `ROZ_HOLD` (po C1–C3 i #217)**
+### C4. Zdjęcie `KOR_HOLD` i `ROZ_HOLD` (po C1–C3 i #217)
 - Checklista przed zdjęciem: łańcuch korekt (#217) wdrożony; C1–C3 scalone;
   H1 przeszedł scenariusze korekt na KSeF TEST (pierwsza, druga, 440, 450);
   ROZ: 00125 (jedna ROZ na zaliczkę) + `assertSubmitReferences` + test TEST.
@@ -411,30 +265,18 @@ agenta z weryfikacją Bartosza, nie obietnica.
   A4b PR2b ponowienie wysyła treść z kopii — przed zdjęciem hamulca kopię ma
   zapisywać wyłącznie serwer.
 - DoD: pierwsza korekta klienta na PROD przyjęta z UPO; strażnik 0.
+- Z rejestru (sekcja 8): F-005 (#283), C5b-e, -KORB2C; ROZ: #195 albo decyzja D0.
 
-**C5. Import historii i JPK (W9, S18, S19)**
-- W9: normalizacja `P_12` w `lib/import/fa3-parser.ts` (np II, np I, 0 KR,
-  0 WDT) + ewentualny `UPDATE` istniejących wierszy **za zgodą** (migracja
-  z licznikiem `SELECT count(*)` w nagłówku).
-- S18/S19: eksport i pulpit nie padają na jednym dokumencie — błąd per
-  dokument z nazwą, reszta liczy się dalej.
-- Czerwony test: JPK_V7M dla miesiąca z jedną zaimportowaną fakturą „np II”.
-- Podział (05.10.2026): **C5a** — W9 (stawki P_12, `lib/xml/fa3-p12.ts`,
-  runbook `import-stawki-vat.md`); **C5b** — data sprzedaży (P_6) i adnotacje
-  (P_16, P_18A, P_19A/B/C) z pliku do `sale_date` / `fa3_data.annotations` —
-  **warunek** D-A4-1b-3 PR C (zapis oryginału z KSeF po decyzji klienta);
-  S18/S19 osobno. Na produkcji 05.10: 0 faktur z importu — bez `UPDATE`.
-  Decyzje Bartosza 06.10.2026: **C5c** — ceny brutto (`P_9B`, `P_11A`,
-  `P_11Vat`, VAT rozłożony do `P_14_x`) osobnym PR po C5b, też warunek PR C;
-  JPK_FA wpisuje `P_17`, jawne `P_18` i `P_19B`/`P_19C` z pliku; FP, TP,
-  podmiot upoważniony, GTU i Procedura — wykrywane i zatrzymywane w JPK;
-  faktury z importu sprzed C5b uzupełnia ponowny import.
-  C5c (decyzje 06.10): VAT nagłówka dzielony na pozycje także dla faktur
-  netto; `P_11Vat` częściowy albo niezgodny z nagłówkiem — zatrzymać.
+### C5. Reszta: eksport i pulpit odporne na jeden dokument (S18, S19)
+- C5a–c zrobione. Zostaje: eksport i pulpit nie padają na jednym dokumencie, błąd per dokument z nazwą, reszta liczy się dalej. Najpierw ustalić, czy to nie zostało już zrobione inną drogą.
 
-### Blok D — dowody (M5)
+### C6. Okres VAT w JPK_V7M (z C5b-f)
+- Problem: `lib/exports/data-fetcher.ts:286` wybiera sprzedaż po `issue_date`; runbook `import-stawki-vat.md:176` zapisuje to jako C5b-f, także dla faktur FaktWay. Sprzedaż z 30.10 z fakturą z 3.11 idzie do JPK za listopad zamiast za październik.
+- Najpierw księgowa potwierdza regułę okresu (art. 19a, metoda kasowa `P_16`, `OkresFa`, zaliczki).
+- Czerwony test: JPK_V7M za październik z fakturą jak wyżej.
+- DoD: reguła okresu w jednym module, użyta przez JPK; złoty przypadek od księgowej.
 
-**D1. UPO dla każdej przyjętej faktury (W12, I3)**
+### D1. UPO dla każdej przyjętej faktury (W12, I3)
 - Problem: `upo-retry-stale` bez limitu prób, trwale nieudane wypychają nowe.
 - Zakres: `download_attempts` z limitem i wykluczeniem kodów nieretryowalnych;
   po limicie `failed` UPO z kodem i wyjście operatora w `/admin/ksef` (karta
@@ -442,17 +284,17 @@ agenta z weryfikacją Bartosza, nie obietnica.
   < 24 h” (ostrzeżenie) i „> 24 h” (naruszenie).
 - Czerwony test: 60 wpisów UPO: 50 trwale 4xx, 10 świeżych — świeże
   pobrane w jednym przebiegu.
+- Stan: `upo-retry-stale.ts:129` bierze najstarsze wpisy, a `download_attempts` jest tylko odczytywane (limit 100 na przebieg, nie na wpis). Obejmuje -UPO.
 
-**D2. Dowód treści: skrót XML w każdym PDF i w portalu**
+### D2. Dowód treści: skrót XML w każdym PDF i w portalu
 - PDF z KOD I liczy skrót z pliku próby (D5); dla faktur sprzed D5 — z pliku
   historycznego; brak pliku = PDF bez kodu z wyraźnym komunikatem (B14 jest),
   plus alarm I3.
 - Czerwony test: `generateInvoicePdf` dla faktury z `xml_storage_path` próby.
+- Z rejestru: C-12, C-20 (#369, #190).
 
-### Blok E — faktury przychodzące (M7)
-
-**E1. Skrzynka bez luk (W10, S12, S9)**
-- W10: `isTruncated` honorowany niezależnie od `hasMore` (`lib/ksef/inbox.ts:105-115`).
+### E1. Skrzynka bez luk (W10, S12, S9)
+- W10: `isTruncated` honorowany niezależnie od `hasMore` (`lib/ksef/inbox.ts:114-116`).
 - S12: legacy wiersz bez `ksef_environment` w oknie kursora — uzgodnienie
   per firma w `/admin` zamiast zatrzymania skrzynki (fail-closed z wyjściem).
 - S9: PDF faktury ze skrzynki nie rzuca 500 — podgląd z `fa3_data` albo
@@ -460,13 +302,7 @@ agenta z weryfikacją Bartosza, nie obietnica.
 - Czerwony test: skrzynka z 10 001 faktur w oknie (atrapa) → 10 001 wierszy,
   HWM nie przeskakuje.
 
-**E2. Magiczny import odporny na jedną złą fakturę (S11)**
-- Jedna faktura w EUR / nakładka ze skrzynką nie wywala paczki; błąd per
-  dokument w raporcie importu.
-
-### Blok F — go-live (M4, M8)
-
-**F1. Runbook przełączenia TEST → PROD (W15, S13)**
+### F1. Runbook przełączenia TEST → PROD (W15, S13)
 - Dziś przełączenie `KSEF_ENV` wyłączy KPiR, eksporty i stronę zaległości
   u firm z fakturami przyjętymi na TEST; zmiana `ksef_environment` tylko
   rolą `postgres`.
@@ -490,48 +326,40 @@ agenta z weryfikacją Bartosza, nie obietnica.
   potwierdzić środowiska KSeF…”, bez przycisków.
   Worker i aplikacja przełączane razem (zdarzenie z drugiego środowiska =
   `ENV_MISMATCH`, wyjście: szkic i decyzja klienta).
+- Z rejestru: -SYS.
 
-**F2. Firma z fakturami TEST po go-live**
+### F2. Firma z fakturami TEST po go-live
 - Widok „dokumenty testowe” oddzielony od księgowych; portal księgowej
   bez faktur TEST (S10); eksporty tylko PROD.
+- Z rejestru: ZAP-01-f, S10, D-A4-2.
 
-### Blok G — joby i odporność (M9, M10)
-
-**G1. Zabity worker (S4)**
+### G1. Zabity worker (S4)
 - `stopBoss({ timeout })` dopasowane do czasu łaski kontenera (Coolify
   10 s) + idempotencja jobów, które dziś dublują: sekwencja maili próbnych
   (W14, klucz `seq/<userId>/<stage>`), przypomnienia, eksporty.
 - Czerwony test (chaos, H2): SIGKILL w trakcie `submit-invoice` po POST →
   po restarcie uzgodnienie, nie drugi POST.
 
-**G2. Równoległość i kolejność (S3, S16)**
-- `localConcurrency` zamiast `batchSize` tam, gdzie Inngest miało `concurrency.limit`;
-  bramka `/wdroz` wdraża worker PRZED webem (jak AGENTS.md).
+### G2. Równoległość (S3, S16)
+- Stan: wysyłka ma `localConcurrency: 5` i limit na firmę (`package-d.ts:65-67`); sloty wysyłki należą do sesji 15 planu skalowania. Zostają inne kolejki z `batchSize` (`package-c.ts`) i sprawdzenie, czy `/wdroz` wdraża worker przed webem.
 
-**G3. Retencja bez półśrodków (W13)**
+### G3. Retencja bez półśrodków (W13)
 - Referencje (FK) sprawdzane przed kasowaniem plików; DELETE per faktura;
   pliki prób (D5) w jednym przebiegu z wierszem.
+- Stan: najpierw przeczytać `retention-delete.ts` i `archive-old-invoices.ts`; plan skalowania (sesja 30) też dotyka archiwizacji.
 
-### Blok H — prawdziwy KSeF TEST w CI (klucz całego planu)
+### H1a. Szkielet na prawdziwym KSeF TEST (od razu)
+- Workflow `ksef-test-e2e.yml`: tylko `schedule` i `workflow_dispatch`, nigdy `pull_request`, bo repo jest publiczne. Termin poza oknem serwisowym TEST (16:00–18:00). Baza lokalna jak „RLS isolation”, worker w procesie, fikcyjny NIP, certyfikat samopodpisany (TEST je dopuszcza).
+- Numer faktury z identyfikatorem przebiegu, bo KSeF pilnuje unikalności przez 10 lat. Dane TEST są współdzielone między integratorami, więc testy nie zakładają pustego konta (`-TESTENV`).
+- Scenariusze na start: 1, 2, 3, 13.
+- Warunek: rozstrzygnąć #189 (F-093), inaczej `ksef_code` jest pusty dla `problem+json` i raport kodów nie działa.
+- DoD: zielony przebieg z raportem kodów; scenariusz 13 pokazuje, jaki tryb KSeF nadał fakturze.
 
-Dotąd wszystko było dowodzone na atrapach. Bez tego bloku każda kolejna
-rewizja znajdzie „~45 defektów przy zielonych testach”.
+### H1b. Pełna lista scenariuszy
+- Reszta sekcji 6 oraz: reset → poprawa → ponowna wysyłka (nowy klucz XML), „tylko uzgodnij”, uzgodnienie po referencji, skrót oryginału = `invoiceHash` i UPO z sesji spoza FaktWay (D-A4-1a).
+- DoD: każdy scenariusz zielony w 3 kolejnych tygodniach przed wydaniem.
 
-**H1. E2E na KSeF TEST (cotygodniowo, konto testowe FaktFlow)**
-- Workflow `ksef-test-e2e.yml` (ręczny + harmonogram): środowisko TEST,
-  firma testowa z certyfikatem/tokenem w sekretach GitHub, baza lokalna
-  (jak „RLS isolation”) + worker w procesie.
-- Scenariusze (każdy = test z asercjami na bazie i w KSeF): wysyłka VAT
-  → `accepted` + UPO; duplikat 440 (ta sama faktura dwa razy) → własny
-  duplikat; odrzucenie 450 (błąd semantyczny) → `rejected` + wpis zamknięty;
-  reset → poprawa → ponowna wysyłka (nowy klucz XML); korekta „przed/po”
-  → druga korekta (łańcuch) → sumy; uzgodnienie po referencji (POST bez
-  odczytu statusu); „tylko uzgodnij”; nieznana sesja → **tu ustalamy
-  prawdziwy kod odpowiedzi** i wpisujemy do `KSEF_SUBMISSION_STALE_*`.
-- DoD: raport w CI z kodami odpowiedzi KSeF; każdy scenariusz zielony
-  3 tygodnie z rzędu przed wydaniem.
-
-**H2. Chaos na kopii bazy (game day)**
+### H2. Chaos na kopii bazy (game day)
 - Skrypt `scripts/ops/game-day.sh` (na kopii, nigdy na produkcji): zabij
   worker w `sending`; odetnij R2 w uploadzie; odetnij bazę w `enqueue`;
   wyłącz PostgREST na 2 min; zmień klucz szyfrowania bez `_PREVIOUS`.
@@ -539,188 +367,117 @@ rewizja znajdzie „~45 defektów przy zielonych testach”.
   i wyjście.
 - DoD: tabela „awaria → sygnał w ≤ 15 min → wyjście” bez pustych pól.
 
-### Blok I — operacje
-
-**I1. Rotacja kluczy (dług z Vercela)**
+### I1. Rotacja kluczy (dług z Vercela)
 - `KSEF_CREDENTIALS_ENCRYPTION_KEY` z `_PREVIOUS` i skryptem reencrypt
   (AUD-52 ✅) — wykonać rotację naprawdę; `CREDENTIALS_UNAVAILABLE` ma test
   na prawdziwej rotacji (H2). Pozostałe klucze wg `docs/runbooks/key-rotation.md`.
 
-**I2. Runbook operatora per kod + ćwiczenie**
+### I2. Runbook operatora per kod + ćwiczenie
 - `docs/runbooks/ksef-error-codes.md`: dla każdego kodu — co widzi klient,
   co robi automat, co klika operator, kiedy dzwonić do klienta. Jedno
   ćwiczenie Bartosza na kopii bazy z fakturami w każdym stanie.
 
-**I3. Backup i odtworzenie z weryfikacją faktur**
+### I3. Backup i odtworzenie z weryfikacją faktur
 - `docs/runbooks/backup-restore.md` wykonany na kopii: po odtworzeniu
   `ksef_lifecycle_violations()` bez I5D = 0, liczby faktur per stan zgodne,
   pliki XML prób dostępne.
 
-### Blok J — pozostałe ustalenia rewizji (po A–I)
-
+### J. Pozostałe ustalenia (po bramce)
 S5 (cron ponagleń proponuje ROZ/KOR z błędną kwotą), S15 (usunięcie
 użytkownika omija RODO), S17 (AUD-58: MFA w `getOcrJobStatusAction`,
 `upo-actions`, support chat), S20/S21 (env `RESEND_FROM_EMAIL`,
 `STRIPE_PRICE_ANNUAL`), S23 (eksport RODO), NISKIE z raportu. Każde osobnym
 PR według protokołu; nie dotyczą kar, więc po bramce z sekcji 8.
 
----
-
-## 6. Kolejność i zależności
-
-```
-A1 ──┐
-A2 ──┼──► H1 (E2E na KSeF TEST) ──► C4 (zdjęcie hamulców) ──► bramka (sekcja 8)
-A3 ──┤        ▲
-A4 ──┘        │
-B1 (decyzja) ─► B2 ─► B3 ───────────┤
-C1 ─► C2 ─► C3 ─────────────────────┘
-D1, D2, E1, E2, F1, F2, G1–G3 — równolegle, każda osobno; I1–I3 w dowolnym momencie.
-H2 (game day) po G1 i A2. Blok J po bramce.
-```
-
-A5 (ślad per próba) po A2, przed H2 — dostarcza dane centrum dowodzenia
-(osobny tor Masła/Codexa, `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`);
-centrum nie jest sesją tego planu.
-
-Można prowadzić dwie sesje naraz tylko wtedy, gdy nie dotykają tych samych
-plików: np. C1 (walidatory) i E1 (skrzynka), D1 (UPO) i G3 (retencja).
-Bloki A i H prowadzi jedna linia sesji, bo zmieniają runner.
-
-Orientacyjnie: 21 sesji roboczych (A: 5, B: 3, C: 5, D: 2, E: 2, F: 2, G: 3,
-H: 2, I: 3 — część krótkich), plus decyzje Bartosza w B1 i C4.
+### A4-D. „Sprawdź ponownie” dla 440 bez danych oryginału (D-A4-1b-3 PR D)
+- Stan: #336 ma test czerwony przed naprawą, recenzję i 18 tekstów do prawnika, ale jest 244 commity za `main`.
+- Zakres: dogonić `main` przez merge, powtórzyć pełną weryfikację, sprawdzić, czy zmiany z `main` nie unieważniły założeń, zdjąć szkic. Scalenie tylko na polecenie Bartosza.
+- Dlaczego w bramce: klient przy powodach `download-refused`, `download-pending`, `storage-pending`, `archive-pending` nie ma dziś żadnego wyjścia (definicja sukcesu, pkt 1).
+- Poza zakresem: 440 bez numeru oryginału (rejestr, po bramce) i PR E.
 
 ---
 
-## 7. Scenariusze, które muszą przechodzić na prawdziwym KSeF TEST
+## 6. Scenariusze
 
-| # | Scenariusz | Oczekiwany stan końcowy | Dowód |
-|---|---|---|---|
-| 1 | Zwykła faktura VAT | `accepted`, numer KSeF, XML próby, `xml_documents`, UPO ≤ 24 h | `/admin/ksef` karta; strażnik 0 |
-| 2 | Ta sama faktura wysłana dwa razy (dwa zdarzenia) | jedna wysyłka; druga → `singletonKey` albo 440 → własny duplikat | `ksef_submissions`: 1 wpis `accepted` |
-| 3 | Odrzucenie semantyczne (450) | `rejected KSEF_REJECTED`, wpis `rejected`, przycisk „Wróć do szkicu” | brak wpisu `sent` |
-| 4 | Reset → poprawa → ponowna wysyłka | `accepted`, nowy klucz XML, stary plik nietknięty | dwa pliki w folderze faktury |
-| 5 | POST wysłany, worker zabity przed statusem | po restarcie uzgodnienie, `accepted`, **bez** drugiego POST | 1 wpis `sent → accepted` |
-| 6 | KSeF niedostępny 2 h | `failed KSEF_UNAVAILABLE` → automat ponawia → `accepted` | audyt `send_requeued` z `user_id NULL` |
-| 7 | KSeF niedostępny > 24 h | `TRANSIENT_EXHAUSTED` + alarm + decyzja z B1/B2 | raport dzienny |
-| 8 | Korekta „przed/po”, potem druga | P_15 drugiej = różnica od stanu po pierwszej | XML golden |
-| 9 | Nieznana / stara sesja przy uzgadnianiu | kod odpowiedzi KSeF zapisany; STALE tylko gdy uzasadnione | log CI |
-| 10 | Brak certyfikatu / NIP niezweryfikowany | `failed NO_CERTIFICATE / NOT_VERIFIED`, link do ustawień | przycisk |
-| 11 | Zdarzenie z innego środowiska | `failed ENV_MISMATCH`, alarm, operator | Sentry |
-| 12 | Faktura przychodząca w KSeF TEST | wiersz `received`, koszt, XML, KOD I w PDF | skrzynka |
+Dokumentacja KSeF nie opisuje symulowania awarii na TEST, więc awarie idą przez blokadę sieci.
 
----
-
-## 8. Bramka wydania „zero zgubionych faktur”
-
-Wydanie na PROD dla klientów płacących dopiero, gdy **wszystkie** punkty
-są odhaczone (z datą i numerem PR/raportu):
-
-- [ ] Sesje A1–A4, B1–B3, C1–C4, D1, E1, F1, G1, H1, H2 scalone i wdrożone.
-- [ ] 12 scenariuszy z sekcji 7 zielone na KSeF TEST w 3 kolejnych
-      tygodniowych przebiegach.
-- [ ] `ksef_lifecycle_violations()` bez I5D = 0 przez 14 dni (I5D — faktury
-      czekające na decyzję klienta — w raporcie osobno; I5D-env = 0); raport
-      dzienny bez `exhausted` i `i1Lost` niewyjaśnionych.
-- [ ] Każdy kod z `ksef_error_codes` ma wiersz w runbooku z wyjściem
-      i testem (A4, I2).
-- [ ] Game day (H2): każda z 5 awarii → sygnał ≤ 15 min → wyjście.
-- [ ] Rotacja kluczy wykonana (I1); odtworzenie z kopii wykonane (I3).
-- [ ] Runbook go-live przećwiczony na kopii (F1).
-- [ ] Hamulce: `KOR_HOLD`, `ROZ_HOLD` zdjęte świadomie (C4) **albo** decyzja,
-      że korekty/ROZ nie są w pierwszym wydaniu — zapisana i widoczna
-      w produkcie (komunikat, nie `failed`).
-- [ ] Decyzja B1 zapisana w projekcie cyklu życia; Offline24 albo działa,
-      albo jest jawnie poza produktem.
-- [ ] Teksty decyzji D-A4-1b-3 PR B (dialogi, odmowy w panelu, komunikaty
-      P0001 z RPC i wyzwalaczy 00148, baner wycofanego dokumentu każdego
-      rodzaju, odmowa e-maila, e-mail i przypomnienie, teksty
-      KSEF_NUMBER_TAKEN, w tym KOR/ZAL/ROZ) przejrzane przez prawnika —
-      decyzje Bartosza 07.10.2026 (A) i (8); TEST bez blokady. Lista:
-      DUPLICATE_DECISION_TEXTS + DUPLICATE_DECISION_SQL_TEXTS (snapshot
-      tests/unit/ksef-duplikat-decyzja-teksty.test.ts).
-- [ ] Teksty decyzji D-A4-1b-3 PR C (zapis oryginału z oznaczeniem FaktWay)
-      przejrzane przez prawnika (rozszerzenie punktu wyżej); TEST bez
-      blokady. Ta sama migawka
-      (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 69 tekstów
-      klienta `DUPLICATE_DECISION_TEXTS.FAKTFLOW` i 12 nowych szablonów
-      `DUPLICATE_DECISION_SQL_TEXTS` z 00156. Klient: wstęp panelu (para,
-      własna historia, ta sama treść), „Zapisz fakturę z KSeF w FaktWay”,
-      dialogi „ta sama” / „inna” / „zapisz” z „Rozumiem skutki”, zdania o JPK
-      i KPiR (`LEDGER`, `PAST_PERIOD`, `NOT_RECORDED`), o korekcie dla nabywcy
-      bez NIP i VAT-UE (`CORRECTION_PERSON`), o pozycji `zw`, stawce spoza
-      FaktWay i braku ceny netto (`CORRECTION_RATE`) i o wstrzymanych korektach na
-      produkcji (`HELD_CORRECTIONS`), tosty, banery wycofanego dokumentu,
-      karta faktury z KSeF (`IMPORTED_CARD*`), odmowa PDF i e-maila
-      (`RETIRED_DOCUMENT_REFUSAL`, `RETIRED_PDF_LINK`), teksty o ponownym
-      sprawdzeniu i o błędzie odczytu (`RECHECK`, `READ_FAILED`), e-mail i push (`NOTICE_*`: zapis, oddanie,
-      „sprawdzamy fakturę”), `LAST_ERROR`, `LAST_ERROR_REVIEW`,
-      `RELEASED_NOTE`, `PROGRAM_RELEASED`. Komunikaty P0001 z 00156:
-      `known-now`, `cross-tenant`, `recheck-needed`, `provenance-review`,
-      `CHOICE`, `IMPORT_MISMATCH`, `ALREADY_IMPORTED` i pięć odmów wyzwalacza
-      `TRIGGER_*_IMPORTED`. Teksty operatora (`OPERATOR_DUPLICATE_MESSAGES`)
-      prawnika nie dotyczą. Zmiana tekstu P0001 po przeglądzie wymaga nowej
-      migracji i tej samej zmiany w lustrze TS (strażnik
-      `tests/unit/zapis-oryginalu-migracja.test.ts`).
-- [ ] `scripts/ops/kontrola-faktur-ksef.sh` uruchamiany codziennie przez
-      14 dni bez „nieznanych” stanów.
-
-Po bramce: tygodniowy przegląd (raport dzienny + strażnik + Sentry) przez
-pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem.
-
----
-
-## 9. Dziennik sesji
-
-| Data | Sesja | PR | Zrobione | Co zostało |
+| # | Scenariusz | Oczekiwany stan końcowy | Dowód | Gdzie |
 |---|---|---|---|---|
-| 03–04.10.2026 | (runda cyklu życia, przed tym planem) | #199–#217 | sekcja 3 | — (wszystko scalone, 00131–00135 na db-1, wdrożone 04.10) |
-| 04.10.2026 | A1 | #219 | `lib/invoices/issue-date.ts`: jedna reguła „data wystawienia = dziś w Polsce” w 5 akcjach wysyłki (FA, szkic, ZAL, KOR, ROZ — w ROZ przed hamulcem); formularz ZAL bez UTC; 11 przypadków czerwonych przed naprawą. Scalone i wdrożone 04.10 (worker, potem web; `2dbf13a`) | faktura, która nie wyszła przed północą (ponowienie, cron, `/admin/ksef`), to B1/B2 |
-| 04.10.2026 | A2 | #221 | wpis `intent` z numerem sesji przed POST pliku (bez zapisu — bez wysyłki); ponowienie zamyka sesję zamiaru i pyta KSeF o jej faktury (`GET /sessions/{ref}/invoices`): plik → `sent` + uzgodnienie, pusto → `abandoned` + wysyłka od nowa; 00136: `intent` = dowód kontaktu, I5 widzi stary zamiar; „Tylko uzgodnij” działa przy zamiarze | scalone, 00136 wgrana na db-1 i wdrożone 04.10 (worker, potem web; `dcf48ba`; strażnik 0); test na KSeF TEST (H1, scenariusz 5); osobne ustalenie: status 440 przy uzgadnianiu po referencji (`reconcile-previous-submission`) kończy się ponowieniami zamiast ścieżką „własny duplikat”; dla A5/C-22: A2 dodało status `abandoned`, a otwarte zamiary rozstrzyga osobny krok (`findOpenKsefSubmissionIntents`) — `findOpenKsefSubmission` zostaje przy `sent`; punkt 3 kontraktu w sekcji 5 briefu do uzgodnienia przed A5 |
-| 04.10.2026 | A2b | #222 | ustalenie z A2: „tylko uzgodnij”, które stwierdza brak faktury w KSeF (zamiar porzucony, wpis STALE) i brak dowodu kontaktu, kończy `failed NOT_IN_KSEF` (00141, transient, bez automatu) z „Wyślij ponownie” / „Wróć do szkicu” zamiast ślepej uliczki RESULT_UNCERTAIN; poprawione błędne zdanie runbooka A2 | scalone, 00141 wgrana na db-1 i wdrożone 04.10 (`ae87bdd`); osobne ustalenie: komunikat klienta dla klasy transient obiecuje „ponowimy automatycznie” także przy `TRANSIENT_EXHAUSTED` i `CREDENTIALS_UNAVAILABLE` (bez automatu); A3 po #222 |
-| 04.10.2026 | A3 | #223 | cron cyklu życia: I5 (zalegający `sent` / zamiar `intent` > 48 h) przy fakturze `failed`/`rejected` → „tylko uzgodnij” z aktorem NULL; najwyżej raz na dobę (audyt `reconcile_only = true`), po 3 próbach w tygodniu `i5NeedsOperator` + Sentry; inne stany `i5Other` (tylko alarm); dokumenty specjalne pominięte (A4) | scalone i wdrożone 04.10 (`1f95c97`); I5 przy `accepted` z niezamkniętym wpisem — automat go nie zamyka (do rozważenia: zamknięcie wpisu, gdy numer KSeF się zgadza) |
-| 04.10.2026 | A4a | #224 | macierz wyjść dla 20 kodów × rodzaj × dowód × otwarty wpis (test-strażnik z jawną listą ślepych uliczek); „Wyślij ponownie” operatora dla ENQUEUE_LOST, INVALID_EVENT, RESULT_UNCERTAIN; akcja operatora decyduje jak przycisk (zasada 6); tabela kod → wyjście w runbooku | scalone i wdrożone 04.10 (`4aa27ce`); A4b (00137, dokumenty specjalne); decyzje D-A4-1 (cudzy 440: porównanie treści z KSeF) i D-A4-2 (ENV_MISMATCH, z F1) |
-| 04.10.2026 | D-A4-1a | #226 | cudzy 440 (decyzja D-A4-1): weryfikacja treści oryginału z KSeF w obu ścieżkach (wysyłka i uzgadnianie po referencji — wcześniej 440 przy uzgadnianiu krążył w ponowieniach); własny duplikat tylko przy tym samym skrócie pliku; `KSEF_NUMBER_TAKEN` (00142) dla oryginału z innego programu, wpisy → `number_taken`; ponowienie samej weryfikacji bez drugiej wysyłki; klasa `KsefSendVerdictError` przed klasami KSeF w klasyfikatorze; sesja oryginału z numerem KSeF w historii (UPO); kody z `problem+json`. Projekt sprawdzony adwersaryjnie (3 recenzentów) przed kodem, gotowy diff — drugi raz (4 soczewki + weryfikacja): znacznik 440 na otwartym wpisie (00142: `original_ksef_number`), żeby po 48 h nie powstało fałszywe NOT_IN_KSEF; alarmy operatora; błąd magazynu = ponowienie; akceptacja zamyka wpis po zapisie faktury; ta sama treść z innego programu = operator | scalone, 00142 wgrana na db-1 i wdrożone 04.10 (`e09d408`); D-A4-1b: ręczny werdykt operatora — **czeka na decyzje** (recenzja projektu: „numer zajęty” dla oryginału z FaktFlow o innej treści jest prawnie błędny — to wcześniejsza wersja tej faktury; przyjęcie „tej samej treści z innego programu” wymaga znacznika i ostrzeżenia w JPK; „inna sprzedaż czy ta sama” wie klient, nie operator); potwierdzić na KSeF TEST (H1), że skrót pobranego oryginału = `invoiceHash` wysyłki i że UPO z sesji spoza FaktFlow się pobiera; osobne ustalenia: `NOT_IN_KSEF` (transient) parkowany w Offline24 na TEST; limiter `invoiceDownload` (16/min) wspólny ze skrzynką |
-| 04.10.2026 | D-A4-1a-data | #227 | ustalenie z recenzji D-A4-1b: numer przyjęty z duplikatu (własnego i zweryfikowanego) nie miał `ksef_accepted_at` — teraz data nadania numeru oryginałowi (status po referencji własnej sesji albo `POST /invoices/query/metadata` po numerze KSeF; brak → alarm); typy bazy z produkcji po 00142 | bez migracji; scalone 04.10 (`38c8512`), wdrożenie czeka na polecenie |
-| 04.10.2026 | D-A4-2 | #228 | `ENV_MISMATCH` (decyzja D-A4-2): klasa reconcile → **terminal** (00143) — bez dowodu kontaktu faktura wraca do szkicu (klient sam albo operator), klient decyduje, czy wysłać ją w obecnym środowisku; `requeue_ksef_send` odmawia ponowienia (wcześniej przepuszczał — chronił tylko przycisk), „tylko uzgodnij” przy otwartym wpisie zostaje; komunikat z obu środowiskami w `last_error`, osobny przy workerze bez `KSEF_ENV`; przy dowodzie kontaktu „nie wystawiaj ponownie” zamiast „wróć do szkicu” (recenzja: wcześniejsza próba mogła dotrzeć do KSeF); etykieta „Inne środowisko KSeF” zamiast „Do uzgodnienia”; ślepa uliczka wykreślona z macierzy wyjść (także dla korekt bez dowodu) | 00143 przed wdrożeniem (0 faktur z kodem na produkcji 04.10); ustalenia dla F1/F2: cron I6/I7 wznawia `failed` nowym zdarzeniem z BIEŻĄCYM środowiskiem — po przełączeniu TEST → PROD faktury przejściowe i wstrzymane z czasu TEST wyszłyby same na PROD; `ksef_submissions` bez kolumny środowiska — próba z TEST to po przełączeniu „dowód kontaktu”; gałąź `ENV_MISMATCH` w `onExhausted` nie wysyła zdarzenia `invoice/submit.failed` (brak maila do klienta — dziś tylko interfejs i alarm operatora); z recenzji: `ENV_MISMATCH` z otwartym wpisem sprzed przełączenia środowiska — „tylko uzgodnij” (operator i cron I5, który nie patrzy na kod) uzgadnia w bieżącym środowisku, `requeue` czyści kod, a wynik (`NOT_IN_KSEF`/`NOT_VERIFIED`/`RESULT_UNCERTAIN`) zaprasza do wysyłki dokumentu z TEST na PROD — do F2 (środowisko na wpisie albo filtr I5), do tego czasu ostrzeżenie w runbooku i komunikacie operatora |
-| 04.10.2026 | D-A4-1b-3 (A0) | #229 | decyzje D-A4-1b w runbooku; kolejność zmieniona (Bartosz): D-A4-1b-1 (automat przyjęcia treści) odłożony do B2 — projekt pokazał, że treść jednego wiersza nie zmienia się między próbami, a szkic z nieaktualną datą jest usuwany razem z historią prób; budujemy D-A4-1b-3 (przycisk klienta, ok. 7 PR). A0: „znany numer KSeF” liczy tylko faktury sprzedaży — zakupowa z tym numerem zatrzymywała porównanie treści (operator zamiast werdyktu) | bez migracji; ustalenie „`NOT_IN_KSEF` parkowane w Offline24 na TEST” nieaktualne — Offline24 wyłączony wszędzie od 02.10 (`offline24-policy.ts`), warunek do sesji, która go włączy (#122); osobne ustalenia z projektu D-A4-1b-3: podpowiedź numeru oddaje numer zajęty w KSeF po usunięciu szkicu (pętla 440 w wyjściu `KSEF_NUMBER_TAKEN`), szkic po „numer zajęty” da się wysłać ponownie (powtórne 440) |
-| 04.10.2026 | D-A4-1b-3 (A) | #230 | dane oryginału przy nierozstrzygniętym 440 zapisane na otwartym wpisie próby (`original_check`, 00144) w każdej gałęzi bez werdyktu: powód (8 wartości), dane z faktury (numer, data, nabywca, kwota, program), data nadania numeru, skrót, „w historii tej faktury”, „treść jak nasza”; bajty oryginału w archiwum importu (`<firma>/ksef-import/<numer>.xml`), konflikt archiwum = werdykt dla operatora (nie pętla ponowień); klient widzi panel „W KSeF jest już faktura o tym numerze” (bez przycisku — ten w B), operator — sekcję na karcie `/admin/ksef`. Recenzja diffu (3 soczewki + sceptycy): nieudane ponowne sprawdzenie (I5 po 48 h, 403 po zmianie tokenu) zerowało zapisane dane — teraz `recheck` obok danych z udanego; „odśwież za kilka minut” nieprawdziwe (panel widać po wyczerpaniu ponowień) — „sprawdzimy ponownie automatycznie”; osobny powód `archive-pending`; panel nie wraca ze starymi danymi po zmianie stanu (realtime); data nadania w strefie Europe/Warsaw | 00144 przed wdrożeniem; #229 (A0) scalone 04.10, wdrożenie razem z tym PR |
-| 05.10.2026 | C5a (W9) | #231 | import historii KSeF: P_12 → stawka FaktFlow jednym odwzorowaniem (`lib/xml/fa3-p12.ts`, spięte testem z mapami 3 generatorów): `0 KR`→`0`, `np I`→`np`, `np II`→`np_ii`; kody bez odpowiednika (`0 WDT`, `0 EX`, `22`, `7`, `4`, `3`) dosłownie, bez P_12 — z nagłówka tylko jednoznacznie (23/22 i 8/7 z proporcji, `zw` przy P_19), inaczej `nieznana` (nigdy domyślne 23%); JPK_FA i JPK_V7M odmawiają takich dokumentów oraz zaimportowanych KOR/ZAL/ROZ z numerem faktury (`JpkDocumentNotSupportedError`, bez ponowień, 422 w portalu, CSV w paczce Co-Pilot), ostrzeżenie na początku raportu importu, opis stawki na karcie faktury, sekcja 8 w `kontrola-faktur-ksef.sh`. Projekt sprawdzony adwersaryjnie (2 recenzentów): regresja dla faktur uproszczonych bez P_12 i FA(2), korekty z importu dotąd chronione przypadkiem. Recenzja diffu (3 soczewki + sceptycy): pozycja zwolniona bez P_12 obok sumy 23% (P_19 = 1) szła jako 23% — teraz `nieznana`; ceny brutto (P_11A bez P_11) dawały netto 0, a po normalizacji `0 KR`/`np` sprzedaż cicho wypadała z JPK — teraz odmowa z numerem (netto pozycji ≠ netto nagłówka) i ostrzeżenie; fałszywe ostrzeżenie przy ponownym imporcie własnej korekty / zaliczki z FaktFlow; ostrzeżenie ginęło przy nieudanym zapisie XML; Centrum eksportu nie pokazywało powodu odmowy (`error_message`); tekst odmowy w portalu kazał księgowej „przygotować JPK z księgową” | bez migracji (0 faktur z importu na produkcji); C5b (P_6, adnotacje) przed D-A4-1b-3 PR C; osobne ustalenia: W9-b `jpk-fa-parser` (import pliku JPK) domyślne 23% i stratne `0`/`np`, W9-c parsery CSV z własnym słownikiem stawek (szkice), W9-e Comarch Optima (wstrzymany) zamienia nieznane stawki na 23%, W9-g JPK_FA(4) wyraża `22`/`7`/`4`/`3` i całe 0% (P_13_6) — można zawęzić odmowę do JPK_V7M, P_12Z (`ZamowienieWiersz` zaliczek) pomijane przez parser, korekta zaimportowanej faktury 0% teraz możliwa (KOR_HOLD obowiązuje); z recenzji: paczka Co-Pilot wyrzuca powód odmowy JPK_FA (księgowa dostaje CSV bez wyjaśnienia — dotyczy też korekt i GUS), CSV/KPiR opisuje zaimportowane KOR/ZAL/ROZ jak zwykłe faktury, import ze stanem `failed` ukrywa ostrzeżenia w widoku postępu, odczyt cen brutto (P_9B/P_11A) — C5b |
-| 05.10.2026 | A4b PR1 | #235 | dane zdarzenia wysyłki dokumentu specjalnego na wierszu faktury: jedna kolumna `special_data` (00137) — KOR `{correctionData}`, ROZ `{finalData, finalAdvanceSettlementRows}`, ZAL w `fa3_data.advanceEnvelope` (odejścia od tekstu A4 potwierdzone przez Bartosza 05.10); zapis w tym samym INSERT (`insertCorrection`, `insertFinalDraft`), CHECK kształtu dwuwartościowy (brak klucza = odmowa), wyzwalacz zapisu jednorazowego (NULL → wartość tylko serwer — wyjście operatora); worker porównuje zapisaną kopię ze zdarzeniem (NULL = sprzed 00137); sekcja 9 `kontrola-faktur-ksef.sh` z sondą PostgREST zapisem (SELECT nie wykrywa nieprzeładowanego cache). Projekt sprawdzony adwersaryjnie (3 krytyki: CHECK z NULL przepuszczał niepełne kształty, zapis jednorazowy bez wyjścia operatora, sonda SELECT-em). Recenzja diffu (3 soczewki + sceptycy): test granicy nie wykrywał usunięcia kolumny z SELECT, test akcji porównywał obiekt sam ze sobą — poprawione (projekcja w atrapie, kopia w chwili zapisu, granica na prawdziwym wierszu w teście bazy) | 00137 przed wdrożeniem (produkcja 05.10: 0 KOR/ZAL/ROZ, KSEF_ENV=test); scalenie wstrzymane awarią GitHub Actions 05.10; A4b PR2 — ponowienie z kopii (bez migracji), przed nim decyzja: KOR_HOLD klienta zostaje w klasie hold; zapisane dla C4/B2: wiersze zaliczek ROZ odtworzyć z przyjętych zaliczek przed zdjęciem hamulca, odmówić klientowi INSERT z `special_data` zanim szkice specjalne staną się wysyłalne, zmiana zapisanej kopii (B2, C4) wymaga migracji zastępującej wyzwalacz; `xml_generated_at` zapisywalne przez klienta (osobne ustalenie) |
-| 06.10.2026 | A4b (bezpiecznik daty) | #242 | decyzja Bartosza 06.10 (krytyka projektu A4b PR2): dokument specjalny (KOR, ZAL, ROZ) nie wychodzi do KSeF z datą wystawienia inną niż dziś (Europe/Warsaw) — worker odmawia przed wysyłką (runner, po granicy dokumentu) i drugi raz w haku otwarcia sesji tuż przed plikiem i zamiarem (`lib/ksef/special-issue-date.ts`); kod `ISSUE_DATE_PASSED` (00147, terminal, bez automatu): klient wraca do szkicu, usuwa go i wystawia od nowa z dzisiejszą datą; `requeue_ksef_send` odmawia, operator bez „Wyślij ponownie”; zwykła faktura bez zmian (B1/B2). Recenzja diffu (soczewki + sceptycy): sprawdzenie przed uwierzytelnieniem zostawiało okno kilkudziesięciu sekund (zaliczka z 23:59:50 szła po północy) — drugie sprawdzenie w haku sesji; podpowiedź operatora i runbook wskazywały wyłączone „Tylko uzgodnij”; brak wiersza w cyklu życia §6 — poprawione, testy czerwone przed poprawką; odrzucone: ogólny mail „odrzucona” (B2) | 00147 przed wdrożeniem (worker bez wiersza zgłosiłby I4); zostaje okno samego żądania z plikiem (< 1 s); dokument specjalny z dowodem kontaktu bez wyjścia w panelu — jak przy innych kodach, A4b PR2a/B2; następnie A4b PR2a (ponowienie dokumentów specjalnych z kopii, cron, operator) i PR2b (klient) |
-| 06.10.2026 | C5b | #239 | import historii KSeF zapisuje datę sprzedaży (`P_6`, `OkresFa` → `P_6_Do`, wspólne `P_6A`; ZAL/KOR — NULL) i Adnotacje (`P_16`, `P_17`, `P_18`, `P_18A`, `P_19` + `P_19A/B/C`, `P_22`, `P_23`, `PMarzy`) w kluczach FaktFlow (liczby 1\|2, nieczytelne w `annotationProblems` — nigdy domyślne „nie”) oraz oznaczenia FP / TP / podmiot upoważniony / GTU / Procedura (`ksefMarkers`); JPK_FA wpisuje `P_17`, jawne `P_18`, `P_19B`/`P_19C` z pliku; JPK_FA i JPK_V7M (także paczka Co-Pilot) odmawiają z numerem: P_23, P_22, marża, oznaczenia, adnotacje nieczytelne, P_19 niezgodne ze stawkami, różne daty sprzedaży pozycji, import sprzed C5b (podpowiedź „ponów import” — ponowny import uzupełnia warunkowym UPDATE); generator FA(3) pisze `P_19B/C`, odmawia P_22 i marży. Decyzje Bartosza 06.10 (4). Projekt sprawdzony adwersaryjnie (2 krytyki: FP/TP/GTU cicho błędne w V7M, `P_6` sprzeczne z `P_6A`, testy generatora poza vitest, stare importy bez wyjścia). Recenzja diffu (3 soczewki + sceptycy): tylko luki w testach (warunki uzupełnienia — sprawdzone mutacją, daty niejasne, paczka) i P_19 w sekcji 8 skryptu — poprawione | bez migracji (produkcja 06.10: 0 faktur z importu); **C5c** — ceny brutto (`P_9B`, `P_11A`, `P_11Vat`, VAT do `P_14_x`) przed D-A4-1b-3 PR C; osobne ustalenia: C5b-b (nabywca `NrID`, JST/GV z pliku), C5b-c (`ksef_accepted_at` z chwili importu, `notes` „[import]” na PDF, Stopka), C5b-d (PDF bez P_17/P_18/P_23/marży/`OkresFa`, karta bez adnotacji), C5b-e (KOR faktury z importu z procedurami wpisuje 2/N — przed C4), C5b-f (V7M okres po dacie wystawienia, nie po obowiązku podatkowym; też faktury FaktFlow); panel 440 przed decyzją klienta pokazuje datę sprzedaży i adnotacje oryginału — warunek PR C |
-| 06.10.2026 | C5c | #241 | import historii KSeF: kwoty pozycji zgodne z sumami stawek co do grosza (`lib/import/fa3-line-amounts.ts`, grosze całkowite): ceny brutto (`P_9B`, `P_11A`) — VAT od sumy brutto stawki (ust. 7), netto = brutto − VAT (podział FaktFlow), cena netto pusta; VAT pozycji z pliku (`P_11Vat` przy każdej, `P_11A − P_11`), inaczej VAT nagłówka `P_14_x` dzielony największą resztą (porównanie na krzyż 23/22) — także przy cenach netto (decyzja Bartosza 06.10); faktura bez sum stawek: VAT od sumy każdej stawki, całość = `P_15`, netto i VAT faktury z pozycji; JPK_FA `FakturaWiersz` przepisuje pola z pliku (`ksefLineFields`), suma kontrolna z `P_11`, kontrola VAT pozycji = VAT faktury; zatrzymania z numerem (netto i brutto w jednej stawce, `P_11Vat` częściowe albo ≠ nagłówek — decyzja: zatrzymać, VAT poza podziałem, brutto ≠ netto + VAT, netto ≠ nagłówek, suma bez pozycji, kwota nieczytelna, pozycja bez wartości, duble `NrWierszaFa`, brutto przy taksówkach) i „kwoty faktury nieznane” (KPiR i CSV też nie pokażą). Recenzja diffu (soczewki + sceptycy): faktura uproszczona w cenach brutto przy zw zapisywała netto 0 z „KPiR i CSV działają”, brak sumy stawki sumującej się do 0 zatrzymywał, `P_11A − P_11` ignorowane bez sum, paczka bez odmowy „pozycja bez pól”, testy nierozróżniające (na krzyż, T2, produkt, suma kontrolna) — poprawione, 18 testów czerwonych na kodzie sprzed poprawki | bez migracji (produkcja 06.10: 0 faktur z importu); D-A4-1b-3 PR C może ruszyć (przed nim decyzja: oryginał w cenach brutto — generatory FaktFlow piszą tylko netto); osobne ustalenia: C5c-b (import pliku JPK_FA czyta tylko netto), C5c-c (własne faktury liczą `P_14_x` sumą VAT pozycji — ust. 10 vs ust. 1 pkt 14, pytanie do doradcy), C5c-e (brak `P_8B` → ilość 0), C5b-d rozszerzone (cena brutto na PDF i karcie), import sprzed C5c: duplikat nie przepisuje pozycji (decyzja, gdy pojawią się stare importy) |
-| 07.10.2026 | A4b PR2a | #243 | ponowienie KOR/ZAL/ROZ z kopii na wierszu (ZAL `fa3_data.advanceEnvelope`, KOR/ROZ `special_data` 00137) dla crona i operatora: `lib/ksef/kind-holds.ts` (KOR na PROD, ROZ wszędzie, nieznane środowisko — wstrzymane), builder `ksef-requeue-event.ts` z kontraktem kolumn `KSEF_RESEND_SOURCE_COLUMNS` (kolumna niepobrana = wyjątek) i faktami (dane → rodzaj → data; decyzja Bartosza 06.10 b: pełna wysyłka tylko w dniu wystawienia, uzgodnienie bez daty); cron I6/I7 osobne zapytania dla zwykłych i specjalnych (specjalne tylko dziś), audyt paczkami, pola `skippedNoData`/`skippedHeld`/`skippedIssueDate`/`skippedConflict`, konflikt 00135 rozpoznany wąsko; I5 uzgadnia KOR/ZAL bez względu na datę; operator: fakty i `environmentKnown`, osobny `operatorReconcileButton` (akcja = przycisk), karta pokazuje fakty i `KSEF_ENV`; granica: żywy profil firmy pomijany tylko przed uzgodnieniem; runbook (kolumny automat/operator, „Stary dokument specjalny” + `scripts/ops/dopisz-dane-specjalne.sh`), sekcja 9 kontroli (3 zapytania, ostatni przebieg crona). Projekt sprawdzony ponownie na main 5546781 (3 weryfikatory + synteza); 73 testy czerwone przed naprawą. Recenzja diffu (4 soczewki + sceptycy): 5 drobnych ustaleń (dopisanie special_data bez wiązania joba z fakturą → skrypt, etykieta I5, trzy luki testów pominięcia profilu) — poprawione, sprawdzone mutacją | bez migracji (00137 06.10, 00147 07.10 na db-1); **PR2b** (klient: przycisk, `decideResend`, teksty KSEF_PAUSED / transient / ISSUE_DATE_PASSED dla dokumentów specjalnych) zaraz po tym — do tego czasu klient widzi przy failed ZAL/KOR na TEST tylko „Wróć do szkicu”; zapisane: I5 ponawia konflikt 23505 co 15 min bez limitu, KOR/ZAL z błędem po ok. 23:00 bez automatu (D1), stara ZAL po przejęciu — decyzja Bartosza, dokument po dacie klasy reconcile bez dowodu i wpisu — B2, „dziś” w trzech miejscach — ujednolicić w B2 |
-| 07.10.2026 | A4b PR2b | #244 | strona klienta ponowienia z kopii: „Wyślij ponownie” dla KOR/ZAL z zapisaną kopią, rodzajem niewstrzymanym i dzisiejszą datą wystawienia (decyzja b); `resendInvoiceAction` z `KSEF_RESEND_SOURCE_COLUMNS`, faktami i builderem z #243, `validateInvoice` tylko dla zwykłej, Sentry w catch; kolejność klienta rodzaj → dane → data; strona liczy fakty dla każdego stanu bez wysyłania treści do klienta; decyzje Bartosza 07.10 (8–11): prawdziwe teksty KOR_HOLD/ROZ (sami nie wyślemy, pomoc@faktflow.pl), „uzgodni operator” → pomoc FaktFlow (także worker ENV_MISMATCH), `automaticResendExpected` dla tekstu i znaczka „Błąd — ponawiamy” (wszystkie rodzaje — zamyka A2b), `environmentKnown` u klienta; kolejkowanie w trybie ponowienia nie mówi „zapisana jako szkic”; teksty workera KOR_HOLD / KSEF_PAUSED dokumentu specjalnego / ROZ. Projekt sprawdzony ponownie na gałęzi #243 (3 weryfikatory + synteza); 125 testów czerwonych przed naprawą. Recenzja diffu (4 soczewki + sceptycy): 4 ustalenia (ważne: przy KOR na PROD i ROZ teksty odrzucenia, błędu treści, ENV_MISMATCH i ISSUE_DATE_PASSED kazały wystawić od nowa dziś — teraz „po zdjęciu blokady”, macierz pilnuje) — poprawione | bez migracji; po wdrożeniu blok A4 zamknięty po stronie wyjść (DoD: brak gałęzi „dokument specjalny: tylko szkic”); zapisane: katalog 00131 `client_message` hamulców (C4), `resetDone` zwykłej po dacie (B1/B2), surowy P0001 w wyścigu z I6, teksty bez instrukcji („Brak NIP firmy.”), ISSUE_DATE_PASSED workera przy dowodzie (B2); dalej w bloku A: D-A4-1b-3 PR B, C, D i A5 |
-| 08.10.2026 | D-A4-1b-3 PR B | #245 | decyzja klienta przy nierozstrzygniętym 440 (powody `no-own-file` i `known-number`, zwykła faktura): panel z tabelą porównania i dwoma dialogami „To ta sama sprzedaż” / „Inna sprzedaż → nowy numer” z „Rozumiem skutki” (sprawdzane też na serwerze; etykieta wg `markedDifference`); 00148: RPC `decide_ksef_duplicate` (jedna transakcja: wpisy → `number_taken` z decyzją na znaczniku, powrót do szkicu z numerem, audyt), `ksef_duplicate_check_allows`, `ksef_duplicate_decision_blocker` (m.in. wpłaty blokują), wyzwalacze szkicu wycofanego (bez wyjścia z `draft` dla każdej roli — wyścig EvalPlanQual; sesja klienta nie usuwa zwykłej/ZAL niezależnie od kierunku, nie zmienia numeru ani kierunku), I5 bez czekających + I5D, katalog `KSEF_NUMBER_TAKEN` bez „usuń go”; `known-number` pobiera i streszcza oryginał; automatyczny „numer zajęty” poprawiony tak samo (zasada 3); szkic wycofany bez wysyłki, maila PDF i usunięcia (KOR/ROZ usuwalne), baner z „Wystaw nową fakturę”; mail i push „czeka na Twoją decyzję” raz na (fakturę, K) ze śladem po dostarczeniu, ścisły odczyt właściciela z ponowieniem co 5 min, operator: „Zapisz decyzję klienta” (z notatką), „Przypomnij klientowi” (24 h), sekcja I5D z kolumną „Powiadomienie klienta”, monitor I5D-env; recenzja przed PR: 10 drobnych poprawionych (m.in. obejście usunięcia przez zmianę kierunku); 177 czerwonych testów jednostkowych na `main` przed naprawą, testy bazy w CI; migracja 00148 **przed** wdrożeniem | po scaleniu: 00148 na db-1, wdrożenie worker → web, `kontrola-faktur-ksef.sh`; typy `types/database.ts` z produkcji w następnym PR; przed KSeF PROD przegląd tekstów przez prawnika (lista w runbooku + migawka, dwa teksty dopisane po recenzji); zapisane: niedostarczone pierwsze powiadomienie bez automatycznego ponowienia (decyzje 4 i 5), „bez powiadomienia: n” w raporcie dziennym, odwrotna zmiana kierunku z tym samym tekstem, zamrożenie treści szkicu wycofanego (§7.15); dalej w bloku A: D-A4-1b-3 PR C (faktflow-original), PR D („Sprawdź ponownie”), A5 (czeka na zatwierdzenie kontraktu kolumn w briefie §5) |
-| 10.10.2026 | D-A4-1b-3 PR C0 | #246 | refaktor przed PR C (`faktflow-original`): mapowanie wiersza importu z `insertInvoices` do czystego `lib/import/imported-invoice-row.ts` (nagłówek, pozycje bez `invoice_id`, `fa3_data` z wstrzykniętym `provenance`, ostrzeżenie JPK, rodzaj, nabywca, sprzedawca, płatność); silnik zostawia zapis do bazy, kolejność i znaczniki czasu; inwarianty C0-1…C0-5 spisane przed zmianą; strażnik `import-wiersze-tozsamosc` (36 testów, migawka nagrana na silniku z `main`: generator FaktFlow, ceny brutto, KOR, ZAL, ROZ, nabywca UE, OkresFa, FP/GTU, same P_15, niezgodne sumy, 4 źródła, ponowienie, awarie zapisu, kolejność kluczy) — mutacje 118/143 zabitych (reszta równoważna, nieosiągalna z FA(3) albo identyczna ze starym kodem), porównanie stary/nowy na 5810 przypadkach: 0 różnic; test czystości (zegar, wstrzyknięte znaczniki, dokładne klucze, zamrożone argumenty) | bez migracji; dalej C0b (GEN-RUNDA: parser czyta pliki z generatora FaktFlow bez strat — `NrID`, VAT 0 przy stawkach bez VAT, `Stopka`, JST/GV), potem PR C (00149); decyzje Bartosza dla PR C 08–10.10 (C1–C8, N1–N6) w specyfikacji; zapisane, nie naprawiane: **IMP-ACC** `ksef_accepted_at` importu historii = chwila importu, nie data nadania numeru (`history-fetcher` ją ma); **IMP-PROD** ponowny import / ponowienie zadania zwiększa `products.use_count` i nadpisuje dane kontrahenta, także gdy zapis faktury się nie uda; **IMP-KOR** zaimportowana KOR z FaktFlow zapisuje wiersze `StanPrzed` jak zwykłe pozycje (JPK ją zatrzymuje); **IMP-STAWKA** przy stawce spoza FA(3) VAT pozycji = 0 i kontrola zgodności z nagłówkiem pominięta; **CQ-IDENT** `tests/unit/decyzja-duplikatu-operator-ekran.test.tsx:150` (PR B) `.replace(/ /g, ' ')` zamienia spację na spację (CodeQL `js/identity-replacement`, nie blokuje bramki; zamiar: twarda spacja `\u00a0`) |
-| 10.10.2026 | C0b (GEN-RUNDA) | #247 | import historii KSeF czyta pliki z generatora FaktFlow bez strat i bez fałszywych ostrzeżeń (warunek PR C: brama „plik FaktFlow” i zapisany oryginał K): `Podmiot2/NrID` (+ `KodKraju`: PL albo brak, 11 cyfr, suma PESEL → `pesel`, inaczej `nrInny`, napis), `JST`/`GV`, `footerNote` (pierwsza niepusta `StopkaFaktury`), surowe `RodzajFaktury` (`invoiceTypeCode`); `pickTotals` — bez `P_14_x`, każda pozycja bez VAT i |P_15 − Σ P_13_x| ≤ 1 grosz → VAT 0 bez ostrzeżenia; wiersz importu: `buyer_id_number` = NrInny, `buyer_data.jst/gv` z pliku, `noIdMarker` tylko przy BrakID albo bez identyfikatora; czerwony test rundy (42 pliki z generatora × GR-1..GR-5 + 18 plików obcych programów) — 150 czerwonych na `main`; strażniki GR-4 po mutacjach (every/some, tolerancja w obie strony, brutto, P_14 obok zw); migawka strażnika C0 zmieniona świadomie (nowe pola `parsed` w każdej fiksturze + PESEL, NrInny, zw, Stopka) | bez migracji; dalej PR C (00149); zapisane: **GEN-PESEL-KRAJ** generator pisze przy PESEL `KodKraju` z adresu nabywcy (PESEL z adresem zagranicznym wraca jako NrInny); **IMP-B2C-NRINNY** nabywca z NrInny po imporcie `is_b2c` false / `buyer_id_type` `nip`, a formularz zapisuje go jako `is_b2c` true z `id_card`/`passport` (kolumn nikt nie czyta — ujednolicić przed użyciem); **IMP-STOPKA-WIELE** z kilku `Informacje` innych programów tylko pierwsza niepusta; **IMP-ID-XSD** plik łamiący XSD (NIP i NrID naraz) daje dwa identyfikatory; uwaga RODO: PESEL nabywcy z importu zapisywany w `buyer_pesel`, `buyer_data`, `fa3_data.parsed` |
-| 13.10.2026 | A5 | #249 (widok: #250) | dziennik prób wysyłki `ksef_send_attempts` (00150): wiersz na każde wykonanie joba wysyłki (`withSendAttemptLedger` w `package-d.ts`, runner nietknięty) — etap z nazw kroków runnera (`submit-to-ksef` doprecyzowany: `xml` / `ksef`), kod i klasa z `classifySendError` w chwili zdarzenia, HTTP i kod KSeF, job pg-boss (`JobContext.jobId`), numer wykonania, SHA workera (`SOURCE_COMMIT`); oczekiwanie (`RetryAfterError` bez zużycia próby) = `waiting` tylko w budżecie odczekań (po `MAX_WAIT_RETRIES` błąd z kodem); każdy zapis fail-open z limitem 3 s (Sentry raz na wykonanie). Odmowy przed kolejką (`ksef-submit-enqueue.ts`: hamulce, wyłącznik, MFA, certyfikat, KSeF niedostępny, błąd kolejkowania) → `refused` / `enqueue` z `user_id`, odpowiedź dla klienta bez zmian (decyzja 13.10.2026). Kontrakt §5 briefu zatwierdzony z poprawką po A2: **osobna tabela zamiast kolumn `ksef_submissions` z UNIQUE `send_attempt_id`** — po A2 jedna próba ma kilka sesji i wykonań, a statusy `ksef_submissions` są dowodem kontaktu; `findOpenKsefSubmission` bez zmian (`sent`), zamiary w `findOpenKsefSubmissionIntents`. Czerwone przed naprawą: dziennik 4/5 (plus 2 po recenzji: oczekiwanie po limicie, zawieszony zapis), odmowy 3/5; test bazy `tests/rls-dziennik-prob-wysylki.test.ts` (tylko serwis, bez DELETE także dla `service_role`, CHECK, dowód kontaktu = false, CASCADE); migracje przeszły na Postgresie 16 z domyślnymi uprawnieniami jak Supabase (cały łańcuch). Widok: osobny PR (`/admin/centrum/bledy`, karta `/admin/ksef/[id]` z próbami — DoD A5) | migracja **00150 przed wdrożeniem** (00149 zajęte przez szkic #248); `SOURCE_COMMIT` w środowisku workera (inaczej `worker_sha` puste); **nie zrobione z zakresu A5**: `ops_alert_log` w `markAlertDelivered` (D7), `sentry_event_id` (Sentry pomija `NonRetriableError`, id zdarzenia nie da się pewnie przypisać do joba); błędy poza jobem wysyłki (cron cyklu życia: ENQUEUE_LOST / TRANSIENT_EXHAUSTED, Offline24, UPO) nadal tylko w `invoices` / `upo_receipts`; odmowy operatora w `/admin/ksef` (`app/admin/ksef/actions.ts`) bez wiersza `refused`; `scripts/ops/kontrola-faktur-ksef.sh` bez sekcji dziennika; `ksef_code` pusty dla odpowiedzi `problem+json` do scalenia #189 (F-093). Zrobione w tym PR także: ślad nieudanego zlecenia faktury VAT za abonament (`self-invoice-payment.ts`, `ENQUEUE_ERROR`) |
-| 13.10.2026 | A5 — luka „skrypt kontroli” | #251 | `scripts/ops/kontrola-faktur-ksef.sh`, sekcja 12: dziennik prób (00150) zamiast surowego SQL — sonda tabeli (bez 00150 jeden komunikat „BRAK TABELI”, nieudana sonda = „nie wiadomo”, nigdy „pusty”), zakres dziennika, wykonania joba z `inngest_run_log` bez wiersza w dzienniku (czy dziennik pisze — worker bez A5 dawał pusty dziennik jak „brak błędów”), wykonania z 24 h wg stanu (przerwane = `started` bez wyniku po 20 min), błędy, odmowy i przerwane wg kodu ze stanem faktur teraz (progi i kubełki jak `/admin/centrum/bledy`, „utknęła” = I2), 20 ostatnich z zamaskowaną treścią, logi od startu kontenera (`ksef.send.attempt`, nieudane zapisy dziennika; worker i aplikacja). Testy na prawdziwym skrypcie z atrapą ssh (`bash -c`, jak sshd): jednostkowy (5/6 czerwonych na `main`; każde zapytanie skryptu dociera do psql bez zmian po dwóch powłokach) i na bazie w jobie RLS (`tests/rls-kontrola-dziennik-prob.test.ts`, wyrocznia `effectiveStatus`/`recoveryState` dashboardu; czerwony na `main`, mutanty progów i bez `refused` czerwone); recenzja w 4 perspektywach z weryfikatorami: 4 potwierdzone, naprawione | bez migracji i bez wdrożenia (skrypt z repo); runner CI potrzebuje `psql` w `PATH`; otwarte luki A5 bez zmian: odmowy operatora w `/admin/ksef` bez wiersza `refused`, historia błędów spoza joba wysyłki (cykl życia, Offline24, UPO, powiadomienia), I1 na dashboardzie, `ops_alert_log` (rezerwacja Codexa), retencja `ksef_send_attempts` (decyzja) |
-| 13.10.2026 | A5 — odmowy operatora | #252 | „Wyślij ponownie” i „Tylko uzgodnij” w `/admin/ksef` zapisują każdą odmowę jako `refused` / `enqueue` z `user_id` operatora (`recordSendRefusal`, fail-open); polityka `operatorRequeueRefusal`/`operatorReconcileRefusal` zwraca kod i powód, przyciski są jej pochodną; kody z katalogu, gdy znaczą to samo (`KSEF_PAUSED`, `KOR_HOLD`, `ROZ_HOLD_RECONCILE`, `ISSUE_DATE_PASSED`), klasa błędu faktury → jej kod, nowe poza katalogiem (`STATUS_NOT_ALLOWED`, `NO_OPEN_SUBMISSION`, `ENV_UNKNOWN`, `SEND_DATA_MISSING`, `NO_NIP`); typ `SendRefusalCode` w czystym `send-error-classes.ts` (strażnik W1). 18 przypadków czerwonych przed naprawą | scalone w wydaniu A5 (PR „Scalenie #251, #252, #253, #255, #256”); bez migracji; wdrożenie: aplikacja; reset, decyzja duplikatu i przypomnienie poza zakresem (to nie wysyłki) |
-| 13.10.2026 | A5 — I1 na dashboardzie | #253 | `/admin/centrum/bledy`: sekcja „Utknięte w wysyłce teraz” z I1 i I2 z istniejącego RPC `ksef_lifecycle_violations()` (bez migracji); „od” wg zegara strażnika (I1 = `updated_at`), I1 > 45 min = „Automat nie zadziałał”; nieudany odczyt → „nie wiadomo” + problem. 5 przypadków czerwonych | scalone w wydaniu A5; wdrożenie: aplikacja; otwarte: procedura operatora dla I2 i przeterminowanego I1 (karta bez akcji, runbook bez opisu) |
-| 14.10.2026 | A5 — luka #2 identyfikatory | #255 | cron cyklu życia nazywa fakturę przy decyzjach bez śladu w bazie: ostrzeżenie z `invoiceId` dla I5 po limicie (`lastAttemptAt`) i I5 poza `failed`/`rejected`, `invariant` w logu odmowy budowy zlecenia, licznik `skippedNoNip`, zbiorczy Sentry z `<licznik>Ids` (do 20 na rodzaj, płasko); wyzwalacz Sentry bez zmian (stany trwałe bez deduplikacji zjadałyby kwotę); skrypt kontroli §9: lista faktur bez akcji automatu z logu (z rozróżnieniem wyłącznika i braku przebiegu). 14 czerwonych przed naprawą, 25 mutantów | scalone w wydaniu A5; wdrożenie: worker; zapisane: zagłodzenie paczki 100 (I5 `slice` i odmówione wiersze I6/I7), zbiorczy Sentry bez deduplikacji (od A3), sekcja 2 skryptu łapie każdą linię crona |
-| 14.10.2026 | A5 — luka #4 Offline24 | #256 | skrypt kontroli, sekcja 4a: `KSEF_ENV` workera, kolejka `ksef_offline_queue`, otwarte wpisy i co zrobi z nimi cron, faktury `offline_queued` wg werdyktu (BEZ WYJŚCIA), lista do uzgodnienia z KSeF (NIP firmy, flagi), `failed`/`rejected` z `OFFLINE_*`, zamrożone szkice, wpisy zamknięte, przebiegi crona z `inngest_run_log`; runbook `offline24-zalegle.md`; potwierdzone: kwarantanna zostawia fakturę w `offline_queued` bez wyjścia. Test na bazie (job RLS) z wyrocznią z reguł crona, 29 mutantów SQL | scalone w wydaniu A5; bez wdrożenia (skrypt z repo); decyzja o luce #5 po pierwszym przebiegu sekcji 4a na produkcji — (i) wyjście dla istniejących faktur, (ii) poprawka zapisu crona; zapisane: kody `OFFLINE_*` poza katalogiem (I4), nieaktualne `cykl-zycia-faktury-ksef.md:42,:69`, reset nie czyści `offline_idempotency_key` |
-| 14.10.2026 | A5 — zagłodzenie paczki | #258 | cron cyklu życia: paczka 100 liczy faktury, przy których automat działa, nie odczytane wiersze — odmówione (brak pozycji, NIP-u, danych, rodzaj wstrzymany; I5 poza `failed`/`rejected`, po limicie, odroczone) już nie zajmują paczki na zawsze; I6/I7 kursorem po (`updated_at`, `id`) (`applyCursorFilter` — pierwszy wołający), I5 stronami po 100 identyfikatorów, bezpiecznik `LIFECYCLE_SCAN_MAX_PAGES` = 10 z licznikiem `scanCapped` i ostrzeżeniem „bezpiecznik odczytu”; w wydaniu połączone z #255 (inwariant i identyfikatory przy odmowach z `collect()` i wstępnej odmowie I5 — mutanty 4/4) | w wydaniu #257–#263; wdrożenie: worker; po wdrożeniu `scanCapped: 0`, `errors: 0` w „przebieg zakończony”; skrypt kontroli §9 bez `scanCapped` (osobny PR) |
-| 14.10.2026 | A5 — luka #3 powiadomienia | #259 | powiadomienie o wyniku wysyłki nie ginie po cichu: karta FLO izolowana (`floCard`), ścisły `readTenantOwnerContact` (błąd bazy/GoTrue = ponowienie), push mimo błędu Resend, ponowienia po 5 i 30 min (`notifyRetryDelayMs`), `onNotifyExhausted` (Sentry z `invoiceId`); runbook `joby-pg-boss.md` | w wydaniu #257–#263; wdrożenie: worker; push przy ponowieniu po błędzie Resend dzwoni drugi raz (osobna kolejka push — decyzja) |
-| 14.10.2026 | A5 — procedura I2/I1 | #260 | `scripts/ops/zwolnij-utknieta-wysylke.sh` + `.sql`: podgląd, zapis z `--wykonaj` w jednej transakcji z blokadą wiersza; I2 → `failed RESULT_UNCERTAIN` + audyt `invoice.send_lease_released`, I1 jak cron (`release_ksef_enqueue` albo `ENQUEUE_LOST` + audyt `invoice.enqueue_lost`); tylko bez żywego zlecenia w pg-boss; runbook `hamulce-ksef.md`; test na bazie 17/17; w wydaniu podpowiedzi I1/I2 na `/admin/centrum/bledy` wskazują procedurę (test-strażnik) | w wydaniu #257–#263; bez wdrożenia (skrypt z repo); uruchamia Bartosz |
-| 14.10.2026 | A5 — push przy błędzie odczytu | #261 | `PushReadError` zamiast cichego `{ sent: 0 }` przy błędzie odczytu subskrypcji/członków; `sendPushToTenant` czyta subskrypcje firmy jednym zapytaniem przed wysyłką; certyfikat i OCR „nie rozpoznano” łapią błąd pusha (OCR: z przeglądu — ponowienie płaciło drugi raz za odczyt i gubiło kartę FLO) | w wydaniu #257–#263; wdrożenie: worker |
-| 14.10.2026 | A5 — dokument cyklu życia | #262 | `cykl-zycia-faktury-ksef.md`: `offline_queued` bez wyjścia do `sending` od 02.10, jedyne wyjście `failed OFFLINE_DEADLINE_EXCEEDED` z crona kolejki (kod spoza katalogu — I4) | w wydaniu #257–#263; luka #5 (wyjście dla stojących faktur) po sekcji 4a z produkcji |
-| 14.10.2026 | A5 — certyfikat | #263 | `cert-expiry-alert`: ścisły odczyt adresu — błąd bazy/GoTrue nie jest „brakiem adresu” (dawniej push zamykał próg, a mail nie wychodził nigdy); firma z błędem odłożona i na liście operatora, pozostałe dalej, zadanie rzuca na końcu (ponowienie); mail z kluczem idempotencji (próg + liczba dni); mutanty 12/12 | w wydaniu #257–#263; wdrożenie: worker; błąd Resend dalej zatrzymuje kolejne firmy w pętli (osobne ustalenie); `getTenantAdminEmail`/`getTenantOwnerUserId` bez wołających |
-| 26.10.2026 | D-A4-1b-3 PR C | #248 | zapis oryginału z oznaczeniem FaktWay/FaktFlow (`faktflow-original`) przy nierozstrzygniętym 440: klient decyduje na karcie („ta sama” / „inna sprzedaż”, a przy wcześniejszej wersji tego dokumentu albo tej samej treści jeden przycisk „Zapisz fakturę z KSeF”), a jedna transakcja zapisuje K jako przyjętą fakturę sprzedaży (`origin='ksef_import'`, numer FV/N) i zdejmuje numer z wycofanego X (decyzje Bartosza 08.10 C1–C8, 09–10.10 N1–N6); brama pochodzenia (16 jawnych reguł) liczona przez runner i zapisana na znaczniku; plik nie z generatora → przegląd operatora (I5R, alarm po 72 h) z zapisem albo oddaniem decyzji klientowi; ponowne sprawdzenie (`recheck-needed`) przy archiwum/rozjeździe; inna firma z tym samym NIP i numer znany po werdykcie → blokady; PDF szkicu bez numeru odmawiany z odnośnikiem do K; I3K (brak sesji albo daty) + skrypt `oryginal-ksef-data-nadania.sh`; migracja **00156** (dawniej 00149 — przeniesiona, bo 00151 i 00155 nadpisały po niej funkcje PR C; ciała z 00151/00155 + zmiany PR C, ścieżka PR B bez zmian); czerwone przed naprawą: 1487 jednostkowych (commit 2), 69/70 testów bazy (commit 4, PGRST202); scalenie main (330 commitów, marka FaktWay); testy bazy uruchamiane lokalnie na izolowanym Supabase (kopia joba „RLS isolation”) | **00156 przed wdrożeniem**; typy 00156 w kolejnym PR; przed KSeF PROD przegląd tekstów przez prawnika (82 nowe, lista w sekcji 8); zapisane: D-A4-1b-3-MI, -UPO, -SYS, -DATE, -PDF, -PAY, -CAT, -LIST, -EVID, -XEDIT, -KORB2C, -KORZW, -FLO-NUM, GEN-PESEL-KRAJ, C5b-d+, IDX-ENV, -TESTENV (opis w runbooku i opisie PR); dalej w bloku A: PR D („Sprawdź ponownie” dla powodów bez danych oryginału) |
-| 27–29.10.2026 | ZAP-01 (przegląd architektury 26.10) | #339 | historia KSeF nie gubi sprzedaży przeniesionej plikiem: szkic z importu CSV/JPK (`draft`, bez numeru KSeF i środowiska) o tym samym numerze i danych dawał `skipped/already_present` (stan końcowy), a przychód, KPiR, JPK i Pulpit liczą tylko `accepted` w środowisku — sprzedaż znikała bez komunikatu. `inSalesBooks` w `lib/ksef/history-sync/classify.ts`: `already_present`/`imported` tylko z posiadaczem w księgach (wyjątek: dawny `ksef_import` bez środowiska); szkic do usunięcia (`draft`, bez prób wysyłki) → `number_conflict` z tekstem „usuń go” (bez „zmień numer” — szkicu nie da się edytować); szkic z pliku w wysyłce albo `failed`/`rejected` z próbą → `own_send_pending` (po 48 h `own_send_unresolved`); szkic z próbą (np. wycofany 440 bez numeru oryginału — klient go nie usunie, 00148; usuwa serwis za zgodą Bartosza), bez statusu, z numerem KSeF, inne środowisko, `failed`/`rejected` bez próby → `local_conflict` (operator, alarm, procedura w runbooku §4a); `number_conflict` przy statusie NULL także w gałęzi `app` → operator. Strażnik (pochodzenie × status × środowisko × numer KSeF × dane × próby wysyłki): 4 reguły, czerwony na `main`; runbook §4, §4a–§4c; `ksef-historia.sh stan` pkt 8 (z listą firm) i pkt 9 (`number_conflict` na firmę, wiek z `discovered_at`), tylko odczyt. Recenzja niezależna (#339): 5 uwag poprawionych w tym PR | bez migracji (CHECK 00155 zna oba powody); **decyzje Bartosza**: otwarcie pozycji `already_present` sprzed poprawki (`stan` pkt 8, §4c — wariant A albo B z opisu PR) i potwierdzenie, że szkic z INNYMI danymi daje `number_conflict` zamiast `file_import_mismatch`; zapisane: **ZAP-01-a** setki szkiców z CSV: usuwanie po jednym, lista klienta 20 pozycji, bez akcji zbiorczej i bez alarmu — akcja „usuń szkice z pliku, których oryginał jest w KSeF” albo RPC zastępujące szkic oryginałem (decyzja Bartosza; procedura do tego czasu: runbook §4b); **ZAP-01-b** karta historii w fazie `live` pisze „Cała historia sprzedaży pobrana” i „Automatycznie” mimo blokad klienta (`status.ts`, `ksef-history-model.ts`), Pulpit i KPiR bez sygnału — wszystkie powody blokady; **ZAP-01-c** po usunięciu szkicu pozycja ok. 1 h bez linku z tym samym „usuń go” (zerowanie FK podbija `updated_at`, usunięty szkic idzie na koniec kolejki sprawdzeń), przy N blokadach do ceil(N/50) h, a pobranie oryginałów 5/10 na przebieg; **ZAP-01-d** `lib/invoices/next-number.ts` po usunięciu najnowszego szkicu z CSV może podpowiedzieć numer zajęty w KSeF (440); **ZAP-01-e** zakupy, krok 1b: kopia bez numeru KSeF → `already_present` bez sprawdzenia kosztów (uśpione); **ZAP-01-f** `lib/reports/kpir-data.ts` nie woła `assertAcceptedEnvironmentKnown` — przyjęte bez środowiska znikają z KPiR po cichu |
+| 1 | Zwykła faktura VAT | `accepted`, numer, XML próby, `xml_documents`, UPO ≤ 24 h | karta `/admin/ksef`; strażnik 0 | TEST |
+| 2 | Ta sama faktura dwa razy | jedna wysyłka; druga → `singletonKey` albo 440 → własny duplikat | 1 wpis `accepted` | TEST |
+| 3 | Odrzucenie semantyczne (450) | `rejected KSEF_REJECTED`, „Wróć do szkicu” | brak wpisu `sent` | TEST |
+| 4 | Reset → poprawa → ponowna wysyłka | `accepted`, nowy klucz XML, stary plik nietknięty | dwa pliki | TEST |
+| 5 | POST wysłany, worker zabity przed statusem | uzgodnienie, `accepted`, bez drugiego POST | 1 wpis `sent → accepted` | TEST + zabicie procesu |
+| 6 | KSeF niedostępny 2 h | `failed KSEF_UNAVAILABLE` → automat → `accepted` | audyt `send_requeued` | blokada sieci |
+| 7 | KSeF niedostępny dłużej niż termin | alarm i decyzja z B1/B2 | raport dzienny | blokada sieci, sztuczny zegar |
+| 8 | Korekta „przed/po”, potem druga | P_15 drugiej = różnica od stanu po pierwszej | XML golden | TEST |
+| 9 | Stara sesja przy uzgadnianiu | kod odpowiedzi zapisany (MF nie planuje retencji statusów sesji, changelog v2.4.0) | log CI | TEST |
+| 10 | Brak certyfikatu, NIP niezweryfikowany | `failed NO_CERTIFICATE / NOT_VERIFIED`, link do ustawień | przycisk | lokalnie |
+| 11 | Zdarzenie z innego środowiska | `failed ENV_MISMATCH`, alarm, operator | Sentry | lokalnie |
+| 12 | Faktura przychodząca | `received`, koszt, XML, KOD I w PDF | skrzynka | TEST, druga firma |
+| 13 | P_1 = wczoraj, wysłana dziś | `accepted`, numer, zapisany tryb nadany przez KSeF | log CI | TEST |
+| 14 | Nabywca bez NIP | `accepted`, PDF z KOD I | PDF | TEST |
+| 15 | Wysyłka tuż po północy, P_1 = dziś w Warszawie | przyjęta; dokumentacja nie podaje strefy porównania dat, wynik krytyczny dla A1 | log CI | TEST, ręcznie |
 
 ---
 
-## 10. Czego nie robić w tej rundzie
+## 7. Bramka wydania
 
-- Nie dodawać funkcji (nowe moduły FLO, eksporty, integracje) — każda
-  sesja z tego planu zamyka ryzyko kary albo buduje dowód, nic więcej.
-- Nie zdejmować hamulców „na próbę”.
-- Nie naprawiać dwóch rzeczy w jednym PR, nawet gdy są obok siebie.
-- Nie uznawać za naprawione niczego, czego nie widział test na prawdziwej
-  ścieżce (baza z wyzwalaczami albo KSeF TEST).
-- Nie pisać `ksef_status` nigdzie poza RPC z 00131 i workerem.
-- Nie budować w sesjach planu statystyk, pulpitów ani osi czasu faktury —
-  to centrum dowodzenia (tor Masła/Codexa, `CENTRUM-DOWODZENIA-BRIEF-DLA-CODEXA.md`);
-  plan dostarcza dane (A5), nie widoki.
+Wydanie na KSeF PROD dla płacących klientów, gdy wszystkie punkty mają datę i numer PR albo raportu. `GOTOWOSC-DO-WYDANIA.md` opisuje niższy próg Closed Alpha (7 dni) i obowiązuje dalej; jego G3 („wyłączony KSeF TEST”) czytaj jak scenariusz 6.
+
+- [ ] Sesje A4-D, B2, B3, C1–C4, C6, D1, E1, F1, F2, G1, H1a, H1b, H2 scalone i wdrożone.
+- [ ] Scenariusze z sekcji 6 zielone w 3 kolejnych tygodniowych przebiegach, każdy w swoim miejscu.
+- [ ] Strażnik bez I5D = 0 przez 14 dni (I5D-env = 0); raport dzienny bez `exhausted` i `i1Lost` niewyjaśnionych.
+- [ ] Każdy kod błędu, także `OFFLINE_*`, ma wiersz w runbooku z wyjściem i testem.
+- [ ] Game day (H2): każda z 5 awarii → sygnał ≤ 15 min → wyjście.
+- [ ] Rotacja kluczy wykonana (I1), odtworzenie z kopii wykonane (I3), oba z datą.
+- [ ] Runbook go-live przećwiczony na kopii (F1).
+- [ ] Hamulce zdjęte świadomie (C4) albo decyzja o ich zostawieniu, widoczna w produkcie jako komunikat, nie `failed`.
+- [ ] Offline24 działa albo jest jawnie poza produktem (B1 b).
+- [ ] `kontrola-faktur-ksef.sh` codziennie przez 14 dni bez nieznanych stanów.
+- [ ] Sekcja 8: pozycje BRAMKA zamknięte.
+- [ ] Na końcu: prawnik przejrzał pakiet z sekcji 9, poprawki po przeglądzie wdrożone. TEST bez blokady.
+
+Po bramce: tygodniowy przegląd (raport dzienny, strażnik, Sentry) przez pierwszy kwartał.
+
+---
+
+## 8. Rejestr otwartych ustaleń
+
+Dotąd leżały w kolumnie „co zostało” dziennika, bez właściciela. Przydział jest propozycją do akceptacji Bartosza. „Sprawdzone” = potwierdzone w kodzie 05.11.2026.
+
+**BRAMKA:**
+
+| Kod | Co | Sesja | Stan |
+|---|---|---|---|
+| D-A4-1b-3-SYS | `SystemInfo` jedyną podstawą powodu, zmiana przed KSeF PROD | F1 | sprawdzone: otwarte |
+| D-A4-1b-3-XEDIT | treść szkicu wycofanego zmienialna surowym PATCH | B2 | sprawdzone: otwarte |
+| D-A4-1b-3-PDF | PDF szkicu bez oznaczenia „nie jest fakturą” | B2 | sprawdzone: otwarte |
+| OFFLINE | kody `OFFLINE_*` poza katalogiem, `offline_queued` bez wyjścia (luka #5) | B2 | sprawdzone: otwarte |
+| ZAP-01-f | KPiR bez `assertAcceptedEnvironmentKnown`: przyjęte bez środowiska znikają po cichu | F2 | sprawdzone: otwarte |
+| S10 | portal księgowej bez filtra środowiska | F2 | sprawdzone: brak filtra |
+| D-A4-2 | `ksef_submissions` bez środowiska, I5 uzgadnia dokument z TEST w bieżącym środowisku | F2 | do sprawdzenia |
+| F-093 | `ksef_code` pusty dla `problem+json` | H1a | #189 otwarty od 03.10 |
+| F-005 | korekta faktury spoza 50 najnowszych | C4 | #283 otwarty od 17.10 |
+| C5b-e | KOR faktury z importu z procedurami wpisuje 2/N | C4 | do sprawdzenia |
+| D-A4-1b-3-KORB2C | brak korekty dla nabywcy bez NIP i VAT-UE | C4 | do sprawdzenia |
+| D-A4-1b-3-KORZW | korekta K z `zw` | C3 | w DoD C3 |
+| C-09, C-10, C-16 | ROZ z bazy i środowiska | C4 albo pierwsze wydanie bez ROZ | #195 konflikt od 03.10 |
+| C-12, C-20 | niezmienny dowód XML | D2 | #369, #190 (szkice) |
+| C5c-c | `P_14_x` z sumy VAT pozycji | sekcja 9 | pytanie do doradcy |
+
+**Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
+
+---
+
+## 9. Pakiet dla prawnika (na końcu)
+
+Pokazujemy, gdy reszta bramki jest gotowa. Poprawki po przeglądzie idą osobnymi PR.
+
+1. Założenia z karty B1, z pytaniami:
+   - Czy termin z art. 106nda ust. 2 obowiązuje fakturę z ust. 16, skoro ust. 16 go nie wymienia? Działamy, jakby obowiązywał.
+   - Czy po terminie wolno wystawić dokument z nową datą, gdy nabywca nie dostał poprzedniego?
+   - Czy wysłanie takiej faktury z `offlineMode: false`, gdy KSeF sam przypisuje tryb, jest wystarczające?
+2. Teksty dla klienta: migawka `tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt` (D-A4-1b-3 PR B, PR C, PR D; szczegółowa lista: archiwum, sekcja 8) oraz teksty o terminie i awarii z B2 i B3.
+3. Do księgowej lub doradcy: reguła okresu VAT w JPK (C6) i C5c-c (`P_14_x` z sumy VAT pozycji).
+4. Sprawdzenie, czy projekt odroczenia kar został uchwalony i czy jest nowszy tekst jednolity ustawy.
