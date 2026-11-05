@@ -19,8 +19,8 @@
  *
  * Ścieżka operatora do czasu przycisku w `/admin/flags` (pilotaż, krok K8):
  * UPDATE na `global_feature_flags` i `tenant_feature_flags` kluczem
- * serwisowym. W K1 wszystkie obszary są zablokowane w kodzie, więc moduł
- * nie czyta bazy i żaden klient niczego nie widzi.
+ * serwisowym. Od K2 kod puszcza obszar `ustawienia`, więc o kreatorze
+ * decyduje flaga firmy; pozostałe obszary są zablokowane w kodzie.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -51,7 +51,9 @@ export interface StatusObszaru {
 }
 
 const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
-  ustawienia: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'Kreator ustawień podatkowych: krok K2.' },
+  // K2: kreator zbudowany, więc kod go puszcza; widzi go tylko firma
+  // z `ksiegowosc_enabled = true` (pilotaż), reszta dostaje 404.
+  ustawienia: { wlaczony: true, notatka: 'Kreator ustawień podatkowych (K2).' },
   ewidencja: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'Ewidencja przychodów i JPK_EWP: krok K3.' },
   ten_miesiac: {
     wlaczony: false,
