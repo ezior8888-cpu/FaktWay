@@ -53,6 +53,7 @@ export function usePushNotifications() {
       'Notification' in window &&
       'serviceWorker' in navigator &&
       'PushManager' in window;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- odczyt API przeglądarki (Notification, serviceWorker) po zamontowaniu; na serwerze ich nie ma
     setIsSupported(supported);
 
     if (!supported) return;

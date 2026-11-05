@@ -76,6 +76,7 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
 
         if (result.success) {
           toast.success('Import rozpoczęty');
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- pełne przeładowanie po imporcie, zachowanie od fazy 12; zamiana na router.push to osobna decyzja
           window.location.assign(`/onboarding/progress/${result.importJobId}`);
         } else {
           toast.error(result.error);
