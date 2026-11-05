@@ -26,6 +26,7 @@ vitest.config.ts
 vitest.rls.config.ts
 # Importuje tests/helpers, których tu nie ma: wywrócił build obrazu (wdrożenie #363, 03.11).
 scripts/test-ksef-kreator.ts
+scripts/test-ksef-wysylka.ts
 
 # Dokumentacja i materiały wewnętrzne.
 docs

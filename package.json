@@ -14,6 +14,7 @@
     "ksef:test-auth": "tsx scripts/test-ksef-auth.ts",
     "ksef:test-token": "tsx scripts/test-ksef-token.ts",
     "ksef:submit-full": "tsx scripts/test-submit-full.ts",
+    "ksef:test-wysylka": "tsx scripts/test-ksef-wysylka.ts",
     "r2:smoke": "tsx scripts/test-r2.ts",
     "fa3:test": "tsx scripts/test-fa3-generation.ts",
     "seed:tenant": "tsx scripts/seed-tenant.ts",
