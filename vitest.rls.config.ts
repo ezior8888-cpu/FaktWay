@@ -46,6 +46,9 @@ export default defineConfig({
       // 00163 (krok kodu przy dostępie osób trzecich): adres wysyłki i link dla księgowej,
       // przyjęcie prośby i zmiana roli odmawiają sesji AAL1 konta z 2FA; cofnięcie działa.
       'tests/rls-krok-kodu.test.ts',
+      // 00165 (plan księgowości JDG, K1): wyłącznik modułu — flaga firmy domyślnie
+      // false, czytelna tylko dla swojej firmy, bez zapisu kluczem użytkownika.
+      'tests/rls-ksiegowosc-wylacznik.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

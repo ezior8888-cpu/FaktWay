@@ -147,7 +147,7 @@ Przygotowanie: 4.11.2026, odczyt kodu `origin/main` @ `7a249d3f` (po #368) i prz
 | Ryczałt: termin | do 20. za poprzedni miesiąc, za grudzień do 20 stycznia; formularz PPE na mikrorachunek | bez zmian | wysoka | kwartalny: K9 |
 | Ryczałt: limity | 2 mln euro = 8 517 200 zł; wpłaty kwartalne 200 tys. euro = 851 720 zł (kurs 4,2586 z 1.10.2025) | przeliczyć po kursie NBP z 1.10.2026 | wysoka (2026) | |
 | Skala | 12 % do 120 000 zł, kwota zmniejszająca 3 600 zł; powyżej 10 800 zł + 32 % nadwyżki; zaliczki do 20.; składki społeczne odliczane od dochodu; zdrowotna nieodliczana | bez zapowiedzi zmian | wysoka (stawki), średnia (zaliczki) | |
-| Liniowy | 19 %; zdrowotna odliczana od dochodu do limitu rocznego | bez zmian stawki | wysoka (stawka) | limit 2026 (14 100 zł?) i 2027 do potwierdzenia, art. 30c ustawy o PIT |
+| Liniowy | 19 %; zdrowotna odliczana od dochodu do limitu rocznego: 14 100 zł (podatki.gov.pl, sprawdzone w K1) | bez zmian stawki; limit 2027 ogłasza MF w grudniu | wysoka (stawka, limit 2026) | art. 30c ustawy o PIT |
 | Zdrowotna, ryczałt | 9 % od 60 / 100 / 180 % przeciętnego wynagrodzenia z IV kw. roku poprzedniego, progi przychodu 60 / 300 tys. zł: **498,35 / 830,58 / 1 495,04 zł** | **nieznane do stycznia 2027** (GUS, IV kw. 2026) | średnia | rok składkowy luty-styczeń |
 | Zdrowotna, skala | 9 % dochodu, minimum 9 % płacy minimalnej: 432,54 zł | minimum **445,50 zł** (9 % × 4 950 zł) od lutego 2027 | średnia | podstawą jest dochód z poprzedniego miesiąca |
 | Zdrowotna, liniowy | 4,9 % dochodu, minimum jak skala | jak skala | średnia | |
@@ -155,14 +155,14 @@ Przygotowanie: 4.11.2026, odczyt kodu `origin/main` @ `7a249d3f` (po #368) i prz
 | Płaca minimalna | 4 806 zł | **4 950 zł** (Dz.U. 2026 poz. 1213) | wysoka | |
 | Prognozowane przeciętne wynagrodzenie | 9 420 zł (podstawa pełnego ZUS 5 652 zł) | **10 033 zł w projekcie budżetu** (podstawa 6 019,80 zł) | średnia (2027) | ostatecznie po ustawie budżetowej i komunikacie ZUS |
 | ZUS pełny | społeczne z chorobową i Funduszem Pracy: 1 926,76 zł | ok. 2 052,14 zł (przy 10 033 zł) | średnia | stopę wypadkową dla płatników do 9 osób ZUS zmienia co roku od 1 kwietnia |
-| ZUS preferencyjny | podstawa 30 % płacy minimalnej (1 441,80 zł), społeczne z chorobową ok. 456,19 zł, 24 mies. | podstawa 1 485 zł, ok. 469,85 zł | średnia | bez Funduszu Pracy |
+| ZUS preferencyjny | podstawa 30 % płacy minimalnej (1 441,80 zł), społeczne z chorobową 456,18 zł (tabela ZUS z 2.02.2026, sprawdzone w K1), 24 mies. | podstawa 1 485 zł, ok. 469,85 zł | średnia | bez Funduszu Pracy |
 | Ulga na start | 6 mies. bez społecznych, zdrowotna płatna | bez zmian | średnia | |
 | ZUS: termin, DRA | do 20., na rachunek składkowy (NRS) | bez zmian | niska | kiedy DRA jest obowiązkowa: potwierdzić na zus.pl |
 | VAT | JPK_V7M(3) / V7K(3) od 1.02.2026, do 25.; limit zwolnienia 240 000 zł | bez zmian w źródłach | wysoka (schematy), średnia (limit) | przestrzeń V7M(3): `http://crd.gov.pl/wzor/2025/12/19/14090/` |
 | Księgi w programie | od 1.01.2026 podatnicy z JPK_V7M | od 1.01.2027 **wszyscy pozostali** na PIT | wysoka | nowy wzór KPiR od 2026 (Dz.U. 2025 poz. 1299) z numerem KSeF i identyfikatorem kontrahenta |
 | JPK_PKPIR / JPK_EWP | przesyłane w terminie zeznania | w 2027 tylko grupa V7M za 2026 (do 30.04.2027); pozostali za 2027 w 2028 | wysoka | JPK_PKPIR(3): `http://jpk.mf.gov.pl/wzor/2024/10/30/10302/`; JPK_EWP(4): `.../10301/` |
 | PIT roczne | PIT-28/36/36L od 15 lutego do 30 kwietnia | jak 2026 | wysoka | K9 |
-| Mikrorachunek | 26 cyfr: 2 cyfry kontrolne, 10100071, 22, cyfra typu (2 = NIP), identyfikator, zera; PIT, ryczałt (PPE) i VAT | bez zmian | wysoka | cyfry kontrolne mod 97 jak NRB; wektor testowy z generatora podatki.gov.pl |
+| Mikrorachunek | 26 cyfr: 2 cyfry kontrolne, 10100071, 222, cyfra typu (2 = NIP), identyfikator, zera (w K1 poprawione z „22” według podatki.gov.pl); PIT, ryczałt (PPE) i VAT | bez zmian | wysoka | cyfry kontrolne mod 97 jak NRB; wektor testowy z generatora podatki.gov.pl |
 | Rachunek ZUS (NRS) | indywidualny, z PUE ZUS | bez zmian | niska | klient wpisuje sam |
 
 **Kalendarz 2027 (do sprawdzenia przez `taxDeadline` z przesunięciami weekendów i świąt)**
@@ -357,7 +357,8 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 ## 13. Pułapki znane z tego repo
 
 - `flo_prefs.tax_profile` jest martwy. Nie buduj na nim.
-- `lib/flo/tax-params.ts`: ZUS to atrapy, `PARAMS_VERIFIED=false`, a test świeżości pęknie po 29.08.2027. Pulpit bierze stamtąd limit VAT 240 000.
+- `lib/flo/tax-params.ts`: od K1 bez atrap ZUS, kalendarz i terminy tylko jako aliasy `lib/ksiegowosc/kalendarz.ts`, a Pulpit bierze limit VAT z `lib/ksiegowosc/parametry`. Tabela FLO została dla nieaktywnych funkcji, `PARAMS_VERIFIED=false`, a jej test świeżości pęknie po 29.08.2027.
+- Bezpiecznik roku (`tests/unit/ksiegowosc-parametry.test.ts`): od 1 grudnia psuje CI, jeśli nie ma pliku parametrów na następny rok.
 - `lib/dashboard/tax-estimate.ts` i `components/przeplywy/finora-1do1/adaptery.ts` mają 19 % na sztywno (D13).
 - JPK_V7M jest wyłączony w interfejsie (`SUSPENDED_EXPORT_FORMATS`). Pilnują tego testy `jpk-v7m-wstrzymany*`. Generator odrzuca odwrotne obciążenie i nie śledzi P_39.
 - `kpir_entries` istnieje, ale jest nieużywana. Nie myl jej z KPiR liczoną na żywo.
@@ -394,6 +395,7 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 | Data | Krok | PR | Stan | Wdrożone (SHA) | Uwagi |
 |---|---|---|---|---|---|
 | 4.11.2026 | plan | — | gotowy | — | rozpoznanie kodu (`7a249d3f`) i przepisów; plan poza gitem |
-| 5.11.2026 | K0 | #375 | gotowy, PR otwarty | — | plan w repo i fraza w `AGENTS.md`; `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`; arkusz `docs/ksiegowosc/ZLOTE-PRZYPADKI.md` i pusty `tests/fixtures/ksiegowosc/zlote/szablon.json` (bez kwot); D1, D2 i D9 Bartosz potwierdził bez zmian; 00164 zajmuje szkic #369 |
+| 5.11.2026 | K0 | #375 | scalony 5.11 (`c4600b3d`) | nie dotyczy (tylko dokumentacja) | plan w repo i fraza w `AGENTS.md`; `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`; arkusz `docs/ksiegowosc/ZLOTE-PRZYPADKI.md` i pusty `tests/fixtures/ksiegowosc/zlote/szablon.json` (bez kwot); D1, D2 i D9 Bartosz potwierdził bez zmian; 00164 zajmuje szkic #369 |
+| 5.11.2026 | K1 | #380 | gotowy, PR otwarty | — | `lib/ksiegowosc/parametry` (2026 i 2027, każda liczba ze źródłem urzędowym z odczytu 5.11; liczby 2026 odtwarzają tabele ZUS co do grosza), terminy po dacie obowiązywania, `kalendarz.ts` z FLO plus Wigilia od 2025 r. (kalendarz FLO jej nie znał), `mikrorachunek.ts` z wektorem z generatora MF, `wylacznik.ts` (`killKsiegowosc`, blokada w kodzie, `ksiegowosc_enabled`) z migracją 00165 (do wgrania przed wdrożeniem); atrapy ZUS usunięte z FLO; Pulpit bierze limit VAT z nowego modułu (bez warunku `sprawdzila`); w planie poprawione: mikrorachunek „222”, preferencyjny 456,18 zł, limit liniowy 2026 14 100 zł; czeka na ogłoszenie: limity ryczałtu 2027 (grudzień), limit liniowy 2027 (grudzień), podstawa pełnego ZUS 2027 (listopad), zdrowotna ryczałtu 2027 (styczeń), wypadkowa od 1.04.2027 |
 
-**Następny krok:** K1, parametry i kalendarz (sekcja 12): `lib/ksiegowosc/parametry/{index,2026,2027}.ts` ze źródłami, kalendarz i `taxDeadline` przeniesione z `lib/flo/tax-params.ts` (FLO importuje z nowego modułu), atrapy ZUS usunięte, limit VAT dla pulpitu z nowego modułu, `mikrorachunek.ts`, wyłącznik `ksiegowosc` (globalny i dla firmy). Gałąź `claude/ksiegowosc-k1-parametry` od świeżego `origin/main`, po scaleniu #375. Numer migracji dla flagi (jeśli będzie potrzebna) z rejestru po sprawdzeniu otwartych PR: 00164 zajmuje szkic #369. Odpowiedzi prawnika i księgowej nie blokują K1.
+**Następny krok:** K2, profil podatkowy (sekcja 12): tabela `tax_profiles` z historią (`valid_from`, D3), akcje z audytem, kreator w ustawieniach za wyłącznikiem (obszar `ustawienia` w `lib/ksiegowosc/wylacznik.ts` odblokowany w kodzie dopiero razem z kreatorem), `ryczalt_rate` na pozycji faktury z profilu albo produktu (D4). Stawki i etapy ZUS bierz z `lib/ksiegowosc/parametry`. Migracja: numer z rejestru (po 00165 następny wolny 00166; sprawdź otwarte PR i gałęzie). Gałąź `claude/ksiegowosc-k2-profil` od świeżego `origin/main`, po scaleniu PR K1; 00165 musi być wgrana na db-1 przed wdrożeniem K1. Uwaga dla K4 i G4: przy kilku stawkach ryczałtu 50 % zdrowotnej odlicza się proporcjonalnie do przychodów z każdej stawki (podatki.gov.pl, zapisane przy `odliczenieZdrowotnej`).
