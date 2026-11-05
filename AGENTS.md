@@ -29,6 +29,11 @@
 > zrób checklistę startową (sekcja 0) i TYLKO krok z „Następny krok”
 > w dzienniku (sekcja 15). Po kroku wiersz w dzienniku z numerem PR, nowy
 > „Następny krok”, raport i STOP.
+>
+> **„Kontynuuj plan usprawnień”** (hooki, skille, strażnicy, CI, wygoda
+> pracy): przeczytaj
+> [`docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md),
+> zrób checklistę (sekcja 0) i pracuj od „Następny krok” w dzienniku (sekcja 7).
 
 ## Projekt
 
