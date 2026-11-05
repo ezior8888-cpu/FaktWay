@@ -319,8 +319,8 @@ type RecheckRow = DuplicateDecisionInvoiceRow & { fa3_data: unknown; special_dat
  *
  * Ponowienie po każdym kroku: odczyty nie zostawiają śladu; odmowa polityki albo hamulców kolejki zostawia
  * fakturę `failed` (kolejne kliknięcie liczy od nowa); zapis zlecenia i `failed → queued` to jedna transakcja
- * z `singletonKey = faktura`, więc drugie kliknięcie po sukcesie widzi `queued` i dostaje „Sprawdzamy ponownie”,
- * a RPC nie przejdzie drugi raz; audyt idzie po kolejce i nie rzuca (zapis nieudany tylko wyłącza cooldown na
+ * RPC, więc drugie kliknięcie po sukcesie widzi `queued` i dostaje „Sprawdzamy ponownie”,
+ * a RPC nie przejdzie drugi raz (`singletonKey` jest tylko etykietą, `lib/jobs/enqueue.ts`); audyt idzie po kolejce i nie rzuca (zapis nieudany tylko wyłącza cooldown na
  * czas przebiegu, bo status `queued` i tak blokuje).
  */
 export async function recheckKsefDuplicateAction(invoiceId: string): Promise<RecheckKsefDuplicateResult> {
