@@ -221,11 +221,11 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 05.11.2026 | 2.5 hook lintu po edycji | #399 | ok. 0,5 s, cisza gdy czysto; 2.12 (uprawnienia) czeka na zgodę, sekcja 5.3 |
 | 05.11.2026 | Renovate po instalacji | #400 | Dependency Dashboard (#397) i 16 osobnych PR bezpieczeństwa (#381–#396); #400 składa je w jeden; tryb Mend „Scan and Alert” (domyślny „Scan Only” nie otwiera PR) |
 | 05.11.2026 | Scalenie #365, #398, #399, #400 (polecenie Bartosza) | #402 | auto-merge metodą merge; wdrożenie (zależności z #365) czeka na polecenie Bartosza |
-| 05.11.2026 | 2.2 skille + 2 runbooki | #SKILLE | `/wdrozenie`, `/migracja`, `/naprawa`, `/telefon-review` tylko ręcznie, `/fa3-ksef` także dla modelu; `fa3-ksef.md` i `zmiany-na-telefon.md` przeniesione z prywatnej pamięci Claude, żeby widział je Codex |
-| 05.11.2026 | 2.4b lint 17 → 0, `--max-warnings 0` | #REACT | 8 poprawek (refy w useLayoutEffect, useSyncExternalStore, useWatch, useMemo, sprzątanie efektu), 7 świadomych wzorców z `eslint-disable-next-line … -- powód`; bez zmian klas |
+| 05.11.2026 | 2.2 skille + 2 runbooki | #403 | `/wdrozenie`, `/migracja`, `/naprawa`, `/telefon-review` tylko ręcznie, `/fa3-ksef` także dla modelu; `fa3-ksef.md` i `zmiany-na-telefon.md` przeniesione z prywatnej pamięci Claude, żeby widział je Codex |
+| 05.11.2026 | 2.4b lint 17 → 0, `--max-warnings 0` | #404 | 8 poprawek (refy w useLayoutEffect, useSyncExternalStore, useWatch, useMemo, sprzątanie efektu), 7 świadomych wzorców z `eslint-disable-next-line … -- powód`; bez zmian klas |
 
 **Następny krok:** Bartosz: zgoda na uprawnienia (5.3), plugin `design`
-w aplikacji, wdrożenie po #402, scalenie #SKILLE i #REACT. Sesja po
+w aplikacji, wdrożenie po #402, scalenie #403 i #404. Sesja po
 „idź dalej”: 2.9 (strażnik tekstów), 2.10 (skrypt zbiorczego scalania),
 2.11 (`/code-review` w protokole), 2.7 (typy bazy w CI), 2.8 (szybsze testy),
 potem etap 3 osobnymi sesjami.
