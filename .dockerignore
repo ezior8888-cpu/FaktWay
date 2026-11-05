@@ -32,7 +32,7 @@ docs
 *.md
 !README.md
 
-# Migracje wgrywane osobno (pnpm db:push:prod), nie z kontenera.
+# Migracje wgrywane osobno (scripts/ops/wgraj-migracje.sh), nie z kontenera.
 supabase
 
 # Lokalne środowisko — root i podkatalogi; env dostarcza Coolify.
