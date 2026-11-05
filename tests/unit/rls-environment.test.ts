@@ -88,6 +88,10 @@ describe('separate RLS test configuration', () => {
       'tests/rls-krok-kodu.test.ts',
       // 00164 (C-12): jeden wiersz `xml_documents` na fakturę.
       'tests/rls-xml-dowod-jeden-wiersz.test.ts',
+      // 00165 (plan księgowości JDG, K1): wyłącznik modułu księgowości.
+      'tests/rls-ksiegowosc-wylacznik.test.ts',
+      // 00166 (plan księgowości JDG, K2): profil podatkowy.
+      'tests/rls-ksiegowosc-profil.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

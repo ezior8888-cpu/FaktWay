@@ -55,6 +55,7 @@ export function BankAccountInput({
     const cleaned = value.replace(/\s/g, '').toUpperCase();
 
     if (!isCompletePlBankAccount(cleaned) || (!buyerNip && !sellerNip)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset walidacji w tym samym efekcie, który startuje zapytanie do serwera
       setStatus('idle');
       setWarning(null);
       return;

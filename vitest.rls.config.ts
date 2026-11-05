@@ -49,6 +49,12 @@ export default defineConfig({
       // 00164 (C-12): jeden wiersz `xml_documents` na fakturę, wyścig równoległych
       // zapisów i dowód bez nadpisania przez prawdziwy PostgREST.
       'tests/rls-xml-dowod-jeden-wiersz.test.ts',
+      // 00165 (plan księgowości JDG, K1): wyłącznik modułu — flaga firmy domyślnie
+      // false, czytelna tylko dla swojej firmy, bez zapisu kluczem użytkownika.
+      'tests/rls-ksiegowosc-wylacznik.test.ts',
+      // 00166 (plan księgowości JDG, K2): profil podatkowy — zapis owner/admin, izolacja firm,
+      // forma tylko od 1 stycznia (wyzwalacz), CHECK-i stawki i daty ZUS, bez DELETE.
+      'tests/rls-ksiegowosc-profil.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

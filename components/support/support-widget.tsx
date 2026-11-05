@@ -2,9 +2,9 @@
 
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -74,6 +74,9 @@ const VIDEO_TUTORIALS = [
   'Import z Fakturowni',
 ];
 
+/** Nic się nie zmienia po zamontowaniu, więc subskrypcja jest pusta. */
+const subscribeNothing = () => () => {};
+
 export function SupportWidget({
   articleTitles,
 }: {
@@ -101,12 +104,10 @@ export function SupportWidget({
   const [escalating, startEscalation] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const [portalReady, setPortalReady] = useState(false);
+  // false na serwerze i przy hydratacji, true w przeglądarce: to samo co dawny
+  // setState w useLayoutEffect, bez dodatkowego renderu z efektu.
+  const portalReady = useSyncExternalStore(subscribeNothing, () => true, () => false);
   const kontener = usePortalContainer();
-
-  useLayoutEffect(() => {
-    setPortalReady(true);
-  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({

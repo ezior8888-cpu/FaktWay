@@ -6,7 +6,9 @@
  * T-03 — zegar ulg na starcie (krok 38 planu).
  *
  * ⚠️ FUNKCJA ZA FLAGĄ (`tax.relief`) i za bramką M12. Kwoty składek to dane
- * prawne — patrz `PARAMS_VERIFIED` w `lib/flo/tax-params.ts`.
+ * prawne: od kroku K1 planu księgowości podaje je wywołujący
+ * (`ReliefParams.zusMonthly`), a długości ulg są w `lib/flo/tax-params.ts`
+ * (`PARAMS_VERIFIED`).
  *
  * CO ROBI: na 60 dni przed końcem ulgi na start albo preferencyjnego ZUS-u
  * mówi, o ile urośnie składka i ile odkładać, żeby ten wzrost nie był
@@ -40,6 +42,22 @@ import { fingerprintOf } from '@/lib/flo/fingerprint';
 import { formatPln } from '@/lib/flo/money';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
 import type { TaxParams } from '@/lib/flo/tax-params';
+
+/**
+ * Składki miesięczne na trzech etapach. Atrapy 400/700/1600 zł zniknęły
+ * z tabeli parametrów w kroku K1 planu księgowości (D7): kwoty podaje
+ * wywołujący, docelowo z modułu `lib/ksiegowosc` po sprawdzeniu przez
+ * księgową. Funkcja jest nieaktywna, więc dziś wywołującego nie ma.
+ */
+export interface ReliefMonthlyContributions {
+  startRelief: number;
+  preferential: number;
+  standard: number;
+}
+
+export type ReliefParams = Pick<TaxParams, 'reliefStartMonths' | 'reliefPreferentialMonths'> & {
+  zusMonthly: ReliefMonthlyContributions;
+};
 
 const DAY_MS = 86_400_000;
 
@@ -87,7 +105,7 @@ export interface ReliefWindow {
  */
 export function reliefWindows(
   profile: ReliefProfileInput,
-  params: TaxParams,
+  params: ReliefParams,
 ): ReliefWindow[] {
   if (!profile.startedOn) return [];
   const started = Date.parse(`${profile.startedOn}T00:00:00.000Z`);
@@ -106,8 +124,8 @@ export function reliefWindows(
       startsOn: iso(cursor),
       endsOn: iso(end),
       shiftedByDays: suspended,
-      monthly: params.zusStartReliefMonthly,
-      nextMonthly: params.zusPreferentialMonthly,
+      monthly: params.zusMonthly.startRelief,
+      nextMonthly: params.zusMonthly.preferential,
     });
     cursor = end;
   }
@@ -124,8 +142,8 @@ export function reliefWindows(
     startsOn: iso(cursor),
     endsOn: iso(preferentialEnd),
     shiftedByDays: profile.usesStartRelief ? 0 : suspended,
-    monthly: params.zusPreferentialMonthly,
-    nextMonthly: params.zusStandardMonthly,
+    monthly: params.zusMonthly.preferential,
+    nextMonthly: params.zusMonthly.standard,
   });
 
   return windows;
@@ -147,7 +165,7 @@ export type ReliefVerdict =
 
 export function decideReliefNotice(input: {
   profile: ReliefProfileInput;
-  params: TaxParams;
+  params: ReliefParams;
   today: Date;
 }): ReliefVerdict {
   if (!input.profile.startedOn) return { kind: 'silent', reason: 'no_start_date' };
@@ -190,7 +208,7 @@ const RELIEF_NAME: Record<ReliefKind, string> = {
 export function buildReliefProposal(input: {
   tenantId: string;
   profile: ReliefProfileInput;
-  params: TaxParams;
+  params: ReliefParams;
   today: Date;
 }): CreateProposalInput | null {
   const verdict = decideReliefNotice(input);

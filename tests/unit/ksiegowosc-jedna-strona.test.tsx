@@ -15,9 +15,19 @@ import { describe, expect, it, vi } from 'vitest';
 const nav = vi.hoisted(() => ({ pathname: '/reports/kpir' }));
 vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
 
+// Plan księgowości JDG (K2): layout pyta wyłącznik o zakładkę „Ustawienia podatkowe”.
+const wylacznik = vi.hoisted(() => ({ wlaczony: false, blad: false }));
+vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: async () => ({ supabase: {}, tenantId: 'firma-1' }) }));
+vi.mock('@/lib/ksiegowosc/wylacznik', () => ({
+  czyKsiegowoscWlaczona: async () => {
+    if (wylacznik.blad) throw new Error('odczyt flagi');
+    return { wlaczony: wylacznik.wlaczony };
+  },
+}));
+
 const { default: KsiegowoscLayout } = await import('@/app/(dashboard)/reports/layout');
 const { SectionTabsNav } = await import('@/components/lists/section-tabs-nav');
-const { KSIEGOWOSC_TABS } = await import('@/components/reports/ksiegowosc-tabs');
+const { KSIEGOWOSC_TABS, USTAWIENIA_PODATKOWE_TAB } = await import('@/components/reports/ksiegowosc-tabs');
 
 const ROOT = join(__dirname, '..', '..');
 
@@ -31,13 +41,26 @@ function elements(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
 }
 
 describe('Księgowość — jedna strona', () => {
-  it('layout: rząd zakładek Księgowości u góry, pod nim strona zakładki', () => {
-    const tree = KsiegowoscLayout({ children: <p id="zakladka">treść</p> });
+  it('layout: rząd zakładek Księgowości u góry, pod nim strona zakładki', async () => {
+    const tree = await KsiegowoscLayout({ children: <p id="zakladka">treść</p> });
     expect((tree.props as { className: string }).className).toContain('ff-page-fill');
     const all = elements(tree);
     const tabs = all.find((el) => el.type === SectionTabsNav)!;
     expect((tabs.props as { tabs: unknown }).tabs).toBe(KSIEGOWOSC_TABS);
     expect(all.indexOf(tabs)).toBeLessThan(all.findIndex((el) => (el.props as { id?: string }).id === 'zakladka'));
+  });
+
+  it('firma w pilotażu dostaje zakładkę „Ustawienia podatkowe”, błąd wyłącznika ją tylko chowa', async () => {
+    const zakladki = async () => {
+      const tree = await KsiegowoscLayout({ children: <p>treść</p> });
+      return (elements(tree).find((el) => el.type === SectionTabsNav)!.props as { tabs: unknown[] }).tabs;
+    };
+    wylacznik.wlaczony = true;
+    expect(await zakladki()).toEqual([...KSIEGOWOSC_TABS, USTAWIENIA_PODATKOWE_TAB]);
+    wylacznik.blad = true;
+    expect(await zakladki()).toBe(KSIEGOWOSC_TABS);
+    wylacznik.wlaczony = false;
+    wylacznik.blad = false;
   });
 
   it('aktywna zakładka z adresu', () => {

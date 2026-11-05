@@ -17,6 +17,13 @@
 /scripts/security/           @ezior8888-cpu
 /AGENTS.md                   @ezior8888-cpu
 /CLAUDE.md                   @ezior8888-cpu
+/.claude/                    @ezior8888-cpu
+/.githooks/                  @ezior8888-cpu
+# Procedury wydzielone z AGENTS.md (plan usprawnień 2.1): ta sama ochrona co AGENTS.md
+/docs/runbooks/scalanie-pr.md          @ezior8888-cpu
+/docs/runbooks/wgrywanie-migracji.md   @ezior8888-cpu
+/docs/runbooks/wdrozenie-produkcji.md  @ezior8888-cpu
+/docs/runbooks/coolify-pulapki.md      @ezior8888-cpu
 /renovate.json               @ezior8888-cpu
 /docs/runbooks/agent-kodu.md  @ezior8888-cpu
 

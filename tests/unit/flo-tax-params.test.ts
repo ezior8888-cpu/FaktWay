@@ -111,7 +111,10 @@ describe('kalendarz dni wolnych', () => {
   it('zna święta o stałej dacie', () => {
     expect(isPublicHoliday(d('2026-11-11'))).toBe(true);
     expect(isPublicHoliday(d('2026-12-26'))).toBe(true);
-    expect(isPublicHoliday(d('2026-12-24'))).toBe(false); // wigilia nie jest dniem wolnym
+    // Od 2025 r. Wigilia jest dniem wolnym od pracy (kalendarz z lib/ksiegowosc,
+    // krok K1 planu księgowości; ten sam wyjątek ma lib/ksef/idempotency.ts).
+    expect(isPublicHoliday(d('2026-12-24'))).toBe(true);
+    expect(isPublicHoliday(d('2024-12-24'))).toBe(false);
   });
 
   it('weekend nie jest dniem roboczym', () => {

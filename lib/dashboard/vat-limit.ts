@@ -9,8 +9,8 @@ import {
   type SalesEntry,
   type VatLimitInput,
 } from '@/lib/flo/functions/vat-limit';
-import { paramsFor } from '@/lib/flo/tax-params';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { limitZwolnieniaVat } from '@/lib/ksiegowosc/parametry';
 import { readTenantBusinessStart } from '@/lib/invoices/business-start';
 import { MAX_SALE_DAYS_AFTER_ISSUE } from '@/lib/invoices/sale-date';
 import {
@@ -76,7 +76,7 @@ export interface VatLimitOverview {
    * zaokrąglonych do groszy.
    */
   used: number;
-  /** `paramsFor(today).vatExemptionLimit`. */
+  /** `limitZwolnieniaVat(today)` w złotych (plik roku w `lib/ksiegowosc/parametry`). */
   annualLimit: number;
   /** Data rozpoczęcia działalności z ustawień firmy; `null` = nie podano. */
   startedOn: string | null;
@@ -289,12 +289,12 @@ export interface VatLimitPlan {
 
 export function vatLimitPlan(now: Date): VatLimitPlan {
   const today = todayInWarsaw(now);
-  const params = paramsFor(utcDay(today));
-  if (!params) throw new Error('Brak parametrów limitu zwolnienia z VAT na ten rok');
+  const limitGr = limitZwolnieniaVat(today);
+  if (limitGr === null) throw new Error('Brak parametrów limitu zwolnienia z VAT na ten rok');
   const year = Number(today.slice(0, 4));
   return {
     today,
-    annualLimit: params.vatExemptionLimit,
+    annualLimit: limitGr / 100,
     from: vatLimitReadStart(year),
     toExclusive: `${year + 1}-01-01`,
   };

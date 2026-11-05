@@ -35,7 +35,12 @@ const HC = 'https://hc.example.test/ping/db-backup';
 const GB = 1_000_000_000;
 const ROLES = 'CREATE ROLE anon;\n';
 
-const hasBash = spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0;
+/**
+ * Skrypt chodzi na db-1 (bash 5) i używa `mapfile`, którego nie ma w bashu 3.2
+ * z macOS. Na Macu bez `brew install bash` test się pomija, zamiast padać.
+ */
+const bashMajor = Number(spawnSync('bash', ['-c', 'echo "${BASH_VERSINFO[0]}"'], { encoding: 'utf8' }).stdout?.trim() || 0);
+const hasBash = bashMajor >= 4;
 
 const FAKE_DOCKER = `#!/usr/bin/env bash
 # Atrapa: docker exec [-i] <kontener> pg_dump | pg_dumpall | pg_restore -l.

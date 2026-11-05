@@ -379,11 +379,11 @@ export function CorrectionInvoiceForm({
   // bridge URL-param → form-state (pre-select rodzica korekty), więc wzorzec
   // jest pożądany. Refaktor na `useSyncExternalStore` byłby przesadą dla
   // jednego pre-fillu; suppress z explicit komentarzem.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
   useEffect(() => {
     if (!validPreselect || userDismissedPrefillRef.current) return;
     const row = parentInvoices.find((p) => p.id === validPreselect);
     if (!row) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-fill bridge for ?parent=<id> URL param
     void loadParentContext(row);
   }, [validPreselect, parentInvoices, loadParentContext]);
 
@@ -582,6 +582,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
 
   const correctionType = useWatch({ control: form.control, name: 'correctionType' });
   const typKorekty = useWatch({ control: form.control, name: 'typKorekty' }) ?? '2';
+  const paymentMethod = useWatch({ control: form.control, name: 'paymentMethod' });
 
   // Nabywca i pozycje „Było” przychodzą z faktury pierwotnej (formularz nabywcy
   // nie zmienia) — z nich wynika dostępność np. II i stawka korekty kwotowej.
@@ -797,7 +798,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
           <div>
             <Label className={labelClass}>Metoda płatności</Label>
             <Select
-              value={form.watch('paymentMethod')}
+              value={paymentMethod}
               items={PAYMENT_METHOD_ITEMS}
               onValueChange={(v) => {
                 if (v == null) return
