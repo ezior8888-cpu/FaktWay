@@ -196,7 +196,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 
 1. Otwórz https://github.com/apps/renovate i kliknij **Install** (albo
    **Configure**, jeśli już jest).
-2. Wybierz konto `ezior8888-cpu` → **Only select repositories** → `ksef-saas`
+2. Wybierz konto `ezior8888-cpu` → **Only select repositories** → `FaktWay` (do 05.11.2026 `ksef-saas`)
    → **Install**.
 3. Pierwszy PR to zwykle „Configure Renovate” albo od razu „Dependency
    Dashboard” (issue). Nic nie scalaj w ciemno: `renovate.json` już jest.
@@ -219,7 +219,13 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 05.11.2026 | 1.7 Renovate zainstalowany (Bartosz, tryb „Scan and Alert”) | — | „Dependency Dashboard” jeszcze nie powstał w chwili wpisu |
 | 05.11.2026 | 2.4 lint 30 → 17, próg `--max-warnings 17`, `--cache` | #398 | 17 zostało: ostrzeżenia kompilatora React w komponentach klienta, każde zmienia zachowanie, więc osobny PR z oceną przypadków (2.4b) |
 | 05.11.2026 | 2.5 hook lintu po edycji | #399 | ok. 0,5 s, cisza gdy czysto; 2.12 (uprawnienia) czeka na zgodę, sekcja 5.3 |
+| 05.11.2026 | Renovate po instalacji | #400 | Dependency Dashboard (#397) i 16 osobnych PR bezpieczeństwa (#381–#396); #400 składa je w jeden; tryb Mend „Scan and Alert” (domyślny „Scan Only” nie otwiera PR) |
+| 05.11.2026 | Scalenie #365, #398, #399, #400 (polecenie Bartosza) | #402 | auto-merge metodą merge; wdrożenie (zależności z #365) czeka na polecenie Bartosza |
+| 05.11.2026 | 2.2 skille + 2 runbooki | #SKILLE | `/wdrozenie`, `/migracja`, `/naprawa`, `/telefon-review` tylko ręcznie, `/fa3-ksef` także dla modelu; `fa3-ksef.md` i `zmiany-na-telefon.md` przeniesione z prywatnej pamięci Claude, żeby widział je Codex |
+| 05.11.2026 | 2.4b lint 17 → 0, `--max-warnings 0` | #REACT | 8 poprawek (refy w useLayoutEffect, useSyncExternalStore, useWatch, useMemo, sprzątanie efektu), 7 świadomych wzorców z `eslint-disable-next-line … -- powód`; bez zmian klas |
 
 **Następny krok:** Bartosz: zgoda na uprawnienia (5.3), plugin `design`
-w aplikacji, scalenie #398 i #399. Sesja po „idź dalej”: 2.2 (skille),
-2.4b (17 ostrzeżeń React), 2.9, 2.10, 2.11, 2.7, 2.8.
+w aplikacji, wdrożenie po #402, scalenie #SKILLE i #REACT. Sesja po
+„idź dalej”: 2.9 (strażnik tekstów), 2.10 (skrypt zbiorczego scalania),
+2.11 (`/code-review` w protokole), 2.7 (typy bazy w CI), 2.8 (szybsze testy),
+potem etap 3 osobnymi sesjami.
