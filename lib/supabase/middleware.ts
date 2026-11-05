@@ -4,6 +4,7 @@ import { getPanelMfaState } from '@/lib/auth/panel-mfa';
 import { PASSKEY_SESSION_COOKIE } from '@/lib/auth/passkey/session-marker';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
+import { isTelemetryTunnelPath } from '@/lib/telemetry-tunnel';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
 
@@ -53,14 +54,15 @@ const PUBLIC_API_PREFIXES = [
 // Billing APIs and any nested paths must still require a user session.
 const PUBLIC_API_EXACT = ['/api/stripe/webhook'] as const;
 
+/**
+ * Publiczne, ale z sesją: proxy dalej tworzy klienta i odświeża ciasteczka.
+ * Pliki techniczne (`/sw.js`, manifest, robots, sitemap) są w
+ * `NO_SESSION_PATHS`, a tunele telemetrii w `lib/telemetry-tunnel.ts`.
+ */
 const STATIC_PUBLIC_EXACT = [
-  '/manifest.webmanifest',
-  '/sw.js',
-  '/monitoring', // Sentry `tunnelRoute`
-  // Dla wyszukiwarek i podglądów linków. Bez tego (do 1.10.2026) wszystkie trzy
-  // kończyły się przekierowaniem na /login.
-  '/robots.txt',
-  '/sitemap.xml',
+  // Podgląd linku; do 1.10.2026 kończył się przekierowaniem na /login. Zostaje
+  // z sesją, bo pobierają go roboty bez ciasteczek, a bez ciasteczek klient
+  // nie woła GoTrue.
   '/opengraph-image',
   MAINTENANCE_PATH, // tu kieruje bramka przerwy technicznej — musi być osiągalna
 ] as const;
@@ -77,9 +79,23 @@ const STATIC_PUBLIC_EXACT = [
 const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] = [
   // baner KSeF w każdej karcie panelu (plan skalowania, sesja 1)
   { path: '/api/ksef/health', match: 'exact' },
+  // Pliki techniczne (plan skalowania, sesja 2). Przeglądarka sprawdza `/sw.js`
+  // przy pełnych nawigacjach w zasięgu workera i pobiera manifest, a roboty
+  // wyszukiwarek pobierają `robots.txt` i `sitemap.xml`. Żaden nie zależy od
+  // tego, kto pyta. `robots.txt` i `sitemap.xml` muszą zostać publiczne:
+  // do 1.10.2026 kończyły się przekierowaniem na /login.
+  { path: '/sw.js', match: 'exact' },
+  { path: '/manifest.webmanifest', match: 'exact' },
+  { path: '/robots.txt', match: 'exact' },
+  { path: '/sitemap.xml', match: 'exact' },
 ];
 
 export function isNoSessionPath(pathname: string): boolean {
+  // Tunele PostHog i Sentry mają własny mechanizm (`lib/telemetry-tunnel.ts`,
+  // wołany w `proxy.ts` przed `updateSession`: zdejmuje też ciasteczka).
+  // Delegacja zamiast drugiego wpisu — jedna lista, żeby obie ścieżki nie
+  // rozjechały się przy następnej zmianie przepisań w `next.config.ts`.
+  if (isTelemetryTunnelPath(pathname)) return true;
   return NO_SESSION_PATHS.some(({ path, match }) =>
     pathname === path || (match === 'prefix' && pathname.startsWith(`${path}/`)),
   );
@@ -96,9 +112,11 @@ export function isMarketingPath(pathname: string): boolean {
  * Całość `/api/*` NIE jest publiczna — tylko jawne prefiksy (bezpieczeństwo).
  */
 export function isPublicPath(pathname: string): boolean {
+  // Obejmuje pliki techniczne i tunele telemetrii (PostHog musi być
+  // publiczny: skrypt ładuje się przed logowaniem). `startsWith('/ingest')`
+  // robiło publicznymi też `/ingestion` i `/ingest-raport`, których Next
+  // nie przepisuje do PostHog.
   if (isNoSessionPath(pathname)) return true;
-  // PostHog reverse proxy — musi być publiczny (skrypt ładuje się przed logowaniem).
-  if (pathname.startsWith('/ingest')) return true;
   if (isMarketingPath(pathname)) return true;
   if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
   if (pathname.startsWith('/api/')) {
