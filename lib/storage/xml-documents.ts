@@ -99,13 +99,14 @@ export async function recordXmlDocument(record: XmlDocumentRecord): Promise<void
   }
 
   const sizeBytes = record.verifyStoredBytes ? await storedSize(record, sha256Hash) : record.sizeBytes;
+  // Kolejność kluczy jak przed C-12: migawka importu (import-wiersze-tozsamosc) przypina surowy JSON.
   const { error } = await createAdminClient().from('xml_documents').insert({
-    invoice_id: record.invoiceId,
-    tenant_id: record.tenantId,
     storage_provider: 'r2',
     storage_path: record.storagePath,
     sha256_hash: sha256Hash,
     file_size_bytes: sizeBytes ?? null,
+    invoice_id: record.invoiceId,
+    tenant_id: record.tenantId,
   });
   if (!error) return;
   if (error.code !== UNIQUE_VIOLATION) throw new Error(`xml_documents: ${error.message}`);
