@@ -197,6 +197,29 @@ function automaticExit(s: Scenario): boolean {
     || (canRebuild && s.openSubmission && reconcileIsExit(s));
 }
 
+/**
+ * PR D: polityka „Sprawdź ponownie” klienta (`lib/ksef/duplicate-recheck.ts`). Ścieżka w zmiennej: przed
+ * PR D modułu nie ma, a statyczny import wywróciłby cały plik razem ze strażnikami macierzy.
+ */
+type RecheckViewLite = { kind: 'recheck'; reason: string; refusal: { code: string; message: string } | null } | null;
+type RecheckPolicy = {
+  duplicateRecheckView: (input: {
+    facts: DuplicateDecisionFacts;
+    sendFacts: KsefResendFacts;
+    canManage: boolean;
+    environment: KsefEnvironment | null;
+    lastRecheckAt: string | null;
+    now: Date;
+  }) => RecheckViewLite;
+};
+const RECHECK_POLICY_PATH = '@/lib/ksef/duplicate-recheck';
+const recheckPolicy: RecheckPolicy | null = await import(/* @vite-ignore */ RECHECK_POLICY_PATH)
+  .then((mod) => mod as RecheckPolicy)
+  .catch((err: unknown) => {
+    if (!/Cannot find|Failed to (load|resolve)|does not exist/i.test(String(err))) throw err;
+    return null;
+  });
+
 const NOW = new Date('2026-10-07T12:00:00.000Z');
 
 /**
@@ -228,6 +251,29 @@ function duplicateViewOf(s: Scenario, actor: 'client' | 'operator'): DuplicateDe
   return duplicateDecisionOptions({ facts, actor, canManage: true, environment: s.env, now: NOW });
 }
 
+/**
+ * PR D: widok „Sprawdź ponownie” z PRAWDZIWEJ polityki (właściciel, bez cooldownu) — fakty jak z ładowarki:
+ * znacznik z danym powodem pobrania albo bez zapisu sprawdzenia. Tylko KSEF_DUPLICATE_RECONCILE z otwartym wpisem.
+ */
+function recheckViewOf(s: Scenario): RecheckViewLite {
+  if (s.code !== SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE || !s.openSubmission || !s.duplicateReason) return null;
+  if (!recheckPolicy) return null;
+  const reason = s.duplicateReason;
+  const check = reason === 'no-check'
+    ? null
+    : validCheck({ reason, env: s.env, httpStatus: reason === 'download-refused' ? 403 : reason === 'download-pending' ? 503 : null });
+  const facts = decisionFacts({ invoice: { invoice_kind: s.kind }, check });
+  return recheckPolicy.duplicateRecheckView({
+    facts, sendFacts: factsOf(s), canManage: true, environment: s.env, lastRecheckAt: null, now: NOW,
+  });
+}
+
+/** PR D: przycisk „Sprawdź ponownie” jest dla tego scenariusza wyjściem klienta. */
+function recheckExit(s: Scenario): boolean {
+  const v = recheckViewOf(s);
+  return v?.kind === 'recheck' && v.refusal === null;
+}
+
 /** Przyciski właściciela (A4b PR2b): fakty ponowienia z kopii i znane środowisko — jak operator. */
 function clientButtons(s: Scenario) {
   return failedInvoiceButtons({
@@ -240,7 +286,8 @@ function clientExit(s: Scenario): boolean {
   if (!b) return false;
   // „Wyślij ponownie” klienta idzie przez `requeue_ksef_send` (klasa terminal odmawia — przycisk jej nie pokazuje).
   // D-A4-1b-3 PR B: panel decyzji („ta sama sprzedaż” / „inna sprzedaż”) — `decide_ksef_duplicate`.
-  return b.resend || (b.reset && resetAllowedByRpc(s)) || duplicateViewOf(s, 'client')?.kind === 'decidable';
+  // PR D: przycisk „Sprawdź ponownie” (reconcile-only) tam, gdzie brakuje danych oryginału.
+  return b.resend || (b.reset && resetAllowedByRpc(s)) || duplicateViewOf(s, 'client')?.kind === 'decidable' || recheckExit(s);
 }
 
 /**
@@ -345,7 +392,8 @@ const LATER_DUPLICATE_REASONS: readonly DuplicateReason[] = [
  *  - KSEF_DUPLICATE_RECONCILE (D-A4-1b-3 PR B):
  *    - bez otwartego wpisu (stary 440 sprzed znacznika) — D-A4-1b;
  *    - z otwartym wpisem: pobranie/magazyn/archiwum nieudane i brak zapisu
- *      (`no-check`) — I5 i „Tylko uzgodnij” (PR D: „Sprawdź ponownie”);
+ *      (`no-check`) — przycisk klienta „Sprawdź ponownie” (PR D, `duplicateRecheckView`),
+ *      I5 i „Tylko uzgodnij” operatora;
  *      zwykła faktura `no-own-file`, `known-number` i `faktflow-original`
  *      (PR C) — decyzja klienta i operatora, oddanie albo zapis w przeglądzie,
  *      automat (`recheck-needed`, `known-now`), NIE ślepa uliczka; wyjątki
@@ -367,7 +415,7 @@ function knownDeadEnd(s: Scenario): boolean {
   if (special && (s.sendData === 'missing' || kindHeld)) return noReset; // runbook / C4 / decyzja Bartosza (ZAL, 00132)
   if (s.code === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE) {
     if (!s.openSubmission) return true; // D-A4-1b
-    if (RECHECK_REASONS.includes(s.duplicateReason!)) return false; // I5 i „Tylko uzgodnij” (PR D)
+    if (RECHECK_REASONS.includes(s.duplicateReason!)) return false; // klient „Sprawdź ponownie” (PR D), I5 i „Tylko uzgodnij”
     if (special) return true; // D-A4-1b-3-S
     if (s.faktflow === 'cross-tenant') return true; // PR C: runbook „Oryginał w innej firmie” (Bartosz)
     if (s.faktflow === 'review-record' && s.recordable === false) return true; // PR C: runbook „Zapis oryginału odmówiony” (Bartosz)
@@ -428,6 +476,40 @@ describe('A4: każdy kod katalogu ma wyjście (automat, klient albo operator)', 
     }
     for (const reason of ['no-own-file', 'known-number', 'faktflow-original', 'same-content-other-program', 'archive-conflict'] as const) {
       expect(automaticExit(open('regular', reason)), reason).toBe(false);
+    }
+  });
+
+  it('U15d (PR D): powody RECHECK mają wyjście KLIENTA (przycisk „Sprawdź ponownie”), niezależne od I5 i operatora', () => {
+    const open = (kind: Kind, duplicateReason: DuplicateReason, env: Env, sendData: KsefResendFacts['sendData'] = 'stored'): Scenario => ({
+      code: SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, kind, sendData, env,
+      issueDatePassed: false, evidence: true, openSubmission: true, duplicateReason,
+    });
+    for (const env of ENVS) {
+      for (const reason of RECHECK_REASONS) {
+        // Zwykła faktura i dokumenty specjalne z kopią danych w dniu wystawienia (rodzaj niewstrzymany w tym środowisku).
+        expect(recheckExit(open('regular', reason, env)), `${reason} ${env}`).toBe(true);
+        expect(clientExit(open('regular', reason, env)), `${reason} ${env}`).toBe(true);
+        expect(recheckExit(open('advance', reason, env)), `advance ${reason} ${env}`).toBe(true);
+        // Bez kopii danych klient nie uzgodni (jak „Tylko uzgodnij” operatora) — to jawna ślepa uliczka runbooka.
+        expect(recheckExit(open('correction', reason, env, 'missing')), `kor bez danych ${reason} ${env}`).toBe(false);
+      }
+      // Powody z panelem decyzji i deterministyczne nie dostają przycisku (mają decyzję albo właściciela).
+      for (const reason of ['no-own-file', 'known-number', 'faktflow-original', 'same-content-other-program', 'archive-conflict'] as const) {
+        expect(recheckExit(open('regular', reason, env)), `${reason} ${env}`).toBe(false);
+      }
+    }
+  });
+
+  it('U15e (PR D): wyjście klienta nie zależy od crona ani operatora — samo przyciskiem zamyka powody RECHECK dla zwykłej faktury', () => {
+    for (const env of ENVS) {
+      for (const reason of RECHECK_REASONS) {
+        const s: Scenario = {
+          code: SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, kind: 'regular', sendData: 'stored', env,
+          issueDatePassed: false, evidence: true, openSubmission: true, duplicateReason: reason,
+        };
+        expect(clientExit(s), `${reason} ${env}`).toBe(true);
+        expect(knownDeadEnd(s), `${reason} ${env}`).toBe(false);
+      }
     }
   });
 

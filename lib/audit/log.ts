@@ -71,6 +71,9 @@ export type AuditAction =
   // (decyzję zapisuje RPC `decide_ksef_duplicate` — `invoice.ksef_duplicate_decided`).
   // PR C (00156): metadane niosą też `mode`, `offer` i `importedInvoiceId` (K zapisana z KSeF; brak przy `no-import`).
   | 'invoice.operator_duplicate_decision'
+  // D-A4-1b-3 PR D: klient (właściciel/administrator) kliknął „Sprawdź ponownie” przy braku danych oryginału 440.
+  // Metadane: `reason`, `originalKsefNumber`, `sendAttemptId`; z tego wpisu liczymy cooldown 10 minut.
+  | 'invoice.duplicate_recheck'
   // D-A4-1b-3 PR B: „Faktura … czeka na Twoją decyzję” dostarczone (e-mail albo push) —
   // zapis bezpośredni (`lib/ksef/duplicate-decision-notice.ts`), raz na (fakturę, K).
   // PR C: metadane niosą `variant` (`pair` / `record` / `released` / `review`).
