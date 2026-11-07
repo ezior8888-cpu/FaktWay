@@ -187,7 +187,12 @@ export type AuditAction =
   // Rozliczenie miesiąca (00168, K4, D6): zatwierdzone wersje i oznaczenie zapłaty.
   | 'tax_settlement.approved'
   | 'tax_settlement.paid'
-  | 'tax_settlement.unpaid';
+  | 'tax_settlement.unpaid'
+  // VAT i JPK_V7M (00170, K6): pobrany plik (miesiąc i kwoty deklaracji, bez
+  // danych osoby), wysyłka do MF z numerem referencyjnym i przyjęcie z UPO.
+  | 'jpk_v7m.downloaded'
+  | 'jpk_v7m.sent'
+  | 'jpk_v7m.accepted';
 
 export interface AuditLogEntry {
   action: AuditAction;

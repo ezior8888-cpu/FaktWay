@@ -61,6 +61,9 @@ export default defineConfig({
       // 00169 (plan księgowości JDG, K5): powiadomienia tylko dla zadań (service_role), UNIQUE jako
       // idempotencja cronów, przejęcie wpisu „failed”, CHECK-i, zgoda push „Księgowość”.
       'tests/rls-ksiegowosc-powiadomienia.test.ts',
+      // 00170 (plan księgowości JDG, K6): wysyłki JPK do MF owner/admin, izolacja firm, jedna wysyłka
+      // w toku na miesiąc, przejścia stanów i niezmienność pliku (wyzwalacz), granty kolumnowe, CHECK-i.
+      'tests/rls-ksiegowosc-jpk.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

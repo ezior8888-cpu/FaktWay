@@ -8,10 +8,11 @@ import { ZaplaconeRozliczenie, ZatwierdzMiesiac } from '@/components/ksiegowosc/
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { monthLabel, shiftMonth } from '@/lib/expenses/month';
+import { monthLabel } from '@/lib/expenses/month';
 import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { miesiacZParametrow } from '@/lib/ksiegowosc/miesiac-strony';
 import { formatujRachunek, mikrorachunekZNip } from '@/lib/ksiegowosc/mikrorachunek';
 import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
 import { NAZWY_ROZLICZEN, type RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
@@ -45,16 +46,6 @@ export const dynamic = 'force-dynamic';
 type DaneOk = Extract<DaneMiesiaca, { ok: true }>;
 
 const zl = (gr: number) => `${formatPlMoney(gr / 100)} zł`;
-
-function miesiacZParametrow(sp: { month?: string; year?: string }, dzis: string): string {
-  const m = Number(sp.month);
-  const r = Number(sp.year);
-  if (Number.isInteger(m) && m >= 1 && m <= 12 && Number.isInteger(r) && r >= 2026 && r <= 2100) {
-    return `${r}-${String(m).padStart(2, '0')}`;
-  }
-  // Domyślnie poprzedni miesiąc: ten, który właśnie się rozlicza.
-  return shiftMonth(dzis.slice(0, 7), -1);
-}
 
 /** Podpis każdej kwoty (plan, sekcja 8): rok stawek, a dla zdrowotnej rok składkowy, gdy jest inny. Kończy się kropką. */
 function podpis(rok: number, rokSkladkowy: number): string {
