@@ -186,7 +186,7 @@ nadpisanie historii i push prosto na `main`):
 }
 ```
 
-Po „tak” Bartosz wkleja to sam albo pozwala sesji zapisać (zgoda w czacie).
+Zgoda Bartosza w czacie 07.11.2026 („uprawnienia: tak”); zapisane w `.claude/settings.json`.
 
 ## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
 
@@ -230,10 +230,16 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | Scalenie #418–#420 (polecenie Bartosza) | #422 | `bbdf4e2e`; przy składaniu CodeQL zatrzymał #418 (`js/file-system-race` w teście), poprawione; auto-merge zablokowany przez tryb auto, scalił Bartosz |
 | 07.11.2026 | 2.7 typy bazy w CI | #423 | job RLS: 1288 pozycji, 0 błędów (brak dryfu produkcji), 13 ostrzeżeń: 00167 bez typów z produkcji i stałe `invoices.ksef_upo_expected` |
 | 07.11.2026 | 2.8 Vitest w 3 częściach | #424 | ta sama wymagana kontrola; lokalnie 57/71/83 s zamiast 180 s, suma = pełny zestaw |
-| 07.11.2026 | 3.5 alarm krytyczny → issue | #432 | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; czeka na etykietę `alert-produkcji` i token `GITHUB_ALERT_ISSUES_TOKEN` w workerze (opis PR) |
+| 07.11.2026 | #423 i #424 scalone (polecenie Bartosza) | — | `0dadc429`, `a42d7db0`; CI na `main` ok. 3,5 min zamiast 9 |
+| 07.11.2026 | Etap 3: sesje 3.1 i 3.2 | #425, #426, #427 | 3.1 build obrazów w CI (10 kroków Bartosza w opisie #425); 3.2 testy wizualne, przy okazji błąd hydratacji strony głównej przy „ogranicz ruch” (#427) |
+| 07.11.2026 | 3.1 build obrazów w Actions, wdrożenie przez API Coolify | #425 | workflow tylko ręczny; blokada migracji przez `/api/ops/deploy-state` (token), Coolify przez Tailscale; nic nie działa przed 10 krokami Bartosza z runbooka `wdrozenie-produkcji.md` (sekrety, zmienne, Tailscale, Coolify z obrazu) |
+| 07.11.2026 | 3.2 testy wizualne + 4.3 axe | #426 | `pnpm test:wizualne`: 6 ekranów, iPhone 13 (WebKit) i desktop 1440 (Chromium), 11 wzorców z Maca; 2 przebiegi bez różnic, celowe `gap-1` złapane (1949 i 2300 px); axe: 0 `critical`, `serious` kontrast i `aria-hidden-focus` (raport). Linux/CI niezrobione: rekomendacja kontener `playwright run-server` + konto testowe + `ubuntu-24.04-arm` (3.2b); znalezione: błąd hydratacji strony głównej przy „ogranicz ruch” (`hero-preview.tsx`) |
+| 07.11.2026 | 2.12 uprawnienia (zgoda Bartosza), archiwizacja sesji po zamknięciu PR (ustawienie aplikacji, zgoda) | #429 | etap 2 zamknięty |
+| 07.11.2026 | 3.5 alarm krytyczny → issue | #432 | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; etykietę `alert-produkcji` założyła sesja, token `GITHUB_ALERT_ISSUES_TOKEN` dodał Bartosz w workerze (07.11); działa po scaleniu i wdrożeniu |
 
-**Następny krok:** Bartosz: zgoda na uprawnienia (5.3, jedyny otwarty
-punkt etapu 2), plugin `design` w aplikacji, scalenie #423 i #424,
-wgranie 00167 i typy z produkcji (ostrzeżenia z #423). Potem etap 3
-(3.1–3.7) jako osobne sesje, każda z pełnym briefem; najpierw 3.1 (build
-obrazów w CI) i 3.2 (testy wizualne).
+**Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
+starą drogą, plugin `design` w aplikacji, scalenie #432 (3.5; etykieta
+i token gotowe, działa od wdrożenia workera). Sesja: etap 3 dalej osobnymi
+sesjami: 3.6 (sprzątanie `.next` w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
+(najpierw sprawdzić, czy opiera się na #411 Igora). 3.7 jako osobny,
+długi tor.

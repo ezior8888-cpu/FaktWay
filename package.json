@@ -29,6 +29,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
+    "test:wizualne": "playwright test --project=wizualne-iphone --project=wizualne-desktop",
     "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
     "test:all": "pnpm test && pnpm test:vitest",
     "load:smoke": "bash scripts/k6-run.sh load-tests/smoke.js",

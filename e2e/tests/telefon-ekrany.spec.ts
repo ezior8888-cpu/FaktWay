@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { createClient } from '@supabase/supabase-js';
@@ -9,6 +9,7 @@ import {
   dashboardSettingsNavItem,
 } from '../../lib/dashboard-nav-config';
 import { loginViaUI } from '../helpers/auth';
+import { devCredentials } from '../helpers/konto-dev';
 
 /**
  * Telefon: obchód po wszystkich ekranach panelu (FaktWay 1.0, pkt 2).
@@ -20,8 +21,8 @@ import { loginViaUI } from '../helpers/auth';
  * `test-results/telefon-raport.json` (większość to standardowe przyciski
  * 36 px, o których decyduje projekt, a nie usterka).
  *
- * Dane logowania czytamy z `scripts/dev/baza-lokalna.sh`, żeby nie powielać
- * hasła w kolejnym pliku. Test działa wyłącznie na lokalnym serwerze.
+ * Dane logowania: `helpers/konto-dev.ts`. Test działa wyłącznie na lokalnym
+ * serwerze.
  */
 
 const MIN_TARGET = 44;
@@ -84,14 +85,6 @@ type RouteReport = {
   pageErrors: string[];
   problem: string[];
 };
-
-function devCredentials(): { email: string; password: string } {
-  const source = readFileSync(resolve(process.cwd(), 'scripts/dev/baza-lokalna.sh'), 'utf8');
-  const email = /^DEV_EMAIL="([^"]+)"/m.exec(source)?.[1];
-  const password = /^DEV_PASSWORD="([^"]+)"/m.exec(source)?.[1];
-  if (!email || !password) throw new Error('Brak DEV_EMAIL / DEV_PASSWORD w scripts/dev/baza-lokalna.sh');
-  return { email, password };
-}
 
 /** Lokalne konto dev ma 40 szkiców faktur, ale ani jednego kosztu i kontrahenta. */
 async function seedDevData(email: string): Promise<void> {

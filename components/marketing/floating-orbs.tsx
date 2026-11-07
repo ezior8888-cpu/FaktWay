@@ -1,6 +1,8 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 
 /**
  * Dekoracyjne, animowane orby tła dla landing page (Faza 19). Respektuje
@@ -12,7 +14,7 @@ import { motion, useReducedMotion } from 'framer-motion';
  * sekcje (2 z boków). Wartości w `vw/vh` żeby skalowały się z viewportem.
  */
 export function FloatingOrbs() {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = usePrefersReducedMotion();
 
   if (reduceMotion) {
     return (

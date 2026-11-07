@@ -1,0 +1,262 @@
+name: Obrazy i wdrożenie
+
+# Plan usprawnień 3.1 (i etap 1a planu skalowania): obrazy `runner` (aplikacja)
+# i `worker` budują się tutaj, nie na app-1 (12–18 min i ok. 4,5 GB swapu na
+# obraz). Trafiają do GHCR z tagiem pełnego SHA (i `main`, gdy budujemy main).
+# Z `wdroz: true` workflow wdraża przez API Coolify: najpierw blokada
+# niewgranych migracji, potem worker, potem aplikacja, na końcu kontrola.
+# Na start tylko ręcznie. Kroki do włączenia (sekrety, Tailscale, aplikacje
+# Coolify z obrazu): docs/runbooks/wdrozenie-produkcji.md, „Droga przez
+# GitHub Actions”. Stara droga (`scripts/ops/wdroz-produkcje.sh`) działa dalej.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Co zbudować: main albo pełny SHA (40 znaków) z main'
+        required: true
+        default: main
+        type: string
+      wdroz:
+        description: 'Po buildzie wdrożyć na produkcję (worker, potem aplikacja)'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# Jawne `bash` daje `-eo pipefail` (domyślna powłoka kroków ma tylko `-e`).
+defaults:
+  run:
+    shell: bash
+
+env:
+  IMAGE_PREFIX: ghcr.io/ezior8888-cpu/faktway
+
+jobs:
+  przygotuj:
+    name: Commit do zbudowania
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: Sprawdź wejście
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if ! [[ "$REF" =~ ^(main|[0-9a-f]{40})$ ]]; then
+            echo "::error::ref musi być main albo pełnym SHA (40 znaków małymi literami)."
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref }}
+          # Historia commitów bez drzew: wystarczy do `merge-base --is-ancestor`.
+          fetch-depth: 0
+          filter: tree:0
+          persist-credentials: false
+      - name: SHA i przynależność do main
+        id: sha
+        env:
+          WDROZ: ${{ inputs.wdroz }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Commit: $sha"
+          # Na produkcję idzie tylko kod ze scalonego PR (AGENTS.md, niezmiennik 3).
+          if [ "$WDROZ" = true ] && ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha nie jest na main. Wdraża się tylko scalony kod."
+            exit 1
+          fi
+
+  obraz:
+    name: Obraz ${{ matrix.target }}
+    needs: przygotuj
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        # Cel builda zawsze jawny: pusty buduje ostatni etap `Dockerfile`
+        # (docs/runbooks/coolify-pulapki.md).
+        target: [runner, worker]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.przygotuj.outputs.sha }}
+          persist-credentials: false
+      - name: Zmienne builda aplikacji
+        if: matrix.target == 'runner'
+        env:
+          NEXT_PUBLIC_APP_DOMAIN: ${{ vars.NEXT_PUBLIC_APP_DOMAIN }}
+          NEXT_PUBLIC_APP_ENV: ${{ vars.NEXT_PUBLIC_APP_ENV }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+        run: |
+          # Wartości NEXT_PUBLIC_* są wypiekane w bundlu podczas builda. Pusta
+          # wymagana = zepsuta produkcja, więc build stoi.
+          missing=0
+          for name in NEXT_PUBLIC_APP_DOMAIN NEXT_PUBLIC_APP_ENV NEXT_PUBLIC_APP_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SUPABASE_URL; do
+            if [ -z "${!name}" ]; then echo "::error::Brak zmiennej repozytorium $name"; missing=1; fi
+          done
+          for name in NEXT_PUBLIC_POSTHOG_HOST NEXT_PUBLIC_POSTHOG_KEY NEXT_PUBLIC_SENTRY_DSN NEXT_PUBLIC_TURNSTILE_SITE_KEY NEXT_PUBLIC_VAPID_PUBLIC_KEY; do
+            if [ -z "${!name}" ]; then echo "::warning::Pusta zmienna $name (ta funkcja nie zadziała w tym obrazie)"; fi
+          done
+          exit "$missing"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build i push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.target }}:${{ needs.przygotuj.outputs.sha }}
+            ${{ inputs.ref == 'main' && format('{0}-{1}:main', env.IMAGE_PREFIX, matrix.target) || '' }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          # Etap `worker` nie czyta NEXT_PUBLIC_*; nieużyte argumenty to tylko
+          # ostrzeżenie BuildKitu. SENTRY_AUTH_TOKEN celowo NIE idzie jako
+          # argument (zostałby w metadanych etapu `build` i w cache GHA):
+          # mapy źródeł z tego builda dopiero po montowaniu sekretu w
+          # `Dockerfile` (szkic #197).
+          build-args: |
+            APP_COMMIT_SHA=${{ needs.przygotuj.outputs.sha }}
+            NEXT_PUBLIC_APP_DOMAIN=${{ vars.NEXT_PUBLIC_APP_DOMAIN }}
+            NEXT_PUBLIC_APP_ENV=${{ vars.NEXT_PUBLIC_APP_ENV }}
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+            NEXT_PUBLIC_VAPID_PUBLIC_KEY=${{ vars.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+            STRIPE_BLIK_RECURRING=${{ vars.STRIPE_BLIK_RECURRING }}
+          cache-from: type=gha,scope=obraz-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=obraz-${{ matrix.target }}
+
+  wdrozenie:
+    name: Wdrożenie (worker, potem aplikacja)
+    needs: [przygotuj, obraz]
+    if: inputs.wdroz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # Ochrona środowiska (wymagany zatwierdzający) i jego sekrety ustawia
+    # Bartosz w GitHubie; workflow tylko z niego korzysta.
+    environment: produkcja
+    concurrency:
+      group: wdrozenie-produkcji
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SHA: ${{ needs.przygotuj.outputs.sha }}
+      APP_URL: ${{ vars.FAKTWAY_URL || 'https://faktflow.pl' }}
+      DEPLOY_STATE_TOKEN: ${{ secrets.DEPLOY_STATE_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.przygotuj.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            supabase/migrations
+            scripts/ci
+
+      - name: Blokada niewgranych migracji
+        run: |
+          # Stan bazy podaje działająca aplikacja (/api/ops/deploy-state, token).
+          # Brak odpowiedzi = brak wiedzy = wdrożenie stoi.
+          http=$(curl --silent --show-error --max-time 30 -o stan.json -w '%{http_code}' \
+            -H "Authorization: Bearer $DEPLOY_STATE_TOKEN" \
+            "$APP_URL/api/ops/deploy-state" || true)
+          case "$http" in
+            200) ;;
+            404) echo "::error::deploy-state 404: brak albo różny DEPLOY_STATE_TOKEN (Coolify i sekret środowiska produkcja), albo trasa jeszcze niewdrożona. Wdrożenie stoi."; exit 1 ;;
+            503) echo "::error::deploy-state 503: aplikacja nie czyta supabase_migrations.schema_migrations (uprawnienia roli z DATABASE_URL, Sentry: ops.deploy-state). Wdrożenie stoi."; exit 1 ;;
+            *) echo "::error::deploy-state: HTTP ${http:-brak odpowiedzi} z $APP_URL. Wdrożenie stoi."; exit 1 ;;
+          esac
+          code=0
+          node scripts/ci/migracje-niewgrane.mjs supabase/migrations stan.json > migracje.txt 2>&1 || code=$?
+          cat migracje.txt
+          {
+            echo "### Migracje"
+            echo '```'
+            cat migracje.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Połączenie z Coolify (Tailscale)
+        # Panel Coolify jest za filtrem IP w zaporze Hetznera; runner wchodzi
+        # przez tailnet jako węzeł efemeryczny z tagiem `tag:ci`.
+        uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Worker (najpierw, inaczej joby zostają na starym kodzie)
+        env:
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          APP_UUID: ${{ secrets.COOLIFY_WORKER_UUID }}
+        run: bash scripts/ci/coolify-wdroz.sh worker "$APP_UUID" "$IMAGE_PREFIX-worker" "$SHA"
+
+      - name: Aplikacja
+        env:
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          APP_UUID: ${{ secrets.COOLIFY_APP_UUID }}
+        run: bash scripts/ci/coolify-wdroz.sh aplikacja "$APP_UUID" "$IMAGE_PREFIX-runner" "$SHA"
+
+      - name: Kontrola po wdrożeniu
+        run: |
+          commit=""
+          for _ in $(seq 1 18); do
+            commit=$(curl --fail --silent --max-time 15 -H "Authorization: Bearer $DEPLOY_STATE_TOKEN" \
+              "$APP_URL/api/ops/deploy-state" | jq -r '.commit // empty' || true)
+            [ "$commit" = "$SHA" ] && break
+            sleep 10
+          done
+          if [ "$commit" != "$SHA" ]; then
+            echo "::error::$APP_URL odpowiada z commitem ${commit:-?}, a wdrażaliśmy $SHA."
+            exit 1
+          fi
+          health=$(curl --silent --max-time 15 -o health.json -w '%{http_code}' "$APP_URL/api/health" || true)
+          if [ "$health" != 200 ] || [ "$(jq -r .status health.json)" != healthy ]; then
+            echo "::error::/api/health: HTTP $health"
+            cat health.json || true
+            exit 1
+          fi
+          {
+            echo "### Wdrożono $SHA"
+            echo "- worker i aplikacja: Coolify \`running:healthy\`"
+            echo "- $APP_URL: commit $SHA, \`/api/health\` 200"
+            echo "- Dalej ręcznie: migracje PO wdrożeniu (lista wyżej), \`./scripts/ops/kontrola-faktur-ksef.sh\`"
+          } >> "$GITHUB_STEP_SUMMARY"
