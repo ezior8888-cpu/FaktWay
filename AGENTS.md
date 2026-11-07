@@ -182,6 +182,8 @@ W Claude Code uruchamia go sam hook SessionStart; Codex woła go ręcznie.
 `git push` uruchamia `.githooks/pre-push` (adresy z `infra.env`, typy, eslint,
 `vitest related`; do ok. 3 minut, więc daj poleceniu dłuższy limit czasu).
 Pominięcie: `SKIP_PREPUSH=1 git push`.
+Dysk: `.next` w bezczynnych worktree (3–5 GB każdy) usuwa
+`bash scripts/dev/sprzataj-worktree.sh` (bez `--usun` tylko pokazuje).
 
 **Kilka sesji w jednym katalogu.** Inna sesja potrafi zacommitować coś na
 Twojej gałęzi (zdarzyło się 02.10). Przed każdym pushem przejrzyj
