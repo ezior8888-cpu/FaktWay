@@ -149,7 +149,8 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
   const policzone = new Map<string, { spoleczne: number | null; bezFp: number; zdrowotna: number | null }>();
   const platnosci: Platnosc[] = [];
   const wyniki: Record<string, Record<string, unknown>> = {};
-  const porownywane = new Set(p.miesiace.map((m) => m.miesiac));
+  /** Miesiące do porównania z wynikiem z arkusza; reszta to historia. */
+  const porownywane = new Map(p.miesiace.map((m) => [m.miesiac, m.wynik]));
 
   for (const m of wszystkie(p)) {
     const zHistorii = !porownywane.has(m.miesiac);
@@ -189,7 +190,7 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
     if (forma !== 'ryczalt') {
       // Szkielety mają w grudniu 2026 r. tylko składki (zaliczka i zdrowotna z tabel od stycznia 2027 r.),
       // więc brak zaliczki albo zdrowotnej kończy przypadek tylko wtedy, gdy księgowa ten blok wypełniła.
-      const oczekiwane = wypelnione(m.wynik, 'kpir');
+      const oczekiwane = wypelnione(porownywane.get(m.miesiac) ?? {}, 'kpir');
       if (!skladki || ('pit' in oczekiwane && !pit) || ('zdrowotna' in oczekiwane && !zdrowotnaOdDochodu)) {
         throw new Error(`${p.id} ${m.miesiac}: ${brakiPozycji.join(' ')}`);
       }
