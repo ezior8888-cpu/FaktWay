@@ -106,8 +106,8 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 |---|---|---|---|
 | 3.1 | Build obrazów `runner` i `worker` w GitHub Actions do GHCR, wdrożenie przez API Coolify (worker, potem aplikacja), kontrola po wdrożeniu, blokada przy niewgranych migracjach. Na start tylko `workflow_dispatch` | W | zmiana w Coolify (źródło obrazu, token API) tylko za zgodą; zdejmuje z `app-1` 12–18 min i 4,5 GB swapu; to też etap 1a planu skalowania |
 | 3.2 | Wizualne testy dymne Playwright `toHaveScreenshot`: iPhone 13 (WebKit) i desktop 1440 (Chromium), `reducedMotion: 'reduce'`; strona główna, menu hamburgera, `#telefon`, `/login`, pulpit, lista faktur. Plus `@axe-core/playwright` na tych samych ekranach (pomysł 4.3) | Ś | pilnuje zamrożonego Maca automatem zamiast reguły |
-| 3.3 | Raport poranny na Telegram (launchd 8:00 na Macu): `kontrola-faktur-ksef.sh`, dysk i WAL na `db-1`, kopia i restore-drill, PR i CI, alerty zależności | Ś | launchd = zmiana poza repo, plik `.plist` w repo, instaluje Bartosz |
-| 3.4 | Workflow z `schedule`: nocny test KSeF TEST (NIP `1234567890`), czujka zmian schematu FA(3) MF, cotygodniowy restore-drill z alarmem | Ś | sekrety KSeF TEST w GitHubie = zgoda Bartosza |
+| 3.3 | ~~Raport poranny na Telegram (launchd)~~ **Odrzucone 07.11:** dublowałby raport dzienny o 6:00 (`daily-summary-email`, Telegram) i bramkę `/status` (`ops/bramka`). Zamiast tego raport dzienny dostał kopię, rozmiar bazy i WAL slotu (#434) | N | przeoczenie w analizie 04.11: bramki i raportu dziennego nie było na liście „nie dubluj” |
+| 3.4 | Czujka zmian schematu FA(3) MF i cotygodniowy restore-drill z alarmem. Nocny test KSeF TEST robi już #411 Igora (bez sekretów), więc go nie dublujemy | Ś | sesja „Etap 3.4” |
 | 3.5 | Błąd krytyczny zakłada issue (deduplikacja po kodzie błędu); Bartosz dodaje `agent:napraw` | Ś | korzysta z `critical-alerts-monitor` i `agent.yml`, nie dubluje |
 | 3.6 | Sprzątanie: archiwizacja sesji po scaleniu PR (ustawienie aplikacji, za zgodą), cotygodniowe usuwanie `.next` w worktree bezczynnych > 7 dni (`scripts/dev/sprzataj-worktree.sh`) | N | |
 | 3.7 | Później: podział `submit-invoice.ts`, `duplicate-decision.ts`, `invoice-form.tsx` z listą niezmienników spisaną przed zmianą; stopniowe `noUncheckedIndexedAccess` (katalog po katalogu) | W | każdy gigant osobna sesja |
@@ -236,11 +236,18 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.2 testy wizualne + 4.3 axe | #426 | `pnpm test:wizualne`: 6 ekranów, iPhone 13 (WebKit) i desktop 1440 (Chromium), 11 wzorców z Maca; 2 przebiegi bez różnic, celowe `gap-1` złapane (1949 i 2300 px); axe: 0 `critical`, `serious` kontrast i `aria-hidden-focus` (raport). Linux/CI niezrobione: rekomendacja kontener `playwright run-server` + konto testowe + `ubuntu-24.04-arm` (3.2b); znalezione: błąd hydratacji strony głównej przy „ogranicz ruch” (`hero-preview.tsx`) |
 | 07.11.2026 | 2.12 uprawnienia (zgoda Bartosza), archiwizacja sesji po zamknięciu PR (ustawienie aplikacji, zgoda) | #429 | etap 2 zamknięty |
 | 07.11.2026 | 3.5 alarm krytyczny → issue | #432 (scalony w #437) | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; etykietę `alert-produkcji` założyła sesja, token `GITHUB_ALERT_ISSUES_TOKEN` dodał Bartosz w workerze (07.11); działa od wdrożenia workera |
+| 07.11.2026 | 3.6 sprzątanie `.next` | #431 | `scripts/dev/sprzataj-worktree.sh`; podgląd: 18,2 GB w 5 worktree przy progu 0 dni |
+| 07.11.2026 | 3.3 w nowej postaci: raport dzienny | #434 | kopia bazy (próg 26 h jak bramka), rozmiar bazy, WAL slotu (próg 2 GB) w raporcie o 6:00 |
+| 07.11.2026 | Scalenie #430 i #437, migracje, wdrożenie (polecenie Bartosza) | #430, #437 | `620ee8c8`, `16512d37`; #432 najpierw zamknięty z odnośnikiem (treść w `main`), potem otwarty ponownie i scalony z konta `ezior8888-cpu` (`e68c6653`, tylko 4 linie dziennika); 00167–00169 (księgowość K3–K5) wgrane na db-1 przed wdrożeniem; wdrożenie 21:31: worker `16512d37`, aplikacja `e68c6653` (ten sam kod), 38 min, kontrola czysta (health 200, 31/31 cronów, nic nie utknęło); poprawka `zloz-scalenie.sh` z detached HEAD w #438 |
+| 07.11.2026 | Przeoczenie z analizy: `ops/bramka` | — | bramka ma już `/wdroz` z kontrolą CI i niewgranych migracji (funkcje `ops`, 00100); #425 dodał drugi mechanizm migracji (`/api/ops/deploy-state`). Decyzja Bartosza przed krokami 2–9 z #425: workflow przez funkcje `ops` czy nowy endpoint |
 | 07.11.2026 | 3.4a czujka schematu FA(3) (test KSeF TEST jest w #411) | #435 | wtorek rano: crd.gov.pl po skrócie (normalizacja `schemaLocation`), `CIRFMF/ksef-docs` po liście i blobach; różnica = issue `czujka-fa3` z diffem nazw, MF niedostępny = ostrzeżenie; na żywo zgodne |
 | 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
 | 07.11.2026 | 3.4 scalenie i instalacja (polecenie Bartosza) | #436 (niesie #435) | oba scalone; restore-drill zainstalowany na `db-1` przez Bartosza (`zainstaluj-restore-drill.sh`, tryb auto blokuje zapis na serwerze), pierwsza próba `WYNIK: OK` w 13 s, ping do checku Healthchecks „restore-drill” wysłany; czujka FA(3) po scaleniu ręcznie na GitHubie: „zgodny z repo”, bez issue |
 
-**Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
-starą drogą, plugin `design` w aplikacji, wdrożenie workera z 3.5 (#432
-w #437; etykieta i token gotowe). Sesja: 3.3 (raport poranny,
-`launchd`); 3.7 jako osobny, długi tor.
+**Następny krok:** Bartosz: decyzja przy #425 (workflow pyta o migracje
+funkcje `ops` bramki czy nowy endpoint `/api/ops/deploy-state`), potem
+kroki 2–9 z #425; opcjonalnie `bash scripts/dev/sprzataj-worktree.sh
+--zainstaluj-harmonogram`; plugin `design` w aplikacji. Sesja: z planu
+zostaje 3.7 (podział `submit-invoice.ts`, `duplicate-decision.ts`,
+`invoice-form.tsx`, stopniowe `noUncheckedIndexedAccess`) jako długi tor,
+jeden gigant na sesję z listą niezmienników spisaną przed zmianą.
