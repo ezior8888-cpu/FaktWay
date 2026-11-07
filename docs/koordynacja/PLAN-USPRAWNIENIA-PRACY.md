@@ -236,10 +236,11 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.2 testy wizualne + 4.3 axe | #426 | `pnpm test:wizualne`: 6 ekranów, iPhone 13 (WebKit) i desktop 1440 (Chromium), 11 wzorców z Maca; 2 przebiegi bez różnic, celowe `gap-1` złapane (1949 i 2300 px); axe: 0 `critical`, `serious` kontrast i `aria-hidden-focus` (raport). Linux/CI niezrobione: rekomendacja kontener `playwright run-server` + konto testowe + `ubuntu-24.04-arm` (3.2b); znalezione: błąd hydratacji strony głównej przy „ogranicz ruch” (`hero-preview.tsx`) |
 | 07.11.2026 | 2.12 uprawnienia (zgoda Bartosza), archiwizacja sesji po zamknięciu PR (ustawienie aplikacji, zgoda) | #429 | etap 2 zamknięty |
 | 07.11.2026 | 3.5 alarm krytyczny → issue | #432 (scalony w #437) | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; etykietę `alert-produkcji` założyła sesja, token `GITHUB_ALERT_ISSUES_TOKEN` dodał Bartosz w workerze (07.11); działa od wdrożenia workera |
+| 07.11.2026 | 3.4a czujka schematu FA(3) (test KSeF TEST jest w #411) | #435 | wtorek rano: crd.gov.pl po skrócie (normalizacja `schemaLocation`), `CIRFMF/ksef-docs` po liście i blobach; różnica = issue `czujka-fa3` z diffem nazw, MF niedostępny = ostrzeżenie; na żywo zgodne |
+| 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
+| 07.11.2026 | 3.4 scalenie i instalacja (polecenie Bartosza) | #436 (niesie #435) | oba scalone; restore-drill zainstalowany na `db-1` przez Bartosza (`zainstaluj-restore-drill.sh`, tryb auto blokuje zapis na serwerze), pierwsza próba `WYNIK: OK` w 13 s, ping do checku Healthchecks „restore-drill” wysłany; czujka FA(3) po scaleniu ręcznie na GitHubie: „zgodny z repo”, bez issue |
 
 **Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
 starą drogą, plugin `design` w aplikacji, wdrożenie workera z 3.5 (#432
-w #437; etykieta i token gotowe). Sesja: etap 3 dalej osobnymi
-sesjami: 3.6 (sprzątanie `.next` w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
-(najpierw sprawdzić, czy opiera się na #411 Igora). 3.7 jako osobny,
-długi tor.
+w #437; etykieta i token gotowe). Sesja: 3.3 (raport poranny,
+`launchd`); 3.7 jako osobny, długi tor.

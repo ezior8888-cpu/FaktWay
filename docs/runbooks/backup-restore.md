@@ -185,11 +185,64 @@ Wynik jest poprawny, gdy:
 Obraz `supabase/postgres:15.8.1.085` zostaje na `ops-1` (3 GB) do następnej
 próby. Usunięcie: `docker rmi supabase/postgres:15.8.1.085`.
 
+### Cotygodniowa próba na `db-1` (automat)
+
+Od planu usprawnień 3.4 próba chodzi też sama: timer systemd
+`faktflow-restore-drill.timer` na `db-1`, niedziela 03:30 UTC
+(`scripts/hetzner/systemd/`). Uruchamia
+`scripts/hetzner/restore-drill-tydzien.sh`, który:
+
+1. bierze najnowszy **kompletny** zrzut z `BACKUP_DIR` (z plikiem `.sha256`)
+   i sprawdza sumy;
+2. sprawdza miejsce (odtworzona baza leży na dysku produkcji): co najmniej
+   max(2 GiB, 10 × zrzut) + 10% systemu plików;
+3. wgrywa go `restore-drill.sh` do kontenera bez sieci z **obrazem
+   odczytanym z kontenera produkcji** (`PGC`), więc po aktualizacji
+   Postgresa próba idzie na nowym obrazie;
+4. pinguje osobny check Healthchecks „restore-drill” (`DRILL_HC_URL`
+   w `/etc/faktflow-restore-drill.env`): `/start`, potem sukces albo `/fail`
+   z linią `WYNIK:`. Okres 7 dni, karencja 1 dzień: próba, która się nie
+   uruchomi, daje alarm po 8 dniach. Alarm idzie integracjami tego checka.
+
+Werdykt `restore-drill.sh` (kod 1 i `WYNIK: BŁĄD`): błąd `pg_restore` spoza
+4 oczekiwanych z § 4, błąd pliku ról inny niż „already exists”, tabela ze
+spisu zrzutu, która nie powstała, pusta `auth.users` albo `public.tenants`,
+brak polityk RLS albo wpisu w `schema_migrations`. Bez liczb z produkcji
+różnic wierszy próba nie widzi; to zostaje w próbie comiesięcznej wyżej.
+
+Ta próba nie dowodzi, że kopia przeżyje utratę `db-1` (zrzut i próba są na
+tym samym hoście). Po skonfigurowaniu Storage Boxa (§ 3) można ją przenieść
+na `ops-1` ze zrzutem z `boxcrypt:db`.
+
+| Chcesz… | Polecenie (z katalogu repo) |
+|---|---|
+| zainstalować i od razu zrobić pierwszą próbę | `./scripts/ops/zainstaluj-restore-drill.sh` |
+| zobaczyć stan (tylko odczyt) | `./scripts/ops/zainstaluj-restore-drill.sh --sprawdz` |
+| usunąć | `./scripts/ops/zainstaluj-restore-drill.sh --odinstaluj` |
+| log ostatniej próby na `db-1` | `journalctl -u faktflow-restore-drill -n 80 -o cat` |
+
+Alarm „restore-drill” w Healthchecks:
+
+- `/fail` z `sumy kontrolne` albo `brak kompletnego zrzutu`: najpierw check
+  „db-backup” i `/var/log/faktflow-db-backup.log`;
+- `za mało miejsca`: dysk `db-1` (`./scripts/ops/pojemnosc-db.sh`);
+- `nie odczytałem obrazu kontenera`: po przebudowie w Coolify popraw `PGC`
+  w `/etc/faktflow-backup.env` (zrzut padnie z tego samego powodu);
+- `WYNIK: BŁĄD`: log z `journalctl`; nowy rodzaj błędu `pg_restore` po
+  aktualizacji obrazu sprawdź ręcznie jak w § 4, krok 5, i dopiero wtedy
+  dopisz go do `EXPECTED_RESTORE_ERRORS` w `restore-drill.sh`;
+- `nocny zrzut trwa ponad godzinę`: `/var/log/faktflow-db-backup.log`;
+- kontener `faktflow-restore-drill` po przerwanej próbie usuwa następna próba
+  i `ExecStopPost` usługi; ręcznie: `docker rm -f faktflow-restore-drill`;
+- brak pinga 8 dni: `systemctl list-timers faktflow-restore-drill.timer`,
+  `systemctl status faktflow-restore-drill`.
+
 ### Protokół prób
 
 | Data | Zrzut | Host | Start / wgranie / razem | Tabele i wiersze | Struktura | Błędy | Wynik |
 |---|---|---|---|---|---|---|---|
 | 2026-10-01 | 3,4 MB, 1762 pozycje spisu, migracja 00099 | `ops-1`, kontener bez sieci, 1 CPU / 1 GB | 10 s / 6 s / 16 s | 111 tabel, wszystkie liczby zgodne z produkcją | 71 polityk RLS, 67 tabel z RLS, 111 funkcji `public`, 45 wyzwalaczy, 248 indeksów, 9 rozszerzeń — jak produkcja | 4 oczekiwane (§ 4); role: 12× `already exists` | ✅ |
+| 2026-11-07 | `faktflow-20261107T013002Z` (nocny), migracja 00200 | `db-1`, automat tygodniowy (pierwszy przebieg przy instalacji), kontener bez sieci, 1 CPU / 1 GB | 7 s / 5 s / 13 s | 122 tabele, wszystkie ze spisu zrzutu; liczby wierszy bez porównania z produkcją | 89 polityk RLS, 78 tabel z RLS, 182 funkcje `public`, 72 wyzwalacze, 288 indeksów, 9 rozszerzeń | 4 oczekiwane (§ 4); role: 12× `already exists` | ✅ |
 
 Wnioski z pierwszej próby, już wbudowane w skrypt: świeży obraz wymaga hasła
 także na lokalnym gnieździe (produkcja nie), a plik ról podmienia hasło
