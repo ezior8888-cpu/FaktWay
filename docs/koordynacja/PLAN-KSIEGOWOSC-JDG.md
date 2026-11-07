@@ -204,7 +204,7 @@ Wszystkie tabele mają `tenant_id`, RLS, polityki dla `authenticated` i testy w 
 | `invoice_line_items.ryczalt_rate` | istnieje; wypełniamy przy wystawianiu z profilu albo produktu | K2-K3 |
 | `ledger_manual_entries` | przychody i koszty bez faktury z KSeF (raport kasy za miesiąc, inne), dokument, data, kwota, stawka, kolumna KPiR, opis | K3 |
 | `tax_settlements` | `okres` (pierwszy dzień miesiąca), `rodzaj` (`ryczalt`/`pit`/`vat`/`zus_spoleczne`/`zdrowotna`), `kwota_gr`, `termin`, `status` (`szkic`/`zatwierdzone`/`zaplacone`), `migawka` jsonb (wejścia, parametry, wersja), `parametry_wersja`, `wejscia_hash`, `zatwierdzone_przez/_o`, `zaplacone_o`, `wersja`, `zastapione_przez` | K4 |
-| `tax_notifications` | klucz UNIQUE (`tenant_id`, `rozliczenie`, `etap`) dla przypomnień | K5 |
+| `tax_notifications` | `rozliczenie` (RRRR-MM), `etap` (`wyliczone`, `termin-5:RRRR-MM-DD`, `termin-1:RRRR-MM-DD`), `status` (`sending`/`sent`/`failed`), `wynik`, `blad`; klucz UNIQUE (`tenant_id`, `rozliczenie`, `etap`) jako idempotencja cronów; tylko service_role (00169) | K5 |
 | `jpk_submissions` | okres, rodzaj pliku, skrót pliku, numer referencyjny MF, status, ścieżka UPO w magazynie, błędy, znaczniki czasu | K6 |
 
 Nowe kolumny w `tenants` (jeśli jednak potrzebne) wymagają jawnego GRANT SELECT według 00112 i testu `tests/unit/dane-ksef-uprawnienia-kolumn.test.ts`.
@@ -291,10 +291,10 @@ Wszystko za wyłącznikiem `ksiegowosc` i z komponentów Finory.
 
 | Cron | Kiedy | Co robi | Idempotencja |
 |---|---|---|---|
-| `cron.ksiegowosc-miesiac` | 1-3. dnia miesiąca, 07:00 | szkic rozliczeń za poprzedni miesiąc, push „Wyliczyliśmy marzec” | `tax_settlements` (okres, rodzaj, wersja) |
-| `cron.ksiegowosc-terminy` | codziennie 08:00 | przypomnienia 5 i 1 dzień przed terminem, jeśli niezapłacone | `tax_notifications` UNIQUE |
+| `cron.ksiegowosc-miesiac` | 1-3. dnia miesiąca, 07:00 | liczy poprzedni miesiąc firm w pilotażu i wysyła push „Rozliczenie za marzec jest wyliczone”, gdy moduł liczy kwoty | `tax_notifications`, etap `wyliczone` (szkic nie trafia do bazy, 00168) |
+| `cron.ksiegowosc-terminy` | codziennie 08:00 | przypomnienia 5 i 1 dzień przed terminem o rozliczeniach bez oznaczonej zapłaty: push do członków firmy i mail do właściciela; ryczałt i składki z tym samym dniem terminu w jednym | `tax_notifications`, etap `termin-N:RRRR-MM-DD`, plus klucz idempotencji Resend |
 
-Fan-out na firmy przez event w `EVENT_QUEUE_MAP` (wzór `inbox.poll.tenant`). Testy na sztywno do podbicia z komentarzem: `jobs-foundation` 29 → 31, `jobs-registry` 50 → 52. Rejestracja w `lib/jobs/handlers/package-b.ts`, wzór `cronJob`.
+W pilotażu (kilka firm) oba crony idą pętlą po firmach w jednym zadaniu (`lib/ksiegowosc/powiadomienia.ts`, jawny błąd przy 1000 firm); fan-out przez event w `EVENT_QUEUE_MAP` (wzór `inbox.poll.tenant`) dojdzie przy włączeniu dla wszystkich (K8). Testy na sztywno podbite z komentarzem w K5: `jobs-foundation` 29 → 31, `jobs-registry` 50 → 52 (paczka B 17 → 19). Rejestracja w `lib/jobs/handlers/package-b.ts`, wzór `cronJob`.
 
 ---
 
@@ -381,6 +381,8 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 - Odliczenia ryczałtu liczą się po dniu zapłaty, więc odczyt „Ten miesiąc” bierze wszystkie zapłacone wersje do miesiąca (także zaległe za wcześniejsze okresy), a nie tylko od grudnia. Skrót wersji (D6) to kwota i jej bezpośrednie wejścia: parametry roku i ich opisy do niego nie wchodzą, więc poprawka opisu albo liczby, której pozycja nie używa, nie tworzy nowych wersji.
 - Każda pozycja „Ten miesiąc” (ryczałt, składki społeczne, zdrowotna) ma własny wynik albo brak; bramka D7 działa osobno dla każdej sekcji, a liczbę bez wartości (np. stopa wypadkowa ogłaszana w kwietniu) sprawdza silnik, który jej używa.
 - Dopóki księgowa nie potwierdzi sekcji parametrów (`sprawdzila`), „Ten miesiąc” pokazuje braki zamiast kwot: tak ma być (D7). Testy i złote przypadki podają parametry wprost do czystych silników.
+- Karta „Odłóż na podatek” na Przepływach liczy z modułu (`odlozyc.ts`) tylko dla firmy w pilotażu (obszar `terminy`); pozostałe firmy widzą ją jak dotąd z `LINEAR_PIT_RATE` (19 %), bo przed bramą nic się dla nich nie zmienia. `LINEAR_PIT_RATE` usuwa się przy włączeniu modułu dla wszystkich (K8). Firma zwolniona z VAT ma w tym miejscu limit zwolnienia, więc szacunek widzi w „Ten miesiąc” za bieżący miesiąc.
+- Push modułu to typ `ksiegowosc` (`push_subscriptions.notify_ksiegowosc`, 00169); przełącznik w ustawieniach powiadomień widzi tylko firma w pilotażu. Przypomnienia o terminach są tylko przy ryczałcie (forma z profilu); skala i liniowy dojdą w K7.
 - `currency-guard.ts` odrzuca waluty w eksportach. Etap 1 (waluty) to zmienia, więc uzgodnij to z jego sesją.
 - Nowe kolumny w `tenants` wymagają jawnego GRANT SELECT (00112).
 - Crony i zadania mają liczby na sztywno w testach (29 i 50). Podbijasz je świadomie, z komentarzem.

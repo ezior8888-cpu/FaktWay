@@ -58,6 +58,9 @@ export default defineConfig({
       // 00168 (plan księgowości JDG, K4): rozliczenia miesiąca: zatwierdzenie i zapłata owner/admin,
       // izolacja firm, granty kolumnowe, niezmienność kwoty (wyzwalacz), UNIQUE wersji, najem tylko przy ryczałcie.
       'tests/rls-ksiegowosc-rozliczenia.test.ts',
+      // 00169 (plan księgowości JDG, K5): powiadomienia tylko dla zadań (service_role), UNIQUE jako
+      // idempotencja cronów, przejęcie wpisu „failed”, CHECK-i, zgoda push „Księgowość”.
+      'tests/rls-ksiegowosc-powiadomienia.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

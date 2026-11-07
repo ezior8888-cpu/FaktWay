@@ -57,7 +57,7 @@ const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
   ustawienia: { wlaczony: true, notatka: 'Kreator ustawień podatkowych (K2).' },
   ewidencja: { wlaczony: true, notatka: 'Ewidencja przychodów ryczałtu, wpisy ręczne i JPK_EWP (K3).' },
   ten_miesiac: { wlaczony: true, notatka: 'Ryczałt, składki i zdrowotna za miesiąc z zatwierdzaniem (K4).' },
-  terminy: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'Przypomnienia i „ile odłożyć”: krok K5.' },
+  terminy: { wlaczony: true, notatka: 'Przypomnienia o terminach, push o wyliczonym miesiącu i karta „Odłóż na podatek” (K5).' },
   vat: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'VAT i podgląd JPK_V7M: krok K6.' },
   wysylka_jpk: {
     wlaczony: false,
