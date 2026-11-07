@@ -85,7 +85,7 @@ export interface CronJobDef {
 
 const TZ = 'Europe/Warsaw';
 
-/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF. */
+/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF, księgowość (K5). */
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
@@ -123,6 +123,11 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.ksef-lifecycle-reconcile', cron: '3,18,33,48 * * * *', tz: TZ },
   // Raport dzienny cyklu życia dla operatora — 07:30, po pulsie FLO.
   { queue: 'cron.ksef-lifecycle-report', cron: '30 7 * * *', tz: TZ },
+  // Moduł księgowości (K5, tylko firmy w pilotażu): 1-3. dnia miesiąca push
+  // „rozliczenie za poprzedni miesiąc jest wyliczone” (jeden dzięki
+  // tax_notifications, 00169) i codziennie przypomnienia o terminach.
+  { queue: 'cron.ksiegowosc-miesiac', cron: '0 7 1-3 * *', tz: TZ },
+  { queue: 'cron.ksiegowosc-terminy', cron: '0 8 * * *', tz: TZ },
   // Heartbeat dla zewnętrznego strażnika (lib/jobs/heartbeat.ts): ping co minutę
   // tylko wtedy, gdy harmonogram, worker i baza działają. Brak pinga = alarm.
   { queue: 'cron.ops-heartbeat', cron: '* * * * *', tz: TZ },

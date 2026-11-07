@@ -205,10 +205,15 @@ describe('CRON_JOBS', () => {
     // 28 → 29: cron.ksef-history-sync (decyzja Bartosza 22.10.2026) — 96 przebiegów
     // na dobę: wybór firm i fan-out automatycznej synchronizacji historii KSeF
     // (zastępuje Magiczny import); pobrania mają własny budżet i ustępują skrzynce.
+    // 29 → 31: moduł księgowości (K5, 07.11.2026): `cron.ksiegowosc-miesiac`
+    // (1-3. dnia miesiąca o 07:00, 3 przebiegi w miesiącu) i
+    // `cron.ksiegowosc-terminy` (codziennie o 08:00, 1 przebieg na dobę);
+    // oba pracują tylko dla firm w pilotażu, a idempotencję trzyma
+    // `tax_notifications` (00169).
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(29);
+    expect(CRON_JOBS.length).toBe(31);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {
