@@ -15,8 +15,8 @@ import {
  * włączenie dla firmy. Każda kolejna warstwa może tylko zabrać.
  */
 
-/** Od K2 kod puszcza `ustawienia` (kreator zbudowany); reszta czeka na swoje kroki. */
-const ZABLOKOWANE: ObszarModulu[] = ['ewidencja', 'ten_miesiac', 'terminy', 'vat', 'wysylka_jpk', 'kpir'];
+/** Od K2 kod puszcza `ustawienia`, od K3 `ewidencja`; reszta czeka na swoje kroki. */
+const ZABLOKOWANE: ObszarModulu[] = ['ten_miesiac', 'terminy', 'vat', 'wysylka_jpk', 'kpir'];
 const WLACZONY = { wlaczony: true } as const;
 
 /** Atrapa łańcucha `from().select().eq().maybeSingle()` z jedną odpowiedzią. */
@@ -31,6 +31,10 @@ function klient(odpowiedz: { data: unknown; error: { code?: string; message: str
 describe('blokada w kodzie', () => {
   it('ustawienia: od K2 puszczone w kodzie, decyduje flaga firmy', () => {
     expect(statusObszaru('ustawienia').wlaczony).toBe(true);
+  });
+
+  it('ewidencja: od K3 puszczona w kodzie, decyduje flaga firmy', () => {
+    expect(statusObszaru('ewidencja').wlaczony).toBe(true);
   });
 
   it.each(ZABLOKOWANE)('%s: wyłączony w kodzie, z notatką', (obszar) => {
