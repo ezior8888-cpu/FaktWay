@@ -123,3 +123,19 @@ w `agent.yml`).
 - Minuty Actions: repo publiczne nie płaci za standardowe runnery.
 - Wyłączenie natychmiast: `gh workflow disable "Agent kodu" --repo ezior8888-cpu/ksef-saas`.
   Trwające zadanie: anuluj run w Actions.
+
+## 7. Issue z alarmów produkcji (plan usprawnień 3.5)
+
+Monitor alarmów krytycznych (`cron.critical-alerts-monitor`) po wysłaniu
+alarmu na Slack i Telegram zakłada issue z etykietą `alert-produkcji`
+(`lib/alerts/github-issue.ts`). Jedno otwarte issue na kod alarmu; kolejne
+wystąpienia podbijają licznik w treści i najwyżej raz na godzinę dopisują
+komentarz. Nowe issue: najwyżej 3 na godzinę i 15 otwartych naraz.
+
+- Treść ma tylko kod, źródło, licznik, czasy, SHA wdrożenia i odnośnik do
+  `/admin/centrum/bledy` (lista dozwolonych pól). Szczegóły są w panelu.
+- Gdy błąd wygląda na błąd w kodzie, człowiek dodaje `agent:napraw`. Moduł
+  nigdy tego nie robi.
+- Po naprawie zamknij issue. Kolejne wystąpienie założy nowe.
+- Wyłączenie: usuń `GITHUB_ALERT_ISSUES_TOKEN` z workera (Coolify `id=2`)
+  i zrestartuj go. Alarmy Slack i Telegram działają dalej.
