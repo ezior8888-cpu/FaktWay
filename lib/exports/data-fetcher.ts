@@ -76,9 +76,11 @@ export async function fetchInvoicesForExport(
    * Zadania eksportu czytają kluczem serwisowym; strona VAT modułu księgowości
    * (K6) podaje klienta z sesji, więc odczyt idzie przez RLS firmy.
    */
-  supabase: ReturnType<typeof createAdminClient> = createAdminClient(),
+  client?: ReturnType<typeof createAdminClient>,
 ): Promise<FetchedInvoiceData> {
+  // Najpierw środowisko KSeF, dopiero potem klucz serwisowy.
   const environment = requireConfiguredKsefEnvironment();
+  const supabase = client ?? createAdminClient();
 
   const needIssued =
     params.direction === 'issued' || params.direction === 'both';

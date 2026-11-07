@@ -13,6 +13,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { fetchInvoicesForExport, type FetchedInvoiceData } from '@/lib/exports/data-fetcher';
+import { exportScopeFor } from '@/lib/exports/export-scope';
 import { monthLabel, monthRange, shiftMonth } from '@/lib/expenses/month';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import type { createAdminClient } from '@/lib/supabase/admin';
@@ -48,6 +49,8 @@ export async function czytajVat(
 ): Promise<DaneVat> {
   const poprzedni = shiftMonth(miesiac, -1);
   const { from, to } = monthRange(miesiac);
+  // FIR-01: zakres jak eksport JPK_V7M (cała sprzedaż z korektami i koszty).
+  const scope = exportScopeFor('jpk_v7m');
   let zwolnienie: string | null;
   let dane: FetchedInvoiceData;
   let wysylki: Wysylka[];
@@ -55,7 +58,14 @@ export async function czytajVat(
     [zwolnienie, dane, wysylki] = await Promise.all([
       readTenantVatExemption(client, tenantId),
       fetchInvoicesForExport(
-        { tenantId, periodStart: from, periodEnd: to, direction: 'issued', includeExpenses: true },
+        {
+          tenantId,
+          periodStart: from,
+          periodEnd: to,
+          direction: scope.invoiceDirection,
+          includeCorrections: scope.includeCorrections,
+          includeExpenses: scope.includeExpenses,
+        },
         client as unknown as ReturnType<typeof createAdminClient>,
       ),
       czytajWysylki(client, tenantId, [`${miesiac}-01`, `${poprzedni}-01`]),
