@@ -25,7 +25,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 import { firmyWPilotazu, wlasciciel, zajmij, zamknij } from '@/lib/ksiegowosc/powiadomienia';
 import { czytajWersjeProfilu, wersjaNa } from '@/lib/ksiegowosc/profil';
 import { niezaplacone, terminyNaDzis, trescTerminu, type TerminNaDzis } from '@/lib/ksiegowosc/przypomnienia';
-import { czytajTenMiesiac } from '@/lib/ksiegowosc/ten-miesiac-dane';
+import { BLAD_ODCZYTU_ROZLICZEN, czytajTenMiesiac } from '@/lib/ksiegowosc/ten-miesiac-dane';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -38,18 +38,16 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
   if (!profil || profil.forma !== 'ryczalt') return 'pominiete';
 
   const dane = await czytajTenMiesiac(admin, tenantId, t.miesiac);
+  // Bez odczytu zapłat nie wiadomo, co jest zapłacone: ponowienie zamiast przypomnienia „bez zapłaty”.
+  if (!dane.ok && dane.braki.includes(BLAD_ODCZYTU_ROZLICZEN)) throw new Error(`Nie udało się odczytać rozliczeń firmy ${tenantId} za ${t.miesiac}`);
   const pozycje = niezaplacone({ grupy: t.grupy, rozliczenia: dane.rozliczenia, pozycje: dane.ok ? dane.pozycje : null, profil });
   if (pozycje.length === 0) return 'pominiete';
 
   if ((await zajmij(admin, tenantId, t.miesiac, t.etap)) === 'duplikat') return 'duplikaty';
   const tresc = trescTerminu({ miesiac: t.miesiac, termin: t.termin, dni: t.dni, pozycje });
   try {
-    const push = await sendPushToTenant(tenantId, 'ksiegowosc', {
-      title: tresc.tytul,
-      body: tresc.tresc,
-      url: tresc.adres,
-      tag: `ksiegowosc-${t.miesiac}-${t.etap}`,
-    });
+    // Mail przed pushem: ma klucz idempotencji Resend, więc ponowienie po błędzie
+    // pusha go nie zdubluje, a push wychodzi dopiero, gdy reszta się udała.
     const odbiorca = await wlasciciel(admin, tenantId);
     const mail = odbiorca
       ? await sendTerminRozliczeniaEmail(
@@ -58,6 +56,12 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
           { userId: odbiorca.userId, idempotencyKey: `ksiegowosc/${tenantId}/${t.miesiac}/${t.etap}` },
         )
       : null;
+    const push = await sendPushToTenant(tenantId, 'ksiegowosc', {
+      title: tresc.tytul,
+      body: tresc.tresc,
+      url: tresc.adres,
+      tag: `ksiegowosc-${t.miesiac}-${t.etap}`,
+    });
     await zamknij(admin, tenantId, t.miesiac, t.etap, {
       status: 'sent',
       wynik: { push: push.sent, mail: mail?.sent ?? false, ...(mail && !mail.sent ? { mailPowod: mail.reason ?? null } : {}) },

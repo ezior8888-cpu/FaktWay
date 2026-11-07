@@ -32,7 +32,8 @@ export async function powiadomOWyliczeniu(admin: SupabaseClient, tenantId: strin
   if (!(await czyKsiegowoscWlaczona(admin, tenantId, 'terminy')).wlaczony) return 'pominiete';
   const dane = await czytajTenMiesiac(admin, tenantId, miesiac);
   if (!dane.ok) return 'pominiete';
-  const pozycje = dane.pozycje.flatMap((p) => (p.ok ? [{ rodzaj: p.rodzaj, kwotaGr: p.kwotaGr }] : []));
+  // Kwota zero (np. składki w uldze na start) nie trafia do treści.
+  const pozycje = dane.pozycje.flatMap((p) => (p.ok && p.kwotaGr > 0 ? [{ rodzaj: p.rodzaj, kwotaGr: p.kwotaGr }] : []));
   if (pozycje.length === 0) return 'pominiete';
 
   if ((await zajmij(admin, tenantId, miesiac, 'wyliczone')) === 'duplikat') return 'duplikaty';

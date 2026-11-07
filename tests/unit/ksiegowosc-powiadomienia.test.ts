@@ -214,6 +214,25 @@ describe('cron.ksiegowosc-terminy', () => {
     expect(mocks.odczytyFirm).toBe(0);
   });
 
+  it('błąd odczytu rozliczeń: bez przypomnienia „bez zapłaty”, zadanie do ponowienia', async () => {
+    mocks.dzis = '2026-11-19';
+    mocks.dane = {
+      ok: false,
+      braki: ['Nie udało się odczytać rozliczeń, więc nie pokazujemy kwot. Strona spróbuje ponownie przy następnym otwarciu.'],
+      rozliczenia: [],
+    };
+    await expect(runKsiegowoscTerminy(ctx)).rejects.toThrow('do ponowienia');
+    expect([mocks.pushe, mocks.wpisy.size]).toEqual([[], 0]);
+  });
+
+  it('wyliczony miesiąc w uldze: push bez pozycji z kwotą zero', async () => {
+    mocks.dane = { ...POLICZONE, pozycje: [pozycja('ryczalt', 120_000), pozycja('zus_spoleczne', 0), pozycja('zdrowotna', 49_835)] };
+    await runKsiegowoscMiesiac(ctx);
+    expect(mocks.pushe[0].payload.body).toBe(
+      'Według Twoich danych: ryczałt 1200,00 zł, składka zdrowotna 498,35 zł. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.',
+    );
+  });
+
   it('parametry czekają na księgową: przypomnienie o terminie bez kwot', async () => {
     mocks.dzis = '2026-11-19';
     mocks.dane = { ok: false, braki: ['Stawki czekają na sprawdzenie.'], rozliczenia: [] };
