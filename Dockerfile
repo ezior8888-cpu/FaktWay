@@ -116,6 +116,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# SHA commita z builda w GitHub Actions (`.github/workflows/obrazy.yml`); build
+# w Coolify go nie podaje i zostaje pusty. Na końcu etapu, żeby zmiana SHA nie
+# unieważniała cache warstw wyżej.
+ARG APP_COMMIT_SHA=""
+ENV APP_COMMIT_SHA=$APP_COMMIT_SHA
+LABEL org.opencontainers.image.revision=$APP_COMMIT_SHA
 # AUD-127: proces bez roota. Obraz `node` ma użytkownika `node`; pliki aplikacji
 # zostają tylko do odczytu, a zapisy (tsx, eksporty) idą do /tmp.
 USER node
@@ -152,6 +158,12 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+
+# Jak w etapie `worker`: SHA z builda w CI. `/api/ops/deploy-state` zwraca go
+# workflowowi, który po wdrożeniu sprawdza, czy działa nowy obraz.
+ARG APP_COMMIT_SHA=""
+ENV APP_COMMIT_SHA=$APP_COMMIT_SHA
+LABEL org.opencontainers.image.revision=$APP_COMMIT_SHA
 
 USER nextjs
 EXPOSE 3000
