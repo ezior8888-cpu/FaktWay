@@ -231,6 +231,117 @@ describe('logowanie na telefonie bez zapamiętanego klucza', () => {
   });
 });
 
+describe('podpowiedź na telefonie bez zapamiętanego klucza żyje dłużej niż jedna próba', () => {
+  // Przycisk opiera się tylko na podpowiedzi, a jej wyzwanie jest jednorazowe i żyje 5 minut
+  // (przegląd #445: po anulowanym Face ID albo po kilku minutach przycisk przestawał działać).
+  type Pending = { resolve: (value: unknown) => void; reject: (error: unknown) => void };
+  let pending: Pending[];
+  let now: number;
+
+  beforeEach(() => {
+    pending = [];
+    now = 1_700_000_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    credentials.get.mockImplementation(
+      () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function loginPage(): Promise<HTMLElement> {
+    const { PasskeyLogin } = await import('@/components/auth/passkey-login');
+    return render(
+      <form>
+        <input id="email" autoComplete="username webauthn" />
+        <PasskeyLogin withSeparator={false} />
+      </form>,
+    );
+  }
+
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  }
+
+  it('przycisk pojawia się dopiero, gdy podpowiedź ma wyzwanie z serwera', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const respond = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) === '/api/auth/passkey/login/options') await gate;
+      return respond(input, init);
+    });
+
+    const container = await loginPage();
+    expect(container.querySelector('button')).toBeNull();
+
+    release();
+    await settle();
+    expect(button(container, 'Zaloguj biometrią')).toBeTruthy();
+  });
+
+  it('po nieudanej próbie dotknięcie czyści błąd i uzbraja nową podpowiedź', async () => {
+    replies['/api/auth/passkey/login/verify'] = { status: 401, body: { error: 'passkey_login_failed' } };
+    const container = await loginPage();
+    expect(pending).toHaveLength(1);
+
+    // Klient wybrał klucz od razu, ale serwer odmówił (np. klucz usunięty z konta).
+    pending[0]!.resolve(assertion('klucz-telefonu', 'platform'));
+    await settle();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(pending).toHaveLength(1);
+
+    await act(async () => {
+      button(container, 'Zaloguj biometrią').click();
+    });
+    await settle();
+
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain(PASSKEY_SUGGESTION_HINT);
+    expect(pending).toHaveLength(2);
+    expect(credentials.get.mock.calls[1]![0]).toMatchObject({ mediation: 'conditional' });
+  });
+
+  it('wyzwanie starsze niż 4 minuty: dotknięcie uzbraja nową podpowiedź', async () => {
+    const container = await loginPage();
+    expect(pending).toHaveLength(1);
+
+    now += 5 * 60_000;
+    await act(async () => {
+      button(container, 'Zaloguj biometrią').click();
+    });
+    await settle();
+
+    expect(pending).toHaveLength(2);
+  });
+
+  it('anulowane Face ID po namyśle: nowa podpowiedź rusza sama, bez dotknięcia', async () => {
+    await loginPage();
+    expect(pending).toHaveLength(1);
+
+    now += 3_000;
+    pending[0]!.reject(new DOMException('', 'NotAllowedError'));
+    await settle();
+
+    expect(pending).toHaveLength(2);
+  });
+
+  it('natychmiastowa odmowa przeglądarki nie zapętla zapytań do serwera', async () => {
+    await loginPage();
+    pending[0]!.reject(new DOMException('', 'NotAllowedError'));
+    await settle();
+
+    expect(pending).toHaveLength(1);
+    expect(calls.filter((path) => path === '/api/auth/passkey/login/options')).toHaveLength(1);
+  });
+});
+
 describe('propozycja „Włącz logowanie biometrią” po logowaniu hasłem', () => {
   it('telefon z kluczem konta: „Włącz” kończy się potwierdzeniem, nie czerwonym błędem', async () => {
     phoneAlreadyHoldsAKey();

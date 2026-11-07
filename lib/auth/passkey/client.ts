@@ -168,9 +168,10 @@ function ceremonyFailure(error: unknown, ceremony: PasskeyCeremony): PasskeyFail
 /**
  * `conditional`: podpowiedź w polu e-mail (autofill). Czeka w tle, aż klient wybierze
  * passkey z listy; kliknięcie przycisku przerywa ją samo (`WebAuthnAbortService`).
+ * `onArmed`: wyzwanie jest pobrane i za chwilę rusza okno albo podpowiedź.
  */
 export async function signInWithPasskey(
-  options: { redirectTo?: string; conditional?: boolean; isCancelled?: () => boolean } = {},
+  options: { redirectTo?: string; conditional?: boolean; isCancelled?: () => boolean; onArmed?: () => void } = {},
 ) {
   const begin = await post<{ options: PublicKeyCredentialRequestOptionsJSON }>(
     '/api/auth/passkey/login/options', 'login', 'options', {},
@@ -182,6 +183,7 @@ export async function signInWithPasskey(
   // Podpowiedź w polu e-mail i tak pomija listę kluczy (`useBrowserAutofill`).
   const handheld = isHandheldDevice();
   const optionsJSON = handheld ? loginOptionsForThisDevice(begin.options, readDeviceKeys()) : begin.options;
+  options.onArmed?.();
   let response;
   try {
     response = await startAuthentication({ optionsJSON, useBrowserAutofill: options.conditional === true });
