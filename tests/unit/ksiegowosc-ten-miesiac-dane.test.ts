@@ -35,6 +35,11 @@ vi.mock('@/lib/ksiegowosc/parametry', async (orig) => {
   };
 });
 vi.mock('@/lib/ksiegowosc/ewidencja-dane', () => ({ czytajEwidencje: async () => mocks.ewidencja }));
+// Od K7 odczyt bierze wersje profilu osobno (forma decyduje: ewidencja czy KPiR); te same co w atrapie ewidencji.
+vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/profil')>()),
+  czytajWersjeProfilu: async () => (mocks.ewidencja as { wersje?: unknown[] } | null)?.wersje ?? [],
+}));
 
 const { czytajRozliczenia, czytajTenMiesiac } = await import('@/lib/ksiegowosc/ten-miesiac-dane');
 

@@ -655,7 +655,7 @@ function linesFromFa3Data(fa3: Json | null): JpkInvoiceLine[] {
   return out;
 }
 
-interface BuyerDataJson {
+export interface BuyerDataJson {
   name?: string;
   nip?: string;
   /** BuyerParty: numer VAT-UE z prefiksem kraju (nabywca z UE, AUD-70). */
@@ -726,7 +726,8 @@ function parseIssuerAddress(
   };
 }
 
-function formatBuyerAddress(buyerData: BuyerDataJson): string {
+/** Adres nabywcy z `buyer_data` w jednej linii (KPiR w module księgowości, K7: K_5B). */
+export function formatBuyerAddress(buyerData: BuyerDataJson): string {
   const nested = buyerData.address;
   if (nested && (nested.addressLine1 || nested.addressLine2)) {
     return [nested.addressLine1, nested.addressLine2].filter(Boolean).join(', ');

@@ -8,7 +8,7 @@
  * o zapłacone składki społeczne bez FP (biznes.gov.pl, ZUS; pewność średnia,
  * sekcja 5). Wyższa składka obowiązuje od miesiąca przekroczenia progu, bez
  * korekty miesięcy wcześniejszych: różnicę wyrównuje rozliczenie roczne.
- * Skala i liniowy: K7.
+ * Skala i liniowy (K7): `zdrowotnaOdDochodu` niżej.
  */
 
 import type { KluczZdrowotnej, Liczba } from '@/lib/ksiegowosc/parametry';
@@ -45,4 +45,48 @@ export function zdrowotnaRyczaltu(przychodNarastajacoGr: number, liczby: LiczbyZ
     };
   }
   return { ok: true, zdrowotna: { przychodNarastajacoGr, prog, skladkaGr } };
+}
+
+/**
+ * Skala i liniowy (K7): składka za miesiąc od dochodu z POPRZEDNIEGO miesiąca
+ * (za styczeń od grudnia), czyli przychód minus koszty z KPiR minus składki
+ * społeczne zapłacone w tamtym miesiącu; 9 % przy skali, 4,9 % przy liniowym,
+ * nie mniej niż minimalna (9 % płacy minimalnej z pierwszego dnia roku
+ * składkowego). Strata to podstawa zero, więc składka minimalna. Podstawa
+ * w wyniku nie jest niższa niż płaca minimalna (podstawa składki minimalnej).
+ * Roczne rozliczenie składki (wyrównanie do dochodu z roku) to K9.
+ */
+export interface ZdrowotnaOdDochodu {
+  /** Dochód poprzedniego miesiąca po odliczeniu społecznych (może być ujemny). */
+  dochodGr: number;
+  podstawaGr: number;
+  skladkaGr: number;
+  minimalna: boolean;
+}
+
+export type WynikZdrowotnejOdDochodu = { ok: true; zdrowotna: ZdrowotnaOdDochodu } | { ok: false; brak: string };
+
+export function zdrowotnaOdDochodu(forma: 'skala' | 'liniowy', dochodGr: number, liczby: LiczbyZdrowotnej): WynikZdrowotnejOdDochodu {
+  const stawkaSkali = liczby.stawka?.wartosc ?? null;
+  const stawka = forma === 'skala' ? stawkaSkali : (liczby.stawkaLiniowy?.wartosc ?? null);
+  const minimalna = liczby.minimalna?.wartosc ?? null;
+  if (stawka === null || stawkaSkali === null || minimalna === null) {
+    return {
+      ok: false,
+      brak: 'Stawka albo minimalna składka zdrowotna na ten rok składkowy nie są jeszcze ogłoszone (ZUS ogłasza je w styczniu), więc składki nie liczymy.',
+    };
+  }
+  const odDochodu = Math.floor((Math.max(0, dochodGr) * stawka + 5_000) / 10_000);
+  // Minimalna to 9 % płacy minimalnej, więc płaca minimalna = minimalna / 9 %.
+  const placaMinimalnaGr = Math.round((minimalna * 10_000) / stawkaSkali);
+  const jestMinimalna = odDochodu < minimalna;
+  return {
+    ok: true,
+    zdrowotna: {
+      dochodGr,
+      podstawaGr: Math.max(Math.max(0, dochodGr), placaMinimalnaGr),
+      skladkaGr: jestMinimalna ? minimalna : odDochodu,
+      minimalna: jestMinimalna,
+    },
+  };
 }

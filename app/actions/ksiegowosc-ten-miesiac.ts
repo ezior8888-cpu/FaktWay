@@ -56,7 +56,9 @@ const skrotSchema = z.string().regex(/^[0-9a-f]{64}$/);
 const zatwierdzenieSchema = z.object({
   miesiac: z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),
   /** Skróty pozycji z ekranu, z którego kliknięto „Zatwierdź”. */
-  skroty: z.object({ ryczalt: skrotSchema.optional(), zus_spoleczne: skrotSchema.optional(), zdrowotna: skrotSchema.optional() }).strict(),
+  skroty: z
+    .object({ ryczalt: skrotSchema.optional(), pit: skrotSchema.optional(), zus_spoleczne: skrotSchema.optional(), zdrowotna: skrotSchema.optional() })
+    .strict(),
 });
 
 export async function zatwierdzMiesiacAction(wejscie: z.input<typeof zatwierdzenieSchema>): Promise<WynikZatwierdzenia> {
