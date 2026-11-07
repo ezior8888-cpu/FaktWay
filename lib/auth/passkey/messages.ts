@@ -37,6 +37,14 @@ const WRONG_ADDRESS = 'Biometria działa tylko pod głównym adresem FaktWay. Ot
 
 export const PASSKEY_NETWORK_ERROR = 'Brak połączenia. Sprawdź internet i spróbuj ponownie.';
 
+/** Telefon bez zapamiętanego klucza: przycisk logowania prowadzi do podpowiedzi w polu e-mail. */
+export const PASSKEY_SUGGESTION_HINT =
+  'Wybierz klucz z podpowiedzi przy polu e-mail. Jeśli jej nie widać, zaloguj się hasłem.';
+
+/** Telefon ma już klucz konta (system odmówił dodania drugiego). */
+export const PASSKEY_ALREADY_ON_DEVICE_MESSAGE =
+  'To urządzenie ma już klucz do Twojego konta. Przy następnym logowaniu dotknij „Zaloguj biometrią” i wybierz klucz z podpowiedzi przy polu e-mail.';
+
 export function passkeyServerMessage(code: string, ceremony: PasskeyCeremony): string {
   return SERVER_MESSAGES[code] ?? FALLBACK[ceremony];
 }

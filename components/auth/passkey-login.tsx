@@ -12,6 +12,7 @@ import { AuthMessage } from '@/components/auth/finora/auth-message';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { passkeyButtonAvailable, signInWithPasskey } from '@/lib/auth/passkey/client';
+import { PASSKEY_SUGGESTION_HINT } from '@/lib/auth/passkey/messages';
 
 const subscribeToNothing = () => () => {};
 
@@ -23,12 +24,24 @@ const subscribeToNothing = () => () => {};
  * przycisku ją przerywa, a po nieudanej próbie uzbrajamy ją od nowa. Wyzwanie żyje
  * 5 minut, więc po dłuższym czekaniu serwer odmówi i klient dostanie zwykły komunikat.
  */
-export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: string; withSeparator: boolean }) {
+export function PasskeyLogin({
+  redirectTo,
+  withSeparator,
+  emailFieldId = 'email',
+}: {
+  redirectTo?: string;
+  withSeparator: boolean;
+  /** Pole e-mail z `autocomplete="username webauthn"`, w którym przeglądarka pokazuje klucze. */
+  emailFieldId?: string;
+}) {
   // Serwer nie wie, co potrafi przeglądarka, więc na serwerze przycisku nie ma.
   const supported = useSyncExternalStore(subscribeToNothing, browserSupportsWebAuthn, () => false);
-  // Telefon bez własnego klucza nie dostaje przycisku, bo okno systemowe pokazałoby
-  // kod QR (`lib/auth/passkey/client.ts`). Podpowiedź w polu e-mail działa dalej.
-  const showButton = useSyncExternalStore(subscribeToNothing, passkeyButtonAvailable, () => false);
+  // Telefon bez zapamiętanego klucza nie otwiera okna systemowego, bo to pokazałoby kod QR
+  // (`lib/auth/passkey/client.ts`). Przycisk prowadzi wtedy do podpowiedzi w polu e-mail,
+  // więc pokazujemy go dopiero, gdy przeglądarka ją obsługuje.
+  const knowsDeviceKey = useSyncExternalStore(subscribeToNothing, passkeyButtonAvailable, () => false);
+  const [suggestionReady, setSuggestionReady] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(false);
@@ -36,6 +49,7 @@ export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: strin
 
   const armAutofill = useCallback(async () => {
     if (!(await browserSupportsWebAuthnAutofill()) || !mounted.current) return;
+    setSuggestionReady(true);
     const result = await signInWithPasskey({
       redirectTo,
       conditional: true,
@@ -62,6 +76,13 @@ export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: strin
   }, [supported, armAutofill]);
 
   const onClick = async () => {
+    if (!knowsDeviceKey) {
+      // Podpowiedź jest już uzbrojona i pokazuje tylko klucze z tego telefonu. Fokus w tym
+      // samym dotknięciu otwiera klawiaturę także na iPhonie.
+      document.getElementById(emailFieldId)?.focus();
+      setShowHint(true);
+      return;
+    }
     setPending(true);
     setError(null);
     explicitAttempt.current = true;
@@ -78,7 +99,7 @@ export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: strin
   };
 
   if (!supported) return null;
-  if (!showButton) return error ? <AuthMessage tone="error">{error}</AuthMessage> : null;
+  if (!knowsDeviceKey && !suggestionReady) return error ? <AuthMessage tone="error">{error}</AuthMessage> : null;
 
   return (
     <>
@@ -86,6 +107,7 @@ export function PasskeyLogin({ redirectTo, withSeparator }: { redirectTo?: strin
         <RiFingerprintLine aria-hidden />
         {pending ? 'Potwierdź na urządzeniu...' : 'Zaloguj biometrią'}
       </Button>
+      {showHint && !error && <p role="status" className="text-muted-foreground text-sm">{PASSKEY_SUGGESTION_HINT}</p>}
       {error && <AuthMessage tone="error">{error}</AuthMessage>}
       {withSeparator && (
         <div className="flex items-center gap-4">

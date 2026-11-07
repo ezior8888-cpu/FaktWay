@@ -29,9 +29,9 @@ import { PASSKEY_DEVICE_KEYS_KEY } from '@/lib/auth/device-cookies';
  *   telefonie (twarz albo odcisk palca), bez propozycji innego urządzenia.
  * - Logowanie przyciskiem: tylko klucze, które ten telefon już dodał albo
  *   którymi się logował (lista w `localStorage`), z transportem `internal`,
- *   czyli bez kodu QR. Telefon bez takiego klucza nie pokazuje przycisku
- *   (`passkeyButtonAvailable`), zostaje podpowiedź w polu e-mail, która QR
- *   nie pokazuje, i propozycja dodania klucza po logowaniu hasłem.
+ *   czyli bez kodu QR. Telefon bez takiego klucza (`passkeyButtonAvailable`)
+ *   dostaje przycisk, który prowadzi do podpowiedzi w polu e-mail: ona też
+ *   nie pokazuje kodu QR, a wybrany klucz trafia na listę.
  *
  * Serwer się nie zmienia: lista kluczy i wskazówki w oknie systemowym nie są
  * sprawdzane przy weryfikacji (liczy się wyzwanie i klucz z bazy), a aplikacja
@@ -78,7 +78,17 @@ function forgetDeviceKey(id: string): void {
   writeDeviceKeys(readDeviceKeys().filter((known) => known !== id));
 }
 
-/** Przycisk „Zaloguj biometrią”: na telefonie tylko wtedy, gdy ten telefon ma już swój klucz. */
+/** Klucz z innego urządzenia (telefon obok, przez kod QR) nie jest kluczem tego telefonu. */
+function usedOnThisDevice(response: { authenticatorAttachment?: string | null }): boolean {
+  return response.authenticatorAttachment !== 'cross-platform';
+}
+
+/**
+ * Czy telefon zna swój klucz. Bez tego przycisk „Zaloguj biometrią” nie otwiera okna
+ * systemowego (pokazałoby kod QR), tylko prowadzi do podpowiedzi w polu e-mail
+ * (`components/auth/passkey-login.tsx`). Lista bywa pusta także przy kluczu na telefonie:
+ * klucz sprzed 05.11.2026, zsynchronizowany z komputera, wyczyszczone dane strony.
+ */
 export function passkeyButtonAvailable(): boolean {
   return !isHandheldDevice() || readDeviceKeys().length > 0;
 }
@@ -183,14 +193,20 @@ export async function signInWithPasskey(
     redirectTo: options.redirectTo,
   });
   if (handheld) {
+    if (result.ok && usedOnThisDevice(response)) rememberDeviceKey(response.id);
     // Klucz usunięty z konta nie może dalej blokować przycisku na tym telefonie.
-    if (result.ok) rememberDeviceKey(response.id);
-    else if (result.code === 'passkey_login_failed') forgetDeviceKey(response.id);
+    else if (!result.ok && result.code === 'passkey_login_failed') forgetDeviceKey(response.id);
   }
   return result;
 }
 
-export async function addPasskeyDevice() {
+/** Nowe urządzenie albo potwierdzenie, że telefon ma już klucz tego konta. */
+export type AddPasskeyResult =
+  | { ok: true; device: PasskeyDevice; alreadyOnDevice: false }
+  | { ok: true; device: null; alreadyOnDevice: true }
+  | PasskeyFailure;
+
+export async function addPasskeyDevice(): Promise<AddPasskeyResult> {
   const begin = await post<{ options: PublicKeyCredentialCreationOptionsJSON }>(
     '/api/auth/passkey/register/options', 'registration', 'options', {},
   );
@@ -202,13 +218,34 @@ export async function addPasskeyDevice() {
       optionsJSON: handheld ? registrationOptionsForThisDevice(begin.options) : begin.options,
     });
   } catch (error) {
-    return ceremonyFailure(error, 'registration');
+    const failure = ceremonyFailure(error, 'registration');
+    // Telefon trzyma już jeden z kluczy konta (`excludeCredentials`), np. dodany przed
+    // 05.11.2026 albo zsynchronizowany z komputera: po Face ID albo blokadzie ekranu system
+    // odmawia drugiego (iOS 18+, Chrome na Androidzie). Dla klienta to sukces. Którego klucza
+    // to dotyczy, nie wiemy, więc nic nie zapamiętujemy: pierwsze logowanie pójdzie przez
+    // podpowiedź w polu e-mail, a ona zapisze dokładny klucz.
+    if (
+      handheld
+      && failure.code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED'
+      && (begin.options.excludeCredentials?.length ?? 0) > 0
+    ) {
+      return { ok: true, device: null, alreadyOnDevice: true };
+    }
+    return failure;
   }
   const result = await post<{ device: PasskeyDevice }>(
     '/api/auth/passkey/register/verify', 'registration', 'verify', { response },
   );
-  if (handheld && result.ok) rememberDeviceKey(response.id);
-  return result;
+  if (!result.ok) {
+    // Ten klucz jest już w bazie, a telefon właśnie go zwrócił, więc to na pewno jego klucz.
+    if (handheld && result.code === 'already_registered' && usedOnThisDevice(response)) {
+      rememberDeviceKey(response.id);
+      return { ok: true, device: null, alreadyOnDevice: true };
+    }
+    return result;
+  }
+  if (handheld && usedOnThisDevice(response)) rememberDeviceKey(response.id);
+  return { ok: true, device: result.device, alreadyOnDevice: false };
 }
 
 export function removePasskeyDevice(id: string) {

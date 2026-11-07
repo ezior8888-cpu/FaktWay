@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { addPasskeyDevice, removePasskeyDevice } from '@/lib/auth/passkey/client';
-import { passkeyServerMessage } from '@/lib/auth/passkey/messages';
+import { PASSKEY_ALREADY_ON_DEVICE_MESSAGE, passkeyServerMessage } from '@/lib/auth/passkey/messages';
 import type { PasskeyDevice } from '@/lib/auth/passkey/types';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 
@@ -53,8 +53,12 @@ export function PasskeysCard({ initialDevices, stepUpRequired, loadFailed }: Pro
     const result = await addPasskeyDevice();
     setIsPending(false);
     if (result.ok) {
-      setDevices((current) => [...current, result.device]);
-      setNotice('Urządzenie dodane. Przy następnym logowaniu użyj przycisku „Zaloguj biometrią”.');
+      const { device } = result;
+      // `device` puste: telefon ma już klucz tego konta (`addPasskeyDevice`).
+      if (device) setDevices((current) => [...current, device]);
+      setNotice(device
+        ? 'Urządzenie dodane. Przy następnym logowaniu użyj przycisku „Zaloguj biometrią”.'
+        : PASSKEY_ALREADY_ON_DEVICE_MESSAGE);
       return;
     }
     if (result.code === 'mfa_required') setNeedsCode(true);
