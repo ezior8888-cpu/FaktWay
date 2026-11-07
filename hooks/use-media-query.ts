@@ -54,3 +54,24 @@ export const DESKTOP_MEDIA = '(min-width: 1024px)';
 export function useIsDesktop(): boolean {
   return useMediaQuery(DESKTOP_MEDIA);
 }
+
+/** Systemowa opcja „ogranicz ruch”. */
+export const REDUCED_MOTION_MEDIA = '(prefers-reduced-motion: reduce)';
+
+/**
+ * Zamiennik `useReducedMotion` z framer-motion, bezpieczny dla hydratacji.
+ *
+ * `useReducedMotion` czyta `matchMedia` już w pierwszym renderze klienta,
+ * a serwer zawsze odpowiada „nie”. Przy włączonym „ogranicz ruch” komponent
+ * rysował wtedy przy hydratacji inne drzewo niż serwer: React zgłaszał
+ * „Hydration failed” i budował stronę od zera (albo, przy różnicy samego
+ * `style`, zostawiał serwerowe `opacity: 0`). Tutaj pierwszy render klienta
+ * zgadza się z serwerem (`false`), a prawdziwa wartość przychodzi zaraz po
+ * hydratacji. Wynik końcowy jest ten sam co wcześniej.
+ *
+ * W odróżnieniu od `useReducedMotion` wartość śledzi zmianę ustawienia
+ * systemu w trakcie wizyty (zamierzone: strona od razu słucha nowej opcji).
+ */
+export function usePrefersReducedMotion(): boolean {
+  return useMediaQuery(REDUCED_MOTION_MEDIA);
+}
