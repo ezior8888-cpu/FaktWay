@@ -55,6 +55,9 @@ export default defineConfig({
       // 00167 (plan księgowości JDG, K3): wpisy ręczne ewidencji: zapis i usunięcie owner/admin,
       // izolacja firm, data wpisu i autor z bazy (granty kolumnowe), CHECK-i K_9 i kwoty, bez UPDATE.
       'tests/rls-ksiegowosc-wpisy.test.ts',
+      // 00168 (plan księgowości JDG, K4): rozliczenia miesiąca: zatwierdzenie i zapłata owner/admin,
+      // izolacja firm, granty kolumnowe, niezmienność kwoty (wyzwalacz), UNIQUE wersji, najem tylko przy ryczałcie.
+      'tests/rls-ksiegowosc-rozliczenia.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

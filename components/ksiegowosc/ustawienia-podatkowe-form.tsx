@@ -53,6 +53,7 @@ export function UstawieniaPodatkoweForm({
   const [zusEtap, setZusEtap] = useState<EtapZus | ''>(poczatkowa?.zusEtap ?? '');
   const [zusOd, setZusOd] = useState(poczatkowa?.zusOd ?? '');
   const [chorobowe, setChorobowe] = useState(poczatkowa?.chorobowe ?? false);
+  const [najem, setNajem] = useState(poczatkowa?.najem ?? false);
   const [nrsZus, setNrsZus] = useState(poczatkowa?.nrsZus ?? '');
   const [bledy, setBledy] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
@@ -75,6 +76,7 @@ export function UstawieniaPodatkoweForm({
     zusEtap: zusEtap as EtapZus,
     zusOd: zusOd === '' ? null : zusOd,
     chorobowe: zSkladkamiSpolecznymi ? chorobowe : false,
+    najem: forma === 'ryczalt' ? najem : false,
     nrsZus: nrsZus.trim() === '' ? null : nrsZus,
   });
 
@@ -209,6 +211,23 @@ export function UstawieniaPodatkoweForm({
               ))}
             </RadioGroup>
           </div>
+        </Field>
+      ) : null}
+
+      {forma === 'ryczalt' ? (
+        <Field orientation="horizontal">
+          <Switch
+            id="profil-najem"
+            checked={najem}
+            disabled={!canEdit || pending}
+            onCheckedChange={(v) => setNajem(Boolean(v))}
+          />
+          <FieldContent>
+            <FieldLabel htmlFor="profil-najem">Przychody ze stawką 8,5 % to najem, dzierżawa, zakwaterowanie albo badania i rozwój (B+R)</FieldLabel>
+            <FieldDescription>
+              Od nadwyżki takich przychodów ponad 100 000 zł w roku stawka wynosi 12,5 %. Ewidencja liczy to sama.
+            </FieldDescription>
+          </FieldContent>
         </Field>
       ) : null}
 

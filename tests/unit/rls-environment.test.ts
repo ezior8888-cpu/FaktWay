@@ -91,6 +91,7 @@ describe('separate RLS test configuration', () => {
       // 00166 (plan księgowości JDG, K2): profil podatkowy.
       'tests/rls-ksiegowosc-profil.test.ts',
       'tests/rls-ksiegowosc-wpisy.test.ts',
+      'tests/rls-ksiegowosc-rozliczenia.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

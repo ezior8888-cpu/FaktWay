@@ -15,8 +15,8 @@ import {
  * włączenie dla firmy. Każda kolejna warstwa może tylko zabrać.
  */
 
-/** Od K2 kod puszcza `ustawienia`, od K3 `ewidencja`; reszta czeka na swoje kroki. */
-const ZABLOKOWANE: ObszarModulu[] = ['ten_miesiac', 'terminy', 'vat', 'wysylka_jpk', 'kpir'];
+/** Od K2 kod puszcza `ustawienia`, od K3 `ewidencja`, od K4 `ten_miesiac`; reszta czeka na swoje kroki. */
+const ZABLOKOWANE: ObszarModulu[] = ['terminy', 'vat', 'wysylka_jpk', 'kpir'];
 const WLACZONY = { wlaczony: true } as const;
 
 /** Atrapa łańcucha `from().select().eq().maybeSingle()` z jedną odpowiedzią. */
@@ -35,6 +35,10 @@ describe('blokada w kodzie', () => {
 
   it('ewidencja: od K3 puszczona w kodzie, decyduje flaga firmy', () => {
     expect(statusObszaru('ewidencja').wlaczony).toBe(true);
+  });
+
+  it('ten_miesiac: od K4 puszczony w kodzie, decyduje flaga firmy', () => {
+    expect(statusObszaru('ten_miesiac').wlaczony).toBe(true);
   });
 
   it.each(ZABLOKOWANE)('%s: wyłączony w kodzie, z notatką', (obszar) => {
@@ -82,7 +86,7 @@ describe('odczyt', () => {
   it('obszar zablokowany w kodzie nie pyta ani bazy, ani flagi globalnej', async () => {
     const { client, from } = klient({ data: { ksiegowosc_enabled: true }, error: null });
     const globalny = vi.fn().mockResolvedValue(false);
-    const werdykt = await czyKsiegowoscWlaczona(client, 'firma-1', 'ten_miesiac', globalny);
+    const werdykt = await czyKsiegowoscWlaczona(client, 'firma-1', 'terminy', globalny);
     expect(werdykt).toMatchObject({ wlaczony: false, rozstrzygnela: 'blokada_w_kodzie' });
     expect(from).not.toHaveBeenCalled();
     expect(globalny).not.toHaveBeenCalled();

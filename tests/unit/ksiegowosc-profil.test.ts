@@ -29,6 +29,7 @@ const RYCZALT: Profil = {
   zusOd: null,
   chorobowe: true,
   nrsZus: null,
+  najem: false,
 };
 
 function wersja(nadpisz: Partial<WersjaProfilu>): WersjaProfilu {
@@ -174,7 +175,7 @@ describe('fail-closed', () => {
       zus_od: null, chorobowe: false, nrs_zus: null,
     };
     expect(await czytajWersjeProfilu(klient({ data: [wiersz], error: null }), 'f')).toEqual([
-      { id: 'p1', validFrom: '2027-01-01', forma: 'ryczalt', stawkaDomyslna: 850, zusEtap: 'pelny', zusOd: null, chorobowe: false, nrsZus: null },
+      { id: 'p1', validFrom: '2027-01-01', forma: 'ryczalt', stawkaDomyslna: 850, zusEtap: 'pelny', zusOd: null, chorobowe: false, najem: false, nrsZus: null },
     ]);
     expect(await czytajWersjeProfilu(klient({ data: null, error: { code: 'PGRST205', message: 'brak tabeli' } }), 'f')).toEqual([]);
     await expect(czytajWersjeProfilu(klient({ data: null, error: { code: '57014', message: 'timeout' } }), 'f')).rejects.toThrow(

@@ -183,7 +183,11 @@ export type AuditAction =
   // treść wpisu) i pobrany plik JPK_EWP (okres i sumy, bez danych osoby).
   | 'ledger_entry.created'
   | 'ledger_entry.deleted'
-  | 'jpk_ewp.downloaded';
+  | 'jpk_ewp.downloaded'
+  // Rozliczenie miesiąca (00168, K4, D6): zatwierdzone wersje i oznaczenie zapłaty.
+  | 'tax_settlement.approved'
+  | 'tax_settlement.paid'
+  | 'tax_settlement.unpaid';
 
 export interface AuditLogEntry {
   action: AuditAction;
