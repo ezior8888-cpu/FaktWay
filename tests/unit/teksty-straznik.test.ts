@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import ts from 'typescript';
@@ -142,10 +142,6 @@ export function ratchetProblems(current: State, saved: State): string[] {
 
 describe('strażnik tekstów dla klienta', () => {
   const current = currentState();
-  if (!existsSync(STATE_FILE)) {
-    // Pierwsze uruchomienie: stan początkowy z dzisiejszego kodu (widoczny w diffie PR).
-    writeFileSync(STATE_FILE, `${JSON.stringify(current, null, 2)}\n`);
-  }
   const saved = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as State;
 
   if (process.env.ZAPISZ_STAN_TEKSTOW === '1') {
