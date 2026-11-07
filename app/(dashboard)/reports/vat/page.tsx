@@ -19,7 +19,7 @@ import { brakNadwyzki, czytajVat, type DaneVat } from '@/lib/ksiegowosc/vat-dane
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { srodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
 import { ocenOdmoweInit, ocenStatus } from '@/lib/ksiegowosc/wysylka-jpk/statusy';
-import type { StanZapisu, Wysylka } from '@/lib/ksiegowosc/wysylka-jpk/zapis';
+import { trwa, type StanZapisu, type Wysylka } from '@/lib/ksiegowosc/wysylka-jpk/zapis';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -139,6 +139,7 @@ export default async function VatPage({ searchParams }: { searchParams: Promise<
             canEdit={canEdit}
             wysylkaWlaczona={wysylka.wlaczony && srodowisko !== null}
             testowe={srodowisko === 'test'}
+            email={ctx.user.email ?? null}
           />
         </>
       )}
@@ -202,6 +203,7 @@ function Wysylki({
   canEdit,
   wysylkaWlaczona,
   testowe,
+  email,
 }: {
   dane: DaneOk;
   miesiac: string;
@@ -209,9 +211,12 @@ function Wysylki({
   canEdit: boolean;
   wysylkaWlaczona: boolean;
   testowe: boolean;
+  email: string | null;
 }) {
-  const trwa = dane.wysylki.some((w) => w.stan === 'wysylanie' || w.stan === 'w_toku');
-  const moznaWyslac = wysylkaWlaczona && canEdit && zakonczony && dane.wynik?.ok === true && !trwa;
+  // „wysylanie” starsze niż 15 minut to przerwana wysyłka: formularz wraca, a akcja zamknie wiersz przed nową.
+  const wToku = dane.wysylki.some((w) => trwa(w));
+  const korekta = dane.wysylki.some((w) => w.stan === 'przyjeta');
+  const moznaWyslac = wysylkaWlaczona && canEdit && zakonczony && dane.wynik?.ok === true && !wToku;
   if (!wysylkaWlaczona && dane.wysylki.length === 0) return null;
   return (
     <Card>
@@ -230,6 +235,8 @@ function Wysylki({
             nadwyzka={dane.nadwyzka?.zrodlo === 'klient' ? dane.nadwyzka.zl : null}
             rokKwoty={Number(todayInWarsaw().slice(0, 4)) - 2}
             testowe={testowe}
+            korekta={korekta}
+            email={email}
           />
         ) : null}
         {dane.wysylki.length > 0 ? <ListaWysylek wysylki={dane.wysylki} canEdit={canEdit} /> : null}

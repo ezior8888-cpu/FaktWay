@@ -113,6 +113,16 @@ export function nadwyzkaPrzyjetej(wysylki: readonly Wysylka[], okres: string, sr
   return przyjeta ? przyjeta.deklaracja.P_62 : null;
 }
 
+/**
+ * Czy wysyłka blokuje następną za ten miesiąc: „w_toku” zawsze, „wysylanie”
+ * tylko przez pierwsze 15 minut. Starszą zamyka `zamknijPrzerwane` przy nowej
+ * wysyłce, więc formularz musi wtedy wrócić.
+ */
+export function trwa(w: Pick<Wysylka, 'stan' | 'utworzonoO'>, teraz: Date = new Date()): boolean {
+  if (w.stan === 'w_toku') return true;
+  return w.stan === 'wysylanie' && new Date(w.utworzonoO).getTime() > teraz.getTime() - PRZERWANA_PO_MIN * 60_000;
+}
+
 /** Zamyka jako „przerwana” wysyłkę, która utknęła przed numerem referencyjnym (wyjście z blokady 00170). */
 export async function zamknijPrzerwane(client: SupabaseClient, tenantId: string, okres: string, teraz: Date = new Date()): Promise<void> {
   const granica = new Date(teraz.getTime() - PRZERWANA_PO_MIN * 60_000).toISOString();

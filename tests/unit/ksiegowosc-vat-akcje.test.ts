@@ -128,7 +128,7 @@ const faktura = {
   lines: [{ position: 1, name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 1000, netAmount: 1000, vatRate: '23' }],
 } as JpkInvoice;
 
-const OSOBA = { imie: 'Jan', nazwisko: 'Testowy', dataUrodzenia: '1980-01-01' };
+const OSOBA = { imie: 'Jan', nazwisko: 'Testowy', dataUrodzenia: '1980-01-01', email: 'jan@example.test' };
 const WEJSCIE = { miesiac: '2026-10', nadwyzka: 0, ...OSOBA, kwotaGr: 5_432_198 };
 /** Wartości, których nie może być w bazie, audycie, Sentry ani logach. */
 const TAJNE = ['5432198', '54321.98', 'Testowy', '1980-01-01'];
@@ -208,7 +208,8 @@ describe('wysyłka JPK_V7M do MF', () => {
     expect(srodowisko).toBe('test');
     expect(plik.nazwa).toBe('JPK_V7M_1234567890_2026-10.xml');
     expect(plik.xml).toMatch(/<OsobaFizyczna>\s*<etd:NIP>1234567890<\/etd:NIP>/);
-    expect(dane).toEqual({ nip: '1234567890', ...OSOBA, kwotaGr: 5_432_198 });
+    expect(dane).toEqual({ nip: '1234567890', imie: 'Jan', nazwisko: 'Testowy', dataUrodzenia: '1980-01-01', kwotaGr: 5_432_198 });
+    expect(plik.xml).toContain('<CelZlozenia poz="P_7">1</CelZlozenia>');
 
     expect(Object.keys(mocks.wstawione[0]).sort()).toEqual(['cel', 'deklaracja', 'okres', 'rodzaj', 'skrot_pliku', 'srodowisko', 'tenant_id']);
     expect(mocks.wstawione[0]).toMatchObject({ okres: '2026-10-01', rodzaj: 'JPK_V7M', cel: 1, srodowisko: 'test', deklaracja: { P_38: 230, P_51: 230 } });
@@ -300,9 +301,24 @@ describe('pobranie pliku JPK_V7M', () => {
     const wynik = await pobierzJpkV7mAction({ miesiac: '2026-10', nadwyzka: 0, ...OSOBA });
     expect(wynik).toMatchObject({ success: true, nazwa: 'JPK_V7M_1234567890_2026-10.xml' });
     expect(mocks.audit).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'jpk_v7m.downloaded', metadata: { miesiac: '2026-10', deklaracja: { P_38: 230, P_39: 0, P_48: 0, P_51: 230, P_62: 0 }, nadwyzkaZ: 'klient' } }),
+      expect.objectContaining({ action: 'jpk_v7m.downloaded', metadata: { miesiac: '2026-10', cel: 1, deklaracja: { P_38: 230, P_39: 0, P_48: 0, P_51: 230, P_62: 0 }, nadwyzkaZ: 'klient' } }),
     );
     for (const s of TAJNE) expect(zapisane()).not.toContain(s);
+  });
+
+  it('po deklaracji przyjętej przez MF kolejny plik to korekta (CelZlozenia 2, cel 2 w wysyłce); e-mail z formularza w Podmiot1', async () => {
+    const przyjeta = { id: 'w-0', okres: '2026-10-01', stan: 'przyjeta', srodowisko: 'test', deklaracja: { P_62: 0 } };
+    mocks.dane = { ...(mocks.dane as object), wysylki: [przyjeta] };
+    await wyslijJpkV7mAction({ ...WEJSCIE, email: 'biuro@example.test' });
+    const [, plik] = mocks.wyslij.mock.calls[0];
+    expect(plik.xml).toContain('<CelZlozenia poz="P_7">2</CelZlozenia>');
+    expect(plik.xml).toContain('<Email>biuro@example.test</Email>');
+    expect(plik.nazwa).toBe('JPK_V7M_1234567890_2026-10_korekta.xml');
+    expect(mocks.wstawione[0]).toMatchObject({ cel: 2 });
+    // Przyjęta na teście nie robi korekty z pliku bez środowiska wysyłki (produkcja).
+    vi.stubEnv('JPK_MF_ENV', '');
+    expect(await pobierzJpkV7mAction({ miesiac: '2026-10', nadwyzka: 0, ...OSOBA })).toMatchObject({ success: true, nazwa: 'JPK_V7M_1234567890_2026-10.xml' });
+    expect(await pobierzJpkV7mAction({ miesiac: '2026-10', nadwyzka: 0, ...OSOBA, email: 'bez-malpy' })).toMatchObject({ success: false, pole: 'email' });
   });
 
   it('bez nadwyżki z poprzedniej deklaracji nie ma pliku, a przed końcem miesiąca też nie', async () => {

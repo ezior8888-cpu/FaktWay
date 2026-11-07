@@ -44,7 +44,9 @@ vi.mock('@/components/expenses/finora/month-selector', () => ({ default: (p: { m
 vi.mock('@/components/ksiegowosc/vat-akcje', () => ({
   NadwyzkaPoprzednia: (p: { wartosc: number | null }) => <span data-pole-nadwyzki={String(p.wartosc)} />,
   JpkV7mPobierz: (p: { miesiac: string; nadwyzka: number | null }) => <span data-pobierz={`${p.miesiac}:${p.nadwyzka}`} />,
-  JpkV7mWyslij: (p: { rokKwoty: number; testowe: boolean }) => <span data-wyslij={`${p.rokKwoty}:${p.testowe}`} />,
+  JpkV7mWyslij: (p: { rokKwoty: number; testowe: boolean; korekta: boolean; email: string | null }) => (
+    <span data-wyslij={`${p.rokKwoty}:${p.testowe}:${p.korekta}:${p.email}`} />
+  ),
   SprawdzStatus: (p: { id: string }) => <span data-status={p.id} />,
   PobierzUpo: (p: { id: string }) => <span data-upo={p.id} />,
 }));
@@ -138,7 +140,7 @@ describe('ekran VAT', () => {
     vi.stubEnv('JPK_MF_ENV', 'test');
     mocks.obszary.wysylka_jpk = true;
     let html = await strona({ month: '10', year: '2026', nadwyzka: '300' });
-    expect(html).toContain('data-wyslij="2024:true"');
+    expect(html).toContain('data-wyslij="2024:true:false:jan@example.test"');
 
     const wysylka = (z: Record<string, unknown>) => ({
       id: 'w-1',
@@ -168,7 +170,18 @@ describe('ekran VAT', () => {
     expect(html).toContain('osobą fizyczną');
     expect(html).toContain('Kod MF 422');
 
+    // Wysyłka, która utknęła przed numerem ponad 15 minut temu, nie blokuje formularza; po przyjętej deklaracji to korekta.
+    mocks.dane = dane({
+      wysylki: [wysylka({ id: 'w-4', stan: 'wysylanie', numerReferencyjny: null, utworzonoO: '2026-11-01T10:00:00Z' }), wysylka({ id: 'w-2', stan: 'przyjeta', upoSciezka: 'upo/x.xml' })],
+    });
+    html = await strona({ month: '10', year: '2026', nadwyzka: '300' });
+    expect(html).toContain('data-wyslij="2024:true:true:jan@example.test"');
+    mocks.dane = dane({ wysylki: [wysylka({ id: 'w-5', stan: 'wysylanie', numerReferencyjny: null, utworzonoO: new Date().toISOString() })] });
+    html = await strona({ month: '10', year: '2026', nadwyzka: '300' });
+    expect(html).not.toContain('data-wyslij');
+
     // Członek bez uprawnień: lista bez sprawdzania statusu i bez formularza.
+    mocks.dane = dane({ wysylki: [wysylka({}), wysylka({ id: 'w-2', stan: 'przyjeta', upoSciezka: 'upo/x.xml' })] });
     mocks.rola = 'member';
     html = await strona({ month: '10', year: '2026', nadwyzka: '300' });
     expect(html).not.toContain('data-status');

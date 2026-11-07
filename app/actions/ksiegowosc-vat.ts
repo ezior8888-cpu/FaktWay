@@ -14,7 +14,7 @@ import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { brakNadwyzki, czytajVat } from '@/lib/ksiegowosc/vat-dane';
 import { czyKsiegowoscWlaczona, type ObszarModulu } from '@/lib/ksiegowosc/wylacznik';
-import { certyfikatMf, srodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
+import { certyfikatMf, srodowiskoMf, type SrodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
 import { daneAutoryzujaceSchema } from '@/lib/ksiegowosc/wysylka-jpk/dane-autoryzujace';
 import { BladMf, statusWysylki } from '@/lib/ksiegowosc/wysylka-jpk/klient';
 import { ocenOdmoweInit, ocenStatus } from '@/lib/ksiegowosc/wysylka-jpk/statusy';
@@ -66,6 +66,13 @@ const plikSchema = z.object({
   imie: daneAutoryzujaceSchema.shape.imie,
   nazwisko: daneAutoryzujaceSchema.shape.nazwisko,
   dataUrodzenia: daneAutoryzujaceSchema.shape.dataUrodzenia.refine((v) => v < todayInWarsaw(), 'To nie jest poprawna data urodzenia.'),
+  /** E-mail podatnika w pliku (Podmiot1/Email); formularz podpowiada adres konta. */
+  email: z
+    .string()
+    .trim()
+    .min(3, 'Brak adresu e-mail podatnika.')
+    .max(255, 'Adres e-mail ma w JPK najwyżej 255 znaków.')
+    .regex(/^[^\s@]+@[^\s@]+$/, 'To nie jest adres e-mail.'),
 });
 
 const wysylkaSchema = plikSchema.extend({ kwotaGr: daneAutoryzujaceSchema.shape.kwotaGr });
@@ -92,10 +99,14 @@ function blad(parsed: { error: z.ZodError }) {
   return { success: false as const, error: issue?.message ?? 'Nieprawidłowe dane do pliku.', pole: issue?.path.join('.') };
 }
 
-type Plik = { ok: true; xml: string; nazwa: string; deklaracja: DeklaracjaVat; nip: string } | { ok: false; error: string };
+type Plik = { ok: true; xml: string; nazwa: string; deklaracja: DeklaracjaVat; nip: string; cel: 1 | 2 } | { ok: false; error: string };
 
-/** Plik JPK_V7M(3) za miesiąc z danych firmy: ta sama droga dla pobrania i wysyłki. */
-async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>): Promise<Plik> {
+/**
+ * Plik JPK_V7M(3) za miesiąc z danych firmy: ta sama droga dla pobrania i wysyłki.
+ * Po deklaracji przyjętej przez MF (w tym środowisku; bez środowiska: na produkcji)
+ * kolejny plik za ten miesiąc to korekta (CelZlozenia 2).
+ */
+async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>, srodowisko: SrodowiskoMf | null): Promise<Plik> {
   const client = ctx.supabase as unknown as SupabaseClient;
   const { from, to } = monthRange(w.miesiac);
   if (w.miesiac < '2026-02') return { ok: false, error: 'JPK_V7M(3) obowiązuje od rozliczenia za luty 2026 r.' };
@@ -117,14 +128,13 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>): Pr
   if (!kodUrzedu) {
     return { ok: false, error: 'Plik JPK_V7M potrzebuje urzędu skarbowego firmy. Urząd ustawia się w Ustawieniach, w części Księgowa.' };
   }
-  const email = ctx.user.email?.trim();
-  if (!email) return { ok: false, error: 'Plik JPK_V7M potrzebuje adresu e-mail podatnika, a konto nie ma adresu.' };
+  const cel = dane.wysylki.some((x) => x.stan === 'przyjeta' && x.srodowisko === (srodowisko ?? 'produkcja')) ? 2 : 1;
 
   const xml = generateJpkV7m({
     issuer: {
       nip,
       name: String((firma as { name?: unknown } | null)?.name ?? ''),
-      email,
+      email: w.email,
       taxOfficeCode: kodUrzedu,
       naturalPerson: { firstName: w.imie, lastName: w.nazwisko, birthDate: w.dataUrodzenia },
     },
@@ -133,6 +143,7 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>): Pr
     issuedInvoices: dane.dane.issuedInvoices,
     expenses: dane.dane.expenses,
     previousSurplus: dane.nadwyzka.zl,
+    goal: cel === 2 ? '2' : '1',
   });
   const kontrola = await validateJpkV7m(xml);
   if (!kontrola.valid) {
@@ -152,7 +163,7 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>): Pr
     P_51: r.doZaplatyGr / 100,
     P_62: r.nadwyzkaNaNastepnyGr / 100,
   };
-  return { ok: true, xml, nazwa: `JPK_V7M_${nip}_${w.miesiac}.xml`, deklaracja, nip };
+  return { ok: true, xml, nazwa: `JPK_V7M_${nip}_${w.miesiac}${cel === 2 ? '_korekta' : ''}.xml`, deklaracja, nip, cel };
 }
 
 export async function pobierzJpkV7mAction(wejscie: z.input<typeof plikSchema>): Promise<WynikPlikuVat> {
@@ -162,7 +173,7 @@ export async function pobierzJpkV7mAction(wejscie: z.input<typeof plikSchema>): 
   if (!parsed.success) return blad(parsed);
   if (!(await wlaczony(ctx.supabase as unknown as SupabaseClient, ctx.tenantId, 'vat'))) return { success: false, error: NIEDOSTEPNE };
 
-  const plik = await plikMiesiaca(ctx, parsed.data);
+  const plik = await plikMiesiaca(ctx, parsed.data, srodowiskoMf());
   if (!plik.ok) return { success: false, error: plik.error };
   await logAudit({
     action: 'jpk_v7m.downloaded',
@@ -170,7 +181,7 @@ export async function pobierzJpkV7mAction(wejscie: z.input<typeof plikSchema>): 
     userId: ctx.user.id,
     entityType: 'jpk_v7m',
     // Bez imienia, nazwiska i daty urodzenia: tych danych nie zapisujemy (D9).
-    metadata: { miesiac: parsed.data.miesiac, deklaracja: plik.deklaracja, nadwyzkaZ: parsed.data.nadwyzka === null ? 'mf' : 'klient' },
+    metadata: { miesiac: parsed.data.miesiac, cel: plik.cel, deklaracja: plik.deklaracja, nadwyzkaZ: parsed.data.nadwyzka === null ? 'mf' : 'klient' },
   });
   return { success: true, xml: plik.xml, nazwa: plik.nazwa };
 }
@@ -193,13 +204,13 @@ export async function wyslijJpkV7mAction(wejscie: z.input<typeof wysylkaSchema>)
   }
 
   const w = parsed.data;
-  const plik = await plikMiesiaca(ctx, w);
+  const plik = await plikMiesiaca(ctx, w, srodowisko);
   if (!plik.ok) return { success: false, error: plik.error };
   const okres = `${w.miesiac}-01`;
   const skrotPliku = skrotBase64('sha256', Buffer.from(plik.xml, 'utf8'));
 
   await zamknijPrzerwane(client, ctx.tenantId, okres);
-  const zalozona = await zalozWysylke(client, ctx.tenantId, { okres, cel: 1, srodowisko, skrotPliku, deklaracja: plik.deklaracja });
+  const zalozona = await zalozWysylke(client, ctx.tenantId, { okres, cel: plik.cel, srodowisko, skrotPliku, deklaracja: plik.deklaracja });
   if (zalozona === 'w_toku') {
     return { success: false, error: `Wysyłka JPK_V7M za ${monthLabel(w.miesiac)} już trwa. Jej status jest na liście wysyłek.` };
   }
@@ -242,7 +253,7 @@ export async function wyslijJpkV7mAction(wejscie: z.input<typeof wysylkaSchema>)
     userId: ctx.user.id,
     entityType: 'jpk_submission',
     entityId: zalozona.id,
-    metadata: { miesiac: w.miesiac, srodowisko, numer: wynik.numerReferencyjny, skrotPliku, duplikat: wynik.duplikat, zapisany },
+    metadata: { miesiac: w.miesiac, cel: plik.cel, srodowisko, numer: wynik.numerReferencyjny, skrotPliku, duplikat: wynik.duplikat, zapisany },
   });
   revalidatePath('/reports/vat');
   return { success: true, numer: wynik.numerReferencyjny, duplikat: wynik.duplikat };

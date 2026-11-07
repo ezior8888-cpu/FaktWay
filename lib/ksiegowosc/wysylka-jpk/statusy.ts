@@ -22,8 +22,6 @@ const TECHNICZNY = 'Plik nie został złożony z powodu błędu technicznego po 
 
 /** Statusy zależne od klienta albo od podatnika; pozostałe 4xx są techniczne. */
 const ODMOWY_KLIENTA: Readonly<Record<number, string>> = {
-  407: 'MF ma już ten sam plik z wcześniejszej wysyłki.',
-  411: 'MF ma już złożony identyczny dokument za ten okres. Ta wysyłka niczego nie zmienia.',
   419: 'Dane autoryzujące nie zgadzają się z danymi urzędu skarbowego: imię, nazwisko, data urodzenia albo kwota przychodu z zeznania sprzed dwóch lat.',
   420: 'Urząd nie ma aktualnego pełnomocnictwa ani upoważnienia dla osoby podpisującej plik.',
   422: 'Danymi autoryzującymi plik składa tylko podatnik będący osobą fizyczną. Inny podatnik składa go z podpisem kwalifikowanym albo zaufanym.',
@@ -38,6 +36,14 @@ export function ocenStatus(kod: number): OcenaStatusu {
     return {
       stan: 'w_toku',
       tresc: 'MF sprawdza plik. Urzędowe poświadczenie odbioru (UPO) przychodzi zwykle w ciągu kilku minut.',
+      techniczny: false,
+    };
+  }
+  // Duplikat: deklaracja jest złożona wcześniejszą wysyłką, więc to nie „nie złożono”.
+  if (kod === 407 || kod === 411) {
+    return {
+      stan: 'odrzucona',
+      tresc: 'MF ma już identyczny plik z wcześniejszej wysyłki i ta wysyłka niczego nie zmienia. Deklaracja jest złożona tamtą wysyłką.',
       techniczny: false,
     };
   }

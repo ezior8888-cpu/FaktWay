@@ -5,9 +5,11 @@
  * (`statusWysylki`), więc wynik to numer referencyjny.
  *
  * Całość idzie w jednym żądaniu klienta: dane autoryzujące nie mogą czekać
- * w kolejce zadań, bo kolejka je zapisuje. Ponowienie to nowa sesja MF; ten
- * sam plik (ten sam SHA-256) MF rozpoznaje jako duplikat (kod 170) i podaje
- * numer oryginału, który zwracamy zamiast błędu.
+ * w kolejce zadań, bo kolejka je zapisuje. Ponowienie to nowa sesja MF.
+ * Bajtowo ten sam plik (ten sam SHA-256) MF rozpoznaje jako duplikat (kod 170)
+ * i podaje numer oryginału, który zwracamy zamiast błędu; plik wygenerowany
+ * od nowa ma inny czas wytworzenia, więc tę ochronę daje dopiero blokada
+ * w `jpk_submissions` (jedna wysyłka w toku) i korekta po przyjętej deklaracji.
  */
 
 import type { KeyObject } from 'node:crypto';

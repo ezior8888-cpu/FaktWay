@@ -62,11 +62,12 @@ export function NadwyzkaPoprzednia({ adres, poprzedni, wartosc }: { adres: strin
   );
 }
 
-function useDaneOsoby() {
+function useDaneOsoby(emailKonta: string | null) {
   const [imie, setImie] = useState('');
   const [nazwisko, setNazwisko] = useState('');
   const [dataUrodzenia, setDataUrodzenia] = useState('');
-  return { imie, setImie, nazwisko, setNazwisko, dataUrodzenia, setDataUrodzenia };
+  const [email, setEmail] = useState(emailKonta ?? '');
+  return { imie, setImie, nazwisko, setNazwisko, dataUrodzenia, setDataUrodzenia, email, setEmail };
 }
 
 function PolaOsoby({ id, osoba, pending, komunikat }: { id: string; osoba: ReturnType<typeof useDaneOsoby>; pending: boolean; komunikat: (pole: string) => React.ReactNode }) {
@@ -99,6 +100,11 @@ function PolaOsoby({ id, osoba, pending, komunikat }: { id: string; osoba: Retur
         />
         {komunikat('dataUrodzenia')}
       </Field>
+      <Field className="sm:col-span-3">
+        <FieldLabel htmlFor={`${id}-email`}>E-mail podatnika w pliku</FieldLabel>
+        <Input id={`${id}-email`} type="email" value={osoba.email} autoComplete="email" disabled={pending} onChange={(e) => osoba.setEmail(e.target.value)} />
+        {komunikat('email')}
+      </Field>
     </div>
   );
 }
@@ -120,13 +126,20 @@ function useBlad() {
 }
 
 export function JpkV7mPobierz({ miesiac, nadwyzka, email }: { miesiac: string; nadwyzka: number | null; email: string | null }) {
-  const osoba = useDaneOsoby();
+  const osoba = useDaneOsoby(email);
   const { setBlad, komunikat, ogolny } = useBlad();
   const [pending, startTransition] = useTransition();
   const pobierz = () =>
     startTransition(async () => {
       setBlad(null);
-      const wynik = await pobierzJpkV7mAction({ miesiac, nadwyzka, imie: osoba.imie, nazwisko: osoba.nazwisko, dataUrodzenia: osoba.dataUrodzenia });
+      const wynik = await pobierzJpkV7mAction({
+        miesiac,
+        nadwyzka,
+        imie: osoba.imie,
+        nazwisko: osoba.nazwisko,
+        dataUrodzenia: osoba.dataUrodzenia,
+        email: osoba.email,
+      });
       if (wynik.success) {
         saveBlob(new Blob([wynik.xml], { type: 'application/xml' }), wynik.nazwa);
         toast.success('Plik JPK_V7M pobrany');
@@ -139,7 +152,6 @@ export function JpkV7mPobierz({ miesiac, nadwyzka, email }: { miesiac: string; n
     <FieldGroup>
       <FieldDescription>
         Imię, nazwisko i data urodzenia trafiają tylko do tego pliku. FaktWay ich nie zapisuje.
-        {email ? ` Adres e-mail podatnika w pliku: ${email}.` : ''}
       </FieldDescription>
       <PolaOsoby id="v7m" osoba={osoba} pending={pending} komunikat={komunikat} />
       {ogolny}
@@ -153,9 +165,23 @@ export function JpkV7mPobierz({ miesiac, nadwyzka, email }: { miesiac: string; n
   );
 }
 
-export function JpkV7mWyslij({ miesiac, nadwyzka, rokKwoty, testowe }: { miesiac: string; nadwyzka: number | null; rokKwoty: number; testowe: boolean }) {
+export function JpkV7mWyslij({
+  miesiac,
+  nadwyzka,
+  rokKwoty,
+  testowe,
+  korekta,
+  email,
+}: {
+  miesiac: string;
+  nadwyzka: number | null;
+  rokKwoty: number;
+  testowe: boolean;
+  korekta: boolean;
+  email: string | null;
+}) {
   const router = useRouter();
-  const osoba = useDaneOsoby();
+  const osoba = useDaneOsoby(email);
   const [kwota, setKwota] = useState('');
   const { setBlad, komunikat, ogolny } = useBlad();
   const [pending, startTransition] = useTransition();
@@ -173,6 +199,7 @@ export function JpkV7mWyslij({ miesiac, nadwyzka, rokKwoty, testowe }: { miesiac
         imie: osoba.imie,
         nazwisko: osoba.nazwisko,
         dataUrodzenia: osoba.dataUrodzenia,
+        email: osoba.email,
         kwotaGr,
       });
       if (wynik.success) {
@@ -189,7 +216,8 @@ export function JpkV7mWyslij({ miesiac, nadwyzka, rokKwoty, testowe }: { miesiac
     <FieldGroup>
       <FieldDescription>
         Dane autoryzujące: imię, nazwisko, data urodzenia i kwota przychodu z zeznania za {rokKwoty} r. FaktWay ich nie zapisuje; są
-        potrzebne przy każdej wysyłce.{testowe ? ' Wysyłka idzie na środowisko testowe MF i nie jest złożeniem deklaracji.' : ''}
+        potrzebne przy każdej wysyłce.{korekta ? ' MF przyjęło już deklarację za ten miesiąc, więc ten plik to korekta.' : ''}
+        {testowe ? ' Wysyłka idzie na środowisko testowe MF i nie jest złożeniem deklaracji.' : ''}
       </FieldDescription>
       <PolaOsoby id="mf" osoba={osoba} pending={pending} komunikat={komunikat} />
       <Field>

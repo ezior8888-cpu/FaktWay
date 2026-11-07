@@ -13,6 +13,8 @@
 import { create } from 'xmlbuilder2';
 import { z } from 'zod';
 
+import { kwotaJpk } from '@/lib/ksiegowosc/jpk-ewp';
+
 export const PODPIS_NAMESPACE = 'http://e-deklaracje.mf.gov.pl/Repozytorium/Definicje/Podpis/';
 
 /** Najwyższa kwota z `totalDigits 16` i dwoma miejscami po przecinku, w groszach. */
@@ -35,11 +37,6 @@ export const daneAutoryzujaceSchema = z.object({
 
 export type DaneAutoryzujace = z.infer<typeof daneAutoryzujaceSchema>;
 
-/** Kwota SIG-2008: grosze jako „1234.56”. */
-function kwota(gr: number): string {
-  return `${Math.floor(gr / 100)}.${String(gr % 100).padStart(2, '0')}`;
-}
-
 /** Spacje jak w `xsd:whiteSpace collapse`: MF porówna imię i nazwisko bez nadmiarowych odstępów. */
 function znaki(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -55,6 +52,6 @@ export function xmlDanychAutoryzujacych(dane: DaneAutoryzujace): string {
   root.ele(PODPIS_NAMESPACE, 'podp:ImiePierwsze').txt(znaki(d.imie)).up();
   root.ele(PODPIS_NAMESPACE, 'podp:Nazwisko').txt(znaki(d.nazwisko)).up();
   root.ele(PODPIS_NAMESPACE, 'podp:DataUrodzenia').txt(d.dataUrodzenia).up();
-  root.ele(PODPIS_NAMESPACE, 'podp:Kwota').txt(kwota(d.kwotaGr)).up();
+  root.ele(PODPIS_NAMESPACE, 'podp:Kwota').txt(kwotaJpk(d.kwotaGr)).up();
   return root.end({ prettyPrint: false });
 }

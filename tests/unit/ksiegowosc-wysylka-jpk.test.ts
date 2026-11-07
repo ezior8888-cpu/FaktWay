@@ -249,8 +249,9 @@ describe('status wysyłki i UPO', () => {
     expect(mf.zadania[0].url).toBe(`https://test-e-dokumenty.mf.gov.pl/api/Storage/Status/${REF}`);
 
     const odmowy = Object.fromEntries([411, 420, 422, 424].map((k) => [k, ocenStatus(k)]));
-    for (const o of Object.values(odmowy)) expect(o).toMatchObject({ stan: 'odrzucona', techniczny: false, tresc: expect.stringMatching(/Plik nie został złożony\.$/) });
-    expect(odmowy[411].tresc).toContain('identyczny dokument');
+    for (const k of [420, 422, 424]) expect(odmowy[k]).toMatchObject({ stan: 'odrzucona', techniczny: false, tresc: expect.stringMatching(/Plik nie został złożony\.$/) });
+    // Duplikat (407, 411): deklaracja jest złożona wcześniejszą wysyłką, więc bez „nie został złożony”.
+    for (const k of [407, 411]) expect(ocenStatus(k)).toMatchObject({ stan: 'odrzucona', techniczny: false, tresc: expect.stringContaining('Deklaracja jest złożona tamtą wysyłką') });
     expect(odmowy[420].tresc).toContain('pełnomocnictwa');
     expect(odmowy[422].tresc).toContain('osobą fizyczną');
     expect(odmowy[424].tresc).toContain('podpis kwalifikowany albo zaufany');
