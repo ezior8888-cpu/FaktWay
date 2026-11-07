@@ -68,6 +68,9 @@ export const REDUCED_MOTION_MEDIA = '(prefers-reduced-motion: reduce)';
  * `style`, zostawiał serwerowe `opacity: 0`). Tutaj pierwszy render klienta
  * zgadza się z serwerem (`false`), a prawdziwa wartość przychodzi zaraz po
  * hydratacji. Wynik końcowy jest ten sam co wcześniej.
+ *
+ * W odróżnieniu od `useReducedMotion` wartość śledzi zmianę ustawienia
+ * systemu w trakcie wizyty (zamierzone: strona od razu słucha nowej opcji).
  */
 export function usePrefersReducedMotion(): boolean {
   return useMediaQuery(REDUCED_MOTION_MEDIA);

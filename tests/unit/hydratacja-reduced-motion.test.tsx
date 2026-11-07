@@ -109,9 +109,12 @@ describe('hydratacja przy prefers-reduced-motion: reduce', () => {
 
   it('strona główna: telefon', async () => {
     const { Phone } = await import('@/app/(home)/_components/phone-section');
-    const { errors } = await hydrateWithReducedMotion(<Phone />);
+    const { errors, container } = await hydrateWithReducedMotion(<Phone />);
 
     expect(errors).toEqual([]);
+    // Stan końcowy jak dotąd: scena gotowa od razu, bez paska autoodtwarzania.
+    expect(container.textContent).toContain('Przyjęta w KSeF');
+    expect(container.querySelector('[role="tab"] .origin-left')).toBeNull();
   });
 
   it('logowanie: karta z krokami faktury', async () => {
@@ -136,7 +139,10 @@ describe('hydratacja przy prefers-reduced-motion: reduce', () => {
     );
 
     expect(errors).toEqual([]);
-    // Treść nie zostaje przezroczysta po stylu z serwera.
-    expect(container.querySelector<HTMLElement>('#tresc')!.parentElement!.style.opacity).not.toBe('0');
+    // Treść nie zostaje przezroczysta po stylu z serwera (pokazuje się w
+    // najbliższej klatce, bez czekania na wejście w ekran).
+    await vi.waitFor(() =>
+      expect(container.querySelector<HTMLElement>('#tresc')!.parentElement!.style.opacity).not.toBe('0'),
+    );
   });
 });

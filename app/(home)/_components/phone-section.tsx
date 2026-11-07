@@ -723,7 +723,9 @@ export function Phone() {
             animate={reducedMotion ? undefined : { y: [0, -10, 0] }}
             transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <PhoneMockup scene={scene.id} step={shownStep} />
+            {/* Przy „ogranicz ruch” makieta montuje się od nowa po hydratacji,
+                od razu w stanie końcowym, bez przejścia z kroku 0. */}
+            <PhoneMockup key={String(reducedMotion)} scene={scene.id} step={shownStep} />
           </motion.div>
 
           <div

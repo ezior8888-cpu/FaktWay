@@ -33,18 +33,18 @@ export function ScrollReveal({
 }: ScrollRevealProps) {
   const reduceMotion = usePrefersReducedMotion();
 
-  if (reduceMotion) {
-    return <div className={className}>{children}</div>;
-  }
-
   const offset = OFFSETS[direction];
 
+  // Ten sam element w obu trybach: „ogranicz ruch” przychodzi po hydratacji,
+  // a zmiana typu elementu zamontowałaby dzieci od nowa. Wtedy treść
+  // pokazuje się od razu, bez czekania na wejście w ekran.
   return (
     <motion.div
       initial={{ opacity: 0, x: offset.x, y: offset.y }}
-      whileInView={{ opacity: 1, x: 0, y: 0 }}
+      animate={reduceMotion ? { opacity: 1, x: 0, y: 0 } : undefined}
+      whileInView={reduceMotion ? undefined : { opacity: 1, x: 0, y: 0 }}
       viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.55, delay, ease: [0.21, 0.45, 0.27, 0.9] }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.55, delay, ease: [0.21, 0.45, 0.27, 0.9] }}
       className={className}
     >
       {children}
