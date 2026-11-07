@@ -11,7 +11,7 @@ import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { brakiOkresu, etykietaStawki, sumyOkresu, type Ewidencja, type WpisReczny } from '@/lib/ksiegowosc/ewidencja';
-import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
+import { czytajEwidencje, KOMUNIKAT_ODCZYT } from '@/lib/ksiegowosc/ewidencja-dane';
 import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
 import { czytajWersjeProfilu, PROFIL_OD_MIN, wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { wersjaMiesiaca } from '@/lib/ksiegowosc/ten-miesiac';
@@ -53,6 +53,7 @@ export default async function EwidencjaPage({
   const miesiac = `${year}-${String(month).padStart(2, '0')}`;
   const tytul = monthLabel(miesiac);
   // Forma z ustawień na ten miesiąc: skala i liniowy prowadzą KPiR (K7), ryczałt ewidencję.
+  // Bez odczytu ustawień formy nie znamy, więc strona pokazuje błąd odczytu, a nie ewidencję.
   const wersje = await czytajWersjeProfilu(ctx.supabase, ctx.tenantId).catch(() => null);
   const forma = wersje ? wersjaMiesiaca(wersje, miesiac)?.forma : undefined;
   const kpir = forma === 'skala' || forma === 'liniowy';
@@ -99,7 +100,7 @@ export default async function EwidencjaPage({
         <h1 className="sr-only">KPiR</h1>
         {naglowek}
         <KpirModulu
-          wynik={await czytajKpir(ctx.supabase, ctx.tenantId, year)}
+          wynik={await czytajKpir(ctx.supabase, ctx.tenantId, year, { wersje: wersje ?? undefined })}
           od={periodStart}
           doDnia={periodEnd}
           tytul={tytul}
@@ -113,7 +114,7 @@ export default async function EwidencjaPage({
     );
   }
 
-  const wynik = await czytajEwidencje(ctx.supabase, ctx.tenantId, year);
+  const wynik = wersje === null ? { ok: false as const, komunikat: KOMUNIKAT_ODCZYT } : await czytajEwidencje(ctx.supabase, ctx.tenantId, year, { wersje });
 
   return (
     <div className="ff-tab-panel flex flex-1 flex-col gap-6">

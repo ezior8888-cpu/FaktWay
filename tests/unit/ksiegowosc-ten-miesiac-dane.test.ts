@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   wiersze: [] as Record<string, unknown>[],
   filtry: [] as string[],
   ewidencja: null as unknown,
+  kpir: null as null | ((rok: number) => unknown),
+  kpirLata: [] as number[],
+  kpirWersje: [] as unknown[],
 }));
 
 vi.mock('@/lib/ksiegowosc/parametry', async (orig) => {
@@ -35,6 +38,13 @@ vi.mock('@/lib/ksiegowosc/parametry', async (orig) => {
   };
 });
 vi.mock('@/lib/ksiegowosc/ewidencja-dane', () => ({ czytajEwidencje: async () => mocks.ewidencja }));
+vi.mock('@/lib/ksiegowosc/kpir-dane', () => ({
+  czytajKpir: async (_c: unknown, _t: string, rok: number, opcje: { wersje?: unknown[] } = {}) => {
+    mocks.kpirLata.push(rok);
+    mocks.kpirWersje.push(opcje.wersje);
+    return mocks.kpir?.(rok);
+  },
+}));
 // Od K7 odczyt bierze wersje profilu osobno (forma decyduje: ewidencja czy KPiR); te same co w atrapie ewidencji.
 vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/profil')>()),
@@ -42,6 +52,7 @@ vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
 }));
 
 const { czytajRozliczenia, czytajTenMiesiac } = await import('@/lib/ksiegowosc/ten-miesiac-dane');
+const { zbudujKpir } = await import('@/lib/ksiegowosc/kpir');
 
 // Preferencyjny ZUS: jego liczby na 2027 r. są znane (pełny czeka na prognozowane przeciętne wynagrodzenie).
 const PROFIL: WersjaProfilu = {
@@ -112,6 +123,9 @@ beforeEach(() => {
   mocks.wiersze = [];
   mocks.filtry = [];
   mocks.ewidencja = { ok: true, ewidencja: ewidencja(2027, [wiersz('2027-01-20', 1_500_000)]), wersje: [PROFIL], wpisy: [] };
+  mocks.kpir = null;
+  mocks.kpirLata = [];
+  mocks.kpirWersje = [];
 });
 
 describe('odczyt rozliczeń', () => {
@@ -170,5 +184,67 @@ describe('skrót wersji (D6)', () => {
     const skroty = (d: typeof przed) => d.pozycje.map((p) => (p.ok ? p.wejsciaHash : null));
     expect(skroty(po)).toEqual(skroty(przed));
     expect(skroty(przed).every((s) => typeof s === 'string' && /^[0-9a-f]{64}$/.test(s))).toBe(true);
+  });
+});
+
+describe('odczyt przy skali i liniowym (K7)', () => {
+  const SKALA: WersjaProfilu = { ...PROFIL, forma: 'skala', stawkaDomyslna: null };
+  // Przychód 10 000 zł 15. dnia każdego miesiąca (wpis ręczny w kolumnie 7).
+  const kpirRoku = (rok: number) => {
+    const wpisy = Array.from({ length: 12 }, (_, i) => ({
+      id: `w-${rok}-${i + 1}`,
+      data: `${rok}-${String(i + 1).padStart(2, '0')}-15`,
+      dokument: `RK/${i + 1}`,
+      kolumna: 'k7' as const,
+      kwotaGr: 1_000_000,
+      opis: null,
+    }));
+    return { ok: true, kpir: zbudujKpir({ rok, faktury: [], koszty: [], wpisy, wersje: [SKALA], kursy: new Map() }), wpisy: [], wersje: [SKALA] };
+  };
+
+  beforeEach(() => {
+    mocks.ewidencja = { ok: true, ewidencja: ewidencja(2027, []), wersje: [SKALA], wpisy: [] };
+    mocks.kpir = kpirRoku;
+  });
+
+  it('styczeń: KPiR roku i grudnia poprzedniego roku, z wersjami profilu z odczytu; zaliczka, składki i zdrowotna od dochodu z grudnia', async () => {
+    const dane = await czytajTenMiesiac(client, 't1', '2027-01');
+    if (!dane.ok) throw new Error(dane.braki.join(' '));
+    expect(mocks.kpirLata).toEqual([2027, 2026]);
+    expect(mocks.kpirWersje).toEqual([[SKALA], [SKALA]]);
+    expect(dane.pozycje.map((p) => [p.rodzaj, p.ok])).toEqual([
+      ['pit', true],
+      ['zus_spoleczne', true],
+      ['zdrowotna', true],
+    ]);
+    // 9 % z 10 000 zł dochodu grudnia 2026 r. (bez zapłaconych składek).
+    expect(dane.wynik.zdrowotnaOdDochodu).toMatchObject({ dochodGr: 1_000_000, skladkaGr: 90_000 });
+    expect(dane.wynik.pit).toMatchObject({ dochodNarastajacoGr: 1_000_000 });
+  });
+
+  it('bramka D7 według formy: niesprawdzona skala zabiera tylko zaliczkę, niesprawdzony ryczałt nic', async () => {
+    mocks.brakujace = (_rok, sekcje) =>
+      sekcje.includes('skala') ? [{ sekcja: 'skala', powod: 'niesprawdzone', komunikat: 'Skala czeka na sprawdzenie.', operator: '' }] : [];
+    const dane = await czytajTenMiesiac(client, 't1', '2027-02');
+    if (!dane.ok) throw new Error(dane.braki.join(' '));
+    expect(dane.pozycje.find((p) => p.rodzaj === 'pit')).toMatchObject({ ok: false, brak: 'Skala czeka na sprawdzenie.' });
+    expect(dane.wynik.pit).toBeNull();
+    expect(dane.pozycje.filter((p) => p.ok).map((p) => p.rodzaj)).toEqual(['zus_spoleczne', 'zdrowotna']);
+    expect(mocks.kpirLata).toEqual([2027]);
+
+    mocks.brakujace = (_rok, sekcje) =>
+      sekcje.includes('ryczalt') ? [{ sekcja: 'ryczalt', powod: 'niesprawdzone', komunikat: 'Ryczałt czeka.', operator: '' }] : [];
+    const zRyczaltem = await czytajTenMiesiac(client, 't1', '2027-02');
+    if (!zRyczaltem.ok) throw new Error(zRyczaltem.braki.join(' '));
+    expect(zRyczaltem.pozycje.every((p) => p.ok)).toBe(true);
+  });
+
+  it('styczeń, KPiR poprzedniego roku z brakiem odczytu: zdrowotna podaje przyczynę i wyjście, zaliczka się liczy', async () => {
+    const komunikat = 'Część kosztów z KSeF jest w walucie obcej i czeka na przegląd kursu, więc KPiR teraz nie liczymy. Przegląd jest w Kosztach.';
+    mocks.kpir = (rok) => (rok === 2026 ? { ok: false, komunikat } : kpirRoku(rok));
+    const dane = await czytajTenMiesiac(client, 't1', '2027-01');
+    if (!dane.ok) throw new Error(dane.braki.join(' '));
+    expect(dane.pozycje.find((p) => p.rodzaj === 'zdrowotna')).toMatchObject({ ok: false, brak: expect.stringContaining(komunikat) });
+    expect(dane.pozycje.find((p) => p.rodzaj === 'pit')).toMatchObject({ ok: true });
   });
 });

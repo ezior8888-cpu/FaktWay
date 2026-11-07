@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   wersje: [] as unknown[],
   kpir: null as unknown,
   wstawione: [] as Record<string, unknown>[],
+  usuwany: null as Record<string, unknown> | null,
+  kolumnyUsuniecia: '',
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
@@ -57,6 +59,16 @@ const supabase = {
   from: (tabela: string) => {
     if (tabela === 'tenants') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { nip: '1234567890' }, error: null }) }) }) };
     return {
+      delete: () => ({
+        eq: () => ({
+          eq: () => ({
+            select: async (kolumny: string) => {
+              mocks.kolumnyUsuniecia = kolumny;
+              return { data: mocks.usuwany ? [mocks.usuwany] : [], error: null };
+            },
+          }),
+        }),
+      }),
       insert: (w: Record<string, unknown>) => {
         mocks.wstawione.push(w);
         return {
@@ -69,7 +81,7 @@ const supabase = {
   },
 };
 
-const { dodajWpisKpirAction, pobierzJpkPkpirAction } = await import('@/app/actions/ksiegowosc-ewidencja');
+const { dodajWpisKpirAction, pobierzJpkPkpirAction, usunWpisRecznyAction } = await import('@/app/actions/ksiegowosc-ewidencja');
 
 const WPIS = { rodzaj: 'inny' as const, dataPrzychodu: '2026-10-15', dokument: 'NOTA/1', kwota: '123,45', kolumna: 'k8' as const, opis: 'Odsetki' };
 const OSOBA = { imie: 'Jan', nazwisko: 'Testowy', dataUrodzenia: '1980-01-01' };
@@ -104,6 +116,8 @@ beforeEach(() => {
   mocks.audit.mockReset();
   mocks.wersje = [SKALA];
   mocks.wstawione = [];
+  mocks.usuwany = null;
+  mocks.kolumnyUsuniecia = '';
 });
 
 describe('wpis ręczny KPiR', () => {
@@ -128,6 +142,28 @@ describe('wpis ręczny KPiR', () => {
     expect(await dodajWpisKpirAction(WPIS)).toMatchObject({ success: false, pole: 'dataPrzychodu', error: expect.stringContaining('Ustawienia podatkowe') });
     expect(await dodajWpisKpirAction({ ...WPIS, kolumna: '' as never })).toMatchObject({ success: false, pole: 'kolumna' });
     expect(mocks.wstawione).toEqual([]);
+  });
+});
+
+describe('usunięcie wpisu ręcznego', () => {
+  const ID = '00171171-0000-4000-8000-000000000009';
+  const wiersz = { id: ID, rodzaj: 'inny', data_przychodu: '2026-10-15', data_wpisu: '2026-10-16', dokument: 'NOTA/1', kwota_gr: 12_345, opis: 'Odsetki' };
+
+  it('wpis KPiR: audyt ma kolumnę KPiR usuniętego wpisu (przychód albo koszt)', async () => {
+    mocks.usuwany = { ...wiersz, stawka_pb: null, kolumna: 'k8' };
+    expect(await usunWpisRecznyAction(ID)).toEqual({ success: true });
+    expect(mocks.kolumnyUsuniecia).toBe('*');
+    expect(mocks.audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'ledger_entry.deleted', metadata: { wpis: expect.objectContaining({ dokument: 'NOTA/1', kolumna: 'k8', kwotaGr: 12_345 }) } }),
+    );
+  });
+
+  it('wpis ewidencji ryczałtu: audyt jak dotąd, ze stawką i bez kolumny', async () => {
+    mocks.usuwany = { ...wiersz, rodzaj: 'raport_kasy', stawka_pb: 1200, kolumna: null };
+    expect(await usunWpisRecznyAction(ID)).toEqual({ success: true });
+    const metadata = mocks.audit.mock.calls[0][0].metadata as { wpis: Record<string, unknown> };
+    expect(metadata.wpis).toMatchObject({ stawkaPb: 1200, kwotaGr: 12_345 });
+    expect(metadata.wpis).not.toHaveProperty('kolumna');
   });
 });
 

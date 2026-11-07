@@ -54,8 +54,11 @@ w programie, która zmieni choćby jeden wynik, nie przejdzie do wydania.
    (ryczałt) albo dochód (skala, liniowy). Ryczałt: czego nie da się odliczyć,
    przechodzi na kolejne miesiące roku. Skala i liniowy: składki społeczne
    odliczane od dochodu, nie w kosztach. Liniowy: składka zdrowotna też
-   odliczana od dochodu, nie w kosztach. Jeśli przepisy każą inaczej, prosimy
-   o uwagę.
+   odliczana od dochodu, nie w kosztach. Fundusz Pracy i Fundusz
+   Solidarnościowy z zapłaconych składek są przy skali i liniowym kosztem,
+   a kolumna „Koszty w KPiR” już je zawiera: nie dolicza się ich osobno
+   (FaktWay sam ich do KPiR nie dopisuje). Jeśli przepisy każą inaczej,
+   prosimy o uwagę.
 6. Etap ZUS i chorobowe podaje przypadek. Składka wypadkowa jak dla płatnika
    zgłaszającego do 9 osób.
 7. Bez innych odliczeń i ulg (IP Box, B+R, internet, dzieci, darowizny), bez

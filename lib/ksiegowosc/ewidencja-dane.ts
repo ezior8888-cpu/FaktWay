@@ -47,6 +47,8 @@ export type WynikEwidencji =
 export interface OpcjeOdczytu {
   /** Kurs NBP sprzed dnia przychodu; domyślnie API NBP (`nbpRateForCost`). */
   kurs?: (waluta: string, dzien: string) => Promise<RateLookup>;
+  /** Wersje profilu, jeśli wołający już je przeczytał (bez drugiego zapytania). */
+  wersje?: readonly WersjaProfilu[];
 }
 
 export const KOMUNIKAT_SRODOWISKO =
@@ -295,7 +297,10 @@ export async function czytajEwidencje(
   const faktury = await czytajFakturyRoku(client, tenantId, rok, opcje);
   if (!faktury.ok) return faktury;
   try {
-    const [wersje, wpisy] = await Promise.all([czytajWersjeProfilu(client, tenantId), czytajWpisyReczne(client, tenantId, `${rok}-01-01`, `${rok}-12-31`)]);
+    const [wersje, wpisy] = await Promise.all([
+      opcje.wersje ? [...opcje.wersje] : czytajWersjeProfilu(client, tenantId),
+      czytajWpisyReczne(client, tenantId, `${rok}-01-01`, `${rok}-12-31`),
+    ]);
     return {
       ok: true,
       ewidencja: zbudujEwidencje({ rok, faktury: faktury.faktury, wpisy, wersje, kursy: faktury.kursy, najem: progNajmuZParametrow(rok) }),

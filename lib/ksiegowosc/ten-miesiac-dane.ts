@@ -188,7 +188,7 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   }
   if (d7.size === sekcje.length) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };
 
-  const ksiegi = await czytajKsiegi(client, tenantId, miesiac, forma);
+  const ksiegi = await czytajKsiegi(client, tenantId, miesiac, forma, wersjeOdczyt.w);
   if (!ksiegi.ok) return { ok: false, braki: [ksiegi.komunikat], rozliczenia: tegoMiesiaca };
 
   const platnosci: Platnosc[] = odczyt.r
@@ -233,25 +233,36 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
 /**
  * Księga miesiąca według formy: ewidencja przychodów przy ryczałcie (K3), KPiR
  * przy skali i liniowym (K7); za styczeń także KPiR roku poprzedniego, bo
- * składka zdrowotna liczy się od dochodu z grudnia.
+ * składka zdrowotna liczy się od dochodu z grudnia. Wersje profilu są już
+ * przeczytane, więc odczyty ksiąg ich nie powtarzają.
  */
 async function czytajKsiegi(
   client: SupabaseClient,
   tenantId: string,
   miesiac: string,
   forma: WersjaProfilu['forma'],
+  wersje: readonly WersjaProfilu[],
 ): Promise<{ ok: true; wejscie: Pick<Parameters<typeof tenMiesiac>[0], 'ewidencja' | 'kpir'> } | { ok: false; komunikat: string }> {
   const rok = Number(miesiac.slice(0, 4));
   if (forma === 'ryczalt') {
-    const e = await czytajEwidencje(client, tenantId, rok);
+    const e = await czytajEwidencje(client, tenantId, rok, { wersje });
     return e.ok ? { ok: true, wejscie: { ewidencja: e.ewidencja } } : e;
   }
   const [biezacy, poprzedni] = await Promise.all([
-    czytajKpir(client, tenantId, rok),
-    miesiac.endsWith('-01') ? czytajKpir(client, tenantId, rok - 1) : null,
+    czytajKpir(client, tenantId, rok, { wersje }),
+    miesiac.endsWith('-01') ? czytajKpir(client, tenantId, rok - 1, { wersje }) : null,
   ]);
   if (!biezacy.ok) return biezacy;
-  return { ok: true, wejscie: { kpir: { rok: biezacy.kpir, poprzedni: poprzedni?.ok ? poprzedni.kpir : null } } };
+  return {
+    ok: true,
+    wejscie: {
+      kpir: {
+        rok: biezacy.kpir,
+        poprzedni: poprzedni?.ok ? poprzedni.kpir : null,
+        ...(poprzedni && !poprzedni.ok ? { brakPoprzedniego: poprzedni.komunikat } : {}),
+      },
+    },
+  };
 }
 
 /** Najnowsza wersja każdego rodzaju (aktualne rozliczenie). */

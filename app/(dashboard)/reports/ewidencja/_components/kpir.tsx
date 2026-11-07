@@ -172,8 +172,10 @@ function WpisyKpir({ wpisy, domyslnaData, canEdit }: { wpisy: (WpisKpir & { rodz
         <div>
           <h2 className="text-sm font-medium">Wpisy ręczne w KPiR</h2>
           <p className="text-muted-foreground text-xs">
-            Przychody i koszty bez faktury w KSeF ani dokumentu w Kosztach, np. sprzedaż z kasy rejestrującej. Poprawka to usunięcie wpisu i dodanie
-            nowego.
+            Przychody i koszty bez faktury w KSeF ani dokumentu w Kosztach, np. sprzedaż z kasy rejestrującej. Fundusz Pracy i Fundusz
+            Solidarnościowy z zapłaconych składek ZUS są kosztem w kolumnie 13 i trafiają do KPiR jako wpis ręczny. Składek społecznych (a przy
+            liniowym także zdrowotnej) KPiR nie zawiera: zaliczka PIT odlicza od dochodu te oznaczone jako zapłacone w „Ten miesiąc”. Poprawka to
+            usunięcie wpisu i dodanie nowego.
           </p>
         </div>
         {wpisy.length > 0 ? (

@@ -24,7 +24,7 @@ const SKALA: WersjaProfilu = {
   najem: false,
 };
 
-const mocks = vi.hoisted(() => ({ rola: 'owner', wersje: [] as unknown[], kpir: null as unknown, ewidencja: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rola: 'owner', wersje: [] as unknown[] | null, kpir: null as unknown, ewidencja: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -35,10 +35,16 @@ vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: async () => ({ s
 vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: true }) }));
 vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/profil')>()),
-  czytajWersjeProfilu: async () => mocks.wersje,
+  czytajWersjeProfilu: async () => {
+    if (mocks.wersje === null) throw new Error('odczyt ustawień');
+    return mocks.wersje;
+  },
 }));
 vi.mock('@/lib/ksiegowosc/kpir-dane', () => ({ czytajKpir: async () => mocks.kpir }));
-vi.mock('@/lib/ksiegowosc/ewidencja-dane', () => ({ czytajEwidencje: mocks.ewidencja }));
+vi.mock('@/lib/ksiegowosc/ewidencja-dane', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/ewidencja-dane')>()),
+  czytajEwidencje: mocks.ewidencja,
+}));
 vi.mock('@/lib/format/warsaw-date', async (orig) => ({
   ...(await orig<typeof import('@/lib/format/warsaw-date')>()),
   todayInWarsaw: () => '2026-11-05',
@@ -100,6 +106,9 @@ describe('KPiR w zakładce „Ewidencja”', () => {
     expect(html).toContain('Klient Sp. z o.o.');
     expect(html).toContain('1234567890-20260310-0100001AF629-AF');
     expect(html).toContain('Pozostałe wydatki (13)');
+    // Fundusz Pracy to koszt w KPiR, składki społeczne odlicza zaliczka (bez podwójnego odliczenia).
+    expect(html).toContain('Fundusz Pracy i Fundusz Solidarnościowy z zapłaconych składek ZUS są kosztem w kolumnie 13');
+    expect(html).toContain('Składek społecznych (a przy liniowym także zdrowotnej) KPiR nie zawiera');
     // Przychód 10 000 + 50 zł, koszty 300 zł, dochód 9 750 zł.
     expect(html).toMatch(/Razem w miesiącu.*10\s050,00 zł/);
     expect(html).toMatch(/Dochód w miesiącu.*9750,00 zł/);
@@ -123,5 +132,13 @@ describe('KPiR w zakładce „Ewidencja”', () => {
     const html = await strona();
     expect(html).toContain('Wpisy dodaje i usuwa właściciel albo administrator firmy.');
     expect(html).toContain('Plik pobiera właściciel, administrator albo księgowa firmy.');
+  });
+
+  it('błąd odczytu ustawień podatkowych: komunikat zamiast ewidencji ryczałtu dla firmy, której formy nie znamy', async () => {
+    mocks.wersje = null;
+    const html = await strona();
+    expect(html).toContain('Ewidencja jest chwilowo niedostępna');
+    expect(html).toContain('Nie udało się odczytać danych ewidencji');
+    expect(mocks.ewidencja).not.toHaveBeenCalled();
   });
 });

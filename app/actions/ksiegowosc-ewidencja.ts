@@ -145,9 +145,10 @@ export async function usunWpisRecznyAction(id: string): Promise<WynikWpisu> {
     .delete()
     .eq('id', id)
     .eq('tenant_id', ctx.tenantId)
-    .select(KOLUMNY_WPISU);
+    // Cały wiersz: wpis KPiR (K7, 00171) ma kolumnę zamiast stawki, a audyt pokazuje, co usunięto.
+    .select('*');
   if (error) return { success: false, error: BLAD_USUNIECIA };
-  const usuniety = (data ?? [])[0];
+  const usuniety = (data ?? [])[0] as (Parameters<typeof zWierszaWpisu>[0] & { kolumna?: string | null }) | undefined;
   if (!usuniety) return { success: false, error: 'Tego wpisu już nie ma na liście.' };
 
   await logAudit({
@@ -156,7 +157,7 @@ export async function usunWpisRecznyAction(id: string): Promise<WynikWpisu> {
     userId: ctx.user.id,
     entityType: 'ledger_manual_entry',
     entityId: id,
-    metadata: { wpis: zWierszaWpisu(usuniety as Parameters<typeof zWierszaWpisu>[0]) },
+    metadata: { wpis: { ...zWierszaWpisu(usuniety), ...(usuniety.kolumna ? { kolumna: usuniety.kolumna } : {}) } },
   });
   revalidatePath('/reports/ewidencja');
   return { success: true };

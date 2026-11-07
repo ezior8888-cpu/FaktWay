@@ -105,8 +105,11 @@ export interface WejscieMiesiaca {
   miesiac: string;
   /** Ewidencja roku miesiąca (K3); potrzebna tylko przy ryczałcie. */
   ewidencja?: Ewidencja;
-  /** Skala i liniowy (K7): KPiR roku miesiąca i (dla stycznia) roku poprzedniego. */
-  kpir?: { rok: Kpir; poprzedni: Kpir | null };
+  /**
+   * Skala i liniowy (K7): KPiR roku miesiąca i (dla stycznia) roku poprzedniego;
+   * `brakPoprzedniego` to komunikat odczytu, gdy KPiR roku poprzedniego się nie odczytała.
+   */
+  kpir?: { rok: Kpir; poprzedni: Kpir | null; brakPoprzedniego?: string };
   wersje: readonly WersjaProfilu[];
   /** Wszystkie zapłacone wersje rozliczeń do tego miesiąca (odliczenia liczą się po dniu zapłaty). */
   platnosci: readonly Platnosc[];
@@ -379,7 +382,15 @@ function miesiacKpir(
       };
     }
     const ksiega = nr === 1 ? (kpir?.poprzedni ?? null) : (kpir?.rok ?? null);
-    if (!ksiega) return { ok: false, brak: `Nie udało się odczytać KPiR za ${monthLabel(poprzedni)}, więc składki zdrowotnej nie liczymy.` };
+    if (!ksiega) {
+      const powod = nr === 1 ? kpir?.brakPoprzedniego : undefined;
+      return {
+        ok: false,
+        brak: powod
+          ? `Składka zdrowotna liczy się od dochodu za ${monthLabel(poprzedni)}. ${powod}`
+          : `Nie udało się odczytać KPiR za ${monthLabel(poprzedni)}, więc składki zdrowotnej nie liczymy.`,
+      };
+    }
     const g = monthRange(poprzedni);
     if (brakiKpirOkresu(ksiega, g.from, g.to).length > 0) return { ok: false, brak: brakKpir([poprzedni]) };
     const sumy = sumyKpir(wierszeKpirOkresu(ksiega, g.from, g.to));
