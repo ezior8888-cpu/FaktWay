@@ -240,8 +240,6 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
 
 **Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
-starą drogą, plugin `design` w aplikacji. Sesja: etap 3 dalej osobnymi
-sesjami: 3.5 (błąd krytyczny zakłada issue) i 3.6 (sprzątanie `.next`
-w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
-(najpierw sprawdzić, czy opiera się na #411 Igora). 3.7 jako osobny,
-długi tor.
+starą drogą, plugin `design` w aplikacji, 3 kroki instalacji restore-drill
+z opisu #436 (check Healthchecks, `DRILL_HC_URL`, skrypt instalacji).
+Sesja: 3.3 (raport poranny, `launchd`); 3.7 jako osobny, długi tor.
