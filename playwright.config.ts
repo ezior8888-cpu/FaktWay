@@ -10,6 +10,11 @@ const IS_CI = Boolean(process.env.CI);
 // Testy wizualne mają własne dwa projekty (niżej), reszta projektów ich nie
 // uruchamia: każdy projekt to osobny komplet wzorcowych zrzutów.
 const WIZUALNE = /wizualne\.spec\.ts/;
+// Przebieg wizualny (`pnpm test:wizualne`, `--project=wizualne-*`) nie bierze
+// cudzego serwera z portu: tylko serwer postawiony tutaj liczy limity prób
+// w pamięci (env niżej), a obcy `pnpm dev` liczyłby logowania we wspólnym
+// Redisie i po 5 przebiegach w 15 minut zablokował konto dev.
+const WIZUALNE_W_PRZEBIEGU = process.argv.some((arg) => arg.includes('wizualne'));
 
 export default defineConfig({
   testDir: './e2e',
@@ -109,7 +114,7 @@ export default defineConfig({
     : {
         command: `pnpm dev --port ${PORT}`,
         url: BASE_URL,
-        reuseExistingServer: !IS_CI,
+        reuseExistingServer: !IS_CI && !WIZUALNE_W_PRZEBIEGU,
         timeout: 180_000,
         stdout: 'ignore',
         stderr: 'pipe',
