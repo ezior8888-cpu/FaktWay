@@ -235,11 +235,11 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.1 build obrazów w Actions, wdrożenie przez API Coolify | #425 | workflow tylko ręczny; blokada migracji przez `/api/ops/deploy-state` (token), Coolify przez Tailscale; nic nie działa przed 10 krokami Bartosza z runbooka `wdrozenie-produkcji.md` (sekrety, zmienne, Tailscale, Coolify z obrazu) |
 | 07.11.2026 | 3.2 testy wizualne + 4.3 axe | #426 | `pnpm test:wizualne`: 6 ekranów, iPhone 13 (WebKit) i desktop 1440 (Chromium), 11 wzorców z Maca; 2 przebiegi bez różnic, celowe `gap-1` złapane (1949 i 2300 px); axe: 0 `critical`, `serious` kontrast i `aria-hidden-focus` (raport). Linux/CI niezrobione: rekomendacja kontener `playwright run-server` + konto testowe + `ubuntu-24.04-arm` (3.2b); znalezione: błąd hydratacji strony głównej przy „ogranicz ruch” (`hero-preview.tsx`) |
 | 07.11.2026 | 2.12 uprawnienia (zgoda Bartosza), archiwizacja sesji po zamknięciu PR (ustawienie aplikacji, zgoda) | #429 | etap 2 zamknięty |
-| 07.11.2026 | 3.5 alarm krytyczny → issue | #432 | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; czeka na etykietę `alert-produkcji` i token `GITHUB_ALERT_ISSUES_TOKEN` w workerze (opis PR) |
+| 07.11.2026 | 3.5 alarm krytyczny → issue | #432 (scalony w #437) | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; etykietę `alert-produkcji` założyła sesja, token `GITHUB_ALERT_ISSUES_TOKEN` dodał Bartosz w workerze (07.11); działa od wdrożenia workera |
 
 **Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
-starą drogą, plugin `design` w aplikacji. Sesja: etap 3 dalej osobnymi
-sesjami: 3.5 (błąd krytyczny zakłada issue) i 3.6 (sprzątanie `.next`
-w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
+starą drogą, plugin `design` w aplikacji, wdrożenie workera z 3.5 (#432
+w #437; etykieta i token gotowe). Sesja: etap 3 dalej osobnymi
+sesjami: 3.6 (sprzątanie `.next` w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
 (najpierw sprawdzić, czy opiera się na #411 Igora). 3.7 jako osobny,
 długi tor.
