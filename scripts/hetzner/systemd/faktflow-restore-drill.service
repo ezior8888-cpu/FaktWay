@@ -1,0 +1,15 @@
+# Plan usprawnień 3.4: cotygodniowa próba odtworzenia zrzutu na db-1.
+# Instalacja: scripts/ops/zainstaluj-restore-drill.sh. Log: journalctl -u faktflow-restore-drill
+[Unit]
+Description=FaktWay: próba odtworzenia najnowszego zrzutu bazy
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/faktflow-restore-drill-tydzien
+# Produkcja ma pierwszeństwo. Nice i IOSchedulingClass dotyczą wrappera (sumy,
+# docker cp); kontener próby ma własne limity z restore-drill.sh: 1 CPU, 1 GB.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=45min
