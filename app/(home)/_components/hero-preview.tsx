@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion, useInView, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useInView } from 'framer-motion';
 import {
   RiBarChartBoxLine,
   RiCheckLine,
@@ -16,6 +16,7 @@ import {
 } from '@remixicon/react';
 
 import { cn } from '@/lib/utils';
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 
 import { FaktWayLogo } from '@/components/brand/faktway-logo';
 import { EASE_OUT } from '@/components/site/motion';
@@ -98,7 +99,7 @@ function Row({ row, status }: { row: (typeof ROWS)[number]; status: Status }) {
 export function HeroPreview() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { amount: 0.3 });
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = usePrefersReducedMotion();
   const [phase, setPhase] = useState(0);
   const [cycle, setCycle] = useState(0);
 
@@ -183,7 +184,9 @@ export function HeroPreview() {
                     <motion.div
                       key={`nowa-${cycle}`}
                       className="overflow-hidden bg-primary/[0.04]"
-                      initial={{ height: 0, opacity: 0 }}
+                      // Przy „ogranicz ruch” wiersz pojawia się tuż po hydratacji;
+                      // bez rozwijania, jak przy pierwszym renderze.
+                      initial={reducedMotion ? false : { height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.45, ease: EASE_OUT }}
