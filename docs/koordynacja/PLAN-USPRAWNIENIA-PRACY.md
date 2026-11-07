@@ -186,7 +186,7 @@ nadpisanie historii i push prosto na `main`):
 }
 ```
 
-Po „tak” Bartosz wkleja to sam albo pozwala sesji zapisać (zgoda w czacie).
+Zgoda Bartosza w czacie 07.11.2026 („uprawnienia: tak”); zapisane w `.claude/settings.json`.
 
 ## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
 
@@ -230,9 +230,13 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | Scalenie #418–#420 (polecenie Bartosza) | #422 | `bbdf4e2e`; przy składaniu CodeQL zatrzymał #418 (`js/file-system-race` w teście), poprawione; auto-merge zablokowany przez tryb auto, scalił Bartosz |
 | 07.11.2026 | 2.7 typy bazy w CI | #423 | job RLS: 1288 pozycji, 0 błędów (brak dryfu produkcji), 13 ostrzeżeń: 00167 bez typów z produkcji i stałe `invoices.ksef_upo_expected` |
 | 07.11.2026 | 2.8 Vitest w 3 częściach | #424 | ta sama wymagana kontrola; lokalnie 57/71/83 s zamiast 180 s, suma = pełny zestaw |
+| 07.11.2026 | #423 i #424 scalone (polecenie Bartosza) | — | `0dadc429`, `a42d7db0`; CI na `main` ok. 3,5 min zamiast 9 |
+| 07.11.2026 | Etap 3: sesje 3.1 i 3.2 | #425, #426, #427 | 3.1 build obrazów w CI (10 kroków Bartosza w opisie #425); 3.2 testy wizualne, przy okazji błąd hydratacji strony głównej przy „ogranicz ruch” (#427) |
+| 07.11.2026 | 2.12 uprawnienia (zgoda Bartosza), archiwizacja sesji po zamknięciu PR (ustawienie aplikacji, zgoda) | #UPRAWNIENIA | etap 2 zamknięty |
 
-**Następny krok:** Bartosz: zgoda na uprawnienia (5.3, jedyny otwarty
-punkt etapu 2), plugin `design` w aplikacji, scalenie #423 i #424,
-wgranie 00167 i typy z produkcji (ostrzeżenia z #423). Potem etap 3
-(3.1–3.7) jako osobne sesje, każda z pełnym briefem; najpierw 3.1 (build
-obrazów w CI) i 3.2 (testy wizualne).
+**Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
+starą drogą, plugin `design` w aplikacji. Sesja: etap 3 dalej osobnymi
+sesjami: 3.5 (błąd krytyczny zakłada issue) i 3.6 (sprzątanie `.next`
+w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
+(najpierw sprawdzić, czy opiera się na #411 Igora). 3.7 jako osobny,
+długi tor.
