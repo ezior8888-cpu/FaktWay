@@ -124,6 +124,7 @@ function createHarness() {
   const drillConfig: Record<string, string> = { DRILL_HC_URL: HC, DRILL_SCRIPT: posix(drill), LOCK_FILE: posix(join(dir, 'lock')) };
 
   const env = (extra: Record<string, string>) => ({
+    NODE_ENV: 'test' as const,
     PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
     HOME: dir,
     LANG: 'C.UTF-8',
