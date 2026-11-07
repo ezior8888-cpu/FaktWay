@@ -230,6 +230,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | Scalenie #418–#420 (polecenie Bartosza) | #422 | `bbdf4e2e`; przy składaniu CodeQL zatrzymał #418 (`js/file-system-race` w teście), poprawione; auto-merge zablokowany przez tryb auto, scalił Bartosz |
 | 07.11.2026 | 2.7 typy bazy w CI | #423 | job RLS: 1288 pozycji, 0 błędów (brak dryfu produkcji), 13 ostrzeżeń: 00167 bez typów z produkcji i stałe `invoices.ksef_upo_expected` |
 | 07.11.2026 | 2.8 Vitest w 3 częściach | #424 | ta sama wymagana kontrola; lokalnie 57/71/83 s zamiast 180 s, suma = pełny zestaw |
+| 07.11.2026 | 3.1 build obrazów w Actions, wdrożenie przez API Coolify | #425 | workflow tylko ręczny; blokada migracji przez `/api/ops/deploy-state` (token), Coolify przez Tailscale; nic nie działa przed 10 krokami Bartosza z runbooka `wdrozenie-produkcji.md` (sekrety, zmienne, Tailscale, Coolify z obrazu) |
 
 **Następny krok:** Bartosz: zgoda na uprawnienia (5.3, jedyny otwarty
 punkt etapu 2), plugin `design` w aplikacji, scalenie #423 i #424,
