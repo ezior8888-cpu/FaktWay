@@ -72,9 +72,13 @@ export interface FetchedInvoiceData {
 
 export async function fetchInvoicesForExport(
   params: FetchInvoicesParams,
+  /**
+   * Zadania eksportu czytają kluczem serwisowym; strona VAT modułu księgowości
+   * (K6) podaje klienta z sesji, więc odczyt idzie przez RLS firmy.
+   */
+  supabase: ReturnType<typeof createAdminClient> = createAdminClient(),
 ): Promise<FetchedInvoiceData> {
   const environment = requireConfiguredKsefEnvironment();
-  const supabase = createAdminClient();
 
   const needIssued =
     params.direction === 'issued' || params.direction === 'both';

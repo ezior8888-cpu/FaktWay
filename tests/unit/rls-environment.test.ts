@@ -93,6 +93,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-wpisy.test.ts',
       'tests/rls-ksiegowosc-rozliczenia.test.ts',
       'tests/rls-ksiegowosc-powiadomienia.test.ts',
+      'tests/rls-ksiegowosc-jpk.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

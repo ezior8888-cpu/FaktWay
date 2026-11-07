@@ -1520,6 +1520,12 @@ oprócz ostatniej:
   styczeń 2026 r. program nie liczy (brak parametrów 2025 r.), więc
   w historii ich nie odlicza; jeśli wynik księgowej je uwzględnia, różnica
   wyjdzie w `zdrowotna.przychod_narastajaco_gr` za grudzień 2026 r.
+- Przypadek VAT (G12) liczy `vatMiesiaca` (`lib/ksiegowosc/vat.ts`), ten
+  sam kod co plik JPK_V7M: przychód ze `stawka_vat` to faktura, korekta
+  (`korekta_do`) to faktura korygująca z kwotami różnicy, koszt odlicza
+  `odliczenie_vat_proc` z VAT. P_39 stycznia to
+  `zalozenia.nadwyzka_vat_z_poprzedniego_roku_gr`, każdego następnego
+  miesiąca P_62 poprzedniego. Porównanie bierze pola bloku `vat`.
 - `wejscie` przepisujemy z założeń i tabeli „Dane”: jeden wpis w
   `przychody` albo `koszty` na każdą kwotę z tabeli (w szablonie lista ma
   jeden pusty wpis, który pokazuje pola). `zaplacone_skladki_za`: miesiące
