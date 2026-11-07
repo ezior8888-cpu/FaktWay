@@ -108,7 +108,8 @@ function atrapaMf(opcje: { init?: Response; urlMagazynu?: string; statusy?: obje
         ],
       });
     }
-    if (url.includes('.blob.core.windows.net/')) {
+    // Magazyn MF po nazwie hosta, nie po fragmencie adresu (CodeQL js/incomplete-url-substring-sanitization).
+    if (/^taxdocumentstorage\d{2}(tst)?\.blob\.core\.windows\.net$/.test(new URL(url).hostname)) {
       const md5 = createHash('md5').update(tresc).digest('base64');
       return md5 === (init.headers as Record<string, string>)['Content-MD5'] ? new Response(null, { status: 201 }) : new Response('<Error/>', { status: 400 });
     }
