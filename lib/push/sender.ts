@@ -54,7 +54,9 @@ export type NotificationType =
   | 'invoice_rejected'
   | 'payment_received'
   | 'cert_expiry'
-  | 'inbox_new';
+  | 'inbox_new'
+  /** Moduł księgowości: rozliczenie miesiąca i terminy (K5, 00169). */
+  | 'ksiegowosc';
 
 const NOTIFY_COLUMNS: Record<
   NotificationType,
@@ -63,12 +65,14 @@ const NOTIFY_COLUMNS: Record<
   | 'notify_payment_received'
   | 'notify_cert_expiry'
   | 'notify_inbox_new'
+  | 'notify_ksiegowosc'
 > = {
   invoice_accepted: 'notify_invoice_accepted',
   invoice_rejected: 'notify_invoice_rejected',
   payment_received: 'notify_payment_received',
   cert_expiry: 'notify_cert_expiry',
   inbox_new: 'notify_inbox_new',
+  ksiegowosc: 'notify_ksiegowosc',
 };
 
 /**

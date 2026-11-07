@@ -81,6 +81,8 @@ const PREFERENCE_KEYS = new Set([
   'notify_payment_received',
   'notify_cert_expiry',
   'notify_inbox_new',
+  // Moduł księgowości (K5, 00169): przełącznik widzi tylko firma w pilotażu.
+  'notify_ksiegowosc',
 ]);
 
 export async function updatePushPreferencesAction(
@@ -91,6 +93,7 @@ export async function updatePushPreferencesAction(
     notify_payment_received: boolean;
     notify_cert_expiry: boolean;
     notify_inbox_new: boolean;
+    notify_ksiegowosc: boolean;
   }>,
 ) {
   const auth = await verifiedUserOrNull();

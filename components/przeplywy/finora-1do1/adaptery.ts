@@ -11,6 +11,8 @@ import {
 import type { CostEntry } from '@/lib/dashboard/costs';
 import type { InflowEntry } from '@/lib/dashboard/inflows';
 import type { TaxEstimate } from '@/lib/dashboard/tax-estimate';
+import { monthLabel } from '@/lib/expenses/month';
+import type { Odlozyc } from '@/lib/ksiegowosc/odlozyc';
 import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney, formatPlPercentChange } from '@/lib/format/pl';
@@ -232,6 +234,41 @@ export function podatekProps(estimate: TaxEstimate, tryb: TrybDanych): Pierscien
     pct: STAWKA_LINIOWA,
     lines: [`${STAWKA_LINIOWA}%`, formatPlCompactMoney(estimate.amount), 'do odłożenia'],
     caption: 'Szacunek: liniowy, bez ZUS',
+  };
+}
+
+/** Brak profilu w pierwszym powodzie z „Ten miesiąc” (`tenMiesiac`, K4). */
+const BEZ_PROFILU = /nie ma ustawień podatkowych/;
+
+/**
+ * Firma w pilotażu księgowości (K5, D13): szacunek z modułu za bieżący
+ * miesiąc (ryczałt, składki społeczne, zdrowotna) zamiast 19 % liniowego.
+ * W środku udział w przychodzie miesiąca, kwota i „do odłożenia”. Bez kwot
+ * (brak profilu, parametry czekające na księgową, D7) karta mówi, dlaczego.
+ */
+export function odlozycProps(w: Odlozyc, rok: number): PierscienDane {
+  const subtitle = `Szacunek za ${monthLabel(w.miesiac)} z danych do dziś`;
+  if (!w.ok) {
+    return {
+      title: 'Odłóż na podatek',
+      subtitle,
+      pct: 0,
+      lines: ['0%', formatPlCompactMoney(0), 'bez szacunku'],
+      caption: w.braki.some((b) => BEZ_PROFILU.test(b))
+        ? 'Bez ustawień podatkowych nie liczymy szacunku.'
+        : 'Szacunku jeszcze nie liczymy; powód jest w „Ten miesiąc”.',
+    };
+  }
+  const pct = w.przychodGr && w.przychodGr > 0 ? Math.round((w.kwotaGr / w.przychodGr) * 100) : 0;
+  return {
+    title: 'Odłóż na podatek',
+    subtitle,
+    pct: Math.min(100, Math.max(0, pct)),
+    lines: [`${pct}%`, formatPlCompactMoney(w.kwotaGr / 100), 'do odłożenia'],
+    caption:
+      w.braki.length > 0
+        ? 'Część kwot bez szacunku; szczegóły w „Ten miesiąc”.'
+        : `Według Twoich danych i stawek na ${rok} r.`,
   };
 }
 

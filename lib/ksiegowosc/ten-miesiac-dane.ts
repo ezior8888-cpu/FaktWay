@@ -142,7 +142,8 @@ export async function czytajRozliczenia(client: SupabaseClient, tenantId: string
   return wiersze.map(zWierszaRozliczenia).sort((a, b) => a.miesiac.localeCompare(b.miesiac) || a.rodzaj.localeCompare(b.rodzaj) || a.wersja - b.wersja);
 }
 
-const ODCZYT = 'Nie udało się odczytać rozliczeń, więc nie pokazujemy kwot. Strona spróbuje ponownie przy następnym otwarciu.';
+/** Rozliczeń nie udało się odczytać: wołający nie może uznać, że nic nie jest zapłacone. */
+export const BLAD_ODCZYTU_ROZLICZEN = 'Nie udało się odczytać rozliczeń, więc nie pokazujemy kwot. Strona spróbuje ponownie przy następnym otwarciu.';
 
 export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string, miesiac: string): Promise<DaneMiesiaca> {
   const rok = Number(miesiac.slice(0, 4));
@@ -172,7 +173,7 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   ]);
   if (!odczyt.ok) {
     console.error('[ten-miesiac] rozliczenia', odczyt.e instanceof Error ? odczyt.e.message : odczyt.e);
-    return { ok: false, braki: [ODCZYT], rozliczenia: [] };
+    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: [] };
   }
   const tegoMiesiaca = odczyt.r.filter((r) => r.miesiac === miesiac);
   if (nicDoLiczenia || !ewidencja) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };

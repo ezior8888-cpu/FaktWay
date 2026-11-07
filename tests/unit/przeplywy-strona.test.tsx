@@ -64,8 +64,11 @@ const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvir
  * bez RSC `cache()`, na produkcji jeden) czyta też korekty wystawione przed
  * oknem do faktur z dniem wpływu w oknie (`correctionsBefore` w
  * `inflows.ts`); okno 5 lat w demo takich faktur nie ma, więc bez odczytu.
+ * K5 księgowości (07.11.2026) świadomie +1: karta „Odłóż na podatek” płatnika
+ * VAT czyta flagę pilotażu firmy (`tenant_feature_flags`, jeden wiersz po
+ * kluczu), bo firma w pilotażu dostaje szacunek z modułu zamiast 19 %.
  */
-const READS_PRZEPLYWOW = 51;
+const READS_PRZEPLYWOW = 52;
 
 /** Klasy dzisiejszych (sprzed E6) Przepływów Finory — zrzut z renderu 23.10.2026. */
 const KLASY_FINORY: string[] = JSON.parse(

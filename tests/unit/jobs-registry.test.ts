@@ -65,9 +65,11 @@ describe('rejestr jobów', () => {
     for (const q of packageA) expect(queues, `brak ${q}`).toContain(q);
   });
 
-  it('paczka B: 17 jobów e-mail/billing/przypomnienia', () => {
+  it('paczka B: 19 jobów e-mail/billing/przypomnienia', () => {
     const packageB = [
       'cron.critical-alerts-monitor',
+      'cron.ksiegowosc-miesiac',
+      'cron.ksiegowosc-terminy',
       'cron.daily-analytics-digest',
       'cron.daily-summary-email',
       'cron.reminder-scheduler',
@@ -85,7 +87,7 @@ describe('rejestr jobów', () => {
       'email.trial-day-12',
       'email.trial-day-14',
     ];
-    expect(packageB.length).toBe(17);
+    expect(packageB.length).toBe(19);
     for (const q of packageB) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -194,7 +196,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 50 jobów (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import)', () => {
+  it('KOMPLET: 52 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -205,7 +207,10 @@ describe('rejestr jobów', () => {
     // 50: od 22.10.2026 (decyzja Bartosza) — +2 historia KSeF
     // (`cron.ksef-history-sync`, `ksef.history-sync.tenant`), −1 Magiczny import
     // (`import.ksef-history.requested`). Worker: 54 kolejki, „29/29 cronów”.
-    expect(registered.length).toBe(50);
+    // 52: od K5 księgowości (07.11.2026) — +2 crony `cron.ksiegowosc-miesiac`
+    // i `cron.ksiegowosc-terminy` (pętla po firmach pilotażu, bez kolejki
+    // fan-out; plan, sekcja 9). Worker: 56 kolejek, „31/31 cronów”.
+    expect(registered.length).toBe(52);
   });
 
   it('parytet limitów równoległości paczki C', () => {

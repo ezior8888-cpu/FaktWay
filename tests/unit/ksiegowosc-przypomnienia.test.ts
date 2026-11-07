@@ -1,0 +1,123 @@
+import { describe, expect, it } from 'vitest';
+
+import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { niezaplacone, terminyNaDzis, trescTerminu, trescWyliczenia } from '@/lib/ksiegowosc/przypomnienia';
+import type { PozycjaZeSkrotem, Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
+
+/**
+ * Przypomnienia modułu księgowości (plan księgowości JDG, K5, sekcja 9):
+ * kiedy (5 i 1 dzień przed terminem z kalendarza K1), o czym (rozliczenia
+ * bez oznaczonej zapłaty) i jakim tekstem (D8: bez trybu rozkazującego).
+ */
+
+const PROFIL: WersjaProfilu = {
+  id: 'p1',
+  validFrom: '2026-01-01',
+  forma: 'ryczalt',
+  stawkaDomyslna: 1200,
+  zusEtap: 'pelny',
+  zusOd: null,
+  chorobowe: true,
+  nrsZus: null,
+  najem: false,
+};
+
+const wersja = (rodzaj: Rozliczenie['rodzaj'], kwotaGr: number, z: Partial<Rozliczenie> = {}): Rozliczenie => ({
+  id: `${rodzaj}-${z.wersja ?? 1}`,
+  miesiac: '2026-10',
+  rodzaj,
+  wersja: 1,
+  kwotaGr,
+  termin: '2026-11-20',
+  status: 'zatwierdzone',
+  wejsciaHash: 'a'.repeat(64),
+  zatwierdzoneO: '2026-11-02T10:00:00Z',
+  zaplaconeO: null,
+  spoleczneBezFpGr: 0,
+  ...z,
+});
+const szkic = (rodzaj: PozycjaZeSkrotem['rodzaj'], kwotaGr: number): PozycjaZeSkrotem => ({
+  ok: true,
+  rodzaj,
+  kwotaGr,
+  termin: null,
+  wejscia: {},
+  wejsciaHash: 'b'.repeat(64),
+});
+
+describe('kiedy przypominać', () => {
+  it('termin 20.11.2026 za październik: 5 dni wcześniej (15.11) i dzień wcześniej (19.11), ryczałt i ZUS w jednym przypomnieniu', () => {
+    expect(terminyNaDzis('2026-11-15').map((t) => [t.miesiac, t.grupy, t.dni, t.etap])).toEqual([['2026-10', ['ryczalt', 'zus'], 5, 'termin-5:2026-11-20']]);
+    expect(terminyNaDzis('2026-11-19').map((t) => [t.grupy, t.dni])).toEqual([[['ryczalt', 'zus'], 1]]);
+    expect(terminyNaDzis('2026-11-16')).toEqual([]);
+  });
+
+  it('termin przesunięty z soboty 20.02.2027 na poniedziałek 22.02.2027 liczy się od dnia faktycznego', () => {
+    const t = terminyNaDzis('2027-02-17');
+    expect(t.map((x) => [x.miesiac, x.etap, x.termin.przesuniety])).toEqual([['2027-01', 'termin-5:2027-02-22', true]]);
+    expect(terminyNaDzis('2027-02-15')).toEqual([]);
+  });
+
+  it('grudzień: termin w styczniu następnego roku', () => {
+    expect(terminyNaDzis('2027-01-19').map((x) => [x.miesiac, x.etap])).toEqual([['2026-12', 'termin-1:2027-01-20']]);
+  });
+});
+
+describe('o czym przypominać', () => {
+  const ryczalt = (rozliczenia: Rozliczenie[], pozycje: PozycjaZeSkrotem[] | null = null) =>
+    niezaplacone({ grupy: ['ryczalt'], rozliczenia, pozycje, profil: PROFIL });
+
+  it('zatwierdzone bez zapłaty: kwota wersji; zapłacone: nic', () => {
+    expect(ryczalt([wersja('ryczalt', 153_600)])).toEqual([{ rodzaj: 'ryczalt', kwotaGr: 153_600 }]);
+    expect(ryczalt([wersja('ryczalt', 153_600, { status: 'zaplacone', zaplaconeO: '2026-11-05' })])).toEqual([]);
+  });
+
+  it('nowa wersja po zapłaconej poprzedniej: tylko dopłata', () => {
+    const rozliczenia = [
+      wersja('ryczalt', 150_000, { status: 'zaplacone', zaplaconeO: '2026-11-05' }),
+      wersja('ryczalt', 155_600, { id: 'ryczalt-2', wersja: 2 }),
+    ];
+    expect(ryczalt(rozliczenia)).toEqual([{ rodzaj: 'ryczalt', kwotaGr: 5_600 }]);
+  });
+
+  it('bez zatwierdzenia: kwota ze szkicu, a bez szkicu (parametry czekają, D7) samo przypomnienie bez kwoty', () => {
+    expect(ryczalt([], [szkic('ryczalt', 153_600)])).toEqual([{ rodzaj: 'ryczalt', kwotaGr: 153_600 }]);
+    expect(ryczalt([], null)).toEqual([{ rodzaj: 'ryczalt', kwotaGr: null }]);
+  });
+
+  it('ZUS: ulga na start i etat obok bez składek społecznych; kwota zero bez przypomnienia', () => {
+    const pozycje = [szkic('zus_spoleczne', 0), szkic('zdrowotna', 49_835)];
+    expect(niezaplacone({ grupy: ['zus'], rozliczenia: [], pozycje, profil: { ...PROFIL, zusEtap: 'ulga_na_start', zusOd: '2026-01-01' } })).toEqual([
+      { rodzaj: 'zdrowotna', kwotaGr: 49_835 },
+    ]);
+    expect(niezaplacone({ grupy: ['zus'], rozliczenia: [], pozycje, profil: PROFIL })).toEqual([{ rodzaj: 'zdrowotna', kwotaGr: 49_835 }]);
+  });
+});
+
+describe('treść', () => {
+  const [termin] = terminyNaDzis('2026-11-15');
+
+  it('przypomnienie o terminie: data, miesiąc, rozliczenia z kwotami albo bez', () => {
+    const t = trescTerminu({
+      miesiac: '2026-10',
+      termin: termin.termin,
+      dni: 5,
+      pozycje: [
+        { rodzaj: 'ryczalt', kwotaGr: 153_600 },
+        { rodzaj: 'zdrowotna', kwotaGr: null },
+      ],
+    });
+    expect(t.tytul).toBe('Termin 20.11.2026: rozliczenie za październik 2026');
+    expect(t.tresc).toBe('Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składka zdrowotna.');
+    expect(t.adres).toBe('/reports/ten-miesiac?month=10&year=2026');
+    expect(trescTerminu({ miesiac: '2026-10', termin: termin.termin, dni: 1, pozycje: [] }).tresc).toMatch(/^Jutro, 20\.11\.2026/);
+  });
+
+  it('wyliczony miesiąc i teksty bez trybu rozkazującego i długich myślników (D8)', () => {
+    const t = trescWyliczenia({ miesiac: '2026-10', pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 153_600 }, { rodzaj: 'zus_spoleczne', kwotaGr: 192_676 }] });
+    expect(t.tytul).toBe('Rozliczenie za październik 2026 jest wyliczone');
+    expect(t.tresc).toBe('Według Twoich danych: ryczałt 1536,00 zł, składki społeczne 1926,76 zł. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.');
+    const wszystko = [t.tytul, t.tresc, trescTerminu({ miesiac: '2026-10', termin: termin.termin, dni: 5, pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 1 }] }).tresc].join(' ');
+    expect(wszystko).not.toMatch(/[—–]|Zapłać|Sprawdź|Uzupełnij|Otwórz|Pamiętaj/);
+  });
+});
