@@ -15,6 +15,7 @@
  * do dni; tego jeszcze nie liczymy, więc to brak z wyjściem, a nie zgadywanie.
  */
 
+import { monthLabel, monthRange } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import type { KluczZus, Liczba } from '@/lib/ksiegowosc/parametry';
 import { NAZWY_ETAPOW_ZUS, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
@@ -46,19 +47,13 @@ const ZERO: SkladkiSpoleczne = {
 };
 
 const USTAWIENIA = 'Etap ZUS i jego datę zmienia się w Księgowości, w zakładce „Ustawienia podatkowe”.';
-const PROPORCJA =
+export const PROPORCJA =
   'ZUS liczy wtedy składki od podstawy proporcjonalnej do dni, a tego program jeszcze nie liczy. ' +
   'Kwota za ten miesiąc jest w PUE ZUS albo u księgowej.';
 
 /** Grosze × punkty bazowe, zaokrąglone do grosza (połówka w górę). */
 export function procentGr(gr: number, pb: number): number {
   return Math.floor((gr * pb + 5_000) / 10_000);
-}
-
-/** Pierwszy i ostatni dzień miesiąca RRRR-MM. */
-export function granice(miesiac: string): { od: string; do: string } {
-  const [r, m] = miesiac.split('-').map(Number);
-  return { od: `${miesiac}-01`, do: new Date(Date.UTC(r, m, 0)).toISOString().slice(0, 10) };
 }
 
 /** Ten sam dzień `n` miesięcy później (koniec miesiąca, gdy dnia brak), RRRR-MM-DD. */
@@ -77,7 +72,7 @@ function wartosc(liczby: LiczbyZus, klucz: KluczZus): number | null {
  * granicy (miesiąc niepełny).
  */
 function wobecMiesiaca(miesiac: string, od: string, doWylacznie: string | null): 'w' | 'przed' | 'po' | 'czesc' {
-  const { od: pierwszy, do: ostatni } = granice(miesiac);
+  const { from: pierwszy, to: ostatni } = monthRange(miesiac);
   if (ostatni < od) return 'przed';
   if (doWylacznie !== null && pierwszy >= doWylacznie) return 'po';
   const caly = pierwszy >= od && (doWylacznie === null || ostatni < doWylacznie);
@@ -86,7 +81,7 @@ function wobecMiesiaca(miesiac: string, od: string, doWylacznie: string | null):
 
 export function skladkiSpoleczne(miesiac: string, wersja: WersjaProfilu, liczby: LiczbyZus): WynikZus {
   const etap = NAZWY_ETAPOW_ZUS[wersja.zusEtap];
-  const nazwaMiesiaca = formatIsoDatePl(`${miesiac}-01`).slice(3);
+  const nazwaMiesiaca = monthLabel(miesiac);
 
   if (wersja.zusEtap === 'etat_obok') return { ok: true, skladki: ZERO };
 
@@ -106,22 +101,22 @@ export function skladkiSpoleczne(miesiac: string, wersja: WersjaProfilu, liczby:
     if (polozenie === 'przed') {
       return {
         ok: false,
-        brak: `Etap „${etap}” zaczyna się ${formatIsoDatePl(wersja.zusOd)}, czyli po miesiącu ${nazwaMiesiaca}. ${USTAWIENIA}`,
+        brak: `Etap „${etap}” zaczyna się ${formatIsoDatePl(wersja.zusOd)}, a rozliczany miesiąc to ${nazwaMiesiaca}. ${USTAWIENIA}`,
       };
     }
     if (polozenie === 'po') {
       const ostatniDzien = new Date(Date.parse(`${koniec}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
       return {
         ok: false,
-        brak: `Etap „${etap}” trwał do ${formatIsoDatePl(ostatniDzien)}, a miesiąc ${nazwaMiesiaca} jest później. ${USTAWIENIA}`,
+        brak: `Etap „${etap}” trwał do ${formatIsoDatePl(ostatniDzien)}, a rozliczany miesiąc to ${nazwaMiesiaca}. ${USTAWIENIA}`,
       };
     }
     // Ulga zaczęta w trakcie miesiąca to wciąż zero: przed startem nie było
     // działalności. Brakiem jest miesiąc, w którym etap się kończy (miesza się z kolejnym).
-    const startUlgi =
-      wersja.zusEtap === 'ulga_na_start' && granice(miesiac).od < wersja.zusOd && (koniec === null || granice(miesiac).do < koniec);
+    const { from: pierwszy, to: ostatni } = monthRange(miesiac);
+    const startUlgi = wersja.zusEtap === 'ulga_na_start' && pierwszy < wersja.zusOd && (koniec === null || ostatni < koniec);
     if (polozenie === 'czesc' && !startUlgi) {
-      return { ok: false, brak: `W miesiącu ${nazwaMiesiaca} etap „${etap}” zaczyna się albo kończy w trakcie miesiąca. ${PROPORCJA}` };
+      return { ok: false, brak: `Etap „${etap}” zaczyna się albo kończy w trakcie miesiąca (${nazwaMiesiaca}). ${PROPORCJA}` };
     }
   } else if (wersja.zusEtap !== 'pelny') {
     return { ok: false, brak: `Etap „${etap}” potrzebuje daty początku. ${USTAWIENIA}` };

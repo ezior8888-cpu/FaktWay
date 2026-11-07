@@ -219,33 +219,65 @@ describe('kolejność i rok', () => {
 
 describe('próg najmu (K4): 8,5 % ponad 100 000 zł w roku to 12,5 %', () => {
   const NAJEM: WersjaProfilu = { ...RYCZALT_12, stawkaDomyslna: 850, najem: true };
+  const PROG = { progGr: 10_000_000, stawkaNajmuPb: 850, stawkaPonadProgPb: 1250 };
   const f = (id: string, dzien: string, gr: number) => faktura({ id, numer: `FV/${id}`, dataWystawienia: dzien, dataSprzedazy: dzien, nettoGr: gr });
+  const kor = (id: string, dzien: string, gr: number) => faktura({ id, numer: `KOR/${id}`, rodzaj: 'korekta', dataWystawienia: dzien, nettoGr: gr });
+  const wiersze = (e: ReturnType<typeof ewidencja>) => e.wiersze.map((w) => [w.dowod, w.stawkaPb, w.kwotaGr]);
 
   it('wiersz przekraczający próg dzieli się, a kolejne idą z 12,5 %; JPK dostaje obie stawki', () => {
     const e = ewidencja({
       wersje: [NAJEM],
-      progNajmuGr: 10_000_000,
+      najem: PROG,
       faktury: [f('a', '2026-02-01', 6_000_000), f('b', '2026-03-01', 5_000_000), f('c', '2026-04-01', 500_000)],
     });
     expect(e.braki).toEqual([]);
-    expect(e.wiersze.map((w) => [w.dowod, w.stawkaPb, w.kwotaGr])).toEqual([
+    expect(wiersze(e)).toEqual([
       ['FV/a', 850, 6_000_000],
       ['FV/b', 850, 4_000_000],
       ['FV/b', 1250, 1_000_000],
       ['FV/c', 1250, 500_000],
     ]);
-    expect(e.wiersze[2].uwagi).toContain('Najem ponad 100 000 zł w roku: 12,5 %');
+    expect(e.wiersze[2].uwagi?.replace(/\u00a0/g, ' ')).toContain('Najem ponad 100 000 zł w roku: 12,5 %');
   });
 
-  it('bez znacznika najmu 8,5 % zostaje 8,5 %; bez progu w parametrach najem to brak', () => {
-    expect(ewidencja({ wersje: [{ ...NAJEM, najem: false }], progNajmuGr: 1, faktury: [f('a', '2026-02-01', 100)] }).wiersze[0].stawkaPb).toBe(850);
-    const bezProgu = ewidencja({ wersje: [NAJEM], progNajmuGr: null, faktury: [f('a', '2026-02-01', 100)] });
-    expect([bezProgu.wiersze, bezProgu.braki[0]?.komunikat]).toEqual([[], expect.stringContaining('brak progu najmu')]);
+  it('próg, stawki i tekst uwagi biorą się z parametrów roku, nie z kodu', () => {
+    const e = ewidencja({ wersje: [NAJEM], najem: { ...PROG, progGr: 5_000_000, stawkaPonadProgPb: 1300 }, faktury: [f('a', '2026-02-01', 6_000_000)] });
+    expect(wiersze(e)).toEqual([
+      ['FV/a', 850, 5_000_000],
+      ['FV/a', 1300, 1_000_000],
+    ]);
+    expect(e.wiersze[1].uwagi?.replace(/\u00a0/g, ' ')).toContain('Najem ponad 50 000 zł w roku: 13 %');
   });
 
-  it('korekta in minus po przekroczeniu progu to brak (księgowa ustala stawkę)', () => {
-    const kor = faktura({ id: 'k', numer: 'KOR/k', rodzaj: 'korekta', dataWystawienia: '2026-05-01', nettoGr: -100_000 });
-    const e = ewidencja({ wersje: [NAJEM], progNajmuGr: 10_000_000, faktury: [f('a', '2026-02-01', 11_000_000), kor] });
-    expect(e.braki.map((b) => b.dokument)).toEqual(['KOR/k']);
+  it('bez znacznika najmu 8,5 % zostaje 8,5 %; parametry niepotwierdzone przez księgową (D7) to brak z ich komunikatem', () => {
+    expect(ewidencja({ wersje: [{ ...NAJEM, najem: false }], najem: { brak: 'x' }, faktury: [f('a', '2026-02-01', 100)] }).wiersze[0].stawkaPb).toBe(850);
+    const bezProgu = ewidencja({ wersje: [NAJEM], najem: { brak: 'Stawki na 2026 r. (ryczałt) czekają na sprawdzenie przez księgową.' }, faktury: [f('a', '2026-02-01', 100)] });
+    expect([bezProgu.wiersze, bezProgu.braki[0]?.komunikat]).toEqual([[], expect.stringContaining('czekają na sprawdzenie przez księgową')]);
+  });
+
+  it('korekta in minus po przekroczeniu progu najpierw zmniejsza nadwyżkę 12,5 %, resztę z 8,5 %', () => {
+    const e = ewidencja({ wersje: [NAJEM], najem: PROG, faktury: [f('a', '2026-02-01', 11_000_000), kor('k1', '2026-05-01', -400_000), kor('k2', '2026-06-01', -1_000_000)] });
+    expect(e.braki).toEqual([]);
+    expect(wiersze(e)).toEqual([
+      ['FV/a', 850, 10_000_000],
+      ['FV/a', 1250, 1_000_000],
+      ['KOR/k1', 1250, -400_000],
+      ['KOR/k2', 850, -400_000],
+      ['KOR/k2', 1250, -600_000],
+    ]);
+  });
+
+  it('w odczycie próg najmu z sekcji ryczałtu niepotwierdzonej przez księgową to brak (D7)', async () => {
+    const { progNajmuZParametrow } = await import('@/lib/ksiegowosc/ewidencja-dane');
+    expect(progNajmuZParametrow(2026)).toEqual({ brak: expect.stringContaining('(ryczałt) czekają na sprawdzenie przez księgową') });
+    expect(progNajmuZParametrow(2031)).toEqual({ brak: expect.stringContaining('2031') });
+  });
+
+  it('brak wcześniej w roku: kolejne wiersze najmu to brak, bo próg zależy od przychodu od początku roku', () => {
+    const euro = faktura({ id: 'e', numer: 'FV/e', dataWystawienia: '2026-02-10', dataSprzedazy: '2026-02-10', nettoGr: 100_000, waluta: 'EUR' });
+    const e = ewidencja({ wersje: [NAJEM], najem: PROG, faktury: [f('a', '2026-01-10', 1_000_000), euro, f('b', '2026-03-01', 500_000)] });
+    expect(wiersze(e)).toEqual([['FV/a', 850, 1_000_000]]);
+    expect(e.braki.map((b) => b.dokument)).toEqual(['FV/e', 'FV/b']);
+    expect(e.braki[1].komunikat).toContain('10.02.2026');
   });
 });

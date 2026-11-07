@@ -45,6 +45,138 @@
     { "nazwa": "ryczalt_prog_najmu", "okres": "2027", "wartosc": "", "zrodlo": "" },
     { "nazwa": "limit_zwolnienia_vat", "okres": "2027", "wartosc": "", "zrodlo": "" }
   ],
+  "historia": [
+    {
+      "miesiac": "2026-01",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-02",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-01"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-03",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-02"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-04",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-03"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-05",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-04"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-06",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-05"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-07",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-06"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-08",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-07"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-09",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-08"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-10",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-09"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-11",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-10"
+        ],
+        "przychody": [],
+        "koszty": []
+      }
+    }
+  ],
   "miesiace": [
     {
       "miesiac": "2026-12",

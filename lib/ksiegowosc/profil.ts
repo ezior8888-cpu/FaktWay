@@ -20,6 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
 import { formatIsoDatePl } from '@/lib/format/iso-date';
+import { isMissingColumnError } from '@/lib/invoices/business-start';
 import { czyRachunekNrb } from '@/lib/ksiegowosc/mikrorachunek';
 
 export const FORMY = ['ryczalt', 'skala', 'liniowy'] as const;
@@ -112,7 +113,7 @@ export const profilSchema = z
     zusEtap: z.enum(ETAPY_ZUS, { message: 'Brak rodzaju składek ZUS.' }),
     zusOd: data.nullable(),
     chorobowe: z.boolean(),
-    /** Przychody 8,5 % to najem, dzierżawa albo zakwaterowanie: ponad 100 tys. zł w roku 12,5 % (00168, K4). */
+    /** Przychody 8,5 % z progiem (najem, dzierżawa, zakwaterowanie, B+R): ponad 100 tys. zł w roku 12,5 % (00168, K4). */
     najem: z.boolean().default(false),
     nrsZus: z
       .string()
@@ -286,8 +287,8 @@ export async function czytajWersjeProfilu(client: SupabaseClient, tenantId: stri
   const czytaj = (kolumny: string) =>
     client.from('tax_profiles').select(kolumny).eq('tenant_id', tenantId).order('valid_from', { ascending: true });
   let { data: wiersze, error } = await czytaj(KOLUMNY_PROFILU);
-  // Kod przed migracją 00168 (najem): Postgres 42703, PostgREST PGRST204.
-  if (error && (error.code === '42703' || error.code === 'PGRST204')) ({ data: wiersze, error } = await czytaj(KOLUMNY_PROFILU_PRZED_00168));
+  // Odczyt przed migracją 00168 (najem); zapis i tak wymaga 00168 (migracja przed wdrożeniem).
+  if (error && isMissingColumnError(error.code)) ({ data: wiersze, error } = await czytaj(KOLUMNY_PROFILU_PRZED_00168));
   if (error) {
     if (czyBrakTabeli(error.code)) return [];
     throw new Error(`Nie można odczytać ustawień podatkowych: ${error.message}`);

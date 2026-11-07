@@ -23,6 +23,7 @@
 
 import { kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
+import { formatPlInt } from '@/lib/format/pl';
 import { NAZWY_FORM, stawkaRyczaltuPozycji, wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 
 /** Słownik K_9 JPK_EWP(4) w punktach bazowych: 17, 15, 14, 12,5, 12, 10, 8,5, 5,5 i 3 %. */
@@ -74,12 +75,15 @@ export interface WejscieEwidencji {
   /** Kursy NBP po kluczu `kluczKursu(waluta, dzień przychodu)`. */
   kursy: ReadonlyMap<string, KursPrzychodu>;
   /**
-   * Próg najmu (`ryczalt.progStawki8_5` z parametrów roku, w groszach): przychód
-   * 8,5 % z dni, w których profil ma `najem`, ponad próg w roku idzie z 12,5 %
-   * (00168, K4). `null` = parametru brak; wtedy wiersz najmu to brak.
+   * Próg najmu z parametrów roku (00168, K4): przychód ze stawką najmu z dni,
+   * w których profil ma `najem`, ponad próg w roku idzie ze stawką wyższą.
+   * Brak (np. sekcja niepotwierdzona przez księgową, D7) daje brak przy
+   * wierszach najmu.
    */
-  progNajmuGr?: number | null;
+  najem?: ProgNajmu;
 }
+
+export type ProgNajmu = { progGr: number; stawkaNajmuPb: number; stawkaPonadProgPb: number } | { brak: string };
 
 export interface WierszEwidencji {
   /** K_1, numer kolejny w roku. */
@@ -233,48 +237,67 @@ function czyRyczaltWRoku(wersje: readonly WersjaProfilu[], rok: number): boolean
 
 type WierszBezLp = Omit<WierszEwidencji, 'lp'>;
 
-const NAJEM_UWAGA = 'Najem ponad 100 000 zł w roku: 12,5 %';
+/** Stawka najmu, gdy parametrów brak: tylko do rozpoznania wierszy, którym dajemy brak. */
+const STAWKA_NAJMU_BEZ_PARAMETROW = 850;
 
 /**
- * Próg najmu (K4): przychód 8,5 % z dni, w których profil ma `najem`, liczy się
- * narastająco od 1 stycznia po dniu przychodu; wiersz, który przekracza próg,
- * dzieli się na część do progu (8,5 %) i nadwyżkę (12,5 %). Korekta in minus po
- * przekroczeniu progu to brak: nie wiadomo, którą stawkę zmniejsza.
+ * Próg najmu (K4): przychód ze stawką najmu z dni, w których profil ma `najem`,
+ * liczy się narastająco od 1 stycznia po dniu przychodu; wiersz, który
+ * przekracza próg, dzieli się na część do progu i nadwyżkę ze stawką wyższą.
+ * Korekta in minus po przekroczeniu progu najpierw zmniejsza nadwyżkę (roczny
+ * ryczałt to stawka najmu do progu i wyższa ponad nim; sekcja 5, pewność
+ * średnia). Wcześniejszy brak w roku zmienia sumę narastająco, więc kolejne
+ * wiersze najmu też są brakiem, dopóki go nie wyjaśnić.
  */
 function progNajmu(wiersze: WierszBezLp[], wejscie: WejscieEwidencji, braki: BrakEwidencji[]): WierszBezLp[] {
-  const prog = wejscie.progNajmuGr ?? null;
+  if (!wejscie.wersje.some((v) => v.najem)) return wiersze;
+  const n = wejscie.najem ?? { brak: `Brak progu najmu w parametrach na ${wejscie.rok} r., więc stawki nie ustalimy.` };
+  const stawkaNajmu = 'brak' in n ? STAWKA_NAJMU_BEZ_PARAMETROW : n.stawkaNajmuPb;
   const posortowane = [...wiersze].sort(
     (a, b) => a.dataPrzychodu.localeCompare(b.dataPrzychodu) || a.dataWpisu.localeCompare(b.dataWpisu) || a.dowod.localeCompare(b.dowod, 'pl'),
   );
+  let pierwszyBrak = braki.reduce<string | null>((min, b) => (min === null || b.dzien < min ? b.dzien : min), null);
+  const dodajBrak = (w: WierszBezLp, komunikat: string) => {
+    braki.push({ dzien: w.dataPrzychodu, dokument: w.dowod, komunikat });
+    if (pierwszyBrak === null || w.dataPrzychodu < pierwszyBrak) pierwszyBrak = w.dataPrzychodu;
+  };
   const wynik: WierszBezLp[] = [];
   let narastajaco = 0;
   for (const w of posortowane) {
-    const najem = w.stawkaPb === 850 && wersjaNa(wejscie.wersje, w.dataPrzychodu)?.najem === true;
+    const najem = w.stawkaPb === stawkaNajmu && wersjaNa(wejscie.wersje, w.dataPrzychodu)?.najem === true;
     if (!najem) {
       wynik.push(w);
       continue;
     }
-    if (prog === null) {
-      braki.push({ dzien: w.dataPrzychodu, dokument: w.dowod, komunikat: `${w.dowod}: brak progu najmu w parametrach na ${wejscie.rok} r., więc stawki nie ustalimy. ${POMOC_TEKST}` });
+    if ('brak' in n) {
+      dodajBrak(w, `${w.dowod}: ${n.brak} ${POMOC_TEKST}`);
       continue;
     }
-    if (w.kwotaGr < 0 && narastajaco > prog) {
-      braki.push({
-        dzien: w.dataPrzychodu,
-        dokument: w.dowod,
-        komunikat: `${w.dowod}: korekta przychodu z najmu po przekroczeniu 100 000 zł; stawkę tej korekty ustala księgowa. ${POMOC_TEKST}`,
-      });
+    if (pierwszyBrak !== null && pierwszyBrak <= w.dataPrzychodu) {
+      dodajBrak(
+        w,
+        `${w.dowod}: stawka przychodu z najmu zależy od przychodu od początku roku, a ewidencja ma wcześniej brak ` +
+          `(${formatIsoDatePl(pierwszyBrak)}). Po jego wyjaśnieniu ewidencja ustali stawkę.`,
+      );
       continue;
     }
-    const doProgu = Math.max(0, prog - narastajaco);
+    const uwagi = (u: string | null) =>
+      [u, `Najem ponad ${formatPlInt(n.progGr / 100)} zł w roku: ${etykietaStawki(n.stawkaPonadProgPb)}`].filter(Boolean).join('; ').slice(0, 256);
+    const nadwyzka = Math.max(0, narastajaco - n.progGr);
     narastajaco += w.kwotaGr;
+    if (w.kwotaGr < 0) {
+      const zNadwyzki = Math.max(w.kwotaGr, -nadwyzka);
+      if (zNadwyzki < 0) wynik.push({ ...w, kwotaGr: zNadwyzki, stawkaPb: n.stawkaPonadProgPb, uwagi: uwagi(w.uwagi) });
+      if (w.kwotaGr - zNadwyzki < 0) wynik.push({ ...w, kwotaGr: w.kwotaGr - zNadwyzki });
+      continue;
+    }
+    const doProgu = Math.max(0, n.progGr - (narastajaco - w.kwotaGr));
     if (w.kwotaGr <= doProgu) {
       wynik.push(w);
       continue;
     }
-    const uwagi = (u: string | null) => [u, NAJEM_UWAGA].filter(Boolean).join('; ').slice(0, 256);
     if (doProgu > 0) wynik.push({ ...w, kwotaGr: doProgu });
-    wynik.push({ ...w, kwotaGr: w.kwotaGr - doProgu, stawkaPb: 1250, uwagi: uwagi(w.uwagi) });
+    wynik.push({ ...w, kwotaGr: w.kwotaGr - doProgu, stawkaPb: n.stawkaPonadProgPb, uwagi: uwagi(w.uwagi) });
   }
   return wynik;
 }

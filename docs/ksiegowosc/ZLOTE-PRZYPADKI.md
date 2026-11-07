@@ -1511,6 +1511,15 @@ oprócz ostatniej:
   przypadek go ma), potem `2027-01` do `2027-12`. Miesiące bez
   działalności (G13: styczeń i luty 2027) mają
   `"dzialalnosc": false`.
+- `historia` (wypełnia zespół FaktWay, nie księgowa): miesiące 2026 r.
+  przed pierwszym wierszem, tylko `wejscie`, przepisane z założeń
+  przypadku (przychód „w każdym miesiącu 2026 r.”, etapy ZUS, składki
+  płacone w kolejnym miesiącu). Program liczy je bez porównania, żeby
+  grudzień 2026 r. miał przychód narastająco, próg najmu i zapłacone
+  składki z całego roku. Składek za grudzień 2025 r. i zdrowotnej za
+  styczeń 2026 r. program nie liczy (brak parametrów 2025 r.), więc
+  w historii ich nie odlicza; jeśli wynik księgowej je uwzględnia, różnica
+  wyjdzie w `zdrowotna.przychod_narastajaco_gr` za grudzień 2026 r.
 - `wejscie` przepisujemy z założeń i tabeli „Dane”: jeden wpis w
   `przychody` albo `koszty` na każdą kwotę z tabeli (w szablonie lista ma
   jeden pusty wpis, który pokazuje pola). `zaplacone_skladki_za`: miesiące

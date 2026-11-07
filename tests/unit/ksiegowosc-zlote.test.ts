@@ -18,7 +18,11 @@ import { tenMiesiac, type Platnosc } from '@/lib/ksiegowosc/ten-miesiac';
  *
  * Przychody stają się fakturami ze stawką z przypadku, a składki za miesiące
  * z `zaplacone_skladki_za` są płacone 15. dnia miesiąca wiersza, w kwotach
- * policzonych dla tamtych miesięcy.
+ * policzonych dla tamtych miesięcy. `historia` (miesiące przed pierwszym
+ * wierszem, tylko wejście) liczy się tak samo, ale bez porównania: daje
+ * przychód narastająco, próg najmu i zapłacone składki z całego roku. Kwot,
+ * których silnik nie liczy (składki za grudzień 2025 r., zdrowotna za
+ * styczeń 2026 r. bez parametrów 2025 r.), historia nie odlicza.
  */
 
 interface Przychod {
@@ -28,9 +32,15 @@ interface Przychod {
   opis: string;
 }
 
+interface Wejscie {
+  zus_etap: EtapZus | null;
+  zaplacone_skladki_za: string[];
+  przychody: Przychod[];
+}
+
 interface Miesiac {
   miesiac: string;
-  wejscie: { zus_etap: EtapZus | null; zaplacone_skladki_za: string[]; przychody: Przychod[] };
+  wejscie: Wejscie;
   wynik: Record<string, Record<string, unknown> | null>;
 }
 
@@ -39,15 +49,19 @@ export interface Przypadek {
   tytul: string;
   policzyla: string;
   zalozenia: { forma: string | null; start_dzialalnosci: string | null; chorobowe: boolean | null };
+  /** Miesiące przed pierwszym wierszem, tylko wejście (z założeń przypadku). */
+  historia?: { miesiac: string; wejscie: Wejscie }[];
   miesiace: Miesiac[];
 }
+
+const wszystkie = (p: Przypadek) => [...(p.historia ?? []), ...p.miesiace];
 
 const KATALOG = join(__dirname, '..', 'fixtures', 'ksiegowosc', 'zlote');
 
 function wersjeProfilu(p: Przypadek): WersjaProfilu[] {
-  const najem = p.miesiace.some((m) => m.wejscie.przychody.some((x) => x.stawka_ryczaltu === '8.5' && /najem|najmu|dzierżaw|zakwater/i.test(x.opis)));
+  const najem = wszystkie(p).some((m) => m.wejscie.przychody.some((x) => x.stawka_ryczaltu === '8.5' && /najem|najmu|dzierżaw|zakwater/i.test(x.opis)));
   const wersje: WersjaProfilu[] = [];
-  for (const m of p.miesiace) {
+  for (const m of wszystkie(p)) {
     const etap = m.wejscie.zus_etap;
     if (!etap || wersje.at(-1)?.zusEtap === etap) continue;
     const od = `${m.miesiac}-01`;
@@ -67,7 +81,7 @@ function wersjeProfilu(p: Przypadek): WersjaProfilu[] {
 }
 
 function faktury(p: Przypadek, rok: number): FakturaEwidencji[] {
-  return p.miesiace.flatMap((m) =>
+  return wszystkie(p).flatMap((m) =>
     m.wejscie.przychody
       .filter((x) => x.data && x.netto_gr && x.data.startsWith(String(rok)))
       .map((x, i) => ({
@@ -93,25 +107,42 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
   const ewidencje = new Map<number, ReturnType<typeof zbudujEwidencje>>();
   const ewidencjaRoku = (rok: number) => {
     if (!ewidencje.has(rok)) {
-      ewidencje.set(rok, zbudujEwidencje({ rok, faktury: faktury(p, rok), wpisy: [], wersje, kursy: new Map(), progNajmuGr: parametry(rok)?.ryczalt.liczby.progStawki8_5.wartosc ?? null }));
+      const l = parametry(rok)?.ryczalt.liczby;
+      const najem =
+        l && l.progStawki8_5.wartosc !== null && l.stawka8_5.wartosc !== null && l.stawkaPonadProg8_5.wartosc !== null
+          ? { progGr: l.progStawki8_5.wartosc, stawkaNajmuPb: l.stawka8_5.wartosc, stawkaPonadProgPb: l.stawkaPonadProg8_5.wartosc }
+          : { brak: `brak progu najmu na ${rok} r.` };
+      ewidencje.set(rok, zbudujEwidencje({ rok, faktury: faktury(p, rok), wpisy: [], wersje, kursy: new Map(), najem }));
     }
     return ewidencje.get(rok)!;
   };
-  const policzone = new Map<string, { spoleczne: number; bezFp: number; zdrowotna: number }>();
+  const policzone = new Map<string, { spoleczne: number | null; bezFp: number; zdrowotna: number | null }>();
   const platnosci: Platnosc[] = [];
   const wyniki: Record<string, Record<string, unknown>> = {};
+  const porownywane = new Set(p.miesiace.map((m) => m.miesiac));
 
-  for (const m of p.miesiace) {
+  for (const m of wszystkie(p)) {
+    const zHistorii = !porownywane.has(m.miesiac);
     for (const za of m.wejscie.zaplacone_skladki_za) {
       const s = policzone.get(za);
-      if (!s) throw new Error(`${p.id} ${m.miesiac}: składki za ${za} nie zostały policzone`);
-      platnosci.push({ miesiac: za, rodzaj: 'zus_spoleczne', wersja: 1, kwotaGr: s.spoleczne, spoleczneBezFpGr: s.bezFp, zaplaconeO: `${m.miesiac}-15` });
-      platnosci.push({ miesiac: za, rodzaj: 'zdrowotna', wersja: 1, kwotaGr: s.zdrowotna, spoleczneBezFpGr: 0, zaplaconeO: `${m.miesiac}-15` });
+      if (!s && !zHistorii) throw new Error(`${p.id} ${m.miesiac}: składki za ${za} nie zostały policzone`);
+      if (s?.spoleczne != null) {
+        platnosci.push({ miesiac: za, rodzaj: 'zus_spoleczne', wersja: 1, kwotaGr: s.spoleczne, spoleczneBezFpGr: s.bezFp, zaplaconeO: `${m.miesiac}-15` });
+      }
+      if (s?.zdrowotna != null) {
+        platnosci.push({ miesiac: za, rodzaj: 'zdrowotna', wersja: 1, kwotaGr: s.zdrowotna, spoleczneBezFpGr: 0, zaplaconeO: `${m.miesiac}-15` });
+      }
     }
     const w = tenMiesiac({ miesiac: m.miesiac, ewidencja: ewidencjaRoku(Number(m.miesiac.slice(0, 4))), wersje, platnosci, parametry });
-    if (!w.ok) throw new Error(`${p.id} ${m.miesiac}: ${w.braki.join(' ')}`);
+    if (!w.ok) {
+      if (zHistorii) continue;
+      throw new Error(`${p.id} ${m.miesiac}: ${w.braki.join(' ')}`);
+    }
     const { skladki, zdrowotna, ryczalt, pozycje } = w.wynik;
-    policzone.set(m.miesiac, { spoleczne: skladki.razemGr + skladki.funduszPracyGr, bezFp: skladki.razemGr, zdrowotna: zdrowotna.skladkaGr });
+    policzone.set(m.miesiac, { spoleczne: skladki ? skladki.razemGr + skladki.funduszPracyGr : null, bezFp: skladki?.razemGr ?? 0, zdrowotna: zdrowotna?.skladkaGr ?? null });
+    if (zHistorii) continue;
+    const brakiPozycji = pozycje.flatMap((x) => (x.ok ? [] : [`${x.rodzaj}: ${x.brak}`]));
+    if (brakiPozycji.length > 0 || !skladki || !zdrowotna || !ryczalt) throw new Error(`${p.id} ${m.miesiac}: ${brakiPozycji.join(' ')}`);
     const klucz = (pb: number) => String(pb / 100);
     wyniki[m.miesiac] = {
       skladki_spoleczne: {
@@ -207,6 +238,41 @@ describe('uruchamianie przypadku (syntetyczny, policzony ręcznie na parametrach
       terminy: { ryczalt_lub_pit: '2026-04-20', zus: '2026-04-20' },
     });
     expect(w['2026-02']).toMatchObject({ ryczalt: { ryczalt_gr: 180_000 }, zdrowotna: { przychod_narastajaco_gr: 1_500_000 } });
+  });
+
+  it('historia roku daje grudniowi przychód narastająco i składki zapłacone przez cały rok', () => {
+    const miesiac = (m: number) => `2026-${String(m).padStart(2, '0')}`;
+    const przychod = (dzien: string) => [{ data: dzien, netto_gr: 1_500_000, stawka_ryczaltu: '12', opis: '' }];
+    const zHistoria: Przypadek = {
+      ...syntetyczny,
+      id: 'GH',
+      historia: Array.from({ length: 11 }, (_, i) => ({
+        miesiac: miesiac(i + 1),
+        wejscie: { zus_etap: 'pelny' as const, zaplacone_skladki_za: i === 0 ? [] : [miesiac(i)], przychody: przychod(`${miesiac(i + 1)}-28`) },
+      })),
+      miesiace: [{ miesiac: '2026-12', wejscie: { zus_etap: 'pelny', zaplacone_skladki_za: ['2026-11'], przychody: przychod('2026-12-31') }, wynik: {} }],
+    };
+    const w = policzPrzypadek(zHistoria, parametryRoku);
+    expect(Object.keys(w)).toEqual(['2026-12']);
+    // 180 000,00 zł przychodu minus 11 × 1 788,29 zł składek zapłaconych w 2026 r. (za styczeń-listopad) = 160 328,81 zł.
+    // Odliczenie w grudniu: składki za listopad 1 788,29 zł i połowa zdrowotnej 830,58 zł; ryczałt 1 536 zł.
+    expect(w['2026-12']).toMatchObject({
+      zdrowotna: { przychod_narastajaco_gr: 16_032_881, prog: 'do 300 tys.', skladka_gr: 83_058 },
+      ryczalt_odliczenia: { spoleczne_zaplacone_gr: 178_829, zdrowotna_50_proc_gr: 41_529 },
+      ryczalt: { ryczalt_gr: 153_600 },
+    });
+  });
+
+  it('szkielety G2-G7 i G14 liczą grudzień 2026 z historią roku; w G3 najem jest już ponad progiem', () => {
+    const grudnie = new Map<string, Record<string, unknown>>();
+    for (const plik of pliki.filter((f) => f !== 'G1.json')) {
+      const przypadek = JSON.parse(readFileSync(join(KATALOG, plik), 'utf8')) as Przypadek;
+      const w = policzPrzypadek({ ...przypadek, miesiace: przypadek.miesiace.filter((m) => m.miesiac === '2026-12') }, parametryRoku);
+      expect(Object.keys(w), przypadek.id).toEqual(['2026-12']);
+      grudnie.set(przypadek.id, w['2026-12']);
+    }
+    // 11 × 11 000 zł = 121 000 zł do listopada, więc cały grudzień idzie z 12,5 %.
+    expect(grudnie.get('G3')?.ryczalt).toMatchObject({ przychod_wg_stawek_gr: { '12.5': 1_100_000 } });
   });
 
   it('porównanie bierze tylko pola wypełnione przez księgową', () => {

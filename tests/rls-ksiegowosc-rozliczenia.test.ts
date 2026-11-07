@@ -82,7 +82,7 @@ async function sprzataj() {
   }
 }
 
-const odczyt = (client: SupabaseClient) => czytajRozliczenia(client, ORG, '2025-12-01', '2026-12-01');
+const odczyt = (client: SupabaseClient) => czytajRozliczenia(client, ORG, '2026-10');
 
 describe.skipIf(!hasDatabase)('00168: rozliczenia miesiąca na prawdziwym PostgREST', () => {
   beforeAll(async () => {
@@ -139,10 +139,14 @@ describe.skipIf(!hasDatabase)('00168: rozliczenia miesiąca na prawdziwym PostgR
     expect((await other.from('tax_settlements').insert({ ...WIERSZ, rodzaj: 'zdrowotna' })).error?.code).toBe('42501');
   });
 
-  it('zapłata: status z datą i cofnięcie przechodzą; status bez daty odrzuca CHECK', async () => {
+  it('zapłata: status z datą i cofnięcie przechodzą; status bez daty, data sprzed miesiąca i z przyszłości odrzuca baza', async () => {
     const owner = await signedIn(OWNER_EMAIL, ORG);
     const bezDaty = await owner.from('tax_settlements').update({ status: 'zaplacone' }).eq('tenant_id', ORG);
     expect(bezDaty.error?.message).toContain('tax_settlements_zaplata_check');
+    const przedMiesiacem = await owner.from('tax_settlements').update({ status: 'zaplacone', zaplacone_o: '2026-09-30' }).eq('tenant_id', ORG);
+    expect(przedMiesiacem.error?.message).toContain('tax_settlements_zaplata_od_okresu_check');
+    const zPrzyszlosci = await owner.from('tax_settlements').update({ status: 'zaplacone', zaplacone_o: '2099-01-05' }).eq('tenant_id', ORG);
+    expect([zPrzyszlosci.error?.code, zPrzyszlosci.error?.hint]).toEqual(['23514', 'tax_settlement_future_payment']);
     expect((await owner.from('tax_settlements').update({ status: 'zaplacone', zaplacone_o: '2026-11-05' }).eq('tenant_id', ORG)).error).toBeNull();
     expect((await odczyt(owner))[0]).toMatchObject({ status: 'zaplacone', zaplaconeO: '2026-11-05' });
     expect((await owner.from('tax_settlements').update({ status: 'zatwierdzone', zaplacone_o: null }).eq('tenant_id', ORG)).error).toBeNull();
@@ -181,5 +185,18 @@ describe.skipIf(!hasDatabase)('00168: rozliczenia miesiąca na prawdziwym PostgR
     expect(najem.error?.message).toContain('tax_profiles_najem_check');
     const ryczalt = await owner.from('tax_profiles').insert({ tenant_id: ORG, valid_from: '2026-01-01', forma: 'ryczalt', stawka_domyslna: 850, zus_etap: 'pelny', najem: true });
     expect(ryczalt.error).toBeNull();
+  });
+
+  it('odczyt miesiąca: jego wersje i wszystkie wcześniejsze zapłacone (odliczenie po dniu zapłaty), bez niezapłaconych z innych miesięcy', async () => {
+    const owner = await signedIn(OWNER_EMAIL, ORG);
+    const wstaw = await owner.from('tax_settlements').insert([
+      { ...WIERSZ, okres: '2026-08-01', rodzaj: 'zus_spoleczne', migawka: { spoleczneBezFpGr: 178829 }, wejscia_hash: 'c'.repeat(64) },
+      { ...WIERSZ, okres: '2026-09-01', rodzaj: 'zus_spoleczne', wejscia_hash: 'd'.repeat(64) },
+    ]);
+    expect(wstaw.error).toBeNull();
+    const zaplata = await owner.from('tax_settlements').update({ status: 'zaplacone', zaplacone_o: '2026-10-05' }).eq('tenant_id', ORG).eq('okres', '2026-08-01');
+    expect(zaplata.error).toBeNull();
+    const listopad = await czytajRozliczenia(owner, ORG, '2026-11');
+    expect(listopad.map((r) => [r.miesiac, r.rodzaj, r.status, r.spoleczneBezFpGr])).toEqual([['2026-08', 'zus_spoleczne', 'zaplacone', 178829]]);
   });
 });

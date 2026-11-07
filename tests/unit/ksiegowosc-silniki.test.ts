@@ -154,10 +154,23 @@ describe('ryczałt za miesiąc', () => {
     expect(doPelnychZlotych(1_279_650)).toBe(1_279_700);
   });
 
-  it('12,5 % po progu najmu liczy się ze swojego klucza; stawka spoza parametrów i ujemny przychód to brak', () => {
+  it('12,5 % po progu najmu liczy się ze swojego klucza; stawka spoza parametrów to brak', () => {
     const najem = ryczaltMiesiaca(wejscie({ przychodWgStawekGr: new Map([[1250, 1_000_000]]) }), RYC);
     expect(najem.ok && najem.ryczalt.ryczaltGr).toBe(125_000);
-    expect(ryczaltMiesiaca(wejscie({ przychodWgStawekGr: new Map([[2300, 1]]) }), RYC)).toMatchObject({ ok: false });
-    expect(ryczaltMiesiaca(wejscie({ przychodWgStawekGr: new Map([[1200, -100]]) }), RYC)).toMatchObject({ ok: false, brak: expect.stringContaining('ujemny') });
+    expect(ryczaltMiesiaca(wejscie({ przychodWgStawekGr: new Map([[2300, 1]]) }), RYC)).toMatchObject({ ok: false, brak: expect.stringContaining('23 %') });
+  });
+
+  it('ujemny przychód stawki przechodzi na kolejny miesiąc i zmniejsza tam przychód tej samej stawki', () => {
+    const lipiec = ryczaltMiesiaca(wejscie({ przychodWgStawekGr: new Map([[1200, -50_000], [850, 1_000_000]]) }), RYC);
+    if (!lipiec.ok) throw new Error(lipiec.brak);
+    // 12 % ma ryczałt zero, 8,5 % liczy się normalnie: 10 000 zł × 8,5 % = 850 zł.
+    expect(lipiec.ryczalt.ryczaltGr).toBe(85_000);
+    expect([...lipiec.ryczalt.ujemneNaKolejneGr]).toEqual([[1200, -50_000]]);
+    const sierpien = ryczaltMiesiaca(
+      wejscie({ przychodWgStawekGr: new Map([[1200, 1_000_000]]), ujemneZPoprzednichGr: lipiec.ryczalt.ujemneNaKolejneGr }),
+      RYC,
+    );
+    // (10 000 - 500) zł × 12 % = 1 140 zł.
+    expect(sierpien.ok && [sierpien.ryczalt.ryczaltGr, sierpien.ryczalt.ujemneNaKolejneGr.size]).toEqual([114_000, 0]);
   });
 });

@@ -45,6 +45,248 @@
     { "nazwa": "ryczalt_prog_najmu", "okres": "2027", "wartosc": "", "zrodlo": "" },
     { "nazwa": "limit_zwolnienia_vat", "okres": "2027", "wartosc": "", "zrodlo": "" }
   ],
+  "historia": [
+    {
+      "miesiac": "2026-01",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2026-01-31",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-02",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-01"
+        ],
+        "przychody": [
+          {
+            "data": "2026-02-28",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-03",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-02"
+        ],
+        "przychody": [
+          {
+            "data": "2026-03-31",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-04",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-03"
+        ],
+        "przychody": [
+          {
+            "data": "2026-04-30",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-05",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-04"
+        ],
+        "przychody": [
+          {
+            "data": "2026-05-31",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-06",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-05"
+        ],
+        "przychody": [
+          {
+            "data": "2026-06-30",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-07",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-06"
+        ],
+        "przychody": [
+          {
+            "data": "2026-07-31",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-08",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-07"
+        ],
+        "przychody": [
+          {
+            "data": "2026-08-31",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-09",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-08"
+        ],
+        "przychody": [
+          {
+            "data": "2026-09-30",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-10",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-09"
+        ],
+        "przychody": [
+          {
+            "data": "2026-10-31",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    },
+    {
+      "miesiac": "2026-11",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": [
+          "2026-10"
+        ],
+        "przychody": [
+          {
+            "data": "2026-11-30",
+            "netto_gr": 1100000,
+            "stawka_ryczaltu": "8.5",
+            "stawka_vat": "zw",
+            "vat_gr": 0,
+            "korekta_do": null,
+            "opis": "czynsz za najem lokalu użytkowego"
+          }
+        ],
+        "koszty": []
+      }
+    }
+  ],
   "miesiace": [
     {
       "miesiac": "2026-12",

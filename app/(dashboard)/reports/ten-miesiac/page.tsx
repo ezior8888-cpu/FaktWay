@@ -1,20 +1,32 @@
 import { notFound } from 'next/navigation';
+import { RiFileList3Line, RiHeartPulseLine, RiPercentLine, RiShieldUserLine } from '@remixicon/react';
+import type { ComponentType } from 'react';
 
 import MonthSelector from '@/components/expenses/finora/month-selector';
+import { StatCell, StatCellError, StatsCardsFrame } from '@/components/expenses/finora/stats-cards';
 import { ZaplaconeRozliczenie, ZatwierdzMiesiac } from '@/components/ksiegowosc/ten-miesiac-akcje';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { monthLabel } from '@/lib/expenses/month';
+import { monthLabel, shiftMonth } from '@/lib/expenses/month';
 import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { formatujRachunek, mikrorachunekZNip } from '@/lib/ksiegowosc/mikrorachunek';
-import { wersjaNa } from '@/lib/ksiegowosc/profil';
+import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
 import { NAZWY_ROZLICZEN, type RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
-import { aktualne, czytajTenMiesiac, type Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
+import {
+  aktualne,
+  czytajTenMiesiac,
+  doZatwierdzenia,
+  miesiacZakonczony,
+  PO_KONCU_MIESIACA,
+  zaplacono,
+  type DaneMiesiaca,
+  type PozycjaZeSkrotem,
+  type Rozliczenie,
+} from '@/lib/ksiegowosc/ten-miesiac-dane';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
-import { granice } from '@/lib/ksiegowosc/zus';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -26,16 +38,13 @@ export const dynamic = 'force-dynamic';
  *
  * Za wyłącznikiem (obszar `ten_miesiac`): firma poza pilotażem dostaje 404.
  * Bez parametrów potwierdzonych przez księgową, profilu albo z brakami
- * ewidencji strona pokazuje braki zamiast kwot (sekcja 4, pkt 8).
+ * ewidencji strona pokazuje braki zamiast kwot (sekcja 4, pkt 8); brak jednej
+ * pozycji nie zabiera kwot pozostałych.
  */
 
-const zl = (gr: number) => `${formatPlMoney(gr / 100)} zł`;
+type DaneOk = Extract<DaneMiesiaca, { ok: true }>;
 
-function poprzedniMiesiac(dzis: string): string {
-  const [r, m] = dzis.split('-').map(Number);
-  const d = new Date(Date.UTC(r, m - 2, 1));
-  return d.toISOString().slice(0, 7);
-}
+const zl = (gr: number) => `${formatPlMoney(gr / 100)} zł`;
 
 function miesiacZParametrow(sp: { month?: string; year?: string }, dzis: string): string {
   const m = Number(sp.month);
@@ -44,7 +53,14 @@ function miesiacZParametrow(sp: { month?: string; year?: string }, dzis: string)
     return `${r}-${String(m).padStart(2, '0')}`;
   }
   // Domyślnie poprzedni miesiąc: ten, który właśnie się rozlicza.
-  return poprzedniMiesiac(dzis);
+  return shiftMonth(dzis.slice(0, 7), -1);
+}
+
+/** Podpis każdej kwoty (plan, sekcja 8): rok stawek, a dla zdrowotnej rok składkowy, gdy jest inny. Kończy się kropką. */
+function podpis(rok: number, rokSkladkowy: number): string {
+  const zdrowotna =
+    rokSkladkowy !== rok ? `; składka zdrowotna według stawek roku składkowego od lutego ${rokSkladkowy} r. do stycznia ${rokSkladkowy + 1} r.` : '';
+  return `Według Twoich danych i stawek na ${rok} r.${zdrowotna}`;
 }
 
 export default async function TenMiesiacPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string }> }) {
@@ -56,14 +72,15 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
   const miesiac = miesiacZParametrow(await searchParams, dzis);
   const tytul = monthLabel(miesiac);
   const rok = Number(miesiac.slice(0, 4));
-  const zakonczony = granice(miesiac).do < dzis;
+  const rokSkladkowy = rokSkladkowyZdrowotnej(miesiac);
   const canEdit = ctx.role === 'owner' || ctx.role === 'admin';
 
-  const [dane, { data: firma }] = await Promise.all([
+  const [dane, firma] = await Promise.all([
     czytajTenMiesiac(ctx.supabase, ctx.tenantId, miesiac),
     ctx.supabase.from('tenants').select('nip').eq('id', ctx.tenantId).maybeSingle(),
   ]);
-  const nip = String(firma?.nip ?? '').replace(/\D/g, '');
+  // `null`: NIP-u nie udało się odczytać (inny komunikat niż „brak NIP w ustawieniach”).
+  const nip = firma.error ? null : String(firma.data?.nip ?? '').replace(/\D/g, '');
   const mikro = nip ? mikrorachunekZNip(nip) : null;
 
   return (
@@ -92,98 +109,98 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
         </Alert>
       ) : (
         <>
-          <Card>
-            <CardContent className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Kafel nazwa="Przychód w miesiącu" kwotaGr={dane.wynik.przychodGr} />
-                <Kafel nazwa="Ryczałt" kwotaGr={dane.wynik.ryczalt.ryczaltGr} />
-                <Kafel nazwa="Składki społeczne" kwotaGr={dane.wynik.skladki.razemGr + dane.wynik.skladki.funduszPracyGr} />
-                <Kafel nazwa="Składka zdrowotna" kwotaGr={dane.wynik.zdrowotna.skladkaGr} />
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Według Twoich danych i stawek na {rok} r. Od przychodu odliczono {zl(dane.wynik.ryczalt.odliczenia.odliczonoGr)}: składki
-                społeczne zapłacone w tym miesiącu {zl(dane.wynik.ryczalt.odliczenia.spoleczneZaplaconeGr)}, połowa zapłaconej składki
-                zdrowotnej {zl(dane.wynik.ryczalt.odliczenia.zdrowotna50ProcGr)} i nadwyżka z poprzednich miesięcy{' '}
-                {zl(dane.wynik.ryczalt.odliczenia.nadwyzkaZPoprzednichGr)}; na kolejne miesiące zostaje{' '}
-                {zl(dane.wynik.ryczalt.odliczenia.nadwyzkaNaKolejneGr)}. Odlicza się składki oznaczone jako zapłacone, z datą zapłaty.
-                Składka zdrowotna: próg „{dane.wynik.zdrowotna.prog}”, bo przychód od początku roku po odliczeniu zapłaconych składek
-                społecznych to {zl(dane.wynik.zdrowotna.przychodNarastajacoGr)}.
-              </p>
-            </CardContent>
-          </Card>
+          <Kafle dane={dane} podpisKwot={podpis(rok, rokSkladkowy)} />
 
           <Card>
             <CardContent className="flex flex-col gap-4">
-              <h2 className="text-sm font-medium">Do zapłaty</h2>
+              <div>
+                <h2 className="text-sm font-medium">Do zapłaty</h2>
+                <p className="text-muted-foreground text-xs">{podpis(rok, rokSkladkowy)}</p>
+              </div>
               <ul className="flex flex-col gap-4" aria-label="Rozliczenia do zapłaty">
-                {dane.pozycje.map((p) => {
-                  const zatwierdzone = aktualne(dane.rozliczenia).get(p.rodzaj);
-                  const aktualneDane = zatwierdzone?.wejsciaHash === p.wejsciaHash;
-                  return (
-                    <li key={p.rodzaj} className="flex flex-col gap-1 border-b pb-4 last:border-b-0 last:pb-0">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="text-sm font-medium">{NAZWY_ROZLICZEN[p.rodzaj]}</span>
-                        <span className="text-sm font-medium tabular-nums">{zl(p.kwotaGr)}</span>
-                      </div>
-                      {p.termin ? (
-                        <p className="text-muted-foreground text-xs">
-                          Termin: {formatIsoDatePl(p.termin.faktyczny)}
-                          {p.termin.przesuniety ? ` (ustawowo ${formatIsoDatePl(p.termin.nominalny)}, przesunięty na dzień roboczy)` : ''}.
-                        </p>
-                      ) : null}
-                      <p className="text-muted-foreground text-xs">{daneDoPrzelewu(p.rodzaj, miesiac, nip, mikro, wersjaNa(dane.wersje, `${miesiac}-01`)?.nrsZus ?? null)}</p>
-                      <StatusRozliczenia
-                        rodzaj={p.rodzaj}
-                        rozliczenie={zatwierdzone ?? null}
-                        aktualneDane={aktualneDane}
-                        kwotaGr={p.kwotaGr}
-                        canEdit={canEdit}
-                        dzis={dzis}
-                        miesiac={miesiac}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-              {canEdit ? (
-                zakonczony ? (
-                  dane.pozycje.some((p) => aktualne(dane.rozliczenia).get(p.rodzaj)?.wejsciaHash !== p.wejsciaHash) ? (
-                    <div className="flex justify-end">
-                      <ZatwierdzMiesiac
-                        miesiac={miesiac}
-                        etykieta={dane.rozliczenia.length > 0 ? 'Zatwierdź nową wersję' : 'Zatwierdź miesiąc'}
-                      />
+                {dane.pozycje.map((p) => (
+                  <li key={p.rodzaj} className="flex flex-col gap-1 border-b pb-4 last:border-b-0 last:pb-0">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="text-sm font-medium">{NAZWY_ROZLICZEN[p.rodzaj]}</span>
+                      {p.ok ? <span className="text-sm font-medium tabular-nums">{zl(p.kwotaGr)}</span> : null}
                     </div>
-                  ) : (
-                    <p className="text-muted-foreground text-xs">Miesiąc jest zatwierdzony i dane się od tego czasu nie zmieniły.</p>
-                  )
-                ) : (
-                  <p className="text-muted-foreground text-xs">Miesiąc zatwierdza się po jego zakończeniu, gdy są już wszystkie przychody.</p>
-                )
-              ) : (
-                <p className="text-muted-foreground text-xs">Miesiąc zatwierdza i zapłaty oznacza właściciel albo administrator firmy.</p>
-              )}
+                    {p.ok ? null : <p className="text-xs">{p.brak}</p>}
+                    {p.termin ? (
+                      <p className="text-muted-foreground text-xs">
+                        Termin: {formatIsoDatePl(p.termin.faktyczny)}
+                        {p.termin.przesuniety ? ` (ustawowo ${formatIsoDatePl(p.termin.nominalny)}, przesunięty na dzień roboczy)` : ''}.
+                      </p>
+                    ) : null}
+                    <p className="text-muted-foreground text-xs">{daneDoPrzelewu(p.rodzaj, miesiac, nip, mikro, dane.wynik.profil.nrsZus)}</p>
+                    <StatusRozliczenia pozycja={p} rozliczenia={dane.rozliczenia} canEdit={canEdit} dzis={dzis} miesiac={miesiac} />
+                  </li>
+                ))}
+              </ul>
+              <Zatwierdzanie dane={dane} miesiac={miesiac} dzis={dzis} canEdit={canEdit} />
             </CardContent>
           </Card>
         </>
       )}
 
-      {dane.rozliczenia.length > 0 ? <Historia rozliczenia={dane.rozliczenia} /> : null}
+      {dane.rozliczenia.length > 0 ? <Historia rozliczenia={dane.rozliczenia} canEdit={canEdit} dzis={dzis} /> : null}
     </div>
   );
 }
 
-function Kafel({ nazwa, kwotaGr }: { nazwa: string; kwotaGr: number }) {
+const IKONY: Readonly<Record<RodzajRozliczenia, ComponentType<{ className?: string }>>> = {
+  ryczalt: RiPercentLine,
+  zus_spoleczne: RiShieldUserLine,
+  zdrowotna: RiHeartPulseLine,
+};
+
+const ETYKIETY: Readonly<Record<RodzajRozliczenia, string>> = {
+  ryczalt: 'Ryczałt',
+  zus_spoleczne: 'Składki społeczne',
+  zdrowotna: 'Składka zdrowotna',
+};
+
+function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
+  const { ryczalt, zdrowotna, przychodGr } = dane.wynik;
+  const ujemne = ryczalt ? [...ryczalt.ujemneNaKolejneGr.values()].reduce((s, gr) => s - gr, 0) : 0;
   return (
-    <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground text-xs">{nazwa}</p>
-      <p className="text-lg font-medium tabular-nums">{zl(kwotaGr)}</p>
-    </div>
+    <StatsCardsFrame
+      cells={[
+        przychodGr !== null ? (
+          <StatCell label="Przychód w miesiącu" value={zl(przychodGr)} icon={RiFileList3Line} />
+        ) : (
+          <StatCellError label="Przychód w miesiącu" message="Ewidencja ma w tym miesiącu braki; lista jest w zakładce „Ewidencja”." />
+        ),
+        ...dane.pozycje.map((p) =>
+          p.ok ? (
+            <StatCell key={p.rodzaj} label={ETYKIETY[p.rodzaj]} value={zl(p.kwotaGr)} icon={IKONY[p.rodzaj]} />
+          ) : (
+            <StatCellError key={p.rodzaj} label={ETYKIETY[p.rodzaj]} message="Kwoty nie liczymy; powód jest niżej, w „Do zapłaty”." />
+          ),
+        ),
+      ]}
+      footer={
+        <p className="text-muted-foreground text-xs">
+          {podpisKwot}
+          {ryczalt
+            ? ` Od przychodu odliczono ${zl(ryczalt.odliczenia.odliczonoGr)}: składki społeczne zapłacone w tym miesiącu ` +
+              `${zl(ryczalt.odliczenia.spoleczneZaplaconeGr)}, połowa zapłaconej składki zdrowotnej ${zl(ryczalt.odliczenia.zdrowotna50ProcGr)} ` +
+              `i nadwyżka z poprzednich miesięcy ${zl(ryczalt.odliczenia.nadwyzkaZPoprzednichGr)}; na kolejne miesiące zostaje ` +
+              `${zl(ryczalt.odliczenia.nadwyzkaNaKolejneGr)}. Odlicza się składki oznaczone jako zapłacone, z datą zapłaty.`
+            : ''}
+          {ujemne > 0 ? ` Korekty większe niż przychód zmniejszą przychód kolejnych miesięcy o ${zl(ujemne)}.` : ''}
+          {zdrowotna
+            ? ` Składka zdrowotna: próg „${zdrowotna.prog}”, bo przychód od początku roku po odliczeniu zapłaconych składek ` +
+              `społecznych to ${zl(zdrowotna.przychodNarastajacoGr)}.`
+            : ''}
+        </p>
+      }
+    />
   );
 }
 
-function daneDoPrzelewu(rodzaj: RodzajRozliczenia, miesiac: string, nip: string, mikro: string | null, nrs: string | null): string {
+function daneDoPrzelewu(rodzaj: RodzajRozliczenia, miesiac: string, nip: string | null, mikro: string | null, nrs: string | null): string {
   if (rodzaj === 'ryczalt') {
+    if (nip === null) return 'Nie udało się odczytać NIP firmy, więc mikrorachunku teraz nie pokazujemy; strona spróbuje ponownie przy następnym otwarciu.';
     if (!mikro) return 'Mikrorachunek podatkowy wylicza się z NIP firmy, a NIP jest w Ustawieniach, w danych firmy.';
     return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza PPE, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
   }
@@ -191,59 +208,86 @@ function daneDoPrzelewu(rodzaj: RodzajRozliczenia, miesiac: string, nip: string,
   return `Rachunek składkowy ZUS ${formatujRachunek(nrs)}.`;
 }
 
+/**
+ * Stan ostatniej zatwierdzonej wersji z kontrolką zapłaty. Dopłata liczy się od
+ * najwyższej zapłaconej wersji, tak jak odliczenia (`przyrostyZaplat`).
+ */
 function StatusRozliczenia({
-  rodzaj,
-  rozliczenie,
-  aktualneDane,
-  kwotaGr,
+  pozycja: p,
+  rozliczenia,
   canEdit,
   dzis,
   miesiac,
 }: {
-  rodzaj: RodzajRozliczenia;
-  rozliczenie: Rozliczenie | null;
-  aktualneDane: boolean;
-  kwotaGr: number;
+  pozycja: PozycjaZeSkrotem;
+  rozliczenia: Rozliczenie[];
   canEdit: boolean;
   dzis: string;
   miesiac: string;
 }) {
-  if (!rozliczenie) return <p className="text-xs">Niezatwierdzone.</p>;
-  const wersja = `wersja ${rozliczenie.wersja}`;
-  if (!aktualneDane) {
-    const doplata = rozliczenie.status === 'zaplacone' ? kwotaGr - rozliczenie.kwotaGr : null;
-    return (
-      <p className="text-xs">
-        Dane zmieniły się po zatwierdzeniu ({wersja}: {zl(rozliczenie.kwotaGr)}). Nowa wersja czeka na zatwierdzenie
-        {doplata !== null && doplata > 0 ? `; po zapłacie poprzedniej wersji dopłata to ${zl(doplata)}` : ''}.
-      </p>
-    );
-  }
+  const ostatnia = aktualne(rozliczenia).get(p.rodzaj);
+  if (!ostatnia) return p.ok ? <p className="text-xs">Niezatwierdzone.</p> : null;
+  const zaplaconoGr = zaplacono(rozliczenia, p.rodzaj);
+  const wersja = `wersja ${ostatnia.wersja}`;
+  const stan =
+    ostatnia.status === 'zaplacone' && ostatnia.zaplaconeO
+      ? `Zapłacono ${formatIsoDatePl(ostatnia.zaplaconeO)} (${wersja}: ${zl(ostatnia.kwotaGr)}).`
+      : zaplaconoGr > 0
+        ? `Zatwierdzone (${wersja}: ${zl(ostatnia.kwotaGr)}); wcześniejsza wersja jest zapłacona (${zl(zaplaconoGr)}), ` +
+          `więc do dopłaty zostaje ${zl(Math.max(0, ostatnia.kwotaGr - zaplaconoGr))}.`
+        : `Zatwierdzone (${wersja}).`;
+  const zmiana =
+    p.ok && ostatnia.wejsciaHash !== p.wejsciaHash
+      ? `Dane zmieniły się po zatwierdzeniu: nowa kwota ${zl(p.kwotaGr)} czeka na zatwierdzenie` +
+        (zaplaconoGr > 0 ? `; po zatwierdzeniu do dopłaty zostanie ${zl(Math.max(0, p.kwotaGr - zaplaconoGr))}` : '') +
+        '.'
+      : null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-xs">
-        {rozliczenie.status === 'zaplacone' && rozliczenie.zaplaconeO
-          ? `Zapłacono ${formatIsoDatePl(rozliczenie.zaplaconeO)} (${wersja}).`
-          : `Zatwierdzone (${wersja}).`}
-      </p>
-      {canEdit ? (
-        <ZaplaconeRozliczenie
-          id={rozliczenie.id}
-          nazwa={NAZWY_ROZLICZEN[rodzaj]}
-          zaplacone={rozliczenie.status === 'zaplacone'}
-          dzis={dzis}
-          najwczesniej={`${miesiac}-01`}
-        />
-      ) : null}
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs">{stan}</p>
+        {canEdit ? (
+          <ZaplaconeRozliczenie
+            id={ostatnia.id}
+            nazwa={NAZWY_ROZLICZEN[p.rodzaj]}
+            zaplacone={ostatnia.status === 'zaplacone'}
+            dzis={dzis}
+            najwczesniej={`${miesiac}-01`}
+          />
+        ) : null}
+      </div>
+      {zmiana ? <p className="text-xs">{zmiana}</p> : null}
     </div>
   );
 }
 
-function Historia({ rozliczenia }: { rozliczenia: Rozliczenie[] }) {
+function Zatwierdzanie({ dane, miesiac, dzis, canEdit }: { dane: DaneOk; miesiac: string; dzis: string; canEdit: boolean }) {
+  if (!canEdit) return <p className="text-muted-foreground text-xs">Miesiąc zatwierdza i zapłaty oznacza właściciel albo administrator firmy.</p>;
+  if (!miesiacZakonczony(miesiac, dzis)) return <p className="text-muted-foreground text-xs">{PO_KONCU_MIESIACA}</p>;
+  if (doZatwierdzenia(dane).length === 0) {
+    return dane.pozycje.some((p) => p.ok) ? (
+      <p className="text-muted-foreground text-xs">Policzone kwoty są zatwierdzone i dane się od tego czasu nie zmieniły.</p>
+    ) : null;
+  }
+  // Akcja zatwierdzi tylko to, co widać: skróty pozycji z tego widoku.
+  const skroty = Object.fromEntries(dane.pozycje.flatMap((p) => (p.ok ? [[p.rodzaj, p.wejsciaHash]] : [])));
+  return (
+    <div className="flex justify-end">
+      <ZatwierdzMiesiac miesiac={miesiac} skroty={skroty} etykieta={dane.rozliczenia.length > 0 ? 'Zatwierdź nową wersję' : 'Zatwierdź miesiąc'} />
+    </div>
+  );
+}
+
+function Historia({ rozliczenia, canEdit, dzis }: { rozliczenia: Rozliczenie[]; canEdit: boolean; dzis: string }) {
+  // Starszą wersję da się oznaczyć albo poprawić tutaj; najnowszą przy rozliczeniu wyżej.
+  const najnowsze = new Set([...aktualne(rozliczenia).values()].map((r) => r.id));
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Historia wersji</h2>
+        <div>
+          <h2 className="text-sm font-medium">Historia wersji</h2>
+          <p className="text-muted-foreground text-xs">Kwoty zatwierdzonych wersji według danych z dnia zatwierdzenia.</p>
+        </div>
         <Table aria-label="Wersje rozliczeń miesiąca">
           <TableHeader>
             <TableRow>
@@ -252,6 +296,11 @@ function Historia({ rozliczenia }: { rozliczenia: Rozliczenie[] }) {
               <TableHead className="text-right">Kwota</TableHead>
               <TableHead>Zatwierdzone</TableHead>
               <TableHead>Zapłata</TableHead>
+              {canEdit ? (
+                <TableHead>
+                  <span className="sr-only">Zmiana zapłaty</span>
+                </TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -262,6 +311,19 @@ function Historia({ rozliczenia }: { rozliczenia: Rozliczenie[] }) {
                 <TableCell className="text-right tabular-nums">{zl(r.kwotaGr)}</TableCell>
                 <TableCell>{formatTimestampDatePl(r.zatwierdzoneO)}</TableCell>
                 <TableCell>{r.zaplaconeO ? formatIsoDatePl(r.zaplaconeO) : ''}</TableCell>
+                {canEdit ? (
+                  <TableCell>
+                    {najnowsze.has(r.id) ? null : (
+                      <ZaplaconeRozliczenie
+                        id={r.id}
+                        nazwa={`${NAZWY_ROZLICZEN[r.rodzaj]}, wersja ${r.wersja}`}
+                        zaplacone={r.status === 'zaplacone'}
+                        dzis={dzis}
+                        najwczesniej={`${r.miesiac}-01`}
+                      />
+                    )}
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>

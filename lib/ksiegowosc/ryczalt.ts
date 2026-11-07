@@ -7,6 +7,9 @@
  * - Od przychodu odlicza się składki społeczne zapłacone w miesiącu (bez FP)
  *   i 50 % zapłaconej składki zdrowotnej; czego nie da się odliczyć,
  *   przechodzi na kolejne miesiące roku.
+ * - Korekta większa niż przychód ze stawką w miesiącu zmniejsza przychód tej
+ *   stawki w kolejnych miesiącach roku (art. 14 ust. 1m i 1n ustawy o PIT przez
+ *   art. 6 ust. 1a ustawy o ryczałcie; sekcja 5, pewność średnia).
  * - Przy kilku stawkach odliczenia dzielą się proporcjonalnie do przychodu
  *   z każdej stawki (dla zdrowotnej tak mówi podatki.gov.pl; dla społecznych
  *   to podział neutralny, bez wybierania za klienta, D8; księgowa potwierdza
@@ -14,7 +17,9 @@
  * - Podstawy i ryczałt w pełnych złotych (art. 63 Ordynacji podatkowej).
  */
 
+import { etykietaStawki } from '@/lib/ksiegowosc/ewidencja';
 import type { KluczRyczaltu, Liczba } from '@/lib/ksiegowosc/parametry';
+import { procentGr } from '@/lib/ksiegowosc/zus';
 
 export type LiczbyRyczaltu = { readonly [P in KluczRyczaltu]: Liczba };
 
@@ -40,6 +45,8 @@ export interface WejscieRyczaltu {
   zdrowotnaZaplaconaGr: number;
   /** Odliczenia, których nie dało się wykorzystać we wcześniejszych miesiącach roku. */
   nadwyzkaZPoprzednichGr: number;
+  /** Ujemny przychód według stawki z wcześniejszych miesięcy roku (korekty większe niż przychód). */
+  ujemneZPoprzednichGr?: ReadonlyMap<number, number>;
 }
 
 export interface OdliczeniaRyczaltu {
@@ -52,11 +59,14 @@ export interface OdliczeniaRyczaltu {
 
 export interface RyczaltMiesiaca {
   odliczenia: OdliczeniaRyczaltu;
+  /** Przychód ze stawką po zmniejszeniu o korekty z wcześniejszych miesięcy, tylko dodatni. */
   przychodWgStawekGr: Map<number, number>;
   /** Przychód ze stawką po odliczeniach, w pełnych złotych (w groszach). */
   podstawaWgStawekGr: Map<number, number>;
   /** Ryczałt do zapłaty za miesiąc, w pełnych złotych (w groszach). */
   ryczaltGr: number;
+  /** Ujemny przychód według stawki, który przechodzi na kolejne miesiące. */
+  ujemneNaKolejneGr: Map<number, number>;
 }
 
 export type WynikRyczaltu = { ok: true; ryczalt: RyczaltMiesiaca } | { ok: false; brak: string };
@@ -101,23 +111,23 @@ export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): Wyn
     return { ok: false, brak: 'Brak w parametrach części składki zdrowotnej, którą odlicza się od przychodu.' };
   }
 
-  const przychody = new Map([...w.przychodWgStawekGr].filter(([, gr]) => gr !== 0).sort((a, b) => b[0] - a[0]));
-  for (const [pb, gr] of przychody) {
+  const lacznie = new Map<number, number>();
+  for (const zrodlo of [w.przychodWgStawekGr, w.ujemneZPoprzednichGr ?? new Map<number, number>()]) {
+    for (const [pb, gr] of zrodlo) lacznie.set(pb, (lacznie.get(pb) ?? 0) + gr);
+  }
+  const przychody = new Map<number, number>();
+  const ujemneNaKolejneGr = new Map<number, number>();
+  for (const [pb, gr] of [...lacznie].sort((a, b) => b[0] - a[0])) {
+    if (gr === 0) continue;
     const klucz = KLUCZE_STAWEK[pb];
     if (!klucz || liczby[klucz]?.wartosc !== pb) {
-      return { ok: false, brak: `Stawki ${String(pb / 100).replace('.', ',')} % nie ma w parametrach ryczałtu na ten rok.` };
+      return { ok: false, brak: `Stawki ${etykietaStawki(pb)} nie ma w parametrach ryczałtu na ten rok.` };
     }
-    if (gr < 0) {
-      return {
-        ok: false,
-        brak:
-          `Przychód ze stawką ${String(pb / 100).replace('.', ',')} % jest w tym miesiącu ujemny (korekty większe niż sprzedaż), ` +
-          'więc ryczałtu za miesiąc nie liczymy. Taki miesiąc rozlicza księgowa.',
-      };
-    }
+    if (gr < 0) ujemneNaKolejneGr.set(pb, gr);
+    else przychody.set(pb, gr);
   }
 
-  const zdrowotna50ProcGr = Math.floor((w.zdrowotnaZaplaconaGr * odliczenieZdrowotnej + 5_000) / 10_000);
+  const zdrowotna50ProcGr = procentGr(w.zdrowotnaZaplaconaGr, odliczenieZdrowotnej);
   const dostepne = w.nadwyzkaZPoprzednichGr + w.spoleczneZaplaconeGr + zdrowotna50ProcGr;
   const przychodGr = [...przychody.values()].reduce((a, b) => a + b, 0);
   const odliczonoGr = Math.min(dostepne, przychodGr);
@@ -145,6 +155,7 @@ export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): Wyn
       podstawaWgStawekGr,
       // Σ podstawa × pb to grosze × 10 000; do pełnych złotych z połówką w górę.
       ryczaltGr: Math.floor((podatekRazem + 500_000) / 1_000_000) * 100,
+      ujemneNaKolejneGr,
     },
   };
 }

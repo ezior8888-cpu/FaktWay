@@ -60,24 +60,25 @@ CREATE TABLE IF NOT EXISTS public.tax_settlements (
   CONSTRAINT tax_settlements_wersja_check CHECK (wersja >= 1),
   CONSTRAINT tax_settlements_kwota_check CHECK (kwota_gr >= 0),
   CONSTRAINT tax_settlements_status_check CHECK (status IN ('zatwierdzone', 'zaplacone')),
-  -- Data zapłaty jest dokładnie wtedy, gdy status mówi „zapłacone”.
+  -- Data zapłaty jest dokładnie wtedy, gdy status mówi „zapłacone”, i nie
+  -- wcześniej niż rozliczany miesiąc (data z przyszłości: wyzwalacz niżej).
   CONSTRAINT tax_settlements_zaplata_check CHECK ((status = 'zaplacone') = (zaplacone_o IS NOT NULL)),
+  CONSTRAINT tax_settlements_zaplata_od_okresu_check CHECK (zaplacone_o IS NULL OR zaplacone_o >= okres),
   CONSTRAINT tax_settlements_hash_check CHECK (wejscia_hash ~ '^[0-9a-f]{64}$'),
   CONSTRAINT tax_settlements_parametry_check CHECK (char_length(parametry_wersja) BETWEEN 1 AND 64)
 );
 
-CREATE INDEX IF NOT EXISTS idx_tax_settlements_tenant_okres
-  ON public.tax_settlements (tenant_id, okres);
--- Odliczenia ryczałtu czytają składki po dniu zapłaty.
-CREATE INDEX IF NOT EXISTS idx_tax_settlements_tenant_zaplacone
-  ON public.tax_settlements (tenant_id, zaplacone_o) WHERE zaplacone_o IS NOT NULL;
+-- Odczyt (firma, okres) obsługuje indeks UNIQUE powyżej; osobnych indeksów
+-- nie ma, więc oznaczenie zapłaty nie zmienia żadnej kolumny indeksowanej.
 
 COMMENT ON TABLE public.tax_settlements IS
   'Zatwierdzone rozliczenia miesiąca w wersjach (plan księgowości JDG, K4, D6). '
   'Niezmienne poza oznaczeniem zapłaty (wyzwalacz guard_tax_settlement_immutable); bez DELETE.';
 
 -- Niezmienność zatwierdzonego rozliczenia (D6). UPDATE może zmienić tylko
--- status i datę zapłaty; HINT pozwala akcji odróżnić ten błąd od CHECK.
+-- status i datę zapłaty, a data zapłaty nie może być z przyszłości (dzień
+-- w Polsce); HINT pozwala akcji odróżnić te błędy od CHECK. Ta sama reguła
+-- daty jest w akcji, a tutaj obejmuje też zapis prosto przez API.
 CREATE OR REPLACE FUNCTION public.guard_tax_settlement_immutable()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -98,6 +99,11 @@ BEGIN
      OR NEW.zatwierdzone_o IS DISTINCT FROM OLD.zatwierdzone_o THEN
     RAISE EXCEPTION 'Zatwierdzonego rozliczenia nie zmienia się (wersja %); zmiana danych tworzy nową wersję.', OLD.wersja
       USING ERRCODE = '23514', HINT = 'tax_settlement_immutable';
+  END IF;
+  IF NEW.zaplacone_o IS DISTINCT FROM OLD.zaplacone_o
+     AND NEW.zaplacone_o > (now() AT TIME ZONE 'Europe/Warsaw')::date THEN
+    RAISE EXCEPTION 'Data zapłaty (%) nie może być późniejsza niż dziś.', NEW.zaplacone_o
+      USING ERRCODE = '23514', HINT = 'tax_settlement_future_payment';
   END IF;
   RETURN NEW;
 END;

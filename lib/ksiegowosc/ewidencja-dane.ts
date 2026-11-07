@@ -26,10 +26,11 @@ import {
   type Ewidencja,
   type FakturaEwidencji,
   type KursPrzychodu,
+  type ProgNajmu,
   type RodzajFaktury,
   type WpisReczny,
 } from '@/lib/ksiegowosc/ewidencja';
-import { parametryRoku } from '@/lib/ksiegowosc/parametry';
+import { brakujace, parametryRoku } from '@/lib/ksiegowosc/parametry';
 import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { czytajWpisyReczne } from '@/lib/ksiegowosc/wpisy-reczne';
 import { nbpRateForCost } from '@/lib/nbp/client';
@@ -128,6 +129,24 @@ async function pozycje(client: SupabaseClient, ids: readonly string[], tylkoZeSt
     );
   }
   return wynik;
+}
+
+/**
+ * Próg najmu dla ewidencji (K4) z parametrów roku. D7: sekcja ryczałtu
+ * niepotwierdzona przez księgową to brak przy wierszach najmu, bo podział na
+ * stawki trafia do pliku JPK_EWP.
+ */
+export function progNajmuZParametrow(rok: number): ProgNajmu {
+  const brak = brakujace(rok, ['ryczalt']).find((b) => b.powod !== 'brak_liczby');
+  if (brak) return { brak: brak.komunikat };
+  const l = parametryRoku(rok)?.ryczalt.liczby;
+  const progGr = l?.progStawki8_5.wartosc ?? null;
+  const stawkaNajmuPb = l?.stawka8_5.wartosc ?? null;
+  const stawkaPonadProgPb = l?.stawkaPonadProg8_5.wartosc ?? null;
+  if (progGr === null || stawkaNajmuPb === null || stawkaPonadProgPb === null) {
+    return { brak: `Brak progu najmu w parametrach na ${rok} r., więc stawki nie ustalimy.` };
+  }
+  return { progGr, stawkaNajmuPb, stawkaPonadProgPb };
 }
 
 /**
@@ -257,7 +276,7 @@ export async function czytajEwidencje(
         wpisy,
         wersje,
         kursy: await kursy(faktury, rok, opcje.kurs ?? nbpRateForCost),
-        progNajmuGr: parametryRoku(rok)?.ryczalt.liczby.progStawki8_5.wartosc ?? null,
+        najem: progNajmuZParametrow(rok),
       }),
       wpisy,
       wersje,

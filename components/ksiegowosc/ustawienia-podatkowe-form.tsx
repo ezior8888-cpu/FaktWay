@@ -223,7 +223,7 @@ export function UstawieniaPodatkoweForm({
             onCheckedChange={(v) => setNajem(Boolean(v))}
           />
           <FieldContent>
-            <FieldLabel htmlFor="profil-najem">Przychody ze stawką 8,5 % to najem, dzierżawa albo zakwaterowanie</FieldLabel>
+            <FieldLabel htmlFor="profil-najem">Przychody ze stawką 8,5 % to najem, dzierżawa, zakwaterowanie albo badania i rozwój (B+R)</FieldLabel>
             <FieldDescription>
               Od nadwyżki takich przychodów ponad 100 000 zł w roku stawka wynosi 12,5 %. Ewidencja liczy to sama.
             </FieldDescription>
