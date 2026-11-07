@@ -79,6 +79,23 @@ exec 9> "$LOCK_FILE"
 flock -n 9 || fail "poprzednia próba wciąż trwa"
 ping_hc /start
 
+# Nocny zrzut w toku (np. próba nadrobiona po restarcie serwera o 01:30):
+# czekamy, aż skończy, żeby nie obciążać produkcji dwa razy naraz.
+BACKUP_LOCK=${BACKUP_LOCK:-/var/lock/faktflow-db-backup.lock}
+if [ -e "$BACKUP_LOCK" ]; then
+  exec 8< "$BACKUP_LOCK"
+  flock -w 3600 8 || fail "nocny zrzut trwa ponad godzinę ($BACKUP_LOCK) — próby nie zaczynam"
+  flock -u 8
+  exec 8<&-
+fi
+
+# Kontener po przerwanej próbie (timeout systemd, restart) blokowałby każdą
+# następną. Tę nazwę tworzy tylko próba, a blokada wyżej wyklucza drugą naraz.
+if docker ps -a --format '{{.Names}}' | grep -qx faktflow-restore-drill; then
+  log "usuwam kontener po przerwanej próbie: faktflow-restore-drill"
+  docker rm -f faktflow-restore-drill > /dev/null
+fi
+
 [ -f "$DRILL_SCRIPT" ] || fail "brak $DRILL_SCRIPT (restore-drill.sh)"
 
 # Najnowszy kompletny zrzut: plik .sha256 powstaje jako ostatni (db-backup.sh).
@@ -118,7 +135,7 @@ OUT=$(mktemp)
 trap 'rm -f "$OUT"' EXIT
 # pipefail: kod próby (tee się nie myli); `||` wyłącza pułapkę ERR.
 RC=0
-IMAGE=$IMAGE bash "$DRILL_SCRIPT" "$BASE.dump" "$BASE.roles.sql" 2>&1 | tee "$OUT" || RC=$?
+IMAGE=$IMAGE PULL=never bash "$DRILL_SCRIPT" "$BASE.dump" "$BASE.roles.sql" 2>&1 | tee "$OUT" || RC=$?
 
 WYNIK=$(grep -E '^[0-9TZ:-]+ WYNIK: ' "$OUT" | tail -n 1 | sed -E 's/^[^ ]+ //') || WYNIK=""
 SUMMARY="${WYNIK:-restore-drill.sh zakończony kodem $RC} (zrzut $NAME)"

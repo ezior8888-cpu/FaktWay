@@ -49,7 +49,7 @@ for v in K DB; do
   [ -n "${!v:-}" ] || { echo "Brak zmiennej $v w $ENV_FILE." >&2; exit 1; }
 done
 
-SSH=(ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=15 "root@$DB")
+SSH=(ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 "root@$DB")
 UNIT=faktflow-restore-drill
 
 case "${1:-}" in
@@ -116,7 +116,7 @@ RC=0
 "${SSH[@]}" "systemctl start $UNIT.service" || RC=$?
 "${SSH[@]}" "journalctl -u $UNIT --no-pager -n 60 -o cat"
 if [ "$RC" -ne 0 ]; then
-  echo "Próba NIEUDANA (wyżej log). Healthchecks dostał /fail." >&2
+  echo "Próba NIEUDANA albo zerwane połączenie (wyżej log; przy zerwanym próba trwa dalej na db-1, sprawdź: --sprawdz)." >&2
   exit 1
 fi
 echo "Próba udana; Healthchecks dostał ping. Następna: niedziela 03:30 UTC."

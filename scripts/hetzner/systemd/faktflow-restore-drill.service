@@ -13,3 +13,5 @@ ExecStart=/usr/local/sbin/faktflow-restore-drill-tydzien
 Nice=10
 IOSchedulingClass=idle
 TimeoutStartSec=45min
+# Przy timeoucie albo stopie kontener działa dalej w dockerd: sprzątamy go tu.
+ExecStopPost=-/bin/sh -c 'docker rm -f faktflow-restore-drill > /dev/null 2>&1 || true'

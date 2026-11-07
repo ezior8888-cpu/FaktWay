@@ -28,6 +28,7 @@
 #   IMAGE=supabase/postgres:15.8.1.085   obraz jak na produkcji
 #   KEEP_CONTAINER=1                     nie usuwaj kontenera po próbie
 #   READY_PAUSE=5                        s czekania po starcie bazy (skrypty init)
+#   PULL=missing                         `never` = bez pobierania obrazu (próba na db-1)
 # ════════════════════════════════════════════════════════════════
 
 set -Eeuo pipefail
@@ -74,7 +75,7 @@ psql_drill() { dexec -i "$NAME" psql -U supabase_admin -d postgres -v ON_ERROR_S
 
 T0=$(date +%s)
 log "start kontenera ($IMAGE, bez sieci)"
-docker run -d --name "$NAME" --network none --memory 1g --cpus 1 \
+docker run -d --pull "${PULL:-missing}" --name "$NAME" --network none --memory 1g --cpus 1 \
   -e POSTGRES_PASSWORD="$PW" \
   "$IMAGE" postgres -c config_file=/etc/postgresql/postgresql.conf \
   -c shared_buffers=64MB -c log_min_messages=fatal > /dev/null
@@ -108,7 +109,7 @@ if [ -n "$ROLES" ]; then
   ROLE_ERRORS=$(printf '%s\n' "$ROLE_OUT" | grep -ci 'error' || true)
   log "role wgrane bez haseł (błędy: $ROLE_ERRORS)"
   printf '%s\n' "$ROLE_OUT" | grep -i 'error' | sed -E 's/^.*ERROR: +//' | sort | uniq -c | sort -rn | head -10
-  ROLE_UNEXPECTED=$(printf '%s\n' "$ROLE_OUT" | grep -i 'error' | grep -vc 'already exists' || true)
+  ROLE_UNEXPECTED=$(printf '%s\n' "$ROLE_OUT" | grep 'ERROR: ' | grep -vc 'already exists' || true)
   [ "$ROLE_UNEXPECTED" -eq 0 ] || check_fail "plik ról: $ROLE_UNEXPECTED błędów innych niż „already exists”"
 fi
 

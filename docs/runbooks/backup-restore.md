@@ -231,6 +231,9 @@ Alarm „restore-drill” w Healthchecks:
 - `WYNIK: BŁĄD`: log z `journalctl`; nowy rodzaj błędu `pg_restore` po
   aktualizacji obrazu sprawdź ręcznie jak w § 4, krok 5, i dopiero wtedy
   dopisz go do `EXPECTED_RESTORE_ERRORS` w `restore-drill.sh`;
+- `nocny zrzut trwa ponad godzinę`: `/var/log/faktflow-db-backup.log`;
+- kontener `faktflow-restore-drill` po przerwanej próbie usuwa następna próba
+  i `ExecStopPost` usługi; ręcznie: `docker rm -f faktflow-restore-drill`;
 - brak pinga 8 dni: `systemctl list-timers faktflow-restore-drill.timer`,
   `systemctl status faktflow-restore-drill`.
 

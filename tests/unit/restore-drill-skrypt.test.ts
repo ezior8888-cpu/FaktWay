@@ -73,6 +73,7 @@ printf '%s %s\\n' "$url" "$body" >> "$FAKE_DIR/pings"
 `;
 
 const FAKE_FLOCK = `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_DIR/flock-calls"
 exit "\${FAKE_FLOCK_RC:-0}"
 `;
 
@@ -323,6 +324,30 @@ describe('restore-drill-tydzien.sh: cotygodniowa próba z alarmem Healthchecks',
     expect(run.status).toBe(1);
     expect(run.pings.at(-1)).toContain('/fail BŁĄD: poprzednia próba wciąż trwa');
     expect(run.calls.some((c) => c.startsWith('docker run'))).toBe(false);
+  });
+
+  it('kontener po przerwanej próbie jest usuwany przed nową; obraz bez pobierania (--pull never)', () => {
+    seedDump('faktflow-20261107T013000Z');
+    h.answers.ps = 'faktflow-restore-drill';
+    const run = h.weekly();
+    // atrapa `ps` zwraca kontener także w restore-drill.sh, więc ten przebieg tam stanie;
+    // liczy się, że wrapper usunął kontener, zanim go wywołał
+    const rm = run.calls.findIndex((c) => c === 'docker rm -f faktflow-restore-drill');
+    expect(rm, run.out).toBeGreaterThanOrEqual(0);
+    expect(run.out).toContain('usuwam kontener po przerwanej próbie');
+    h.answers.ps = '';
+    const ok = h.weekly();
+    expect(ok.status, ok.out).toBe(0);
+    expect(ok.calls.find((c) => c.startsWith('docker run'))).toContain('--pull never');
+  });
+
+  it('nocny zrzut w toku: próba czeka na jego blokadę, potem idzie', () => {
+    seedDump('faktflow-20261107T013000Z');
+    const lock = join(h.dir, 'backup.lock');
+    writeFileSync(lock, '');
+    const run = h.weekly({ BACKUP_LOCK: posix(lock) });
+    expect(run.status, run.out).toBe(0);
+    expect(readFileSync(join(h.dir, 'flock-calls'), 'utf8')).toContain('-w 3600 8');
   });
 
   it('bez DRILL_HC_URL: próba idzie, głośne ostrzeżenie, zero pingów', () => {
