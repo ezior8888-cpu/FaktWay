@@ -112,6 +112,8 @@ export const profilSchema = z
     zusEtap: z.enum(ETAPY_ZUS, { message: 'Brak rodzaju składek ZUS.' }),
     zusOd: data.nullable(),
     chorobowe: z.boolean(),
+    /** Przychody 8,5 % to najem, dzierżawa albo zakwaterowanie: ponad 100 tys. zł w roku 12,5 % (00168, K4). */
+    najem: z.boolean().default(false),
     nrsZus: z
       .string()
       .nullable()
@@ -129,6 +131,9 @@ export const profilSchema = z
     }
     if ((p.zusEtap === 'ulga_na_start' || p.zusEtap === 'preferencyjny') && p.zusOd === null) {
       ctx.addIssue({ code: 'custom', path: ['zusOd'], message: 'Ulga na start i składki preferencyjne biegną od daty, która jest potrzebna.' });
+    }
+    if (p.najem && p.forma !== 'ryczalt') {
+      ctx.addIssue({ code: 'custom', path: ['najem'], message: 'Próg najmu dotyczy tylko ryczałtu.' });
     }
     if (p.nrsZus !== null && !czyRachunekNrb(p.nrsZus)) {
       ctx.addIssue({ code: 'custom', path: ['nrsZus'], message: 'To nie jest poprawny numer rachunku (26 cyfr).' });
@@ -152,9 +157,12 @@ interface WierszProfilu {
   zus_od: string | null;
   chorobowe: boolean;
   nrs_zus: string | null;
+  najem?: boolean | null;
 }
 
-export const KOLUMNY_PROFILU = 'id, valid_from, forma, stawka_domyslna, zus_etap, zus_od, chorobowe, nrs_zus';
+export const KOLUMNY_PROFILU = 'id, valid_from, forma, stawka_domyslna, zus_etap, zus_od, chorobowe, nrs_zus, najem';
+/** Przed wgraniem 00168 kolumny `najem` nie ma: odczyt bez niej, najem = false. */
+const KOLUMNY_PROFILU_PRZED_00168 = 'id, valid_from, forma, stawka_domyslna, zus_etap, zus_od, chorobowe, nrs_zus';
 
 export function zWiersza(w: WierszProfilu): WersjaProfilu {
   return {
@@ -165,6 +173,7 @@ export function zWiersza(w: WierszProfilu): WersjaProfilu {
     zusEtap: w.zus_etap,
     zusOd: w.zus_od,
     chorobowe: w.chorobowe,
+    najem: w.najem === true,
     nrsZus: w.nrs_zus,
   };
 }
@@ -178,6 +187,7 @@ export function doWiersza(tenantId: string, p: Profil) {
     zus_etap: p.zusEtap,
     zus_od: p.zusOd,
     chorobowe: p.chorobowe,
+    najem: p.najem,
     nrs_zus: p.nrsZus,
   };
 }
@@ -273,14 +283,14 @@ function czyBrakTabeli(kod: string | undefined): boolean {
  * inny błąd rzuca.
  */
 export async function czytajWersjeProfilu(client: SupabaseClient, tenantId: string): Promise<WersjaProfilu[]> {
-  const { data: wiersze, error } = await client
-    .from('tax_profiles')
-    .select(KOLUMNY_PROFILU)
-    .eq('tenant_id', tenantId)
-    .order('valid_from', { ascending: true });
+  const czytaj = (kolumny: string) =>
+    client.from('tax_profiles').select(kolumny).eq('tenant_id', tenantId).order('valid_from', { ascending: true });
+  let { data: wiersze, error } = await czytaj(KOLUMNY_PROFILU);
+  // Kod przed migracją 00168 (najem): Postgres 42703, PostgREST PGRST204.
+  if (error && (error.code === '42703' || error.code === 'PGRST204')) ({ data: wiersze, error } = await czytaj(KOLUMNY_PROFILU_PRZED_00168));
   if (error) {
     if (czyBrakTabeli(error.code)) return [];
     throw new Error(`Nie można odczytać ustawień podatkowych: ${error.message}`);
   }
-  return ((wiersze ?? []) as WierszProfilu[]).map(zWiersza);
+  return ((wiersze ?? []) as unknown as WierszProfilu[]).map(zWiersza);
 }

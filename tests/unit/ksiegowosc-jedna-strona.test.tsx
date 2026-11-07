@@ -27,7 +27,7 @@ vi.mock('@/lib/ksiegowosc/wylacznik', () => ({
 
 const { default: KsiegowoscLayout } = await import('@/app/(dashboard)/reports/layout');
 const { SectionTabsNav } = await import('@/components/lists/section-tabs-nav');
-const { EWIDENCJA_TAB, KSIEGOWOSC_TABS, USTAWIENIA_PODATKOWE_TAB } = await import('@/components/reports/ksiegowosc-tabs');
+const { EWIDENCJA_TAB, KSIEGOWOSC_TABS, TEN_MIESIAC_TAB, USTAWIENIA_PODATKOWE_TAB } = await import('@/components/reports/ksiegowosc-tabs');
 
 const ROOT = join(__dirname, '..', '..');
 
@@ -50,14 +50,14 @@ describe('Księgowość — jedna strona', () => {
     expect(all.indexOf(tabs)).toBeLessThan(all.findIndex((el) => (el.props as { id?: string }).id === 'zakladka'));
   });
 
-  it('firma w pilotażu dostaje zakładki „Ewidencja” i „Ustawienia podatkowe”, błąd wyłącznika chowa tylko je', async () => {
+  it('firma w pilotażu dostaje zakładki „Ten miesiąc”, „Ewidencja” i „Ustawienia podatkowe”, błąd wyłącznika chowa tylko je', async () => {
     const zakladki = async () => {
       const tree = await KsiegowoscLayout({ children: <p>treść</p> });
       return (elements(tree).find((el) => el.type === SectionTabsNav)!.props as { tabs: unknown[] }).tabs;
     };
     wylacznik.wlaczony = true;
-    expect(await zakladki()).toEqual([...KSIEGOWOSC_TABS, EWIDENCJA_TAB, USTAWIENIA_PODATKOWE_TAB]);
-    wylacznik.obszary = { ustawienia: false };
+    expect(await zakladki()).toEqual([...KSIEGOWOSC_TABS, TEN_MIESIAC_TAB, EWIDENCJA_TAB, USTAWIENIA_PODATKOWE_TAB]);
+    wylacznik.obszary = { ustawienia: false, ten_miesiac: false };
     expect(await zakladki()).toEqual([...KSIEGOWOSC_TABS, EWIDENCJA_TAB]);
     wylacznik.obszary = {};
     wylacznik.blad = true;

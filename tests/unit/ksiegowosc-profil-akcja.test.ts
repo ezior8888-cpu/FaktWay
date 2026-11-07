@@ -119,7 +119,7 @@ describe('zapis profilu podatkowego', () => {
       {
         wiersz: {
           tenant_id: 'firma-1', valid_from: '2027-01-01', forma: 'ryczalt', stawka_domyslna: 1200,
-          zus_etap: 'pelny', zus_od: null, chorobowe: false, nrs_zus: null,
+          zus_etap: 'pelny', zus_od: null, chorobowe: false, najem: false, nrs_zus: null,
         },
         opcje: { onConflict: 'tenant_id,valid_from' },
       },

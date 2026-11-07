@@ -29,6 +29,7 @@ import {
   type RodzajFaktury,
   type WpisReczny,
 } from '@/lib/ksiegowosc/ewidencja';
+import { parametryRoku } from '@/lib/ksiegowosc/parametry';
 import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { czytajWpisyReczne } from '@/lib/ksiegowosc/wpisy-reczne';
 import { nbpRateForCost } from '@/lib/nbp/client';
@@ -256,6 +257,7 @@ export async function czytajEwidencje(
         wpisy,
         wersje,
         kursy: await kursy(faktury, rok, opcje.kurs ?? nbpRateForCost),
+        progNajmuGr: parametryRoku(rok)?.ryczalt.liczby.progStawki8_5.wartosc ?? null,
       }),
       wpisy,
       wersje,

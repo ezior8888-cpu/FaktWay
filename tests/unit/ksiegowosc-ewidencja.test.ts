@@ -29,6 +29,7 @@ const RYCZALT_12: WersjaProfilu = {
   zusOd: null,
   chorobowe: false,
   nrsZus: null,
+  najem: false,
 };
 
 function faktura(z: Partial<FakturaEwidencji> = {}): FakturaEwidencji {
@@ -213,5 +214,38 @@ describe('kolejność i rok', () => {
     });
     expect(e.wiersze.map((w) => [w.lp, w.dowod])).toEqual([[1, 'RK/01'], [2, 'FV/2']]);
     expect(e.ryczaltWRoku).toBe(true);
+  });
+});
+
+describe('próg najmu (K4): 8,5 % ponad 100 000 zł w roku to 12,5 %', () => {
+  const NAJEM: WersjaProfilu = { ...RYCZALT_12, stawkaDomyslna: 850, najem: true };
+  const f = (id: string, dzien: string, gr: number) => faktura({ id, numer: `FV/${id}`, dataWystawienia: dzien, dataSprzedazy: dzien, nettoGr: gr });
+
+  it('wiersz przekraczający próg dzieli się, a kolejne idą z 12,5 %; JPK dostaje obie stawki', () => {
+    const e = ewidencja({
+      wersje: [NAJEM],
+      progNajmuGr: 10_000_000,
+      faktury: [f('a', '2026-02-01', 6_000_000), f('b', '2026-03-01', 5_000_000), f('c', '2026-04-01', 500_000)],
+    });
+    expect(e.braki).toEqual([]);
+    expect(e.wiersze.map((w) => [w.dowod, w.stawkaPb, w.kwotaGr])).toEqual([
+      ['FV/a', 850, 6_000_000],
+      ['FV/b', 850, 4_000_000],
+      ['FV/b', 1250, 1_000_000],
+      ['FV/c', 1250, 500_000],
+    ]);
+    expect(e.wiersze[2].uwagi).toContain('Najem ponad 100 000 zł w roku: 12,5 %');
+  });
+
+  it('bez znacznika najmu 8,5 % zostaje 8,5 %; bez progu w parametrach najem to brak', () => {
+    expect(ewidencja({ wersje: [{ ...NAJEM, najem: false }], progNajmuGr: 1, faktury: [f('a', '2026-02-01', 100)] }).wiersze[0].stawkaPb).toBe(850);
+    const bezProgu = ewidencja({ wersje: [NAJEM], progNajmuGr: null, faktury: [f('a', '2026-02-01', 100)] });
+    expect([bezProgu.wiersze, bezProgu.braki[0]?.komunikat]).toEqual([[], expect.stringContaining('brak progu najmu')]);
+  });
+
+  it('korekta in minus po przekroczeniu progu to brak (księgowa ustala stawkę)', () => {
+    const kor = faktura({ id: 'k', numer: 'KOR/k', rodzaj: 'korekta', dataWystawienia: '2026-05-01', nettoGr: -100_000 });
+    const e = ewidencja({ wersje: [NAJEM], progNajmuGr: 10_000_000, faktury: [f('a', '2026-02-01', 11_000_000), kor] });
+    expect(e.braki.map((b) => b.dokument)).toEqual(['KOR/k']);
   });
 });

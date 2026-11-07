@@ -167,6 +167,11 @@ Przygotowanie: 4.11.2026, odczyt kodu `origin/main` @ `7a249d3f` (po #368) i prz
 | Ewidencja: zaliczki | ZAL w miesiącu zaliczki, ROZ pomniejszona o rozliczone zaliczki, jak KPiR (`kpirRevenueNet`) | bez zmian | niska | art. 14 ust. 3 pkt 1 ustawy o PIT: zaliczka na dostawę wykonaną w następnym okresie nie jest przychodem. Księgowa rozstrzyga przed bramą; zmiana dotyczy też KPiR (K3) |
 | Ewidencja: korekty | różnica w dniu wystawienia korekty | bez zmian | średnia | korekta z powodu błędu rachunkowego albo oczywistej omyłki zmienia okres pierwotny (art. 14 ustawy o PIT); program tego nie rozpozna. Księgowa potwierdza (K3) |
 | JPK_EWP(4) | schemat `http://jpk.mf.gov.pl/wzor/2024/10/30/10301/` (pobrany 5.11.2026, `lib/exports/schemas/jpk-ewp4/`); jeden wiersz to jeden przychód z jedną stawką; osoba fizyczna: NIP, imię, nazwisko, data urodzenia | bez zmian w źródłach | wysoka | próg 100 tys. zł przy najmie (K_9 = 12,5) i znacznik `Kasowy_PIT`: K4 |
+| Zdrowotna, ryczałt: próg (K4) | przychód od początku roku pomniejszony o zapłacone składki społeczne bez FP; wyższa składka od miesiąca przekroczenia, bez korekty miesięcy wcześniejszych (biznes.gov.pl, ZUS) | bez zmian | średnia | czy pomniejszenie dotyczy testu progu, źródła nie mówią wprost; księgowa potwierdza w G1 i G5 |
+| Ryczałt: kilka stawek (K4) | odliczenia proporcjonalnie do przychodu z każdej stawki (zdrowotna: podatki.gov.pl; społeczne: podział neutralny, D8); podstawa każdej stawki i ryczałt z sumy do pełnych złotych | bez zmian | średnia | księgowa potwierdza w G4 |
+| Odliczenia ryczałtu (K4) | składki zapłacone w miesiącu to te oznaczone w FaktWay „Zapłacone” z datą; przy kolejnej wersji rozliczenia liczy się dopłata | bez zmian | wysoka (zasada), — (dane) | składki płacone poza programem trzeba oznaczyć, inaczej odliczenia nie ma (ryczałt wychodzi wyższy, nie niższy) |
+| Składki: miesiąc niepełny (K4) | etap ZUS zaczyna się albo kończy w trakcie miesiąca (poza startem ulgi): brak z wyjściem (PUE ZUS, księgowa) | bez zmian | — | podstawa proporcjonalna do dni: po pilotażu, jeśli będzie potrzebna (G13) |
+| Metoda kasowa PIT (K4) | poza v1: profil jej nie ma, `Kasowy_PIT` w JPK_EWP pomijany (NIE) | bez zmian | — | do decyzji Bartosza, jeśli piloci jej potrzebują |
 
 **Kalendarz 2027 (do sprawdzenia przez `taxDeadline` z przesunięciami weekendów i świąt)**
 
@@ -367,6 +372,8 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 - `kpir_entries` istnieje, ale jest nieużywana. Nie myl jej z KPiR liczoną na żywo.
 - Ewidencja (K3) liczy przychód na żywo przy każdym otwarciu, z kursem NBP pobieranym wtedy z API. `invoice_line_items.ryczalt_rate` nikt jeszcze nie zapisuje, więc stawka pochodzi z profilu; korekta albo zaliczka z kilkoma stawkami na pozycjach to brak, a nie zgadywanie.
 - `ledger_manual_entries` (00167) nie ma UPDATE: poprawka to usunięcie i nowy wpis, oba z audytem. Daty wpisu i autora nie podstawi klucz użytkownika (granty kolumnowe).
+- `tax_settlements` (00168) trzyma tylko ZATWIERDZONE wersje; szkic liczy się na żywo. Aktualna wersja to najwyższy numer, a kwoty nie zmieni ani klucz użytkownika (granty kolumnowe), ani serwisowy (wyzwalacz `guard_tax_settlement_immutable`). Zmiana danych po zatwierdzeniu daje inny skrót wejść i nową wersję.
+- Dopóki księgowa nie potwierdzi sekcji parametrów (`sprawdzila`), „Ten miesiąc” pokazuje braki zamiast kwot: tak ma być (D7). Testy i złote przypadki podają parametry wprost do czystych silników.
 - `currency-guard.ts` odrzuca waluty w eksportach. Etap 1 (waluty) to zmienia, więc uzgodnij to z jego sesją.
 - Nowe kolumny w `tenants` wymagają jawnego GRANT SELECT (00112).
 - Crony i zadania mają liczby na sztywno w testach (29 i 50). Podbijasz je świadomie, z komentarzem.

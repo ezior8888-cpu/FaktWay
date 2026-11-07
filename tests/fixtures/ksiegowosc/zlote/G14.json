@@ -1,0 +1,362 @@
+{
+  "wersja_szablonu": 1,
+  "id": "G14",
+  "tytul": "Grudzień i terminy w styczniu, przesunięcia weekendów",
+  "rok": 2027,
+  "policzyla": "",
+  "data": "",
+  "uwagi": "",
+  "zalozenia": {
+    "forma": "ryczalt",
+    "vat": "czynny",
+    "start_dzialalnosci": null,
+    "chorobowe": null,
+    "etat_obok": false,
+    "nadwyzka_vat_z_poprzedniego_roku_gr": null,
+    "opis": "Ryczałt, czynny podatnik VAT (JPK_V7M), ZUS pełny, rozliczenie miesięczne. Kwot nie liczymy, tylko terminy. W każdym wierszu: ostatni dzień zapłaty ryczałtu i składek ZUS za miesiąc z wiersza oraz ostatni dzień złożenia JPK_V7M i zapłaty VAT za ten miesiąc. Wiersz „grudzień 2026” to terminy w styczniu 2027 r., a wiersz „grudzień” (2027 r.) to terminy w styczniu 2028 r. Prosimy uwzględnić soboty, niedziele i dni ustawowo wolne od pracy, od 2025 r. także Wigilię. Dane: nie są potrzebne, liczymy tylko terminy."
+  },
+  "parametry": [
+    { "nazwa": "placa_minimalna", "okres": "2026", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "placa_minimalna", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "prognozowane_przecietne_wynagrodzenie", "okres": "2026", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "prognozowane_przecietne_wynagrodzenie", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "przecietne_wynagrodzenie_iv_kw", "okres": "2025", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "przecietne_wynagrodzenie_iv_kw", "okres": "2026", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_emerytalna", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_rentowa", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_chorobowa", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_wypadkowa", "okres": "2026-04-01/2027-03-31", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_wypadkowa", "okres": "2027-04-01/2028-03-31", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "stopa_fp_fs", "okres": "2026/2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_60000", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_300000", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_ponad_300000", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_60000", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_do_300000", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_ryczalt_ponad_300000", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_minimalna", "okres": "2026-02/2027-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "zdrowotna_minimalna", "okres": "2027-02/2028-01", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "limit_odliczenia_zdrowotnej_liniowy", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_prog", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_stawka_do_progu", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_stawka_ponad_prog", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "skala_kwota_zmniejszajaca", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "liniowy_stawka", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "ryczalt_prog_najmu", "okres": "2027", "wartosc": "", "zrodlo": "" },
+    { "nazwa": "limit_zwolnienia_vat", "okres": "2027", "wartosc": "", "zrodlo": "" }
+  ],
+  "miesiace": [
+    {
+      "miesiac": "2026-12",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2026-11"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-01",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2026-12"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-02",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-01"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-03",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-02"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-04",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-03"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-05",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-04"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-06",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-05"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-07",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-06"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-08",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-07"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-09",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-08"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-10",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-09"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-11",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-10"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    },
+    {
+      "miesiac": "2027-12",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": "pelny",
+        "zaplacone_skladki_za": ["2027-11"],
+        "przychody": [],
+        "koszty": []
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": null,
+        "limit_vat": null,
+        "terminy": {
+          "ryczalt_lub_pit": null,
+          "zus": null,
+          "vat": null
+        }
+      }
+    }
+  ]
+}

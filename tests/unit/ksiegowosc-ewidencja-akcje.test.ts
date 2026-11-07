@@ -19,6 +19,7 @@ const RYCZALT: WersjaProfilu = {
   zusOd: null,
   chorobowe: false,
   nrsZus: null,
+  najem: false,
 };
 
 const FAKTURA: FakturaEwidencji = {
