@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { zbudujEwidencje, type FakturaEwidencji } from '@/lib/ksiegowosc/ewidencja';
+import { zbudujKpir, type KosztKpir, type Kpir } from '@/lib/ksiegowosc/kpir';
 import { terminDla } from '@/lib/ksiegowosc/kalendarz';
 import { parametryRoku, type ParametryRoku } from '@/lib/ksiegowosc/parametry';
 import type { EtapZus, WersjaProfilu } from '@/lib/ksiegowosc/profil';
@@ -39,6 +40,8 @@ interface Wejscie {
   zus_etap: EtapZus | null;
   zaplacone_skladki_za: string[];
   przychody: Przychod[];
+  /** Skala i liniowy (G8-G11): koszty w KPiR. */
+  koszty?: { data: string | null; kpir_gr: number | null; opis: string }[];
 }
 
 interface Miesiac {
@@ -51,7 +54,7 @@ export interface Przypadek {
   id: string;
   tytul: string;
   policzyla: string;
-  zalozenia: { forma: string | null; start_dzialalnosci: string | null; chorobowe: boolean | null };
+  zalozenia: { forma: 'ryczalt' | 'skala' | 'liniowy' | null; start_dzialalnosci: string | null; chorobowe: boolean | null };
   /** Miesiące przed pierwszym wierszem, tylko wejście (z założeń przypadku). */
   historia?: { miesiac: string; wejscie: Wejscie }[];
   miesiace: Miesiac[];
@@ -71,8 +74,8 @@ function wersjeProfilu(p: Przypadek): WersjaProfilu[] {
     wersje.push({
       id: `${p.id}-${m.miesiac}`,
       validFrom: wersje.length === 0 && p.zalozenia.start_dzialalnosci && p.zalozenia.start_dzialalnosci < od ? p.zalozenia.start_dzialalnosci : od,
-      forma: 'ryczalt',
-      stawkaDomyslna: 1200,
+      forma: p.zalozenia.forma ?? 'ryczalt',
+      stawkaDomyslna: (p.zalozenia.forma ?? 'ryczalt') === 'ryczalt' ? 1200 : null,
       zusEtap: etap,
       zusOd: etap === 'ulga_na_start' || etap === 'preferencyjny' ? (wersje.length === 0 ? (p.zalozenia.start_dzialalnosci ?? od) : od) : null,
       chorobowe: p.zalozenia.chorobowe === true,
@@ -99,7 +102,25 @@ function faktury(p: Przypadek, rok: number): FakturaEwidencji[] {
         fp: false,
         kontrahent: { kraj: null, identyfikator: null },
         rozliczoneZaliczkiGr: 0,
-        pozycje: [{ nettoGr: x.netto_gr as number, stawkaRyczaltu: x.stawka_ryczaltu }],
+        pozycje: x.stawka_ryczaltu ? [{ nettoGr: x.netto_gr as number, stawkaRyczaltu: x.stawka_ryczaltu }] : null,
+      })),
+  );
+}
+
+/** Koszty w KPiR (G8-G11): jeden koszt w kolumnie 13 na każdą kwotę z tabeli. */
+function koszty(p: Przypadek, rok: number): KosztKpir[] {
+  return wszystkie(p).flatMap((m) =>
+    (m.wejscie.koszty ?? [])
+      .filter((x) => x.data && x.kpir_gr && x.data.startsWith(String(rok)))
+      .map((x, i) => ({
+        id: `${m.miesiac}-k${i}`,
+        data: x.data as string,
+        dowod: `${p.id}/K/${m.miesiac}/${i + 1}`,
+        numerKsef: null,
+        kontrahent: { nazwa: 'Dostawca', adres: null, kraj: null, identyfikator: null },
+        opis: x.opis || 'Koszty',
+        kolumnaAplikacji: 'col_13',
+        kwotaGr: x.kpir_gr as number,
       })),
   );
 }
@@ -119,6 +140,12 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
     }
     return ewidencje.get(rok)!;
   };
+  const forma = p.zalozenia.forma ?? 'ryczalt';
+  const ksiegi = new Map<number, Kpir>();
+  const kpirRoku = (rok: number) => {
+    if (!ksiegi.has(rok)) ksiegi.set(rok, zbudujKpir({ rok, faktury: faktury(p, rok), koszty: koszty(p, rok), wpisy: [], wersje, kursy: new Map() }));
+    return ksiegi.get(rok)!;
+  };
   const policzone = new Map<string, { spoleczne: number | null; bezFp: number; zdrowotna: number | null }>();
   const platnosci: Platnosc[] = [];
   const wyniki: Record<string, Record<string, unknown>> = {};
@@ -136,15 +163,55 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
         platnosci.push({ miesiac: za, rodzaj: 'zdrowotna', wersja: 1, kwotaGr: s.zdrowotna, spoleczneBezFpGr: 0, zaplaconeO: `${m.miesiac}-15` });
       }
     }
-    const w = tenMiesiac({ miesiac: m.miesiac, ewidencja: ewidencjaRoku(Number(m.miesiac.slice(0, 4))), wersje, platnosci, parametry });
+    const rok = Number(m.miesiac.slice(0, 4));
+    const ksiega =
+      forma === 'ryczalt'
+        ? { ewidencja: ewidencjaRoku(rok) }
+        : { kpir: { rok: kpirRoku(rok), poprzedni: m.miesiac.endsWith('-01') ? kpirRoku(rok - 1) : null } };
+    const w = tenMiesiac({ miesiac: m.miesiac, ...ksiega, wersje, platnosci, parametry });
     if (!w.ok) {
       if (zHistorii) continue;
       throw new Error(`${p.id} ${m.miesiac}: ${w.braki.join(' ')}`);
     }
-    const { skladki, zdrowotna, ryczalt, pozycje } = w.wynik;
-    policzone.set(m.miesiac, { spoleczne: skladki ? skladki.razemGr + skladki.funduszPracyGr : null, bezFp: skladki?.razemGr ?? 0, zdrowotna: zdrowotna?.skladkaGr ?? null });
+    const { skladki, zdrowotna, zdrowotnaOdDochodu, ryczalt, pit, pozycje } = w.wynik;
+    policzone.set(m.miesiac, {
+      spoleczne: skladki ? skladki.razemGr + skladki.funduszPracyGr : null,
+      bezFp: skladki?.razemGr ?? 0,
+      zdrowotna: zdrowotna?.skladkaGr ?? zdrowotnaOdDochodu?.skladkaGr ?? null,
+    });
     if (zHistorii) continue;
     const brakiPozycji = pozycje.flatMap((x) => (x.ok ? [] : [`${x.rodzaj}: ${x.brak}`]));
+    if (forma !== 'ryczalt') {
+      // Grudzień 2026: tylko składki (zaliczka i zdrowotna z tabel od stycznia 2027 r.).
+      if (!skladki) throw new Error(`${p.id} ${m.miesiac}: ${brakiPozycji.join(' ')}`);
+      wyniki[m.miesiac] = {
+        skladki_spoleczne: {
+          podstawa_gr: skladki.podstawaGr,
+          emerytalna_gr: skladki.emerytalnaGr,
+          rentowe_gr: skladki.rentoweGr,
+          chorobowa_gr: skladki.chorobowaGr,
+          wypadkowa_gr: skladki.wypadkowaGr,
+          razem_gr: skladki.razemGr,
+          fundusz_pracy_gr: skladki.funduszPracyGr,
+        },
+        ...(zdrowotnaOdDochodu ? { zdrowotna: { podstawa_gr: zdrowotnaOdDochodu.podstawaGr, skladka_gr: zdrowotnaOdDochodu.skladkaGr } } : {}),
+        ...(pit
+          ? {
+              pit: {
+                przychod_narastajaco_gr: pit.przychodNarastajacoGr,
+                koszty_narastajaco_gr: pit.kosztyNarastajacoGr,
+                dochod_narastajaco_gr: pit.dochodNarastajacoGr,
+                spoleczne_narastajaco_gr: pit.spoleczneNarastajacoGr,
+                zdrowotna_narastajaco_gr: pit.zdrowotnaNarastajacoGr,
+                podstawa_narastajaco_gr: pit.podstawaNarastajacoGr,
+                podatek_narastajaco_gr: pit.podatekNarastajacoGr,
+                zaliczka_gr: pit.zaliczkaGr,
+              },
+            }
+          : {}),
+      };
+      continue;
+    }
     if (brakiPozycji.length > 0 || !skladki || !zdrowotna || !ryczalt) throw new Error(`${p.id} ${m.miesiac}: ${brakiPozycji.join(' ')}`);
     const klucz = (pb: number) => String(pb / 100);
     wyniki[m.miesiac] = {
@@ -180,17 +247,27 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
   return wyniki;
 }
 
-/** Bloki liczone dopiero w K6 i K7 oraz pola, których silnik ryczałtu nie liczy. */
-const POMIJANE_BLOKI = new Set(['pit', 'vat', 'limit_vat']);
-const POMIJANE_POLA = new Set(['zdrowotna.podstawa_gr']);
+/**
+ * Bloki i pola, których silnik danej formy nie liczy: ryczałt nie liczy zaliczki
+ * PIT ani podstawy zdrowotnej (kwota z progu), skala i liniowy nie liczą ryczałtu
+ * ani progu zdrowotnej; VAT i limit VAT liczy osobny harness albo nikt.
+ */
+const POMIJANE: Readonly<Record<'ryczalt' | 'kpir', { bloki: Set<string>; pola: Set<string> }>> = {
+  ryczalt: { bloki: new Set(['pit', 'vat', 'limit_vat']), pola: new Set(['zdrowotna.podstawa_gr']) },
+  kpir: {
+    bloki: new Set(['ryczalt', 'ryczalt_odliczenia', 'vat', 'limit_vat']),
+    pola: new Set(['zdrowotna.przychod_narastajaco_gr', 'zdrowotna.prog']),
+  },
+};
 
 /** Tylko pola, które księgowa wypełniła (nie null, nie pusty obiekt). */
-function wypelnione(oczekiwane: Record<string, Record<string, unknown> | null>) {
+function wypelnione(oczekiwane: Record<string, Record<string, unknown> | null>, rodzaj: 'ryczalt' | 'kpir' = 'ryczalt') {
+  const { bloki, pola: pomijanePola } = POMIJANE[rodzaj];
   const wynik: Record<string, Record<string, unknown>> = {};
   for (const [blok, pola] of Object.entries(oczekiwane)) {
-    if (!pola || POMIJANE_BLOKI.has(blok)) continue;
+    if (!pola || bloki.has(blok)) continue;
     const pusty = (v: unknown) => v === null || (typeof v === 'object' && Object.keys(v as object).length === 0);
-    const zostaw = Object.entries(pola).filter(([k, v]) => !pusty(v) && !POMIJANE_POLA.has(`${blok}.${k}`));
+    const zostaw = Object.entries(pola).filter(([k, v]) => !pusty(v) && !pomijanePola.has(`${blok}.${k}`));
     if (zostaw.length > 0) wynik[blok] = Object.fromEntries(zostaw);
   }
   return wynik;
@@ -283,8 +360,8 @@ const pliki = readdirSync(KATALOG).filter((f) => /^G\d+\.json$/.test(f)).sort((a
 const plikiRyczaltu = pliki.filter((f) => !PRZYPADKI_VAT.has(f));
 
 describe('złote przypadki z arkusza księgowej', () => {
-  it('są szkielety G1-G7, G12 i G14', () => {
-    expect(pliki).toEqual(['G1.json', 'G2.json', 'G3.json', 'G4.json', 'G5.json', 'G6.json', 'G7.json', 'G12.json', 'G14.json']);
+  it('są szkielety G1-G12 i G14', () => {
+    expect(pliki).toEqual(['G1.json', 'G2.json', 'G3.json', 'G4.json', 'G5.json', 'G6.json', 'G7.json', 'G8.json', 'G9.json', 'G10.json', 'G11.json', 'G12.json', 'G14.json']);
   });
 
   for (const plik of plikiRyczaltu) {
@@ -292,7 +369,8 @@ describe('złote przypadki z arkusza księgowej', () => {
     const podpisany = przypadek.policzyla.trim() !== '';
     it.skipIf(!podpisany)(`${przypadek.id} co do grosza: ${przypadek.tytul}${podpisany ? '' : ' (czeka na podpis księgowej)'}`, () => {
       const policzone = policzPrzypadek(przypadek, parametryRoku);
-      for (const m of przypadek.miesiace) expect(policzone[m.miesiac], m.miesiac).toMatchObject(wypelnione(m.wynik));
+      const rodzaj = (przypadek.zalozenia.forma ?? 'ryczalt') === 'ryczalt' ? 'ryczalt' : 'kpir';
+      for (const m of przypadek.miesiace) expect(policzone[m.miesiac], m.miesiac).toMatchObject(wypelnione(m.wynik, rodzaj));
     });
   }
 
@@ -362,7 +440,7 @@ describe('uruchamianie przypadku (syntetyczny, policzony ręcznie na parametrach
     });
   });
 
-  it('szkielety G2-G7 i G14 liczą grudzień 2026 z historią roku; w G3 najem jest już ponad progiem', () => {
+  it('szkielety G2-G11 i G14 liczą grudzień 2026 z historią roku; w G3 najem jest już ponad progiem', () => {
     const grudnie = new Map<string, Record<string, unknown>>();
     for (const plik of plikiRyczaltu.filter((f) => f !== 'G1.json')) {
       const przypadek = JSON.parse(readFileSync(join(KATALOG, plik), 'utf8')) as Przypadek;
@@ -372,6 +450,8 @@ describe('uruchamianie przypadku (syntetyczny, policzony ręcznie na parametrach
     }
     // 11 × 11 000 zł = 121 000 zł do listopada, więc cały grudzień idzie z 12,5 %.
     expect(grudnie.get('G3')?.ryczalt).toMatchObject({ przychod_wg_stawek_gr: { '12.5': 1_100_000 } });
+    // G8 (skala, preferencyjny od lipca 2026 r.): składki grudnia z podstawy 30 % płacy minimalnej 2026 r. (1 441,80 zł).
+    expect(grudnie.get('G8')?.skladki_spoleczne).toMatchObject({ podstawa_gr: 144_180 });
   });
 
   it('szkielet G12 liczy się przez cały rok: nadwyżka z grudnia, korekta w maju, nadwyżka z czerwca w lipcu (policzone ręcznie)', () => {
