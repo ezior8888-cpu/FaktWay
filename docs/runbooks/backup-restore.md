@@ -242,6 +242,7 @@ Alarm „restore-drill” w Healthchecks:
 | Data | Zrzut | Host | Start / wgranie / razem | Tabele i wiersze | Struktura | Błędy | Wynik |
 |---|---|---|---|---|---|---|---|
 | 2026-10-01 | 3,4 MB, 1762 pozycje spisu, migracja 00099 | `ops-1`, kontener bez sieci, 1 CPU / 1 GB | 10 s / 6 s / 16 s | 111 tabel, wszystkie liczby zgodne z produkcją | 71 polityk RLS, 67 tabel z RLS, 111 funkcji `public`, 45 wyzwalaczy, 248 indeksów, 9 rozszerzeń — jak produkcja | 4 oczekiwane (§ 4); role: 12× `already exists` | ✅ |
+| 2026-11-07 | `faktflow-20261107T013002Z` (nocny), migracja 00200 | `db-1`, automat tygodniowy (pierwszy przebieg przy instalacji), kontener bez sieci, 1 CPU / 1 GB | 7 s / 5 s / 13 s | 122 tabele, wszystkie ze spisu zrzutu; liczby wierszy bez porównania z produkcją | 89 polityk RLS, 78 tabel z RLS, 182 funkcje `public`, 72 wyzwalacze, 288 indeksów, 9 rozszerzeń | 4 oczekiwane (§ 4); role: 12× `already exists` | ✅ |
 
 Wnioski z pierwszej próby, już wbudowane w skrypt: świeży obraz wymaga hasła
 także na lokalnym gnieździe (produkcja nie), a plik ról podmienia hasło
