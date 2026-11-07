@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   kpir: null as null | ((rok: number) => unknown),
   kpirLata: [] as number[],
   kpirWersje: [] as unknown[],
+  kpirWKodzie: true,
 }));
 
 vi.mock('@/lib/ksiegowosc/parametry', async (orig) => {
@@ -38,6 +39,14 @@ vi.mock('@/lib/ksiegowosc/parametry', async (orig) => {
   };
 });
 vi.mock('@/lib/ksiegowosc/ewidencja-dane', () => ({ czytajEwidencje: async () => mocks.ewidencja }));
+vi.mock('@/lib/ksiegowosc/wylacznik', async (orig) => {
+  const prawdziwy = await orig<typeof import('@/lib/ksiegowosc/wylacznik')>();
+  return {
+    ...prawdziwy,
+    statusObszaru: (obszar: import('@/lib/ksiegowosc/wylacznik').ObszarModulu) =>
+      obszar === 'kpir' && !mocks.kpirWKodzie ? { wlaczony: false, powod: 'nie_zbudowane' as const } : prawdziwy.statusObszaru(obszar),
+  };
+});
 vi.mock('@/lib/ksiegowosc/kpir-dane', () => ({
   czytajKpir: async (_c: unknown, _t: string, rok: number, opcje: { wersje?: unknown[] } = {}) => {
     mocks.kpirLata.push(rok);
@@ -126,6 +135,7 @@ beforeEach(() => {
   mocks.kpir = null;
   mocks.kpirLata = [];
   mocks.kpirWersje = [];
+  mocks.kpirWKodzie = true;
 });
 
 describe('odczyt rozliczeń', () => {
@@ -246,5 +256,14 @@ describe('odczyt przy skali i liniowym (K7)', () => {
     if (!dane.ok) throw new Error(dane.braki.join(' '));
     expect(dane.pozycje.find((p) => p.rodzaj === 'zdrowotna')).toMatchObject({ ok: false, brak: expect.stringContaining(komunikat) });
     expect(dane.pozycje.find((p) => p.rodzaj === 'pit')).toMatchObject({ ok: true });
+  });
+
+  it('obszar `kpir` zablokowany w kodzie: braki zamiast kwot, KPiR nieczytana; ryczałt liczy się dalej', async () => {
+    mocks.kpirWKodzie = false;
+    const dane = await czytajTenMiesiac(client, 't1', '2027-02');
+    expect(dane).toMatchObject({ ok: false, braki: [expect.stringContaining('chwilowo wyłączone')] });
+    expect(mocks.kpirLata).toEqual([]);
+    mocks.ewidencja = { ok: true, ewidencja: ewidencja(2027, [wiersz('2027-02-20', 1_500_000)]), wersje: [PROFIL], wpisy: [] };
+    expect((await czytajTenMiesiac(client, 't1', '2027-02')).ok).toBe(true);
   });
 });

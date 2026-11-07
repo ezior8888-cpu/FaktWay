@@ -29,7 +29,7 @@ import {
   type WpisKpirWejscie,
   type WpisWejscie,
 } from '@/lib/ksiegowosc/wpisy-reczne';
-import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
+import { czyKsiegowoscWlaczona, statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { ActionAuthError, requireOrgRole } from '@/lib/supabase/auth-context';
 
 /**
@@ -49,6 +49,9 @@ export type WynikWpisu = { success: true } | { success: false; error: string; po
 export type WynikPobrania = { success: true; xml: string; nazwa: string } | { success: false; error: string; pole?: string };
 
 const NIEDOSTEPNE = 'Ewidencja przychodów nie jest jeszcze dostępna dla tej firmy.';
+const KPIR_NIEDOSTEPNA = 'KPiR w module księgowości jest chwilowo niedostępna dla tej firmy.';
+/** KPiR (K7): obszar `ewidencja` (globalny stop, flaga firmy) i blokada w kodzie obszaru `kpir`. */
+const kpirWlaczona = async (client: SupabaseClient, tenantId: string) => statusObszaru('kpir').wlaczony && (await wlaczona(client, tenantId));
 const BLAD_ZAPISU = 'Nie udało się zapisać wpisu i nic się nie zmieniło. Można spróbować jeszcze raz.';
 const BLAD_USUNIECIA = 'Nie udało się usunąć wpisu i nic się nie zmieniło. Można spróbować jeszcze raz.';
 const PROFIL_TEKST = 'Ustawienia są w Księgowości, w zakładce „Ustawienia podatkowe”.';
@@ -274,7 +277,7 @@ export async function dodajWpisKpirAction(wejscie: WpisKpirWejscie): Promise<Wyn
     return { success: false, error: 'Data zdarzenia nie może być późniejsza niż dziś.', pole: 'dataPrzychodu' };
   }
   const client = ctx.supabase as unknown as SupabaseClient;
-  if (!(await wlaczona(client, ctx.tenantId))) return { success: false, error: NIEDOSTEPNE };
+  if (!(await kpirWlaczona(client, ctx.tenantId))) return { success: false, error: KPIR_NIEDOSTEPNA };
 
   let wersje;
   try {
@@ -321,7 +324,7 @@ export async function pobierzJpkPkpirAction(wejscie: z.input<typeof pobranieSche
   }
   const { rok, doMiesiaca, imie, nazwisko, dataUrodzenia } = parsed.data;
   const client = ctx.supabase as unknown as SupabaseClient;
-  if (!(await wlaczona(client, ctx.tenantId))) return { success: false, error: NIEDOSTEPNE };
+  if (!(await kpirWlaczona(client, ctx.tenantId))) return { success: false, error: KPIR_NIEDOSTEPNA };
 
   const dzis = todayInWarsaw();
   const od = `${rok}-01-01`;

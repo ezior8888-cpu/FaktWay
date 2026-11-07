@@ -15,6 +15,7 @@ import { monthRange } from '@/lib/expenses/month';
 import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
 import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
 import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { brakujace, parametryRoku, rokSkladkowyZdrowotnej, type Liczba, type NazwaSekcji } from '@/lib/ksiegowosc/parametry';
 import {
   tenMiesiac,
@@ -145,6 +146,10 @@ export async function czytajRozliczenia(client: SupabaseClient, tenantId: string
 }
 
 /** Rozliczeń nie udało się odczytać: wołający nie może uznać, że nic nie jest zapłacone. */
+export const KPIR_WYLACZONA =
+  'Rozliczenie skali podatkowej i podatku liniowego jest w FaktWay chwilowo wyłączone, więc kwot za ten miesiąc nie liczymy. ' +
+  'Faktury i koszty są w raporcie w zakładce „KPiR”.';
+
 export const BLAD_ODCZYTU_ROZLICZEN = 'Nie udało się odczytać rozliczeń, więc nie pokazujemy kwot. Strona spróbuje ponownie przy następnym otwarciu.';
 
 export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string, miesiac: string): Promise<DaneMiesiaca> {
@@ -171,6 +176,8 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
     return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: tegoMiesiaca };
   }
   const forma = wersjaMiesiaca(wersjeOdczyt.w, miesiac)?.forma ?? 'ryczalt';
+  // Skala i liniowy (K7) za obszarem `kpir`; wołający sprawdził już globalny stop i flagę firmy.
+  if (forma !== 'ryczalt' && !statusObszaru('kpir').wlaczony) return { ok: false, braki: [KPIR_WYLACZONA], rozliczenia: tegoMiesiaca };
 
   // D7: bez sekcji potwierdzonej przez księgową nie ma kwoty tej pozycji. Liczbę
   // bez wartości (np. stopa wypadkowa ogłaszana w kwietniu) sprawdza silnik,

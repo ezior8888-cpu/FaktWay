@@ -15,8 +15,11 @@ import {
  * włączenie dla firmy. Każda kolejna warstwa może tylko zabrać.
  */
 
-/** Od K2 kod puszcza `ustawienia`, od K3 `ewidencja`, od K4 `ten_miesiac`, od K5 `terminy`, od K6 `vat`; reszta czeka na swoje kroki. */
-const ZABLOKOWANE: ObszarModulu[] = ['wysylka_jpk', 'kpir'];
+/**
+ * Od K2 kod puszcza `ustawienia`, od K3 `ewidencja`, od K4 `ten_miesiac`, od K5 `terminy`, od K6 `vat`,
+ * od K7 `kpir`; `wysylka_jpk` czeka na opinię prawnika.
+ */
+const ZABLOKOWANE: ObszarModulu[] = ['wysylka_jpk'];
 const WLACZONY = { wlaczony: true } as const;
 
 /** Atrapa łańcucha `from().select().eq().maybeSingle()` z jedną odpowiedzią. */
@@ -31,6 +34,10 @@ function klient(odpowiedz: { data: unknown; error: { code?: string; message: str
 describe('blokada w kodzie', () => {
   it('ustawienia: od K2 puszczone w kodzie, decyduje flaga firmy', () => {
     expect(statusObszaru('ustawienia').wlaczony).toBe(true);
+  });
+
+  it('kpir: od K7 puszczony w kodzie, decyduje flaga firmy', () => {
+    expect(statusObszaru('kpir').wlaczony).toBe(true);
   });
 
   it('ewidencja: od K3 puszczona w kodzie, decyduje flaga firmy', () => {

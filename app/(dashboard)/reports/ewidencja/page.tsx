@@ -16,7 +16,7 @@ import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
 import { czytajWersjeProfilu, PROFIL_OD_MIN, wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { wersjaMiesiaca } from '@/lib/ksiegowosc/ten-miesiac';
 import { NAZWY_RODZAJOW_WPISU } from '@/lib/ksiegowosc/wpisy-reczne';
-import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
+import { czyKsiegowoscWlaczona, statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -95,6 +95,20 @@ export default async function EwidencjaPage({
   const canEdit = ctx.role === 'owner' || ctx.role === 'admin';
   const mozePobrac = canEdit || ctx.role === 'accountant';
   if (kpir) {
+    // Globalny stop i flagę firmy sprawdził już obszar `ewidencja`; `kpir` różni się tylko blokadą w kodzie (K7).
+    if (!statusObszaru('kpir').wlaczony) {
+      return (
+        <div className="ff-tab-panel flex flex-1 flex-col gap-6">
+          <h1 className="sr-only">KPiR</h1>
+          {naglowek}
+          <Card>
+            <CardContent className="text-sm">
+              KPiR w module księgowości jest chwilowo wyłączona. Faktury i koszty są dalej w raporcie w zakładce „KPiR”.
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     return (
       <div className="ff-tab-panel flex flex-1 flex-col gap-6">
         <h1 className="sr-only">KPiR</h1>

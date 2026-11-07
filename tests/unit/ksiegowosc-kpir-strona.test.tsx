@@ -24,7 +24,7 @@ const SKALA: WersjaProfilu = {
   najem: false,
 };
 
-const mocks = vi.hoisted(() => ({ rola: 'owner', wersje: [] as unknown[] | null, kpir: null as unknown, ewidencja: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rola: 'owner', wersje: [] as unknown[] | null, kpir: null as unknown, ewidencja: vi.fn(), kpirWKodzie: true }));
 
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -32,7 +32,10 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: async () => ({ supabase: {}, tenantId: 'firma-1', role: mocks.rola }) }));
-vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: true }) }));
+vi.mock('@/lib/ksiegowosc/wylacznik', () => ({
+  czyKsiegowoscWlaczona: async () => ({ wlaczony: true }),
+  statusObszaru: (obszar: string) => ({ wlaczony: obszar !== 'kpir' || mocks.kpirWKodzie }),
+}));
 vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/profil')>()),
   czytajWersjeProfilu: async () => {
@@ -97,6 +100,7 @@ beforeEach(() => {
   mocks.wersje = [SKALA];
   mocks.kpir = wynik();
   mocks.ewidencja.mockReset();
+  mocks.kpirWKodzie = true;
 });
 
 describe('KPiR w zakładce „Ewidencja”', () => {
@@ -139,6 +143,14 @@ describe('KPiR w zakładce „Ewidencja”', () => {
     const html = await strona();
     expect(html).toContain('Ewidencja jest chwilowo niedostępna');
     expect(html).toContain('Nie udało się odczytać danych ewidencji');
+    expect(mocks.ewidencja).not.toHaveBeenCalled();
+  });
+
+  it('obszar `kpir` zablokowany w kodzie: przy skali komunikat z odesłaniem do raportu KPiR, bez księgi i bez ewidencji', async () => {
+    mocks.kpirWKodzie = false;
+    const html = await strona();
+    expect(html).toContain('KPiR w module księgowości jest chwilowo wyłączona');
+    expect(html).not.toContain('Wpisy ręczne w KPiR');
     expect(mocks.ewidencja).not.toHaveBeenCalled();
   });
 });

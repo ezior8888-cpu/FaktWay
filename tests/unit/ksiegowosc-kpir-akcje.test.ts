@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   wstawione: [] as Record<string, unknown>[],
   usuwany: null as Record<string, unknown> | null,
   kolumnyUsuniecia: '',
+  kpirWKodzie: true,
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
@@ -44,7 +45,10 @@ vi.mock('@/lib/supabase/auth-context', async (orig) => ({
   ...(await orig<typeof import('@/lib/supabase/auth-context')>()),
   requireOrgRole: mocks.requireOrgRole,
 }));
-vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: true }) }));
+vi.mock('@/lib/ksiegowosc/wylacznik', () => ({
+  czyKsiegowoscWlaczona: async () => ({ wlaczony: true }),
+  statusObszaru: (obszar: string) => ({ wlaczony: obszar !== 'kpir' || mocks.kpirWKodzie }),
+}));
 vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/profil')>()),
   czytajWersjeProfilu: async () => mocks.wersje,
@@ -118,6 +122,7 @@ beforeEach(() => {
   mocks.wstawione = [];
   mocks.usuwany = null;
   mocks.kolumnyUsuniecia = '';
+  mocks.kpirWKodzie = true;
 });
 
 describe('wpis ręczny KPiR', () => {
@@ -142,6 +147,16 @@ describe('wpis ręczny KPiR', () => {
     expect(await dodajWpisKpirAction(WPIS)).toMatchObject({ success: false, pole: 'dataPrzychodu', error: expect.stringContaining('Ustawienia podatkowe') });
     expect(await dodajWpisKpirAction({ ...WPIS, kolumna: '' as never })).toMatchObject({ success: false, pole: 'kolumna' });
     expect(mocks.wstawione).toEqual([]);
+  });
+});
+
+describe('obszar `kpir` zablokowany w kodzie', () => {
+  it('wpis KPiR i plik JPK_PKPIR odmawiają bez zapisu i bez audytu', async () => {
+    mocks.kpirWKodzie = false;
+    expect(await dodajWpisKpirAction(WPIS)).toMatchObject({ success: false, error: expect.stringContaining('niedostępn') });
+    expect(await pobierzJpkPkpirAction({ rok: 2026, doMiesiaca: 12, ...OSOBA })).toMatchObject({ success: false });
+    expect(mocks.wstawione).toEqual([]);
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 });
 
