@@ -9,6 +9,8 @@ import {
   type EmailCategory,
 } from '@/lib/email/preferences';
 import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
+import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { createClient } from '@/lib/supabase/server';
 import type { Tables } from '@/types/database';
 
@@ -26,7 +28,7 @@ export default async function NotificationsPage() {
   const [supabase, user] = await Promise.all([createClient(), getDashboardSessionUser()]);
   if (!user) redirect('/login');
 
-  const [{ data: subscriptions }, unsubscribed, consents] = await Promise.all([
+  const [{ data: subscriptions }, unsubscribed, consents, ksiegowosc] = await Promise.all([
     supabase
       .from('push_subscriptions')
       .select('*')
@@ -35,6 +37,10 @@ export default async function NotificationsPage() {
       .order('created_at', { ascending: false }),
     getUnsubscribedCategories(user.id).catch(() => null),
     getEmailConsents(user.id).catch(() => null),
+    // Przełącznik „Księgowość” tylko dla firmy w pilotażu (K5); błąd odczytu to „nie”.
+    getActiveOrgIdFromCookies()
+      .then((orgId) => (orgId ? czyKsiegowoscWlaczona(supabase, orgId, 'terminy') : null))
+      .then((w) => w?.wlaczony === true, () => false),
   ]);
 
   // Przełącznik jest włączony tylko przy zgodzie i bez wypisu — tak samo,
@@ -55,6 +61,7 @@ export default async function NotificationsPage() {
         subscriptions={
           (subscriptions ?? []) as Tables<'push_subscriptions'>[]
         }
+        ksiegowosc={ksiegowosc}
       />
 
       <Separator />

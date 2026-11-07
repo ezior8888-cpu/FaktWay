@@ -26,6 +26,7 @@ import MagicImportCompleted from './templates/MagicImportCompleted';
 import PaymentFailed from './templates/PaymentFailed';
 import RefundIssued from './templates/RefundIssued';
 import SupportEscalation, { type SupportEscalationProps } from './templates/SupportEscalation';
+import TerminRozliczenia, { type TerminRozliczeniaProps } from './templates/TerminRozliczenia';
 import TrialEnding from './templates/TrialEnding';
 
 // ═══════════════════════════════════════════════════════════════
@@ -383,6 +384,29 @@ export async function sendCertExpiryAlert(
     to: email,
     subject: `⚠ Certyfikat KSeF wygasa za ${payload.daysRemaining} dni`,
     html,
+    idempotencyKey: options.idempotencyKey,
+  });
+}
+
+/**
+ * Przypomnienie o terminie rozliczenia z modułu księgowości (K5): treść
+ * z `lib/ksiegowosc/przypomnienia.ts`, `adres` względny do aplikacji.
+ */
+export async function sendTerminRozliczeniaEmail(
+  email: string,
+  payload: TerminRozliczeniaProps,
+  options: SendOptions & { userId?: string } = {},
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendTerminRozliczeniaEmail → ${email}: ${payload.tytul}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(TerminRozliczenia({ ...payload, adres: `${APP_URL}${payload.adres}` }));
+  return sendViaResend({
+    to: email,
+    subject: payload.tytul,
+    html,
+    userId: options.userId,
     idempotencyKey: options.idempotencyKey,
   });
 }
