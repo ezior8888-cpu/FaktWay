@@ -32,20 +32,29 @@ for (const { name, viewport, scrollY } of CASES) {
     await page.evaluate((top) => window.scrollTo({ top, behavior: 'instant' }), scrollY);
     await page.waitForTimeout(1_500);
 
-    const shift = await page.evaluate(
+    const { shift, sawConfirmation } = await page.evaluate(
       (watchMs) =>
-        new Promise<number>((resolve) => {
+        new Promise<{ shift: number; sawConfirmation: boolean }>((resolve) => {
           let sum = 0;
+          let sawConfirmation = false;
           new PerformanceObserver((list) => {
             for (const entry of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>) {
               if (!entry.hadRecentInput) sum += entry.value;
             }
           }).observe({ type: 'layout-shift' });
-          setTimeout(() => resolve(sum), watchMs);
+          // Kontrola, że pętla naprawdę działała: dymek z UPO pojawia się w każdej pętli.
+          const poll = setInterval(() => {
+            if (document.body.textContent?.includes('UPO pobrane')) sawConfirmation = true;
+          }, 200);
+          setTimeout(() => {
+            clearInterval(poll);
+            resolve({ shift: sum, sawConfirmation });
+          }, watchMs);
         }),
       WATCH_MS,
     );
 
+    expect(sawConfirmation).toBe(true);
     expect(shift).toBeLessThan(0.01);
   });
 }

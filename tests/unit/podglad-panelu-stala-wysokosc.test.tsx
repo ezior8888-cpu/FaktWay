@@ -100,6 +100,16 @@ describe('podgląd panelu na stronie głównej', () => {
     }
 
     expect(counts).toEqual(counts.map(() => counts[0]));
+    // Liczba elementów nie wystarczy: wiersz wrócony do przepływu wewnątrz miejsca
+    // albo miejsce bez niewidocznego wiersza znów zmieniałyby wysokość. Nowa faktura
+    // ma być nakładką na całe miejsce, a miejsce ma trzymać wysokość wierszem `invisible`.
+    const overlay = [...tableEl.querySelectorAll<HTMLElement>('.absolute')].find((element) =>
+      element.textContent?.includes('FV/2026/11/004'),
+    );
+    expect(overlay?.classList.contains('inset-0')).toBe(true);
+    const slot = overlay!.parentElement!;
+    expect(slot.parentElement).toBe(tableEl);
+    expect([...slot.children].filter((child) => child.classList.contains('invisible'))).toHaveLength(1);
     // Kolejne plakietki statusu podmienia animacja wyjścia, której jsdom nie
     // odtwarza, więc sprawdzamy wejście wiersza i potwierdzenie z UPO.
     expect(texts[0]).toContain('W kolejce');
