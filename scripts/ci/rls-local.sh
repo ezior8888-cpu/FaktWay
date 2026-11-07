@@ -12,7 +12,8 @@ trap cleanup EXIT
 
 mv supabase/migrations supabase/migrations.ci
 mkdir -p supabase/migrations
-supabase start -x studio,imgproxy,mailpit,inbucket,edge-runtime,logflare,vector,supavisor,realtime,storage-api,postgres-meta
+# postgres-meta zostaje: generuje typy dla kontroli `types/database.ts` na końcu.
+supabase start -x studio,imgproxy,mailpit,inbucket,edge-runtime,logflare,vector,supavisor,realtime,storage-api
 rmdir supabase/migrations
 mv supabase/migrations.ci supabase/migrations
 
@@ -37,3 +38,10 @@ export RLS_TEST_DATABASE_URL="${DB_URL}"
 unset NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
 
 pnpm test:rls
+
+# Plan usprawnień 2.7: `types/database.ts` (z produkcji) nie może mieć niczego,
+# czego migracje z repo nie tworzą (dryf produkcji albo ręczna edycja).
+# Migracja jeszcze nieodzwierciedlona w typach to tylko ostrzeżenie.
+GEN_TYPES="${RUNNER_TEMP:-/tmp}/database.z-migracji.ts"
+supabase gen types typescript --local --schema public,graphql_public > "$GEN_TYPES"
+node scripts/ci/typy-bazy-zgodne.mjs "$GEN_TYPES" types/database.ts

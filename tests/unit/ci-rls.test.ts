@@ -22,6 +22,9 @@ describe('CI: izolacja RLS', () => {
   it('skrypt: schemat pg-boss przed migracjami, potem test:rls tylko na lokalnej bazie', () => {
     expect(script.indexOf("schema: 'pgboss'")).toBeLessThan(script.indexOf('supabase migration up --local'));
     expect(script).toContain('RLS_TEST_ALLOW_DESTRUCTIVE="isolated-local-database"');
-    expect(script.trim().endsWith('pnpm test:rls')).toBe(true);
+    // test:rls po migracjach; po nim już tylko kontrola typów bazy (plan usprawnień 2.7).
+    expect(script).toMatch(/^pnpm test:rls$/m);
+    expect(script.indexOf('pnpm test:rls')).toBeGreaterThan(script.indexOf('supabase migration up --local'));
+    expect(script.trim().endsWith('node scripts/ci/typy-bazy-zgodne.mjs "$GEN_TYPES" types/database.ts')).toBe(true);
   });
 });

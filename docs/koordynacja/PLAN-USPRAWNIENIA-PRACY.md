@@ -227,10 +227,12 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 2.9 strażnik tekstów | #418 | zapadka: 744 „—” w 195 plikach klienta, 0 plakietek; nowe nie wejdą |
 | 07.11.2026 | 2.10 `scripts/ops/zloz-scalenie.sh` | #419 | kontrola, gałąź, ci+build, PR zbiorczy; nie scala; pełny przebieg niesprawdzony (założyłby PR) |
 | 07.11.2026 | 2.11 drugi czytelnik w protokole | #420 | punkt 6 protokołu w `AGENTS.md`: `/code-review` (Claude) albo osobna sesja (Codex) |
+| 07.11.2026 | Scalenie #418–#420 (polecenie Bartosza) | #422 | `bbdf4e2e`; przy składaniu CodeQL zatrzymał #418 (`js/file-system-race` w teście), poprawione; auto-merge zablokowany przez tryb auto, scalił Bartosz |
+| 07.11.2026 | 2.7 typy bazy w CI | #423 | job RLS: 1288 pozycji, 0 błędów (brak dryfu produkcji), 13 ostrzeżeń: 00167 bez typów z produkcji i stałe `invoices.ksef_upo_expected` |
+| 07.11.2026 | 2.8 Vitest w 3 częściach | #424 | ta sama wymagana kontrola; lokalnie 57/71/83 s zamiast 180 s, suma = pełny zestaw |
 
-**Następny krok:** Bartosz: zgoda na uprawnienia (5.3), plugin `design`
-w aplikacji, scalenie #418, #419, #420. Sesja po „idź dalej”:
-2.7 (zgodność `types/database.ts` z migracjami w CI) i 2.8 (szybsze
-testy: pomiar importów, `--shard` w CI), co zamyka etap 2 poza 2.12. Potem
-etap 3 (3.1–3.7) jako osobne sesje, każda z pełnym briefem; najpierw 3.1
-(build w CI) i 3.2 (testy wizualne).
+**Następny krok:** Bartosz: zgoda na uprawnienia (5.3, jedyny otwarty
+punkt etapu 2), plugin `design` w aplikacji, scalenie #423 i #424,
+wgranie 00167 i typy z produkcji (ostrzeżenia z #423). Potem etap 3
+(3.1–3.7) jako osobne sesje, każda z pełnym briefem; najpierw 3.1 (build
+obrazów w CI) i 3.2 (testy wizualne).

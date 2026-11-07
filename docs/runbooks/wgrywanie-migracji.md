@@ -119,3 +119,8 @@ curl -sf "http://$IP:8080/generators/typescript?included_schemas=graphql_public,
 
 Zachowaj nagłówek pliku i blok `__InternalSupabase` (wersja PostgREST
 z obrazu `$RESTC`), potem `pnpm typecheck`.
+
+Job CI „RLS isolation” porównuje ten plik ze schematem zbudowanym z migracji
+(`scripts/ci/typy-bazy-zgodne.mjs`). Coś w typach, czego migracje nie tworzą,
+to błąd (dryf produkcji albo ręczna edycja). Migracja jeszcze nie w typach to
+ostrzeżenie, które znika po tym kroku.
