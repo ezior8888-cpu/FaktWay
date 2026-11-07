@@ -39,3 +39,41 @@ która nie przejdzie lokalnej walidacji XSD i nigdy nie dotrze do KSeF.
 
 Kody błędów i co robić: `docs/runbooks/ksef-error-codes.md`. Błędy wysyłki
 na produkcji: `docs/runbooks/centrum-bledy-wysylki.md`.
+
+## Czujka zmian schematu MF
+
+Workflow `.github/workflows/czujka-schematu-fa3.yml` (wtorek rano i ręcznie
+z zakładki Actions) uruchamia `scripts/ci/czujka-schematu-fa3.mjs`:
+
+- **crd.gov.pl**: pliki spod adresów przestrzeni nazw (`schemat.xsd`
+  i trzy pliki `*_v10-0E.xsd`) porównane ze skrótem kopii w
+  `lib/xml/schemas/fa3/`. Normalizacja: końce linii i `schemaLocation`
+  z pełnym adresem MF zamienione na samą nazwę pliku. Łapie poprawki MF
+  wprowadzone w miejscu.
+- **`CIRFMF/ksef-docs`** (`faktury/schemy/FA`): nowy plik (np. nowa wersja
+  FA), zmieniony albo usunięty względem listy `ZNANE_W_DOCS` w skrypcie.
+  Zmiany FA(2) są pomijane.
+
+Różnica zakłada issue z etykietą `czujka-fa3`: tabela plików, diff nazw
+elementów, typów i wartości wyliczeń, odcisk wersji w znaczniku. Ta sama
+wersja MF nie zakłada drugiego issue; inna przy otwartym issue aktualizuje je
+i dodaje komentarz. MF niedostępny: ostrzeżenie w logu przebiegu, bez issue.
+
+Co zrobić z issue:
+
+1. Przeczytaj komunikat MF (podatki.gov.pl/ksef, `api-changelog.md`
+   w `ksef-docs`): poprawka w miejscu czy nowa wersja z datą obowiązywania.
+2. Pobierz nowe pliki do `lib/xml/schemas/fa3/`. `schemat.xsd` zostaje jak
+   z MF; `schemat-local.xsd` (używa go walidator) to ta sama treść
+   z `schemaLocation="StrukturyDanych_v10-0E.xsd"`, a pliki bazowe
+   z `schemaLocation` na samą nazwę pliku.
+3. Nowa wersja (nowa przestrzeń nazw): `FA3_NAMESPACE` we wszystkich
+   generatorach (`grep -rl "crd.gov.pl/wzor/2025/06/25/13775" lib`), kod
+   formularza w wysyłce KSeF,
+   `docs/fa3-schema-analysis.md`. Termin wejścia ustala Bartosz.
+4. `pnpm verify:fa3`, `pnpm test`, pełny `pnpm vitest run`.
+5. W tym samym PR zaktualizuj `ZNANE_W_DOCS` (skróty blobów:
+   `gh api repos/CIRFMF/ksef-docs/contents/faktury/schemy/FA -q '.[] | .path+" "+.sha'`).
+   Ręczny przebieg czujki po scaleniu ma dać „zgodny z repo”.
+
+Zamknięcie issue bez zmiany repo wycisza tę wersję MF.
