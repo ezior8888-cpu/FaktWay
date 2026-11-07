@@ -12,7 +12,6 @@ set -uo pipefail
 
 [ "${SKIP_PREPUSH:-}" = 1 ] && exit 0
 cd "$(git rev-parse --show-toplevel)" || exit 0
-[ -d node_modules ] || { echo "pre-push: brak node_modules, kontrola pominięta (pnpm install)" >&2; exit 0; }
 
 zero=0000000000000000000000000000000000000000
 changed=""
@@ -41,6 +40,8 @@ if [ -f .agents/infra.env ]; then
 fi
 code="$(printf '%s' "$changed" | grep -E '\.(ts|tsx|js|mjs|cjs)$' | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
 [ -n "$code" ] || exit 0
+# Typy, eslint i testy potrzebują zależności; kontrola adresów wyżej ich nie potrzebuje.
+[ -d node_modules ] || { echo "pre-push: brak node_modules, typy i testy pominięte (pnpm install)" >&2; exit 0; }
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT

@@ -75,7 +75,8 @@ git fetch -q origin
 if git rev-parse -q --verify "refs/heads/$branch" >/dev/null || git ls-remote --exit-code -q origin "refs/heads/$branch" >/dev/null 2>&1; then
   fail "Gałąź $branch już istnieje."
 fi
-start=$(git rev-parse --abbrev-ref HEAD)
+# Punkt powrotu przy konflikcie: gałąź albo commit (gdy uruchomiono z „detached HEAD”).
+start=$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)
 base_sha=$(git rev-parse --short origin/main)
 git switch -q -c "$branch" origin/main
 for pair in $heads; do
@@ -83,7 +84,7 @@ for pair in $heads; do
   git fetch -q origin "refs/heads/$head"
   if ! git merge -q --no-ff --no-edit -m "Merge #$n ($head) into $branch" FETCH_HEAD; then
     git merge --abort || true
-    git switch -q "$start"
+    git switch -q "$start" 2>/dev/null || git switch -q --detach "$start"
     git branch -q -D "$branch"
     fail "Konflikt przy #$n ($head). Rozwiąż go według docs/runbooks/scalanie-pr.md; nic nie zostało wypchnięte."
   fi
