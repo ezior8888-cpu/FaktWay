@@ -58,6 +58,10 @@ git switch main && git pull --ff-only
 Metoda merge jest obowiązkowa: zbiorcze PR i stosy niosą cudze PR jako
 commity scalające i tylko wtedy GitHub oznacza je jako scalone.
 
+**Jedną linią:** `./scripts/ops/zloz-scalenie.sh A B C` robi kroki opisane
+niżej (kontrola PR, gałąź `claude/scalenie-…`, `--no-ff`, `pnpm run ci && pnpm build`,
+PR zbiorczy z tabelą) i NIE scala; `--sprawdz` tylko sprawdza PR.
+
 **Kilka PR albo stos PR.** Każde scalenie do `main` robi z pozostałych PR
 „BEHIND”, czyli kolejny cykl CI (~10 min) na każdy. Przy więcej niż dwóch:
 złóż je w jedną gałąź od `main` (`claude/scalenie-...`), dodając każdy

@@ -223,9 +223,14 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 05.11.2026 | Scalenie #365, #398, #399, #400 (polecenie Bartosza) | #402 | auto-merge metodą merge; wdrożenie (zależności z #365) czeka na polecenie Bartosza |
 | 05.11.2026 | 2.2 skille + 2 runbooki | #403 | `/wdrozenie`, `/migracja`, `/naprawa`, `/telefon-review` tylko ręcznie, `/fa3-ksef` także dla modelu; `fa3-ksef.md` i `zmiany-na-telefon.md` przeniesione z prywatnej pamięci Claude, żeby widział je Codex |
 | 05.11.2026 | 2.4b lint 17 → 0, `--max-warnings 0` | #404 | 8 poprawek (refy w useLayoutEffect, useSyncExternalStore, useWatch, useMemo, sprzątanie efektu), 7 świadomych wzorców z `eslint-disable-next-line … -- powód`; bez zmian klas |
+| 05.11.2026 | Scalenie #403 i #404 (polecenie Bartosza) | #407 | `39e63bfa`; #402 scalony ręcznie `gh pr merge --merge`, bo auto-merge nie ruszył przy zielonym CI; wdrożenie `9f152212` zrobiła sesja „Telefon: design i animacje” na polecenie Bartosza |
+| 07.11.2026 | 2.9 strażnik tekstów | #418 | zapadka: 744 „—” w 195 plikach klienta, 0 plakietek; nowe nie wejdą |
+| 07.11.2026 | 2.10 `scripts/ops/zloz-scalenie.sh` | #419 | kontrola, gałąź, ci+build, PR zbiorczy; nie scala; pełny przebieg niesprawdzony (założyłby PR) |
+| 07.11.2026 | 2.11 drugi czytelnik w protokole | #420 | punkt 6 protokołu w `AGENTS.md`: `/code-review` (Claude) albo osobna sesja (Codex) |
 
 **Następny krok:** Bartosz: zgoda na uprawnienia (5.3), plugin `design`
-w aplikacji, wdrożenie po #402, scalenie #403 i #404. Sesja po
-„idź dalej”: 2.9 (strażnik tekstów), 2.10 (skrypt zbiorczego scalania),
-2.11 (`/code-review` w protokole), 2.7 (typy bazy w CI), 2.8 (szybsze testy),
-potem etap 3 osobnymi sesjami.
+w aplikacji, scalenie #418, #419, #420. Sesja po „idź dalej”:
+2.7 (zgodność `types/database.ts` z migracjami w CI) i 2.8 (szybsze
+testy: pomiar importów, `--shard` w CI), co zamyka etap 2 poza 2.12. Potem
+etap 3 (3.1–3.7) jako osobne sesje, każda z pełnym briefem; najpierw 3.1
+(build w CI) i 3.2 (testy wizualne).
