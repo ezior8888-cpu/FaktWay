@@ -137,5 +137,9 @@ komentarz. Nowe issue: najwyżej 3 na godzinę i 15 otwartych naraz.
 - Gdy błąd wygląda na błąd w kodzie, człowiek dodaje `agent:napraw`. Moduł
   nigdy tego nie robi.
 - Po naprawie zamknij issue. Kolejne wystąpienie założy nowe.
+- Etykieta `alert-produkcji` musi istnieć (`gh label create alert-produkcji
+  --color d93f0b --description "Issue z alarmu produkcji (automat)" --repo
+  ezior8888-cpu/FaktWay`). Gdy GitHub jej nie nada, moduł zakłada jedno issue,
+  wpisuje błąd do logu workera i wstrzymuje nowe issue do restartu.
 - Wyłączenie: usuń `GITHUB_ALERT_ISSUES_TOKEN` z workera (Coolify `id=2`)
   i zrestartuj go. Alarmy Slack i Telegram działają dalej.

@@ -8,6 +8,7 @@ import {
   CRITICAL_ISSUE_CODES,
   CRITICAL_ISSUE_SOURCE_MONITOR,
   reportCriticalIssues,
+  resetGitHubIssueLimitsForTests,
 } from '@/lib/alerts/github-issue';
 
 // Plan usprawnień 3.5: alarm krytyczny zakłada albo aktualizuje issue na
@@ -36,7 +37,7 @@ interface Call {
   headers: Record<string, string>;
 }
 
-function fakeGitHub(initial: FakeIssue[] = []) {
+function fakeGitHub(initial: FakeIssue[] = [], options: { dropLabels?: boolean } = {}) {
   const issues = [...initial];
   const comments: { issue: number; body: string }[] = [];
   const calls: Call[] = [];
@@ -67,7 +68,8 @@ function fakeGitHub(initial: FakeIssue[] = []) {
         number: next++,
         title: String(body!.title),
         body: String(body!.body),
-        labels: ((body!.labels as string[]) ?? []).map((name) => ({ name })),
+        // GitHub po cichu pomija etykiety, których token nie może nadać.
+        labels: options.dropLabels ? [] : ((body!.labels as string[]) ?? []).map((name) => ({ name })),
         created_at: NOW.toISOString(),
         state: 'open',
       };
@@ -104,6 +106,7 @@ function minutesAgo(min: number): Date {
 }
 
 beforeEach(() => {
+  resetGitHubIssueLimitsForTests();
   vi.stubEnv('GITHUB_ALERT_ISSUES_TOKEN', TOKEN);
   vi.stubEnv('GITHUB_ALERT_ISSUES_REPO', 'ezior8888-cpu/FaktWay');
   vi.stubEnv('SOURCE_COMMIT', SHA);
@@ -275,6 +278,45 @@ describe('issue z alarmu: limit częstotliwości', () => {
     await reportCriticalIssues(codes.slice(0, 3).map((code) => ({ code, source: SOURCE })), NOW);
     await reportCriticalIssues([{ code: codes[3]!, source: SOURCE }], NOW);
     expect(gh.issues).toHaveLength(3);
+  });
+
+  it('gdy GitHub zgubi etykietę, nie zakłada issue co przebieg (limit w pamięci procesu)', async () => {
+    const gh = fakeGitHub([], { dropLabels: true });
+    vi.stubGlobal('fetch', gh.fetchMock);
+    for (let run = 0; run < 6; run++) {
+      await reportCriticalIssues([{ code: 'stale_backup', source: SOURCE }], new Date(NOW.getTime() + run * 30 * 60_000));
+    }
+    expect(gh.issues).toHaveLength(1);
+    const logged = vi.mocked(console.error).mock.calls.flat().map(String).join('\n');
+    expect(logged).toContain(ALERT_ISSUE_LABEL);
+  });
+
+  it('zamknięte w ciągu godziny issue nadal liczą się do limitu nowych', async () => {
+    const gh = fakeGitHub();
+    vi.stubGlobal('fetch', gh.fetchMock);
+    const codes = Object.keys(CRITICAL_ISSUE_CODES);
+    await reportCriticalIssues(codes.slice(0, 3).map((code) => ({ code, source: SOURCE })), NOW);
+    gh.issues.splice(0); // człowiek zamknął wszystkie
+    await reportCriticalIssues(codes.slice(3, 6).map((code) => ({ code, source: SOURCE })), new Date(NOW.getTime() + 10 * 60_000));
+    expect(gh.writes().filter((c) => c.method === 'POST' && c.path.endsWith('/issues'))).toHaveLength(3);
+  });
+
+  it('po pierwszym timeoucie przerywa przebieg zamiast czekać na każde issue', async () => {
+    const gh = fakeGitHub();
+    vi.stubGlobal('fetch', gh.fetchMock);
+    const codes = Object.keys(CRITICAL_ISSUE_CODES).slice(0, 3);
+    await reportCriticalIssues(codes.map((code) => ({ code, source: SOURCE })), minutesAgo(120));
+    let writes = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET') return gh.fetchMock(input, init);
+      writes++;
+      throw new Error('aborted');
+    }));
+
+    const result = await reportCriticalIssues(codes.map((code) => ({ code, source: SOURCE })), NOW);
+
+    expect(writes).toBe(1);
+    expect(result).toMatchObject({ failed: 3, updated: 0 });
   });
 
   it('przy 15 otwartych issue alarmów nie zakłada nowych', async () => {

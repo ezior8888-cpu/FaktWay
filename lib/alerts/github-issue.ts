@@ -68,6 +68,23 @@ const COMMENT_MIN_INTERVAL_MS = 60 * 60 * 1000;
 const MAX_NEW_ISSUES_PER_HOUR = 3;
 const MAX_OPEN_ALERT_ISSUES = 15;
 const DETAILS_PATH = '/admin/centrum/bledy';
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Założenia issue w pamięci procesu (worker to jeden długo żyjący proces).
+ * Limit nowych issue nie może zależeć tylko od listy z GitHuba: issue
+ * zamknięte w ciągu godziny albo bez etykiety (GitHub po cichu pomija
+ * etykietę, której token nie może nadać) z listy znikają.
+ */
+const createdLocally: number[] = [];
+/** Etykieta nie przyszła w odpowiedzi: deduplikacja nie zadziała, więc stop do restartu. */
+let labelMissing = false;
+
+/** Tylko dla testów: stan limitów w pamięci procesu. */
+export function resetGitHubIssueLimitsForTests(): void {
+  createdLocally.length = 0;
+  labelMissing = false;
+}
 
 export interface CriticalIssueOccurrence {
   code: string;
@@ -117,7 +134,11 @@ function isAllowedCode(code: string): code is keyof typeof CRITICAL_ISSUE_CODES 
   return Object.hasOwn(CRITICAL_ISSUE_CODES, code);
 }
 
-/** SHA wdrożenia (Coolify: `SOURCE_COMMIT`), tylko gdy wygląda na hex. */
+/**
+ * SHA wdrożenia (Coolify: `SOURCE_COMMIT`), tylko gdy wygląda na hex. Te same
+ * zmienne czyta `workerRevision()` w `lib/ksef/send-attempt-ledger.ts`, ale
+ * import stamtąd wciągnąłby do alertów klienta KSeF i generator XML.
+ */
 function deploymentSha(): string | null {
   const raw = (process.env.SOURCE_COMMIT || process.env.GIT_COMMIT_SHA || '').trim();
   return /^[0-9a-f]{7,40}$/i.test(raw) ? raw.slice(0, 12).toLowerCase() : null;
@@ -178,7 +199,12 @@ function renderComment(state: IssueState): string {
   return `Kolejne wystąpienie: nr ${state.count}, ${state.last}, wdrożenie ${sha ? `\`${sha}\`` : 'nieznane'}.`;
 }
 
-class GitHubRequestError extends Error {}
+class GitHubRequestError extends Error {
+  /** Brak odpowiedzi (timeout, sieć): kolejne żądania w tym przebiegu też zawisną. */
+  constructor(message: string, readonly unreachable = false) {
+    super(message);
+  }
+}
 
 async function github<T>(
   cfg: { token: string; repo: string },
@@ -206,7 +232,7 @@ async function github<T>(
     return (await response.json()) as T;
   } catch (err) {
     if (err instanceof GitHubRequestError) throw err;
-    throw new GitHubRequestError(`GitHub ${method} not completed`);
+    throw new GitHubRequestError(`GitHub ${method} not completed`, true);
   } finally {
     clearTimeout(timeout);
   }
@@ -256,6 +282,9 @@ export async function reportCriticalIssues(
   const cfg = config();
   if (!cfg || accepted.length === 0) return report;
   report.enabled = true;
+  while (createdLocally.length > 0 && now.getTime() - createdLocally[0]! >= HOUR_MS) {
+    createdLocally.shift();
+  }
 
   const nowIso = now.toISOString();
   let open: OpenAlertIssue[];
@@ -268,9 +297,10 @@ export async function reportCriticalIssues(
       if (!fp || !FINGERPRINT_RE.test(fp)) return [];
       return [{ number: issue.number, fingerprint: fp, state: parseState(issue.body ?? '') }];
     });
-    createdLastHour = listed.filter(
-      (issue) => now.getTime() - Date.parse(issue.created_at) < 60 * 60 * 1000,
-    ).length;
+    createdLastHour = Math.max(
+      createdLocally.length,
+      listed.filter((issue) => now.getTime() - Date.parse(issue.created_at) < HOUR_MS).length,
+    );
     // Strona ma 100 pozycji; pełna strona = na pewno ponad limit otwartych.
     pageFull = listed.length >= 100;
   } catch (err) {
@@ -280,7 +310,7 @@ export async function reportCriticalIssues(
   }
   let openCount = open.length;
 
-  for (const { code, source } of accepted) {
+  for (const [index, { code, source }] of accepted.entries()) {
     const fingerprint = `${source}:${code}`;
     const existing = open.find((issue) => issue.fingerprint === fingerprint);
     try {
@@ -311,6 +341,7 @@ export async function reportCriticalIssues(
       }
 
       if (
+        labelMissing ||
         pageFull ||
         createdLastHour >= MAX_NEW_ISSUES_PER_HOUR ||
         openCount >= MAX_OPEN_ALERT_ISSUES
@@ -319,18 +350,32 @@ export async function reportCriticalIssues(
         continue;
       }
       const state: IssueState = { first: nowIso, last: nowIso, commented: nowIso, count: 1 };
-      const created = await github<{ number: number }>(cfg, 'POST', '/issues', {
-        title: renderTitle(code),
-        body: renderBody(code, source, state),
-        labels: [ALERT_ISSUE_LABEL],
-      });
+      const created = await github<{ number: number; labels?: ({ name?: string } | string)[] }>(
+        cfg,
+        'POST',
+        '/issues',
+        { title: renderTitle(code), body: renderBody(code, source, state), labels: [ALERT_ISSUE_LABEL] },
+      );
+      createdLocally.push(now.getTime());
       open.push({ number: created.number, fingerprint, state });
       openCount++;
       createdLastHour++;
       report.created++;
+      const labels = (created.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name));
+      if (!labels.includes(ALERT_ISSUE_LABEL)) {
+        labelMissing = true;
+        console.error(
+          `[github-issue] GitHub nie nadał etykiety ${ALERT_ISSUE_LABEL}; nowe issue wstrzymane do restartu workera (załóż etykietę, docs/runbooks/agent-kodu.md)`,
+        );
+      }
     } catch (err) {
       report.failed++;
       console.error(`[github-issue] ${code}: ${(err as Error).message}`);
+      if (err instanceof GitHubRequestError && err.unreachable) {
+        // Każde kolejne żądanie czekałoby pełny timeout; reszta w następnym przebiegu.
+        report.failed += accepted.length - index - 1;
+        break;
+      }
     }
   }
 

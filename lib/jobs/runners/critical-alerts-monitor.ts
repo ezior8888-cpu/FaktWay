@@ -1247,7 +1247,7 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
 
     return {
       checked: results.length,
-      fired: results.filter((r) => r.fired).length,
+      fired: fired.length,
       details: results,
     };
 }
