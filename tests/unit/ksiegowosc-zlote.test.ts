@@ -181,9 +181,18 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
     });
     if (zHistorii) continue;
     const brakiPozycji = pozycje.flatMap((x) => (x.ok ? [] : [`${x.rodzaj}: ${x.brak}`]));
+    const terminy = {
+      ryczalt_lub_pit: pozycje.find((x) => x.rodzaj === (forma === 'ryczalt' ? 'ryczalt' : 'pit'))?.termin?.faktyczny ?? null,
+      zus: pozycje.find((x) => x.rodzaj === 'zus_spoleczne')?.termin?.faktyczny ?? null,
+      vat: terminDla({ rodzaj: 'vatJpk', rok: Number(m.miesiac.slice(0, 4)), miesiac: Number(m.miesiac.slice(5, 7)) })?.faktyczny ?? null,
+    };
     if (forma !== 'ryczalt') {
-      // Grudzień 2026: tylko składki (zaliczka i zdrowotna z tabel od stycznia 2027 r.).
-      if (!skladki) throw new Error(`${p.id} ${m.miesiac}: ${brakiPozycji.join(' ')}`);
+      // Szkielety mają w grudniu 2026 r. tylko składki (zaliczka i zdrowotna z tabel od stycznia 2027 r.),
+      // więc brak zaliczki albo zdrowotnej kończy przypadek tylko wtedy, gdy księgowa ten blok wypełniła.
+      const oczekiwane = wypelnione(m.wynik, 'kpir');
+      if (!skladki || ('pit' in oczekiwane && !pit) || ('zdrowotna' in oczekiwane && !zdrowotnaOdDochodu)) {
+        throw new Error(`${p.id} ${m.miesiac}: ${brakiPozycji.join(' ')}`);
+      }
       wyniki[m.miesiac] = {
         skladki_spoleczne: {
           podstawa_gr: skladki.podstawaGr,
@@ -209,6 +218,7 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
               },
             }
           : {}),
+        terminy,
       };
       continue;
     }
@@ -237,11 +247,7 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
         podstawa_wg_stawek_gr: Object.fromEntries([...ryczalt.podstawaWgStawekGr].map(([pb, gr]) => [klucz(pb), gr])),
         ryczalt_gr: ryczalt.ryczaltGr,
       },
-      terminy: {
-        ryczalt_lub_pit: pozycje.find((x) => x.rodzaj === 'ryczalt')?.termin?.faktyczny ?? null,
-        zus: pozycje.find((x) => x.rodzaj === 'zus_spoleczne')?.termin?.faktyczny ?? null,
-        vat: terminDla({ rodzaj: 'vatJpk', rok: Number(m.miesiac.slice(0, 4)), miesiac: Number(m.miesiac.slice(5, 7)) })?.faktyczny ?? null,
-      },
+      terminy,
     };
   }
   return wyniki;
@@ -452,6 +458,19 @@ describe('uruchamianie przypadku (syntetyczny, policzony ręcznie na parametrach
     expect(grudnie.get('G3')?.ryczalt).toMatchObject({ przychod_wg_stawek_gr: { '12.5': 1_100_000 } });
     // G8 (skala, preferencyjny od lipca 2026 r.): składki grudnia z podstawy 30 % płacy minimalnej 2026 r. (1 441,80 zł).
     expect(grudnie.get('G8')?.skladki_spoleczne).toMatchObject({ podstawa_gr: 144_180 });
+  });
+
+  it('skala i liniowy: termin zaliczki PIT jak ryczałtu; brak w bloku wypełnionym przez księgową kończy przypadek treścią braku', () => {
+    const czytaj = (plik: string) => JSON.parse(readFileSync(join(KATALOG, plik), 'utf8')) as Przypadek;
+    const g8 = czytaj('G8.json');
+    const grudzien = policzPrzypadek({ ...g8, miesiace: g8.miesiace.filter((m) => m.miesiac === '2026-12') }, parametryRoku);
+    expect(grudzien['2026-12']).toMatchObject({ terminy: { ryczalt_lub_pit: '2027-01-20', zus: '2027-01-20' } });
+    // G11 (liniowy): limitu odliczenia zdrowotnej na 2027 r. jeszcze nie ma, więc zaliczki za styczeń 2027 r. silnik nie liczy.
+    const g11 = czytaj('G11.json');
+    const zPit = g11.miesiace
+      .filter((m) => m.miesiac <= '2027-01')
+      .map((m) => (m.miesiac === '2027-01' ? { ...m, wynik: { ...m.wynik, pit: { zaliczka_gr: 1 } } } : m));
+    expect(() => policzPrzypadek({ ...g11, miesiace: zPit }, parametryRoku)).toThrow(/^G11 2027-01: .*pit: /);
   });
 
   it('szkielet G12 liczy się przez cały rok: nadwyżka z grudnia, korekta w maju, nadwyżka z czerwca w lipcu (policzone ręcznie)', () => {

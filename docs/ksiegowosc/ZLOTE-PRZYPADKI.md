@@ -1520,6 +1520,15 @@ oprócz ostatniej:
   styczeń 2026 r. program nie liczy (brak parametrów 2025 r.), więc
   w historii ich nie odlicza; jeśli wynik księgowej je uwzględnia, różnica
   wyjdzie w `zdrowotna.przychod_narastajaco_gr` za grudzień 2026 r.
+- Przypadki skali i liniowego (G8-G11, `zalozenia.forma` `skala` albo
+  `liniowy`) liczy KPiR (`lib/ksiegowosc/kpir.ts`) i ten sam silnik co
+  „Ten miesiąc”: przychód to faktura, a każda kwota z kolumny „Koszty
+  w KPiR” to jeden koszt w kolumnie 13 (`koszty`, pole `kpir_gr`).
+  Porównanie bierze bloki `skladki_spoleczne`, `zdrowotna` (`podstawa_gr`,
+  `skladka_gr`), `pit` i `terminy` (`ryczalt_lub_pit` to termin zaliczki);
+  bloków ryczałtu, progu zdrowotnej i VAT nie liczy. Brak w bloku, który
+  księgowa wypełniła (np. zaliczka liniowa za 2027 r. przed ogłoszeniem
+  limitu odliczenia zdrowotnej), kończy przypadek treścią braku.
 - Przypadek VAT (G12) liczy `vatMiesiaca` (`lib/ksiegowosc/vat.ts`), ten
   sam kod co plik JPK_V7M: przychód ze `stawka_vat` to faktura, korekta
   (`korekta_do`) to faktura korygująca z kwotami różnicy, koszt odlicza
