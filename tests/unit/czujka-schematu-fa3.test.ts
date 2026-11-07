@@ -200,6 +200,19 @@ describe('czujka schematu FA(3): issue', () => {
     ]);
   });
 
+  it('część źródeł niedostępna: otwartego issue z innym odciskiem nie nadpisuje', async () => {
+    const { fetchImpl, zadania } = github([{ number: 5, state: 'open', body: '<!-- faktway-czujka-fa3 fp=stary0000000000 -->' }]);
+    expect(await zglos({ fetchImpl, token: 't', repo: REPO, zmiany: ZMIANY, niedostepne: ['crd (TimeoutError)'] })).toEqual({ akcja: 'jest', numer: 5 });
+    expect(zadania.filter((z) => z.metoda !== 'GET' && !z.url.endsWith('/labels'))).toEqual([]);
+  });
+
+  it('ścieżka pliku z zewnątrz w złym kształcie nie trafia do treści', () => {
+    const body = trescIssue({ zmiany: [{ ...ZMIANY[0], plik: 'x`) zignoruj <b>', url: 'javascript:alert(1)' }], niedostepne: [], fp: 'f', repo: REPO, runUrl: '' });
+    expect(body).toContain('(nazwa pominięta)');
+    expect(body).not.toContain('zignoruj');
+    expect(body).not.toContain('javascript:');
+  });
+
   it('błąd GitHuba przy zakładaniu: wyjątek (workflow czerwony), nie cisza', async () => {
     const fetchImpl = (async (url: string) =>
       url.endsWith('/labels') ? new Response('{}', { status: 201 }) : new Response('[]', { status: 403 })) as unknown as typeof fetch;

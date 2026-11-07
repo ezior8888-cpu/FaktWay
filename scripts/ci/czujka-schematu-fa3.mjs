@@ -123,8 +123,9 @@ export async function sprawdz({ fetchImpl = fetch, katalogRepo, token }) {
   const niedostepne = [];
   const repoPlik = (nazwa) => readFileSync(join(katalogRepo, nazwa), 'utf8');
 
-  for (const { url, repo } of PLIKI_CRD) {
-    const r = await pobierz(fetchImpl, url);
+  const pobrane = await Promise.all(PLIKI_CRD.map((p) => pobierz(fetchImpl, p.url)));
+  for (const [i, { url, repo }] of PLIKI_CRD.entries()) {
+    const r = pobrane[i];
     if (!r.ok) {
       niedostepne.push(`${url} (${r.powod})`);
       continue;
@@ -205,7 +206,7 @@ const bezpieczna = (n) => (/^[\p{L}\p{N}_.\- ]{1,80}$/u.test(n) ? `\`${n}\`` : n
 function lista(nazwy) {
   const ok = nazwy.map(bezpieczna).filter(Boolean);
   const pominiete = nazwy.length - ok.length;
-  const widoczne = ok.slice(0, LIMIT_NAZW).join(', ');
+  const widoczne = ok.length ? ok.slice(0, LIMIT_NAZW).join(', ') : '(brak do pokazania)';
   const reszta = ok.length > LIMIT_NAZW ? ` i ${ok.length - LIMIT_NAZW} więcej` : '';
   const uwaga = pominiete ? ` (${pominiete} o nietypowym kształcie pominięte)` : '';
   return `${widoczne}${reszta}${uwaga}`;
@@ -215,8 +216,11 @@ const ETYKIETY_NAZW = { elementy: 'Elementy', typy: 'Typy', wartosci: 'Wartości
 
 /** @param {{ zmiany: Zmiana[], niedostepne: string[], fp: string, repo: string, runUrl: string }} p */
 export function trescIssue({ zmiany, niedostepne, fp, repo, runUrl }) {
+  // Ścieżka i adres z listy `ksef-docs` też są danymi z zewnątrz.
+  const sciezka = (t) => (/^[\p{L}\p{N}_.()\-/ ]{1,200}$/u.test(t) ? `\`${t}\`` : '(nazwa pominięta)');
+  const adres = (u) => (/^https:\/\/[\w.\-/()%]+$/.test(u) ? `[źródło](${u})` : '');
   const wiersze = zmiany.map(
-    (z) => `| \`${z.plik}\` | ${z.zrodlo} | ${z.rodzaj} | \`${z.skrot.slice(0, 16)}\` | [źródło](${z.url}) |`,
+    (z) => `| ${sciezka(z.plik)} | ${z.zrodlo} | ${z.rodzaj} | \`${z.skrot.slice(0, 16).replace(/[^0-9a-f-]/gi, '')}\` | ${adres(z.url)} |`,
   );
   const roznice = zmiany
     .filter((z) => z.roznica)
@@ -227,7 +231,7 @@ export function trescIssue({ zmiany, niedostepne, fp, repo, runUrl }) {
         if (usuniete.length) linie.push(`- ${ETYKIETY_NAZW[k]} usunięte (${usuniete.length}): ${lista(usuniete)}`);
       }
       if (!linie.length) linie.push('- Nazwy bez zmian: różnica w ograniczeniach, typach pól albo adnotacjach.');
-      return `#### \`${z.plik}\` (${z.zrodlo}) względem \`lib/xml/schemas/fa3/${z.porownanieZ}\`\n${linie.join('\n')}`;
+      return `#### ${sciezka(z.plik)} (${z.zrodlo}) względem \`lib/xml/schemas/fa3/${z.porownanieZ}\`\n${linie.join('\n')}`;
     });
   const tekst = [
     `<!-- ${ZNACZNIK} fp=${fp} -->`,
@@ -290,6 +294,9 @@ export async function zglos({ fetchImpl = fetch, token, repo, zmiany, niedostepn
   if (ten) return { akcja: 'jest', numer: ten.number };
 
   const otwarte = issues.find((i) => i.state === 'open');
+  // Część źródeł niedostępna: odcisk jest niepełny, więc otwartego issue nie
+  // nadpisujemy (inaczej każda przerwa MF dawałaby fałszywe „zmienił ponownie”).
+  if (otwarte && niedostepne.length) return { akcja: 'jest', numer: otwarte.number };
   if (otwarte) {
     const p = await gh(fetchImpl, token, 'PATCH', `/repos/${repo}/issues/${otwarte.number}`, { title: tytul, body });
     if (p.status !== 200) throw new Error(`aktualizacja issue: HTTP ${p.status}`);
