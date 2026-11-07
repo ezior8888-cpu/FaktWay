@@ -106,8 +106,8 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 |---|---|---|---|
 | 3.1 | Build obrazów `runner` i `worker` w GitHub Actions do GHCR, wdrożenie przez API Coolify (worker, potem aplikacja), kontrola po wdrożeniu, blokada przy niewgranych migracjach. Na start tylko `workflow_dispatch` | W | zmiana w Coolify (źródło obrazu, token API) tylko za zgodą; zdejmuje z `app-1` 12–18 min i 4,5 GB swapu; to też etap 1a planu skalowania |
 | 3.2 | Wizualne testy dymne Playwright `toHaveScreenshot`: iPhone 13 (WebKit) i desktop 1440 (Chromium), `reducedMotion: 'reduce'`; strona główna, menu hamburgera, `#telefon`, `/login`, pulpit, lista faktur. Plus `@axe-core/playwright` na tych samych ekranach (pomysł 4.3) | Ś | pilnuje zamrożonego Maca automatem zamiast reguły |
-| 3.3 | Raport poranny na Telegram (launchd 8:00 na Macu): `kontrola-faktur-ksef.sh`, dysk i WAL na `db-1`, kopia i restore-drill, PR i CI, alerty zależności | Ś | launchd = zmiana poza repo, plik `.plist` w repo, instaluje Bartosz |
-| 3.4 | Workflow z `schedule`: nocny test KSeF TEST (NIP `1234567890`), czujka zmian schematu FA(3) MF, cotygodniowy restore-drill z alarmem | Ś | sekrety KSeF TEST w GitHubie = zgoda Bartosza |
+| 3.3 | ~~Raport poranny na Telegram (launchd)~~ **Odrzucone 07.11:** dublowałby raport dzienny o 6:00 (`daily-summary-email`, Telegram) i bramkę `/status` (`ops/bramka`). Zamiast tego raport dzienny dostał kopię, rozmiar bazy i WAL slotu (#434) | N | brak przeoczenia w analizie 04.11 (bramka i raport dzienny nie były na liście „nie dubluj”) |
+| 3.4 | Czujka zmian schematu FA(3) MF i cotygodniowy restore-drill z alarmem. Nocny test KSeF TEST robi już #411 Igora (bez sekretów), więc go nie dublujemy | Ś | sesja „Etap 3.4” |
 | 3.5 | Błąd krytyczny zakłada issue (deduplikacja po kodzie błędu); Bartosz dodaje `agent:napraw` | Ś | korzysta z `critical-alerts-monitor` i `agent.yml`, nie dubluje |
 | 3.6 | Sprzątanie: archiwizacja sesji po scaleniu PR (ustawienie aplikacji, za zgodą), cotygodniowe usuwanie `.next` w worktree bezczynnych > 7 dni (`scripts/dev/sprzataj-worktree.sh`) | N | |
 | 3.7 | Później: podział `submit-invoice.ts`, `duplicate-decision.ts`, `invoice-form.tsx` z listą niezmienników spisaną przed zmianą; stopniowe `noUncheckedIndexedAccess` (katalog po katalogu) | W | każdy gigant osobna sesja |
@@ -236,10 +236,14 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.2 testy wizualne + 4.3 axe | #426 | `pnpm test:wizualne`: 6 ekranów, iPhone 13 (WebKit) i desktop 1440 (Chromium), 11 wzorców z Maca; 2 przebiegi bez różnic, celowe `gap-1` złapane (1949 i 2300 px); axe: 0 `critical`, `serious` kontrast i `aria-hidden-focus` (raport). Linux/CI niezrobione: rekomendacja kontener `playwright run-server` + konto testowe + `ubuntu-24.04-arm` (3.2b); znalezione: błąd hydratacji strony głównej przy „ogranicz ruch” (`hero-preview.tsx`) |
 | 07.11.2026 | 2.12 uprawnienia (zgoda Bartosza), archiwizacja sesji po zamknięciu PR (ustawienie aplikacji, zgoda) | #429 | etap 2 zamknięty |
 | 07.11.2026 | 3.5 alarm krytyczny → issue | #432 | `lib/alerts/github-issue.ts` po Slacku i Telegramie: jedno issue na kod, komentarz najwyżej co godzinę, 3 nowe na godzinę, treść z listy dozwolonych pól; czeka na etykietę `alert-produkcji` i token `GITHUB_ALERT_ISSUES_TOKEN` w workerze (opis PR) |
+| 07.11.2026 | 3.6 sprzątanie `.next` | #431 | `scripts/dev/sprzataj-worktree.sh`; podgląd: 18,2 GB w 5 worktree przy progu 0 dni |
+| 07.11.2026 | 3.3 w nowej postaci: raport dzienny | #434 | kopia bazy (próg 26 h jak bramka), rozmiar bazy, WAL slotu (próg 2 GB) w raporcie o 6:00 |
+| 07.11.2026 | Scalenie #430 i #437, migracje, wdrożenie (polecenie Bartosza) | #430, #437 | `620ee8c8`, `16512d37`; #432 zamknięty z odnośnikiem (treść w `main`, na gałęzi tylko scalenia `main`); 00167–00169 (księgowość K3–K5) wgrane na db-1 przed wdrożeniem; wdrożenie `16512d37` starą drogą; poprawka `zloz-scalenie.sh` z detached HEAD w #438 |
+| 07.11.2026 | Przeoczenie z analizy: `ops/bramka` | — | bramka ma już `/wdroz` z kontrolą CI i niewgranych migracji (funkcje `ops`, 00100); #425 dodał drugi mechanizm migracji (`/api/ops/deploy-state`). Decyzja Bartosza przed krokami 2–9 z #425: workflow przez funkcje `ops` czy nowy endpoint |
 
-**Następny krok:** Bartosz: kroki 2–9 z #425 po jego scaleniu i wdrożeniu
-starą drogą, plugin `design` w aplikacji. Sesja: etap 3 dalej osobnymi
-sesjami: 3.5 (błąd krytyczny zakłada issue) i 3.6 (sprzątanie `.next`
-w bezczynnych worktree), potem 3.3 (raport poranny, `launchd`) i 3.4
-(najpierw sprawdzić, czy opiera się na #411 Igora). 3.7 jako osobny,
-długi tor.
+**Następny krok:** Bartosz: token `GITHUB_ALERT_ISSUES_TOKEN` w workerze
+(#432), decyzja bramka czy endpoint przy #425, potem kroki 2–9 z #425,
+opcjonalnie harmonogram `sprzataj-worktree.sh --zainstaluj-harmonogram`,
+plugin `design` w aplikacji. Sesja: 3.4 w toku (osobna sesja), potem 3.7
+(podział gigantów, `noUncheckedIndexedAccess`) jako długi tor, jeden gigant
+na sesję z listą niezmienników spisaną przed zmianą.
