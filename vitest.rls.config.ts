@@ -64,6 +64,9 @@ export default defineConfig({
       // 00170 (plan księgowości JDG, K6): wysyłki JPK do MF owner/admin, izolacja firm, jedna wysyłka
       // w toku na miesiąc, przejścia stanów i niezmienność pliku (wyzwalacz), granty kolumnowe, CHECK-i.
       'tests/rls-ksiegowosc-jpk.test.ts',
+      // 00171 (plan księgowości JDG, K7): wpisy ręczne KPiR z kolumną; stawka albo kolumna (CHECK),
+      // rozdział czytników ewidencji i KPiR, role i izolacja jak w 00167.
+      'tests/rls-ksiegowosc-kpir.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
