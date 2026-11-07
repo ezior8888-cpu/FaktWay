@@ -13,8 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: Typecheck + Lint + Unit tests
+  # Plan usprawnień 2.8: Vitest jedzie szeregowo (vitest.config.ts), więc dzielimy
+  # go na 3 maszyny, a typy, lint i reszta testów idą obok. Wymagana kontrola
+  # „Typecheck + Lint + Unit tests” zostaje pod tą samą nazwą i zbiera wyniki
+  # (reguły gałęzi main bez zmian).
+  static:
+    name: Typy, lint, testy tsx i node
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -37,8 +41,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
-      - name: Run typecheck + lint + tests
-        run: pnpm run ci
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Lint
+        run: pnpm run lint
+      - name: Testy tsx (generator, kalkulator i walidator FA(3))
+        run: pnpm run test
         # Bez sekretów aplikacji i bez dostępu do bazy.
       - name: Test CodeQL gate and safe diagnostics
         run: node --test scripts/security/check-codeql-results.test.mjs scripts/security/print-codeql-locations.test.mjs
@@ -48,6 +56,50 @@ jobs:
         run: node --test ops/bramka/test/*.test.mjs
       - name: Test support mail worker (ops/poczta)
         run: node --test ops/poczta/worker.test.mjs
+
+  vitest:
+    name: Vitest (część ${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install XML schema validator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libxml2-utils
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Vitest, część ${{ matrix.shard }} z 3
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/3
+        # Bez sekretów aplikacji i bez dostępu do bazy.
+
+  ci:
+    name: Typecheck + Lint + Unit tests
+    needs: [static, vitest]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Wynik części
+        env:
+          STATIC: ${{ needs.static.result }}
+          VITEST: ${{ needs.vitest.result }}
+        run: |
+          echo "typy, lint, tsx: $STATIC; vitest (3 części): $VITEST"
+          [ "$STATIC" = success ] && [ "$VITEST" = success ]
 
   # AUD-108: błąd builda (np. plik 'use server' eksportujący nie-funkcję) wychodził
   # dopiero przy 12–18-minutowym wdrożeniu w Coolify. Typecheck tego nie łapie.
