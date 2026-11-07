@@ -192,7 +192,11 @@ export type AuditAction =
   // danych osoby), wysyłka do MF z numerem referencyjnym i przyjęcie z UPO.
   | 'jpk_v7m.downloaded'
   | 'jpk_v7m.sent'
-  | 'jpk_v7m.accepted';
+  | 'jpk_v7m.accepted'
+  // KPiR (00171, K7): wpis ręczny KPiR dodany (usunięcie jak w K3) i pobrany
+  // plik JPK_PKPIR (okres i sumy, bez danych osoby).
+  | 'ledger_entry.kpir_created'
+  | 'jpk_pkpir.downloaded';
 
 export interface AuditLogEntry {
   action: AuditAction;

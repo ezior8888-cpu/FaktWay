@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
-import { dodajWpisRecznyAction, usunWpisRecznyAction } from '@/app/actions/ksiegowosc-ewidencja';
+import { dodajWpisKpirAction, dodajWpisRecznyAction, usunWpisRecznyAction } from '@/app/actions/ksiegowosc-ewidencja';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -20,27 +20,35 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { etykietaStawki, STAWKI_JPK_EWP_PB } from '@/lib/ksiegowosc/ewidencja';
-import { NAZWY_RODZAJOW_WPISU, RODZAJE_WPISU, wpisSchema, type RodzajWpisu } from '@/lib/ksiegowosc/wpisy-reczne';
+import { KOLUMNY_KPIR, NAZWY_KOLUMN, type KolumnaKpir } from '@/lib/ksiegowosc/kpir';
+import { NAZWY_RODZAJOW_WPISU, RODZAJE_WPISU, wpisKpirSchema, wpisSchema, type RodzajWpisu } from '@/lib/ksiegowosc/wpisy-reczne';
 
 const STAWKI = STAWKI_JPK_EWP_PB.map((pb) => ({ label: etykietaStawki(pb), value: String(pb) }));
+const KOLUMNY = KOLUMNY_KPIR.map((k) => ({ label: NAZWY_KOLUMN[k], value: k }));
 
 /**
  * Wpis ręczny ewidencji (plan księgowości JDG, K3): raport z kasy
  * rejestrującej albo inny dowód bez faktury z KSeF. Ten sam schemat Zod co
  * akcja; stawkę wybiera klient (D4), pole startuje od stawki z profilu.
+ * Przy skali i liniowym (K7, `ksiega="kpir"`) zamiast stawki kolumna KPiR,
+ * także dla kosztu bez faktury.
  */
 export function WpisRecznyForm({
   domyslnaData,
   domyslnaStawkaPb,
+  ksiega = 'ewidencja',
 }: {
   domyslnaData: string;
   domyslnaStawkaPb: number | null;
+  ksiega?: 'ewidencja' | 'kpir';
 }) {
+  const kpir = ksiega === 'kpir';
   const [rodzaj, setRodzaj] = useState<RodzajWpisu>('raport_kasy');
   const [dataPrzychodu, setDataPrzychodu] = useState(domyslnaData);
   const [dokument, setDokument] = useState('');
   const [kwota, setKwota] = useState('');
   const [stawka, setStawka] = useState(domyslnaStawkaPb ? String(domyslnaStawkaPb) : '');
+  const [kolumna, setKolumna] = useState<KolumnaKpir | ''>('');
   const [opis, setOpis] = useState('');
   const [bledy, setBledy] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
@@ -54,17 +62,12 @@ export function WpisRecznyForm({
       return reszta;
     });
 
-  const wejscie = () => ({
-    rodzaj,
-    dataPrzychodu,
-    dokument,
-    kwota,
-    stawkaPb: stawka === '' ? Number.NaN : Number(stawka),
-    opis: opis.trim() === '' ? null : opis,
-  });
+  const wspolne = () => ({ rodzaj, dataPrzychodu, dokument, kwota, opis: opis.trim() === '' ? null : opis });
+  const wejscie = () => ({ ...wspolne(), stawkaPb: stawka === '' ? Number.NaN : Number(stawka) });
+  const wejscieKpir = () => ({ ...wspolne(), kolumna: kolumna as KolumnaKpir });
 
   const dodaj = () => {
-    const parsed = wpisSchema.safeParse(wejscie());
+    const parsed = kpir ? wpisKpirSchema.safeParse(wejscieKpir()) : wpisSchema.safeParse(wejscie());
     if (!parsed.success) {
       const nowe: Record<string, string> = {};
       for (const issue of parsed.error.issues) nowe[String(issue.path[0] ?? 'formularz')] ??= issue.message;
@@ -73,9 +76,9 @@ export function WpisRecznyForm({
     }
     setBledy({});
     startTransition(async () => {
-      const wynik = await dodajWpisRecznyAction(wejscie());
+      const wynik = kpir ? await dodajWpisKpirAction(wejscieKpir()) : await dodajWpisRecznyAction(wejscie());
       if (wynik.success) {
-        toast.success('Wpis dodany do ewidencji');
+        toast.success(kpir ? 'Wpis dodany do KPiR' : 'Wpis dodany do ewidencji');
         setDokument('');
         setKwota('');
         setOpis('');
@@ -116,7 +119,7 @@ export function WpisRecznyForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
-          <FieldLabel htmlFor="wpis-data">Data przychodu</FieldLabel>
+          <FieldLabel htmlFor="wpis-data">{kpir ? 'Data zdarzenia' : 'Data przychodu'}</FieldLabel>
           <Input
             id="wpis-data"
             type="date"
@@ -148,7 +151,7 @@ export function WpisRecznyForm({
           {blad('dokument')}
         </Field>
         <Field>
-          <FieldLabel htmlFor="wpis-kwota">Kwota przychodu (zł)</FieldLabel>
+          <FieldLabel htmlFor="wpis-kwota">{kpir ? 'Kwota (zł)' : 'Kwota przychodu (zł)'}</FieldLabel>
           <Input
             id="wpis-kwota"
             inputMode="decimal"
@@ -165,32 +168,61 @@ export function WpisRecznyForm({
           <FieldDescription>Zwrot zapisuje się kwotą ujemną.</FieldDescription>
           {blad('kwota')}
         </Field>
-        <Field>
-          <FieldLabel htmlFor="wpis-stawka">Stawka ryczałtu</FieldLabel>
-          <Select
-            items={STAWKI}
-            value={stawka}
-            disabled={pending}
-            onValueChange={(v) => {
-              if (v) setStawka(v);
-              wyczysc('stawkaPb');
-            }}
-          >
-            <SelectTrigger id="wpis-stawka" className="w-full" aria-describedby={opisBledu('stawkaPb')}>
-              <SelectValue placeholder="Stawka ryczałtu" />
-            </SelectTrigger>
-            <SelectContent className="p-1" alignItemWithTrigger={false}>
-              <SelectGroup>
-                {STAWKI.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          {blad('stawkaPb')}
-        </Field>
+        {kpir ? (
+          <Field>
+            <FieldLabel htmlFor="wpis-kolumna">Kolumna KPiR</FieldLabel>
+            <Select
+              items={KOLUMNY}
+              value={kolumna}
+              disabled={pending}
+              onValueChange={(v) => {
+                if (v) setKolumna(v as KolumnaKpir);
+                wyczysc('kolumna');
+              }}
+            >
+              <SelectTrigger id="wpis-kolumna" className="w-full" aria-describedby={opisBledu('kolumna')}>
+                <SelectValue placeholder="Kolumna KPiR" />
+              </SelectTrigger>
+              <SelectContent className="p-1" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {KOLUMNY.map((k) => (
+                    <SelectItem key={k.value} value={k.value}>
+                      {k.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {blad('kolumna')}
+          </Field>
+        ) : (
+          <Field>
+            <FieldLabel htmlFor="wpis-stawka">Stawka ryczałtu</FieldLabel>
+            <Select
+              items={STAWKI}
+              value={stawka}
+              disabled={pending}
+              onValueChange={(v) => {
+                if (v) setStawka(v);
+                wyczysc('stawkaPb');
+              }}
+            >
+              <SelectTrigger id="wpis-stawka" className="w-full" aria-describedby={opisBledu('stawkaPb')}>
+                <SelectValue placeholder="Stawka ryczałtu" />
+              </SelectTrigger>
+              <SelectContent className="p-1" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {STAWKI.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {blad('stawkaPb')}
+          </Field>
+        )}
       </div>
 
       <Field>
@@ -221,7 +253,7 @@ export function WpisRecznyForm({
 }
 
 /** Usunięcie wpisu ręcznego z potwierdzeniem; poprawka to usunięcie i nowy wpis. */
-export function UsunWpisPrzycisk({ id, dokument }: { id: string; dokument: string }) {
+export function UsunWpisPrzycisk({ id, dokument, ksiega = 'ewidencja' }: { id: string; dokument: string; ksiega?: 'ewidencja' | 'kpir' }) {
   const [otwarty, setOtwarty] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -229,7 +261,7 @@ export function UsunWpisPrzycisk({ id, dokument }: { id: string; dokument: strin
     startTransition(async () => {
       const wynik = await usunWpisRecznyAction(id);
       if (wynik.success) {
-        toast.success('Wpis usunięty z ewidencji');
+        toast.success(ksiega === 'kpir' ? 'Wpis usunięty z KPiR' : 'Wpis usunięty z ewidencji');
         setOtwarty(false);
       } else {
         toast.error(wynik.error);
@@ -246,7 +278,9 @@ export function UsunWpisPrzycisk({ id, dokument }: { id: string; dokument: strin
           <AlertDialogHeader>
             <AlertDialogTitle>Usunąć wpis {dokument}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Wpis zniknie z ewidencji i z pliku JPK_EWP. Usunięcie zostaje w historii zmian firmy.
+              {ksiega === 'kpir'
+                ? 'Wpis zniknie z KPiR i z pliku JPK_PKPIR. Usunięcie zostaje w historii zmian firmy.'
+                : 'Wpis zniknie z ewidencji i z pliku JPK_EWP. Usunięcie zostaje w historii zmian firmy.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -12,15 +12,31 @@ import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { brakiOkresu, sumyOkresu, wierszeOkresu } from '@/lib/ksiegowosc/ewidencja';
 import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
 import { celZlozenia, generujJpkEwp, nazwaPlikuJpkEwp } from '@/lib/ksiegowosc/jpk-ewp';
-import { validateJpkEwp } from '@/lib/ksiegowosc/jpk-ewp-walidator';
+import { validateJpkEwp, validateJpkPkpir } from '@/lib/ksiegowosc/jpk-ewp-walidator';
+import { generujJpkPkpir, nazwaPlikuJpkPkpir } from '@/lib/ksiegowosc/jpk-pkpir';
+import { brakiKpirOkresu, sumyKpir, wierszeKpirOkresu } from '@/lib/ksiegowosc/kpir';
+import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
 import { czytajWersjeProfilu, NAZWY_FORM, wersjaNa } from '@/lib/ksiegowosc/profil';
-import { doWierszaWpisu, KOLUMNY_WPISU, wpisSchema, zWierszaWpisu, type WpisWejscie } from '@/lib/ksiegowosc/wpisy-reczne';
+import {
+  doWierszaWpisu,
+  doWierszaWpisuKpir,
+  KOLUMNY_WPISU,
+  KOLUMNY_WPISU_KPIR,
+  wpisKpirSchema,
+  wpisSchema,
+  zWierszaWpisu,
+  zWierszaWpisuKpir,
+  type WpisKpirWejscie,
+  type WpisWejscie,
+} from '@/lib/ksiegowosc/wpisy-reczne';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { ActionAuthError, requireOrgRole } from '@/lib/supabase/auth-context';
 
 /**
  * Akcje ewidencji przychodów (plan księgowości JDG, K3): wpisy ręczne
  * (dodanie i usunięcie, owner/admin, z audytem) i pobranie pliku JPK_EWP(4).
+ * Od K7 także KPiR przy skali i liniowym: wpis ręczny z kolumną KPiR (00171)
+ * i plik JPK_PKPIR(3).
  * Wszystko za wyłącznikiem modułu (obszar `ewidencja`) i klientem z sesji.
  *
  * Ponowienie: dodanie nie ma klucza, więc podwójne kliknięcie dałoby dwa
@@ -237,4 +253,125 @@ export async function pobierzJpkEwpAction(wejscie: z.input<typeof pobranieSchema
     metadata: { od, do: doDnia, celZlozenia: cel, liczbaWierszy: sumy.liczbaWierszy, sumaGr: sumy.razemGr },
   });
   return { success: true, xml, nazwa: nazwaPlikuJpkEwp(nip, od, doDnia) };
+}
+
+export async function dodajWpisKpirAction(wejscie: WpisKpirWejscie): Promise<WynikWpisu> {
+  let ctx;
+  try {
+    ctx = await requireOrgRole(['owner', 'admin']);
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const parsed = wpisKpirSchema.safeParse(wejscie);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { success: false, error: issue?.message ?? 'Nieprawidłowy wpis.', pole: issue?.path.join('.') };
+  }
+  const wpis = parsed.data;
+  if (wpis.dataPrzychodu > todayInWarsaw()) {
+    return { success: false, error: 'Data zdarzenia nie może być późniejsza niż dziś.', pole: 'dataPrzychodu' };
+  }
+  const client = ctx.supabase as unknown as SupabaseClient;
+  if (!(await wlaczona(client, ctx.tenantId))) return { success: false, error: NIEDOSTEPNE };
+
+  let wersje;
+  try {
+    wersje = await czytajWersjeProfilu(client, ctx.tenantId);
+  } catch {
+    return { success: false, error: BLAD_ZAPISU };
+  }
+  const wersja = wersjaNa(wersje, wpis.dataPrzychodu);
+  const kiedy = formatIsoDatePl(wpis.dataPrzychodu);
+  if (!wersja) {
+    return { success: false, error: `Bez ustawień podatkowych na ${kiedy} wpis nie trafi do KPiR. ${PROFIL_TEKST}`, pole: 'dataPrzychodu' };
+  }
+  if (wersja.forma === 'ryczalt') {
+    return { success: false, error: `${kiedy} forma opodatkowania to ryczałt, więc wpis należy do ewidencji przychodów, nie do KPiR.`, pole: 'dataPrzychodu' };
+  }
+
+  const { data, error } = await client.from('ledger_manual_entries').insert(doWierszaWpisuKpir(ctx.tenantId, wpis)).select(KOLUMNY_WPISU_KPIR).single();
+  if (error || !data) return { success: false, error: BLAD_ZAPISU };
+  const zapisany = zWierszaWpisuKpir(data as Parameters<typeof zWierszaWpisuKpir>[0]);
+  await logAudit({
+    action: 'ledger_entry.kpir_created',
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    entityType: 'ledger_manual_entry',
+    entityId: zapisany.id,
+    metadata: { wpis: zapisany },
+  });
+  revalidatePath('/reports/ewidencja');
+  return { success: true };
+}
+
+export async function pobierzJpkPkpirAction(wejscie: z.input<typeof pobranieSchema>): Promise<WynikPobrania> {
+  let ctx;
+  try {
+    ctx = await requireOrgRole(['owner', 'admin', 'accountant']);
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const parsed = pobranieSchema.safeParse(wejscie);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { success: false, error: issue?.message ?? 'Nieprawidłowe dane do pliku.', pole: issue?.path.join('.') };
+  }
+  const { rok, doMiesiaca, imie, nazwisko, dataUrodzenia } = parsed.data;
+  const client = ctx.supabase as unknown as SupabaseClient;
+  if (!(await wlaczona(client, ctx.tenantId))) return { success: false, error: NIEDOSTEPNE };
+
+  const dzis = todayInWarsaw();
+  const od = `${rok}-01-01`;
+  if (od > dzis) return { success: false, error: `Rok ${rok} jeszcze się nie zaczął, więc nie ma z niego KPiR.` };
+  const koniec = koniecMiesiaca(rok, doMiesiaca);
+  const doDnia = koniec < dzis ? koniec : dzis;
+
+  const wynik = await czytajKpir(client, ctx.tenantId, rok);
+  if (!wynik.ok) return { success: false, error: wynik.komunikat };
+  const braki = brakiKpirOkresu(wynik.kpir, od, doDnia);
+  if (braki.length > 0) {
+    const reszta = braki.length > 1 ? ` Braków w tym okresie jest ${braki.length}; lista jest w KPiR.` : '';
+    return { success: false, error: `Plik JPK_PKPIR nie powstanie, dopóki KPiR ma braki. ${braki[0].komunikat}${reszta}` };
+  }
+  const wiersze = wierszeKpirOkresu(wynik.kpir, od, doDnia);
+  if (wiersze.length === 0) {
+    return { success: false, error: `W KPiR nie ma wpisów od ${formatIsoDatePl(od)} do ${formatIsoDatePl(doDnia)}, więc plik JPK_PKPIR byłby pusty.` };
+  }
+
+  const [{ data: firma }, kodUrzedu] = await Promise.all([
+    client.from('tenants').select('nip').eq('id', ctx.tenantId).maybeSingle(),
+    readTenantTaxOffice(client, ctx.tenantId).catch(() => null),
+  ]);
+  const nip = String((firma as { nip?: unknown } | null)?.nip ?? '').replace(/\D/g, '');
+  if (!/^[1-9]((\d[1-9])|([1-9]\d))\d{7}$/.test(nip)) {
+    return { success: false, error: 'Plik JPK_PKPIR potrzebuje poprawnego NIP firmy. NIP jest w Ustawieniach, w danych firmy.' };
+  }
+  if (!kodUrzedu) {
+    return { success: false, error: 'Plik JPK_PKPIR potrzebuje urzędu skarbowego firmy. Urząd ustawia się w Ustawieniach, w części Księgowa.' };
+  }
+
+  const cel = celZlozenia(od, doDnia, dzis);
+  const xml = generujJpkPkpir({ od, do: doDnia, celZlozenia: cel, kodUrzedu, podatnik: { nip, imie, nazwisko, dataUrodzenia }, wiersze });
+  const kontrola = await validateJpkPkpir(xml);
+  if (!kontrola.valid) {
+    console.error('[jpk_pkpir] niezgodny ze schematem', ctx.tenantId, kontrola.errors.slice(0, 20).map(redactXsdMessage));
+    return {
+      success: false,
+      error:
+        'Plik JPK_PKPIR nie przeszedł kontroli schematu Ministerstwa Finansów, więc go nie wydajemy. ' +
+        'Szczegóły są w naszych logach i sprawdzimy dane z tego okresu.',
+    };
+  }
+  const sumy = sumyKpir(wiersze);
+  await logAudit({
+    action: 'jpk_pkpir.downloaded',
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    entityType: 'jpk_pkpir',
+    // Bez imienia, nazwiska i daty urodzenia: tych danych nie zapisujemy (jak w D9).
+    metadata: { od, do: doDnia, celZlozenia: cel, liczbaWierszy: sumy.liczbaWierszy, przychodGr: sumy.przychodGr, kosztyGr: sumy.kosztyGr },
+  });
+  return { success: true, xml, nazwa: nazwaPlikuJpkPkpir(nip, od, doDnia) };
 }

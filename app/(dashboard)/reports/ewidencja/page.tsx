@@ -12,18 +12,23 @@ import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { brakiOkresu, etykietaStawki, sumyOkresu, type Ewidencja, type WpisReczny } from '@/lib/ksiegowosc/ewidencja';
 import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
-import { PROFIL_OD_MIN, wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
+import { czytajWersjeProfilu, PROFIL_OD_MIN, wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { wersjaMiesiaca } from '@/lib/ksiegowosc/ten-miesiac';
 import { NAZWY_RODZAJOW_WPISU } from '@/lib/ksiegowosc/wpisy-reczne';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
+
+import { KpirModulu } from './_components/kpir';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * „Ewidencja” w Księgowości (plan księgowości JDG, K3, sekcja 8): ewidencja
  * przychodów ryczałtu za miesiąc, wpisy ręczne (raport kasy) i plik
- * JPK_EWP(4) od 1 stycznia.
+ * JPK_EWP(4) od 1 stycznia. Miesiąc ze skalą albo liniowym (K7) pokazuje KPiR
+ * (`_components/kpir.tsx`) z plikiem JPK_PKPIR(3).
  *
  * Za wyłącznikiem modułu (obszar `ewidencja`): firma poza pilotażem dostaje
  * 404. Dane czyta klient z sesji (RLS). Miesiąc z brakiem nie ma sum,
@@ -47,14 +52,20 @@ export default async function EwidencjaPage({
   const dzis = todayInWarsaw();
   const miesiac = `${year}-${String(month).padStart(2, '0')}`;
   const tytul = monthLabel(miesiac);
+  // Forma z ustawień na ten miesiąc: skala i liniowy prowadzą KPiR (K7), ryczałt ewidencję.
+  const wersje = await czytajWersjeProfilu(ctx.supabase, ctx.tenantId).catch(() => null);
+  const forma = wersje ? wersjaMiesiaca(wersje, miesiac)?.forma : undefined;
+  const kpir = forma === 'skala' || forma === 'liniowy';
 
   const naglowek = (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium">Ewidencja przychodów, {tytul}</h2>
+          <h2 className="text-sm font-medium">{kpir ? `KPiR, ${tytul}` : `Ewidencja przychodów, ${tytul}`}</h2>
           <p className="text-muted-foreground text-xs">
-            Faktury przyjęte w KSeF i wpisy ręczne przy ryczałcie od przychodów ewidencjonowanych.
+            {kpir
+              ? 'Podatkowa księga przychodów i rozchodów według wzoru od 2026 r.: faktury przyjęte w KSeF, koszty i wpisy ręczne.'
+              : 'Faktury przyjęte w KSeF i wpisy ręczne przy ryczałcie od przychodów ewidencjonowanych.'}
           </p>
         </div>
         <MonthSelector
@@ -80,9 +91,29 @@ export default async function EwidencjaPage({
     );
   }
 
-  const wynik = await czytajEwidencje(ctx.supabase, ctx.tenantId, year);
   const canEdit = ctx.role === 'owner' || ctx.role === 'admin';
   const mozePobrac = canEdit || ctx.role === 'accountant';
+  if (kpir) {
+    return (
+      <div className="ff-tab-panel flex flex-1 flex-col gap-6">
+        <h1 className="sr-only">KPiR</h1>
+        {naglowek}
+        <KpirModulu
+          wynik={await czytajKpir(ctx.supabase, ctx.tenantId, year)}
+          od={periodStart}
+          doDnia={periodEnd}
+          tytul={tytul}
+          rok={year}
+          miesiac={month}
+          dzis={dzis}
+          canEdit={canEdit}
+          mozePobrac={mozePobrac}
+        />
+      </div>
+    );
+  }
+
+  const wynik = await czytajEwidencje(ctx.supabase, ctx.tenantId, year);
 
   return (
     <div className="ff-tab-panel flex flex-1 flex-col gap-6">
