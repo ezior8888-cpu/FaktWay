@@ -1,0 +1,782 @@
+{
+  "app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoice-sheet.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoices-view.tsx": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-row-actions.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(dashboard)/(faktury)/invoices/recurring/page.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(dashboard)/(koszty)/inbox/_components/inbox-rows.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/(dashboard)/(koszty)/inbox/_components/inbox-stat-cells.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(dashboard)/(koszty)/inbox/_components/inbox-table.tsx": {
+    "myslniki": 7,
+    "plakietki": 0
+  },
+  "app/(dashboard)/contractors/_components/contractors-table.tsx": {
+    "myslniki": 7,
+    "plakietki": 0
+  },
+  "app/(dashboard)/invoices/[id]/upo-actions.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/(dashboard)/invoices/_components/invoice-stat-tiles.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(dashboard)/invoices/_components/invoices-table.tsx": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "app/(dashboard)/invoices/_components/payment-indicator.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(dashboard)/invoices/new/regular/page.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/(dashboard)/settings/accountant/page.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/(dashboard)/settings/audit/page.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "app/(dashboard)/settings/notifications/_components/email-preferences.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "app/(dashboard)/settings/page.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/(dashboard)/settings/security/_components/password-change-card.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(dashboard)/settings/security/_components/two-factor-card.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(marketing)/legal/podprocesorzy/page.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/(marketing)/legal/rodo/page.tsx": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "app/actions/organizations.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "app/actions/recurring-invoices.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "app/actions/validation.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/api/dev/posthog-test/route.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/api/email/unsubscribe/route.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "app/api/portal/exports/generate/route.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/api/support/chat/route.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/onboarding/import-source/page.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "app/onboarding/progress/[jobId]/page.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "app/onboarding/zgody/page.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/accountant/invoice-list.tsx": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "components/analizy/finora-1do1/monthly-stats-cards.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/analizy/finora-1do1/spend-heatmap.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/analizy/sprzedaz-grid.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/contractors/contractor-row-actions.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/dashboard/finora/adaptery.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "components/dashboard/finora/statistics-card-03.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/dashboard/flo-welcome.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/dashboard/notification-dropdown.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/dashboard/pulpit/recent-invoices-card.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/dashboard/pulpit/vat-limit-card.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/dashboard/section-error-boundary.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/dashboard/welcome-modal.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/expenses/capture-button.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/expenses/expense-edit-form.tsx": {
+    "myslniki": 11,
+    "plakietki": 0
+  },
+  "components/expenses/expenses-list.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/expenses/finora/expense-stat-cells.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/expenses/finora/expenses-table.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/expenses/finora/labels.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/expenses/kpir-view.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/exports/accountant-export-buttons.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/exports/co-pilot-settings-form.tsx": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "components/exports/export-history.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/import-danych/import-center.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/import-danych/import-history.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/import-danych/import-model.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/import-danych/import-source-grid.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/import-danych/ksef-history-model.ts": {
+    "myslniki": 19,
+    "plakietki": 0
+  },
+  "components/invoices/actions-detail.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/advance-form.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/invoices/buyer-lookup.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/invoices/correction-actions.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/correction-form.tsx": {
+    "myslniki": 9,
+    "plakietki": 0
+  },
+  "components/invoices/draft-invoice-actions.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/final-actions.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/final-form.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/invoices/finora/invoice-document.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/invoice-detail-view.tsx": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "components/invoices/invoice-form.tsx": {
+    "myslniki": 8,
+    "plakietki": 0
+  },
+  "components/invoices/invoice-list.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/ksef-duplicate-decision.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/invoices/ksef-original-lines.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/status-badge.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/swipeable-invoice-row.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/invoices/upo-download.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/marketing/blog-newsletter-form.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/marketing/faq-section.tsx": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "components/marketing/landing-hero.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/onboarding/actions.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/onboarding/form.tsx": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "components/onboarding/import-progress-view.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/onboarding/import-source-selector.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/przeplywy/finora-1do1/adaptery.ts": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "components/przeplywy/finora-1do1/chart-cash-flow.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/przeplywy/finora/chart-cash-flow.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/przeplywy/finora/chart-net-worth.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/przeplywy/finora/statistics-area-stat-card.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/przeplywy/finora/statistics-savings-goal-card.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/reminders/overdue-dashboard.tsx": {
+    "myslniki": 9,
+    "plakietki": 0
+  },
+  "components/reminders/reminder-consent-dialog.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/reminders/reminder-settings-form.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/reports/kpir/kpir-cost-structure-card.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/reports/kpir/kpir-model.ts": {
+    "myslniki": 8,
+    "plakietki": 0
+  },
+  "components/settings/accountant-list.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/settings/business-start-form.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/settings/company-deletion.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/settings/company-profile-form.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/settings/complete-nip-form.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/settings/finora/format-date.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/settings/tax-office-form.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "components/team/team-management.tsx": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/auth/oauth-providers.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/auth/password.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/billing/self-invoice.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/categorization/kpir-revenue.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/dashboard/product-name.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/email/send.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/email/templates/CertExpiry.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/email/templates/GdprDeletionScheduled.tsx": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/expenses/photo-upload.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/exports/issuer-address.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/exports/jpk-fa-generator.ts": {
+    "myslniki": 5,
+    "plakietki": 0
+  },
+  "lib/exports/jpk-schema-check.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/exports/jpk-v7m-generator.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/exports/kpir-generator.ts": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "lib/exports/suspended-formats.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/exports/tax-office.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/feature-flags/global-flags.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/feature-flags/maintenance.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/format/iso-date.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/import/csv-parsers/csv-helpers.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/import/csv-parsers/fakturownia.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/import/csv-parsers/ifirma.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/import/csv-parsers/infakt.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/import/csv-parsers/wfirma.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/import/fa3-content.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/import/fa3-parser.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/import/import-engine.ts": {
+    "myslniki": 15,
+    "plakietki": 0
+  },
+  "lib/import/imported-invoice-row.ts": {
+    "myslniki": 8,
+    "plakietki": 0
+  },
+  "lib/import/jpk-fa-parser.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/import/ksef-xml-archive.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/invoices/correction-parents.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/invoices/display-date.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/invoices/ksef-send-policy.ts": {
+    "myslniki": 47,
+    "plakietki": 0
+  },
+  "lib/invoices/ksef-send-step.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/invoices/ksef-submit-enqueue.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/invoices/recurring/issue.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/invoices/recurring/template.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/invoices/vat-exemption.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/jobs/logger.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/run-job.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/cert-expiry-alert.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/cleanup-audit-logs.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/co-pilot-monthly.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/critical-alerts-monitor.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/daily-analytics-digest.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/daily-db-snapshot.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/daily-summary-email.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/email-sequence.ts": {
+    "myslniki": 10,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/ksef-lifecycle-reconcile.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/ksef-lifecycle-report.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice.ts": {
+    "myslniki": 21,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/upo-retry-stale.ts": {
+    "myslniki": 8,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/verify-backup.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/weekly-business-review.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/ksef/duplicate-check.ts": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "lib/ksef/duplicate-decision.ts": {
+    "myslniki": 100,
+    "plakietki": 0
+  },
+  "lib/ksef/duplicate-verdict.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/ksef/error-translator.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/ksef/health-check.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/ksef/history-sync/db.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/ksef/history-sync/windows.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/ksef/reencrypt-credentials.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/ksef/send-attempt-ledger.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/ksef/special-invoice-data.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/ksef/special-issue-date.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/ksef/submission-holds.ts": {
+    "myslniki": 5,
+    "plakietki": 0
+  },
+  "lib/ksef/submit.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/ksef/upo-client.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/ksef/upo-pdf-generator.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/legal/documents/polityka-cookies.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/legal/documents/polityka-prywatnosci.ts": {
+    "myslniki": 30,
+    "plakietki": 0
+  },
+  "lib/legal/documents/regulamin.ts": {
+    "myslniki": 45,
+    "plakietki": 0
+  },
+  "lib/legal/documents/umowa-powierzenia.ts": {
+    "myslniki": 10,
+    "plakietki": 0
+  },
+  "lib/legal/plain-text.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/legal/record.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/legal/subprocessors.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/marketing/landing-faqs.ts": {
+    "myslniki": 6,
+    "plakietki": 0
+  },
+  "lib/ocr/currency.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/ocr/schema.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/pagination/keyset.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/pdf/invoice-pdf.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/pdf/invoice-renderer.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/reminders/templates.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/schemas/invoice-form.ts": {
+    "myslniki": 17,
+    "plakietki": 0
+  },
+  "lib/schemas/recurring-invoice.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/supabase/auth-context.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/support/chat.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/support/knowledge-base.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/support/support-actions.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/validation/whitelist-client.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/xml/fa3-annotations.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/xml/fa3-generator.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/xml/invoice-calculator.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  }
+}
