@@ -124,4 +124,17 @@ describe.skipIf(!hasDatabase)('00171: wpisy ręczne KPiR na prawdziwym PostgREST
     const other = await signedIn(OTHER_EMAIL, OTHER_ORG);
     expect(await czytajWpisyKpir(other, ORG, '2026-10-01', '2026-10-31')).toEqual([]);
   });
+
+  it('właściciel usuwa wpis KPiR i dostaje cały wiersz z kolumną (audyt usunięcia); członek firmy nie usuwa nic', async () => {
+    const owner = await signedIn(OWNER_EMAIL, ORG);
+    const { data: nowy, error } = await owner.from('ledger_manual_entries').insert({ ...WPIS, dokument: 'USUN/1', kolumna: 'k13' }).select('id').single();
+    expect(error).toBeNull();
+    const member = await signedIn(MEMBER_EMAIL, ORG);
+    const zCzlonka = await member.from('ledger_manual_entries').delete().eq('id', nowy!.id).eq('tenant_id', ORG).select('*');
+    expect(zCzlonka.data ?? []).toEqual([]);
+    const usuniete = await owner.from('ledger_manual_entries').delete().eq('id', nowy!.id).eq('tenant_id', ORG).select('*');
+    expect(usuniete.error).toBeNull();
+    expect(usuniete.data).toEqual([expect.objectContaining({ dokument: 'USUN/1', kolumna: 'k13', stawka_pb: null })]);
+  });
 });
+
