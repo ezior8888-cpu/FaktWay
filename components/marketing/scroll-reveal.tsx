@@ -1,6 +1,8 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -29,7 +31,7 @@ export function ScrollReveal({
   direction = 'up',
   className,
 }: ScrollRevealProps) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = usePrefersReducedMotion();
 
   if (reduceMotion) {
     return <div className={className}>{children}</div>;

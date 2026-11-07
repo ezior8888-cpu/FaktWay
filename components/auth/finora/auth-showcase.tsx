@@ -9,11 +9,12 @@
 import { useEffect, useState } from 'react'
 
 // Third-party Imports
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Check } from 'lucide-react'
 
 // Util Imports
 import { cn } from '@/lib/utils'
+import { usePrefersReducedMotion } from '@/hooks/use-media-query'
 
 const STEPS = ['Wystawiona', 'Wysłana do KSeF', 'Potwierdzenie UPO pobrane'] as const
 
@@ -21,7 +22,7 @@ const STEP_MS = 1100
 const HOLD_MS = 2600
 
 export function AuthShowcase() {
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = usePrefersReducedMotion()
   // Ile kroków jest już zrobionych (0…3).
   const [done, setDone] = useState(0)
 

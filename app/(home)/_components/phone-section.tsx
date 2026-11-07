@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { AnimatePresence, motion, useInView, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useInView } from 'framer-motion';
 import {
   RiAddLine,
   RiCameraLine,
@@ -20,6 +20,7 @@ import {
 import { BatteryFull, ScanFace, Signal, Wifi } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 
 import { FaktWayLogo } from '@/components/brand/faktway-logo';
 import { EASE_OUT, Reveal } from '@/components/site/motion';
@@ -607,7 +608,7 @@ export function Phone() {
   // (na telefonie makieta jest ekran niżej).
   const phoneRef = useRef<HTMLDivElement>(null);
   const inView = useInView(phoneRef, { amount: 0.5 });
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = usePrefersReducedMotion();
   const baseId = useId();
   const tabId = (i: number) => `${baseId}-tab-${i}`;
   const panelId = `${baseId}-panel`;
