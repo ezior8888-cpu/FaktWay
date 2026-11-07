@@ -77,6 +77,9 @@ const STATIC_PUBLIC_EXACT = [
 const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] = [
   // baner KSeF w każdej karcie panelu (plan skalowania, sesja 1)
   { path: '/api/ksef/health', match: 'exact' },
+  // stan wdrożenia dla workflowu `obrazy.yml`; trasa sama sprawdza token
+  // (plan usprawnień 3.1)
+  { path: '/api/ops/deploy-state', match: 'exact' },
 ];
 
 export function isNoSessionPath(pathname: string): boolean {
