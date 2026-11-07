@@ -220,7 +220,8 @@ idzie więc tak:
 6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
    `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
    wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,
-   z komentarzem dlaczego.
+   z komentarzem dlaczego. Potem drugi czytelnik przed otwarciem PR:
+   w Claude Code `/code-review`, w Codexie przegląd w osobnej sesji.
 7. **Opis PR według `.github/pull_request_template.md`:** co naprawia (kod
    ustalenia), zmiana, co było czerwone przed naprawą, tabela weryfikacji,
    migracje (numer z rejestru, przed czy PO wdrożeniu), co sprawdzić po
