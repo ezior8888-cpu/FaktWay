@@ -27,6 +27,9 @@
  *      operatorskim i strumienie przy limicie (raz na dobę)
  *  17. **Historia KSeF: 429 u wielu firm** — globalny bezpiecznik fan-outu
  *
+ * Odpalony alarm zakłada też issue na GitHubie (`lib/alerts/github-issue.ts`,
+ * plan usprawnień 3.5): jedno na kod, sam kod i liczniki, bez danych.
+ *
  * Wszystkie progi konserwatywne — wolimy false-positive niż przegapić
  * critical incident. Operator może zignorować, ale nie chcemy gubić alertów.
  */
@@ -34,6 +37,7 @@
 import * as Sentry from '@sentry/nextjs';
 
 import { OPERATOR_DUPLICATE_MESSAGES } from '@/lib/admin/ksef-operator-policy';
+import { CRITICAL_ISSUE_SOURCE_MONITOR, reportCriticalIssues } from '@/lib/alerts/github-issue';
 import { alertCritical } from '@/lib/alerts/slack';
 import { backupAgeHours, isBackupStale, MAX_BACKUP_AGE_HOURS } from '@/lib/backup/freshness';
 import { STALE_REFUND_OPERATION_MS } from '@/lib/billing/refund-operations';
@@ -1226,9 +1230,24 @@ export async function runCriticalAlertsMonitor({ step }: JobContext) {
       ),
     ]);
 
+    // Plan usprawnień 3.5: odpalone alarmy zakładają issue na GitHubie, obok
+    // Slacka i Telegrama (te poszły już w kontrolach). Do GitHuba idzie tylko
+    // kod i źródło; moduł nigdy nie rzuca, a `.catch` chroni wynik monitora.
+    const fired = results.filter((r) => r.fired);
+    if (fired.length > 0) {
+      await step.run('report-github-issues', () =>
+        reportCriticalIssues(
+          fired.map((r) => ({ code: r.type, source: CRITICAL_ISSUE_SOURCE_MONITOR })),
+        ).catch((err: unknown) => {
+          Sentry.captureException(err, { tags: { area: 'observability.critical-alerts.github' } });
+          return null;
+        }),
+      );
+    }
+
     return {
       checked: results.length,
-      fired: results.filter((r) => r.fired).length,
+      fired: fired.length,
       details: results,
     };
 }

@@ -1,5 +1,5 @@
 import { SectionTabsNav } from '@/components/lists/section-tabs-nav';
-import { zakladkiKsiegowosci } from '@/components/reports/ksiegowosc-tabs';
+import { zakladkiKsiegowosci, type ObszaryKsiegowosci } from '@/components/reports/ksiegowosc-tabs';
 import { Card } from '@/components/ui/card';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { getPageContext } from '@/lib/supabase/page-context';
@@ -17,12 +17,12 @@ import { getPageContext } from '@/lib/supabase/page-context';
  * siedział w karcie każdej z nich i przy przełączeniu skakał o kilkaset
  * pikseli w pionie.
  *
- * Plan księgowości JDG (K2): firma w pilotażu dostaje trzecią zakładkę
- * „Ustawienia podatkowe”. Błąd odczytu wyłącznika chowa tylko ją, a KPiR
- * i Eksport działają jak dotąd.
+ * Plan księgowości JDG (K2-K4): firma w pilotażu dostaje zakładki
+ * „Ten miesiąc”, „Ewidencja” i „Ustawienia podatkowe”. Błąd odczytu wyłącznika chowa tylko
+ * je, a KPiR i Eksport działają jak dotąd.
  */
 export default async function KsiegowoscLayout({ children }: { children: React.ReactNode }) {
-  const tabs = zakladkiKsiegowosci(await czyUstawieniaPodatkoweWidoczne());
+  const tabs = zakladkiKsiegowosci(await widoczneObszary());
   return (
     <div className="ff-page-fill flex flex-col gap-6">
       <Card className="gap-0 py-0 shadow-none">
@@ -33,12 +33,16 @@ export default async function KsiegowoscLayout({ children }: { children: React.R
   );
 }
 
-async function czyUstawieniaPodatkoweWidoczne(): Promise<boolean> {
+async function widoczneObszary(): Promise<ObszaryKsiegowosci> {
   // Poza try: przekierowanie na logowanie z getPageContext musi przejść dalej.
   const ctx = await getPageContext();
-  try {
-    return (await czyKsiegowoscWlaczona(ctx.supabase, ctx.tenantId, 'ustawienia')).wlaczony;
-  } catch {
-    return false;
-  }
+  const czy = async (obszar: 'ten_miesiac' | 'ewidencja' | 'ustawienia') => {
+    try {
+      return (await czyKsiegowoscWlaczona(ctx.supabase, ctx.tenantId, obszar)).wlaczony;
+    } catch {
+      return false;
+    }
+  };
+  const [tenMiesiac, ewidencja, ustawienia] = await Promise.all([czy('ten_miesiac'), czy('ewidencja'), czy('ustawienia')]);
+  return { tenMiesiac, ewidencja, ustawienia };
 }

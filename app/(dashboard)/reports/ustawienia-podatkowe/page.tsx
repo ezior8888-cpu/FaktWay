@@ -71,6 +71,7 @@ export default async function UstawieniaPodatkowePage() {
                     {NAZWY_ETAPOW_ZUS[w.zusEtap]}
                     {w.zusOd ? ` od ${formatIsoDatePl(w.zusOd)}` : ''}
                     {w.chorobowe ? ', z chorobowym' : ''}
+                    {w.najem ? ', najem z progiem 100 000 zł' : ''}
                   </span>
                 </li>
               ))}

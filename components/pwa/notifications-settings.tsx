@@ -61,11 +61,28 @@ const NOTIFICATION_TYPES = [
   },
 ] as const;
 
-interface Props {
-  subscriptions: PushSubscription[];
+/** Moduł księgowości (K5): tylko dla firmy w pilotażu; kolumna z 00169, domyślnie włączona. */
+const KSIEGOWOSC_TYPE = {
+  key: 'notify_ksiegowosc' as const,
+  label: 'Księgowość',
+  desc: 'Wyliczone rozliczenie miesiąca i terminy ryczałtu oraz składek ZUS',
+};
+
+type KluczZgody = (typeof NOTIFICATION_TYPES)[number]['key'] | typeof KSIEGOWOSC_TYPE.key;
+
+/** Zgoda z wiersza; kolumny `notify_ksiegowosc` nie ma w typach przed 00169, a jej brak to „włączone”. */
+function zgoda(subscription: PushSubscription, key: KluczZgody): boolean {
+  const wartosc = (subscription as PushSubscription & { notify_ksiegowosc?: boolean })[key];
+  return wartosc !== false;
 }
 
-export function NotificationsSettings({ subscriptions }: Props) {
+interface Props {
+  subscriptions: PushSubscription[];
+  /** Firma w pilotażu księgowości: dochodzi przełącznik „Księgowość”. */
+  ksiegowosc?: boolean;
+}
+
+export function NotificationsSettings({ subscriptions, ksiegowosc = false }: Props) {
   const router = useRouter();
   const {
     isSupported,
@@ -129,6 +146,7 @@ export function NotificationsSettings({ subscriptions }: Props) {
               <DeviceRow
                 key={sub.id}
                 subscription={sub}
+                ksiegowosc={ksiegowosc}
                 onUpdate={() => router.refresh()}
               />
             ))}
@@ -141,9 +159,11 @@ export function NotificationsSettings({ subscriptions }: Props) {
 
 function DeviceRow({
   subscription,
+  ksiegowosc,
   onUpdate,
 }: {
   subscription: PushSubscription;
+  ksiegowosc: boolean;
   onUpdate: () => void;
 }) {
   const [isUpdating, startUpdate] = useTransition();
@@ -156,10 +176,7 @@ function DeviceRow({
         ? RiTabletLine
         : RiComputerLine;
 
-  const togglePref = (
-    key: (typeof NOTIFICATION_TYPES)[number]['key'],
-    current: boolean,
-  ) => {
+  const togglePref = (key: KluczZgody, current: boolean) => {
     startUpdate(async () => {
       await updatePushPreferencesAction(subscription.id, { [key]: !current });
       onUpdate();
@@ -205,8 +222,8 @@ function DeviceRow({
       </div>
 
       <FieldGroup className="gap-3 border-t pt-3">
-        {NOTIFICATION_TYPES.map((type) => {
-          const enabled = subscription[type.key];
+        {[...NOTIFICATION_TYPES, ...(ksiegowosc ? [KSIEGOWOSC_TYPE] : [])].map((type) => {
+          const enabled = zgoda(subscription, type.key);
           const id = `push-${subscription.id}-${type.key}`;
           return (
             <Field key={type.key} orientation="horizontal" className="items-center!">

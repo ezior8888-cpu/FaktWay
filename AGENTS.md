@@ -157,7 +157,7 @@ Dawne sekcje tego pliku przeniesione są dosłownie; odnośniki typu
 
 | Chcesz… | Runbook (dawna sekcja) | Jedną linią |
 |---|---|---|
-| scalić PR, kilka PR, stos | [`scalanie-pr.md`](docs/runbooks/scalanie-pr.md) („Scalanie PR”) | `gh pr merge N --merge` |
+| scalić PR, kilka PR, stos | [`scalanie-pr.md`](docs/runbooks/scalanie-pr.md) („Scalanie PR”) | `gh pr merge N --merge`; kilka: `./scripts/ops/zloz-scalenie.sh A B` |
 | wgrać migrację, wygenerować typy bazy | [`wgrywanie-migracji.md`](docs/runbooks/wgrywanie-migracji.md) („Wgrywanie migracji”, „Typy bazy”) | `./scripts/ops/wgraj-migracje.sh 00157` |
 | wdrożyć, zdiagnozować nieudane wdrożenie, sprawdzić po wdrożeniu | [`wdrozenie-produkcji.md`](docs/runbooks/wdrozenie-produkcji.md) („Kolejność przy pełnym wydaniu”, „Wdrożenie produkcji”, „Kiedy wdrożenie padnie”, „Weryfikacja po wdrożeniu”) | `./scripts/ops/wdroz-produkcje.sh`, `./scripts/ops/kontrola-faktur-ksef.sh` |
 | zmienić `Dockerfile`, Coolify, zmienne, serwer; wejść w panel | [`coolify-pulapki.md`](docs/runbooks/coolify-pulapki.md) („Pułapki”) | tunel: `ssh -i $K -N -L 8000:localhost:8000 root@$OPS` |
@@ -182,6 +182,8 @@ W Claude Code uruchamia go sam hook SessionStart; Codex woła go ręcznie.
 `git push` uruchamia `.githooks/pre-push` (adresy z `infra.env`, typy, eslint,
 `vitest related`; do ok. 3 minut, więc daj poleceniu dłuższy limit czasu).
 Pominięcie: `SKIP_PREPUSH=1 git push`.
+Dysk: `.next` w bezczynnych worktree (3–5 GB każdy) usuwa
+`bash scripts/dev/sprzataj-worktree.sh` (bez `--usun` tylko pokazuje).
 
 **Kilka sesji w jednym katalogu.** Inna sesja potrafi zacommitować coś na
 Twojej gałęzi (zdarzyło się 02.10). Przed każdym pushem przejrzyj
@@ -220,7 +222,8 @@ idzie więc tak:
 6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
    `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
    wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,
-   z komentarzem dlaczego.
+   z komentarzem dlaczego. Potem drugi czytelnik przed otwarciem PR:
+   w Claude Code `/code-review`, w Codexie przegląd w osobnej sesji.
 7. **Opis PR według `.github/pull_request_template.md`:** co naprawia (kod
    ustalenia), zmiana, co było czerwone przed naprawą, tabela weryfikacji,
    migracje (numer z rejestru, przed czy PO wdrożeniu), co sprawdzić po

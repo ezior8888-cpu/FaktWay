@@ -24,6 +24,8 @@ import { getVatLimit } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { czytajOdlozyc } from '@/lib/ksiegowosc/odlozyc';
+import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +35,7 @@ import {
   krzywaKosztow,
   krzywaWplywow,
   limitProps,
+  odlozycProps,
   podatekProps,
   tabelaProps,
   wplywyMiesiacaProps,
@@ -220,6 +223,16 @@ async function PierscienKarta({ supabase, tenantId, nowIso, tryb, className }: S
     ));
   }
   return zaladujKarte('Odłóż na podatek', className, async () => {
+    // Pilotaż księgowości (K5, D13): szacunek z modułu zamiast 19 % liniowego.
+    // Pozostałe firmy i tryb przykładowy bez zmian; błąd odczytu wyłącznika to „nie”.
+    const pilotaz =
+      tryb !== 'przyklad' &&
+      (await czyKsiegowoscWlaczona(supabase, tenantId, 'terminy').then((w) => w.wlaczony, () => false));
+    if (pilotaz) {
+      const dzis = todayInWarsaw(new Date(nowIso));
+      const szacunek = await czytajOdlozyc(supabase, tenantId, dzis);
+      return <StatisticsSavingsGoalCard {...odlozycProps(szacunek, Number(dzis.slice(0, 4)))} className={className} />;
+    }
     const data = await getCashFlowData(supabase, tenantId, new Date(nowIso));
     return <StatisticsSavingsGoalCard {...podatekProps(data.taxEstimate, tryb)} className={className} />;
   });

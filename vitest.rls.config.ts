@@ -52,6 +52,15 @@ export default defineConfig({
       // 00166 (plan księgowości JDG, K2): profil podatkowy — zapis owner/admin, izolacja firm,
       // forma tylko od 1 stycznia (wyzwalacz), CHECK-i stawki i daty ZUS, bez DELETE.
       'tests/rls-ksiegowosc-profil.test.ts',
+      // 00167 (plan księgowości JDG, K3): wpisy ręczne ewidencji: zapis i usunięcie owner/admin,
+      // izolacja firm, data wpisu i autor z bazy (granty kolumnowe), CHECK-i K_9 i kwoty, bez UPDATE.
+      'tests/rls-ksiegowosc-wpisy.test.ts',
+      // 00168 (plan księgowości JDG, K4): rozliczenia miesiąca: zatwierdzenie i zapłata owner/admin,
+      // izolacja firm, granty kolumnowe, niezmienność kwoty (wyzwalacz), UNIQUE wersji, najem tylko przy ryczałcie.
+      'tests/rls-ksiegowosc-rozliczenia.test.ts',
+      // 00169 (plan księgowości JDG, K5): powiadomienia tylko dla zadań (service_role), UNIQUE jako
+      // idempotencja cronów, przejęcie wpisu „failed”, CHECK-i, zgoda push „Księgowość”.
+      'tests/rls-ksiegowosc-powiadomienia.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
