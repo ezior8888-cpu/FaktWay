@@ -73,6 +73,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
   // `null`: NIP-u nie udało się odczytać (inny komunikat niż „brak NIP w ustawieniach”).
   const nip = firma.error ? null : String(firma.data?.nip ?? '').replace(/\D/g, '');
   const mikro = nip ? mikrorachunekZNip(nip) : null;
+  const podatek = dane.ok && dane.wynik.profil.forma !== 'ryczalt' ? 'Zaliczka na podatek dochodowy' : 'Ryczałt';
 
   return (
     <div className="ff-tab-panel flex flex-1 flex-col gap-6">
@@ -81,7 +82,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-medium">Rozliczenie za {tytul}</h2>
-            <p className="text-muted-foreground text-xs">Ryczałt, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.</p>
+            <p className="text-muted-foreground text-xs">{podatek}, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.</p>
           </div>
           <MonthSelector month={miesiac} currentMonth={dzis.slice(0, 7)} basePath="/reports/ten-miesiac" query="month-year" ariaLabel="Miesiąc rozliczenia" />
         </CardContent>
