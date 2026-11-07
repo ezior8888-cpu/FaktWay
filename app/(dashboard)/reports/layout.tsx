@@ -17,8 +17,8 @@ import { getPageContext } from '@/lib/supabase/page-context';
  * siedział w karcie każdej z nich i przy przełączeniu skakał o kilkaset
  * pikseli w pionie.
  *
- * Plan księgowości JDG (K2, K3): firma w pilotażu dostaje zakładki
- * „Ewidencja” i „Ustawienia podatkowe”. Błąd odczytu wyłącznika chowa tylko
+ * Plan księgowości JDG (K2-K4): firma w pilotażu dostaje zakładki
+ * „Ten miesiąc”, „Ewidencja” i „Ustawienia podatkowe”. Błąd odczytu wyłącznika chowa tylko
  * je, a KPiR i Eksport działają jak dotąd.
  */
 export default async function KsiegowoscLayout({ children }: { children: React.ReactNode }) {
@@ -36,13 +36,13 @@ export default async function KsiegowoscLayout({ children }: { children: React.R
 async function widoczneObszary(): Promise<ObszaryKsiegowosci> {
   // Poza try: przekierowanie na logowanie z getPageContext musi przejść dalej.
   const ctx = await getPageContext();
-  const czy = async (obszar: 'ewidencja' | 'ustawienia') => {
+  const czy = async (obszar: 'ten_miesiac' | 'ewidencja' | 'ustawienia') => {
     try {
       return (await czyKsiegowoscWlaczona(ctx.supabase, ctx.tenantId, obszar)).wlaczony;
     } catch {
       return false;
     }
   };
-  const [ewidencja, ustawienia] = await Promise.all([czy('ewidencja'), czy('ustawienia')]);
-  return { ewidencja, ustawienia };
+  const [tenMiesiac, ewidencja, ustawienia] = await Promise.all([czy('ten_miesiac'), czy('ewidencja'), czy('ustawienia')]);
+  return { tenMiesiac, ewidencja, ustawienia };
 }

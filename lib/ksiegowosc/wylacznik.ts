@@ -19,8 +19,8 @@
  *
  * Ścieżka operatora do czasu przycisku w `/admin/flags` (pilotaż, krok K8):
  * UPDATE na `global_feature_flags` i `tenant_feature_flags` kluczem
- * serwisowym. Od K2 kod puszcza obszar `ustawienia`, od K3 `ewidencja`, więc
- * o kreatorze i ewidencji decyduje flaga firmy; pozostałe obszary są
+ * serwisowym. Od K2 kod puszcza obszar `ustawienia`, od K3 `ewidencja`, od K4
+ * `ten_miesiac`, więc o nich decyduje flaga firmy; pozostałe obszary są
  * zablokowane w kodzie.
  */
 
@@ -56,11 +56,7 @@ const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
   // z `ksiegowosc_enabled = true` (pilotaż), reszta dostaje 404.
   ustawienia: { wlaczony: true, notatka: 'Kreator ustawień podatkowych (K2).' },
   ewidencja: { wlaczony: true, notatka: 'Ewidencja przychodów ryczałtu, wpisy ręczne i JPK_EWP (K3).' },
-  ten_miesiac: {
-    wlaczony: false,
-    powod: 'nie_zbudowane',
-    notatka: 'Ryczałt, ZUS, zdrowotna i ekran „Ten miesiąc”: krok K4.',
-  },
+  ten_miesiac: { wlaczony: true, notatka: 'Ryczałt, składki i zdrowotna za miesiąc z zatwierdzaniem (K4).' },
   terminy: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'Przypomnienia i „ile odłożyć”: krok K5.' },
   vat: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'VAT i podgląd JPK_V7M: krok K6.' },
   wysylka_jpk: {

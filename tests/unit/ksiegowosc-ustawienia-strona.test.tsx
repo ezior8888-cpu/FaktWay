@@ -51,6 +51,7 @@ const WERSJA = {
   zusOd: null,
   chorobowe: true,
   nrsZus: null,
+  najem: false,
 };
 
 function elementy(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
@@ -167,6 +168,7 @@ describe('kreator', () => {
       zusEtap: 'pelny',
       zusOd: null,
       chorobowe: true,
+      najem: false,
       nrsZus: null,
     });
     expect(mocks.toastSuccess).toHaveBeenCalled();
