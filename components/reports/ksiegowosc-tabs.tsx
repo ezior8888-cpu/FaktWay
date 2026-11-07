@@ -1,6 +1,6 @@
 import { SectionTabs, type SectionTab } from '@/components/lists/section-tabs';
 
-export type KsiegowoscTab = 'kpir' | 'eksport' | 'ten_miesiac' | 'ewidencja' | 'ustawienia';
+export type KsiegowoscTab = 'kpir' | 'eksport' | 'ten_miesiac' | 'ewidencja' | 'vat' | 'ustawienia';
 
 /** Zakładki Księgowości — każda to osobna strona z własnym adresem (stare adresy zostają). */
 export const KSIEGOWOSC_TABS: readonly SectionTab<KsiegowoscTab>[] = [
@@ -9,7 +9,7 @@ export const KSIEGOWOSC_TABS: readonly SectionTab<KsiegowoscTab>[] = [
 ];
 
 /**
- * Zakładki modułu księgowości JDG (plan, K2-K4). Widzi je tylko firma, dla
+ * Zakładki modułu księgowości JDG (plan, K2-K6). Widzi je tylko firma, dla
  * której wyłącznik `lib/ksiegowosc/wylacznik.ts` puszcza dany obszar; reszta
  * ma zakładki bez zmian.
  */
@@ -25,6 +25,12 @@ export const EWIDENCJA_TAB: SectionTab<KsiegowoscTab> = {
   href: '/reports/ewidencja',
 };
 
+export const VAT_TAB: SectionTab<KsiegowoscTab> = {
+  value: 'vat',
+  label: 'VAT',
+  href: '/reports/vat',
+};
+
 export const USTAWIENIA_PODATKOWE_TAB: SectionTab<KsiegowoscTab> = {
   value: 'ustawienia',
   label: 'Ustawienia podatkowe',
@@ -34,15 +40,17 @@ export const USTAWIENIA_PODATKOWE_TAB: SectionTab<KsiegowoscTab> = {
 export interface ObszaryKsiegowosci {
   tenMiesiac: boolean;
   ewidencja: boolean;
+  vat: boolean;
   ustawienia: boolean;
 }
 
 export function zakladkiKsiegowosci(obszary: ObszaryKsiegowosci): readonly SectionTab<KsiegowoscTab>[] {
-  if (!obszary.tenMiesiac && !obszary.ewidencja && !obszary.ustawienia) return KSIEGOWOSC_TABS;
+  if (!obszary.tenMiesiac && !obszary.ewidencja && !obszary.vat && !obszary.ustawienia) return KSIEGOWOSC_TABS;
   return [
     ...KSIEGOWOSC_TABS,
     ...(obszary.tenMiesiac ? [TEN_MIESIAC_TAB] : []),
     ...(obszary.ewidencja ? [EWIDENCJA_TAB] : []),
+    ...(obszary.vat ? [VAT_TAB] : []),
     ...(obszary.ustawienia ? [USTAWIENIA_PODATKOWE_TAB] : []),
   ];
 }

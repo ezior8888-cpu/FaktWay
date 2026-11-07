@@ -1,0 +1,674 @@
+{
+  "wersja_szablonu": 1,
+  "id": "G12",
+  "tytul": "VAT: 23 %, zakup z odliczeniem 50 % (samochód), korekta, nadwyżka z poprzedniego miesiąca",
+  "rok": 2027,
+  "policzyla": "",
+  "data": "",
+  "uwagi": "",
+  "zalozenia": {
+    "forma": null,
+    "vat": "czynny",
+    "start_dzialalnosci": null,
+    "chorobowe": null,
+    "etat_obok": null,
+    "nadwyzka_vat_z_poprzedniego_roku_gr": 120000,
+    "opis": "Czynny podatnik VAT od lat, rozliczenie miesięczne (JPK_V7M); forma PIT nie ma znaczenia. Z deklaracji za grudzień 2026 r. przechodzi na styczeń 2027 r. nadwyżka 1 200,00 zł, bez zwrotu: nadwyżki przechodzą na następny miesiąc. Sprzedaż: jedna faktura w miesiącu, usługi w kraju, 23 %, ostatni dzień miesiąca. Zakupy z KSeF w miesiącu zakupu, VAT odliczany w tym samym miesiącu. Samochód osobowy używany także prywatnie, bez ewidencji przebiegu: 50 % VAT z paliwa i serwisu. Maj: korekta in minus do faktury z kwietnia, wystawiona 12.05.2027 r., warunki uzgodnione w maju. Czerwiec: usługa podwykonawcy z pełnym odliczeniem."
+  },
+  "parametry": [],
+  "miesiace": [
+    {
+      "miesiac": "2027-01",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-01-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-01-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-01-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-02",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-02-28",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-02-28",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-02-28",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-03",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-03-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-03-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-03-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-04",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-04-30",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-04-30",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-04-30",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-05",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-05-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          },
+          {
+            "data": "2027-05-12",
+            "netto_gr": -200000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": -46000,
+            "korekta_do": "2027-04",
+            "opis": "korekta in minus do faktury z kwietnia"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-05-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-05-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-06",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-06-30",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-06-30",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-06-30",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          },
+          {
+            "data": "2027-06-30",
+            "kpir_gr": null,
+            "netto_gr": 4000000,
+            "vat_gr": 920000,
+            "odliczenie_vat_proc": 100,
+            "opis": "usługa podwykonawcy, pełne odliczenie"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-07",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-07-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-07-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-07-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-08",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-08-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-08-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-08-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-09",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-09-30",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-09-30",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-09-30",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-10",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-10-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-10-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-10-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-11",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-11-30",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-11-30",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-11-30",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    },
+    {
+      "miesiac": "2027-12",
+      "wejscie": {
+        "dzialalnosc": true,
+        "zus_etap": null,
+        "zaplacone_skladki_za": [],
+        "przychody": [
+          {
+            "data": "2027-12-31",
+            "netto_gr": 3000000,
+            "stawka_ryczaltu": null,
+            "stawka_vat": "23",
+            "vat_gr": 690000,
+            "korekta_do": null,
+            "opis": "usługi w kraju"
+          }
+        ],
+        "koszty": [
+          {
+            "data": "2027-12-31",
+            "kpir_gr": null,
+            "netto_gr": 800000,
+            "vat_gr": 184000,
+            "odliczenie_vat_proc": 100,
+            "opis": "zakupy, pełne odliczenie"
+          },
+          {
+            "data": "2027-12-31",
+            "kpir_gr": null,
+            "netto_gr": 100000,
+            "vat_gr": 23000,
+            "odliczenie_vat_proc": 50,
+            "opis": "samochód: paliwo i serwis, odliczenie 50 %"
+          }
+        ]
+      },
+      "wynik": {
+        "skladki_spoleczne": null,
+        "zdrowotna": null,
+        "ryczalt_odliczenia": null,
+        "ryczalt": null,
+        "pit": null,
+        "vat": {
+          "p_38_gr": null,
+          "p_39_gr": null,
+          "p_48_gr": null,
+          "p_51_gr": null,
+          "p_62_gr": null
+        },
+        "limit_vat": null,
+        "terminy": null
+      }
+    }
+  ]
+}

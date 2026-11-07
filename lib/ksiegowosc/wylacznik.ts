@@ -20,8 +20,8 @@
  * Ścieżka operatora do czasu przycisku w `/admin/flags` (pilotaż, krok K8):
  * UPDATE na `global_feature_flags` i `tenant_feature_flags` kluczem
  * serwisowym. Od K2 kod puszcza obszar `ustawienia`, od K3 `ewidencja`, od K4
- * `ten_miesiac`, więc o nich decyduje flaga firmy; pozostałe obszary są
- * zablokowane w kodzie.
+ * `ten_miesiac`, od K5 `terminy`, od K6 `vat`, więc o nich decyduje flaga
+ * firmy; pozostałe obszary są zablokowane w kodzie.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -58,7 +58,7 @@ const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
   ewidencja: { wlaczony: true, notatka: 'Ewidencja przychodów ryczałtu, wpisy ręczne i JPK_EWP (K3).' },
   ten_miesiac: { wlaczony: true, notatka: 'Ryczałt, składki i zdrowotna za miesiąc z zatwierdzaniem (K4).' },
   terminy: { wlaczony: true, notatka: 'Przypomnienia o terminach, push o wyliczonym miesiącu i karta „Odłóż na podatek” (K5).' },
-  vat: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'VAT i podgląd JPK_V7M: krok K6.' },
+  vat: { wlaczony: true, notatka: 'VAT za miesiąc, plik JPK_V7M(3) do pobrania, lista wysyłek z UPO (K6).' },
   wysylka_jpk: {
     wlaczony: false,
     powod: 'prawnik',
