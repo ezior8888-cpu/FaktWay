@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { test as setup } from '@playwright/test';
 
 import { loginViaUI } from './helpers/auth';
-import { devCredentials, isLocalBaseUrl, isLocalDatabase, SESJA_KONTA_DEV } from './helpers/konto-dev';
+import { devCredentials, isLocalBaseUrl, isLocalDatabaseUp, SESJA_KONTA_DEV } from './helpers/konto-dev';
 
 /**
  * Jedno logowanie konta dev na cały przebieg testów wizualnych (projekt
@@ -12,8 +12,10 @@ import { devCredentials, isLocalBaseUrl, isLocalDatabase, SESJA_KONTA_DEV } from
  * pulpitu i listy faktur biorą zapisaną sesję zamiast logować się same.
  */
 setup('logowanie konta dev', async ({ page, baseURL }) => {
+  // Bez lokalnej bazy pomijamy logowanie zamiast oblać: nieudana zależność
+  // zatrzymałaby też zrzuty stron przed logowaniem, które konta nie potrzebują.
   setup.skip(
-    !isLocalBaseUrl(baseURL) || !isLocalDatabase() || process.platform !== 'darwin',
+    !isLocalBaseUrl(baseURL) || process.platform !== 'darwin' || !(await isLocalDatabaseUp()),
     'Tylko lokalne konto dev (pnpm db:local) na Macu.',
   );
   const { email, password } = devCredentials();

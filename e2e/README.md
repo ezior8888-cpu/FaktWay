@@ -86,6 +86,14 @@ najpierw `pnpm db:local`.
 E2E_PORT=3132 pnpm test:wizualne
 ```
 
+Port musi być wolny: Playwright sam stawia serwer z limitami prób w pamięci.
+Gdy na tym porcie działa już Twój `pnpm dev`, Playwright go użyje, a wtedy
+logowanie liczy się do wspólnego limitu (5 prób na 15 minut).
+
+Bez lokalnej bazy logowanie, pulpit i lista są pomijane, a strona główna,
+`#telefon` i menu idą dalej. `/login` też potrzebuje bazy: przyciski logowania
+zależą od ustawień lokalnego GoTrue (lokalnie bez Google).
+
 Zielono = wygląd bez zmian. Czerwono = raport HTML (`pnpm test:e2e:report`)
 pokazuje przy każdym ekranie wzorzec, nowy zrzut i obraz różnicy. Różowe
 prostokąty na zrzutach panelu to maski: liczby, daty i wykresy zależą od

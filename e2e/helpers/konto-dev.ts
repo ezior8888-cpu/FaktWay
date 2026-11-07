@@ -15,12 +15,31 @@ export function devCredentials(): { email: string; password: string } {
 
 /** Test na koncie dev ma sens tylko na lokalnym serwerze i lokalnej bazie. */
 export function isLocalBaseUrl(baseURL: string | undefined): boolean {
-  return /^https?:\/\/(localhost|127\.0\.0\.1)/.test(baseURL ?? '');
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(baseURL ?? '');
 }
 
 /** Konto dev istnieje tylko w lokalnym Supabase (`pnpm db:local`), nie na stagingu. */
 export function isLocalDatabase(): boolean {
   return isLocalBaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+}
+
+/**
+ * Lokalny Supabase odpowiada (`pnpm db:local` działa). Bez tego logowanie
+ * czekałoby do limitu czasu i zatrzymało wszystkie testy wizualne.
+ */
+export async function isLocalDatabaseUp(): Promise<boolean> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!url || !isLocalDatabase()) return false;
+  try {
+    const response = await fetch(`${url}/auth/v1/health`, {
+      headers: { apikey: key },
+      signal: AbortSignal.timeout(3_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Sesja konta dev zapisana przez `wizualne-logowanie.ts` (poza gitem). */

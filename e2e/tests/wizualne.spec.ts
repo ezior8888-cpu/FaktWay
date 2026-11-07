@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import AxeBuilder from '@axe-core/playwright';
@@ -100,7 +100,13 @@ async function settle(page: Page): Promise<void> {
  */
 function panelMasks(page: Page): Locator[] {
   const main = page.locator('main');
-  return [main.getByText(/\d/), main.locator('[data-chart], [style*="height"]')];
+  // Wykresy recharts (`[data-chart]` i ich kontener, który bywa o piksel
+  // szerszy) oraz słupki z wysokością z danych (`style={{ height: '17%' }}`);
+  // `^=`, żeby nie łapać kontenerów z `max-height` czy `line-height`.
+  return [
+    main.getByText(/\d/),
+    main.locator('[data-chart], .recharts-responsive-container, [style^="height:"]'),
+  ];
 }
 
 /** Raport axe jako załącznik; nie oblewa testu (punkt 4.3 planu usprawnień). */
@@ -182,9 +188,11 @@ test.describe('Wygląd: strony przed logowaniem', () => {
 });
 
 test.describe('Wygląd: panel (konto dev)', () => {
+  // Sesję zapisuje projekt `wizualne-logowanie` w tym samym przebiegu; nie ma
+  // jej, gdy lokalna baza nie działa albo przebieg idzie z `--no-deps`.
   test.skip(
-    ({ baseURL }) => !isLocalBaseUrl(baseURL) || !isLocalDatabase(),
-    'Tylko lokalne konto dev (pnpm db:local).',
+    ({ baseURL }) => !isLocalBaseUrl(baseURL) || !isLocalDatabase() || !existsSync(SESJA_KONTA_DEV),
+    'Tylko lokalne konto dev (pnpm db:local), zalogowane przez projekt wizualne-logowanie.',
   );
 
   test.use({ storageState: SESJA_KONTA_DEV });
