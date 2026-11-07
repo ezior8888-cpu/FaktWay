@@ -60,8 +60,9 @@ naprawiamy i w jakiej kolejności.
   dysk db-1 (40 GB, już 79%: obrazy Dockera, dziennik systemowy, dane
   bazy) zapełnią dzienniki i lokalne zrzuty, a dysk ops-1, gdzie stoi
   MinIO z plikami (wolne ok. 28 GB), pełnowymiarowe zdjęcia paragonów.
-- **Już dziś nie działa:** upload zdjęcia paragonu powyżej 1 MB (domyślny
-  limit Server Actions).
+- **Dziś nie przechodzi:** PDF i import powyżej 1 MB (domyślny limit Server
+  Actions). Klient dostaje czytelny komunikat, a zdjęcia są zmniejszane
+  w przeglądarce (#346). Właściwa naprawa to sesja 31.
 
 ## 0. Checklista startowa (każda sesja)
 
@@ -83,9 +84,14 @@ naprawiamy i w jakiej kolejności.
 - **Pomiar przed i po w opisie PR.** Przy wydajności czerwony test to
   zwykle licznik: wywołań GoTrue na żądanie, zapytań na render, zadań
   w kolejce, rozmiaru pamięci. Liczba przed i po naprawie trafia do opisu.
-- **Migracje (sesje 20–21):** sesja przygotowuje plik z numerem z rejestru
+- **Migracje (sesje 20, 21, 28):** sesja przygotowuje plik z numerem z rejestru
   w `CLAUDE-DO-CODEXA.md` i opisuje, czy wgrać go przed, czy po wdrożeniu.
-  Wgrywa Bartosz.
+  Wgrywa Bartosz: przed wdrożeniem, poza godzinami pracy.
+- **Scalanie paczkami (Bartosz, 03.11):** każda sesja to osobny PR. Gdy
+  uzbierają się 3–4 gotowe, powstaje jeden zbiorczy PR „Scalenie …” według
+  `AGENTS.md`, z lokalnym `pnpm run ci && pnpm build`, a Bartosz scala ten
+  jeden. Dziennik (sekcja 6) uzupełnia sesja główna w tym zbiorczym PR, a nie
+  każda sesja osobno, żeby PR-y sesji nie kolidowały w jednej tabeli.
 - **Wdrożenie, zmienne środowiskowe, konfiguracja serwerów:** tylko
   Bartosz. Sesja 25 to jego lista decyzji.
 - **Szczegóły słabych punktów** (limity, konfiguracja logowania) opisuj
@@ -120,12 +126,11 @@ Numer sesji to identyfikator, nie kolejność. Rozmiar: S = do kilku godzin,
 M = dzień. Identyfikatory ustaleń odsyłają do prywatnego raportu (numeracja
 inna niż w „Rejestrze braków” z 17.10).
 
-**Kolejność wykonania (25.10, dla db-1 = CX23: mały dysk i RAM idą
-pierwsze):** 23 → 22 → 20 → 26 → 27 → 4 → 1 → 2 → 8 → 9 → 19 → 21 → 13 →
-28 → 14 → 17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24 → 29 → 30, a na końcu 15
-i 16.
-Sesja 27 idzie wcześnie, bo to błąd poprawności, nie wydajności: od ok.
-500 firm z KSeF crony po cichu pomijają część firm.
+**Zrobione i wdrożone (03.11, zbiorczy #363):** 23, 22, 20, 26, 27, 4, 1, 9, 19.
+
+**Kolejność wykonania (Bartosz, 03.11):** 2 → 8 → 31 → 21 → 13 → 28 → 14 →
+17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24 → 29 → 30 → 32 → 34 → 33, a po
+pomiarze 15 i 16.
 Sesje 15 i 16 dokładają obciążenie bazy, więc na CX23 robi się je po
 pomiarze i z niższymi wartościami: wysyłka 6–8 slotów, OCR
 i kategoryzacja 2–3.
@@ -133,7 +138,7 @@ i kategoryzacja 2–3.
 | # | Sesja | Typ | Kto | Rozmiar | Ustalenia | Gotowe, gdy |
 |---|---|---|---|---|---|---|
 | 1 | Baner KSeF: odpytywanie tylko widocznej karty co 120 s, `/api/ksef/health` bez weryfikacji sesji w proxy, wynik w pamięci 15 s | kod | sesja | S | REQ-03, CAC-01, HOR-07, CPU-02 | Odpytanie z ciasteczkiem sesji nie woła GoTrue; ukryta karta nie odpytuje |
-| 2 | Ścieżki techniczne (`/ingest`, `/monitoring`, `sw.js`, manifest, robots, sitemap) omijają tworzenie klienta Supabase w proxy | kod | sesja | S | REQ-05, CAC-04, CPU-08 | Test: te ścieżki nie tworzą klienta; trasy o podobnym prefiksie dalej chronione |
+| 2 | Ścieżki techniczne (`sw.js`, manifest, robots, sitemap) omijają tworzenie klienta Supabase w proxy: wpisy w `NO_SESSION_PATHS` z #347. `/ingest` i `/monitoring` zrobił #349 własnym mechanizmem (`lib/telemetry-tunnel.ts`): `isNoSessionPath` ma do niego delegować, a martwy wpis `/monitoring` w `STATIC_PUBLIC_EXACT` znika | kod | sesja | S | REQ-05, CAC-04, CPU-08 | Test: te ścieżki nie tworzą klienta; trasy o podobnym prefiksie dalej chronione |
 | 3 | Flo: `expireStale` i `releaseStuck` jednym UPDATE z warunkiem w zapytaniu zamiast listy id w adresie (dziś lista wygasłych kart jest do tego ucinana do 1000 na przebieg); izolacja błędów prologu pulsu | kod | sesja | S | FLO-01 | Test z 500 wygasłymi kartami: jedno żądanie o stałej długości, idempotentne |
 | 4 | Zdjęcia paragonów zmniejszane w przeglądarce (≤ 2000 px, JPEG ok. 0,8) + czytelny komunikat przy zbyt dużym pliku; PDF bez zmian | kod | razem | S | EXT-09, HOR-V1, LIM-08, CPU-06, DBC-02, BCK-09 | Plik 4 MB wychodzi jako < 1 MB; Bartosz decyduje o oryginale |
 | 5 | Limity czasu `fetch` w klientach Supabase (proxy krótko, RSC i akcje ok. 10 s, admin w workerze dłużej); przekroczenie = 503, nie wylogowanie | kod | sesja | S | REQ-V01, QRY-V1, LIM-05 | Test z atrapą, która nie odpowiada: 503 po limicie |
@@ -152,7 +157,7 @@ i kategoryzacja 2–3.
 | 18 | Ponaglenia: najpierw firmy z włączonymi ponagleniami, kandydaci paczkami, przetwarzanie strona po stronie | kod | sesja | S | DB-03, JOB-08 | Firma z wyłączonymi ponagleniami nie jest czytana; pamięć niezależna od liczby stron |
 | 19 | Pulpit: wspólny loader sprzedaży w `cache()` na żądanie, paczki pozycji równolegle, `count` tylko na pierwszej stronie. Od #328 Pulpit czeka na wszystkie karty naraz, więc najwolniejsza karta wyznacza czas wejścia | kod | sesja | M | QRY-02, QAL-05, QRY-05, QRY-07, CPU-13 | Licznik zapytań na render: ok. 35 → ok. 10; wyniki kart identyczne |
 | 20 | Migracja: sprzątanie `audit_logs` i `inngest_run_log` paczkami, codziennie; retencja `ksef_health_log` | migracja | razem | S | DB-01, JOB-05, DBC-07, DB-09 | Test na bazie: paczka mieści się w limicie, blokada append-only działa; wgrane przez Bartosza |
-| 21 | Migracja: indeksy częściowe pod crony KSeF (`CONCURRENTLY`), lżejsza funkcja przebiegu uzgadniania | migracja | razem | S | DB-02, DB-V02, DB-08 | EXPLAIN na kopii: index scan; wyniki identyczne przed i po |
+| 21 | Migracja: indeksy częściowe pod crony KSeF (`CONCURRENTLY`), lżejsza funkcja przebiegu uzgadniania; do tego `products`: UNIQUE na kluczu i indeks `(tenant_id, id)`, z porządkiem istniejących dubli (osobne ustalenie z #345) | migracja | razem | M | DB-02, DB-V02, DB-08 + #345 | EXPLAIN na kopii: index scan; wyniki identyczne przed i po; import równoległy nie tworzy dubla produktu |
 | 22 | Skrypt kopii `db-backup.sh`: sprzątanie `.partial`, kontrola wolnego miejsca przed zrzutem, bez drugiej kopii w `.outbox`, retencja przed wysyłką | infra | razem | S | BCK-01, DBC-01, BCK-04, BCK-05 | Test skryptu na katalogu tymczasowym; wdrożenie na db-1 przez Bartosza |
 | 23 | Pomiar: opóźnienie i wykorzystanie pętli zdarzeń, pamięć i czas żądań w logu web i workera co 60 s, osobno czas renderu Pulpitu (p50/p95; web to jeden proces Node, czyli jeden rdzeń, więc w dzień terminu może być drugim sufitem obok db-1); `scripts/ops/pojemnosc-db.sh` (tylko odczyt, obejmuje też niezrobione odczyty z sekcji 5); próbkowanie Sentry bez health i telemetrii | operacje | sesja | S | CPU-12, DBC-10, EXT-15 | Linia JSON z metrykami w logach obu procesów, w tym czas renderu Pulpitu; skrypt uruchamiany jedną linią |
 | 24 | Przygotowanie replik: lekki `/api/live` do HEALTHCHECK, `deploymentId` i ID z SHA, stały klucz Server Actions, `stop-timeout` | infra | razem | M | HOR-01, REQ-09, CPU-05, HOR-11, DBC-05 | Healthcheck nie dotyka bazy ani Redisa; dwa buildy tego samego commita mają te same ID akcji |
@@ -162,6 +167,10 @@ i kategoryzacja 2–3.
 | 28 | Alarmy, raporty i panel admina liczą w bazie, nie na obciętej liście: klasy w monitorze skrzynki i historii KSeF, naruszenia cyklu życia KSeF (RPC z GROUP BY do alarmu i raportu, osobny odczyt I5 z limitem dla crona uzgadniania), akcje w raporcie dziennym, wpisy `ksef_health_log` w raporcie tygodniowym (dziś ok. 2000 wpisów, więc już obcięty), `/admin/system`, `/admin/ksef`, lista kont w `/admin/users`, panel Flo | kod + migracja | razem | M | QAL-09 + przeszukanie 25.10: `critical-alerts-monitor.ts:885, :1036, :1085`, `ksef-lifecycle-reconcile.ts:288`, `admin/ksef-lifecycle.ts:166, :229`, `ksef-lifecycle-report.ts:147`, `business-metrics.ts:100`, `admin/system.ts:45, :85`, `admin/users.ts:70, :248`, `flo/metrics.ts` | Test z atrapą ucinającą do 1000: alarmy i raporty podają te same liczby co zapytanie liczące; migracja wgrana przez Bartosza |
 | 29 | Odczyty jednej firmy, które przekroczą 1000 wierszy dopiero po latach: decyzje i wyciszenia Flo (wyciszony rodzaj karty może wrócić), cień Flo, historia sprzedawcy w przeglądzie kosztu, reguły nazw w kategoryzacji, walidacja kontrahentów, eksport danych RODO (jawnie ucięty do 1000 wpisów audytu), lista korekt (własny limit 500 bez ORDER BY), znani sprzedawcy w karcie Flo „podsumowanie skrzynki” (`.limit(1000)`, więc część znanych wygląda na nowych) | kod | sesja | S | przeszukanie 25.10: `flo/decisions.ts:327`, `flo/shadow.ts:157`, `expense-review.ts:519`, `name-rule.ts:28`, `actions/validation.ts:120`, `gdpr/data-collector.ts:174`, `invoices/new/correction/page.tsx:33`; weryfikacja 29.10: `inbox-polling.ts:418` | Test z atrapą ucinającą do 1000: wyciszony rodzaj zostaje wyciszony przy 1500 wierszach decyzji; eksport RODO kompletny |
 | 30 | Archiwizacja starych faktur: `mark-archived` i `schedule-deletion` wysyłają do 500 id jednym `.in('id', …)` w adresie (ok. 19,5 KB, ponad typowy limit wiersza żądania bramki). Krok pada po wgraniu plików, ponowienie wgrywa je od nowa, a archiwum stoi. Paczki po ≤ 100 id. Dziś kandydatek nie ma (faktury starsze niż 2 lata), więc pilne dopiero przy ok. 200 naraz | kod | sesja | S | weryfikacja 29.10: `archive-old-invoices.ts:95, :108` | Test: 500 kandydatek daje zapytania z ≤ 100 id; wynik oznaczenia identyczny |
+| 31 | Pliki powyżej 1 MB (decyzja Bartosza 03.11, wariant b): osobny route handler na wzór `share-target`, z własnym limitem `Content-Length` i limitem liczby wgrań, bez globalnego `bodySizeLimit`. `/share-target` dostaje limit poniżej progu OCR z polskim komunikatem, żeby zdjęcie 7,5–10 MB nie padało dopiero w OCR. Podpisany PUT do MinIO dopiero przy replikach (etap 2) | kod | sesja | M | LIM-08, HOR-V1, CPU-06 | Test: PDF i CSV 3 MB przechodzą; ponad limit odmowa przed odczytem ciała, z komunikatem; limit wgrań działa; `/share-target` odrzuca plik ponad próg OCR |
+| 32 | Paczki po 100 w `import-engine.ts`: `.in('nip' / 'internal_number' / 'ksef_number', lista z CSV)` | kod | sesja | S | F-089 | Test: CSV z 1500 numerów daje zapytania z ≤ 100 wartości; duplikaty rozpoznane jak dotąd |
+| 33 | `readCompletePagesByKey` dla KPiR i eksportów | kod | sesja | M | QRY-07 (reszta, z #352) | Test identyczności: wyniki KPiR i eksportów takie same jak na `readCompletePages` |
+| 34 | OCR obrazów powyżej 8000 px: przeskalowanie w workerze | kod | sesja | S | osobne ustalenie z #346 | Test: obraz 9000 px trafia do API w dopuszczalnym rozmiarze; mniejszy bez zmian |
 
 ## 4. Etapy skalowania (sprzęt)
 
@@ -239,7 +248,10 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 30.10.2026 | Sesja 9: jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render RSC (layout bez drugiego `getUser`, `getPageContext` w `cache()` na wierszach z cache, ustawienia i szczegół faktury przez `getDashboardSessionUser`, tytuły pomocy raz na proces) | #350 | PR otwarty, CI w toku. Poprawka do planu: Next 16 skleja identyczne GET w renderze RSC, więc powtórzone `getUser` szło dotąd do sieci raz; realny zysk dziś to członkostwo (2 → 1). Sesja 9 musi wejść **przed sesją 5** (limity czasu z `AbortSignal` wyłączą sklejanie). Błąd odczytu członkostw w `getPageContext` daje teraz stronę błędu zamiast `/onboarding` (jak layout; decyzja Bartosza) |
 | 30.10.2026 | Z sesji 9: „Spróbuj ponownie” na stronie błędu panelu pobiera stronę od nowa (`router.refresh()` + `reset()` w przejściu; samo `reset` w Next 16.4 nie pobierało RSC) | #351 | PR otwarty, CI 11/11 zielone; do decyzji Bartosza: `app/error.tsx` dla segmentu głównego (dziś przy trwałej awarii layoutu kończy się `global-error.tsx`) |
 | 30.10.2026 | Sesja 19: Pulpit czyta sprzedaż raz na wejście (`lib/dashboard/sales-history.ts` w `cache()`, strażniki liczone na oknie każdej karty, przy błędzie wspólnego odczytu karty czytają osobno jak dawniej), paczki pozycji do 4 naraz, nowy `readCompletePagesByKey` (`readCompletePages` bez zmian) | #352 | PR otwarty, CI w toku; złoty wzorzec 32/32 identyczny z `main`. Zapytania na wejście: dane przykładowe 26 → 14, mikrofirma 35 → 22, duża firma 62 → 40. Cel „ok. 10” osiągnięty tylko dla sprzedaży bez pozycji (19 → 6); zostają pozycje rankingu (paczki po 100, krok 2 = RPC, migracja), koszty i należności (osobne ustalenia w PR) |
+| 03.11.2026 | Scalone i wdrożone: #329 i #337–#352 w zbiorczym #363, poprawka buildu #364 | #363, #364 | 00157 na db-1, aplikacja i worker na 3b428464, w logu workera 29/29 cronów, `db-backup.sh` na db-1 podmieniony. Metryki z sesji 23: web 339 MB, ELU ok. 0,05, render Pulpitu 265 ms. Zmniejszanie zdjęć podpięte w `components/expenses/use-expense-capture.tsx` po scaleniu z #334 i #335 |
+| 03.11.2026 | Decyzje Bartosza po statusie z 30.10 | — | #344 przyjęty. #346: kopia 2000 px wystarcza jako dowód (zapyta księgową; jeśli „nie”, 2600 px, bez trzymania oryginału); pliki ponad 1 MB → sesja 31. #350 przyjęty. #351: `app/error.tsx` dla segmentu głównego, mały osobny PR. #352: krok 2 Pulpitu (RPC) odłożony: wraca, gdy p95 renderu Pulpitu przekroczy 800 ms w dzień terminu albo przed etapem 1b, jako migracja razem z RPC z sesji 28. Nowe sesje 31–34, `products` w sesji 21 |
 
-**Następny krok:** sesja 23 (pomiar i skrypt pozostałych odczytów), potem
-22, 20, 26, 27, 4 — każda osobny PR. Dopóki #329 nie jest scalony, sesje
-czytają ten plik z gałęzi `origin/claude/plan-skalowania-3000`.
+**Następny krok:** sesja 2, potem 8 (proxy, odblokowane po #363), dalej według
+kolejności z sekcji 3. Obok: `app/error.tsx` (mały osobny PR) i przegląd
+starych PR-ów (#320, #236, #225, #189, #197, #193, #190). Przy 3–4 gotowych
+PR-ach zbiorczy „Scalenie …”.
