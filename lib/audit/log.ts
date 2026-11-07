@@ -178,7 +178,12 @@ export type AuditAction =
   // Zgoda na analitykę (00161): kto, kiedy i na jakie brzmienie (ANALYTICS_STATEMENT).
   | 'analytics.consent_changed'
   // Profil podatkowy (00166, plan księgowości JDG K2): wersja przed i po zapisie.
-  | 'tax_profile.saved';
+  | 'tax_profile.saved'
+  // Ewidencja przychodów (00167, K3): wpis ręczny dodany albo usunięty (cała
+  // treść wpisu) i pobrany plik JPK_EWP (okres i sumy, bez danych osoby).
+  | 'ledger_entry.created'
+  | 'ledger_entry.deleted'
+  | 'jpk_ewp.downloaded';
 
 export interface AuditLogEntry {
   action: AuditAction;

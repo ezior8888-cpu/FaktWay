@@ -1,6 +1,6 @@
 // Wygenerowane 5.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00165
-// (m.in. 00155-00163 i 00165 wyłącznik modułu księgowości). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00166
+// (m.in. 00165 wyłącznik modułu księgowości i 00166 profil podatkowy). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -5305,6 +5305,83 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "support_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_profiles: {
+        Row: {
+          chorobowe: boolean
+          created_at: string
+          created_by: string | null
+          forma: string
+          id: string
+          nrs_zus: string | null
+          okres: string
+          stawka_domyslna: number | null
+          tenant_id: string
+          updated_at: string
+          valid_from: string
+          zus_etap: string
+          zus_od: string | null
+        }
+        Insert: {
+          chorobowe?: boolean
+          created_at?: string
+          created_by?: string | null
+          forma: string
+          id?: string
+          nrs_zus?: string | null
+          okres?: string
+          stawka_domyslna?: number | null
+          tenant_id: string
+          updated_at?: string
+          valid_from: string
+          zus_etap: string
+          zus_od?: string | null
+        }
+        Update: {
+          chorobowe?: boolean
+          created_at?: string
+          created_by?: string | null
+          forma?: string
+          id?: string
+          nrs_zus?: string | null
+          okres?: string
+          stawka_domyslna?: number | null
+          tenant_id?: string
+          updated_at?: string
+          valid_from?: string
+          zus_etap?: string
+          zus_od?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
