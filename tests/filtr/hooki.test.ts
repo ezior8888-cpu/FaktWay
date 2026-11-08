@@ -169,3 +169,24 @@ describe('konfiguracja Claude Code w repozytorium', () => {
     expect(lista.match(/^\d+\. /gm)).toHaveLength(21);
   });
 });
+
+describe('hook po edycji: reguły statyczne (F7)', () => {
+  it('nowe naruszenie w pliku R1 kończy się kodem 2 z nazwą reguły; plik bez naruszeń przechodzi', async () => {
+    const { poEdycji: hook } = await import('@/scripts/filtr/po-edycji.mjs');
+    const katalog = mkdtempSync(join(tmpdir(), 'filtr-reguly-'));
+    execFileSync('mkdir', ['-p', join(katalog, 'lib/ksiegowosc')]);
+    writeFileSync(join(katalog, 'lib/ksiegowosc/nowy.ts'), 'export const a = Math.round(kwota * 100);');
+    const mapa = przygotujMape({
+      wersja: 1,
+      kod: { katalogi: ['lib/'], rozszerzenia: ['.ts'] },
+      obszary: [{ id: 'silniki', poziom: 'R1', opis: 'Silniki obliczeń podatków.', sciezki: ['lib/ksiegowosc/**'] }],
+      wylaczenia: [],
+      sygnaly: { tresc: [], nazwy: [] },
+    });
+    const zly = hook({ sciezka: join(katalog, 'lib/ksiegowosc/nowy.ts'), katalog, mapa, katalogZnacznikow: null, pliki: ['lib/ksiegowosc/nowy.ts'] });
+    expect(zly.kod).toBe(2);
+    expect(zly.stderr).toMatch(/reguła kwoty-bez-float/);
+    writeFileSync(join(katalog, 'lib/ksiegowosc/nowy.ts'), 'export const a = procentGr(kwota, 2300);');
+    expect(hook({ sciezka: join(katalog, 'lib/ksiegowosc/nowy.ts'), katalog, mapa, katalogZnacznikow: null, pliki: ['lib/ksiegowosc/nowy.ts'] }).kod).toBe(0);
+  });
+});
