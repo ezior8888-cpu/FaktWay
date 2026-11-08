@@ -11,16 +11,17 @@
  * K_9A, K_14A, SumaPrzychodow2) zostają puste: od rozporządzenia
  * z 6.09.2025 (Dz.U. 2025 poz. 1299) nie mają funkcji.
  *
- * PKPIRInfo: spis z natury na początek i koniec roku (P_1, P_2) moduł
- * dziś zapisuje jako zero, więc P_3 to koszty z księgi, a P_4 przychód minus
- * P_3. Firma, która ma towary handlowe (koszty w K_10), dostaje uwagę
- * w pobraniu: spis z natury podaje księgowa.
+ * PKPIRInfo (K7.4, D19): spis z natury na początek i koniec roku (P_1, P_2)
+ * ze spisów zapisanych w module (`spis-z-natury.ts`), koszty uzyskania P_3 to
+ * wydatki plus P_1 minus P_2, dochód P_4 to przychód minus P_3; pozostałe
+ * spisy z okresu pliku idą do PKPIRSpis.
  */
 
 import { create } from 'xmlbuilder2';
 
 import { kwotaJpk } from '@/lib/ksiegowosc/jpk-ewp';
 import { sumyKpir, type WierszKpir } from '@/lib/ksiegowosc/kpir';
+import type { SpisyPliku } from '@/lib/ksiegowosc/spis-z-natury';
 
 export const JPK_PKPIR_NAMESPACE = 'http://jpk.mf.gov.pl/wzor/2024/10/30/10302/';
 export const ETD_NAMESPACE = 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/';
@@ -41,6 +42,8 @@ export interface DaneJpkPkpir {
   podatnik: PodatnikJpkPkpir;
   /** Wiersze okresu numerowane od 1 (`wierszeKpirOkresu`). */
   wiersze: readonly WierszKpir[];
+  /** Spis z natury okresu (`spisyPliku`); bez pola: brak spisów (zero). */
+  spis?: SpisyPliku;
   wytworzono?: Date;
 }
 
@@ -78,11 +81,19 @@ export function generujJpkPkpir(dane: DaneJpkPkpir): string {
   osoba.ele('etd:DataUrodzenia').txt(dane.podatnik.dataUrodzenia).up();
 
   const sumy = sumyKpir(dane.wiersze);
+  const poczatek = dane.spis?.poczatekGr ?? 0;
+  const koniec = dane.spis?.koniecGr ?? 0;
+  const kosztyUzyskania = sumy.kosztyGr + poczatek - koniec;
   const info = root.ele('PKPIRInfo');
-  info.ele('P_1').txt(kwotaJpk(0)).up();
-  info.ele('P_2').txt(kwotaJpk(0)).up();
-  info.ele('P_3').txt(kwotaJpk(sumy.kosztyGr)).up();
-  info.ele('P_4').txt(kwotaJpk(sumy.przychodGr - sumy.kosztyGr)).up();
+  info.ele('P_1').txt(kwotaJpk(poczatek)).up();
+  info.ele('P_2').txt(kwotaJpk(koniec)).up();
+  info.ele('P_3').txt(kwotaJpk(kosztyUzyskania)).up();
+  info.ele('P_4').txt(kwotaJpk(sumy.przychodGr - kosztyUzyskania)).up();
+  for (const spis of dane.spis?.wTrakcie ?? []) {
+    const wezel = root.ele('PKPIRSpis');
+    wezel.ele('P_5A').txt(spis.data).up();
+    wezel.ele('P_5B').txt(kwotaJpk(spis.kwotaGr)).up();
+  }
 
   for (const w of dane.wiersze) {
     const k = w.kwoty;
