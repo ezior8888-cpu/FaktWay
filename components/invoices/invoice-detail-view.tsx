@@ -333,11 +333,13 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
   const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
-  // Krok 1.4: tytuł przelewu jak na PDF (numer KSeF, potem numer faktury);
-  // bez numeru KSeF, przy innej zapłacie niż przelew albo bez kwoty wiersza nie ma.
+  // Krok 1.4: tytuł przelewu jak na PDF (numer KSeF, potem numer faktury; przy
+  // MPP sam numer KSeF); bez numeru KSeF, przy innej zapłacie niż przelew albo
+  // bez kwoty wiersza nie ma.
   const transferTitle = tytulPrzelewuNaDokumencie(inv.internal_number ?? '', inv.ksef_number, {
     metoda: payment?.method,
     doZaplaty: inv.amount_due,
+    mpp: inv.split_payment,
   });
   const lines = inv.lines;
   // Panel „W KSeF jest już faktura o tym numerze” (decyzja albo nota z danymi oryginału).

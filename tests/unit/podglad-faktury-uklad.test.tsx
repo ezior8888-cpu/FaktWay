@@ -629,8 +629,10 @@ describe('Krok 1.4: tytuł przelewu w sekcji „Płatność”', () => {
     expect(etykiety(platnosc(el))).not.toContain('Tytuł przelewu:');
   });
 
-  it('MPP: wiersz po „MPP:”, wcześniejsze wiersze na swoich miejscach', () => {
+  it('MPP: wiersz po „MPP:” z samym numerem KSeF, wcześniejsze wiersze na swoich miejscach', () => {
+    // W komunikacie MPP numer faktury idzie do pola na 35 znaków, a numer KSeF ma 35 znaków.
     const wiersze = platnosc(mount({ ...base, payment_data: PRZELEW, split_payment: true }));
     expect(etykiety(wiersze)).toEqual(['Do zapłaty:', 'Forma płatności:', 'Rachunek:', 'MPP:', 'Tytuł przelewu:']);
+    expect(wiersze[wiersze.length - 1]).toEqual(['Tytuł przelewu:', KSEF_NR]);
   });
 });

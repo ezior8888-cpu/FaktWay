@@ -15,6 +15,8 @@
  *    (4 wiersze po 35 znaków w przelewie Elixir); inaczej sam numer KSeF;
  *  - numer faktury, w którym już jest numer KSeF (np. numer zastępczy z KSeF),
  *    nie dochodzi, żeby w tytule był jeden numer KSeF;
+ *  - faktura z MPP: sam numer KSeF, bo w komunikacie MPP numer faktury idzie
+ *    do pola na 35 znaków, a numer KSeF ma 35 znaków;
  *  - bez numeru KSeF albo z numerem spoza wzorca: sam numer faktury, jak przed
  *    tą zmianą.
  *
@@ -54,14 +56,25 @@ export function poprawnyNumerKsef(wartosc: unknown): string | null {
   return NUMER_KSEF.test(numer) ? numer : null;
 }
 
+export interface OpcjeTytulu {
+  /** Faktura z mechanizmem podzielonej płatności (P_18A = 1). */
+  mpp?: boolean;
+}
+
 /**
  * Tytuł przelewu dla faktury. Z poprawnym numerem KSeF: numer KSeF, spacja
- * i numer faktury (albo sam numer KSeF, gdy całość przekroczyłaby 140 znaków).
- * Bez poprawnego numeru KSeF: `numerFaktury` bez zmian, jak przed krokiem 1.4.
+ * i numer faktury (albo sam numer KSeF, gdy całość przekroczyłaby 140 znaków
+ * albo faktura ma MPP). Bez poprawnego numeru KSeF: `numerFaktury` bez zmian,
+ * jak przed krokiem 1.4.
  */
-export function tytulPrzelewu(numerFaktury: string, numerKsef: string | null | undefined): string {
+export function tytulPrzelewu(
+  numerFaktury: string,
+  numerKsef: string | null | undefined,
+  opcje: OpcjeTytulu = {},
+): string {
   const ksef = poprawnyNumerKsef(numerKsef);
   if (!ksef) return numerFaktury;
+  if (opcje.mpp) return ksef;
   const numer = numerFaktury.trim();
   if (!numer || NUMER_KSEF_W_TEKSCIE.test(numer)) return ksef;
   const tytul = `${ksef} ${numer}`;
@@ -69,7 +82,7 @@ export function tytulPrzelewu(numerFaktury: string, numerKsef: string | null | u
 }
 
 /** Dane płatności z dokumentu, od których zależy wiersz „Tytuł przelewu”. */
-export interface PlatnoscDokumentu {
+export interface PlatnoscDokumentu extends OpcjeTytulu {
   /** Sposób zapłaty z `payment_data.method`; przelew to `transfer`. */
   metoda: string | null | undefined;
   /** Kwota „Do zapłaty” z tego samego dokumentu. */
@@ -91,5 +104,5 @@ export function tytulPrzelewuNaDokumencie(
   if (!poprawnyNumerKsef(numerKsef)) return null;
   if (platnosc.metoda !== 'transfer') return null;
   if (!Number.isFinite(platnosc.doZaplaty) || platnosc.doZaplaty <= 0) return null;
-  return tytulPrzelewu(numerFaktury, numerKsef);
+  return tytulPrzelewu(numerFaktury, numerKsef, { mpp: platnosc.mpp });
 }

@@ -373,4 +373,19 @@ describe('tytuł przelewu z numerem KSeF (krok 1.4)', () => {
     expect(delivery.text).toContain(`Tytuł przelewu: ${KSEF}\n`);
     expect(delivery.text).not.toContain(`${KSEF} ${KSEF}`);
   });
+
+  it('without its own number, a KSeF number outside the pattern stays out of the title (the label still names the invoice)', async () => {
+    patchInvoice({ internal_number: null, ksef_number: 'KSEF-1' });
+    const { delivery, letterTexts } = await prepareWithRealLetter('stage_3');
+    expect(delivery.text).toContain('Tytuł przelewu: bez numeru\n');
+    expect(delivery.text).not.toContain('Tytuł przelewu: KSEF-1');
+    expect(letterTexts).toContain('Tytuł przelewu: bez numeru');
+  });
+
+  it.each(['stage_1', 'stage_3'] as const)('%s: a split-payment (MPP) invoice gets the KSeF number alone, which fits the 35-character invoice field of the MPP message', async (stage) => {
+    patchInvoice({ ksef_number: KSEF, fa3_data: { annotations: { splitPayment: 1 } } });
+    const delivery = await buildReminderDelivery(tenantId, invoiceId, stage);
+    expect(delivery.text).toContain(`Tytuł przelewu: ${KSEF}\n`);
+    expect(delivery.text).not.toContain(TYTUL);
+  });
 });

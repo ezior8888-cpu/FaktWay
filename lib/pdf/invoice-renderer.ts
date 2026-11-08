@@ -216,14 +216,16 @@ export function amountDueOnPdf(invoice: Invoice): number {
 
 /**
  * Tytuł przelewu w sekcji płatności (krok 1.4, RP-PLAT-01): numer KSeF, potem
- * numer faktury. Tylko przy przelewie, z kwotą „Do zapłaty” i poprawnym
- * numerem KSeF; inaczej `null` i sekcja jak dotąd. Mail z fakturą bierze ten
- * sam tytuł (`emailInvoiceAction`), więc mail i PDF w załączniku się zgadzają.
+ * numer faktury; przy MPP sam numer KSeF. Tylko przy przelewie, z kwotą „Do
+ * zapłaty” i poprawnym numerem KSeF; inaczej `null` i sekcja jak dotąd. Mail
+ * z fakturą bierze ten sam tytuł (`emailInvoiceAction`), więc mail i PDF
+ * w załączniku się zgadzają.
  */
 export function transferTitleOnPdf(invoice: Invoice, ksefNumber: string | null | undefined): string | null {
   return tytulPrzelewuNaDokumencie(invoice.internalNumber, ksefNumber, {
     metoda: invoice.payment?.method,
     doZaplaty: amountDueOnPdf(invoice),
+    mpp: invoice.annotations?.splitPayment === 1,
   });
 }
 

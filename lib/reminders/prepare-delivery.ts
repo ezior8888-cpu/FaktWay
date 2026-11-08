@@ -94,9 +94,12 @@ export async function buildReminderDelivery(
   const replyToRaw = text(settings?.reply_to_email, 254) || text(settings?.sender_email, 254);
   const replyTo = replyToRaw ? email(replyToRaw) : null;
   const invoiceLabel = text(invoice.internal_number, 150) || text(invoice.ksef_number, 150) || 'bez numeru';
-  // Krok 1.4 (RP-PLAT-01): numer KSeF pierwszy, potem numer faktury; numer
-  // spoza wzorca KSeF nie wchodzi. Ten sam tytuł w mailu i w wezwaniu PDF.
-  const transferTitle = tytulPrzelewu(invoiceLabel, invoice.ksef_number);
+  // Krok 1.4 (RP-PLAT-01): numer KSeF pierwszy, potem numer faktury; przy MPP
+  // sam numer KSeF. Tytuł bierze własny numer faktury, nie `invoiceLabel`:
+  // bez niego etykietą jest surowy `ksef_number`, a numer spoza wzorca KSeF
+  // nie może trafić do tytułu. Ten sam tytuł w mailu i w wezwaniu PDF.
+  const splitPayment = object(object(invoice.fa3_data).annotations ?? null).splitPayment === 1;
+  const transferTitle = tytulPrzelewu(text(invoice.internal_number, 150), invoice.ksef_number, { mpp: splitPayment }) || 'bez numeru';
   const bankAccount = text(payment.bankAccount, 100);
   const source = template ? { subject: text(template.email_subject, 998), body: text(template.email_body, 20000) } : DEFAULT_TEMPLATES[stage];
   if (!source.subject || !source.body) throw new Error('Szablon przypomnienia jest pusty.');

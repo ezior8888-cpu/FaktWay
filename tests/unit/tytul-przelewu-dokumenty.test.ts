@@ -92,6 +92,12 @@ describe('PDF faktury: tytuł przelewu w sekcji „Płatność”', () => {
     expect(transferTitleOnPdf(faktura({ method: 'cash' }), KSEF)).toBeNull();
   });
 
+  it('faktura z MPP: w tytule sam numer KSeF (pole numeru faktury w komunikacie MPP ma 35 znaków)', async () => {
+    const invoice: Invoice = { ...faktura(), annotations: { splitPayment: 1 } };
+    expect(transferTitleOnPdf(invoice, KSEF)).toBe(KSEF);
+    expect(await napisyPdf(invoice, KSEF)).toContain(`Tytuł przelewu: ${KSEF}`);
+  });
+
   it('nowy wiersz unieważnia PDF-y zapisane w pamięci podręcznej (nowa wersja w ścieżce)', () => {
     expect(buildInvoicePdfKey('tenant', 'invoice', '2027-01-05', 'qr', KSEF)).toContain('.v7.');
   });

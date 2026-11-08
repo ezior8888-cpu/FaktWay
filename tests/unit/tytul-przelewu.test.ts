@@ -214,6 +214,13 @@ describe('tytuł przelewu', () => {
     expect(tytulPrzelewu(`FV ${KSEF_36}`, KSEF)).toBe(KSEF);
   });
 
+  it('faktura z MPP: sam numer KSeF, bo w komunikacie MPP pole numeru faktury ma 35 znaków', () => {
+    expect(tytulPrzelewu('FV/1/01/2027', KSEF, { mpp: true })).toBe(KSEF);
+    expect(tytulPrzelewu('FV/1/01/2027', KSEF, { mpp: false })).toBe(`${KSEF} FV/1/01/2027`);
+    // Bez numeru KSeF MPP niczego nie zmienia: sam numer faktury, jak dotąd.
+    expect(tytulPrzelewu('FV/1/01/2027', null, { mpp: true })).toBe('FV/1/01/2027');
+  });
+
   it('pusty numer faktury: sam numer KSeF', () => {
     expect(tytulPrzelewu('', KSEF)).toBe(KSEF);
     expect(tytulPrzelewu('  ', KSEF)).toBe(KSEF);
@@ -235,13 +242,14 @@ describe('niezmienniki tytułu na losowych danych', () => {
     for (let i = 0; i < 3000; i += 1) {
       const ksef = losowyNumerKsef(r);
       const numer = losowyNumerFaktury(r, 160);
-      const tytul = tytulPrzelewu(numer, ksef);
-      const opis = JSON.stringify({ ksef, numer, tytul });
+      const mpp = r() < 0.2;
+      const tytul = tytulPrzelewu(numer, ksef, { mpp });
+      const opis = JSON.stringify({ ksef, numer, mpp, tytul });
       expect(tytul.length, opis).toBeLessThanOrEqual(140);
       expect(tytul.startsWith(ksef), opis).toBe(true);
       expect(ileRazy(tytul, ksef), opis).toBe(1);
       const czysty = numer.trim();
-      const oczekiwany = czysty && ksef.length + 1 + czysty.length <= 140 ? `${ksef} ${czysty}` : ksef;
+      const oczekiwany = !mpp && czysty && ksef.length + 1 + czysty.length <= 140 ? `${ksef} ${czysty}` : ksef;
       expect(tytul, opis).toBe(oczekiwany);
     }
   });
@@ -269,6 +277,10 @@ describe('tytuł na dokumencie (PDF faktury, mail z fakturą, ekran faktury)', (
 
   it('przelew z kwotą do zapłaty i poprawnym numerem KSeF: tytuł', () => {
     expect(tytulPrzelewuNaDokumencie('FV/1/01/2027', KSEF, przelew)).toBe(`${KSEF} FV/1/01/2027`);
+  });
+
+  it('faktura z MPP: w wierszu sam numer KSeF', () => {
+    expect(tytulPrzelewuNaDokumencie('FV/1/01/2027', KSEF, { ...przelew, mpp: true })).toBe(KSEF);
   });
 
   it.each([null, undefined, '', 'KSEF-1'])('bez poprawnego numeru KSeF (%s): bez wiersza, dokument jak dotąd', (brak) => {
