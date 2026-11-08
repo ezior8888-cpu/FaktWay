@@ -11,7 +11,6 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -46,11 +45,18 @@ export function poEdycji({ sciezka, katalog = KATALOG_REPO, mapa = wczytajMape()
   }
   if (wynik.poziom !== 'R1' && wynik.poziom !== 'R2') return { kod: 0 };
   if (katalogZnacznikow !== null) {
-    const katalogSesji = join(katalogZnacznikow ?? join(tmpdir(), 'claude-filtr'), sesja.replace(/[^A-Za-z0-9_-]/g, '') || 'bez-sesji');
+    // Znaczniki „już powiedziane w tej sesji” w ignorowanym katalogu repozytorium
+    // (.tmp/), nie we wspólnym katalogu tymczasowym systemu. Zapis z flagą „wx”
+    // tworzy plik atomowo: gdy już jest, kontekst był w tej sesji.
+    const katalogSesji = join(katalogZnacznikow ?? join(katalog, '.tmp', 'filtr-sesje'), sesja.replace(/[^A-Za-z0-9_-]/g, '') || 'bez-sesji');
     const znacznik = join(katalogSesji, createHash('sha256').update(plik).digest('hex').slice(0, 16));
-    if (existsSync(znacznik)) return { kod: 0 };
     mkdirSync(katalogSesji, { recursive: true });
-    writeFileSync(znacznik, plik);
+    try {
+      writeFileSync(znacznik, plik, { flag: 'wx' });
+    } catch (blad) {
+      if (blad && typeof blad === 'object' && 'code' in blad && blad.code === 'EEXIST') return { kod: 0 };
+      throw blad;
+    }
   }
   const kontekst =
     `[FILTR ${wynik.poziom} ${wynik.obszary.join(', ')}] ${plik} jest w obszarze ryzyka prawnego ` +
