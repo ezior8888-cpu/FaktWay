@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   maile: [] as { email: string; payload: Record<string, unknown>; opcje: Record<string, unknown> }[],
   bladPusha: null as Error | null,
   odczytyFirm: 0,
+  zwolnienie: null as string | null,
+  vatWKodzie: true,
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
@@ -28,7 +30,14 @@ vi.mock('@/lib/format/warsaw-date', async (orig) => ({
   ...(await orig<typeof import('@/lib/format/warsaw-date')>()),
   todayInWarsaw: () => mocks.dzis,
 }));
-vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }) }));
+vi.mock('@/lib/ksiegowosc/wylacznik', () => ({
+  czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }),
+  statusObszaru: (obszar: string) => ({ wlaczony: obszar !== 'vat' || mocks.vatWKodzie }),
+}));
+vi.mock('@/lib/invoices/vat-exemption', async (orig) => ({
+  ...(await orig<typeof import('@/lib/invoices/vat-exemption')>()),
+  readTenantVatExemption: async () => mocks.zwolnienie,
+}));
 vi.mock('@/lib/ksiegowosc/ten-miesiac-dane', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/ten-miesiac-dane')>()),
   czytajTenMiesiac: async () => mocks.dane,
@@ -124,6 +133,8 @@ beforeEach(() => {
   mocks.maile = [];
   mocks.bladPusha = null;
   mocks.odczytyFirm = 0;
+  mocks.zwolnienie = null;
+  mocks.vatWKodzie = true;
 });
 
 describe('cron.ksiegowosc-miesiac', () => {
@@ -208,6 +219,28 @@ describe('cron.ksiegowosc-terminy', () => {
     expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
     expect(mocks.pushe[0].payload.body).toContain('zaliczka PIT');
     expect(mocks.pushe[0].payload.body).not.toContain('ryczałt');
+  });
+
+  it('VAT (K7.1): 20.11 przypomnienie o VAT za październik z kwotą; firma zwolniona (art. 113) albo VAT zablokowany w kodzie: nic', async () => {
+    mocks.dzis = '2026-11-20';
+    mocks.dane = { ...POLICZONE, pozycje: [...POLICZONE.pozycje, pozycja('vat', 374_500)] };
+    await runKsiegowoscTerminy(ctx);
+    expect(mocks.pushe).toHaveLength(1);
+    expect(String(mocks.pushe[0].payload.body)).toContain('VAT');
+    expect(String(mocks.pushe[0].payload.body)).not.toMatch(/ryczałt|składki/);
+    expect([...mocks.wpisy.keys()]).toEqual(['t1|2026-10|termin-5:2026-11-25']);
+
+    mocks.wpisy = new Map();
+    mocks.pushe = [];
+    mocks.zwolnienie = 'art. 113 ust. 1';
+    await runKsiegowoscTerminy(ctx);
+    expect(mocks.pushe).toEqual([]);
+    expect(mocks.wpisy.size).toBe(0);
+
+    mocks.zwolnienie = null;
+    mocks.vatWKodzie = false;
+    await runKsiegowoscTerminy(ctx);
+    expect(mocks.pushe).toEqual([]);
   });
 
   it('dzień bez terminu: zadanie kończy się bez odczytu firm', async () => {

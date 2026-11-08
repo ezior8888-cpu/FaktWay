@@ -60,7 +60,7 @@ const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
   ewidencja: { wlaczony: true, notatka: 'Ewidencja przychodów ryczałtu, wpisy ręczne i JPK_EWP (K3); przy skali i liniowym KPiR za obszarem `kpir` (K7).' },
   ten_miesiac: { wlaczony: true, notatka: 'Ryczałt, składki i zdrowotna za miesiąc z zatwierdzaniem (K4); zaliczka PIT przy skali i liniowym za obszarem `kpir` (K7).' },
   terminy: { wlaczony: true, notatka: 'Przypomnienia o terminach, push o wyliczonym miesiącu i karta „Odłóż na podatek” (K5).' },
-  vat: { wlaczony: true, notatka: 'VAT za miesiąc, plik JPK_V7M(3) do pobrania, lista wysyłek z UPO (K6).' },
+  vat: { wlaczony: true, notatka: 'VAT za miesiąc, plik JPK_V7M(3) do pobrania, lista wysyłek z UPO (K6); VAT w „Ten miesiąc” i przypomnienie przed 25. (K7.1).' },
   wysylka_jpk: {
     wlaczony: false,
     powod: 'prawnik',

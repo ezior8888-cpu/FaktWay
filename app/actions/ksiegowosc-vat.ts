@@ -12,7 +12,7 @@ import { generateJpkV7m, JPK_V7M_FORM_CODE } from '@/lib/exports/jpk-v7m-generat
 import { validateJpkV7m } from '@/lib/exports/jpk-v7m-validator';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { brakNadwyzki, czytajVat } from '@/lib/ksiegowosc/vat-dane';
+import { brakNadwyzki, czytajVat, type ZrodloNadwyzki } from '@/lib/ksiegowosc/vat-dane';
 import { czyKsiegowoscWlaczona, type ObszarModulu } from '@/lib/ksiegowosc/wylacznik';
 import { certyfikatMf, srodowiskoMf, type SrodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
 import { daneAutoryzujaceSchema } from '@/lib/ksiegowosc/wysylka-jpk/dane-autoryzujace';
@@ -99,7 +99,9 @@ function blad(parsed: { error: z.ZodError }) {
   return { success: false as const, error: issue?.message ?? 'Nieprawidłowe dane do pliku.', pole: issue?.path.join('.') };
 }
 
-type Plik = { ok: true; xml: string; nazwa: string; deklaracja: DeklaracjaVat; nip: string; cel: 1 | 2 } | { ok: false; error: string };
+type Plik =
+  | { ok: true; xml: string; nazwa: string; deklaracja: DeklaracjaVat; nip: string; cel: 1 | 2; zrodloNadwyzki: ZrodloNadwyzki }
+  | { ok: false; error: string };
 
 /**
  * Plik JPK_V7M(3) za miesiąc z danych firmy: ta sama droga dla pobrania i wysyłki.
@@ -163,7 +165,15 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>, sro
     P_51: r.doZaplatyGr / 100,
     P_62: r.nadwyzkaNaNastepnyGr / 100,
   };
-  return { ok: true, xml, nazwa: `JPK_V7M_${nip}_${w.miesiac}${cel === 2 ? '_korekta' : ''}.xml`, deklaracja, nip, cel };
+  return {
+    ok: true,
+    xml,
+    nazwa: `JPK_V7M_${nip}_${w.miesiac}${cel === 2 ? '_korekta' : ''}.xml`,
+    deklaracja,
+    nip,
+    cel,
+    zrodloNadwyzki: dane.nadwyzka.zrodlo,
+  };
 }
 
 export async function pobierzJpkV7mAction(wejscie: z.input<typeof plikSchema>): Promise<WynikPlikuVat> {
@@ -181,7 +191,7 @@ export async function pobierzJpkV7mAction(wejscie: z.input<typeof plikSchema>): 
     userId: ctx.user.id,
     entityType: 'jpk_v7m',
     // Bez imienia, nazwiska i daty urodzenia: tych danych nie zapisujemy (D9).
-    metadata: { miesiac: parsed.data.miesiac, cel: plik.cel, deklaracja: plik.deklaracja, nadwyzkaZ: parsed.data.nadwyzka === null ? 'mf' : 'klient' },
+    metadata: { miesiac: parsed.data.miesiac, cel: plik.cel, deklaracja: plik.deklaracja, nadwyzkaZ: plik.zrodloNadwyzki },
   });
   return { success: true, xml: plik.xml, nazwa: plik.nazwa };
 }

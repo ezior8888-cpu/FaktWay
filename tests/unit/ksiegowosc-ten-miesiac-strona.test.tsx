@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   rola: 'owner',
   dane: null as unknown,
   miesiacOdczytu: '',
+  opcjeOdczytu: undefined as unknown,
   firma: { data: { nip: '1234563218' }, error: null } as { data: unknown; error: unknown },
 }));
 
@@ -32,22 +33,35 @@ vi.mock('@/lib/supabase/page-context', () => ({
     supabase: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => mocks.firma }) }) }) },
   }),
 }));
-vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }) }));
+vi.mock('@/lib/ksiegowosc/wylacznik', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/wylacznik')>()),
+  czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }),
+}));
 vi.mock('@/lib/format/warsaw-date', async (orig) => ({
   ...(await orig<typeof import('@/lib/format/warsaw-date')>()),
   todayInWarsaw: () => '2026-11-07',
 }));
 vi.mock('@/components/ksiegowosc/ten-miesiac-akcje', () => ({
-  ZatwierdzMiesiac: (p: { etykieta: string; skroty?: Record<string, string> }) => <button data-skroty={JSON.stringify(p.skroty ?? null)}>{p.etykieta}</button>,
+  ZatwierdzMiesiac: (p: { etykieta: string; skroty?: Record<string, string>; nadwyzkaVat?: number | null }) => (
+    <button data-skroty={JSON.stringify(p.skroty ?? null)} data-nadwyzka-vat={String(p.nadwyzkaVat ?? null)}>
+      {p.etykieta}
+    </button>
+  ),
   ZaplaconeRozliczenie: (p: { id: string; nazwa: string; zaplacone: boolean }) => (
     <span data-zaplata={p.id}>{p.zaplacone ? `Cofnij zapłatę: ${p.nazwa}` : `Zapłacone: ${p.nazwa}`}</span>
   ),
 }));
 vi.mock('@/components/expenses/finora/month-selector', () => ({ default: (p: { month: string }) => <span data-miesiac={p.month} /> }));
+vi.mock('@/components/ksiegowosc/vat-akcje', () => ({
+  NadwyzkaPoprzednia: (p: { adres: string; poprzedni: string; wartosc: number | null }) => (
+    <span data-pole-nadwyzki={p.adres} data-poprzedni={p.poprzedni} data-wartosc={String(p.wartosc)} />
+  ),
+}));
 vi.mock('@/lib/ksiegowosc/ten-miesiac-dane', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/ten-miesiac-dane')>()),
-  czytajTenMiesiac: async (_c: unknown, _t: string, miesiac: string) => {
+  czytajTenMiesiac: async (_c: unknown, _t: string, miesiac: string, opcje?: unknown) => {
     mocks.miesiacOdczytu = miesiac;
+    mocks.opcjeOdczytu = opcje;
     return mocks.dane;
   },
 }));
@@ -155,6 +169,58 @@ describe('strona „Ten miesiąc”', () => {
     expect(html).toContain(`data-skroty="${JSON.stringify({ pit: H('d'), zus_spoleczne: H('b'), zdrowotna: H('c') }).replace(/"/g, '&quot;')}"`);
     mocks.dane = skala('liniowy');
     expect(await strona()).toContain('symbol formularza PIT-36L, okres 26M10');
+  });
+
+  it('VAT (K7.1): pozycja z symbolem VAT-7 i terminem 25.; nadwyżka z adresu idzie do odczytu i do zatwierdzenia; nieznana: pole do wpisania', async () => {
+    const vatTermin = { rodzaj: 'vatJpk', nominalny: '2026-11-25', faktyczny: '2026-11-25', przesuniety: false };
+    const WYNIK_VAT = { naleznyGr: 690_000, nadwyzkaPoprzedniaGr: 120_000, naliczonyGr: 315_500, doZaplatyGr: 374_500, nadwyzkaNaNastepnyGr: 0, liczbaSprzedazy: 3, liczbaZakupow: 2 };
+    const zVat = (pozycjaVat: unknown, vat: unknown) => {
+      const pozycje = [...POZYCJE, pozycjaVat];
+      return { ok: true, wynik: { ...WYNIK, pozycje, vat }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+    };
+    mocks.dane = zVat(
+      { ok: true, rodzaj: 'vat', kwotaGr: 374_500, termin: vatTermin, wejscia: {}, wejsciaHash: H('d') },
+      { wynik: WYNIK_VAT, nadwyzka: { zl: 1200, zrodlo: 'klient' }, nadwyzkaNieznana: false },
+    );
+    const html = await strona({ month: '10', year: '2026', nadwyzka: '1200' });
+    expect(mocks.opcjeOdczytu).toEqual({ nadwyzkaVat: 1200 });
+    expect(html).toMatch(/3745,00 zł<\/h4><p[^>]*>VAT do zapłaty/);
+    expect(html).toContain('Termin: 25.11.2026');
+    expect(tekst(html)).toContain('Ryczałt, składki społeczne, składka zdrowotna i VAT z terminami i danymi do przelewu.');
+    expect(html).toContain('symbol formularza VAT-7, okres 26M10, identyfikator NIP 1234563218');
+    expect(html).toContain('data-nadwyzka-vat="1200"');
+    // Wpisana kwota zostaje do poprawienia przy pozycji.
+    expect(html).toContain('data-wartosc="1200"');
+    expect(tekst(html)).toContain('VAT: należny 6900,00 zł, naliczony 3155,00 zł (w tym nadwyżka 1200,00 zł z deklaracji za wrzesień 2026).');
+
+    mocks.dane = zVat(
+      { ok: false, rodzaj: 'vat', termin: vatTermin, brak: 'Do wyliczenia VAT za październik 2026 potrzebna jest nadwyżka z deklaracji za wrzesień 2026.' },
+      { wynik: null, nadwyzka: null, nadwyzkaNieznana: true },
+    );
+    const bez = await strona();
+    expect(mocks.opcjeOdczytu).toEqual({ nadwyzkaVat: null });
+    expect(bez).toContain('data-pole-nadwyzki="/reports/ten-miesiac?month=10&amp;year=2026"');
+    expect(bez).toContain('data-poprzedni="wrzesień 2026"');
+    expect(bez).toContain('data-nadwyzka-vat="null"');
+  });
+
+  it('VAT z nadwyżką z rozliczenia zatwierdzonego w FaktWay: informacja, skąd jest kwota, i pole do poprawienia', async () => {
+    const vatTermin = { rodzaj: 'vatJpk', nominalny: '2026-11-25', faktyczny: '2026-11-25', przesuniety: false };
+    const pozycje = [...POZYCJE, { ok: true, rodzaj: 'vat', kwotaGr: 0, termin: vatTermin, wejscia: {}, wejsciaHash: H('d') }];
+    const vat = {
+      wynik: { naleznyGr: 100_000, nadwyzkaPoprzedniaGr: 300_000, naliczonyGr: 350_000, doZaplatyGr: 0, nadwyzkaNaNastepnyGr: 250_000, liczbaSprzedazy: 1, liczbaZakupow: 1 },
+      nadwyzka: { zl: 3000, zrodlo: 'zatwierdzone' },
+      nadwyzkaNieznana: false,
+    };
+    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+    const html = await strona();
+    expect(html).toContain('data-wartosc="3000"');
+    const t = tekst(html);
+    expect(t).toContain('z rozliczenia VAT za wrzesień 2026 zatwierdzonego w „Ten miesiąc”');
+    expect(t).toContain('nadwyżka na następny miesiąc 2500,00 zł');
+    // Zatwierdzony miesiąc bez zatwierdzonego poprzedniego: kwota z jego własnej migawki.
+    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat: { ...vat, nadwyzka: { zl: 3000, zrodlo: 'ten_miesiac' } } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+    expect(tekst(await strona())).toContain('Nadwyżka z deklaracji za wrzesień 2026 (P_39): 3000,00 zł, z zatwierdzonego rozliczenia VAT za październik 2026.');
   });
 
   it('każda kwota ma podpis z rokiem stawek; w styczniu zdrowotna według roku składkowego', async () => {
