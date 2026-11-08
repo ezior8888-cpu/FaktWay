@@ -218,6 +218,9 @@ describe('strona „Ten miesiąc”', () => {
     const t = tekst(html);
     expect(t).toContain('z rozliczenia VAT za wrzesień 2026 zatwierdzonego w „Ten miesiąc”');
     expect(t).toContain('nadwyżka na następny miesiąc 2500,00 zł');
+    // Zatwierdzony miesiąc bez zatwierdzonego poprzedniego: kwota z jego własnej migawki.
+    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat: { ...vat, nadwyzka: { zl: 3000, zrodlo: 'ten_miesiac' } } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+    expect(tekst(await strona())).toContain('Nadwyżka z deklaracji za wrzesień 2026 (P_39): 3000,00 zł, z zatwierdzonego rozliczenia VAT za październik 2026.');
   });
 
   it('każda kwota ma podpis z rokiem stawek; w styczniu zdrowotna według roku składkowego', async () => {

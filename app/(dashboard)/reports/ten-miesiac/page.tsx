@@ -342,6 +342,11 @@ function NadwyzkaVat({ vat, miesiac }: { vat: VatWyniku; miesiac: string }) {
           Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(vat.nadwyzka.zl * 100)}, z rozliczenia VAT za {poprzedni} zatwierdzonego w „Ten miesiąc”.
         </p>
       ) : null}
+      {vat.nadwyzka?.zrodlo === 'ten_miesiac' ? (
+        <p className="text-muted-foreground text-xs">
+          Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(vat.nadwyzka.zl * 100)}, z zatwierdzonego rozliczenia VAT za {monthLabel(miesiac)}.
+        </p>
+      ) : null}
       <NadwyzkaPoprzednia
         adres={`/reports/ten-miesiac?month=${Number(miesiac.slice(5, 7))}&year=${miesiac.slice(0, 4)}`}
         poprzedni={poprzedni}

@@ -6,9 +6,12 @@
  * Nadwyżka z poprzedniej deklaracji (P_39): P_62 deklaracji za poprzedni
  * miesiąc przyjętej przez MF z FaktWay, a bez niej kwota wpisana przez
  * klienta (z deklaracji złożonej poza FaktWay; także 0 zł), a bez niej P_62
- * rozliczenia VAT za poprzedni miesiąc zatwierdzonego w „Ten miesiąc” (K7.1).
- * Bez żadnej z nich kwot nie ma (fail-closed): zgadnięte 0 zł zawyżyłoby VAT
- * do wpłaty.
+ * rozliczenia VAT za poprzedni miesiąc zatwierdzonego w „Ten miesiąc” (K7.1),
+ * a bez niego P_39 z zatwierdzonego rozliczenia VAT tego miesiąca (kwota
+ * wpisana przy zatwierdzeniu). Poprzedni miesiąc ma pierwszeństwo przed
+ * migawką tego: jego korekta zmienia P_39, więc ten miesiąc dostaje nową
+ * wersję. Bez żadnej z nich kwot nie ma (fail-closed): zgadnięte 0 zł
+ * zawyżyłoby VAT do wpłaty.
  */
 
 import * as Sentry from '@sentry/nextjs';
@@ -24,7 +27,7 @@ import { vatMiesiaca, type VatMiesiaca } from './vat';
 import { srodowiskoMf } from './wysylka-jpk/certyfikaty';
 import { czytajWysylki, nadwyzkaPrzyjetej, type Wysylka } from './wysylka-jpk/zapis';
 
-export type ZrodloNadwyzki = 'mf' | 'klient' | 'zatwierdzone';
+export type ZrodloNadwyzki = 'mf' | 'klient' | 'zatwierdzone' | 'ten_miesiac';
 
 export type DaneVat =
   | {
@@ -61,9 +64,9 @@ export async function czytajVat(
   let zwolnienie: string | null;
   let dane: FetchedInvoiceData;
   let wysylki: Wysylka[];
-  let zatwierdzona: number | null;
+  let zatwierdzone: NadwyzkiZatwierdzone;
   try {
-    [zwolnienie, dane, wysylki, zatwierdzona] = await Promise.all([
+    [zwolnienie, dane, wysylki, zatwierdzone] = await Promise.all([
       readTenantVatExemption(client, tenantId),
       fetchInvoicesForExport(
         {
@@ -77,7 +80,7 @@ export async function czytajVat(
         client as unknown as ReturnType<typeof createAdminClient>,
       ),
       czytajWysylki(client, tenantId, [`${miesiac}-01`, `${poprzedni}-01`]),
-      nadwyzkaZatwierdzona(client, tenantId, poprzedni),
+      nadwyzkiZatwierdzone(client, tenantId, poprzedni, miesiac),
     ]);
   } catch (e) {
     Sentry.captureException(e, { tags: { area: 'ksiegowosc.vat' }, extra: { tenantId, miesiac } });
@@ -94,9 +97,11 @@ export async function czytajVat(
       ? { zl: zMf, zrodlo: 'mf' }
       : nadwyzkaKlienta !== null
         ? { zl: nadwyzkaKlienta, zrodlo: 'klient' }
-        : zatwierdzona !== null
-          ? { zl: zatwierdzona, zrodlo: 'zatwierdzone' }
-          : null;
+        : zatwierdzone.poprzedni !== null
+          ? { zl: zatwierdzone.poprzedni, zrodlo: 'zatwierdzone' }
+          : zatwierdzone.tenMiesiac !== null
+            ? { zl: zatwierdzone.tenMiesiac, zrodlo: 'ten_miesiac' }
+            : null;
 
   return {
     ok: true,
@@ -108,28 +113,41 @@ export async function czytajVat(
   };
 }
 
+interface NadwyzkiZatwierdzone {
+  /** P_62 zatwierdzonego rozliczenia VAT za poprzedni miesiąc (pełne złote). */
+  poprzedni: number | null;
+  /** P_39 zatwierdzonego rozliczenia VAT tego miesiąca (pełne złote). */
+  tenMiesiac: number | null;
+}
+
+/** Grosze z migawki na pełne złote; kwota z groszami albo ujemna to brak (bez zgadywania). */
+const pelneZlote = (gr: unknown) => (typeof gr === 'number' && Number.isInteger(gr) && gr >= 0 && gr % 100 === 0 ? gr / 100 : null);
+
 /**
- * P_62 rozliczenia VAT za miesiąc zatwierdzonego w „Ten miesiąc” (K7.1,
- * najwyższa wersja), w pełnych złotych. Przed 00168 tabeli nie ma: to brak,
- * nie awaria. Kwota z groszami albo ujemna w migawce to też brak.
+ * Kwoty z zatwierdzonych rozliczeń VAT (K7.1, najwyższa wersja każdego
+ * miesiąca), jednym zapytaniem o poprzedni i ten miesiąc. Przed 00168 tabeli
+ * nie ma: to brak, nie awaria.
  */
-async function nadwyzkaZatwierdzona(client: SupabaseClient, tenantId: string, miesiac: string): Promise<number | null> {
+async function nadwyzkiZatwierdzone(client: SupabaseClient, tenantId: string, poprzedni: string, miesiac: string): Promise<NadwyzkiZatwierdzone> {
   const { data, error } = await client
     .from('tax_settlements')
-    .select('wersja, migawka')
+    .select('okres, wersja, migawka')
     .eq('tenant_id', tenantId)
-    .eq('okres', `${miesiac}-01`)
     .eq('rodzaj', 'vat')
-    .order('wersja', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .in('okres', [`${poprzedni}-01`, `${miesiac}-01`])
+    .order('wersja', { ascending: false });
   if (error) {
     // Przed wgraniem 00168: Postgres 42P01, PostgREST PGRST205.
-    if (error.code === '42P01' || error.code === 'PGRST205') return null;
+    if (error.code === '42P01' || error.code === 'PGRST205') return { poprzedni: null, tenMiesiac: null };
     throw new Error(`Nie można odczytać rozliczeń VAT: ${error.message}`);
   }
-  const gr = (data as { migawka?: { wejscia?: { nadwyzkaNaNastepnyGr?: unknown } } } | null)?.migawka?.wejscia?.nadwyzkaNaNastepnyGr;
-  return typeof gr === 'number' && Number.isInteger(gr) && gr >= 0 && gr % 100 === 0 ? gr / 100 : null;
+  type Wiersz = { okres: string; migawka?: { wejscia?: { nadwyzkaNaNastepnyGr?: unknown; nadwyzkaPoprzedniaGr?: unknown } } | null };
+  const wiersze = (data ?? []) as Wiersz[];
+  const najnowsza = (okres: string) => wiersze.find((w) => w.okres === okres)?.migawka?.wejscia;
+  return {
+    poprzedni: pelneZlote(najnowsza(`${poprzedni}-01`)?.nadwyzkaNaNastepnyGr),
+    tenMiesiac: pelneZlote(najnowsza(`${miesiac}-01`)?.nadwyzkaPoprzedniaGr),
+  };
 }
 
 /** P_39 z adresu strony (`?nadwyzka=`): pełne złote, bez znaku; inaczej null. */

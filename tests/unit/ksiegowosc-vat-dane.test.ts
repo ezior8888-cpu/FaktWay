@@ -6,15 +6,16 @@ import type { Wysylka } from '@/lib/ksiegowosc/wysylka-jpk/zapis';
  * Nadwyżka z poprzedniej deklaracji (P_39) w odczycie VAT (plan księgowości
  * JDG, K6 i K7.1): deklaracja przyjęta przez MF, potem kwota wpisana przez
  * klienta, potem P_62 rozliczenia VAT za poprzedni miesiąc zatwierdzonego
- * w „Ten miesiąc”. Bez żadnej z nich kwot nie ma. Atrapy dla bazy, faktur,
- * zwolnienia i wysyłek; silnik VAT i wybór źródła są prawdziwe.
+ * w „Ten miesiąc”, potem P_39 z zatwierdzonego rozliczenia tego miesiąca.
+ * Bez żadnej z nich kwot nie ma. Atrapy dla bazy, faktur, zwolnienia
+ * i wysyłek; silnik VAT i wybór źródła są prawdziwe.
  */
 
 const mocks = vi.hoisted(() => ({
   zwolnienie: null as string | null,
   wysylki: [] as unknown[],
   srodowisko: null as 'test' | 'produkcja' | null,
-  zatwierdzona: null as unknown,
+  rozliczenia: [] as unknown[],
   bladRozliczen: null as { code: string; message: string } | null,
   filtry: [] as string[],
 }));
@@ -43,18 +44,24 @@ const client = {
   from: (tabela: string) => {
     if (tabela !== 'tax_settlements') throw new Error(tabela);
     const l: Record<string, unknown> = {};
-    for (const m of ['select', 'eq', 'order', 'limit']) {
+    for (const m of ['select', 'eq', 'in']) {
       l[m] = (...a: unknown[]) => {
         mocks.filtry.push(`${m}:${a.map(String).join(',')}`);
         return l;
       };
     }
-    l.maybeSingle = async () => ({ data: mocks.bladRozliczen ? null : mocks.zatwierdzona, error: mocks.bladRozliczen });
+    // Najwyższa wersja najpierw, jak `order('wersja', { ascending: false })`.
+    l.order = async (...a: unknown[]) => {
+      mocks.filtry.push(`order:${String(a[0])}`);
+      const wiersze = [...(mocks.rozliczenia as { wersja: number }[])].sort((x, y) => y.wersja - x.wersja);
+      return { data: mocks.bladRozliczen ? null : wiersze, error: mocks.bladRozliczen };
+    };
     return l;
   },
 } as unknown as import('@supabase/supabase-js').SupabaseClient;
 
-const zatwierdzonaZ = (p62Gr: unknown) => ({ wersja: 2, migawka: { wejscia: { nadwyzkaNaNastepnyGr: p62Gr } } });
+const wrzesien = (p62Gr: unknown, wersja = 2) => ({ okres: '2026-09-01', wersja, migawka: { wejscia: { nadwyzkaNaNastepnyGr: p62Gr } } });
+const pazdziernik = (p39Gr: unknown, wersja = 1) => ({ okres: '2026-10-01', wersja, migawka: { wejscia: { nadwyzkaPoprzedniaGr: p39Gr } } });
 
 const przyjetaZaWrzesien = (p62: number): Wysylka =>
   ({
@@ -71,24 +78,24 @@ beforeEach(() => {
   mocks.zwolnienie = null;
   mocks.wysylki = [];
   mocks.srodowisko = null;
-  mocks.zatwierdzona = null;
+  mocks.rozliczenia = [];
   mocks.bladRozliczen = null;
   mocks.filtry = [];
 });
 
 describe('nadwyżka z poprzedniej deklaracji (P_39)', () => {
   it('bez MF i bez wpisu klienta: P_62 rozliczenia VAT za wrzesień zatwierdzonego w „Ten miesiąc”', async () => {
-    mocks.zatwierdzona = zatwierdzonaZ(120_000);
+    mocks.rozliczenia = [wrzesien(100_000, 1), wrzesien(120_000, 2)];
     const dane = await czytajVat(client, 't1', '2026-10', null);
     if (!dane.ok) throw new Error(dane.komunikat);
     expect(dane.nadwyzka).toEqual({ zl: 1200, zrodlo: 'zatwierdzone' });
     expect(dane.wynik).toMatchObject({ ok: true, nadwyzkaPoprzedniaGr: 120_000 });
-    // Najwyższa wersja rozliczenia VAT za wrzesień tej firmy.
-    expect(mocks.filtry).toEqual(expect.arrayContaining(['eq:tenant_id,t1', 'eq:okres,2026-09-01', 'eq:rodzaj,vat', 'order:wersja,[object Object]', 'limit:1']));
+    // Najwyższa wersja rozliczeń VAT tej firmy za wrzesień i październik, jednym zapytaniem.
+    expect(mocks.filtry).toEqual(['select:okres, wersja, migawka', 'eq:tenant_id,t1', 'eq:rodzaj,vat', 'in:okres,2026-09-01,2026-10-01', 'order:wersja']);
   });
 
   it('wpis klienta wygrywa z zatwierdzonym rozliczeniem, a deklaracja przyjęta przez MF z obydwoma', async () => {
-    mocks.zatwierdzona = zatwierdzonaZ(120_000);
+    mocks.rozliczenia = [wrzesien(120_000)];
     expect((await czytajVat(client, 't1', '2026-10', 500)) as { nadwyzka: unknown }).toMatchObject({ nadwyzka: { zl: 500, zrodlo: 'klient' } });
     mocks.srodowisko = 'test';
     mocks.wysylki = [przyjetaZaWrzesien(300)];
@@ -97,10 +104,24 @@ describe('nadwyżka z poprzedniej deklaracji (P_39)', () => {
 
   it('bez żadnego źródła kwot nie ma; kwota z groszami albo ujemna w migawce to też brak (bez zgadywania)', async () => {
     expect(await czytajVat(client, 't1', '2026-10', null)).toMatchObject({ ok: true, nadwyzka: null, wynik: null });
-    mocks.zatwierdzona = zatwierdzonaZ(12_345);
+    mocks.rozliczenia = [wrzesien(12_345)];
     expect(await czytajVat(client, 't1', '2026-10', null)).toMatchObject({ ok: true, nadwyzka: null });
-    mocks.zatwierdzona = zatwierdzonaZ(-100);
+    mocks.rozliczenia = [wrzesien(-100)];
     expect(await czytajVat(client, 't1', '2026-10', null)).toMatchObject({ ok: true, nadwyzka: null });
+  });
+
+  it('zatwierdzony październik bez września: P_39 z jego własnej migawki, więc powrót na stronę nie gubi kwoty', async () => {
+    mocks.rozliczenia = [pazdziernik(0)];
+    const dane = await czytajVat(client, 't1', '2026-10', null);
+    if (!dane.ok) throw new Error(dane.komunikat);
+    expect(dane.nadwyzka).toEqual({ zl: 0, zrodlo: 'ten_miesiac' });
+    expect(dane.wynik).toMatchObject({ ok: true, nadwyzkaPoprzedniaGr: 0 });
+  });
+
+  it('wrzesień zatwierdzony później z innym P_62 wygrywa z migawką października (korekta oznacza zmianę), a wpis klienta z obydwoma', async () => {
+    mocks.rozliczenia = [pazdziernik(0), wrzesien(30_000)];
+    expect(await czytajVat(client, 't1', '2026-10', null)).toMatchObject({ nadwyzka: { zl: 300, zrodlo: 'zatwierdzone' } });
+    expect(await czytajVat(client, 't1', '2026-10', 7)).toMatchObject({ nadwyzka: { zl: 7, zrodlo: 'klient' } });
   });
 
   it('przed 00168 (brak tabeli rozliczeń): bez nadwyżki zatwierdzonej, nie awaria; inny błąd odczytu: błąd odczytu VAT', async () => {

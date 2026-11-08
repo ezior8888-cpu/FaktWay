@@ -155,6 +155,12 @@ function Nadwyzka({ dane, adres }: { dane: DaneOk; adres: string }) {
     <Card>
       <CardContent className="flex flex-col gap-3">
         {dane.nadwyzka ? null : <p className="text-sm">{brakNadwyzki(dane.miesiac)}</p>}
+        {dane.nadwyzka?.zrodlo === 'ten_miesiac' ? (
+          <p className="text-muted-foreground text-xs">
+            Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(dane.nadwyzka.zl * 100)}, z zatwierdzonego rozliczenia VAT za{' '}
+            {monthLabel(dane.miesiac)} w „Ten miesiąc”. Inna kwota z deklaracji złożonej poza FaktWay wpisuje się niżej.
+          </p>
+        ) : null}
         {dane.nadwyzka?.zrodlo === 'zatwierdzone' ? (
           <p className="text-muted-foreground text-xs">
             Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(dane.nadwyzka.zl * 100)}, z rozliczenia VAT za {poprzedni} zatwierdzonego w „Ten
