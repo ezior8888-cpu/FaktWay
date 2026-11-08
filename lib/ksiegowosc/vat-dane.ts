@@ -5,8 +5,13 @@
  *
  * Nadwyżka z poprzedniej deklaracji (P_39): P_62 deklaracji za poprzedni
  * miesiąc przyjętej przez MF z FaktWay, a bez niej kwota wpisana przez
- * klienta (z deklaracji złożonej poza FaktWay; także 0 zł). Bez żadnej
- * z nich kwot nie ma (fail-closed): zgadnięte 0 zł zawyżyłoby VAT do wpłaty.
+ * klienta (z deklaracji złożonej poza FaktWay; także 0 zł), a bez niej P_62
+ * rozliczenia VAT za poprzedni miesiąc zatwierdzonego w „Ten miesiąc” (K7.1),
+ * a bez niego P_39 z zatwierdzonego rozliczenia VAT tego miesiąca (kwota
+ * wpisana przy zatwierdzeniu). Poprzedni miesiąc ma pierwszeństwo przed
+ * migawką tego: jego korekta zmienia P_39, więc ten miesiąc dostaje nową
+ * wersję. Bez żadnej z nich kwot nie ma (fail-closed): zgadnięte 0 zł
+ * zawyżyłoby VAT do wpłaty.
  */
 
 import * as Sentry from '@sentry/nextjs';
@@ -22,7 +27,7 @@ import { vatMiesiaca, type VatMiesiaca } from './vat';
 import { srodowiskoMf } from './wysylka-jpk/certyfikaty';
 import { czytajWysylki, nadwyzkaPrzyjetej, type Wysylka } from './wysylka-jpk/zapis';
 
-export type ZrodloNadwyzki = 'mf' | 'klient';
+export type ZrodloNadwyzki = 'mf' | 'klient' | 'zatwierdzone' | 'ten_miesiac';
 
 export type DaneVat =
   | {
@@ -35,10 +40,15 @@ export type DaneVat =
       /** Wysyłki za ten miesiąc, od najnowszej. */
       wysylki: Wysylka[];
     }
-  | { ok: false; komunikat: string };
+  | {
+      ok: false;
+      komunikat: string;
+      /** Zwolnienie podmiotowe (art. 113): VAT nie dotyczy firmy, to nie błąd odczytu. */
+      zwolniona?: true;
+    };
 
 export const BLAD_ODCZYTU_VAT =
-  'Nie udało się odczytać faktur i kosztów miesiąca, więc nie pokazujemy kwot VAT. Strona spróbuje ponownie przy następnym otwarciu.';
+  'Nie udało się odczytać faktur, kosztów albo rozliczeń miesiąca, więc nie pokazujemy kwot VAT. Strona spróbuje ponownie przy następnym otwarciu.';
 
 export async function czytajVat(
   client: SupabaseClient,
@@ -54,8 +64,9 @@ export async function czytajVat(
   let zwolnienie: string | null;
   let dane: FetchedInvoiceData;
   let wysylki: Wysylka[];
+  let zatwierdzone: NadwyzkiZatwierdzone;
   try {
-    [zwolnienie, dane, wysylki] = await Promise.all([
+    [zwolnienie, dane, wysylki, zatwierdzone] = await Promise.all([
       readTenantVatExemption(client, tenantId),
       fetchInvoicesForExport(
         {
@@ -69,19 +80,28 @@ export async function czytajVat(
         client as unknown as ReturnType<typeof createAdminClient>,
       ),
       czytajWysylki(client, tenantId, [`${miesiac}-01`, `${poprzedni}-01`]),
+      nadwyzkiZatwierdzone(client, tenantId, poprzedni, miesiac),
     ]);
   } catch (e) {
     Sentry.captureException(e, { tags: { area: 'ksiegowosc.vat' }, extra: { tenantId, miesiac } });
     return { ok: false, komunikat: BLAD_ODCZYTU_VAT };
   }
   if (isSubjectiveVatExemption(zwolnienie)) {
-    return { ok: false, komunikat: 'Firma korzysta ze zwolnienia z VAT (art. 113), więc nie składa JPK_V7M.' };
+    return { ok: false, komunikat: 'Firma korzysta ze zwolnienia z VAT (art. 113), więc nie składa JPK_V7M.', zwolniona: true };
   }
 
   const srodowisko = srodowiskoMf();
   const zMf = srodowisko ? nadwyzkaPrzyjetej(wysylki, `${poprzedni}-01`, srodowisko) : null;
-  const nadwyzka =
-    zMf !== null ? { zl: zMf, zrodlo: 'mf' as const } : nadwyzkaKlienta !== null ? { zl: nadwyzkaKlienta, zrodlo: 'klient' as const } : null;
+  const nadwyzka: { zl: number; zrodlo: ZrodloNadwyzki } | null =
+    zMf !== null
+      ? { zl: zMf, zrodlo: 'mf' }
+      : nadwyzkaKlienta !== null
+        ? { zl: nadwyzkaKlienta, zrodlo: 'klient' }
+        : zatwierdzone.poprzedni !== null
+          ? { zl: zatwierdzone.poprzedni, zrodlo: 'zatwierdzone' }
+          : zatwierdzone.tenMiesiac !== null
+            ? { zl: zatwierdzone.tenMiesiac, zrodlo: 'ten_miesiac' }
+            : null;
 
   return {
     ok: true,
@@ -91,6 +111,48 @@ export async function czytajVat(
     wynik: nadwyzka ? vatMiesiaca({ sprzedaz: dane.issuedInvoices, koszty: dane.expenses }, nadwyzka.zl) : null,
     wysylki: wysylki.filter((w) => w.okres === `${miesiac}-01`),
   };
+}
+
+interface NadwyzkiZatwierdzone {
+  /** P_62 zatwierdzonego rozliczenia VAT za poprzedni miesiąc (pełne złote). */
+  poprzedni: number | null;
+  /** P_39 zatwierdzonego rozliczenia VAT tego miesiąca (pełne złote). */
+  tenMiesiac: number | null;
+}
+
+/** Grosze z migawki na pełne złote; kwota z groszami albo ujemna to brak (bez zgadywania). */
+const pelneZlote = (gr: unknown) => (typeof gr === 'number' && Number.isInteger(gr) && gr >= 0 && gr % 100 === 0 ? gr / 100 : null);
+
+/**
+ * Kwoty z zatwierdzonych rozliczeń VAT (K7.1, najwyższa wersja każdego
+ * miesiąca), jednym zapytaniem o poprzedni i ten miesiąc. Przed 00168 tabeli
+ * nie ma: to brak, nie awaria.
+ */
+async function nadwyzkiZatwierdzone(client: SupabaseClient, tenantId: string, poprzedni: string, miesiac: string): Promise<NadwyzkiZatwierdzone> {
+  const { data, error } = await client
+    .from('tax_settlements')
+    .select('okres, wersja, migawka')
+    .eq('tenant_id', tenantId)
+    .eq('rodzaj', 'vat')
+    .in('okres', [`${poprzedni}-01`, `${miesiac}-01`])
+    .order('wersja', { ascending: false });
+  if (error) {
+    // Przed wgraniem 00168: Postgres 42P01, PostgREST PGRST205.
+    if (error.code === '42P01' || error.code === 'PGRST205') return { poprzedni: null, tenMiesiac: null };
+    throw new Error(`Nie można odczytać rozliczeń VAT: ${error.message}`);
+  }
+  type Wiersz = { okres: string; migawka?: { wejscia?: { nadwyzkaNaNastepnyGr?: unknown; nadwyzkaPoprzedniaGr?: unknown } } | null };
+  const wiersze = (data ?? []) as Wiersz[];
+  const najnowsza = (okres: string) => wiersze.find((w) => w.okres === okres)?.migawka?.wejscia;
+  return {
+    poprzedni: pelneZlote(najnowsza(`${poprzedni}-01`)?.nadwyzkaNaNastepnyGr),
+    tenMiesiac: pelneZlote(najnowsza(`${miesiac}-01`)?.nadwyzkaPoprzedniaGr),
+  };
+}
+
+/** P_39 z adresu strony (`?nadwyzka=`): pełne złote, bez znaku; inaczej null. */
+export function nadwyzkaZAdresu(wartosc: string | undefined): number | null {
+  return wartosc !== undefined && /^\d{1,13}$/.test(wartosc) ? Number(wartosc) : null;
 }
 
 /** Komunikat, gdy nadwyżka z poprzedniej deklaracji jest nieznana. */

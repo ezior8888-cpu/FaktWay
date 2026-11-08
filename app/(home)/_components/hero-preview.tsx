@@ -179,22 +179,32 @@ export function HeroPreview() {
                   <span className="hidden text-right sm:block">Brutto</span>
                   <span className="justify-self-end">Status KSeF</span>
                 </div>
-                <AnimatePresence initial={false}>
-                  {shown >= 1 ? (
-                    <motion.div
-                      key={`nowa-${cycle}`}
-                      className="overflow-hidden bg-primary/[0.04]"
-                      // Przy „ogranicz ruch” wiersz pojawia się tuż po hydratacji;
-                      // bez rozwijania, jak przy pierwszym renderze.
-                      initial={reducedMotion ? false : { height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.45, ease: EASE_OUT }}
-                    >
-                      <Row row={NEW_ROW} status={newStatus} />
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                {/*
+                  Miejsce na nową fakturę trzyma niewidoczny wiersz, a ona sama pojawia
+                  się nad nim. Karta ma stałą wysokość, więc treść pod podglądem nie
+                  skacze co pętlę (wcześniej wiersz rozwijał się od zera: na telefonie
+                  56 px w dół i z powrotem co 8,5 s).
+                */}
+                <div className="relative overflow-hidden">
+                  <div className="invisible">
+                    <Row row={NEW_ROW} status="przyjeta" />
+                  </div>
+                  <AnimatePresence initial={false}>
+                    {shown >= 1 ? (
+                      <motion.div
+                        key={`nowa-${cycle}`}
+                        className="absolute inset-0 bg-primary/[0.04]"
+                        // Przy „ogranicz ruch” wiersz pojawia się tuż po hydratacji, bez wjazdu.
+                        initial={reducedMotion ? false : { opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.45, ease: EASE_OUT }}
+                      >
+                        <Row row={NEW_ROW} status={newStatus} />
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
                 {ROWS.map((row) => (
                   <Row key={row.no} row={row} status="przyjeta" />
                 ))}

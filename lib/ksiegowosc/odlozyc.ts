@@ -1,7 +1,7 @@
 /**
  * „Ile odłożyć” (plan księgowości JDG, K5, D13): suma kwot bieżącego miesiąca
  * z danych do dziś, czyli tego, co za ten miesiąc przyjdzie zapłacić
- * w następnym. To szacunek: przychód miesiąca jeszcze rośnie, a odliczenia
+ * w następnym (od K7.1 przy czynnym VAT także VAT). To szacunek: przychód miesiąca jeszcze rośnie, a odliczenia
  * zależą od zapłat oznaczonych do dziś. Kwoty liczy silnik „Ten miesiąc”
  * (K4), z tą samą bramką D7: bez profilu albo potwierdzonych parametrów nie
  * ma kwoty, tylko powód.

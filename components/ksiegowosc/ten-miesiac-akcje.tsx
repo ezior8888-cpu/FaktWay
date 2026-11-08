@@ -14,12 +14,23 @@ import { Input } from '@/components/ui/input';
  * zmieniły, i tylko te kwoty, które są na ekranie (`skroty`). Po odmowie
  * strona się odświeża, więc widać aktualny stan.
  */
-export function ZatwierdzMiesiac({ miesiac, skroty, etykieta }: { miesiac: string; skroty: Record<string, string>; etykieta: string }) {
+export function ZatwierdzMiesiac({
+  miesiac,
+  skroty,
+  etykieta,
+  nadwyzkaVat = null,
+}: {
+  miesiac: string;
+  skroty: Record<string, string>;
+  etykieta: string;
+  /** P_39 wpisane na ekranie (K7.1); akcja liczy VAT z tą samą kwotą. */
+  nadwyzkaVat?: number | null;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const zatwierdz = () =>
     startTransition(async () => {
-      const wynik = await zatwierdzMiesiacAction({ miesiac, skroty });
+      const wynik = await zatwierdzMiesiacAction({ miesiac, skroty, nadwyzkaVat });
       if (wynik.success) {
         toast.success(wynik.nowe > 0 ? 'Miesiąc zatwierdzony' : 'Miesiąc był już zatwierdzony w tej wersji');
       } else {

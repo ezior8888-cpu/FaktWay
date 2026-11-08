@@ -19,6 +19,8 @@
  * - Skala i liniowy (K7): zamiast ryczałtu zaliczka PIT narastająco z KPiR
  *   (`pit.ts`), a składka zdrowotna od dochodu z poprzedniego miesiąca (za
  *   styczeń z grudnia, więc z KPiR roku poprzedniego).
+ * - VAT (K7.1): przy czynnym VAT pozycja z P_51 deklaracji (`vat.ts`) i terminem
+ *   25.; kwoty liczy odczyt VAT (`vat-dane.ts`), tu powstaje sama pozycja.
  */
 
 import { monthLabel, monthRange } from '@/lib/expenses/month';
@@ -32,8 +34,10 @@ import { wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { ryczaltMiesiaca, type RyczaltMiesiaca, type WejscieRyczaltu } from '@/lib/ksiegowosc/ryczalt';
 import { zdrowotnaOdDochodu, zdrowotnaRyczaltu, type ZdrowotnaOdDochodu, type ZdrowotnaRyczaltu } from '@/lib/ksiegowosc/zdrowotna';
 import { PROPORCJA, skladkiSpoleczne, type SkladkiSpoleczne } from '@/lib/ksiegowosc/zus';
+import type { WynikVat } from '@/lib/ksiegowosc/vat';
+import type { ZrodloNadwyzki } from '@/lib/ksiegowosc/vat-dane';
 
-export const RODZAJE_ROZLICZEN = ['ryczalt', 'pit', 'zus_spoleczne', 'zdrowotna'] as const;
+export const RODZAJE_ROZLICZEN = ['ryczalt', 'pit', 'zus_spoleczne', 'zdrowotna', 'vat'] as const;
 export type RodzajRozliczenia = (typeof RODZAJE_ROZLICZEN)[number];
 
 export const NAZWY_ROZLICZEN: Readonly<Record<RodzajRozliczenia, string>> = {
@@ -41,7 +45,25 @@ export const NAZWY_ROZLICZEN: Readonly<Record<RodzajRozliczenia, string>> = {
   pit: 'Zaliczka na podatek dochodowy',
   zus_spoleczne: 'Składki społeczne',
   zdrowotna: 'Składka zdrowotna',
+  vat: 'Podatek VAT',
 };
+
+/**
+ * VAT miesiąca (K7.1) z odczytu VAT: wynik deklaracji z nadwyżką z poprzedniej
+ * deklaracji i jej źródłem albo brak. Firma bez VAT (zwolnienie z art. 113,
+ * obszar `vat` zablokowany) nie ma tego pola.
+ */
+export type VatWejscie =
+  | { ok: true; wynik: WynikVat; nadwyzka: { zl: number; zrodlo: ZrodloNadwyzki } }
+  | { ok: false; brak: string; nadwyzkaNieznana: boolean };
+
+/** VAT w wyniku miesiąca: dla kafla, podpisu i pola nadwyżki na ekranie. */
+export interface VatWyniku {
+  wynik: WynikVat | null;
+  nadwyzka: { zl: number; zrodlo: ZrodloNadwyzki } | null;
+  /** Brak, bo nadwyżka z poprzedniej deklaracji jest nieznana (ekran pokazuje pole). */
+  nadwyzkaNieznana: boolean;
+}
 
 /** Zapłacona wersja rozliczenia (status `zaplacone`). */
 export interface Platnosc {
@@ -95,6 +117,8 @@ export interface WynikMiesiaca {
   ryczalt: RyczaltMiesiaca | null;
   /** Skala i liniowy: zaliczka narastająco za ten miesiąc. */
   pit: ZaliczkaMiesiaca | null;
+  /** VAT (K7.1); null, gdy firma nie płaci VAT. */
+  vat: VatWyniku | null;
   pozycje: PozycjaMiesiaca[];
 }
 
@@ -111,6 +135,8 @@ export interface WejscieMiesiaca {
    */
   kpir?: { rok: Kpir; poprzedni: Kpir | null; brakPoprzedniego?: string };
   wersje: readonly WersjaProfilu[];
+  /** VAT miesiąca (K7.1); brak pola albo null: firma bez VAT. */
+  vat?: VatWejscie | null;
   /** Wszystkie zapłacone wersje rozliczeń do tego miesiąca (odliczenia liczą się po dniu zapłaty). */
   platnosci: readonly Platnosc[];
   parametry: (rok: number) => ParametryRoku | null;
@@ -195,7 +221,10 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
     }
     return skladkiSpoleczne(w.miesiac, wersja, p.zus.liczby);
   })();
-  const termin = (rodzaj: 'ryczalt' | 'zaliczkaPit' | 'zus') => terminDla({ rodzaj, rok, miesiac: nr });
+  const termin = (rodzaj: 'ryczalt' | 'zaliczkaPit' | 'zus' | 'vatJpk') => terminDla({ rodzaj, rok, miesiac: nr });
+  // VAT (K7.1) po podatku i składkach, w obu formach.
+  const zVatem = (wynik: WynikMiesiaca): WynikMiesiaca =>
+    w.vat ? { ...wynik, pozycje: [...wynik.pozycje, pozycjaVat(w.vat, termin('vatJpk'))], vat: vatWyniku(w.vat) } : wynik;
   const pozycjaZus: PozycjaMiesiaca = zus.ok
     ? {
         ok: true,
@@ -210,7 +239,7 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
   if (wersja.forma !== 'ryczalt') {
     return {
       ok: true,
-      wynik: miesiacKpir(w, wersja.forma, p, przyrosty, termin, pozycjaZus, zus.ok ? zus.skladki : null, wersja),
+      wynik: zVatem(miesiacKpir(w, wersja.forma, p, przyrosty, termin, pozycjaZus, zus.ok ? zus.skladki : null, wersja)),
     };
   }
 
@@ -307,7 +336,7 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
 
   return {
     ok: true,
-    wynik: {
+    wynik: zVatem({
       miesiac: w.miesiac,
       profil: wersja,
       przychodGr: brakiOkresu(ewidencja, od, koniec).length === 0 ? sumyOkresu(wierszeOkresu(ewidencja, od, koniec)).razemGr : null,
@@ -317,9 +346,33 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
       zdrowotnaOdDochodu: null,
       ryczalt: ryczalt.ok ? ryczalt.ryczalt : null,
       pit: null,
+      vat: null,
       pozycje,
-    },
+    }),
   };
+}
+
+/**
+ * Pozycja VAT: kwota to P_51, a wejścia to pozostałe kwoty deklaracji, w tym
+ * P_62 (nadwyżka na następny miesiąc), z którego kolejny miesiąc bierze P_39
+ * po zatwierdzeniu. Źródło nadwyżki i liczby dokumentów idą do szczegółów,
+ * poza skrót (D6): dokument bez wpływu na kwoty nie tworzy nowej wersji.
+ */
+function pozycjaVat(v: VatWejscie, termin: Termin | null): PozycjaMiesiaca {
+  if (!v.ok) return { ok: false, rodzaj: 'vat', termin, brak: v.brak };
+  const { doZaplatyGr, liczbaSprzedazy, liczbaZakupow, ...kwoty } = v.wynik;
+  return {
+    ok: true,
+    rodzaj: 'vat',
+    kwotaGr: doZaplatyGr,
+    termin,
+    wejscia: { ...kwoty },
+    szczegoly: { zrodloNadwyzki: v.nadwyzka.zrodlo, liczbaSprzedazy, liczbaZakupow },
+  };
+}
+
+function vatWyniku(v: VatWejscie): VatWyniku {
+  return v.ok ? { wynik: v.wynik, nadwyzka: v.nadwyzka, nadwyzkaNieznana: false } : { wynik: null, nadwyzka: null, nadwyzkaNieznana: v.nadwyzkaNieznana };
 }
 
 type Przyrost = ReturnType<typeof przyrostyZaplat>[number];
@@ -335,7 +388,7 @@ function miesiacKpir(
   forma: FormaPit,
   p: ParametryRoku,
   przyrosty: readonly Przyrost[],
-  termin: (rodzaj: 'ryczalt' | 'zaliczkaPit' | 'zus') => Termin | null,
+  termin: (rodzaj: 'ryczalt' | 'zaliczkaPit' | 'zus' | 'vatJpk') => Termin | null,
   pozycjaZus: PozycjaMiesiaca,
   skladki: SkladkiSpoleczne | null,
   wersja: WersjaProfilu,
@@ -432,6 +485,7 @@ function miesiacKpir(
     zdrowotnaOdDochodu: zdrowotna.ok ? zdrowotna.zdrowotna : null,
     ryczalt: null,
     pit: pit.ok ? pit.zaliczka : null,
+    vat: null,
     pozycje,
   };
 }

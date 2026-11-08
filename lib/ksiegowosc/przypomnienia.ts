@@ -24,21 +24,28 @@ export type DniPrzed = (typeof DNI_PRZED_TERMINEM)[number];
 
 /**
  * Rozliczenia z jednym terminem: ryczałt albo zaliczka PIT (K7) osobno,
- * składki ZUS razem (jedna deklaracja). Która z dwóch pierwszych dotyczy
- * firmy, rozstrzyga jej forma (`grupyFormy`).
+ * składki ZUS razem (jedna deklaracja), VAT (K7.1) z terminem 25. Która
+ * z dwóch pierwszych dotyczy firmy, rozstrzyga jej forma (`grupyFormy`);
+ * VAT dotyczy płatnika VAT, co sprawdza zadanie.
  */
-export type Grupa = 'ryczalt' | 'pit' | 'zus';
+export type Grupa = 'ryczalt' | 'pit' | 'zus' | 'vat';
 export const RODZAJE_GRUPY: Readonly<Record<Grupa, readonly RodzajRozliczenia[]>> = {
   ryczalt: ['ryczalt'],
   pit: ['pit'],
   zus: ['zus_spoleczne', 'zdrowotna'],
+  vat: ['vat'],
 };
 
-const TERMIN_GRUPY: Readonly<Record<Grupa, 'ryczalt' | 'zaliczkaPit' | 'zus'>> = { ryczalt: 'ryczalt', pit: 'zaliczkaPit', zus: 'zus' };
+const TERMIN_GRUPY: Readonly<Record<Grupa, 'ryczalt' | 'zaliczkaPit' | 'zus' | 'vatJpk'>> = {
+  ryczalt: 'ryczalt',
+  pit: 'zaliczkaPit',
+  zus: 'zus',
+  vat: 'vatJpk',
+};
 
-/** Grupy z przypomnienia, które dotyczą firmy o tej formie opodatkowania. */
+/** Grupy z przypomnienia, które dotyczą firmy o tej formie opodatkowania (VAT od formy nie zależy). */
 export function grupyFormy(grupy: readonly Grupa[], forma: WersjaProfilu['forma']): Grupa[] {
-  return grupy.filter((g) => g === 'zus' || (forma === 'ryczalt' ? g === 'ryczalt' : g === 'pit'));
+  return grupy.filter((g) => g === 'zus' || g === 'vat' || (forma === 'ryczalt' ? g === 'ryczalt' : g === 'pit'));
 }
 
 export interface TerminNaDzis {
@@ -64,7 +71,7 @@ export function terminyNaDzis(dzis: string): TerminNaDzis[] {
   const biezacy = dzis.slice(0, 7);
   for (const miesiac of [shiftMonth(biezacy, -1), biezacy]) {
     const [rok, nr] = miesiac.split('-').map(Number);
-    for (const grupa of ['ryczalt', 'pit', 'zus'] as const) {
+    for (const grupa of ['ryczalt', 'pit', 'zus', 'vat'] as const) {
       const termin = terminDla({ rodzaj: TERMIN_GRUPY[grupa], rok, miesiac: nr });
       if (!termin) continue;
       for (const dni of DNI_PRZED_TERMINEM) {
@@ -120,6 +127,7 @@ const NAZWY: Readonly<Record<RodzajRozliczenia, string>> = {
   pit: 'zaliczka PIT',
   zus_spoleczne: 'składki społeczne',
   zdrowotna: 'składka zdrowotna',
+  vat: 'VAT',
 };
 
 const zl = (gr: number) => `${formatPlMoney(gr / 100)} zł`;

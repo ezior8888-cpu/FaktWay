@@ -222,3 +222,51 @@ describe('korekta większa niż przychód ze stawką w miesiącu', () => {
     expect(kwoty(sierpien)[0]).toEqual(['ryczalt', 114_000]);
   });
 });
+
+describe('VAT w „Ten miesiąc” (K7.1)', () => {
+  const WYNIK_VAT = {
+    naleznyGr: 690_000,
+    nadwyzkaPoprzedniaGr: 120_000,
+    naliczonyGr: 315_500,
+    doZaplatyGr: 374_500,
+    nadwyzkaNaNastepnyGr: 0,
+    liczbaSprzedazy: 3,
+    liczbaZakupow: 2,
+  };
+
+  it('czynny VAT: pozycja z P_51 i terminem 25. następnego miesiąca, po podatku i składkach; źródło nadwyżki poza skrótem', () => {
+    const w = tenMiesiac(wejscie({ vat: { ok: true, wynik: WYNIK_VAT, nadwyzka: { zl: 1200, zrodlo: 'zatwierdzone' } } }));
+    expect(kwoty(w)).toEqual([
+      ['ryczalt', expect.any(Number)],
+      ['zus_spoleczne', expect.any(Number)],
+      ['zdrowotna', expect.any(Number)],
+      ['vat', 374_500],
+    ]);
+    if (!w.ok) throw new Error(w.braki.join(' '));
+    const vat = w.wynik.pozycje.find((p) => p.rodzaj === 'vat');
+    expect(vat).toMatchObject({
+      ok: true,
+      termin: { faktyczny: '2026-03-25' },
+      wejscia: { naleznyGr: 690_000, nadwyzkaPoprzedniaGr: 120_000, naliczonyGr: 315_500, nadwyzkaNaNastepnyGr: 0 },
+      szczegoly: { zrodloNadwyzki: 'zatwierdzone' },
+    });
+    expect(JSON.stringify(vat && vat.ok ? vat.wejscia : null)).not.toContain('zatwierdzone');
+    // Liczby dokumentów nie są kwotami: dokument bez wpływu na VAT nie tworzy nowej wersji (D6).
+    expect(vat && vat.ok ? vat.wejscia : null).not.toHaveProperty('liczbaSprzedazy');
+    expect(vat && vat.ok ? vat.szczegoly : null).toMatchObject({ liczbaSprzedazy: 3, liczbaZakupow: 2 });
+    expect(w.wynik.vat).toEqual({ wynik: WYNIK_VAT, nadwyzka: { zl: 1200, zrodlo: 'zatwierdzone' }, nadwyzkaNieznana: false });
+  });
+
+  it('nieznana nadwyżka: brak pozycji VAT z treścią; bez VAT (zwolnienie albo obszar): bez pozycji; przy skali VAT też jest', () => {
+    const brak = tenMiesiac(wejscie({ vat: { ok: false, brak: 'Do wyliczenia VAT potrzebna jest nadwyżka.', nadwyzkaNieznana: true } }));
+    expect(kwoty(brak).at(-1)).toEqual(['vat', 'brak']);
+    if (!brak.ok) throw new Error(brak.braki.join(' '));
+    expect(brak.wynik.vat).toEqual({ wynik: null, nadwyzka: null, nadwyzkaNieznana: true });
+    expect(kwoty(tenMiesiac(wejscie({ vat: null }))).map(([r]) => r)).toEqual(['ryczalt', 'zus_spoleczne', 'zdrowotna']);
+    expect(kwoty(tenMiesiac(wejscie())).map(([r]) => r)).toEqual(['ryczalt', 'zus_spoleczne', 'zdrowotna']);
+    const skala = tenMiesiac(
+      wejscie({ wersje: [{ ...PROFIL, forma: 'skala', stawkaDomyslna: null }], vat: { ok: true, wynik: WYNIK_VAT, nadwyzka: { zl: 1200, zrodlo: 'mf' } } }),
+    );
+    expect(kwoty(skala).map(([r]) => r)).toEqual(['pit', 'zus_spoleczne', 'zdrowotna', 'vat']);
+  });
+});
