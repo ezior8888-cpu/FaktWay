@@ -10,7 +10,7 @@ import type { KsefEnvironment } from '@/types/ksef';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { requireMatchingKsefEnvironment } from './claim-environment';
 
-import { getKsefBaseUrl } from './client';
+import { getKsefBaseUrl, ksefErrorCodes } from './client';
 import { ksefRateLimiter } from './rate-limiter';
 import { ksefSessionCache } from './session-cache';
 
@@ -177,10 +177,14 @@ export async function downloadUpoFromKsef(
         };
       }
 
-      const errorText = await response.text();
+      // Treść odpowiedzi czytamy tylko po kody KSeF. Komunikat idzie do
+      // `upo_receipts.last_error`, komunikatu błędu joba (log workera,
+      // `inngest_run_log`, Sentry po wyczerpaniu prób), więc treść nigdy:
+      // może nieść dane kontrahenta (F-093-UPO).
+      const codes = ksefErrorCodes(await response.text());
       return {
         success: false,
-        error: `KSeF zwrócił ${response.status}: ${errorText.slice(0, 200)}`,
+        error: upoHttpErrorMessage(response.status, codes),
         errorCode: `HTTP_${response.status}`,
         retryable: response.status >= 500,
       };
@@ -223,6 +227,20 @@ export async function downloadUpoFromKsef(
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** Najwyżej tyle kodów w komunikacie: lista przychodzi z zewnątrz. */
+const MAX_CODES_IN_MESSAGE = 10;
+
+/**
+ * Komunikat błędu HTTP pobrania UPO: status i kody KSeF, bez treści odpowiedzi.
+ * Reguła jak w `lib/ksef/history-sync/errors.ts` („HTTP {status} {ścieżka}
+ * kody:{…}”), tylko bez ścieżki: UPO ma jedną, a krótki napis grupuje się
+ * w `scripts/ops/kontrola-faktur-ksef.sh` (pierwsze 60 znaków `last_error`).
+ */
+function upoHttpErrorMessage(status: number, codes: readonly number[]): string {
+  const shown = [...new Set(codes)].slice(0, MAX_CODES_IN_MESSAGE);
+  return `KSeF zwrócił HTTP ${status} kody:${shown.length ? shown.join(',') : '-'}`;
+}
 
 async function sha256(text: string): Promise<string> {
   const encoder = new TextEncoder();
