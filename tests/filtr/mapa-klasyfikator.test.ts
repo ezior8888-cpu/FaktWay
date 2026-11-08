@@ -368,3 +368,20 @@ describe('prawdziwa mapa', () => {
     expect(() => wczytajMape()).not.toThrow();
   });
 });
+
+describe('poprawki po przeglądzie (drugi czytelnik F1)', () => {
+  it('dodana linia „++ x” w hunku nie jest nagłówkiem pliku', () => {
+    const diff = ['diff --git a/lib/a.ts b/lib/a.ts', '--- a/lib/a.ts', '+++ b/lib/a.ts', '@@ -0,0 +1,2 @@', '+++ licznik', '+const vat = 1;'].join('\n');
+    expect(plikiZDiffu(diff)).toEqual([{ plik: 'lib/a.ts', tresc: '++ licznik\nconst vat = 1;' }]);
+  });
+
+  it('`**` w środku nazwy nie przechodzi przez katalogi', () => {
+    expect(pasujeDoWzorca('lib/ksef/duplicate**.ts', 'lib/ksef/duplicate-check.ts')).toBe(true);
+    expect(pasujeDoWzorca('lib/ksef/duplicate**.ts', 'lib/ksef/duplicate/x/y.ts')).toBe(false);
+  });
+
+  it('nazwa katalogu też jest sygnałem', () => {
+    expect(sygnalyNazwy(mapa, 'lib/tax/index.ts')).toEqual(['nazwa:podatki']);
+    expect(klasyfikujPlik(mapa, 'lib/tax/index.ts', { tresc: 'export {};' })).toMatchObject({ status: 'niesklasyfikowany' });
+  });
+});

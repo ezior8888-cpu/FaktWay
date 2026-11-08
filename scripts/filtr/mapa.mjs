@@ -98,8 +98,12 @@ function zrodloWzorca(wzorzec) {
         if (wzorzec[i + 2] === '/') {
           wynik += '(?:[^/]+/)*';
           i += 2;
-        } else {
+        } else if (i + 2 === wzorzec.length) {
           wynik += '.*';
+          i += 1;
+        } else {
+          // `**` w środku nazwy działa jak `*`: nie przechodzi przez `/`.
+          wynik += '[^/]*';
           i += 1;
         }
         continue;
@@ -276,9 +280,10 @@ export function znormalizowanaNazwa(plik) {
     .replace(/^-+|-+$/g, '');
 }
 
+/** Sygnały z nazwy pliku i z nazw jego katalogów (`lib/zus/index.ts` też mówi „ZUS”). */
 export function sygnalyNazwy(mapa, plik) {
-  const nazwa = znormalizowanaNazwa(plik);
-  return mapa._nazwy.filter((s) => s.regex.test(nazwa)).map((s) => `nazwa:${s.id}`);
+  const czlony = plik.split('/').map((czlon) => znormalizowanaNazwa(czlon));
+  return mapa._nazwy.filter((s) => czlony.some((nazwa) => s.regex.test(nazwa))).map((s) => `nazwa:${s.id}`);
 }
 
 export function sygnalyTresci(mapa, tekst) {
@@ -493,6 +498,9 @@ export function porownajMapy(stara, nowa, pliki = []) {
 export function plikiZDiffu(diff) {
   const pliki = new Map();
   let biezacy = null;
+  // Nagłówki `---`/`+++` są tylko przed pierwszym `@@` pliku; w hunku linia
+  // `+++ x` to dodana linia o treści `++ x`.
+  let wHunku = false;
   const dodaj = (sciezka) => {
     if (!sciezka || sciezka === '/dev/null') return null;
     if (!pliki.has(sciezka)) pliki.set(sciezka, []);
@@ -501,6 +509,7 @@ export function plikiZDiffu(diff) {
   for (const linia of diff.split('\n')) {
     if (linia.startsWith('diff --git ')) {
       biezacy = null;
+      wHunku = false;
       const dopasowanie = /^diff --git a\/(.+?) b\/(.+)$/.exec(linia);
       if (dopasowanie) {
         dodaj(dopasowanie[1]);
@@ -508,15 +517,19 @@ export function plikiZDiffu(diff) {
       }
       continue;
     }
-    if (linia.startsWith('--- ')) continue;
-    if (linia.startsWith('+++ ')) {
+    if (linia.startsWith('@@')) {
+      wHunku = true;
+      continue;
+    }
+    if (!wHunku && linia.startsWith('--- ')) continue;
+    if (!wHunku && linia.startsWith('+++ ')) {
       const cel = linia.slice(4).replace(/^b\//, '');
       if (cel !== '/dev/null') biezacy = dodaj(cel);
       continue;
     }
-    if (linia.startsWith('rename from ')) dodaj(linia.slice('rename from '.length));
-    if (linia.startsWith('rename to ')) biezacy = dodaj(linia.slice('rename to '.length));
-    if (biezacy && linia.startsWith('+')) pliki.get(biezacy).push(linia.slice(1));
+    if (!wHunku && linia.startsWith('rename from ')) dodaj(linia.slice('rename from '.length));
+    if (!wHunku && linia.startsWith('rename to ')) biezacy = dodaj(linia.slice('rename to '.length));
+    if (wHunku && biezacy && linia.startsWith('+')) pliki.get(biezacy).push(linia.slice(1));
   }
   return [...pliki.entries()].map(([plik, linie]) => ({ plik, tresc: linie.join('\n') }));
 }
@@ -598,12 +611,20 @@ function glowna(argumenty) {
   if (reszta[0] === '--diff' || reszta[0] === '--diff-z-pliku') {
     let diff;
     if (reszta[0] === '--diff') {
+      // Od punktu rozejścia z bazą do drzewa roboczego: zatwierdzone,
+      // niezatwierdzone i nowe, jeszcze nieśledzone pliki (hook po edycji).
       const baza = reszta[1] ?? 'origin/main';
-      diff = execFileSync('git', ['diff', '--no-color', '-M', '-U0', `${baza}...HEAD`], {
-        cwd: KATALOG_REPO,
-        encoding: 'utf8',
-        maxBuffer: 256 * 1024 * 1024,
-      });
+      const opcje = { cwd: KATALOG_REPO, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 };
+      const punkt = execFileSync('git', ['merge-base', baza, 'HEAD'], opcje).trim();
+      diff = execFileSync('git', ['diff', '--no-color', '-M', '-U0', punkt], opcje);
+      const nowe = execFileSync('git', ['ls-files', '-z', '--others', '--exclude-standard'], opcje)
+        .split('\0')
+        .filter(Boolean);
+      for (const plik of nowe) {
+        const tresc = readFileSync(join(KATALOG_REPO, plik), 'utf8');
+        diff += `\ndiff --git a/${plik} b/${plik}\n--- /dev/null\n+++ b/${plik}\n@@ -0,0 +1 @@\n`;
+        diff += tresc.split('\n').map((linia) => `+${linia}`).join('\n');
+      }
     } else {
       if (!reszta[1]) {
         console.error('Użycie: node scripts/filtr/mapa.mjs --diff-z-pliku <plik.diff|->');
