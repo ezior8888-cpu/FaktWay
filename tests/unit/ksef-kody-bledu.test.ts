@@ -26,7 +26,7 @@ import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 const status = (code: number) => ({ code, description: 'Opis', details: ['x'] }) as never;
 
 describe('ksefErrorCodes', () => {
-  it('D-A4-1: kody z treści application/problem+json (ksefFetch zostawia ją jako tekst)', () => {
+  it('D-A4-1: kody z JSON-u w tekście (odpowiedź z błędnym nagłówkiem; problem+json parsuje już ksefFetch)', () => {
     expect(ksefErrorCodes(JSON.stringify({ errors: [{ code: 21165 }] }))).toEqual([21165]);
     expect(ksefErrorCodes(JSON.stringify({ exception: { exceptionDetailList: [{ exceptionCode: 21164 }] } }))).toEqual([21164]);
     expect(ksefErrorCodes('Bad gateway')).toEqual([]);

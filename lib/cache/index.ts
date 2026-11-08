@@ -1,9 +1,12 @@
 /**
- * Public API cache layer — wrapper nad Upstash Redis (`lib/cache/redis.ts`).
+ * Public API cache layer — wrapper nad Redisem (`lib/cache/redis.ts`;
+ * gdzie stoi i czemu zmienne nazywają się UPSTASH_* — nagłówek tamtego pliku).
  *
- * Gwarancja "fail-soft": każda operacja przechwytuje błędy Redisa i zwraca
- * null/false zamiast rzucać. Aplikacja nigdy nie wybucha przez cache miss
- * lub Redis outage — w najgorszym wypadku spada na live query.
+ * Gwarancja "fail-soft" DOTYCZY TYLKO TEJ WARSTWY: każda operacja cache
+ * przechwytuje błędy Redisa i zwraca null/false zamiast rzucać — przy cache
+ * miss lub awarii Redisa spada na live query. Limitery MFA i hasła celowo
+ * działają odwrotnie (fail-closed), więc awaria Redisa blokuje m.in. logowanie
+ * z 2FA i operacje na haśle — pełna lista w nagłówku `lib/cache/redis.ts`.
  *
  * Monitorowanie: każdy miss/hit/error inkrementuje counter w Sentry
  * breadcrumbs. Dla pełnej observability docelowo wystawimy Prometheus

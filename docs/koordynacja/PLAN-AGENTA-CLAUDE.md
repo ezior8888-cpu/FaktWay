@@ -71,7 +71,7 @@ Status: ✅ zrobione · 🔄 w toku · ⏳ czeka na kogoś · ⬜ do zrobienia
 | E12 | Koszty samochodu osobowego (50% VAT, 75% PIT) — aplikacja odlicza 100% VAT i nie stosuje limitu | ⏳ decyzja | 4.4 |
 | E15 | Job OCR po B4: ponowienie bez płatnego OCR, karta i powiadomienie z zapisanego wydatku, `onProcessOcrExhausted` bez „nieudane” w ciemno | ✅ 03.10 | #192 (razem z B4) |
 | E16 | Resztki OCR i karty wydatku: karta przy braku kursu (`deductible: 1` → „stale”, kwota w walucie jako „zł”, `unknown_seller` nieosiągalne); status odczytu OCR (błąd bazy = „Job nie istnieje”); baner „odczytany” nad kartą porażki; zawieszone „przetwarzanie” (decyzja); dubel przy ponownym wgraniu zdjęcia (decyzja) | ✅ 03.10 kod / ⏳ decyzje | #198; decyzje Bartosza w 5 |
-| E17 | Podpięcie E16 w `process-ocr` (po scaleniu #192 i #198): waluta kwot i `is_deductible` do karty (świeża ścieżka i `reviewSourceFromSaved`), `ocrJobId` w karcie sukcesu (baner bez wniosku z czasu), karta porażki w `onProcessOcrExhausted` | ⬜ czeka na scalenie | 5 |
+| E17 | Podpięcie E16 w `process-ocr` (po scaleniu #192 i #198): waluta kwot i `is_deductible` do karty (świeża ścieżka i `reviewSourceFromSaved`), `ocrJobId` w karcie sukcesu (baner bez wniosku z czasu), karta porażki w `onProcessOcrExhausted` | ✅ 05.11 kod / ⏳ scalenie | #416 (osobne ustalenia w opisie PR) |
 
 ### 3.1. Audyt jobów pod ponowienia (E4)
 
@@ -191,6 +191,7 @@ aktualizacji z `main` (03.10 po południu: #187–#189 i #192 zaktualizowane).
 | C-17 = audyt F-020: faktura zaliczkowa bez P_6 (data otrzymania zaliczki) i z przyszłym terminem zamiast „zapłacono” | otwarte; `Zamowienie` zrobione (AUD-71, #177). Generator ZAL zmieniany 02.10 przez sesje Bartosza (AUD-70) — **zanim weźmiesz: ustal z Bartoszem**, czy ktoś to robi |
 | C-15 = AUD-04: korekty i zaliczki przy stawce „zw” rzucają wyjątek; korekty na produkcji wstrzymane (`lib/ksef/submission-holds.ts`, AUD-03/04) | otwarte; #186 scalony 03.10 — zostaje uzgodnienie z Bartoszem (pliki korekt zmieniały jego sesje) |
 | F-093: `KsefApiError.ksefCode` zawsze `null` + odpowiedź `application/problem+json` nieparsowana (kody z tego kształtu, także 21184 z F-050, nieczytelne w prawdziwym `ksefFetch`) | zrobione 03.10 w #189 — czeka na scalenie przez Bartosza |
+| F-093-KOPIA: `historyKsefErrorCodes` w `lib/ksef/history-sync/errors.ts` to ręczna kopia `ksefErrorCodes`. Powód kopii (zakaz importu `lib/ksef/submit.ts`) znika po #189, bo parser jest wtedy w `client.ts`, który ten plik już importuje | otwarte, po scaleniu #189: usunąć kopię i importować parser z `client.ts`; do tego czasu `tests/unit/ksef-kod-bledu.test.ts` sprawdza obie na tych samych danych |
 | C-21 (dawniej mylnie „C-18” — ten numer ma sprawa „Niepewny wynik wysyłki KSeF i UPO”): strona przepływów ładuje dane od 1 stycznia i przekazuje `dataFrom` | zrobione 03.10 w #188 — czeka na scalenie przez Bartosza |
 | Szacunek podatku zakłada 19% liniowy dla każdego (podpisane na kafelku); skala i ryczałt dałyby inne kwoty; Flo ma profil podatkowy (`taxGateOpen`) | decyzja produktowa (Bartosz) |
 | JPK_V7M: pole dla „oo” i okres według daty sprzedaży | księgowa |

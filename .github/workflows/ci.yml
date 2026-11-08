@@ -41,6 +41,22 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
+      # Plan usprawnień 4.6: przyrostowy tsc (`incremental` w tsconfig.json
+      # pisze tsconfig.tsbuildinfo) i cache ESLinta (strategia `content`
+      # w package.json, bo świeży checkout zmienia czasy plików). Oba porównują
+      # treść plików, więc stary cache najwyżej nic nie przyspieszy, nie da
+      # fałszywie zielonego wyniku. Klucz od lockfile i konfiguracji: po zmianie
+      # zależności zaczynamy od zera, w obrębie tego samego lockfile bierzemy
+      # najnowszy zapis (restore-keys).
+      - name: Cache tsc i ESLint
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            tsconfig.tsbuildinfo
+            .tmp/eslintcache
+          key: tsc-eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tsconfig.json', 'eslint.config.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            tsc-eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tsconfig.json', 'eslint.config.mjs') }}-
       - name: Typecheck
         run: pnpm run typecheck
       - name: Lint
@@ -134,6 +150,11 @@ jobs:
           # z „heap out of memory” (20.10.2026). Strażnik: tests/unit/build-pamiec-sterty.test.ts.
           NODE_OPTIONS: '--max-old-space-size=4096'
         # Bez sekretów aplikacji — build ma przechodzić bez nich (jak lokalnie).
+      # Plan usprawnień 4.5: Next 16 nie wypisuje już „First Load JS”, więc
+      # skrypt liczy go z plików .next (gzip, per trasa) i porównuje z progiem
+      # w scripts/ci/budzet-js.json. Test logiki: tests/unit/budzet-js.test.ts.
+      - name: Budżet First Load JS
+        run: node scripts/ci/budzet-js.mjs .next scripts/ci/budzet-js.json
 
   # AUD-109: izolacja firm (RLS) sprawdzana przed scaleniem, na lokalnym
   # Supabase z migracjami z repo — bez sekretów i bez dostępu do produkcji.

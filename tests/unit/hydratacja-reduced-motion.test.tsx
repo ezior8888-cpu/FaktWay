@@ -105,6 +105,8 @@ describe('hydratacja przy prefers-reduced-motion: reduce', () => {
     expect(errors).toEqual([]);
     // Stan końcowy jak dotąd: nowa faktura przyjęta, UPO pobrane.
     expect(container.textContent).toContain('FV/2026/11/004 przyjęta, UPO pobrane');
+    // Szkielet z serwera znika od razu, a nie wygasa pod gotowym wierszem (#457).
+    expect(container.querySelector('[data-testid="podglad-szkielet"]')).toBeNull();
   });
 
   it('strona główna: telefon', async () => {

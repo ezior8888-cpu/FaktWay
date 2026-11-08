@@ -84,7 +84,7 @@ bramka: `/wylacz rejestracja`.
 
 | Flaga | Co blokuje | Błąd odczytu flagi |
 |---|---|---|
-| `disableSignups` | formularz `/register` (bez przycisku Google) i zakładanie **pierwszej** firmy — konto z Google albo prosto z GoTrue bez firmy nic nie może; zaproszenia i kolejne firmy istniejących klientów działają | rejestracja zamknięta |
+| `disableSignups` | zakładanie nowych kont: formularz `/register` (bez przycisku Google) i hook GoTrue z 00102 (e-mail, pierwsze logowanie Google, API; działa przy `GOTRUE_HOOK_BEFORE_USER_CREATED_*` na `db-1`), oraz **pierwszej** firmy w aplikacji (`app/actions/organizations.ts`); działają logowanie, kolejne firmy klientów i przyjęcie zaproszenia przez osobę z kontem, a osoba bez konta dostanie mail, ale przyjmie zaproszenie dopiero po zdjęciu flagi (link ważny 7 dni) | rejestracja zamknięta |
 | `maintenanceMode` | panel zalogowanego i onboarding → `/przerwa-techniczna`, prywatne API → 503 `maintenance`; działają strony publiczne, logowanie, `/admin`, `/api/health`, webhooki, joby | ostatnia znana wartość, a bez niej panel działa |
 
 `disableSignups` działa od razu (odczyt wprost z bazy). `maintenanceMode`

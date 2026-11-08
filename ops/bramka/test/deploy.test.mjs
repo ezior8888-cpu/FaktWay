@@ -103,40 +103,60 @@ test('start: zły SHA → odmowa bez wdrożenia', async () => {
   assert.equal(deployer.isRunning(), false);
 });
 
-test('start: pełny przebieg — najpierw web, potem worker, weryfikacja i dziennik', async () => {
+test('start: pełny przebieg — najpierw worker, potem web, weryfikacja i dziennik', async () => {
   const { deployer, calls, notify, settle } = setup();
   const r = await deployer.start('abcdef12', 'tg:1', notify);
   assert.equal(r.started, true);
   await settle();
-  assert.deepEqual(calls.deploy, ['web', 'worker']);
+  assert.deepEqual(calls.deploy, ['worker', 'web']);
   assert.deepEqual(calls.log.map((l) => l.action), ['ops.deploy.started', 'ops.deploy.finished']);
   assert.match(calls.notify.at(-1), /Wdrożono abcdef12/);
 });
 
-test('start: gałąź przesunęła się po webie → worker NIE jest wdrażany, ostrzeżenie o stanie mieszanym', async () => {
-  // plan() → HEAD, deployOne(web) → HEAD, deployOne(worker) → NOWY
+test('start: gałąź przesunęła się po workerze → web NIE jest wdrażany, ostrzeżenie o stanie mieszanym', async () => {
+  // plan() → HEAD, deployOne(worker) → HEAD, deployOne(web) → NOWY
   const { deployer, calls, notify, settle } = setup({ headSeq: [HEAD, HEAD, 'ffffffff00000000'] });
   await deployer.start('abcdef12', 'tg:1', notify);
   await settle();
-  assert.deepEqual(calls.deploy, ['web']);
-  assert.match(calls.notify.at(-1), /przesunęła się.*stan mieszany/s);
+  assert.deepEqual(calls.deploy, ['worker']);
+  assert.match(calls.notify.at(-1), /Web: gałąź przesunęła się.*Worker jest na abcdef12, web na poprzedniej wersji — stan mieszany/s);
   assert.equal(calls.log.at(-1).action, 'ops.deploy.failed');
 });
 
-test('start: Coolify wdrożył inny commit → stop przed workerem', async () => {
-  const { deployer, calls, notify, settle } = setup({ result: { web: { status: 'finished', commit: 'ffffffff' } } });
+test('start: Coolify wdrożył inny commit workera → stop przed webem', async () => {
+  const { deployer, calls, notify, settle } = setup({ result: { worker: { status: 'finished', commit: 'ffffffff' } } });
   await deployer.start('abcdef12', 'tg:1', notify);
   await settle();
-  assert.deepEqual(calls.deploy, ['web']);
-  assert.match(calls.notify.at(-1), /zamiast abcdef12/);
+  assert.deepEqual(calls.deploy, ['worker']);
+  assert.match(calls.notify.at(-1), /Worker: Coolify wdrożył ffffffff zamiast abcdef12/);
+  assert.doesNotMatch(calls.notify.at(-1), /stan mieszany/);
 });
 
-test('start: nieudany build webu → stop, informacja o wycofaniu w Coolify', async () => {
+test('start: nieudany build workera → stop, web nietknięty, informacja o wycofaniu w Coolify', async () => {
+  const { deployer, calls, notify, settle } = setup({ result: { worker: { status: 'failed', commit: HEAD } } });
+  await deployer.start('abcdef12', 'tg:1', notify);
+  await settle();
+  assert.deepEqual(calls.deploy, ['worker']);
+  assert.match(calls.notify.at(-1), /Worker: wdrożenie zakończone statusem „failed”/);
+  assert.doesNotMatch(calls.notify.at(-1), /stan mieszany/);
+  assert.equal(calls.log.at(-1).action, 'ops.deploy.failed');
+});
+
+test('start: worker przeszedł, build webu padł → stan mieszany odwrotny: worker nowy, web stary', async () => {
   const { deployer, calls, notify, settle } = setup({ result: { web: { status: 'failed', commit: HEAD } } });
   await deployer.start('abcdef12', 'tg:1', notify);
   await settle();
-  assert.deepEqual(calls.deploy, ['web']);
-  assert.match(calls.notify.at(-1), /statusem „failed”/);
+  assert.deepEqual(calls.deploy, ['worker', 'web']);
+  assert.match(calls.notify.at(-1), /Web: wdrożenie zakończone statusem „failed”/);
+  assert.match(calls.notify.at(-1), /Worker jest na abcdef12, web na poprzedniej wersji — stan mieszany/);
+  assert.equal(calls.log.at(-1).action, 'ops.deploy.failed');
+});
+
+test('start: komunikat po workerze zapowiada web', async () => {
+  const { deployer, calls, notify, settle } = setup();
+  await deployer.start('abcdef12', 'tg:1', notify);
+  await settle();
+  assert.ok(calls.notify.some((m) => /Worker wdrożony\. Teraz web\./.test(m)));
 });
 
 test('start: dwa szybkie /wdroz — drugie odrzucone, jedno wdrożenie', async () => {
@@ -147,5 +167,5 @@ test('start: dwa szybkie /wdroz — drugie odrzucone, jedno wdrożenie', async (
   ]);
   assert.deepEqual([a.started, b.started].sort(), [false, true]);
   await settle();
-  assert.deepEqual(calls.deploy, ['web', 'worker']);
+  assert.deepEqual(calls.deploy, ['worker', 'web']);
 });

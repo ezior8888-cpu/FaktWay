@@ -1,4 +1,4 @@
-import { KsefApiError, ksefFetch } from './client';
+import { KsefApiError, ksefErrorCodes, ksefFetch } from './client';
 import { ksefNumericStatusCode } from './normalize-status-code';
 import { generateSessionEncryption, encryptInvoiceXml } from './encryption';
 import { ksefSessionCache } from './session-cache';
@@ -17,6 +17,11 @@ import type {
   SessionInvoicesResponse,
 } from '@/types/ksef';
 import { INVOICE_STATUS } from '@/types/ksef';
+
+// Odczyt kodów błędu KSeF mieszka w `client.ts` (getter `KsefApiError.ksefCode`
+// czyta to samo). Eksport stąd zostaje, bo job wysyłki i atrapy testów biorą
+// go z `@/lib/ksef/submit`.
+export { ksefErrorCodes };
 
 export interface SubmitInvoiceResult {
   /** Numer KSeF nadany fakturze po akceptacji */
@@ -593,35 +598,6 @@ async function pollInvoiceStatus(
 
 /** Kod KSeF „Sesja tymczasowo niedostępna” (API 2.8.0, produkcja od 23.09.2026). */
 export const KSEF_SESSION_TEMPORARILY_UNAVAILABLE = 21184;
-
-/**
- * Kody błędów z odpowiedzi KSeF. API zwraca je w dwóch kształtach:
- * `application/problem+json` (`errors[].code`) albo starszym
- * `exception.exceptionDetailList[].exceptionCode` (oba w `open-api.json` MF);
- * atrapy w repo mają jeszcze `exceptionDetailList` na wierzchu.
- */
-export function ksefErrorCodes(body: unknown): number[] {
-  // `application/problem+json` ksefFetch zostawia jako tekst (parsuje tylko `application/json`).
-  if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      return [];
-    }
-  }
-  if (!body || typeof body !== 'object') return [];
-  const b = body as {
-    errors?: Array<{ code?: unknown }>;
-    exception?: { exceptionDetailList?: Array<{ exceptionCode?: unknown }> };
-    exceptionDetailList?: Array<{ exceptionCode?: unknown }>;
-  };
-  const codes = [
-    ...(b.errors ?? []).map((e) => e.code),
-    ...(b.exception?.exceptionDetailList ?? []).map((e) => e.exceptionCode),
-    ...(b.exceptionDetailList ?? []).map((e) => e.exceptionCode),
-  ];
-  return codes.map(Number).filter((c) => Number.isInteger(c));
-}
 
 /**
  * 21184 przychodzi z HTTP 400, więc wyglądał jak ostateczne odrzucenie

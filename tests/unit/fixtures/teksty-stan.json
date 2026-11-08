@@ -275,8 +275,20 @@
     "myslniki": 6,
     "plakietki": 0
   },
-  "components/invoices/invoice-form.tsx": {
-    "myslniki": 8,
+  "components/invoices/invoice-form-parts/buyer-section.tsx": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/invoices/invoice-form-parts/calculations.ts": {
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "components/invoices/invoice-form-parts/constants.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "components/invoices/invoice-form-parts/line-items-section.tsx": {
+    "myslniki": 3,
     "plakietki": 0
   },
   "components/invoices/invoice-list.tsx": {

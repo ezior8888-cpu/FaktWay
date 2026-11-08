@@ -838,6 +838,53 @@ export const DUPLICATE_DECISION_TEXTS = {
     LAST_ERROR_REVIEW: (k: string) =>
       `KSeF ma już fakturę o tym numerze z oznaczeniem FaktWay (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać.`,
   },
+
+  /**
+   * D-A4-1b-3 PR D: „Sprawdź ponownie” przy braku danych oryginału (pobranie, magazyn, archiwum, brak zapisu
+   * sprawdzenia, inne środowisko KSeF). Lista prawnika (plan zero zgubionych faktur, sekcja 8). Nowe teksty
+   * bez długich myślników; adres pomocy tylko przez `SUPPORT_EMAIL`. `{nr}` numer dokumentu, `{k}` numer KSeF
+   * oryginału, `{dzien}` dzień nadania numeru (RRRR-MM-DD, może brakować), `{minuty}` minuty do końca cooldownu.
+   */
+  RECHECK: {
+    BUTTON: 'Sprawdź ponownie',
+    NO_REISSUE: 'Nie wystawiaj tej faktury ponownie.',
+    INTRO: (nr: string, k: string, dzien: string | null) =>
+      `KSeF ma już fakturę Twojej firmy o numerze dokumentu ${nr} (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}). Nie mamy jeszcze jej treści, więc nie możesz teraz zdecydować, czym jest ten dokument.`,
+    /** Co robi przycisk; tylko tam, gdzie przycisk jest. */
+    WHAT_NEXT:
+      'Wybierz „Sprawdź ponownie”: pobierzemy tę fakturę z KSeF jeszcze raz, a wynik zobaczysz na tej karcie. Robimy to także automatycznie, zwykle w ciągu 2 dni.',
+    /**
+     * Odmowa pobrania 403: dane logowania KSeF w FaktWay bez uprawnienia do odczytu faktur. Klient łączy FaktWay
+     * z KSeF certyfikatem (tokenu nie ma gdzie nadać), więc rada jak w nocie PR B (`describeDuplicateOriginal`).
+     */
+    HINT_403:
+      'Dane logowania KSeF w FaktWay nie mają uprawnienia do odczytu faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF, a potem wybierz „Sprawdź ponownie”.',
+    /** Inne środowisko niż obecne: dane oryginału sprawdziliśmy gdzie indziej. */
+    ENV_MISMATCH:
+      'Dane oryginału pochodzą z innego środowiska KSeF niż to, w którym FaktWay pracuje teraz. Sprawdź ponownie, żeby pobrać fakturę z obecnego środowiska.',
+    ROLE:
+      'Ponowne sprawdzenie w KSeF uruchamia właściciel lub administrator firmy. Poproś właściciela lub administratora firmy o kliknięcie „Sprawdź ponownie”. Nie wystawiaj tej faktury ponownie.',
+    IN_FLIGHT: (nr: string) => `Sprawdzamy ponownie w KSeF dokument ${nr}. Odśwież stronę za kilka minut.`,
+    COOLDOWN: (nr: string, minuty: number) =>
+      `Dokument ${nr} sprawdziliśmy w KSeF przed chwilą. Kolejne sprawdzenie możesz uruchomić za ${minuty} min. Nie wystawiaj go ponownie.`,
+    QUEUED: (nr: string) => `Sprawdzamy dokument ${nr} ponownie w KSeF. Odśwież stronę za kilka minut.`,
+    NOT_AVAILABLE: (nr: string) =>
+      `Dokumentu ${nr} nie sprawdzimy ponownie z tego miejsca. Odśwież stronę; jeśli komunikat wraca, napisz do nas: ${SUPPORT_EMAIL}, podając numer dokumentu. Nie wystawiaj go ponownie.`,
+    CANNOT: (nr: string) =>
+      `Dokumentu ${nr} nie możemy teraz sprawdzić ponownie z tego miejsca. Napisz do nas: ${SUPPORT_EMAIL}, podając numer dokumentu. Nie wystawiaj go ponownie.`,
+    PAUSED: (nr: string) =>
+      `Wysyłka do KSeF jest chwilowo wstrzymana przez FaktWay, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie, gdy wysyłka zostanie przywrócona. Nie wystawiaj go ponownie.`,
+    PAUSE_UNKNOWN: (nr: string) =>
+      `Nie możemy sprawdzić, czy KSeF jest teraz dostępny, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie za chwilę. Nie wystawiaj go ponownie.`,
+    /** `KSEF_ENV` nieustawione albo niepoprawne: o sprawdzaniu (nie o wysyłce), z numerem dokumentu (D4). */
+    ENV_UNKNOWN: (nr: string) =>
+      `Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Odśwież stronę za kilka minut; jeśli komunikat się powtarza, napisz do nas: ${SUPPORT_EMAIL}, podając numer dokumentu. Nie wystawiaj go ponownie.`,
+    NO_CERTIFICATE: (nr: string) =>
+      `Brak certyfikatu KSeF: dokumentu ${nr} nie sprawdziliśmy ponownie. Wgraj certyfikat w Ustawieniach KSeF i spróbuj jeszcze raz. Nie wystawiaj go ponownie.`,
+    /** Odmowa kolejki, której tekst nie nazywa dokumentu: numer z przodu. */
+    REFUSED: (nr: string, powod: string) => `Dokumentu ${nr} nie sprawdziliśmy ponownie. ${powod}`,
+    GENERIC: `Nie udało się uruchomić ponownego sprawdzenia. Spróbuj ponownie za chwilę; jeśli błąd się powtarza, napisz do nas: ${SUPPORT_EMAIL}.`,
+  },
 } as const;
 
 // ─── Polityka jsonb (lustro `ksef_duplicate_check_allows`, 2.1.1; 00156 4.2) ──

@@ -40,6 +40,7 @@ import type {
   DuplicateRefusalDetail,
 } from '@/lib/ksef/duplicate-decision';
 import type { OriginalGateProblem } from '@/lib/ksef/duplicate-check';
+import { OPEN_SUBMISSION_STATUSES, reconcileOnlyBlocker } from '@/lib/ksef/duplicate-recheck';
 import {
   SEND_ERROR_CODES,
   isSendErrorCode,
@@ -70,9 +71,10 @@ export const OPERATOR_REQUEUE_RECONCILE_CODES: readonly SendErrorCode[] = [
  * Wpisy `ksef_submissions`, które „Tylko uzgodnij” ma czym uzgodnić: wysyłka
  * z numerem referencyjnym (`sent`) albo zamiar z numerem sesji (`intent`, A2
  * — runner zamyka sesję i pyta KSeF o jej faktury). Ta sama lista dla akcji
- * i karty faktury.
+ * i karty faktury; definicja mieszka w `duplicate-recheck.ts` (PR D: ten sam
+ * rdzeń uzgodnienia ma przycisk klienta), tu tylko ponowny eksport.
  */
-export const OPEN_SUBMISSION_STATUSES = ['sent', 'intent'] as const;
+export { OPEN_SUBMISSION_STATUSES };
 
 export function hasOpenSubmission(history: ReadonlyArray<{ status: string | null }>): boolean {
   return history.some((s) => (OPEN_SUBMISSION_STATUSES as readonly (string | null)[]).includes(s.status));
@@ -441,15 +443,23 @@ export function operatorRequeueButton(
 export function operatorReconcileRefusal(
   input: Pick<OperatorButtonsInput, 'direction' | 'status' | 'invoiceKind' | 'facts' | 'environmentKnown' | 'openSent'>,
 ): OperatorRefusal | null {
-  if (input.direction !== 'outgoing') return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.incoming);
-  if (input.status !== 'failed' && input.status !== 'rejected') {
-    return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.notFailedOrRejected);
+  // Rdzeń wspólny z przyciskiem klienta „Sprawdź ponownie” (PR D): kolejność i warunki w jednym miejscu.
+  switch (reconcileOnlyBlocker(input)) {
+    case null:
+      return null;
+    case 'incoming':
+      return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.incoming);
+    case 'status':
+      return refuse('STATUS_NOT_ALLOWED', OPERATOR_MESSAGES.notFailedOrRejected);
+    case 'env-unknown':
+      return refuse('ENV_UNKNOWN', OPERATOR_MESSAGES.envUnknown);
+    case 'send-data-missing':
+      return refuse('SEND_DATA_MISSING', operatorLegacyDataMessage(input.invoiceKind));
+    case 'kind-held':
+      return refuse(kindHeldCode(input.invoiceKind), operatorKindHeldMessage(input.invoiceKind));
+    case 'no-open-submission':
+      return refuse('NO_OPEN_SUBMISSION', OPERATOR_MESSAGES.noOpenSent);
   }
-  if (!input.environmentKnown) return refuse('ENV_UNKNOWN', OPERATOR_MESSAGES.envUnknown);
-  if (input.facts.sendData === 'missing') return refuse('SEND_DATA_MISSING', operatorLegacyDataMessage(input.invoiceKind));
-  if (input.facts.kindHeld) return refuse(kindHeldCode(input.invoiceKind), operatorKindHeldMessage(input.invoiceKind));
-  if (!input.openSent) return refuse('NO_OPEN_SUBMISSION', OPERATOR_MESSAGES.noOpenSent);
-  return null;
 }
 
 export function operatorReconcileButton(

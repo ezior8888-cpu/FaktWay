@@ -12,7 +12,14 @@
  * ZASADA: nowa usługa zewnętrzna, która widzi dane osobowe → wpis tutaj
  * w tym samym PR + powiadomienie klientów (umowa powierzenia, § 6 ust. 3).
  * Nieaktywne dziś (nie wpisuj, dopóki nie ruszą na produkcji): AWS S3 Glacier
- * (archiwum, `AWS_*`), Upstash Redis (poza produkcją od przeprowadzki).
+ * (archiwum, `AWS_*`).
+ *
+ * Redis NIE jest osobnym dostawcą: to własny redis:7.2 z nakładką
+ * `hiett/serverless-redis-http` na serwerze app-1, więc mieści się we wpisie
+ * Hetzner. Zmienne nazywają się UPSTASH_REDIS_REST_* tylko dlatego, że
+ * nakładka udaje API Upstash — produkcja nie wysyła danych do Upstash (stan 23.10.2026).
+ * Wpis potrzebny dopiero wtedy, gdy UPSTASH_REDIS_REST_URL wskaże usługę
+ * zewnętrzną (np. *.upstash.io).
  */
 
 export type ProcessingRole =
