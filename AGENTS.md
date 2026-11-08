@@ -12,6 +12,7 @@
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |
 > | „Kontynuuj plan księgowość JDG” | [`PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md), tylko krok z „Następny krok”, dziennik w sekcji 15, potem raport i STOP |
 > | „Kontynuuj plan usprawnień” | [`PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md), dziennik w sekcji 7 |
+> | „Kontynuuj plan żelazny filtr” | [`PLAN-ZELAZNY-FILTR.md`](docs/koordynacja/PLAN-ZELAZNY-FILTR.md), tylko krok z „Następny krok”, dziennik w sekcji B12; do „idź dalej” od Bartosza tylko plan |
 >
 > Sesje „sesja N” robią TYLKO wskazaną sesję, według „Protokołu naprawy błędu” niżej.
 
