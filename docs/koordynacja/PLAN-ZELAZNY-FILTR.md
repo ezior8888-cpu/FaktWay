@@ -1385,7 +1385,7 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 
 | Data | Krok | PR | Stan | Uwagi |
 |---|---|---|---|---|
-| 8.11.2026 | plan (ETAP 1) | #PR_PLANU | otwarty, czeka na decyzję Bartosza | rozpoznanie stanu (`279e2b4c`), reguł repozytorium i kodu; 15 sygnałów możliwych błędów (B7.1, S-01 do S-15); mapa ryzyka dla sesji planu pełnej aplikacji w folderze notatek |
+| 8.11.2026 | plan (ETAP 1) | #486 | otwarty, czeka na decyzję Bartosza | rozpoznanie stanu (`279e2b4c`), reguł repozytorium i kodu; 15 sygnałów możliwych błędów (B7.1, S-01 do S-15); mapa ryzyka dla sesji planu pełnej aplikacji w folderze notatek |
 
 **Następny krok:** czeka na „idź dalej” i decyzje D-F1 do D-F8 od Bartosza.
 Potem F1 (mapa i klasyfikator).
