@@ -7,6 +7,7 @@ import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/mainten
 import { isTelemetryTunnelPath } from '@/lib/telemetry-tunnel';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
+import { createAuthUserFetch } from './auth-user-fetch';
 
 /**
  * Ścieżki marketingowe — dostęp bez logowania (spec 19.1.3).
@@ -197,9 +198,11 @@ export async function updateSession(request: NextRequest) {
           for (const [name, value] of Object.entries(headers)) supabaseResponse.headers.set(name, value);
         },
       },
-      global: isUuid(activeOrgCookie)
-        ? { headers: { [ACTIVE_ORG_HEADER]: activeOrgCookie } }
-        : undefined,
+      global: {
+        // Wszystkie sprawdzenia tokenu w tym żądaniu dzielą jedną odpowiedź GoTrue.
+        fetch: createAuthUserFetch(),
+        ...(isUuid(activeOrgCookie) ? { headers: { [ACTIVE_ORG_HEADER]: activeOrgCookie } } : {}),
+      },
     },
   );
 
