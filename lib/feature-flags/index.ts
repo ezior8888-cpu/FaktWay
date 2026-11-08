@@ -42,6 +42,7 @@ interface TenantFlagsRow {
   co_pilot_enabled: boolean;
   magic_import_enabled: boolean;
   exports_enabled: boolean;
+  ksiegowosc_enabled: boolean;
 }
 
 /**
