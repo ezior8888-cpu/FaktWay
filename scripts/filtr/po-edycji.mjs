@@ -15,6 +15,7 @@ import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { KATALOG_REPO, importyPliku, klasyfikujPlik, plikiRepozytorium, poziomZeSciezki, wczytajMape } from './mapa.mjs';
+import { naruszeniaPliku, opisWzrostow, otwarteFz, porownajZZapadka, wczytajZapadke } from './reguly.mjs';
 
 const DOWODY = {
   R1: 'czerwony test przed zmianą (niezmiennik albo przykład urzędowy, nie tylko punkt), reguła z rejestru przepisów, karta zmiany prawnej w opisie PR, `pnpm filtr:lokalnie`, drugi czytelnik z listą kontrolną docs/filtr/LISTA-KONTROLNA.md',
@@ -22,7 +23,7 @@ const DOWODY = {
 };
 
 /**
- * @param {{ sciezka: string, katalog?: string, mapa?: object, sesja?: string, katalogZnacznikow?: string, pliki?: string[] }} dane
+ * @param {{ sciezka: string, katalog?: string, mapa?: object, sesja?: string, katalogZnacznikow?: string | null, pliki?: string[] }} dane
  * @returns {{ kod: number, stdout?: string, stderr?: string }}
  */
 export function poEdycji({ sciezka, katalog = KATALOG_REPO, mapa = wczytajMape(), sesja = '', katalogZnacznikow, pliki }) {
@@ -42,6 +43,16 @@ export function poEdycji({ sciezka, katalog = KATALOG_REPO, mapa = wczytajMape()
         'Dopisz go do obszaru w filtr/mapa-ryzyka.json (wolno bez zgody) albo do „wylaczenia” z powodem ' +
         '(osłabienie: zgoda:zmiana-filtra od Bartosza). Sprawdzenie: pnpm filtr:mapa ' + plik,
     };
+  }
+  // Reguły statyczne (F7): nowe naruszenie ponad zapadkę dla tego pliku to kod 2.
+  if (/\.(?:ts|tsx|mjs|js)$/.test(plik) && !plik.startsWith('scripts/filtr/')) {
+    const liczby = {};
+    for (const { regula } of naruszeniaPliku(plik, tresc, { mapa, kontekst: { otwarteFz: otwarteFz(katalog) } })) {
+      liczby[regula] ??= {};
+      liczby[regula][plik] = (liczby[regula][plik] ?? 0) + 1;
+    }
+    const { wzrosty } = porownajZZapadka(liczby, wczytajZapadke(katalog), { tylkoPliki: [plik] });
+    if (wzrosty.length > 0) return { kod: 2, stderr: opisWzrostow(wzrosty) };
   }
   if (wynik.poziom !== 'R1' && wynik.poziom !== 'R2') return { kod: 0 };
   if (katalogZnacznikow !== null) {
