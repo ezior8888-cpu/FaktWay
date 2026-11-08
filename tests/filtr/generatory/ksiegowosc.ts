@@ -21,7 +21,11 @@ export const miesiac = (lata: readonly number[] = [2026]) =>
 export const dzien = (rok = 2026) =>
   fc.integer({ min: 0, max: 364 }).map((d) => new Date(Date.UTC(rok, 0, 1) + d * 86_400_000).toISOString().slice(0, 10));
 
-/** Poprawny NIP (suma kontrolna wagami 6,5,7,2,3,4,5,6,7 mod 11, bez wyniku 10). */
+/**
+ * Poprawny NIP (suma kontrolna wagami 6,5,7,2,3,4,5,6,7 mod 11, bez wyniku 10).
+ * Trzy pierwsze cyfry to kod urzędu: bez zera na początku i bez „00” na 2. i 3.
+ * miejscu (tak jak wzorzec TNumerKSeF w schematach MF).
+ */
 export const nip = fc
   .array(fc.integer({ min: 0, max: 9 }), { minLength: 9, maxLength: 9 })
   .map((cyfry) => {
@@ -29,7 +33,7 @@ export const nip = fc
     const suma = cyfry.reduce((s, c, i) => s + c * wagi[i], 0) % 11;
     return { cyfry, suma };
   })
-  .filter(({ cyfry, suma }) => suma !== 10 && cyfry[0] !== 0)
+  .filter(({ cyfry, suma }) => suma !== 10 && cyfry[0] !== 0 && !(cyfry[1] === 0 && cyfry[2] === 0))
   .map(({ cyfry, suma }) => `${cyfry.join('')}${suma}`);
 
 export function profil(z: Partial<WersjaProfilu> = {}): WersjaProfilu {
