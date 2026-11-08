@@ -39,8 +39,13 @@ function setup(over = {}) {
     deploy: async (uuid) => { calls.deploy.push(uuid); const id = `dep-${uuid}`; state.deployments[id] = over.result?.[uuid] ?? { status: 'finished', commit: HEAD }; return id; },
     deployment: async (id) => state.deployments[id],
     appStatus: async () => 'running:healthy',
-    source: async (uuid) => (over.sources ?? REPO_SOURCES)[uuid === 'web' ? 'web' : 'worker'],
+    source: async (uuid) => {
+      // `sourcesAfterWorker`: źródło przełączone w trakcie, po wdrożeniu workera.
+      const all = calls.deploy.length + calls.deployImage.length > 0 && over.sourcesAfterWorker ? over.sourcesAfterWorker : (over.sources ?? REPO_SOURCES);
+      return all[uuid === 'web' ? 'web' : 'worker'];
+    },
     deployImage: async (uuid, sha) => {
+      if (over.deployImageError?.[uuid]) throw new Error(over.deployImageError[uuid]);
       calls.deployImage.push(`${uuid}:${sha}`);
       const id = `img-${uuid}`;
       state.deployments[id] = over.result?.[uuid] ?? { status: 'finished', commit: sha };
@@ -246,6 +251,37 @@ test('start: tryb obraz → wdrożenie obrazu SHA, worker przed webem, bez build
   assert.deepEqual(calls.deploy, []);
   assert.match(calls.notify.at(-1), /Wdrożono abcdef12/);
   assert.equal(calls.log[0].meta.mode, 'obraz');
+});
+
+test('start: tryb obraz, Coolify odrzuca wdrożenie webu → komunikat o stanie mieszanym', async () => {
+  const { deployer, calls, notify, settle } = setup({ sources: IMAGE_SOURCES, deployImageError: { web: 'Coolify POST /applications/web/rollback: HTTP 400 (Deployment queue full)' } });
+  await deployer.start('abcdef12', 'tg:1', notify);
+  await settle();
+  assert.deepEqual(calls.deployImage, [`worker:${HEAD}`]);
+  assert.match(calls.notify.at(-1), /Web: Coolify nie przyjął wdrożenia.*queue full/s);
+  assert.match(calls.notify.at(-1), /stan mieszany/);
+});
+
+test('start: źródło przełączone po workerze → web nie jest wdrażany', async () => {
+  const { deployer, calls, notify, settle } = setup({ sources: IMAGE_SOURCES, sourcesAfterWorker: REPO_SOURCES });
+  await deployer.start('abcdef12', 'tg:1', notify);
+  await settle();
+  assert.deepEqual(calls.deployImage, [`worker:${HEAD}`]);
+  assert.deepEqual(calls.deploy, []);
+  assert.match(calls.notify.at(-1), /źródło w Coolify zmieniło się na „dockerfile”/);
+});
+
+test('start: tryb obraz → po sukcesie ostrzeżenie przed Redeploy w panelu', async () => {
+  const { deployer, calls, notify, settle } = setup({ sources: IMAGE_SOURCES });
+  await deployer.start('abcdef12', 'tg:1', notify);
+  await settle();
+  assert.match(calls.notify.at(-1), /Nie klikaj Redeploy/);
+});
+
+test('createCoolify: błąd HTTP niesie komunikat Coolify', async () => {
+  const f = fakeFetch([[/rollback$/, [400, { message: 'Deployment queue full.' }]]]);
+  const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
+  await assert.rejects(coolify.deployImage('app-1', HEAD), /HTTP 400 \(Deployment queue full\.\)/);
 });
 
 test('start: tryb obraz, nieudany worker → stop przed webem', async () => {

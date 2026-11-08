@@ -15,7 +15,9 @@ async function requestJson(fetchImpl, url, { method = 'GET', headers = {}, body,
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = null; }
   if (!res.ok) {
-    const err = new Error(`${label}: HTTP ${res.status}`);
+    // Komunikat serwisu (np. Coolify „Deployment queue full”) bez nagłówków i tokenów.
+    const detail = typeof json?.message === 'string' ? ` (${json.message.slice(0, 200)})` : '';
+    const err = new Error(`${label}: HTTP ${res.status}${detail}`);
     err.status = res.status;
     err.body = json;
     throw err;

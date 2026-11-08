@@ -126,14 +126,26 @@ export function createDeployer({ github, coolify, ghcr, db, config, sleep = (ms)
     if (current !== head) {
       return { ok: false, message: `${label}: gałąź przesunęła się na ${current?.slice(0, 8)} — przerywam. Uruchom /wdroz ponownie.` };
     }
-    let depUuid;
-    if (mode === 'obraz') {
-      depUuid = await coolify.deployImage(appUuid, head);
-      await notify(`⏳ ${label}: pobieranie obrazu ${head.slice(0, 8)} z GHCR i start (kilka minut).`);
-    } else {
-      depUuid = await coolify.deploy(appUuid);
-      await notify(`⏳ ${label}: build ruszył (12–18 min).`);
+    // Źródło mogło się zmienić od planu (coolify-zrodlo.sh w trakcie): inny
+    // endpoint dla innego źródła zrobiłby co innego, więc stop.
+    const src = await coolify.source(appUuid);
+    const expected = mode === 'obraz' ? 'dockerimage' : 'dockerfile';
+    if (src?.buildPack !== expected) {
+      return { ok: false, message: `${label}: źródło w Coolify zmieniło się na „${src?.buildPack ?? '?'}” (plan: ${expected}) — przerywam. Uruchom /wdroz ponownie.` };
     }
+    let depUuid;
+    try {
+      if (mode === 'obraz') {
+        depUuid = await coolify.deployImage(appUuid, head);
+      } else {
+        depUuid = await coolify.deploy(appUuid);
+      }
+    } catch (err) {
+      return { ok: false, message: `${label}: Coolify nie przyjął wdrożenia (${err instanceof Error ? err.message : 'nieznany błąd'}).` };
+    }
+    await notify(mode === 'obraz'
+      ? `⏳ ${label}: pobieranie obrazu ${head.slice(0, 8)} z GHCR i start (kilka minut).`
+      : `⏳ ${label}: build ruszył (12–18 min).`);
     const d = await waitFor(depUuid);
     if (d.status !== 'finished') {
       return { ok: false, message: `${label}: wdrożenie zakończone statusem „${d.status}”. Coolify zostawia poprzednią wersję — sprawdź logi wdrożenia.` };
@@ -185,6 +197,9 @@ export function createDeployer({ github, coolify, ghcr, db, config, sleep = (ms)
           `/api/health: ${escapeHtml(checks.health)}`,
           `Web: ${escapeHtml(checks.web)} · Worker: ${escapeHtml(checks.worker)}`,
           checks.ok ? '' : '⚠️ Coś nie wygląda zdrowo — sprawdź ręcznie (AGENTS.md „Weryfikacja po wdrożeniu”).',
+          // Tag w konfiguracji Coolify zostaje na ostatnim SHA ze skryptu
+          // (bramka nie ma prawa `write`): Redeploy z panelu wróciłby do niego.
+          mode === 'obraz' ? 'ℹ️ Nie klikaj Redeploy/Restart w panelu Coolify (wróciłby starszy tag). Następne wdrożenie: /wdroz albo wdroz-produkcje.sh --obraz.' : '',
         ].filter(Boolean).join('\n'));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'nieznany błąd';
