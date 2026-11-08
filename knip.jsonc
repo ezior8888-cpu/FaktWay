@@ -1,0 +1,44 @@
+// Knip: nieużywane pliki, eksporty i zależności (plan usprawnień 4.4).
+// Raport tygodniowy (.github/workflows/knip.yml), nie blokada CI.
+// Lokalnie: pnpm knip. Wtyczki Next.js, Vitest, Playwright, ESLint
+// i GitHub Actions włączają się same z package.json; niżej tylko to,
+// czego same nie widzą.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    // Worker pg-boss: CMD etapu `worker` w Dockerfile (ten sam ciąg co `worker:dev`).
+    "lib/jobs/worker.ts",
+    "lib/jobs/server-only-hook.mjs",
+    // Skrypty uruchamiane ręcznie, z innych skryptów .sh albo w kontenerze
+    // workera (np. scripts/reencrypt-ksef-credentials.ts, scripts/ops/*.mjs).
+    "scripts/**/*.{ts,mjs,js}",
+    // k6 (scripts/k6-run.sh) i load-tests/ksef-inbox (procesy potomne run.ts).
+    "load-tests/**/*.{ts,mjs,js}",
+    // Treści czytane z dysku (gray-matter, next-mdx-remote), nie importowane.
+    "content/**/*.mdx",
+    // Playwright: projekty `setup` i `wizualne-logowanie` mają własny testMatch,
+    // wizualne.css idzie przez opcję stylePath.
+    "e2e/*.setup.ts",
+    "e2e/wizualne-logowanie.ts",
+    "e2e/wizualne.css",
+    // Vitest: alias `server-only` (vitest.config.ts) i sondy uruchamiane jako
+    // osobny proces (tests/unit/worker-start-jak-dockerfile.test.ts).
+    "tests/stubs/*.ts",
+    "tests/fixtures/*.ts"
+  ],
+  // Osobno wdrażane pakiety z własnym package.json i testami:
+  // ops/bramka (bot Telegrama), ops/poczta (Cloudflare Email Worker).
+  "ignore": ["ops/**"],
+  // Programy systemowe wołane w testach i skryptach, nie paczki npm.
+  "ignoreBinaries": ["xmllint", "openssl", "psql", "lighthouse"],
+  // Moduły `k6/*` dostarcza binarka k6, nie npm.
+  "ignoreDependencies": ["k6"],
+  // Stała eksportowana i używana w tym samym pliku to nie martwy kod.
+  "ignoreExportsUsedInFile": true,
+  "ignoreIssues": {
+    // shadcn/ui: pełne API komponentu zostaje, nawet gdy część nieużywana.
+    "components/ui/**": ["exports", "types"],
+    // Generowane z bazy (AGENTS.md: typy z produkcji, bez ręcznych zmian).
+    "types/database.ts": ["exports", "types"]
+  }
+}
