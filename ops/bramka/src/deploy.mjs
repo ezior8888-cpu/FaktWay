@@ -1,13 +1,14 @@
 // /wdroz — plan i przebieg wdrożenia obu aplikacji (AGENTS.md „Wdrożenie
-// produkcji”, MAN-54/55). Kolejność jak przy ręcznym tinkerze: najpierw web
-// (id=1), potem worker (id=2), nigdy równolegle — dwa buildy naraz zjadają
-// pamięć app-1.
+// produkcji”, MAN-54/55). Kolejność z AGENTS.md (Niezmienniki, pkt 4) i
+// scripts/ops/wdroz-produkcje.sh: najpierw worker (id=2), potem web (id=1),
+// nigdy równolegle — dwa buildy naraz zjadają pamięć app-1. Joby muszą być
+// na nowym kodzie, zanim strona zacznie wrzucać nowe zdarzenia.
 //
 // API Coolify wdraża HEAD gałęzi, nie wskazany commit. Dlatego:
 //   - człowiek zatwierdza konkretny SHA (pierwsze 8 znaków + TOTP),
 //   - przed każdym wyzwoleniem sprawdzamy, że HEAD to nadal ten SHA,
 //   - po każdym wdrożeniu sprawdzamy commit zapisany przez Coolify,
-//   - gdy `main` się przesunie, zatrzymujemy się PRZED workerem.
+//   - gdy `main` się przesunie, zatrzymujemy się PRZED webem.
 import { escapeHtml, migrationVersions, summarizeChecks } from './clients.mjs';
 
 const POLL_MS = 30_000;
@@ -118,16 +119,16 @@ export function createDeployer({ github, coolify, db, config, sleep = (ms) => ne
     (async () => {
       try {
         await db.log('ops.deploy.started', actor, { sha: head });
-        const web = await deployOne('Web', config.coolify.webUuid, head, notify);
-        if (!web.ok) throw new Error(web.message);
-        await notify('✅ Web wdrożony. Teraz worker.');
         const worker = await deployOne('Worker', config.coolify.workerUuid, head, notify);
-        if (!worker.ok) throw new Error(`${worker.message}\n⚠️ Web jest na ${head.slice(0, 8)}, worker na poprzedniej wersji — stan mieszany.`);
+        if (!worker.ok) throw new Error(worker.message);
+        await notify('✅ Worker wdrożony. Teraz web.');
+        const web = await deployOne('Web', config.coolify.webUuid, head, notify);
+        if (!web.ok) throw new Error(`${web.message}\n⚠️ Worker jest na ${head.slice(0, 8)}, web na poprzedniej wersji — stan mieszany.`);
 
         const checks = await verify();
         await db.log('ops.deploy.finished', actor, { sha: head, ...checks });
         await notify([
-          `✅ Wdrożono ${head.slice(0, 8)} (web i worker).`,
+          `✅ Wdrożono ${head.slice(0, 8)} (worker i web).`,
           `/api/health: ${escapeHtml(checks.health)}`,
           `Web: ${escapeHtml(checks.web)} · Worker: ${escapeHtml(checks.worker)}`,
           checks.ok ? '' : '⚠️ Coś nie wygląda zdrowo — sprawdź ręcznie (AGENTS.md „Weryfikacja po wdrożeniu”).',
