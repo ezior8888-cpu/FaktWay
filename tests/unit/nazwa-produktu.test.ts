@@ -47,7 +47,7 @@ const OWNED_ELSEWHERE = [
 // a lustro w TS (`FAKTFLOW_SYSTEM_INFO_NEXT`) musi być identyczne. To nie tekst
 // dla klienta; zmienia się razem z migracją i decyzją o nowym SystemInfo generatora.
 const DB_BOUND = new Map<string, string[]>([
-  ['lib/ksef/duplicate-decision.ts', ['FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/']],
+  ['lib/ksef/duplicate-decision-jsonb.ts', ['FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/']],
 ]);
 
 function walk(dir: string): string[] {
