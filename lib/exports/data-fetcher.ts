@@ -6,6 +6,7 @@ import {
   assertKsefExpensesReadyForPln,
   type KsefExpenseForPlnReport,
 } from '@/lib/expenses/ksef-currency-review';
+import { isReceiptInvoiceFa3 } from '@/lib/invoices/receipt-invoice';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -540,7 +541,11 @@ export function importedContentFlags(
   const strings = (v: unknown) => (Array.isArray(v) ? v.filter((p): p is string => typeof p === 'string') : []);
   const problems = strings(o.annotationProblems);
   const lineProblems = strings(o.lineAmountProblems);
-  const markers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  const fileMarkers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  // Krok 1.2: faktura do paragonu wystawiona w FaktWay (`fa3_data.receipt`) ma
+  // w pliku KSeF `Fa/FP` = 1 jak FP z importu. JPK nie zna jeszcze typu FP
+  // (art. 109 ust. 3d: bez zwiększenia sprzedaży), więc ta sama odmowa.
+  const markers = isReceiptInvoiceFa3(o) ? { ...fileMarkers, fp: true as const } : fileMarkers;
   const saleDates = isRecordJson(o.saleDates) ? o.saleDates : undefined;
   return {
     ...(origin === 'ksef_import' && !isRecordJson(o.annotations) ? { importedAnnotationsMissing: true } : {}),

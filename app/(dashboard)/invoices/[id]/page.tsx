@@ -5,6 +5,7 @@ import { amountDueOf } from '@/lib/invoices/amount-due';
 import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
 import { canCorrectInvoice, canMarkInvoicePaid } from '@/lib/invoices/list-row-facts';
 import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
+import { receiptInvoiceView } from '@/lib/invoices/receipt-invoice';
 import { canDuplicateInvoice, canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
@@ -249,6 +250,8 @@ export default async function InvoiceDetailPage({
     // D-A4-1b-3 PR C: panel odsyła do akcji środowisko, które zobaczył (INV-8); karta K — skąd faktura się wzięła (6.5).
     ksef_server_environment: env,
     ksef_imported_original: importedOriginalProvenance(invoice.fa3_data),
+    // Krok 1.2: oznaczenie FP i dane paragonu jako gotowy tekst, fa3_data zostaje na serwerze.
+    receipt_invoice: receiptInvoiceView(invoice.fa3_data),
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;

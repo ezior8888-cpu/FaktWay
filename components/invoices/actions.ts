@@ -36,6 +36,8 @@ import { addDaysToIsoDate, dueDateFrom, todayInWarsaw } from '@/lib/format/warsa
 import {
   EU_BUYER_COUNTRIES,
   invoiceFormSchema,
+  receiptBuyerKindOfForm,
+  receiptFromFormValues,
   type InvoiceFormValues,
 } from '@/lib/schemas/invoice-form';
 import type {
@@ -370,6 +372,12 @@ function buildInvoiceFromForm(
       ? saleTrim
       : undefined;
 
+  // Faktura do paragonu (krok 1.2): ten sam kształt, który sprawdził schemat
+  // (`receiptFromFormValues`). Klucz tylko przy FP, zwykła faktura bez zmian.
+  const receipt = values.receiptInvoice === true
+    ? receiptFromFormValues(values, receiptBuyerKindOfForm(values))
+    : undefined;
+
   return {
     internalNumber: values.internalNumber,
     type: 'VAT',
@@ -389,6 +397,7 @@ function buildInvoiceFromForm(
       cashMethod,
     }),
     notes: values.notes && values.notes.length ? values.notes : undefined,
+    ...(receipt ? { receipt } : {}),
   };
 }
 

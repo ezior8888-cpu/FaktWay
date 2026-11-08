@@ -36,6 +36,7 @@ import { RecurringActionsCard, StickyFormActions } from './invoice-form-parts/fo
 import { MobileFormHeader, PrefillBanner } from './invoice-form-parts/form-header';
 import { LineItemsSection } from './invoice-form-parts/line-items-section';
 import { PaymentSection } from './invoice-form-parts/payment-section';
+import { ReceiptInvoiceFields } from './invoice-form-parts/receipt-invoice-fields';
 import { useLinesDesktopLayout } from './invoice-form-parts/use-lines-desktop-layout';
 import { firstValidationMessage } from './invoice-form-parts/validation-message';
 
@@ -136,6 +137,13 @@ export function InvoiceForm({
       bankAccount: '',
       notes: '',
       splitPayment: false,
+      // Faktura do paragonu (krok 1.2): domyślnie wyłączona, pola puste.
+      receiptInvoice: false,
+      receiptNumber: '',
+      receiptDate: '',
+      cashRegisterNumber: '',
+      receiptRequestDate: '',
+      buyerNipOnReceipt: false,
       ...initialValues,
       ...(recurringInvoiceId ? { recurringInvoiceId } : {}),
       ...(recurringInvoiceId && recurringPeriod ? { recurringPeriod } : {}),
@@ -160,6 +168,7 @@ export function InvoiceForm({
   const buyerVatUeWatch = useWatch({ control: form.control, name: 'buyerVatUe' }) ?? '';
   const buyerCountryCode = useWatch({ control: form.control, name: 'buyerCountryCode' }) ?? '';
   const buyerKind: BuyerKind = buyerIsEu ? 'eu' : buyerIsConsumer ? 'consumer' : 'pl';
+  const receiptInvoice = useWatch({ control: form.control, name: 'receiptInvoice' }) === true;
 
   // Ta sama tablica idzie do sum i do `InvoiceTotals` (rozbicie VAT na stawki).
   const lineItems = toLineItems(watchedLines);
@@ -333,6 +342,7 @@ export function InvoiceForm({
           header={
             <InvoiceDocumentHeader seller={seller}>
               <DocumentHeaderFields form={form} />
+              <ReceiptInvoiceFields form={form} enabled={receiptInvoice} buyerKind={buyerKind} />
             </InvoiceDocumentHeader>
           }
         >

@@ -22,6 +22,7 @@ import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { formatInvoiceDate } from '@/lib/invoices/display-date';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
+import type { ReceiptInvoiceView } from '@/lib/invoices/receipt-invoice';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
 import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
@@ -136,6 +137,8 @@ export interface InvoiceDetailInitial {
    * Brak pola = `null`.
    */
   ksef_imported_original?: ImportedOriginalProvenance | null;
+  /** Krok 1.2: faktura do paragonu, oznaczenie i dane paragonu liczone na serwerze. Brak pola = `null`. */
+  receipt_invoice?: ReceiptInvoiceView | null;
 }
 
 interface PaymentSnapshot {
@@ -507,6 +510,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               <div className="text-muted-foreground space-y-1 text-sm">
                 <p>Data wystawienia: {formatInvoiceDate(inv.issue_date)}</p>
                 {inv.sale_date && <p>Data sprzedaży: {formatInvoiceDate(inv.sale_date)}</p>}
+                {inv.receipt_invoice && (
+                  <>
+                    <p data-testid="faktura-do-paragonu" className="text-foreground font-medium">
+                      {inv.receipt_invoice.label}
+                    </p>
+                    {inv.receipt_invoice.details && <p>{inv.receipt_invoice.details}</p>}
+                  </>
+                )}
                 {payment?.dueDate && <p>Termin płatności: {formatInvoiceDate(payment.dueDate)}</p>}
               </div>
             </div>

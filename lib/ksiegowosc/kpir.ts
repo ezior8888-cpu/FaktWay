@@ -11,7 +11,8 @@
  *
  * Przychód z faktur jak ewidencja ryczałtu (K3, `ewidencja.ts`): dzień
  * sprzedaży nie później niż wystawienie, korekta różnicą w dniu wystawienia,
- * rozliczenie pomniejszone o zaliczki, faktura do paragonu poza księgą,
+ * rozliczenie pomniejszone o zaliczki, faktura do paragonu poza księgą (gdy
+ * miesiąc sprzedaży ma wpis „Raport z kasy rejestrującej”, inaczej brak),
  * waluta po kursie NBP. Koszty z listy kosztów uznanych za koszt, w kwocie
  * jak KPiR w aplikacji (`kpirCostAmount`: netto i VAT bez odliczenia),
  * w kolumnie z kategorii kosztu. Koszt B+R (w aplikacji `col_15`) idzie do
@@ -30,9 +31,11 @@
 import { monthLabel } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import {
+  brakRaportuKasyDlaFp,
   dzienPrzychodu,
   kluczKursu,
   kwotaTekst,
+  maRaportKasyWMiesiacu,
   przeliczNaPln,
   type BrakEwidencji,
   type FakturaEwidencji,
@@ -85,6 +88,8 @@ export interface WpisKpir {
   kolumna: KolumnaKpir;
   kwotaGr: number;
   opis: string | null;
+  /** Rodzaj dowodu (00167): raport kasy pozwala pominąć fakturę do paragonu z tego miesiąca. */
+  rodzaj?: 'raport_kasy' | 'inny';
 }
 
 /** Fundusz Pracy i FS z zapłaty składek społecznych (K7.3, D21): koszt w dniu zapłaty. */
@@ -246,7 +251,12 @@ export function zbudujKpir(wejscie: WejscieKpir): Kpir {
       continue;
     }
     if (f.fp) {
-      pominiete.push({ numer: f.numer, dzien, powod: 'Faktura do paragonu: sprzedaż wchodzi do księgi z raportu kasy.' });
+      // Krok 1.2: jak ewidencja, poza księgą tylko z raportem kasy w miesiącu sprzedaży.
+      if (maRaportKasyWMiesiacu(wejscie.wpisy.map((w) => ({ rodzaj: w.rodzaj, dzien: w.data })), dzien)) {
+        pominiete.push({ numer: f.numer, dzien, powod: 'Faktura do paragonu: sprzedaż wchodzi do księgi z raportu kasy.' });
+      } else {
+        braki.push({ dzien, dokument: f.numer, komunikat: brakRaportuKasyDlaFp(f.numer, dzien, 'księgi') });
+      }
       continue;
     }
     let kwotaGr = f.rodzaj === 'rozliczenie' ? f.nettoGr - f.rozliczoneZaliczkiGr : f.nettoGr;

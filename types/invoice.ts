@@ -179,6 +179,26 @@ export interface InvoiceAnnotations {
   marginScheme?: 'P_PMarzy_2' | 'P_PMarzy_3_1' | 'P_PMarzy_3_2' | 'P_PMarzy_3_3';
 }
 
+/**
+ * Faktura do paragonu (FP, plan kompletnej aplikacji, krok 1.2): dane paragonu
+ * fiskalnego, do którego wystawiono fakturę. Art. 106h ust. 1 ustawy o VAT:
+ * w dokumentacji zostaje numer dokumentu i numer unikatowy kasy z paragonu.
+ * W FA(3) faktura dostaje `Fa/FP = 1` (art. 109 ust. 3d) i dane paragonu
+ * w `Fa/DodatkowyOpis`. Reguły: `lib/invoices/receipt-invoice.ts`.
+ */
+export interface ReceiptInvoiceData {
+  /** Numer paragonu (numer dokumentu z paragonu). */
+  receiptNumber: string;
+  /** Data paragonu, RRRR-MM-DD. Na fakturze do paragonu to także data sprzedaży. */
+  receiptDate: string;
+  /** Numer unikatowy kasy rejestrującej z paragonu, bez spacji, wielkimi literami. */
+  cashRegisterNumber: string;
+  /** Dzień żądania faktury (art. 106b ust. 3), gdy wcześniejszy niż dzień wystawienia. */
+  requestDate?: string;
+  /** Firma: wystawca potwierdził, że paragon ma NIP nabywcy (art. 106b ust. 5). */
+  buyerNipOnReceipt?: true;
+}
+
 export interface Invoice {
   /** Wewnętrzny numer faktury (np. FV 2026/04/001) */
   internalNumber: string;
@@ -209,6 +229,9 @@ export interface Invoice {
 
   /** Uwagi dodatkowe - pole Stopka */
   notes?: string;
+
+  /** Faktura do paragonu (FP). Brak = faktura bez paragonu. Tylko zwykła faktura VAT. */
+  receipt?: ReceiptInvoiceData;
 
   /** Frozen source for ZAL XML; the worker must reject a different queued envelope. */
   advanceEnvelope?: AdvanceInvoiceData;

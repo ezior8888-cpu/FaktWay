@@ -24,6 +24,7 @@ import {
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
+import { isReceiptInvoiceFa3, receiptCorrectionRefusal } from '@/lib/invoices/receipt-invoice';
 import {
   resolveAmountChangeVatRate,
   zeroVatRateFromParentLines,
@@ -542,7 +543,8 @@ async function readAcceptedCorrectionParent(
   const environment = requireConfiguredKsefEnvironment();
   const { data: row, error } = await supabase
     .from('invoices')
-    .select('id, tenant_id, issue_date, internal_number, ksef_number, net_total, vat_total, gross_total, seller_data, buyer_data')
+    // Krok 1.2: FP z FaktWay (`receipt`) i FP z importu KSeF (`ksefMarkers.fp`), tylko te dwie gałęzie fa3_data.
+    .select('id, tenant_id, issue_date, internal_number, ksef_number, net_total, vat_total, gross_total, seller_data, buyer_data, fp_paragon:fa3_data->receipt, fp_ksef:fa3_data->ksefMarkers->>fp')
     .eq('id', parentId)
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -553,6 +555,12 @@ async function readAcceptedCorrectionParent(
 
   if (error || !row?.id || !row.ksef_number?.trim()) {
     throw new Error('Faktura pierwotna nie ma potwierdzonego numeru KSeF w bieżącym środowisku tej firmy.');
+  }
+  // Generator korekty nie pisze FP, a korekty są na produkcji wstrzymane (KOR_HOLD):
+  // korekta faktury do paragonu zostaje na później (krok 1.2, plan kompletnej aplikacji).
+  // `->>` daje tekst: „true” z importu KSeF (C5b).
+  if (isReceiptInvoiceFa3({ receipt: row.fp_paragon, ksefMarkers: { fp: String(row.fp_ksef) === 'true' } })) {
+    throw new Error(receiptCorrectionRefusal(row.internal_number as string | null));
   }
   // K4 — łańcuch korekt: kolejna korekta liczy różnicę od stanu PO
   // poprzednich przyjętych korektach, a druga korekta w toku jest

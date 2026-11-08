@@ -57,9 +57,10 @@ export const KOMUNIKAT_SRODOWISKO =
 export const KOMUNIKAT_ODCZYT =
   'Nie udało się odczytać danych ewidencji, więc nie pokazujemy niepełnych kwot. Strona spróbuje ponownie przy następnym otwarciu.';
 
+// FP z importu KSeF (`ksefMarkers.fp`) i FP wystawiona w FaktWay (`receipt`, krok 1.2).
 const KOLUMNY_FAKTURY =
   'id, internal_number, issue_date, sale_date, net_total, invoice_kind, invoice_type, advance_invoice_ids, ' +
-  'currency, ksef_number, buyer_data, fp:fa3_data->ksefMarkers->>fp';
+  'currency, ksef_number, buyer_data, fp:fa3_data->ksefMarkers->>fp, fp_paragon:fa3_data->receipt';
 const KAWALEK = 100;
 
 interface WierszFaktury {
@@ -75,6 +76,8 @@ interface WierszFaktury {
   ksef_number: string | null;
   buyer_data: unknown;
   fp: string | boolean | null;
+  /** `fa3_data.receipt`: każdy zapis paragonu (także niepełny) to FP. */
+  fp_paragon?: unknown;
 }
 
 interface WierszPozycji {
@@ -223,7 +226,7 @@ function zWierszaFaktury(
     nettoGr: doGroszy(w.net_total),
     waluta: (w.currency ?? 'PLN').trim().toUpperCase() || 'PLN',
     numerKsef: w.ksef_number,
-    fp: w.fp === true || w.fp === 'true',
+    fp: w.fp === true || w.fp === 'true' || (w.fp_paragon !== undefined && w.fp_paragon !== null),
     kontrahent: { ...kontrahentJpk(w.buyer_data), ...nazwaIAdres(w.buyer_data) },
     rozliczoneZaliczkiGr: doGroszy(rozliczone.get(w.id)),
     pozycje: zeStawkami.get(w.id) ?? null,
