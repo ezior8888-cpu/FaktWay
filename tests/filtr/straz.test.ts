@@ -364,3 +364,13 @@ describe('poprawki po przeglądzie (drugi czytelnik F2)', () => {
     expect(ocenPR(dane({ pliki: [zmianaR1, testR1], opis: KARTA_R1.replace('R1, silniki', 'R3 i R1, silniki') })).ok).toBe(true);
   });
 });
+
+describe('komentarze HTML w opisie (CodeQL F2)', () => {
+  it('usuwa komentarze także zagnieżdżone i niezamknięte', async () => {
+    const { bezKomentarzyHtml } = await import('@/scripts/filtr/straz.mjs');
+    expect(bezKomentarzyHtml('a<!-- x -->b<!-- y -->c')).toBe('abc');
+    expect(bezKomentarzyHtml('a<!--<!-- x -->-->b')).toBe('a-->b');
+    expect(bezKomentarzyHtml('a<!-- bez końca')).toBe('a');
+    expect(bezKomentarzyHtml('bez komentarzy')).toBe('bez komentarzy');
+  });
+});
