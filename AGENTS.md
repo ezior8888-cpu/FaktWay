@@ -12,7 +12,7 @@
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |
 > | „Kontynuuj plan księgowość JDG” | [`PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md), tylko krok z „Następny krok”, dziennik w sekcji 15, potem raport i STOP |
 > | „Kontynuuj plan usprawnień” | [`PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md), dziennik w sekcji 7 |
-> | „Kontynuuj plan żelazny filtr” | [`PLAN-ZELAZNY-FILTR.md`](docs/koordynacja/PLAN-ZELAZNY-FILTR.md), tylko krok z „Następny krok”, dziennik w sekcji B12; do „idź dalej” od Bartosza tylko plan |
+> | „Kontynuuj plan żelazny filtr” | [`PLAN-ZELAZNY-FILTR.md`](docs/koordynacja/PLAN-ZELAZNY-FILTR.md), tylko krok z „Następny krok”, dziennik w sekcji B12 |
 >
 > Sesje „sesja N” robią TYLKO wskazaną sesję, według „Protokołu naprawy błędu” niżej.
 
@@ -166,10 +166,11 @@ Dawne sekcje tego pliku przeniesione są dosłownie; odnośniki typu
 | zrotować klucz albo sekret produkcyjny | [`rotacja-kluczy.md`](docs/runbooks/rotacja-kluczy.md) | kontrola po każdym kroku: `./scripts/ops/rotacja-kluczy.sh` |
 | zobaczyć błędy wysyłki do KSeF | [`centrum-bledy-wysylki.md`](docs/runbooks/centrum-bledy-wysylki.md) | `/admin/centrum/bledy` (konto z `ADMIN_EMAILS` + 2FA) |
 | zmienić generator FA(3) albo wysyłkę KSeF | [`fa3-ksef.md`](docs/runbooks/fa3-ksef.md) | `pnpm verify:fa3` |
+| zrozumieć blokadę żelaznego filtra, zrobić wyjątek | [`filtr.md`](docs/runbooks/filtr.md) | `pnpm filtr:lokalnie` |
 | zmienić coś „na telefon” | [`zmiany-na-telefon.md`](docs/runbooks/zmiany-na-telefon.md) (Mac zamrożony) | obchód z `e2e/README.md`, „Telefon” |
 
 W Claude Code te same procedury otwierają skille `/wdrozenie`, `/migracja`,
-`/naprawa`, `/fa3-ksef`, `/telefon-review` (`.claude/skills/`, odnośniki do
+`/naprawa`, `/fa3-ksef`, `/telefon-review`, `/filtr` (`.claude/skills/`, odnośniki do
 runbooków; operacyjne tylko na polecenie).
 
 ## Praca w worktree
@@ -194,6 +195,29 @@ Twojej gałęzi (zdarzyło się 02.10). Przed każdym pushem przejrzyj
 nowym commitem (i scalasz w przód przez stos), nie przepisywaniem historii
 wypchniętej gałęzi.
 
+## Żelazny filtr (zmiany z ryzykiem prawnym)
+
+Każdy plik kodu ma poziom ryzyka z mapy `filtr/mapa-ryzyka.json`: **R1**
+krytyczny (kwota podatku albo składki, termin, faktura, JPK, KSeF,
+przechowywanie danych), **R2** wprowadza w błąd (szacunki, treści o
+podatkach, regulamin), **R3** pomocniczy, **R0** bez ryzyka. Plan:
+[`PLAN-ZELAZNY-FILTR.md`](docs/koordynacja/PLAN-ZELAZNY-FILTR.md), skrót:
+[`filtr/README.md`](filtr/README.md).
+
+- Poziom zmiany: `pnpm filtr:mapa --diff origin/main`. Plik z sygnałem poza
+  mapą (test `tests/filtr/mapa.test.ts`, hook po edycji, pre-push) dopisujesz
+  do obszaru; wyłączenie albo niższy poziom tylko za zgodą Bartosza.
+- Zmiana R1 i R2: karta zmiany prawnej w opisie PR (szablon), przed PR
+  `pnpm filtr:lokalnie` i drugi czytelnik z listą
+  [`docs/filtr/LISTA-KONTROLNA.md`](docs/filtr/LISTA-KONTROLNA.md). R1: czerwony
+  test, przepis z rejestru (od F4) i ścieżki testów w karcie.
+- Kontrola „Filtr: straż” w CI wymaga etykiet `zgoda:zmiana-filtra` (maszyneria
+  filtra, osłabienie mapy), `zgoda:wiedza-prawna` (przepisy, parametry, złote
+  przypadki, schematy) i `zgoda:wyjatek-filtra` (wyjątek). **Etykiety `zgoda:*`
+  nadaje i zdejmuje tylko Bartosz; agent nigdy.** Każdy push je zdejmuje.
+- Hooka przed pushem nie omijasz (`--no-verify`, `SKIP_PREPUSH=1`). `pnpm install`
+  włącza go sam (`prepare`). Gdy filtr blokuje: [`docs/runbooks/filtr.md`](docs/runbooks/filtr.md).
+
 ## Protokół naprawy błędu (obowiązuje każdego agenta)
 
 Skąd: rewizja z 03.10.2026 (`docs/automation/13_REWIZJA_2026-10-03.md`)
@@ -210,6 +234,8 @@ idzie więc tak:
    bazie (`tests/rls-*.test.ts`, job CI „RLS isolation”), nie w pamięci.
    Uruchom test, zobacz czerwony, dopiero potem napraw. Test, który
    przechodzi przed naprawą, nie dowodzi niczego i nie liczy się.
+   W obszarze R1 z mapy ryzyka czerwony test to niezmiennik albo przykład
+   urzędowy, nie tylko jeden punkt („Żelazny filtr” wyżej).
 3. **Napraw przyczynę i wszystkie jej wystąpienia.** Ten sam błąd w drugim
    generatorze, runnerze albo ścieżce UI naprawiasz razem albo zapisujesz
    jako osobne ustalenie w dzienniku. Nigdy po cichu.
@@ -225,12 +251,14 @@ idzie więc tak:
 6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
    `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
    wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,
-   z komentarzem dlaczego. Potem drugi czytelnik przed otwarciem PR:
-   w Claude Code `/code-review`, w Codexie przegląd w osobnej sesji.
+   z komentarzem dlaczego. Przy zmianie R1 i R2 także `pnpm filtr:lokalnie`.
+   Potem drugi czytelnik przed otwarciem PR: w Claude Code `/code-review`,
+   w Codexie przegląd w osobnej sesji; przy R1 i R2 z listą
+   `docs/filtr/LISTA-KONTROLNA.md`.
 7. **Opis PR według `.github/pull_request_template.md`:** co naprawia (kod
    ustalenia), zmiana, co było czerwone przed naprawą, tabela weryfikacji,
    migracje (numer z rejestru, przed czy PO wdrożeniu), co sprawdzić po
-   wdrożeniu.
+   wdrożeniu; przy R1 i R2 karta zmiany prawnej.
 8. **„Scalone” to nie „naprawione”.** Wpis „naprawione” w dzienniku
    (`docs/automation/12_NAPRAWY_POSTEP.md`) dostaje ustalenie dopiero, gdy
    ktoś inny niż autor przeczyta kod na `main` i poda plik:linia.
