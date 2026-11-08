@@ -7,6 +7,7 @@ import { RiFingerprintLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import { PASSKEY_OFFER_DISMISSED_KEY } from '@/lib/auth/device-cookies';
 import { addPasskeyDevice, fetchPasskeyDevices, isHandheldDevice, readDeviceKeys } from '@/lib/auth/passkey/client';
+import { PASSKEY_ALREADY_ON_DEVICE_MESSAGE } from '@/lib/auth/passkey/messages';
 
 const TITLE = 'Włącz logowanie biometrią';
 
@@ -33,7 +34,7 @@ function rememberDismissal(): void {
  * Odrzucenie zostaje na tym urządzeniu. Ładuje ją `PasskeyEnrollOfferGate`.
  */
 export function PasskeyEnrollOffer() {
-  const [stage, setStage] = useState<'hidden' | 'offer' | 'pending' | 'done'>('hidden');
+  const [stage, setStage] = useState<'hidden' | 'offer' | 'pending' | 'done' | 'already'>('hidden');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export function PasskeyEnrollOffer() {
     const result = await addPasskeyDevice();
     if (result.ok) {
       rememberDismissal();
-      setStage('done');
+      setStage(result.alreadyOnDevice ? 'already' : 'done');
       return;
     }
     setStage('offer');
@@ -75,10 +76,12 @@ export function PasskeyEnrollOffer() {
       aria-label={TITLE}
       className="border-border bg-card fixed right-4 bottom-[calc(1rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] left-4 z-40 flex flex-col gap-3 border p-4 shadow-lg lg:right-6 lg:left-auto lg:w-96"
     >
-      {stage === 'done' ? (
+      {stage === 'done' || stage === 'already' ? (
         <>
           <p role="status" className="text-sm">
-            Gotowe. Następnym razem zalogujesz się biometrią. Urządzenia znajdziesz w Ustawienia → Bezpieczeństwo.
+            {stage === 'already'
+              ? PASSKEY_ALREADY_ON_DEVICE_MESSAGE
+              : 'Gotowe. Następnym razem zalogujesz się biometrią. Urządzenia znajdziesz w Ustawienia → Bezpieczeństwo.'}
           </p>
           <div>
             <Button type="button" variant="outline" onClick={() => setStage('hidden')}>Zamknij</Button>
