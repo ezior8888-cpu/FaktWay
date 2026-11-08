@@ -21,7 +21,9 @@ import { createScriptHarness, KONTROLA_SCRIPT, labelRows, type ScriptHarness } f
 
 const FAKE_DOCKER = `#!/usr/bin/env bash
 # Atrapa docker: psql zapisuje SQL z -c (rozdzielone NUL); reszta: nic (brak kontenerów).
-[ "$1" = exec ] && [ "$3" = psql ] || exit 0
+[ "$1" = exec ] || exit 0
+shift; [ "$1" = -e ] && { export "$2"; shift 2; }
+[ "$2" = psql ] || exit 0
 sql=""; prev=""
 for a in "$@"; do [ "$prev" = "-c" ] && sql=$a; prev=$a; done
 printf '%s\\0' "$sql" >> "$FAKE_DIR/sql"

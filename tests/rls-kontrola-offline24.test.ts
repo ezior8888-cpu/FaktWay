@@ -42,8 +42,10 @@ const pg: Record<string, string> = hasDatabase ? pgEnv(getRlsTestDatabaseUrl()) 
 const FAKE_DOCKER = `#!/usr/bin/env bash
 # Atrapa docker: \`exec <kontener> psql …\` → psql do lokalnej bazy testowej
 # (PG* z testu); -U/-d skryptu pominięte. Reszta: nic (brak kontenerów).
-[ "$1" = exec ] && [ "$3" = psql ] || exit 0
-shift 3
+[ "$1" = exec ] || exit 0
+shift; [ "$1" = -e ] && { export "$2"; shift 2; }
+[ "$2" = psql ] || exit 0
+shift 2
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in

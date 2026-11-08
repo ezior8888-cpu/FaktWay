@@ -136,12 +136,14 @@ SSH=(ssh -i "$K" -o ConnectTimeout=15 -o BatchMode=yes)
 section() { printf '\n=== %s\n' "$1"; }
 
 # SELECT przez psql w kontenerze Postgresa. SQL bez cudzysłowów, backticków
-# i znaku dolara — przechodzi przez dwie powłoki.
+# i znaku dolara — przechodzi przez dwie powłoki. PGOPTIONS: transakcja tylko
+# do odczytu i limit 30 s, jak w pojemnosc-db.sh (agent uruchamia ten skrypt
+# bez pytania, .claude/settings.json).
 sql() {
   local label=$1 query=$2
   printf -- '--- %s\n' "$label"
   "${SSH[@]}" "root@$DB" \
-    "docker exec $PGC psql -U postgres -d postgres -At -F' | ' -v ON_ERROR_STOP=1 -c \"$query\"" \
+    "docker exec -e 'PGOPTIONS=-c statement_timeout=30s -c default_transaction_read_only=on' $PGC psql -U postgres -d postgres -At -F' | ' -v ON_ERROR_STOP=1 -c \"$query\"" \
     || echo "  (zapytanie nieudane — brak tabeli/kolumny albo brak dostępu)"
 }
 
@@ -374,7 +376,7 @@ section "12. db-1: dziennik prób wysyłki (A5, 00150) — błędy, odmowy i prz
 # Sonda to jedyne miejsce sekcji, gdzie skrypt czyta wynik psql: `-At` daje
 # samo `t`/`f`, `-X` pomija .psqlrc.
 LEDGER=$("${SSH[@]}" "root@$DB" \
-  "docker exec $PGC psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \"SELECT to_regclass('public.ksef_send_attempts') IS NOT NULL\"") \
+  "docker exec -e 'PGOPTIONS=-c statement_timeout=30s -c default_transaction_read_only=on' $PGC psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \"SELECT to_regclass('public.ksef_send_attempts') IS NOT NULL\"") \
   || LEDGER=""
 case "$LEDGER" in
   t)
