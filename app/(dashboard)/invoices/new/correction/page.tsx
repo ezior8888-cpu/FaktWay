@@ -3,39 +3,25 @@ import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { CorrectionInvoiceForm } from '@/components/invoices/correction-form';
-import { excludeParentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
+import { sanitizeSearch } from '@/lib/invoices/list-query';
+import { loadCorrectionPicker, type CorrectionPicker } from '@/lib/invoices/correction-picker';
 
 export default async function NewCorrectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ parentId?: string }>;
+  searchParams: Promise<{ parentId?: string; q?: string }>;
 }) {
   const params = await searchParams;
   const tenantId = await getActiveOrgIdFromCookies();
   const environment = requireConfiguredKsefEnvironment();
   const supabase = await createClient();
+  const q = sanitizeSearch(params.q ?? '');
 
-  const { data: parentInvoices } = tenantId ? await supabase
-    .from('invoices')
-    .select('id, internal_number, ksef_number, issue_date, gross_total, buyer_data')
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .eq('invoice_kind', 'regular')
-    .eq('ksef_environment', environment)
-    .not('ksef_number', 'is', null)
-    .order('issue_date', { ascending: false })
-    .limit(50) : { data: [] };
-
-  // K4: rodzic z otwartą korektą (każdą poza odrzuconą przez KSeF) nie dostaje
-  // drugiej — akcja i wyzwalacz 00133 i tak odmówią, lista nie ma go kusić.
-  const { data: corrections } = tenantId ? await supabase
-    .from('invoices')
-    .select('parent_invoice_id, ksef_status')
-    .eq('tenant_id', tenantId)
-    .eq('invoice_kind', 'correction')
-    .limit(500) : { data: [] };
-  const available = excludeParentsWithOpenCorrection(parentInvoices ?? [], corrections ?? []);
+  // F-005: `parentId` spoza 50 najnowszych czyta loader osobno, a gdy faktura
+  // nie przyjmie korekty — formularz pokazuje dlaczego, zamiast pustego wyboru.
+  const picker: CorrectionPicker = tenantId
+    ? await loadCorrectionPicker(supabase, { tenantId, environment, parentId: params.parentId, q })
+    : { parentInvoices: [], truncated: false, preselectRefusal: null };
 
   return (
     <CorrectionPageFrame>
@@ -43,8 +29,11 @@ export default async function NewCorrectionPage({
           `key` montuje formularz od nowa po przełączeniu firmy w tej karcie. */}
       <CorrectionInvoiceForm
         key={tenantId ?? ''}
-        parentInvoices={available}
+        parentInvoices={picker.parentInvoices}
         preselectedParentId={params.parentId}
+        preselectRefusal={picker.preselectRefusal}
+        searchQuery={q}
+        truncated={picker.truncated}
         tenantId={tenantId ?? ''}
       />
     </CorrectionPageFrame>

@@ -44,6 +44,7 @@ const CORRECTION_STATUS_LABEL: Record<string, string> = {
   offline_queued: 'w kolejce offline',
   failed: 'z błędem wysyłki',
   accepted: 'przyjęta przez KSeF',
+  rejected: 'odrzucona przez KSeF',
 };
 
 /** Komunikat K4 — wspólny dla akcji i (pośrednio) wyzwalacza 00133. */
@@ -51,6 +52,54 @@ export function openCorrectionMessage(parentNumber: string | null, open: OpenCor
   const status = CORRECTION_STATUS_LABEL[open.ksef_status ?? ''] ?? (open.ksef_status ?? 'w toku');
   return `Faktura ${parentNumber ?? 'pierwotna'} ma korektę w toku: ${open.internal_number ?? ''} (${status}). `
     + 'Dokończ jej wysyłkę albo wróć nią do szkicu i usuń, zanim wystawisz kolejną korektę.';
+}
+
+/** Kolumny faktury, po których strona korekty ocenia `?parentId` (F-005). */
+export interface CorrectionParentFacts {
+  internal_number: string | null;
+  direction: string | null;
+  invoice_kind: string | null;
+  ksef_status: string | null;
+  ksef_environment: string | null;
+  ksef_number: string | null;
+}
+
+/**
+ * Dlaczego faktura z `?parentId` nie przyjmie korekty — `null`, gdy przyjmie.
+ * Te same warunki co lista kandydatów strony korekty i
+ * `readAcceptedCorrectionParent` w akcjach: faktura zwykła, sprzedaż,
+ * przyjęta w KSeF w bieżącym środowisku, z numerem KSeF. Korektę w toku
+ * (K4) sprawdza loader osobno — `openCorrectionMessage`.
+ */
+export function correctionParentRefusal(
+  row: CorrectionParentFacts | null,
+  environment: string,
+): string | null {
+  if (!row) {
+    return 'Nie znaleźliśmy faktury wskazanej do korekty w tej firmie. '
+      + 'Wybierz fakturę pierwotną z listy poniżej albo wyszukaj ją po numerze.';
+  }
+  const nr = row.internal_number ?? 'wskazana';
+  if (row.direction !== 'outgoing' || row.invoice_kind !== 'regular') {
+    return `Faktury ${nr} nie skorygujesz tym formularzem, bo przyjmuje on tylko zwykłe faktury sprzedaży. `
+      + (row.invoice_kind === 'correction'
+        ? 'To jest korekta: wskaż fakturę pierwotną, a nowa korekta policzy stan po przyjętych korektach.'
+        : 'Wybierz fakturę pierwotną z listy poniżej.');
+  }
+  if (row.ksef_status === 'draft') {
+    return `Faktura ${nr} to szkic. Nie trafiła do KSeF, więc nie wystawia się do niej korekty. `
+      + 'Popraw szkic i wyślij go.';
+  }
+  if (row.ksef_status !== 'accepted') {
+    const status = CORRECTION_STATUS_LABEL[row.ksef_status ?? ''] ?? (row.ksef_status ?? 'bez statusu');
+    return `Faktura ${nr} nie jest przyjęta w KSeF (${status}). `
+      + 'Korektę wystawisz, gdy KSeF ją przyjmie. Status sprawdzisz na podglądzie faktury.';
+  }
+  if (row.ksef_environment !== environment || !row.ksef_number?.trim()) {
+    return `Faktura ${nr} nie ma numeru KSeF w bieżącym środowisku tej firmy, więc korekty do niej nie wyślesz. `
+      + 'Wybierz fakturę pierwotną z listy poniżej.';
+  }
+  return null;
 }
 
 /** Stan faktury po przyjętych korektach (K4) — budowany w akcjach (`correctionBaseline`). */
