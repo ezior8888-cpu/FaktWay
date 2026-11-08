@@ -107,10 +107,32 @@ const PUSTE = /^(?:n\/?d|brak|nie dotyczy|-|)$/i;
 // ---------------------------------------------------------------------------
 // Karta zmiany prawnej
 
+/**
+ * Opis bez komentarzy HTML (podpowiedzi z szablonu PR). Bez wyrażenia
+ * regularnego: niezamknięty `<!--` ucina resztę, więc nic nie zostaje
+ * w połowie komentarza.
+ */
+export function bezKomentarzyHtml(tekst) {
+  let wynik = '';
+  let pozycja = 0;
+  while (pozycja < tekst.length) {
+    const start = tekst.indexOf('<!--', pozycja);
+    if (start === -1) {
+      wynik += tekst.slice(pozycja);
+      break;
+    }
+    wynik += tekst.slice(pozycja, start);
+    const koniec = tekst.indexOf('-->', start + 4);
+    if (koniec === -1) break;
+    pozycja = koniec + 3;
+  }
+  return wynik;
+}
+
 /** Pola karty z opisu PR. `null`, gdy w opisie nie ma sekcji karty. */
 export function czytajKarte(opis) {
   if (!opis) return null;
-  const bezKomentarzy = opis.replace(/<!--[\s\S]*?-->/g, '');
+  const bezKomentarzy = bezKomentarzyHtml(opis);
   const poczatek = bezKomentarzy.search(NAGLOWEK_KARTY);
   if (poczatek === -1) return null;
   const reszta = bezKomentarzy.slice(poczatek).split('\n').slice(1);
@@ -594,7 +616,7 @@ async function glowna(argumenty) {
     numer = Number(argumenty[argumenty.indexOf('--pr') + 1]);
     repo = process.env.GITHUB_REPOSITORY ?? 'ezior8888-cpu/FaktWay';
   }
-  if (!repo || !numer) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo ?? '') || !Number.isInteger(numer) || numer <= 0) {
     console.error('Użycie: node scripts/filtr/straz.mjs --github | --pr <N> [--tylko-raport]');
     return 2;
   }
