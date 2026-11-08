@@ -5,9 +5,11 @@
 > Kroki rotacji odwołują się do zmiennych w Vercelu i jobów Inngest; zmienne ustawia się dziś w Coolify (dwie aplikacje: web i worker, `is_preview = false`). Produkcja stoi na **Hetznerze pod Coolify**,
 > joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
 >
-> **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",
-> oraz `docs/runbooks/joby-pg-boss.md`.** Nie wykonuj poleceń z tego pliku
-> na produkcji bez sprawdzenia ich tam (AUD-110).
+> **Aktualna procedura rotacji: [`rotacja-kluczy.md`](rotacja-kluczy.md)**
+> (kontrola po każdym kroku: `./scripts/ops/rotacja-kluczy.sh`). Pozostałe:
+> `AGENTS.md`, sekcja „Infrastruktura i dostępy", oraz
+> `docs/runbooks/joby-pg-boss.md`. Nie wykonuj poleceń z tego pliku
+> na produkcji (AUD-110).
 
 ---
 
