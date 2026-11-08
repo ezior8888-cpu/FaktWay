@@ -116,7 +116,7 @@ beforeEach(() => {
 describe('łańcuch korekt (K4)', () => {
   it('KOR2 po przyjętej KOR1 „10→8” liczy różnicę od stanu po KOR1: „8→7” = −100/−23/−123', async () => {
     st.corrections = [kor1()];
-    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(8)], linesAfter: [line(7)] }));
+    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(8)], linesAfter: [line(7)] }), TENANT);
     expect(r).toMatchObject({ success: true });
     expect(st.inserted[0]).toEqual(expect.objectContaining({ net_total: -100, vat_total: -23, gross_total: -123 }));
   });
@@ -135,32 +135,32 @@ describe('łańcuch korekt (K4)', () => {
 
   it('„stan przed” z formularza inny niż stan po KOR1 → odmowa (nie liczymy od pierwotnej)', async () => {
     st.corrections = [kor1()];
-    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(7)] }));
+    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(7)] }), TENANT);
     expect(r).toMatchObject({ success: false, error: expect.stringContaining('po korekcie FK/1/10/2026') });
     expect(st.inserted).toHaveLength(0);
   });
 
   it('niezgodność pozycji KOR1 z sumami faktury i korekt → odmowa, bez zgadywania', async () => {
     st.corrections = [kor1({ net_total: -100, vat_total: -23, gross_total: -123 })]; // wiersze KOR1 mówią 8, sumy mówią 9
-    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(8)], linesAfter: [line(7)] }));
+    const r = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(8)], linesAfter: [line(7)] }), TENANT);
     expect(r).toMatchObject({ success: false, error: expect.stringContaining('nie zgadza się z sumami') });
   });
 
   it('po przyjętej korekcie kwotowej: „przed/po” odmawia, kwotowa przechodzi', async () => {
     st.corrections = [kor1({ correction_type: 'amount_change', net_total: -50, vat_total: -11.5, gross_total: -61.5 })];
-    const beforeAfter = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(9)] }));
+    const beforeAfter = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(9)] }), TENANT);
     expect(beforeAfter).toMatchObject({ success: false, error: expect.stringContaining('tylko kwotowa') });
     const amount = await saveCorrectionDraftAction(payload({
       correctionType: 'amount_change',
       amountChange: { netDelta: -10, vatDelta: -2.3, grossDelta: -12.3, description: 'Rabat' },
-    }));
+    }), TENANT);
     expect(amount).toMatchObject({ success: true });
     expect(st.inserted[0]).toEqual(expect.objectContaining({ net_total: -10, vat_total: -2.3, gross_total: -12.3 }));
   });
 
   it('po przyjętym anulowaniu nic nie da się skorygować', async () => {
     st.corrections = [kor1({ correction_type: 'cancellation', net_total: -1000, vat_total: -230, gross_total: -1230 })];
-    const r = await saveCorrectionDraftAction(payload({ correctionType: 'amount_change', amountChange: { netDelta: -10, vatDelta: -2.3, grossDelta: -12.3, description: 'x' } }));
+    const r = await saveCorrectionDraftAction(payload({ correctionType: 'amount_change', amountChange: { netDelta: -10, vatDelta: -2.3, grossDelta: -12.3, description: 'x' } }), TENANT);
     expect(r).toMatchObject({ success: false, error: expect.stringContaining('anulowana') });
     const ctx = await getCorrectionParentContextAction(PARENT);
     expect(ctx).toMatchObject({ success: false, error: expect.stringContaining('anulowana') });
@@ -168,11 +168,11 @@ describe('łańcuch korekt (K4)', () => {
 
   it('korekta w toku (failed) blokuje kolejną; odrzucona nie liczy się wcale', async () => {
     st.corrections = [kor1({ ksef_status: 'failed', ksef_accepted_at: null })];
-    const blocked = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(9)] }));
+    const blocked = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(9)] }), TENANT);
     expect(blocked).toMatchObject({ success: false, error: expect.stringContaining('w toku') });
 
     st.corrections = [kor1({ ksef_status: 'rejected', ksef_accepted_at: null })];
-    const fresh = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(9)] }));
+    const fresh = await saveCorrectionDraftAction(payload({ correctionType: 'before_after', linesBefore: [line(10)], linesAfter: [line(9)] }), TENANT);
     expect(fresh).toMatchObject({ success: true });
     expect(st.inserted[0]).toEqual(expect.objectContaining({ net_total: -100, vat_total: -23, gross_total: -123 }));
   });

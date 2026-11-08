@@ -101,18 +101,29 @@ export function TableSearch({
   )
 }
 
-/** Filtr wartości kolumny (Finora `Filter`, wariant `select`) z polskimi etykietami. */
+/**
+ * Filtr wartości kolumny (Finora `Filter`, wariant `select`) z polskimi etykietami.
+ *
+ * Kolejność opcji (poprawka Bartosza 21.10.2026: przeprojektowanie Księgowości):
+ * sortowanie po polsku i „naturalnie” (`numeric`), bo kolumny KPiR to liczby —
+ * zwykłe `.sort()` stawiało „10” przed „7”. `order` ustawia znane wartości
+ * w podanej kolejności (np. 7, 10…13, B+R, braki), a nieznane idą na koniec.
+ * Dla dotychczasowych filtrów (małe litery ASCII) kolejność się nie zmienia.
+ */
 export function ColumnSelectFilter<T>({
   column,
   labels,
   allLabel,
-  label
+  label,
+  order
 }: {
   column: Column<T, unknown>
   labels?: Record<string, string>
   allLabel: string
   /** Etykieta dla czytnika ekranu. */
   label: string
+  /** Kolejność znanych wartości; wartości spoza listy idą po nich. */
+  order?: readonly string[]
 }) {
   const id = useId()
   const columnFilterValue = column.getFilterValue()
@@ -124,8 +135,13 @@ export function ColumnSelectFilter<T>({
       if (Array.isArray(curr)) return [...acc, ...curr.map(String)]
       return [...acc, String(curr)]
     }, [])
-    return Array.from(new Set(flattened)).sort()
-  }, [facetedUniqueValues])
+    const unique = Array.from(new Set(flattened)).sort((a, b) => a.localeCompare(b, 'pl', { numeric: true }))
+    if (!order) return unique
+    const rank = new Map(order.map((value, index) => [value, index]))
+    const known = unique.filter(value => rank.has(value))
+    known.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))
+    return [...known, ...unique.filter(value => !rank.has(value))]
+  }, [facetedUniqueValues, order])
 
   const labelFor = (value: string) => labels?.[value] ?? value
 
@@ -317,9 +333,14 @@ export function DataTablePagination<T>({ table }: { table: TanstackTable<T> }) {
                 <PaginationItem key={page}>
                   <Button
                     size='icon'
+                    // Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary`.
+                    // `text-primary` na `bg-primary/10` ma 4,44:1 (jasny motyw, spoczynek) i 3,84:1 /
+                    // 4,13:1 pod kursorem (`primary/20`, jasny / ciemny); `accent-foreground` daje
+                    // 9,00 / 7,79:1 (jasny) i 8,93 / 7,43:1 (ciemny) — ten sam odcień błękitu,
+                    // tylko ciemniejszy (jasny) albo jaśniejszy (ciemny).
                     className={cn(
                       !isActive &&
-                        'bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'
+                        'bg-primary/10 text-accent-foreground hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'
                     )}
                     onClick={() => table.setPageIndex(page - 1)}
                     aria-current={isActive ? 'page' : undefined}
@@ -367,7 +388,8 @@ export function FinoraListCard({
   amountNote,
   meta,
   actions,
-  leading
+  leading,
+  subtitleClassName
 }: {
   title: ReactNode
   subtitle?: ReactNode
@@ -377,6 +399,12 @@ export function FinoraListCard({
   actions?: ReactNode
   /** Awatar albo ikona statusu przed tytułem. */
   leading?: ReactNode
+  /**
+   * Krój podtytułu; domyślnie `font-mono` (numery faktur, NIP-y). KPiR podaje
+   * `font-sans` — numer dowodu czyta się tam jak tekst (poprawka Bartosza
+   * 21.10.2026: przeprojektowanie Księgowości).
+   */
+  subtitleClassName?: string
 }) {
   return (
     <div className='p-4'>
@@ -385,7 +413,9 @@ export function FinoraListCard({
           {leading}
           <div className='min-w-0'>
             <p className='text-foreground truncate text-sm font-medium'>{title}</p>
-            {subtitle ? <p className='text-muted-foreground truncate font-mono text-xs'>{subtitle}</p> : null}
+            {subtitle ? (
+              <p className={cn('text-muted-foreground truncate text-xs', subtitleClassName ?? 'font-mono')}>{subtitle}</p>
+            ) : null}
           </div>
         </div>
         {amount !== undefined ? (

@@ -116,6 +116,40 @@ export async function countExpensesToReview(
   return count ?? 0;
 }
 
+export interface InboxScheduleSummary {
+  /** Ostatni udany przebieg, także bez nowych faktur. */
+  lastCheckedAt: string | null;
+}
+
+/**
+ * Harmonogram firmy dla kafla (00160, RLS: członek czyta tylko ostatni sukces).
+ * `null` = firma bez KSeF albo tabeli jeszcze nie ma: kafel wraca do dotychczasowego
+ * tekstu, bo sam harmonogram nie jest wart błędu na ekranie.
+ */
+export async function getInboxScheduleSummary(supabase: Supabase, tenantId: string): Promise<InboxScheduleSummary | null> {
+  const { data, error } = await (supabase as unknown as ScheduleReader)
+    .from('ksef_inbox_schedule')
+    .select('last_success_at')
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { lastCheckedAt: data.last_success_at };
+}
+
+/** Tabela z 00160 poza `types/database.ts`, dopóki typy nie zostaną wygenerowane z produkcji. */
+interface ScheduleReader {
+  from(table: 'ksef_inbox_schedule'): {
+    select(columns: 'last_success_at'): {
+      eq(column: 'tenant_id', value: string): {
+        maybeSingle(): PromiseLike<{
+          data: { last_success_at: string | null } | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+}
+
 /**
  * Kafel P9 „Ostatnie pobranie z KSeF”: chwila zapisu najnowszej faktury
  * kosztowej (`created_at`), czyli ostatniego pobrania, które coś przyniosło.
@@ -128,6 +162,9 @@ export async function getLastInboxFetchAt(supabase: Supabase, tenantId: string):
     .select('created_at')
     .eq('tenant_id', tenantId)
     .eq('direction', 'incoming')
+    // Historia z KSeF to archiwum pobierane w tle (decyzja Bartosza 22.10.2026) —
+    // „Ostatnie pobranie z KSeF” mówi o Skrzynce. OCR zostaje liczony jak dotąd.
+    .neq('origin', 'ksef_import')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();

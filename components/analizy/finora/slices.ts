@@ -8,8 +8,10 @@ import type { BreakdownSlice } from '@/lib/analytics-finance/breakdown';
  */
 
 /** Klucz serii w `ChartConfig` — nazwy kategorii nie nadają się na zmienne CSS. */
-export function sliceSlot(slice: BreakdownSlice, index: number): string {
-  return slice.other ? 'other' : `s${index}`;
+export function sliceSlot(_slice: BreakdownSlice, index: number): string {
+  // Klucz po miejscu także dla „Pozostałe”: legenda recharts sortuje po kluczu,
+  // a 'other' < 's0' stawiało „Pozostałe” na początku (poprawka 21.10.2026).
+  return `s${index}`;
 }
 
 export function sliceChartConfig(data: readonly BreakdownSlice[]): ChartConfig {

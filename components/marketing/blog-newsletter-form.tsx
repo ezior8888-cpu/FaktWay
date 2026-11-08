@@ -4,6 +4,13 @@ import { useState, useTransition } from 'react';
 
 import { subscribeNewsletterAction } from '@/app/actions/newsletter';
 
+/**
+ * NIEPODPIĘTY (przegląd prawny 22.10.2026): żaden ekran nie używa tego
+ * formularza i tak ma zostać, dopóki newsletter nie ma potwierdzenia zapisu
+ * (double opt-in), zapisu wersji zgody i linku wypisu w każdej wiadomości —
+ * klauzula niżej obiecuje „link w wiadomości”, a wysyłki nie ma.
+ * Pilnuje tego tests/unit/newsletter-wstrzymany.test.ts.
+ */
 export function BlogNewsletterForm() {
   const [email, setEmail] = useState('');
   // Honeypot — pole niewidoczne dla człowieka; wypełnia je tylko bot.
@@ -28,7 +35,7 @@ export function BlogNewsletterForm() {
 
   if (done) {
     return (
-      <p className="text-sm leading-relaxed text-[var(--blog-text-excerpt)]">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Dziękujemy! Jesteś na liście — odezwiemy się, gdy pojawi się coś
         wartego Twojej uwagi.
       </p>
@@ -48,7 +55,7 @@ export function BlogNewsletterForm() {
         value={email}
         onChange={(ev) => setEmail(ev.target.value)}
         placeholder="Twój e-mail"
-        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[var(--blog-text-title)] outline-none transition-all placeholder:text-[var(--blog-text-metadata)]/60 focus:border-transparent focus:ring-2 focus:ring-[var(--ml-primary)]"
+        className="w-full rounded-full bg-card px-4 py-3 text-sm text-foreground ring-1 ring-border outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
       />
       {/* Honeypot: poza viewportem + poza tab-order; nie `display:none`,
           bo część botów pomija pola niewidoczne w CSSOM. */}
@@ -63,17 +70,29 @@ export function BlogNewsletterForm() {
         className="absolute -left-[9999px] h-0 w-0 opacity-0"
       />
       {error ? (
-        <p role="alert" className="text-xs text-red-400">
+        <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       ) : null}
       <button
         type="submit"
         disabled={pending}
-        className="ff-blog-newsletter-submit w-full rounded-xl py-3.5 text-sm font-bold transition-all disabled:opacity-60"
+        className="w-full rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
       >
         {pending ? 'Zapisuję…' : 'Zapisz się'}
       </button>
+      {/* Obowiązek informacyjny przy zbieraniu adresu (art. 13 RODO) — skrót
+          z odesłaniem; kliknięcie „Zapisz się” jest wyraźnym działaniem
+          potwierdzającym zgodę na newsletter. */}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Klikając „Zapisz się”, zgadzasz się na otrzymywanie newslettera FaktWay
+        e-mailem. Zgodę wycofasz w każdej chwili linkiem w wiadomości.
+        Administrator i Twoje prawa:{' '}
+        <a href="/legal/polityka-prywatnosci" className="underline underline-offset-2">
+          polityka prywatności
+        </a>
+        .
+      </p>
     </form>
   );
 }

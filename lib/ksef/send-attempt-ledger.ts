@@ -39,7 +39,8 @@ import { MAX_WAIT_RETRIES, readWaits } from '@/lib/jobs/retry';
 import type { JobStep } from '@/lib/jobs/step-shim';
 import { KsefApiError } from '@/lib/ksef/client';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { classifySendError, sendErrorClassOf, type SendErrorCode } from '@/lib/ksef/send-error-codes';
+import type { SendRefusalCode } from '@/lib/ksef/send-error-classes';
+import { classifySendError, sendErrorClassOf } from '@/lib/ksef/send-error-codes';
 import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { scrubTelemetryText } from '@/lib/observability/scrub';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -418,17 +419,11 @@ export function withSendAttemptLedger<TData, TResult>(
 }
 
 /**
- * Kod odmowy wysyłki PRZED kolejką (`ksef-submit-enqueue.ts`). Kody z katalogu
- * `ksef_error_codes`, gdy znaczą to samo (hamulce, certyfikat, KSeF niedostępny),
- * plus własne odmowy kolejkowania bez odpowiednika w katalogu.
+ * Kod odmowy wysyłki PRZED kolejką — typ w czystym katalogu kodów
+ * (`send-error-classes.ts`), żeby polityka operatora (komponent kliencki,
+ * importowana także przez crony) nie sięgała do tego modułu.
  */
-export type SendRefusalCode =
-  | SendErrorCode
-  | 'MFA_REQUIRED'
-  | 'PAUSE_UNKNOWN'
-  | 'OFFLINE_QUEUE_ERROR'
-  | 'ENQUEUE_REFUSED'
-  | 'ENQUEUE_ERROR';
+export type { SendRefusalCode };
 
 /**
  * Odmowa wysyłki przed kolejką → wiersz `refused` / `enqueue`. Fail-open:

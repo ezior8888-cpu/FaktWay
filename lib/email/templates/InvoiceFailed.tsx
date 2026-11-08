@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface InvoiceFailedProps {
   invoiceId: string;
   errorMessage: string;
@@ -26,6 +28,7 @@ export default function InvoiceFailed({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>Faktura odrzucona przez KSeF</Heading>
 
           <Text style={textStyle}>

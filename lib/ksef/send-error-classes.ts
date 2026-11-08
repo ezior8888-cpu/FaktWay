@@ -48,6 +48,27 @@ export const SEND_ERROR_CODES = {
 export type SendErrorCode = (typeof SEND_ERROR_CODES)[keyof typeof SEND_ERROR_CODES];
 export type SendErrorClass = 'terminal' | 'transient' | 'hold' | 'reconcile' | 'setup';
 
+/**
+ * Kod odmowy wysyłki PRZED kolejką (`ksef-submit-enqueue.ts`, akcje operatora
+ * `/admin/ksef`) — wiersz `refused` w dzienniku prób (`ksef_send_attempts`,
+ * 00150). Kody z katalogu, gdy znaczą to samo (hamulce, certyfikat, KSeF
+ * niedostępny; odmowa operatora z powodu klasy błędu faktury — jej kod), plus
+ * własne odmowy bez odpowiednika w katalogu (klasa `null`).
+ */
+export type SendRefusalCode =
+  | SendErrorCode
+  | 'MFA_REQUIRED'
+  | 'PAUSE_UNKNOWN'
+  | 'OFFLINE_QUEUE_ERROR'
+  | 'ENQUEUE_REFUSED'
+  | 'ENQUEUE_ERROR'
+  // Odmowy operatora (`lib/admin/ksef-operator-policy.ts`, `app/admin/ksef/actions.ts`).
+  | 'STATUS_NOT_ALLOWED'
+  | 'NO_OPEN_SUBMISSION'
+  | 'ENV_UNKNOWN'
+  | 'SEND_DATA_MISSING'
+  | 'NO_NIP';
+
 export const SEND_ERROR_CLASS: Record<SendErrorCode, SendErrorClass> = {
   XSD_INVALID: 'terminal',
   KSEF_REJECTED: 'terminal',

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Wpływy `/przeplywy` (plan Finora §2.4 pkt 14, etap E5): `getInflows` to
- * wzór `paidThisMonth` (kafel „Opłacone” listy faktur) dla dowolnego zakresu
- * dni. Te same przypadki co dla kafla — i ta sama suma dla tego samego
- * miesiąca.
+ * Wpływy `/przeplywy` (plan Finora §2.4 pkt 14, etap E5): `getInflows` daje
+ * fakturę sprzedaży w dniu prawdziwej zapłaty, inaczej w dniu terminu płatności
+ * (bez terminu — wystawienia). Tu brzegi odczytu: dzień w Warszawie, strony,
+ * firma, nabywca, zaliczka + ROZ. Reguła dnia (termin, FA(3), import, korekta,
+ * waluta) — `wplywy-wg-terminow.test.tsx`; co jest wpływem —
+ * `wplywy-prawdziwe-pieniadze.test.tsx`.
  */
 
 const env = vi.hoisted(() => ({ value: 'production' as string }));
@@ -13,8 +15,11 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
 }));
 
 import { getInflows } from '@/lib/dashboard/inflows';
+import { orPredicate } from '@/lib/demo/fake-postgrest';
 import { paidThisMonth } from '@/lib/invoices/list-stats';
 import type { PageContext } from '@/lib/supabase/page-context';
+
+import { withJsonAliases } from '../helpers/json-alias';
 
 type Row = Record<string, unknown>;
 type Supabase = PageContext['supabase'];
@@ -89,6 +94,8 @@ function client(tables: Record<string, Row[]>, options: ClientOptions = {}) {
         lt: (c: string, v: string) => add('lt', c, v, (r) => r[c] !== null && String(r[c]) < v),
         lte: (c: string, v: string) => add('lte', c, v, (r) => r[c] !== null && String(r[c]) <= v),
         in: (c: string, v: unknown[]) => add('in', c, v, (r) => v.includes(r[c])),
+        // E11: dzień wpływu z kilku kolumn — alternatywa jak w atrapie PostgREST-a.
+        or: (expr: string) => add('or', '', expr, orPredicate(expr)),
         is: (c: string, v: null) => add('is', c, v, (r) => r[c] === v),
         not: (c: string, op: string, v: unknown) => add(`not.${op}`, c, v, (r) => {
           if (op === 'is' && v === null) return r[c] !== null && r[c] !== undefined;
@@ -118,7 +125,7 @@ function client(tables: Record<string, Row[]>, options: ClientOptions = {}) {
           });
           const start = range?.[0] ?? 0;
           const wanted = range ? range[1] - range[0] + 1 : matching.length;
-          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity));
+          const data = head ? null : matching.slice(start, start + Math.min(wanted, options.serverCap ?? Infinity)).map((r) => withJsonAliases(columns, r));
           const count = countRequested && !options.withholdCount ? matching.length : null;
           return Promise.resolve({ data: head ? null : data, count, error: null }).then(resolve, reject);
         },
@@ -142,9 +149,12 @@ beforeEach(() => {
 const OCTOBER = { from: '2026-10-01', toExclusive: '2026-11-01' };
 const sum = (entries: Array<{ amount: number }>) => Math.round(entries.reduce((s, e) => s + e.amount, 0) * 100) / 100;
 
-describe('getInflows — wpływy według oznaczonych wpłat', () => {
-  it('bez opłaconych faktur w zakresie → pusta lista', async () => {
-    const { supabase } = sb({ invoices: [invoice(), paid(500, '2026-09-20T10:00:00Z')] });
+describe('getInflows — brzegi odczytu wpływów', () => {
+  it('bez faktur z dniem wpływu w zakresie → pusta lista', async () => {
+    const { supabase } = sb({ invoices: [
+      invoice({ issue_date: '2026-09-01', payment_due_date: '2026-09-15' }),
+      paid(500, '2026-09-20T10:00:00Z'),
+    ] });
     expect(await getInflows(supabase, TENANT, OCTOBER)).toEqual([]);
   });
 
@@ -156,25 +166,44 @@ describe('getInflows — wpływy według oznaczonych wpłat', () => {
       paid(400, '2026-09-30T21:30:00Z'),
     ] });
     const entries = await getInflows(supabase, TENANT, OCTOBER);
-    expect(entries.map((e) => [e.paidOn, e.amount])).toEqual([['2026-10-01', 300], ['2026-10-02', 100]]);
+    // paid_at ma pierwszeństwo przed terminem (30.10) — dzień zapłaty w Warszawie.
+    expect(entries.map((e) => [e.date, e.amount])).toEqual([['2026-10-01', 300], ['2026-10-02', 100]]);
   });
 
-  it('ta sama suma co kafel „Opłacone” dla tego samego miesiąca', async () => {
+  it('prawdziwe wpłaty — ta sama suma co kafel „Opłacone” listy faktur', async () => {
+    // Kafel „Opłacone” liczy `paid_at`, a wpływy prawdziwe pieniądze: obie drogi są zgodne.
     const rows = [
       paid(100, '2026-10-02T08:00:00Z'),
       paid(200.5, '2026-10-31T23:30:00Z'),
       paid(300, '2026-09-30T22:30:00Z'),
       paid(55.55, '2026-10-15T12:00:00Z', { invoice_kind: 'advance', invoice_type: 'ZAL' }),
-      paid(999, '2026-10-05T10:00:00Z', { origin: 'ksef_import' }),
     ];
     const { supabase } = sb({ invoices: rows });
     expect(sum(await getInflows(supabase, TENANT, OCTOBER))).toBe(await paidThisMonth(supabase, TENANT, NOW));
   });
 
+  // Recenzja PR #358, pkt 2: kafel i Przepływy czytają tę samą drogą (`getInflows`), więc nawet z importem
+  // z FA(3) (`paid_at` puste) i korektami przed zapłatą oraz po niej mówią tę samą kwotę.
+  it('kafel „Opłacone” zgadza się z wpływami przy imporcie z FA(3) i korektach przed i po zapłacie', async () => {
+    const przed = paid(1000, '2026-10-12T10:00:00Z', { issue_date: '2026-09-10', payment_due_date: null });
+    const po = paid(1230, '2026-10-02T10:00:00Z');
+    const korekta = (parent: Row, gross: number, issued: string) => invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: gross, parent_invoice_id: parent.id,
+      issue_date: issued, payment_due_date: null,
+    });
+    const { supabase } = sb({ invoices: [
+      przed,
+      korekta(przed, -300, '2026-09-28'),
+      po,
+      korekta(po, -123, '2026-10-10'),
+      invoice({ origin: 'ksef_import', gross_total: 500, fa3_data: { parsed: { paidDate: '2026-10-03' } } }),
+    ] });
+    const wplywy = sum(await getInflows(supabase, TENANT, OCTOBER));
+    expect(wplywy).toBe(700 + 1107 + 500);
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(wplywy);
+  });
+
   it.each([
-    ['import', { origin: 'ksef_import' }],
-    ['korekta', { invoice_kind: 'correction', invoice_type: 'KOR' }],
-    ['EUR', { currency: 'EUR' }],
     ['inne środowisko', { ksef_environment: 'test' }],
     ['zakup', { direction: 'incoming' }],
     ['cudza firma', { tenant_id: OTHER_TENANT }],
@@ -195,13 +224,13 @@ describe('getInflows — wpływy według oznaczonych wpłat', () => {
     expect(entries.map((e) => e.invoiceKind)).toEqual(['advance', 'final']);
   });
 
-  it('opłacony oryginał z korektą — wpłata oryginału zostaje, korekta nie jest wpływem', async () => {
+  it('opłacony oryginał z korektą — wpłata oryginału zostaje, korekta in minus pomniejsza wpływy (E11)', async () => {
     const original = paid(1230, '2026-10-05T10:00:00Z');
     const correction = invoice({
       invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -123, parent_invoice_id: original.id,
     });
     const { supabase } = sb({ invoices: [original, correction] });
-    expect(sum(await getInflows(supabase, TENANT, OCTOBER))).toBe(1230);
+    expect(sum(await getInflows(supabase, TENANT, OCTOBER))).toBe(1107);
   });
 
   it('wpłata 0 zł (ROZ opłacona zaliczkami) nie jest wpływem', async () => {
@@ -220,7 +249,7 @@ describe('getInflows — wpływy według oznaczonych wpłat', () => {
 
   it('faktura bez środowiska poza zakresem nie blokuje', async () => {
     const { supabase } = sb({ invoices: [
-      paid(100, '2026-09-05T10:00:00Z', { ksef_environment: null }),
+      paid(100, '2026-09-05T10:00:00Z', { ksef_environment: null, issue_date: '2026-09-01' }),
       paid(7, '2026-10-05T10:00:00Z'),
     ] });
     expect(sum(await getInflows(supabase, TENANT, OCTOBER))).toBe(7);
@@ -240,7 +269,7 @@ describe('getInflows — wpływy według oznaczonych wpłat', () => {
     await expect(getInflows(supabase, TENANT, OCTOBER)).rejects.toThrow(/niepełna strona/);
   });
 
-  it('odczyt zawężony do firmy, bez `payments`', async () => {
+  it('odczyt zawężony do firmy, bez `payments` (dzień zapłaty tylko z faktury)', async () => {
     const { supabase, c } = sb({ invoices: [paid(10, '2026-10-05T10:00:00Z')] });
     await getInflows(supabase, TENANT, OCTOBER);
     expect(c.log.map((q) => q.table)).toEqual(['invoices']);

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { hashToken } from '@/lib/accountant/tokens';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
+import { exportScopeFor } from '@/lib/exports/export-scope';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
@@ -106,13 +107,15 @@ export async function POST(req: NextRequest) {
       fwd?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? null;
     const userAgent = req.headers.get('user-agent') ?? '';
 
+    // Portal pobiera pełny zakres formatu — reguła ta sama co w runnerze (FIR-01).
+    const scope = exportScopeFor(format, { includeIssued: true, includeReceived: true, includeCorrections: true });
     const data = await fetchInvoicesForExport({
       tenantId,
       periodStart,
       periodEnd,
-      direction: format === 'jpk_fa' ? 'issued' : 'both',
-      includeCorrections: true,
-      includeExpenses: format === 'kpir_excel',
+      direction: scope.invoiceDirection,
+      includeCorrections: scope.includeCorrections,
+      includeExpenses: scope.includeExpenses,
     });
 
     const nipSeg = safeNipSegment(data.issuer.nip);

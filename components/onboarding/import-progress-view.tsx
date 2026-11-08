@@ -4,6 +4,13 @@
 // belka postępu w kolorze `--primary` jak `ui/progress` Finory, `Button`,
 // ikony Remix) zamiast szkła i gradientu. Logika bez zmian: stan z SSR
 // + Supabase Realtime.
+//
+// Decyzja Bartosza 22.10.2026: Magiczny import znika. Dawny ręczny import
+// z KSeF, który został „w toku”, już się nie skończy (kolejki nie ma) —
+// pokazujemy go jako przerwany i odsyłamy do Importu danych, gdzie historia
+// z KSeF pobiera się sama. Tak samo nieudany (poprawka po przeglądzie): jego
+// zapisany powód kazał „ponowić import”, a „Spróbuj ponownie” prowadził na
+// ekran, na którym tego importu już nie ma. Bez obietnicy e-maila po imporcie.
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,13 +20,16 @@ import {
   RiCheckboxCircleLine,
   RiCloseCircleLine,
   RiFileTextLine,
+  RiForbidLine,
   RiGroupLine,
   RiLoader4Line,
   RiSparkling2Line,
 } from '@remixicon/react';
 
+import { INTERRUPTED_LEGACY_NOTE, isInterruptedLegacyImport } from '@/components/import-danych/import-model';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { countLabel } from '@/lib/i18n/plural';
 import { createClient } from '@/lib/supabase/client';
 import type { Database, Json } from '@/types/database';
 
@@ -105,6 +115,8 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
 
   const isCompleted = job.status === 'completed';
   const isFailed = job.status === 'failed';
+  // Ta sama reguła co w historii importów: dawny import z KSeF „w toku” albo nieudany.
+  const isInterruptedLegacy = isInterruptedLegacyImport(job);
   const warningList = Array.isArray(job.warnings)
     ? job.warnings.filter((w): w is string => typeof w === 'string')
     : [];
@@ -171,6 +183,32 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
           className="w-full"
         >
           Przejdź do panelu
+          <RiArrowRightLine />
+        </Button>
+      </div>
+    );
+  }
+
+  if (isInterruptedLegacy) {
+    return (
+      <div className="space-y-5">
+        <div className="space-y-3">
+          <div className="flex size-12 items-center justify-center bg-muted text-muted-foreground">
+            <RiForbidLine className="size-6" />
+          </div>
+          <h1 className="mb-2 text-2xl font-semibold">Import przerwany</h1>
+          <p role="status" className="text-muted-foreground">
+            {`${INTERRUPTED_LEGACY_NOTE}. Historię z KSeF pobieramy teraz sami — postęp zobaczysz w Imporcie danych.`}
+          </p>
+          {job.invoices_imported > 0 ? (
+            <p className="text-muted-foreground text-sm">
+              {`Zapisano ${countLabel(job.invoices_imported, ['fakturę', 'faktury', 'faktur'])}.`}
+            </p>
+          ) : null}
+        </div>
+
+        <Button type="button" onClick={() => router.push('/import-danych')} size="lg" className="w-full">
+          Przejdź do Importu danych
           <RiArrowRightLine />
         </Button>
       </div>
@@ -253,7 +291,7 @@ export function ImportProgressView({ initialJob }: ImportProgressViewProps) {
 
       <p className="text-xs text-muted-foreground">
         <RiLoader4Line className="mr-1 inline size-3 animate-spin" aria-hidden />
-        Możesz zamknąć tę stronę — skończymy w tle. Otrzymasz email gdy import będzie gotowy.
+        Możesz zamknąć tę stronę — skończymy w tle. Wynik zobaczysz w Imporcie danych.
       </p>
     </div>
   );

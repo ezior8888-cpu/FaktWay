@@ -17,6 +17,7 @@ import * as Sentry from '@sentry/nextjs';
 import { escapeTelegramHtml, isTelegramConfigured, sendTelegramMessage } from '@/lib/alerts/telegram';
 import { sendEmail } from '@/lib/email/send';
 import { getDailyMetrics, type DailyMetrics } from '@/lib/observability/business-metrics';
+import { readDbHealth, type DbHealth } from '@/lib/observability/db-health';
 
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -144,8 +145,8 @@ export async function runDailySummaryEmail({ step, logger }: JobContext) {
     // Telegram: te same liczby co w mailu, bez dźwięku — to raport, nie alarm.
     // Fail-soft: brak dostarczenia nie blokuje maila.
     const telegramDelivered = telegram
-      ? await step.run('send-telegram', () =>
-          sendTelegramMessage(buildTelegramReport(metrics), { silent: true }),
+      ? await step.run('send-telegram', async () =>
+          sendTelegramMessage(buildTelegramReport(metrics, await readDbHealth()), { silent: true }),
         )
       : 0;
 
@@ -190,7 +191,38 @@ export async function runDailySummaryEmail({ step, logger }: JobContext) {
  * Raport dzienny dla Telegrama — wyłącznie agregaty (bez nazw firm, e-maili,
  * NIP-ów), bo wiadomość trafia na serwery Telegrama.
  */
-export function buildTelegramReport(metrics: DailyMetrics): string {
+/** Kopia starsza niż doba z zapasem: ten sam próg co bramka (`/status`). */
+const BACKUP_STALE_HOURS = 26;
+/** WAL trzymany przez jeden slot: powyżej tego dysk db-1 (40 GB) zaczyna być zagrożony. */
+const SLOT_WAL_WARN_BYTES = 2 * 1024 ** 3;
+
+function fmtBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} GB`;
+  return `${Math.round(bytes / 1024 ** 2).toLocaleString('pl-PL')} MB`;
+}
+
+/** Linie o kopii i bazie; `null` = odczyt stanu bazy się nie udał. */
+function dbHealthLines(health: DbHealth | null, nowMs: number): string[] {
+  if (!health) return ['Baza: ⚠️ odczyt stanu nieudany'];
+  const failed = health.backupFailed24h > 0 ? `, porażki 24 h: ${fmtNum(health.backupFailed24h)}` : '';
+  let backup: string;
+  if (!health.backupAt) {
+    backup = `Kopia bazy: ⚠️ brak udanej kopii${failed}`;
+  } else {
+    const hours = Math.floor((nowMs - Date.parse(health.backupAt)) / 3_600_000);
+    backup = `Kopia bazy: ${fmtNum(hours)} h temu${hours > BACKUP_STALE_HOURS ? ' ⚠️ nieaktualna' : ''}${failed}`;
+  }
+  const wal = health.slotName
+    ? `WAL trzymany przez slot ${health.slotName}: ${fmtBytes(health.slotWalBytes)}${health.slotWalBytes > SLOT_WAL_WARN_BYTES ? ' ⚠️' : ''}`
+    : 'bez slotów replikacji trzymających WAL';
+  return [backup, `Baza: ${fmtBytes(health.databaseBytes)}, ${wal}`];
+}
+
+export function buildTelegramReport(
+  metrics: DailyMetrics,
+  health?: DbHealth | null,
+  nowMs: number = Date.now(),
+): string {
   const day = (iso: string) =>
     new Date(iso).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
   const ksef =
@@ -204,6 +236,8 @@ export function buildTelegramReport(metrics: DailyMetrics): string {
     `KSeF: ${ksef}`,
     `Płatności: udane ${fmtNum(metrics.paymentsSucceeded)} (${fmtPln(metrics.paymentsTotalGrossPln)}), nieudane ${fmtNum(metrics.paymentsFailed)}`,
     `Błędy: audyt ${fmtNum(metrics.totalAuditErrors)}, joby ${fmtNum(metrics.totalInngestFailures)}`,
+    // Stan bazy tylko z joba (health przekazany); stare wywołania bez niego bez zmian.
+    ...(health === undefined ? [] : dbHealthLines(health, nowMs)),
   ];
   // Nagłówek składamy z liczb i dat, więc nie ma w nim treści do escapowania.
   return [header, '', ...body.map(escapeTelegramHtml)].join('\n');

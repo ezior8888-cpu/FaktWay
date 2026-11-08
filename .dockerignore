@@ -24,13 +24,15 @@ vitest.config.ts
 # Importuje vitest.config.ts, którego tu nie ma — `next build` sprawdza typy
 # każdego *.ts w kontekście i wywracał build obrazu (wdrożenie 36, 25.09).
 vitest.rls.config.ts
+# Importuje tests/helpers, których tu nie ma: wywrócił build obrazu (wdrożenie #363, 03.11).
+scripts/test-ksef-kreator.ts
 
 # Dokumentacja i materiały wewnętrzne.
 docs
 *.md
 !README.md
 
-# Migracje wgrywane osobno (pnpm db:push:prod), nie z kontenera.
+# Migracje wgrywane osobno (scripts/ops/wgraj-migracje.sh), nie z kontenera.
 supabase
 
 # Lokalne środowisko — root i podkatalogi; env dostarcza Coolify.

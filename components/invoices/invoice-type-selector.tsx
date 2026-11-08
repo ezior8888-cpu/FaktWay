@@ -8,6 +8,7 @@ import {
   RiHandCoinLine,
 } from '@remixicon/react';
 
+import { ExpenseCaptureCard } from '@/components/expenses/expense-capture-card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 
@@ -17,6 +18,10 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
  * Karta jak `statistics-card-03.tsx` Finory: ikona w `Avatar` (`bg-primary/10
  * text-primary`), tytuł i opis w treści. Cała karta jest linkiem — cztery
  * adresy i teksty bez zmian względem wersji przed P5.
+ *
+ * Pierwszy kafel to „Wydatek” ze zdjęcia albo pliku (poprawka Bartosza
+ * 25.10.2026): plus dolnego paska telefonu prowadzi tutaj, a na telefonie
+ * najczęściej dodaje się koszty.
  */
 const INVOICE_TYPES: ReadonlyArray<{
   type: 'regular' | 'correction' | 'advance' | 'final';
@@ -56,12 +61,12 @@ export function InvoiceTypeSelector() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nowa faktura</h1>
         <p className="text-muted-foreground text-sm">
-          Wybierz typ dokumentu — każda ścieżka prowadzi do formularza w tym samym
-          układzie co reszta aplikacji
+          Wybierz rodzaj faktury albo dodaj wydatek ze zdjęcia.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <ExpenseCaptureCard />
         {INVOICE_TYPES.map((it) => (
           <Link
             key={it.type}

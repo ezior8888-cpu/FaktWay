@@ -10,7 +10,9 @@ vi.mock('@/lib/ksef/claim-environment', () => ({ requireConfiguredKsefEnvironmen
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), redirect: vi.fn() }));
 vi.mock('@/components/reminders/reminder-consent-dialog', () => ({ ReminderConsentDialog: () => null }));
 vi.mock('@/app/actions/reminders', () => ({ toggleInvoiceRemindersAction: vi.fn() }));
-import OverduePage from '@/app/(dashboard)/payments/overdue/page';
+vi.mock('@/app/actions/invoice-payments', () => ({ markInvoicePaidAction: vi.fn(), undoInvoicePaidAction: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+import OverduePage from '@/app/(dashboard)/(faktury)/payments/overdue/page';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const FOREIGN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -130,8 +132,11 @@ describe('overdue reminder status', () => {
     expect(props.overdueInvoices.map((item) => item.id)).toEqual([INVOICE]);
     expect(props.stats.totalAmount).toBe(100);
     const html = renderToStaticMarkup(page);
-    expect(html).toContain('Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy');
-    expect(html).toContain('Suma pokazanych pozycji');
+    // Poprawka Bartosza 21.10.2026: stała nota nad kaflami zniknęła. Zakres sumy
+    // (bez importów i korekt) mówi podpis kafla „Po terminie” (RECEIVABLES_NOTE).
+    expect(html).not.toContain('role="note"');
+    expect(html).not.toContain('Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy');
+    expect(html).toContain('Suma pokazanych pozycji<br/>Bez importów i faktur skorygowanych');
     expect(html).not.toContain('Suma do odzyskania');
     expect(html).not.toContain('IMPORTED');
     expect(html).not.toContain('CORRECTED-ORIGINAL');
@@ -230,9 +235,50 @@ describe('overdue reminder status', () => {
     expect(props.overdueInvoices).toHaveLength(100);
     expect(props.overdueInvoices.every((row) => row.id.startsWith('prod-'))).toBe(true);
     expect(props.stats.totalAmount).toBe(10_000);
+    // Dokładnie 100 po przejrzeniu całego widoku: lista jest pełna, bez noty o limicie.
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
     expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
     expect(queries.filter((query) => query.table === 'invoices' && query.selection.includes('ksef_environment'))
       .every((query) => query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data' && query.exactCount)).toBe(true);
+  });
+
+  it('notes the 100-invoice cap only when more overdue invoices may exist (poprawka Bartosza 21.10.2026)', async () => {
+    const productionRows = (count: number) => Array.from({ length: count }, (_, index) => ({
+      ...invoice('prod-' + index, TENANT), internal_number: 'PROD-' + index,
+    }));
+    // Od 25.10.2026 liczby „Po terminie” stoją w pasku nad tabelą (`PanelStats`:
+    // etykieta, liczba, podpis), nie w osobnych kaflach zakładki.
+    const CAP_NOTE = /Faktur po terminie<\/dt><dd[^>]*>100<\/dd><dd[^>]*>średnio 22 dni po terminie<br\/>Pokazujemy pierwsze 100, od najdłużej zaległych<\/dd>/;
+
+    // Jedna faktura: bez noty.
+    let page = await OverduePage();
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
+    expect(renderToStaticMarkup(page)).not.toContain('Pokazujemy pierwsze');
+
+    // Dokładnie 100 na jednej stronie widoku: lista pełna, bez noty.
+    rows.invoices_overdue = productionRows(100);
+    page = await OverduePage();
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
+    expect(renderToStaticMarkup(page)).not.toContain('Pokazujemy pierwsze');
+
+    // 101 kandydatów: pętla staje po 100 bezpiecznych, 101. nie jest sprawdzana —
+    // dalszych pozycji nie wykluczymy, więc nota mówi „pierwsze 100”.
+    rows.invoices_overdue = productionRows(101);
+    page = await OverduePage();
+    expect((page.props as { overdueInvoices: unknown[] }).overdueInvoices).toHaveLength(100);
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(true);
+    expect(renderToStaticMarkup(page)).toMatch(CAP_NOTE);
+
+    // Cały widok przejrzany, bezpiecznych ponad 100 (99 + 100 z dwóch stron): ucięte na pewno.
+    const testRow = { ...invoice('test-0', TENANT), internal_number: 'TEST-0' };
+    rows.invoices_overdue = [testRow, ...productionRows(199)];
+    rows.invoices = rows.invoices_overdue.map((row) => ({ id: row.id, tenant_id: TENANT,
+      ksef_environment: row.id === 'test-0' ? 'test' : 'production', origin: 'app',
+      invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' }));
+    page = await OverduePage();
+    expect((page.props as { overdueInvoices: unknown[] }).overdueInvoices).toHaveLength(100);
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(true);
+    expect(renderToStaticMarkup(page)).toMatch(CAP_NOTE);
   });
 
   it('shows reconciliation error for an overdue accepted invoice with unknown environment', async () => {
@@ -249,7 +295,11 @@ describe('overdue reminder status', () => {
     rows.payment_reminders.push(reminder('22222222-2222-4222-8222-222222222222', FOREIGN, '2026-09-23T11:00:00.000Z'));
     const html = await markup();
     expect(html).toContain('Oczekuje na wysyłkę');
-    expect(html).toContain('Stan przypomnień jest orientacyjny.');
+    // Poprawka Bartosza 21.10.2026: zastrzeżenie przeszło z noty nad kaflami
+    // do podpisu kafla „Przypomnień wysłanych w miesiącu” (ten atrapowy klient nie
+    // zna `.gte`, więc licznik kafla jest tu nieodczytany — zdanie stoi pod tą linią).
+    expect(html).toMatch(/Przypomnień wysłanych w miesiącu<\/dt><dd[^>]*>—<\/dd><dd[^>]*>Nie udało się odczytać — odśwież za chwilę<br\/>Stan przypomnień jest orientacyjny<\/dd>/);
+    expect(html).not.toContain('Stan przypomnień jest orientacyjny.');
     expect(html).not.toContain('FOREIGN-1');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Przypomnienie już zlecone"/);
     const view = queries.find((q) => q.table === 'invoices_overdue')!;
@@ -330,6 +380,26 @@ describe('overdue reminder status', () => {
     expect(await markup()).toContain('href="/settings/reminders"');
     mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role: 'member', isActive: true }] });
     expect(await markup()).not.toContain('href="/settings/reminders"');
+  });
+
+  // „Zapłacone” (00158): ta sama lista ról co w `mark_invoice_paid`. Księgowa widzi
+  // należność, ale nie oznacza, więc przycisk, który RPC i tak by odrzuciło, nie powstaje.
+  it.each([
+    ['owner', true],
+    ['admin', true],
+    ['member', true],
+    ['accountant', false],
+  ])('role %s: the "Zapłacone" button present = %s', async (role, expected) => {
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role, isActive: true }] });
+    const html = await markup();
+    expect(html.includes('aria-label="Zapłacone: oznacz fakturę VISIBLE-1"')).toBe(expected);
+    // Etykieta zaczyna się od widocznego tekstu (WCAG 2.5.3), a pole dotyku ma 44 px.
+    if (expected) expect(html).toMatch(/max-lg:min-h-\[44px\][^"]*max-lg:min-w-\[44px\]/);
+  });
+
+  it('marks nothing without a membership in the active organization', async () => {
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: FOREIGN, role: 'owner', isActive: false }] });
+    expect(await markup()).not.toContain('Zapłacone: oznacz fakturę');
   });
 
   it('leaves fresh preparation available only when the status read succeeds and finds no pending row', async () => {

@@ -43,7 +43,9 @@ const SettingsNav = ({ tabs, onSelect }: SettingsNavProps) => {
               'justify-between',
               active &&
                 // Jasny motyw: text-chart-3 (5,4:1 na primary/15; sam primary 4,13:1 < AA), jak w app-sidebar.
-                'bg-primary/15 text-chart-3 hover:bg-primary/20 hover:text-chart-3 dark:bg-primary/20 dark:text-primary dark:hover:bg-primary/30 dark:hover:text-primary'
+                // Ciemny (WCAG 1.4.3): primary na primary/20–/30 to 3,4–5,0:1 (hover i arkusz na telefonie
+                // poniżej AA) — accent-foreground daje 6,1–9,0:1.
+                'bg-primary/15 text-chart-3 hover:bg-primary/20 hover:text-chart-3 dark:bg-primary/20 dark:text-accent-foreground dark:hover:bg-primary/30 dark:hover:text-accent-foreground'
             )}
           >
             {item.label}

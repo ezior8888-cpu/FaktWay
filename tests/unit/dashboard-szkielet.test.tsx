@@ -41,9 +41,7 @@ vi.mock('@/components/dashboard/command-menu', () => ({
 }));
 
 const { AppSidebar } = await import('@/components/dashboard/app-sidebar');
-const { AppHeader } = await import('@/components/dashboard/app-header');
 const { Footer } = await import('@/components/dashboard/footer');
-const { ProfileMenu, initialsFromEmail } = await import('@/components/dashboard/profile-menu');
 const { SidebarProvider } = await import('@/components/ui/sidebar');
 const { TooltipProvider } = await import('@/components/ui/tooltip');
 const { dashboardNavSections, dashboardSettingsNavItem } = await import('@/lib/dashboard-nav-config');
@@ -189,14 +187,12 @@ describe('AppSidebar — dostępność', () => {
 
   it('klasy nie zawierają kombinacji o za niskim kontraście', () => {
     const sidebar = readFileSync(join(__dirname, '../../components/dashboard/app-sidebar.tsx'), 'utf8');
-    const profile = readFileSync(join(__dirname, '../../components/dashboard/profile-menu.tsx'), 'utf8');
+
     expect(sidebar).not.toContain('text-sidebar-foreground/50');
     expect(sidebar).toContain('data-active:text-chart-3');
     expect(sidebar).toContain('hover:data-active:text-chart-3');
     expect(sidebar).toContain('dark:data-active:text-primary');
     expect(sidebar).not.toMatch(/(?<!dark:)(?<!dark:hover:)data-active:text-primary/);
-    expect(profile).not.toContain('bg-primary/10 text-primary');
-    expect(profile).toContain('text-accent-foreground');
   });
 });
 
@@ -249,59 +245,18 @@ describe('Footer — stopka panelu', () => {
     // Pływający bąbelek pomocy (prawy dolny róg) nie może zasłaniać „Pomocy”.
     expect(html).toContain('lg:pr-[100px]');
   });
-});
 
-describe('ProfileMenu — menu avatara', () => {
-  it('przycisk pokazuje inicjały z adresu e-mail', () => {
-    const html = renderToStaticMarkup(<ProfileMenu email="jan.kowalski@example.test" />);
+  it('Regulamin, Polityka prywatności i Pomoc mają na telefonie cel dotykowy 44 px', () => {
+    const html = renderToStaticMarkup(<Footer />);
+    const targets = html.match(/<(?:a|button)\b[^>]*class="[^"]*"/g) ?? [];
 
-    expect(html).toContain('aria-label="Menu konta"');
-    expect(html).toContain('>JK</span>');
-  });
-
-  it('inicjały: dwa człony, jeden człon i adres bez liter', () => {
-    expect(initialsFromEmail('jan.kowalski@example.test')).toBe('JK');
-    expect(initialsFromEmail('anna@example.test')).toBe('AN');
-    expect(initialsFromEmail('łukasz_żak@example.test')).toBe('ŁŻ');
-    expect(initialsFromEmail('@example.test')).toBe('?');
+    expect(targets).toHaveLength(3);
+    for (const tag of targets) {
+      expect(tag).toContain('max-sm:min-h-[44px]');
+      expect(tag).toContain('max-sm:min-w-[44px]');
+    }
   });
 });
 
-describe('AppHeader — nagłówek panelu', () => {
-  it('wstawia sloty przełącznika firmy i tytułu strony oraz menu konta', () => {
-    nav.pathname = '/invoices';
-    const html = renderToStaticMarkup(
-      <TooltipProvider>
-        <SidebarProvider>
-          <AppHeader
-            orgSwitcher={<div data-testid="slot-firma">Firma testowa</div>}
-            pageHeading={<h1 data-testid="slot-tytul">Tytuł strony</h1>}
-            user={{ email: 'anna@example.test' }}
-          />
-        </SidebarProvider>
-      </TooltipProvider>,
-    );
+// Pasek górny i menu profilu (1:1 z Finory, 21.10.2026): tests/unit/finora-pasek-gorny.test.tsx.
 
-    expect(html).toMatch(/^<div[^>]*data-slot="sidebar-wrapper"[^>]*><header[^>]*class="ff-shell-header/);
-    expect(html).toContain('data-testid="slot-firma"');
-    expect(html).toContain('data-testid="slot-tytul"');
-    expect(html).toContain('Szukaj lub przejdź…');
-    expect(html).toContain('aria-label="Przełącz pasek boczny"');
-    expect(html).toContain('>AN</span>');
-    // Dzwonka i ikony ustawień w nagłówku nie ma (plan Finora P0).
-    expect(html).not.toContain('href="/settings"');
-    expect(html).not.toMatch(/powiadomie/i);
-  });
-
-  it('bez użytkownika nie rysuje menu konta', () => {
-    const html = renderToStaticMarkup(
-      <TooltipProvider>
-        <SidebarProvider>
-          <AppHeader orgSwitcher={null} pageHeading={null} user={null} />
-        </SidebarProvider>
-      </TooltipProvider>,
-    );
-
-    expect(html).not.toContain('Menu konta');
-  });
-});

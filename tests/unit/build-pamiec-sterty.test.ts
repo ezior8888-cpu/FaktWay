@@ -19,10 +19,11 @@ describe('build produkcyjny mieści się w pamięci app-1', () => {
     expect(config).toMatch(/experimental:\s*\{[\s\S]*?webpackMemoryOptimizations:\s*true/);
   });
 
-  it('Dockerfile daje buildowi co najmniej 3584 MB sterty', () => {
+  // 22.10.2026: 4096 MB — łatki Next 16.4.1 i @sentry/nextjs 10.75.2 nie mieszczą się w 3584 MB.
+  it('Dockerfile daje buildowi co najmniej 4096 MB sterty', () => {
     const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8');
     const cap = Number(dockerfile.match(/--max-old-space-size=(\d+)/)?.[1]);
-    expect(cap).toBeGreaterThanOrEqual(3584);
+    expect(cap).toBeGreaterThanOrEqual(4096);
   });
 
   it('job CI „Next build” buduje z tym samym pułapem sterty co Dockerfile', () => {

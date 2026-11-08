@@ -2,10 +2,12 @@
 // `login-form.tsx` szablonu. Układ i klasy 1:1; logika nasza i bez zmian:
 // formularz idzie do `loginWithEmail`, Google do `loginWithGoogle` (przycisk
 // tylko przy włączonym Google w GoTrue — #281), Turnstile zostaje.
-// Wylatują: Facebook i „Remember me” (nie mamy tej funkcji, `IdleWatcher`
-// wylogowuje po 60 min bezczynności).
+// Wylatuje Facebook. „Zapamiętaj mnie” wróciło z logowaniem biometrią: domyślnie
+// włączone na telefonie, wyłączone na komputerze; przy nim `IdleWatcher`
+// nie wylogowuje po 60 min bezczynności.
 
 // Next Imports
+import { headers } from 'next/headers'
 import Link from 'next/link'
 
 // Component Imports
@@ -14,13 +16,18 @@ import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { GoogleIcon } from '@/components/auth/finora/google-icon'
 import { PasswordInput } from '@/components/auth/finora/password-input'
+import { HoneypotField } from '@/components/auth/honeypot-field'
+import { PasskeyLogin } from '@/components/auth/passkey-login'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 
 // Lib Imports
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers'
+import { safeRedirectPath } from '@/lib/auth/safe-redirect'
+import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent'
 import { SUPPORT_EMAIL } from '@/lib/site'
 
 import { loginWithEmail, loginWithGoogle } from './actions'
@@ -39,8 +46,11 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 const SUCCESS_MESSAGES: Record<string, string> = {
-  check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
-  account_deleted: 'Zapisaliśmy żądanie usunięcia firmy. Zostałeś wylogowany — konto zostanie trwale usunięte po upływie okresu retencji (30 dni), o ile nie cofniesz decyzji z pomocą techniczną.',
+  check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową, wysłaliśmy link aktywacyjny.',
+  // Bez `account_deleted` od 15.10.2026: usuwanie firmy z aplikacji jest
+  // wstrzymane (idzie przez pomoc — components/settings/company-deletion.tsx),
+  // a komunikat obiecywał trwałe usunięcie po 30 dniach, którego nic nie
+  // wykonywało.
   session_expired: 'Wylogowaliśmy Cię po godzinie bezczynności. Zaloguj się ponownie, aby kontynuować.',
 }
 
@@ -49,7 +59,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string; success?: string; redirect?: string; retry?: string; notice?: string }>
 }) {
-  const { error, success, retry, notice } = await searchParams
+  const { error, success, retry, notice, redirect: redirectParam } = await searchParams
+  const isPhone = isPhoneUserAgent((await headers()).get('user-agent'))
   const retryMinutes = retry ? Math.ceil(Number(retry) / 60) : null
   const errorMsg = error
     ? error === 'rate_limited' && retryMinutes
@@ -78,6 +89,8 @@ export default async function LoginPage({
           Wylogowaliśmy tę przeglądarkę. Nie udało się potwierdzić wylogowania na pozostałych urządzeniach.
         </AuthMessage>
       )}
+
+      <PasskeyLogin redirectTo={safeRedirectPath(redirectParam ?? null)} withSeparator={!googleEnabled} />
 
       {googleEnabled && (
         <>
@@ -109,7 +122,7 @@ export default async function LoginPage({
                 id='email'
                 name='email'
                 required
-                autoComplete='email'
+                autoComplete='username webauthn'
                 placeholder='Wpisz adres e‑mail'
               />
             </Field>
@@ -120,12 +133,17 @@ export default async function LoginPage({
               </FieldLabel>
               <PasswordInput id='password' name='password' required autoComplete='current-password' />
             </Field>
-            {/* Forgot Password — „Remember me” wylatuje (plan P15) */}
-            <div className='flex items-center justify-end gap-y-2'>
+            {/* Zapamiętaj mnie i Forgot Password. Całe pole etykiety ma co najmniej 44 px. */}
+            <div className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
+              <label data-testid='remember-me-field' className='flex min-h-[44px] cursor-pointer items-center gap-2 text-base'>
+                <Checkbox name='remember' defaultChecked={isPhone} />
+                Zapamiętaj mnie
+              </label>
               <Link href='/forgot-password' className='text-base text-nowrap hover:underline'>
                 {FORGOT_PASSWORD_LABEL}
               </Link>
             </div>
+            <HoneypotField />
             <TurnstileWidget action='login' theme='light' />
             <Field>
               <Button className='w-full' type='submit'>
@@ -136,14 +154,16 @@ export default async function LoginPage({
         </form>
         <p className='text-center text-muted-foreground'>
           Nie masz konta?{' '}
-          <Link href='/register' className='text-foreground hover:underline'>
+          <Link href='/register' className='text-foreground underline underline-offset-4 hover:text-primary'>
             Utwórz konto
           </Link>
         </p>
         {/* Pierwsze logowanie Google zakłada konto, więc zgoda musi być widoczna i tu. */}
         <p className='text-center text-sm text-muted-foreground'>
           Zakładając konto akceptujesz <Link href='/legal/regulamin' className='underline'>regulamin</Link> i{' '}
-          <Link href='/legal/polityka-prywatnosci' className='underline'>politykę prywatności</Link>.
+          <Link href='/legal/umowa-powierzenia' className='underline'>umowę powierzenia</Link> oraz potwierdzasz
+          zapoznanie się z{' '}
+          <Link href='/legal/polityka-prywatnosci' className='underline'>polityką prywatności</Link>.
         </p>
       </div>
     </AuthSplitLayout>

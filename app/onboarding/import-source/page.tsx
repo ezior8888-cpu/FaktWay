@@ -8,6 +8,9 @@ import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 
 /**
  * Krok onboardingu: wybór źródła importu danych po założeniu organizacji.
+ * Decyzja Bartosza 22.10.2026: historię z KSeF FaktWay pobiera sam po
+ * wgraniu certyfikatu (bez Magicznego importu), więc tu zostaje informacja
+ * o KSeF, import pliku CSV z czterech programów i „Pomiń”.
  *
  * Membership/tenant query przez admin client (deterministyczne, omija RLS) —
  * bez tego zaraz po `createOrganizationAction` zdarzała się sytuacja, gdy
@@ -46,7 +49,7 @@ export default async function ImportSourcePage() {
   return (
     <AuthSplitLayout
       panelTitle="Przenieś historię faktur"
-      panelText="Pobierzemy faktury z KSeF albo z pliku z poprzedniego programu. Możesz też zacząć od zera i wrócić do importu później."
+      panelText="Historię faktur z KSeF pobierzemy sami po wgraniu certyfikatu. Z poprzedniego programu przeniesiesz ją plikiem CSV — albo zacznij od zera."
     >
       <ImportSourceSelector
         tenantId={tenantId}

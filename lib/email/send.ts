@@ -20,11 +20,13 @@ import AccountDeletionConfirmation from './templates/AccountDeletionConfirmation
 import CertExpiry from './templates/CertExpiry';
 import GdprDeletionScheduled from './templates/GdprDeletionScheduled';
 import InvoiceAccepted from './templates/InvoiceAccepted';
-import InvoiceDuplicateDecision from './templates/InvoiceDuplicateDecision';
+import InvoiceDuplicateDecision, { duplicateDecisionSubject } from './templates/InvoiceDuplicateDecision';
 import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
 import PaymentFailed from './templates/PaymentFailed';
 import RefundIssued from './templates/RefundIssued';
+import SupportEscalation, { type SupportEscalationProps } from './templates/SupportEscalation';
+import TerminRozliczenia, { type TerminRozliczeniaProps } from './templates/TerminRozliczenia';
 import TrialEnding from './templates/TrialEnding';
 
 // ═══════════════════════════════════════════════════════════════
@@ -126,6 +128,11 @@ export interface InvoiceDuplicateDecisionPayload {
   ksefNumber: string;
   /** Przypomnienie operatora (inny temat). */
   reminder: boolean;
+  /**
+   * PR C (spec v3 5.7): wariant z tej samej oferty co panel (`duplicateNoticeVariant`) — `pair` (teksty PR B),
+   * `record`, `released` albo `review` („sprawdzamy”). Brak = `pair`.
+   */
+  variant?: DuplicateNoticeVariant;
 }
 
 interface CertExpiryPayload {
@@ -144,7 +151,7 @@ import {
   isUnsubscribeConfigured,
 } from './unsubscribe-token';
 import { SUPPORT_EMAIL } from '@/lib/site';
-import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
+import type { DuplicateNoticeVariant } from '@/lib/ksef/duplicate-decision';
 
 async function sendViaResend(opts: {
   to: string;
@@ -162,6 +169,8 @@ async function sendViaResend(opts: {
    * (AUD-86). Klucz zależy od zdarzenia, nie od próby.
    */
   idempotencyKey?: string;
+  /** Adres do odpowiedzi; domyślnie pomoc FaktWay. */
+  replyTo?: string;
 }): Promise<EmailStubResult> {
   const category: EmailCategory = opts.category ?? 'transactional';
   const finalTo = DEV_TO_OVERRIDE ?? opts.to;
@@ -200,7 +209,7 @@ async function sendViaResend(opts: {
   const message = {
     from: getFromEmail(category),
     // Nadawca to no-reply@ — bez tego odpowiedź klienta ginie (MAN-18).
-    replyTo: SUPPORT_EMAIL,
+    replyTo: opts.replyTo ?? SUPPORT_EMAIL,
     to: [finalTo],
     subject: finalSubject,
     html: opts.html,
@@ -277,20 +286,41 @@ export async function sendInvoiceFailedEmail(
 }
 
 /**
+ * Klient kliknął „Połącz z człowiekiem”. Zgłoszenie na adres pomocy: odpowiedź
+ * z tej wiadomości idzie od razu do klienta. Klucz na rozmowę: wyścig dwóch
+ * kliknięć nie wysyła drugiego maila.
+ */
+export async function sendSupportEscalationEmail(
+  payload: SupportEscalationProps,
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendSupportEscalationEmail: rozmowa ${payload.conversationId}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(SupportEscalation(payload));
+  return sendViaResend({
+    to: SUPPORT_EMAIL,
+    subject: 'Klient prosi o kontakt z człowiekiem',
+    html,
+    replyTo: payload.userEmail ?? undefined,
+    idempotencyKey: `support-escalation/${payload.conversationId}`,
+  });
+}
+
+/**
  * D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (5), spec §2.8): „Faktura {nr}
  * czeka na Twoją decyzję” — raz na fakturę i numer KSeF oryginału (ślad
  * w `audit_logs`, klucz idempotencji z wywołującego); przypomnienie operatora
  * z tematem „Przypomnienie: …”. Teksty: `DUPLICATE_DECISION_TEXTS.NOTICE`
  * (przegląd prawnika przed KSeF PROD). Błąd Resend rzuca (`sendViaResend`).
+ * PR C: `payload.variant` (`pair` / `record` / `released` / `review`) wybiera temat i treść.
  */
 export async function sendInvoiceDuplicateDecisionEmail(
   email: string,
   payload: InvoiceDuplicateDecisionPayload,
   options: SendOptions = {},
 ): Promise<EmailStubResult> {
-  const subject = payload.reminder
-    ? DUPLICATE_DECISION_TEXTS.NOTICE.REMINDER_SUBJECT(payload.invoiceNumber)
-    : DUPLICATE_DECISION_TEXTS.NOTICE.SUBJECT(payload.invoiceNumber);
+  const subject = duplicateDecisionSubject(payload.variant ?? 'pair', payload.reminder, payload.invoiceNumber);
   if (!isResendConfigured()) {
     logger.debug(`[email:stub] sendInvoiceDuplicateDecisionEmail → ${email}:`, `${subject} (numer KSeF ${payload.ksefNumber})`);
     return { sent: false, reason: 'not-configured' };
@@ -318,6 +348,9 @@ export async function sendEmail(opts: {
   html: string;
   category?: EmailCategory;
   userId?: string;
+  /** Np. regulamin jako plik — potwierdzenie umowy na trwałym nośniku (lib/legal/record.ts). */
+  attachments?: Array<{ filename: string; content: Buffer }>;
+  idempotencyKey?: string;
 }): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(`[email:stub] sendEmail → ${opts.to}: ${opts.subject}`);
@@ -329,6 +362,7 @@ export async function sendEmail(opts: {
 export async function sendCertExpiryAlert(
   email: string,
   payload: CertExpiryPayload,
+  options: SendOptions = {},
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(
@@ -350,6 +384,30 @@ export async function sendCertExpiryAlert(
     to: email,
     subject: `⚠ Certyfikat KSeF wygasa za ${payload.daysRemaining} dni`,
     html,
+    idempotencyKey: options.idempotencyKey,
+  });
+}
+
+/**
+ * Przypomnienie o terminie rozliczenia z modułu księgowości (K5): treść
+ * z `lib/ksiegowosc/przypomnienia.ts`, `adres` względny do aplikacji.
+ */
+export async function sendTerminRozliczeniaEmail(
+  email: string,
+  payload: TerminRozliczeniaProps,
+  options: SendOptions & { userId?: string } = {},
+): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendTerminRozliczeniaEmail → ${email}: ${payload.tytul}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(TerminRozliczenia({ ...payload, adres: `${APP_URL}${payload.adres}` }));
+  return sendViaResend({
+    to: email,
+    subject: payload.tytul,
+    html,
+    userId: options.userId,
+    idempotencyKey: options.idempotencyKey,
   });
 }
 
@@ -550,6 +608,22 @@ export interface InvoiceEmailPayload {
   pdfFilename: string;
 }
 
+/**
+ * Stopka maila z fakturą do nabywcy. Do 15.10.2026: „Wiadomość wysłana przez
+ * FaktWay” — nabywca nie wiedział, że nadawcą jest sprzedawca, a FaktWay
+ * tylko przetwarza dane na jego zlecenie, ani że odpowiedź trafi do obsługi
+ * FaktWay (Reply-To), nie do sprzedawcy. Art. 14 RODO jest obowiązkiem
+ * sprzedawcy; stopka mówi nabywcy, do kogo się zwrócić.
+ */
+export function invoiceEmailFooter(sellerName: string): string {
+  const seller = escapeHtml(sellerName);
+  return (
+    `Fakturę wysłał(a) ${seller} za pośrednictwem serwisu FaktWay, który przetwarza dane na zlecenie ${seller}. ` +
+    `W sprawie faktury, płatności i Twoich danych osobowych skontaktuj się bezpośrednio z ${seller} — ` +
+    `odpowiedź na tę wiadomość trafi do obsługi FaktWay, która przekaże ją nadawcy.`
+  );
+}
+
 export async function sendInvoiceEmail(
   payload: InvoiceEmailPayload,
 ): Promise<EmailStubResult> {
@@ -570,7 +644,7 @@ export async function sendInvoiceEmail(
         <tr><td style="color:#6b7280;padding-right:16px">${escapeHtml(payload.amountCaption)}</td><td><strong>${escapeHtml(payload.amountLabel)}</strong></td></tr>
         <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
       </table>
-      <p style="color:#9ca3af;font-size:12px">Wiadomość wysłana przez FaktWay.</p>
+      <p style="color:#9ca3af;font-size:12px">${invoiceEmailFooter(payload.sellerName)}</p>
     </div>
   `;
 

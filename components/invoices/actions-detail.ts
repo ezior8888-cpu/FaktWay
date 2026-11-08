@@ -21,14 +21,37 @@ import { ActionAuthError, requireOrgRole, requireUserAndActiveOrg } from '@/lib/
 import { downloadInvoiceXml } from '@/lib/storage/r2';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import {
+  KSEF_ORIGINAL_ALARM_KINDS,
+  parseDuplicateCheck,
+  type DuplicateDecisionMode,
+  type DuplicateOriginalOffer,
+  type OriginalRecheckKind,
+} from '@/lib/ksef/duplicate-check';
+import {
   DUPLICATE_DECISION_SQL_TEXTS,
   DUPLICATE_DECISION_TEXTS,
+  decisionLabel,
   duplicateDecisionOptions,
+  duplicateMarker,
   fillSqlText,
   type DuplicateChoice,
 } from '@/lib/ksef/duplicate-decision';
 import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
-import { callDecideKsefDuplicate } from '@/lib/ksef/duplicate-decision-rpc';
+import {
+  callDecideKsefDuplicate,
+  callDecideKsefDuplicateOriginal,
+  callFlagKsefOriginalRecheck,
+  type DecideKsefDuplicateOriginalResult,
+  type DuplicateRpcError,
+} from '@/lib/ksef/duplicate-decision-rpc';
+import {
+  originalDecisionAlarms,
+  originalRecheckKindFor,
+  prepareOriginalImport,
+  type PrepareOriginalImportResult,
+} from '@/lib/ksef/duplicate-original-import';
+import type { KsefOriginalImportProjection } from '@/lib/ksef/duplicate-original-projection';
+import type { KsefEnvironment } from '@/types/ksef';
 import { validateInvoice } from '@/lib/xml/invoice-calculator';
 import { generateInvoicePdf, verifyInvoicePdfDeliveryState } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
@@ -314,6 +337,15 @@ export type DecideKsefDuplicateInput = {
   originalSha256: string;
   /** Zaznaczone „Rozumiem skutki” (decyzja 7 — sprawdzane też tutaj, nie tylko w UI). */
   confirmed: boolean;
+  /**
+   * PR C (INV-8): tryb (`import` — zapis faktury z KSeF; `no-import` — oddana decyzja), oferta
+   * (`pair`/`record`/`released`) i środowisko KSeF serwera, które pokazał panel `faktflow-original`.
+   * Serwer liczy je od nowa i odmawia `STALE`, gdy którakolwiek wartość się różni. Powody PR B
+   * (`no-own-file`, `known-number`) ich nie niosą — brak = `null`.
+   */
+  mode?: DuplicateDecisionMode | null;
+  offer?: DuplicateOriginalOffer | null;
+  env?: KsefEnvironment | null;
 };
 
 export type DecideKsefDuplicateResult =
@@ -322,22 +354,104 @@ export type DecideKsefDuplicateResult =
 
 const isDuplicateChoice = (v: unknown): v is DuplicateChoice => v === 'same_sale' || v === 'other_sale';
 
+const BOTH_CHOICES: readonly DuplicateChoice[] = ['same_sale', 'other_sale'];
+
+/** `DETAIL` odmów P0001 `decide_ksef_duplicate_original`, których tekst z bazy idzie do klienta bez alarmu (stan zmienił się od odczytu). */
+const PASSTHROUGH_REFUSAL_DETAILS: ReadonlySet<string> = new Set([
+  'mode',
+  'offer',
+  'choice',
+  'already',
+  'recheck-needed',
+  'provenance-review',
+  'known-now',
+  'cross-tenant',
+]);
+
+/** Toast po zapisie oryginału z KSeF: z zapisanej decyzji (oferta, wybór), nie z wejścia akcji. `nrK` = numer przeniesiony na fakturę z KSeF. */
+function importedDecisionToast(offer: DuplicateOriginalOffer | null | undefined, choice: DuplicateChoice, nrK: string): string {
+  const F = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
+  const label = decisionLabel(offer, choice);
+  return label === 'record' ? F.TOAST_RECORD(nrK) : label === 'other_sale' ? F.TOAST_OTHER(nrK) : F.TOAST_SAME(nrK);
+}
+
 /**
- * „To ta sama sprzedaż” / „To inna sprzedaż” na karcie faktury (D-A4-1b-3 PR B,
- * decyzje Bartosza 04.10 i 07.10.2026). Kolejność: rola (właściciel/admin),
- * środowisko KSeF serwera, fakty sesją klienta (RLS) i ta sama polityka co
- * panel, wiązanie z danymi pokazanymi klientowi (numer KSeF i SHA-256
- * oryginału), „Rozumiem skutki” — dopiero wtedy RPC kluczem serwisowym
- * (przejścia stanu są serwerowe). RPC sprawdza to samo w bazie i zapisuje
- * audyt; akcja własnego audytu nie pisze.
+ * Alarmy po decyzji (K bez daty nadania / bez sesji, T5) — ze stanu bazy, na KAŻDEJ ścieżce sukcesu.
+ * Zapisana decyzja nie może zamienić się w błąd: `originalDecisionAlarms` nie rzuca, a ta osłona
+ * łapie ewentualny błąd programu (trwały sygnał K bez sesji / daty i tak pokaże I3K).
+ */
+async function reportOriginalDecisionAlarms(tenantId: string, invoiceId: string, importedInvoiceId: string): Promise<void> {
+  try {
+    await originalDecisionAlarms(createAdminClient(), { tenantId, invoiceId, importedInvoiceId });
+  } catch (err) {
+    Sentry.captureException(err, { tags: { area: 'ksef.duplicate-decision' }, extra: { tenantId, invoiceId, importedInvoiceId } });
+  }
+}
+
+/**
+ * Odmowa w chwili zapisu: brak/inne archiwum, inna ocena pliku, projekcja nie przechodzi lustra albo baza
+ * jej nie przyjęła. Zostaje trwały znacznik „sprawdź ponownie” (`flag_ksef_original_recheck`, INV-25 —
+ * idempotentny; błąd zapisu zgłasza i tak nie rzucający wrapper), klient dostaje `RECHECK` z numerem dokumentu,
+ * a Sentry jedno zgłoszenie z odciskiem `[kind, invoiceId]` (powtórzone kliknięcie go nie mnoży).
+ * Gdy `flag_*` odpowie `stale` / `not-pending` (stan zmienił się od kliknięcia, np. decyzja operatora w międzyczasie),
+ * nic nie zostało oznaczone: klient dostaje `STALE` (odśwież stronę), bez tekstu „sprawdzimy” i bez alarmu.
+ */
+async function refuseOriginalForRecheck(args: {
+  tenantId: string;
+  userId: string;
+  invoiceId: string;
+  nr: string;
+  originalKsefNumber: string;
+  originalSha256: string;
+  recheckKind: OriginalRecheckKind;
+  alarmKind: string;
+  alarmMessage: string;
+  detail: string;
+}): Promise<DecideKsefDuplicateResult> {
+  const flagged = await callFlagKsefOriginalRecheck(createAdminClient(), {
+    invoiceId: args.invoiceId,
+    tenantId: args.tenantId,
+    actorUserId: args.userId,
+    originalKsefNumber: args.originalKsefNumber,
+    originalSha256: args.originalSha256,
+    kind: args.recheckKind,
+  });
+  if (flagged?.reason === 'stale' || flagged?.reason === 'not-pending') {
+    return { success: false, error: DUPLICATE_DECISION_TEXTS.STALE };
+  }
+  Sentry.captureMessage(args.alarmMessage, {
+    level: 'warning',
+    // Wartość tagu w Sentry ma limit 200 znaków — opis rozjazdu bramy bywa dłuższy; pełny trafia do `extra`.
+    tags: { area: 'ksef.duplicate-decision', kind: args.alarmKind, detail: args.detail.slice(0, 190) },
+    fingerprint: [args.alarmKind, args.invoiceId],
+    extra: { tenantId: args.tenantId, invoiceId: args.invoiceId, originalKsefNumber: args.originalKsefNumber, detail: args.detail },
+  });
+  return { success: false, error: DUPLICATE_DECISION_TEXTS.FAKTFLOW.RECHECK(args.nr) };
+}
+
+/**
+ * „To ta sama sprzedaż” / „To inna sprzedaż” (PR B) i „Zapisz fakturę z KSeF w FaktWay” (PR C) na karcie
+ * faktury (decyzje Bartosza 04.10, 07.10 i 08.10.2026). Kolejność: rola (właściciel/administrator),
+ * środowisko KSeF serwera, fakty SESJĄ klienta (RLS; przy `faktflow-original` także blokada SQL sesji, 4.9)
+ * i ta sama polityka co panel, wiązanie z tym, co pokazał panel (numer KSeF i SHA-256 oryginału, tryb,
+ * oferta, środowisko — INV-8), wybór dozwolony w ofercie, „Rozumiem skutki”. Dopiero potem:
+ *   - powody PR B: RPC `decide_ksef_duplicate` kluczem serwisowym (przejścia stanu są serwerowe);
+ *   - `faktflow-original`, tryb `import`: suchy przebieg `prepareOriginalImport` (archiwum → SHA-256 →
+ *     brama → projekcja; tylko odczyty) i `decide_ksef_duplicate_original` z projekcją; każda odmowa suchego
+ *     przebiegu zostawia znacznik „sprawdź ponownie” (INV-25), tekst `RECHECK` i alarm — bez RPC decyzji;
+ *   - `faktflow-original`, tryb `no-import` (oddana decyzja): to samo RPC bez projekcji i bez archiwum.
+ * RPC sprawdza to samo w bazie i zapisuje audyt; akcja własnego audytu nie pisze. Po decyzji (także
+ * `already_decided` i wczesny widok `decided`) alarmy ze stanu bazy: K bez daty nadania albo bez sesji.
  *
- * Ponowienie po zgubionej odpowiedzi (drugie kliknięcie): szkic wycofany tą
- * samą decyzją daje sukces bez RPC; RPC samo też odpowiada `already_decided`.
+ * Ponowienie po zgubionej odpowiedzi (drugie kliknięcie): szkic wycofany tą samą decyzją daje sukces bez RPC
+ * (z toastem z ZAPISANEJ decyzji i alarmami z bazy); RPC samo też odpowiada `already_decided`.
  */
 export async function decideKsefDuplicateAction(
   input: DecideKsefDuplicateInput,
 ): Promise<DecideKsefDuplicateResult> {
   const T = DUPLICATE_DECISION_TEXTS;
+  const F = T.FAKTFLOW;
+  const ALARM = KSEF_ORIGINAL_ALARM_KINDS;
   try {
     const { supabase, user, tenantId, role } = await requireUserAndActiveOrg();
     if (!canManageKsefSend(role)) return { success: false, error: T.ROLE };
@@ -346,16 +460,32 @@ export async function decideKsefDuplicateAction(
     const env = configuredKsefEnvironment();
     if (env === null) return { success: false, error: KSEF_SEND_MESSAGES.envUnknown };
 
-    const facts = await loadDuplicateDecisionFacts(supabase, tenantId, input.invoiceId);
-    const view = duplicateDecisionOptions({ facts, actor: 'client', canManage: true, environment: env, now: new Date() });
+    const now = new Date();
+    const facts = await loadDuplicateDecisionFacts(supabase, tenantId, input.invoiceId, undefined, { sqlBlocker: 'session' });
+    const view = duplicateDecisionOptions({ facts, actor: 'client', canManage: true, environment: env, now });
     const nr = facts.invoice?.internal_number ?? '(bez numeru)';
     const toast = input.choice === 'same_sale' ? T.TOAST_SAME(nr) : T.TOAST_OTHER;
 
     if (view.kind === 'decided') {
+      // Zapis oryginału z KSeF (`importedInvoiceId`): dokument nie ma już numeru — teksty nazywają DAWNY numer.
+      const importedInvoiceId = view.importedInvoiceId ?? null;
+      const nrOld = view.retiredInternalNumber ?? nr;
       if (view.choice === input.choice && view.originalKsefNumber === input.originalKsefNumber) {
-        return { success: true, message: toast };
+        if (importedInvoiceId === null) return { success: true, message: toast };
+        await reportOriginalDecisionAlarms(tenantId, input.invoiceId, importedInvoiceId);
+        return { success: true, message: importedDecisionToast(view.offer, view.choice, nrOld) };
       }
-      // Inny wybór (albo inny oryginał) niż zapisany — ten sam tekst co RPC (ALREADY).
+      // Inny wybór (albo inny oryginał) niż zapisany — ten sam tekst co RPC (ALREADY / ALREADY_IMPORTED).
+      if (importedInvoiceId !== null) {
+        return {
+          success: false,
+          error: fillSqlText(
+            DUPLICATE_DECISION_SQL_TEXTS.ALREADY_IMPORTED.template,
+            nrOld,
+            F.IMPORTED_CARD_CHOICE[decisionLabel(view.offer, view.choice)],
+          ),
+        };
+      }
       return {
         success: false,
         error: fillSqlText(
@@ -366,26 +496,153 @@ export async function decideKsefDuplicateAction(
       };
     }
     if (view.kind === 'refused') return { success: false, error: view.message ?? T.GENERIC };
+    if (view.kind !== 'decidable') {
+      // Widok `review` (przegląd pliku) jest tylko dla operatora — klient nigdy go nie dostaje (polityka odmawia
+      // `provenance-review`); gdyby jednak, odmowa przed jakimkolwiek zapisem (M2).
+      return { success: false, error: fillSqlText(DUPLICATE_DECISION_SQL_TEXTS['provenance-review'].template, nr) };
+    }
+
+    // Wiązanie z tym, co pokazał panel (INV-8): oryginał, tryb, oferta, środowisko. Dla powodów PR B widok ma
+    // `mode = offer = null`, a panel nie wysyła tych pól.
+    const viewMode = view.mode ?? null;
+    const viewOffer = view.offer ?? null;
     if (view.originalKsefNumber !== input.originalKsefNumber || view.originalSha256 !== input.originalSha256) {
       return { success: false, error: T.STALE };
+    }
+    if ((input.mode ?? null) !== viewMode || (input.offer ?? null) !== viewOffer) return { success: false, error: T.STALE };
+    if (viewOffer !== null && (input.env ?? null) !== env) return { success: false, error: T.STALE };
+
+    // Oferta „tylko zapis” (`record`) zna jeden wybór — inny to odmowa z numerem dokumentu.
+    if (!(view.choices ?? BOTH_CHOICES).includes(input.choice)) {
+      return { success: false, error: fillSqlText(DUPLICATE_DECISION_SQL_TEXTS.CHOICE.template, nr) };
     }
     if (view.needsConfirmation[input.choice] && !input.confirmed) {
       return { success: false, error: T.CONFIRM };
     }
 
-    const { error } = await callDecideKsefDuplicate(createAdminClient(), {
-      invoiceId: input.invoiceId,
-      tenantId,
-      actorUserId: user.id,
-      choice: input.choice,
-      via: 'client',
-      originalKsefNumber: input.originalKsefNumber,
-      originalSha256: input.originalSha256,
-      env,
-      note: null,
-    });
+    const faktflow = viewOffer !== null && viewMode !== null ? { offer: viewOffer, mode: viewMode } : null;
+
+    // Tryb `import`: suchy przebieg PRZED RPC — tylko odczyty (archiwum), oddaje projekcję K dla `p_import`.
+    let importPayload: KsefOriginalImportProjection | null = null;
+    if (faktflow?.mode === 'import') {
+      const marker = duplicateMarker(facts.submissions);
+      const check = marker ? parseDuplicateCheck(marker.original_check) : null;
+      if (!check || view.invoiceNumber === null) return { success: false, error: T.GENERIC };
+
+      // NIP firmy (reguła `seller` bramy i lustra 4.8): z sesji klienta, jak w „Wyślij ponownie”.
+      const { data: tenant, error: tenantError } = await supabase.from('tenants').select('nip').eq('id', tenantId).maybeSingle();
+      const tenantNip = (tenant?.nip as string | null | undefined) ?? null;
+      if (tenantError || !tenantNip) {
+        Sentry.captureException(tenantError ?? new Error('decideKsefDuplicateAction: firma bez NIP'), {
+          tags: { area: 'ksef.duplicate-decision' },
+          extra: { tenantId, invoiceId: input.invoiceId },
+        });
+        return { success: false, error: F.READ_FAILED(nr) };
+      }
+
+      const prepared: PrepareOriginalImportResult = await prepareOriginalImport({
+        tenantId,
+        internalNumber: view.invoiceNumber,
+        tenantNip,
+        offer: faktflow.offer,
+        check,
+        ksefNumber: view.originalKsefNumber,
+        env,
+        now,
+      });
+      if (!prepared.ok) {
+        const recheckKind = originalRecheckKindFor(prepared);
+        if (recheckKind === null) {
+          // Chwilowy błąd magazynu — bez znacznika (klient odświeża i klika jeszcze raz).
+          Sentry.captureException(prepared.cause ?? new Error('prepareOriginalImport: odczyt archiwum nieudany'), {
+            tags: { area: 'ksef.duplicate-decision' },
+            extra: { tenantId, invoiceId: input.invoiceId },
+          });
+          return { success: false, error: F.READ_FAILED(nr) };
+        }
+        const detail = prepared.detail ? `${prepared.kind}:${prepared.detail}` : prepared.kind;
+        return refuseOriginalForRecheck({
+          tenantId,
+          userId: user.id,
+          invoiceId: input.invoiceId,
+          nr,
+          originalKsefNumber: view.originalKsefNumber,
+          originalSha256: view.originalSha256,
+          recheckKind,
+          alarmKind: ALARM.recheck,
+          alarmMessage: 'Zapis oryginału z KSeF odmówiony — faktura wraca do ponownego sprawdzenia',
+          detail,
+        });
+      }
+      importPayload = prepared.projection;
+    }
+
+    const admin = createAdminClient();
+    // Wynik 9-argumentowego RPC jest podzbiorem wyniku `_original` (te same klucze, bez pól trybu).
+    let rpc: { data: DecideKsefDuplicateOriginalResult | null; error: DuplicateRpcError | null };
+    if (faktflow) {
+      rpc = await callDecideKsefDuplicateOriginal(admin, {
+        invoiceId: input.invoiceId,
+        tenantId,
+        actorUserId: user.id,
+        choice: input.choice,
+        via: 'client',
+        originalKsefNumber: input.originalKsefNumber,
+        originalSha256: input.originalSha256,
+        env,
+        note: null,
+        mode: faktflow.mode,
+        offer: faktflow.offer,
+        importPayload,
+      });
+    } else {
+      rpc = await callDecideKsefDuplicate(admin, {
+        invoiceId: input.invoiceId,
+        tenantId,
+        actorUserId: user.id,
+        choice: input.choice,
+        via: 'client',
+        originalKsefNumber: input.originalKsefNumber,
+        originalSha256: input.originalSha256,
+        env,
+        note: null,
+      });
+    }
+    const { data, error } = rpc;
     if (error) {
+      const details = error.details ?? '';
+      if (error.code === 'P0001' && details.startsWith('import-mismatch:')) {
+        // Lustro TS przepuściło to, czego baza nie przyjęła (numer faktury albo NIP sprzedawcy) — rozjazd do naprawy.
+        return refuseOriginalForRecheck({
+          tenantId,
+          userId: user.id,
+          invoiceId: input.invoiceId,
+          nr,
+          originalKsefNumber: input.originalKsefNumber,
+          originalSha256: input.originalSha256,
+          recheckKind: 'import-mismatch',
+          alarmKind: ALARM.importRefused,
+          alarmMessage: 'Baza odrzuciła zapis oryginału z KSeF, który przepuściło lustro w TypeScript',
+          detail: details,
+        });
+      }
+      if (error.code === '22023' && details.startsWith('import-projection:')) {
+        return refuseOriginalForRecheck({
+          tenantId,
+          userId: user.id,
+          invoiceId: input.invoiceId,
+          nr,
+          originalKsefNumber: input.originalKsefNumber,
+          originalSha256: input.originalSha256,
+          recheckKind: 'import-projection',
+          alarmKind: ALARM.importRefused,
+          alarmMessage: 'Baza odrzuciła projekcję oryginału z KSeF, którą przepuściło lustro w TypeScript',
+          detail: details,
+        });
+      }
       if (error.code === 'P0001' && error.message) {
+        // Stan zmienił się od odczytu (tryb, oferta, wybór, blokada) — tekst z bazy dla klienta, bez alarmu.
+        if (PASSTHROUGH_REFUSAL_DETAILS.has(details)) return { success: false, error: error.message };
         // Polityka TS pozwoliła, baza odmówiła — rozjazd TS↔SQL (np. wiersz `payments`
         // niewidoczny dla sesji, §7 p. 18). Komunikat bazy jest dla klienta (nazywa dokument).
         Sentry.captureMessage('Decyzja przy duplikacie 440: RPC odmówiło mimo zgody polityki', {
@@ -404,9 +661,29 @@ export async function decideKsefDuplicateAction(
       return { success: false, error: T.GENERIC };
     }
 
+    let message = toast;
+    if (faktflow) {
+      if (data === null) {
+        // Baza odpowiedziała bez błędu i bez wyniku — błąd programu; decyzja jest idempotentna, ponowienie
+        // trafi w widok `decided` (sukces + alarmy z bazy).
+        Sentry.captureException(new Error('decide_ksef_duplicate_original: pusty wynik'), {
+          tags: { area: 'ksef.duplicate-decision' },
+          extra: { tenantId, invoiceId: input.invoiceId },
+        });
+        return { success: false, error: T.GENERIC };
+      }
+      // Alarmy ze stanu bazy na każdej ścieżce sukcesu (nowa decyzja i `already_decided`); flagi z RPC nie są źródłem.
+      const importedInvoiceId = data.imported_invoice_id ?? null;
+      if (importedInvoiceId !== null) {
+        await reportOriginalDecisionAlarms(tenantId, input.invoiceId, importedInvoiceId);
+        // Toast z wyniku RPC (oferta, numer, który przeszedł na K), nie z wejścia.
+        message = importedDecisionToast(data.offer ?? faktflow.offer, input.choice, data.retired_internal_number ?? nr);
+      }
+    }
+
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${input.invoiceId}`);
-    return { success: true, message: toast };
+    return { success: true, message };
   } catch (err) {
     if (err instanceof ActionAuthError) {
       return { success: false, error: err.message };

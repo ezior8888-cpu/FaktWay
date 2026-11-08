@@ -310,6 +310,85 @@ export function groupIncidents(rows: readonly AttemptRow[], now: Date): SendErro
 }
 
 /**
+ * Faktury, które utknęły w wysyłce TERAZ — strażnik cyklu życia
+ * (`ksef_lifecycle_violations()`, 00148), niezależnie od dziennika prób:
+ * zgubione zlecenie (I1) nie zostawia w dzienniku żadnego wiersza.
+ *   - I1: `queued` ponad 15 min bez zlecenia w pg-boss — cron cyklu życia
+ *     (co 15 min) wycofuje do szkicu albo oznacza `ENQUEUE_LOST`;
+ *   - I2: `sending` ponad dzierżawę + 15 min albo bez znacznika przejęcia —
+ *     automat tylko alarmuje, rozstrzyga operator.
+ * Pozostałe naruszenia (I3–I5, I9, I5D) nie są błędami wysyłki — `/admin/ksef`.
+ */
+export const STUCK_INVARIANTS = ['I1', 'I2'] as const;
+export type StuckInvariant = (typeof STUCK_INVARIANTS)[number];
+
+/**
+ * I1 dłużej wg zegara strażnika (`updated_at`) = automat nie zadziałał:
+ * 15 min do naruszenia I1 i dwa przebiegi crona cyklu życia (co 15 min,
+ * `lib/jobs/queues.ts`) — jeden może trafić tuż przed progiem.
+ */
+export const STUCK_AUTOMAT_DEADLINE_MS = 45 * 60 * 1000;
+
+export const STUCK_HINTS: Record<StuckInvariant, string> = {
+  I1: 'Cron cyklu życia (co 15 min) wycofa ją do szkicu albo oznaczy ENQUEUE_LOST. Po 45 min wg zegara strażnika automat nie zadziałał: sprawdź chip „strażnik cyklu życia” wyżej i Sentry („Cykl życia: I1 nieobsłużone”). Karta faktury nie ma akcji dla queued; wyjście bez crona: scripts/ops/zwolnij-utknieta-wysylke.sh <id> — najpierw podgląd, potem --wykonaj (runbook hamulce-ksef.md, „Faktura utknęła w wysyłce”; skrypt uruchamia Bartosz).',
+  I2: 'Automat tylko alarmuje. Wysyłka mogła dojść do KSeF — nie ponawiaj. Karta faktury nie ma akcji dla sending: sprawdź na niej znacznik przejęcia, dziennik prób i audyt. Gdy w pg-boss nie ma żywego zlecenia tej faktury: scripts/ops/zwolnij-utknieta-wysylke.sh <id> — najpierw podgląd, potem --wykonaj → failed RESULT_UNCERTAIN, dalej na karcie „Tylko uzgodnij” albo „Wyślij ponownie” (runbook hamulce-ksef.md, „Faktura utknęła w wysyłce”; skrypt uruchamia Bartosz).',
+};
+
+/** Wiersz naruszenia z numerem i firmą (`listLifecycleViolations`). */
+export interface LifecycleViolationLike {
+  invariant: string;
+  invoiceId: string;
+  tenantName: string | null;
+  internalNumber: string | null;
+  ksefStatus: string | null;
+  detail: unknown;
+}
+
+export interface StuckInvoice {
+  invariant: StuckInvariant;
+  invoiceId: string;
+  tenantName: string | null;
+  internalNumber: string | null;
+  ksefStatus: string | null;
+  /**
+   * Zegar strażnika: I1 — `updated_at` (ostatnia zmiana wiersza, np. zapis PDF;
+   * nie zawsze wejście do kolejki), I2 — znacznik przejęcia; `null` — brak znacznika.
+   */
+  since: string | null;
+  /** I1 po terminie automatu (albo bez daty) — cron cyklu życia nie zadziałał. */
+  automatOverdue: boolean;
+}
+
+function detailTime(detail: unknown, key: string): string | null {
+  const value = detail && typeof detail === 'object' ? (detail as Record<string, unknown>)[key] : null;
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+const isStuckInvariant = (value: string): value is StuckInvariant =>
+  (STUCK_INVARIANTS as readonly string[]).includes(value);
+
+/** I1 i I2 z naruszeń strażnika; najpierw I1 od najstarszego (bez daty na górze), potem I2. */
+export function stuckInvoices(violations: readonly LifecycleViolationLike[], now: Date): StuckInvoice[] {
+  const out: StuckInvoice[] = [];
+  for (const v of violations) {
+    if (!isStuckInvariant(v.invariant)) continue;
+    const since = detailTime(v.detail, v.invariant === 'I1' ? 'updated_at' : 'submitted_to_ksef_at');
+    out.push({
+      invariant: v.invariant,
+      invoiceId: v.invoiceId,
+      tenantName: v.tenantName,
+      internalNumber: v.internalNumber,
+      ksefStatus: v.ksefStatus,
+      since,
+      automatOverdue: v.invariant === 'I1' && (since === null || now.getTime() - Date.parse(since) > STUCK_AUTOMAT_DEADLINE_MS),
+    });
+  }
+  const bySince = (a: StuckInvoice, b: StuckInvoice): number =>
+    a.since === b.since ? 0 : a.since === null ? -1 : b.since === null ? 1 : Date.parse(a.since) - Date.parse(b.since);
+  return out.sort((a, b) => STUCK_INVARIANTS.indexOf(a.invariant) - STUCK_INVARIANTS.indexOf(b.invariant) || bySince(a, b));
+}
+
+/**
  * Crony, bez których pusta lista błędów nic nie znaczy: worker mógł stanąć.
  * Budżet = termin kompletnego przebiegu z kontraktu F0 (contracts.md,
  * „Due i terminy cronów”).

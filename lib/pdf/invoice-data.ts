@@ -29,6 +29,12 @@ export interface InvoicePdfData {
   issueDate: string;
   ksefNumber: string | null;
   ksefStatus: string | null;
+  /**
+   * Wiersz nie ma numeru (`internal_number IS NULL`): szkic wycofany po zapisie oryginału z KSeF
+   * (D-A4-1b-3 PR C, 5.12) — numer przeszedł na fakturę K. `invoice.internalNumber` jest wtedy
+   * tylko numerem zastępczym (`id.slice(0, 8)`) i nie wolno go drukować jako numeru faktury.
+   */
+  internalNumberMissing: boolean;
   /** Trwały ślad wejścia do kolejki Offline24, również po statusie failed/rejected. */
   offlineIdempotencyKey: string | null;
   /** NIP sprzedawcy i SHA-256 pliku XML (hex) — do KOD I (`qr-verification.ts`). */
@@ -205,6 +211,7 @@ export async function loadInvoiceForPdf(
     issueDate: row.issue_date,
     ksefNumber: row.ksef_number,
     ksefStatus: row.ksef_status,
+    internalNumberMissing: row.internal_number == null,
     offlineIdempotencyKey: row.offline_idempotency_key,
     sellerNip: row.seller_nip ?? (invoice.seller as { nip?: string } | null)?.nip ?? null,
     xmlSha256Hex: await readXmlHash(admin, row),

@@ -28,7 +28,7 @@ export default async function AdminMfaSetupPage() {
   return (
     <AuthSplitLayout
       panelTitle='Zabezpiecz panel administratora'
-      panelText='Wejście do panelu operatora wymaga drugiego składnika logowania — kodu z aplikacji uwierzytelniającej.'
+      panelText='Wejście do panelu operatora wymaga drugiego składnika logowania: kodu z aplikacji uwierzytelniającej.'
     >
       <div>
         <h2 className='mb-2 text-2xl font-semibold'>Zabezpiecz dostęp administratora</h2>

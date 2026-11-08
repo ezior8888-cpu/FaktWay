@@ -1,6 +1,6 @@
-// Wygenerowane 19.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00153
-// (m.in. 00150 dziennik prób wysyłki, 00151/00152 marka FaktWay, 00153 data rozpoczęcia działalności). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 5.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00166
+// (m.in. 00165 wyłącznik modułu księgowości i 00166 profil podatkowy). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -92,6 +92,13 @@ export type Database = {
             columns: ["created_by_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accountant_access_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -198,6 +205,13 @@ export type Database = {
             foreignKeyName: "accountant_settings_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accountant_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -295,6 +309,13 @@ export type Database = {
             foreignKeyName: "audit_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -384,6 +405,13 @@ export type Database = {
             foreignKeyName: "billing_invoice_counters_operator_tenant_id_fkey"
             columns: ["operator_tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_invoice_counters_operator_tenant_id_fkey"
+            columns: ["operator_tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -438,6 +466,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "billing_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "billing_notifications_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -502,6 +537,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "categorization_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "categorization_rules_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -596,6 +638,13 @@ export type Database = {
           vat_status?: Database["public"]["Enums"]["vat_status_enum"] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "contractors_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contractors_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -854,6 +903,13 @@ export type Database = {
             foreignKeyName: "expenses_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -932,6 +988,13 @@ export type Database = {
             columns: ["last_downloaded_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_files_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -1044,6 +1107,13 @@ export type Database = {
             foreignKeyName: "export_jobs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -1113,6 +1183,13 @@ export type Database = {
             foreignKeyName: "flo_approvals_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flo_approvals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -1162,6 +1239,13 @@ export type Database = {
             foreignKeyName: "flo_decisions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flo_decisions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -1204,6 +1288,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flo_kind_flags_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flo_kind_flags_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1259,6 +1350,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flo_prefs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flo_prefs_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1345,6 +1443,13 @@ export type Database = {
             foreignKeyName: "flo_proposals_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flo_proposals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -1427,6 +1532,13 @@ export type Database = {
             foreignKeyName: "flo_shadow_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flo_shadow_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -1472,6 +1584,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flo_usage_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flo_usage_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1648,6 +1767,13 @@ export type Database = {
             foreignKeyName: "import_jobs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -1724,6 +1850,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inngest_run_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -1867,6 +2000,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -1938,6 +2073,8 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at?: string | null
           pdf_storage_path?: string | null
+          recurring_invoice_id?: string | null
+          recurring_period?: string | null
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
@@ -2009,6 +2146,8 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at?: string | null
           pdf_storage_path?: string | null
+          recurring_invoice_id?: string | null
+          recurring_period?: string | null
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
@@ -2039,6 +2178,20 @@ export type Database = {
             columns: ["parent_invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_recurring_invoice_same_tenant_fk"
+            columns: ["tenant_id", "recurring_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -2125,6 +2278,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpir_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -2237,6 +2397,277 @@ export type Database = {
         }
         Relationships: []
       }
+      ksef_history_items: {
+        Row: {
+          acquisition_at: string | null
+          attempts: number
+          counterparty_name: string | null
+          counterparty_nip: string | null
+          currency: string | null
+          detail: string | null
+          direction: string
+          discovered_at: string
+          environment: string
+          first_deferred_at: string | null
+          gross_amount: number | null
+          id: string
+          invoice_hash: string | null
+          invoice_id: string | null
+          invoice_number: string
+          invoice_type: string | null
+          issue_date: string
+          ksef_number: string
+          next_attempt_at: string | null
+          permanent_storage_at: string | null
+          reason_code: string | null
+          resolved_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          acquisition_at?: string | null
+          attempts?: number
+          counterparty_name?: string | null
+          counterparty_nip?: string | null
+          currency?: string | null
+          detail?: string | null
+          direction: string
+          discovered_at?: string
+          environment: string
+          first_deferred_at?: string | null
+          gross_amount?: number | null
+          id?: string
+          invoice_hash?: string | null
+          invoice_id?: string | null
+          invoice_number: string
+          invoice_type?: string | null
+          issue_date: string
+          ksef_number: string
+          next_attempt_at?: string | null
+          permanent_storage_at?: string | null
+          reason_code?: string | null
+          resolved_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          acquisition_at?: string | null
+          attempts?: number
+          counterparty_name?: string | null
+          counterparty_nip?: string | null
+          currency?: string | null
+          detail?: string | null
+          direction?: string
+          discovered_at?: string
+          environment?: string
+          first_deferred_at?: string | null
+          gross_amount?: number | null
+          id?: string
+          invoice_hash?: string | null
+          invoice_id?: string | null
+          invoice_number?: string
+          invoice_type?: string | null
+          issue_date?: string
+          ksef_number?: string
+          next_attempt_at?: string | null
+          permanent_storage_at?: string | null
+          reason_code?: string | null
+          resolved_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_history_items_invoice_same_tenant_fk"
+            columns: ["tenant_id", "invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_invoice_same_tenant_fk"
+            columns: ["tenant_id", "invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ksef_history_sync: {
+        Row: {
+          backfill_completed_at: string | null
+          backfill_cursor: string
+          backfill_issue: string | null
+          backfill_issue_at: string | null
+          backfill_page_offset: number
+          backfill_progress_at: string | null
+          backfill_window_end: string
+          boundary_at: string
+          client_paused_at: string | null
+          client_paused_by: string | null
+          consecutive_failures: number
+          created_at: string
+          direction: string
+          environment: string
+          history_floor: string
+          id: string
+          last_enqueued_at: string | null
+          last_error_at: string | null
+          last_error_code: string | null
+          last_error_detail: string | null
+          last_run_at: string | null
+          last_success_at: string | null
+          lease_until: string | null
+          live_checked_at: string | null
+          live_hwm: string | null
+          live_issue: string | null
+          live_issue_at: string | null
+          live_page_offset: number
+          paused_until: string | null
+          rate_limit_hits: number
+          rate_limited_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          backfill_completed_at?: string | null
+          backfill_cursor: string
+          backfill_issue?: string | null
+          backfill_issue_at?: string | null
+          backfill_page_offset?: number
+          backfill_progress_at?: string | null
+          backfill_window_end: string
+          boundary_at: string
+          client_paused_at?: string | null
+          client_paused_by?: string | null
+          consecutive_failures?: number
+          created_at?: string
+          direction: string
+          environment: string
+          history_floor: string
+          id?: string
+          last_enqueued_at?: string | null
+          last_error_at?: string | null
+          last_error_code?: string | null
+          last_error_detail?: string | null
+          last_run_at?: string | null
+          last_success_at?: string | null
+          lease_until?: string | null
+          live_checked_at?: string | null
+          live_hwm?: string | null
+          live_issue?: string | null
+          live_issue_at?: string | null
+          live_page_offset?: number
+          paused_until?: string | null
+          rate_limit_hits?: number
+          rate_limited_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          backfill_completed_at?: string | null
+          backfill_cursor?: string
+          backfill_issue?: string | null
+          backfill_issue_at?: string | null
+          backfill_page_offset?: number
+          backfill_progress_at?: string | null
+          backfill_window_end?: string
+          boundary_at?: string
+          client_paused_at?: string | null
+          client_paused_by?: string | null
+          consecutive_failures?: number
+          created_at?: string
+          direction?: string
+          environment?: string
+          history_floor?: string
+          id?: string
+          last_enqueued_at?: string | null
+          last_error_at?: string | null
+          last_error_code?: string | null
+          last_error_detail?: string | null
+          last_run_at?: string | null
+          last_success_at?: string | null
+          lease_until?: string | null
+          live_checked_at?: string | null
+          live_hwm?: string | null
+          live_issue?: string | null
+          live_issue_at?: string | null
+          live_page_offset?: number
+          paused_until?: string | null
+          rate_limit_hits?: number
+          rate_limited_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_history_sync_client_paused_by_fkey"
+            columns: ["client_paused_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_sync_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ksef_inbox_cursor: {
         Row: {
           announced_count: number
@@ -2273,6 +2704,13 @@ export type Database = {
             foreignKeyName: "ksef_inbox_cursor_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_inbox_cursor_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -2285,6 +2723,86 @@ export type Database = {
           },
           {
             foreignKeyName: "ksef_inbox_cursor_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ksef_inbox_schedule: {
+        Row: {
+          activity_tier: string
+          consecutive_errors: number
+          created_at: string
+          last_activity_at: string | null
+          last_error_at: string | null
+          last_error_class: string | null
+          last_invoice_at: string | null
+          last_poll_finished_at: string | null
+          last_success_at: string | null
+          next_poll_at: string
+          nudged_at: string | null
+          poll_lease_until: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_tier?: string
+          consecutive_errors?: number
+          created_at?: string
+          last_activity_at?: string | null
+          last_error_at?: string | null
+          last_error_class?: string | null
+          last_invoice_at?: string | null
+          last_poll_finished_at?: string | null
+          last_success_at?: string | null
+          next_poll_at?: string
+          nudged_at?: string | null
+          poll_lease_until?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_tier?: string
+          consecutive_errors?: number
+          created_at?: string
+          last_activity_at?: string | null
+          last_error_at?: string | null
+          last_error_class?: string | null
+          last_invoice_at?: string | null
+          last_poll_finished_at?: string | null
+          last_success_at?: string | null
+          next_poll_at?: string
+          nudged_at?: string | null
+          poll_lease_until?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_inbox_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_inbox_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_inbox_schedule_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_inbox_schedule_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
             referencedRelation: "tenants"
@@ -2366,6 +2884,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_offline_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -2477,6 +3002,13 @@ export type Database = {
             foreignKeyName: "ksef_send_attempts_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_send_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -2532,6 +3064,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ksef_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ksef_sessions_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -2635,6 +3174,13 @@ export type Database = {
             foreignKeyName: "ksef_submissions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -2700,6 +3246,13 @@ export type Database = {
             columns: ["invited_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -2850,6 +3403,13 @@ export type Database = {
             foreignKeyName: "ocr_jobs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -2931,6 +3491,13 @@ export type Database = {
             foreignKeyName: "organization_invitations_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -2987,6 +3554,13 @@ export type Database = {
             columns: ["decided_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_join_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -3092,6 +3666,13 @@ export type Database = {
             columns: ["matched_payment_id"]
             isOneToOne: false
             referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_imports_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -3216,6 +3797,13 @@ export type Database = {
             foreignKeyName: "payment_reminders_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reminders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -3326,6 +3914,13 @@ export type Database = {
             foreignKeyName: "payments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -3412,6 +4007,13 @@ export type Database = {
           use_count?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -3504,6 +4106,13 @@ export type Database = {
             foreignKeyName: "push_subscriptions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -3516,6 +4125,98 @@ export type Database = {
           },
           {
             foreignKeyName: "push_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_invoices: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          day_of_month: number
+          frequency: string
+          id: string
+          name: string
+          next_run_date: string
+          template_invoice_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          day_of_month: number
+          frequency: string
+          id?: string
+          name: string
+          next_run_date: string
+          template_invoice_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          day_of_month?: number
+          frequency?: string
+          id?: string
+          name?: string
+          next_run_date?: string
+          template_invoice_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_invoices_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_template_same_tenant_fk"
+            columns: ["tenant_id", "template_invoice_id"]
+            isOneToOne: true
+            referencedRelation: "invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_template_same_tenant_fk"
+            columns: ["tenant_id", "template_invoice_id"]
+            isOneToOne: true
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -3592,6 +4293,13 @@ export type Database = {
             foreignKeyName: "reminder_settings_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminder_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -3643,6 +4351,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reminder_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reminder_templates_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -3708,6 +4423,13 @@ export type Database = {
             foreignKeyName: "stripe_checkout_attempts_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_checkout_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -3753,6 +4475,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "stripe_customer_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stripe_customer_attempts_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -4083,6 +4812,13 @@ export type Database = {
             foreignKeyName: "stripe_payments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -4191,6 +4927,13 @@ export type Database = {
             foreignKeyName: "stripe_refund_operations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_refund_operations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -4261,6 +5004,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "stripe_payments"
             referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "stripe_refunds_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "stripe_refunds_tenant_id_fkey"
@@ -4421,6 +5171,13 @@ export type Database = {
             foreignKeyName: "subscriptions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -4488,6 +5245,13 @@ export type Database = {
             foreignKeyName: "support_conversations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -4545,10 +5309,88 @@ export type Database = {
           },
         ]
       }
+      tax_profiles: {
+        Row: {
+          chorobowe: boolean
+          created_at: string
+          created_by: string | null
+          forma: string
+          id: string
+          nrs_zus: string | null
+          okres: string
+          stawka_domyslna: number | null
+          tenant_id: string
+          updated_at: string
+          valid_from: string
+          zus_etap: string
+          zus_od: string | null
+        }
+        Insert: {
+          chorobowe?: boolean
+          created_at?: string
+          created_by?: string | null
+          forma: string
+          id?: string
+          nrs_zus?: string | null
+          okres?: string
+          stawka_domyslna?: number | null
+          tenant_id: string
+          updated_at?: string
+          valid_from: string
+          zus_etap: string
+          zus_od?: string | null
+        }
+        Update: {
+          chorobowe?: boolean
+          created_at?: string
+          created_by?: string | null
+          forma?: string
+          id?: string
+          nrs_zus?: string | null
+          okres?: string
+          stawka_domyslna?: number | null
+          tenant_id?: string
+          updated_at?: string
+          valid_from?: string
+          zus_etap?: string
+          zus_od?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_feature_flags: {
         Row: {
           co_pilot_enabled: boolean
           exports_enabled: boolean
+          ksiegowosc_enabled: boolean
           magic_import_enabled: boolean
           tenant_id: string
           updated_at: string
@@ -4556,6 +5398,7 @@ export type Database = {
         Insert: {
           co_pilot_enabled?: boolean
           exports_enabled?: boolean
+          ksiegowosc_enabled?: boolean
           magic_import_enabled?: boolean
           tenant_id: string
           updated_at?: string
@@ -4563,11 +5406,19 @@ export type Database = {
         Update: {
           co_pilot_enabled?: boolean
           exports_enabled?: boolean
+          ksiegowosc_enabled?: boolean
           magic_import_enabled?: boolean
           tenant_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_feature_flags_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tenant_feature_flags_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -4598,6 +5449,7 @@ export type Database = {
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
+          first_invoice_accepted_at: string | null
           hard_delete_at: string | null
           has_ksef_credentials: boolean | null
           id: string
@@ -4624,6 +5476,7 @@ export type Database = {
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
+          first_invoice_accepted_at?: string | null
           hard_delete_at?: string | null
           has_ksef_credentials?: boolean | null
           id?: string
@@ -4650,6 +5503,7 @@ export type Database = {
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
+          first_invoice_accepted_at?: string | null
           hard_delete_at?: string | null
           has_ksef_credentials?: boolean | null
           id?: string
@@ -4764,6 +5618,13 @@ export type Database = {
             foreignKeyName: "upo_receipts_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upo_receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -4783,29 +5644,84 @@ export type Database = {
           },
         ]
       }
+      user_passkeys: {
+        Row: {
+          backed_up: boolean
+          counter: number
+          created_at: string
+          credential_id: string
+          device_label: string
+          id: string
+          last_used_at: string | null
+          public_key: string
+          transports: string[]
+          user_id: string
+        }
+        Insert: {
+          backed_up?: boolean
+          counter?: number
+          created_at?: string
+          credential_id: string
+          device_label: string
+          id?: string
+          last_used_at?: string | null
+          public_key: string
+          transports?: string[]
+          user_id: string
+        }
+        Update: {
+          backed_up?: boolean
+          counter?: number
+          created_at?: string
+          credential_id?: string
+          device_label?: string
+          id?: string
+          last_used_at?: string | null
+          public_key?: string
+          transports?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
+          analytics_consent: string | null
+          analytics_consent_at: string | null
           created_at: string | null
           id: string
           last_active_tenant_id: string | null
           last_login: string | null
           name: string | null
+          signup_source: Json | null
         }
         Insert: {
+          analytics_consent?: string | null
+          analytics_consent_at?: string | null
           created_at?: string | null
           id: string
           last_active_tenant_id?: string | null
           last_login?: string | null
           name?: string | null
+          signup_source?: Json | null
         }
         Update: {
+          analytics_consent?: string | null
+          analytics_consent_at?: string | null
           created_at?: string | null
           id?: string
           last_active_tenant_id?: string | null
           last_login?: string | null
           name?: string | null
+          signup_source?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "users_last_active_tenant_id_fkey"
+            columns: ["last_active_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "users_last_active_tenant_id_fkey"
             columns: ["last_active_tenant_id"]
@@ -4883,6 +5799,33 @@ export type Database = {
         }
         Relationships: []
       }
+      webauthn_challenges: {
+        Row: {
+          challenge: string
+          created_at: string
+          expires_at: string
+          id: string
+          purpose: string
+          user_id: string | null
+        }
+        Insert: {
+          challenge: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          purpose: string
+          user_id?: string | null
+        }
+        Update: {
+          challenge?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          purpose?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       xml_documents: {
         Row: {
           created_at: string | null
@@ -4930,6 +5873,13 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "xml_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -5020,6 +5970,13 @@ export type Database = {
             foreignKeyName: "invoices_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "mv_tenant_dashboard_summary"
             referencedColumns: ["tenant_id"]
           },
@@ -5038,6 +5995,102 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ksef_history_export_changes: {
+        Row: {
+          environment: string | null
+          item_count: number | null
+          period: string | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ksef_history_item_counts: {
+        Row: {
+          direction: string | null
+          environment: string | null
+          item_count: number | null
+          reason_code: string | null
+          status: string | null
+          tenant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_history_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ksef_inbox_live_tenants: {
+        Row: {
+          environment: string | null
+          id: string | null
+          nip: string | null
+        }
+        Insert: {
+          environment?: string | null
+          id?: string | null
+          nip?: never
+        }
+        Update: {
+          environment?: string | null
+          id?: string | null
+          nip?: never
+        }
+        Relationships: []
       }
       mv_tenant_dashboard_summary: {
         Row: {
@@ -5071,6 +6124,13 @@ export type Database = {
           year_month: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoices_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -5143,6 +6203,19 @@ export type Database = {
         Returns: string
       }
       admin_database_size: { Args: never; Returns: number }
+      admin_funnel_weekly: {
+        Args: { p_environment?: string; p_weeks?: number }
+        Returns: {
+          churned: number
+          first_invoice: number
+          ksef_connected: number
+          new_tenants: number
+          paying: number
+          source: string
+          trial_started: number
+          week_start: string
+        }[]
+      }
       admin_refund_financial_preflight: {
         Args: { p_payment_id: string }
         Returns: string
@@ -5155,6 +6228,7 @@ export type Database = {
           total_bytes: number
         }[]
       }
+      analytics_tenant_owner: { Args: { p_tenant_id: string }; Returns: string }
       anonymize_user_audit_logs: { Args: { p_user_id: string }; Returns: Json }
       apply_stripe_subscription_sync: {
         Args: {
@@ -5183,6 +6257,18 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      claim_ksef_inbox_polls: {
+        Args: {
+          p_environment: string
+          p_lease_seconds: number
+          p_limit: number
+        }
+        Returns: {
+          due_at: string
+          nip: string
+          tenant_id: string
+        }[]
       }
       claim_ksef_nip_ownership: {
         Args: { p_tenant_id: string }
@@ -5260,6 +6346,23 @@ export type Database = {
         }
         Returns: Json
       }
+      decide_ksef_duplicate_original: {
+        Args: {
+          p_actor_user_id: string
+          p_choice: string
+          p_env: string
+          p_import: Json
+          p_invoice_id: string
+          p_mode: string
+          p_note: string
+          p_offer: string
+          p_original_ksef_number: string
+          p_original_sha256: string
+          p_tenant_id: string
+          p_via: string
+        }
+        Returns: Json
+      }
       deny_join_request: { Args: { p_request_id: string }; Returns: undefined }
       enqueue_ksef_send: {
         Args: {
@@ -5321,6 +6424,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -5364,6 +6469,28 @@ export type Database = {
           p_status: string
         }
         Returns: boolean
+      }
+      finish_ksef_inbox_poll: {
+        Args: {
+          p_activity_tier: string
+          p_error_class: string
+          p_new_invoices: number
+          p_next_poll_at: string
+          p_started_at: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
+      flag_ksef_original_recheck: {
+        Args: {
+          p_actor_user_id: string
+          p_invoice_id: string
+          p_kind: string
+          p_original_ksef_number: string
+          p_original_sha256: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       flo_record_usage: {
         Args: {
@@ -5413,6 +6540,7 @@ export type Database = {
         Args: { sub_id: string }
         Returns: undefined
       }
+      invoice_manual_payment: { Args: { p_invoice_id: string }; Returns: Json }
       is_member_of: { Args: { p_org: string }; Returns: boolean }
       is_nip_ksef_claimed: {
         Args: { p_nip: string; p_tenant_id: string }
@@ -5422,14 +6550,96 @@ export type Database = {
         Args: { p_check: Json; p_choice: string }
         Returns: boolean
       }
+      ksef_duplicate_cross_tenant: {
+        Args: {
+          p_internal_number: string
+          p_ksef_number: string
+          p_tenant_id: string
+        }
+        Returns: boolean
+      }
+      ksef_duplicate_decide_core: {
+        Args: {
+          p_actor_user_id: string
+          p_choice: string
+          p_env: string
+          p_import: Json
+          p_invoice_id: string
+          p_mode: string
+          p_note: string
+          p_offer: string
+          p_original_ksef_number: string
+          p_original_sha256: string
+          p_tenant_id: string
+          p_via: string
+        }
+        Returns: Json
+      }
       ksef_duplicate_decision_blocker: {
         Args: { p_invoice_id: string; p_tenant_id: string }
         Returns: string
+      }
+      ksef_duplicate_decision_blocker_for_session: {
+        Args: { p_invoice_id: string }
+        Returns: string
+      }
+      ksef_duplicate_gate_ok: { Args: { p_gate: Json }; Returns: boolean }
+      ksef_duplicate_original_offer: {
+        Args: { p_check: Json; p_own_history_db: boolean }
+        Returns: string
+      }
+      ksef_duplicate_own_history: {
+        Args: {
+          p_invoice_id: string
+          p_original_session: string
+          p_sha256: string
+          p_tenant_id: string
+        }
+        Returns: boolean
       }
       ksef_error_class: { Args: { p_code: string }; Returns: string }
       ksef_has_contact_evidence: {
         Args: { p_invoice_id: string; p_tenant_id: string }
         Returns: boolean
+      }
+      ksef_inbox_alarm_counts: {
+        Args: {
+          p_environment: string
+          p_expected_gap_seconds: Json
+          p_failing_margin_seconds: number
+          p_hwm_margin_seconds: number
+          p_overdue_seconds: number
+        }
+        Returns: {
+          credentials: number
+          failing: number
+          hwm_behind: number
+          live: number
+          overdue: number
+          rate_limited: number
+          unscheduled: number
+        }[]
+      }
+      ksef_inbox_poll_backlog: {
+        Args: { p_environment: string; p_recent_seconds: number }
+        Returns: {
+          due: number
+          in_flight: number
+          oldest_due_at: string
+          polled_recent: number
+          rate_limited_recent: number
+        }[]
+      }
+      ksef_inbox_poll_state: {
+        Args: { p_active_statuses: string[]; p_tenant_id: string }
+        Returns: {
+          consecutive_errors: number
+          last_activity_at: string
+          last_invoice_at: string
+          next_poll_at: string
+          poll_lease_until: string
+          subscription_active: boolean
+        }[]
       }
       ksef_lifecycle_violations: {
         Args: never
@@ -5439,6 +6649,17 @@ export type Database = {
           invoice_id: string
           tenant_id: string
         }[]
+      }
+      ksef_original_import_mismatch: {
+        Args: {
+          p_import: Json
+          p_inv: Database["public"]["Tables"]["invoices"]["Row"]
+          p_marker: Database["public"]["Tables"]["ksef_submissions"]["Row"]
+          p_offer: string
+          p_tenant_id: string
+          p_tenant_nip: string
+        }
+        Returns: string
       }
       ksef_send_audit: {
         Args: {
@@ -5450,14 +6671,47 @@ export type Database = {
         }
         Returns: undefined
       }
+      ksef_upo_expected: {
+        Args: { i: Database["public"]["Tables"]["invoices"]["Row"] }
+        Returns: boolean
+      }
       list_public_tables: {
         Args: never
         Returns: {
           table_name: string
         }[]
       }
+      mark_invoice_paid: {
+        Args: { p_invoice_id: string; p_paid_on?: string }
+        Returns: Json
+      }
+      note_ksef_inbox_activity: {
+        Args: {
+          p_min_gap_seconds: number
+          p_pull_seconds: number
+          p_request_poll: boolean
+          p_tenant_id: string
+        }
+        Returns: {
+          next_poll_at: string
+          retry_after_seconds: number
+          status: string
+        }[]
+      }
       prune_stripe_webhook_payloads: {
         Args: { p_retention_days?: number }
+        Returns: number
+      }
+      purge_audit_logs_batch: {
+        Args: { p_limit?: number; p_retention_months?: number }
+        Returns: number
+      }
+      purge_inngest_run_log_batch: {
+        Args: { p_limit?: number }
+        Returns: number
+      }
+      purge_ksef_health_log_batch: {
+        Args: { p_limit?: number }
         Returns: number
       }
       record_stripe_checkout_session: {
@@ -5505,6 +6759,18 @@ export type Database = {
       release_ksef_enqueue: {
         Args: { p_invoice_id: string; p_reason: string; p_tenant_id: string }
         Returns: boolean
+      }
+      release_ksef_original_review: {
+        Args: {
+          p_actor_user_id: string
+          p_env: string
+          p_invoice_id: string
+          p_note: string
+          p_original_ksef_number: string
+          p_original_sha256: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       release_stripe_subscription_sync: {
         Args: {
@@ -5576,6 +6842,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -5660,6 +6928,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -5719,6 +6989,8 @@ export type Database = {
         Args: { p_membership_id: string }
         Returns: undefined
       }
+      session_may_grant_access: { Args: never; Returns: boolean }
+      session_may_manage_passkeys: { Args: never; Returns: boolean }
       set_invoice_reminders_paused: {
         Args: { p_invoice_id: string; p_paused: boolean; p_reason?: string }
         Returns: boolean
@@ -5748,6 +7020,16 @@ export type Database = {
         Args: { p_payment_id: string }
         Returns: boolean
       }
+      sync_analytics_consent: {
+        Args: { p_chosen_at?: string; p_consent?: string }
+        Returns: {
+          changed: boolean
+          consent: string
+          consent_at: string
+          withdrawn: boolean
+        }[]
+      }
+      undo_invoice_paid: { Args: { p_invoice_id: string }; Returns: Json }
     }
     Enums: {
       backup_kind: "daily" | "weekly" | "manual"

@@ -1,6 +1,6 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
-import { getCosts, type CostEntry } from '@/lib/dashboard/costs';
+import { getCostsWithKsefPurchases, type CostEntry } from '@/lib/dashboard/costs';
 import { assertAcceptedEnvironmentKnown } from '@/lib/dashboard/monthly-figures';
 import { buildMonthReport, type MonthReport } from '@/lib/dashboard/pulpit-report';
 import { estimateIncomeTaxThisYear, type TaxEstimate } from '@/lib/dashboard/tax-estimate';
@@ -21,7 +21,9 @@ import type { Database } from '@/types/database';
  *   (§2.4 pkt 2), ROZ bez zaliczek już policzonych (`kpirRevenueNet`, §2.4
  *   pkt 4), korekta swoją różnicą w swoim miesiącu (pkt 5), tylko PLN (pkt 6),
  *   komplet stron (pkt 7);
- * - koszt = `getCosts` (§2.4 pkt 12, `kpirCostAmount`);
+ * - koszt = `getCostsWithKsefPurchases` (E10, decyzja D-K): wydatki jak
+ *   w KPiR (`kpirCostAmount`) i faktury zakupu z KSeF bez wydatku netto —
+ *   pełne koszty kart; sama KPiR (`/reports/kpir`) czyta tylko wydatki;
  * - szacunek podatku = `estimateIncomeTaxThisYear` od 1 stycznia (C-21).
  *
  * Nowe wobec starej strony: przyjęta faktura bez środowiska KSeF w oknie
@@ -66,7 +68,7 @@ export interface CashFlowData {
   months: CashFlowMonth[];
   /** Przychód netto jak w KPiR per miesiąc, PLN (do groszy). */
   revenue: number[];
-  /** Koszt jak w KPiR per miesiąc, PLN (do groszy). */
+  /** Koszt per miesiąc (wydatki jak w KPiR + faktury zakupu z KSeF bez wydatku), PLN (do groszy). */
   costs: number[];
   /** `revenue − costs` per miesiąc. */
   profit: number[];
@@ -77,7 +79,7 @@ export interface CashFlowData {
   taxEstimate: TaxEstimate;
   /** Wiersze faktur, z których liczony jest przychód (posortowane: data, id). */
   invoices: CashFlowInvoiceRow[];
-  /** Koszty z `getCosts` z tego samego okna. */
+  /** Koszty z `getCostsWithKsefPurchases` z tego samego okna. */
   costEntries: CostEntry[];
 }
 
@@ -139,7 +141,7 @@ export async function getCashFlowData(
         .lt('issue_date', endExclusive)
         .order('id', { ascending: true })
         .range(from, to)),
-    getCosts(supabase, tenantId, { from: dataFrom, toExclusive: endExclusive }),
+    getCostsWithKsefPurchases(supabase, tenantId, { from: dataFrom, toExclusive: endExclusive }),
   ]);
   // Przyjęta faktura bez środowiska mogłaby być z TEST albo z produkcji —
   // zero zamiast niej ukryłoby niejasność (jak na Pulpicie).

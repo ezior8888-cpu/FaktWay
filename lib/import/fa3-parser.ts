@@ -53,6 +53,13 @@ export interface ParsedInvoice {
   };
 
   paymentDueDate?: string;
+  /**
+   * E11: `Platnosc/DataZaplaty` faktury z `Zaplacono = 1` — faktura
+   * wystawiona po zapłacie. Trafia do `fa3_data.parsed`, skąd karty wpływów
+   * biorą prawdziwy dzień zapłaty. Brak pola = plik nie mówi o zapłacie
+   * (albo daty nie dało się odczytać — wtedy ostrzeżenie).
+   */
+  paidDate?: string;
   /** Zmapowana etykieta (np. przelew / gotówka) albo surowy kod z FormaPlatnosci. */
   paymentMethod?: string;
   bankAccount?: string;
@@ -84,6 +91,15 @@ export interface ParsedInvoice {
   footerNote?: string;
   /** C0b: surowe `Fa/RodzajFaktury` (przycięte, wielkość liter z pliku); `invoiceType` to jego odwzorowanie. */
   invoiceTypeCode?: string;
+  /**
+   * Chwila nadania numeru w KSeF (`acquisitionDate`, zapasowo
+   * `permanentStorageDate` z metadanych) — podaje synchronizacja historii
+   * KSeF (decyzja Bartosza 22.10.2026; IMP-ACC). Parser XML jej nie ustawia
+   * (plik FA(3) jej nie zawiera). Obecne pole = wywołujący zna ten czas:
+   * poprawna data trafia do `ksef_accepted_at`, niepoprawna albo pusta —
+   * chwila importu z ostrzeżeniem. Brak pola = zachowanie bez zmian.
+   */
+  ksefAcceptedAt?: string;
 
   warnings: string[];
 }
@@ -343,7 +359,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
   const totals = pickTotals(totalsHeader, totalsFromLines, lines, warnings);
 
   const platnosc = fa.Platnosc;
-  const { paymentDueDate, paymentMethod, bankAccount } = parsePlatnosc(platnosc, warnings);
+  const { paymentDueDate, paidDate, paymentMethod, bankAccount } = parsePlatnosc(platnosc, warnings);
 
   // Jeden literał wyniku — z numerem KSeF i bez (szkic z pliku) te same pola.
   return {
@@ -356,6 +372,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
     lines,
     totals,
     paymentDueDate,
+    ...(paidDate ? { paidDate } : {}),
     paymentMethod,
     bankAccount,
     ...(formCode ? { formCode } : {}),
@@ -688,7 +705,7 @@ function pickTotals(
 function parsePlatnosc(
   platnosc: unknown,
   warnings: string[],
-): Pick<ParsedInvoice, 'paymentDueDate' | 'paymentMethod' | 'bankAccount'> {
+): Pick<ParsedInvoice, 'paymentDueDate' | 'paidDate' | 'paymentMethod' | 'bankAccount'> {
   if (!platnosc || typeof platnosc !== 'object') {
     return {};
   }
@@ -712,6 +729,15 @@ function parsePlatnosc(
 
   if (paymentDueDate && !/^\d{4}-\d{2}-\d{2}$/.test(paymentDueDate)) {
     warnings.push(`Nieczytelny termin płatności: ${paymentDueDate}`);
+  }
+
+  // E11: „Zaplacono = 1” + „DataZaplaty” — faktura opłacona przed wystawieniem.
+  // Daty, której nie da się odczytać, nie zgadujemy: ostrzeżenie i brak pola.
+  let paidDate: string | undefined;
+  if (String(p.Zaplacono ?? '').trim() === '1' && p.DataZaplaty != null) {
+    const raw = String(p.DataZaplaty).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) paidDate = raw;
+    else warnings.push(`Nieczytelna data zapłaty: ${raw}`);
   }
 
   let paymentMethod: string | undefined;
@@ -739,6 +765,7 @@ function parsePlatnosc(
 
   return {
     paymentDueDate,
+    ...(paidDate ? { paidDate } : {}),
     paymentMethod,
     bankAccount,
   };

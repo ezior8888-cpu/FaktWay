@@ -4,7 +4,10 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { logAuditSystem } from '@/lib/audit/log-system';
+import { anonymizeUserAuditLogs, findUserDeletionForeignKeyBlockers } from '@/lib/gdpr/account-deletion-steps';
+import { findOrganizationsBlockingDeletion } from '@/lib/gdpr/deletion-blockers';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { deleteUserSupportConversations } from '@/lib/support/retention';
 
 /**
  * Server actions dla `/admin/users/[userId]` (Faza 24).
@@ -146,9 +149,46 @@ export async function deleteUserGdprAction(
 
   const supabase = createAdminClient();
 
-  // Krok 1: ustaw soft-delete + hard_delete_at na tenantach, gdzie user jest
-  // ownerem (10-lat retention vs RODO). Pełne czyszczenie zrobi Inngest job
-  // `retention-delete` po upływie retention period.
+  // Krok 0: te same sprawdzenia co ścieżka samoobsługowa (`executeGdprRequest`),
+  // przed pierwszym zapisem — odmowa zostawia konto, firmy i dziennik nietknięte.
+  // Subskrypcja jest przypięta do firmy: bez jedynej osoby, która nią zarządza,
+  // Stripe dalej pobiera opłaty, a nikt nie może ich zatrzymać.
+  let billingBlocked: string[];
+  try {
+    billingBlocked = await findOrganizationsBlockingDeletion(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się sprawdzić subskrypcji firm użytkownika; konto nie zostało usunięte' };
+  }
+  if (billingBlocked.length > 0) {
+    const names = billingBlocked.map((name) => `„${name}”`).join(', ');
+    return {
+      success: false,
+      error: `Usunięcie wstrzymane: subskrypcja firmy ${names} dalej pobiera opłaty, a ten użytkownik jest jedyną osobą, która może nią zarządzać. Anuluj subskrypcję w Stripe albo dodaj firmie innego właściciela lub administratora i spróbuj ponownie. Konto nie zostało usunięte.`,
+    };
+  }
+  // AUD-41: klucz obcy bez ON DELETE wywróciłby deleteUser PO odwołaniu
+  // członkostw i anonimizacji dziennika.
+  let foreignKeyBlockers: string[];
+  try {
+    foreignKeyBlockers = await findUserDeletionForeignKeyBlockers(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się sprawdzić powiązań konta w bazie; konto nie zostało usunięte' };
+  }
+  if (foreignKeyBlockers.length > 0) {
+    return {
+      success: false,
+      error: `Usunięcie wstrzymane: konto jest jeszcze wskazywane w ${foreignKeyBlockers.join(', ')} (klucz obcy bez ON DELETE). Przepisz albo usuń te wpisy i spróbuj ponownie. Konto nie zostało usunięte.`,
+    };
+  }
+
+  // Krok 1: firmy, których user jest właścicielem — tylko do komunikatu
+  // i audytu. Firm NIE ruszamy, jak ścieżka samoobsługowa
+  // (`executeGdprRequest`). Przed tą zmianą panel stawiał tu `deleted_at`,
+  // `hard_delete_at` (+30 dni) i `is_active = false` z obietnicą „hard delete
+  // po 30 dniach” przez job `retention-delete` — a ten usuwa tylko faktury po
+  // `invoices.scheduled_deletion_at` (10 lat), firm nie czyta. Tych flag nie
+  // sprawdza też logowanie ani RLS, więc firma działała dalej.
+  // Usunięcie firmy: docs/support/escalation-matrix.md („Usunięcie firmy”).
   const { data: ownerMemberships, error: membershipsReadError } = await supabase
     .from('memberships')
     .select('organization_id, role')
@@ -163,21 +203,6 @@ export async function deleteUserGdprAction(
   }
 
   const ownerOrgIds = ownerMemberships.map((m) => m.organization_id);
-  if (ownerOrgIds.length > 0) {
-    const now = new Date();
-    const hardDeleteAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dni
-    const { error: tenantsUpdateError } = await supabase
-      .from('tenants')
-      .update({
-        deleted_at: now.toISOString(),
-        hard_delete_at: hardDeleteAt.toISOString(),
-        is_active: false,
-      })
-      .in('id', ownerOrgIds);
-    if (tenantsUpdateError) {
-      return { success: false, error: 'Nie udało się oznaczyć organizacji do usunięcia; konto nie zostało usunięte' };
-    }
-  }
 
   // Krok 2: usuń wszystkie membership usera (revoked).
   const { error: membershipsUpdateError } = await supabase
@@ -188,9 +213,29 @@ export async function deleteUserGdprAction(
     return { success: false, error: 'Nie udało się odwołać członkostw; konto nie zostało usunięte' };
   }
 
-  // Krok 3: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
+  // Krok 3: rozmowy z czatem pomocy. FK user_id ma ON DELETE SET NULL, więc
+  // po deleteUser zostałyby z treścią bez właściciela. Tuż przed kontem —
+  // to nieodwracalne, a wcześniejsze kroki da się cofnąć.
+  try {
+    await deleteUserSupportConversations(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się usunąć rozmów z czatem pomocy; konto nie zostało usunięte' };
+  }
+
+  // Krok 4: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
   // gdzie user był created_by, etc.). Audyt zachowuje user_id w `audit_logs`
   // (snapshot ID po deletion).
+  //
+  // Najpierw anonimizacja dotychczasowych wpisów dziennika (polityka: „po
+  // usunięciu Konta wpisy są anonimizowane”) — user_id, IP i przeglądarka
+  // znikają; ID konta zostaje tylko we wpisie `admin.user.deleted` niżej.
+  // Jak w ścieżce samoobsługowej: nieodwracalna, więc po krokach, które da się
+  // cofnąć, i tuż przed deleteUser.
+  try {
+    await anonymizeUserAuditLogs(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się zanonimizować dziennika zdarzeń; konto nie zostało usunięte' };
+  }
   const { error } = await supabase.auth.admin.deleteUser(userId);
   if (error) {
     return { success: false, error: error.message };
@@ -204,7 +249,7 @@ export async function deleteUserGdprAction(
     entityId: userId,
     metadata: {
       adminEmail: admin.email,
-      ownedOrgsSoftDeleted: ownerOrgIds.length,
+      ownedOrgsLeftActive: ownerOrgIds.length,
       gdprDeletion: true,
     },
   });
@@ -212,7 +257,10 @@ export async function deleteUserGdprAction(
   revalidatePath('/admin/users');
   return {
     success: true,
-    message: 'User usunięty, org-y w retencji 30 dni do hard delete',
+    message:
+      ownerOrgIds.length > 0
+        ? `Konto usunięte. Firmy, których był właścicielem (${ownerOrgIds.length}), działają dalej — usunięcie firmy to osobna procedura (docs/support/escalation-matrix.md).`
+        : 'Konto usunięte.',
   };
 }
 

@@ -3,7 +3,14 @@ import { redirect } from 'next/navigation';
 import { NotificationsSettings } from '@/components/pwa/notifications-settings';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { getUnsubscribedCategories } from '@/lib/email/preferences';
+import {
+  getEmailConsents,
+  getUnsubscribedCategories,
+  type EmailCategory,
+} from '@/lib/email/preferences';
+import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
+import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
+import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { createClient } from '@/lib/supabase/server';
 import type { Tables } from '@/types/database';
 
@@ -17,13 +24,11 @@ export const dynamic = 'force-dynamic';
  * (w Finorze w tym miejscu stoją „Quiet hours”).
  */
 export default async function NotificationsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Ten sam użytkownik co w layoucie (`cache()` na żądanie) — bez drugiego wywołania GoTrue.
+  const [supabase, user] = await Promise.all([createClient(), getDashboardSessionUser()]);
   if (!user) redirect('/login');
 
-  const [{ data: subscriptions }, unsubscribedCategories] = await Promise.all([
+  const [{ data: subscriptions }, unsubscribed, consents, ksiegowosc] = await Promise.all([
     supabase
       .from('push_subscriptions')
       .select('*')
@@ -31,7 +36,24 @@ export default async function NotificationsPage() {
       .eq('is_active', true)
       .order('created_at', { ascending: false }),
     getUnsubscribedCategories(user.id).catch(() => null),
+    getEmailConsents(user.id).catch(() => null),
+    // Przełącznik „Księgowość” tylko dla firmy w pilotażu (K5); błąd odczytu to „nie”.
+    getActiveOrgIdFromCookies()
+      .then((orgId) => (orgId ? czyKsiegowoscWlaczona(supabase, orgId, 'terminy') : null))
+      .then((w) => w?.wlaczony === true, () => false),
   ]);
+
+  // Przełącznik jest włączony tylko przy zgodzie i bez wypisu — tak samo,
+  // jak decyduje wysyłka (`canSendTo`). Bez zgody pokazujemy „wyłączone”.
+  const unsubscribedCategories: EmailCategory[] | null =
+    unsubscribed && consents
+      ? [
+          ...new Set<EmailCategory>([
+            ...unsubscribed,
+            ...(['product_updates', 'marketing'] as const).filter((c) => !consents[c]),
+          ]),
+        ]
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,6 +61,7 @@ export default async function NotificationsPage() {
         subscriptions={
           (subscriptions ?? []) as Tables<'push_subscriptions'>[]
         }
+        ksiegowosc={ksiegowosc}
       />
 
       <Separator />

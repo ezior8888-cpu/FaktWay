@@ -1,4 +1,4 @@
-import { ksefFetch } from './client';
+import { KsefApiError, ksefFetch } from './client';
 import { ksefSessionCache } from './session-cache';
 import { ksefRateLimiter } from './rate-limiter';
 import type { KsefAuth } from './auth';
@@ -9,7 +9,11 @@ import type {
   KsefEnvironment,
 } from '@/types/ksef';
 
-/** Kontekst audytu (Faza 23 sekcja 3) — opcjonalny propagator do `ksefFetch`. */
+/**
+ * Kontekst audytu (Faza 23 sekcja 3) — opcjonalny propagator do `ksefFetch`.
+ * Strona skrzynki trafia do `audit_logs` tylko przy błędzie (EXT-03); przebieg,
+ * który dodał faktury, zapisuje runner jednym wierszem podsumowania.
+ */
 export interface InboxAuditContext {
   tenantId: string;
 }
@@ -29,6 +33,8 @@ export interface ReceivedInvoicesResult {
    * podał i okna nie wolno przesunąć.
    */
   hwm: string | null;
+  /** Ile zapytań (stron) poszło do KSeF w tym oknie — do wiersza podsumowania audytu. */
+  requests: number;
 }
 
 /**
@@ -44,7 +50,7 @@ export interface ReceivedInvoicesResult {
  * Wcześniejsza wersja czekała na `continuationToken`, którego ten endpoint
  * nie zwraca, więc kończyła na pierwszej stronie (domyślnie 10 faktur).
  */
-export async function queryReceivedInvoices(
+async function queryReceivedInvoicesOnce(
   auth: KsefAuth,
   dateFrom: Date,
   dateTo: Date,
@@ -59,6 +65,7 @@ export async function queryReceivedInvoices(
     let from = dateFrom.toISOString();
     let pageOffset = 0;
     let hwm: string | null = null;
+    let requests = 0;
 
     for (let request = 0; ; request += 1) {
       // Rzucamy zamiast przerywać: HWM się wtedy nie przesunie, a alarm
@@ -92,11 +99,13 @@ export async function queryReceivedInvoices(
             ? {
                 tenantId: auditContext.tenantId,
                 action: 'inbox.poll',
+                when: 'error',
                 metadata: { dateFrom: from, dateTo: dateTo.toISOString(), pageOffset },
               }
             : undefined,
         },
       );
+      requests = request + 1;
 
       const page = response.invoices ?? [];
       for (const inv of page) byNumber.set(inv.ksefNumber, inv);
@@ -115,8 +124,29 @@ export async function queryReceivedInvoices(
       }
     }
 
-    return { invoices: [...byNumber.values()], hwm };
+    return { invoices: [...byNumber.values()], hwm, requests };
   });
+}
+
+/**
+ * Sesja z pamięci żyje teraz do 7 dni przez refresh token, więc 401 może znaczyć
+ * unieważnioną sesję, a nie zły certyfikat. Jedna próba od czystej sesji rozstrzyga
+ * to w tym samym przebiegu; drugie 401 idzie wyżej jako błąd poświadczeń.
+ */
+export async function queryReceivedInvoices(
+  auth: KsefAuth,
+  dateFrom: Date,
+  dateTo: Date,
+  env?: KsefEnvironment,
+  auditContext?: InboxAuditContext,
+): Promise<ReceivedInvoicesResult> {
+  try {
+    return await queryReceivedInvoicesOnce(auth, dateFrom, dateTo, env, auditContext);
+  } catch (error) {
+    if (!(error instanceof KsefApiError) || error.status !== 401) throw error;
+    ksefSessionCache.invalidate(auth.nip, env);
+    return queryReceivedInvoicesOnce(auth, dateFrom, dateTo, env, auditContext);
+  }
 }
 
 /**

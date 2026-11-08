@@ -2,38 +2,39 @@
 title: "Pierwsze kroki w FaktWay"
 category: "start"
 order: 1
-summary: "Od rejestracji do pierwszej faktury w KSeF — co zrobić w pierwszych 10 minutach."
-updated: "2026-05-19"
+summary: "Od rejestracji do pierwszej faktury w KSeF: co zrobić na początku."
+updated: "2026-11-02"
 ---
 
-FaktWay prowadzi Cię od rejestracji do pierwszej faktury w kilka minut. Oto co dzieje się krok po kroku.
+FaktWay prowadzi Cię od rejestracji do pierwszej faktury. Oto co dzieje się krok po kroku.
 
 ## 1. Rejestracja i potwierdzenie email
 
-Po założeniu konta wysyłamy link aktywacyjny. Kliknij go w ciągu 24 godzin — bez potwierdzenia nie zalogujesz się do panelu. Jeśli mail nie dotarł, sprawdź folder spam i poproś o nowy link na stronie logowania.
+Po założeniu konta wysyłamy link aktywacyjny. Kliknij go w ciągu 24 godzin, bo bez potwierdzenia nie zalogujesz się do panelu. Jeśli mail nie dotarł, sprawdź folder spam i poproś o nowy link na stronie logowania.
 
-## 2. Onboarding — dane firmy
+## 2. Onboarding: dane firmy
 
-Przy pierwszym wejściu kreator poprosi o NIP. FaktWay automatycznie pobierze dane Twojej firmy z rejestru GUS — nazwę, adres, formę prawną. Sprawdź, czy wszystko się zgadza i uzupełnij brakujące pola.
+Przy pierwszym wejściu kreator poprosi o NIP. FaktWay automatycznie pobierze dane Twojej firmy z rejestru GUS: nazwę, adres, formę prawną. Sprawdź, czy wszystko się zgadza i uzupełnij brakujące pola.
 
 ## 3. Konfiguracja KSeF
 
-Aby wystawiać faktury, FaktWay musi połączyć się z Krajowym Systemem e-Faktur. W ustawieniach KSeF wgrywasz certyfikat (środowisko testowe lub produkcyjne). Szczegóły w artykule o konfiguracji certyfikatu KSeF.
+Aby wystawiać faktury, FaktWay musi połączyć się z Krajowym Systemem e-Faktur. W **Ustawienia → KSeF** wgrywasz certyfikat KSeF. Potrzebne jest do tego włączone logowanie dwuetapowe. Szczegóły w artykule o konfiguracji certyfikatu KSeF.
 
-## 4. Magic Import (opcjonalnie)
+## 4. Historia faktur
 
-Jeśli przechodzisz z innego programu, uruchom Magic Import — pobierze Twoją historię faktur z KSeF oraz kontrahentów i produkty z plików CSV/XML eksportowanych przez konkurencję. Zaoszczędzisz godziny ręcznego przepisywania.
+Po wgraniu certyfikatu FaktWay sam pobiera z KSeF historię Twojej sprzedaży i zakupów. Nic nie musisz uruchamiać, a postęp widzisz w menu Import danych. Jeśli przechodzisz z Fakturowni, inFaktu, wFirmy albo iFirmy, faktury sprzed KSeF przeniesiesz tam plikiem CSV. Szczegóły w artykule o historii z KSeF i przeprowadzce z innego programu.
 
 ## 5. Pierwsza faktura
 
-Kliknij „Wystaw fakturę", wybierz kontrahenta (lub dodaj nowego), uzupełnij pozycje i wyślij. FaktWay zwaliduje dokument lokalnie, wyśle do KSeF i pobierze UPO (urzędowe poświadczenie odbioru).
+Kliknij „Wystaw fakturę”, wybierz kontrahenta (lub dodaj nowego), uzupełnij pozycje i wyślij. FaktWay zwaliduje dokument lokalnie, wyśle do KSeF i pobierze UPO (urzędowe poświadczenie odbioru).
 
-> Wskazówka: w trybie testowym KSeF używaj fikcyjnego NIP-u — nie wysyłaj prawdziwych danych na środowisko testowe.
+## 6. Telefon
+
+FaktWay działa w przeglądarce telefonu. Dodaj stronę do ekranu głównego, a otworzysz FaktWay jednym dotknięciem jak zwykły program.
 
 ## Co dalej?
 
-- Skonfiguruj **Wkurzacz Dłużników**, aby automatycznie przypominać o płatnościach.
 - Dodaj **księgową** przez portal księgowego.
 - Włącz **2FA** w ustawieniach bezpieczeństwa.
 
-Masz pytania? Kliknij ikonę pomocy w prawym dolnym rogu panelu — asystent AI odpowie od razu.
+Masz pytania? Napisz na pomoc@faktway.pl albo otwórz w panelu automatyczny czat pomocy, a z niego przejdziesz do człowieka.

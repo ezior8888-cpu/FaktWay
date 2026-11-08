@@ -73,7 +73,8 @@ self.addEventListener('push', (event) => {
   } = {
     body: data.body,
     icon: data.icon ?? '/icons/icon-192x192.png',
-    badge: data.badge ?? '/icons/icon-72x72.png',
+    // Android rysuje plakietkę z samej przezroczystości, więc biała sylwetka znaku.
+    badge: data.badge ?? '/icons/badge-72x72.png',
     tag: data.tag,
     // `renotify` bez `tag` jest błędem — stąd warunek.
     ...(data.tag ? { renotify: true } : {}),

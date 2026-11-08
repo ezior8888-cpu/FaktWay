@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mocks = vi.hoisted(() => ({ getPageContext: vi.fn() }));
+// Strona KPiR pyta o tryb danych (dane przykładowe przed weryfikacją KSeF) — tu firma zweryfikowana.
+vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null }) }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: mocks.getPageContext }));
 vi.mock('@/components/expenses/kpir-view', () => ({
   KpirView: ({ invoices, expenses }: {

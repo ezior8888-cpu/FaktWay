@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface InvoiceAcceptedProps {
   ksefNumber: string;
   invoiceId: string;
@@ -26,6 +28,7 @@ export default function InvoiceAccepted({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>Faktura wysłana do KSeF ✓</Heading>
 
           <Text style={textStyle}>

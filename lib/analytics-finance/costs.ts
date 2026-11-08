@@ -1,4 +1,5 @@
 import type { CostEntry } from '@/lib/dashboard/costs';
+import { isKsefInvoiceCost } from '@/lib/dashboard/ksef-invoice-cost';
 import { shortCompanyName } from '@/lib/format/company-name';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -7,8 +8,9 @@ import { countedDays, monthShortLabel } from './months';
 
 /**
  * Analiza kosztów `/analizy/koszty` (plan Finora P10 ← Monthly Analytics).
- * Czyste funkcje na wyniku `getCosts` (§2.4 pkt 12 — jedna droga odczytu
- * kosztów, ta sama co Pulpit, `/przeplywy` i eksport).
+ * Czyste funkcje na wyniku `getCostsWithKsefPurchases` (E10, D-K — jedna
+ * definicja kosztów kart, ta sama co Pulpit i `/przeplywy`: faktury zakupu
+ * z KSeF + wydatki spoza KSeF; KPiR i eksport czytają same wydatki).
  *
  * Kwoty „wydatków” (Wydano, trend, kategorie, ostatnie, kalendarz, stałe
  * koszty) to WYPŁYW, czyli `gross_amount` (`outflow`) — tak jak „Wydano
@@ -120,7 +122,7 @@ export interface CostVatSummary {
   vat: number;
   /** VAT do odliczenia — reguła `VAT_DEDUCTIBLE_DOCUMENTS` (§2.4 pkt 12). */
   vatDeductible: number;
-  /** Wydatki miesiąca do opisania (`is_reviewed = false`). */
+  /** Wydatki miesiąca do opisania (`is_reviewed = false`); faktura z KSeF bez wydatku się nie liczy. */
   toReview: number;
 }
 
@@ -130,7 +132,8 @@ export function costVatSummary(entries: readonly CostEntry[], monthKey: string):
   return {
     vat: sum(current.map((e) => e.vat)),
     vatDeductible: sum(current.map((e) => e.vatDeductible)),
-    toReview: current.filter((e) => !e.isReviewed).length,
+    // Faktury z KSeF bez wydatku nie ma w Wydatkach — nie ma czego opisać (link „Do opisania”).
+    toReview: current.filter((e) => !e.isReviewed && !isKsefInvoiceCost(e)).length,
   };
 }
 

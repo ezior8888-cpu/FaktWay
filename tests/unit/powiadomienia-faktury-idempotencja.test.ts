@@ -13,8 +13,7 @@ vi.mock('@/lib/email/send', () => ({
 }));
 vi.mock('@/lib/jobs/runners/tenant-boundary', () => ({ requireInvoiceTenant: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
-  getTenantAdminEmail: async () => 'wlasciciel@example.test',
-  getTenantOwnerUserId: async () => null,
+  readTenantOwnerContact: async () => ({ ownerUserId: null, email: 'wlasciciel@example.test' }),
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn() }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: vi.fn() }));

@@ -2,21 +2,35 @@ import { createHash } from 'node:crypto';
 import type { KsefAuth, KsefAuthSession } from './auth';
 import { authenticateWithXades } from './auth';
 import { authenticateWithToken } from './auth-token';
+import { isRefreshRejected, refreshKsefSession } from './auth-refresh';
 import type { KsefEnvironment } from '@/types/ksef';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { requireMatchingKsefEnvironment } from './claim-environment';
 
 /**
  * In-memory cache sesji KSeF per (environment, NIP, fingerprint poświadczeń).
- * Refreshuje sesję 5 minut przed wygaśnięciem accessToken.
+ * Odświeża token dostępu 5 minut przed wygaśnięciem przez refresh token; pełne
+ * logowanie dopiero po odrzuceniu refresh tokenu albo gdy wygasł (do 7 dni).
  *
  * Cache jest lokalny dla procesu workera. Nowy certyfikat lub token pobrany
  * z bazy wymusza ponowną autoryzację, nawet gdy NIP pozostał ten sam.
+ *
+ * Tokeny są tylko w pamięci procesu, celowo: refresh token w bazie byłby
+ * sekretem do szyfrowania i rotacji. Restart workera kosztuje jedno logowanie
+ * na firmę, a tych w cyklu firm gorących jest tyle, ile mieści się w slotach
+ * (pomiar: docs/runbooks/skrzynka-ksef-pojemnosc.md).
  *
  * Wspiera oba typy auth z `KsefAuth` (XAdES-BES cert + token KSeF).
  * Consumer dostarcza credentials, cache dispatcha na odpowiedni flow wg
  * `auth.type`.
  */
+
+/**
+ * Sufit pamięci: sesja to ok. 3,5 KB (dwa tokeny JWT), więc 20 tys. firm to
+ * ok. 70 MB. Wypada sesja najdawniej odświeżona; kosztuje jedno logowanie.
+ */
+export const KSEF_SESSION_CACHE_MAX_ENTRIES = 20_000;
+
 interface CachedSession {
   fingerprint: string;
   session: KsefAuthSession;
@@ -56,6 +70,25 @@ class SessionCache {
     return session.accessTokenExpiresAt - this.REFRESH_BUFFER_MS < Date.now();
   }
 
+  /** Refresh token ważny jeszcze przez bufor: nie zaczynamy odświeżenia, które zaraz wygaśnie. */
+  private canRefresh(session: KsefAuthSession): boolean {
+    return session.refreshTokenExpiresAt - this.REFRESH_BUFFER_MS > Date.now();
+  }
+
+  private remember(cacheKey: string, entry: CachedSession): void {
+    this.sessions.delete(cacheKey);
+    this.sessions.set(cacheKey, entry);
+    if (this.sessions.size > KSEF_SESSION_CACHE_MAX_ENTRIES) {
+      const oldest = this.sessions.keys().next().value;
+      if (oldest !== undefined) this.sessions.delete(oldest);
+    }
+  }
+
+  /** Liczba sesji w pamięci (test sufitu, pomiar). */
+  size(): number {
+    return this.sessions.size;
+  }
+
   /**
    * Pobiera sesję dla NIP. Autentykuje lub odświeża jeśli trzeba.
    * Równoległe żądania z tymi samymi poświadczeniami współdzielą auth flow.
@@ -69,17 +102,21 @@ class SessionCache {
     const fingerprint = credentialFingerprint(auth);
 
     const cached = this.sessions.get(cacheKey);
-    if (cached?.fingerprint === fingerprint && !this.isExpired(cached.session)) {
+    const sameCredentials = cached?.fingerprint === fingerprint;
+    if (sameCredentials && !this.isExpired(cached.session)) {
       return cached.session;
     }
-    this.sessions.delete(cacheKey);
+    const refreshable = sameCredentials && this.canRefresh(cached.session) ? cached.session : null;
+    // Sesja do odświeżenia zostaje: błąd KSeF (429, 5xx) nie może kosztować
+    // pełnego logowania przy następnym przebiegu.
+    if (!refreshable) this.sessions.delete(cacheKey);
 
     const existingLock = this.locks.get(cacheKey);
     if (existingLock?.fingerprint === fingerprint) {
       return existingLock.promise;
     }
 
-    const authPromise = this.doAuth(auth, env);
+    const authPromise = this.refreshOrAuth(cacheKey, auth, refreshable, env);
     const pending: PendingAuth = { fingerprint, promise: authPromise };
     this.locks.set(cacheKey, pending);
 
@@ -87,7 +124,7 @@ class SessionCache {
       const session = await authPromise;
       // A slower old auth flow must not overwrite a newer credential's session.
       if (this.locks.get(cacheKey) === pending) {
-        this.sessions.set(cacheKey, { fingerprint, session });
+        this.remember(cacheKey, { fingerprint, session });
       }
       return session;
     } finally {
@@ -95,6 +132,24 @@ class SessionCache {
         this.locks.delete(cacheKey);
       }
     }
+  }
+
+  /** Najpierw refresh token. Pełne logowanie tylko, gdy KSeF go odrzucił albo go nie ma. */
+  private async refreshOrAuth(
+    cacheKey: string,
+    auth: KsefAuth,
+    refreshable: KsefAuthSession | null,
+    env?: KsefEnvironment,
+  ): Promise<KsefAuthSession> {
+    if (refreshable) {
+      try {
+        return await refreshKsefSession(refreshable, env);
+      } catch (error) {
+        if (!isRefreshRejected(error)) throw error;
+        this.sessions.delete(cacheKey);
+      }
+    }
+    return this.doAuth(auth, env);
   }
 
   private async doAuth(

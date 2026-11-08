@@ -24,10 +24,43 @@ export interface InvoiceRow {
   currency?: string | null;
   invoice_kind?: string | null;
   last_error_code?: string | null;
+  /**
+   * N1: skąd faktura i jaki ma typ — z tych pól (razem z `invoice_kind`,
+   * `ksef_status` i `currency`) lista wylicza „Duplikuj” i „Ustaw jako
+   * cykliczną” (`lib/invoices/recurring/visibility.ts`). Strona listy je
+   * wybiera; brak pola = przycisk ukryty.
+   */
+  origin?: string | null;
+  invoice_type?: string | null;
 }
 
 /** Fakty wierszy (`loadInvoiceListRowFacts`) jako zwykły obiekt: id → fakty. */
 export type InvoiceFactsById = Record<string, InvoiceListRowFacts>;
+
+/**
+ * Stan płatności wiersza nałożony optymistycznie, zanim odpowie serwer
+ * („Zapłacone” i „Cofnij”): to, co liczą `resolvePaymentState` i `resolveOutstanding`.
+ */
+export interface InvoicePaymentOverlay {
+  paymentStatus: string | null | undefined;
+  facts: InvoiceListRowFacts | undefined;
+}
+
+/** Wiersz tuż po dotknięciu „Zapłacone”. */
+export function paidOverlay(facts: InvoiceListRowFacts | undefined): InvoicePaymentOverlay {
+  return {
+    paymentStatus: 'paid',
+    facts: { payment: 'paid', outstanding: 0, canCorrect: facts?.canCorrect ?? false, canMarkPaid: false },
+  };
+}
+
+/** Wiersz z nałożonym stanem płatności; bez nakładki — bez zmian. */
+export function withPaymentOverlay<T extends InvoiceRow>(
+  invoice: T,
+  overlay: InvoicePaymentOverlay | undefined,
+): T {
+  return overlay ? { ...invoice, payment_status: overlay.paymentStatus } : invoice;
+}
 
 /** Kolumny, których zmiana unieważnia fakty policzone na serwerze. */
 export const PAYMENT_FACT_FIELDS = [

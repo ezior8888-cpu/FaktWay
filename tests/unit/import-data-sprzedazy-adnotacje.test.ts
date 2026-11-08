@@ -367,7 +367,8 @@ describe('C5b: faktury zaimportowane przed C5b i ponowienie importu', () => {
     row.fa3_data = { import: meta, parsed };
     row.sale_date = null;
 
-    await expectJpkRefusal('FV/STARA/1', /zaimportowana przed .*ponów import/i);
+    // Tekst po wycofaniu magicznego importu (decyzja Bartosza 22.10.2026).
+    await expectJpkRefusal('FV/STARA/1', /zaimportowana przed .*uzupełnia te dane automatycznie/i);
 
     const again = await importXml(xml, { ksef });
     expect(again.invoicesFailed).toBe(0);

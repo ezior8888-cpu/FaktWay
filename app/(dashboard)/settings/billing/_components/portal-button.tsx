@@ -10,20 +10,22 @@ import { openCustomerPortalAction } from '../actions';
 
 interface Props {
   disabled?: boolean;
+  /** Wersja zgody na BLIK pokazanej przy przycisku: trafia do audytu otwarcia portalu. */
+  blikStatementVersion?: string | null;
 }
 
 /**
  * Przycisk otwierający Stripe Customer Portal w nowym tabie. Klient sam
- * zmienia plan/kartę/anuluje, my dostajemy webhook'a i synchronizujemy
+ * zmienia plan i metodę płatności albo anuluje, my dostajemy webhook'a i synchronizujemy
  * lokalną subscription.
  */
-export function PortalButton({ disabled }: Props) {
+export function PortalButton({ disabled, blikStatementVersion = null }: Props) {
   const [isPending, startTransition] = useTransition();
 
   const handle = () => {
     startTransition(async () => {
       try {
-        await openCustomerPortalAction();
+        await openCustomerPortalAction(blikStatementVersion);
       } catch (e) {
         const err = e as Error;
         if (err.message?.includes('NEXT_REDIRECT')) return;

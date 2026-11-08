@@ -11,22 +11,26 @@ import {
 } from '@/lib/dashboard/cash-movements';
 import type { CostEntry } from '@/lib/dashboard/costs';
 import type { InflowEntry } from '@/lib/dashboard/inflows';
-import type { ReceivableInvoice } from '@/lib/dashboard/receivables';
 
 /**
  * Czyste agregaty kart `/przeplywy` (plan Finora P2, etap E5) na wynikach
- * `getInflows` (§2.4 pkt 14), `getCosts` (§2.4 pkt 12) i `getReceivables`
- * (§2.4 pkt 11). Brzegi: korekta kosztu in minus, zaliczka + ROZ jako dwa
- * wpływy, B2C, przełom miesiąca i roku, „dziś” w Warszawie.
+ * `getInflows` i `getCosts` (§2.4 pkt 12). Brzegi: korekta kosztu in minus,
+ * zaliczka + ROZ jako dwa wpływy, B2C, przełom miesiąca i roku, „dziś”
+ * w Warszawie. Wykres, kafel, źródła i operacje liczą same prawdziwe pieniądze,
+ * a otwarte faktury z terminem od dziś to Spodziewane wpływy.
  */
 
 let seq = 0;
-function inflow(paidOn: string, amount: number, fields: Partial<InflowEntry> = {}): InflowEntry {
+/** Wpływ z prawdziwą zapłatą (dzień = dzień zapłaty); termin i wystawienie — przez `fields`. */
+function inflow(date: string, amount: number, fields: Partial<InflowEntry> = {}): InflowEntry {
   seq += 1;
   return {
     id: `inv-${String(seq).padStart(4, '0')}`,
-    paidOn,
+    date,
+    basis: 'paid',
     amount,
+    outstanding: 0,
+    dueDate: null,
     invoiceKind: 'regular',
     internalNumber: `FV/${seq}`,
     buyerKey: 'nip:1111111111',
@@ -110,14 +114,14 @@ describe('monthFlows — Wpłynęło / Wydano w tym miesiącu', () => {
       [cost('2026-10-05', 40), cost('2026-09-30', 80)],
       TODAY,
     );
-    // Cały miesiąc, jak słupek miesiąca na wykresie; wykres do ostatniego dokumentu.
-    expect(inflowFlow).toMatchObject({ amount: 1149, prevAmount: 120, count: 3 });
-    expect(inflowFlow.changePct).toBeCloseTo(857.5);
-    expect(inflowFlow.daily).toHaveLength(25);
+    // Wpływ z dniem po dziś (25.10) jeszcze nie wpłynął — kafel i krzywa kończą się dziś.
+    // Koszty bez zmian: cały miesiąc, jak słupek miesiąca na wykresie.
+    expect(inflowFlow).toMatchObject({ amount: 150, prevAmount: 120, count: 2 });
+    expect(inflowFlow.changePct).toBeCloseTo(25);
+    expect(inflowFlow.daily).toHaveLength(20);
     expect(inflowFlow.daily[0]).toEqual({ date: '2026-10-01', value: 0 });
     expect(inflowFlow.daily[1]).toEqual({ date: '2026-10-02', value: 100 });
-    expect(inflowFlow.daily[19]).toEqual({ date: '2026-10-20', value: 150 });
-    expect(inflowFlow.daily.at(-1)).toEqual({ date: '2026-10-25', value: 1149 });
+    expect(inflowFlow.daily.at(-1)).toEqual({ date: '2026-10-20', value: 150 });
     expect(outflow).toMatchObject({ amount: 40, prevAmount: 80, count: 1 });
     expect(outflow.changePct).toBeCloseTo(-50);
   });
@@ -151,6 +155,7 @@ describe('topCashFlowSources — skąd i dokąd płyną pieniądze', () => {
         inflow('2026-10-03', 500, { buyerKey: 'b2c', buyerName: 'Jan', buyerNip: null, consumers: true }),
       ],
       [cost('2026-10-04', 800, { sellerNip: '22-22', sellerName: 'Dostawca S.A.' }), cost('2026-10-05', 200, { sellerNip: null, sellerName: 'Sklep' })],
+      TODAY,
     );
     expect(sources.map((s) => [s.name, s.direction, s.amount, s.share, s.count])).toEqual([
       ['Alfa sp. z o.o. (nowa nazwa)', 'in', 1500, 75, 2],
@@ -165,6 +170,7 @@ describe('topCashFlowSources — skąd i dokąd płyną pieniądze', () => {
     const [top] = topCashFlowSources(
       [inflow('2026-10-03', 1000, { invoiceKind: 'advance' }), inflow('2026-10-04', 3000, { invoiceKind: 'final' })],
       [],
+      TODAY,
     );
     expect(top).toMatchObject({ amount: 4000, count: 2, share: 100 });
   });
@@ -173,6 +179,7 @@ describe('topCashFlowSources — skąd i dokąd płyną pieniądze', () => {
     const sources = topCashFlowSources(
       Array.from({ length: 7 }, (_, i) => inflow('2026-10-01', 10 * (i + 1), { buyerKey: `nip:${i}`, buyerName: `K${i}` })),
       [cost('2026-10-01', -50, { sellerNip: '9' })],
+      TODAY,
     );
     expect(sources).toHaveLength(5);
     expect(sources.every((s) => s.direction === 'in')).toBe(true);
@@ -181,22 +188,21 @@ describe('topCashFlowSources — skąd i dokąd płyną pieniądze', () => {
 });
 
 describe('upcomingInflows — spodziewane wpływy w 30 dni', () => {
-  const receivable = (id: string, paymentDueDate: string | null, outstanding: number): ReceivableInvoice => ({
-    id, internalNumber: `FV/${id}`, buyerName: 'Gamma spółka akcyjna', paymentDueDate, outstanding, daysOverdue: 0,
+  // Wejście to otwarte faktury z `getInflows`, nie należności `getReceivables`.
+  const receivable = (id: string, dueDate: string | null, outstanding: number): InflowEntry => inflow(dueDate ?? '2026-10-01', 100, {
+    id, internalNumber: `FV/${id}`, buyerName: 'Gamma spółka akcyjna', basis: dueDate ? 'due' : 'issued', dueDate, outstanding,
   });
 
   it('od dziś do +30 dni włącznie, najbliższy termin pierwszy', () => {
     const result = upcomingInflows(
-      {
-        byInvoice: [
-          receivable('a', '2026-11-19', 30), // +30 — w oknie
-          receivable('b', '2026-11-20', 40), // +31 — poza
-          receivable('c', '2026-10-20', 10), // dziś
-          receivable('d', '2026-10-19', 99), // po terminie — karta „Zaległości”
-          receivable('e', null, 77), // bez terminu
-          receivable('f', '2026-10-21', 20),
-        ],
-      },
+      [
+        receivable('a', '2026-11-19', 30), // +30 — w oknie
+        receivable('b', '2026-11-20', 40), // +31 — poza
+        receivable('c', '2026-10-20', 10), // dziś
+        receivable('d', '2026-10-19', 99), // termin minął — należność po terminie, nie spodziewany wpływ
+        receivable('e', null, 77), // bez terminu — nie wiadomo, kiedy spodziewać się pieniędzy
+        receivable('f', '2026-10-21', 20),
+      ],
       TODAY,
     );
     expect(result.items.map((i) => [i.id, i.daysLeft, i.amount])).toEqual([['c', 0, 10], ['f', 1, 20], ['a', 30, 30]]);
@@ -206,7 +212,7 @@ describe('upcomingInflows — spodziewane wpływy w 30 dni', () => {
 
   it('przez przełom roku i limit pozycji', () => {
     const result = upcomingInflows(
-      { byInvoice: Array.from({ length: 7 }, (_, i) => receivable(`r${i}`, `2027-01-0${i + 1}`, 1)) },
+      Array.from({ length: 7 }, (_, i) => receivable(`r${i}`, `2027-01-0${i + 1}`, 1)),
       '2026-12-30',
       30,
       5,
@@ -226,6 +232,7 @@ describe('cashFlowOperations — ostatnie i wszystkie operacje', () => {
         cost('2026-10-11', 0, { id: 'exp-zero' }),
         cost('2026-10-09', -20, { id: 'exp-kor' }),
       ],
+      TODAY,
     );
     expect(rows.map((r) => [r.id, r.date, r.category, r.status, r.amount, r.href])).toEqual([
       ['in:inv-b', '2026-10-12', 'Sprzedaż', 'paid', 100, '/invoices/inv-b'],

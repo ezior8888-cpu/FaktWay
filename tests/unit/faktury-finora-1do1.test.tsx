@@ -160,16 +160,48 @@ describe('pasek narzędzi w klasach Finory', () => {
   div.innerHTML = renderToStaticMarkup(<InvoicesToolbar params={parseInvoiceListParams({})} filtered={false} />);
   const form = div.querySelector('form') as HTMLFormElement;
 
-  it('rząd Finory: lewa grupa (Pokaż, Wystaw fakturę), prawa (szukaj, filtry)', () => {
-    expect(form.className.split(/\s+/)).toEqual(
+  // Lista 1:1 z Finory (21.10.2026): klasy Finory są na rzędzie wewnątrz formularza (nie na samym <form>),
+  // a pod rzędem jest zwinięty panel `filtry-faktur` z pozostałymi filtrami i paczką PDF za miesiąc.
+  it('rząd Finory: lewa grupa (Pokaż, Wystaw fakturę), prawa (szukaj, status, przycisk filtrów)', () => {
+    const [row] = [...form.children] as HTMLElement[];
+    expect(row?.className.split(/\s+/)).toEqual(
       expect.arrayContaining(['flex', 'gap-6', 'p-4', 'pt-0', 'max-lg:flex-col', 'lg:items-center', 'lg:justify-between']),
     );
-    const [left, right] = [...form.children] as HTMLElement[];
+    const [left, right] = [...(row?.children ?? [])] as HTMLElement[];
     expect(left?.textContent).toContain('Pokaż');
     expect(left?.querySelector('a[href="/invoices/new"]')?.textContent).toBe('Wystaw fakturę');
+    // PDF za miesiąc nie stoi już w lewej grupie (jest w panelu filtrów).
+    expect(left?.textContent).not.toContain('PDF za miesiąc');
     expect(right?.className).toContain('lg:justify-end');
     expect(right?.querySelector('input[name="q"]')).not.toBeNull();
     expect(right?.textContent).toContain('Status KSeF');
+    // Filtry dodatkowe nie są w prawej grupie rzędu — tylko status i przycisk „Filtry”.
+    expect(right?.querySelector('input[name="platnosc"]')).toBeNull();
+    expect(right?.querySelector('input[name="rodzaj"]')).toBeNull();
+    expect(right?.querySelector('input[name="od"]')).toBeNull();
+    expect(right?.querySelector('button[type="submit"]')).toBeNull();
+  });
+
+  it('przycisk „Filtry” (ikona) steruje zwiniętym panelem `filtry-faktur` w tym samym formularzu GET', () => {
+    const toggle = form.querySelector('button[aria-controls="filtry-faktur"]');
+    expect(toggle?.getAttribute('aria-label')).toBe('Filtry');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.getAttribute('type')).toBe('button');
+    const panel = form.querySelector('#filtry-faktur') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(panel.hasAttribute('hidden')).toBe(true);
+    // Panel jest w formularzu (Enter w wyszukiwarce nie gubi płatności, rodzaju ani dat) i niesie resztę filtrów.
+    expect(form.getAttribute('method')).toBe('get');
+    expect(form.getAttribute('action')).toBe('/invoices');
+    expect(panel.parentElement).toBe(form);
+    for (const name of ['platnosc', 'rodzaj', 'od', 'do']) {
+      expect(panel.querySelector(`[name="${name}"]`)).not.toBeNull();
+    }
+    expect(panel.textContent).toContain('Płatność');
+    expect(panel.textContent).toContain('Rodzaj');
+    expect([...panel.querySelectorAll('button[type="submit"]')].map((b) => b.textContent)).toEqual(['Filtruj']);
+    // PDF za miesiąc to teraz część panelu filtrów.
+    expect(panel.querySelector('#batch-month')).not.toBeNull();
   });
 
   it('pole miesiąca paczki PDF nie należy do formularza filtrów (bez name, z obcym `form`)', () => {
@@ -207,6 +239,7 @@ const facts = (over: Partial<InvoiceListRowFacts> = {}): InvoiceListRowFacts => 
   payment: 'unpaid',
   outstanding: 1230,
   canCorrect: false,
+  canMarkPaid: false,
   ...over,
 });
 

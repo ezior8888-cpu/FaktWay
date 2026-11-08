@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
+import { OPERATOR_DUPLICATE_MESSAGES, operatorInvoiceButtons } from '@/lib/admin/ksef-operator-policy';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { decideResend, failedInvoiceButtons } from '@/lib/invoices/ksef-send-policy';
-import { DUPLICATE_CHECK_REASONS, type DuplicateCheckReason } from '@/lib/ksef/duplicate-check';
-import { duplicateDecisionOptions } from '@/lib/ksef/duplicate-decision';
+import {
+  DUPLICATE_CHECK_REASONS,
+  ORIGINAL_GATE_RULES,
+  type DuplicateCheckReason,
+  type KsefOriginalImportGate,
+} from '@/lib/ksef/duplicate-check';
+import {
+  DUPLICATE_DECISION_SQL_TEXTS,
+  duplicateDecisionOptions,
+  fillSqlText,
+  type DuplicateDecisionFacts,
+  type DuplicateDecisionView,
+} from '@/lib/ksef/duplicate-decision';
 import { isKindHeldForEnv } from '@/lib/ksef/kind-holds';
 import {
   isAutoRequeueable,
@@ -16,8 +27,10 @@ import type { KsefEnvironment } from '@/types/ksef';
 
 import {
   decisionFacts,
+  DUP_K,
   DUP_KNOWN_ID,
   DUP_KNOWN_NUMBER,
+  DUP_NR,
   knownNumberCheck,
   validCheck,
 } from './helpers/ksef-duplicate-decision-cases';
@@ -68,7 +81,70 @@ interface Scenario {
   openSubmission: boolean;
   /** Powód znacznika przy KSEF_DUPLICATE_RECONCILE z otwartym wpisem (PR A, 00144); inaczej `null`. */
   duplicateReason: DuplicateReason | null;
+  /** PR C (7.3): podprzypadek znacznika `faktflow-original`; brak — `pair` (plik z generatora, brama importable). */
+  faktflow?: FaktflowCase;
+  /** PR C (6.6): suchy przebieg strony operatora — plik da się zapisać (domyślnie tak); `false` przy `review-record` to runbook. */
+  recordable?: boolean;
 }
+
+/**
+ * Podprzypadki `faktflow-original` (spec v3 1.1): oferta (`ksef_duplicate_original_offer`)
+ * albo blokada SQL, która o nich rozstrzyga.
+ */
+type FaktflowCase =
+  | 'pair'
+  | 'record'
+  | 'released'
+  | 'review-pair'
+  | 'review-record'
+  | 'no-gate'
+  | 'recheck-flag'
+  | 'known-now'
+  | 'cross-tenant';
+
+const FAKTFLOW_CASE_NAMES: readonly FaktflowCase[] = [
+  'pair', 'record', 'released', 'review-pair', 'review-record', 'no-gate', 'recheck-flag', 'known-now', 'cross-tenant',
+];
+
+const RECHECK_AT = '2026-10-06T08:00:00.000Z';
+const IMPORTABLE_GATE: KsefOriginalImportGate = { v: 1, rules: ORIGINAL_GATE_RULES, kind: 'importable', problems: [], preview: null };
+const REVIEW_GATE: KsefOriginalImportGate = { v: 1, rules: ORIGINAL_GATE_RULES, kind: 'review', problems: ['rates'], preview: null };
+const RELEASED_GATE: KsefOriginalImportGate = {
+  ...REVIEW_GATE,
+  release: { at: '2026-10-06T09:00:00.000Z', via: 'operator', actorUserId: null, note: 'Plik sprawdzony: nie powstał w FaktFlow.' },
+};
+
+/**
+ * Znacznik `faktflow-original` (spec 7.3): SystemInfo `KSeF SaaS v1.0`,
+ * `sameContentExceptHeader: false`, brama `importable` albo `review`
+ * (`gate: null` — znacznik sprzed 00149, bez oceny pliku).
+ */
+function faktflowOriginalCheck(o: { env: Env; gate: KsefOriginalImportGate | null; over?: Record<string, unknown> }): Record<string, unknown> {
+  const base = validCheck({
+    reason: 'faktflow-original',
+    env: o.env,
+    sameContentExceptHeader: false,
+    summary: { ...(validCheck().summary as Record<string, unknown>), systemInfo: 'KSeF SaaS v1.0' },
+    ...(o.over ?? {}),
+  });
+  return o.gate ? { ...base, importGate: o.gate } : base;
+}
+
+/** Znacznik i kod blokady SQL (`ksef_duplicate_decision_blocker`) każdego podprzypadku — jak z bazy. */
+const FAKTFLOW_CASES: Record<FaktflowCase, { gate: KsefOriginalImportGate | null; over?: Record<string, unknown>; sqlBlocker: string | null }> = {
+  pair: { gate: IMPORTABLE_GATE, sqlBlocker: null },
+  record: { gate: IMPORTABLE_GATE, over: { sameContentExceptHeader: true }, sqlBlocker: null },
+  released: { gate: RELEASED_GATE, sqlBlocker: null },
+  'review-pair': { gate: REVIEW_GATE, sqlBlocker: 'provenance-review' },
+  'review-record': { gate: REVIEW_GATE, over: { ownHistory: true }, sqlBlocker: 'provenance-review' },
+  'no-gate': { gate: null, sqlBlocker: 'recheck-needed' },
+  'recheck-flag': { gate: IMPORTABLE_GATE, over: { recheckNeeded: { kind: 'gate-drift', at: RECHECK_AT } }, sqlBlocker: 'recheck-needed' },
+  'known-now': { gate: IMPORTABLE_GATE, sqlBlocker: 'known-now' },
+  'cross-tenant': { gate: IMPORTABLE_GATE, sqlBlocker: 'cross-tenant' },
+};
+
+/** Podprzypadki, w których kolejny werdykt (cron I5, „Tylko uzgodnij”) daje inną ocenę — I5 je uzgadnia. */
+const RECHECK_FAKTFLOW: readonly FaktflowCase[] = ['no-gate', 'recheck-flag', 'known-now'];
 
 /** Powód z `original_check` albo `no-check` — znacznik bez zapisu sprawdzenia (sprzed 00144). */
 type DuplicateReason = DuplicateCheckReason | 'no-check';
@@ -87,7 +163,10 @@ const RECHECK_REASONS: readonly DuplicateReason[] = [
 
 /** Czy „tylko uzgodnij” (I5 albo operator) jest dla tego scenariusza wyjściem. */
 function reconcileIsExit(s: Scenario): boolean {
-  return s.code !== SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE || RECHECK_REASONS.includes(s.duplicateReason!);
+  return s.code !== SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE
+    || RECHECK_REASONS.includes(s.duplicateReason!)
+    // PR C: blokada `recheck-needed` / `known-now` — I5 robi nowy werdykt (INV-25).
+    || (s.faktflow !== undefined && RECHECK_FAKTFLOW.includes(s.faktflow));
 }
 
 /** Fakty ponowienia z `ksefResendFacts` — tu z wymiarów scenariusza i prawdziwego hamulca rodzaju. */
@@ -126,19 +205,26 @@ const NOW = new Date('2026-10-07T12:00:00.000Z');
  * przy known-number faktura Y z K i przyjęta. Tylko KSEF_DUPLICATE_RECONCILE
  * z otwartym wpisem; inaczej panelu nie ma.
  */
-function duplicateViewOf(s: Scenario, actor: 'client' | 'operator') {
+function duplicateViewOf(s: Scenario, actor: 'client' | 'operator'): DuplicateDecisionView | null {
   if (s.code !== SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE || !s.openSubmission || !s.duplicateReason) return null;
   const reason = s.duplicateReason;
+  // PR C: `faktflow-original` — znacznik z plikiem FaktFlow i blokada SQL podana jak z bazy (domyślnie para, brama importable).
+  const faktflow = reason === 'faktflow-original' ? FAKTFLOW_CASES[s.faktflow ?? 'pair'] : null;
   const check = reason === 'no-check'
     ? null
-    : reason === 'known-number'
-      ? knownNumberCheck({ env: s.env })
-      : validCheck({ reason, env: s.env });
-  const facts = decisionFacts({
-    invoice: { invoice_kind: s.kind },
-    check,
-    knownInvoice: reason === 'known-number' ? { id: DUP_KNOWN_ID, internalNumber: DUP_KNOWN_NUMBER, holdsOriginal: true } : null,
-  });
+    : faktflow
+      ? faktflowOriginalCheck({ env: s.env, gate: faktflow.gate, over: faktflow.over })
+      : reason === 'known-number'
+        ? knownNumberCheck({ env: s.env })
+        : validCheck({ reason, env: s.env });
+  const facts: DuplicateDecisionFacts = {
+    ...decisionFacts({
+      invoice: { invoice_kind: s.kind },
+      check,
+      knownInvoice: reason === 'known-number' ? { id: DUP_KNOWN_ID, internalNumber: DUP_KNOWN_NUMBER, holdsOriginal: true } : null,
+    }),
+    ...(faktflow ? { sqlBlocker: faktflow.sqlBlocker } : {}),
+  };
   return duplicateDecisionOptions({ facts, actor, canManage: true, environment: s.env, now: NOW });
 }
 
@@ -157,14 +243,34 @@ function clientExit(s: Scenario): boolean {
   return b.resend || (b.reset && resetAllowedByRpc(s)) || duplicateViewOf(s, 'client')?.kind === 'decidable';
 }
 
-function operatorExit(s: Scenario): boolean {
-  const b = operatorInvoiceButtons({
+/**
+ * Przyciski operatora z prawdziwej polityki — widok decyzji (actor operator) jak na karcie. PR C: `originalRecordable`
+ * to wynik suchego przebiegu strony (zapisywalność pliku z przeglądu); domyślnie plik da się zapisać.
+ */
+function operatorButtonsOf(s: Scenario) {
+  return operatorInvoiceButtons({
     direction: 'outgoing', status: 'failed', errorCode: s.code, invoiceKind: s.kind,
     openSent: s.openSubmission, evidence: s.evidence, facts: factsOf(s), environmentKnown: true,
     duplicateDecision: duplicateViewOf(s, 'operator'), duplicateNotice: null, now: NOW,
+    originalRecordable: s.recordable === false ? { ok: false, detail: 'currency' } : { ok: true },
   });
+}
+
+/**
+ * PR C: widok `review` (przegląd pliku, I5R; spec 5.5 i 6.6) — wyjście operatora to „Oddaj decyzję klientowi”
+ * (`review-pair`) albo „Zapisz fakturę z KSeF w FaktWay”, gdy plik da się zapisać (suchy przebieg strony,
+ * `recordable`). Liczone z PRAWDZIWYCH przycisków przeglądu (`operatorReviewButtons`), nie z `view.releasable`
+ * i flagi scenariusza (kontrakt I5) — `review-record` bez zapisywalnego pliku nie ma wyjścia w panelu: runbook (Bartosz).
+ */
+function reviewExit(s: Scenario): boolean {
+  const b = operatorButtonsOf(s);
+  return b.record.enabled || b.release.enabled;
+}
+
+function operatorExit(s: Scenario): boolean {
+  const b = operatorButtonsOf(s);
   return b.requeue.enabled || (b.reconcile.enabled && reconcileIsExit(s)) || (b.reset.enabled && resetAllowedByRpc(s))
-    || b.decide.enabled;
+    || b.decide.enabled || reviewExit(s);
 }
 
 const KINDS: readonly Kind[] = ['regular', 'correction', 'advance', 'final'];
@@ -214,9 +320,11 @@ const label = (s: Scenario) =>
   `${s.code} ${s.kind} ${s.env}${s.sendData === 'missing' ? ' bez-danych' : ''}${s.issueDatePassed ? ' po-dacie' : ''}`
   + `${s.evidence ? ' +dowód' : ''}${s.openSubmission ? ' +otwarty' : ''}${s.duplicateReason ? ` ${s.duplicateReason}` : ''}`;
 
-/** Powody zwykłej faktury bez decyzji w panelu po PR B — każdy z sesją, która go zamknie. */
+/**
+ * Powody zwykłej faktury bez decyzji w panelu po PR C — każdy z sesją, która go zamknie.
+ * PR C (7.3): `faktflow-original` zniknął z listy — ma wyjście w każdym podprzypadku.
+ */
 const LATER_DUPLICATE_REASONS: readonly DuplicateReason[] = [
-  'faktflow-original', // PR C (import oryginału)
   'same-content-other-program', // D-A4-1b-2
   'archive-conflict', // runbook (porównanie plików)
 ];
@@ -238,11 +346,14 @@ const LATER_DUPLICATE_REASONS: readonly DuplicateReason[] = [
  *    - bez otwartego wpisu (stary 440 sprzed znacznika) — D-A4-1b;
  *    - z otwartym wpisem: pobranie/magazyn/archiwum nieudane i brak zapisu
  *      (`no-check`) — I5 i „Tylko uzgodnij” (PR D: „Sprawdź ponownie”);
- *      zwykła faktura `no-own-file` i `known-number` — decyzja klienta
- *      i operatora (PR B), NIE ślepa uliczka; `faktflow-original` — PR C;
- *      `same-content-other-program` — D-A4-1b-2; `archive-conflict` —
- *      runbook; KOR/ZAL/ROZ z werdyktem deterministycznym — D-A4-1b-3-S
- *      (blokada `kind` w decyzji);
+ *      zwykła faktura `no-own-file`, `known-number` i `faktflow-original`
+ *      (PR C) — decyzja klienta i operatora, oddanie albo zapis w przeglądzie,
+ *      automat (`recheck-needed`, `known-now`), NIE ślepa uliczka; wyjątki
+ *      z runbookiem: `faktflow-original` `cross-tenant` („Oryginał w innej
+ *      firmie”, Bartosz) i `review-record` z plikiem, którego nie da się zapisać
+ *      („Zapis oryginału odmówiony”, Bartosz); `same-content-other-program` —
+ *      D-A4-1b-2; `archive-conflict` — runbook; KOR/ZAL/ROZ z werdyktem
+ *      deterministycznym — D-A4-1b-3-S (blokada `kind` w decyzji);
  *  - kod treści (terminal) przy dowodzie kontaktu bez otwartego wpisu — w
  *    praktyce zamknięty wpis `duplicate` po nierozstrzygniętym 440 w historii
  *    (rozstrzygnięty „numer zajęty” przenosi wpisy na `number_taken`, które
@@ -258,7 +369,9 @@ function knownDeadEnd(s: Scenario): boolean {
     if (!s.openSubmission) return true; // D-A4-1b
     if (RECHECK_REASONS.includes(s.duplicateReason!)) return false; // I5 i „Tylko uzgodnij” (PR D)
     if (special) return true; // D-A4-1b-3-S
-    return LATER_DUPLICATE_REASONS.includes(s.duplicateReason!); // PR C / D-A4-1b-2 / runbook
+    if (s.faktflow === 'cross-tenant') return true; // PR C: runbook „Oryginał w innej firmie” (Bartosz)
+    if (s.faktflow === 'review-record' && s.recordable === false) return true; // PR C: runbook „Zapis oryginału odmówiony” (Bartosz)
+    return LATER_DUPLICATE_REASONS.includes(s.duplicateReason!); // D-A4-1b-2 / runbook
   }
   if (s.openSubmission) return false;
   if (special && s.issueDatePassed) return noReset; // B2
@@ -333,6 +446,19 @@ describe('A4: każdy kod katalogu ma wyjście (automat, klient albo operator)', 
     expect(knownDeadEnd({ ...regularOpen('download-pending'), kind: 'correction' })).toBe(false);
   });
 
+  it('U15c (PR C, 7.3): faktflow-original regularna z otwartym wpisem NIE jest martwym końcem — ma realne wyjście klienta i operatora, KOR nadal czeka na D-A4-1b-3-S', () => {
+    const regularOpen = (env: Env): Scenario => ({
+      code: SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, kind: 'regular', sendData: 'stored', env,
+      issueDatePassed: false, evidence: true, openSubmission: true, duplicateReason: 'faktflow-original',
+    });
+    for (const env of ENVS) {
+      expect(knownDeadEnd(regularOpen(env)), `faktflow-original ${env}`).toBe(false);
+      expect(clientExit(regularOpen(env)), `faktflow-original ${env}: klient`).toBe(true);
+      expect(operatorExit(regularOpen(env)), `faktflow-original ${env}: operator`).toBe(true);
+    }
+    expect(knownDeadEnd({ ...regularOpen('test'), kind: 'correction' })).toBe(true);
+  });
+
   it('U15d: wyjście PR B — zwykła no-own-file i known-number: panel klienta i „Zapisz decyzję klienta” operatora', () => {
     for (const env of ENVS) {
       for (const duplicateReason of ['no-own-file', 'known-number'] as const) {
@@ -373,6 +499,131 @@ describe('A4: każdy kod katalogu ma wyjście (automat, klient albo operator)', 
     };
     expect(operatorExit(s)).toBe(true);
     expect(knownDeadEnd(s)).toBe(false);
+  });
+});
+
+/**
+ * D-A4-1b-3 PR C (spec v3 7.3, „U15e” z listy zmian — w pliku nazwa U15e jest już
+ * zajęta przez test tekstów klienta, stąd U15g): `faktflow-original` × podprzypadek.
+ * Wyjścia liczone prawdziwą polityką klienta i operatora; blokada SQL podana jak
+ * z bazy (`FAKTFLOW_CASES`). Na HEAD polityka odmawia `faktflow-original` powodem
+ * `reason` w każdym podprzypadku (brak gałęzi PR C).
+ */
+describe('U15g (PR C, 7.3): faktflow-original — każdy podprzypadek ma wyjście', () => {
+  const open = (faktflow: FaktflowCase, env: Env = 'test', extra: Partial<Scenario> = {}): Scenario => ({
+    code: SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, kind: 'regular', sendData: 'stored', env,
+    issueDatePassed: false, evidence: true, openSubmission: true, duplicateReason: 'faktflow-original', faktflow, ...extra,
+  });
+  const clientViewOf = (s: Scenario) => duplicateViewOf(s, 'client');
+
+  it.each(ENVS)('%s: pair, record i released — klient i operator mają decyzję, automat nie', (env) => {
+    for (const faktflow of ['pair', 'record', 'released'] as const) {
+      const s = open(faktflow, env);
+      const client = clientViewOf(s);
+      const operator = duplicateViewOf(s, 'operator');
+      expect(client?.kind, `${faktflow}: widok klienta`).toBe('decidable');
+      expect(operator?.kind, `${faktflow}: widok operatora`).toBe('decidable');
+      expect(clientExit(s), `${faktflow}: klient`).toBe(true);
+      expect(operatorExit(s), `${faktflow}: operator`).toBe(true);
+      expect(operatorButtonsOf(s).decide.enabled, `${faktflow}: „Zapisz decyzję klienta”`).toBe(true);
+      expect(automaticExit(s), `${faktflow}: automat`).toBe(false);
+      expect(knownDeadEnd(s), `${faktflow}: martwy koniec`).toBe(false);
+    }
+  });
+
+  it.each(ENVS)('%s: review-pair — klient bez wyjścia (sprawdzamy, damy znać), operator: oddanie albo zapis; wyjście nie zależy od zapisywalności pliku', (env) => {
+    const s = open('review-pair', env);
+
+    const client = clientViewOf(s);
+    expect(client).toEqual({
+      kind: 'refused',
+      refusal: 'provenance-review',
+      message: fillSqlText(DUPLICATE_DECISION_SQL_TEXTS['provenance-review'].template, DUP_NR),
+    });
+    expect(clientExit(s)).toBe(false);
+
+    const operator = duplicateViewOf(s, 'operator');
+    expect(operator).toMatchObject({ kind: 'review', offer: 'review-pair', releasable: true, choices: ['same_sale', 'other_sale'] });
+    expect(automaticExit(s)).toBe(false); // I5R: cron I5 przeglądu nie uzgadnia (bez pętli), alarm po 72 h
+    for (const recordable of [true, false]) {
+      const variant = open('review-pair', env, { recordable });
+      expect(operatorExit(variant), `zapisywalny: ${recordable}`).toBe(true);
+      expect(knownDeadEnd(variant), `zapisywalny: ${recordable}`).toBe(false);
+    }
+  });
+
+  it.each(ENVS)('%s: review-record — tylko zapis (bez oddania); plik, którego nie da się zapisać, to runbook (Bartosz)', (env) => {
+    const s = open('review-record', env);
+
+    expect(clientViewOf(s)).toMatchObject({ kind: 'refused', refusal: 'provenance-review' });
+    expect(clientExit(s)).toBe(false);
+    expect(duplicateViewOf(s, 'operator')).toMatchObject({
+      kind: 'review', offer: 'review-record', releasable: false, choices: ['same_sale'],
+    });
+
+    expect(operatorExit(open('review-record', env, { recordable: true }))).toBe(true);
+    expect(knownDeadEnd(open('review-record', env, { recordable: true }))).toBe(false);
+
+    const notBuildable = open('review-record', env, { recordable: false });
+    expect(operatorExit(notBuildable)).toBe(false);
+    expect(automaticExit(notBuildable)).toBe(false);
+    expect(knownDeadEnd(notBuildable)).toBe(true);
+  });
+
+  it.each(ENVS)('%s: recheck-needed (brak bramy, znacznik recheckNeeded) i known-now — automat (cron I5) i „Tylko uzgodnij”; klient bez przycisku, operator z tekstem powodu', (env) => {
+    const texts: Record<'no-gate' | 'recheck-flag' | 'known-now', string> = {
+      'no-gate': OPERATOR_DUPLICATE_MESSAGES.recheckPending(null, null),
+      'recheck-flag': OPERATOR_DUPLICATE_MESSAGES.recheckPending('gate-drift', RECHECK_AT),
+      'known-now': OPERATOR_DUPLICATE_MESSAGES.knownNow(DUP_K),
+    };
+    for (const faktflow of ['no-gate', 'recheck-flag', 'known-now'] as const) {
+      const s = open(faktflow, env);
+      expect(clientViewOf(s), faktflow).toMatchObject({ kind: 'refused', refusal: faktflow === 'known-now' ? 'known-now' : 'recheck-needed' });
+      expect(clientExit(s), `${faktflow}: klient`).toBe(false);
+      expect(automaticExit(s), `${faktflow}: automat`).toBe(true);
+      expect(operatorButtonsOf(s).reconcile.enabled, `${faktflow}: „Tylko uzgodnij”`).toBe(true);
+      const b = operatorButtonsOf(s);
+      expect(b.decide, `${faktflow}: „Zapisz decyzję klienta”`).toEqual({ enabled: false, reason: texts[faktflow] });
+      expect(b.remind.enabled, `${faktflow}: „Przypomnij klientowi”`).toBe(false);
+      expect(knownDeadEnd(s), `${faktflow}: martwy koniec`).toBe(false);
+    }
+  });
+
+  it.each(ENVS)('%s: cross-tenant — runbook (Bartosz): ani klient, ani operator, ani automat; operator widzi tekst z numerem K', (env) => {
+    const s = open('cross-tenant', env);
+
+    expect(clientViewOf(s)).toMatchObject({ kind: 'refused', refusal: 'cross-tenant' });
+    expect(clientExit(s)).toBe(false);
+    expect(automaticExit(s)).toBe(false);
+    expect(operatorExit(s)).toBe(false);
+    expect(operatorButtonsOf(s).decide).toEqual({ enabled: false, reason: OPERATOR_DUPLICATE_MESSAGES.crossTenant(DUP_K) });
+    expect(knownDeadEnd(s)).toBe(true);
+  });
+
+  it('INV-25: żaden podprzypadek nie kończy się w I5D (blokada NULL) bez akcji klienta; pozostałe stoją w I5 albo I5R', () => {
+    for (const faktflow of FAKTFLOW_CASE_NAMES) {
+      const s = open(faktflow);
+      const { sqlBlocker } = FAKTFLOW_CASES[faktflow];
+      if (sqlBlocker === null) {
+        expect(clientViewOf(s)?.kind, `${faktflow}: I5D wymaga widoku do decyzji klienta`).toBe('decidable');
+      } else {
+        // 4.10: I5 = blokada NOT NULL poza `provenance-review`; `provenance-review` to I5R.
+        expect(clientViewOf(s)?.kind, `${faktflow}: blokada ${sqlBlocker}`).toBe('refused');
+      }
+    }
+  });
+
+  it('INV-12: każda odmowa klienta nazywa dokument i mówi, co zrobić (numer dokumentu w tekście, bez odsyłania do operatora)', () => {
+    for (const faktflow of ['review-pair', 'review-record', 'no-gate', 'recheck-flag', 'known-now', 'cross-tenant'] as const) {
+      const view = clientViewOf(open(faktflow));
+      expect(view?.kind, faktflow).toBe('refused');
+      const message = view?.kind === 'refused' ? view.message : null;
+      // M1: odmowa PR B ma `message: null` — bez tej asercji pada chai ('null and string'), co wygląda na błąd testu.
+      expect(typeof message, `${faktflow}: odmowa klienta ma mieć tekst (nie null)`).toBe('string');
+      expect(message ?? '', faktflow).toContain(DUP_NR);
+      expect(message ?? '', faktflow).toMatch(/nie wystawiaj/i);
+      expect(message ?? '', faktflow).not.toMatch(/operator/i);
+    }
   });
 });
 

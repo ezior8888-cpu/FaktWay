@@ -5,7 +5,8 @@ import { test, expect } from '../fixtures';
 /**
  * Plan Finora E7: `/analizy/sprzedaz` i `/analizy/koszty` (P10, P11) na
  * świeżym koncie — nagłówek, wybór miesiąca, puste stany z §7.3 zamiast
- * pustych wykresów, pozycje w menu i audyt WCAG 2.1 AA (jak 06).
+ * pustych wykresów, przełącznik „Sprzedaż | Koszty” (od 21.10.2026 jedna
+ * pozycja menu „Analizy”) i audyt WCAG 2.1 AA (jak 06).
  */
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
@@ -17,8 +18,26 @@ test.describe('Analizy (plan Finora E7)', () => {
     await expect(page.getByRole('combobox', { name: 'Wybierz miesiąc' })).toBeVisible();
     await expect(page.getByText('Pokażemy to, gdy wystawisz pierwszą fakturę').first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Wystaw fakturę' }).first()).toBeVisible();
-    await expect(page.getByText('Klienci: rośnie')).toBeVisible();
-    await expect(page.getByText('Klienci: spada')).toBeVisible();
+    // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — dodatkowy wiersz
+    // („Klienci: rośnie” / „Klienci: spada”) nie jest renderowany; siatka to
+    // 9 kart Monthly Analytics.
+    await expect(page.getByText('Klienci: rośnie')).toHaveCount(0);
+    await page.close();
+  });
+
+  // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — jedna pozycja menu
+  // „Analizy”, a analizę kosztów otwiera przełącznik „Sprzedaż | Koszty”.
+  test('przełącznik „Sprzedaż | Koszty” prowadzi do analizy kosztów', async ({ authenticatedContext }) => {
+    const page = await authenticatedContext.newPage();
+    await page.goto('/analizy/sprzedaz');
+    const tryb = page.getByRole('navigation', { name: 'Rodzaj analizy' });
+    await expect(tryb.getByRole('link', { name: 'Sprzedaż' })).toHaveAttribute('aria-current', 'page');
+    await tryb.getByRole('link', { name: 'Koszty' }).click();
+    await expect(page).toHaveURL(/\/analizy\/koszty$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Analiza kosztów' })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Rodzaj analizy' }).getByRole('link', { name: 'Koszty' }),
+    ).toHaveAttribute('aria-current', 'page');
     await page.close();
   });
 

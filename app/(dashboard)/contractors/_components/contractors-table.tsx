@@ -206,9 +206,11 @@ export function ContractorsTable({
     onPaginationChange: setPagination,
   });
 
+  // Pełny arkusz (poprawka Bartosza 21.10.2026): obszar tabeli rośnie do dołu
+  // karty, nota i paginacja stoją przy jej dolnej krawędzi — jak listy Faktur.
   return (
-    <div className="w-full">
-      <div className="border-b">
+    <div className="flex w-full flex-1 flex-col">
+      <div className="flex-1 border-b">
         <div className="flex gap-6 p-4 pt-0 max-lg:flex-col lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <PageSizeSelect table={table} />

@@ -569,6 +569,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
               size="lg"
               onClick={handleDelete}
               disabled={isDeleting || isSaving}
+              aria-label="Usuń wydatek"
             >
               {isDeleting ? (
                 <RiLoader4Line className="animate-spin" />

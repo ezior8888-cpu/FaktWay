@@ -176,6 +176,18 @@ export function knownNumberVerdictMessage(
     : DUPLICATE_DECISION_TEXTS.KNOWN_NUMBER_LAST_ERROR(ksefNumber, y);
 }
 
+/**
+ * D-A4-1b-3 PR C (5.1 punkt 3): `last_error` werdyktu `faktflow-original` —
+ * `DUPLICATE_DECISION_TEXTS.FAKTFLOW.LAST_ERROR(K)` przy bramie `importable`,
+ * `LAST_ERROR_REVIEW(K)` przy `review` (bez „operatora” i bez obietnicy decyzji;
+ * trafia też do e-maila „odrzucona” i karty FLO). `operatorVerdictMessage`
+ * zostaje dla `same-content-other-program`.
+ */
+export function faktflowOriginalVerdictMessage(ksefNumber: string, gateKind: 'importable' | 'review'): string {
+  const FF = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
+  return gateKind === 'review' ? FF.LAST_ERROR_REVIEW(ksefNumber) : FF.LAST_ERROR(ksefNumber);
+}
+
 /** Komunikat werdyktu „operator” (trafia do `last_error`; przy panelu duplikatu klient go nie widzi — karta błędu jest ukryta). */
 export function operatorVerdictMessage(ksefNumber: string, cmp: DuplicateComparison): string {
   const original = describeOriginal(ksefNumber, cmp.summary);

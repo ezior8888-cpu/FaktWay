@@ -141,9 +141,13 @@ export function TransactionDatatable<T>({
   const pageRows = table.getRowModel().rows
   const noData = data.length === 0 && emptyState !== undefined
 
+  // Pełny arkusz (poprawka Bartosza 21.10.2026): korzeń to rosnąca kolumna,
+  // a obszar listy (`border-b`) bierze resztę wysokości — paginacja stoi przy
+  // dolnej krawędzi karty, pusty arkusz jest między ostatnim wierszem a nią.
+  // Gdy rodzic nie jest rosnącą kolumną flex, `flex-1` nic nie zmienia.
   return (
-    <div className='w-full'>
-      <div className='border-b'>
+    <div className='flex w-full flex-1 flex-col'>
+      <div className='flex flex-1 flex-col border-b'>
         <div className='flex items-start gap-6 p-4 pt-0 max-lg:flex-col lg:justify-between'>
           <div className='flex items-center gap-4'>
             <div className='flex items-center gap-2'>
@@ -206,7 +210,8 @@ export function TransactionDatatable<T>({
         {noData ? (
           // Pusty stan raz, nie osobno w tabeli i w kartach: tekst stoi
           // w jednym węźle (e2e 04 szuka go `getByText` w trybie ścisłym).
-          <div className='border-t'>{emptyState}</div>
+          // W rosnącym obszarze listy stoi na środku, jak `Empty` Cyklicznych.
+          <div className='flex flex-1 flex-col justify-center border-t'>{emptyState}</div>
         ) : (
           <>
             <div className='hidden lg:block'>
@@ -333,7 +338,10 @@ export function TransactionDatatable<T>({
                   <PaginationItem key={page}>
                     <Button
                       size='icon'
-                      className={`${!isActive && 'bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'}`}
+                      // Odstępstwo od Finory (WCAG 1.4.3): numer strony `text-accent-foreground`, nie `text-primary`.
+                      // `text-primary` na `bg-primary/10` ma 4,44:1 (jasny) i 3,84 / 4,13:1 pod kursorem (`primary/20`,
+                      // jasny / ciemny); `accent-foreground` daje 9,00 / 7,79:1 (jasny) i 8,93 / 7,43:1 (ciemny).
+                      className={`${!isActive && 'bg-primary/10 text-accent-foreground hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'}`}
                       onClick={() => table.setPageIndex(page - 1)}
                       aria-current={isActive ? 'page' : undefined}
                     >

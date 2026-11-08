@@ -43,11 +43,6 @@ COPY . .
 ARG NEXT_PUBLIC_APP_DOMAIN
 ARG NEXT_PUBLIC_APP_ENV
 ARG NEXT_PUBLIC_APP_URL
-# Przełącznik wpuszczania telefonów do panelu (zob. lib/mobile-access.ts).
-# Musi być build-argiem: proxy.ts idzie pod Edge, a tam Next wstawia
-# wartości env w czasie budowania, nie odczytuje ich w locie.
-ARG NEXT_PUBLIC_MOBILE_PANEL
-ARG NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST
 ARG NEXT_PUBLIC_POSTHOG_HOST
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ARG NEXT_PUBLIC_SENTRY_DSN
@@ -55,13 +50,13 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+# Opcjonalny: strony statyczne przy `next build` mówią o BLIK-u (`lib/marketing/oferta.ts`).
+ARG STRIPE_BLIK_RECURRING
 # Opcjonalny: source maps do GlitchTip/Sentry (build działa bez niego).
 ARG SENTRY_AUTH_TOKEN
 ENV NEXT_PUBLIC_APP_DOMAIN=$NEXT_PUBLIC_APP_DOMAIN \
     NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
-    NEXT_PUBLIC_MOBILE_PANEL=$NEXT_PUBLIC_MOBILE_PANEL \
-    NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST=$NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST \
     NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST \
     NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
@@ -100,7 +95,14 @@ ENV NEXT_OUTPUT=standalone \
 # z `experimental.webpackMemoryOptimizations` (next.config.ts) 3526 MB.
 # Optymalizacje + 3584 MB przechodzą lokalnie (także z E9). Swap app-1
 # 20.10: 8 GB, w spoczynku zajęte ~1.6 GB — +512 MB sterty mieści się.
-ENV NODE_OPTIONS="--max-old-space-size=3584"
+#
+# 22.10.2026: 3584 → 4096 MB (decyzja Bartosza). Łatki bezpieczeństwa:
+# Next 16.4.1 (GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r) i @sentry/nextjs
+# 10.75.2 (GHSA-mchm-gjx6-7h55 — używamy `tunnelRoute`). Z nową wersją Sentry
+# build padał przy 3584 MB nawet bez `widenClientFileUpload`; przy 4096 MB
+# przechodzi (lokalnie szczyt RSS ~6.7 GB). Swap app-1 22.10: 8 GB, w spoczynku
+# zajęte ~0.8 GB. Gdy build zginie z exit 137 — dołóż swap (pułapki w AGENTS.md).
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm build
 
 # ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──
@@ -114,15 +116,24 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# SHA commita z builda w GitHub Actions (`.github/workflows/obrazy.yml`); build
+# w Coolify go nie podaje i zostaje pusty. Na końcu etapu, żeby zmiana SHA nie
+# unieważniała cache warstw wyżej.
+ARG APP_COMMIT_SHA=""
+ENV APP_COMMIT_SHA=$APP_COMMIT_SHA
+LABEL org.opencontainers.image.revision=$APP_COMMIT_SHA
 # AUD-127: proces bez roota. Obraz `node` ma użytkownika `node`; pliki aplikacji
 # zostają tylko do odczytu, a zapisy (tsx, eksporty) idą do /tmp.
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||8080)+'/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-# `--conditions=react-server`: moduły z `import 'server-only'` (np. analytics)
-# rzucają wyjątek poza tym warunkiem — Next ustawia go sam, worker musi jawnie.
-CMD ["node", "--conditions=react-server", "--import", "tsx", "lib/jobs/worker.ts"]
+# `server-only-hook.mjs`: moduły z `import 'server-only'` rzucają poza warunkiem
+# `react-server`, więc hak podmienia sam `server-only` na pusty moduł. NIE wracaj
+# do globalnego `--conditions=react-server`: psuje `react-dom/server` i render
+# maili (RUN-01). Ten sam ciąg ma `worker:dev` — pilnuje tego test
+# tests/unit/worker-start-jak-dockerfile.test.ts.
+CMD ["node", "--import", "./lib/jobs/server-only-hook.mjs", "--import", "tsx", "lib/jobs/worker.ts"]
 
 # ── runner: minimalny obraz produkcyjny ──
 # MUSI zostać ostatnim etapem pliku: `docker build` bez `--target` buduje
@@ -147,6 +158,12 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+
+# Jak w etapie `worker`: SHA z builda w CI. `/api/ops/deploy-state` zwraca go
+# workflowowi, który po wdrożeniu sprawdza, czy działa nowy obraz.
+ARG APP_COMMIT_SHA=""
+ENV APP_COMMIT_SHA=$APP_COMMIT_SHA
+LABEL org.opencontainers.image.revision=$APP_COMMIT_SHA
 
 USER nextjs
 EXPOSE 3000

@@ -1,8 +1,10 @@
 import type { CostEntry } from '@/lib/dashboard/costs';
+import { clientIdentity } from '@/lib/dashboard/rankings';
 import { shortCompanyName } from '@/lib/format/company-name';
+import { canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
-import { clientKeyOf, clientNames } from './clients';
+import { clientNames } from './clients';
 import type { SaleInvoice } from './sales';
 
 /**
@@ -24,6 +26,11 @@ export interface RecurringEntry {
   /** RRRR-MM-DD */
   date: string;
   amount: number;
+  /**
+   * N1: faktura, którą można wskazać jako wzór faktury cyklicznej (opcjonalne).
+   * Z najnowszej takiej faktury kontrahenta powstaje `RecurringItem.templateInvoiceId`.
+   */
+  templateInvoiceId?: string | null;
 }
 
 export interface RecurringItem {
@@ -35,6 +42,12 @@ export interface RecurringItem {
   typicalDay: number;
   /** W ilu z `monthKeys` wystąpił (z kwotą > 0). */
   months: number;
+  /**
+   * N1: id najnowszej faktury kontrahenta spełniającej warunki wzoru (tylko
+   * „Stali klienci”; ustawione wyłącznie, gdy taka faktura jest w oknie).
+   * Z niej „Zrób fakturę cykliczną” otwiera arkusz faktury cyklicznej.
+   */
+  templateInvoiceId?: string;
 }
 
 export function findRecurring(
@@ -48,18 +61,22 @@ export function findRecurring(
     byMonth: Map<string, number>;
     days: number[];
     newest: { date: string; name: string };
+    template: { date: string; id: string } | null;
   }>();
   for (const entry of entries) {
     const month = entry.date.slice(0, 7);
     if (!window.has(month)) continue;
     let group = groups.get(entry.key);
     if (!group) {
-      group = { byMonth: new Map(), days: [], newest: { date: entry.date, name: entry.name } };
+      group = { byMonth: new Map(), days: [], newest: { date: entry.date, name: entry.name }, template: null };
       groups.set(entry.key, group);
     }
     group.byMonth.set(month, (group.byMonth.get(month) ?? 0) + entry.amount);
     group.days.push(Number(entry.date.slice(8, 10)));
     if (entry.date >= group.newest.date) group.newest = { date: entry.date, name: entry.name };
+    if (entry.templateInvoiceId && (group.template === null || entry.date >= group.template.date)) {
+      group.template = { date: entry.date, id: entry.templateInvoiceId };
+    }
   }
 
   const items: RecurringItem[] = [];
@@ -73,6 +90,8 @@ export function findRecurring(
       averageAmount: roundToCents(active.reduce((s, v) => s + v, 0) / active.length),
       typicalDay: days[Math.floor((days.length - 1) / 2)]!,
       months: active.length,
+      // Klucz tylko, gdy jest wzór — wyniki bez niego zostają takie jak przed N1.
+      ...(group.template ? { templateInvoiceId: group.template.id } : {}),
     });
   }
   return items
@@ -110,9 +129,29 @@ export function recurringClients(
   const names = clientNames(invoices);
   const entries: RecurringEntry[] = [];
   for (const inv of invoices) {
-    const key = clientKeyOf(inv);
-    if (key === null) continue;
-    entries.push({ key, name: names.get(key) ?? '', date: inv.issueDate, amount: inv.net });
+    const identity = clientIdentity(inv);
+    if (identity === null) continue;
+    const key = identity.key;
+    entries.push({
+      key,
+      name: names.get(key) ?? '',
+      date: inv.issueDate,
+      amount: inv.net,
+      // N1: `getSalesInvoices` zwraca tylko przyjęte faktury sprzedaży w PLN, więc o wzorze
+      // rozstrzygają rodzaj, typ i pochodzenie — te same warunki co akcja tworzenia.
+      // „Konsumenci” to wielu różnych nabywców pod jednym kluczem: faktura jednego z nich
+      // nie jest wzorem dla „klienta”, więc przy tej pozycji przycisku nie ma.
+      templateInvoiceId: !identity.consumers && canSetAsRecurring({
+        direction: 'outgoing',
+        origin: inv.origin,
+        invoice_kind: inv.kind,
+        invoice_type: inv.invoiceType,
+        ksef_status: 'accepted',
+        currency: 'PLN',
+      })
+        ? inv.id
+        : null,
+    });
   }
   // Nazwa z `clientNames` (najnowsza faktura z nazwą), nie z ostatniego wpisu.
   return findRecurring(entries, monthKeys, MIN_MONTHS, limit).map((item) => ({

@@ -7,6 +7,7 @@
  */
 
 import { MONTHLY_NET_PLN } from '@/lib/billing/pricing';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -66,15 +67,20 @@ export async function getDailyMetrics(hours = 24): Promise<DailyMetrics> {
       .from('tenants')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', fromIso),
+    // Faktury wystawione W FaktWay: bez sprzedaży pobranej z historii KSeF
+    // (`origin = ksef_import`, decyzja Bartosza 22.10.2026). `origin` jest
+    // NOT NULL (00065), więc `neq` niczego nie gubi.
     supabase
       .from('invoices')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outgoing')
+      .neq('origin', 'ksef_import')
       .gte('created_at', fromIso),
     supabase
       .from('invoices')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outgoing')
+      .neq('origin', 'ksef_import')
       .eq('ksef_status', 'accepted')
       .gte('created_at', fromIso),
     supabase
@@ -249,4 +255,55 @@ export async function readSubscriptionCounts(
     count('trialing'),
   ]);
   return { active: monthlyCount + annualCount, trialing, monthlyCount, annualCount };
+}
+
+// ─── Lejek firm ────────────────────────────────────────────────────
+
+/** Jeden wiersz `admin_funnel_weekly` (00161): `source` to `all` albo kanał z listy. */
+export interface FunnelWeekRow {
+  /** Poniedziałek tygodnia założenia firmy (RRRR-MM-DD, czas Warszawy). */
+  weekStart: string;
+  source: string;
+  newTenants: number;
+  ksefConnected: number;
+  firstInvoice: number;
+  trialStarted: number;
+  paying: number;
+  churned: number;
+}
+
+export const FUNNEL_WEEKS = 12;
+
+/**
+ * Lejek z własnej bazy, niezależny od PostHoga i zgód. Liczy SQL, bo produkcja
+ * ucina odpowiedzi do 1000 wierszy, a firm będzie więcej. Bez sesji: odczyt dla
+ * człowieka idzie przez `getAdminFunnelWeekly` z lib/admin/metrics.
+ */
+export async function getFunnelWeekly(weeks = FUNNEL_WEEKS): Promise<FunnelWeekRow[]> {
+  // „KSeF podłączony” liczy się w środowisku aplikacji, tak jak hasConfiguredKsefProof.
+  const { data, error } = await createAdminClient().rpc('admin_funnel_weekly', {
+    p_weeks: weeks,
+    p_environment: configuredKsefEnvironment(),
+  });
+  if (error) throw new Error(`Lejek niedostępny: ${error.message}`);
+  const rows = (data ?? []) as Array<{
+    week_start: string;
+    source: string;
+    new_tenants: number;
+    ksef_connected: number;
+    first_invoice: number;
+    trial_started: number;
+    paying: number;
+    churned: number;
+  }>;
+  return rows.map((row) => ({
+    weekStart: row.week_start,
+    source: row.source,
+    newTenants: row.new_tenants,
+    ksefConnected: row.ksef_connected,
+    firstInvoice: row.first_invoice,
+    trialStarted: row.trial_started,
+    paying: row.paying,
+    churned: row.churned,
+  }));
 }

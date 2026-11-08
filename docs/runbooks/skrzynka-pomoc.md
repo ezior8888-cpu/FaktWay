@@ -1,5 +1,11 @@
 # Skrzynka pomoc@faktflow.pl
 
+> **RODO (15.10.2026):** na `pomoc@` trafiają żądania RODO, reklamacje,
+> odstąpienia od umowy i dokumenty klientów. Skrzynka docelowa musi mieć
+> umowę powierzenia — prywatny Gmail jej nie ma. Użyj skrzynki firmowej
+> z DPA (np. Google Workspace) i wpisz dostawcę do `lib/legal/subprocessors.ts`.
+> Terminy odpowiedzi: `docs/prawne/procedura-zadan-i-reklamacji.md`.
+
 Krok 10 planu automatyzacji (1 października 2026), MAN-18 i MAN-19. Kod
 workera: `ops/poczta/worker.mjs`.
 

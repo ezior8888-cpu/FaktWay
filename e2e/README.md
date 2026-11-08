@@ -20,7 +20,8 @@ Reguła kciuka: jeśli coś można sprawdzić bez przeglądarki — robisz unit.
 # Pierwsze setup — pobiera browsery (~250MB)
 pnpm test:e2e:install
 
-# Wszystkie testy, wszystkie projekty (chromium/firefox/webkit/mobile-iphone/mobile-pixel)
+# Wszystkie testy, wszystkie projekty (chromium/firefox/webkit/mobile-iphone/mobile-pixel
+# i testy wizualne, sekcja „Testy wizualne”)
 pnpm test:e2e
 
 # Tryb interaktywny — UI runner Playwrighta z timeline i debugowaniem
@@ -52,6 +53,70 @@ KSEF_CREDENTIALS_ENCRYPTION_KEY=...
 
 Playwright sam podnosi dev server na porcie 3100 (zob. `playwright.config.ts`).
 Jeśli już masz coś na 3100 — ustaw `E2E_PORT=3200` w env.
+
+## Telefon
+
+`tests/telefon-ekrany.spec.ts` loguje lokalne konto dev (`pnpm db:local`),
+przechodzi po wszystkich ekranach panelu w projekcie `mobile-iphone` albo
+`mobile-pixel` i sprawdza brak poziomego przewijania, uciętych przycisków
+i błędów strony. Cele dotykowe mniejsze niż 44x44 trafiają do raportu
+`test-results/telefon-raport-<projekt>.json`, nie oblewają testu.
+
+```bash
+E2E_PORT=3108 pnpm test:e2e e2e/tests/telefon-ekrany.spec.ts --project=mobile-iphone
+# tylko wybrane trasy:
+TELEFON_TRASY=/settings/account,/inbox E2E_PORT=3108 pnpm test:e2e e2e/tests/telefon-ekrany.spec.ts --project=mobile-iphone
+```
+
+Na hostach innych niż localhost test jest pomijany. Wyniki ostatniego obchodu:
+`docs/qa/telefon-macierz.md`.
+
+## Testy wizualne
+
+Wygląd na Macu jest zamrożony od 03.11.2026 (`docs/runbooks/zmiany-na-telefon.md`).
+`tests/wizualne.spec.ts` porównuje ekrany ze wzorcowymi zrzutami
+w `tests/wizualne.spec.ts-snapshots/`: strona główna, sekcja `#telefon`,
+menu hamburgera (tylko telefon), `/login`, pulpit i lista faktur. Dwa
+projekty: `wizualne-iphone` (WebKit, iPhone 13) i `wizualne-desktop`
+(Chromium 1440x900), oba z `reducedMotion: 'reduce'`. Pulpit i lista faktur
+logują lokalne konto dev raz na przebieg (`wizualne-logowanie.ts`), więc
+najpierw `pnpm db:local`.
+
+```bash
+E2E_PORT=3132 pnpm test:wizualne
+```
+
+Port musi być wolny: Playwright sam stawia serwer z limitami prób w pamięci
+i przy testach wizualnych nie użyje już działającego `pnpm dev` (ten liczyłby
+logowania we wspólnym limicie, 5 prób na 15 minut). Zajęty port kończy się
+błędem „is already used”; wybierz inny `E2E_PORT`.
+
+Bez lokalnej bazy logowanie, pulpit i lista są pomijane, a strona główna,
+`#telefon` i menu idą dalej. `/login` też potrzebuje bazy: przyciski logowania
+zależą od ustawień lokalnego GoTrue (lokalnie bez Google).
+
+Zielono = wygląd bez zmian. Czerwono = raport HTML (`pnpm test:e2e:report`)
+pokazuje przy każdym ekranie wzorzec, nowy zrzut i obraz różnicy. Różowe
+prostokąty na zrzutach panelu to maski: liczby, daty i wykresy zależą od
+dzisiejszej daty i danych konta dev.
+
+Zmiana wyglądu zamierzona i zaakceptowana przez Bartosza: odśwież wzorce
+i dołącz je do tego samego PR.
+
+```bash
+E2E_PORT=3132 pnpm test:wizualne --update-snapshots
+```
+
+Wzorce mają w nazwie system (`-darwin.png`): powstają na Macu i tylko tam
+się porównują. Na Linuksie (CI, chmura) testy wizualne są pomijane, bo inny
+system rysuje czcionki inaczej i każdy ekran byłby „zmieniony”. Gdy dane konta dev zmienią
+wygląd listy faktur (np. nowa faktura z długą nazwą nabywcy), odśwież
+wzorzec listy.
+
+Ten sam przebieg zbiera naruszenia dostępności axe (`serious`, `critical`):
+załącznik `axe-<ekran>` w raporcie HTML i pliki
+`test-results/wizualne-axe/<projekt>-<ekran>.json`. Na razie raport, nie
+blokada.
 
 ## Mocki
 

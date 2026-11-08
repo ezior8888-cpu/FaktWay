@@ -40,10 +40,19 @@ const m = vi.hoisted(() => ({
   duplicateEmail: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),
+  /** Wiersze dziennika prób `ksef_send_attempts` (A5, 00150) zapisane przez akcję. */
+  attempts: [] as Array<Record<string, unknown>>,
+  /** Zapis do dziennika prób kończy się błędem bazy (zapis fail-open). */
+  failAttemptInsert: false,
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.admin }));
+// Dziennik prób (`recordSendRefusal`) bierze klienta serwisowego z `@/lib/supabase/server` — ta sama atrapa bazy.
+vi.mock('@/lib/supabase/server', async (orig) => ({
+  ...await orig<typeof import('@/lib/supabase/server')>(),
+  createAdminClient: () => m.admin(),
+}));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: m.send }));
 vi.mock('@/lib/ksef/submission-holds', () => ({ isKsefSubmissionPaused: m.paused }));
 vi.mock('@/lib/ksef/claim-environment', () => ({
@@ -77,8 +86,10 @@ import {
   operatorIssueDateMessage,
   operatorKindHeldMessage,
   operatorLegacyDataMessage,
+  operatorRequeueEventRefusal,
 } from '@/lib/admin/ksef-operator-policy';
 import { KSEF_RESEND_SOURCE_COLUMNS } from '@/lib/invoices/ksef-requeue-event';
+import { sendAttemptMessage } from '@/lib/ksef/send-attempt-ledger';
 
 import { CLIENT } from './helpers/decyzja-klienta';
 import { fillExpected } from './helpers/ksef-duplicate-decision-cases';
@@ -157,6 +168,10 @@ function fakeAdminClient() {
       };
       const insertResult = () => {
         if (table === 'audit_logs' && m.failAuditInsert) return { data: null, error: { code: 'XX000', message: 'db down' } };
+        if (table === 'ksef_send_attempts' && inserted) {
+          if (m.failAttemptInsert) return { data: null, error: { code: 'XX000', message: 'db down' } };
+          m.attempts.push(inserted);
+        }
         if (table === 'audit_logs' && inserted) {
           m.auditLogs.push({ id: `audit-${m.auditLogs.length + 1}`, created_at: new Date().toISOString(), ...inserted });
         }
@@ -189,6 +204,7 @@ function fakeAdminClient() {
         is: (k: string, v: unknown) => { filters.push((r) => !has(r, k) || (columnValue(r, k) ?? null) === v); return q; },
         not: (k: string, _op: string, v: unknown) => { filters.push((r) => !has(r, k) || (columnValue(r, k) ?? null) !== v); return q; },
         limit: () => q,
+        abortSignal: () => q,
         order: () => q,
         gte: () => q,
         lte: () => q,
@@ -239,6 +255,8 @@ beforeEach(() => {
   m.openSent = [];
   m.auditLogs = [];
   m.failAuditInsert = false;
+  m.attempts = [];
+  m.failAttemptInsert = false;
   m.ownerEmail.mockResolvedValue('owner@example.test');
   m.duplicateEmail.mockResolvedValue({ sent: true, messageId: 'msg-1' });
 });
@@ -472,6 +490,22 @@ describe('operatorRequeueAction — dokumenty specjalne z kopii (A4b PR2a)', () 
     expect(result).toEqual({ success: false, error: operatorKindHeldMessage('correction') });
   });
 
+  it.each([
+    ['A5: KSeF produkcyjny, korekta z danymi → KOR_HOLD (hold)', (): Record<string, unknown> => { m.env.mockReturnValue('production'); return korRow(TODAY).row; }, 'KOR_HOLD', 'hold', (): string => operatorKindHeldMessage('correction')],
+    ['A5: ZAL z wczorajszą datą → ISSUE_DATE_PASSED (terminal)', (): Record<string, unknown> => zalRow(YESTERDAY).row, 'ISSUE_DATE_PASSED', 'terminal', (): string => operatorIssueDateMessage('advance')],
+  ] as const)('%s — odmowa w dzienniku prób', async (_l, make, code, errorClass, message) => {
+    m.invoice = make();
+    okTx();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(result).toEqual({ success: false, error: message() });
+    expect(m.attempts).toEqual([expect.objectContaining({
+      tenant_id: TENANT, invoice_id: ID, user_id: OPERATOR.userId, status: 'refused', stage: 'enqueue',
+      error_code: code, error_class: errorClass, error_message: sendAttemptMessage(message()),
+    })]);
+  });
+
   it('ZAL z wczorajszą datą wystawienia: „Wyślij ponownie” odmówione (decyzja b), „Tylko uzgodnij” przy otwartym wpisie sent zlecone', async () => {
     const zal = zalRow(YESTERDAY);
     m.invoice = zal.row;
@@ -537,6 +571,155 @@ describe('operatorRequeueAction — dokumenty specjalne z kopii (A4b PR2a)', () 
     expect(invoiceSelect).toContain(KSEF_RESEND_SOURCE_COLUMNS);
     const columns = topLevelColumns(invoiceSelect);
     expect(new Set(columns).size).toBe(columns.length);
+  });
+});
+
+/**
+ * A5, luka „odmowy operatora”: każda odmowa „Wyślij ponownie” / „Tylko
+ * uzgodnij” po odczycie faktury zostawia wiersz `refused` / `enqueue`
+ * w dzienniku prób — z kodem (katalog `ksef_error_codes`, gdy znaczy to samo;
+ * odmowa z powodu klasy błędu faktury: jej kod), klasą z katalogu i operatorem
+ * w `user_id`, jak odmowa klienta przed kolejką (`ksef-submit-enqueue.ts`).
+ * Odpowiedź dla operatora bez zmian; zapis fail-open.
+ */
+describe('A5: odmowy operatora w dzienniku prób (ksef_send_attempts)', () => {
+  const refusedRow = (code: string, errorClass: string | null, message: string) => ({
+    tenant_id: TENANT, invoice_id: ID, user_id: OPERATOR.userId, ksef_environment: m.env(),
+    status: 'refused', stage: 'enqueue', error_code: code, error_class: errorClass,
+    error_message: sendAttemptMessage(message), retryable: false,
+    started_at: NOW.replace('Z', '.000Z'), finished_at: NOW.replace('Z', '.000Z'),
+  });
+
+  it.each([
+    ['wyłącznik wysyłek', (): void => { m.paused.mockResolvedValue(true); }, false, 'KSEF_PAUSED', 'hold', (): string => OPERATOR_MESSAGES.paused],
+    ['nieczytelny wyłącznik (fail-closed)', (): void => { m.paused.mockRejectedValue(new Error('db')); }, false, 'PAUSE_UNKNOWN', null, (): string => OPERATOR_MESSAGES.pausedUnknown],
+    ['cudzy duplikat 440', (): void => { m.invoice = row({ last_error_code: 'KSEF_DUPLICATE_RECONCILE' }); }, false, 'KSEF_DUPLICATE_RECONCILE', 'reconcile', (): string => OPERATOR_MESSAGES.duplicateRequeue],
+    ['błąd treści', (): void => { m.invoice = row({ last_error_code: 'XSD_INVALID' }); }, false, 'XSD_INVALID', 'terminal', (): string => OPERATOR_MESSAGES.terminal],
+    ['inne środowisko', (): void => { m.invoice = row({ last_error_code: 'ENV_MISMATCH' }); }, false, 'ENV_MISMATCH', 'terminal', (): string => OPERATOR_MESSAGES.envMismatchRequeue],
+    ['stary dokument specjalny bez danych', (): void => { m.invoice = row({ invoice_kind: 'correction' }); }, false, 'SEND_DATA_MISSING', null, (): string => operatorLegacyDataMessage('correction')],
+    ['zwykła bez pozycji', (): void => { m.invoice = row({ fa3_data: { internalNumber: 'FV/9' } }); }, false, 'SEND_DATA_MISSING', null, (): string => OPERATOR_MESSAGES.incomplete],
+    ['stan inny niż failed (np. drugie kliknięcie po zleceniu)', (): void => { m.invoice = row({ ksef_status: 'queued' }); }, false, 'STATUS_NOT_ALLOWED', null, (): string => OPERATOR_MESSAGES.onlyFailed],
+    ['odrzucona treść', (): void => { m.invoice = row({ ksef_status: 'rejected', last_error_code: null }); }, false, 'STATUS_NOT_ALLOWED', null, (): string => OPERATOR_MESSAGES.rejectedToDraft],
+    ['„Tylko uzgodnij” bez otwartego wpisu', (): void => {}, true, 'NO_OPEN_SUBMISSION', null, (): string => OPERATOR_MESSAGES.noOpenSent],
+    ['„Tylko uzgodnij” szkicu', (): void => { m.invoice = row({ ksef_status: 'draft', last_error_code: null }); }, true, 'STATUS_NOT_ALLOWED', null, (): string => OPERATOR_MESSAGES.notFailedOrRejected],
+    ['KSEF_ENV nieustawione', (): void => { m.env.mockReturnValue(null); }, false, 'ENV_UNKNOWN', null, (): string => OPERATOR_MESSAGES.envUnknown],
+  ] as const)('%s → wiersz refused z kodem, odpowiedź bez zmian', async (_l, arrange, reconcileOnly, code, errorClass, message) => {
+    arrange();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly });
+
+    expect(result).toEqual({ success: false, error: message() });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.attempts).toEqual([refusedRow(code, errorClass, message())]);
+  });
+
+  it('firma i faktura bez NIP-u → NO_NIP', async () => {
+    m.invoice = row({ tenants: { nip: null }, fa3_data: { internalNumber: 'FV/9', type: 'VAT', lines: [{ ordinal: 1 }], seller: {} } });
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(result).toEqual({ success: false, error: OPERATOR_MESSAGES.noNip });
+    expect(m.attempts).toEqual([refusedRow('NO_NIP', null, OPERATOR_MESSAGES.noNip)]);
+  });
+
+  it('odmowa przy zleceniu (RPC P0001 w transakcji) → ENQUEUE_REFUSED z komunikatem RPC, bez audytu', async () => {
+    const tx: Tx = { executeSql: vi.fn(async () => { throw Object.assign(new Error('Błąd treści dokumentu (XSD_INVALID) — wróć do szkicu i popraw'), { code: 'P0001' }); }) };
+    sendRunningStep(tx);
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(result).toEqual({ success: false, error: 'Błąd treści dokumentu (XSD_INVALID) — wróć do szkicu i popraw' });
+    expect(m.audit).not.toHaveBeenCalled();
+    expect(m.attempts).toEqual([refusedRow('ENQUEUE_REFUSED', null, 'Błąd treści dokumentu (XSD_INVALID) — wróć do szkicu i popraw')]);
+  });
+
+  it('wyjątek przy decyzji (odczyt ksef_submissions pada) → ENQUEUE_ERROR i ten sam wyjątek dalej', async () => {
+    const base = fakeAdminClient();
+    const failing = {
+      select: () => failing, eq: () => failing, in: () => failing, limit: () => failing,
+      then: (ok: (v: unknown) => unknown) => ok({ data: null, error: { message: 'db down' } }),
+    };
+    m.admin.mockImplementation(() => ({ ...base, from: (t: string) => (t === 'ksef_submissions' ? failing : base.from(t)) }));
+
+    await expect(operatorRequeueAction(ID, { reconcileOnly: true })).rejects.toThrow('ksef_submissions: db down');
+
+    expect(m.attempts).toEqual([refusedRow('ENQUEUE_ERROR', null, 'Error: ksef_submissions: db down')]);
+  });
+
+  it('udane zlecenie i brak faktury → bez wiersza refused', async () => {
+    sendRunningStep({ executeSql: vi.fn(async () => ({ rows: [{ id: ID }], rowCount: 1 })) });
+    await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: true, message: OPERATOR_MESSAGES.requeued });
+    m.invoice = null;
+    await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: false, error: OPERATOR_MESSAGES.notFound });
+    expect(m.attempts).toEqual([]);
+  });
+
+  it('zapis do dziennika pada → odpowiedź operatora bez zmian, ostrzeżenie w Sentry (fail-open)', async () => {
+    m.failAttemptInsert = true;
+    m.paused.mockResolvedValue(true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(operatorRequeueAction(ID, { reconcileOnly: false })).resolves.toEqual({ success: false, error: OPERATOR_MESSAGES.paused });
+
+    expect(m.attempts).toEqual([]);
+    expect(m.captureMessage).toHaveBeenCalledWith('KSeF: dziennik prób wysyłki — zapis odmowy nieudany', expect.objectContaining({
+      extra: { invoiceId: ID, code: 'KSEF_PAUSED' },
+    }));
+    warn.mockRestore();
+  });
+
+  // Po recenzji: ROZ (hamulec we wszystkich środowiskach) i gałęzie „Tylko uzgodnij” — osobna funkcja polityki.
+  const rozRow = () => row({
+    invoice_kind: 'final', internal_number: 'ROZ/9', last_error_code: 'ROZ_HOLD_RECONCILE',
+    special_data: { finalData: { invoiceType: 'final', issueDate: TODAY }, finalAdvanceSettlementRows: [{ id: 'x' }] },
+    fa3_data: { internalNumber: 'ROZ/9', type: 'ROZ', issueDate: TODAY, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' } },
+  });
+
+  it.each([
+    ['ROZ z danymi, „Wyślij ponownie”', (): void => { m.invoice = rozRow(); }, false, 'ROZ_HOLD_RECONCILE', 'hold', (): string => operatorKindHeldMessage('final')],
+    ['ROZ z danymi, „Tylko uzgodnij”', (): void => { m.invoice = rozRow(); m.openSent = [{ id: 'sub-1' }]; }, true, 'ROZ_HOLD_RECONCILE', 'hold', (): string => operatorKindHeldMessage('final')],
+    ['„Tylko uzgodnij” przy KSEF_ENV nieustawionym', (): void => { m.env.mockReturnValue(null); m.openSent = [{ id: 'sub-1' }]; }, true, 'ENV_UNKNOWN', null, (): string => OPERATOR_MESSAGES.envUnknown],
+    ['„Tylko uzgodnij” korekty bez special_data', (): void => { m.invoice = row({ invoice_kind: 'correction' }); m.openSent = [{ id: 'sub-1' }]; }, true, 'SEND_DATA_MISSING', null, (): string => operatorLegacyDataMessage('correction')],
+  ] as const)('%s → wiersz refused z kodem', async (_l, arrange, reconcileOnly, code, errorClass, message) => {
+    arrange();
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly });
+
+    expect(result).toEqual({ success: false, error: message() });
+    expect(m.attempts).toEqual([refusedRow(code, errorClass, message())]);
+  });
+
+  it('północ między decyzją a zdarzeniem (ZAL) → ISSUE_DATE_PASSED z budowniczego zdarzenia, bez zlecenia', async () => {
+    vi.setSystemTime(new Date('2026-10-03T21:59:59Z'));
+    m.invoice = row({
+      invoice_kind: 'advance', internal_number: 'ZAL/9', last_error_code: 'KSEF_UNAVAILABLE',
+      fa3_data: {
+        internalNumber: 'ZAL/9', type: 'ZAL', issueDate: TODAY, lines: [{ ordinal: 1 }], seller: { nip: '5260001246' },
+        advanceEnvelope: { invoiceType: 'advance', issueDate: TODAY },
+      },
+    });
+    // Odczyt wyłącznika to jedyne okno między faktami decyzji a budowniczym zdarzenia.
+    m.paused.mockImplementation(async () => { vi.setSystemTime(new Date('2026-10-03T22:00:01Z')); return false; });
+
+    const result = await operatorRequeueAction(ID, { reconcileOnly: false });
+
+    expect(result).toEqual({ success: false, error: operatorIssueDateMessage('advance') });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.attempts).toEqual([expect.objectContaining({
+      status: 'refused', stage: 'enqueue', error_code: 'ISSUE_DATE_PASSED', error_class: 'terminal',
+      error_message: sendAttemptMessage(operatorIssueDateMessage('advance')),
+    })]);
+  });
+
+  it('operatorRequeueEventRefusal: powód budowniczego → kod i komunikat (jak przycisk)', () => {
+    expect(operatorRequeueEventRefusal('missing-special-data', 'correction')).toEqual({ code: 'SEND_DATA_MISSING', reason: operatorLegacyDataMessage('correction') });
+    expect(operatorRequeueEventRefusal('incomplete', 'regular')).toEqual({ code: 'SEND_DATA_MISSING', reason: OPERATOR_MESSAGES.incomplete });
+    expect(operatorRequeueEventRefusal('kind-held', 'correction')).toEqual({ code: 'KOR_HOLD', reason: operatorKindHeldMessage('correction') });
+    expect(operatorRequeueEventRefusal('kind-held', 'final')).toEqual({ code: 'ROZ_HOLD_RECONCILE', reason: operatorKindHeldMessage('final') });
+    // Zaliczka jest wstrzymana tylko przy nieznanym środowisku — kod jak komunikat.
+    expect(operatorRequeueEventRefusal('kind-held', 'advance')).toEqual({ code: 'ENV_UNKNOWN', reason: OPERATOR_MESSAGES.envUnknown });
+    expect(operatorRequeueEventRefusal('issue-date', 'advance')).toEqual({ code: 'ISSUE_DATE_PASSED', reason: operatorIssueDateMessage('advance') });
+    expect(operatorRequeueEventRefusal('no-nip', 'regular')).toEqual({ code: 'NO_NIP', reason: OPERATOR_MESSAGES.noNip });
   });
 });
 
@@ -756,7 +939,10 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
     it.each([
       ['wpłaty na dokumencie (paid_amount)', () => { m.invoice = pendingRow({ paid_amount: 100 }); }, 'decyzja zablokowana'],
       ['dane oryginału z innego środowiska KSeF', () => { m.openSent = duplicateRows(duplicateCheck({ env: 'production' })); }, 'original_check.env „production” ≠ KSEF_ENV „test”'],
-      ['powód faktflow-original (PR C)', () => { m.openSent = duplicateRows(duplicateCheck({ reason: 'faktflow-original', summary: { ...duplicateCheck().summary, systemInfo: 'KSeF SaaS v1.0' } })); }, 'Powód faktflow-original'],
+      // PR C: znacznik faktflow-original z SystemInfo FaktWay, ale bez oceny pliku (sprzed 00156) to `recheck-needed`
+      // (lustro kroku 11c) — „Zapisz decyzję klienta” odmawia tekstem `recheckPending(null, null)`; operator czyta
+      // blokadę SQL (`{ sqlBlocker: 'admin' }`), ale bez RPC decyzji i bez audytu. Wcześniej: „Powód faktflow-original”.
+      ['powód faktflow-original z SystemInfo FaktWay, bez oceny pliku (PR C: recheck-needed)', () => { m.openSent = duplicateRows(duplicateCheck({ reason: 'faktflow-original', summary: { ...duplicateCheck().summary, systemInfo: 'KSeF SaaS v1.0' } })); }, OPERATOR_DUPLICATE_MESSAGES.recheckPending(null, null)],
     ])('%s → powód wyłączenia przycisku dla operatora; bez RPC i audytu', async (_l, arrange, reason) => {
       arrange();
 
@@ -765,6 +951,7 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
       expect(result.success).toBe(false);
       expect(result.success ? '' : result.error).toContain(reason);
       expect(rpcCallsOf('decide_ksef_duplicate')).toEqual([]);
+      expect(rpcCallsOf('decide_ksef_duplicate_original')).toEqual([]);
       expect(m.audit).not.toHaveBeenCalled();
     });
 

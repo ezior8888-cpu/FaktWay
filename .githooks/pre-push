@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Szybka kontrola przed pushem: adresy serwerów z `.agents/infra.env` w nowych
+# liniach (repo jest publiczne), typy, eslint zmienionych plików i testy
+# Vitest związane ze zmienionymi plikami (`vitest related`). To siatka
+# bezpieczeństwa, nie zamiennik `pnpm run ci && pnpm build` z AGENTS.md.
+#
+# Włącza go `scripts/dev/przygotuj-worktree.sh` (git config core.hooksPath
+# .githooks). Milczy, gdy wszystko gra. Trwa od kilku sekund do ok. 3 minut
+# (zmiana w pliku importowanym wszędzie uruchamia większość testów).
+# Pominięcie w razie potrzeby: SKIP_PREPUSH=1 git push   albo   git push --no-verify
+set -uo pipefail
+
+[ "${SKIP_PREPUSH:-}" = 1 ] && exit 0
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+zero=0000000000000000000000000000000000000000
+changed=""
+ranges=()
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue          # usuwanie gałęzi
+  base="$(git merge-base origin/main "$local_sha" 2>/dev/null)" || continue
+  ranges+=("$base..$local_sha")
+  changed+="$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha")"$'\n'
+done
+[ ${#ranges[@]} -gt 0 ] || exit 0
+
+# Adresy i identyfikatory serwerów nie mogą wrócić do publicznego repo.
+# Wartości czytamy z lokalnego pliku i nigdzie ich nie wypisujemy.
+if [ -f .agents/infra.env ]; then
+  added="$(for r in "${ranges[@]}"; do git diff --no-color --unified=0 "$r" -- . ':!pnpm-lock.yaml'; done | grep '^+' | grep -v '^+++')"
+  for name in APP OPS DB PGC RESTC APP_PREFIX WORKER_PREFIX LOCAL_SUPABASE_REF; do
+    value="$( (set +u; . .agents/infra.env >/dev/null 2>&1; printenv "$name") )"
+    [ ${#value} -ge 6 ] || continue
+    if printf '%s' "$added" | grep -qF -- "$value"; then
+      echo "pre-push: nowe linie zawierają wartość \$$name z .agents/infra.env — push zatrzymany." >&2
+      echo "Repo jest publiczne. Użyj zmiennej zamiast wartości (AGENTS.md, „Skąd wziąć adresy”)." >&2
+      exit 1
+    fi
+  done
+fi
+code="$(printf '%s' "$changed" | grep -E '\.(ts|tsx|js|mjs|cjs)$' | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
+[ -n "$code" ] || exit 0
+# Typy, eslint i testy potrzebują zależności; kontrola adresów wyżej ich nie potrzebuje.
+[ -d node_modules ] || { echo "pre-push: brak node_modules, typy i testy pominięte (pnpm install)" >&2; exit 0; }
+
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+fail() {
+  echo "pre-push: $1 — push zatrzymany. Ostatnie linie:" >&2
+  tail -40 "$log" >&2
+  echo "(pominięcie: SKIP_PREPUSH=1 git push)" >&2
+  exit 1
+}
+
+pnpm -s typecheck >"$log" 2>&1 || fail "pnpm typecheck czerwony"
+# shellcheck disable=SC2086
+printf '%s\n' "$code" | xargs pnpm -s eslint --no-warn-ignored >"$log" 2>&1 || fail "eslint zmienionych plików czerwony"
+# shellcheck disable=SC2086
+printf '%s\n' "$code" | xargs pnpm -s vitest related --run --passWithNoTests >"$log" 2>&1 || fail "vitest related czerwony"
+exit 0

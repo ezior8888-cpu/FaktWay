@@ -27,11 +27,42 @@ const eslintConfig = defineConfig([
     // (callback-refs w `nip-validated-input.tsx`, `Date.now()` w
     // defaultach formularzy). Refaktor tych wzorców jest świadomie
     // odłożony do osobnej iteracji — lint pokazuje je w PR-ze, więc nie
-    // znikają z radaru.
+    // znikają z radaru. Od 05.11.2026 ostrzeżeń jest zero, a `lint` ma
+    // `--max-warnings 0`: każde nowe zatrzymuje CI. Świadomy wyjątek to
+    // `eslint-disable-next-line <reguła> -- <powód>` przy jednej linii.
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/refs": "warn",
       "react-hooks/purity": "warn",
+      // Argument z „_” na początku jest celowo nieużywany (np. podpis
+      // funkcji wspólny z innymi implementacjami): ostrzeżenie byłoby szumem.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
+    // Granica „przykład ↔ prawda” (PLAN-PRAWDZIWE-DANE §5.2): dane przykładowe
+    // i atrapa bazy żyją w `lib/demo/*`; spoza tego katalogu (i testów) wolno
+    // importować tylko `lib/demo/tryb-danych` — jedno miejsce decyzji, czy
+    // strona czyta prawdziwe dane, czy przykład. Pilnuje też test T1
+    // (`tests/unit/dane-granica.test.ts`).
+    files: ["**/*.{ts,tsx,js,jsx,mjs}"],
+    ignores: ["lib/demo/**", "tests/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/demo/*", "!@/lib/demo/tryb-danych", "**/demo/*", "!**/demo/tryb-danych"],
+              message:
+                "Dane przykładowe tylko przez @/lib/demo/tryb-danych (kontekstDanych / trybDanych) — PLAN-PRAWDZIWE-DANE §5.2.",
+            },
+          ],
+        },
+      ],
     },
   },
   {

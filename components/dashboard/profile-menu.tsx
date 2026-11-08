@@ -1,19 +1,37 @@
 'use client'
 
-// Plan Finora P0 (E2): wygląd `ProfileDropdown` z szablonu, pozycje tylko
-// z P0 — Ustawienia, Przełącz firmę, Wyloguj. Bez zdjęcia i kropki statusu.
+// Poprawka Bartosza 21.10.2026: menu profilu 1:1 z `src/components/shared/ProfileDropdown.tsx`
+// Finory — przycisk z awatarem i zieloną kropką, rozwijka `w-65`: awatar + dwa
+// wiersze, potem pozycje, potem wylogowanie. Różnice:
+//  - zamiast zdjęcia szary ludzik (nie mamy zdjęć profilowych);
+//  - pod nazwą/e‑mailem firma (aktywna organizacja);
+//  - „My Accounts” → „Moje firmy” (podmenu z przełączaniem firm — dawny
+//    przełącznik z paska), „Settings” → „Ustawienia”, „Monthly Analytics” →
+//    „Analiza sprzedaży”; „My Cards” odpada (nie mamy odpowiednika).
 
 // Next Imports
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 // React Imports
+import { useTransition } from 'react'
 import { useFormStatus } from 'react-dom'
 
 // Third-party Imports
-import { RiArrowLeftRightLine, RiLogoutBoxLine, RiSettings3Line } from '@remixicon/react'
+import {
+  RiAddLine,
+  RiBuilding2Line,
+  RiCheckLine,
+  RiLogoutBoxLine,
+  RiPieChartLine,
+  RiSettings3Line,
+  RiUser3Fill
+} from '@remixicon/react'
+import { toast } from 'sonner'
 
 // Component Imports
 import { signOut } from '@/app/(auth)/login/actions'
+import { setActiveOrganizationAction } from '@/app/actions/organizations'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,38 +41,36 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 
-// Lib Imports
-import { OTWORZ_PRZELACZNIK_FIRMY } from '@/lib/org-switcher-event'
+// Type Imports
+import type { DashboardOrgMembershipPreview } from '@/lib/dashboard-shell-data'
 
-/**
- * Inicjały z adresu e-mail: „jan.kowalski@…” → „JK”, „anna@…” → „AN”.
- * Pusty albo dziwny adres daje „?”, żeby kółko nigdy nie było puste.
- */
-export function initialsFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? ''
-  const parts = local.split(/[._\-+]+/).filter(part => /[\p{L}\p{N}]/u.test(part))
-
-  if (parts.length >= 2) {
-    return (firstLetter(parts[0]) + firstLetter(parts[1])).toUpperCase()
-  }
-
-  const letters = [...(parts[0] ?? '')].filter(ch => /[\p{L}\p{N}]/u.test(ch))
-
-  if (letters.length === 0) return '?'
-
-  return letters.slice(0, 2).join('').toUpperCase()
+const ROLE_LABEL: Record<DashboardOrgMembershipPreview['role'], string> = {
+  owner: 'właściciel',
+  admin: 'admin',
+  member: 'członek',
+  accountant: 'księgowy'
 }
 
-function firstLetter(part: string): string {
-  return [...part].find(ch => /[\p{L}\p{N}]/u.test(ch)) ?? ''
+/** Szary ludzik w kółku — awatar bez zdjęcia profilowego. */
+function PersonAvatar({ className }: { className?: string }) {
+  return (
+    <Avatar className={className}>
+      <AvatarFallback className='bg-muted text-muted-foreground'>
+        <RiUser3Fill className='size-[60%]' aria-hidden />
+      </AvatarFallback>
+    </Avatar>
+  )
 }
 
 /**
  * Pozycja „Wyloguj” jako przycisk wysyłający formularz z akcją `signOut`
- * (ta sama droga co arkusz „Więcej” w `bottom-nav.tsx`). `closeOnClick={false}`:
+ * (ta sama akcja co w arkuszu „Więcej” w `bottom-nav.tsx`). `closeOnClick={false}`:
  * menu zostaje otwarte do przekierowania na `/login`, bo zamknięcie zdjęłoby
  * formularz z drzewa w trakcie wysyłki.
  */
@@ -75,40 +91,126 @@ function SignOutItem() {
   )
 }
 
-export function ProfileMenu({ email, name }: { email: string; name?: string }) {
-  const initials = initialsFromEmail(email)
+/**
+ * „Moje firmy”: lista organizacji z przełączaniem (dawny przełącznik z paska).
+ * Stan oczekiwania żyje w `ProfileMenu`: kliknięta pozycja zamyka menu, a Base UI
+ * odmontowuje wtedy podmenu razem z jego stanem.
+ */
+function CompaniesSubmenu({
+  memberships,
+  isPending,
+  onSwitch
+}: {
+  memberships: DashboardOrgMembershipPreview[]
+  isPending: boolean
+  onSwitch: (organizationId: string, isActive: boolean) => void
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={isPending}>
+        <RiBuilding2Line aria-hidden />
+        <span>Moje firmy</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className='w-72'>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className='text-muted-foreground text-xs font-normal'>Twoje organizacje</DropdownMenuLabel>
+          {memberships.map(m => (
+            <DropdownMenuItem
+              key={m.organizationId}
+              disabled={isPending}
+              onClick={() => onSwitch(m.organizationId, m.isActive)}
+              className='items-start'
+            >
+              <RiBuilding2Line aria-hidden className='mt-0.5' />
+              <div className='flex min-w-0 flex-1 flex-col'>
+                <span className='truncate' title={m.name}>
+                  {m.name}
+                </span>
+                <span className='text-muted-foreground truncate font-mono text-[10px]'>
+                  NIP: {m.nip} · {ROLE_LABEL[m.role]}
+                </span>
+              </div>
+              {m.isActive ? <RiCheckLine aria-label='Aktywna' className='text-accent-foreground mt-0.5' /> : null}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href='/onboarding?action=new' prefetch={false} />}>
+          <RiAddLine aria-hidden />
+          <span>Dodaj kolejną organizację</span>
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+export function ProfileMenu({
+  email,
+  name,
+  company,
+  memberships,
+  defaultOpen
+}: {
+  email: string
+  name?: string
+  /** Nazwa aktywnej firmy; `null` — jeszcze się wczytuje (szkielet w `Suspense`). */
+  company: string | null
+  memberships: DashboardOrgMembershipPreview[]
+  defaultOpen?: boolean
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
+  const handleSwitch = (organizationId: string, isActive: boolean) => {
+    if (isActive) return
+    startTransition(async () => {
+      const result = await setActiveOrganizationAction(organizationId)
+      if (result.success) router.refresh()
+      else toast.error(result.error)
+    })
+  }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu defaultOpen={defaultOpen}>
       <DropdownMenuTrigger
         render={
           <Button
             variant='ghost'
             size='icon'
-            className='relative rounded-full hover:bg-transparent'
+            className='relative rounded-full hover:bg-transparent disabled:opacity-60'
             aria-label='Menu konta'
+            // Do końca przełączania firmy (akcja + odświeżenie) menu jest zablokowane.
+            disabled={isPending}
           />
         }
       >
-        <Avatar>
-          <AvatarFallback className='bg-primary/10 text-accent-foreground font-medium'>{initials}</AvatarFallback>
-        </Avatar>
+        {/* Kropka przypięta do awatara (jak w nagłówku menu niżej): na dotyku przycisk ma 44 px. */}
+        <span className='relative block'>
+          <PersonAvatar />
+          <span className='ring-card absolute right-0 bottom-0 block size-2 rounded-full bg-green-600 ring-2' aria-hidden />
+        </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-65'>
         <DropdownMenuGroup>
-          <DropdownMenuLabel className='flex items-center gap-3 px-2 py-2.5 font-normal'>
-            <Avatar className='size-10'>
-              <AvatarFallback className='bg-primary/10 text-accent-foreground font-medium'>{initials}</AvatarFallback>
-            </Avatar>
+          <DropdownMenuLabel className='flex items-center gap-4 px-2 py-2.5 font-normal'>
+            <div className='relative shrink-0'>
+              <PersonAvatar className='size-10' />
+              <span className='ring-card absolute right-0 bottom-0 block size-2 rounded-full bg-green-600 ring-2' aria-hidden />
+            </div>
             <div className='flex min-w-0 flex-1 flex-col items-start'>
-              {name ? (
-                <span className='text-foreground w-full truncate text-sm font-semibold'>{name}</span>
-              ) : (
-                <span className='text-muted-foreground text-xs'>Zalogowano jako</span>
-              )}
-              <span className={name ? 'text-muted-foreground w-full truncate text-xs' : 'text-foreground w-full truncate text-sm font-medium'}>
-                {email}
+              <span className='text-foreground w-full truncate text-base font-semibold' title={name ?? email}>
+                {name ?? email}
               </span>
+              {name ? (
+                <span className='text-muted-foreground w-full truncate text-sm' title={email}>
+                  {email}
+                </span>
+              ) : null}
+              {company ? (
+                <span className='text-muted-foreground w-full truncate text-sm' title={company}>
+                  {company}
+                </span>
+              ) : null}
             </div>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
@@ -116,13 +218,16 @@ export function ProfileMenu({ email, name }: { email: string; name?: string }) {
         <DropdownMenuSeparator />
 
         <DropdownMenuGroup className='p-1'>
+          {memberships.length > 0 ? (
+            <CompaniesSubmenu memberships={memberships} isPending={isPending} onSwitch={handleSwitch} />
+          ) : null}
           <DropdownMenuItem render={<Link href='/settings' />}>
             <RiSettings3Line aria-hidden />
             <span>Ustawienia</span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => window.dispatchEvent(new Event(OTWORZ_PRZELACZNIK_FIRMY))}>
-            <RiArrowLeftRightLine aria-hidden />
-            <span>Przełącz firmę</span>
+          <DropdownMenuItem render={<Link href='/analizy/sprzedaz' />}>
+            <RiPieChartLine aria-hidden />
+            <span>Analiza sprzedaży</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
 

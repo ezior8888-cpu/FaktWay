@@ -1,0 +1,55 @@
+{
+  "brand": "FaktWay",
+  "brief": "Faktury VAT przez KSeF dla mikrofirm i księgowych, bez urzędowego stresu. Znak ma być pewny i spokojny, a zarazem szybki i lekki, w duchu geometrycznego minimalizmu.",
+  "adjectives": [
+    "pewny",
+    "spokojny",
+    "szybki",
+    "lekki"
+  ],
+  "criteria": "Czytelny w 16 px, działa w jednym kolorze i na ciemnym tle, nie wygląda jak kartka, ptaszek ani strzałka, da się opowiedzieć jednym zdaniem.",
+  "mockups": [
+    "website",
+    "favicon-tab",
+    "app-icon",
+    "social",
+    "business-card",
+    "sticker"
+  ],
+  "nav": [
+    "Funkcje",
+    "Cennik",
+    "Pomoc"
+  ],
+  "brand_color": "#2463EF",
+  "greyscale": false,
+  "final": true,
+  "designer": "FaktWay",
+  "deck_title": "logo",
+  "concepts": [
+    {
+      "name": "Przesunięcie",
+      "symbol": "../zestaw/svg/faktway-znak.svg",
+      "lockup": "../zestaw/svg/faktway-logo.svg",
+      "stacked": "../zestaw/svg/faktway-logo-pionowe.svg",
+      "avatar": "../zestaw/web/faktway-znak-app-icon.svg",
+      "lockup_on_dark": "../zestaw/svg/faktway-logo-negatyw.svg",
+      "symbol_on_dark": "../zestaw/svg/faktway-znak-negatyw.svg",
+      "stacked_on_dark": "../zestaw/svg/faktway-logo-pionowe-negatyw.svg",
+      "idea": "Koło przecięte na pół, połówki jadą w przeciwne strony: faktury wychodzą i wracają, a całość dalej się zgadza.",
+      "rationale": [
+        "Koło i symetria dają spokój, przesunięcie daje ruch",
+        "Jedna reguła: promień 4u, przerwa i przesunięcie po 1u",
+        "Osobny rysunek na 16 px, czytelny w zakładce przeglądarki"
+      ],
+      "symbol_on_tile": "../zestaw/svg/faktway-znak-bialy.svg",
+      "lockup_on_tile": "../zestaw/svg/faktway-logo-biale.svg",
+      "stacked_on_tile": "../zestaw/svg/faktway-logo-pionowe-biale.svg"
+    }
+  ],
+  "next_steps": [
+    "Podmiana logo, favicony i ikon PWA w aplikacji (osobny PR)",
+    "Sprawdzenie znaku w bazach znaków towarowych (EUIPO, UPRP)",
+    "Przed drukiem: dobór CMYK i Pantone na wzorniku"
+  ]
+}

@@ -1,30 +1,17 @@
 // Plan Finora P15 (E10b): `src/components/shared/Logo.tsx` szablonu —
-// znak 34 px + nazwa `text-xl font-bold`. Zamiast znaku i nazwy Finory nasz
-// znak (`/brand/faktflow-mark.png`, jak `FaktflowMark`) i „FaktWay”
-// dwutonowo, jak wordmark panelu (`BrandWordmark variant='app'`).
+// znak + nazwa. Od 25.10.2026 logo FaktWay z zestawu (docs/brand/logo);
+// wcześniej sam napis, bo zielony znak zdjęto 23.10.2026.
 
-// Next Imports
-import Image from 'next/image'
+// Component Imports
+import { FaktWayLogo } from '@/components/brand/faktway-logo'
 
 // Util Imports
 import { cn } from '@/lib/utils'
 
 export function AuthLogo({ className }: { className?: string }) {
   return (
-    <div className={cn('flex items-center gap-2.5', className)}>
-      {/* Znak jest ozdobą: nazwę niesie tekst obok (odsyłacz ma nazwę „FaktWay”). */}
-      <Image
-        src='/brand/faktflow-mark.png'
-        alt=''
-        width={128}
-        height={128}
-        className='size-8.5 shrink-0 rounded-lg object-contain'
-        priority
-        unoptimized
-      />
-      <span className='text-xl font-bold'>
-        Fakt<span className='text-primary'>Way</span>
-      </span>
+    <div className={cn('flex items-center', className)}>
+      <FaktWayLogo className='h-8' />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { InvoiceList } from '@/components/invoices/invoice-list';
@@ -20,6 +21,7 @@ export function InvoicesPullToRefresh({
   summary,
   facts,
   today,
+  canMarkPaid = false,
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
@@ -31,11 +33,16 @@ export function InvoicesPullToRefresh({
   facts?: InvoiceFactsById;
   /** Dziś w Europe/Warsaw (RRRR-MM-DD). */
   today?: string;
+  /** Rola pozwala oznaczać zapłatę. */
+  canMarkPaid?: boolean;
 }) {
   const router = useRouter();
+  // `router.refresh()` nie zwraca obietnicy; przejście mówi, kiedy nowy
+  // snapshot z serwera już stoi na ekranie.
+  const [refreshing, startRefresh] = useTransition();
 
   return (
-    <PullToRefresh onRefresh={async () => router.refresh()}>
+    <PullToRefresh refreshing={refreshing} onRefresh={() => startRefresh(() => router.refresh())}>
       <InvoiceList
         tenantId={tenantId}
         initialInvoices={initialInvoices}
@@ -43,6 +50,7 @@ export function InvoicesPullToRefresh({
         summary={summary}
         facts={facts}
         today={today}
+        canMarkPaid={canMarkPaid}
       />
     </PullToRefresh>
   );

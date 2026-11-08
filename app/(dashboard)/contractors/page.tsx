@@ -76,7 +76,8 @@ export default async function ContractorsPage({
   });
 
   return (
-    <div className="space-y-6 pb-10">
+    // `ff-page-fill`: karta z tabelą sięga do stopki pustym arkuszem (poprawka Bartosza 21.10.2026).
+    <div className="ff-page-fill flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Kontrahenci</h1>
         <p className="text-muted-foreground text-sm">
@@ -103,7 +104,7 @@ export default async function ContractorsPage({
               </AlertDescription>
             </Alert>
           ) : null}
-          <Card className="shadow-none">
+          <Card className="flex-1 shadow-none">
             <ContractorsTable
               contractors={rows}
               q={q}

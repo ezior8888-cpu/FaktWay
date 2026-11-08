@@ -5,40 +5,40 @@ date: '2026-04-22'
 readTime: 6
 tags:
   - KPiR
-  - OCR
+  - koszty
   - księgowość
 ---
 
-Mikrofirma żyje z przepływu dokumentów: paragon z paliwa, faktura z hurtowni, proforma z hostingu. Jeśli każdy taki dokument „zjada” kilka minut na przepisanie do arkusza lub programu, rocznie robi się z tego **pełny etat ukrytych kosztów**. OCR i sensowna auto-kategoryzacja KPiR nie są luksusem — to sposób, żeby ten czas odzyskać.
+Mikrofirma żyje z przepływu dokumentów: paragon z paliwa, faktura z hurtowni, rachunek za hosting. Jeśli każdy taki dokument „zjada” kilka minut na przepisanie do arkusza lub programu, rocznie robią się z tego **dziesiątki godzin ukrytych kosztów**. Odczyt ze zdjęcia i podpowiedź kolumny KPiR to sposób, żeby ten czas odzyskać.
 
-Poniżej masz sprawdzony schemat: od zdjęcia w telefonie do wpisu, który księgowa akceptuje bez poprawek.
+Poniżej masz prosty schemat: od zdjęcia w telefonie do wpisu, który księgowa może sprawdzić bez dopytywania.
 
 ## Krok 1: jeden rytuał zbierania dokumentów
 
-Ustal zasadę: **wszystko ląduje w jednym miejscu tego samego dnia**. Nie chodzi o perfekcję zdjęcia — chodzi o to, żebyś nie budował kolejki „na później”. W FaktWay robisz zdjęcie w PWA, kadrujesz paragon i od razu widzisz podgląd OCR. Jeśli światło jest słabe, przesuń telefon o pół metra od lampy — algorytm i tak wyciąga NIP i kwoty, ale czystszy kadrowany obraz to mniej ręcznych poprawek.
+Ustal zasadę: **wszystko ląduje w jednym miejscu tego samego dnia**. Nie chodzi o perfekcję zdjęcia, tylko o to, żebyś nie budował kolejki „na później”. W FaktWay dodajesz zdjęcie albo plik paragonu i po chwili widzisz odczytane dane do sprawdzenia. Jeśli światło jest słabe, przesuń telefon o pół metra od lampy: czystszy kadr to mniej ręcznych poprawek.
 
-## Krok 2: OCR jako „pierwszy filtr”, nie ostateczna prawda
+## Krok 2: odczyt to pierwszy filtr, nie ostateczna prawda
 
-Dobre OCR zwraca nie tylko tekst, ale też **confidence score** dla pól krytycznych: NIP sprzedawcy, data, brutto, stawka VAT. Jeśli pole jest poniżej progu pewności, oznacz je do weryfikacji — ale **nie przepisuj całego dokumentu ręcznie**, popraw tylko to, co jest podejrzane. To różnica między 30 sekundami a 8 minutami.
+Odczyt ze zdjęcia może się pomylić, więc sprawdź pola krytyczne: NIP sprzedawcy, datę, brutto i stawkę VAT. **Nie przepisuj całego dokumentu ręcznie**, popraw tylko to, co się nie zgadza.
 
-## Krok 3: auto-kategoryzacja KPiR z historii
+## Krok 3: podpowiedź kolumny KPiR z historii
 
-System, który **uczy się z Twoich poprawek**, po kilkunastu dokumentach zaczyna rozpoznawać stałych dostawców: paliwo → transport, hosting → usługi teleinformatyczne, materiały budowlane → zużycie materiałów. Ty zatwierdzasz sugestię jednym gestem; księgowa widzi spójny opis w eksporcie do Excela lub pakiecie dla biura.
+FaktWay **uczy się z Twoich poprawek**. Gdy zmienisz kolumnę, zapamięta ją dla tego dostawcy i następnym razem podpowie właściwą. Ty tylko sprawdzasz, a księgowa dostaje spójny opis w eksporcie do Excela lub w paczce dla biura.
 
-## Krok 4: spięcie z KSeF inbox
+## Krok 4: faktury zakupowe z KSeF
 
-Faktury przychodzące z KSeF możesz **automatycznie importować** jako koszty — bez dublowania pracy „najpierw ściągnąłem z MF, potem wrzuciłem do programu”. Im mniej ręcznych kroków, tym mniejsze ryzyko pomyłki daty sprzedaży / daty wpływu.
+Faktury kosztowe wystawione na Twój NIP **przychodzą do Skrzynki KSeF same**, bez dublowania pracy „najpierw ściągnąłem z MF, potem wrzuciłem do programu”. Im mniej ręcznych kroków, tym mniejsze ryzyko pomyłki daty sprzedaży albo daty wpływu.
 
 ## Krok 5: zamknięcie miesiąca
 
-Na koniec miesiąca generujesz **KPiR + zestawienie kosztów** i porównujesz z kontem bankowym (prosty triangulacja: brakujący dokument = brak wpisu). Jeśli coś się nie zgadza, wracasz tylko do oznaczonych „niskiej pewności” pozycji — nie do całej skrzynki.
+Na koniec miesiąca przeglądasz **KPiR za dany miesiąc** i porównujesz z kontem bankowym (brakujący dokument = brak wpisu). Jeśli coś się nie zgadza, wracasz tylko do tych pozycji, a nie do całej skrzynki.
 
 ## Typowe błędy (i jak ich unikać)
 
-- **Ściganie perfekcji zdjęcia** zamiast szybkiego zatwierdzenia — lekko krzywy paragon i tak da się odczytać, jeśli numer NIP jest widoczny.
-- **Brak jednej stawki VAT w ustawieniach domyślnych** — wtedy każdy paragon wymaga wyboru ręcznego; skonfiguruj domyślne kategorie per kontrahent.
-- **Mieszanie prywatnych zakupów z firmą** — trzymaj osobny folder / tag „prywatne”, żeby nie wracać do tego przy ZUS i PIT.
+- **Ściganie perfekcji zdjęcia** zamiast szybkiego sprawdzenia: lekko krzywy paragon i tak da się odczytać, jeśli numer NIP jest widoczny.
+- **Poprawianie tego samego za każdym razem**: popraw kolumnę raz, a FaktWay zapamięta ją dla tego dostawcy.
+- **Mieszanie prywatnych zakupów z firmą**: trzymaj je poza programem, żeby nie wracać do tego przy rozliczeniu.
 
 ## Podsumowanie
 
-Optymalizacja KPiR to nie „więcej funkcji”, tylko **mniej decyzji na dokument**. OCR + auto-kategoryzacja + import z KSeF to trójkąt, który realnie skraca ścieżkę od zdjęcia do zaksięgowania. Jeśli chcesz zobaczyć to na swoich dokumentach, uruchom trial FaktWay i wrzuć 20 najbrudniejszych paragonów z ostatniego miesiąca — czas obsłużenia pierwszej dziesiątki zwykle mówi sam za siebie.
+Porządek w KPiR to nie „więcej funkcji”, tylko **mniej decyzji na dokument**. Odczyt ze zdjęcia, podpowiedź kolumny i faktury z KSeF to trójkąt, który skraca ścieżkę od zdjęcia do wpisu. Jeśli chcesz zobaczyć to na swoich dokumentach, uruchom okres próbny FaktWay i dodaj 20 najtrudniejszych paragonów z ostatniego miesiąca.

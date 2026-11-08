@@ -3,7 +3,7 @@ import { RiFileList3Line, RiMoneyDollarCircleLine } from '@remixicon/react';
 
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
 import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
-import { getCosts, sumCostsByMonth } from '@/lib/dashboard/costs';
+import { getCosts, KsefPurchaseCurrencyError, sumCostsByMonth } from '@/lib/dashboard/costs';
 import { getMonthlyFigures, getSalesSeries } from '@/lib/dashboard/monthly-figures';
 import { buildMonthReport } from '@/lib/dashboard/pulpit-report';
 import { PRODUCTS_NOTE, getTopClients, getTopProducts } from '@/lib/dashboard/rankings';
@@ -84,7 +84,12 @@ const CUSTOMER_MESSAGE_PREFIXES = ['Nie można ', 'Przyjęte faktury ', 'Koszty 
  * programu) to ogólny komunikat, a pełny wyjątek idzie do logu.
  */
 export function pulpitErrorMessage(error: unknown): string {
-  if (error instanceof OutgoingInvoiceCurrencyNotSupportedError || error instanceof KsefExpenseCurrencyNotSupportedError) {
+  if (
+    error instanceof OutgoingInvoiceCurrencyNotSupportedError ||
+    error instanceof KsefExpenseCurrencyNotSupportedError ||
+    // E10: faktura zakupu z KSeF w walucie obcej bez wydatku — komunikat z numerem dokumentu.
+    error instanceof KsefPurchaseCurrencyError
+  ) {
     return error.message;
   }
   const message = error instanceof Error ? error.message : '';

@@ -17,6 +17,23 @@ const FILES = [
   'components/exports/exports-center.tsx',
   'components/exports/co-pilot-settings-form.tsx',
   'app/(dashboard)/import-danych/page.tsx',
+  // Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): nowe pliki
+  // ekranów KPiR i Eksport (plakietki przychodu i ostrzeżeń, notka „poza sumą”).
+  'components/reports/ksiegowosc-tabs.tsx',
+  'components/reports/segmented-control.tsx',
+  'components/reports/kpir/kpir-toolbar.tsx',
+  'components/reports/kpir/kpir-result-card.tsx',
+  'components/reports/kpir/kpir-cost-structure-card.tsx',
+  'components/reports/kpir/kpir-blocked.tsx',
+  'app/(dashboard)/reports/kpir/error.tsx',
+  'components/exports/new-export-form.tsx',
+  'components/exports/export-history.tsx',
+  // Poprawka Bartosza 22.10.2026 (import danych w stylu Finory): Centrum
+  // importu — plakietki „Gotowy” / „Wymaga certyfikatu”, statusy historii
+  // i licznik ostrzeżeń.
+  'components/import-danych/import-center.tsx',
+  'components/import-danych/import-source-grid.tsx',
+  'components/import-danych/import-history.tsx',
 ];
 
 const LIGHT_TOO_PALE = /(?<![\w:-])text-(green|amber)-600\b/g;

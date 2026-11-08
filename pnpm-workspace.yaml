@@ -9,6 +9,9 @@ peerDependencyRules:
     '@xmldom/xmldom': '0.9.12'
 
 overrides:
+  # WebAuthn: parser i schematy (asn1-ecc) muszą być z tej samej kopii asn1-schema, inaczej każda
+  # asercja ES256 pada na „Cannot get schema for ECDSASigValue”. Pilnuje tests/unit/passkey-login-route.test.ts.
+  '@simplewebauthn/server>@peculiar/asn1-schema': '^2.11.1'
   '@grpc/proto-loader>protobufjs': '>=8.6.0'
   '@aws-sdk/xml-builder>fast-xml-parser': '>=5.7.0'
   'fast-xml-builder@<1.1.7': '>=1.1.7'
@@ -26,12 +29,12 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': '>=7.29.6 <8'
   'adm-zip@<0.6.1': '0.6.1'
   'hono@<4.13.5': '^4.13.5'
-  'fast-uri@<4.1.5': '4.1.5'
-  'ip-address@<10.7.1': '10.7.1'
+  'fast-uri@<4.2.3': '4.2.3'
+  'ip-address@<10.7.4': '10.7.4'
   'postcss@<8.5.23': '^8.5.23'
   'source-map-js@<1.2.2': '^1.2.2'
   'qs@>=6.0.0 <6.16.0': '^6.16.0'
-  'dompurify@>=3.0.0 <3.4.16': '3.4.16'
+  'dompurify@>=3.0.0 <3.4.17': '3.4.17'
   'brace-expansion@>=1.0.0 <1.1.20': '^1.1.20'
   'brace-expansion@>=2.0.0 <2.1.6': '^2.1.6'
   'brace-expansion@>=5.0.0 <5.0.11': '^5.0.11'
@@ -50,3 +53,11 @@ overrides:
   'baseline-browser-mapping@<2.11.0': '^2.11.0'
   'tar@>=7.0.0 <7.5.21': '^7.5.21'
   'fflate@>=0.8.0 <0.8.3': '^0.8.3'
+  'zod@>=4.0.0 <4.6.6': '^4.6.6'
+  # Alerty Dependabot z 03.11.2026. jsdom 29.1.1 (przypięty) ciągnie undici ^7.25.0, a poprawka jest w 7.30.1.
+  'undici@>=7.0.0 <7.30.1': '7.30.1'
+  # @tailwindcss/typography żąda ^6.0.10, więc 6.1.5 mieści się w jego zakresie.
+  'postcss-selector-parser@<6.1.5': '^6.1.5'
+  # Poprawka tylko w nowej wersji głównej (glob 14 / minimatch 11); rodzice (Sentry, Serwist, archiver, ESLint) jej jeszcze nie mają.
+  'glob@>=9.0.0 <14.0.2': '14.0.2'
+  'minimatch@<11.0.1': '11.0.1'

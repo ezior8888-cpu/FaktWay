@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface MagicImportCompletedProps {
   appUrl: string;
   tenantName: string;
@@ -39,6 +41,7 @@ export default function MagicImportCompleted({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             Twoja historia jest gotowa ✨
           </Heading>
@@ -76,7 +79,7 @@ export default function MagicImportCompleted({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktWay — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay, faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>

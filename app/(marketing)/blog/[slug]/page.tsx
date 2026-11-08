@@ -8,7 +8,10 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 
+import { TRIAL_DAYS } from '@/lib/billing/pricing';
 import { cn } from '@/lib/utils';
+import { Reveal } from '@/components/site/motion';
+import { BandGlow, ButtonLink, Container } from '@/components/site/ui';
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -44,6 +47,32 @@ function parseMatterData(data: unknown): {
   };
 }
 
+/** Twarda spacja po jednoliterowym słowie, żeby nie zostało samo na końcu linii. */
+function bezSierotek(text: string): string {
+  return text.replace(/(?<=^|\s)([aiouwz])\s+/giu, '$1 ');
+}
+
+/*
+ * Treść MDX na tokenach aplikacji: kolory nagłówków, linków, cytatów i kodu
+ * idą za motywem (jasny i ciemny), bez palety bloga.
+ */
+const PROSE = cn(
+  'prose prose-lg prose-neutral max-w-none dark:prose-invert',
+  'prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-foreground',
+  'prose-h2:mt-12 prose-h2:mb-4 prose-h2:text-3xl prose-h3:mt-8 prose-h3:text-xl',
+  'prose-p:leading-relaxed prose-strong:text-foreground',
+  'prose-a:font-medium prose-a:text-primary prose-a:underline-offset-4',
+  'prose-blockquote:border-l-primary prose-blockquote:font-normal prose-blockquote:text-foreground',
+  'prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:font-medium prose-code:text-foreground prose-code:before:content-none prose-code:after:content-none',
+  'prose-hr:border-border',
+);
+
+/** Poświata nagłówka, ta sama co w `PageHero`. */
+const HEADER_GLOW = {
+  background:
+    'radial-gradient(48rem 20rem at 50% -10%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%)',
+} as const;
+
 export async function generateStaticParams() {
   const dir = blogDirPath();
   if (!fs.existsSync(dir)) return [];
@@ -53,6 +82,7 @@ export async function generateStaticParams() {
     .map((f) => ({ slug: f.replace(/\.mdx$/u, '') }));
 }
 
+// Końcówkę „| FaktWay” dopisuje szablon tytułu z layoutu.
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const fullPath = postFilePath(slug);
@@ -66,7 +96,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return { title: 'Blog' };
   }
   return {
-    title: `${parsed.title} | FaktWay Blog`,
+    title: `${parsed.title} | Blog`,
     description: parsed.description,
   };
 }
@@ -87,49 +117,79 @@ export default async function BlogPostPage({ params }: PageProps) {
   });
 
   return (
-    <article className="py-16 lg:py-24">
-      <div className="mx-auto max-w-3xl px-6">
-        <Link
-          href="/blog"
-          className="mb-8 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          Powrót do bloga
-        </Link>
+    <>
+      <article>
+        <header className="relative overflow-hidden">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-[28rem]"
+            style={HEADER_GLOW}
+          />
+          <Container className="relative max-w-3xl pt-10 pb-10 sm:pt-16 sm:pb-12">
+            <Reveal onLoad y={12}>
+              <Link
+                href="/blog"
+                className="inline-flex items-center gap-1.5 rounded-full text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Powrót do bloga
+              </Link>
+            </Reveal>
+            <Reveal onLoad delay={0.05}>
+              <p className="mt-10 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+                <time dateTime={parsed.date}>
+                  {new Date(parsed.date).toLocaleDateString('pl-PL', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </time>
+                <span aria-hidden>·</span>
+                <span>{parsed.readTime} min czytania</span>
+              </p>
+              <h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance text-foreground sm:text-6xl">
+                {bezSierotek(parsed.title)}
+              </h1>
+            </Reveal>
+            <Reveal onLoad delay={0.1}>
+              <p className="mt-6 text-lg text-pretty text-muted-foreground sm:text-xl">
+                {parsed.description}
+              </p>
+            </Reveal>
+          </Container>
+        </header>
 
-        <div className="mb-12">
-          <div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
-            <time dateTime={parsed.date}>
-              {new Date(parsed.date).toLocaleDateString('pl-PL', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
-            </time>
-            <span aria-hidden>·</span>
-            <span>{parsed.readTime} min czytania</span>
-          </div>
-          <h1 className="font-editorial text-4xl leading-[1.1] font-semibold md:text-5xl">
-            {parsed.title}
-          </h1>
-          <p className="mt-6 text-xl leading-relaxed text-zinc-500">{parsed.description}</p>
-        </div>
+        <Container className="max-w-3xl pb-20 sm:pb-28">
+          {/* Cały tekst odsłania się raz przy załadowaniu: przy długim
+              artykule odsłanianie przy przewijaniu mogłoby się nie włączyć. */}
+          <Reveal onLoad delay={0.2} className="border-t border-border pt-10 sm:pt-12">
+            <div className={PROSE}>{compiledContent}</div>
+          </Reveal>
+        </Container>
+      </article>
 
-        <div
-          className={cn(
-            'prose prose-lg max-w-none dark:prose-invert',
-            'prose-headings:font-editorial prose-headings:tracking-tighter-text',
-            'prose-h2:mt-12 prose-h2:mb-4 prose-h2:text-3xl',
-            'prose-h3:mt-8 prose-h3:text-xl',
-            'prose-p:leading-relaxed',
-            'prose-a:text-zinc-900 prose-a:underline prose-a:underline-offset-2',
-            'prose-code:rounded prose-code:bg-foreground/5 prose-code:px-1 prose-code:text-zinc-900',
-            'prose-blockquote:border-l-foreground prose-blockquote:bg-foreground/2',
-          )}
-        >
-          {compiledContent}
-        </div>
-      </div>
-    </article>
+      <section
+        aria-labelledby="blog-start-title"
+        className="relative overflow-hidden bg-primary py-20 text-primary-foreground sm:py-28"
+      >
+        <BandGlow className="rotate-180" />
+        <Container className="relative">
+          <Reveal className="mx-auto max-w-xl text-center">
+            <h2
+              id="blog-start-title"
+              className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl"
+            >
+              Wystaw pierwszą fakturę jeszcze dziś
+            </h2>
+            <p className="mt-4 text-lg text-pretty text-primary-foreground">
+              {TRIAL_DAYS} dni za darmo. Rezygnujesz, kiedy chcesz.
+            </p>
+            <ButtonLink href="/register" variant="inverse" className="mt-10">
+              Wypróbuj za darmo
+            </ButtonLink>
+          </Reveal>
+        </Container>
+      </section>
+    </>
   );
 }

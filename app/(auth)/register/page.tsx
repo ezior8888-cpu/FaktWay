@@ -2,9 +2,10 @@
 // `register-form.tsx` szablonu. Układ i klasy 1:1; logika nasza i bez zmian:
 // `signupWithEmail`, Google przez `loginWithGoogle` (tylko przy włączonym
 // Google w GoTrue), Turnstile, wyłącznik `/wylacz rejestracja` (AUD-63).
-// Pole zgody Finory („I agree to all Terms…”) zastępuje dzisiejsza informacja
-// o regulaminie: akcja nie zapisuje zgody z pola wyboru, a nowe wymaganie
-// w formularzu byłoby nową funkcją (plan: nie wymyślaj funkcji).
+// W miejscu pola zgody Finory („I agree to all Terms…”) są dwa pola z pakietu
+// prawnego (#264): akceptacja regulaminu i umowy powierzenia (wymagana —
+// `signupWithEmail` bez `terms=on` odsyła `terms_required`) i dobrowolna
+// zgoda na e-maile. Brzmienie obu: lib/legal/versions.ts.
 
 // Next Imports
 import Link from 'next/link'
@@ -15,7 +16,9 @@ import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { GoogleIcon } from '@/components/auth/finora/google-icon'
 import { PasswordInput } from '@/components/auth/finora/password-input'
+import { HoneypotField } from '@/components/auth/honeypot-field'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
+import { LegalInline } from '@/components/legal/legal-document'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -23,6 +26,7 @@ import { Separator } from '@/components/ui/separator'
 // Lib Imports
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers'
 import { isSignupClosed, SIGNUPS_CLOSED_MESSAGE } from '@/lib/feature-flags/signups'
+import { MARKETING_STATEMENT, TERMS_STATEMENT } from '@/lib/legal/versions'
 
 import { loginWithGoogle } from '../login/actions'
 import { signupWithEmail } from './actions'
@@ -32,7 +36,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   weak_password:
     'Hasło musi mieć min. 12 znaków, zawierać małą i dużą literę, cyfrę oraz znak specjalny.',
   password_breached:
-    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne — najlepiej passphrase z 4-5 losowych słów.',
+    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne, najlepiej passphrase z 4-5 losowych słów.',
   rate_limited:
     'Zbyt wiele prób rejestracji z tego urządzenia. Poczekaj kilka minut i spróbuj ponownie.',
   bot_check_failed:
@@ -40,7 +44,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   'email rate limit exceeded':
     'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
   signups_disabled: SIGNUPS_CLOSED_MESSAGE,
+  terms_required:
+    'Aby założyć konto, zaakceptuj Regulamin i Umowę powierzenia (pierwsze pole wyboru).',
 }
+
+const LEGAL_LINK_CLASS = 'text-foreground underline underline-offset-2 hover:no-underline'
 
 const PANEL_TITLE = 'Załóż konto i wystaw pierwszą fakturę'
 const PANEL_TEXT =
@@ -50,7 +58,7 @@ function LoginLink() {
   return (
     <p className='text-muted-foreground'>
       Masz już konto?{' '}
-      <Link href='/login' className='text-foreground hover:underline'>
+      <Link href='/login' className='text-foreground underline underline-offset-4 hover:text-primary'>
         Zaloguj się
       </Link>
     </p>
@@ -102,6 +110,17 @@ export default async function RegisterPage({
               <GoogleIcon />
               Zarejestruj przez Google
             </Button>
+            {/* Konto z Google powstaje bez naszego formularza — wyraźną
+                akceptację zbiera bramka /onboarding/zgody
+                (lib/legal/acceptance.ts), gdy dokumenty przestaną być wersją
+                roboczą. */}
+            <p className='mt-2 text-center text-xs leading-relaxed text-muted-foreground'>
+              Rejestrując się przez Google, akceptujesz{' '}
+              <LegalInline
+                text="[Regulamin](/legal/regulamin) i [Umowę powierzenia](/legal/umowa-powierzenia) oraz potwierdzasz zapoznanie się z [Polityką prywatności](/legal/polityka-prywatnosci)."
+                linkClassName={LEGAL_LINK_CLASS}
+              />
+            </p>
           </form>
 
           <div className='flex items-center gap-4'>
@@ -160,11 +179,30 @@ export default async function RegisterPage({
                 Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
               </FieldDescription>
             </Field>
-            {/* Regulamin — w miejscu pola zgody Finory */}
-            <FieldDescription>
-              Rejestrując się akceptujesz <Link href='/legal/regulamin'>regulamin</Link> i{' '}
-              <Link href='/legal/polityka-prywatnosci'>politykę prywatności</Link>.
-            </FieldDescription>
+            {/* Zgody — w miejscu pola zgody Finory. Zwykłe pola wyboru, bo
+                akcja czyta `terms` i `marketing` z FormData („on”). */}
+            <label className='flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground'>
+              <input
+                type='checkbox'
+                name='terms'
+                value='on'
+                required
+                className='mt-1 size-4 shrink-0 accent-primary'
+              />
+              <span>
+                <LegalInline text={TERMS_STATEMENT.text} linkClassName={LEGAL_LINK_CLASS} /> (wymagane)
+              </span>
+            </label>
+            <label className='flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground'>
+              <input
+                type='checkbox'
+                name='marketing'
+                value='on'
+                className='mt-1 size-4 shrink-0 accent-primary'
+              />
+              <span>{MARKETING_STATEMENT.text} (dobrowolne)</span>
+            </label>
+            <HoneypotField />
             <TurnstileWidget action='register' theme='light' />
             <Field>
               <Button className='w-full' type='submit'>

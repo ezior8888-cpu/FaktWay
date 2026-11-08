@@ -148,12 +148,30 @@ const nextConfig: NextConfig = {
         destination: '/pomoc/platnosci-i-faktury-za-faktway',
         permanent: true,
       },
+      // Decyzja Bartosza 22.10.2026: Magiczny import znika — historię z KSeF
+      // FaktWay pobiera sam, a postęp i import plików są w Imporcie danych.
+      // Stare linki (zakładki, maile) nie kończą się 404.
+      {
+        source: '/onboarding/magic-import',
+        destination: '/import-danych',
+        permanent: true,
+      },
+      // FaktWay 1.0: artykuły o FLO zniknęły z publicznej pomocy
+      // (content/flo/pomoc). Stare linki i wyniki wyszukiwarki lądują na
+      // stronie głównej zamiast na 404.
+      {
+        source: '/pomoc/flo-:slug',
+        destination: '/',
+        permanent: true,
+      },
     ];
   },
 
   // PostHog reverse proxy (Faza 31) — ruch analityczny leci przez naszą
   // domenę pod `/ingest`, omijając ad-blockery blokujące `*.posthog.com`.
   // Region EU (zgodność z hostingiem Supabase / R2).
+  // Next przekazuje celowi nagłówki żądania — ciasteczka zdejmuje proxy
+  // (`lib/telemetry-tunnel.ts`); nowe ścieżki tunelu dopisz też tam.
   async rewrites() {
     return [
       {
@@ -189,8 +207,11 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Bez rozszerzonego zestawu map źródłowych: z @sentry/nextjs 10.75.2 (łatka
+  // GHSA-mchm-gjx6-7h55 dla `tunnelRoute`) build rośnie ponad 3584 MB sterty;
+  // pułap podniesiony do 4096 MB (Dockerfile), a to oszczędza zapas na app-1.
+  // Mapy stron i chunków dalej idą.
+  widenClientFileUpload: false,
 
   bundleSizeOptimizations: {
     excludeReplayShadowDom: true,
@@ -201,8 +222,9 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.
-  // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
-  // side errors will fail.
+  // Proxy (`proxy.ts`) obejmuje tunel i przepuszcza go bez sesji i bez ciasteczek
+  // (`lib/telemetry-tunnel.ts`). Wrapper Sentry, który omijał proxy na tej
+  // ścieżce, przy `output: standalone` i Next ≥ 16 jest wyłączony — nie licz na niego.
   tunnelRoute: '/monitoring',
 
   webpack: {
@@ -210,7 +232,8 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
     // See the following for more information:
     // https://docs.sentry.io/product/crons/
     // https://vercel.com/docs/cron-jobs
-    automaticVercelMonitors: true,
+    // Vercela nie ma od 14.09.2026 (Hetzner) — instrumentacja cronów Vercela tylko obciąża build.
+    automaticVercelMonitors: false,
 
     // Tree-shaking options for reducing bundle size
     treeshake: {

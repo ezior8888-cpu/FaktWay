@@ -29,7 +29,10 @@ const STATUS_CONFIG: Record<
   exempt: {
     label: 'Zwolniony VAT',
     icon: CheckCircle2,
-    className: 'bg-primary/10 text-primary',
+    // Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary` — `text-primary`
+    // na `bg-primary/10` ma 4,44:1 na karcie i 4,20:1 w zaznaczonym wierszu (jasny motyw);
+    // `accent-foreground` daje 9,00 / 8,52:1 (jasny) i 8,93:1 (ciemny).
+    className: 'bg-primary/10 text-accent-foreground',
   },
   inactive: {
     label: 'Wykreślony',

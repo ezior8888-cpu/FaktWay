@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -17,6 +19,11 @@ const db = vi.hoisted(() => ({
   /** Odpowiedź `head` bez licznika (PostgREST 404 bez treści: brak tabeli albo nieprzeładowany schemat). */
   headWithoutCount: false,
   calls: [] as Array<{ table: string; method: string; args: unknown[] }>,
+  /** Odpowiedź RPC `ksef_lifecycle_violations()` (strażnik cyklu życia, 00148). */
+  violations: [] as Array<Record<string, unknown>>,
+  violationsError: null as { message: string } | null,
+  /** Wiersze `invoices` dla odczytu numeru i firmy naruszenia. */
+  invoices: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: db.requireAdmin }));
@@ -30,7 +37,9 @@ vi.mock('@/lib/supabase/admin', () => ({
             ? { data: null, count: null, error: db.ledgerError, status: 404 }
             : table === 'ksef_send_attempts'
               ? { data: db.listRows, count: db.listCount, error: null, status: 200 }
-              : { data: [], count: 0, error: null, status: 200 };
+              : table === 'invoices'
+                ? { data: db.invoices, count: db.invoices.length, error: null, status: 200 }
+                : { data: [], count: 0, error: null, status: 200 };
       const q: Record<string, unknown> = {};
       for (const method of ['select', 'eq', 'gte', 'lt', 'is', 'in', 'or', 'order', 'limit']) {
         q[method] = (...args: unknown[]) => { db.calls.push({ table, method, args }); return q; };
@@ -38,6 +47,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       q.maybeSingle = async () => ({ ...result(), data: null });
       q.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result()).then(resolve);
       return q;
+    },
+    rpc: async (name: string) => {
+      db.calls.push({ table: `rpc:${name}`, method: 'rpc', args: [] });
+      return db.violationsError ? { data: null, error: db.violationsError } : { data: db.violations, error: null };
     },
   }),
 }));
@@ -53,6 +66,9 @@ import {
   messageTemplate,
   parseSendErrorFilters,
   recoveryState,
+  stuckInvoices,
+  STUCK_AUTOMAT_DEADLINE_MS,
+  STUCK_HINTS,
   type AttemptRow,
   type CronRun,
 } from '@/lib/admin/centrum/send-errors';
@@ -206,6 +222,68 @@ describe('świeżość cronów', () => {
   });
 });
 
+describe('utknięte w wysyłce teraz (strażnik I1/I2)', () => {
+  const v = (invariant: string, invoiceId: string, detail: Record<string, unknown>) => ({
+    invariant, invoiceId, tenantName: 'Firma', internalNumber: `FV/${invoiceId}`, ksefStatus: invariant === 'I1' ? 'queued' : 'sending', detail,
+  });
+
+  it('tylko I1 (queued bez zlecenia) i I2 (sending ponad dzierżawę); inne naruszenia zostają w /admin/ksef', () => {
+    const out = stuckInvoices([
+      v('I3', 'a', {}),
+      v('I2', 'b', { submitted_to_ksef_at: '2026-10-13T11:00:00.000Z', owner: 'x' }),
+      v('I5D', 'c', {}),
+      v('I1', 'd', { updated_at: '2026-10-13T11:40:00.000Z' }),
+      v('I9', 'e', {}),
+    ], NOW);
+    expect(out.map((s) => [s.invariant, s.invoiceId])).toEqual([['I1', 'd'], ['I2', 'b']]);
+  });
+
+  it('zegar strażnika: I1 — updated_at (ostatnia zmiana wiersza), I2 — znacznik przejęcia; brak znacznika = null', () => {
+    const out = stuckInvoices([
+      v('I1', 'a', { updated_at: '2026-10-13T11:40:00.000Z' }),
+      v('I2', 'b', { submitted_to_ksef_at: null, owner: null }),
+      v('I2', 'c', { submitted_to_ksef_at: '2026-10-13T11:00:00.000Z' }),
+    ], NOW);
+    expect(out.map((s) => [s.invoiceId, s.since])).toEqual([
+      ['a', '2026-10-13T11:40:00.000Z'],
+      ['b', null],
+      ['c', '2026-10-13T11:00:00.000Z'],
+    ]);
+  });
+
+  it('I1 dłużej niż próg automatu (15 min do I1 + dwa przebiegi crona co 15 min) — automat nie zadziałał', () => {
+    expect(STUCK_AUTOMAT_DEADLINE_MS).toBe(45 * 60 * 1000);
+    const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000).toISOString();
+    const out = stuckInvoices([
+      v('I1', 'fresh', { updated_at: at(20) }),
+      // Próg zachowaniem w całym przedziale 20–45 min, nie tylko wartością stałej.
+      v('I1', 'mid', { updated_at: at(30) }),
+      v('I1', 'edge', { updated_at: at(44) }),
+      v('I1', 'old', { updated_at: at(46) }),
+      v('I1', 'nodate', {}),
+      v('I2', 'i2', { submitted_to_ksef_at: at(600) }),
+    ], NOW);
+    expect(Object.fromEntries(out.map((s) => [s.invoiceId, s.automatOverdue]))).toEqual({
+      old: true, edge: false, mid: false, fresh: false, nodate: true, i2: false,
+    });
+    // Najpierw I1 od najstarszego (bez znacznika na górze), potem I2.
+    expect(out.map((s) => s.invoiceId)).toEqual(['nodate', 'old', 'edge', 'mid', 'fresh', 'i2']);
+  });
+
+  // Operator czyta „Co dalej” na tym widoku — wskazana procedura musi istnieć
+  // w repo (#260), a podpowiedź nie może twierdzić, że jej nie ma.
+  it('podpowiedzi I1/I2 wskazują procedurę operatora z repo i runbook', () => {
+    const script = 'scripts/ops/zwolnij-utknieta-wysylke.sh';
+    expect(existsSync(script)).toBe(true);
+    for (const invariant of ['I1', 'I2'] as const) {
+      expect(STUCK_HINTS[invariant]).toContain(script);
+      expect(STUCK_HINTS[invariant]).toContain('hamulce-ksef.md');
+      expect(STUCK_HINTS[invariant]).not.toContain('jeszcze nie ma');
+    }
+    expect(readFileSync('docs/runbooks/hamulce-ksef.md', 'utf8')).toContain('## Faktura utknęła w wysyłce (I1/I2)');
+  });
+});
+
 describe('loader', () => {
   beforeEach(() => {
     db.requireAdmin.mockReset();
@@ -214,6 +292,9 @@ describe('loader', () => {
     db.listRows = [];
     db.listCount = 0;
     db.headWithoutCount = false;
+    db.violations = [];
+    db.violationsError = null;
+    db.invoices = [];
   });
 
   it('najpierw requireAdmin, potem dane; odmowa operatora nie czyta bazy', async () => {
@@ -269,5 +350,39 @@ describe('loader', () => {
     const listOr = db.calls.find((c) => c.table === 'ksef_send_attempts' && c.method === 'or');
     expect(String(listOr?.args[0])).toMatch(/^status\.in\.\(failed,refused\),and\(status\.eq\.started,finished_at\.is\.null,started_at\.lt\."2026-10-13T11:40:00\.000Z"\)$/);
     expect(db.calls).toContainEqual({ table: 'ksef_send_attempts', method: 'gte', args: ['started_at', '2026-10-12T12:00:00.000Z'] });
+  });
+
+  it('utknięte teraz: I1 i I2 ze strażnika cyklu życia z numerem i firmą — także bez wiersza w dzienniku', async () => {
+    db.violations = [
+      { invariant: 'I1', invoice_id: 'inv-q', tenant_id: T, detail: { updated_at: '2026-10-13T11:00:00.000Z' } },
+      { invariant: 'I3', invoice_id: 'inv-a', tenant_id: T, detail: {} },
+      { invariant: 'I2', invoice_id: 'inv-s', tenant_id: T, detail: { submitted_to_ksef_at: null, owner: null } },
+    ];
+    db.invoices = [
+      { id: 'inv-q', internal_number: 'FV/Q', ksef_status: 'queued', tenants: { name: 'Firma Q', nip: '1234567890' } },
+      { id: 'inv-s', internal_number: 'FV/S', ksef_status: 'sending', tenants: { name: 'Firma S', nip: '1234567890' } },
+    ];
+    const view = await loadSendErrorsView(parseSendErrorFilters({}), NOW);
+    expect(view.stuckNow).toEqual([
+      expect.objectContaining({ invariant: 'I1', invoiceId: 'inv-q', internalNumber: 'FV/Q', tenantName: 'Firma Q', ksefStatus: 'queued', since: '2026-10-13T11:00:00.000Z', automatOverdue: true }),
+      expect.objectContaining({ invariant: 'I2', invoiceId: 'inv-s', internalNumber: 'FV/S', tenantName: 'Firma S', ksefStatus: 'sending', since: null, automatOverdue: false }),
+    ]);
+    expect(db.calls).toContainEqual({ table: 'rpc:ksef_lifecycle_violations', method: 'rpc', args: [] });
+  });
+
+  it('utknięte teraz: nieudany odczyt strażnika to „nie wiadomo” (null) i problem, nie pusta lista', async () => {
+    db.violationsError = { message: 'permission denied for function ksef_lifecycle_violations' };
+    const view = await loadSendErrorsView(parseSendErrorFilters({}), NOW);
+    expect(view.stuckNow).toBeNull();
+    expect(view.problems).toContainEqual(expect.stringContaining('ksef_lifecycle_violations'));
+
+    db.violationsError = null;
+    expect((await loadSendErrorsView(parseSendErrorFilters({}), NOW)).stuckNow).toEqual([]);
+  });
+
+  it('utknięte teraz: odmowa operatora przed odczytem strażnika (requireAdmin pierwszy)', async () => {
+    db.requireAdmin.mockRejectedValue(new Error('NEXT_REDIRECT'));
+    await expect(loadSendErrorsView(parseSendErrorFilters({}), NOW)).rejects.toThrow('NEXT_REDIRECT');
+    expect(db.calls.filter((c) => c.method === 'rpc')).toEqual([]);
   });
 });

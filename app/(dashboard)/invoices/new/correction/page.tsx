@@ -39,9 +39,13 @@ export default async function NewCorrectionPage({
 
   return (
     <CorrectionPageFrame>
+      {/* UX-01: firma listy faktur pierwotnych — zapis korekty sprawdzi, że to wciąż aktywna firma;
+          `key` montuje formularz od nowa po przełączeniu firmy w tej karcie. */}
       <CorrectionInvoiceForm
+        key={tenantId ?? ''}
         parentInvoices={available}
         preselectedParentId={params.parentId}
+        tenantId={tenantId ?? ''}
       />
     </CorrectionPageFrame>
   );

@@ -4,6 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 import { createClient } from '@/lib/supabase/server';
 import { checkPasswordOperationRateLimit } from '@/lib/rate-limit/password';
+import { isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
 
 export interface ReauthResult {
   ok: boolean;
@@ -21,9 +22,14 @@ export interface ReauthResult {
  * obniżałoby wcześniej potwierdzone MFA. Tymczasowa sesja musi należeć do
  * tego samego użytkownika i jest od razu wylogowywana wyłącznie lokalnie.
  * Ten helper potwierdza hasło, a nie drugi czynnik — MFA sprawdza wywołujący.
+ *
+ * `captchaToken` (widżet Turnstile w oknie z hasłem) idzie do GoTrue, gdy jest:
+ * przy włączonej captcha w GoTrue logowanie hasłem bez niego jest odrzucane
+ * (docs/runbooks/captcha-w-gotrue.md). Odmowa captcha to nie „złe hasło”.
  */
 export async function reauthenticateWithPassword(
   password: string,
+  captchaToken?: string,
 ): Promise<ReauthResult> {
   if (typeof password !== 'string' || !password || password.length > 1024) {
     return { ok: false, error: 'invalid_password' };
@@ -57,9 +63,13 @@ export async function reauthenticateWithPassword(
     },
   );
 
+  const token = typeof captchaToken === 'string' && captchaToken.length >= 10 && captchaToken.length <= 2048
+    ? captchaToken
+    : undefined;
   const { data, error } = await verifier.auth.signInWithPassword({
     email: user.email,
     password,
+    ...(token ? { options: { captchaToken: token } } : {}),
   });
 
   // Nawet niespójna odpowiedź tożsamości nie może zostawić celowo otwartej
@@ -78,7 +88,7 @@ export async function reauthenticateWithPassword(
   }
 
   if (error) {
-    return { ok: false, error: 'invalid_password' };
+    return { ok: false, error: isGoTrueCaptchaRejection(error) ? 'verification_unavailable' : 'invalid_password' };
   }
 
   if (cleanupFailed || typeof temporaryToken !== 'string' || !temporaryToken || data.user?.id !== user.id) {

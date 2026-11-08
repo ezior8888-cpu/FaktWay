@@ -71,6 +71,10 @@ beforeEach(() => {
       id: 'p1', user_id: USER, tenant_id: 'org-1', endpoint: `https://push.example/${SECRET}`, p256dh: SECRET, auth: SECRET,
       device_type: 'mobile', device_name: 'Telefon', user_agent: 'UA', is_active: true, created_at: '2026-03-01',
     }],
+    user_passkeys: [{
+      id: 'k1', user_id: USER, credential_id: SECRET, public_key: SECRET, counter: 3, transports: ['internal'],
+      device_label: 'iPhone (Safari)', backed_up: true, created_at: '2026-03-02', last_used_at: '2026-03-03',
+    }],
     support_conversations: [
       { id: 'c1', user_id: USER, status: 'closed', category: 'faktury', subject: 'KOR', created_at: '2026-04-01' },
       { id: 'c2', user_id: OTHER, status: 'open', category: 'inne', subject: SECRET, created_at: '2026-04-01' },
@@ -95,6 +99,7 @@ describe('eksport danych konta — pełny zakres osoby (AUD-76)', () => {
     expect(data.profile).toMatchObject({ name: 'Jan Testowy' });
     expect(data.email_preferences).toHaveLength(1);
     expect(data.push_devices).toEqual([expect.objectContaining({ device_name: 'Telefon' })]);
+    expect(data.passkey_devices).toEqual([expect.objectContaining({ device_label: 'iPhone (Safari)' })]);
     expect(data.support_conversations).toEqual([
       expect.objectContaining({ id: 'c1', messages: [expect.objectContaining({ content: 'Jak wystawić korektę?' })] }),
     ]);
@@ -110,7 +115,7 @@ describe('eksport danych konta — pełny zakres osoby (AUD-76)', () => {
 
     expect(JSON.stringify(data)).not.toContain(SECRET);
     expect(JSON.stringify(data)).not.toContain(OTHER);
-    for (const forbidden of ['p256dh', 'auth', 'endpoint', 'token_hash', 'cancel_token_hash', 'raw_payload', 'invited_by']) {
+    for (const forbidden of ['p256dh', 'auth', 'endpoint', 'token_hash', 'cancel_token_hash', 'raw_payload', 'invited_by', 'public_key', 'credential_id']) {
       for (const [table, cols] of Object.entries(s.columns)) {
         expect(cols.split(',').map((c) => c.trim()), `${table} wybiera ${forbidden}`).not.toContain(forbidden);
       }

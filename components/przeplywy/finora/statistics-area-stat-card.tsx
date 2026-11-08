@@ -25,7 +25,7 @@ import { MoneyTooltipRow, zl } from './money'
  * 1. dnia miesiąca do dziś (w szablonie osiem dni z danymi przykładowymi).
  *
  * `empty` zastępuje kwotę, gdy w miesiącu nie ma czego pokazać — wpływy bez
- * żadnej oznaczonej wpłaty to „Oznaczaj wpłaty, a pokażemy wpływy”, nigdy
+ * żadnej oznaczonej wpłaty to „Oznacz wpłatę przy fakturze”, nigdy
  * „0 zł” (§2.4 pkt 14).
  */
 

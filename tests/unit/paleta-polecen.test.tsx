@@ -38,7 +38,7 @@ vi.mock('@/lib/supabase/auth-context', () => {
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { searchCommandPaletteAction } from '@/app/actions/command-search';
-import { CommandMenu } from '@/components/dashboard/command-menu';
+import { CommandMenu, CommandMenuPhoneTrigger } from '@/components/dashboard/command-menu';
 import { buildPaletteNavEntries, normalizeSearchQuery } from '@/lib/command-palette';
 import { dashboardNavItems, dashboardSettingsNavItem } from '@/lib/dashboard-nav-config';
 import { ActionAuthError } from '@/lib/supabase/auth-context';
@@ -61,6 +61,77 @@ describe('buildPaletteNavEntries', () => {
       ['Wystaw fakturę', '/invoices/new'],
       ['Dodaj wydatek', '/expenses'],
     ]);
+  });
+});
+
+describe('buildPaletteNavEntries — zakładki Faktur (poprawka 21.10.2026)', () => {
+  // Cykliczne i przypomnienia wyszły z menu (są zakładkami ekranu „Faktury”),
+  // ale ⌘K dalej prowadzi do nich wprost — także po starej nazwie „Przypomnienia”.
+  it('„Faktury cykliczne” są w ⌘K, z nazwą sekcji w słowach kluczowych', () => {
+    const entry = buildPaletteNavEntries().find((e) => e.href === '/invoices/recurring');
+    expect(entry).toMatchObject({ group: 'Przejdź do', label: 'Faktury cykliczne' });
+    expect(entry?.keywords).toContain('Sprzedaż');
+  });
+
+  it('„Faktury po terminie” są w ⌘K i dają się znaleźć po słowie „Przypomnienia”', () => {
+    const entry = buildPaletteNavEntries().find((e) => e.href === '/payments/overdue');
+    expect(entry).toMatchObject({ group: 'Przejdź do', label: 'Faktury po terminie' });
+    expect(entry?.keywords).toEqual(expect.arrayContaining(['Sprzedaż', 'Przypomnienia']));
+  });
+});
+
+describe('buildPaletteNavEntries — zakładki Kosztów (poprawka 21.10.2026)', () => {
+  // Wydatki i Skrzynka KSeF wyszły z menu (są zakładkami ekranu „Koszty”),
+  // ale ⌘K dalej prowadzi do każdej wprost — także po słowie „Koszty”.
+  it('„Koszty” są w menu, a „Wydatki” i „Skrzynka KSeF” w ⌘K ze starymi nazwami', () => {
+    const entries = buildPaletteNavEntries().filter((e) => e.group === 'Przejdź do');
+    expect(entries.find((e) => e.label === 'Koszty')?.href).toBe('/expenses');
+    const wydatki = entries.find((e) => e.label === 'Wydatki');
+    expect(wydatki?.href).toBe('/expenses');
+    expect(wydatki?.keywords).toEqual(expect.arrayContaining(['Koszty', 'paragon']));
+    const skrzynka = entries.find((e) => e.href === '/inbox');
+    expect(skrzynka?.label).toBe('Skrzynka KSeF');
+    expect(skrzynka?.keywords).toEqual(expect.arrayContaining(['Koszty', 'KSeF', 'faktury zakupowe']));
+  });
+});
+
+describe('buildPaletteNavEntries — zakładki Księgowości (poprawka 21.10.2026)', () => {
+  // KPiR i Eksport wyszły z menu (są zakładkami ekranu „Księgowość”), ale ⌘K
+  // dalej prowadzi do każdej wprost — także po słowie „Księgowość” i „JPK”.
+  it('„Księgowość” jest w menu, a „KPiR” i „Eksport” w ⌘K ze starymi nazwami', () => {
+    const entries = buildPaletteNavEntries().filter((e) => e.group === 'Przejdź do');
+    expect(entries.find((e) => e.label === 'Księgowość')?.href).toBe('/reports/kpir');
+    const kpir = entries.find((e) => e.label === 'KPiR');
+    expect(kpir?.href).toBe('/reports/kpir');
+    expect(kpir?.keywords).toEqual(expect.arrayContaining(['Księgowość', 'książka przychodów i rozchodów', 'PIT']));
+    const eksport = entries.find((e) => e.href === '/reports/exports');
+    expect(eksport?.label).toBe('Eksport');
+    expect(eksport?.keywords).toEqual(expect.arrayContaining(['Księgowość', 'JPK', 'CSV', 'plik dla księgowej']));
+    // Ten sam adres co pozycja menu „Księgowość”, ale inna etykieta — inna wartość cmdk.
+    expect(kpir?.value).not.toBe(entries.find((e) => e.label === 'Księgowość')?.value);
+  });
+});
+
+describe('buildPaletteNavEntries — obie analizy (Analizy 1:1 z Finory, 21.10.2026)', () => {
+  // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — w menu jedna pozycja
+  // „Analizy” (/analizy/sprzedaz), analiza kosztów jest za przełącznikiem
+  // w nagłówku; ⌘K dalej prowadzi do każdej analizy wprost.
+  it('„Analizy” są w menu, a „Analiza sprzedaży” i „Analiza kosztów” w ⌘K', () => {
+    const entries = buildPaletteNavEntries().filter((e) => e.group === 'Przejdź do');
+    const menu = entries.find((e) => e.label === 'Analizy');
+    expect(menu?.href).toBe('/analizy/sprzedaz');
+    const sprzedaz = entries.find((e) => e.label === 'Analiza sprzedaży');
+    expect(sprzedaz?.href).toBe('/analizy/sprzedaz');
+    expect(sprzedaz?.keywords).toEqual(
+      expect.arrayContaining(['Analizy', 'Sprzedaż', 'przychody', 'produkty', 'należności', 'stali klienci', 'wykresy']),
+    );
+    const koszty = entries.find((e) => e.href === '/analizy/koszty');
+    expect(koszty?.label).toBe('Analiza kosztów');
+    expect(koszty?.keywords).toEqual(
+      expect.arrayContaining(['Analizy', 'Koszty', 'wydatki', 'kategorie', 'VAT', 'stałe koszty', 'wykresy']),
+    );
+    // Ten sam adres co pozycja menu „Analizy”, ale inna etykieta — inna wartość cmdk.
+    expect(sprzedaz?.value).not.toBe(menu?.value);
   });
 });
 
@@ -143,6 +214,11 @@ describe('CommandMenu', () => {
     expect(html).toContain('Szukaj lub przejdź…');
     expect(html).toContain('<kbd');
     expect(html).toContain('⌘K');
+  });
+
+  it('na telefonie lupa jest osobnym przyciskiem po prawej stronie paska (03.11.2026)', () => {
+    const html = renderToStaticMarkup(<CommandMenuPhoneTrigger />);
     expect(html).toContain('aria-label="Szukaj"');
+    expect(html).toMatch(/class="[^"]*\bsm:hidden/);
   });
 });

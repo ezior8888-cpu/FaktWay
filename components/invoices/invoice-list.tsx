@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { RiAddLine, RiFileSearchLine, RiFileTextLine, RiUploadLine } from '@remixicon/react';
@@ -13,10 +13,31 @@ import { plural } from '@/lib/i18n/plural';
 import { SelectedPdfDownload } from './batch-pdf-download';
 import { SwipeableInvoiceRow } from './swipeable-invoice-row';
 
-import { PAYMENT_FACT_FIELDS, type InvoiceFactsById, type InvoiceRow } from './invoice-row-types';
+import {
+  paidOverlay,
+  PAYMENT_FACT_FIELDS,
+  withPaymentOverlay,
+  type InvoiceFactsById,
+  type InvoicePaymentOverlay,
+  type InvoiceRow,
+} from './invoice-row-types';
+import { stableOptimisticReducer, useInvoicePayment, type PayableInvoice } from './use-invoice-payment';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
 
 export type { InvoiceRow } from './invoice-row-types';
+
+/** Faktura z dotknięcia „Zapłacone” razem ze stanem sprzed niego: do tego wraca „Cofnij”. */
+interface PayableRow extends PayableInvoice {
+  before: InvoicePaymentOverlay;
+}
+
+const NO_OVERLAYS: ReadonlyMap<string, InvoicePaymentOverlay> = new Map();
+
+const overlayReducer = stableOptimisticReducer(
+  (current: ReadonlyMap<string, InvoicePaymentOverlay>, change: { id: string; overlay: InvoicePaymentOverlay }) =>
+    new Map(current).set(change.id, change.overlay) as ReadonlyMap<string, InvoicePaymentOverlay>,
+);
 
 /**
  * Lista faktur z nasłuchem Realtime.
@@ -33,7 +54,9 @@ export type { InvoiceRow } from './invoice-row-types';
  * Stan płatności („Opłacona”, „Po terminie”, „Do zapłaty”) jest wyliczany przy
  * renderze z faktów serwera i dat wiersza, nie przechowywany. Zmiana kolumny,
  * od której zależą fakty serwera (`PAYMENT_FACT_FIELDS`), odświeża stronę
- * (`router.refresh()`), żeby fakty przeliczył serwer.
+ * (`router.refresh()`), żeby fakty przeliczył serwer. „Zapłacone” nakłada stan
+ * płatności optymistycznie na oba widoki wiersza naraz (karta i tabela są w DOM
+ * równocześnie), do odpowiedzi serwera (`useInvoicePayment`).
  *
  * Nowy snapshot z serwera (`initialInvoices` — po `router.refresh()`, zmianie
  * strony albo filtra) zastępuje stan lokalny, ale lista NIE jest remontowana:
@@ -54,6 +77,7 @@ export function InvoiceList({
   summary,
   facts = {},
   today,
+  canMarkPaid = false,
 }: {
   tenantId: string;
   /** Snapshot z serwera; nowa referencja (po `router.refresh()`) zastępuje stan lokalny. */
@@ -70,6 +94,8 @@ export function InvoiceList({
   filtered?: boolean;
   /** Opis zakresu pozycji z serwera (np. „1–50 z 230”). */
   summary?: string;
+  /** Rola pozwala oznaczać zapłatę (`canChangeInvoicePayment`); księgowa ma wgląd. */
+  canMarkPaid?: boolean;
 }) {
   const router = useRouter();
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
@@ -91,6 +117,39 @@ export function InvoiceList({
     invoicesRef.current = invoices;
   }, [invoices]);
   const dayToday = today ?? todayInWarsaw();
+
+  const [overlays, setOverlay] = useOptimistic(NO_OVERLAYS, overlayReducer);
+  const onPaid = useCallback(
+    ({ id, before }: PayableRow) => setOverlay({ id, overlay: paidOverlay(before.facts) }),
+    [setOverlay],
+  );
+  const onRestored = useCallback(
+    ({ id, before }: PayableRow) => setOverlay({ id, overlay: before }),
+    [setOverlay],
+  );
+  const { mark } = useInvoicePayment<PayableRow>({ onPaid, onRestored });
+  const markPaid = useCallback(
+    (invoice: InvoiceRow, rowFacts: InvoiceListRowFacts | undefined) =>
+      mark({
+        id: invoice.id,
+        number: invoice.internal_number,
+        before: { paymentStatus: invoice.payment_status, facts: rowFacts },
+      }),
+    [mark],
+  );
+  const viewFacts = useMemo(() => {
+    if (overlays.size === 0) return facts;
+    const next: InvoiceFactsById = { ...facts };
+    for (const [id, overlay] of overlays) {
+      if (overlay.facts) next[id] = overlay.facts;
+      else delete next[id];
+    }
+    return next;
+  }, [facts, overlays]);
+  const viewInvoices = useMemo(
+    () => (overlays.size === 0 ? invoices : invoices.map((inv) => withPaymentOverlay(inv, overlays.get(inv.id)))),
+    [invoices, overlays],
+  );
 
   const toggleRow = useCallback((id: string, checked: boolean) => {
     setSelected((prev) => {
@@ -246,8 +305,14 @@ export function InvoiceList({
 
       {/* TELEFON (< lg, §7.2): wiersze-karty ze swipe zamiast tabeli */}
       <div className="divide-y border-t lg:hidden">
-        {invoices.map((inv) => (
-          <SwipeableInvoiceRow key={inv.id} invoice={inv} facts={facts[inv.id]} today={dayToday} />
+        {viewInvoices.map((inv) => (
+          <SwipeableInvoiceRow
+            key={inv.id}
+            invoice={inv}
+            facts={viewFacts[inv.id]}
+            today={dayToday}
+            onMarkPaid={canMarkPaid ? markPaid : undefined}
+          />
         ))}
       </div>
 
@@ -255,12 +320,13 @@ export function InvoiceList({
       <div className="hidden lg:block">
         {summary ? <p className="sr-only">{summary}</p> : null}
         <InvoicesTable
-          invoices={invoices}
-          facts={facts}
+          invoices={viewInvoices}
+          facts={viewFacts}
           today={dayToday}
           selectedIds={selectedSet}
           onToggleRow={toggleRow}
           onToggleAll={toggleAll}
+          onMarkPaid={canMarkPaid ? markPaid : undefined}
         />
       </div>
     </>

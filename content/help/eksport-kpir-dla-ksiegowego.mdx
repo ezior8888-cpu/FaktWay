@@ -2,30 +2,31 @@
 title: "Eksport KPiR i danych dla księgowego"
 category: "ocr-kpir"
 order: 4
-summary: "Jak przekazać dane księgowej — JPK_FA, KPiR w Excelu i formaty programów księgowych."
-updated: "2026-05-19"
+summary: "Jak przekazać dane księgowej: JPK_FA, KPiR w Excelu i uniwersalny CSV."
+updated: "2026-11-02"
 ---
 
 FaktWay ułatwia współpracę z biurem rachunkowym. Dane przekazujesz w formacie, który księgowa zna.
 
 ## Dostępne eksporty
 
-- **JPK_FA** — ustrukturyzowany plik XML z fakturami za wybrany okres.
-- **KPiR w Excelu** — księga w układzie zgodnym z rozporządzeniem MF.
-- **Formaty programów księgowych** — Comarch Optima, Symfonia, Insert Subiekt/GT, Wapro Mag.
-- **Uniwersalny CSV** — sam wybierasz kolumny.
+- **JPK_FA**: ustrukturyzowany plik XML z fakturami za wybrany okres.
+- **KPiR w Excelu**: księga w układzie zgodnym z rozporządzeniem MF.
+- **Uniwersalny CSV**: stały układ kolumn (numer, data wystawienia, kontrahent, NIP, netto, VAT, brutto, waluta (zawsze PLN), rodzaj, numer KSeF).
+
+Symfonia FK i WAPRO Kaper wczytują faktury z pliku JPK_FA, więc wybierz JPK_FA. Eksporty JPK_V7M(3), Comarch Optima i Subiekt (EDI++) są w przygotowaniu i jeszcze niedostępne; do tego czasu księgowa dostaje uniwersalny CSV.
 
 ## Jak wyeksportować
 
-W sekcji raportów wybierasz okres (miesiąc, kwartał, zakres dat) i format. Plik generuje się w tle — przy większych zbiorach dostaniesz go, gdy będzie gotowy.
+W sekcji raportów wybierasz okres (miesiąc, kwartał, zakres dat) i format. Plik generuje się w tle, a przy większych zbiorach dostaniesz go, gdy będzie gotowy.
 
 ## Co-Pilot Księgowego
 
-Zamiast eksportować ręcznie co miesiąc, włącz Co-Pilot Księgowego. W ustawieniach podajesz email księgowej i preferowany format. FaktWay co miesiąc automatycznie generuje paczkę (JPK_FA + KPiR + podsumowanie VAT) i wysyła ją na maila biura. Zero klikania z Twojej strony.
+Zamiast eksportować ręcznie co miesiąc, włącz Co-Pilot Księgowego. W ustawieniach podajesz email księgowej i wybierasz formaty. FaktWay co miesiąc automatycznie generuje paczkę dokumentów (np. JPK_FA i KPiR) i wysyła ją na maila biura.
 
 ## Portal księgowego
 
-Możesz też dać księgowej własny dostęp — portal księgowego. Generujesz token, księgowa wchodzi przez dedykowany URL i sama pobiera dokumenty w wybranym formacie. Zobacz artykuł o portalu księgowego.
+Możesz też dać księgowej własny dostęp przez portal księgowego. Tworzysz link, księgowa wchodzi przez niego bez konta i, jeśli wybierzesz dostęp z pobieraniem, sama pobiera JPK_FA(4) albo KPiR za wybrany miesiąc oraz XML faktur. Zobacz artykuł o portalu księgowego.
 
 ## Co dalej?
 

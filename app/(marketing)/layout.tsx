@@ -1,10 +1,8 @@
 import type { Metadata } from 'next';
 
-import '@/styles/zova.css';
+import { SiteShell } from '@/components/site/site-shell';
 
-import { SiteFooter } from '@/app/(landing)/_components/closing';
-import { IconSprite } from '@/app/(landing)/_components/icon-sprite';
-import { SiteNav } from '@/app/(landing)/_components/site-nav';
+import { fraunces } from './_fonts';
 
 export const metadata: Metadata = {
   title: {
@@ -14,29 +12,23 @@ export const metadata: Metadata = {
 };
 
 /**
- * Layout stron marketingowych: cennik, pomoc, regulaminy, porównania,
- * kalkulator, artykuły bloga.
+ * Layout stron marketingowych: O nas, blog, cennik, pomoc, dokumenty prawne,
+ * kontakt, kalkulator, porównania.
  *
- * Wcześniej miał tu własny ciemny nagłówek, stopkę i tło z gradientem.
- * Teraz bierze te same elementy co strona główna, żeby klient nigdzie nie
- * trafił na poprzedni wygląd. Kolory treści zmieniają się razem z blokiem
- * `.marketing-landing` w `globals.css` — wszystkie te strony trzymają je
- * na zmiennych, więc znaczników nie trzeba było ruszać.
+ * Od 23.10.2026 ten sam nagłówek, stopka i animacje co strona główna
+ * (`components/site`), na tokenach aplikacji. Wcześniej strony brały
+ * elementy szablonu Zova i paletę `.marketing-landing`.
  */
 export default function MarketingLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Nowy wygląd stron (#318) + Fraunces tylko w marketingu (#326): zmienna
+  // `--font-fraunces` na elemencie `contents`, więc nie dodaje pudełka do układu.
   return (
-    <div className="zova marketing-landing relative flex min-h-screen flex-col overflow-x-clip">
-      <IconSprite />
-      <SiteNav />
-
-      {/* odstęp na pływającą nawigację, która nie zajmuje miejsca w układzie */}
-      <main className="flex-1 pt-[128px]">{children}</main>
-
-      <SiteFooter />
+    <div className={`${fraunces.variable} contents`}>
+      <SiteShell>{children}</SiteShell>
     </div>
   );
 }

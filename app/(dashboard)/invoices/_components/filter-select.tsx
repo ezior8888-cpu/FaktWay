@@ -27,12 +27,15 @@ export function FilterSelect({
   value,
   options,
   className,
+  submitOnChange = false,
 }: {
   name: string;
   label: string;
   value: string;
   options: FilterOption[];
   className?: string;
+  /** Wybór od razu wysyła formularz (jak filtr statusu w Finorze); bez JS działa „Filtruj”. */
+  submitOnChange?: boolean;
 }) {
   const id = `filtr-${name}`;
   return (
@@ -40,7 +43,19 @@ export function FilterSelect({
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      <Select name={name} defaultValue={value} items={options}>
+      <Select
+        name={name}
+        defaultValue={value}
+        items={options}
+        onValueChange={
+          submitOnChange
+            ? () => {
+                // Po zatwierdzeniu wyboru: ukryte pole Base UI ma już nową wartość.
+                setTimeout(() => document.getElementById(id)?.closest('form')?.requestSubmit(), 0);
+              }
+            : undefined
+        }
+      >
         <SelectTrigger id={id} aria-label={label} className="w-full">
           <span className="text-muted-foreground shrink-0">{label}:</span>
           <SelectValue />

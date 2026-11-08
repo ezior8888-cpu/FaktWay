@@ -1,14 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, type ReactNode } from 'react';
 import { RiCameraLine, RiImageLine, RiLoader4Line } from '@remixicon/react';
-import { toast } from 'sonner';
 
-import {
-  getOcrJobStatusAction,
-  uploadExpensePhotoAction,
-} from '@/app/actions/expenses';
+import { useExpenseCapture } from '@/components/expenses/use-expense-capture';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,123 +15,22 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { MOBILE_MEDIA } from '@/hooks/use-mobile';
+import { ACTION_FILE_LIMIT_LABEL } from '@/lib/upload-limit';
 import { cn } from '@/lib/utils';
-
-type CaptureState =
-  | { kind: 'idle' }
-  | { kind: 'uploading' }
-  | { kind: 'processing'; jobId: string }
-  | { kind: 'failed'; error: string };
 
 export function CaptureButton({
   triggerClassName,
 }: {
   triggerClassName?: string;
 } = {}) {
-  const router = useRouter();
   // Strona arkusza ustalana przy otwarciu (telefon: od dołu, jak wcześniej;
   // od `lg`: z prawej, jak arkusz „Add Transaction” Finory).
   const [sheetSide, setSheetSide] = useState<'bottom' | 'right'>('right');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [showSheet, setShowSheet] = useState(false);
-  const [state, setState] = useState<CaptureState>({ kind: 'idle' });
-  const [, startUpload] = useTransition();
-
-  const processingJobId =
-    state.kind === 'processing' ? state.jobId : null;
-
-  useEffect(() => {
-    if (!processingJobId) return;
-
-    const jobId = processingJobId;
-    let cancelled = false;
-    const timers: { interval?: ReturnType<typeof setInterval> } = {};
-    // Jedno pytanie naraz: odpowiedź wolniejsza niż takt (2 s) nie może
-    // nakładać się na następne — dwie odpowiedzi „completed” dałyby
-    // podwójny toast i podwójne przejście do wydatku.
-    let inFlight = false;
-
-    async function pollOnce() {
-      if (cancelled || inFlight) return;
-      inFlight = true;
-      // Odrzucona obietnica akcji (sieć, restart serwera) to chwilowy błąd —
-      // stan zadania nieznany, pytamy przy następnym takcie.
-      const status = await getOcrJobStatusAction(jobId).catch(() => null);
-      inFlight = false;
-      if (cancelled || !status) return;
-
-      if (!status.success) {
-        // Chwilowy błąd odczytu: zadanie mogło się udać, więc nie pokazujemy
-        // porażki (klient wgrałby zdjęcie drugi raz → drugi wydatek). Pytamy
-        // dalej; limit 60 s niżej i tak zakończy czekanie.
-        if (status.retryable) return;
-        if (timers.interval) clearInterval(timers.interval);
-        setState({ kind: 'failed', error: status.error });
-        toast.error(status.error);
-        return;
-      }
-
-      if (status.job.status === 'completed' && status.job.expense_id) {
-        if (timers.interval) clearInterval(timers.interval);
-        toast.success('Wydatek rozpoznany!');
-        router.push(`/expenses/${status.job.expense_id}`);
-        setState({ kind: 'idle' });
-        return;
-      }
-
-      if (status.job.status === 'failed') {
-        if (timers.interval) clearInterval(timers.interval);
-        setState({
-          kind: 'failed',
-          error: status.job.error_message ?? 'Nieznany błąd',
-        });
-        toast.error('Nie udało się rozpoznać');
-      }
-    }
-
-    void pollOnce();
-    timers.interval = setInterval(() => void pollOnce(), 2000);
-
-    const timeoutId = setTimeout(() => {
-      cancelled = true;
-      if (timers.interval) clearInterval(timers.interval);
-      setState((s) =>
-        s.kind === 'processing' && s.jobId === jobId
-          ? {
-              kind: 'failed',
-              error: 'Przekroczono czas oczekiwania (60 s).',
-            }
-          : s,
-      );
-      toast.error('Przekroczono czas oczekiwania');
-    }, 60_000);
-
-    return () => {
-      cancelled = true;
-      if (timers.interval) clearInterval(timers.interval);
-      clearTimeout(timeoutId);
-    };
-  }, [processingJobId, router]);
-
-  const handleFile = (file: File) => {
-    setShowSheet(false);
-    setState({ kind: 'uploading' });
-
-    startUpload(async () => {
-      const fd = new FormData();
-      fd.append('photo', file);
-      const result = await uploadExpensePhotoAction(fd);
-
-      if (!result.success) {
-        setState({ kind: 'failed', error: result.error });
-        toast.error(result.error);
-        return;
-      }
-
-      setState({ kind: 'processing', jobId: result.ocrJobId });
-    });
-  };
+  // Wgranie, odczyt i przejście do wydatku — wspólne z plusem dolnego paska.
+  const { state, busy, openCamera, openGallery, inputs } = useExpenseCapture({
+    onFileChosen: () => setShowSheet(false),
+  });
 
   return (
     <>
@@ -145,7 +39,7 @@ export function CaptureButton({
           setSheetSide(window.matchMedia?.(MOBILE_MEDIA).matches ? 'bottom' : 'right');
           setShowSheet(true);
         }}
-        disabled={state.kind === 'uploading' || state.kind === 'processing'}
+        disabled={busy}
         className={triggerClassName}
       >
         {state.kind === 'uploading' || state.kind === 'processing' ? (
@@ -158,29 +52,7 @@ export function CaptureButton({
         )}
       </Button>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleFile(f);
-          e.target.value = '';
-        }}
-      />
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleFile(f);
-          e.target.value = '';
-        }}
-      />
+      {inputs}
 
       {/* Finora: „+ Add Transaction” otwiera arkusz (create-transaction-sheet,
           `SheetContent className='sm:max-w-md'`). U nas arkusz ma dwa wyjścia:
@@ -199,19 +71,19 @@ export function CaptureButton({
               icon={<RiCameraLine />}
               title="Zrób zdjęcie"
               description="Na telefonie otwiera od razu aparat tylny"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={openCamera}
               highlighted
             />
             <CaptureOption
               icon={<RiImageLine />}
               title="Wybierz z galerii"
               description="Zdjęcie lub PDF z plików"
-              onClick={() => galleryInputRef.current?.click()}
+              onClick={openGallery}
             />
           </div>
           <SheetFooter>
             <p className="text-muted-foreground text-center text-xs">
-              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Max 10 MB.
+              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Zdjęcia zmniejszamy sami, PDF do {ACTION_FILE_LIMIT_LABEL}.
             </p>
           </SheetFooter>
         </SheetContent>

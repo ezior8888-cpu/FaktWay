@@ -14,9 +14,11 @@
 
 export const SUPPORT_EMAIL = 'pomoc@faktway.pl';
 
-const DEFAULT_SITE_URL = 'https://faktway.pl';
+/** Adres strony na dokumentach, które wychodzą poza aplikację (PDF): stały, niezależny od środowiska. */
+export const PUBLIC_SITE_DOMAIN = 'faktway.pl';
+export const PUBLIC_SITE_URL = `https://${PUBLIC_SITE_DOMAIN}`;
 
 /** Adres strony bez końcowego ukośnika (NEXT_PUBLIC_APP_URL albo faktway.pl). */
 export function siteUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL?.trim() || DEFAULT_SITE_URL).replace(/\/+$/, '');
+  return (process.env.NEXT_PUBLIC_APP_URL?.trim() || PUBLIC_SITE_URL).replace(/\/+$/, '');
 }

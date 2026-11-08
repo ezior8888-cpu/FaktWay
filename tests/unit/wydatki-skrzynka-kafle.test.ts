@@ -62,6 +62,7 @@ function database(): PageContext['supabase'] {
           return query;
         },
         eq: (c: string, v: unknown) => add('eq', c, v, (r) => r[c] === v),
+        neq: (c: string, v: unknown) => add('neq', c, v, (r) => r[c] != null && r[c] !== v),
         in: (c: string, v: unknown[]) => add('in', c, v, (r) => v.includes(r[c])),
         gte: (c: string, v: string) => add('gte', c, v, (r) => String(r[c]) >= v),
         lt: (c: string, v: string) => add('lt', c, v, (r) => String(r[c]) < v),
@@ -107,6 +108,8 @@ function incoming(id: string, fields: Row = {}): Row {
     id,
     tenant_id: TENANT,
     direction: 'incoming',
+    // `origin` jest NOT NULL (00065) — faktura ze Skrzynki KSeF.
+    origin: 'ksef_inbox',
     ksef_status: 'accepted',
     ksef_environment: 'test',
     currency: 'PLN',
@@ -284,6 +287,15 @@ describe('getLastInboxFetchAt — „Ostatnie pobranie z KSeF”', () => {
       incoming('inv-2', { created_at: '2026-10-19T14:05:00Z' }),
       incoming('inv-3', { created_at: '2026-10-20T09:00:00Z', tenant_id: 'firma-b' }),
       { ...incoming('out-1', { created_at: '2026-10-20T10:00:00Z' }), direction: 'outgoing' },
+    ];
+
+    expect(await getLastInboxFetchAt(database(), TENANT)).toBe('2026-10-19T14:05:00Z');
+  });
+
+  it('pomija faktury z historii KSeF (archiwum) — liczy się tylko pobranie Skrzynki (decyzja Bartosza 22.10.2026)', async () => {
+    tables.invoices = [
+      incoming('inv-1', { created_at: '2026-10-19T14:05:00Z', origin: 'ksef_inbox' }),
+      incoming('hist-1', { created_at: '2026-10-21T09:00:00Z', origin: 'ksef_import' }),
     ];
 
     expect(await getLastInboxFetchAt(database(), TENANT)).toBe('2026-10-19T14:05:00Z');

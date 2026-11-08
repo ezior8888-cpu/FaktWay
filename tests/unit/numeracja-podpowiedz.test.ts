@@ -51,7 +51,7 @@ describe('podpowiedź kolejnego numeru faktury (F-015)', () => {
 });
 
 type Row = {
-  tenant_id: string; direction: string; invoice_kind: string;
+  tenant_id: string; direction: string; invoice_kind: string; origin: string;
   internal_number: string | null; issue_date: string; created_at: string;
 };
 
@@ -85,7 +85,7 @@ function fakeSupabase(rows: Row[]) {
 }
 
 const row = (o: Partial<Row>): Row => ({
-  tenant_id: 'ten-1', direction: 'outgoing', invoice_kind: 'regular',
+  tenant_id: 'ten-1', direction: 'outgoing', invoice_kind: 'regular', origin: 'app',
   internal_number: 'FV/1/10/2026', issue_date: '2026-10-01', created_at: '2026-10-01T08:00:00Z', ...o,
 });
 
@@ -111,5 +111,22 @@ describe('podpowiedź numeru dla firmy (F-015)', () => {
 
   it('pierwsza faktura firmy — bez podpowiedzi', async () => {
     expect(await suggestNextInvoiceNumberForTenant(fakeSupabase([]), 'ten-1', '2026-10-06')).toBeNull();
+  });
+
+  // Decyzja Bartosza 22.10.2026: sprzedaż wystawiona poza FaktWay przychodzi
+  // z KSeF na bieżąco (`origin = ksef_import`) — nie może ustawiać serii FaktWay.
+  it('woli ostatnią fakturę wystawioną w FaktWay niż późniejszą sprzedaż spoza FaktWay z KSeF', async () => {
+    const sb = fakeSupabase([
+      row({ internal_number: 'FV/7/10/2026', issue_date: '2026-10-05', created_at: '2026-10-05T08:00:00Z' }),
+      row({ internal_number: 'ZEW/123/2026', origin: 'ksef_import', issue_date: '2026-10-06', created_at: '2026-10-06T08:00:00Z' }),
+    ]);
+    expect(await suggestNextInvoiceNumberForTenant(sb, 'ten-1', '2026-10-06')).toBe('FV/8/10/2026');
+  });
+
+  it('bez faktur z FaktWay — kontynuacja serii z historii KSeF (klient przeniósł się tylko przez KSeF)', async () => {
+    const sb = fakeSupabase([
+      row({ internal_number: 'FV/20/10/2026', origin: 'ksef_import', issue_date: '2026-10-05', created_at: '2026-10-05T08:00:00Z' }),
+    ]);
+    expect(await suggestNextInvoiceNumberForTenant(sb, 'ten-1', '2026-10-06')).toBe('FV/21/10/2026');
   });
 });

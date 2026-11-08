@@ -27,6 +27,8 @@ export interface SupportConversationRow {
   status: 'open' | 'escalated' | 'resolved' | 'closed';
   category: string | null;
   subject: string | null;
+  /** `ai_uncertain` (czat sam eskalował) albo `user_requested` (klient poprosił o człowieka). */
+  escalation_reason: string | null;
   created_at: string;
 }
 
@@ -97,7 +99,7 @@ export async function getOwnedConversation(
   const admin = createAdminClient() as unknown as ConversationsClient;
   const res = await admin
     .from('support_conversations')
-    .select('id, user_id, tenant_id, status, category, subject, created_at')
+    .select('id, user_id, tenant_id, status, category, subject, escalation_reason, created_at')
     .eq('id', conversationId)
     .maybeSingle();
   if (res.error || !res.data) return null;
@@ -154,14 +156,22 @@ export async function appendMessage(input: AppendMessageInput): Promise<void> {
     .eq('id', input.conversationId);
 }
 
-/** Zmiana statusu/kategorii/eskalacji — używane w Kroku 7. */
+/**
+ * Zmiana statusu/kategorii/eskalacji — używane w Kroku 7.
+ *
+ * Klient Supabase nie rzuca przy błędzie, tylko zwraca `error`. Bez tego
+ * sprawdzenia nieudany zapis wyglądał jak udany i klient widział „Zgłoszono”.
+ */
 export async function updateConversation(
   conversationId: string,
   patch: Record<string, unknown>,
 ): Promise<void> {
   const admin = createAdminClient() as unknown as ConversationsClient;
-  await admin
+  const { error } = await admin
     .from('support_conversations')
     .update(patch)
     .eq('id', conversationId);
+  if (error) {
+    throw new Error(`conversation_update_failed: ${error.message}`);
+  }
 }

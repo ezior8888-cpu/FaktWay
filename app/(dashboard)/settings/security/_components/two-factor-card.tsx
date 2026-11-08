@@ -6,6 +6,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import {
   enrollTotpAction,
   unenrollTotpAction,
@@ -58,6 +60,10 @@ function RecoveryUnavailableNotice() {
 }
 
 function ErrorText({ children }: { children: string }) {
+  // Sesja po biometrii: sama treść błędu nie mówi, gdzie podać kod, więc dajemy przejście.
+  if (children === MFA_ERROR_MESSAGES.mfa_required) {
+    return <MfaStepUpNotice returnTo="/settings/security">{children}</MfaStepUpNotice>;
+  }
   return (
     <p role="alert" className="text-destructive text-xs">
       {children}
@@ -108,9 +114,10 @@ export function TwoFactorCard({ isEnabled }: Props) {
 
   const onUnenrollSubmit = (formData: FormData) => {
     const password = String(formData.get('password') ?? '');
+    const captchaToken = formData.get('cf-turnstile-response');
     setError(null);
     startTransition(async () => {
-      const r = await unenrollTotpAction(password);
+      const r = await unenrollTotpAction(password, typeof captchaToken === 'string' ? captchaToken : undefined);
       if (!r.ok) {
         setError(
           MFA_ERROR_MESSAGES[r.error] ??
@@ -192,6 +199,7 @@ export function TwoFactorCard({ isEnabled }: Props) {
           />
           {error && <ErrorText>{error}</ErrorText>}
         </Field>
+        <TurnstileWidget action="reauth" theme="auto" />
         <div className="flex gap-3">
           <Button type="submit" variant="destructive" disabled={isPending}>
             {isPending ? 'Wyłączanie...' : 'Wyłącz aplikację TOTP'}

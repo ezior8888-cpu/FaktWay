@@ -44,7 +44,7 @@ describe('rejestr jobów', () => {
     expect(bezHandlera, 'kolejki zdarzeń bez zarejestrowanego joba').toEqual([]);
   });
 
-  it('paczka A: 13 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b)', () => {
+  it('paczka A: 14 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b; + retencja czatu)', () => {
     const packageA = [
       'cron.archive-old-invoices',
       'cron.cert-expiry-alert',
@@ -58,14 +58,18 @@ describe('rejestr jobów', () => {
       'cron.ksef-lifecycle-report',
       'cron.nightly-validation-recheck',
       'cron.retention-delete',
+      'cron.support-chat-retention',
       'cron.verify-backup',
     ];
+    expect(packageA.length).toBe(14);
     for (const q of packageA) expect(queues, `brak ${q}`).toContain(q);
   });
 
-  it('paczka B: 17 jobów e-mail/billing/przypomnienia', () => {
+  it('paczka B: 19 jobów e-mail/billing/przypomnienia', () => {
     const packageB = [
       'cron.critical-alerts-monitor',
+      'cron.ksiegowosc-miesiac',
+      'cron.ksiegowosc-terminy',
       'cron.daily-analytics-digest',
       'cron.daily-summary-email',
       'cron.reminder-scheduler',
@@ -83,7 +87,7 @@ describe('rejestr jobów', () => {
       'email.trial-day-12',
       'email.trial-day-14',
     ];
-    expect(packageB.length).toBe(17);
+    expect(packageB.length).toBe(19);
     for (const q of packageB) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -97,6 +101,9 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('reminders.send.requested')?.maxRetries).toBe(3);
     // Nightly validation: 1 (jak w Inngest).
     expect(byQueue.get('cron.nightly-validation-recheck')?.maxRetries).toBe(1);
+    // Sprzątanie dzienników paczkami (00157): ponowienie od zera powtarza 10-min budżet,
+    // więc 1 (błąd przejściowy); resztę i tak bierze następna noc.
+    expect(byQueue.get('cron.cleanup-audit-logs')?.maxRetries).toBe(1);
     // Reszta: default Inngest 4.
     expect(byQueue.get('cron.daily-summary-email')?.maxRetries).toBe(4);
   });
@@ -106,19 +113,20 @@ describe('rejestr jobów', () => {
     expect(dunning?.groupConcurrency).toBe(1);
   });
 
-  it('paczka C: 8 jobów OCR/importy/eksporty', () => {
+  it('paczka C: 7 jobów OCR/importy/eksporty (bez Magicznego importu — decyzja Bartosza 22.10.2026)', () => {
     const packageC = [
       'cron.co-pilot-monthly',
       'ocr.process-photo',
       'inbox.invoice-received',
       'import.file.uploaded',
       'validation.bulk-contractors.requested',
-      'import.ksef-history.requested',
       'exports.generate.requested',
       'exports.co-pilot.send-package',
     ];
-    expect(packageC.length).toBe(8);
+    expect(packageC.length).toBe(7);
     for (const q of packageC) expect(queues, `brak ${q}`).toContain(q);
+    // 8 → 7: Magiczny import wycofany — kolejka w RETIRED_QUEUES, bez workera.
+    expect(queues).not.toContain('import.ksef-history.requested');
   });
 
   it('joby z onFailure w Inngest mają odpowiednik onExhausted', () => {
@@ -126,7 +134,6 @@ describe('rejestr jobów', () => {
     const withHandler = [
       'ocr.process-photo',
       'import.file.uploaded',
-      'import.ksef-history.requested',
     ];
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
     for (const q of withHandler) {
@@ -136,7 +143,7 @@ describe('rejestr jobów', () => {
     }
   });
 
-  it('paczka D: 10 jobów rdzenia KSeF (9 z Inngest + cron uzupełniający skrzynkę, K2)', () => {
+  it('paczka D: 12 jobów rdzenia KSeF (9 z Inngest + cron uzupełniający skrzynkę, K2, + historia KSeF)', () => {
     const packageD = [
       'invoice.submit.requested',
       'invoice.upo.requested',
@@ -148,8 +155,11 @@ describe('rejestr jobów', () => {
       'invoice.submit.succeeded.offline-queue',
       'invoice.submit.failed.offline-queue',
       'billing.payment.succeeded',
+      // 10 → 12: synchronizacja historii KSeF (decyzja Bartosza 22.10.2026).
+      'cron.ksef-history-sync',
+      'ksef.history-sync.tenant',
     ];
-    expect(packageD.length).toBe(10);
+    expect(packageD.length).toBe(12);
     for (const q of packageD) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -173,16 +183,34 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(100);
     expect(byQueue.get('invoice.upo.requested')?.groupConcurrency).toBe(3);
     expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(1); // AUD-91: jeden przebieg skrzynki na NIP
+    // Harmonogram 00160: ponowieniem przebiegu jest termin zależny od rodzaju błędu,
+    // a taktu rozsyłki następna minuta. Sloty z konfiguracji, domyślnie 16.
+    expect(byQueue.get('inbox.poll.tenant')?.maxRetries).toBe(0);
+    expect(byQueue.get('inbox.poll.tenant')?.localConcurrency).toBe(16);
+    expect(byQueue.get('cron.inbox-polling')?.maxRetries).toBe(0);
     expect(byQueue.get('billing.payment.succeeded')?.groupConcurrency).toBe(1);
+    // Historia KSeF: jeden przebieg na NIP, bez ponowień pg-boss (ponowieniem
+    // jest następny cron — cały stan w bazie), 3 firmy naraz (plan fan-outu).
+    expect(byQueue.get('ksef.history-sync.tenant')?.groupConcurrency).toBe(1);
+    expect(byQueue.get('ksef.history-sync.tenant')?.maxRetries).toBe(0);
+    expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 48 jobów (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia)', () => {
+  it('KOMPLET: 52 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
     // 48: od PR 4b cyklu życia (03.10.2026) z `cron.ksef-lifecycle-reconcile`
-    // i `cron.ksef-lifecycle-report`.
-    expect(registered.length).toBe(48);
+    // i `cron.ksef-lifecycle-report`;
+    // 49: od 15.10.2026 z `cron.support-chat-retention` (retencja czatu pomocy
+    // z polityki prywatności);
+    // 50: od 22.10.2026 (decyzja Bartosza) — +2 historia KSeF
+    // (`cron.ksef-history-sync`, `ksef.history-sync.tenant`), −1 Magiczny import
+    // (`import.ksef-history.requested`). Worker: 54 kolejki, „29/29 cronów”.
+    // 52: od K5 księgowości (07.11.2026) — +2 crony `cron.ksiegowosc-miesiac`
+    // i `cron.ksiegowosc-terminy` (pętla po firmach pilotażu, bez kolejki
+    // fan-out; plan, sekcja 9). Worker: 56 kolejek, „31/31 cronów”.
+    expect(registered.length).toBe(52);
   });
 
   it('parytet limitów równoległości paczki C', () => {
@@ -190,7 +218,5 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ocr.process-photo')?.batchSize).toBe(5);
     expect(byQueue.get('inbox.invoice-received')?.batchSize).toBe(10);
     expect(byQueue.get('validation.bulk-contractors.requested')?.batchSize).toBe(3);
-    // magic-import: limit per NIP (grupa), nie globalny batch
-    expect(byQueue.get('import.ksef-history.requested')?.groupConcurrency).toBe(3);
   });
 });

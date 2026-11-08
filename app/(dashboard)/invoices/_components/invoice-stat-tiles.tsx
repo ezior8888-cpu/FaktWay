@@ -225,7 +225,6 @@ export function StatsCardsGrid({ cells, className }: { cells: Array<{ key: strin
 export function InvoiceStatTiles(props: TileProps) {
   return (
     <StatsCardsGrid
-      className="mb-6"
       cells={[
         {
           key: 'kontrahenci',

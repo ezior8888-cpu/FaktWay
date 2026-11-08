@@ -42,9 +42,10 @@ function bucketOf(daysOverdue: number): AgingBucketKey {
 
 /**
  * Procenty całkowite sumujące się do 100 (metoda największej reszty).
- * Remis reszt rozstrzyga kolejność kubełków.
+ * Remis reszt rozstrzyga kolejność kubełków. Wspólne ze spodziewanymi wpływami
+ * według terminu (`inflow-terms.ts`).
  */
-function largestRemainderPercents(amounts: readonly number[]): number[] {
+export function largestRemainderPercents(amounts: readonly number[]): number[] {
   const sum = amounts.reduce((a, b) => a + b, 0);
   if (!(sum > 0)) return amounts.map(() => 0);
   const exact = amounts.map((a) => (a / sum) * 100);

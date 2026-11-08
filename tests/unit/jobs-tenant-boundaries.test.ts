@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice } from '@/types/invoice';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
-import { sellerPartyFromSellerData } from '@/lib/invoices/map-buyer-party';
 import { KsefApiError } from '@/lib/ksef/client';
 
 type Row = Record<string, unknown>;
@@ -12,14 +11,14 @@ type Query = {
   nullableNonAccepted?: boolean; patch?: Row;
 };
 const mocks = vi.hoisted(() => ({
-  admin: vi.fn(), download: vi.fn(), metadata: vi.fn(), xml: vi.fn(), parseFa3Xml: vi.fn(), process: vi.fn(),
+  admin: vi.fn(), download: vi.fn(), xml: vi.fn(), parseFa3Xml: vi.fn(), process: vi.fn(),
   photo: vi.fn(), ocr: vi.fn(), push: vi.fn(), email: vi.fn(), proposal: vi.fn(),
   health: vi.fn(), submit: vi.fn(), audit: vi.fn(), credentials: vi.fn(), offlineAdd: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/import/file-storage', () => ({ downloadImportFile: mocks.download }));
-vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoicesMetadata: mocks.metadata, fetchInvoiceXmlBytes: mocks.xml }));
+vi.mock('@/lib/ksef/history-fetcher', () => ({ fetchInvoiceXmlBytes: mocks.xml }));
 vi.mock('@/lib/import/ksef-xml-archive', () => ({
   archiveImportedKsefXml: async (tenantId: string, ksefNumber: string, bytes: Buffer) => ({
     storagePath: `${tenantId}/ksef-import/${ksefNumber}.xml`, sha256Hash: 'a'.repeat(64), sizeBytes: bytes.length,
@@ -50,7 +49,7 @@ vi.mock('@/lib/xml/fa3-generator', () => ({ InvoiceValidationError: class Invoic
 import { requireInvoiceTenant, requireImportJobTenant } from '@/lib/jobs/runners/tenant-boundary';
 import { getInvoiceForSubmit, updateInvoiceStatus } from '@/lib/supabase/admin-queries';
 import { onBulkImportExhausted, runBulkImportFile } from '@/lib/jobs/runners/bulk-import';
-import { onMagicImportExhausted, runMagicImportKsef } from '@/lib/jobs/runners/magic-import-ksef';
+import { runKsefHistorySyncTenant } from '@/lib/jobs/runners/ksef-history-sync';
 import { runNotifySuccess, runNotifyFailure } from '@/lib/jobs/runners/notify-user';
 import { runProcessOcr } from '@/lib/jobs/runners/process-ocr';
 import { runSendReminder } from '@/lib/jobs/runners/send-reminder';
@@ -148,7 +147,8 @@ const ctx: JobContext = {
   },
 };
 const fileEvent = { importJobId: ID, tenantId: A, source: 'jpk_fa' as const, filePath: 'imports/' + A + '/input.xml' };
-const magicEvent = { importJobId: ID, tenantId: A, nip: '1234567890', environment: 'test' as const, dateFrom: '2026-01-01', dateTo: '2026-09-01', direction: 'issued' as const };
+// Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026) zastąpiła Magiczny import.
+const historyEvent = { tenantId: A, nip: '1234567890', environment: 'test' as const };
 const submitEvent = { invoiceId: ID, tenantId: A, nip: '1234567890', environment: 'test' as const, invoice: { internalNumber: 'TEST-1' } as Invoice };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -156,7 +156,6 @@ beforeEach(() => {
   tables = {}; errors = new Set(); calls = []; beforeUpdate = null; claimHeldByOther = false;
   mocks.admin.mockImplementation(client);
   mocks.health.mockResolvedValue({ available: true });
-  mocks.metadata.mockResolvedValue({ totalCount: 0, invoices: [] });
   mocks.xml.mockResolvedValue(Buffer.from('<Faktura/>'));
   mocks.parseFa3Xml.mockReturnValue({ invoiceNumber: 'TEST/1/2026' });
 });
@@ -196,74 +195,53 @@ describe('service-role job boundaries', () => {
     await expect(requireImportJobTenant(ID, A, 'ksef_history')).rejects.toThrow('źródła');
     expect(writes()).toEqual([]);
   });
-  it.each(['bulk', 'magic'] as const)('rejects a mismatched %s job before progress writes or downloads', async (kind) => {
+  it('rejects a mismatched bulk job before progress writes or downloads', async () => {
     tables.import_jobs = [{ id: ID, tenant_id: B, source: 'jpk_fa' }];
-    await expect(kind === 'bulk' ? runBulkImportFile(fileEvent, ctx) : runMagicImportKsef(magicEvent, ctx)).rejects.toThrow('nie należy');
+    await expect(runBulkImportFile(fileEvent, ctx)).rejects.toThrow('nie należy');
     expect(writes()).toEqual([]);
-    expect(mocks.download).not.toHaveBeenCalled(); expect(mocks.metadata).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
   });
-  it.each([onBulkImportExhausted, onMagicImportExhausted])('never mutates an unrelated import in its failure callback', async (handler) => {
+  it('never mutates an unrelated import in its failure callback', async () => {
     tables.import_jobs = [{ id: ID, tenant_id: B, status: 'pending' }];
-    await expect(handler(new Error('private-error'), { importJobId: ID, tenantId: A })).rejects.toThrow('nie należy');
+    await expect(onBulkImportExhausted(new Error('private-error'), { importJobId: ID, tenantId: A })).rejects.toThrow('nie należy');
     expect(writes()).toEqual([]);
     expect(tables.import_jobs[0].status).toBe('pending');
   });
-  it.each([onBulkImportExhausted, onMagicImportExhausted])('preserves scoped import failure handling without leaking the exception', async (handler) => {
+  it('preserves scoped import failure handling without leaking the exception', async () => {
     tables.import_jobs = [{ id: ID, tenant_id: A, status: 'pending' }];
-    await handler(new Error('private-error'), { importJobId: ID, tenantId: A });
+    await onBulkImportExhausted(new Error('private-error'), { importJobId: ID, tenantId: A });
     expect(tables.import_jobs[0].status).toBe('failed');
     expect(writes()[0].filters).toContainEqual(['tenant_id', A]);
     expect(JSON.stringify(writes())).not.toContain('private-error');
   });
-  it('rejects a stale KSeF history import event before any DB or API effect', async () => {
-    await expect(runMagicImportKsef({ ...magicEvent, environment: 'demo' }, ctx)).rejects.toThrow('environment');
+  it('rejects a KSeF history sync event from another environment before any DB or API effect (NonRetriable)', async () => {
+    await expect(runKsefHistorySyncTenant({ ...historyEvent, environment: 'demo' }, ctx)).rejects.toMatchObject({
+      name: 'NonRetriableError', message: expect.stringContaining('environment'),
+    });
     expect(calls).toEqual([]);
-    expect(mocks.metadata).not.toHaveBeenCalled();
-  });
-  it('preserves empty successful magic imports and scopes every update', async () => {
-    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
-    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toEqual({ success: true, imported: 0 });
-    expect(writes().length).toBeGreaterThan(0);
-    for (const q of writes()) expect(q.filters).toContainEqual(['tenant_id', A]);
-  });
-  it('marks truncated KSeF metadata failed before fetching XML or completing the import', async () => {
-    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
-    mocks.metadata.mockResolvedValue({ totalCount: 1, invoices: [{ ksefNumber: 'KSEF-TEST-1' }], truncated: true });
-    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toEqual({ success: false, imported: 0 });
-    expect(tables.import_jobs[0].status).toBe('failed');
     expect(mocks.xml).not.toHaveBeenCalled();
-    expect(mocks.process).not.toHaveBeenCalled();
   });
-  it('propagates XML fetch failure instead of silently completing a shorter history', async () => {
-    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
-    mocks.metadata.mockResolvedValue({ totalCount: 1, invoices: [{ ksefNumber: 'KSEF-TEST-1' }] });
-    mocks.xml.mockRejectedValue(new Error('KSeF XML unavailable'));
-    await expect(runMagicImportKsef(magicEvent, ctx)).rejects.toThrow('KSeF XML unavailable');
-    expect(mocks.process).not.toHaveBeenCalled();
-    expect(tables.import_jobs[0].status).not.toBe('completed');
-    await onMagicImportExhausted(new Error('private-error'), { importJobId: ID, tenantId: A });
-    expect(tables.import_jobs[0].status).toBe('failed');
+  it('rejects a malformed tenant identity in a KSeF history sync event before any DB effect', async () => {
+    await expect(runKsefHistorySyncTenant({ ...historyEvent, tenantId: 'nie-uuid' }, ctx)).rejects.toMatchObject({ name: 'NonRetriableError' });
+    expect(calls).toEqual([]);
   });
-  it('marks a rejected invoice failed while allowing benign duplicate warnings', async () => {
-    tables.import_jobs = [{ id: ID, tenant_id: A, source: 'ksef_history' }];
-    mocks.metadata.mockResolvedValue({ totalCount: 1, invoices: [{ ksefNumber: 'KSEF-TEST-1' }] });
-    mocks.process.mockResolvedValueOnce({
-      invoicesImported: 0, invoicesFailed: 1, contractorsCreated: 0,
-      contractorsUpdated: 0, productsCreated: 0, warnings: ['Błąd zapisu KOR'],
-    });
-    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toEqual({ success: false, imported: 0 });
-    expect(tables.import_jobs[0]).toMatchObject({ status: 'failed', warnings: ['Błąd zapisu KOR'] });
-
-    mocks.process.mockResolvedValueOnce({
-      invoicesImported: 0, invoicesFailed: 0, contractorsCreated: 0,
-      contractorsUpdated: 0, productsCreated: 0, warnings: ['Pominięto duplikat (DB, KSeF)'],
-    });
-    await expect(runMagicImportKsef(magicEvent, ctx)).resolves.toMatchObject({ success: true, imported: 0 });
-    expect(tables.import_jobs[0].status).toBe('completed');
-    // #122 część B: do silnika trafia faktura z oryginałem XML w folderze firmy.
-    expect(mocks.process.mock.calls.at(-1)?.[0].invoices[0]).toMatchObject({
-      xmlArchive: { storagePath: `${A}/ksef-import/KSEF-TEST-1.xml`, sha256Hash: 'a'.repeat(64) },
-    });
+  const verifiedTenant = (patch: Row = {}): Row => ({
+    id: A, nip: '1234567890', ksef_verified_at: '2026-09-01T00:00:00Z', ksef_verified_environment: 'test',
+    ksef_certificate_expiry: '2099-01-01T00:00:00Z', deleted_at: null, is_active: true, has_ksef_credentials: true, ...patch,
+  });
+  it.each([
+    ['NIP z innej firmy', { nip: '9999999999' }],
+    ['inne środowisko weryfikacji', { ksef_verified_environment: 'production' }],
+    ['niezweryfikowany NIP', { ksef_verified_at: null }],
+    ['firma nieaktywna', { is_active: false }],
+    ['firma usunięta', { deleted_at: '2026-10-01T00:00:00Z' }],
+    ['bez certyfikatu', { has_ksef_credentials: false }],
+  ] as const)('skips a KSeF history sync for a tenant that no longer qualifies (%s) without writes', async (_label, patch) => {
+    tables.tenants = [verifiedTenant(patch)];
+    await expect(runKsefHistorySyncTenant(historyEvent, ctx)).resolves.toEqual({ skipped: 'tenant-state' });
+    expect(writes()).toEqual([]);
+    expect(calls.map((q) => q.table)).toEqual(['tenants']);
+    expect(calls[0].filters).toContainEqual(['id', A]);
   });
   it.each(['success', 'failure'] as const)('rejects a mismatched %s notification before cards, mail or push', async (kind) => {
     tables.invoices = [{ id: ID, tenant_id: B }];

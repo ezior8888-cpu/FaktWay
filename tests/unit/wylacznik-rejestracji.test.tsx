@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const mocks = vi.hoisted(() => ({
   flag: vi.fn(), signUp: vi.fn(), createAdminClient: vi.fn(), from: vi.fn(),
-  userContext: vi.fn(), setCookie: vi.fn(), audit: vi.fn(),
+  userContext: vi.fn(), setCookie: vi.fn(), audit: vi.fn(), requirePage: vi.fn(),
 }));
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: mocks.flag }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -30,9 +30,9 @@ vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/jobs/events', () => ({ userRegistered: { create: (data: unknown) => ({ data }) } }));
-vi.mock('@/lib/auth/verified-user', () => ({ getVerifiedUserContext: mocks.userContext, requireVerifiedUserForPage: vi.fn() }));
+vi.mock('@/lib/auth/verified-user', () => ({ getVerifiedUserContext: mocks.userContext, requireVerifiedUserForPage: mocks.requirePage }));
 vi.mock('@/components/onboarding/form', () => ({ OnboardingForm: () => null }));
-vi.mock('@/components/brand/brand-wordmark', () => ({ BrandWordmark: () => null }));
+vi.mock('@/components/brand/faktway-logo', () => ({ FaktWayLogo: () => null, FaktWayMark: () => null }));
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
 vi.mock('@/lib/dashboard-shell-data', () => ({
   getCachedMembershipRowsWithTenants: vi.fn(), getDashboardSessionUser: vi.fn(), mapMembershipRowsToOrgSwitcher: vi.fn(),
@@ -69,6 +69,9 @@ function signupForm() {
   form.set('email', 'nowy@example.test');
   form.set('password', 'Fixture-Passw0rd!');
   form.set('name', 'Nowy');
+  // Od 15.10.2026 rejestracja wymaga akceptacji regulaminu (pole `terms`);
+  // brak pola sprawdza tests/unit/legal-zgody.test.ts.
+  form.set('terms', 'on');
   return form;
 }
 
@@ -79,6 +82,8 @@ beforeEach(() => {
   mocks.from.mockImplementation(chain);
   mocks.createAdminClient.mockReturnValue({ from: mocks.from });
   mocks.userContext.mockResolvedValue({ ok: true, user: { id: 'fixture-user', email: 'nowy@example.test' } });
+  // Strona onboardingu czyta `app_metadata` (bramka dokumentów prawnych).
+  mocks.requirePage.mockResolvedValue({ ok: true, user: { id: 'fixture-user', app_metadata: {} } });
   mocks.flag.mockResolvedValue(false);
 });
 

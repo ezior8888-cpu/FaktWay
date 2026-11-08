@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { ATTEMPTS_SCAN_LIMIT, loadSendErrorsView } from '@/lib/admin/centrum/attempts';
+import { INVARIANT_LABELS } from '@/lib/admin/ksef-lifecycle';
 import {
   attemptMessage,
   CLASS_LABELS,
@@ -16,6 +17,7 @@ import {
   STATUS_FILTER_LABELS,
   STATUS_FILTERS,
   STATUS_LABELS,
+  STUCK_HINTS,
   type RecoveryState,
   type SendErrorFilters,
 } from '@/lib/admin/centrum/send-errors';
@@ -88,7 +90,8 @@ function Counter({ label, value, warn, note }: { label: string; value: number | 
  * Każda nieudana próba z dziennika `ksef_send_attempts` (00150): porażki
  * wykonania (także przed wysłaniem pliku), odmowy przed kolejką i wykonania
  * przerwane przez padnięty worker — z incydentami według odcisku, bieżącym
- * stanem faktur (odzyskane / nadal z błędem) i świeżością cronów. Widok
+ * stanem faktur (odzyskane / nadal z błędem), świeżością cronów i fakturami,
+ * które utknęły w wysyłce teraz (strażnik I1/I2 — także bez wiersza w dzienniku). Widok
  * tylko czyta; akcje na fakturach są w `/admin/ksef/[id]`.
  */
 export default async function AdminSendErrorsPage(props: {
@@ -183,6 +186,64 @@ export default async function AdminSendErrorsPage(props: {
           {view.invoicesWithErrorNow === null ? 'nie wiadomo' : view.invoicesWithErrorNow}
           {' '}(<Link href="/admin/ksef" className="underline">lista w cyklu życia</Link>).
         </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="font-semibold text-lg flex items-center gap-2">
+          {view.stuckNow === null || view.stuckNow.length > 0 ? (
+            <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />
+          )}
+          Utknięte w wysyłce teraz ({view.stuckNow === null ? 'nie wiadomo' : view.stuckNow.length})
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Strażnik cyklu życia (I1, I2) — stan faktur teraz, niezależnie od okresu i filtrów. Zgubione zlecenie nie
+          zostawia wiersza w dzienniku prób, więc takiej faktury może nie być w incydentach niżej. Pozostałe naruszenia
+          strażnika: <Link href="/admin/ksef" className="underline">KSeF — cykl życia</Link>.
+        </p>
+        {view.stuckNow === null ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            Nie wiadomo — odczyt strażnika nieudany (wyżej). To nie znaczy, że nic nie utknęło.
+          </p>
+        ) : view.stuckNow.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Brak faktur w queued bez zlecenia ani w sending ponad dzierżawę.</p>
+        ) : (
+          <div className={TABLE}>
+            <table className="w-full text-sm">
+              <thead className="border-b border-glass-border">
+                <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className={TH}>Strażnik</th>
+                  <th className={TH}>Faktura</th>
+                  <th className={TH}>Firma</th>
+                  <th className={TH}>Stan</th>
+                  <th className={TH} title="I1: ostatnia zmiana wiersza faktury (updated_at); I2: znacznik przejęcia wysyłki">Od (zegar strażnika)</th>
+                  <th className={TH}>Co dalej</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.stuckNow.map((s) => (
+                  <tr key={`${s.invariant}:${s.invoiceId}`} className="border-b border-glass-border/60 last:border-0">
+                    <td className={TD}>
+                      <span className="font-mono">{s.invariant}</span>
+                      <div className="text-xs text-muted-foreground">{INVARIANT_LABELS[s.invariant]}</div>
+                    </td>
+                    <td className={TD}>
+                      <Link href={`/admin/ksef/${s.invoiceId}`} className="underline">{s.internalNumber ?? s.invoiceId.slice(0, 8)}</Link>
+                    </td>
+                    <td className={TD}>{s.tenantName ?? '—'}</td>
+                    <td className={cn(TD, 'font-mono text-xs')}>{s.ksefStatus ?? '—'}</td>
+                    <td className={cn(TD, 'whitespace-nowrap text-xs')}>{s.since ? when(s.since) : 'brak znacznika'}</td>
+                    <td className={cn(TD, 'max-w-md text-xs', s.automatOverdue && 'text-red-600')}>
+                      {s.automatOverdue && <strong>Automat nie zadziałał. </strong>}
+                      {STUCK_HINTS[s.invariant]}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <form method="get" className="flex flex-wrap items-end gap-3 text-sm">

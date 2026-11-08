@@ -242,21 +242,14 @@ Do 6 września 2026 panel na telefonie **nie istniał**: proxy przekierowywało
 każdy telefon na `/mobile` („aplikacja mobilna w przygotowaniu"). Ta sekcja
 opisuje, co się zmieniło, i — ważniejsze — czego NIE wolno cofnąć.
 
-### Przełącznik wpuszczania
+### Przełącznik wpuszczania (zdjęty 2 listopada 2026)
 
-`lib/mobile-access.ts` + `NEXT_PUBLIC_MOBILE_PANEL` (`off` | `allowlist` | `on`)
-i `NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST` (identyfikatory `sub` po przecinku).
-Brak zmiennej = `off` = zachowanie sprzed zmiany.
-
-**Prefiks `NEXT_PUBLIC_` nie jest pomyłką.** `proxy.ts` idzie pod Edge, gdzie
-Next wstawia wartości `process.env` w czasie BUDOWANIA, a `Dockerfile`
-przekazuje do builda wyłącznie argumenty `NEXT_PUBLIC_*`. Zmienna bez tego
-prefiksu byłaby w obrazie `undefined` i blokada nigdy by nie zeszła — bez
-żadnego komunikatu, który by na to wskazywał.
-
-W trybie `allowlist` telefon zawsze dociera do `/login` i `/register`, bo
-o wstępie decyduje `userId`, a tego przed zalogowaniem nie ma. Bez tej furtki
-konto z listy nie miałoby jak się zalogować.
+Od FaktWay 1.0 panel jest dostępny na każdym telefonie. Przełącznika
+`NEXT_PUBLIC_MOBILE_PANEL`, listy `NEXT_PUBLIC_MOBILE_PANEL_ALLOWLIST`
+i pliku `lib/mobile-access.ts` już nie ma, a `proxy.ts` nie przekierowuje
+telefonów na `/mobile`. Strona `/mobile` zostaje jako krótka instrukcja
+dodania FaktWay do ekranu głównego. Obchód wszystkich ekranów na telefonie:
+`e2e/tests/telefon-ekrany.spec.ts`, wyniki w `docs/qa/telefon-macierz.md`.
 
 ### Co gdzie mieszka na wąskim ekranie
 

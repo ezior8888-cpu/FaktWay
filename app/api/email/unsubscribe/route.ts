@@ -81,7 +81,7 @@ function categoryLabelOf(category: string): string {
   return category === 'transactional'
     ? 'transakcyjnych (faktury, KSeF, hasła)'
     : category === 'product_updates'
-      ? 'powiadomień produktowych (welcome, magic import done, paczki dla księgowej)'
+      ? 'powiadomień produktowych (welcome, paczki dla księgowej)'
       : 'powiadomień marketingowych';
 }
 

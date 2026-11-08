@@ -1,33 +1,41 @@
 ---
-title: "Magic Import — przeniesienie danych z innego programu"
+title: "Historia z KSeF i przeprowadzka z innego programu"
 category: "start"
 order: 3
-summary: "Jak zaimportować historię faktur, kontrahentów i produkty z Fakturowni, inFakt, wFirma czy iFirma."
-updated: "2026-05-19"
+summary: "Jak FaktWay sam pobiera historię faktur z KSeF i jak przenieść faktury z Fakturowni, inFaktu, wFirmy albo iFirmy."
+updated: "2026-10-29"
 ---
 
-Magic Import przenosi Twoje dane do FaktWay bez ręcznego przepisywania. Cały proces zajmuje zwykle kilka minut.
+Faktury, które są w KSeF, FaktWay pobiera sam: nic nie musisz uruchamiać. Faktury z poprzedniego programu przeniesiesz plikiem CSV (większy eksport kilkoma plikami).
 
-## Co importuje Magic Import
+## Historia z KSeF pobiera się sama
 
-- **Historię faktur z KSeF** — wszystkie dokumenty wystawione i odebrane przez Twój NIP w ostatnich latach, prosto z Krajowego Systemu e-Faktur.
-- **Kontrahentów** — wyciągnięci automatycznie z historii faktur (NIP, nazwa, adres).
-- **Produkty i usługi** — pozycje z Twoich faktur, z częstotliwością użycia, żeby najczęstsze były pod ręką.
+Po wgraniu certyfikatu KSeF (Ustawienia → KSeF) FaktWay w ciągu około 30 minut zaczyna pobierać z KSeF historię Twojej firmy: sprzedaż i zakupy. Pobieramy wszystko, co KSeF nam zwraca, od najnowszych faktur wstecz. Postęp widzisz w menu **Import danych**, w karcie „Historia z KSeF”.
 
-## Import z konkurencji
+Przy dużej historii trwa to dłużej: pobieramy faktury powoli i sami mierzymy tempo, żeby nie przekroczyć limitów KSeF i nie spowolnić wysyłki Twoich bieżących faktur. Szacowany koniec pokazujemy dopiero wtedy, gdy przeszukamy całą historię.
 
-Jeśli korzystałeś z Fakturowni, inFakt, wFirma lub iFirma, wyeksportuj dane do pliku CSV lub XML i wgraj go w kreatorze importu. FaktWay rozpoznaje formaty tych programów. Dla innych systemów użyj uniwersalnego importera JPK_FA.
+## Sprzedaż wystawiona poza FaktWay
 
-## Import z Excela
+Gdy historia sprzedaży jest już pobrana, FaktWay dalej sprawdza KSeF i na bieżąco pobiera faktury, które wystawiłeś w innym programie, zwykle w ciągu godziny. Faktur wysłanych z FaktWay nie pobieramy drugi raz.
 
-Masz listę kontrahentów w arkuszu? Przeciągnij plik XLS — FaktWay wykryje kolumny (NIP, nazwa, adres, email) na podstawie nagłówków i zawartości.
+Faktur wystawionych poza FaktWay nie liczymy w należnościach.
 
-## Jak uruchomić
+## Zakupy z historii to archiwum
 
-Magic Import startuje automatycznie po onboardingu. Możesz go też uruchomić później z panelu. Import historii z KSeF działa w tle — dostaniesz email, gdy się zakończy.
+Bieżące faktury zakupowe trafiają do Skrzynki KSeF i, jak dotąd, do kosztów. Gdy firma korzysta z FaktWay, sprawdzamy KSeF co 15 minut, a po wejściu do Skrzynki KSeF od razu. Firmy bez ruchu sprawdzamy rzadziej, najrzadziej raz na dobę, i żadna faktura nie ginie. Starsze faktury zakupowe z historii zapisujemy jako archiwum: widzisz je w Skrzynce KSeF z oznaczeniem „Historia z KSeF”, ale nie dodajemy ich do kosztów ani do KPiR.
 
-## Po imporcie
+## Faktury, których nie pobraliśmy
 
-Sprawdź zaimportowanych kontrahentów i produkty. Duplikaty (ten sam NIP) FaktWay scala automatycznie. Faktury historyczne są oznaczone jako zaimportowane — nie wysyłamy ich ponownie do KSeF.
+Niektórych faktur nie przenosimy od razu, np. faktur w walucie obcej albo takich, których numer jest już zajęty przez dokument w FaktWay. Listę z powodem i podpowiedzią, co zrobić, znajdziesz w karcie „Historia z KSeF”. Jeśli po Twoim eksporcie doszły faktury za już wyeksportowany okres, karta też to pokaże. Wtedy wygeneruj eksport ponownie, a gdy JPK za ten okres jest już wysłany, sprawdź z księgowym, czy potrzebna jest korekta.
 
-> Bezpieczeństwo: import jest jednokierunkowy i nie modyfikuje danych w programie, z którego eksportujesz. Możesz spokojnie testować.
+## Wstrzymanie pobierania
+
+Właściciel firmy może wstrzymać i wznowić pobieranie historii w karcie „Historia z KSeF” (potrzebne jest włączone logowanie dwuetapowe). Wstrzymanie nie zatrzymuje wysyłki faktur z FaktWay ani Skrzynki KSeF.
+
+## Przeprowadzka z innego programu
+
+Faktury sprzed KSeF przeniesiesz plikiem CSV z eksportu faktur z jednego z czterech programów: **Fakturownia**, **inFakt**, **wFirma** albo **iFirma**. Wybierz program w menu Import danych (sekcja „Przeprowadzka z innego programu”) i wgraj plik (do 1 MB). Większy eksport podziel na krótsze okresy (np. kwartały) i wgraj pliki po kolei. Postęp i wynik zobaczysz na ekranie importu.
+
+Kontrahenci i produkty z pliku dodają się sami. Faktury przeniesione z pliku nie są wysyłane do KSeF.
+
+> Bezpieczeństwo: import jest jednokierunkowy i nie zmienia danych w programie, z którego eksportujesz, ani w KSeF.

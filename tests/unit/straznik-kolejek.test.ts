@@ -14,6 +14,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { runOpsHeartbeat } from '@/lib/jobs/heartbeat';
 import { cronMaxGapMs, evaluateJobsHealth, type QueueHealthRow } from '@/lib/jobs/jobs-health';
+import { CRON_JOBS, EVENT_QUEUE_MAP, RETIRED_QUEUES } from '@/lib/jobs/queues';
+import { FANOUT_SLOT_SECONDS, LOCAL_CONCURRENCY } from '@/lib/ksef/history-sync/constants';
 
 const NOW = Date.parse('2026-10-02T12:00:00Z');
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
@@ -91,5 +93,25 @@ describe('heartbeat ze strażnikiem kolejek', () => {
     vi.stubGlobal('fetch', fetchMock);
     await expect(runOpsHeartbeat(async () => { throw new Error('fixture'); })).resolves.toEqual({ sent: false, reason: 'db-unavailable' });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('kolejki historii KSeF a strażnik (decyzja Bartosza 22.10.2026)', () => {
+  it('Magiczny import wycofany: kolejka w RETIRED_QUEUES, bez zdarzenia i bez crona', () => {
+    expect(RETIRED_QUEUES).toContain('import.ksef-history.requested');
+    expect(Object.values(EVENT_QUEUE_MAP).flat()).not.toContain('import.ksef-history.requested');
+    expect(Object.keys(EVENT_QUEUE_MAP)).not.toContain('import/ksef-history.requested');
+  });
+
+  it('cron historii co 15 min — strażnik ocenia go jak skrzynkę (przerwa do 2 h)', () => {
+    const cron = CRON_JOBS.find((c) => c.queue === 'cron.ksef-history-sync');
+    expect(cron?.cron).toBe('11,26,41,56 * * * *');
+    expect(cronMaxGapMs(cron!.cron)).toBe(2 * 3600_000);
+  });
+
+  it('fan-out jednego cyklu kończy się przed progiem „zaległe” heartbeatu (15 min)', () => {
+    // 3 sloty × 13 min czasu przebiegów: ostatni przebieg cyklu startuje najpóźniej
+    // po FANOUT_SLOT_SECONDS / LOCAL_CONCURRENCY sekundach od fan-outu.
+    expect(FANOUT_SLOT_SECONDS / LOCAL_CONCURRENCY).toBeLessThan(15 * 60);
   });
 });

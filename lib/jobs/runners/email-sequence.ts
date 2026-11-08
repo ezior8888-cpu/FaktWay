@@ -79,18 +79,18 @@ function WELCOME_TEMPLATE(name: string) {
   return `
 ${baseStyle}
 <h1>Cześć ${safe},</h1>
-<p>Cieszę się, że jesteś z nami. Jestem Bartek, founder FaktWay.</p>
-<p>W ciągu najbliższych 30 dni możesz przetestować <strong>wszystko</strong> bez ograniczeń. Bez karty kredytowej.</p>
+<p>Cieszę się, że jesteś z nami. Jestem Bartek, współzałożyciel FaktWay.</p>
+<p>Konto jest bezpłatne. Gdy uruchomisz subskrypcję, pierwsze 30 dni nic nie płacisz. Metodę płatności podajesz przy uruchomieniu, a pierwsza płatność przychodzi dopiero po tym okresie.</p>
 <p>Najszybszy sposób żeby zobaczyć wartość:</p>
 <ol>
   <li><a href="${APP_BASE}/invoices/new">Wystaw pierwszą fakturę</a> (30 sekund)</li>
   <li><a href="${APP_BASE}/expenses">Sfotografuj paragon</a> (zobacz OCR w akcji)</li>
-  <li><a href="${APP_BASE}/onboarding/import-source">Zaimportuj historię z Fakturownia</a> (5 minut)</li>
+  <li><a href="${APP_BASE}/onboarding/import-source">Zaimportuj historię z KSeF albo z innego programu</a></li>
 </ol>
 <p>Pytania? Po prostu odpisz na ten email — czytam wszystko.</p>
 <p style="margin-top: 30px;">— Bartek</p>
 <div class="footer">
-  FaktWay · Poznań · <a href="${APP_BASE}/legal/polityka-prywatnosci">Polityka prywatności</a>
+  FaktWay · <a href="${APP_BASE}/legal/regulamin">Regulamin</a> · <a href="${APP_BASE}/legal/polityka-prywatnosci">Polityka prywatności</a>
 </div>`;
 }
 
@@ -123,8 +123,7 @@ ${baseStyle}
 <p style="text-align: center; margin: 30px 0;">
   <a href="${APP_BASE}/expenses" class="button">Otwórz Wydatki →</a>
 </p>
-<p>Apka rozpozna Orlen / BP / Lotos, kwotę, VAT i automatycznie wpisze do kolumny 13 KPiR. Bez wpisywania.</p>
-<p>To jest moment, w którym większość beta-testerów zostaje na zawsze.</p>
+<p>Apka odczyta sprzedawcę, kwotę i VAT i zaproponuje kolumnę KPiR — Ty tylko sprawdzasz i zatwierdzasz.</p>
 <p>— Bartek</p>`;
 }
 
@@ -133,18 +132,13 @@ function DAY_4_OCR_TEMPLATE(name: string) {
   return `
 ${baseStyle}
 <h1>${safe}, sprawdź OCR (2 min)</h1>
-<p>Czy używasz już funkcji OCR paragonów? To <strong>największa różnica</strong> między FaktWay a Fakturownią.</p>
+<p>Czy używasz już odczytu paragonów (OCR)? Oszczędza przepisywania kosztów ręcznie.</p>
 <p><strong>Krótki demo:</strong></p>
 <ol>
-  <li>Otwórz apkę na telefonie (zainstaluj jako PWA jeśli jeszcze nie)</li>
-  <li>Wydatki → &quot;Dodaj wydatek&quot; → &quot;Zrób zdjęcie&quot;</li>
-  <li>Sfotografuj jakikolwiek paragon</li>
-  <li>Po 5 sekundach masz: sprzedawcę, kwotę, VAT, kategorię KPiR — wszystko</li>
+  <li>Otwórz w panelu Wydatki → &quot;Dodaj wydatek&quot;</li>
+  <li>Dodaj zdjęcie albo plik paragonu</li>
+  <li>Po chwili dostajesz propozycję: sprzedawca, kwota, VAT, kolumna KPiR — sprawdź i zatwierdź</li>
 </ol>
-<p>Jeden screenshot z prawdziwego beta-testu (Orlen, paragon na 67.43 PLN):</p>
-<p>[screenshot OCR]</p>
-<p>Twoje statystyki za 4 dni:</p>
-<p><strong>0 minut spędzonych na ręcznym wpisywaniu kosztów</strong></p>
 <p>— Bartek</p>`;
 }
 
@@ -160,10 +154,10 @@ ${baseStyle}
   <p style="font-size: 36px; margin: 0; font-weight: 700;">${docsCount} dokumentów</p>
   <p style="margin: 5px 0 0 0; color: #666;">faktur i paragonów</p>
   <p style="font-size: 36px; margin: 20px 0 0 0; font-weight: 700;">≈ ${escapeHtml(hoursSaved)}h</p>
-  <p style="margin: 5px 0 0 0; color: #666;">zaoszczędzonego czasu</p>
+  <p style="margin: 5px 0 0 0; color: #666;">szacowanego zaoszczędzonego czasu</p>
 </div>
-<p>Jeśli Twoja stawka godzinowa to 150 PLN, to już <strong>${plnSaved} PLN</strong> oszczędności.</p>
-<p>Subskrypcja kosztuje ${PRICE_PER_MONTH}. Już teraz się zwróciła.</p>
+<p style="font-size: 13px; color: #666;">Szacunek: przyjmujemy ok. 6,5 minuty oszczędności na dokument w porównaniu z ręcznym wpisywaniem. Twój wynik może być inny.</p>
+<p>Przy stawce 150 PLN za godzinę to około <strong>${plnSaved} PLN</strong>. Subskrypcja kosztuje ${PRICE_PER_MONTH}.</p>
 <p style="text-align: center; margin: 30px 0;">
   <a href="${APP_BASE}/settings" class="button">Przejdź do rozliczeń / ustawień →</a>
 </p>
@@ -301,7 +295,9 @@ export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create
     await step.run('send-stats', async () => {
       await sendEmail({
         to: email,
-        subject: `${firstName}, w 8 dni zaoszczędziłeś ${hoursSaved}h pracy`,
+        // Liczba godzin to szacunek (6,5 min na dokument), nie pomiar — temat
+        // nie może podawać jej jako faktu.
+        subject: `${firstName}, Twoje pierwsze 8 dni w FaktWay`,
         html: DAY_8_STATS_TEMPLATE(firstName, totalDocs, hoursSaved),
         ...PRODUCT_EMAIL(userId),
       });

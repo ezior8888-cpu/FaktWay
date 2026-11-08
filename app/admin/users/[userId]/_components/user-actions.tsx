@@ -116,8 +116,10 @@ export function UserActions({ userId, isSuspended }: Props) {
             <DialogTitle>Usunięcie konta — GDPR</DialogTitle>
             <DialogDescription>
               Akcja nieodwracalna. Konto auth.users zostanie skasowane od razu.
-              Organizacje (których user jest ownerem) idą do soft-delete z hard
-              delete za <strong>30 dni</strong> (retention period). Wpisz
+              Firmy, których user jest właścicielem, <strong>zostają i działają
+              dalej</strong> — jeśli jest jedynym właścicielem, najpierw dodaj
+              firmie innego albo zleć usunięcie firmy
+              (docs/support/escalation-matrix.md). Wpisz
               <code className="mx-1 rounded bg-foreground/10 px-1 py-0.5 text-xs font-mono">
                 DELETE
               </code>

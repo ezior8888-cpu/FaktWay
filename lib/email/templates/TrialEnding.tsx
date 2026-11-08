@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface TrialEndingProps {
   appUrl: string;
   tenantName: string;
@@ -41,14 +43,15 @@ export default function TrialEnding({
     : `Twój trial kończy się za ${daysRemaining} dni`;
 
   const intro = isFinalDay
-    ? `Cześć ${tenantName}, jutro (${trialEndDate}) zakończy się 30-dniowy darmowy okres testowy FaktWay. Karta zostanie obciążona za ${planLabel}.`
-    : `Cześć ${tenantName}, za ${daysRemaining} dni (${trialEndDate}) zakończy się Twój darmowy 30-dniowy trial. Karta zostanie obciążona za ${planLabel}.`;
+    ? `Cześć ${tenantName}, jutro (${trialEndDate}) zakończy się 30-dniowy darmowy okres testowy FaktWay. Po nim pobierzemy opłatę za plan ${planLabel}.`
+    : `Cześć ${tenantName}, za ${daysRemaining} dni (${trialEndDate}) zakończy się Twój darmowy 30-dniowy trial. Po nim pobierzemy opłatę za plan ${planLabel}.`;
 
   return (
     <Html lang="pl">
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={{ ...headingStyle, color: accentColor }}>
             {headline}
           </Heading>
@@ -63,12 +66,13 @@ export default function TrialEnding({
           </Section>
 
           <Text style={textStyle}>
-            Jeśli chcesz <strong>kontynuować</strong> — nie musisz nic robić.
-            Karta zostanie automatycznie obciążona w dniu {trialEndDate}.
+            Jeśli chcesz <strong>kontynuować</strong>, nie musisz nic robić.
+            Pobierzemy płatność automatycznie z Twojej metody płatności w dniu{' '}
+            {trialEndDate}.
           </Text>
 
           <Text style={textStyle}>
-            Jeśli chcesz <strong>anulować</strong> — kliknij poniżej i wybierz
+            Jeśli chcesz <strong>anulować</strong>, kliknij poniżej i wybierz
             {' „Anuluj subskrypcję” '}w panelu Stripe. Zachowasz dostęp do końca
             trialu.
           </Text>
@@ -80,7 +84,7 @@ export default function TrialEnding({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktWay — faktury KSeF dla mikrofirm. Ta wiadomość została wysłana
+            FaktWay, faktury KSeF dla mikrofirm. Ta wiadomość została wysłana
             automatycznie. Pytania? Odpowiedz na ten email.
           </Text>
         </Container>

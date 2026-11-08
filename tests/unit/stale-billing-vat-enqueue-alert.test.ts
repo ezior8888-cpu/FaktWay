@@ -210,7 +210,11 @@ describe('stale billing VAT enqueue alert', () => {
     // 16 → 17: faktura w `sending` bez wyniku po przejęciu wysyłki (#71).
     // 17 → 18: strażnik cyklu życia faktury I1–I9 (PR 4b, 03.10.2026).
     expect(step.run).toHaveBeenCalledWith('check-ksef-lifecycle', expect.any(Function));
-    expect(result).toMatchObject({ checked: 18, fired: 0 });
+    // 18 → 21: historia KSeF (stoi / do operatora / 429), decyzja Bartosza 22.10.2026.
+    expect(step.run).toHaveBeenCalledWith('check-stale-ksef-history-sync', expect.any(Function));
+    expect(step.run).toHaveBeenCalledWith('check-ksef-history-blocked', expect.any(Function));
+    expect(step.run).toHaveBeenCalledWith('check-ksef-history-rate-limited', expect.any(Function));
+    expect(result).toMatchObject({ checked: 21, fired: 0 });
     expect(result.details).toContainEqual({ type: 'offline_environment_blocked', fired: false });
   });
 });

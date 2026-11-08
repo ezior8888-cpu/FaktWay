@@ -2,40 +2,29 @@
 title: "Środowisko testowe a produkcyjne KSeF"
 category: "ksef"
 order: 5
-summary: "Czym różni się tryb testowy od produkcyjnego i jak bezpiecznie przełączyć się na prawdziwe faktury."
-updated: "2026-05-19"
+summary: "Czym różni się KSeF testowy od produkcyjnego i co to znaczy dla Twoich faktur."
+updated: "2026-11-02"
 ---
 
-KSeF udostępnia dwa oddzielne środowiska. Zrozumienie różnicy chroni Cię przed pomyłką — np. wysłaniem prawdziwej faktury jako testu.
+KSeF udostępnia dwa oddzielne środowiska. Zrozumienie różnicy chroni Cię przed pomyłką, np. wysłaniem prawdziwej faktury jako testu.
 
 ## Środowisko testowe
 
-Służy do prób. Faktury wysłane na środowisko testowe **nie mają mocy prawnej** i nie trafiają do urzędu skarbowego. To bezpieczne miejsce, żeby:
+Służy do prób. Faktury wysłane na środowisko testowe **nie mają mocy prawnej** i nie trafiają do urzędu skarbowego.
 
-- przejść cały proces wystawiania faktury,
-- sprawdzić, jak wygląda korekta czy zaliczka,
-- przetestować integrację certyfikatu.
-
-W trybie testowym używaj **fikcyjnych NIP-ów** (np. 1234567890). Nigdy nie wysyłaj prawdziwych danych klientów na środowisko testowe.
+Na środowisku testowym używa się **fikcyjnych NIP-ów** (np. 1234567890). Nigdy nie wysyłaj tam prawdziwych danych klientów.
 
 ## Środowisko produkcyjne
 
-To prawdziwy KSeF. Faktury mają moc prawną, dostają numer KSeF i są widoczne dla urzędu. Wymaga certyfikatu produkcyjnego — innego niż testowy.
+To prawdziwy KSeF. Faktury mają moc prawną, dostają numer KSeF i są widoczne dla urzędu. Wymaga certyfikatu produkcyjnego, innego niż testowy.
 
-## Jak przełączyć
+## Środowisko w FaktWay
 
-W **Ustawienia → KSeF** zmieniasz środowisko. Pamiętaj, że każde środowisko wymaga osobnego certyfikatu — produkcyjnego nie da się użyć w trybie testowym i odwrotnie.
-
-## Zalecana kolejność
-
-1. Skonfiguruj środowisko testowe i wystaw kilka próbnych faktur.
-2. Uzyskaj certyfikat produkcyjny z KSeF.
-3. Przełącz na produkcję i wystaw pierwszą prawdziwą fakturę (np. na małą kwotę, do zaufanego kontrahenta).
-4. Sprawdź, czy faktura dostała numer KSeF i UPO.
+Środowiska nie wybierasz w ustawieniach: FaktWay pracuje na jednym środowisku KSeF, ustawionym dla całego programu. Certyfikat musi pochodzić z tego samego środowiska, bo produkcyjnego nie da się użyć w KSeF testowym i odwrotnie. Jeśli certyfikat nie pasuje, zobaczysz błąd przy wgrywaniu.
 
 ## Faktury między środowiskami
 
-Faktury testowe i produkcyjne są całkowicie oddzielone. Przełączenie środowiska nie przenosi dokumentów — historia testowa zostaje testowa.
+Faktury testowe i produkcyjne są całkowicie oddzielone.
 
 ## Co dalej?
 

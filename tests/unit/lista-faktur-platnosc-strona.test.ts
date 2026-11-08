@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * NOT EXISTS na wierszu rodzica; jego wiersz pokazuje „—”.
  */
 
-const state = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>>, envBroken: false }));
+const state = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>>, envBroken: false, role: 'owner' }));
 
 vi.mock('@/lib/ksef/claim-environment', () => ({
   requireConfiguredKsefEnvironment: () => {
@@ -24,11 +24,11 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
   },
 }));
 vi.mock('@/lib/supabase/page-context', () => ({
-  getPageContext: async () => ({ supabase: memoryClient(state.rows), tenantId: TENANT }),
+  getPageContext: async () => ({ supabase: memoryClient(state.rows), tenantId: TENANT, role: state.role }),
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
-import InvoicesPage from '@/app/(dashboard)/invoices/page';
+import InvoicesPage from '@/app/(dashboard)/(faktury)/invoices/page';
 
 type Row = Record<string, unknown>;
 type Pred = (row: Row) => boolean;
@@ -82,6 +82,14 @@ function parseCondition(text: string): Pred {
     case 'is':
       if (value !== 'null') throw new Error(`nieobsługiwane is.${value}`);
       return (r) => r[column] === null || r[column] === undefined;
+    case 'not': {
+      // `fa3_data->parsed->>paidDate.not.is.null`: ścieżka JSON z filtra „Opłacone”.
+      if (value !== 'is.null') throw new Error(`nieobsługiwane not.${value}`);
+      const path = column.split(/->>?/);
+      const read = (r: Row): unknown =>
+        path.reduce<unknown>((node, key) => (node && typeof node === 'object' ? (node as Row)[key] : undefined), r);
+      return (r) => read(r) !== null && read(r) !== undefined;
+    }
     default:
       throw new Error(`nieobsługiwany operator w or(): ${op}`);
   }
@@ -196,11 +204,14 @@ function listedLabels(tree: ReactNode): string[] {
   return found[0]!.map((r) => String(r.label)).sort();
 }
 
-async function listFor(platnosc?: string): Promise<string[]> {
+async function listFor(platnosc?: string, naStronie?: string): Promise<string[]> {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   try {
-    const tree = await InvoicesPage({ searchParams: Promise.resolve(platnosc ? { platnosc } : {}) });
+    const searchParams: Record<string, string> = {};
+    if (platnosc) searchParams.platnosc = platnosc;
+    if (naStronie) searchParams.na_stronie = naStronie;
+    const tree = await InvoicesPage({ searchParams: Promise.resolve(searchParams) });
     return listedLabels(tree);
   } finally {
     vi.useRealTimers();
@@ -211,6 +222,38 @@ beforeEach(() => {
   seq = 0;
   state.rows = [];
   state.envBroken = false;
+  state.role = 'owner';
+});
+
+describe('„Zapłacone” (00158): strona listy przekazuje prawo roli', () => {
+  /** Props komponentu z listą (`initialInvoices`) z drzewa strony. */
+  function listProps(tree: ReactNode): Row | null {
+    let found: Row | null = null;
+    const walk = (node: ReactNode): void => {
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (node === null || typeof node !== 'object' || !('props' in node)) return;
+      const props = (node as ReactElement<Record<string, unknown>>).props;
+      if (Array.isArray(props.initialInvoices)) found = props;
+      walk(props.children as ReactNode);
+    };
+    walk(tree);
+    return found;
+  }
+
+  it.each([
+    ['owner', true],
+    ['admin', true],
+    ['member', true],
+    ['accountant', false],
+  ])('rola %s: canMarkPaid = %s', async (role, expected) => {
+    state.role = role;
+    state.rows = [invoice('vat')];
+    const props = listProps(await InvoicesPage({ searchParams: Promise.resolve({}) }));
+    expect(props?.canMarkPaid).toBe(expected);
+  });
 });
 
 describe('C1: filtr płatności na stronie /invoices obejmuje tylko należności (§2.4 pkt 11)', () => {
@@ -242,20 +285,29 @@ describe('C1: filtr płatności na stronie /invoices obejmuje tylko należności
     expect(await listFor('nieoplacone')).toEqual(['bez-waluty', 'rozliczenie', 'vat', 'zaliczka']);
   });
 
-  it('opłacone: opłacony import ani opłacona korekta nie są „opłaconą fakturą” listy', async () => {
+  // Zapłata to fakt bez względu na pochodzenie: „Zapłacone” działa też na imporcie (00158), a wiersz
+  // takiej faktury mówi „Opłacona”. Filtr ma pokazać te same faktury. Świadomie zastępuje dawne
+  // „opłacony import ani opłacona korekta nie są opłaconą fakturą listy”.
+  it('opłacone: każda zapłacona faktura sprzedaży, także import i z datą zapłaty z FA(3)', async () => {
     const paid = { payment_status: 'paid', paid_amount: 1230, paid_at: '2026-10-05T10:00:00Z' };
     state.rows = [
       invoice('vat-oplacona', paid),
       invoice('import-oplacony', { ...paid, origin: 'ksef_import' }),
       invoice('korekta-oplacona', { ...paid, invoice_kind: 'correction', invoice_type: 'KOR' }),
+      invoice('plik-z-data-z-fa3', { origin: 'file_import', fa3_data: { parsed: { paidDate: '2026-09-20' } } }),
       invoice('vat-nieoplacona'),
+      invoice('szkic-oplacony', { ...paid, ksef_status: 'draft', ksef_environment: null, ksef_number: null }),
+      invoice('zakup-oplacony', { ...paid, direction: 'incoming' }),
+      invoice('inne-srodowisko', { ...paid, ksef_environment: 'test' }),
     ];
-    expect(await listFor('oplacone')).toEqual(['vat-oplacona']);
+    expect(await listFor('oplacone')).toEqual(['import-oplacony', 'korekta-oplacona', 'plik-z-data-z-fa3', 'vat-oplacona']);
   });
 
   it('bez filtra płatności lista pokazuje wszystkie faktury sprzedaży (jak dotąd)', async () => {
     state.rows = overdueMix();
-    expect(await listFor()).toHaveLength(12); // wszystko poza zakupem
+    // Lista 1:1 z Finory (21.10.2026): domyślna strona ma 10 pozycji (było 50), a ten zbiór to 12 faktur
+    // sprzedaży — „Pokaż 25” mieści je wszystkie, więc nadal sprawdzamy brak zawężenia filtrem płatności.
+    expect(await listFor(undefined, '25')).toHaveLength(12); // wszystko poza zakupem
   });
 });
 

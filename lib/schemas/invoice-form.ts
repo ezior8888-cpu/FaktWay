@@ -108,6 +108,11 @@ const hasAtMostDecimals = (v: number, d: number) => {
   return Math.abs(scaled - Math.round(scaled)) < 1e-6;
 };
 /** Kwoty faktury i pozycji to NUMERIC(12,2) — poniżej 10 mld zł. */
+/** Format okresu faktury cyklicznej — ten sam co CHECK `invoices_recurring_period_format_check` (00154). */
+const RECURRING_PERIOD_FORMAT = /^[0-9]{4}(-(0[1-9]|1[0-2])|-Q[1-4])?$/;
+export const RECURRING_PERIOD_MISSING_MESSAGE =
+  'Brakuje okresu faktury cyklicznej — otwórz „Wystaw teraz” ponownie.';
+
 export const MAX_INVOICE_AMOUNT = 9_999_999_999.99;
 const VAT_FACTOR: Record<string, number> = { '23': 1.23, '8': 1.08, '5': 1.05 };
 
@@ -190,6 +195,24 @@ export const invoiceFormSchema = z
     notes: z.string().max(3500).refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
     /** P_18A — mechanizm podzielonej płatności (art. 106e ust. 1 pkt 18a). */
     splitPayment: z.boolean().optional(),
+    /**
+     * Pozycja cykliczna (plan Finora N1), z której wystawiamy fakturę —
+     * ukryte pole formularza otwartego z `?cykliczna=<id>`. Brak = zwykła faktura.
+     */
+    recurringInvoiceId: z.string().uuid('Nieprawidłowa faktura cykliczna').optional(),
+    /**
+     * Okres, który strona `?cykliczna=` pokazała w banerze (format jak CHECK
+     * `invoices_recurring_period_format_check` w 00154). Wymagany razem
+     * z `recurringInvoiceId`: zapis odmawia, gdy pozycja ma już inny okres (C3).
+     */
+    recurringPeriod: z
+      .string()
+      .regex(RECURRING_PERIOD_FORMAT, 'Nieprawidłowy okres faktury cyklicznej — otwórz „Wystaw teraz” ponownie.')
+      .optional(),
+  })
+  .refine((d) => !d.recurringInvoiceId || !!d.recurringPeriod, {
+    message: RECURRING_PERIOD_MISSING_MESSAGE,
+    path: ['recurringPeriod'],
   })
   .refine(
     (d) =>

@@ -11,6 +11,7 @@ import {
 } from '@remixicon/react';
 import { toast } from 'sonner';
 
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
 import {
   createAccountantTokenAction,
   revokeAccountantTokenAction,
@@ -144,6 +145,8 @@ function CreateTokenForm({
     'read_only'
   );
   const [validForDays, setValidForDays] = useState('90');
+  // Sesja po biometrii: link wymaga kodu, więc odmowa niesie przejście na ekran kodu.
+  const [stepUp, setStepUp] = useState<string | null>(null);
   const [isCreating, startCreating] = useTransition();
 
   const handleSubmit = () => {
@@ -152,6 +155,7 @@ function CreateTokenForm({
       return;
     }
 
+    setStepUp(null);
     startCreating(async () => {
       const result = await createAccountantTokenAction({
         name,
@@ -163,6 +167,8 @@ function CreateTokenForm({
       if (result.success) {
         toast.success('Dostęp utworzony');
         onSuccess(result.shareUrl);
+      } else if (result.mfaStepUp) {
+        setStepUp(result.error);
       } else {
         toast.error(result.error);
       }
@@ -234,6 +240,12 @@ function CreateTokenForm({
           />
         </Field>
       </div>
+
+      {stepUp ? (
+        <MfaStepUpNotice returnTo="/settings/accountant">
+          {stepUp} Po potwierdzeniu wrócisz tutaj.
+        </MfaStepUpNotice>
+      ) : null}
 
       <div className="flex gap-3 sm:justify-end">
         <Button variant="outline" onClick={onCancel} disabled={isCreating}>

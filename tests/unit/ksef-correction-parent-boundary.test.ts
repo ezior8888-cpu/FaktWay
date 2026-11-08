@@ -128,10 +128,10 @@ describe('correction parent boundary', () => {
   it.each([
     ['parent context, MFA', () => getCorrectionParentContextAction(parentId), 'Wymagana weryfikacja dwuetapowa'],
     ['parent context, membership', () => getCorrectionParentContextAction(parentId), 'Brak dostępu do aktywnej organizacji'],
-    ['draft, MFA', () => saveCorrectionDraftAction(basePayload), 'Wymagana weryfikacja dwuetapowa'],
-    ['draft, membership', () => saveCorrectionDraftAction(basePayload), 'Brak dostępu do aktywnej organizacji'],
-    ['send, MFA', () => saveAndSendCorrectionAction(basePayload), 'Wymagana weryfikacja dwuetapowa'],
-    ['send, membership', () => saveAndSendCorrectionAction(basePayload), 'Brak dostępu do aktywnej organizacji'],
+    ['draft, MFA', () => saveCorrectionDraftAction(basePayload, tenantId), 'Wymagana weryfikacja dwuetapowa'],
+    ['draft, membership', () => saveCorrectionDraftAction(basePayload, tenantId), 'Brak dostępu do aktywnej organizacji'],
+    ['send, MFA', () => saveAndSendCorrectionAction(basePayload, tenantId), 'Wymagana weryfikacja dwuetapowa'],
+    ['send, membership', () => saveAndSendCorrectionAction(basePayload, tenantId), 'Brak dostępu do aktywnej organizacji'],
   ])('rejects %s before reading or writing', async (_label, action, reason) => {
     vi.stubEnv('KSEF_ENV', 'test');
     mocks.requireAuth.mockRejectedValueOnce(new Error(reason));
@@ -148,7 +148,7 @@ describe('correction parent boundary', () => {
       parent.ksef_environment = 'test';
     }
     const action = kind === 'draft' ? saveCorrectionDraftAction : saveAndSendCorrectionAction;
-    const result = await action(basePayload);
+    const result = await action(basePayload, tenantId);
     expect(result).toMatchObject({ success: true });
     const parentRead = queries.find((query) => query.table === 'invoices' && query.operation === 'select');
     expect(parentRead?.filters).toMatchObject({
@@ -164,13 +164,13 @@ describe('correction parent boundary', () => {
   });
 
   it('does not create or enqueue an unproven legal correction in PROD', async () => {
-    const result = await saveAndSendCorrectionAction(basePayload);
+    const result = await saveAndSendCorrectionAction(basePayload, tenantId);
     expect(result).toMatchObject({ success: false, error: expect.stringContaining('PROD') });
     expectNoWrite();
   });
 
   it('stores the monetary delta that appears in amount-change KOR XML', async () => {
-    const result = await saveCorrectionDraftAction(basePayload);
+    const result = await saveCorrectionDraftAction(basePayload, tenantId);
     expect(result).toMatchObject({ success: true });
     expect(queries).toContainEqual(expect.objectContaining({
       table: 'invoices', operation: 'insert',
@@ -187,7 +187,7 @@ describe('correction parent boundary', () => {
   ])('rejects an amount change when %s', async (_label, change) => {
     const result = await saveCorrectionDraftAction({
       ...basePayload, amountChange: { ...basePayload.amountChange!, ...change },
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
   });
@@ -198,7 +198,7 @@ describe('correction parent boundary', () => {
       amountChange: {
         ...basePayload.amountChange!, netDelta: -100, vatDelta: -8, grossDelta: -108,
       },
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: true });
     expect(queries).toContainEqual(expect.objectContaining({
       table: 'invoice_line_items', operation: 'insert',
@@ -216,7 +216,7 @@ describe('correction parent boundary', () => {
     ['no KSeF number', { ksef_number: null }],
   ])('rejects %s before a write', async (_label, patch) => {
     parent = { ...parent, ...patch };
-    expect((await saveCorrectionDraftAction(basePayload)).success).toBe(false);
+    expect((await saveCorrectionDraftAction(basePayload, tenantId)).success).toBe(false);
     expectNoWrite();
   });
 
@@ -226,7 +226,7 @@ describe('correction parent boundary', () => {
     ['KSeF number', { parentKsefNumber: 'FORGED' }],
     ['seller NIP', { seller: { ...seller, nip: '9876543210' } }],
   ])('rejects a forged parent %s', async (_label, patch) => {
-    const result = await saveCorrectionDraftAction({ ...basePayload, ...patch } as CorrectionInvoiceSchemaIn);
+    const result = await saveCorrectionDraftAction({ ...basePayload, ...patch } as CorrectionInvoiceSchemaIn, tenantId);
     expect(result.success).toBe(false);
     expectNoWrite();
   });
@@ -235,7 +235,7 @@ describe('correction parent boundary', () => {
     const result = await saveCorrectionDraftAction({
       ...basePayload, correctionType: 'cancellation', amountChange: undefined,
       linesBefore: [{ ...originalLine, unitPriceNet: 1000 }],
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
   });
@@ -245,7 +245,7 @@ describe('correction parent boundary', () => {
       ...basePayload, correctionType: 'before_after', amountChange: undefined,
       linesBefore: [{ ...originalLine, unitPriceNet: 1000 }],
       linesAfter: [{ ...originalLine, unitPriceNet: 90 }],
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
   });
@@ -255,7 +255,7 @@ describe('correction parent boundary', () => {
       ...basePayload, correctionType: 'before_after', amountChange: undefined,
       linesBefore: [originalLine],
       linesAfter: [{ ...originalLine, unitPriceNet: 90 }],
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: true });
     expect(queries).toContainEqual(expect.objectContaining({
       table: 'invoice_line_items', operation: 'select', filters: { invoice_id: parentId },
@@ -268,7 +268,7 @@ describe('correction parent boundary', () => {
       ...basePayload, correctionType,
       amountChange: correctionType === 'cancellation' ? undefined : basePayload.amountChange,
       buyer: { ...buyer, name: 'Inna firma' }, linesBefore: undefined,
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
     },
@@ -277,7 +277,7 @@ describe('correction parent boundary', () => {
   it('derives cancellation lines from the accepted parent when absent', async () => {
     const result = await saveCorrectionDraftAction({
       ...basePayload, correctionType: 'cancellation', amountChange: undefined, linesBefore: undefined,
-    });
+    }, tenantId);
     expect(result.success).toBe(true);
     expect(queries).toContainEqual(expect.objectContaining({
       table: 'invoice_line_items', operation: 'select', filters: { invoice_id: parentId },
@@ -291,7 +291,7 @@ describe('correction parent boundary', () => {
     lines = [{ ...lines[0], ...patch }];
     const result = await saveCorrectionDraftAction({
       ...basePayload, correctionType: 'cancellation', amountChange: undefined, linesBefore: undefined,
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
   });
@@ -300,7 +300,7 @@ describe('correction parent boundary', () => {
     parent.gross_total = 999;
     const result = await saveCorrectionDraftAction({
       ...basePayload, correctionType: 'cancellation', amountChange: undefined, linesBefore: undefined,
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
   });
@@ -309,7 +309,7 @@ describe('correction parent boundary', () => {
     lines = [{ ...lines[0], vat_rate: 'zw' }];
     const result = await saveCorrectionDraftAction({
       ...basePayload, correctionType: 'cancellation', amountChange: undefined, linesBefore: undefined,
-    });
+    }, tenantId);
     expect(result).toMatchObject({ success: false });
     expectNoWrite();
   });

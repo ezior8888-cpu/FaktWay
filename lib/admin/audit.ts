@@ -118,6 +118,8 @@ export const KNOWN_AUDIT_ACTIONS = [
   'auth.logout',
   'auth.signup',
   'auth.password_reset_requested',
+  'auth.passkey_added',
+  'auth.passkey_removed',
   // Tenants
   'tenant.created',
   'tenant.updated',
@@ -146,6 +148,12 @@ export const KNOWN_AUDIT_ACTIONS = [
   'ksef.upo.download',
   'ksef.inbox.poll',
   'ksef.auth.token',
+  // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026).
+  'ksef.history.query',
+  'ksef.history.download',
+  'ksef.history.paused',
+  'ksef.history.resumed',
+  'ksef.history.operator',
   // Accountants
   'accountant.token_created',
   'accountant.token_revoked',

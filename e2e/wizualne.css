@@ -1,0 +1,10 @@
+/*
+ * Styl wstrzykiwany tylko na czas zrzutu w `tests/wizualne.spec.ts`
+ * (opcja `stylePath`). Chowa to, czego klient nie widzi albo co zmienia się
+ * bez zmiany wyglądu aplikacji.
+ */
+
+/* Znaczek i nakładka błędów serwera deweloperskiego Next.js. */
+nextjs-portal {
+  display: none !important;
+}

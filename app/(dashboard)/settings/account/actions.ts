@@ -8,6 +8,7 @@ import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
 import { cancelOwnGdprRequest, createGdprRequest } from '@/lib/gdpr/deletion';
 import { GdprDeletionBlockedError } from '@/lib/gdpr/deletion-blockers';
+import { readTurnstileToken } from '@/lib/security/bot-check';
 import { createClient } from '@/lib/supabase/server';
 
 type GdprActionError = 'not_authenticated' | 'mfa_required' | 'session_verification_failed' | 'invalid_password' | 'no_email' | 'request_failed' | 'not_pending' | 'rate_limited' | 'verification_unavailable' | 'active_subscription';
@@ -21,7 +22,7 @@ async function confirmGdprPassword(formData: FormData): Promise<Exclude<GdprCanc
   if (typeof password !== 'string' || !password || password.length > 1024) {
     return { ok: false, error: 'invalid_password' };
   }
-  const reauth = await reauthenticateWithPassword(password).catch(() => null);
+  const reauth = await reauthenticateWithPassword(password, readTurnstileToken(formData)).catch(() => null);
   if (!reauth || (!reauth.ok && (reauth.error === 'unknown' || reauth.error === 'verification_unavailable'))) {
     return { ok: false, error: 'verification_unavailable' };
   }

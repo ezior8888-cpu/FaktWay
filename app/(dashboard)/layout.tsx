@@ -1,30 +1,31 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
-import { assertDashboardShellAccess } from '@/lib/dashboard-shell-data';
-import DashboardOrgHeader, {
-  OrgSwitcherHeaderSkeleton,
-} from '@/app/(dashboard)/_components/dashboard-org-header';
-import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-page-heading';
+import { after } from 'next/server';
+import { assertDashboardShellAccess, getDashboardSessionUser } from '@/lib/dashboard-shell-data';
+import DashboardProfileMenu from '@/app/(dashboard)/_components/dashboard-profile-menu';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
-import { DashboardVerificationBannerSlot } from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
 import { AppHeader } from '@/components/dashboard/app-header';
+import { ProfileMenu } from '@/components/dashboard/profile-menu';
 import { AppSidebar } from '@/components/dashboard/app-sidebar';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { Footer } from '@/components/dashboard/footer';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
+import { ShellScrollMemory } from '@/components/dashboard/shell-scroll-memory';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
+import { PasskeyEnrollOfferGate } from '@/components/auth/passkey-enroll-offer-gate';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
 import { AnalyticsIdentify } from '@/components/analytics/analytics-identify';
 import { SupportWidget } from '@/components/support/support-widget';
 import { PortalContainerProvider } from '@/components/ui/portal-container';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { REMEMBER_ME_COOKIE, REMEMBER_ME_VALUE } from '@/lib/auth/device-cookies';
 import { getAllHelpArticles } from '@/lib/help/articles';
+import { noteTenantActivityThrottled } from '@/lib/ksef/inbox-activity';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
-import { createClient } from '@/lib/supabase/server';
 
 /**
  * Dashboard layout dla wszystkich chronionych podstron `(dashboard)/...`.
@@ -51,18 +52,27 @@ export default async function DashboardLayout({
 }) {
   await assertDashboardShellAccess();
 
-  // Identity dla PostHog (Faza 31 Krok 5). `assertDashboardShellAccess`
-  // już potwierdziło sesję i aktywną org — tu tylko czytamy id-ki dla
-  // `<AnalyticsIdentify>`. Oba odczyty są lekkie (sesja w cache, cookie).
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const activeOrg = await getActiveOrgIdFromCookies();
+  // Identity dla PostHog (Faza 31 Krok 5) i imię do menu. `assertDashboardShellAccess`
+  // już potwierdziło sesję i aktywną org — tu ten sam użytkownik z `cache()`
+  // na żądanie (bez drugiego wywołania GoTrue) i aktywna org z cookie.
+  const [user, activeOrg] = await Promise.all([
+    getDashboardSessionUser(),
+    getActiveOrgIdFromCookies(),
+  ]);
+
+  // Harmonogram skrzynki: ktoś z firmy jest aktywny (firma gorąca przez 24 h).
+  // `assertDashboardShellAccess` potwierdziło członkostwo w tej firmie. Po odpowiedzi
+  // i najwyżej raz na godzinę na firmę, więc wejście na panel za to nie płaci.
+  if (activeOrg) {
+    after(() => noteTenantActivityThrottled(activeOrg));
+  }
 
   // Stan paska bocznego (rozwinięty / zwinięty do ikon) z ciasteczka, które
   // zapisuje `SidebarProvider` — bez tego pasek „skakałby" po hydracji.
-  const sidebarOpen = (await cookies()).get('sidebar_state')?.value !== 'false';
+  const cookieStore = await cookies();
+  const sidebarOpen = cookieStore.get('sidebar_state')?.value !== 'false';
+  // „Zapamiętaj mnie” (także logowanie biometrią): bez wylogowania po bezczynności.
+  const rememberedDevice = cookieStore.get(REMEMBER_ME_COOKIE)?.value === REMEMBER_ME_VALUE;
 
   // Imię do menu avatara, jeśli GoTrue je ma (Google OAuth: `full_name`).
   const metaName: unknown =
@@ -77,6 +87,8 @@ export default async function DashboardLayout({
 
   // `100dvh`, nie `100vh`: na iOS Safari `100vh` to wysokość okna BEZ pasków
   // przeglądarki, więc dolna krawędź szkieletu chowa się pod paskiem adresu.
+  // `ff-app-shell` blokuje przewijanie samego dokumentu (`globals.css`, „Pasek
+  // górny stoi w miejscu”) — przewija się tylko `.ff-shell-scroll`.
   // Wysokość nagłówka niesie `.ff-shell-header` (tokeny `--ff-header-h`
   // i `--ff-safe-t`), stąd brak `h-20` w `AppHeader`.
   //
@@ -86,40 +98,41 @@ export default async function DashboardLayout({
   // menu, okna i podpowiedzi Base UI dziedziczyły tokeny, a `transform`
   // animacji trasy nie przypinał ich do pudełka strony.
   //
-  // ŁAŃCUCH WYSOKOŚCI EKRANU AGENTA — nie wstawiaj opakowań:
-  // `.ff-shell-scroll` > JEDEN `<div>` (kontener max-w) > baner, baner KSeF,
-  // `{children}` jako OSTATNIE dziecko. Blokada z `globals.css`
-  // (`html.ff-route-dashboard .ff-shell-scroll > div`) liczy na tę budowę,
-  // dlatego stopka obok kontenera jest `<footer>`, nie `<div>`.
+  // STOPKA NA DOLE (poprawka Bartosza 21.10.2026): `.ff-shell-scroll` jest
+  // kolumną flex, kontener treści rośnie (`grow`, bez `min-h-0` — nie może
+  // skurczyć się poniżej treści i wjechać na stopkę), więc „Regulamin ·
+  // Polityka · Pomoc” stoją przy dolnej krawędzi także na krótkiej stronie.
+  // `ff-shell-content` niesie łańcuch „pełnego arkusza” list Faktur
+  // (`globals.css`, `.ff-page-fill`).
   return (
     <TooltipProvider>
       <SidebarProvider
         defaultOpen={sidebarOpen}
-        className="ff-dashboard relative h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]"
+        className="ff-dashboard ff-app-shell relative h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]"
       >
         <PortalContainerProvider>
           <AppSidebar />
 
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
             <AppHeader
-              orgSwitcher={
-                <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
-                  <DashboardOrgHeader />
-                </Suspense>
+              profile={
+                user?.email ? (
+                  // Do czasu wczytania firm menu działa bez nich (e‑mail,
+                  // Ustawienia, Analiza, Wyloguj) — pasek nie czeka na bazę.
+                  <Suspense
+                    fallback={
+                      <ProfileMenu email={user.email} name={userName} company={null} memberships={[]} />
+                    }
+                  >
+                    <DashboardProfileMenu email={user.email} name={userName} />
+                  </Suspense>
+                ) : null
               }
-              pageHeading={<DashboardPageHeading />}
-              user={user?.email ? { email: user.email, name: userName } : null}
             />
 
-            <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
-                {/* Na dashboardzie ten baner stoi w prawej szynie — szeroki
-                    wariant chowa CSS. Na pozostałych stronach zostaje. */}
-                <div className="ff-shell-banner">
-                  <Suspense fallback={null}>
-                    <DashboardVerificationBannerSlot />
-                  </Suspense>
-                </div>
+            <div className="ff-shell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+              {/* Kontener treści 1:1 z `<main>` Finory (układ „compact”). */}
+              <div className="ff-shell-content mx-auto w-full max-w-360 grow px-4 py-6 sm:px-6">
                 <Suspense fallback={null}>
                   <KsefHealthBanner />
                 </Suspense>
@@ -130,11 +143,14 @@ export default async function DashboardLayout({
           </SidebarInset>
 
           <BottomNav />
+          {/* Za treścią: jego efekt układu biegnie po przewinięciu Nexta. */}
+          <ShellScrollMemory />
           <DashboardRouteFlags />
           <InstallPrompt />
           <PrefetchDashboardRoutes />
           <PrefetchExportsRoute />
-          <IdleWatcher />
+          {!rememberedDevice && <IdleWatcher />}
+          <PasskeyEnrollOfferGate />
           {user && activeOrg && (
             <AnalyticsIdentify
               userId={user.id}

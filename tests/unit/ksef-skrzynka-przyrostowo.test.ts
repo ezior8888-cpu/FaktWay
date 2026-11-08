@@ -86,26 +86,43 @@ describe('queryReceivedInvoices — kontrakt MF', () => {
 });
 
 // NOWE-01 (poza audytem, ta sama wada): import historii z KSeF też czekał
-// na `continuationToken` i kończył na pierwszej stronie.
-describe('import historii — stronicowanie pageOffset/hasMore', () => {
-  it('pobiera wszystkie strony okresu', async () => {
-    vi.resetModules();
-    vi.doMock('@/lib/ksef/session-cache', () => ({
-      getValidSession: async () => ({ auth: { nip: '1234567890' } }),
-      ksefSessionCache: { getSession: async () => ({ accessToken: 'fixture-token' }) },
-    }));
-    const { fetchInvoicesMetadata: fetchInvoiceHistory } = await import('@/lib/ksef/history-fetcher');
-    const meta = (n: number) => ({
-      ksefNumber: `K-${n}`, invoiceNumber: `FV ${n}`, issueDate: '2026-09-01', acquisitionDate: '2026-09-01T10:00:00Z',
-      netAmount: 100, vatAmount: 23, grossAmount: 123,
-      seller: { nip: '5260001246', name: 'Dostawca' }, buyer: { identifier: { type: 'Nip', value: '1234567890' } },
+// na `continuationToken`. Od 22.10.2026 (decyzja Bartosza) historię pobiera
+// synchronizacja (`lib/ksef/history-sync/query.ts`): JEDNO zapytanie na
+// wywołanie — strony przesuwa kursor w bazie, dopiero po zapisie strony.
+describe('synchronizacja historii — jedna strona metadanych na wywołanie', () => {
+  it('pyta po PermanentStorage z ograniczeniem do HWM, o wskazaną stronę, i nie idzie dalej sama', async () => {
+    const { queryMetadataPage } = await import('@/lib/ksef/history-sync/query');
+    mocks.fetch.mockResolvedValueOnce({
+      invoices: [inv(1, '2026-09-21T10:00:00Z')], hasMore: true, isTruncated: false,
+      permanentStorageHwmDate: '2026-10-01T23:58:00Z',
     });
-    mocks.fetch
-      .mockResolvedValueOnce({ invoices: [meta(1)], hasMore: true, isTruncated: false })
-      .mockResolvedValueOnce({ invoices: [meta(2)], hasMore: false, isTruncated: false });
-    const result = await fetchInvoiceHistory({ tenantId: 't1', dateFrom: '2026-09-01', dateTo: '2026-09-30', direction: 'received', env: 'test' });
-    expect(result.invoices.map((i) => i.ksefNumber)).toEqual(['K-1', 'K-2']);
-    expect([0, 1].map((i) => query(i).get('pageOffset'))).toEqual(['0', '1']);
-    expect(calls()[0]![1].headers?.['x-continuation-token']).toBeUndefined();
+    const page = await queryMetadataPage(auth, {
+      subjectType: 'subject1', from: FROM.toISOString(), to: TO.toISOString(), pageOffset: 3, env: 'test', tenantId: 't1',
+    });
+    expect(calls()).toHaveLength(1);
+    expect(query(0).get('pageOffset')).toBe('3');
+    expect(query(0).get('pageSize')).toBe('250');
+    expect(query(0).get('sortOrder')).toBe('Asc');
+    const [, init] = calls()[0]!;
+    expect(init.body.subjectType).toBe('subject1');
+    expect(init.body.dateRange).toEqual({
+      dateType: 'PermanentStorage',
+      from: FROM.toISOString(),
+      to: TO.toISOString(),
+      restrictToPermanentStorageHwmDate: true,
+    });
+    expect(init.headers?.['x-continuation-token']).toBeUndefined();
+    expect(page).toEqual({
+      invoices: [inv(1, '2026-09-21T10:00:00Z')], hasMore: true, isTruncated: false, hwm: '2026-10-01T23:58:00Z',
+    });
+  });
+
+  it('brak HWM = null; błąd KSeF nie jest połykany', async () => {
+    const { queryMetadataPage } = await import('@/lib/ksef/history-sync/query');
+    mocks.fetch.mockResolvedValueOnce({ invoices: [], hasMore: false, isTruncated: false });
+    const params = { subjectType: 'subject2' as const, from: FROM.toISOString(), to: TO.toISOString(), pageOffset: 0, env: 'test' as const, tenantId: 't1' };
+    await expect(queryMetadataPage(auth, params)).resolves.toMatchObject({ hwm: null, hasMore: false });
+    mocks.fetch.mockRejectedValueOnce(new Error('KSeF 503'));
+    await expect(queryMetadataPage(auth, params)).rejects.toThrow('KSeF 503');
   });
 });

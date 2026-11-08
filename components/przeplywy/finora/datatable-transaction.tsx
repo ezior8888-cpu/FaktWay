@@ -55,13 +55,20 @@ import { amountTone, signedAmount } from './operation-amount'
 
 export const OPERATION_STATUS_LABELS: Record<OperationStatus, string> = {
   paid: 'Opłacona',
+  // Korekta in minus zapłaconej faktury — wspólny typ statusów z `cash-movements`.
+  correction: 'Korekta',
   reviewed: 'Zatwierdzony',
-  pending: 'Do akceptacji'
+  pending: 'Do akceptacji',
+  // Faktura zakupu z KSeF bez wydatku (E10) — wspólny typ statusów z `cash-movements`.
+  ksef: 'Z KSeF'
 }
 
 const STATUS_STYLES: Record<OperationStatus, string> = {
   paid: 'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
+  correction: 'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
   reviewed:
+    'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
+  ksef:
     'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
   pending:
     'bg-amber-600/10 text-amber-800 focus-visible:ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:focus-visible:ring-amber-400/40'
@@ -349,7 +356,10 @@ const TransactionDatatable = ({ data }: { data: CashFlowOperation[] }) => {
                   <PaginationItem key={page}>
                     <Button
                       size='icon'
-                      className={`${!isActive && 'bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'}`}
+                      // Odstępstwo od Finory (WCAG 1.4.3): numer strony `text-accent-foreground`, nie `text-primary`.
+                      // `text-primary` na `bg-primary/10` ma 4,44:1 (jasny) i 3,84 / 4,13:1 pod kursorem (`primary/20`,
+                      // jasny / ciemny); `accent-foreground` daje 9,00 / 7,79:1 (jasny) i 8,93 / 7,43:1 (ciemny).
+                      className={`${!isActive && 'bg-primary/10 text-accent-foreground hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'}`}
                       onClick={() => table.setPageIndex(page - 1)}
                       aria-current={isActive ? 'page' : undefined}
                     >

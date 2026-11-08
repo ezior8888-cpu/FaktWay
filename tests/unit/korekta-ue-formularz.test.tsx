@@ -98,6 +98,8 @@ function context(buyer: unknown, lines: Array<ReturnType<typeof line>>) {
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
+/** Firma, dla której strona wyrenderowała listę faktur — zapis odsyła ją akcji (UX-01). */
+const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -117,7 +119,7 @@ async function render(rows: CorrectionParentInvoiceRow[], preselectedParentId?: 
   root = createRoot(host);
   await act(async () => {
     root!.render(
-      <CorrectionInvoiceForm parentInvoices={rows} preselectedParentId={preselectedParentId} />,
+      <CorrectionInvoiceForm parentInvoices={rows} preselectedParentId={preselectedParentId} tenantId={TENANT} />,
     );
   });
   // Kontekst faktury pierwotnej przychodzi asynchronicznie z akcji.
@@ -266,6 +268,7 @@ describe('korekta kwotowa — stawka bez VAT z faktury pierwotnej', () => {
     await act(async () => {});
 
     expect(mocks.saveDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.saveDraft.mock.calls[0]![1]).toBe(TENANT);
     expect(mocks.saveDraft.mock.calls[0]![0]).toMatchObject({
       correctionType: 'amount_change',
       buyer: { type: 'eu', vatUeNumber: 'DE123456789' },

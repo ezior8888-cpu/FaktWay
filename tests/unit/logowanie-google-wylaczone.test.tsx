@@ -13,7 +13,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { signInWithOAuth: mocks.signInWithOAuth } }),
 }));
 vi.mock('next/navigation', () => ({ redirect: (path: string) => { throw new Error('redirect:' + path); } }));
-vi.mock('next/headers', () => ({ headers: async () => new Headers({ origin: 'https://app.example.test' }) }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ origin: 'https://app.example.test' }),
+  cookies: async () => ({ set: vi.fn() }),
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: vi.fn() }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));

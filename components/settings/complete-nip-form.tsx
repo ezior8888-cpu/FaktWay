@@ -164,8 +164,8 @@ export function CompleteNipForm() {
       {!company && (
         <FieldDescription>
           Twoja organizacja to na razie szkic bez NIP-u. Po przypisaniu NIP-u
-          odblokujesz wgrywanie certyfikatu KSeF, wysyłkę faktur i Magiczny
-          Import historii.
+          odblokujesz wgrywanie certyfikatu KSeF, wysyłkę faktur i automatyczne
+          pobieranie historii z KSeF.
         </FieldDescription>
       )}
     </FieldGroup>

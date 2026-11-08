@@ -33,6 +33,7 @@ import {
   type MarginScheme,
 } from '@/lib/xml/fa3-annotations';
 import { roundToCents, summarizeVatPerRate } from '@/lib/xml/invoice-calculator';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 
 const TNS = 'http://jpk.mf.gov.pl/wzor/2022/02/17/02171/';
@@ -442,7 +443,9 @@ function linePct(vatRate: string): number {
  */
 function importedContentRefusal(inv: JpkInvoice): string | null {
   if (inv.importedAnnotationsMissing) {
-    return 'jest zaimportowana przed odczytem daty sprzedaży i adnotacji z pliku KSeF (metoda kasowa, MPP, zwolnienie, procedury) — ponów import historii z KSeF za ten okres, a FaktWay uzupełni je z oryginału.';
+    // Magiczny import wycofany (decyzja Bartosza 22.10.2026): uzupełnia to
+    // synchronizacja historii KSeF (pozycja `repair_content`), bez akcji klienta.
+    return `jest zaimportowana przed odczytem daty sprzedaży i adnotacji z pliku KSeF (metoda kasowa, MPP, zwolnienie, procedury). FaktWay uzupełnia te dane automatycznie z oryginału w KSeF (postęp: Import danych → Historia z KSeF). Jeśli faktura jest tam na liście faktur, których nie pobraliśmy, albo komunikat zostaje dłużej niż dobę, napisz na ${SUPPORT_EMAIL}.`;
   }
   if (inv.importedAnnotationProblems?.length) {
     return `ma w KSeF adnotacje, których import nie udało się odczytać (${inv.importedAnnotationProblems.join('; ')}) — FaktWay nie wie, czy dotyczy jej metoda kasowa, MPP albo procedura szczególna.`;

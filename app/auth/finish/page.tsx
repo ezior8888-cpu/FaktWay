@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { FaktWayLogo } from '@/components/brand/faktway-logo';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { finishSignInFromFragment, type FinishSignInResult } from '@/lib/auth/finish-sign-in';
@@ -44,10 +45,8 @@ export default function FinishPage() {
     <div className="ff-dashboard flex min-h-dvh items-center justify-center p-6 text-foreground">
       <Card className="w-full max-w-lg gap-6 py-8">
         <CardHeader className="gap-6 px-8">
-          {/* Wordmark jak w `AuthLogo`, bez znaku: `next/image` to kolejny efekt kliencki. */}
-          <span className="w-fit text-xl font-bold">
-            Fakt<span className="text-primary">Way</span>
-          </span>
+          {/* Logo jak w `AuthLogo`: wbudowany SVG, bez `next/image`. */}
+          <FaktWayLogo className="h-8 w-fit" />
           {blad ? (
             <CardTitle className="text-2xl font-semibold">
               <h1>Nie udało się dokończyć logowania</h1>

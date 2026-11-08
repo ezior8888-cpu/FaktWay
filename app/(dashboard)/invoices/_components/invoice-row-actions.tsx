@@ -9,14 +9,17 @@ import {
   RiEditLine,
   RiEyeLine,
   RiFileCodeLine,
+  RiFileCopyLine,
   RiFilePdf2Line,
   RiLoader4Line,
   RiMore2Line,
+  RiRepeatLine,
 } from '@remixicon/react';
 
 import { downloadInvoiceXmlAction } from '@/components/invoices/actions-detail';
 import { deleteDraftInvoiceAction } from '@/components/invoices/draft-actions';
 import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
+import { MarkPaidButton } from '@/components/invoices/use-invoice-payment';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Dialog,
@@ -37,21 +40,34 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { saveBlob } from '@/lib/download';
 import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
+import {
+  canDuplicateInvoice,
+  canSetAsRecurring,
+  duplicateInvoiceHref,
+  setAsRecurringHref,
+} from '@/lib/invoices/recurring/visibility';
 
-export type RowMenuEntry = 'correction' | 'xml' | 'delete';
+export type RowMenuEntry = 'correction' | 'duplicate' | 'recurring' | 'xml' | 'delete';
 
 /**
  * Pozycje menu „⋯” wiersza. Korekta: tylko faktury, które przyjmuje formularz
- * korekty i bez korekty w toku (`facts.canCorrect`). XML: gdy jest plik.
- * Usuń: wyłącznie szkic — akcja sama odmawia dla szkiców wycofanych, a
- * odmowę widać w toaście.
+ * korekty i bez korekty w toku (`facts.canCorrect`). Duplikuj: zwykła faktura
+ * wystawiona w FaktWay (nie korekta, zaliczka ani import — N1). Ustaw jako
+ * cykliczną: tylko faktura spełniająca warunki wzoru N1, te same co w akcji
+ * tworzenia. XML: gdy jest plik. Usuń: wyłącznie szkic — akcja sama odmawia
+ * dla szkiców wycofanych, a odmowę widać w toaście.
  */
 export function rowMenuEntries(
-  invoice: Pick<InvoiceRow, 'ksef_status' | 'xml_storage_path'>,
+  invoice: Pick<
+    InvoiceRow,
+    'ksef_status' | 'xml_storage_path' | 'invoice_kind' | 'origin' | 'invoice_type' | 'currency'
+  >,
   facts: Pick<InvoiceListRowFacts, 'canCorrect'> | undefined,
 ): RowMenuEntry[] {
   const entries: RowMenuEntry[] = [];
   if (facts?.canCorrect === true) entries.push('correction');
+  if (canDuplicateInvoice(invoice)) entries.push('duplicate');
+  if (canSetAsRecurring(invoice)) entries.push('recurring');
   if (invoice.xml_storage_path) entries.push('xml');
   if (invoice.ksef_status === 'draft') entries.push('delete');
   return entries;
@@ -85,10 +101,12 @@ interface Props {
   facts: InvoiceListRowFacts | undefined;
   /** Tylko testy: menu otwarte od razu. */
   defaultMenuOpen?: boolean;
+  /** „Zapłacone” (`facts.canMarkPaid`): tylko gdy rola pozwala. */
+  onMarkPaid?: (invoice: InvoiceRow, facts: InvoiceListRowFacts | undefined) => void;
 }
 
-/** Kolumna „Akcje”: Podgląd, PDF i menu „⋯” (Finora: podgląd + RowActions). */
-export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: Props) {
+/** Kolumna „Akcje”: „Zapłacone”, Podgląd, PDF i menu „⋯” (Finora: podgląd + RowActions). */
+export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false, onMarkPaid }: Props) {
   const router = useRouter();
   const [pdfPending, startPdf] = useTransition();
   const [xmlPending, startXml] = useTransition();
@@ -124,7 +142,16 @@ export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: P
   };
 
   return (
-    <div className="flex items-center justify-center gap-1">
+    <div className="flex items-center justify-end gap-1">
+      {onMarkPaid && facts?.canMarkPaid ? (
+        // Bez ikony poniżej `2xl`: przy 1280 px obok menu bocznego tabela inaczej nie mieści się bez przewijania.
+        <MarkPaidButton
+          number={invoice.internal_number}
+          iconClassName="max-2xl:hidden"
+          className="max-2xl:px-2"
+          onClick={() => onMarkPaid(invoice, facts)}
+        />
+      ) : null}
       <Tooltip>
         <TooltipTrigger
           render={
@@ -174,6 +201,18 @@ export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: P
                 <DropdownMenuItem render={<Link href={`/invoices/new/correction?parentId=${invoice.id}`} />}>
                   <RiEditLine />
                   Korekta
+                </DropdownMenuItem>
+              ) : null}
+              {entries.includes('duplicate') ? (
+                <DropdownMenuItem render={<Link href={duplicateInvoiceHref(invoice.id)} />}>
+                  <RiFileCopyLine />
+                  Duplikuj
+                </DropdownMenuItem>
+              ) : null}
+              {entries.includes('recurring') ? (
+                <DropdownMenuItem render={<Link href={setAsRecurringHref(invoice.id)} />}>
+                  <RiRepeatLine />
+                  Ustaw jako cykliczną
                 </DropdownMenuItem>
               ) : null}
               {entries.includes('xml') ? (

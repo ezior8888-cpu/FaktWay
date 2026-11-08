@@ -95,6 +95,7 @@ const facts = (over: Partial<InvoiceListRowFacts> = {}): InvoiceListRowFacts => 
   payment: 'unpaid',
   outstanding: 1230,
   canCorrect: false,
+  canMarkPaid: false,
   ...over,
 });
 
@@ -398,9 +399,24 @@ describe('paginacja linkami', () => {
     expect(html).not.toContain('<button');
   });
 
-  it('jedna strona: bez nawigacji, ale z zakresem pozycji', () => {
-    const html = renderToStaticMarkup(<InvoicesPagination params={parseInvoiceListParams({})} total={12} />);
-    expect(html).toContain('Pozycje 1–12 z 12');
+  // Lista 1:1 z Finory (21.10.2026): nawigacja (Poprzednia / numery / Następna) jest ZAWSZE, gdy są pozycje,
+  // także przy jednej stronie (było: bez nawigacji). Domyślnie 10 na stronę, więc „jedna strona” to total ≤ 10
+  // (było total=12 przy 50 na stronę); obie strzałki są wtedy nieaktywne, a jedyny numer to bieżąca strona.
+  it('jedna strona: nawigacja jest (jak w Finorze), strzałki nieaktywne, z zakresem pozycji', () => {
+    const html = renderToStaticMarkup(<InvoicesPagination params={parseInvoiceListParams({})} total={7} />);
+    expect(html).toContain('Pozycje 1–7 z 7');
+    expect(html).toContain('aria-label="Strony listy faktur"');
+    expect(html).toContain('Poprzednia');
+    expect(html).toContain('Następna');
+    expect(html).toContain('aria-current="page"');
+    expect(html.match(/aria-disabled="true"/g)).toHaveLength(2);
+    expect(html).not.toContain('href="/invoices?strona=2"');
+  });
+
+  // Lista 1:1 z Finory (21.10.2026): nawigacja tylko gdy total > 0 — pusta lista ma sam napis „Brak pozycji”.
+  it('pusta lista: „Brak pozycji”, bez nawigacji', () => {
+    const html = renderToStaticMarkup(<InvoicesPagination params={parseInvoiceListParams({})} total={0} />);
+    expect(html).toContain('Brak pozycji');
     expect(html).not.toContain('Strony listy faktur');
   });
 

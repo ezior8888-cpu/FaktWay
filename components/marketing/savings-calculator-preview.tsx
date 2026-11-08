@@ -1,14 +1,32 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
+import { MONTHLY_PRICE_GROSS_GROSZE, PRICE_PER_MONTH, formatPln } from '@/lib/billing/pricing';
+import { cn } from '@/lib/utils';
+import { ButtonLink } from '@/components/site/ui';
+
 /**
- * Kalkulator oszczędności — dark+emerald glow. 2-col grid (inputy / wynik)
- * z subtelną emerald aurą wokół całej karty. Gigantyczna liczba zysku
- * w marketing-gradient-emerald.
+ * Kalkulator oszczędności: dwie kolumny (suwaki / wynik) w jednej karcie.
+ * Od 23.10.2026 na tokenach aplikacji, w wyglądzie strony głównej
+ * (wcześniej ciemny motyw ze szmaragdową poświatą).
+ *
+ * Abonament z `lib/billing/pricing` (do 23.10.2026 było tu na sztywno
+ * 49 zł miesięcznie, a do „zysku” doliczana była różnica względem
+ * założonej ceny konkurencji 79 zł i wiersz „Przewaga rynkowa: Wysoka”;
+ * niczego z tego nie mogliśmy wykazać).
  */
+const SUBSCRIPTION_YEAR_GROSZE = MONTHLY_PRICE_GROSS_GROSZE * 12;
+
+/**
+ * Odczyt ze zdjęcia ma twardy limit miesięczny na firmę: 3 zł budżetu, przy
+ * obecnych cenach około 55 rozpoznań (lib/ai/tenant-ai-budget.ts). Po jego
+ * wyczerpaniu dane wpisuje się ręcznie, więc z dokumentów ponad limit nie
+ * liczymy oszczędności. Wartość jest tu na sztywno, bo plik jest kliencki.
+ */
+const LIMIT_ODCZYTOW_MIESIECZNIE = 55;
+
 export function SavingsCalculatorPreview() {
   const [invoicesPerMonth, setInvoicesPerMonth] = useState(20);
   const [hourlyRate, setHourlyRate] = useState(150);
@@ -21,140 +39,125 @@ export function SavingsCalculatorPreview() {
     const savedMinutesPerInvoice =
       minutesPerInvoiceManual - minutesPerInvoiceWithOcr;
 
-    const invoicesPerYear = invoicesPerMonth * 12;
+    const invoicesPerYear = Math.min(invoicesPerMonth, LIMIT_ODCZYTOW_MIESIECZNIE) * 12;
     const minutesSavedPerYear = invoicesPerYear * savedMinutesPerInvoice;
     const hoursSavedPerYear = minutesSavedPerYear / 60;
     const moneySavedPerYear = hoursSavedPerYear * hourlyRate;
 
-    const ksefSaasYear = 49 * 12;
-    const competitorAvg = 79 * 12;
-
-    const netSaving =
-      moneySavedPerYear - ksefSaasYear + (competitorAvg - ksefSaasYear);
+    const netSaving = moneySavedPerYear - SUBSCRIPTION_YEAR_GROSZE / 100;
 
     return {
       hoursSavedPerYear,
       moneySavedPerYear,
-      ksefSaasYear,
-      competitorAvg,
       netSaving,
     };
   }, [invoicesPerMonth, hourlyRate]);
 
   return (
-    <div className="relative">
-      {/* Aura emerald wokół karty */}
-      <div
-        className="pointer-events-none absolute -inset-4 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-emerald-500/20 opacity-50 blur-2xl"
-        aria-hidden
-      />
-      <div className="marketing-glass-card relative overflow-hidden rounded-2xl">
-        <div className="grid grid-cols-1 lg:grid-cols-2">
-          {/* LEWA — sliderowe inputy */}
-          <div className="space-y-8 border-b border-zinc-200 p-8 lg:border-b-0 lg:border-r lg:border-zinc-200 lg:p-10">
-            <div>
-              <div className="mb-3 flex items-baseline justify-between gap-4">
-                <label
-                  htmlFor={invoicesInputId}
-                  className="text-sm font-medium text-zinc-900"
-                >
-                  Faktury miesięcznie
-                </label>
-                <span className="text-2xl font-bold tabular-nums text-emerald-700">
-                  {invoicesPerMonth}
-                </span>
-              </div>
-              <input
-                id={invoicesInputId}
-                type="range"
-                min={5}
-                max={200}
-                step={5}
-                value={invoicesPerMonth}
-                onChange={(e) => setInvoicesPerMonth(Number(e.target.value))}
-                className="w-full accent-emerald-500"
-              />
-            </div>
-
-            <div>
-              <div className="mb-3 flex items-baseline justify-between gap-4">
-                <label
-                  htmlFor={hourlyRateInputId}
-                  className="text-sm font-medium text-zinc-900"
-                >
-                  Stawka godzinowa (PLN)
-                </label>
-                <span className="text-2xl font-bold tabular-nums text-emerald-700">
-                  {hourlyRate}
-                </span>
-              </div>
-              <input
-                id={hourlyRateInputId}
-                type="range"
-                min={30}
-                max={500}
-                step={10}
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(Number(e.target.value))}
-                className="w-full accent-emerald-500"
-              />
-            </div>
-          </div>
-
-          {/* PRAWA — gigantyczny zysk netto */}
-          <div className="relative p-8 lg:p-10">
-            {/* Subtelny emerald glow tła kolumny wyniku */}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.06] to-transparent" aria-hidden />
-            <div className="relative">
-              <p className="marketing-section-label">Zysk netto rocznie</p>
-              <p className="mt-4 flex items-baseline gap-2">
-                <span className="text-6xl font-bold tabular-nums tracking-tight marketing-gradient-emerald lg:text-7xl">
-                  {calc.netSaving.toFixed(0)}
-                </span>
-                <span className="text-2xl font-semibold text-zinc-600">
-                  PLN
-                </span>
-              </p>
-
-              <div className="mt-8 space-y-3 text-sm">
-                <BreakdownRow
-                  label="Czas wolny"
-                  value={`${calc.hoursSavedPerYear.toFixed(0)} h / rok`}
-                />
-                <BreakdownRow
-                  label="Wartość czasu"
-                  value={`+${calc.moneySavedPerYear.toFixed(0)} PLN`}
-                  positive
-                />
-                <BreakdownRow
-                  label="Subskrypcja FaktWay"
-                  value={`−${calc.ksefSaasYear} PLN`}
-                />
-                <BreakdownRow
-                  label="Przewaga rynkowa"
-                  value="Wysoka"
-                  positive
-                  isLast
-                />
-              </div>
-            </div>
-          </div>
+    <div className="overflow-hidden rounded-3xl bg-card text-card-foreground shadow-xl shadow-primary/5 ring-1 ring-border">
+      <div className="grid grid-cols-1 lg:grid-cols-2">
+        {/* LEWA: suwaki */}
+        <div className="space-y-10 border-b border-border p-8 lg:border-r lg:border-b-0 lg:p-10">
+          <RangeField
+            id={invoicesInputId}
+            label="Faktury miesięcznie"
+            value={invoicesPerMonth}
+            min={5}
+            max={200}
+            step={5}
+            onChange={setInvoicesPerMonth}
+          />
+          <RangeField
+            id={hourlyRateInputId}
+            label="Stawka godzinowa (zł)"
+            value={hourlyRate}
+            min={30}
+            max={500}
+            step={10}
+            onChange={setHourlyRate}
+          />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-200 bg-zinc-100 p-6 lg:px-10">
-          <p className="max-w-md text-xs text-zinc-600">
-            Szacowanie na podstawie pomiarów beta-testerów: 8 min ręcznie vs 1,5
-            min z OCR FaktWay.
+        {/* PRAWA: zysk netto */}
+        <div className="bg-muted/50 p-8 lg:p-10">
+          <p className="text-sm font-medium text-muted-foreground">Zysk netto rocznie</p>
+          <p className="mt-3 flex items-baseline gap-2">
+            <span className="text-6xl font-semibold tracking-tight text-primary tabular-nums lg:text-7xl">
+              {calc.netSaving.toFixed(0)}
+            </span>
+            <span className="text-2xl font-semibold text-muted-foreground">zł</span>
           </p>
-          <Link
-            href="/register"
-            className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 shadow-[0_0_24px_-4px_var(--ff-emerald-glow)] transition-all hover:bg-emerald-400 hover:shadow-[0_0_36px_0_var(--ff-emerald-glow)]"
-          >
-            Zacznij oszczędzać teraz
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </Link>
+
+          <div className="mt-8 space-y-3 text-sm">
+            <BreakdownRow
+              label="Czas wolny"
+              value={`${calc.hoursSavedPerYear.toFixed(0)} h / rok`}
+            />
+            <BreakdownRow
+              label="Wartość czasu"
+              value={`+${calc.moneySavedPerYear.toFixed(0)} zł`}
+              positive
+            />
+            <BreakdownRow
+              label="Abonament FaktWay"
+              value={`−${formatPln(SUBSCRIPTION_YEAR_GROSZE)}`}
+              isLast
+            />
+          </div>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border p-6 lg:px-10">
+        <p className="max-w-md text-xs text-muted-foreground">
+          Szacunek przy założeniu: 8 min na dokument ręcznie i 1,5 min
+          z odczytem ze zdjęcia w FaktWay, abonament {PRICE_PER_MONTH}. Odczyt ze zdjęcia ma limit, około{' '}
+          {LIMIT_ODCZYTOW_MIESIECZNIE} dokumentów miesięcznie na firmę, więc ponad limit oszczędności nie
+          liczymy. Twój wynik może być inny.
+        </p>
+        <ButtonLink href="/register">
+          Zacznij oszczędzać teraz
+          <ArrowRight className="size-4" aria-hidden />
+        </ButtonLink>
+      </div>
+    </div>
+  );
+}
+
+function RangeField({
+  id,
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex items-baseline justify-between gap-4">
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
+          {label}
+        </label>
+        <span className="text-2xl font-semibold text-primary tabular-nums">{value}</span>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full cursor-pointer accent-primary"
+      />
     </div>
   );
 }
@@ -172,15 +175,17 @@ function BreakdownRow({
 }) {
   return (
     <div
-      className={`flex items-baseline justify-between gap-4 ${
-        isLast ? '' : 'border-b border-zinc-200 pb-3'
-      }`}
+      className={cn(
+        'flex items-baseline justify-between gap-4',
+        !isLast && 'border-b border-border pb-3',
+      )}
     >
-      <span className="text-zinc-600">{label}</span>
+      <span className="text-muted-foreground">{label}</span>
       <span
-        className={`tabular-nums ${
-          positive ? 'font-semibold text-emerald-700' : 'text-zinc-800'
-        }`}
+        className={cn(
+          'tabular-nums',
+          positive ? 'font-semibold text-primary' : 'text-foreground',
+        )}
       >
         {value}
       </span>

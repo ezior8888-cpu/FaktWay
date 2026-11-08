@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   client: vi.fn(), session: vi.fn(), user: vi.fn(), claims: vi.fn(), update: vi.fn(), logout: vi.fn(), globalLogout: vi.fn(),
   limit: vi.fn(), claim: vi.fn(), password: vi.fn(), audit: vi.fn(), revalidate: vi.fn(),
+  admin: vi.fn(), removed: vi.fn(),
 }));
-vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client, createAdminClient: mocks.admin }));
 vi.mock('@/lib/rate-limit/password', () => ({ checkPasswordOperationRateLimit: mocks.limit, claimPasswordRecoverySession: mocks.claim }));
 vi.mock('@/lib/auth/password', () => ({ validatePassword: mocks.password }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
@@ -20,8 +21,17 @@ function claims(amr = [{ method: 'recovery', timestamp: Math.floor(Date.now() / 
 function form() {
   const data = new FormData(); data.set('new_password', password); data.set('confirm_password', password); return data;
 }
+// Klient serwisowy kasuje klucze biometrii: zapisujemy, po jakiej kolumnie i dla kogo.
+const removal = { calls: [] as string[][] };
 beforeEach(() => {
   vi.resetAllMocks();
+  removal.calls = [];
+  mocks.removed.mockResolvedValue({ data: [], error: null });
+  mocks.admin.mockImplementation(() => ({
+    from: (table: string) => ({
+      delete: () => ({ eq: (column: string, value: string) => { removal.calls.push([table, column, value]); return { select: mocks.removed }; } }),
+    }),
+  }));
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected external request'); }));
   mocks.client.mockResolvedValue({ auth: { getSession: mocks.session, getUser: mocks.user, getClaims: mocks.claims, updateUser: mocks.update, signOut: mocks.logout, admin: { signOut: mocks.globalLogout } } });
   mocks.session.mockResolvedValue({ data: { session: { access_token: 'verified-recovery-token', user: { id: 'forged' } } }, error: null });
@@ -191,4 +201,50 @@ it('retains password success but warns on a thrown global revocation', async () 
   mocks.globalLogout.mockRejectedValue(new Error('sensitive service detail'));
   expect(await resetPasswordAction(null, form())).toEqual({ ok: true, localSessionCleared: true, globalSignOutConfirmed: false });
   expect(mocks.logout).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
+});
+
+// Recenzja #359, pkt 2: reset hasła wylogowuje wszędzie, ale klucz dodany z przejętej sesji
+// zostawał i wracał po resecie. Klucze znikają razem z hasłem; błąd usuwania nie cofa resetu
+// i nie jest przemilczany.
+describe('klucze biometrii po resecie hasła', () => {
+  it('usuwa wszystkie klucze tego użytkownika po zmianie hasła i odwołaniu sesji, z wpisem w audycie', async () => {
+    mocks.removed.mockResolvedValue({ data: [{ id: 'k1' }, { id: 'k2' }], error: null });
+    expect(await resetPasswordAction(null, form())).toEqual({ ok: true, localSessionCleared: true, globalSignOutConfirmed: true, passkeys: 'removed' });
+    expect(removal.calls).toEqual([['user_passkeys', 'user_id', id]]);
+    expect(mocks.audit).toHaveBeenCalledWith({
+      action: 'auth.passkey_removed', tenantId: null, userId: id, metadata: { reason: 'password_recovery', removed_count: 2 },
+    });
+    // Najpierw koniec sesji, potem klucze: nic z przejętej sesji nie zdąży dodać klucza po usunięciu.
+    const removedAt = mocks.admin.mock.invocationCallOrder[0]!;
+    expect(mocks.update.mock.invocationCallOrder[0]).toBeLessThan(removedAt);
+    expect(mocks.globalLogout.mock.invocationCallOrder[0]).toBeLessThan(removedAt);
+  });
+  it('konto bez kluczy: bez dodatkowego wpisu w audycie i bez wzmianki w wyniku', async () => {
+    expect(await resetPasswordAction(null, form())).toEqual({ ok: true, localSessionCleared: true, globalSignOutConfirmed: true });
+    expect(mocks.audit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'auth.password_changed' }));
+  });
+  it.each([
+    ['błąd bazy', () => mocks.removed.mockResolvedValue({ data: null, error: { message: 'private detail', code: '57P01' } })],
+    ['wyjątek klienta serwisowego', () => mocks.admin.mockImplementation(() => { throw new Error('private detail'); })],
+  ])('%s: reset zostaje, wynik mówi o kluczach, a w logu nie ma danych osobowych', async (_name, fail) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      fail();
+      expect(await resetPasswordAction(null, form())).toEqual({ ok: true, localSessionCleared: true, globalSignOutConfirmed: true, passkeys: 'failed' });
+      expect(log).toHaveBeenCalledTimes(1);
+      const logged = JSON.stringify(log.mock.calls);
+      for (const secret of [id, user.email, sessionId, 'private detail', password]) expect(logged).not.toContain(secret);
+      expect(mocks.audit).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'auth.passkey_removed' }));
+      expect(mocks.update).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it('nie rusza kluczy, gdy hasło nie zostało zmienione', async () => {
+    mocks.update.mockResolvedValue({ data: { user: null }, error: { code: 'unexpected_failure', message: 'x' } });
+    expect(await resetPasswordAction(null, form())).toEqual({ ok: false, error: 'restart_required' });
+    mocks.claim.mockResolvedValue({ allowed: false, unavailable: false, retryAfter: 1 });
+    expect(await resetPasswordAction(null, form())).toEqual({ ok: false, error: 'restart_required' });
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
 });

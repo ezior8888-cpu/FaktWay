@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowDown, Loader2 } from 'lucide-react';
 
@@ -8,16 +8,24 @@ import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
 
 interface Props {
   onRefresh: () => Promise<void> | void;
+  /**
+   * Odświeżanie trwa poza hakiem (np. `router.refresh()` w przejściu React,
+   * które samo nie zwraca obietnicy) — wskaźnik kręci się do jego końca.
+   */
+  refreshing?: boolean;
   children: ReactNode;
 }
 
-export function PullToRefresh({ onRefresh, children }: Props) {
-  const { pullDistance, isRefreshing, progress } = usePullToRefresh({
+export function PullToRefresh({ onRefresh, refreshing = false, children }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { pullDistance, isRefreshing: hookRefreshing, progress } = usePullToRefresh({
     onRefresh,
+    targetRef: rootRef,
   });
+  const isRefreshing = hookRefreshing || refreshing;
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <motion.div
         animate={{
           height: isRefreshing ? 60 : pullDistance,

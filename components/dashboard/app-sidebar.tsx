@@ -12,8 +12,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
 // Component Imports
-import { BrandWordmark } from '@/components/brand/brand-wordmark'
-import { FaktflowMark } from '@/components/brand/faktflow-mark'
+import { FaktWayLogo, FaktWayMark } from '@/components/brand/faktway-logo'
 import {
   Sidebar,
   SidebarContent,
@@ -150,16 +149,18 @@ export function AppSidebar() {
   return (
     <Sidebar variant={SIDEBAR_VARIANT} collapsible={SIDEBAR_COLLAPSIBLE}>
       <SidebarHeader className='h-(--ff-header-h) flex-row items-center px-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0'>
-        {/* Rozwinięty: wordmark. Zwinięty do ikon: sam znak (wordmark nie
-            mieści się w 3rem). */}
-        <div className='min-w-0 group-data-[collapsible=icon]:hidden'>
-          <BrandWordmark href='/dashboard' variant='app' className='text-[19px]' />
-        </div>
+        {/* Rozwinięty: logo. Zwinięty do ikon: sam znak (logo nie mieści się w 3rem). */}
         <Link
           href='/dashboard'
-          className='hidden shrink-0 transition-opacity group-data-[collapsible=icon]:flex hover:opacity-80 [&_img]:size-8 [&_img]:rounded-lg'
+          className='min-w-0 transition-opacity hover:opacity-80 group-data-[collapsible=icon]:hidden'
         >
-          <FaktflowMark variant='header' priority={false} />
+          <FaktWayLogo className='h-7' />
+        </Link>
+        <Link
+          href='/dashboard'
+          className='hidden size-8 shrink-0 items-center justify-center transition-opacity group-data-[collapsible=icon]:flex hover:opacity-80'
+        >
+          <FaktWayMark className='size-7' />
         </Link>
       </SidebarHeader>
 

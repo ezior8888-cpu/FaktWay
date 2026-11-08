@@ -978,15 +978,75 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   /* Wysokość i wcięcie pod wcięcie ekranu — zob. sekcja „Telefon" niżej.
    * Dzięki temu w layoucie nie ma już `h-20`, którego kopie krążyły po
    * wyliczeniach wysokości na dashboardzie. */
-  height: calc(var(--ff-header-h) + var(--ff-safe-t));
+  /* Wysokość jak w Finorze: z `py-2` i przycisków (21.10.2026), bez sztywnych
+   * 52 px. Wcięcie ekranu dalej dokłada `padding-top`. */
   padding-top: var(--ff-safe-t);
 }
 
 /* Stopka panelu (`components/dashboard/footer.tsx`) — przewija się z treścią
- * jako drugie dziecko `.ff-shell-scroll`. Na `/dashboard` znika (niżej,
- * `html.ff-route-dashboard .ff-shell-footer`). */
+ * jako drugie dziecko `.ff-shell-scroll`. Ta jest kolumną flex, a kontener
+ * treści rośnie, więc na krótkiej stronie stopka stoi przy dolnej krawędzi. */
 .ff-shell-footer {
   border-top: 1px solid var(--border);
+}
+
+/* Pełny arkusz list Faktur (Wystawione / Cykliczne / Po terminie, poprawka
+ * Bartosza 21.10.2026): karta z tabelą sięga do stopki pustym arkuszem, zamiast
+ * kończyć się po ostatnim wierszu. Korzeń takiej strony ma `ff-page-fill`;
+ * opakowania między kontenerem treści a nim (szablon trasy, skóra `/invoices`)
+ * stają się kolumną flex TYLKO na tych stronach (`:has`). Wszędzie indziej
+ * zostają blokami — w kolumnie flex korzeń `mx-auto max-w-*` skurczyłby się
+ * do szerokości treści. */
+.ff-shell-content:has(.ff-page-fill),
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill) {
+  display: flex;
+  flex-direction: column;
+}
+
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill),
+.ff-shell-content .ff-page-fill {
+  flex-grow: 1;
+}
+
+/* Zawartość karty sekcji, czyli strona podzakładki (poprawka Bartosza
+ * 25.10.2026: przy zmianie zakładki „płynnie zmienia się sama tabelka”).
+ * Kafle, karta i rząd zakładek stoją w layoucie sekcji i się nie ruszają;
+ * nowa tabela tylko krótko się rozjaśnia. Sama przezroczystość, bez ruchu:
+ * `transform` zrobiłby z panelu blok zawierający dla `fixed` dzieci (pływający
+ * „+ Dodaj wydatek”), jak opisano niżej przy `.ff-route-template`. */
+.ff-tab-panel {
+  animation: ff-tab-panel-in 160ms ease-out backwards;
+}
+
+@keyframes ff-tab-panel-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-tab-panel {
+    animation: none;
+  }
+}
+
+/* Zakładki w karcie (`components/lists/section-tabs.tsx`): dotknięta zakładka
+ * przejmuje podkreślenie od razu, zanim jej strona przyjdzie z serwera.
+ * Znacznik `[data-link-pending]` wstawia `LinkPendingMark` tylko na czas
+ * oczekiwania. Zwykły CSS, nie warstwa: wygrywa z klasami Tailwinda zakładki. */
+.ff-section-tabs:has([data-link-pending]) > a:not(:has([data-link-pending]))::after {
+  opacity: 0;
+}
+
+.ff-section-tabs > a:has([data-link-pending]) {
+  color: var(--foreground);
+}
+
+.ff-section-tabs > a:has([data-link-pending])::after {
+  opacity: 1;
 }
 
 
@@ -1069,6 +1129,32 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * więc reguła nie robi nic na komputerze. */
 .ff-shell-scroll {
   padding-bottom: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
+  /* Dojście do krawędzi listy nie przewija dalej dokumentu („gumka” iOS
+   * ciągnęła wtedy cały ekran razem z paskiem górnym). */
+  overscroll-behavior-y: contain;
+}
+
+/* ─── Pasek górny stoi w miejscu (zgłoszenie Bartosza 23.10.2026) ────────────
+ * W panelu przewija się WYŁĄCZNIE `.ff-shell-scroll`; dokument ma się nie
+ * przewijać wcale. A przewijał się: `<body>` ma `min-h-screen` (100vh), a na
+ * telefonie 100vh to wysokość okna BEZ pasków przeglądarki, czyli więcej niż
+ * widać. Szkielet (`100dvh`) był niższy od `<body>`, więc dokument dawał się
+ * przesunąć o wysokość paska Safari. Przy każdej zmianie zakładki Next woła
+ * `scrollIntoView()` na nowej stronie — to przewija też dokument, aż góra
+ * strony stanie przy górnej krawędzi ekranu, i pasek górny wyjeżdżał poza
+ * ekran. To samo robiła „gumka” iOS przy przeciąganiu za pasek.
+ *
+ * Tylko na ekranie: wydruk (podgląd faktury ma style `print:`) zostaje bez
+ * zmian. Klasa `ff-app-shell` stoi wyłącznie na korzeniu `(dashboard)/layout`,
+ * więc landing i strony logowania przewijają się po staremu. */
+@media screen {
+  html:has(.ff-app-shell),
+  html:has(.ff-app-shell) body {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }
 
 /* ─── Przyklejone paski akcji ────────────────────────────────────────────────
@@ -1108,12 +1194,71 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * nie być jeszcze w arkuszu, a przezroczysty pasek nawigacji nad treścią
  * wygląda jak zepsuta strona.
  *
- * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Żadnego `overflow`:
- * wyróżniony przycisk „Nowa" celowo wystaje ponad górną krawędź. */
+ * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Wyróżnione koło „Nowa”
+ * od 21.10.2026 nie wystaje ponad krawędź — stoi w pasku na miejscu napisu. */
 .ff-bottom-nav {
   height: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
   background-color: var(--background);
   border-top: 1px solid var(--border);
+}
+
+/* Slot, którego strona jest w drodze (`LinkPendingMark` albo pozycja wybrana
+ * w arkuszu „Więcej”), przejmuje kolor od razu, dotychczasowy aktywny gaśnie,
+ * a u góry paska przesuwa się pasek postępu (poprawka Bartosza 25.10.2026:
+ * „podświetla się i nic się nie dzieje”). Znacznik znika, gdy nawigacja się
+ * skończy, więc nic nie zostaje zapalone bez przejścia. */
+.ff-bottom-nav:has([data-link-pending]) > a[aria-current='page'] {
+  color: var(--ff-text-muted);
+}
+
+.ff-bottom-nav > :is(a, button):has([data-link-pending]) {
+  color: var(--ff-accent);
+}
+
+.ff-bottom-nav:has([data-link-pending])::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ff-primary), transparent) no-repeat;
+  background-size: 40% 100%;
+  animation: ff-nav-progress 1s ease-in-out infinite;
+}
+
+@keyframes ff-nav-progress {
+  from {
+    background-position: -67% 0;
+  }
+  to {
+    background-position: 167% 0;
+  }
+}
+
+/* Plus w drodze do kreatora: koło pulsuje obwódką (`[data-ff-plus]`
+ * w `bottom-nav.tsx`), zamiast stać płasko do przyjścia strony. */
+.ff-bottom-nav > a:has([data-link-pending]) [data-ff-plus] {
+  animation: ff-plus-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes ff-plus-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ff-primary) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--ff-primary) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-bottom-nav:has([data-link-pending])::before {
+    animation: none;
+    background-size: 100% 100%;
+  }
+
+  .ff-bottom-nav > a:has([data-link-pending]) [data-ff-plus] {
+    animation: none;
+  }
 }
 
 /* Arkusz z dołu dostaje klasę `.ff-dashboard`, bo Radix portaluje go POZA
@@ -1252,6 +1397,50 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
 
 @media (prefers-reduced-motion: reduce) {
   .ff-route-template {
+    animation: none;
+  }
+}
+
+/* Wejście treści Pulpitu i Przepływów (poprawka Bartosza 23.10.2026:
+ * „przejścia pomiędzy zakładkami nie są już takie clean”). Strona czeka na
+ * dane wszystkich kart i pojawia się RAZ, w całości — ten sam ruch co szablon
+ * trasy, bo szablon animuje się już przy kliknięciu (na pustym `loading.tsx`),
+ * a treść przychodzi chwilę później. `backwards` z tego samego powodu co
+ * wyżej: po animacji żadnego `transform`, więc żadnego bloku zawierającego. */
+.ff-route-content {
+  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-route-content {
+    animation: none;
+  }
+}
+
+/* Telefon i tablet (poprawka Bartosza 03.11.2026: „płynność przechodzenia
+ * na telefonie”). Tylko urządzenia dotykowe, więc Mac zostaje bez zmian.
+ *
+ * 1. Strona, która przychodzi z serwera w miejsce szkieletu, wchodzi krótkim
+ *    rozjaśnieniem zamiast podmienić się w jednej klatce. Animacja rusza
+ *    przy wstawieniu elementu, czyli właśnie przy tej podmianie. Sama
+ *    przezroczystość, bez `transform`, z tego samego powodu co `.ff-tab-panel`
+ *    (paski `fixed` w środku strony). Pulpit i Przepływy mają już
+ *    `.ff-route-content`, więc ich nie dublujemy.
+ * 2. Bez szarego prostokąta systemu po dotknięciu paska górnego i dolnego:
+ *    oba mają własne ugięcie i podświetlenie, prostokąt wyglądał jak błąd. */
+@media (hover: none) and (pointer: coarse) {
+  .ff-route-template > :not(.ff-route-content) {
+    animation: ff-tab-panel-in 180ms ease-out backwards;
+  }
+
+  .ff-shell-header,
+  .ff-bottom-nav {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: reduce) {
+  .ff-route-template > :not(.ff-route-content) {
     animation: none;
   }
 }
@@ -1507,20 +1696,10 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
   --ff-emerald-soft: oklch(0.76 0.17 162 / 0.12);
 }
 
-/* Wordmark marki (landing + panel) — SF / Apple system UI, pochylony, gruby. */
-.marketing-wordmark {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    var(--font-geist-sans), system-ui, sans-serif;
-  font-style: italic;
-  font-weight: 800;
-  font-synthesis: weight style;
-  letter-spacing: -0.04em;
-  -webkit-font-smoothing: antialiased;
-}
-
 /* Italic Fraunces — emphasis w hero/headlines (np. "Automatyzacja").
- * Global utility, nie scoped — używane w landingu, vs, blog. */
+ * `--font-fraunces` ustawia tylko `app/(marketing)/layout.tsx` (od 24.10.2026,
+ * żeby panel nie pobierał fontu) — poza tą grupą klasa spada na Georgię.
+ * Pilnuje: tests/unit/fraunces-tylko-marketing.test.ts. */
 .font-editorial {
   font-family: var(--font-fraunces), 'EB Garamond', Georgia, serif;
   font-feature-settings: 'ss01' on;

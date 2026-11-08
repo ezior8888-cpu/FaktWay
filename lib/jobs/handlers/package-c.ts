@@ -1,18 +1,20 @@
 /**
- * Paczka C (Etap 7.5): 8 jobów OCR / importy / eksporty.
+ * Paczka C (Etap 7.5): 7 jobów OCR / importy / eksporty.
  *
  * Runnery żyją w lib/jobs/runners/* (jedno źródło prawdy).
  *
  * Konfiguracja przeniesiona 1:1 z dawnych funkcji Inngest (etap 7):
  *   - retries: OCR 2, auto-kategoryzacja 2, bulk-import 1, walidacja
- *     kontrahentów 1, magic-import 2, eksporty 2, co-pilot 2,
+ *     kontrahentów 1, eksporty 2, co-pilot 2,
  *   - `concurrency: { limit: N }` (globalne) → `batchSize: N` — worker
  *     pobiera do N jobów naraz z tej kolejki,
- *   - `concurrency: { key: 'event.data.nip' }` (magic-import) →
- *     `groupConcurrency` pg-boss; grupę ustawia nadawca (Etap 7 planu),
  *   - `onFailure` → `onExhausted` (wspólne funkcje w plikach jobów):
  *     oznaczenie zadania jako nieudanego, żeby UI nie wisiało na
  *     „przetwarzanie".
+ *
+ * 8 → 7: Magiczny import z KSeF wycofany (decyzja Bartosza 22.10.2026) —
+ * historię pobiera automatycznie `ksef.history-sync.tenant` (paczka D),
+ * a kolejka `import.ksef-history.requested` jest w RETIRED_QUEUES.
  */
 
 import { runAutoCategorizeInbox } from '../runners/auto-categorize-inbox';
@@ -26,10 +28,6 @@ import {
   runCoPilotSendPackage,
 } from '../runners/co-pilot-monthly';
 import { onExportsGenerateExhausted, runExportsGenerate } from '../runners/exports-generate';
-import {
-  onMagicImportExhausted,
-  runMagicImportKsef,
-} from '../runners/magic-import-ksef';
 import {
   onProcessOcrExhausted,
   runProcessOcr,
@@ -78,15 +76,6 @@ registerJob<Parameters<typeof runBulkValidateContractors>[0]>({
   maxRetries: 1,
   batchSize: 3,
   handler: (data, ctx) => runBulkValidateContractors(data, ctx),
-});
-
-// ── Magic Import historii z KSeF (limit per NIP) ──
-registerJob<Parameters<typeof runMagicImportKsef>[0]>({
-  queue: 'import.ksef-history.requested',
-  maxRetries: 2,
-  groupConcurrency: 3, // odpowiednik concurrency { key: 'event.data.nip', limit: 3 }
-  handler: (data, ctx) => runMagicImportKsef(data, ctx),
-  onExhausted: onMagicImportExhausted,
 });
 
 // ── Generowanie eksportów (JPK, KPiR, Optima) ──

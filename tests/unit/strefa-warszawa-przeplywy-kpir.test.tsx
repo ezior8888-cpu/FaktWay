@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   context: vi.fn(),
   provenance: vi.fn(async () => undefined),
 }));
+// Strona KPiR pyta o tryb danych (dane przykładowe przed weryfikacją KSeF) — tu firma zweryfikowana.
+vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null }) }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: mocks.context }));
 vi.mock('@/lib/ksef/claim-environment', () => ({
   requireConfiguredKsefEnvironment: () => 'production',

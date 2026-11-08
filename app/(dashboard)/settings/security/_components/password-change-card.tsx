@@ -1,6 +1,8 @@
 'use client';
 
 import { useRef, useState, useTransition, type FormEvent } from 'react';
+import { MfaStepUpNotice } from '@/components/auth/mfa-step-up-notice';
+import { refreshTurnstileToken, TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -35,6 +37,8 @@ export function PasswordChangeCard() {
   const [nonceSent, setNonceSent] = useState(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
+    // Turnstile wstrzymał wysyłkę do gotowego tokenu i wyśle formularz sam.
+    if (event.defaultPrevented) return;
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -60,8 +64,12 @@ export function PasswordChangeCard() {
   function sendNonce() {
     const form = formRef.current;
     if (!form) return;
+    const fields = new FormData(form);
     const data = new FormData();
-    data.set('current_password', new FormData(form).get('current_password') ?? '');
+    data.set('current_password', fields.get('current_password') ?? '');
+    // Hasło sprawdza GoTrue, a przy włączonej captcha wymaga tokenu (jednorazowego).
+    data.set('cf-turnstile-response', fields.get('cf-turnstile-response') ?? '');
+    refreshTurnstileToken(form);
     setResult(null);
     setNonceSent(false);
     startTransition(async () => {
@@ -101,7 +109,10 @@ export function PasswordChangeCard() {
             <AlertDescription className="text-green-800 dark:text-green-400/80">Hasło zmienione.</AlertDescription>
           </Alert>
         )}
-        {failure && (
+        {failure?.error === 'mfa_required' && (
+          <MfaStepUpNotice returnTo="/settings/security">{ERROR_MESSAGES.mfa_required}</MfaStepUpNotice>
+        )}
+        {failure && failure.error !== 'mfa_required' && (
           <Alert variant="destructive">
             <AlertDescription>
               {ERROR_MESSAGES[failure.error]}
@@ -182,6 +193,8 @@ export function PasswordChangeCard() {
             </div>
           </Field>
         )}
+
+        <TurnstileWidget action="reauth" theme="auto" />
 
         <Separator />
 

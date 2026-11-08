@@ -20,6 +20,13 @@ import { cn } from '@/lib/utils'
  * wydatków od F-087. Lista ma 24 miesiące wstecz (Finora: 6), bo wydatki
  * sprzed pół roku też się opisuje; miesiąc z adresu spoza listy dochodzi na
  * jej koniec, żeby wybór był zawsze widoczny.
+ *
+ * Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): ten sam
+ * przełącznik stoi na KPiR, ale KPiR ma od dawna adres `?month=M&year=RRRR`
+ * (linki z Przepływów, Flo, testy strefy czasowej) — stąd `query="month-year"`.
+ * Domyślnie wszystko jak było (`?miesiac=`, etykieta „Miesiąc wydatków”).
+ * Propsy zostają serializowalne (bez funkcji), bo na KPiR rysuje go komponent
+ * serwerowy.
  */
 
 type MonthSelectorProps = {
@@ -29,6 +36,13 @@ type MonthSelectorProps = {
   currentMonth: string
   /** Ścieżka listy, np. `/expenses` — miesiąc dochodzi jako `?miesiac=RRRR-MM`. */
   basePath: string
+  /**
+   * Postać adresu: `'miesiac'` (domyślnie) → `?miesiac=RRRR-MM`,
+   * `'month-year'` → `?month=M&year=RRRR` (KPiR).
+   */
+  query?: 'miesiac' | 'month-year'
+  /** Etykieta pola dla czytnika ekranu. */
+  ariaLabel?: string
   className?: string
 }
 
@@ -52,7 +66,25 @@ function capitalize(text: string): string {
   return text.charAt(0).toLocaleUpperCase('pl-PL') + text.slice(1)
 }
 
-const MonthSelector = ({ month, currentMonth, basePath, className }: MonthSelectorProps) => {
+/** Adres listy dla wybranego miesiąca RRRR-MM w postaci `query`. */
+function monthHref(basePath: string, value: string, query: 'miesiac' | 'month-year'): string {
+  if (query === 'month-year') {
+    const [year, month] = value.split('-')
+
+    return `${basePath}?month=${Number(month)}&year=${year}`
+  }
+
+  return `${basePath}?miesiac=${value}`
+}
+
+const MonthSelector = ({
+  month,
+  currentMonth,
+  basePath,
+  query = 'miesiac',
+  ariaLabel = 'Miesiąc wydatków',
+  className
+}: MonthSelectorProps) => {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const options = monthOptions(currentMonth, month)
@@ -63,10 +95,15 @@ const MonthSelector = ({ month, currentMonth, basePath, className }: MonthSelect
       value={month}
       disabled={isPending}
       onValueChange={value => {
-        if (value) startTransition(() => router.push(`${basePath}?miesiac=${value}`))
+        if (value) startTransition(() => router.push(monthHref(basePath, value, query)))
       }}
     >
-      <SelectTrigger className={cn('w-48', className)} aria-label='Miesiąc wydatków'>
+      <SelectTrigger
+        className={cn('w-48', className)}
+        aria-label={ariaLabel}
+        // Przejście do innego miesiąca trwa (strona serwerowa) — czytnik słyszy „zajęte”.
+        aria-busy={isPending || undefined}
+      >
         <SelectValue placeholder='Wybierz miesiąc' />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} className='p-1'>

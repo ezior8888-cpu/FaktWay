@@ -1,75 +1,71 @@
 'use client'
 
-// Plan Finora P0 (E2): nagłówek z `src/components/layout/Header.tsx` szablonu.
-// Kolejność: zwijanie paska · tytuł strony · ⌘K | przełącznik firmy · motyw ·
-// avatar. Bez dzwonka (nie mamy listy powiadomień), bez ikony ustawień
-// (są w pasku i w menu avatara) i bez panelu personalizacji.
+// Poprawka Bartosza 21.10.2026: pasek górny 1:1 z `src/components/layout/Header.tsx`
+// Finory. Lewa strona: zwijanie paska · separator · wyszukiwarka (⌘K). Prawa:
+// dzwonek (komunikat „wkrótce FLO”) · motyw · zębatka (/settings) · profil.
+// Bez panelu personalizacji szablonu (paleta kolorów) — mamy jeden preset.
+// Tytuł strony, przełącznik firmy i wordmark z dawnego paska wylatują: firma
+// jest w menu profilu („Moje firmy”), tytuły stron są w treści.
 
 // React Imports
 import type { ReactNode } from 'react'
 
+// Next Imports
+import Link from 'next/link'
+
+// Third-party Imports
+import { RiSettings3Line } from '@remixicon/react'
+
 // Component Imports
-import { BrandWordmark } from '@/components/brand/brand-wordmark'
-import { CommandMenu } from '@/components/dashboard/command-menu'
-import { ProfileMenu } from '@/components/dashboard/profile-menu'
+import { FaktWayLogo } from '@/components/brand/faktway-logo'
+import { CommandMenu, CommandMenuPhoneTrigger } from '@/components/dashboard/command-menu'
+import { NotificationDropdown } from '@/components/dashboard/notification-dropdown'
 import { ThemeToggle } from '@/components/dashboard/theme-toggle'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 
-export interface AppHeaderUser {
-  email: string
-  name?: string
-}
-
 /**
- * Nagłówek panelu. Przełącznik firmy i tytuł strony przychodzą jako sloty
- * (`ReactNode`), bo `DashboardOrgHeader` jest asynchronicznym Server
- * Componentem w `Suspense`, a komponent kliencki nie może go zaimportować.
+ * Nagłówek panelu. Menu profilu przychodzi jako slot (`ReactNode`), bo dane
+ * firm czyta asynchroniczny Server Component w `Suspense`, a komponent
+ * kliencki nie może go zaimportować.
  *
- * Klasa `ff-shell-header` niesie wysokość (`--ff-header-h` + wcięcie ekranu),
- * tło i dolną ramkę — zob. `app/globals.css`.
+ * Klasa `ff-shell-header` niesie tło, dolną ramkę i wcięcie ekranu
+ * (`app/globals.css`); wysokość daje `py-2` jak w Finorze.
+ *
+ * Telefon (poniżej `sm`, poprawka Bartosza 03.11.2026): niższy pasek, przy
+ * menu logo zamiast lupy, lupa po prawej, bez zębatki (Ustawienia są w menu
+ * profilu i w „Więcej”). Od `sm` w górę pasek jest taki jak był.
  */
-export function AppHeader({
-  orgSwitcher,
-  pageHeading,
-  user
-}: {
-  orgSwitcher: ReactNode
-  pageHeading: ReactNode
-  user: AppHeaderUser | null
-}) {
+export function AppHeader({ profile }: { profile: ReactNode }) {
   return (
-    <header className='ff-shell-header sticky top-0 z-40 flex w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]'>
-      {/* PODZIAŁ SZEROKOŚCI. Na telefonie lewa strona ma stałą szerokość
-          wordmarku i lupy (`shrink-0`), a kurczy się prawa — inaczej długa
-          nazwa organizacji („ORANGE POLSKA SPÓŁKA AKCYJNA") zjada cały pasek
-          i z „FaktWay" zostaje samo „F". Od `lg` odwrotnie: rośnie lewa,
-          bo to ona niesie tytuł strony i paletę poleceń. */}
-      <div className='flex shrink-0 items-center gap-1.5 sm:gap-3 lg:min-w-0 lg:flex-1'>
-        <SidebarTrigger className='[&_svg]:size-5!' />
-        <Separator orientation='vertical' className='hidden h-4! self-center! lg:block' />
-        {/* Na telefonie pasek nosi wordmark: pasek boczny z marką jest
-            schowany, a gdzie jesteśmy, mówi dolna nawigacja. Ukrycie na
-            opakowaniu, nie przez `className` wordmarku — ten prop trafia do
-            wewnętrznego `<span>`, więc pusty odsyłacz zostałby w kolejności
-            tabulacji. */}
-        <div className='shrink-0 lg:hidden'>
-          <BrandWordmark href='/dashboard' variant='app' className='text-[19px]' />
+    <header className='ff-shell-header sticky top-0 z-40 w-full shrink-0 px-2 sm:px-6'>
+      {/* Wewnętrzny kontener jak w Finorze (układ „compact”: `max-w-348`, `py-2`). */}
+      <div className='relative mx-auto flex w-full max-w-348 items-center justify-between py-1 sm:py-2'>
+        <div className='flex items-center gap-0.5 sm:gap-4'>
+          <SidebarTrigger className='[&_svg]:size-5!' />
+          <Separator orientation='vertical' className='hidden h-4! self-center! sm:block' />
+          <Link href='/dashboard' aria-label='FaktWay, pulpit' className='flex items-center sm:hidden'>
+            <FaktWayLogo className='h-[22px]' />
+          </Link>
+          <CommandMenu />
         </div>
-        <div className='hidden min-w-0 lg:block'>{pageHeading}</div>
-        <CommandMenu />
-      </div>
-      <div className='flex min-w-0 flex-1 items-center justify-end gap-2 lg:flex-none lg:shrink-0'>
-        {orgSwitcher}
-        <ThemeToggle />
-        {/* Na telefonie Ustawienia i Wyloguj są w arkuszu „Więcej" dolnej
-            nawigacji (plan Finora §4) — drugi zestaw w nagłówku byłby dublem,
-            a pasek 375 px dzieli się już między wordmark, lupę, firmę i motyw. */}
-        {user ? (
-          <div className='hidden lg:flex'>
-            <ProfileMenu email={user.email} name={user.name} />
-          </div>
-        ) : null}
+        <div className='flex items-center sm:gap-1.5'>
+          <CommandMenuPhoneTrigger />
+          <NotificationDropdown />
+          <ThemeToggle />
+          <Button
+            variant='ghost'
+            size='icon'
+            className='max-sm:hidden'
+            render={<Link href='/settings' />}
+            nativeButton={false}
+            aria-label='Ustawienia'
+          >
+            <RiSettings3Line aria-hidden />
+          </Button>
+          {profile}
+        </div>
       </div>
     </header>
   )

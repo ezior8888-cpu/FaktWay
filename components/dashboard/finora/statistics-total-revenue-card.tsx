@@ -6,67 +6,111 @@ import { Bar, BarChart } from 'recharts'
 // Component Imports
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { DymekWiersz } from './dymek'
 
 // Util Imports
+import { formatPlMoney, formatPlPercentChange } from '@/lib/format/pl'
 import { cn } from '@/lib/utils'
 
-// Revenue chart data
-const revenueChartData = [
-  { month: 'Styczeń', desktop: 120, mobile: 80 },
-  { month: 'Luty', desktop: 164, mobile: 120 },
-  { month: 'Marzec', desktop: 99, mobile: 138 },
-  { month: 'Kwiecień', desktop: 48, mobile: 80 },
-  { month: 'Maj', desktop: 160, mobile: 141 }
-]
+export type PrzychodMiesiac = {
+  /** Podpis miesiąca, np. „Paź”. */
+  month: string
+  /** Netto miesiąca w tym roku. */
+  current: number
+  /** Netto tego samego miesiąca rok wcześniej. */
+  previous: number
+}
 
+export type StatisticsTotalRevenueCardProps = {
+  value: string
+  valueTitle?: string
+  /** Zmiana m/m; `null` (brak podstawy) → bez procentu. */
+  changePct: number | null
+  description: string
+  descriptionTitle?: string
+  series: PrzychodMiesiac[]
+  /** Czy firma ma sprzedaż sprzed roku — bez niej dymek mówi „brak danych”, nie „0 zł”. */
+  hasPrevYear: boolean
+  className?: string
+}
+
+// Revenue chart config: te same kolory co w Finorze, prawdziwe nazwy serii.
 const revenueChartConfig = {
-  desktop: {
-    label: 'Komputer',
+  current: {
+    label: 'Ten rok',
     color: 'var(--chart-2)'
   },
-  mobile: {
-    label: 'Telefon',
+  previous: {
+    label: 'Rok wcześniej',
     color: 'color-mix(in oklab, var(--chart-2) 20%, transparent)'
   }
 } satisfies ChartConfig
 
-const StatisticsCardData = {
-  title: '42,5 tys. zł',
-  description: 'Przychód łącznie',
-  children: (
-    <>
-      <ChartContainer config={revenueChartConfig} className='h-31 w-full'>
-        <BarChart
-          accessibilityLayer
-          data={revenueChartData}
-          barSize={12}
-          margin={{
-            left: 0,
-            right: 0
-          }}
-          barGap={0}
-        >
-          <Bar dataKey='desktop' fill='var(--color-desktop)' radius={[12, 12, 0, 0]} />
-          <Bar dataKey='mobile' fill='var(--color-mobile)' radius={[12, 12, 0, 0]} />
-          <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-        </BarChart>
-      </ChartContainer>
-    </>
-  ),
-  changePercentage: '-22%'
-}
+const zl = (n: number) => `${formatPlMoney(n)} zł`
 
-const StatisticsTotalRevenueCard = ({ className }: { className?: string }) => {
+const StatisticsTotalRevenueCard = ({
+  value,
+  valueTitle,
+  changePct,
+  description,
+  descriptionTitle,
+  series,
+  hasPrevYear,
+  className
+}: StatisticsTotalRevenueCardProps) => {
   return (
     <Card className={cn('justify-between', className)}>
       <CardHeader>
         <div className='flex items-center gap-2'>
-          <CardTitle className='text-lg font-semibold'>{StatisticsCardData.title}</CardTitle>
-          <span className='text-base'>{StatisticsCardData.changePercentage}</span>
+          <CardTitle className='text-lg font-semibold' title={valueTitle}>
+            {value}
+          </CardTitle>
+          <span className='text-base'>{changePct === null ? null : formatPlPercentChange(changePct)}</span>
         </div>
-        <CardDescription className='text-muted-foreground text-base'>{StatisticsCardData.description}</CardDescription>
+        <CardDescription className='text-muted-foreground text-base' title={descriptionTitle}>
+          {description}
+        </CardDescription>
       </CardHeader>
-      <CardContent>{StatisticsCardData.children}</CardContent>
+      <CardContent>
+        <ChartContainer config={revenueChartConfig} className='h-31 w-full'>
+          <BarChart
+            accessibilityLayer
+            data={series}
+            barSize={12}
+            margin={{
+              left: 0,
+              right: 0
+            }}
+            barGap={0}
+          >
+            <Bar dataKey='current' fill='var(--color-current)' radius={[12, 12, 0, 0]} />
+            <Bar dataKey='previous' fill='var(--color-previous)' radius={[12, 12, 0, 0]} />
+            <ChartTooltip
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(_, payload) => String(payload?.[0]?.payload?.month ?? '')}
+                  formatter={(itemValue, name, item) =>
+                    name === 'previous' ? (
+                      <DymekWiersz color={item.color} label='Rok wcześniej' value={hasPrevYear ? zl(Number(itemValue)) : 'brak danych'} />
+                    ) : (
+                      <DymekWiersz color={item.color} label='Ten rok' value={zl(Number(itemValue))} />
+                    )
+                  }
+                />
+              }
+            />
+          </BarChart>
+        </ChartContainer>
+        {/* Blada seria nie ma kontrastu 3:1 — kwoty obu serii także tekstem (PLAN-PRAWDZIWE-DANE §11 pkt 9). */}
+        <ul className='sr-only'>
+          {series.map(m => (
+            <li key={m.month}>
+              {`${m.month}: ten rok ${zl(m.current)}, rok wcześniej ${hasPrevYear ? zl(m.previous) : 'brak danych'}`}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
     </Card>
   )
 }

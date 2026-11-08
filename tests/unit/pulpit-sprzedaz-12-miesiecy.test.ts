@@ -117,6 +117,8 @@ describe('getSalesSeries — wywołanie bez opcji jak dotąd', () => {
       ],
       currentSeries: [1230, 0, 0, 0, 0, 2460],
       prevSeries: [0, 492, 0, 0, 0, 0],
+      // PLAN-PRAWDZIWE-DANE E5: netto roku wcześniej dla karty „Przychód netto” Pulpitu.
+      prevNetSeries: [0, 400, 0, 0, 0, 0],
       currentMonthKey: '2026-09',
       netSeries: [1000, 0, 0, 0, 0, 2000],
       vatSeries: [230, 0, 0, 0, 0, 460],
@@ -158,6 +160,7 @@ describe('getSalesSeries({ months: 12, withPrevYear: false })', () => {
     ]);
     expect(series.currentMonthKey).toBe('2027-02');
     expect(series.prevSeries).toEqual([]);
+    expect(series.prevNetSeries).toEqual([]);
     expect(series.netSeries).toEqual([100, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 300]);
     expect(series.vatSeries).toEqual([23, 0, 0, 0, 0, 0, 0, 0, 0, 46, 0, 69]);
     expect(series.currentSeries).toEqual([123, 0, 0, 0, 0, 0, 0, 0, 0, 246, 0, 369]);

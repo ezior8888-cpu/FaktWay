@@ -7,7 +7,10 @@ export function isPublicStaticAsset(url: URL, origin: string): boolean {
   return (
     (url.pathname.startsWith('/_next/static/') &&
       /\.(?:js|css|woff2?|ttf|otf|png|jpg|jpeg|webp|avif|svg|ico)$/.test(url.pathname)) ||
-    (url.pathname.startsWith('/favicon/') && /\.(?:png|svg|ico)$/.test(url.pathname))
+    // Logo i ikony z `public/` (docs/brand/logo/zrodla/aplikacja.py).
+    (url.pathname.startsWith('/icons/') && /\.png$/.test(url.pathname)) ||
+    url.pathname === '/favicon.ico' ||
+    url.pathname === '/icon.svg'
   );
 }
 

@@ -32,6 +32,14 @@ export function ResetPasswordForm() {
     return (
       <div className="space-y-4">
         <AuthMessage tone="success">Hasło zostało zmienione.</AuthMessage>
+        {result.passkeys === 'removed' && <AuthMessage tone="success">
+          Usunęliśmy zapisane urządzenia do logowania biometrią. Zaloguj się hasłem i dodaj je ponownie
+          w Ustawieniach, w zakładce Bezpieczeństwo.
+        </AuthMessage>}
+        {result.passkeys === 'failed' && <AuthMessage tone="error">
+          Nie udało się usunąć zapisanych urządzeń do logowania biometrią. Po zalogowaniu otwórz Ustawienia,
+          zakładkę Bezpieczeństwo, i usuń te, których nie rozpoznajesz. Jeśli to się nie uda, skontaktuj się z pomocą.
+        </AuthMessage>}
         {!result.globalSignOutConfirmed && <AuthMessage tone="error">
           Nie udało się potwierdzić odwołania pozostałych sesji. Skontaktuj się z pomocą.
         </AuthMessage>}

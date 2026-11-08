@@ -203,6 +203,22 @@ Legenda: **[B]** tylko Bartosz (panel, konto, decyzja prawna),
 26. **[B]** Komunikat do klientów: nowa nazwa i adres, ta sama firma i te same
     dane, trzeba zalogować się ponownie, powiadomienia push i instalację PWA
     trzeba włączyć jeszcze raz (sesje i zgody są przypisane do domeny).
+26a. **[C]** Logowanie biometrią. RP ID biometrii pochodzi z `NEXT_PUBLIC_APP_URL`
+    (`lib/auth/passkey/config.ts`), a klucz jest przypisany do RP ID na stałe, więc po
+    zmianie domeny wszystkie dotychczasowe klucze przestają działać. W tym samym kroku,
+    dopiero po teście odbiorczym (24): skasuj wiersze `user_passkeys` i powiadom klientów,
+    że dodają klucz ponownie.
+    - Najpierw policz: `source .agents/infra.env && ssh -i $K root@$DB "docker exec $PGC psql -U postgres -d postgres -c 'SELECT count(*) FROM public.user_passkeys;'"`.
+      Zero albo brak tabeli (migracja 00159 jeszcze niewgrana): krok jest pusty, przejdź do 27.
+    - Kasowanie, za zgodą Bartosza (`DELETE FROM`): to samo polecenie z
+      `DELETE FROM public.user_passkeys;`, potem ponownie `count(*)` ma dać 0. Bez tego
+      lista urządzeń w Ustawieniach pokazuje klucze, które już nie zalogują.
+    - **[B]** Dopisz do komunikatu z kroku 26: logowanie odciskiem palca lub twarzą trzeba
+      dodać ponownie (Ustawienia, zakładka Bezpieczeństwo, „Dodaj urządzenie”); hasło i kod
+      z aplikacji działają bez zmian.
+
+    Skasowanych kluczy nie przywrócimy: po powrocie na starą domenę (sekcja 5) klienci
+    dodają je jeszcze raz, dlatego nie robimy tego przed testem odbiorczym.
 
 ### Po wdrożeniu
 

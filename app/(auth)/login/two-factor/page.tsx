@@ -39,9 +39,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function TwoFactorChallengePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; redirect?: string }>
+  searchParams: Promise<{ error?: string; redirect?: string; potwierdzenie?: string }>
 }) {
-  const { error, redirect: redirectParam } = await searchParams
+  const { error, redirect: redirectParam, potwierdzenie } = await searchParams
   const safeNext = safeRedirectPath(redirectParam ?? null)
   const state = await getVerifiedMfaState(await createClient())
   if (state.status === 'unauthenticated') redirect('/login')
@@ -60,6 +60,12 @@ export default async function TwoFactorChallengePage({
         <p className='text-muted-foreground'>Wpisz 6-cyfrowy kod z aplikacji TOTP.</p>
       </div>
 
+      {/* Przejście z operacji wrażliwej po logowaniu biometrią (`mfaStepUpHref`). */}
+      {potwierdzenie === '1' && !errorMsg && (
+        <AuthMessage tone='success'>
+          Ta operacja wymaga kodu z aplikacji. Po potwierdzeniu wrócisz na poprzednią stronę.
+        </AuthMessage>
+      )}
       {errorMsg && <AuthMessage tone='error'>{errorMsg}</AuthMessage>}
 
       <div className='space-y-4'>

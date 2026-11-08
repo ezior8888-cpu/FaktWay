@@ -28,8 +28,11 @@ const PAGE_ACTIVE = cn(
   buttonVariants({ variant: 'default', size: 'icon' }),
   'hover:text-primary-foreground border-transparent dark:border-transparent dark:bg-primary dark:hover:bg-primary/80',
 );
+// Odstępstwo od Finory (WCAG 1.4.3): numer strony `text-accent-foreground`, nie `text-primary`.
+// `text-primary` na `bg-primary/10` ma 4,44:1 (jasny) i 3,84 / 4,13:1 pod kursorem (`primary/20`,
+// jasny / ciemny); `accent-foreground` daje 9,00 / 7,79:1 (jasny) i 8,93 / 7,43:1 (ciemny).
 const PAGE_INACTIVE =
-  'bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary focus-visible:ring-primary/20 dark:hover:bg-primary/20 dark:focus-visible:ring-primary/40';
+  'bg-primary/10 text-accent-foreground hover:bg-primary/20 hover:text-accent-foreground focus-visible:ring-primary/20 dark:hover:bg-primary/20 dark:focus-visible:ring-primary/40';
 
 /**
  * Stopka listy jak w Finorze (`flex items-center justify-between gap-3 p-4
@@ -67,7 +70,8 @@ export function InvoicesPagination({ params, total }: { params: InvoiceListParam
       <p className="text-muted-foreground text-sm whitespace-nowrap" aria-live="polite">
         {total === 0 ? 'Brak pozycji' : `Pozycje ${first}–${last} z ${total}`}
       </p>
-      {pages > 1 ? (
+      {/* Jak w Finorze: „Poprzednia / numery / Następna” zawsze, także przy jednej stronie. */}
+      {total > 0 ? (
         <div>
           <Pagination aria-label="Strony listy faktur">
             {/* Zawijanie: od `sm` przy dotyku (44 px na numer) 10 stron nie mieści się do ok. 720 px. */}

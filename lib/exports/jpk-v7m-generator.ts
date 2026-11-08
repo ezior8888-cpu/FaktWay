@@ -20,6 +20,9 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 const JPK_V7M_NAMESPACE = 'http://crd.gov.pl/wzor/2025/12/19/14090/';
 const ETD_NAMESPACE = 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/';
 
+/** KodFormularza z nagłówka pliku: to samo idzie do metadanych wysyłki MF (`FormCode`). */
+export const JPK_V7M_FORM_CODE = { kod: 'JPK_VAT', kodSystemowy: 'JPK_V7M (3)', wersjaSchemy: '1-0E' } as const;
+
 export interface JpkV7mInputData {
   issuer: {
     nip: string;
@@ -28,6 +31,13 @@ export interface JpkV7mInputData {
     email?: string;
     /** KodUrzedu — urząd skarbowy firmy (#67). */
     taxOfficeCode?: string;
+    /**
+     * Podatnik będący osobą fizyczną (JDG, plan księgowości K6): Podmiot1
+     * jako OsobaFizyczna. MF przyjmuje plik podpisany danymi autoryzującymi
+     * tylko od osoby fizycznej (status 422). Bez tego pola: OsobaNiefizyczna
+     * z nazwą firmy, jak dotąd.
+     */
+    naturalPerson?: { firstName: string; lastName: string; birthDate: string };
   };
   /** Okres — z period wyciągamy rok i miesiąc. */
   periodStart: string; // YYYY-MM-DD
@@ -195,9 +205,18 @@ export interface JpkV7mSummary {
   purchaseNet: number;
   /** Dodatnie = do zapłaty (P_51); ujemne = nadwyżka (P_53). */
   balance: number;
+  /** P_39 — nadwyżka z poprzedniej deklaracji (pełne złote). */
+  previousSurplus: number;
+  /** P_51 — do wpłaty (pełne złote). */
+  toPay: number;
+  /** P_62 — nadwyżka na następny okres, bez zwrotu (pełne złote). */
+  carryForward: number;
   salesCount: number;
   purchaseCount: number;
 }
+
+/** Wejście deklaracji: sprzedaż, zakupy i P_39 (podmiot i okres nie zmieniają kwot). */
+type DeclarationInput = Pick<JpkV7mInputData, 'issuedInvoices' | 'expenses' | 'previousSurplus'>;
 
 interface Declaration {
   P_10: number;
@@ -221,7 +240,7 @@ interface Declaration {
   P_62: number;
 }
 
-function declaration(data: JpkV7mInputData): Declaration {
+function declaration(data: DeclarationInput): Declaration {
   const s = aggregateSales(data.issuedInvoices);
   const purchases = vatPurchases(data.expenses ?? []);
   const P_10 = wholeZloty(s.netZw);
@@ -250,13 +269,16 @@ function declaration(data: JpkV7mInputData): Declaration {
   return { P_10, P_11, P_12, P_13, P_15, P_16, P_17, P_18, P_19, P_20, P_37, P_38, P_39, P_42, P_43, P_48, P_51, P_53, P_62 };
 }
 
-export function summarizeJpkV7m(data: JpkV7mInputData): JpkV7mSummary {
+export function summarizeJpkV7m(data: DeclarationInput): JpkV7mSummary {
   const d = declaration(data);
   return {
     vatDue: d.P_38,
     vatDeductible: d.P_48,
     purchaseNet: d.P_42,
     balance: d.P_38 - d.P_48,
+    previousSurplus: d.P_39,
+    toPay: d.P_51,
+    carryForward: d.P_62,
     salesCount: data.issuedInvoices.length,
     purchaseCount: vatPurchases(data.expenses ?? []).length,
   };
@@ -317,7 +339,10 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
 
   // ── Nagłówek ──────────────────────────────────────────────
   const header = root.ele('Naglowek');
-  header.ele('KodFormularza', { kodSystemowy: 'JPK_V7M (3)', wersjaSchemy: '1-0E' }).txt('JPK_VAT').up();
+  header
+    .ele('KodFormularza', { kodSystemowy: JPK_V7M_FORM_CODE.kodSystemowy, wersjaSchemy: JPK_V7M_FORM_CODE.wersjaSchemy })
+    .txt(JPK_V7M_FORM_CODE.kod)
+    .up();
   header.ele('WariantFormularza').txt('3').up();
   header.ele('DataWytworzeniaJPK').txt((data.generatedAt ?? new Date()).toISOString()).up();
   header.ele('NazwaSystemu').txt(data.systemName ?? 'FaktWay').up();
@@ -327,10 +352,22 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
   header.ele('Miesiac').txt(month).up();
 
   // ── Podmiot1 ──────────────────────────────────────────────
-  const osoba = root.ele('Podmiot1', { rola: 'Podatnik' }).ele('OsobaNiefizyczna');
-  osoba.ele('NIP').txt(data.issuer.nip).up();
-  osoba.ele('PelnaNazwa').txt(data.issuer.name).up();
-  osoba.ele('Email').txt(email).up();
+  const podmiot = root.ele('Podmiot1', { rola: 'Podatnik' });
+  const person = data.issuer.naturalPerson;
+  if (person) {
+    // etd:TIdentyfikatorOsobyFizycznej2: pola w przestrzeni etd, Email w przestrzeni wzoru.
+    const osoba = podmiot.ele('OsobaFizyczna');
+    osoba.ele('etd:NIP').txt(data.issuer.nip).up();
+    osoba.ele('etd:ImiePierwsze').txt(person.firstName.replace(/\s+/g, ' ').trim()).up();
+    osoba.ele('etd:Nazwisko').txt(person.lastName.replace(/\s+/g, ' ').trim()).up();
+    osoba.ele('etd:DataUrodzenia').txt(person.birthDate).up();
+    osoba.ele('Email').txt(email).up();
+  } else {
+    const osoba = podmiot.ele('OsobaNiefizyczna');
+    osoba.ele('NIP').txt(data.issuer.nip).up();
+    osoba.ele('PelnaNazwa').txt(data.issuer.name).up();
+    osoba.ele('Email').txt(email).up();
+  }
 
   // ── Deklaracja VAT-7(23) ──────────────────────────────────
   const dekl = root.ele('Deklaracja');

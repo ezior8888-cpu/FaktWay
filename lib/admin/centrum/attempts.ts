@@ -12,17 +12,20 @@
 
 import 'server-only';
 
+import { listLifecycleViolations } from '@/lib/admin/ksef-lifecycle';
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import {
   INTERRUPTED_AFTER_MS,
   periodStart,
+  stuckInvoices,
   WATCHED_CRONS,
   type AttemptRow,
   type AttemptStatus,
   type CronRun,
   type SendErrorFilters,
+  type StuckInvoice,
 } from './send-errors';
 
 /**
@@ -188,6 +191,8 @@ export interface SendErrorsView {
   invoicesWithErrorNow: number | null;
   upoFailures: UpoFailure[];
   upoFailuresTotal: number | null;
+  /** Utknięte w wysyłce teraz (strażnik I1/I2), niezależnie od okresu i filtrów; `null` — odczyt nieudany. */
+  stuckNow: StuckInvoice[] | null;
   problems: string[];
 }
 
@@ -312,12 +317,22 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
     return { list, total: count ?? list.length };
   };
 
-  const [list, since, crons, withError, upoResult, succeeded, failed, refused, waiting, interrupted] = await Promise.all([
+  const stuck = async (): Promise<StuckInvoice[] | null> => {
+    try {
+      return stuckInvoices(await listLifecycleViolations(), now);
+    } catch (e) {
+      problems.push(`Strażnik cyklu życia (I1/I2): ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  };
+
+  const [list, since, crons, withError, upoResult, stuckNow, succeeded, failed, refused, waiting, interrupted] = await Promise.all([
     listQuery(),
     ledgerSince(),
     lastCronRuns(client, problems),
     invoicesWithError(),
     upo(),
+    stuck(),
     countStatus(client, filters, from, 'succeeded', now, problems),
     countStatus(client, filters, from, 'failed', now, problems),
     countStatus(client, filters, from, 'refused', now, problems),
@@ -338,6 +353,7 @@ export async function loadSendErrorsView(filters: SendErrorFilters, now: Date = 
     invoicesWithErrorNow: withError,
     upoFailures: upoResult.list,
     upoFailuresTotal: upoResult.total,
+    stuckNow,
     // Ten sam brak tabeli zgłasza kilka zapytań — jeden komunikat wystarczy.
     problems: [...new Set(problems)],
   };

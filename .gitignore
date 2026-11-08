@@ -27,8 +27,14 @@
 # misc
 .DS_Store
 
-# Cursor / Claude Code — lokalne worktree (nie commituj)
-.claude/
+# Claude Code: wspólne ustawienia projektu (hooki) są w gicie,
+# reszta (worktree, settings.local.json, launch.json) zostaje lokalnie.
+.claude/*
+!.claude/settings.json
+# Skille projektu (cienkie nakładki na docs/runbooks/). Lokalny skill PostHoga
+# z głównego katalogu zostaje poza gitem.
+!.claude/skills/
+.claude/skills/integration-nextjs-app-router/
 
 # Lokalne notatki operatora (nie commituj)
 .gemini.md

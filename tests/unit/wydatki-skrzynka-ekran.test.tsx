@@ -19,7 +19,9 @@ const stats = vi.hoisted(() => ({
   getInboxMonthCosts: vi.fn(),
   countExpensesToReview: vi.fn(),
   getLastInboxFetchAt: vi.fn(),
+  getInboxScheduleSummary: vi.fn(),
   verified: vi.fn(),
+  trybCtx: null as unknown,
 }));
 const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
@@ -28,8 +30,17 @@ const pageContext = vi.hoisted(() => ({ get: vi.fn() }));
 
 vi.mock('@/lib/dashboard/expense-stats', () => stats);
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: pageContext.get }));
-vi.mock('@/lib/dashboard-shell-data', () => ({ getDashboardActiveOrgVerified: stats.verified }));
+// Kafel „Ostatnie pobranie” pyta o tryb danych firmy (weryfikacja KSeF) — jedna funkcja trybu.
+vi.mock('@/lib/demo/tryb-danych', () => ({
+  trybDanych: async (ctx: unknown) => {
+    stats.trybCtx = ctx;
+    return { tryb: (await stats.verified()) ? 'prawdziwe' : 'przyklad', stan: 'C', verifiedAt: null };
+  },
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// Strona zleca przyspieszenie terminu po odpowiedzi; poza żądaniem `after` by rzucił.
+vi.mock('next/server', () => ({ after: vi.fn() }));
+vi.mock('@/lib/ksef/inbox-activity', () => ({ requestInboxPollOnVisit: vi.fn() }));
 vi.mock('sonner', () => ({ toast }));
 vi.mock('@/app/actions/expenses', () => ({
   deleteExpenseAction: vi.fn(),
@@ -54,16 +65,16 @@ import { monthOptions } from '@/components/expenses/finora/month-selector';
 import { StatCell, StatsCardsFrame } from '@/components/expenses/finora/stats-cards';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import type { PageContext } from '@/lib/supabase/page-context';
-import { buildInboxRows, type InboxInvoiceRow } from '@/app/(dashboard)/inbox/_components/inbox-rows';
+import { buildInboxRows, type InboxInvoiceRow } from '@/app/(dashboard)/(koszty)/inbox/_components/inbox-rows';
 import {
   InboxLastFetchCell,
   InboxMonthCostsCell,
   InboxNewCell,
-} from '@/app/(dashboard)/inbox/_components/inbox-stat-cells';
-import { inboxAmount, inboxColumns, InboxTable } from '@/app/(dashboard)/inbox/_components/inbox-table';
+} from '@/app/(dashboard)/(koszty)/inbox/_components/inbox-stat-cells';
+import { inboxAmount, inboxColumns, InboxTable } from '@/app/(dashboard)/(koszty)/inbox/_components/inbox-table';
 import { RiArrowRightUpLine } from '@remixicon/react';
-import ExpensesPage from '@/app/(dashboard)/expenses/page';
-import InboxPage from '@/app/(dashboard)/inbox/page';
+import ExpensesPage from '@/app/(dashboard)/(koszty)/expenses/page';
+import InboxPage from '@/app/(dashboard)/(koszty)/inbox/page';
 
 const supabase = {} as PageContext['supabase'];
 const TENANT = 'firma-a';
@@ -115,6 +126,7 @@ function invoice(id: string, fields: Partial<InboxInvoiceRow> = {}): InboxInvoic
     gross_total: '615.00',
     currency: 'PLN',
     ksef_accepted_at: '2026-10-05T10:00:00Z',
+    origin: 'ksef_inbox',
     ...fields,
   };
 }
@@ -381,6 +393,33 @@ describe('Skrzynka KSeF P9', () => {
     expect(buildInboxRows(invoices, null).every((r) => r.status === null && r.expenseId === null)).toBe(true);
   });
 
+  // Decyzja Bartosza 22.10.2026: zakup z historii KSeF (`origin = 'ksef_import'`)
+  // to archiwum bez kosztu — plakietka „Historia z KSeF” zamiast „—”.
+  it('zakup z historii KSeF bez wydatku: plakietka „Historia z KSeF” w tabeli i w karcie', () => {
+    const rows = buildInboxRows(
+      [invoice('inv-1', { origin: 'ksef_import' }), invoice('inv-2'), invoice('inv-3', { origin: 'ksef_import' })],
+      [{ id: 'e-3', ksef_invoice_id: 'inv-3', is_reviewed: true }],
+    );
+    expect(rows.map((r) => [r.id, r.fromKsefHistory, r.status])).toEqual([
+      ['inv-1', true, null],
+      ['inv-2', false, null],
+      ['inv-3', true, 'reviewed'],
+    ]);
+    const markup = html(<InboxTable rows={rows} />);
+    // Tylko inv-1 (bez wydatku): raz w tabeli, raz w karcie; inv-3 ma wydatek i status „Opisana”.
+    expect(markup.match(/>Historia z KSeF</g)).toHaveLength(2);
+    expect(markup).toContain('title="Faktura z historii KSeF — nie dodaliśmy jej do kosztów"');
+    expect(markup).toContain('Opisana');
+    // Bieżąca faktura bez wydatku dalej „jeszcze powstaje”.
+    expect(markup).toContain('Wydatek z tej faktury jeszcze powstaje');
+  });
+
+  it('błąd odczytu wydatków: bez plakietki historii (nie wiemy, czy wydatek jest)', () => {
+    const rows = buildInboxRows([invoice('inv-1', { origin: 'ksef_import' })], null);
+    const markup = html(<InboxTable rows={rows} statusUnavailable />);
+    expect(markup).not.toContain('>Historia z KSeF<');
+  });
+
   it('sprzedawca z seller_data, potem z FA(3), potem z kolumny NIP', () => {
     const [a, b] = buildInboxRows([
       invoice('inv-1', { seller_data: null, fa3_data: { seller: { name: 'Z FA3', nip: '1111111111' } } }),
@@ -458,7 +497,7 @@ describe('Skrzynka KSeF P9', () => {
     stats.countExpensesToReview.mockResolvedValue(2);
     stats.getInboxMonthCosts.mockResolvedValue({ month: '2026-10', gross: 1845, count: 3 });
     stats.getLastInboxFetchAt.mockResolvedValueOnce('2026-10-19T14:05:00Z').mockResolvedValue(null);
-    const props = { supabase, tenantId: TENANT };
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
 
     const fresh = html((await InboxNewCell(props)) as ReactElement);
     expect(fresh).toContain('Nowe faktury');
@@ -473,10 +512,49 @@ describe('Skrzynka KSeF P9', () => {
 
     const none = html((await InboxLastFetchCell(props)) as ReactElement);
     expect(none).toContain('Jeszcze nie pobraliśmy żadnej faktury');
+    // Poprawka 21.10.2026: podtytuł z „co 15 minut” zniknął — rytm jest w kaflu także przed pierwszym pobraniem.
+    expect(none).toContain('sprawdzamy KSeF co 15 minut');
+
+    // Tryb liczony dla firmy i użytkownika strony (PLAN-PRAWDZIWE-DANE §4 „Uwaga do F”).
+    expect(stats.trybCtx).toEqual({ supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } });
 
     stats.verified.mockResolvedValue(false);
     const noKsef = html((await InboxLastFetchCell(props)) as ReactElement);
     expect(noKsef).toContain('Podłącz KSeF, a faktury kosztowe pobierzemy same');
+    expect(noKsef).not.toContain('Sprawdź teraz');
+  });
+
+  it('kafel: „Sprawdź teraz” i ostatnie sprawdzenie, gdy firma ma harmonogram', async () => {
+    stats.getLastInboxFetchAt.mockResolvedValue('2026-10-19T14:05:00Z');
+    stats.getInboxScheduleSummary.mockResolvedValue({ lastCheckedAt: '2026-10-20T08:30:00Z' });
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
+
+    const cell = html((await InboxLastFetchCell(props)) as ReactElement);
+    expect(cell).toContain('Sprawdź teraz');
+    expect(cell).toContain('19.10.2026, 16:05');
+    expect(cell).toContain('Ostatnie sprawdzenie: 20.10.2026, 10:30');
+    expect(cell).toContain('sprawdzamy KSeF co 15 minut');
+    expect(cell).not.toMatch(/[—–]/);
+  });
+
+  it('kafel: przed pierwszą fakturą przycisk też jest, gdy firma ma KSeF', async () => {
+    stats.getLastInboxFetchAt.mockResolvedValue(null);
+    stats.getInboxScheduleSummary.mockResolvedValue({ lastCheckedAt: null });
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
+
+    const cell = html((await InboxLastFetchCell(props)) as ReactElement);
+    expect(cell).toContain('Jeszcze nie pobraliśmy żadnej faktury');
+    expect(cell).toContain('Sprawdź teraz');
+  });
+
+  it('kafel: bez harmonogramu (firma bez KSeF albo baza przed 00160) bez przycisku, dotychczasowy tekst', async () => {
+    stats.getLastInboxFetchAt.mockResolvedValue('2026-10-19T14:05:00Z');
+    stats.getInboxScheduleSummary.mockResolvedValue(null);
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
+
+    const cell = html((await InboxLastFetchCell(props)) as ReactElement);
+    expect(cell).toContain('Sprawdzamy KSeF co 15 minut');
+    expect(cell).not.toContain('Sprawdź teraz');
   });
 });
 

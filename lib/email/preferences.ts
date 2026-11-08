@@ -4,8 +4,10 @@ import 'server-only';
  * Email preferences API (Faza 26).
  *
  * Strategia: per user × per kategoria opt-out. Brak wiersza w
- * `email_preferences` = subscribed. Wiersz z `unsubscribed_at` =
- * user wyłączył tę kategorię.
+ * `email_preferences` = nie wypisał się. Wiersz z `unsubscribed_at` =
+ * user wyłączył tę kategorię. Od 15.10.2026 porady i oferty wymagają
+ * DODATKOWO zapisanej zgody (`canSendTo`, warstwa 5) — brak wypisu to
+ * jeszcze nie zgoda (art. 398 Prawa komunikacji elektronicznej).
  *
  * UWAGA: `transactional` kategoria jest SERVICE-CRITICAL. Nawet jeśli
  * user "wyłączy" przez settings UI, transactional emaile (KSeF accepted,
@@ -16,6 +18,7 @@ import 'server-only';
  */
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hasEmailConsent } from '@/lib/legal/acceptance';
 
 /**
  * Lokalny typ — `email_category_enum` powstaje w migracji 00049 i nie jest
@@ -146,7 +149,8 @@ export async function getUnsubscribedCategories(
  *   2. User opt-out + kategoria 'transactional' → wysyłamy mimo wszystko
  *      (service-critical)
  *   3. User opt-out + product_updates/marketing → NIE wysyłamy
- *   4. Brak wiersza = subscribed → wysyłamy
+ *   4. product_updates/marketing bez zapisanej zgody → NIE wysyłamy
+ *   5. Zgoda i brak wiersza wypisu → wysyłamy
  */
 export async function canSendTo(
   email: string,
@@ -163,8 +167,9 @@ export async function canSendTo(
   // Layer 2: transactional ZAWSZE OK (service-critical).
   if (category === 'transactional') return { ok: true };
 
-  // Layer 3: brak userId (np. preview link bez user contextu) = OK.
-  if (!userId) return { ok: true };
+  // Layer 3: bez userId nie sprawdzimy zgody — porad i ofert nie wysyłamy
+  // (do 15.10.2026 brak userId znaczył „wolno”).
+  if (!userId) return { ok: false, reason: 'no_consent' };
 
   // Layer 4: user opt-out check.
   const subscribed = await isSubscribed(userId, category);
@@ -172,5 +177,47 @@ export async function canSendTo(
     return { ok: false, reason: 'user_unsubscribed' };
   }
 
+  // Layer 5: uprzednia zgoda (art. 398 ust. 1 Prawa komunikacji elektronicznej).
+  // Brak wypisu to nie zgoda: do 15.10.2026 porady i oferty szły do każdego,
+  // kto się nie wypisał (model opt-out), co przy e-mailach jest niedozwolone.
+  if (!(await hasRecordedEmailConsent(userId, category))) {
+    return { ok: false, reason: 'no_consent' };
+  }
+
   return { ok: true };
+}
+
+/**
+ * Zgoda z `app_metadata.legal.email_consents` (zapis: lib/legal/record.ts).
+ * Błąd odczytu rzuca — wywołujący ponowi, zamiast wysłać bez wiedzy o zgodzie.
+ */
+async function hasRecordedEmailConsent(
+  userId: string,
+  category: Exclude<EmailCategory, 'transactional'>,
+): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+  if (error) {
+    // Konto usunięte = brak zgody, a nie awaria.
+    if (error.status === 404) return false;
+    throw new Error('email_consent_unavailable');
+  }
+  return hasEmailConsent(data.user?.app_metadata, category);
+}
+
+/**
+ * Stan przełączników w ustawieniach: włączone = zgoda i brak wypisu.
+ * Bez zgody przełącznik jest wyłączony, nawet gdy nie ma wiersza wypisu.
+ */
+export async function getEmailConsents(
+  userId: string,
+): Promise<Record<Exclude<EmailCategory, 'transactional'>, boolean>> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+  if (error) throw new Error('email_consent_unavailable');
+  const meta = data.user?.app_metadata;
+  return {
+    product_updates: hasEmailConsent(meta, 'product_updates'),
+    marketing: hasEmailConsent(meta, 'marketing'),
+  };
 }

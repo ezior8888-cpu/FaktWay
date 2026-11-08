@@ -5,6 +5,7 @@ import {
   decideReliefNotice,
   NOTICE_BEFORE_DAYS,
   reliefWindows,
+  type ReliefParams,
   type ReliefProfileInput,
 } from '@/lib/flo/functions/tax-relief';
 import { formatPln } from '@/lib/flo/money';
@@ -17,7 +18,16 @@ import { paramsFor, type TaxParams } from '@/lib/flo/tax-params';
  * zła wiadomość bez konkretu „ile odkładać”.
  */
 
-const PARAMS = paramsFor(new Date('2026-06-01T00:00:00.000Z')) as TaxParams;
+/**
+ * Kwoty składek TESTOWE, nie parametry: od kroku K1 planu księgowości
+ * funkcja dostaje je od wywołującego (atrapy usunięte z tabeli FLO).
+ * Liczy się tylko to, że każdy etap jest droższy od poprzedniego.
+ */
+const ZUS_TESTOWE = { startRelief: 400, preferential: 700, standard: 1_600 };
+const PARAMS: ReliefParams = {
+  ...(paramsFor(new Date('2026-06-01T00:00:00.000Z')) as TaxParams),
+  zusMonthly: ZUS_TESTOWE,
+};
 const d = (iso: string) => new Date(`${iso}T09:00:00.000Z`);
 
 function profile(overrides: Partial<ReliefProfileInput> = {}): ReliefProfileInput {
@@ -54,9 +64,9 @@ describe('oś czasu ulg', () => {
 
   it('składki: co teraz, co potem', () => {
     const [start, preferential] = reliefWindows(profile(), PARAMS);
-    expect(start?.monthly).toBe(PARAMS.zusStartReliefMonthly);
-    expect(start?.nextMonthly).toBe(PARAMS.zusPreferentialMonthly);
-    expect(preferential?.nextMonthly).toBe(PARAMS.zusStandardMonthly);
+    expect(start?.monthly).toBe(PARAMS.zusMonthly.startRelief);
+    expect(start?.nextMonthly).toBe(PARAMS.zusMonthly.preferential);
+    expect(preferential?.nextMonthly).toBe(PARAMS.zusMonthly.standard);
   });
 });
 
@@ -189,7 +199,7 @@ describe('AWARIA 3 — żaden komunikat nie kończy się na złej wiadomości', 
     expect(verdict.kind).toBe('notice');
     if (verdict.kind !== 'notice') return;
     expect(verdict.increase).toBe(
-      PARAMS.zusPreferentialMonthly - PARAMS.zusStartReliefMonthly,
+      PARAMS.zusMonthly.preferential - PARAMS.zusMonthly.startRelief,
     );
   });
 
@@ -200,8 +210,8 @@ describe('AWARIA 3 — żaden komunikat nie kończy się na złej wiadomości', 
       params: PARAMS,
       today: d('2026-06-01'),
     });
-    expect(proposal?.body).toContain(formatPln(PARAMS.zusStartReliefMonthly));
-    expect(proposal?.body).toContain(formatPln(PARAMS.zusPreferentialMonthly));
+    expect(proposal?.body).toContain(formatPln(PARAMS.zusMonthly.startRelief));
+    expect(proposal?.body).toContain(formatPln(PARAMS.zusMonthly.preferential));
     expect(proposal?.body).toContain(formatPln(300));
   });
 });

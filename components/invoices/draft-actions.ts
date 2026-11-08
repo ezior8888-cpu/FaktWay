@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/lib/audit/log';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue';
+import { recurringDb } from '@/lib/invoices/recurring/db';
+import { restoreRunDateAfterDraftDelete } from '@/lib/invoices/recurring/issue';
 import {
   DUPLICATE_DECISION_TEXTS,
   retiredDraftSendRefusal,
@@ -36,6 +38,12 @@ import type { Invoice } from '@/types/invoice';
  * usuwalne — to ich wyjście (00133/00135, 00125). Obie akcje czytają historię
  * sesją klienta przed kolejką i przed DELETE; te same odmowy trzymają
  * wyzwalacze 00148 w bazie (wyścig: P0001 z komunikatem dla klienta).
+ *
+ * Plan Finora E9 (C2/C4): szkic z pozycji cyklicznej (zostaje, gdy kolejka
+ * KSeF odmówi po „Wystaw i wyślij”) zajmuje okres, a `next_run_date` jest już
+ * przesunięta. Po jego usunięciu cofamy datę o jeden okres —
+ * `restoreRunDateAfterDraftDelete`, warunkowo — żeby okres wrócił do „Do
+ * wystawienia”, zamiast zniknąć z harmonogramu.
  */
 
 export type DraftActionResult =
@@ -61,6 +69,31 @@ function authError(err: unknown): DraftActionResult | null {
 
 type SessionClient = Awaited<ReturnType<typeof requireUserAndActiveOrg>>['supabase'];
 type NumberTakenRow = Pick<DuplicateDecisionSubmissionRow, 'id' | 'status' | 'original_ksef_number' | 'original_check' | 'completed_at'>;
+
+/** Kody „brak kolumny/tabeli” — przed wgraniem 00154 szkic nie ma powiązania z pozycją. */
+const SCHEMA_PENDING = new Set(['42703', 'PGRST204', '42P01', 'PGRST205']);
+
+type RecurringLinkRead =
+  | { ok: true; link: { recurringInvoiceId: string; period: string } | null }
+  | { ok: false };
+
+/**
+ * Powiązanie szkicu z okresem pozycji cyklicznej (00154), sesją klienta (RLS).
+ * Osobny odczyt, żeby usuwanie szkiców działało też przed wgraniem 00154.
+ * Błąd odczytu (inny niż brak kolumny) → `ok: false`: bez tej wiedzy
+ * usunięcie zgubiłoby okres po cichu, więc odmawiamy.
+ */
+async function readRecurringLink(supabase: SessionClient, tenantId: string, invoiceId: string): Promise<RecurringLinkRead> {
+  const { data, error } = await recurringDb(supabase)
+    .from('invoices')
+    .select('recurring_invoice_id, recurring_period')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (error) return SCHEMA_PENDING.has(error.code ?? '') ? { ok: true, link: null } : { ok: false };
+  if (!data?.recurring_invoice_id || !data.recurring_period) return { ok: true, link: null };
+  return { ok: true, link: { recurringInvoiceId: data.recurring_invoice_id, period: data.recurring_period } };
+}
 
 /**
  * Wpisy `number_taken` szkicu (sesja klienta, RLS; same `.eq` — wybór wpisu
@@ -193,6 +226,10 @@ export async function deleteDraftInvoiceAction(invoiceId: string): Promise<Draft
       }
     }
 
+    const recurring: RecurringLinkRead =
+      row && row.ksef_status === 'draft' ? await readRecurringLink(supabase, tenantId, invoiceId) : { ok: true, link: null };
+    if (!recurring.ok) return { success: false, error: DELETE_FAILED };
+
     // Pozycje znikają kaskadowo (invoice_line_items ON DELETE CASCADE).
     // Warunek na status w samym zapytaniu: szkic, który właśnie poszedł do
     // kolejki, nie zostanie usunięty.
@@ -219,8 +256,38 @@ export async function deleteDraftInvoiceAction(invoiceId: string): Promise<Draft
       userId: user.id,
       entityType: 'invoice',
       entityId: invoiceId,
-      metadata: { internalNumber: (deleted[0] as { internal_number?: string | null }).internal_number ?? null },
+      metadata: {
+        internalNumber: (deleted[0] as { internal_number?: string | null }).internal_number ?? null,
+        ...(recurring.link
+          ? { recurringInvoiceId: recurring.link.recurringInvoiceId, recurringPeriod: recurring.link.period }
+          : {}),
+      },
     });
+
+    // Okres szkicu jest już wolny (indeks), więc cofamy harmonogram — tylko
+    // gdy poprzedni termin pozycji to ten okres (warunkowy UPDATE). Inaczej
+    // (pozycja zmieniona, przesunięta dalej, usunięta) nic nie ruszamy.
+    if (recurring.link) {
+      const restore = await restoreRunDateAfterDraftDelete(supabase, tenantId, recurring.link);
+      if (restore.restored) {
+        await logAudit({
+          action: 'recurring_invoice.run_date_restored',
+          tenantId,
+          userId: user.id,
+          entityType: 'recurring_invoice',
+          entityId: recurring.link.recurringInvoiceId,
+          metadata: {
+            deletedDraftId: invoiceId,
+            recurringPeriod: recurring.link.period,
+            fromNextRunDate: restore.fromNextRunDate,
+            toNextRunDate: restore.toNextRunDate,
+          },
+        });
+        revalidatePath('/invoices/recurring');
+      } else {
+        console.warn('[recurring-invoices] restore_skipped', { reason: restore.reason });
+      }
+    }
 
     revalidatePath('/invoices');
     return { success: true };

@@ -80,6 +80,7 @@ const facts = (over: Partial<InvoiceListRowFacts> = {}): InvoiceListRowFacts => 
   payment: 'unpaid',
   outstanding: 1230,
   canCorrect: false,
+  canMarkPaid: false,
   ...over,
 });
 
@@ -114,7 +115,8 @@ describe('C4: pasek filtrów podąża za adresem', () => {
       status: 'przyjete',
       platnosc: 'po_terminie',
       rodzaj: 'final',
-      na_stronie: '10',
+      // Lista 1:1 z Finory (21.10.2026): 10 jest teraz domyślne, więc ustawione w adresie jest niedomyślne 25 (było 10).
+      na_stronie: '25',
       od: '2026-09-01',
     });
 
@@ -123,13 +125,14 @@ describe('C4: pasek filtrów podąża za adresem', () => {
     expect(field('status')?.value).toBe('przyjete');
     expect(field('platnosc')?.value).toBe('po_terminie');
     expect(field('rodzaj')?.value).toBe('final');
-    expect(field('na_stronie')?.value).toBe('10');
+    expect(field('na_stronie')?.value).toBe('25');
 
     render(<InvoicesToolbar params={parseInvoiceListParams({})} filtered={false} />);
     expect(field('status')?.value).toBe('wszystkie');
     expect(field('platnosc')?.value).toBe('wszystkie');
     expect(field('rodzaj')?.value).toBe('wszystkie');
-    expect(field('na_stronie')?.value).toBe('50');
+    // Lista 1:1 z Finory (21.10.2026): po „Wyczyść” wraca domyślne „Pokaż 10” (było 50).
+    expect(field('na_stronie')?.value).toBe('10');
     expect(field('od')?.value).toBe('');
   });
 
@@ -153,13 +156,14 @@ describe('C4: pasek filtrów podąża za adresem', () => {
   it('„Pokaż N” nie odtwarza formularza (fokus zostaje na wyborze), a wybór idzie za adresem', () => {
     render(<InvoicesToolbar params={parseInvoiceListParams({ q: 'Acme' })} filtered />);
     const before = host.querySelector('form');
-    render(<InvoicesToolbar params={parseInvoiceListParams({ q: 'Acme', na_stronie: '10' })} filtered />);
+    // Lista 1:1 z Finory (21.10.2026): domyślne jest 10, więc zmiana na niedomyślne 25 (było 10 → 50 i z powrotem).
+    render(<InvoicesToolbar params={parseInvoiceListParams({ q: 'Acme', na_stronie: '25' })} filtered />);
     expect(host.querySelector('form')).toBe(before);
-    expect(field('na_stronie')?.value).toBe('10');
-    // Wstecz do domyślnych 50 też bez odtwarzania formularza.
+    expect(field('na_stronie')?.value).toBe('25');
+    // Wstecz do domyślnych 10 też bez odtwarzania formularza.
     render(<InvoicesToolbar params={parseInvoiceListParams({ q: 'Acme' })} filtered />);
     expect(host.querySelector('form')).toBe(before);
-    expect(field('na_stronie')?.value).toBe('50');
+    expect(field('na_stronie')?.value).toBe('10');
   });
 });
 

@@ -51,6 +51,21 @@ export function formatPlCompactMoney(n: number): string {
 }
 
 /**
+ * Liczba w skrócie bez waluty — oś Y wykresów i ciasne kolumny kart Pulpitu
+ * (PLAN-PRAWDZIWE-DANE E5): „12,4 tys.”, „125 tys.”, „1,25 mln”. Najwyżej
+ * `significantDigits` cyfr znaczących (domyślnie 3), więc szerokość napisu
+ * nie rośnie z kwotą. Poniżej tysiąca liczba całkowita: „999”.
+ */
+export function formatPlCompactNumber(n: number, significantDigits = 3): string {
+  const whole = Math.sign(n) * Math.round(Math.abs(n)) || 0;
+  if (Math.abs(whole) < 1000) return formatPlInt(whole);
+  return new Intl.NumberFormat('pl-PL', {
+    notation: 'compact',
+    maximumSignificantDigits: significantDigits,
+  }).format(n);
+}
+
+/**
  * Zmiana procentowa ze znakiem: „+12%”, „−8%” (minus typograficzny),
  * „0%”. Zaokrąglenie do całych procent (plan Finora §7.1).
  */

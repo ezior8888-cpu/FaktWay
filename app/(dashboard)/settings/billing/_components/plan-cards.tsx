@@ -1,30 +1,41 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { RiArrowRightLine, RiCheckLine, RiLoader4Line, RiSparklingLine } from '@remixicon/react';
 import { toast } from 'sonner';
 
+import { LegalInline } from '@/components/legal/legal-document';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import type { BlikDisclosure } from '@/lib/billing/trial-payment';
+import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
 import { startCheckoutAction } from '../actions';
+
+import { BlikTerms } from './blik-terms';
 
 const FEATURES = [
   'Faktury sprzedaż + zakupy bez limitu',
   'OCR z auto-kategoryzacją KPiR',
   'KSeF 2.0 + UPO + walidacja',
   'Wkurzacz Dłużników',
-  'Magiczny import z konkurencji',
+  // Decyzja Bartosza 22.10.2026: bez Magicznego importu — historia z KSeF pobiera się sama.
+  'Historia z KSeF i import z innych programów',
   'Co-Pilot Księgowego',
-  'PWA mobilna z OCR',
+  // Dawniej „PWA mobilna z OCR” (do FaktWay 1.0 panel na telefonie był wyłączony).
+  'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',
   'Wsparcie po polsku',
 ];
 
 interface PlanCardProps {
   isPending: boolean;
   onSelect: () => void;
+  statementAccepted: boolean;
+  onStatementChange: (accepted: boolean) => void;
+  blikDisclosure: BlikDisclosure | null;
+  paymentHint: string;
 }
 
 /**
@@ -32,8 +43,18 @@ interface PlanCardProps {
  * Plan roczny nie jest sprzedawany — akcja zakupu też go odrzuca.
  *
  * Wygląd: `Card` Finory (nagłówek, treść, stopka), odznaka jak jej `Badge`.
+ * Oświadczenie przed płatnością (art. 15 ust. 3 i art. 35 ustawy o prawach
+ * konsumenta) — brzmienie z lib/legal/versions.ts; serwer odrzuca zakup bez
+ * niego (`startCheckoutAction`, `statement-required`).
  */
-function PlanCard({ isPending, onSelect }: PlanCardProps) {
+function PlanCard({
+  isPending,
+  onSelect,
+  statementAccepted,
+  onStatementChange,
+  blikDisclosure,
+  paymentHint,
+}: PlanCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -69,26 +90,55 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
       </CardContent>
 
       <CardFooter className="flex flex-col items-stretch gap-2">
-        <Button size="lg" className="w-full" disabled={isPending} onClick={onSelect}>
+        {/* Zgoda stoi w polu wyboru pod spodem: jej zaznaczenie jest warunkiem startu próby. */}
+        {blikDisclosure ? (
+          <BlikTerms
+            title="Płatność kartą albo BLIK-iem"
+            rows={[
+              { label: 'Dziś płacisz', value: blikDisclosure.dueToday },
+              { label: 'Pierwsza płatność', value: `${blikDisclosure.firstCharge}, jeśli zaczniesz dziś` },
+              { label: 'Potem', value: blikDisclosure.cycle },
+            ]}
+            banks={blikDisclosure.banks}
+          />
+        ) : null}
+        <label className="text-muted-foreground flex items-start gap-2.5 text-xs leading-relaxed">
+          <input
+            type="checkbox"
+            checked={statementAccepted}
+            onChange={(e) => onStatementChange(e.target.checked)}
+            className="accent-primary mt-0.5 size-4 shrink-0"
+          />
+          <span>
+            <LegalInline text={CHECKOUT_STATEMENT.text} linkClassName="underline underline-offset-2" />
+            {blikDisclosure ? <> {blikDisclosure.consent}</> : null}
+          </span>
+        </label>
+        <Button size="lg" className="w-full" disabled={isPending || !statementAccepted} onClick={onSelect}>
           {isPending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
           Zacznij {TRIAL_DAYS} dni za darmo
           <RiArrowRightLine aria-hidden />
         </Button>
-        <p className="text-muted-foreground text-center text-xs">
-          Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
-        </p>
+        <p className="text-muted-foreground text-center text-xs">{paymentHint}</p>
       </CardFooter>
     </Card>
   );
 }
 
-export function PlanCards() {
+interface PlanCardsProps {
+  /** Ujawnienia BLIK-a z serwera; `null`, gdy `STRIPE_BLIK_RECURRING` jest wyłączony. */
+  blikDisclosure: BlikDisclosure | null;
+  paymentHint: string;
+}
+
+export function PlanCards({ blikDisclosure, paymentHint }: PlanCardsProps) {
   const [isPending, startTransition] = useTransition();
+  const [statementAccepted, setStatementAccepted] = useState(false);
 
   const handleSelect = () => {
     startTransition(async () => {
       try {
-        await startCheckoutAction('monthly');
+        await startCheckoutAction('monthly', statementAccepted, blikDisclosure?.version ?? null);
         // `startCheckoutAction` rzuca NEXT_REDIRECT — kod tu nie dotrze przy
         // sukcesie. Toast wyląduje gdy redirect wróci z `?error=...`.
       } catch (e) {
@@ -103,7 +153,14 @@ export function PlanCards() {
 
   return (
     <div className="max-w-md">
-      <PlanCard isPending={isPending} onSelect={handleSelect} />
+      <PlanCard
+        isPending={isPending}
+        onSelect={handleSelect}
+        statementAccepted={statementAccepted}
+        onStatementChange={setStatementAccepted}
+        blikDisclosure={blikDisclosure}
+        paymentHint={paymentHint}
+      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { RiArrowLeftSLine } from '@remixicon/react'
 import { AuthMessage } from '@/components/auth/finora/auth-message'
 import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { HoneypotField } from '@/components/auth/honeypot-field'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +79,7 @@ export default async function ForgotPasswordPage({
                 placeholder='Wpisz adres e‑mail'
               />
             </Field>
+            <HoneypotField />
             <TurnstileWidget action='forgot-password' />
             <Field>
               <Button className='w-full' type='submit'>

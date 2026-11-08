@@ -9,8 +9,9 @@ import {
   CONSENT_KEY,
   getAnalyticsConsent,
   isAnalyticsConfigured,
-  setAnalyticsConsent,
 } from '@/lib/analytics/consent';
+import { chooseAnalyticsConsent } from '@/lib/analytics/consent-sync';
+import { ANALYTICS_STATEMENT } from '@/lib/legal/versions';
 
 function subscribeConsent(onChange: () => void): () => void {
   const onStorage = (event: StorageEvent) => {
@@ -33,11 +34,11 @@ export function ConsentBanner() {
   if (!visible) return null;
 
   const grant = () => {
-    setAnalyticsConsent(true);
+    chooseAnalyticsConsent(true);
   };
 
   const deny = () => {
-    setAnalyticsConsent(false);
+    chooseAnalyticsConsent(false);
   };
 
   return (
@@ -46,20 +47,19 @@ export function ConsentBanner() {
         <div className="flex-1 text-sm">
           <p className="font-medium">Analityka i pomoc w rozwoju produktu</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Za Twoją zgodą zbieramy statystyki użycia (PostHog, hostowane w EU),
-            żeby naprawiać błędy i ulepszać FaktWay. Szczegóły:{' '}
+            {ANALYTICS_STATEMENT.text} Szczegóły:{' '}
             <Link
-              href="/legal/polityka-prywatnosci"
+              href="/legal/cookies"
               className="underline underline-offset-2 hover:text-foreground"
             >
-              Polityka prywatności
+              Polityka cookies
             </Link>
             .
           </p>
         </div>
         <button
           type="button"
-          aria-label="Zamknij — Tylko niezbędne"
+          aria-label="Zamknij: tylko niezbędne"
           onClick={deny}
           className="rounded-full p-1.5 transition-colors hover:bg-foreground/10"
         >

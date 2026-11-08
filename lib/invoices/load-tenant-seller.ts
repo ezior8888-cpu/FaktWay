@@ -8,10 +8,14 @@ import { sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
  * (zaliczka / rozliczenie / korekta). Jeśli user nie ma aktywnej org —
  * zwracamy null (caller pokaże fallback).
  *
+ * `tenantId` to firma, z której wczytano sprzedawcę — strona podaje ją
+ * formularzowi, a zapis odsyła jako `expectedTenantId` (UX-01). Dzięki temu
+ * sprzedawca na ekranie i kontrola firmy przy zapisie to ta sama firma.
+ *
  * Membership weryfikujemy przez admin client (deterministycznie); odczyt
  * tenant info także admin (po weryfikacji nie ma już potrzeby polegać na RLS).
  */
-export async function loadTenantSellerForForms(): Promise<SellerData | null> {
+export async function loadTenantSellerForForms(): Promise<{ tenantId: string; seller: SellerData } | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -40,5 +44,6 @@ export async function loadTenantSellerForForms(): Promise<SellerData | null> {
 
   if (error || !raw) return null;
 
-  return sellerFromTenantProfile(raw);
+  const seller = sellerFromTenantProfile(raw);
+  return seller ? { tenantId, seller } : null;
 }

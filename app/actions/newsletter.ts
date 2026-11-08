@@ -9,6 +9,11 @@ import { createAdminClient } from '@/lib/supabase/server';
 /**
  * Zapis na newsletter z formularzy publicznych (blog).
  *
+ * NIEPODPIĘTY (przegląd prawny 22.10.2026) — formularz nie stoi na żadnym
+ * ekranie. Przed podpięciem: potwierdzenie zapisu (double opt-in), zapis
+ * wersji brzmienia zgody (art. 7 ust. 1 RODO), link wypisu w każdej
+ * wiadomości. Pilnuje tego tests/unit/newsletter-wstrzymany.test.ts.
+ *
  * Formularz jest dostępny bez logowania, więc ochrona przed spamem:
  *   1. Honeypot `website` — pole niewidoczne dla człowieka; bot je wypełnia,
  *      dostaje pozorny sukces i nic nie zapisujemy.

@@ -1,6 +1,9 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'FaktWay — Faktury KSeF dla mikrofirm';
+import { LOCKUP } from '@/lib/brand/faktway-logo-paths';
+import { OFERTA, OFERTA_TEKST } from '@/lib/marketing/oferta';
+
+export const alt = OFERTA;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -19,61 +22,22 @@ export default function OgImage() {
           padding: '80px',
         }}
       >
+        {/* Logo FaktWay z zestawu (docs/brand/logo), te same ścieżki co w aplikacji. */}
+        <svg width="362" height="80" viewBox={LOCKUP.viewBox} style={{ marginBottom: '40px' }}>
+          <path fill="#2463EF" d={LOCKUP.symbol.brand} />
+          <path fill="#0D1936" d={LOCKUP.wordmark.brand} transform={LOCKUP.wordmark.transform} />
+        </svg>
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '20px',
-            marginBottom: '40px',
-          }}
-        >
-          <div
-            style={{
-              width: '80px',
-              height: '80px',
-              background: '#000',
-              color: '#fff',
-              borderRadius: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '48px',
-              fontWeight: 700,
-            }}
-          >
-            F
-          </div>
-          <div
-            style={{
-              fontSize: '40px',
-              fontWeight: 600,
-              letterSpacing: '-0.03em',
-            }}
-          >
-            FaktWay
-          </div>
-        </div>
-        <div
-          style={{
-            fontSize: '72px',
+            fontSize: '56px',
             fontWeight: 700,
             letterSpacing: '-0.04em',
-            lineHeight: 1.05,
+            lineHeight: 1.15,
             textAlign: 'center',
-            maxWidth: '900px',
+            maxWidth: '1000px',
           }}
         >
-          Faktury, KSeF i KPiR.
-        </div>
-        <div
-          style={{
-            fontSize: '36px',
-            color: '#64748b',
-            marginTop: '20px',
-            textAlign: 'center',
-          }}
-        >
-          Automatyzacja, której nie ma u konkurencji.
+          {OFERTA_TEKST}
         </div>
       </div>
     ),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { shortCompanyName } from '@/lib/format/company-name';
-import { formatPlCompactMoney, formatPlPercentChange } from '@/lib/format/pl';
+import { formatPlCompactMoney, formatPlCompactNumber, formatPlPercentChange } from '@/lib/format/pl';
 
 const NBSP = ' ';
 
@@ -45,6 +45,22 @@ describe('formatPlPercentChange', () => {
     expect(formatPlPercentChange(-8)).toBe('−8%');
     expect(formatPlPercentChange(0.3)).toBe('0%');
     expect(formatPlPercentChange(-0.4)).toBe('0%');
+  });
+});
+
+describe('formatPlCompactNumber (oś Y i kolumny Pulpitu, PLAN-PRAWDZIWE-DANE E5)', () => {
+  it('bez waluty, najwyżej 3 cyfry znaczące — szerokość nie rośnie z kwotą', () => {
+    expect(formatPlCompactNumber(12_400)).toBe(`12,4${NBSP}tys.`);
+    expect(formatPlCompactNumber(125_400)).toBe(`125${NBSP}tys.`);
+    expect(formatPlCompactNumber(1_254_000)).toBe(`1,25${NBSP}mln`);
+    expect(formatPlCompactNumber(999.6)).toBe(`1${NBSP}tys.`);
+    expect(formatPlCompactNumber(750)).toBe('750');
+    expect(formatPlCompactNumber(0)).toBe('0');
+  });
+
+  it('dwie cyfry znaczące dla ciasnych kolumn', () => {
+    expect(formatPlCompactNumber(42_345, 2)).toBe(`42${NBSP}tys.`);
+    expect(formatPlCompactNumber(3_812, 2)).toBe(`3,8${NBSP}tys.`);
   });
 });
 

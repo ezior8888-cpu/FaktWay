@@ -1,4 +1,16 @@
-import { RiAddLine, RiFileAddLine, type RemixiconComponentType } from '@remixicon/react';
+import {
+  RiAddLine,
+  RiAlarmWarningLine,
+  RiBook2Line,
+  RiDownload2Line,
+  RiFileAddLine,
+  RiInboxArchiveLine,
+  RiLineChartLine,
+  RiPieChart2Line,
+  RiReceiptLine,
+  RiRepeatLine,
+  type RemixiconComponentType,
+} from '@remixicon/react';
 
 import { dashboardNavSections, dashboardSettingsNavItem } from '@/lib/dashboard-nav-config';
 
@@ -20,10 +32,72 @@ export interface PaletteEntry {
 export const PALETTE_NAV_GROUP = 'Przejdź do';
 export const PALETTE_ACTIONS_GROUP = 'Akcje';
 
+/**
+ * Zakładki ekranów Faktur, Kosztów i Księgowości oraz dwie analizy, które do
+ * 21.10.2026 były pozycjami menu — paleta dalej prowadzi do nich wprost (stare
+ * nazwy jako słowa kluczowe). „KPiR” ma inną etykietę niż pozycja menu
+ * „Księgowość”, a „Analiza sprzedaży” niż „Analizy” (ten sam adres), więc
+ * wartości cmdk (`grupa:etykieta`) się nie powtarzają.
+ */
+const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: RemixiconComponentType; keywords: string[] }[] = [
+  {
+    label: 'Faktury cykliczne',
+    href: '/invoices/recurring',
+    icon: RiRepeatLine,
+    keywords: ['Faktury cykliczne', 'Faktury', 'Sprzedaż', 'abonament', 'co miesiąc', 'powtarzalne'],
+  },
+  {
+    label: 'Faktury po terminie',
+    href: '/payments/overdue',
+    icon: RiAlarmWarningLine,
+    keywords: ['Faktury po terminie', 'Faktury', 'Sprzedaż', 'Przypomnienia', 'zaległe', 'windykacja', 'monit'],
+  },
+  {
+    label: 'Wydatki',
+    href: '/expenses',
+    icon: RiReceiptLine,
+    keywords: ['Wydatki', 'Koszty', 'paragon', 'faktury kosztowe', 'do opisania'],
+  },
+  {
+    label: 'Skrzynka KSeF',
+    href: '/inbox',
+    icon: RiInboxArchiveLine,
+    keywords: ['Skrzynka KSeF', 'Koszty', 'KSeF', 'faktury zakupowe', 'faktury kosztowe', 'przychodzące'],
+  },
+  // Poprawka Bartosza 21.10.2026 (Analizy 1:1 z Finory): w menu jedna pozycja
+  // „Analizy” (/analizy/sprzedaz), a koszty przełącza się w nagłówku — ⌘K
+  // prowadzi do każdej analizy wprost. Etykiety różnią się od pozycji menu
+  // „Analizy”, więc wartości cmdk (`grupa:etykieta`) się nie powtarzają.
+  {
+    label: 'Analiza sprzedaży',
+    href: '/analizy/sprzedaz',
+    icon: RiLineChartLine,
+    keywords: ['Analiza sprzedaży', 'Analizy', 'Sprzedaż', 'przychody', 'produkty', 'należności', 'stali klienci', 'wykresy'],
+  },
+  {
+    label: 'Analiza kosztów',
+    href: '/analizy/koszty',
+    icon: RiPieChart2Line,
+    keywords: ['Analiza kosztów', 'Analizy', 'Koszty', 'wydatki', 'kategorie', 'VAT', 'stałe koszty', 'wykresy'],
+  },
+  {
+    label: 'KPiR',
+    href: '/reports/kpir',
+    icon: RiBook2Line,
+    keywords: ['KPiR', 'Księgowość', 'książka przychodów i rozchodów', 'księga', 'dochód', 'PIT'],
+  },
+  {
+    label: 'Eksport',
+    href: '/reports/exports',
+    icon: RiDownload2Line,
+    keywords: ['Eksport', 'Księgowość', 'JPK', 'JPK_FA', 'CSV', 'Excel', 'plik dla księgowej'],
+  },
+];
+
 export const MIN_SEARCH_LENGTH = 2;
 export const MAX_SEARCH_LENGTH = 80;
 
-/** Pozycje menu + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
+/** Pozycje menu + zakładki Faktur, Kosztów i Księgowości + obie analizy + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
 export function buildPaletteNavEntries(): PaletteEntry[] {
   const nav: PaletteEntry[] = dashboardNavSections.flatMap((section) =>
     section.items.map((item) => ({
@@ -35,6 +109,9 @@ export function buildPaletteNavEntries(): PaletteEntry[] {
       keywords: [item.label, section.title],
     })),
   );
+  for (const item of PALETTE_EXTRA_NAV) {
+    nav.push({ group: PALETTE_NAV_GROUP, value: `${PALETTE_NAV_GROUP}:${item.label}`, ...item });
+  }
   nav.push({
     group: PALETTE_NAV_GROUP,
     label: dashboardSettingsNavItem.label,

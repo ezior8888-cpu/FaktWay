@@ -9,7 +9,7 @@ Testy w `rls-isolation.test.ts` tworzą konta, modyfikują członkostwa i faktur
 - `RLS_TEST_SUPABASE_URL`: numeryczny loopback, np. `http://127.0.0.1:54321` lub `http://[::1]:54321`. Adres nie może zawierać danych logowania, ścieżki, query ani fragmentu.
 - `RLS_TEST_SUPABASE_ANON_KEY` i `RLS_TEST_SUPABASE_SERVICE_ROLE_KEY`: osobne klucze jednorazowej bazy testowej.
 - `RLS_TEST_ALLOW_DESTRUCTIVE=isolated-local-database`: świadome potwierdzenie, że wskazana baza jest przeznaczona do tworzenia i usuwania danych testowych.
-- `RLS_TEST_DATABASE_URL` (test `rls-kolejkowanie-wysylki.test.ts`): połączenie `postgresql://` do TEJ SAMEJ lokalnej bazy, też wyłącznie numeryczny loopback — pg-boss zapisuje zlecenia w transakcji z RPC cyklu życia faktury.
+- `RLS_TEST_DATABASE_URL` (testy `rls-kolejkowanie-wysylki.test.ts`, `rls-kontrola-dziennik-prob.test.ts` i `rls-kontrola-offline24.test.ts`): połączenie `postgresql://` do TEJ SAMEJ lokalnej bazy, też wyłącznie numeryczny loopback — pg-boss zapisuje zlecenia w transakcji z RPC cyklu życia faktury, a sekcje 12 i 4a `scripts/ops/kontrola-faktur-ksef.sh` czytają bazę programem `psql` (musi być w `PATH`).
 
 Zdalne adresy, także prywatna sieć i staging, oraz nazwy DNS, w tym `localhost`, są zablokowane. Nie ma przełącznika dopuszczającego zdalną bazę. Jeżeli proces otrzyma również konfigurację aplikacji, guard odrzuci ten sam lokalny cel lub ponowne użycie jej kluczy. Komunikaty błędów nie wypisują adresów ani wartości kluczy.
 

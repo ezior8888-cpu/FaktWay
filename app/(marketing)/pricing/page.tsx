@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 
 import {
   PRICE_GROSS,
@@ -9,246 +9,208 @@ import {
   PRICE_VAT,
   TRIAL_DAYS,
 } from '@/lib/billing/pricing';
+import { METODA_PLATNOSCI, OFERTA, OFERTA_TEKST } from '@/lib/marketing/oferta';
 
-// Faza 22: cennik się rzadko zmienia — godzinny revalidate na edge.
+import { Reveal, RevealGroup, RevealItem } from '@/components/site/motion';
+import { PageHero } from '@/components/site/page-hero';
+import { ButtonLink, Container, SectionHeading } from '@/components/site/ui';
+
+// Faza 22: cennik się rzadko zmienia, więc godzinny revalidate na edge.
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: `Cennik FaktWay — ${PRICE_PER_MONTH}, wszystkie funkcje, ${TRIAL_DAYS} dni za darmo`,
-  description:
-    `Jeden plan dla wszystkich: ${PRICE_PER_MONTH}, płatne co miesiąc. ${TRIAL_DAYS} dni za darmo. OCR, KSeF 2.0, KPiR, Wkurzacz Dłużników w cenie. Bez ukrytych dodatków.`,
+  title: `Cennik FaktWay: ${PRICE_PER_MONTH}, wszystkie funkcje, ${TRIAL_DAYS} dni za darmo`,
+  description: OFERTA,
 };
 
+/**
+ * Lista funkcji: każda pozycja ma pokrycie w kodzie, plik do każdej jest
+ * w opisie PR (FaktWay 1.0, decyzja 4; przegląd prawny 15.10.2026).
+ * Usunięte wtedy: „Bez limitu paragonów” (OCR ma limit dzienny i miesięczny,
+ * lib/ai/tenant-ai-budget.ts), eksporty JPK_V7M / Optima / Subiekt / Symfonia /
+ * Wapro (wyłączone, lib/exports/suspended-formats.ts; pilnuje test
+ * marketing-bez-fikcji), „Retencja 10 lat” (dane trzymamy przez czas umowy),
+ * „GDPR-compliant”, „Bank EU”, „Live chat” (czat jest automatyczny).
+ * Usunięte przy FaktWay 1.0: „Tryb Offline24” (wstrzymany wszędzie,
+ * lib/ksef/offline24-policy.ts), korekty i faktury rozliczające (wysyłka
+ * wstrzymana, lib/ksef/kind-holds.ts). Wracają razem ze zdjęciem blokad.
+ */
 const FEATURES = [
   {
     category: 'Faktury',
     items: [
-      'Bez limitu wystawionych',
-      'Bez limitu zakupowych',
-      'Bez limitu paragonów',
-      'Korekty + zaliczki + finalne',
-      'Wystawianie B2B i B2C',
+      'Bez limitu faktur sprzedaży i zakupu',
+      'Faktury zaliczkowe',
+      'Wystawianie B2B i dla konsumentów',
+      'Dane kontrahenta z GUS po NIP',
     ],
   },
   {
     category: 'KSeF 2.0',
     items: [
-      'Pre-send walidacja FA(3)',
-      'Post-send monitoring',
-      'UPO automatyczne + archiwizacja',
-      'Tryb Offline24',
-      'Auto-retry przy błędach',
+      'Walidacja FA(3) przed wysyłką',
+      'Sprawdzanie statusu po wysyłce',
+      'UPO pobierane samo i archiwizowane',
+      'Ponawianie wysyłki, gdy KSeF nie odpowiada',
+      'Faktury zakupowe z KSeF przychodzą same',
+      'Historia faktur z KSeF pobiera się sama',
     ],
   },
   {
-    category: 'OCR + KPiR',
+    category: 'Koszty i KPiR',
     items: [
-      'OCR Claude Vision faktur',
-      'OCR paragonów + auto-kategoryzacja',
-      'Apka uczy się Twoich preferencji',
-      'Auto-import z KSeF inbox',
-      'Eksport JPK_FA + KPiR Excel',
+      'Odczyt faktur kosztowych i paragonów ze zdjęcia, z limitem dziennym i miesięcznym',
+      'Podpowiedź kolumny KPiR, która uczy się Twoich poprawek',
+      'KPiR z faktur i kosztów',
     ],
   },
   {
-    category: 'Mobile',
+    category: 'Należności',
     items: [
-      'PWA installable',
-      'Native aparat',
-      'Push notifications',
-      'Offline mode',
-      'Swipe gestures',
+      'Lista faktur po terminie',
+      'Zapłacone jednym dotknięciem',
+      'Walidacja NIP (biała lista VAT, VIES)',
     ],
   },
   {
-    category: 'Workflow',
+    category: 'Telefon',
     items: [
-      'Magiczny Import z 4 innych apek',
-      'Wkurzacz Dłużników (przypomnienia + wezwania KPC)',
-      'Co-Pilot Księgowego (auto-mailing 25.)',
-      'Live walidacja NIP/VIES',
-      'Walidacja kont bankowych (Biała Lista)',
+      'Działa w przeglądarce telefonu',
+      'Można dodać do ekranu głównego',
+      'Logowanie biometrią',
+      'Zdjęcie dokumentu prosto z aparatu',
+      'Powiadomienia push w przeglądarce',
     ],
   },
   {
-    category: 'Eksport',
+    category: 'Księgowa i eksport',
     items: [
+      'Paczka dla księgowej co miesiąc',
+      'Portal księgowej bez zakładania konta',
       'JPK_FA(4)',
-      'JPK_V7M',
-      'KPiR Excel',
-      'Comarch Optima',
-      'Insert Subiekt',
-      'Symfonia',
-      'Wapro Mag',
+      'KPiR (Excel)',
+      'Uniwersalny CSV dla księgowej',
+      'Import z Fakturowni, inFaktu, wFirmy i iFirmy (CSV)',
     ],
   },
   {
     category: 'Bezpieczeństwo',
     items: [
-      'Hosting w UE (Niemcy) 🇪🇺',
-      'GDPR-compliant',
-      'Retencja 10 lat (zgodnie z prawem)',
-      'Eksport pełnych danych',
-      'Bank EU (nie Polska)',
-      'Audit logs',
+      'Serwery w UE (Niemcy)',
+      'Umowa powierzenia danych (RODO) w standardzie',
+      'Eksport faktur i danych konta w każdej chwili',
+      'Weryfikacja dwuetapowa (2FA)',
+      'Dziennik zdarzeń',
     ],
   },
   {
     category: 'Wsparcie',
     items: [
-      'Email po polsku',
-      'Dokumentacja w pl',
-      'Live chat (godziny biurowe)',
-      'Onboarding pomoc',
+      'E-mail po polsku, zwykle w ciągu 2 dni roboczych',
+      'Centrum pomocy po polsku',
+      'Automatyczny czat z podpowiedziami i przejście do człowieka',
     ],
+  },
+];
+
+const PROMISES = [
+  {
+    value: `${TRIAL_DAYS} dni`,
+    label: `Pełen dostęp do wszystkich funkcji (${METODA_PLATNOSCI}). Pierwsza płatność dopiero po ${TRIAL_DAYS} dniach.`,
+  },
+  {
+    value: `${TRIAL_DAYS} dni`,
+    label: 'Tyle masz na sprawdzenie FaktWay obok obecnego programu, zanim się przeniesiesz.',
   },
 ];
 
 export default function PricingPage() {
   return (
-    <article>
-      {/* Date strip */}
-      <div className="border-b border-white/10">
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-6 py-3 text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)] lg:px-8">
-          <span>Wydanie I · Cennik</span>
-          <span>Jeden plan, bez tierów</span>
-          <span className="font-editorial text-base italic">Nº 03</span>
-        </div>
-      </div>
+    <>
+      <PageHero title="Jeden plan. Wszystkie funkcje." lead={OFERTA_TEKST} />
 
-      <div className="mx-auto max-w-[1280px] px-6 py-16 lg:px-8 lg:py-24">
-        {/* HERO */}
-        <div className="mb-16 max-w-3xl">
-          <p className="editorial-section-num mb-6 text-sm">— Cennik</p>
-          <h1 className="font-editorial text-[clamp(2.5rem,6vw,5.5rem)] font-medium leading-[0.95] tracking-[-0.02em]">
-            Jeden plan.{' '}
-            <span className="italic text-[var(--marketing-accent)]">
-              Wszystkie funkcje.
-            </span>
-          </h1>
-          <p className="mt-8 max-w-xl font-editorial text-2xl leading-snug text-[var(--marketing-muted)]">
-            Bez tierów. Bez &bdquo;premium&rdquo; toggle. Bez umowy na rok.
-          </p>
-        </div>
-
-        {/* Price plate — asymetryczna, większa wersja niż w landingu */}
-        <div className="mb-20 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-16">
-          <div className="border-2 border-emerald-500/40 bg-white/[0.03] p-10">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
-              Plan podstawowy
-            </p>
-            {/* „29,99 zł” jest szersze niż dawne „49 zł” — rozmiar od szerokości, w jednej linii. */}
-            <p className="mt-6 whitespace-nowrap font-editorial text-[clamp(3.5rem,17vw,7rem)] font-medium leading-[0.85] lg:text-[clamp(3.5rem,7.5vw,7rem)]">
-              <span className="italic text-[var(--marketing-accent)]">{PRICE_GROSS}</span>
-            </p>
-            <p className="mt-2 font-editorial text-xl italic text-[var(--marketing-muted)]">
-              / miesiąc · z VAT
-            </p>
-            <p className="mt-4 text-sm text-[var(--marketing-muted)]">
-              {PRICE_NET} netto + {PRICE_VAT} VAT · faktura VAT co miesiąc
-            </p>
-
-            <Link
-              href="/register"
-              className="mt-10 inline-flex w-full items-center justify-center gap-3 border border-emerald-500/40 bg-emerald-500 px-6 py-3.5 text-sm font-medium tracking-wide text-emerald-950 transition-all hover:border-emerald-400 hover:bg-emerald-400"
+      {/* Karta planu w tym samym kroju co cennik na stronie głównej, obok dwie obietnice. */}
+      <section aria-labelledby="plan-title" className="pb-20 sm:pb-28">
+        <Container>
+          <div className="mx-auto grid max-w-5xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
+            <Reveal
+              y={40}
+              className="rounded-3xl bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/20 sm:p-10"
             >
-              Wypróbuj {TRIAL_DAYS} dni za darmo
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Link>
-            <p className="mt-3 text-center text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
-              Pierwsza płatność po {TRIAL_DAYS} dniach · Bez umowy na rok
+              <h2 id="plan-title" className="text-lg font-semibold">
+                FaktWay
+              </h2>
+              <p className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-5xl font-semibold tracking-tight whitespace-nowrap sm:text-6xl">
+                  {PRICE_GROSS}
+                </span>
+                <span className="text-sm text-primary-foreground">/ miesiąc · z VAT</span>
+              </p>
+              <p className="mt-3 text-sm text-primary-foreground">
+                {PRICE_NET} netto + {PRICE_VAT} VAT · cena za jedną firmę (NIP)
+              </p>
+              <ButtonLink href="/register" variant="inverse" className="mt-8 w-full">
+                Wypróbuj {TRIAL_DAYS} dni za darmo
+                <ArrowRight aria-hidden className="size-4" />
+              </ButtonLink>
+              <p className="mt-4 text-center text-xs text-primary-foreground">
+                Pierwsza płatność po {TRIAL_DAYS} dniach · Bez umowy na rok
+              </p>
+            </Reveal>
+
+            <RevealGroup as="ul" className="flex flex-col gap-4">
+              {PROMISES.map((promise) => (
+                <RevealItem as="li" key={promise.label} className="rounded-2xl bg-muted/50 p-6 ring-1 ring-border sm:p-8">
+                  <p className="text-3xl font-semibold tracking-tight text-primary">{promise.value}</p>
+                  <p className="mt-2 text-pretty text-muted-foreground">{promise.label}</p>
+                </RevealItem>
+              ))}
+            </RevealGroup>
+          </div>
+        </Container>
+      </section>
+
+      <section aria-labelledby="features-title" className="bg-muted/50 py-20 sm:py-28">
+        <Container>
+          {/* Twarda spacja po „w”: przyimek nie zostaje sam na końcu linii. */}
+          <SectionHeading
+            id="features-title"
+            title={<>Co dostajesz w{' '}{PRICE_GROSS}</>}
+            lead={`${FEATURES.length} kategorii. Wszystko od pierwszego dnia.`}
+          />
+
+          <div className="mx-auto mt-14 max-w-5xl rounded-3xl bg-card p-8 ring-1 ring-border sm:p-12">
+            <RevealGroup as="ul" className="grid gap-x-10 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((cat) => (
+                <RevealItem as="li" key={cat.category}>
+                  <h3 className="text-lg font-semibold tracking-tight">{cat.category}</h3>
+                  <ul className="mt-4 space-y-3 text-sm">
+                    {cat.items.map((item) => (
+                      <li key={item} className="flex gap-3">
+                        <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
+                        <span className="text-pretty text-muted-foreground">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </RevealItem>
+              ))}
+            </RevealGroup>
+          </div>
+
+          <Reveal className="mx-auto mt-8 max-w-3xl">
+            <p className="text-center text-sm text-pretty text-muted-foreground">
+              W przygotowaniu (jeszcze niedostępne): wysyłka korekt i faktur rozliczających do KSeF,
+              tryb Offline24, eksport JPK_V7M(3), eksport do Comarch Optima i Subiekta (EDI++).
+              Odczyt dokumentów ze zdjęcia ma limit dzienny i miesięczny na firmę. Po jego
+              wyczerpaniu dane wpisujesz ręcznie. Szczegóły w{' '}
+              <Link href="/legal/regulamin" className="font-medium text-primary underline-offset-4 hover:underline">
+                regulaminie
+              </Link>
+              .
             </p>
-          </div>
-
-          {/* Marginalia z 3 obietnicami */}
-          <div className="flex flex-col justify-center">
-            <p className="editorial-section-num mb-6 text-sm">— Dwie obietnice</p>
-            <div className="space-y-8">
-              <Promise
-                num="01"
-                value={`${TRIAL_DAYS} dni`}
-                label={`Pełen dostęp do wszystkich funkcji. Kartę podajesz na starcie, pierwsza płatność dopiero po ${TRIAL_DAYS} dniach.`}
-              />
-              <Promise
-                num="02"
-                value={`${TRIAL_DAYS} dni`}
-                label="Parallel Run — możesz używać równolegle z poprzednią apką, by porównać przed migracją."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Co dostajesz w cenie — hairline grid */}
-        <div className="mb-10 flex items-baseline gap-4 border-b border-white/10 pb-4">
-          <span className="editorial-section-num text-3xl">02.</span>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-[var(--marketing-muted)]">
-            Co dostajesz w {PRICE_GROSS}
-          </span>
-        </div>
-
-        <h2 className="mb-12 max-w-3xl font-editorial text-4xl font-medium leading-[1] tracking-[-0.02em] md:text-5xl">
-          Osiem kategorii.{' '}
-          <span className="italic text-[var(--marketing-accent)]">
-            Wszystko od pierwszego dnia.
-          </span>
-        </h2>
-
-        <div className="grid grid-cols-1 gap-px border border-white/10 bg-white/10 md:grid-cols-2">
-          {FEATURES.map((cat, i) => (
-            <div key={cat.category} className="bg-background p-8">
-              <div className="mb-5 flex items-baseline justify-between">
-                <span className="editorial-section-num text-2xl">
-                  {String(i + 1).padStart(2, '0')}.
-                </span>
-                <span className="text-[10px] uppercase tracking-[0.22em] text-[var(--marketing-muted)]">
-                  Kategoria
-                </span>
-              </div>
-              <h3 className="mb-5 font-editorial text-xl font-medium">
-                {cat.category}
-              </h3>
-              <ul className="space-y-2">
-                {cat.items.map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-baseline gap-3 text-sm text-[var(--marketing-muted)]"
-                  >
-                    <span
-                      className="font-editorial text-[var(--marketing-accent)]"
-                      aria-hidden
-                    >
-                      ✓
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function Promise({
-  num,
-  value,
-  label,
-}: {
-  num: string;
-  value: string;
-  label: string;
-}) {
-  return (
-    <div className="flex items-baseline gap-5 border-b border-zinc-100 pb-6">
-      <span className="editorial-section-num shrink-0 text-xs">{num}.</span>
-      <div>
-        <p className="font-editorial text-3xl font-medium italic text-[var(--marketing-accent)]">
-          {value}
-        </p>
-        <p className="mt-1 text-sm text-[var(--marketing-muted)]">{label}</p>
-      </div>
-    </div>
+          </Reveal>
+        </Container>
+      </section>
+    </>
   );
 }

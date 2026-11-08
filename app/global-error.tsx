@@ -3,16 +3,17 @@
 import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
-import '@/styles/zova.css';
+import './globals.css';
 
 /**
  * Błąd krytyczny — ten komponent zastępuje CAŁY dokument, więc renderuje
  * własne `<html>` i `<body>`. Wcześniej pokazywał domyślną stronę błędu
  * Next.js, czyli surowy komunikat na białym tle bez śladu naszej marki.
  *
- * Nie korzystamy tu z komponentów landingu: skoro aplikacja właśnie się
+ * Nie korzystamy tu z komponentów strony: skoro aplikacja właśnie się
  * wywróciła, strona awaryjna nie może zależeć od niczego, co też mogło paść.
- * Stąd czysty znacznik i style wpisane wprost.
+ * Stąd czysty znacznik na tokenach z `globals.css` (wygląd jak strona
+ * główna, od 23.10.2026; wcześniej arkusz szablonu Zova).
  */
 export default function GlobalError({
   error,
@@ -26,25 +27,22 @@ export default function GlobalError({
   return (
     <html lang="pl">
       <body>
-        <div className="zova flex min-h-screen flex-col items-center justify-center px-5 text-center">
-          <div className="flex max-w-[550px] flex-col items-center gap-6">
-            <span className="z-tiny inline-flex items-center gap-2 rounded-full border border-[var(--z-300)] bg-white px-3 py-1.5">
-              <span className="size-1.5 rounded-full bg-[var(--z-red)]" />
-              Coś poszło nie tak
-            </span>
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 text-center text-foreground">
+          <div className="flex max-w-xl flex-col items-center">
+            <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+              Chwilowo mamy usterkę
+            </h1>
 
-            <h1 className="z-h2">Chwilowo mamy usterkę</h1>
-
-            <p className="z-lead text-[var(--z-muted)]">
+            <p className="mt-5 text-lg text-pretty text-muted-foreground">
               Zgłoszenie już do nas poszło i się tym zajmujemy. Odśwież
               stronę za moment, a jeśli problem wróci, napisz do nas.
             </p>
 
-            <div className="flex flex-wrap justify-center gap-3">
+            <div className="mt-10 flex flex-wrap justify-center gap-3">
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="z-body inline-flex items-center rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
+                className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Odśwież stronę
               </button>
@@ -54,14 +52,14 @@ export default function GlobalError({
               {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a
                 href="/"
-                className="z-body inline-flex items-center rounded-[12px] border border-[var(--z-300)] bg-white px-5 py-3.5 font-medium text-[var(--z-black)] transition-colors hover:bg-[var(--z-50)]"
+                className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-border transition-colors hover:bg-muted"
               >
                 Strona główna
               </a>
             </div>
 
             {error.digest ? (
-              <p className="z-small text-[var(--z-700)]">
+              <p className="mt-8 text-sm text-muted-foreground">
                 Numer zgłoszenia: {error.digest}
               </p>
             ) : null}

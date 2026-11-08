@@ -35,6 +35,7 @@ export function WelcomeModal() {
 
   useEffect(() => {
     if (searchParams.get('welcome') === '1') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- otwarcie po hydratacji, gdy URL ma ?welcome=1; stan początkowy jak na serwerze (zamknięty)
       setOpen(true);
     }
   }, [searchParams]);
@@ -84,7 +85,7 @@ export function WelcomeModal() {
             <PathCard
               icon={Upload}
               title="Importuj historię"
-              description="JPK_FA albo CSV z Fakturownia / inFakt / wFirma / iFirma."
+              description="CSV z Fakturowni, inFaktu, wFirmy albo iFirmy. Historię z KSeF pobieramy sami."
               onClick={() => handleNavigate('/onboarding/import-source')}
               accent="blue"
             />

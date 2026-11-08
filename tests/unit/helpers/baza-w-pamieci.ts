@@ -6,10 +6,13 @@
  *
  * Obsługa: select (kolumny, count/head), insert (wiersz albo tablica, z
  * `.select()` zwraca wstawione), update, delete, eq/neq/in/is/not/gte/lte/gt/lt,
- * `or` dla kontroli środowiska z data-fetchera, order, limit, range, single,
+ * `or` dla kontroli środowiska z data-fetchera i proste alternatywy warunków
+ * (`orPredicate` atrapy: dzień wpływu E11), order, limit, range, single,
  * maybeSingle. Kolumny JSON jak w PostgREST: `alias:kolumna->klucz` w select
  * (pełny wiersz zostaje, alias dochodzi) i `kolumna->klucz` w filtrach.
  */
+
+import { orPredicate } from '@/lib/demo/fake-postgrest';
 
 export type Row = Record<string, unknown>;
 
@@ -38,7 +41,18 @@ function jsonAliases(columns: string | undefined): Array<[string, string]> {
   });
 }
 
-export function memoryClient(tables: MemoryTables, options: { failInsertInto?: readonly string[]; failUpdateOf?: readonly string[] } = {}) {
+export function memoryClient(
+  tables: MemoryTables,
+  options: {
+    failInsertInto?: readonly string[];
+    failUpdateOf?: readonly string[];
+    /**
+     * Limit wierszy odpowiedzi SELECT jak `PGRST_DB_MAX_ROWS` na produkcji
+     * (1000): ucina BEZ błędu. Domyślnie bez limitu (sesja 27 planu skalowania).
+     */
+    maxRows?: number;
+  } = {},
+) {
   function from(table: string) {
     const rows = (tables[table] ??= []);
     const predicates: Array<(r: Row) => boolean> = [];
@@ -80,6 +94,7 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       const count = hit.length;
       if (window) hit = hit.slice(window[0], window[1] + 1);
       if (limitN !== null) hit = hit.slice(0, limitN);
+      if (options.maxRows !== undefined) hit = hit.slice(0, options.maxRows);
       const data = hit.map((r) => ({ ...r, ...Object.fromEntries(aliases.map(([alias, path]) => [alias, valueAt(r, path) ?? null])) }));
       return { data: head ? null : singular ? data[0] ?? null : data, error: null, count };
     };
@@ -112,8 +127,8 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       or: (expr: string) => {
         // Kontrola proweniencji data-fetchera: przyjęte bez środowiska albo z innego.
         const m = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(expr);
-        if (!m) throw new Error(`baza w pamięci: nieobsługiwany filtr or(${expr})`);
-        predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+        if (m) predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+        else predicates.push(orPredicate(expr)); // rzuca przy nieobsługiwanym warunku
         return q;
       },
       order: (key: string, o?: { ascending?: boolean }) => { sort = { key, ascending: o?.ascending ?? true }; return q; },

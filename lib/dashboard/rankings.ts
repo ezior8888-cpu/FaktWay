@@ -1,5 +1,6 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { assertAcceptedEnvironmentKnown } from '@/lib/dashboard/monthly-figures';
+import { normalizeProductName } from '@/lib/dashboard/product-name';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { shortCompanyName } from '@/lib/format/company-name';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -26,6 +27,17 @@ export const CONSUMERS_NAME = 'Konsumenci';
 const UNNAMED_PRODUCT = 'Pozycja bez nazwy';
 /** Tyle identyfikatorów faktur na jedno `.in()` — długość adresu PostgREST. */
 const LOOKUP_CHUNK = 100;
+/**
+ * Tyle paczek pozycji naraz (QRY-05, sesja 19 planu skalowania): paczki
+ * szły jedna po drugiej, a pełne naraz zapchałyby pulę PostgREST jednym
+ * wejściem na Pulpit.
+ */
+const LOOKUP_CONCURRENCY = 4;
+/** Rodzaje faktur, których pozycje wchodzą do rankingu produktów (§2.4 pkt 5 i 13). */
+export const PRODUCT_INVOICE_KINDS: readonly string[] = ['regular', 'final'];
+/** Etykiety błędów odczytu kart rankingów. */
+export const PRODUCT_INVOICES_READ_ERROR = 'Nie można odczytać faktur do rankingu produktów';
+export const CLIENT_INVOICES_READ_ERROR = 'Nie można odczytać faktur do rankingu klientów';
 
 export interface TopProduct {
   /** Klucz grupy: znormalizowana nazwa + j.m. */
@@ -90,6 +102,33 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
+/**
+ * `run` dla każdego elementu, najwyżej `limit` naraz; wyniki w kolejności
+ * wejścia. Pierwszy błąd odrzuca całość i wstrzymuje branie kolejnych.
+ */
+async function inOrderWithLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const index = next++;
+      try {
+        results[index] = await run(items[index]!);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 function amount(value: number | string | null | undefined): number {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -116,8 +155,9 @@ export interface ProductLine {
 }
 
 /**
- * Ranking pozycji: grupa = `lower(trim(name))` + `unit` (NULL to osobna
- * j.m.), kwota = suma `net_amount`, nazwa z najnowszej pozycji grupy. Tylko
+ * Ranking pozycji: grupa = nazwa bez okresu i numeru umowy, małymi literami
+ * (`normalizeProductName`) + `unit` (NULL to osobna j.m.), kwota = suma
+ * `net_amount`, nazwa z najnowszej pozycji grupy (też bez okresu). Tylko
  * grupy z netto > 0, malejąco po netto, potem po kluczu.
  *
  * Wejście ma już być zawężone do faktur `regular` i `final` — zaliczki
@@ -131,11 +171,13 @@ export function rankProducts(lines: readonly ProductLine[], limit = 5): TopProdu
     newest: { date: string; id: string; name: string };
   }>();
   for (const line of lines) {
-    const trimmed = (line.name ?? '').trim();
+    // Nazwa bez okresu i numeru umowy (`normalizeProductName`): „Usługi – październik 2026”
+    // i „Usługi – listopad 2026” to ten sam produkt. Wielkość liter bierze najnowsza pozycja.
+    const normalized = normalizeProductName(line.name);
     // J.m. z formularza bywa z odstępem albo pusta — „ szt ” to „szt”, a pusta to brak.
     const unit = line.unit?.trim() || null;
-    const key = JSON.stringify([trimmed.toLowerCase(), unit]);
-    const candidate = { date: line.issue_date, id: line.id, name: trimmed };
+    const key = JSON.stringify([normalized.key, unit]);
+    const candidate = { date: line.issue_date, id: line.id, name: normalized.display };
     const group = groups.get(key);
     if (!group) {
       groups.set(key, { key, unit, net: amount(line.net_amount), newest: candidate });
@@ -167,7 +209,7 @@ export function rankProducts(lines: readonly ProductLine[], limit = 5): TopProdu
  * dodane do sprzedaży dublowałyby ją (§2.4 pkt 5 i 13).
  *
  * `invoice_line_items` nie ma `tenant_id`, więc najpierw faktury tej firmy,
- * potem ich pozycje paczkami po 100 identyfikatorów.
+ * potem ich pozycje paczkami po 100 identyfikatorów (`fetchLinesOfInvoices`).
  */
 export async function fetchProductLines(
   supabase: PageContext['supabase'],
@@ -178,31 +220,46 @@ export async function fetchProductLines(
   const { from, toExclusive } = range;
 
   await assertAcceptedEnvironmentKnown(supabase, tenantId, from, toExclusive);
-  const invoices = await readCompletePages('Nie można odczytać faktur do rankingu produktów', (start, end) => supabase
+  const invoices = await readCompletePages(PRODUCT_INVOICES_READ_ERROR, (start, end) => supabase
     .from('invoices')
     .select('id, issue_date, currency, invoice_kind', { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
     .eq('ksef_status', 'accepted')
     .eq('ksef_environment', environment)
-    .in('invoice_kind', ['regular', 'final'])
+    .in('invoice_kind', [...PRODUCT_INVOICE_KINDS])
     .gte('issue_date', from)
     .lt('issue_date', toExclusive)
     .order('id', { ascending: true })
     .range(start, end));
   // §2.4 pkt 6: kwoty w złotych — faktura walutowa zatrzymuje kartę.
   assertOutgoingInvoicesInPln(invoices);
-  if (invoices.length === 0) return [];
+  return fetchLinesOfInvoices(supabase, invoices);
+}
 
+/**
+ * Pozycje podanych faktur (już zawężonych do rodzajów rankingu i po
+ * strażnikach) z datą wystawienia ich faktury: paczki po 100 identyfikatorów,
+ * do czterech naraz, każda paczka w komplecie (`readCompletePages`; paczka
+ * 100 faktur to zwykle jedna strona, więc licznik i tak idzie raz).
+ * Kolejność jak przy paczkach jedna po drugiej: paczki w kolejności faktur,
+ * w paczce po `id` pozycji — sumy rankingu wychodzą co do bitu te same.
+ */
+export async function fetchLinesOfInvoices(
+  supabase: PageContext['supabase'],
+  invoices: ReadonlyArray<{ id: string; issue_date: string }>,
+): Promise<ProductLine[]> {
+  if (invoices.length === 0) return [];
   const issueDateById = new Map(invoices.map((inv) => [inv.id, inv.issue_date]));
-  const lines: ProductLine[] = [];
-  for (const chunk of chunks(invoices.map((inv) => inv.id), LOOKUP_CHUNK)) {
-    const page = await readCompletePages('Nie można odczytać pozycji faktur', (start, end) => supabase
+  const pages = await inOrderWithLimit(chunks(invoices.map((inv) => inv.id), LOOKUP_CHUNK), LOOKUP_CONCURRENCY, (chunk) =>
+    readCompletePages('Nie można odczytać pozycji faktur', (start, end) => supabase
       .from('invoice_line_items')
       .select('id, invoice_id, name, unit, net_amount', { count: 'exact' })
       .in('invoice_id', chunk)
       .order('id', { ascending: true })
-      .range(start, end));
+      .range(start, end)));
+  const lines: ProductLine[] = [];
+  for (const page of pages) {
     for (const item of page) {
       const issueDate = issueDateById.get(item.invoice_id);
       if (issueDate === undefined) continue;
@@ -331,7 +388,7 @@ export async function getTopClients(
   const { from: currentFrom } = warsawMonthWindow(now, 12);
 
   await assertAcceptedEnvironmentKnown(supabase, tenantId, from, toExclusive);
-  const rows = await readCompletePages('Nie można odczytać faktur do rankingu klientów', (start, end) => supabase
+  const rows = await readCompletePages(CLIENT_INVOICES_READ_ERROR, (start, end) => supabase
     .from('invoices')
     .select('id, issue_date, net_total, invoice_kind, advance_invoice_ids, currency, buyer_nip, buyer_data, is_b2c', { count: 'exact' })
     .eq('tenant_id', tenantId)
@@ -346,7 +403,22 @@ export async function getTopClients(
   if (rows.length === 0) return [];
 
   const settled = await fetchSettledAdvancesTotals(supabase, tenantId, rows);
-  const invoices: ClientInvoice[] = rows.map((row) => ({
+  return rankClients(clientInvoicesOf(rows, settled), currentFrom, limit);
+}
+
+/** Faktury do rankingu klientów: netto ROZ bez rozliczonych zaliczek (§2.4 pkt 4). */
+export function clientInvoicesOf(
+  rows: ReadonlyArray<{
+    id: string;
+    issue_date: string;
+    net_total: number | string | null;
+    buyer_nip: string | null;
+    buyer_data: unknown;
+    is_b2c: boolean | null;
+  }>,
+  settled: ReadonlyMap<string, { net: number }>,
+): ClientInvoice[] {
+  return rows.map((row) => ({
     id: row.id,
     issue_date: row.issue_date,
     net: amount(row.net_total) - (settled.get(row.id)?.net ?? 0),
@@ -354,5 +426,4 @@ export async function getTopClients(
     buyer_data: row.buyer_data,
     is_b2c: row.is_b2c,
   }));
-  return rankClients(invoices, currentFrom, limit);
 }

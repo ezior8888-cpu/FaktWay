@@ -81,9 +81,11 @@ export type StatCellProps = {
   valueClassName?: string
   /** Podpis pod etykietą: źródło liczby albo zastrzeżenie. */
   note?: ReactNode
+  /** Działanie pod podpisem (np. „Sprawdź teraz” w Skrzynce KSeF). */
+  action?: ReactNode
 }
 
-export function StatCell({ label, value, valueTitle, icon: Icon, iconPosition = 'right', valueClassName, note }: StatCellProps) {
+export function StatCell({ label, value, valueTitle, icon: Icon, iconPosition = 'right', valueClassName, note, action }: StatCellProps) {
   return (
     <div className='flex min-w-0 flex-1 items-center justify-between gap-4'>
       {iconPosition === 'left' && (
@@ -97,6 +99,7 @@ export function StatCell({ label, value, valueTitle, icon: Icon, iconPosition = 
         </h4>
         <p className='text-muted-foreground text-sm'>{label}</p>
         {note ? <p className='text-muted-foreground mt-0.5 text-xs'>{note}</p> : null}
+        {action}
       </div>
       {iconPosition === 'right' && (
         <div className='bg-muted flex size-10 shrink-0 items-center justify-center'>

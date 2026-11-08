@@ -6,66 +6,89 @@ import { Line, LineChart } from 'recharts'
 // Component Imports
 import { Card, CardDescription, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { DymekWiersz } from './dymek'
 
-// Impression chart data
-const impressionChartData = [
-  { month: 'Styczeń', impression: 20 },
-  { month: 'Luty', impression: 20 },
-  { month: 'Marzec', impression: 50 },
-  { month: 'Kwiecień', impression: 50 },
-  { month: 'Maj', impression: 30 },
-  { month: 'Czerwiec', impression: 30 },
-  { month: 'Lipiec', impression: 5 },
-  { month: 'Sierpień', impression: 5 },
-  { month: 'Wrzesień', impression: 50 },
-  { month: 'Październik', impression: 50 },
-  { month: 'Listopad', impression: 105 },
-  { month: 'Grudzień', impression: 105 }
-]
+// Util Imports
+import { formatPlMoney } from '@/lib/format/pl'
 
-const impressionChartConfig = {
-  impression: {
-    label: 'Wyświetlenia',
-    color: 'var(--chart-5)'
-  }
-} satisfies ChartConfig
-
-const StatisticsCardData = {
-  title: 'Wyświetlenia',
-  description: 'Ostatni rok',
-  children: (
-    <>
-      <ChartContainer config={impressionChartConfig} className='h-21 w-full'>
-        <LineChart
-          accessibilityLayer
-          data={impressionChartData}
-          margin={{
-            left: 4,
-            right: 4
-          }}
-        >
-          <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-          <Line dataKey='impression' type='linear' dot={false} stroke='var(--color-impression)' strokeWidth={3} />
-        </LineChart>
-      </ChartContainer>
-    </>
-  ),
-  value: '175 tys.',
-  changePercentage: '+24%'
+export type LiniaPunkt = {
+  /** Podpis miesiąca, np. „Paź”. */
+  month: string
+  value: number
 }
 
-const StatisticsImpressionCard = ({ className }: { className?: string }) => {
+/**
+ * Karta z linią (dawne „Wyświetlenia”, PLAN-PRAWDZIWE-DANE E5): VAT należny
+ * z 12 miesięcy albo, u firmy zwolnionej z VAT, limit zwolnienia — sprzedaż
+ * narastająco od 1 stycznia.
+ */
+export type StatisticsImpressionCardProps = {
+  title: string
+  description: string
+  value: string
+  valueTitle?: string
+  /** Napis po prawej (zmiana m/m ze znakiem albo limit); `null` → pusto. Kolor jak w Finorze. */
+  side: string | null
+  /** Nazwa serii w dymku. */
+  seriesLabel: string
+  points: LiniaPunkt[]
+  className?: string
+}
+
+const StatisticsImpressionCard = ({
+  title,
+  description,
+  value,
+  valueTitle,
+  side,
+  seriesLabel,
+  points,
+  className
+}: StatisticsImpressionCardProps) => {
+  const config = {
+    value: {
+      label: seriesLabel,
+      color: 'var(--chart-5)'
+    }
+  } satisfies ChartConfig
+
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className='text-lg font-semibold'>{StatisticsCardData.title}</CardTitle>
-        <CardDescription className='text-muted-foreground text-base'>{StatisticsCardData.description}</CardDescription>
+        <CardTitle className='text-lg font-semibold'>{title}</CardTitle>
+        <CardDescription className='text-muted-foreground text-base'>{description}</CardDescription>
       </CardHeader>
-      <CardContent>{StatisticsCardData.children}</CardContent>
+      <CardContent>
+        <ChartContainer config={config} className='h-21 w-full'>
+          <LineChart
+            accessibilityLayer
+            data={points}
+            margin={{
+              left: 4,
+              right: 4
+            }}
+          >
+            <ChartTooltip
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(_, payload) => String(payload?.[0]?.payload?.month ?? '')}
+                  formatter={(itemValue, _name, item) => (
+                    <DymekWiersz color={item.color} label={seriesLabel} value={`${formatPlMoney(Number(itemValue))} zł`} />
+                  )}
+                />
+              }
+            />
+            <Line dataKey='value' type='linear' dot={false} stroke='var(--color-value)' strokeWidth={3} />
+          </LineChart>
+        </ChartContainer>
+      </CardContent>
 
       <CardContent className='flex items-center justify-between'>
-        <span className='text-xl font-semibold'>{StatisticsCardData.value}</span>
-        <span className='text-primary text-base'>{StatisticsCardData.changePercentage}</span>
+        <span className='text-xl font-semibold' title={valueTitle}>
+          {value}
+        </span>
+        <span className='text-primary text-base'>{side}</span>
       </CardContent>
     </Card>
   )

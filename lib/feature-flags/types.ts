@@ -10,4 +10,6 @@ export type GlobalFlag =
   /** Zatrzymuje CAŁEGO agenta FLO — pierwszy krok runbooku incydentowego. */
   | 'killFloAgent'
   /** AAL2 dla owner/admin przy KSeF, certyfikacie i płatnościach (AUD-65). */
-  | 'requireMfaForSensitive';
+  | 'requireMfaForSensitive'
+  /** Zatrzymuje CAŁY moduł księgowości (plan księgowości JDG, D10; wiersz z 00165). */
+  | 'killKsiegowosc';

@@ -10,7 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  *  - kontraktu e2e (`e2e/pages/auth-page.ts`): `id='email'`, `id='password'`,
  *    przycisk „Zaloguj się”, przycisk rejestracji „Utwórz konto”;
  *  - tłumaczeń z §5 P15 (bez Facebooka i „Remember me”);
- *  - tła: kolory `--chart-1..3` presetu D2 i znaki od „zł”, tło z motywu;
+ *  - niebieskiej prawej połowy w stylu strony głównej (od 23.10.2026,
+ *    wcześniej czarna z tłem ze znaków Finory);
  *  - braku starego wyglądu (szkło, `.zova`) na przeniesionych ekranach.
  */
 
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
+vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/auth/oauth-providers', () => ({ isGoogleLoginEnabled: mocks.google }));
 vi.mock('@/lib/feature-flags/signups', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/feature-flags/signups')>()),
@@ -29,9 +31,8 @@ vi.mock('@/components/auth/turnstile-widget', () => ({ TurnstileWidget: () => nu
 vi.mock('@/app/(auth)/login/actions', () => ({ loginWithEmail: vi.fn(), loginWithGoogle: vi.fn() }));
 vi.mock('@/app/(auth)/register/actions', () => ({ signupWithEmail: vi.fn() }));
 vi.mock('@/app/(auth)/forgot-password/actions', () => ({ requestPasswordReset: vi.fn() }));
-vi.mock('@/app/onboarding/magic-import/actions', () => ({
-  skipMagicImportAction: vi.fn(),
-  startMagicImportAction: vi.fn(),
+vi.mock('@/app/actions/import-danych', () => ({
+  skipImportStepAction: vi.fn(),
   startFileImportAction: vi.fn(),
 }));
 vi.mock('@/app/actions/organizations', () => ({
@@ -53,31 +54,21 @@ import LoginPage from '@/app/(auth)/login/page';
 import RegisterPage from '@/app/(auth)/register/page';
 import ForgotPasswordPage from '@/app/(auth)/forgot-password/page';
 import FinishPage from '@/app/auth/finish/page';
-import {
-  AUTH_GLITCH_CHARACTERS,
-  AUTH_GLITCH_COLOR_VARS,
-  AUTH_GLITCH_FALLBACK,
-  AuthGlitchBackground,
-  pixelToHex,
-  resolveCssColor,
-} from '@/components/auth/finora/auth-glitch-background';
 import { AuthMessage } from '@/components/auth/finora/auth-message';
 import {
   AUTH_SLOGAN_TEXT,
   AUTH_SLOGAN_TITLE,
   AuthSplitLayout,
 } from '@/components/auth/finora/auth-split-layout';
-import LetterGlitch, { hexToRgb, outerVignetteBackground } from '@/components/ui/letter-glitch';
 import { PasswordInput } from '@/components/auth/finora/password-input';
 import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
+import { OFERTA_TEKST } from '@/lib/marketing/oferta';
 import { OnboardingForm } from '@/components/onboarding/form';
 import { ImportProgressView, type ImportJobRow } from '@/components/onboarding/import-progress-view';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
-import { MagicImportForm } from '@/components/onboarding/magic-import-form';
 import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 const ROOT = join(__dirname, '..', '..');
-const css = readFileSync(join(ROOT, 'app/globals.css'), 'utf8');
 
 /** Stary wygląd, który na przeniesionych ekranach nie może zostać (§9 pkt 5). */
 const OLD_LOOK = /rgba\(15,10,30|white\/55|backdrop-blur|ff-glass-pane|\bzova\b|var\(--z-|glass-primary|bg-glass/;
@@ -115,7 +106,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
       </AuthSplitLayout>,
     );
     expect(html).toContain('href="/"');
-    expect(html).toContain('Fakt<span class="text-primary">Way</span>');
+    // Logo FaktWay z zestawu (25.10.2026): wbudowany SVG z etykietą dla czytników ekranu.
+    expect(html).toContain('role="img" aria-label="FaktWay"');
     expect(html).toMatch(new RegExp(`<p class="[^"]*lg:hidden[^"]*">${AUTH_SLOGAN_TITLE} ${AUTH_SLOGAN_TEXT}</p>`));
     expect(html).toContain('<p>Treść strony</p>');
   });
@@ -129,19 +121,20 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).toContain('max-lg:hidden');
     expect(html).toContain('Tytuł panelu');
     expect(html).toContain('Tekst panelu');
-    expect(AUTH_SLOGAN_TITLE).toBe('Faktury w KSeF bez stresu.');
+    // FaktWay 1.0: to samo zdanie oferty co na stronie głównej i w cenniku.
+    expect(AUTH_SLOGAN_TITLE).toBe(OFERTA_TEKST);
     // Bez obietnicy FLO, którego klient nie ma (agent niewdrożony).
     expect(AUTH_SLOGAN_TEXT).toBe('Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.');
     expect(html.split(AUTH_SLOGAN_TITLE).length - 1).toBe(2); // telefon + karta
-    // Jak w Finorze: prawa połowa zawsze czarna, tekst jasny na czarnym
-    // (w obu motywach), karta z wycięciem biała z czarnym tekstem.
-    expect(html).toContain('background-color:#000000');
-    expect(html).not.toContain('background-color:var(--background)');
-    expect(html).toMatch(/text-4xl[^"]*text-white|text-white[^"]*text-4xl/);
-    expect(html).toContain('text-xl text-white');
-    expect(html).toContain('fill="#ffff"');
-    expect(html).toContain('#F5F5F5');
-    expect(html).toContain('text-black');
+    // Od 23.10.2026 prawa połowa niebieska jak strona główna: tokeny motywu
+    // (bg-primary / text-primary-foreground), karta faktury z krokami KSeF.
+    expect(html).toContain('bg-primary');
+    expect(html).toContain('text-primary-foreground');
+    expect(html).not.toContain('#000000');
+    expect(html).toContain('Wysłana do KSeF');
+    expect(html).toContain('Potwierdzenie UPO pobrane');
+    // Bez plików graficznych: logo jest wbudowanym SVG (zielony znak zdjęty 23.10.2026).
+    expect(html).not.toContain('<img');
     expect(html).not.toMatch(/text-foreground[^"]*xl:text-5xl/);
     expect(html).not.toMatch(OLD_LOOK);
   });
@@ -152,79 +145,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
         <p>x</p>
       </AuthSplitLayout>,
     );
-    // Przed korzeniem React stawia tylko `<link rel="preload">` znaku (`priority`).
-    expect(html.replace(/^<link[^>]*>/, '')).toMatch(/^<div class="ff-dashboard min-h-dvh/);
+    expect(html).toMatch(/^<div class="ff-dashboard min-h-dvh/);
     expect(html).toContain('data-slot="portal-root"');
-  });
-});
-
-describe('tło ze znaków (LetterGlitch z Finory)', () => {
-  it('znaki zaczynają się od „zł”, dalej zestaw Finory bez rupii', () => {
-    expect(AUTH_GLITCH_CHARACTERS.startsWith('zł')).toBe(true);
-    expect(AUTH_GLITCH_CHARACTERS).toBe('zł€£¥₽₩₺₴₦₱₲₵₡₢₭');
-    expect(AUTH_GLITCH_CHARACTERS).not.toContain('र');
-  });
-
-  it('kolory to --chart-1..3 presetu D2, a zapasowe hex to te same wartości', () => {
-    expect([...AUTH_GLITCH_COLOR_VARS]).toEqual(['--chart-1', '--chart-2', '--chart-3']);
-    const lightBlock = css.slice(css.indexOf('\n:root {\n  /* Plan Finora (D2'), css.indexOf('\n}', css.indexOf('\n:root {\n  /* Plan Finora (D2')));
-    const darkBlock = css.slice(css.indexOf('\n.dark {\n'), css.indexOf('\n}', css.indexOf('\n.dark {\n')));
-    const read = (block: string, name: string) => new RegExp(`${name}: (oklch\\([^)]+\\));`).exec(block)?.[1];
-    const toHex = (value: string | undefined) => {
-      const m = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value ?? '');
-      if (!m) throw new Error(`nie oklch: ${value}`);
-      const [l, c, h] = [Number(m[1]), Number(m[2]), (Number(m[3]) * Math.PI) / 180];
-      const a = c * Math.cos(h);
-      const b = c * Math.sin(h);
-      const l3 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-      const m3 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-      const s3 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
-      return '#' + [
-        4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
-        -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
-        -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
-      ]
-        .map((x) => Math.min(1, Math.max(0, x)))
-        .map((x) => (x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055))
-        .map((x) => Math.round(x * 255).toString(16).padStart(2, '0'))
-        .join('');
-    };
-    expect(AUTH_GLITCH_COLOR_VARS.map((v) => toHex(read(lightBlock, v)))).toEqual([...AUTH_GLITCH_FALLBACK.light]);
-    expect(AUTH_GLITCH_COLOR_VARS.map((v) => toHex(read(darkBlock, v)))).toEqual([...AUTH_GLITCH_FALLBACK.dark]);
-    // Zieleń Finory nie zostaje.
-    expect(JSON.stringify(AUTH_GLITCH_FALLBACK)).not.toMatch(/5ee9b5|00bc7d|009966/);
-  });
-
-  it('kolor CSS → hex przez kanwę; nieznany zapis i pusty piksel dają null', () => {
-    let style = '#000000';
-    let pixel = [57, 129, 246, 255];
-    const ctx = {
-      get fillStyle() { return style; },
-      set fillStyle(value: string) { if (/^(#|oklch\()/.test(value)) style = value.startsWith('#') ? value.toLowerCase() : value; },
-      clearRect: vi.fn(),
-      fillRect: vi.fn(),
-      getImageData: () => ({ data: pixel }),
-    } as unknown as CanvasRenderingContext2D;
-    expect(resolveCssColor(ctx, ' oklch(0.62 0.19 259.76) ')).toBe('#3981f6');
-    expect(resolveCssColor(ctx, 'color(display-p3 1 0 0)')).toBeNull();
-    expect(resolveCssColor(ctx, '')).toBeNull();
-    pixel = [0, 0, 0, 0];
-    expect(resolveCssColor(ctx, 'oklch(0.5 0 0)')).toBeNull();
-    expect(pixelToHex([1, 2, 255, 255])).toBe('#0102ff');
-    expect(hexToRgb('#3981f6')).toEqual({ r: 57, g: 129, b: 246 });
-  });
-
-  it('tło kontenera i winieta z koloru motywu; domyślnie zachowanie Finory', () => {
-    // Finora ma tło na sztywno (#000000) w obu motywach, więc nie idzie za motywem.
-    const themed = renderToStaticMarkup(<AuthGlitchBackground />);
-    expect(themed).toContain('background-color:#000000');
-    expect(themed).not.toContain('var(--background)');
-    expect(themed).toContain('rgba(9, 11, 12, 0.5)');
-    expect(themed).toContain('aria-hidden="true"');
-
-    const finora = renderToStaticMarkup(<LetterGlitch />);
-    expect(finora).toContain('background-color:#000000');
-    expect(outerVignetteBackground('#000000')).toContain('rgba(9, 11, 12, 0.5)');
   });
 });
 
@@ -250,10 +172,13 @@ describe('logowanie (login/index.tsx Finory)', () => {
     expect(html).toContain('Witaj ponownie!');
   });
 
-  it('wylatują Facebook i „Remember me”; brak angielskich tekstów Finory', async () => {
+  // Od FW1 „Zapamiętaj mnie” działa naprawdę (przy nim `IdleWatcher` nie wylogowuje),
+  // więc pole wróciło po polsku; angielska nazwa z Finory dalej ma się nie pojawić.
+  it('wylatuje Facebook; „Zapamiętaj mnie” po polsku; brak angielskich tekstów Finory', async () => {
     const html = await login();
     expect(html).not.toMatch(/facebook/i);
-    expect(html).not.toMatch(/remember|zapamiętaj/i);
+    expect(html).toContain('Zapamiętaj mnie');
+    expect(html).not.toMatch(/Remember me/i);
     expect(html).not.toMatch(/Welcome|Login with|Sign in|Forgot Password|Create an account|Finora|Shadcn/);
     expect(html).not.toMatch(OLD_LOOK);
   });
@@ -375,28 +300,30 @@ describe('onboarding i zaproszenie (styl kart P15)', () => {
     expect(html).toContain('value="synthetic-token"');
   });
 
-  it('źródło importu: bez certyfikatu odsyła do /settings/ksef, z certyfikatem Magiczny import', () => {
+  // Decyzja Bartosza 22.10.2026 — świadoma zmiana oczekiwań: Magiczny import
+  // znika. Blok KSeF tylko informuje (z certyfikatem → postęp w Imporcie
+  // danych, bez → ustawienia KSeF), z pliku zostają cztery programy, „Pomiń”
+  // bez zmian (e2e 02).
+  it('źródło importu: historia z KSeF sama — bez certyfikatu do /settings/ksef, z certyfikatem postęp w Imporcie danych', () => {
     const bez = renderToStaticMarkup(<ImportSourceSelector tenantId='t1' tenantName='Fixture Sp. z o.o.' hasCertificate={false} />);
     expect(bez).toContain('href="/settings/ksef"');
     expect(bez).toContain('Witaj, Fixture!');
-    expect(bez).not.toContain('Magiczny Import z KSeF');
+    expect(bez).toContain('Po wgraniu certyfikatu KSeF pobierzemy historię faktur sami.');
+    expect(bez).not.toContain('href="/import-danych"');
     const z = renderToStaticMarkup(<ImportSourceSelector tenantId='t1' tenantName='' hasCertificate />);
-    expect(z).toContain('Magiczny Import z KSeF');
+    expect(z).toContain('Historia z KSeF pobierze się sama — postęp zobaczysz w Imporcie danych.');
+    expect(z).toContain('href="/import-danych"');
     expect(z).toContain('Witaj!');
     for (const html of [bez, z]) {
-      expect(html).toContain('Fakturownia');
+      for (const name of ['Fakturownia', 'inFakt', 'wFirma', 'iFirma']) expect(html).toContain(`>${name}<`);
+      expect(html).not.toContain('Inny program');
+      expect(html).not.toContain('JPK_FA');
+      expect(html).not.toContain('Magiczny');
+      expect(html).not.toContain('/onboarding/magic-import');
       expect(html).toContain('Pomiń — wejdę do aplikacji');
       expect(html).not.toMatch(OLD_LOOK);
       expect(html).not.toMatch(/emerald|purple/);
     }
-  });
-
-  it('Magiczny import: cztery zakresy, 6 miesięcy wybrane', () => {
-    const html = renderToStaticMarkup(<MagicImportForm tenantId='t1' />);
-    expect(html.match(/aria-pressed="(true|false)"/g)).toHaveLength(4);
-    expect(html).toMatch(/aria-pressed="true"[^>]*>[\s\S]*?6 miesięcy/);
-    expect(html).toContain('href="/onboarding/import-source"');
-    expect(html).not.toMatch(OLD_LOOK);
   });
 
   const job = (patch: Partial<ImportJobRow>): ImportJobRow => ({
@@ -425,6 +352,34 @@ describe('onboarding i zaproszenie (styl kart P15)', () => {
     expect(failed).toContain('Import się nie udał');
     expect(failed).toMatch(/role="alert"[^>]*>Brak certyfikatu/);
     for (const html of [running, done, failed]) expect(html).not.toMatch(OLD_LOOK);
+    // Decyzja Bartosza 22.10.2026: import z pliku nie wysyła e-maila — nie obiecujemy go.
+    expect(running).not.toMatch(/e-?mail/i);
+    expect(running).toContain('Wynik zobaczysz w Imporcie danych.');
+  });
+
+  it('postęp dawnego ręcznego importu z KSeF „w toku”: przerwany, prowadzi do Importu danych', () => {
+    const legacy = renderToStaticMarkup(<ImportProgressView initialJob={job({ source: 'ksef_history', status: 'extracting' })} />);
+    expect(legacy).toContain('Import przerwany');
+    expect(legacy).toContain('Przerwany — zastąpiony automatyczną historią z KSeF.');
+    expect(legacy).toContain('Przejdź do Importu danych');
+    expect(legacy).not.toContain('role="progressbar"');
+    // Poprawka po przeglądzie (decyzja Bartosza 22.10.2026): nieudany dawny
+    // import z KSeF też jest zastąpiony — bez „ponów import” i bez
+    // „Spróbuj ponownie” prowadzącego do ekranu, na którym tego importu nie ma.
+    const failedLegacy = renderToStaticMarkup(<ImportProgressView initialJob={job({
+      source: 'ksef_history', status: 'failed', invoices_imported: 5,
+      progress_message: 'Lista faktur KSeF jest niepełna. Zawęź zakres dat i ponów import.',
+    })} />);
+    expect(failedLegacy).toContain('Import przerwany');
+    expect(failedLegacy).toContain('Przerwany — zastąpiony automatyczną historią z KSeF.');
+    expect(failedLegacy).toContain('Przejdź do Importu danych');
+    expect(failedLegacy).toContain('Zapisano 5 faktur.');
+    expect(failedLegacy).not.toContain('ponów import');
+    expect(failedLegacy).not.toContain('Spróbuj ponownie');
+    expect(failedLegacy).not.toContain('Import się nie udał');
+    // Zakończony dawny import pokazuje wynik jak dotąd.
+    const done = renderToStaticMarkup(<ImportProgressView initialJob={job({ source: 'ksef_history', status: 'completed', invoices_imported: 3 })} />);
+    expect(done).toContain('Import zakończony!');
   });
 
   it('zaproszenie: przycisk „Dołącz do …”', () => {
@@ -448,12 +403,10 @@ describe('przeniesione ekrany nie wracają do starego wyglądu', () => {
     'app/auth/finish/page.tsx',
     'app/onboarding/page.tsx',
     'app/onboarding/import-source/page.tsx',
-    'app/onboarding/magic-import/page.tsx',
     'app/onboarding/progress/[jobId]/page.tsx',
     'app/invite/[token]/page.tsx',
     'components/onboarding/form.tsx',
     'components/onboarding/import-source-selector.tsx',
-    'components/onboarding/magic-import-form.tsx',
     'components/onboarding/import-progress-view.tsx',
     'components/onboarding/file-import-dialog.tsx',
     'components/invite/invite-accept-form.tsx',

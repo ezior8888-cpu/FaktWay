@@ -263,12 +263,12 @@ export async function OutflowMonthSlotCard({ supabase, tenantId, nowIso, classNa
 
 export async function SourcesSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Skąd i dokąd płyną pieniądze', className, async () => {
-    const { inflows, costs } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
     return (
       <TopCashFlowSourcesCard
         title="Skąd i dokąd płyną pieniądze"
         subTitle="Ostatnie 12 miesięcy"
-        sources={topCashFlowSources(inflows, costs)}
+        sources={topCashFlowSources(inflows, costs, today)}
         className={className}
       />
     );
@@ -277,8 +277,9 @@ export async function SourcesSlotCard({ supabase, tenantId, nowIso, className }:
 
 export async function UpcomingSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Spodziewane wpływy', className, async () => {
-    const receivables = await loadReceivables(supabase, tenantId, nowIso);
-    const upcoming = upcomingInflows(receivables, todayInWarsaw(new Date(nowIso)));
+    // Spodziewane wpływy to otwarte faktury z terminem od dziś z `getInflows` (wspólna reguła kart Finory).
+    const today = todayInWarsaw(new Date(nowIso));
+    const upcoming = upcomingInflows(await getInflows(supabase, tenantId, { from: today }), today);
     return (
       <UpcomingBillsCard
         title="Spodziewane wpływy"
@@ -294,11 +295,11 @@ export async function UpcomingSlotCard({ supabase, tenantId, nowIso, className }
 
 export async function RecentSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Ostatnie operacje', className, async () => {
-    const { inflows, costs } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
     return (
       <RecentActivityCard
         title="Ostatnie operacje"
-        activity={cashFlowOperations(inflows, costs).slice(0, 5)}
+        activity={cashFlowOperations(inflows, costs, today).slice(0, 5)}
         className={className}
       />
     );
@@ -378,10 +379,10 @@ export async function OverdueSlotCard({ supabase, tenantId, nowIso, className }:
 
 export async function OperationsSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Wszystkie operacje', className, async () => {
-    const { inflows, costs } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
     return (
       <Card className={cn('py-0 shadow-none', className)}>
-        <TransactionDatatable data={cashFlowOperations(inflows, costs)} />
+        <TransactionDatatable data={cashFlowOperations(inflows, costs, today)} />
       </Card>
     );
   });
