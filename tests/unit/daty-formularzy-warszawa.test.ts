@@ -59,6 +59,8 @@ describe('formularze faktur nie biorą daty z UTC', () => {
   // A1 (W5): zaliczka była tu pominięta i liczyła „dziś” w UTC.
   const pliki = [
     'components/invoices/invoice-form.tsx',
+    // Pigułki terminu (7/14/30 dni) od 3.7c żyją w części formularza.
+    'components/invoices/invoice-form-parts/document-header-fields.tsx',
     'components/invoices/correction-form.tsx',
     'components/invoices/final-form.tsx',
     'components/invoices/advance-form.tsx',
