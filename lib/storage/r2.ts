@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 
 import { getR2Client, getR2Config } from './r2-client';
 import { assertTenantStoragePath } from './tenant-path';
+import { XmlArchiveConflictError } from './xml-archive-conflict';
 
 /**
  * Warstwa operacji na obiektach R2 pod tabelę `xml_documents` w Supabase.
@@ -167,13 +168,6 @@ export interface UploadXmlResult {
 }
 
 export interface XmlUploadOptions {
-  /**
-   * Jeśli true, PUT idzie z `IfNoneMatch: '*'` - blokuje nadpisanie istniejącego
-   * klucza. Używaj zawsze, chyba że świadomie chcesz replace (np. retry po
-   * awarii PRZED pierwszym udanym zapisem do xml_documents).
-   * Default: true.
-   */
-  immutable?: boolean;
   /** Dodatkowe metadane - trafiają jako x-amz-meta-* (max 2KB łącznie). */
   metadata?: Record<string, string>;
   /** `sendAttemptId` zdarzenia wysyłki — klucz per próba (D5). Brak = klucz historyczny per faktura. */
@@ -230,11 +224,8 @@ export async function uploadInvoiceUpo(
  * Heurystyka: czy wyjątek to "obiekt już istnieje pod kluczem objętym IfNoneMatch=*".
  *
  * R2/S3 zwracają `PreconditionFailed` (HTTP 412) gdy `IfNoneMatch: '*'` trafia
- * na istniejący klucz. To NIE jest błąd przy retry idempotentnego flow KSeF —
- * pierwszy upload się udał, a job został wznowiony przed zapisem `xml_documents`.
- * W tym przypadku traktujemy zdarzenie jak no-op i wracamy te same metadane
- * (deterministyczny generator FA(3) gwarantuje, że SHA-256 z drugiego call'a
- * zgadza się z tym, co już leży w R2).
+ * na istniejący klucz. Sam 412 nie dowodzi, że leży tam ten sam plik: dowodem
+ * jest dopiero porównanie bajtów w `uploadXmlDocument` (C-12).
  */
 function isPreconditionFailed(e: unknown): boolean {
   if (!(e instanceof S3ServiceException)) return false;
@@ -252,7 +243,7 @@ async function uploadXmlDocument(params: {
   options: XmlUploadOptions;
 }): Promise<UploadXmlResult> {
   const { key, body, tenantId, invoiceId, issueDate, documentType, options } = params;
-  const { immutable = true, metadata = {} } = options;
+  const { metadata = {} } = options;
 
   const sha256Hash = sha256Hex(body);
   const bodyBuffer = Buffer.from(body, 'utf8');
@@ -267,7 +258,7 @@ async function uploadXmlDocument(params: {
         Key: key,
         Body: bodyBuffer,
         ContentType: 'application/xml; charset=utf-8',
-        IfNoneMatch: immutable ? '*' : undefined,
+        IfNoneMatch: '*',
         Metadata: {
           'sha256-hash': sha256Hash,
           'tenant-id': tenantId,
@@ -286,18 +277,18 @@ async function uploadXmlDocument(params: {
       etag: result.ETag ?? '',
     };
   } catch (e) {
-    if (immutable && isPreconditionFailed(e)) {
-      // Idempotency: ten klucz został już zapisany w poprzedniej próbie tego
-      // samego flow. Wracamy SHA-256 z bieżącego buforu — powinien zgadzać
-      // się z R2, bo generator FA(3) jest deterministyczny.
-      return {
-        storagePath: key,
-        sha256Hash,
-        sizeBytes: bodyBuffer.length,
-        etag: '',
-      };
-    }
-    throw e;
+    if (!isPreconditionFailed(e)) throw e;
+    // Ponowienie zastaje plik z poprzedniego przebiegu. Te same bajty to sukces;
+    // inne to konflikt, a nie nadpisanie (C-12). Błąd odczytu leci dalej jako
+    // zwykły błąd: to chwilowa awaria, nie konflikt.
+    const stored = await downloadFromR2(key, tenantId);
+    if (!stored.equals(bodyBuffer)) throw new XmlArchiveConflictError(key);
+    return {
+      storagePath: key,
+      sha256Hash,
+      sizeBytes: bodyBuffer.length,
+      etag: '',
+    };
   }
 }
 
@@ -444,24 +435,10 @@ export async function invoiceXmlExists(storagePath: string): Promise<boolean> {
 
 /**
  * Generyczny alias na `invoiceXmlExists` — HEAD pod dowolnym kluczem R2.
- * Używaj w idempotentnych flow Inngest (np. `exports-generate.ts`,
- * `submitInvoiceFullFlow`) gdzie nazwa "invoice xml" wprowadza w błąd.
+ * Używaj w idempotentnych flow (np. `exports-generate.ts`), gdzie nazwa
+ * "invoice xml" wprowadza w błąd.
  */
 export const r2ObjectExists = invoiceXmlExists;
-
-/**
- * Sprawdza, czy XML faktury (klucz wyliczany z `tenantId/invoiceId/issueDate`)
- * jest już w R2. Używaj w `submitInvoiceFullFlow` przed PUT, by wyłączyć
- * `IfNoneMatch: '*'` przy retry — uniknąć pętli `PreconditionFailed`.
- */
-export async function invoiceXmlExistsForId(
-  tenantId: string,
-  invoiceId: string,
-  issueDate: string,
-  attemptId?: string | null,
-): Promise<boolean> {
-  return invoiceXmlExists(invoiceXmlKeyFor({ tenantId, invoiceId, issueDate, attemptId }));
-}
 
 /**
  * Wszystkie pliki prób wysyłki faktury (folder `invoiceXmlAttemptPrefix`) —

@@ -199,7 +199,6 @@ vi.mock('@/lib/storage/r2-client', () => ({ getR2Config: () => ({ bucketName: 'b
 vi.mock('@/lib/storage/r2', async (orig) => ({
   ...await orig<typeof import('@/lib/storage/r2')>(),
   uploadInvoiceXml: m.upload,
-  invoiceXmlExistsForId: async () => false,
 }));
 vi.mock('@/lib/auth/ksef-verification-guard', () => ({
   requireKsefVerificationForBackgroundJob: vi.fn(async () => undefined),
