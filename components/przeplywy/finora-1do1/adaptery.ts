@@ -242,7 +242,7 @@ const BEZ_PROFILU = /nie ma ustawień podatkowych/;
 
 /**
  * Firma w pilotażu księgowości (K5, D13): szacunek z modułu za bieżący
- * miesiąc (ryczałt, składki społeczne, zdrowotna) zamiast 19 % liniowego.
+ * miesiąc (podatek, składki społeczne, zdrowotna, a przy czynnym VAT także VAT, K7.1) zamiast 19 % liniowego.
  * W środku udział w przychodzie miesiąca, kwota i „do odłożenia”. Bez kwot
  * (brak profilu, parametry czekające na księgową, D7) karta mówi, dlaczego.
  */

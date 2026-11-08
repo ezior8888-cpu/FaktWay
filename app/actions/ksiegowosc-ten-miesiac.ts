@@ -57,8 +57,16 @@ const zatwierdzenieSchema = z.object({
   miesiac: z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),
   /** Skróty pozycji z ekranu, z którego kliknięto „Zatwierdź”. */
   skroty: z
-    .object({ ryczalt: skrotSchema.optional(), pit: skrotSchema.optional(), zus_spoleczne: skrotSchema.optional(), zdrowotna: skrotSchema.optional() })
+    .object({
+      ryczalt: skrotSchema.optional(),
+      pit: skrotSchema.optional(),
+      zus_spoleczne: skrotSchema.optional(),
+      zdrowotna: skrotSchema.optional(),
+      vat: skrotSchema.optional(),
+    })
     .strict(),
+  /** P_39 wpisane na ekranie (K7.1): akcja liczy VAT z tą samą nadwyżką, którą widział klient. */
+  nadwyzkaVat: z.number().int().min(0).max(1e13).nullable().optional(),
 });
 
 export async function zatwierdzMiesiacAction(wejscie: z.input<typeof zatwierdzenieSchema>): Promise<WynikZatwierdzenia> {
@@ -71,13 +79,13 @@ export async function zatwierdzMiesiacAction(wejscie: z.input<typeof zatwierdzen
   }
   const parsed = zatwierdzenieSchema.safeParse(wejscie);
   if (!parsed.success) return { success: false, error: BLAD };
-  const { miesiac, skroty } = parsed.data;
+  const { miesiac, skroty, nadwyzkaVat } = parsed.data;
   if (!miesiacZakonczony(miesiac, todayInWarsaw())) return { success: false, error: PO_KONCU_MIESIACA };
 
   const client = ctx.supabase as unknown as SupabaseClient;
   if (!(await wlaczony(client, ctx.tenantId))) return { success: false, error: NIEDOSTEPNE };
 
-  const dane = await czytajTenMiesiac(client, ctx.tenantId, miesiac);
+  const dane = await czytajTenMiesiac(client, ctx.tenantId, miesiac, { nadwyzkaVat: nadwyzkaVat ?? null });
   if (!dane.ok) return { success: false, error: dane.braki[0] ?? BLAD };
 
   const ostatnie = aktualne(dane.rozliczenia);

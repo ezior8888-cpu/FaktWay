@@ -15,6 +15,7 @@ import { monthRange } from '@/lib/expenses/month';
 import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
 import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
 import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { BLAD_ODCZYTU_VAT, brakNadwyzki, czytajVat, type DaneVat } from '@/lib/ksiegowosc/vat-dane';
 import { statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { brakujace, parametryRoku, rokSkladkowyZdrowotnej, type Liczba, type NazwaSekcji } from '@/lib/ksiegowosc/parametry';
 import {
@@ -24,6 +25,7 @@ import {
   type Platnosc,
   type PozycjaDoZaplaty,
   type PozycjaMiesiaca,
+  type VatWejscie,
   type RodzajRozliczenia,
   type WynikMiesiaca,
 } from '@/lib/ksiegowosc/ten-miesiac';
@@ -152,11 +154,20 @@ export const KPIR_WYLACZONA =
 
 export const BLAD_ODCZYTU_ROZLICZEN = 'Nie udało się odczytać rozliczeń, więc nie pokazujemy kwot. Strona spróbuje ponownie przy następnym otwarciu.';
 
-export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string, miesiac: string): Promise<DaneMiesiaca> {
+export interface OpcjeMiesiaca {
+  /** P_39 wpisane przez klienta na ekranie (`?nadwyzka=`, pełne złote); bez niego null. */
+  nadwyzkaVat?: number | null;
+}
+
+export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string, miesiac: string, opcje: OpcjeMiesiaca = {}): Promise<DaneMiesiaca> {
   const rok = Number(miesiac.slice(0, 4));
   const rokSkladkowy = rokSkladkowyZdrowotnej(miesiac);
 
-  const [odczyt, wersjeOdczyt] = await Promise.all([
+  // VAT (K7.1) za obszarem `vat`; wołający sprawdził już globalny stop i flagę firmy.
+  const odczytVat: Promise<DaneVat | null> = statusObszaru('vat').wlaczony
+    ? czytajVat(client, tenantId, miesiac, opcje.nadwyzkaVat ?? null).catch(() => ({ ok: false as const, komunikat: BLAD_ODCZYTU_VAT }))
+    : Promise.resolve(null);
+  const [odczyt, wersjeOdczyt, daneVat] = await Promise.all([
     czytajRozliczenia(client, tenantId, miesiac).then(
       (r) => ({ ok: true as const, r }),
       (e: unknown) => ({ ok: false as const, e }),
@@ -165,7 +176,9 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
       (w) => ({ ok: true as const, w }),
       (e: unknown) => ({ ok: false as const, e }),
     ),
+    odczytVat,
   ]);
+  const vat = vatMiesiaca(daneVat);
   if (!odczyt.ok) {
     console.error('[ten-miesiac] rozliczenia', odczyt.e instanceof Error ? odczyt.e.message : odczyt.e);
     return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: [] };
@@ -193,7 +206,10 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
     const brak = brakujace(r, [sekcja]).find((b) => b.powod !== 'brak_liczby');
     if (brak) d7.set(rodzaj, brak.komunikat);
   }
-  if (d7.size === sekcje.length) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };
+  // VAT nie zależy od parametrów modułu: z kwotą albo z polem na nieznaną nadwyżkę miesiąc liczy się dalej
+  // (pozostałe pozycje z brakami D7). Sam błąd odczytu VAT niczego tu nie dodaje.
+  const vatNaEkranie = vat !== null && (vat.ok || vat.nadwyzkaNieznana);
+  if (d7.size === sekcje.length && !vatNaEkranie) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };
 
   const ksiegi = await czytajKsiegi(client, tenantId, miesiac, forma, wersjeOdczyt.w);
   if (!ksiegi.ok) return { ok: false, braki: [ksiegi.komunikat], rozliczenia: tegoMiesiaca };
@@ -209,7 +225,7 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
       zaplaconeO: r.zaplaconeO as string,
     }));
 
-  const wynik = tenMiesiac({ miesiac, ...ksiegi.wejscie, wersje: wersjeOdczyt.w, platnosci, parametry: parametryRoku });
+  const wynik = tenMiesiac({ miesiac, ...ksiegi.wejscie, vat, wersje: wersjeOdczyt.w, platnosci, parametry: parametryRoku });
   if (!wynik.ok) return { ok: false, braki: wynik.braki, rozliczenia: tegoMiesiaca };
 
   const maskowane: PozycjaMiesiaca[] = wynik.wynik.pozycje.map((poz) => {
@@ -235,6 +251,26 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   const parametryWersja = skrot(stabilnyJson({ ...podatek, zus: wartosci(p?.zus), zdrowotna: wartosci(pz?.zdrowotna) })).slice(0, 16);
 
   return { ok: true, wynik: bezD7, pozycje, parametryWersja, rozliczenia: tegoMiesiaca };
+}
+
+/**
+ * VAT miesiąca dla silnika (K7.1): firma zwolniona albo obszar zablokowany to
+ * brak pozycji; nieznana nadwyżka to brak z wyjściem (pole na ekranie, a po
+ * zatwierdzeniu kolejny miesiąc bierze P_62 z tego rozliczenia).
+ */
+function vatMiesiaca(d: DaneVat | null): VatWejscie | null {
+  if (!d) return null;
+  if (!d.ok) return d.zwolniona ? null : { ok: false, brak: d.komunikat, nadwyzkaNieznana: false };
+  if (!d.nadwyzka || !d.wynik) {
+    return {
+      ok: false,
+      brak: `${brakNadwyzki(d.miesiac)} Kwotę wpisuje się przy tej pozycji; po zatwierdzeniu miesiąca kolejny bierze nadwyżkę z tego rozliczenia.`,
+      nadwyzkaNieznana: true,
+    };
+  }
+  if (!d.wynik.ok) return { ok: false, brak: d.wynik.brak, nadwyzkaNieznana: false };
+  const { ok: _ok, ...wynik } = d.wynik;
+  return { ok: true, wynik, nadwyzka: d.nadwyzka };
 }
 
 /**

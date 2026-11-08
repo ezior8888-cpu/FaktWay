@@ -11,7 +11,8 @@
  * pozostałych, a zadanie kończy się błędem, żeby kolejka je ponowiła.
  *
  * O ryczałcie przypomina się firmie na ryczałcie (K4), o zaliczce PIT firmie
- * na skali albo liniowym (K7); o składkach ZUS każdej.
+ * na skali albo liniowym (K7); o składkach ZUS każdej; o VAT (25., K7.1)
+ * płatnikowi VAT, gdy obszar `vat` jest puszczony w kodzie.
  *
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
@@ -25,9 +26,10 @@ import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { JobContext } from '@/lib/jobs/registry';
 import { firmyWPilotazu, wlasciciel, zajmij, zamknij } from '@/lib/ksiegowosc/powiadomienia';
 import { czytajWersjeProfilu, wersjaNa } from '@/lib/ksiegowosc/profil';
+import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { grupyFormy, niezaplacone, terminyNaDzis, trescTerminu, type TerminNaDzis } from '@/lib/ksiegowosc/przypomnienia';
 import { BLAD_ODCZYTU_ROZLICZEN, czytajTenMiesiac } from '@/lib/ksiegowosc/ten-miesiac-dane';
-import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
+import { czyKsiegowoscWlaczona, statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -37,8 +39,14 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
   if (!(await czyKsiegowoscWlaczona(admin, tenantId, 'terminy')).wlaczony) return 'pominiete';
   const profil = wersjaNa(await czytajWersjeProfilu(admin, tenantId), monthRange(t.miesiac).to);
   if (!profil) return 'pominiete';
-  // Ryczałt albo zaliczka PIT (skala, liniowy, K7) według formy; składki zawsze.
-  const grupy = grupyFormy(t.grupy, profil.forma);
+  // Ryczałt albo zaliczka PIT (skala, liniowy, K7) według formy; składki zawsze;
+  // VAT (K7.1) tylko płatnikowi VAT. Zwolnienie czytamy tylko w dniu przypomnienia o VAT.
+  const wedlugFormy = grupyFormy(t.grupy, profil.forma);
+  const bezVat =
+    wedlugFormy.includes('vat') &&
+    (!statusObszaru('vat').wlaczony || isSubjectiveVatExemption(await readTenantVatExemption(admin, tenantId)));
+  const grupy = bezVat ? wedlugFormy.filter((g) => g !== 'vat') : wedlugFormy;
+  if (grupy.length === 0) return 'pominiete';
 
   const dane = await czytajTenMiesiac(admin, tenantId, t.miesiac);
   // Bez odczytu zapłat nie wiadomo, co jest zapłacone: ponowienie zamiast przypomnienia „bez zapłaty”.
