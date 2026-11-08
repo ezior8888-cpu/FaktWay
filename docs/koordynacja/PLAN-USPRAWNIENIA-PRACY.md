@@ -119,13 +119,13 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 | 4.1 | Blokada adresów z `infra.env` w pre-push (lokalnie, bez publikowania wartości) | N | nie | **zrobione w 1.3** |
 | 4.2 | Renovate z `minimumReleaseAge` 3 dni (ochrona przed przejętymi paczkami npm) | N | nie | **w 1.4** |
 | 4.3 | `@axe-core/playwright` przy testach wizualnych | N | nie | w 3.2 |
-| 4.4 | Knip (nieużywane pliki, eksporty, zależności): najpierw raport tygodniowy, nie blokada | Ś (fałszywe trafienia przy MDX, workerze, skryptach) | nie | etap 2, po 2.4 |
+| 4.4 | Knip (nieużywane pliki, eksporty, zależności): najpierw raport tygodniowy, nie blokada | Ś (fałszywe trafienia przy MDX, workerze, skryptach) | nie | **zrobione w #467**: `knip.jsonc`, raport w poniedziałek rano (`knip.yml`), bez blokady |
 | 4.5 | Budżet First Load JS w jobie `build` (liczba z wyjścia `next build`, próg jako liczba w repo) | N | nie | etap 2; zamyka otwarty wątek „lazy-load PostHog” |
 | 4.6 | Cache `.tsbuildinfo` i `.eslintcache` w CI (`actions/cache`) | N | nie | przy 2.8 |
 | 4.7 | Subagent `weryfikator` (Opus, tylko odczyt) w `.claude/agents/` | N | lekko | **odrzucone na razie**: `/code-review` robi to samo |
 | 4.8 | Styl odpowiedzi „raport” | N | **tak**, ładowany zawsze | **odrzucone**: format raportu jest w protokole |
 | 4.9 | Reguły gitleaks dla adresów serwerów | — | — | **odrzucone**: wartości musiałyby być w publicznym repo; 4.1 robi to lokalnie |
-| 4.10 | Dependabot obok Renovate | — | — | po instalacji Renovate wyłączyć PR wersji Dependabota (alerty zostają), inaczej podwójne PR |
+| 4.10 | Dependabot obok Renovate | — | — | **sprawdzone w #467**: `dependabot.yml` nie ma, więc PR wersji są wyłączone; alerty zostają; włączone „Dependabot security updates” dublują `vulnerabilityAlerts` Renovate, wyłączenie w ustawieniach repo (opis w PR) |
 | 4.11 | `pnpm approve-builds`: `sharp` i `unrs-resolver` celowo w `ignoredBuiltDependencies` | — | — | bez zmian, tylko notatka |
 
 ## 5. Do decyzji Bartosza (poza repo)
@@ -250,6 +250,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
 | 07.11.2026 | 3.4 scalenie i instalacja (polecenie Bartosza) | #436 (niesie #435) | oba scalone; restore-drill zainstalowany na `db-1` przez Bartosza (`zainstaluj-restore-drill.sh`, tryb auto blokuje zapis na serwerze), pierwsza próba `WYNIK: OK` w 13 s, ping do checku Healthchecks „restore-drill” wysłany; czujka FA(3) po scaleniu ręcznie na GitHubie: „zgodny z repo”, bez issue |
 | 08.11.2026 | Lista Bartosza A–C (polecenie „zrób wszystkie kroki”) | #448, #298, scalenie #417 | A1: 00170 i 00171 już na db-1; `kontrola-faktur-ksef.sh` tylko do odczytu (PGOPTIONS, sprawdzone na db-1: `on`, `30s`, przebieg bez błędów) i bez pytania dla agenta; #298 odświeżony na 4096 MB; #417 odświeżony w nowym PR (konflikt rejestru, 4 długie myślniki ze strażnika tekstów); 3.7a przekierowana na `invoice-form.tsx` (`submit-invoice.ts` zmienia 5 PR). Znalezione: bramka `/wdroz` wdraża web przed workerem (`ops/bramka/src/deploy.mjs`), odwrotnie niż `wdroz-produkcje.sh` |
+| 08.11.2026 | 4.4 Knip i 4.10 Dependabot | #467 | Knip 6.44.1: bez konfiguracji 102 pliki, 432 eksporty, 206 typów; z `knip.jsonc` 30 plików, 77 eksportów, 15 typów, 0 zależności (MDX, skrypty, load-tests, projekty Playwright, `ops/**` wycięte); nic nie usunięte. Dependabot: brak `dependabot.yml`, alerty włączone, security updates włączone (do wyłączenia w Settings, decyzja poza repo). Lokalnie tylko `typecheck` i knip (Mac bez pamięci przy równoległych buildach), pełne CI na GitHubie |
 
 **Następny krok:** Bartosz: decyzja przy #425 (B1 listy z 08.11: wdrożenie
 przez nowy endpoint czy przez bramkę `/wdroz`), potem jej kroki; scalenie
