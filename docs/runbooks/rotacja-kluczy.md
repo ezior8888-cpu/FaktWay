@@ -285,8 +285,11 @@ z kontroli ma `iat` z 14.08.2026, czyli ten sam, który Vercel najpewniej miał.
 anon, który jest wkompilowany w build. Aplikacji nie da się wdrożyć
 wcześniej: healthcheck nowego kontenera pyta bazę kluczem service_role, przy
 starym sekrecie dostałby 503 i Coolify wycofałby wdrożenie.
-- droga przez GitHub Actions (`wdrozenie-produkcji.md`, „Droga przez GitHub
-  Actions”), gdy działa: obraz zbudowany wcześniej, przerwa kilka minut;
+- obraz z GHCR (`wdrozenie-produkcji.md`, „Obrazy z GHCR”), gdy Coolify
+  jest przełączony: przed restartem Supabase nowy klucz anon do zmiennej
+  repo (`gh variable set NEXT_PUBLIC_SUPABASE_ANON_KEY`) i przebudowa obrazu
+  (`gh workflow run obrazy.yml -f ref=<sha> -f wdroz=false`), potem
+  `./scripts/ops/wdroz-produkcje.sh --obraz <sha>`; przerwa kilka minut;
 - stara droga (build na `app-1`): przerwa = build aplikacji, 12–18 minut.
 
 Rób to w nocy, **zaraz po pełnym wydaniu**, gdy `main` = produkcja: wtedy

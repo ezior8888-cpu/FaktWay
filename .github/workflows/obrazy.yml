@@ -2,14 +2,25 @@ name: Obrazy i wdrożenie
 
 # Plan usprawnień 3.1 (i etap 1a planu skalowania): obrazy `runner` (aplikacja)
 # i `worker` budują się tutaj, nie na app-1 (12–18 min i ok. 4,5 GB swapu na
-# obraz). Trafiają do GHCR z tagiem pełnego SHA (i `main`, gdy budujemy main).
-# Z `wdroz: true` workflow wdraża przez API Coolify: najpierw blokada
-# niewgranych migracji, potem worker, potem aplikacja, na końcu kontrola.
-# Na start tylko ręcznie. Kroki do włączenia (sekrety, Tailscale, aplikacje
-# Coolify z obrazu): docs/runbooks/wdrozenie-produkcji.md, „Droga przez
-# GitHub Actions”. Stara droga (`scripts/ops/wdroz-produkcje.sh`) działa dalej.
+# obraz). Trafiają do GHCR z tagiem pełnego SHA (i `main` przy buildzie main).
+#
+# Po każdym scaleniu do `main` (push) budują się same, bez wdrożenia. Wdraża
+# operator: `./scripts/ops/wdroz-produkcje.sh --obraz <sha>` (czeka na obrazy
+# tego SHA, potem worker, potem aplikacja; decyzja B1 z 08.11.2026,
+# docs/runbooks/wdrozenie-produkcji.md, „Obrazy z GHCR”).
+#
+# Zmienne builda (`vars.NEXT_PUBLIC_*`) mają te same wartości co wiersze
+# „Build Variable” aplikacji id=1 w Coolify (sprawdzone odciskami SHA-256
+# 08.11.2026). Zmieniasz wartość w Coolify: zmień ją też tutaj
+# (`gh variable set …`), inaczej obraz z GHCR wypiecze starą.
+#
+# Ręcznie (`workflow_dispatch`) da się zbudować dowolny SHA z main. Opcja
+# `wdroz: true` (droga przez API Coolify i Tailscale) czeka na sprzątnięcie
+# po decyzji B1 i bez sekretów środowiska `produkcja` nie zadziała.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -44,7 +55,8 @@ jobs:
     steps:
       - name: Sprawdź wejście
         env:
-          REF: ${{ inputs.ref }}
+          # Push do main nie ma `inputs`: buduje się wtedy commit z pusha.
+          REF: ${{ inputs.ref || github.sha }}
         run: |
           if ! [[ "$REF" =~ ^(main|[0-9a-f]{40})$ ]]; then
             echo "::error::ref musi być main albo pełnym SHA (40 znaków małymi literami)."
@@ -52,7 +64,7 @@ jobs:
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.sha }}
           # Historia commitów bez drzew: wystarczy do `merge-base --is-ancestor`.
           fetch-depth: 0
           filter: tree:0
@@ -60,7 +72,7 @@ jobs:
       - name: SHA i przynależność do main
         id: sha
         env:
-          WDROZ: ${{ inputs.wdroz }}
+          WDROZ: ${{ inputs.wdroz || false }}
         run: |
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -105,11 +117,17 @@ jobs:
           NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
         run: |
           # Wartości NEXT_PUBLIC_* są wypiekane w bundlu podczas builda. Pusta
-          # wymagana = zepsuta produkcja, więc build stoi.
+          # wymagana = zepsuta produkcja, więc build stoi. NEXT_PUBLIC_APP_DOMAIN
+          # nie jest wymagana: kod jej nie czyta, a produkcja z Coolify buduje
+          # się bez niej.
           missing=0
-          for name in NEXT_PUBLIC_APP_DOMAIN NEXT_PUBLIC_APP_ENV NEXT_PUBLIC_APP_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SUPABASE_URL; do
+          for name in NEXT_PUBLIC_APP_ENV NEXT_PUBLIC_APP_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SUPABASE_URL; do
             if [ -z "${!name}" ]; then echo "::error::Brak zmiennej repozytorium $name"; missing=1; fi
           done
+          if [ "$NEXT_PUBLIC_APP_ENV" != production ]; then
+            echo "::error::NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV, a obrazy z tego workflow idą na produkcję (oczekiwane: production)."
+            missing=1
+          fi
           for name in NEXT_PUBLIC_POSTHOG_HOST NEXT_PUBLIC_POSTHOG_KEY NEXT_PUBLIC_SENTRY_DSN NEXT_PUBLIC_TURNSTILE_SITE_KEY NEXT_PUBLIC_VAPID_PUBLIC_KEY; do
             if [ -z "${!name}" ]; then echo "::warning::Pusta zmienna $name (ta funkcja nie zadziała w tym obrazie)"; fi
           done
@@ -129,7 +147,7 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}-${{ matrix.target }}:${{ needs.przygotuj.outputs.sha }}
-            ${{ inputs.ref == 'main' && format('{0}-{1}:main', env.IMAGE_PREFIX, matrix.target) || '' }}
+            ${{ (github.event_name == 'push' || inputs.ref == 'main') && format('{0}-{1}:main', env.IMAGE_PREFIX, matrix.target) || '' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           # Etap `worker` nie czyta NEXT_PUBLIC_*; nieużyte argumenty to tylko
@@ -156,7 +174,7 @@ jobs:
   wdrozenie:
     name: Wdrożenie (worker, potem aplikacja)
     needs: [przygotuj, obraz]
-    if: inputs.wdroz
+    if: github.event_name == 'workflow_dispatch' && inputs.wdroz
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     # Ochrona środowiska (wymagany zatwierdzający) i jego sekrety ustawia
