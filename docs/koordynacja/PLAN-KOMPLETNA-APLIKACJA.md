@@ -1,14 +1,14 @@
 # Plan kompletnej aplikacji: FaktWay jako pełny program do faktur i księgowości małej firmy
 
-> **Stan: plan do zatwierdzenia przez Bartosza. Nic z niego nie jest jeszcze
-> budowane.** Zlecenie Bartosza z 8.11.2026: „pełnoprawny program »księgowy«,
-> który ma wszystkie funkcje poza openbankingiem, magazynem, integracjami ze
-> sklepami i rzeczami, które dotyczą ogromnych firm”, „nic nie odkładaj na
-> później”, „prostym, opisowym językiem”.
+> **Stan: plan przyjęty.** Bartosz 8.11.2026 przyjął wszystkie rekomendacje
+> z sekcji 6 („tak przyjmuje”). Zlecenie Bartosza z 8.11.2026: „pełnoprawny
+> program »księgowy«, który ma wszystkie funkcje poza openbankingiem,
+> magazynem, integracjami ze sklepami i rzeczami, które dotyczą ogromnych
+> firm”, „nic nie odkładaj na później”, „prostym, opisowym językiem”.
 >
-> **Po zgodzie** krok 0.1 dopisuje do tabeli haseł w `AGENTS.md` frazę
-> „Kontynuuj plan kompletnej aplikacji” (ten plik, dziennik w sekcji 12).
-> Każda sesja robi wtedy jeden krok z „Następnego kroku”, składa raport i STOP.
+> Hasło sesji: „Kontynuuj plan kompletnej aplikacji” (tabela haseł
+> w `AGENTS.md`, krok 0.1). Każda sesja robi jeden krok z „Następnego kroku”
+> (dziennik w sekcji 12), składa raport i STOP.
 >
 > Odczyt kodu: `origin/main` @ `279e2b4c` (8.11.2026). Przepisy: źródła
 > urzędowe odczytane 8.11.2026 (sekcja 11). Aplikacje w App Store i Google Play
@@ -66,9 +66,10 @@
    granicznych. Dla porównania: plan księgowości (K0-K8, ok. 17 PR) zajął
    4 dni (5-8.11.2026). Tempo wyznaczą bardziej prawnik i księgowa niż kod.
 
-7. **Decyzje dla Bartosza (sekcja 6):** sześć spraw na granicy zakresu
-   (import wyciągu, linki do płatności, kadry i płace, pełna księgowość
-   spółek, OSS, kasy fiskalne) i jedenaście mniejszych. Każda ma rekomendację.
+7. **Decyzje (sekcja 6):** sześć spraw na granicy zakresu (import wyciągu,
+   linki do płatności, kadry i płace, pełna księgowość spółek, OSS, kasy
+   fiskalne) i jedenaście mniejszych. Bartosz przyjął wszystkie rekomendacje
+   8.11.2026.
 
 8. **Prawo.** Prawie każdy krok to według mapy żelaznego filtra poziom R1
    (faktura, KSeF, JPK, podatek, termin, przechowywanie), więc przechodzi
@@ -312,11 +313,15 @@ PR po kolei). Przy kroku:
 #### 0.1 Plan w repo i przygotowanie
 - **Klient dostaje:** nic widocznego.
 - **Po co:** sesje muszą mieć jedno źródło prawdy i decyzje Bartosza.
-- **W aplikacji:** fraza w `AGENTS.md`; decyzje z sekcji 6 wpisane do tabeli;
-  nowe pytania do prawnika dopisane do `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`
-  (od pytania 7); nowe złote przypadki (G15 i dalej) w arkuszu
-  `docs/ksiegowosc/ZLOTE-PRZYPADKI.md`; rejestr źródeł dla nowych obszarów
-  (waluty, JPK pełny, ZUS, środki trwałe, roczne) w formie z żelaznego filtra.
+- **W aplikacji:** fraza w `AGENTS.md`; decyzje z sekcji 6 oznaczone jako
+  przyjęte; nowe pytania do prawnika dopisane do
+  `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md` (pytania 7-17); nowe złote
+  przypadki G15-G30 w drugim arkuszu `docs/ksiegowosc/ZLOTE-PRZYPADKI-2.md`
+  (pierwszy arkusz, G1-G14, bez zmian); rejestr przepisów dla nowych obszarów
+  (faktury od 2027 r., płatności, tryby KSeF, waluty, VAT i JPK, PIT, ZUS,
+  środki trwałe, samochód) w `docs/koordynacja/REJESTR-PRZEPISOW-KOMPLETNA.md`,
+  w polach rejestru żelaznego filtra; po fazie F4 filtra wpisy przechodzą do
+  `filtr/przepisy/`.
 - **Praca:** S, bez zależności.
 - **Ryzyko:** R0 (dokumentacja).
 - **Prawnik / księgowa:** nie.
@@ -1180,7 +1185,12 @@ to ryzyko wprost i kolejny powód rekomendacji „nie”.
 
 ---
 
-## 6. Decyzje dla Bartosza
+## 6. Decyzje (przyjęte 8.11.2026)
+
+Bartosz przyjął 8.11.2026 wszystkie rekomendacje z tabel 6.1 i 6.2 bez zmian
+(odpowiedź „tak przyjmuje” na pytanie o rekomendacje z tej sekcji). Kolumna
+„Rekomendacja” jest więc decyzją. Zmiana decyzji wymaga nowego wiersza
+w dzienniku (sekcja 12).
 
 ### 6.1 Sprawy na granicy zakresu
 
@@ -1215,9 +1225,9 @@ to ryzyko wprost i kolejny powód rekomendacji „nie”.
 
 ### 7.1 Nowe pytania do prawnika
 
-Dopisujemy je w kroku 0.1 do `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md`
-(pytania 1-6 już tam są). Prawnik dostaje jeden pakiet razem z pytaniami
-planu „zero zgubionych faktur” (jego sekcja 9).
+Dopisane w kroku 0.1 do `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md` jako
+pytania 7-17 (pytania 1-6 dotyczą modułu księgowości). Prawnik dostaje jeden
+pakiet razem z pytaniami planu „zero zgubionych faktur” (jego sekcja 9).
 
 | # | Pytanie | Kroki |
 |---|---|---|
@@ -1235,8 +1245,9 @@ planu „zero zgubionych faktur” (jego sekcja 9).
 
 ### 7.2 Co sprawdza księgowa
 
-Nowe złote przypadki do arkusza `docs/ksiegowosc/ZLOTE-PRZYPADKI.md` (G1-G14
-już są). Każdy liczy księgowa i podpisuje, a test sprawdza wynik co do grosza.
+Nowe złote przypadki są w drugim arkuszu `docs/ksiegowosc/ZLOTE-PRZYPADKI-2.md`
+(krok 0.1); G1-G14 zostają w pierwszym. Każdy liczy księgowa i podpisuje,
+a test sprawdza wynik co do grosza.
 
 | # | Przypadek | Kroki |
 |---|---|---|
