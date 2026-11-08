@@ -620,7 +620,35 @@
     "plakietki": 0
   },
   "lib/jobs/runners/submit-invoice.ts": {
-    "myslniki": 21,
+    "myslniki": 2,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/duplicate.ts": {
+    "myslniki": 3,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/exhausted.ts": {
+    "myslniki": 7,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/intents.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/reconcile.ts": {
+    "myslniki": 4,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/save-accepted.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/send.ts": {
+    "myslniki": 1,
+    "plakietki": 0
+  },
+  "lib/jobs/runners/submit-invoice/shared.ts": {
+    "myslniki": 2,
     "plakietki": 0
   },
   "lib/jobs/runners/upo-retry-stale.ts": {

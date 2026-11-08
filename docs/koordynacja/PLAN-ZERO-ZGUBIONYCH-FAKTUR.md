@@ -182,7 +182,7 @@ Założenia:
 ### B2a. Bezpiecznik terminu dla zwykłej faktury
 - Problem: zwykła faktura nie ma bezpiecznika daty. „Wyślij ponownie” i cron wyślą ją także po terminie, a KSeF ją przyjmie (scenariusz 13b), choć termin z art. 106nda ust. 2 minął.
 - Zakres wg założenia B1(a): termin z istniejącego `calculateOfflineDeadline(issueDate, false)` (`lib/ksef/idempotency.ts`; koniec następnego dnia roboczego w czasie polskim, sobota nie jest dniem roboczym). Po terminie `ISSUE_DATE_PASSED` także dla zwykłej faktury. Do terminu ponowienie działa bez zmian treści.
-- Miejsca do zmiany razem: `submit-invoice.ts:1738` (runner), `submit-invoice-full.ts:164` (hak sesji), `ksef-requeue-event.ts:142` (fakty), `ksef-send-policy.ts:254` i `:331` (klient), `ksef-operator-policy.ts:424` (operator), `ksef-lifecycle-reconcile.ts:215` (cron), macierz `ksef-wyjscia-kodow.test.ts`.
+- Miejsca do zmiany razem: `submit-invoice/send.ts:97` (runner), `submit-invoice-full.ts:164` (hak sesji), `ksef-requeue-event.ts:142` (fakty), `ksef-send-policy.ts:254` i `:331` (klient), `ksef-operator-policy.ts:424` (operator), `ksef-lifecycle-reconcile.ts:215` (cron), macierz `ksef-wyjscia-kodow.test.ts`.
 - Tekst dla zwykłej faktury: najpierw sprawdzić, czy szkic po resecie da się poprawić (D3), bo teksty dokumentów specjalnych każą go usunąć. Jeśli prawnik odrzuci założenie: cron 23:45 z wersji 1 (archiwum, B2).
 - Czerwony test: faktura `failed INFRA` z P_1 w piątek: ponowienie w sobotę i w poniedziałek przechodzi, we wtorek nie, także po stronie workera; to samo ze świętem w środku tygodnia. Klient widzi dlaczego i co zrobić.
 - Bezpiecznik daty jest w czterech miejscach: runner (`submit-invoice.ts`,
