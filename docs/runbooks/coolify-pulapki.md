@@ -10,6 +10,16 @@
 - **Pusty `dockerfile_target_build` w Coolify** buduje OSTATNI etap pliku.
   Dopisanie etapu na końcu `Dockerfile` raz wyłączyło produkcję na 15 godzin.
   Aplikacja ma jawnie `runner`, worker `worker`.
+- **Zmiana „Build Pack” w Coolify (panel, `$a->save()`) z `dockerfile` na inny
+  czyści `dockerfile_location`, `dockerfile_target_build` i
+  `custom_healthcheck_found`** (model `Application`, Coolify 4.6). Powrót
+  z obrazu na repo zbudowałby wtedy ostatni etap, a aplikacja (healthcheck
+  Coolify wyłączony, liczy się HEALTHCHECK z obrazu) zostałaby uznana za
+  zdrową bez sprawdzenia. Przełączaj tylko `scripts/ops/coolify-zrodlo.sh`
+  (zapytanie bez zdarzeń modelu, jawny cel przy powrocie).
+- **`dockerfile` z ustawioną nazwą obrazu pcha build do rejestru.** Coolify
+  taguje zbudowany obraz `docker_registry_image_name:tag` i robi `docker push`.
+  Przy powrocie na repo nazwa i tag obrazu muszą być puste.
 - **Healthcheck Coolify wymaga `curl` w obrazie.** Bez niego deploy kończy się
   statusem „unhealthy" i wycofaniem, mimo poprawnie działającego procesu.
 - **Zmienne środowiskowe mają bliźniaki `is_preview`.** Wyglądają jak duplikaty,
