@@ -15,6 +15,7 @@ import { celZlozenia, generujJpkEwp, nazwaPlikuJpkEwp } from '@/lib/ksiegowosc/j
 import { validateJpkEwp, validateJpkPkpir } from '@/lib/ksiegowosc/jpk-ewp-walidator';
 import { generujJpkPkpir, nazwaPlikuJpkPkpir } from '@/lib/ksiegowosc/jpk-pkpir';
 import { brakiKpirOkresu, sumyKpir, wierszeKpirOkresu } from '@/lib/ksiegowosc/kpir';
+import { KOLUMNY_SPISU, spisSchema, spisyPliku, zWierszaSpisu, type SpisWejscie } from '@/lib/ksiegowosc/spis-z-natury';
 import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
 import { czytajWersjeProfilu, NAZWY_FORM, wersjaNa } from '@/lib/ksiegowosc/profil';
 import {
@@ -357,7 +358,8 @@ export async function pobierzJpkPkpirAction(wejscie: z.input<typeof pobranieSche
   }
 
   const cel = celZlozenia(od, doDnia, dzis);
-  const xml = generujJpkPkpir({ od, do: doDnia, celZlozenia: cel, kodUrzedu, podatnik: { nip, imie, nazwisko, dataUrodzenia }, wiersze });
+  const spis = spisyPliku(wynik.spisy, od, doDnia);
+  const xml = generujJpkPkpir({ od, do: doDnia, celZlozenia: cel, kodUrzedu, podatnik: { nip, imie, nazwisko, dataUrodzenia }, wiersze, spis });
   const kontrola = await validateJpkPkpir(xml);
   if (!kontrola.valid) {
     console.error('[jpk_pkpir] niezgodny ze schematem', ctx.tenantId, kontrola.errors.slice(0, 20).map(redactXsdMessage));
@@ -375,7 +377,86 @@ export async function pobierzJpkPkpirAction(wejscie: z.input<typeof pobranieSche
     userId: ctx.user.id,
     entityType: 'jpk_pkpir',
     // Bez imienia, nazwiska i daty urodzenia: tych danych nie zapisujemy (jak w D9).
-    metadata: { od, do: doDnia, celZlozenia: cel, liczbaWierszy: sumy.liczbaWierszy, przychodGr: sumy.przychodGr, kosztyGr: sumy.kosztyGr },
+    metadata: {
+      od,
+      do: doDnia,
+      celZlozenia: cel,
+      liczbaWierszy: sumy.liczbaWierszy,
+      przychodGr: sumy.przychodGr,
+      kosztyGr: sumy.kosztyGr,
+      spisPoczatekGr: spis.poczatekGr,
+      spisKoniecGr: spis.koniecGr,
+    },
   });
   return { success: true, xml, nazwa: nazwaPlikuJpkPkpir(nip, od, doDnia) };
 }
+
+/** Spis z natury (K7.4, D19): data, wartość i opis; owner/admin, za obszarem `kpir`, z audytem. */
+export async function dodajSpisAction(wejscie: SpisWejscie): Promise<WynikWpisu> {
+  let ctx;
+  try {
+    ctx = await requireOrgRole(['owner', 'admin']);
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  const parsed = spisSchema.safeParse(wejscie);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { success: false, error: issue?.message ?? 'Nieprawidłowy spis.', pole: issue?.path.join('.') };
+  }
+  const spis = parsed.data;
+  if (spis.data > todayInWarsaw()) return { success: false, error: 'Data spisu nie może być późniejsza niż dziś.', pole: 'data' };
+  const client = ctx.supabase as unknown as SupabaseClient;
+  if (!(await kpirWlaczona(client, ctx.tenantId))) return { success: false, error: KPIR_NIEDOSTEPNA };
+
+  const { data, error } = await client
+    .from('ledger_inventory_counts')
+    .insert({ tenant_id: ctx.tenantId, data: spis.data, kwota_gr: spis.kwota, opis: spis.opis })
+    .select(KOLUMNY_SPISU)
+    .single();
+  if (error?.code === '23505') {
+    return { success: false, error: 'Spis z tego dnia już jest; poprawka to usunięcie spisu i dodanie nowego.', pole: 'data' };
+  }
+  if (error || !data) return { success: false, error: BLAD_ZAPISU };
+  const zapisany = zWierszaSpisu(data as Parameters<typeof zWierszaSpisu>[0]);
+  await logAudit({
+    action: 'ledger_inventory.created',
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    entityType: 'ledger_inventory_count',
+    entityId: zapisany.id,
+    metadata: { spis: zapisany },
+  });
+  revalidatePath('/reports/ewidencja');
+  return { success: true };
+}
+
+export async function usunSpisAction(id: string): Promise<WynikWpisu> {
+  let ctx;
+  try {
+    ctx = await requireOrgRole(['owner', 'admin']);
+  } catch (e) {
+    if (e instanceof ActionAuthError) return { success: false, error: e.message };
+    throw e;
+  }
+  if (!z.string().uuid().safeParse(id).success) return { success: false, error: BLAD_USUNIECIA };
+  const client = ctx.supabase as unknown as SupabaseClient;
+  if (!(await kpirWlaczona(client, ctx.tenantId))) return { success: false, error: KPIR_NIEDOSTEPNA };
+
+  const { data, error } = await client.from('ledger_inventory_counts').delete().eq('id', id).eq('tenant_id', ctx.tenantId).select(KOLUMNY_SPISU);
+  if (error) return { success: false, error: BLAD_USUNIECIA };
+  const usuniety = (data ?? [])[0];
+  if (!usuniety) return { success: false, error: 'Tego spisu już nie ma na liście.' };
+  await logAudit({
+    action: 'ledger_inventory.deleted',
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    entityType: 'ledger_inventory_count',
+    entityId: id,
+    metadata: { spis: zWierszaSpisu(usuniety as Parameters<typeof zWierszaSpisu>[0]) },
+  });
+  revalidatePath('/reports/ewidencja');
+  return { success: true };
+}
+

@@ -5,6 +5,7 @@ import { generujJpkPkpir, nazwaPlikuJpkPkpir } from '@/lib/ksiegowosc/jpk-pkpir'
 import { validateJpkPkpir } from '@/lib/ksiegowosc/jpk-ewp-walidator';
 import { wierszeKpirOkresu, zbudujKpir, type KosztKpir } from '@/lib/ksiegowosc/kpir';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { spisyPliku, type Spis, type SpisyPliku } from '@/lib/ksiegowosc/spis-z-natury';
 
 /**
  * JPK_PKPIR(3) na OFICJALNYM schemacie MF (lib/exports/schemas/jpk-pkpir3,
@@ -52,7 +53,7 @@ const koszt = (dzien: string, gr: number, z: Partial<KosztKpir> = {}): KosztKpir
   ...z,
 });
 
-function plik() {
+function plik(spis?: SpisyPliku) {
   const kpir = zbudujKpir({
     rok: 2026,
     faktury: [
@@ -72,6 +73,7 @@ function plik() {
     kodUrzedu: '1433',
     podatnik: { nip: '1234567890', imie: 'Jan', nazwisko: 'Testowy', dataUrodzenia: '1980-01-01' },
     wiersze,
+    spis,
     wytworzono: new Date('2027-01-15T10:00:00Z'),
   });
 }
@@ -107,3 +109,29 @@ describe('JPK_PKPIR(3), oficjalny schemat MF', () => {
     expect((await validateJpkPkpir(zly)).valid).toBe(false);
   });
 });
+
+describe('spis z natury w JPK_PKPIR (K7.4, D19)', () => {
+  const spisy: Spis[] = [
+    { id: 's1', data: '2025-12-31', kwotaGr: 500_000, opis: null },
+    { id: 's2', data: '2026-06-30', kwotaGr: 650_000, opis: 'Zmiana formy' },
+    { id: 's3', data: '2026-12-31', kwotaGr: 600_000, opis: null },
+  ];
+
+  it('pola pliku: P_1 z 31 grudnia poprzedniego roku albo z 1 stycznia, P_2 tylko w pliku za cały rok, reszta w PKPIRSpis', () => {
+    expect(spisyPliku(spisy, '2026-01-01', '2026-12-31')).toEqual({ poczatekGr: 500_000, poczatekZ: '2025-12-31', koniecGr: 600_000, koniecZ: '2026-12-31', wTrakcie: [spisy[1]] });
+    expect(spisyPliku(spisy, '2026-01-01', '2026-09-30')).toMatchObject({ koniecGr: 0, koniecZ: null, wTrakcie: [spisy[1]] });
+    expect(spisyPliku([{ id: 'x', data: '2026-01-01', kwotaGr: 100, opis: null }], '2026-01-01', '2026-12-31')).toMatchObject({ poczatekGr: 100, poczatekZ: '2026-01-01', wTrakcie: [] });
+    expect(spisyPliku([], '2026-01-01', '2026-12-31')).toEqual({ poczatekGr: 0, poczatekZ: null, koniecGr: 0, koniecZ: null, wTrakcie: [] });
+  });
+
+  it('PKPIRInfo: P_3 to wydatki plus spis na początek minus spis na koniec, P_4 przychód minus P_3; PKPIRSpis przed wierszami; XSD', async () => {
+    const xml = plik(spisyPliku(spisy, '2026-01-01', '2026-12-31'));
+    // Wydatki 2 800 zł + 5 000 − 6 000 = 1 800 zł; dochód 9 975 − 1 800 = 8 175 zł.
+    expect(xml).toMatch(/<P_1>5000\.00<\/P_1>\s*<P_2>6000\.00<\/P_2>\s*<P_3>1800\.00<\/P_3>\s*<P_4>8175\.00<\/P_4>/);
+    expect(xml).toMatch(/<\/PKPIRInfo>\s*<PKPIRSpis>\s*<P_5A>2026-06-30<\/P_5A>\s*<P_5B>6500\.00<\/P_5B>\s*<\/PKPIRSpis>\s*<PKPIRWiersz>/);
+    const wynik = await validateJpkPkpir(xml);
+    expect(wynik.errors).toEqual([]);
+    expect(wynik.valid).toBe(true);
+  });
+});
+

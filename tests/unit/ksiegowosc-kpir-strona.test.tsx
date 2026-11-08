@@ -24,7 +24,7 @@ const SKALA: WersjaProfilu = {
   najem: false,
 };
 
-const mocks = vi.hoisted(() => ({ rola: 'owner', wersje: [] as unknown[] | null, kpir: null as unknown, ewidencja: vi.fn(), kpirWKodzie: true }));
+const mocks = vi.hoisted(() => ({ rola: 'owner', wersje: [] as unknown[] | null, kpir: null as unknown, ewidencja: vi.fn(), kpirWKodzie: true, spisy: [] as unknown[] }));
 
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -60,6 +60,10 @@ vi.mock('@/app/actions/ksiegowosc-ewidencja', () => ({
   pobierzJpkPkpirAction: vi.fn(),
 }));
 vi.mock('@/components/expenses/finora/month-selector', () => ({ default: () => <span data-wybor-miesiaca /> }));
+vi.mock('@/components/ksiegowosc/spis-z-natury-form', () => ({
+  SpisZNaturyForm: (p: { domyslnaData: string }) => <form data-spis-formularz={p.domyslnaData} />,
+  UsunSpisPrzycisk: (p: { id: string }) => <button data-usun-spis={p.id} />,
+}));
 
 const { default: EwidencjaPage } = await import('@/app/(dashboard)/reports/ewidencja/page');
 
@@ -90,12 +94,13 @@ const koszt = (dzien: string, gr: number, kolumna: string | null = 'col_13'): Ko
 
 function wynik(koszty: KosztKpir[] = [koszt('2026-03-12', 30_000)]) {
   const wpisy = [{ id: 'w1', rodzaj: 'inny' as const, data: '2026-03-20', dokument: 'NOTA/1', kolumna: 'k8' as const, kwotaGr: 5_000, opis: 'Odsetki' }];
-  return { ok: true, kpir: zbudujKpir({ rok: 2026, faktury: [faktura('2026-03-10', 1_000_000)], koszty, wpisy, wersje: [SKALA], kursy: new Map() }), wpisy, wersje: [SKALA] };
+  return { ok: true, kpir: zbudujKpir({ rok: 2026, faktury: [faktura('2026-03-10', 1_000_000)], koszty, wpisy, wersje: [SKALA], kursy: new Map() }), wpisy, wersje: [SKALA], spisy: mocks.spisy };
 }
 
 const strona = async () => renderToStaticMarkup(await EwidencjaPage({ searchParams: Promise.resolve({ month: '3', year: '2026' }) }));
 
 beforeEach(() => {
+  mocks.spisy = [];
   mocks.rola = 'owner';
   mocks.wersje = [SKALA];
   mocks.kpir = wynik();
@@ -110,8 +115,8 @@ describe('KPiR w zakładce „Ewidencja”', () => {
     expect(html).toContain('Klient Sp. z o.o.');
     expect(html).toContain('1234567890-20260310-0100001AF629-AF');
     expect(html).toContain('Pozostałe wydatki (13)');
-    // Fundusz Pracy to koszt w KPiR, składki społeczne odlicza zaliczka (bez podwójnego odliczenia).
-    expect(html).toContain('Fundusz Pracy i Fundusz Solidarnościowy z zapłaconych składek ZUS są kosztem w kolumnie 13');
+    // Fundusz Pracy dopisuje FaktWay (K7.3, D21), składki społeczne odlicza zaliczka (bez podwójnego odliczenia).
+    expect(html).toContain('Fundusz Pracy i Fundusz Solidarnościowy FaktWay dopisuje do KPiR sam (kolumna 13) w dniu zapłaty składek');
     expect(html).toContain('Składek społecznych (a przy liniowym także zdrowotnej) KPiR nie zawiera');
     // Przychód 10 000 + 50 zł, koszty 300 zł, dochód 9 750 zł.
     expect(html).toMatch(/Razem w miesiącu.*10\s050,00 zł/);
@@ -153,4 +158,23 @@ describe('KPiR w zakładce „Ewidencja”', () => {
     expect(html).not.toContain('Wpisy ręczne w KPiR');
     expect(mocks.ewidencja).not.toHaveBeenCalled();
   });
+
+  it('spis z natury (K7.4): lista z usuwaniem, formularz z datą spisu na początek roku, w karcie pliku wartości P_1 i P_2', async () => {
+    mocks.spisy = [{ id: 's1', data: '2025-12-31', kwotaGr: 500_000, opis: 'Towar w magazynie' }];
+    mocks.kpir = wynik();
+    const html = await strona();
+    const t = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    expect(t).toContain('Spis z natury');
+    expect(t).toContain('31.12.2025');
+    expect(t).toContain('Towar w magazynie');
+    expect(html).toContain('data-usun-spis="s1"');
+    // Spis na początek roku już jest, więc formularz proponuje koniec roku (nie późniejszy niż dziś).
+    expect(html).toContain('data-spis-formularz="2026-11-05"');
+    expect(t).toContain('Spis z natury w pliku: na początek roku 5000,00 zł (spis z 31.12.2025), na koniec roku w pliku za cały rok.');
+
+    mocks.spisy = [];
+    mocks.kpir = wynik();
+    expect(await strona()).toContain('data-spis-formularz="2025-12-31"');
+  });
 });
+

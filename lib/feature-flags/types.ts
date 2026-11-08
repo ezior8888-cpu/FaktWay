@@ -1,7 +1,9 @@
 export type PerTenantFlag =
   | 'co_pilot_enabled'
   | 'magic_import_enabled'
-  | 'exports_enabled';
+  | 'exports_enabled'
+  /** Pilotaż modułu księgowości JDG (00165, plan księgowości K8); obszary rozstrzyga `lib/ksiegowosc/wylacznik.ts`. */
+  | 'ksiegowosc_enabled';
 
 export type GlobalFlag =
   | 'killAllKsefSubmissions'

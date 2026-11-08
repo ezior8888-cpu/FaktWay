@@ -199,4 +199,28 @@ describe.skipIf(!hasDatabase)('00168: rozliczenia miesiąca na prawdziwym PostgR
     const listopad = await czytajRozliczenia(owner, ORG, '2026-11');
     expect(listopad.map((r) => [r.miesiac, r.rodzaj, r.status, r.spoleczneBezFpGr])).toEqual([['2026-08', 'zus_spoleczne', 'zaplacone', 178829]]);
   });
+
+  it('00172: zapłata spoza wyliczenia za grudzień 2025 r. przechodzi, okres sprzed 2025 r. dalej odrzuca CHECK; odczyt ma oznaczenie i bez daty też', async () => {
+    const owner = await signedIn(OWNER_EMAIL, ORG);
+    const reczna = { ...WIERSZ, okres: '2025-12-01', rodzaj: 'zus_spoleczne', parametry_wersja: 'reczna', wejscia_hash: 'e'.repeat(64) };
+    const grudzien = await owner
+      .from('tax_settlements')
+      .insert({ ...reczna, migawka: { reczna: true, spoleczneBezFpGr: 178829 } })
+      .select('id')
+      .single();
+    expect(grudzien.error).toBeNull();
+    const zaplata = await owner.from('tax_settlements').update({ status: 'zaplacone', zaplacone_o: '2026-01-15' }).eq('id', grudzien.data!.id);
+    expect(zaplata.error).toBeNull();
+    const bezDaty = await owner.from('tax_settlements').insert({ ...reczna, okres: '2025-11-01', migawka: { reczna: true, spoleczneBezFpGr: 0 }, wejscia_hash: 'f'.repeat(64) });
+    expect(bezDaty.error).toBeNull();
+    const zaWczesnie = await owner.from('tax_settlements').insert({ ...reczna, okres: '2024-12-01', wejscia_hash: '1'.repeat(64) });
+    expect(zaWczesnie.error?.message).toContain('tax_settlements_okres_check');
+
+    const styczen = await czytajRozliczenia(owner, ORG, '2026-01');
+    expect(styczen.filter((r) => r.reczna).map((r) => [r.miesiac, r.status, r.spoleczneBezFpGr])).toEqual([
+      ['2025-11', 'zatwierdzone', 0],
+      ['2025-12', 'zaplacone', 178829],
+    ]);
+  });
 });
+

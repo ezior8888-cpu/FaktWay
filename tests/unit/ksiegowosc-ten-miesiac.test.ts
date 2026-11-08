@@ -270,3 +270,14 @@ describe('VAT w „Ten miesiąc” (K7.1)', () => {
     expect(kwoty(skala).map(([r]) => r)).toEqual(['pit', 'zus_spoleczne', 'zdrowotna', 'vat']);
   });
 });
+
+describe('zapłata spoza wyliczenia w przyrostach (K7.2, D15)', () => {
+  it('ręczna wersja przed wyliczoną: wyliczenie tego samego okresu dolicza tylko różnicę', () => {
+    const p = przyrostyZaplat([zaplata('2026-01', 'zdrowotna', 40_000, '2026-02-10', 0, 1), zaplata('2026-01', 'zdrowotna', 49_835, '2026-03-05', 0, 2)]);
+    expect(p.map((x) => [x.miesiacZaplaty, x.kwotaGr])).toEqual([
+      ['2026-02', 40_000],
+      ['2026-03', 9_835],
+    ]);
+  });
+});
+
