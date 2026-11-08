@@ -639,8 +639,12 @@
     "myslniki": 6,
     "plakietki": 0
   },
-  "lib/ksef/duplicate-decision.ts": {
-    "myslniki": 100,
+  "lib/ksef/duplicate-decision-sql-texts.ts": {
+    "myslniki": 27,
+    "plakietki": 0
+  },
+  "lib/ksef/duplicate-decision-texts.ts": {
+    "myslniki": 73,
     "plakietki": 0
   },
   "lib/ksef/duplicate-verdict.ts": {
