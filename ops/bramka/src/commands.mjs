@@ -22,7 +22,7 @@ const HELP = [
   '/kolejki — zaległości zadań i faktury utknięte w wysyłce',
   '/wylacz ksef | flo | rejestracja — natychmiast wyłącza (bez TOTP)',
   '/wdroz — pokazuje, co zostanie wdrożone',
-  '/wdroz &lt;8 znaków SHA&gt; &lt;kod TOTP&gt; — wdraża web i worker',
+  '/wdroz &lt;8 znaków SHA&gt; &lt;kod TOTP&gt; — wdraża worker i web',
 ].join('\n');
 
 /** „/wdroz@FaktWayBot abc” → { cmd: 'wdroz', args: ['abc'] } */
@@ -100,7 +100,7 @@ export function formatPlan(p) {
   if (p.blockers.length) {
     lines.push('', '<b>Nie można wdrożyć:</b>', ...p.blockers.map((b) => `• ${escapeHtml(b)}`));
   } else {
-    lines.push('', `Aby wdrożyć web i worker: <code>/wdroz ${sha8} KOD</code> (kod z aplikacji TOTP).`);
+    lines.push('', `Aby wdrożyć worker i web: <code>/wdroz ${sha8} KOD</code> (kod z aplikacji TOTP).`);
   }
   return lines.join('\n');
 }
@@ -193,7 +193,7 @@ export function createBramka(deps) {
           }
           const r = await deployer.start(sha8.toLowerCase(), actor, (html) => reply(chatId, html));
           if (!r.started) return await reply(chatId, `❌ Nie wdrażam:\n${escapeHtml(r.reason)}`);
-          await reply(chatId, `🚀 Wdrażam <code>${r.head.slice(0, 8)}</code>: najpierw web, potem worker. Dam znać po każdym kroku.`);
+          await reply(chatId, `🚀 Wdrażam <code>${r.head.slice(0, 8)}</code>: najpierw worker, potem web. Dam znać po każdym kroku.`);
           await notifyOthers(fromId, `🚀 ${escapeHtml(name)} uruchomił(a) wdrożenie <code>${r.head.slice(0, 8)}</code>.`);
           return undefined;
         }

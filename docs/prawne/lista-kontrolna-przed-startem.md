@@ -1,6 +1,6 @@
 # Lista kontrolna przed startem — sprawy prawne
 
-Stan na 20.10.2026 (po zmianie nazwy na FaktWay). Każdy punkt ma właściciela. Dokumenty dla klientów
+Stan na 20.10.2026 (po zmianie nazwy na FaktWay), uzupełniona 05.11.2026. Każdy punkt ma właściciela. Dokumenty dla klientów
 (regulamin, umowa powierzenia, polityki) obiecują rzeczy z tej listy —
 **dopóki punkt nie jest zrobiony, dokument mija się z rzeczywistością.**
 
@@ -11,6 +11,14 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
 - [ ] 🔴 **Usługodawca istnieje** (JDG / spółka) i jego dane są w
   `lib/legal/entity.ts`. Do tego czasu strony `/legal/*` mają baner
   „wersja robocza”, a bramka akceptacji regulaminu śpi. — Igor, Bartosz
+- [ ] 🔴 **Rejestracja do czasu zrobienia punktu wyżej: decyzja.** Stan
+  05.11.2026: otwarta. Zamknięcie: flaga `disableSignups`
+  (`/wylacz rejestracja` w bramce Telegrama albo `UPDATE` z
+  `docs/runbooks/hamulce-ksef.md` z `flag = 'disableSignups'`); otwarcie
+  z powrotem tylko tym `UPDATE`, z `enabled = false`. Przy zamkniętej
+  zaproszenia przyjmą tylko osoby, które już mają konto (zakładanie kont
+  blokuje hook GoTrue z 00102). Po decyzji odhaczyć. Punkt wygasa po
+  zrobieniu punktu wyżej. — decyzja: Igor, Bartosz; flaga: Bartosz
 - [ ] 🔴 **Przegląd prawnika** regulaminu, umowy powierzenia, polityk
   i pytań z memo (artefakt „Pakiet prawny”). — Igor
 - [ ] 🔴 **Szablon strony Zova** (Framer Marketplace, 19 USD) — potwierdzić
@@ -51,6 +59,24 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
   cykl do 60 dni): przy zakupie Storage Box ustawić retencję ≤ 60 dni
   (`db-backup.sh` wysyła przez `rclone copy`, więc kopie tam same nie
   znikają); kopie `manual` usuwać w tym samym terminie. — Bartosz
+- [ ] 🟠 **Newsletter — zbudować albo usunąć.** Opisują go polityka
+  prywatności (pkt 2 i pkt 3, wiersz „Newsletter”), regulamin (§ 3 ust. 1
+  pkt 10) i rejestr czynności (A8). Formularz i akcja zapisu nie stoją na
+  żadnym ekranie (`tests/unit/newsletter-wstrzymany.test.ts`), a tabela
+  `newsletter_subscribers` ma 0 wierszy (Bartosz, 23.10.2026), więc nie ma
+  kogo powiadamiać. Albo zbudować: double opt-in, zapis wersji zgody, link
+  wypisu zgodny z okresem z polityki i A8, usuwanie wiersza przy usunięciu
+  konta (dziś tabelę obejmuje tylko eksport RODO w
+  `lib/gdpr/data-collector.ts`) i newsletter w celu Resend w
+  `lib/legal/subprocessors.ts`; test wyżej zmienić dopiero wtedy. Albo
+  usunąć z polityki i regulaminu (nowe `PRIVACY_POLICY_VERSION`
+  i `CONTRACT_VERSION` w `lib/legal/versions.ts`) i z rejestru, w tym samym
+  PR razem z `components/marketing/blog-newsletter-form.tsx`,
+  `app/actions/newsletter.ts`, kubełkiem `newsletter` w `RateLimitBucket`
+  (`lib/rate-limit/index.ts`), sekcją eksportu RODO (z testem
+  `rodo-eksport-pelny`) i testem wyżej. Tabelę usuwa potem migracja, PO
+  wdrożeniu — Bartosz. Rozstrzygnąć przed wysłaniem dokumentów do prawnika
+  (sekcja 1), żeby przegląd objął wersję docelową. — Igor, Bartosz
 - [x] **Retencja rozmów czatu pomocy — 24 miesiące** i usuwanie przy
   usunięciu konta (polityka, pkt 3) — `cron.support-chat-retention`.
 - [ ] 🟠 **Tabela `legal_acceptances`** wyłączona z czyszczenia

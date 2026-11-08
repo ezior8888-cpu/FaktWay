@@ -2,10 +2,11 @@
  * KSeF health status — Redis-backed snapshot pisany przez cron
  * `ksef-health-check` co 30s, czytany przez UI banner.
  *
- * Decyzja: nie używamy `validation_cache` ani innej tabeli DB. Status musi
- * być natychmiastowy do odczytu (banner renderuje się na każdym żądaniu
- * dashboard), a 30s update granularity nie zasługuje na write w DB —
- * audit log + WAL by puchły bez sensu.
+ * Decyzja: bieżącego statusu nie trzymamy w `validation_cache` ani innej tabeli
+ * DB. Status musi być natychmiastowy do odczytu (banner renderuje się na każdym
+ * żądaniu dashboard), a 30s update granularity nie zasługuje na write w DB —
+ * audit log + WAL by puchły bez sensu. Do historii `ksef_health_log` idzie
+ * osobno wiersz przy zmianie poziomu i co 5 min (`persistHealthLogIfRelevant`).
  *
  * Stan kompresujemy do trzech kategorii:
  *   - `operational` — KSeF odpowiada < 2s, status 2xx
@@ -21,6 +22,8 @@ import { cacheGet, cacheKeys, cacheSet, TTL_SECONDS } from '@/lib/cache';
 import { getRedis, isRedisConfigured } from '@/lib/cache/redis';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { KsefEnvironment } from '@/types/ksef';
+
+import type { KsefOfficialStatus, KsefOfficialStatusCode } from './latarnia';
 
 export type KsefHealthLevel = 'operational' | 'degraded' | 'down';
 
@@ -38,6 +41,10 @@ export interface KsefHealthSnapshot {
   error: string | null;
   /** Env którego dotyczy snapshot — `test` vs `production`. */
   env: KsefEnvironment;
+  /** Stan ogłoszony przez MF w Latarni; brak albo `null` = nie wiadomo. Wyznacza tryb prawny, nie `level`. */
+  officialStatus?: KsefOfficialStatusCode | null;
+  /** Koniec przerwy albo awarii podany przez MF. */
+  officialEnd?: string | null;
 }
 
 const DEGRADED_RESPONSE_THRESHOLD_MS = 2000;
@@ -67,6 +74,7 @@ export async function recordKsefPing(
     responseTimeMs: number | null;
     isMfOutage: boolean;
     error: string | null;
+    official?: KsefOfficialStatus | null;
   },
 ): Promise<KsefHealthSnapshot> {
   if (!isRedisConfigured()) {
@@ -78,6 +86,8 @@ export async function recordKsefPing(
       responseTimeMs: ping.responseTimeMs,
       isMfOutage: ping.isMfOutage,
       error: ping.error,
+      officialStatus: ping.official?.status ?? null,
+      officialEnd: ping.official?.end ?? null,
     };
   }
 
@@ -112,6 +122,8 @@ export async function recordKsefPing(
     isMfOutage: ping.isMfOutage,
     error: ping.error,
     env,
+    officialStatus: ping.official?.status ?? null,
+    officialEnd: ping.official?.end ?? null,
   };
 
   await cacheSet(cacheKeys.ksefHealthStatus(env), snapshot, TTL_SECONDS.ksefHealth);
@@ -156,7 +168,10 @@ async function persistHealthLogIfRelevant(
       level: snapshot.level,
       response_time_ms: snapshot.responseTimeMs,
       consecutive_failures: snapshot.consecutiveFailures,
-      is_mf_outage: snapshot.isMfOutage,
+      is_mf_outage:
+        snapshot.isMfOutage ||
+        snapshot.officialStatus === 'FAILURE' ||
+        snapshot.officialStatus === 'TOTAL_FAILURE',
       error_short: snapshot.error?.slice(0, 200) ?? null,
     });
 
@@ -187,7 +202,14 @@ export async function getKsefHealthSnapshot(
  */
 export type KsefHealthPublic = Pick<
   KsefHealthSnapshot,
-  'level' | 'lastCheckedAt' | 'responseTimeMs' | 'consecutiveFailures' | 'isMfOutage' | 'env'
+  | 'level'
+  | 'lastCheckedAt'
+  | 'responseTimeMs'
+  | 'consecutiveFailures'
+  | 'isMfOutage'
+  | 'env'
+  | 'officialStatus'
+  | 'officialEnd'
 >;
 
 export function toPublicKsefHealth(snapshot: KsefHealthSnapshot): KsefHealthPublic {
@@ -198,6 +220,8 @@ export function toPublicKsefHealth(snapshot: KsefHealthSnapshot): KsefHealthPubl
     consecutiveFailures: snapshot.consecutiveFailures,
     isMfOutage: snapshot.isMfOutage,
     env: snapshot.env,
+    officialStatus: snapshot.officialStatus ?? null,
+    officialEnd: snapshot.officialEnd ?? null,
   };
 }
 

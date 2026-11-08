@@ -66,8 +66,8 @@ vi.mock('@/lib/cache/redis', async (importOriginal) => {
 
 /**
  * TEST-3 (audyt przedlaunchowy): rate limiter chroni login/register/reset przed
- * brute-force. Krytyczne: (a) fail-OPEN gdy Redis padł — rate-limit NIE może
- * zablokować logowania całej apce; (b) hash identyfikatora — nie trzymamy
+ * brute-force. Krytyczne: (a) gdy Redisa brak, limit liczy pamięć procesu (AUD-62) —
+ * rate-limit NIE może zablokować logowania całej apce; (b) hash identyfikatora — nie trzymamy
  * plaintext IP/email w Redis.
  */
 
@@ -147,8 +147,8 @@ describe('checkRateLimit — bez Redis limit w pamięci procesu (AUD-62)', () =>
  * Kubełki bez `countDenied` zachowują się jak dotąd.
  */
 describe.each([
-  ['pamięć procesu (produkcja bez Redisa)', false],
-  ['Upstash Redis', true],
+  ['pamięć procesu (Redis nieskonfigurowany)', false],
+  ['Redis', true],
 ])('limit bez przedłużania blokady i ze zwrotem próby: %s', (_name, useRedis) => {
   const T0 = Date.parse('2026-11-03T10:00:00.000Z');
   const at = (seconds: number) => vi.setSystemTime(T0 + seconds * 1000);

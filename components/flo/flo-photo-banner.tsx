@@ -14,8 +14,8 @@ import { useEffect, useState } from 'react';
  * PO TRZECH MINUTACH przestajemy odpytywać i mówimy wprost, że trwa to
  * dłużej niż zwykle, ZE ZDANIEM O TYM, ŻE ZDJĘCIE JEST BEZPIECZNE. Klient,
  * który usłyszy samo „coś nie wyszło”, wyrzuca paragon do kosza i po miesiącu
- * nie ma czego odtwarzać. Kartę z prawdziwą diagnozą i tak przyśle silnik
- * (`findStuckOcrJobs`) — to tutaj jest tylko stan przejściowy.
+ * nie ma czego odtwarzać. Kartę z prawdziwą diagnozą przysyła job OCR
+ * (`lib/jobs/runners/process-ocr.ts`) — to tutaj jest tylko stan przejściowy.
  */
 const POLL_MS = 15_000;
 const GIVE_UP_MS = 3 * 60 * 1000;
@@ -26,30 +26,22 @@ export type PhotoBannerResult = 'failed' | 'read' | null;
 /**
  * Czy paragon z adresu (`?paragon=<ocrJobId>`) ma już wynik.
  *
- * PORAŻKA NIE ZALEŻY OD CZASU: karta „nie odczytałem” niesie numer zadania,
- * więc rozpoznajemy ją po nim — tak samo na serwerze i w przeglądarce, bez
- * migania przy hydratacji. Sukces poznajemy po koszcie odczytanym ze zdjęcia,
- * młodszym niż wejście na ekran (z zapasem jednego cyklu odpytywania).
+ * WYNIK NIE ZALEŻY OD CZASU: obie karty, kosztu i „nie odczytałem”, niosą numer
+ * zadania, więc rozpoznajemy je po nim — tak samo na serwerze i w przeglądarce,
+ * bez migania przy hydratacji. Wcześniej sukcesem był dowolny koszt młodszy niż
+ * wejście na ekran, także z INNEGO zdjęcia (E17).
  */
 export function photoBannerResult({
   paragon,
   failedOcrJobIds,
-  latestExpenseAt,
-  startedAt,
+  readOcrJobIds,
 }: {
   paragon: string;
   failedOcrJobIds: readonly string[];
-  latestExpenseAt: string | null;
-  startedAt: number | null;
+  readOcrJobIds: readonly string[];
 }): PhotoBannerResult {
   if (failedOcrJobIds.includes(paragon)) return 'failed';
-  if (
-    latestExpenseAt !== null &&
-    startedAt !== null &&
-    Date.parse(latestExpenseAt) > startedAt - POLL_MS
-  ) {
-    return 'read';
-  }
+  if (readOcrJobIds.includes(paragon)) return 'read';
   return null;
 }
 
@@ -103,12 +95,12 @@ export function photoBannerMessage({
 }
 
 export function FloPhotoBanner({
-  /** najświeższy koszt odczytany ze zdjęcia — po nim poznajemy, że odczyt gotowy */
-  latestExpenseAt,
+  /** zadania OCR z kartą kosztu w wątku — po nich poznajemy, że odczyt gotowy */
+  readOcrJobIds = [],
   /** zadania OCR z kartą porażki w wątku — po nich poznajemy, że odczyt nie wyszedł */
   failedOcrJobIds = [],
 }: {
-  latestExpenseAt: string | null;
+  readOcrJobIds?: readonly string[];
   failedOcrJobIds?: readonly string[];
 }) {
   const router = useRouter();
@@ -131,7 +123,7 @@ export function FloPhotoBanner({
   }, []);
 
   const current = paragon
-    ? photoBannerResult({ paragon, failedOcrJobIds, latestExpenseAt, startedAt })
+    ? photoBannerResult({ paragon, failedOcrJobIds, readOcrJobIds })
     : null;
 
   // Zapamiętany wynik dla TEGO paragonu (wzorzec „stan z poprzedniego
@@ -147,11 +139,8 @@ export function FloPhotoBanner({
     setLatched({ paragon, result });
   }
 
-  // Na pewno wiemy tylko o porażce: karta „nie odczytałem” niesie numer
-  // TEGO zadania. „Odczytany” to wniosek z czasu najświeższego kosztu —
-  // mógł przyjść z innego zdjęcia — więc pytamy dalej (do trzech minut),
-  // żeby karta porażki tego paragonu mogła go jeszcze poprawić.
-  const settled = result === 'failed';
+  // Oba wyniki dotyczą TEGO zadania, więc po pierwszym nie ma już o co pytać.
+  const settled = result !== null;
 
   useEffect(() => {
     if (startedAt === null || settled) return;

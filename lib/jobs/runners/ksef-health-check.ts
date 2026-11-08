@@ -6,10 +6,11 @@
  * pomiędzy. Concurrency: 1 — żeby dwie iteracje nie nadpisywały sobie nawzajem
  * statusu w Redis.
  *
- * Zakaz wpływu na DB ani logikę faktur: cron tylko sonduje KSeF
+ * Zakaz wpływu na dane i logikę faktur: cron tylko sonduje KSeF
  * (`KSEF_HEALTH_PROBE_PATH` w `lib/ksef/health-check.ts` — KSeF 2.0 nie ma `/health`)
- * i zapisuje snapshot w Redis. Nigdy nie pisze do `invoices`, `audit_logs`
- * ani innych tabel. Sygnał dla UI baner + sygnał dla `submit-invoice`
+ * i zapisuje snapshot w Redis, a przy zmianie poziomu i co 5 min także wiersz
+ * w `ksef_health_log` (`recordKsefPing`). Nigdy nie pisze do `invoices`,
+ * `audit_logs` ani innych tabel. Sygnał dla UI baner + sygnał dla `submit-invoice`
  * (decyzja "czy spróbować vs offline queue").
  */
 
@@ -18,6 +19,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { JobContext } from '@/lib/jobs/registry';
 import { checkKsefAvailability } from '@/lib/ksef/health-check';
 import { recordKsefPing } from '@/lib/ksef/health-status';
+import { fetchKsefOfficialStatus } from '@/lib/ksef/latarnia';
 import type { KsefEnvironment } from '@/types/ksef';
 
 function getCurrentEnv(): KsefEnvironment {
@@ -29,12 +31,14 @@ function getCurrentEnv(): KsefEnvironment {
 }
 
 async function pingAndRecord(env: KsefEnvironment): Promise<void> {
-  const result = await checkKsefAvailability(env);
+  // Sonda mierzy odpowiedź KSeF, Latarnia mówi, co ogłosiło MF. Oba pytania nie rzucają.
+  const [result, official] = await Promise.all([checkKsefAvailability(env), fetchKsefOfficialStatus(env)]);
   await recordKsefPing(env, {
     available: result.available,
     responseTimeMs: result.responseTime ?? null,
     isMfOutage: result.isMfOutage ?? false,
     error: result.error ?? null,
+    official,
   });
 
   // Sentry breadcrumb na każde wykrycie down — operator widzi w UI Sentry
@@ -49,6 +53,7 @@ async function pingAndRecord(env: KsefEnvironment): Promise<void> {
         responseTimeMs: result.responseTime,
         error: result.error,
         isMfOutage: result.isMfOutage,
+        officialStatus: official?.status ?? null,
       },
     });
   }

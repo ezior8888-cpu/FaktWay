@@ -35,8 +35,14 @@ import {
   duplicateMarker,
   fillSqlText,
   type DuplicateChoice,
+  type DuplicateDecisionInvoiceRow,
 } from '@/lib/ksef/duplicate-decision';
-import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
+import {
+  DUPLICATE_DECISION_INVOICE_COLUMNS,
+  loadDuplicateDecisionFacts,
+  loadLastDuplicateRecheckAt,
+} from '@/lib/ksef/duplicate-decision-facts';
+import { DUPLICATE_RECHECK_AUDIT_ACTION, duplicateRecheckView } from '@/lib/ksef/duplicate-recheck';
 import {
   callDecideKsefDuplicate,
   callDecideKsefDuplicateOriginal,
@@ -281,6 +287,135 @@ export async function resendInvoiceAction(
       success: false,
       error: 'Nie można sprawdzić możliwości ponownej wysyłki. Spróbuj później.',
     };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// recheckKsefDuplicateAction
+// ═══════════════════════════════════════════════════════════════
+
+export type RecheckKsefDuplicateResult =
+  | { success: true; message: string }
+  | { success: false; error: string };
+
+/** Kolumny polityki decyzji (wiersz dla ładowarki faktów) + kopia danych zdarzenia uzgodnienia (`fa3_data`, `special_data`). */
+const RECHECK_ROW_COLUMNS = `${DUPLICATE_DECISION_INVOICE_COLUMNS}, fa3_data, special_data` as const;
+
+type RecheckRow = DuplicateDecisionInvoiceRow & { fa3_data: unknown; special_data: unknown };
+
+/**
+ * „Sprawdź ponownie” (D-A4-1b-3 PR D): właściciel albo administrator zleca uzgodnienie faktury w
+ * `failed / KSEF_DUPLICATE_RECONCILE`, gdy brakuje danych oryginału (pobranie, magazyn, archiwum, brak zapisu
+ * sprawdzenia, inne środowisko KSeF) — bez czekania na cron I5 (48 h) i na „Tylko uzgodnij” operatora.
+ * `requeue_ksef_send(p_reconcile_only = true)` + zdarzenie z `reconcileOnly: true`: runner NIGDY nie wysyła w tym
+ * trybie, tylko pyta KSeF jeszcze raz o ten numer i wydaje nowy werdykt (panel decyzji, akceptacja albo
+ * kolejny powód).
+ *
+ * Kolejność: rola → faktura SESJĄ (RLS) → status w kolejce → fakty SESJĄ (`ksef_submissions` czyta tenantowy
+ * SELECT, 00002:183-186 i grant 00027:34) → ostatni wpis audytu SESJĄ (`audit_logs_select_own_tenant`) → ta sama
+ * polityka co karta (`duplicateRecheckView`: powód, fakty uzgodnienia jak „Tylko uzgodnij”, cooldown 10 minut)
+ * → kolejka → audyt. Klucza serwisowego akcja NIE używa do odczytów: wszystko, co czyta, mieści się w RLS
+ * firmy, a zapis stanu robi RPC kolejki po stronie serwera w tej samej transakcji co zlecenie.
+ *
+ * Ponowienie po każdym kroku: odczyty nie zostawiają śladu; odmowa polityki albo hamulców kolejki zostawia
+ * fakturę `failed` (kolejne kliknięcie liczy od nowa); zapis zlecenia i `failed → queued` to jedna transakcja
+ * RPC, więc drugie kliknięcie po sukcesie widzi `queued` i dostaje „Sprawdzamy ponownie”,
+ * a RPC nie przejdzie drugi raz (`singletonKey` jest tylko etykietą, `lib/jobs/enqueue.ts`); audyt idzie po kolejce i nie rzuca (zapis nieudany tylko wyłącza cooldown na
+ * czas przebiegu, bo status `queued` i tak blokuje).
+ */
+export async function recheckKsefDuplicateAction(invoiceId: string): Promise<RecheckKsefDuplicateResult> {
+  const T = DUPLICATE_DECISION_TEXTS.RECHECK;
+  try {
+    const { supabase, user, tenantId, role } = await requireUserAndActiveOrg();
+    if (!canManageKsefSend(role)) return { success: false, error: T.ROLE };
+
+    const { data, error } = await supabase
+      .from('invoices')
+      .select(RECHECK_ROW_COLUMNS)
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error) throw new Error(`recheck: odczyt faktury nieudany (${error.message})`);
+    if (!data) return { success: false, error: KSEF_SEND_MESSAGES.notFound };
+    const row = data as unknown as RecheckRow;
+    const nr = row.internal_number ?? '(bez numeru)';
+
+    // Zlecone sprawdzenie w toku (drugie kliknięcie, ten sam dokument w kolejce): bez drugiego zlecenia.
+    if (row.ksef_status === 'queued' || row.ksef_status === 'sending') {
+      return { success: false, error: T.IN_FLIGHT(nr) };
+    }
+
+    const env = configuredKsefEnvironment();
+    const now = new Date();
+    const facts = await loadDuplicateDecisionFacts(supabase, tenantId, invoiceId, row);
+
+    // Cooldown z ostatniego wpisu audytu tej faktury (sesja klienta czyta audyt własnej firmy).
+    const lastRecheckAt = await loadLastDuplicateRecheckAt(supabase, tenantId, invoiceId);
+
+    const view = duplicateRecheckView({
+      facts,
+      sendFacts: ksefResendFacts(row, env, now),
+      canManage: true,
+      environment: env,
+      lastRecheckAt,
+      now,
+    });
+    if (!view) return { success: false, error: T.NOT_AVAILABLE(nr) };
+    if (view.refusal) return { success: false, error: view.refusal.message };
+
+    // Dane zdarzenia z kopii na wierszu — ta sama definicja co cron i operator; uzgodnienie datę pomija.
+    const built = ksefSendPayloadFromRow(row, { environment: env, reconcileOnly: true, now });
+    if (!built.ok) return { success: false, error: T.CANNOT(nr) };
+    const payload = built.payload;
+
+    const { data: tenant } = await supabase.from('tenants').select('nip').eq('id', tenantId).maybeSingle();
+    const nip = (tenant?.nip as string | null | undefined) ?? payload.invoice.seller?.nip;
+    if (!nip) return { success: false, error: T.CANNOT(nr) };
+
+    const enq = await enqueueKsefSubmitAfterDraft({
+      supabase,
+      tenantId,
+      userId: user.id,
+      invoiceId,
+      nip,
+      invoice: payload.invoice,
+      correctionData: payload.correctionData,
+      advanceData: payload.advanceData,
+      finalData: payload.finalData,
+      finalAdvanceSettlementRows: payload.finalAdvanceSettlementRows,
+      auditKind: payload.auditKind,
+      internalNumberForAudit: row.internal_number ?? undefined,
+      mode: { kind: 'requeue', actorUserId: user.id, reconcileOnly: true },
+    });
+    if (!enq.ok) {
+      // Hamulce kolejki (pauza, certyfikat) mają własne zdania z numerem dokumentu; reszta dostaje numer z przodu.
+      return { success: false, error: enq.error.includes(nr) ? enq.error : T.REFUSED(nr, enq.error) };
+    }
+
+    await logAudit({
+      action: DUPLICATE_RECHECK_AUDIT_ACTION,
+      tenantId,
+      userId: user.id,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      metadata: {
+        reason: view.reason,
+        originalKsefNumber: view.originalKsefNumber,
+        sendAttemptId: enq.sendAttemptId ?? null,
+        internalNumber: row.internal_number,
+      },
+    });
+
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${invoiceId}`);
+    return { success: true, message: T.QUEUED(nr) };
+  } catch (err) {
+    if (err instanceof ActionAuthError) {
+      return { success: false, error: err.message };
+    }
+    // Błąd odczytu albo kolejki: nie klienta. Faktura zostaje `failed`, kolejne kliknięcie liczy od nowa.
+    Sentry.captureException(err, { tags: { area: 'ksef.duplicate-recheck' }, extra: { invoiceId } });
+    return { success: false, error: T.GENERIC };
   }
 }
 

@@ -86,11 +86,81 @@ export class KsefApiError extends Error {
     return this.status === 401 || this.status === 403;
   }
 
-  /** Wyciąga kod błędu KSeF (jeśli jest) */
+  /** Pierwszy kod błędu KSeF z odpowiedzi (jeśli jest) — F-093. */
   get ksefCode(): number | null {
-    if (typeof this.body === 'string') return null;
-    return this.body.exceptionDetailList?.[0]?.exceptionCode ?? null;
+    return ksefErrorCodes(this.body)[0] ?? null;
   }
+}
+
+/**
+ * Kody błędów z odpowiedzi KSeF. API zwraca je w dwóch kształtach:
+ * `application/problem+json` (`errors[].code`) albo starszym
+ * `exception.exceptionDetailList[].exceptionCode` (oba w `open-api.json` MF);
+ * atrapy w repo mają jeszcze `exceptionDetailList` na wierzchu.
+ *
+ * Nigdy nie rzuca: to dane z zewnątrz, a getter `ksefCode` czyta job wysyłki
+ * tuż przed `NonRetriableError` — wyjątek stąd zamieniłby ostateczną odmowę
+ * w ponawianie. Kształt spoza schematu daje pustą listę.
+ */
+export function ksefErrorCodes(body: unknown): number[] {
+  // Ciało jako tekst: `ksefFetch` parsuje już `application/problem+json`, ale
+  // błąd mógł przyjść inną drogą (atrapa, odpowiedź z błędnym nagłówkiem).
+  // JSON w tekście czytamy tak samo jak sparsowany (D-A4-1a).
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return [];
+    }
+  }
+  if (!body || typeof body !== 'object') return [];
+  const b = body as {
+    errors?: unknown;
+    exception?: { exceptionDetailList?: unknown } | null;
+    exceptionDetailList?: unknown;
+  };
+  const codes = [
+    ...errorEntries(b.errors).map((e) => e?.code),
+    ...errorEntries(b.exception?.exceptionDetailList).map((e) => e?.exceptionCode),
+    ...errorEntries(b.exceptionDetailList).map((e) => e?.exceptionCode),
+  ];
+  return codes.map(toKsefCode).filter((c) => c !== null);
+}
+
+/** Lista pozycji błędu; cokolwiek innego niż tablica to brak pozycji. */
+function errorEntries(value: unknown): Array<Record<string, unknown> | null | undefined> {
+  return Array.isArray(value) ? value : [];
+}
+
+/** Górna granica kodu: `ksef_send_attempts.ksef_code` to `integer`, większa liczba wywaliłaby zapis wiersza. */
+const MAX_KSEF_CODE = 2_147_483_647;
+
+/**
+ * Wartość z odpowiedzi jako kod KSeF: dodatnia liczba całkowita, także zapisana
+ * tekstem. Reszta to brak kodu. Bez samego `Number()`, bo ono robi z `null`
+ * i `''` zero (w dzienniku `ksef_code=0`, w panelu błędów „HTTP 4000”),
+ * z `true` jedynkę, a z `[21184]` prawdziwy kod.
+ */
+function toKsefCode(value: unknown): number | null {
+  const code =
+    typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isInteger(code) && code > 0 && code <= MAX_KSEF_CODE ? code : null;
+}
+
+/**
+ * Czy odpowiedź jest JSON-em: `application/json` albo typ z przyrostkiem
+ * `+json`. KSeF zwraca błędy także jako `application/problem+json` (RFC 9457),
+ * a stary warunek `includes('application/json')` zostawiał je tekstem: kody
+ * z tekstu czyta od D-A4-1a `ksefErrorCodes`, ale getter `ksefCode` dawał
+ * `null`, a `KsefApiError.body` nie miało struktury.
+ *
+ * Warunek obejmuje wszystko, co parsował stary (także dwa nagłówki sklejone
+ * przez `Headers.get` w `application/json, application/json`), więc żadna
+ * odpowiedź 2xx nie zamienia się w tekst. Nieudany `JSON.parse` zostawia tekst.
+ */
+function isJsonContentType(contentType: string | null): boolean {
+  const value = contentType?.toLowerCase() ?? '';
+  return value.includes('application/json') || /^\s*application\/[^/;,\s]+\+json\b/.test(value);
 }
 
 /**
@@ -328,7 +398,7 @@ export async function ksefFetch<TResponse = unknown>(
 
     const responseSize = bytes ? bytes.length : Buffer.byteLength(text, 'utf8');
     let parsedBody: unknown = text;
-    if (text && contentType?.includes('application/json')) {
+    if (text && isJsonContentType(contentType)) {
       try {
         parsedBody = JSON.parse(text);
       } catch {

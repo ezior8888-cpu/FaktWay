@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { markAlertDelivered, shouldSendAlert } from '@/lib/jobs/runners/critical-alerts-monitor';
 
 /**
- * N2: deduplikacja alarmów krytycznych szła tylko przez Redis, którego na
- * produkcji nie ma — ten sam alarm wychodził co 5 minut. Bez Redisa znacznik
+ * N2: deduplikacja alarmów krytycznych szła tylko przez Redis — gdy go
+ * brakowało, ten sam alarm wychodził co 5 minut. Bez Redisa (lokalnie albo
+ * przy jego awarii; na produkcji worker go ma — stan 23.10.2026) znacznik
  * „wysłano” trzyma pamięć procesu workera przez 30 minut.
  */
 

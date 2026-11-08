@@ -66,7 +66,7 @@ w słowach Bartosza = Centrum + Analityk; **nie** nowy cron.
 | `pgboss.job`, `pgboss.archive`, `pgboss.schedule`, `pgboss.queue` | stan kolejek, ponowienia, `output` jobów, crony | pg-boss | schemat niewidoczny dla PostgREST; wzorzec dostępu: funkcje `ops.*` z 00100 (czytają `pgboss.job`), tylko dla roli serwisowej |
 | `ksef_error_codes` | 19 kodów: `class` (terminal/transient/hold/reconcile/setup), `auto_requeue`, `client_message` | 00131 | — (źródło prawdy dla etykiet i klas; **nie kopiować** do kodu UI) |
 | `ksef_lifecycle_violations()` | naruszenia I1–I9 z `invoice_id`, `invariant`, szczegóły | 00131/00132 | — |
-| `ksef_health_log` | pingi KSeF: `level`, `consecutive_failures`, `response_time_ms`, `is_mf_outage` | **nikt** (sonda pisze tylko do Redisa — S2) | wypełni sesja **B3** planu |
+| `ksef_health_log` | pingi KSeF: `level`, `consecutive_failures`, `response_time_ms`, `is_mf_outage` | worker (`recordKsefPing`: przy zmianie poziomu i co 5 min; stan 23.10.2026 — worker ma Redisa) | wynik insertu nie jest sprawdzany — zanim oprzesz widok na tej tabeli, potwierdź `count(*)`, `max(recorded_at)` (plan, B3). S11 zakłada wiersz na każdy ping i poziom `ok`, a tabela ich nie ma — do decyzji (plan, B3 pkt c) |
 | `upo_receipts`, `xml_documents` | dowody per faktura | worker | — |
 | `ksef_offline_queue` | kolejka Offline24 (wyłączona na PROD, AUD-14) | worker | — |
 
@@ -118,7 +118,7 @@ Sesje planu, których wynik centrum **konsumuje** (nie buduje):
 | A3 | automatyczne „tylko uzgodnij” dla zalegających `sent`, wpisy STALE w `/admin/ksef` | pokazuje, nie liczy drugi raz |
 | A4 | `docs/runbooks/ksef-error-codes.md`: kod → kto ma wyjście → gdzie przycisk → test; dane dokumentów specjalnych (00137) | wyjaśnienie per próba **linkuje** do sekcji runbooka |
 | **A5 (nowa)** | ślad per próba: wiersz dla każdej próby, także porażek sprzed POST, z etapem, klasą, id joba, SHA workera, id zdarzenia Sentry; log strukturalny per etap | **kontrakt danych centrum** — sekcja 5 |
-| B3 | sonda KSeF pisze do `ksef_health_log`; baner awarii dla klientów | panel „dostępność KSeF” z tej tabeli |
+| B3 | sonda KSeF odporna na awarię Redisa i na błąd insertu do `ksef_health_log` (stan 23.10.2026: worker już tam pisze przy zmianie poziomu i co 5 min — tabela w sekcji wyżej); baner awarii dla klientów | panel „dostępność KSeF” z tej tabeli |
 | D1 | limit prób UPO, I3 rozdzielone na < 24 h / > 24 h | panel „dowody” |
 | H1 | cotygodniowe E2E na KSeF TEST w CI (12 scenariuszy) | panel „ostatni przebieg E2E” (wynik + data; z API GitHuba albo z tabeli, do uzgodnienia) |
 | H2 | game day: tabela „awaria → sygnał ≤ 15 min → wyjście” | centrum jest **miejscem, gdzie ten sygnał ma być widać**; H2 używa centrum jako kryterium |

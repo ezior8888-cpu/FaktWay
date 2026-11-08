@@ -15,6 +15,7 @@ import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
 import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
 import { KsefDuplicateDecision } from '@/components/invoices/ksef-duplicate-decision';
+import { KsefDuplicateRecheck } from '@/components/invoices/ksef-duplicate-recheck';
 import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
@@ -24,6 +25,7 @@ import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
 import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
+import type { DuplicateRecheckView } from '@/lib/ksef/duplicate-recheck';
 import { importedVatRateLabel } from '@/lib/xml/fa3-p12';
 import type { Database } from '@/types/database';
 import type { KsefEnvironment } from '@/types/ksef';
@@ -116,6 +118,11 @@ export interface InvoiceDetailInitial {
    * panel decyzji; `refused` — tekst odmowy jest już notą `ksef_duplicate_original`).
    */
   ksef_duplicate_decision: DuplicateDecisionView | null;
+  /**
+   * D-A4-1b-3 PR D: „Sprawdź ponownie” przy braku danych oryginału (pobranie, magazyn, archiwum, brak zapisu
+   * sprawdzenia, inne środowisko KSeF) — liczy serwer; `null` albo brak pola = bez przycisku.
+   */
+  ksef_duplicate_recheck?: DuplicateRecheckView | null;
   /** D-A4-1b-3 PR B: szkic wycofany (wpis `number_taken`) — baner każdego rodzaju (decyzja 9). */
   ksef_retired_draft: RetiredDraftView | null;
   /**
@@ -258,6 +265,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               ...prev,
               ksef_duplicate_original: duplicateStale ? null : prev.ksef_duplicate_original,
               ksef_duplicate_decision: duplicateStale ? null : prev.ksef_duplicate_decision,
+              ksef_duplicate_recheck: duplicateStale ? null : prev.ksef_duplicate_recheck,
               // Szkic wycofany zostaje wycofany, dopóki faktura jest szkicem; każdy inny stan — bez banera.
               ksef_retired_draft:
                 typeof row.ksef_status === 'string' && row.ksef_status !== 'draft' ? null : prev.ksef_retired_draft,
@@ -332,6 +340,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     inv.last_error_code === 'KSEF_DUPLICATE_RECONCILE' &&
     inv.ksef_duplicate_original !== null;
   const decision = duplicatePanel && inv.ksef_duplicate_decision?.kind === 'decidable' ? inv.ksef_duplicate_decision : null;
+  const recheck = duplicatePanel && !decision ? inv.ksef_duplicate_recheck ?? null : null;
   const retired = inv.ksef_status === 'draft' ? inv.ksef_retired_draft : null;
 
   const currency = inv.currency.trim().toUpperCase() || 'PLN';
@@ -438,6 +447,8 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                 </dl>
                 {decision ? (
                   <KsefDuplicateDecision invoiceId={inv.id} view={decision} env={initial.ksef_server_environment} />
+                ) : recheck ? (
+                  <KsefDuplicateRecheck invoiceId={inv.id} view={recheck} />
                 ) : (
                   <>
                     <p className="mt-3 text-sm text-amber-900 dark:text-amber-100">
