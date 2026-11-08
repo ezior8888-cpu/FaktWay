@@ -1,5 +1,5 @@
 // Klienci usług zewnętrznych bramki: Telegram (long polling), Coolify API,
-// GitHub API. Każdy przyjmuje `fetchImpl`, żeby testy działały bez sieci.
+// GitHub API, rejestr GHCR. Każdy przyjmuje `fetchImpl`, żeby testy działały bez sieci.
 // Treści błędów nie zawierają tokenów ani nagłówków.
 
 const TIMEOUT_MS = 30_000;
@@ -87,6 +87,70 @@ export function createCoolify({ baseUrl, token, fetchImpl = fetch }) {
     async appStatus(appUuid) {
       const a = await call('GET', `/applications/${encodeURIComponent(appUuid)}`);
       return a?.status ?? 'unknown';
+    },
+    /** Źródło aplikacji: `dockerfile` (build z repo) albo `dockerimage` (obraz z GHCR). */
+    async source(appUuid) {
+      const a = await call('GET', `/applications/${encodeURIComponent(appUuid)}`);
+      return {
+        buildPack: a?.build_pack ?? null,
+        image: a?.docker_registry_image_name || null,
+        tag: a?.docker_registry_image_tag || null,
+      };
+    },
+    /**
+     * Wdrożenie obrazu `<obraz>:<sha>` aplikacji `dockerimage`. Endpoint
+     * „rollback” Coolify (4.6) kolejkuje wdrożenie z `rollback: true`
+     * i `commit: <sha>`: tag obrazu = commit, w kolejce i w SOURCE_COMMIT
+     * kontenera jest SHA. Wystarczy uprawnienie `deploy` (bez `write`).
+     * Tag zapisany w konfiguracji aplikacji zostaje bez zmian.
+     */
+    async deployImage(appUuid, sha) {
+      const json = await call('POST', `/applications/${encodeURIComponent(appUuid)}/rollback`, { commit: sha });
+      if (!json?.deployment_uuid) throw new Error(`Coolify nie przyjął wdrożenia obrazu: ${json?.message ?? 'brak odpowiedzi'}`);
+      return json.deployment_uuid;
+    },
+  };
+}
+
+// ── GHCR ────────────────────────────────────────────────────────────────
+
+const MANIFEST_ACCEPT = [
+  'application/vnd.oci.image.index.v1+json',
+  'application/vnd.docker.distribution.manifest.list.v2+json',
+  'application/vnd.oci.image.manifest.v1+json',
+  'application/vnd.docker.distribution.manifest.v2+json',
+].join(',');
+
+/**
+ * Rejestr GHCR, pakiety publiczne (token anonimowy). `revision` zwraca
+ * etykietę `org.opencontainers.image.revision` obrazu `<obraz>:<tag>`
+ * (platforma linux/amd64) albo null, gdy tagu nie ma.
+ */
+export function createGhcr({ fetchImpl = fetch } = {}) {
+  return {
+    async revision(image, tag) {
+      const repo = String(image).replace(/^ghcr\.io\//, '');
+      const { token } = await requestJson(fetchImpl, `https://ghcr.io/token?scope=repository:${repo}:pull`, { label: 'GHCR token' });
+      const headers = { Authorization: `Bearer ${token}`, Accept: MANIFEST_ACCEPT };
+      const manifestAt = (ref) => requestJson(fetchImpl, `https://ghcr.io/v2/${repo}/manifests/${ref}`, { headers, label: 'GHCR manifest' });
+      let manifest;
+      try {
+        manifest = await manifestAt(tag);
+      } catch (err) {
+        if (err.status === 404) return null;
+        throw err;
+      }
+      // buildx z atestacjami wypycha indeks; bierzemy z niego obraz linux/amd64.
+      const amd64 = manifest?.manifests?.find((m) => m.platform?.os === 'linux' && m.platform?.architecture === 'amd64');
+      if (amd64) manifest = await manifestAt(amd64.digest);
+      const configDigest = manifest?.config?.digest;
+      if (!configDigest) return null;
+      // Blob przekierowuje na podpisany adres innego hosta; fetch nie przenosi
+      // tam nagłówka Authorization.
+      const config = await requestJson(fetchImpl, `https://ghcr.io/v2/${repo}/blobs/${configDigest}`, {
+        headers: { Authorization: `Bearer ${token}` }, label: 'GHCR config',
+      });
+      return config?.config?.Labels?.['org.opencontainers.image.revision'] ?? null;
     },
   };
 }

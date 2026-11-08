@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { migrationVersions, summarizeChecks } from '../src/clients.mjs';
+import { createCoolify, createGhcr, migrationVersions, summarizeChecks } from '../src/clients.mjs';
 import { createDeployer } from '../src/deploy.mjs';
 
 const HEAD = 'abcdef1234567890abcdef1234567890abcdef12';
@@ -12,8 +12,19 @@ const GREEN = [
   { id: 3, name: 'Agent guard', status: 'completed', conclusion: 'skipped' },
 ];
 
+const RUNNER = 'ghcr.io/ezior8888-cpu/faktway-runner';
+const WORKER = 'ghcr.io/ezior8888-cpu/faktway-worker';
+const REPO_SOURCES = {
+  web: { buildPack: 'dockerfile', image: null, tag: null },
+  worker: { buildPack: 'dockerfile', image: null, tag: null },
+};
+const IMAGE_SOURCES = {
+  web: { buildPack: 'dockerimage', image: RUNNER, tag: OLD },
+  worker: { buildPack: 'dockerimage', image: WORKER, tag: OLD },
+};
+
 function setup(over = {}) {
-  const calls = { deploy: [], log: [], notify: [] };
+  const calls = { deploy: [], deployImage: [], log: [], notify: [], ghcr: [] };
   let headSeq = over.headSeq ?? [HEAD];
   const state = { deployments: {} };
   const github = {
@@ -28,14 +39,29 @@ function setup(over = {}) {
     deploy: async (uuid) => { calls.deploy.push(uuid); const id = `dep-${uuid}`; state.deployments[id] = over.result?.[uuid] ?? { status: 'finished', commit: HEAD }; return id; },
     deployment: async (id) => state.deployments[id],
     appStatus: async () => 'running:healthy',
+    source: async (uuid) => (over.sources ?? REPO_SOURCES)[uuid === 'web' ? 'web' : 'worker'],
+    deployImage: async (uuid, sha) => {
+      calls.deployImage.push(`${uuid}:${sha}`);
+      const id = `img-${uuid}`;
+      state.deployments[id] = over.result?.[uuid] ?? { status: 'finished', commit: sha };
+      return id;
+    },
+  };
+  // Etykieta rewizji obrazu w GHCR: domyślnie oba obrazy HEAD są.
+  const ghcr = {
+    revision: async (image, tag) => {
+      calls.ghcr.push(`${image}:${tag}`);
+      const labels = over.ghcr ?? { [`${RUNNER}:${HEAD}`]: HEAD, [`${WORKER}:${HEAD}`]: HEAD };
+      return labels[`${image}:${tag}`] ?? null;
+    },
   };
   const db = {
     status: async () => ({ migration: '00100', migrations_recent: over.applied ?? ['00100', '00099'] }),
     log: async (action, actor, meta) => { calls.log.push({ action, meta }); },
   };
-  const config = { github: { branch: 'main' }, coolify: { webUuid: 'web', workerUuid: 'worker' }, requiredChecks: ['Typecheck + Lint + Unit tests', 'Next build'], healthUrl: 'https://x/api/health' };
+  const config = { github: { branch: 'main' }, coolify: { webUuid: 'web', workerUuid: 'worker' }, ghcrPrefix: 'ghcr.io/ezior8888-cpu/faktway', requiredChecks: ['Typecheck + Lint + Unit tests', 'Next build'], healthUrl: 'https://x/api/health' };
   const deployer = createDeployer({
-    github, coolify, db, config,
+    github, coolify, ghcr, db, config,
     sleep: async () => {},
     fetchImpl: async () => ({ status: 200, json: async () => ({ status: 'healthy' }) }),
   });
@@ -168,4 +194,116 @@ test('start: dwa szybkie /wdroz — drugie odrzucone, jedno wdrożenie', async (
   assert.deepEqual([a.started, b.started].sort(), [false, true]);
   await settle();
   assert.deepEqual(calls.deploy, ['worker', 'web']);
+});
+
+// ── Obrazy z GHCR (Coolify `dockerimage`, decyzja B1) ──────────────────
+
+test('plan: build z repo → tryb repo, GHCR nie jest pytany', async () => {
+  const { deployer, calls } = setup();
+  const p = await deployer.plan();
+  assert.equal(p.mode, 'repo');
+  assert.deepEqual(p.blockers, []);
+  assert.deepEqual(calls.ghcr, []);
+});
+
+test('plan: obie aplikacje na obrazach i oba obrazy HEAD w GHCR → tryb obraz, bez blokad', async () => {
+  const { deployer } = setup({ sources: IMAGE_SOURCES });
+  const p = await deployer.plan();
+  assert.equal(p.mode, 'obraz');
+  assert.deepEqual(p.blockers, []);
+});
+
+test('plan: obrazu HEAD jeszcze nie ma w GHCR → blokada z prośbą o ponowienie', async () => {
+  const { deployer } = setup({ sources: IMAGE_SOURCES, ghcr: { [`${WORKER}:${HEAD}`]: HEAD } });
+  const p = await deployer.plan();
+  assert.match(p.blockers.join(), /faktway-runner:abcdef12.*nie ma w GHCR/);
+});
+
+test('plan: obraz z etykietą innego commita → blokada', async () => {
+  const { deployer } = setup({ sources: IMAGE_SOURCES, ghcr: { [`${WORKER}:${HEAD}`]: OLD, [`${RUNNER}:${HEAD}`]: HEAD } });
+  const p = await deployer.plan();
+  assert.match(p.blockers.join(), /etykiet[aę] rewizji 11111111/);
+});
+
+test('plan: jedna aplikacja na obrazie, druga z repo → blokada (stan niespójny)', async () => {
+  const { deployer } = setup({ sources: { web: IMAGE_SOURCES.web, worker: REPO_SOURCES.worker } });
+  const p = await deployer.plan();
+  assert.match(p.blockers.join(), /coolify-zrodlo\.sh/);
+});
+
+test('plan: obraz spoza naszego GHCR → blokada', async () => {
+  const { deployer } = setup({ sources: { ...IMAGE_SOURCES, worker: { buildPack: 'dockerimage', image: 'docker.io/obcy/obraz', tag: 'x' } } });
+  const p = await deployer.plan();
+  assert.match(p.blockers.join(), /docker\.io\/obcy\/obraz/);
+});
+
+test('start: tryb obraz → wdrożenie obrazu SHA, worker przed webem, bez buildu', async () => {
+  const { deployer, calls, notify, settle } = setup({ sources: IMAGE_SOURCES });
+  const r = await deployer.start('abcdef12', 'tg:1', notify);
+  assert.equal(r.started, true);
+  await settle();
+  assert.deepEqual(calls.deployImage, [`worker:${HEAD}`, `web:${HEAD}`]);
+  assert.deepEqual(calls.deploy, []);
+  assert.match(calls.notify.at(-1), /Wdrożono abcdef12/);
+  assert.equal(calls.log[0].meta.mode, 'obraz');
+});
+
+test('start: tryb obraz, nieudany worker → stop przed webem', async () => {
+  const { deployer, calls, notify, settle } = setup({ sources: IMAGE_SOURCES, result: { worker: { status: 'failed', commit: HEAD } } });
+  await deployer.start('abcdef12', 'tg:1', notify);
+  await settle();
+  assert.deepEqual(calls.deployImage, [`worker:${HEAD}`]);
+  assert.match(calls.notify.at(-1), /Worker: wdrożenie zakończone statusem „failed”/);
+});
+
+function fakeFetch(routes) {
+  const seen = [];
+  const impl = async (url, init = {}) => {
+    seen.push({ url, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : undefined, headers: init.headers ?? {} });
+    const hit = routes.find(([re]) => re.test(url));
+    const [status, body] = hit ? hit[1] : [404, { message: 'nie ma' }];
+    return { ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body };
+  };
+  return { impl, seen };
+}
+
+test('createCoolify.deployImage: POST /applications/<uuid>/rollback z commitem = SHA', async () => {
+  const f = fakeFetch([[/\/applications\/app-1\/rollback$/, [200, { message: 'Rollback deployment queued.', deployment_uuid: 'd-1' }]]]);
+  const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
+  assert.equal(await coolify.deployImage('app-1', HEAD), 'd-1');
+  assert.equal(f.seen[0].method, 'POST');
+  assert.deepEqual(f.seen[0].body, { commit: HEAD });
+});
+
+test('createCoolify.deployImage: Coolify pominął wdrożenie → błąd z jego komunikatem', async () => {
+  const f = fakeFetch([[/rollback$/, [200, { message: 'Deployment already queued for this commit.' }]]]);
+  const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
+  await assert.rejects(coolify.deployImage('app-1', HEAD), /already queued/);
+});
+
+test('createCoolify.source: build_pack, nazwa i tag obrazu', async () => {
+  const f = fakeFetch([[/\/applications\/app-1$/, [200, { status: 'running:healthy', build_pack: 'dockerimage', docker_registry_image_name: RUNNER, docker_registry_image_tag: OLD }]]]);
+  const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
+  assert.deepEqual(await coolify.source('app-1'), { buildPack: 'dockerimage', image: RUNNER, tag: OLD });
+});
+
+test('createGhcr.revision: indeks z atestacją → obraz linux/amd64 → etykieta rewizji', async () => {
+  const f = fakeFetch([
+    [/ghcr\.io\/token/, [200, { token: 'anon' }]],
+    [/manifests\/sha256:amd64$/, [200, { config: { digest: 'sha256:cfg' } }]],
+    [/manifests\/abcdef/, [200, { manifests: [
+      { digest: 'sha256:att', platform: { os: 'unknown', architecture: 'unknown' } },
+      { digest: 'sha256:amd64', platform: { os: 'linux', architecture: 'amd64' } },
+    ] }]],
+    [/blobs\/sha256:cfg$/, [200, { config: { Labels: { 'org.opencontainers.image.revision': HEAD } } }]],
+  ]);
+  const ghcr = createGhcr({ fetchImpl: f.impl });
+  assert.equal(await ghcr.revision(RUNNER, HEAD), HEAD);
+  assert.match(f.seen[0].url, /scope=repository:ezior8888-cpu\/faktway-runner:pull/);
+  assert.equal(f.seen[1].headers.Authorization, 'Bearer anon');
+});
+
+test('createGhcr.revision: brak tagu (404) → null', async () => {
+  const f = fakeFetch([[/ghcr\.io\/token/, [200, { token: 'anon' }]]]);
+  assert.equal(await createGhcr({ fetchImpl: f.impl }).revision(RUNNER, HEAD), null);
 });
