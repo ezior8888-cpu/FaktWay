@@ -26,7 +26,26 @@ export function statusFaktury(f: Faktura, dzis: string): Status {
   return { tekst: `Termin ${dataKrotka(f.terminPlatnosci)}`, kolor: 'etykietaDrugorzedna', zalegla: false };
 }
 
-/** Faktura czeka na zapłatę (przyjęta przez KSeF i niezapłacona). */
+/**
+ * Faktura czeka na zapłatę: wysłana (przyjęta albo jeszcze w drodze do KSeF)
+ * i niezapłacona. Klient bywa winien pieniądze, zanim KSeF potwierdzi przyjęcie.
+ */
 export function doZaplaty(f: Faktura): boolean {
-  return f.statusKsef === 'przyjeta' && !f.zaplacona;
+  return (f.statusKsef === 'przyjeta' || f.statusKsef === 'wysylanie') && !f.zaplacona;
+}
+
+/** „1 faktura”, „2 faktury”, „5 faktur”, „22 faktury” (polska liczba mnoga). */
+export function ileFaktur(n: number): string {
+  if (n === 1) return '1 faktura';
+  const j = n % 10;
+  const d = n % 100;
+  return j >= 2 && j <= 4 && (d < 12 || d > 14) ? `${n} faktury` : `${n} faktur`;
+}
+
+/** Termin względem dziś: „dziś”, „jutro”, „za 3 dni”, „2 dni po terminie”. */
+export function kiedyTermin(dzis: string, termin: string): string {
+  const za = dniMiedzy(dzis, termin);
+  if (za === 0) return 'dziś';
+  if (za === 1) return 'jutro';
+  return za > 0 ? `za ${dni(za)}` : `${dni(-za)} po terminie`;
 }

@@ -3,8 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import { DZIS, MIESIAC } from '@/dane-przykladowe';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { Tekst } from '@/komponenty/tekst';
-import { dataKrotka, dniMiedzy, kwota } from '@/lib/format';
-import { dni } from '@/lib/status-faktury';
+import { dataKrotka, kwota } from '@/lib/format';
+import { kiedyTermin } from '@/lib/status-faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
 export default function EkranMiesiaca() {
@@ -26,7 +26,7 @@ export default function EkranMiesiaca() {
         </Tekst>
         {najblizszy ? (
           <Tekst styl="subheadline" kolor="etykietaDrugorzedna">
-            Najbliższy termin {dataKrotka(najblizszy)}, za {dni(dniMiedzy(DZIS, najblizszy))}
+            Najbliższy termin {dataKrotka(najblizszy)}, {kiedyTermin(DZIS, najblizszy)}
           </Tekst>
         ) : null}
       </View>

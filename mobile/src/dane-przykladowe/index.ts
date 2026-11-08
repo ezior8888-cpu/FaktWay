@@ -34,6 +34,19 @@ export type Faktura = {
 
 const NIP = '1234567890';
 
+/** Netto i VAT pozycji zaokrąglane osobno; brutto faktury to ich suma, więc wiersze sumują się do nagłówka. */
+export function nettoPozycji(p: Pozycja): number {
+  return Math.round(p.ilosc * p.cenaNetto);
+}
+
+export function vatPozycji(p: Pozycja): number {
+  return Math.round((nettoPozycji(p) * p.stawkaVat) / 100);
+}
+
+export function bruttoPozycji(p: Pozycja): number {
+  return nettoPozycji(p) + vatPozycji(p);
+}
+
 function faktura(
   id: string,
   numer: string,
@@ -44,8 +57,8 @@ function faktura(
   statusKsef: StatusKsef,
   zaplacona: boolean,
 ): Faktura {
-  const netto = pozycje.reduce((s, p) => s + Math.round(p.ilosc * p.cenaNetto), 0);
-  const vat = pozycje.reduce((s, p) => s + Math.round((p.ilosc * p.cenaNetto * p.stawkaVat) / 100), 0);
+  const netto = pozycje.reduce((s, p) => s + nettoPozycji(p), 0);
+  const vat = pozycje.reduce((s, p) => s + vatPozycji(p), 0);
   return {
     id,
     numer,

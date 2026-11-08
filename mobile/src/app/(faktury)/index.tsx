@@ -10,7 +10,7 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { Tekst } from '@/komponenty/tekst';
 import { WierszFaktury } from '@/komponenty/wiersz-faktury';
 import { kwota } from '@/lib/format';
-import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
+import { doZaplaty, ileFaktur, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
@@ -82,7 +82,7 @@ export default function EkranFaktur() {
             </Tekst>
             {zalegle.length > 0 ? (
               <Tekst styl="subheadline" kolor="ostrzezenie">
-                {zalegle.length === 1 ? '1 faktura' : `${zalegle.length} faktury`} po terminie,{' '}
+                {ileFaktur(zalegle.length)} po terminie,{' '}
                 {kwota(suma(zalegle))}
               </Tekst>
             ) : (

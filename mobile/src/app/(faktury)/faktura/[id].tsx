@@ -1,15 +1,14 @@
-import * as Haptics from 'expo-haptics';
 import { Stack, useIsPreview, useLocalSearchParams } from 'expo-router';
-import { Share, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { DZIS, type StatusKsef } from '@/dane-przykladowe';
+import { bruttoPozycji, DZIS, type StatusKsef } from '@/dane-przykladowe';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { Tekst } from '@/komponenty/tekst';
 import { dataPelna, kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
-import { useStanFaktur } from '@/stan/faktury';
+import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
 const NAZWA_STATUSU_KSEF: Record<StatusKsef, string> = {
@@ -21,7 +20,7 @@ const NAZWA_STATUSU_KSEF: Record<StatusKsef, string> = {
 
 export default function EkranFaktury() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { faktury, ustawZaplate } = useStanFaktur();
+  const { faktury, przelaczZaplate } = useStanFaktur();
   // W podglądzie z przytrzymania wiersza ekran nie ustawia paska nawigacji.
   const podglad = useIsPreview();
   const f = faktury.find((x) => x.id === id);
@@ -36,22 +35,13 @@ export default function EkranFaktury() {
   const status = statusFaktury(f, DZIS);
   const mozeZaplacic = doZaplaty(f) || f.zaplacona;
 
-  const udostepnij = () => {
-    void Share.share({ message: `Faktura ${f.numer} dla ${f.kontrahent}, ${kwota(f.brutto)}.` });
-  };
-
-  const przelaczZaplate = () => {
-    ustawZaplate(f.id, !f.zaplacona);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
   return (
     <>
       {podglad ? null : (
         <>
           <Stack.Screen options={{ title: f.numer }} />
           <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="Udostępnij" onPress={udostepnij} />
+            <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="Udostępnij" onPress={() => udostepnijFakture(f)} />
           </Stack.Toolbar>
         </>
       )}
@@ -75,7 +65,7 @@ export default function EkranFaktury() {
               tytul={f.zaplacona ? 'Cofnij oznaczenie zapłaty' : 'Oznacz jako zapłaconą'}
               ikona={f.zaplacona ? 'arrow.uturn.backward' : 'checkmark'}
               wariant={f.zaplacona ? 'drugorzedny' : 'glowny'}
-              onPress={przelaczZaplate}
+              onPress={() => przelaczZaplate(f)}
             />
           </View>
         ) : null}
@@ -92,7 +82,7 @@ export default function EkranFaktury() {
               key={i}
               tytul={p.nazwa}
               podtytul={`${p.ilosc} ${p.jednostka} × ${kwota(p.cenaNetto)} netto, VAT ${p.stawkaVat}%`}
-              wartosc={kwota(Math.round(p.ilosc * p.cenaNetto * (1 + p.stawkaVat / 100)))}
+              wartosc={kwota(bruttoPozycji(p))}
             />
           ))}
         </Sekcja>
