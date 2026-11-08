@@ -25,4 +25,14 @@ describe('build produkcyjny mieści się w pamięci app-1', () => {
     const cap = Number(dockerfile.match(/--max-old-space-size=(\d+)/)?.[1]);
     expect(cap).toBeGreaterThanOrEqual(4096);
   });
+
+  it('job CI „Next build” buduje z tym samym pułapem sterty co Dockerfile', () => {
+    // Bez tego CI budowało z domyślną stertą runnera (~4 GB) i nie złapało
+    // regresji, która wywaliła wdrożenie na app-1 (20.10.2026).
+    const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8');
+    const ci = readFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
+    const dockerCap = dockerfile.match(/--max-old-space-size=(\d+)/)?.[1];
+    const build = ci.slice(ci.indexOf('name: Next build'), ci.indexOf('rls:'));
+    expect(build).toContain(`NODE_OPTIONS: '--max-old-space-size=${dockerCap}'`);
+  });
 });

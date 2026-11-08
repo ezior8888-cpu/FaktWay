@@ -58,7 +58,6 @@ vi.mock('@/lib/storage/r2', async (orig) => {
       const { sha256Hex } = await import('./helpers/ksef-pelna-sciezka');
       return { storagePath, sha256Hash: sha256Hex(xml), sizeBytes: xml.length, etag: '"e"' };
     },
-    invoiceXmlExistsForId: async () => false,
     // Archiwum bajtów oryginału (`archiveImportedKsefXml`, D-A4-1b-3 PR A).
     uploadToR2IfAbsent: async (key: string, body: Buffer) => {
       if (m.archiveFails) throw new Error('R2 niedostępne (zapis)');
