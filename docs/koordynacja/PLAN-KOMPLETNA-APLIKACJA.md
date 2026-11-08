@@ -213,7 +213,7 @@ osobnej poprawki według protokołu naprawy błędu.
 
 | Co | Gdzie | Krok |
 |---|---|---|
-| Cennik obiecuje „dane wpisujesz ręcznie”, a wpisu ręcznego kosztów poza modułem księgowości nie ma | `app/(marketing)/pricing/page.tsx:203` | 3.8 albo poprawka tekstu wcześniej |
+| Cennik mówi, że po wyczerpaniu limitu odczytu zdjęć „dane wpisujesz ręcznie”, a nieudany odczyt nie tworzy kosztu, formularza nowego kosztu nie ma, a przycisk „Wpisz ręcznie” prowadzi tylko do listy | `app/(marketing)/pricing/page.tsx:203-204`, `lib/jobs/runners/process-ocr.ts:423-447`, `lib/flo/functions/expense-review.ts:400-406` | 3.8 albo poprawka tekstu wcześniej |
 | Powód wstrzymania JPK_V7M w eksporcie mówi o wersji (2), a generator robi już wersję (3); prawdziwy powód to dane osoby fizycznej (D16 planu księgowości) | `lib/exports/suspended-formats.ts:3-8` | 4.5 |
 | Push „Otrzymana płatność” da się włączyć, ale nic go nie wysyła | `lib/jobs/events.ts:246-248` | 8.1 |
 | Zdjęcie udostępnione z telefonu ląduje na Pulpicie bez paska postępu odczytu (po wyłączeniu FLO) | `app/share-target/route.ts` | 8.1 |
