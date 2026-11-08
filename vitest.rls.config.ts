@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia; suma niecofniętych
+      // wpłat = paid_amount, klucz idempotencji, obca firma, kwota, reszta, PLN, cofnięcie ze śladem.
+      'tests/rls-wplaty-czesciowe.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

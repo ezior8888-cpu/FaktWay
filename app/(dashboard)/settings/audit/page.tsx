@@ -20,6 +20,8 @@ const ACTION_LABELS: Record<string, string> = {
   'invoice.submit_failed': 'Faktura odrzucona przez KSeF',
   'invoice.xml_downloaded': 'Pobrano XML faktury',
   'invoice.resubmit_requested': 'Ponowna wysyłka faktury',
+  'invoice.payment_recorded': 'Zapisano wpłatę do faktury',
+  'invoice.payment_voided': 'Cofnięto wpłatę do faktury',
   'ksef.credentials_uploaded': 'Wgrano certyfikat KSeF',
   'ksef.credentials_removed': 'Usunięto certyfikat KSeF',
   'ksef.environment_changed': 'Zmiana środowiska KSeF',

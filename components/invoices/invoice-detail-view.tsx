@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoicePaymentPanel, type InvoicePaymentPanelData } from '@/components/invoices/invoice-payment-panel';
+import { InvoicePaymentsSection } from '@/components/invoices/invoice-payments-section';
+import type { InvoicePaymentsData } from '@/lib/invoices/invoice-payments';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
 import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
@@ -85,6 +87,8 @@ export interface InvoiceDetailInitial {
   payment_status?: string | null;
   /** Panel „Zapłacone” (00158): liczy serwer; brak = faktura bez płatności do oznaczenia (szkic, zakup). */
   payment_panel?: InvoicePaymentPanelData | null;
+  /** Sekcja „Wpłaty” (krok 3.1, 00176): historia, zapłacono i reszta; liczy serwer; brak = bez sekcji. */
+  payment_history?: InvoicePaymentsData | null;
   lines: InvoiceDetailLine[];
   /** E3 / P4: waluta faktury (kod ISO; brak w wierszu = PLN) — podpis kwot zamiast „PLN” na sztywno. */
   currency: string;
@@ -412,6 +416,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               <InvoicePaymentPanel
                 invoice={{ id: inv.id, number: inv.internal_number }}
                 data={inv.payment_panel}
+              />
+            )}
+
+            {/* Krok 3.1: historia wpłat i „Zapisz wpłatę” obok panelu „Zapłacone” (D1: nowa sekcja, bez przestawiania). */}
+            {inv.payment_history && (
+              <InvoicePaymentsSection
+                invoice={{ id: inv.id, number: inv.internal_number }}
+                data={inv.payment_history}
               />
             )}
 
