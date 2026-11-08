@@ -1,0 +1,270 @@
+{
+  "wersja": 1,
+  "opis": "Eksporty plików silników księgowości, które nie są regułą (słowniki, mapowania bazy, komunikaty, odczyt). Nowy eksport musi trafić do reguły albo tutaj z powodem.",
+  "symbole": [
+    {
+      "symbol": "lib/ksiegowosc/ewidencja.ts#kwotaTekst",
+      "powod": "format kwoty do pliku; reguła groszy w RP-ZAOKR-04"
+    },
+    {
+      "symbol": "lib/ksiegowosc/jpk-ewp.ts#JPK_EWP_NAMESPACE",
+      "powod": "przestrzeń nazw schematu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/jpk-ewp.ts#ETD_NAMESPACE",
+      "powod": "przestrzeń nazw schematu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/jpk-pkpir.ts#JPK_PKPIR_NAMESPACE",
+      "powod": "przestrzeń nazw schematu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/jpk-pkpir.ts#ETD_NAMESPACE",
+      "powod": "przestrzeń nazw schematu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/kpir.ts#wierszeKpirOkresu",
+      "powod": "wycinek wierszy okresu (RP-KPIR-KOL-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac.ts#wersjaMiesiaca",
+      "powod": "wersja i skrót (RP-WERSJE-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac-dane.ts#stabilnyJson",
+      "powod": "zapis JSON do skrótu wersji"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac-dane.ts#KOLUMNY_ROZLICZENIA",
+      "powod": "lista kolumn zapytania"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac-dane.ts#zWierszaRozliczenia",
+      "powod": "mapowanie wiersza bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac-dane.ts#KPIR_WYLACZONA",
+      "powod": "komunikat wyłącznika obszaru kpir"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac-dane.ts#BLAD_ODCZYTU_ROZLICZEN",
+      "powod": "komunikat błędu odczytu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ten-miesiac-dane.ts#PO_KONCU_MIESIACA",
+      "powod": "stała dnia po końcu miesiąca"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ewidencja-dane.ts#KOMUNIKAT_SRODOWISKO",
+      "powod": "komunikat braku środowiska (RP-PRZYCH-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/ewidencja-dane.ts#KOMUNIKAT_ODCZYT",
+      "powod": "komunikat błędu odczytu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/kpir-dane.ts#KOMUNIKAT_WALUTA_KOSZTU",
+      "powod": "komunikat kosztu w walucie (RP-WAL-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/kpir-dane.ts#czytajKpir",
+      "powod": "odczyt danych do zbudujKpir"
+    },
+    {
+      "symbol": "lib/ksiegowosc/vat-dane.ts#BLAD_ODCZYTU_VAT",
+      "powod": "komunikat błędu odczytu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#FORMY",
+      "powod": "słownik form"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#ETAPY_ZUS",
+      "powod": "słownik etapów ZUS"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#NAZWY_FORM",
+      "powod": "nazwy dla ekranu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#NAZWY_ETAPOW_ZUS",
+      "powod": "nazwy dla ekranu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#OPISY_ETAPOW_ZUS",
+      "powod": "opisy dla ekranu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#PROFIL_OD_MIN",
+      "powod": "najwcześniejsza data profilu (RP-PROFIL-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#KOLUMNY_PROFILU",
+      "powod": "lista kolumn zapytania"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#zWiersza",
+      "powod": "mapowanie wiersza bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#doWiersza",
+      "powod": "mapowanie do bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#RODZAJE_WPISU",
+      "powod": "słownik rodzajów wpisu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#NAZWY_RODZAJOW_WPISU",
+      "powod": "nazwy dla ekranu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#kwotaNaGrosze",
+      "powod": "kwota z formularza na grosze (RP-ZAOKR-04)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#wpisSchema",
+      "powod": "walidacja formularza"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#KOLUMNY_WPISU",
+      "powod": "lista kolumn zapytania"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#zWierszaWpisu",
+      "powod": "mapowanie wiersza bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#doWierszaWpisu",
+      "powod": "mapowanie do bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#czytajWpisyReczne",
+      "powod": "odczyt wpisów"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#wpisKpirSchema",
+      "powod": "walidacja formularza KPiR"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#KOLUMNY_WPISU_KPIR",
+      "powod": "lista kolumn zapytania"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#zWierszaWpisuKpir",
+      "powod": "mapowanie wiersza bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#doWierszaWpisuKpir",
+      "powod": "mapowanie do bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/wpisy-reczne.ts#czytajWpisyKpir",
+      "powod": "odczyt wpisów KPiR"
+    },
+    {
+      "symbol": "lib/ksiegowosc/spis-z-natury.ts#SPIS_OD",
+      "powod": "najwcześniejsza data spisu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/spis-z-natury.ts#KOLUMNY_SPISU",
+      "powod": "lista kolumn zapytania"
+    },
+    {
+      "symbol": "lib/ksiegowosc/spis-z-natury.ts#zWierszaSpisu",
+      "powod": "mapowanie wiersza bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/spis-z-natury.ts#czytajSpisy",
+      "powod": "odczyt spisów"
+    },
+    {
+      "symbol": "lib/ksiegowosc/zaplata-reczna.ts#RODZAJE_ZAPLATY_RECZNEJ",
+      "powod": "słownik"
+    },
+    {
+      "symbol": "lib/ksiegowosc/zaplata-reczna.ts#ZAPLATA_RECZNA_OD",
+      "powod": "najwcześniejszy okres (RP-ZUS-ZAPLATA-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/zaplata-reczna.ts#ostatniMiesiacZaplatyRecznej",
+      "powod": "zakres okresów formularza"
+    },
+    {
+      "symbol": "lib/ksiegowosc/przypomnienia.ts#trescTerminu",
+      "powod": "treść (RP-D8-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/przypomnienia.ts#trescWyliczenia",
+      "powod": "treść (RP-D8-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/jpk-ewp-walidator.ts#walidatorJpk",
+      "powod": "wybór walidatora XSD (RP-JPK-PIT-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/miesiac-strony.ts#miesiacZParametrow",
+      "powod": "miesiąc z adresu strony (RP-MIES-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/index.ts#PARAMETRY",
+      "powod": "tablica lat"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/index.ts#SEKCJE",
+      "powod": "lista sekcji"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/index.ts#NAZWY_SEKCJI",
+      "powod": "nazwy sekcji"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/index.ts#wszystkieLiczby",
+      "powod": "lista liczb do testów źródeł"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/liczba.ts#nieznana",
+      "powod": "liczba nieogłoszona (RP-BRAK-01)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#ODCZYT_K1",
+      "powod": "data odczytu źródeł"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#ZUS_SKLADKI_2026",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#ZUS_KOMUNIKAT_2026",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#ZUS_TERMINY",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#PIT_STAWKI_I_LIMITY",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#ODLICZENIE_ZDROWOTNEJ",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#STAWKA_ZDROWOTNEJ",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#LIMIT_VAT",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#PLACA_MINIMALNA_2027",
+      "powod": "opis źródła"
+    },
+    {
+      "symbol": "lib/ksiegowosc/parametry/zrodla.ts#BEZ_ZAPOWIEDZI_ZMIAN",
+      "powod": "opis źródła"
+    }
+  ]
+}
