@@ -246,12 +246,14 @@ wdrożeniu” wgranych po nowszym wydaniu: mogą odbierać coś staremu kodowi.
 
 ### Czego jeszcze nie ma (osobne PR)
 
-- **Bramka `/wdroz` (Telegram) nie zna obrazów.** Woła `POST /deploy`
-  w Coolify bez tagu i sprawdza commit wdrożenia (`HEAD` ≠ SHA), więc po
-  przełączeniu wdroży worker na dotychczasowym obrazie i zatrzyma się przed
-  aplikacją. Do jej poprawki wdrażaj skryptem. Poprawka: ustawić
-  `docker_registry_image_tag` przez API Coolify przed wdrożeniem, czekać na
-  obraz w GHCR, sprawdzać etykietę.
+- **Bramka `/wdroz` (Telegram) zna obrazy dopiero z PR #483.** Bez niego
+  woła `POST /deploy` w Coolify bez tagu i sprawdza commit wdrożenia
+  (`HEAD` ≠ SHA), więc po przełączeniu wdroży worker na dotychczasowym
+  obrazie i zatrzyma się przed aplikacją. Do scalenia i wdrożenia #483
+  (bramka na `ops-1`) wdrażaj skryptem. Po #483 bramka wdraża obraz przez
+  endpoint „rollback” (token tylko `read` + `deploy`), a tag w konfiguracji
+  Coolify zostaje na ostatnim SHA ze skryptu: po `/wdroz` nie klikaj
+  Redeploy/Restart w panelu (`docs/runbooks/bramka-telegram.md`).
 - Pozostałości drogi przez API Coolify i Tailscale (przed B1): job
   `wdrozenie` i opcja `wdroz: true` w `obrazy.yml`,
   `scripts/ci/coolify-wdroz.sh`, trasa `/api/ops/deploy-state` z tokenem.

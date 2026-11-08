@@ -145,7 +145,7 @@ echo "── Nowy stan:"
 pokaz_stan
 
 if [ "$POLECENIE" = obraz ]; then
-  echo "⚠️  Bramka /wdroz (Telegram) nie zna jeszcze obrazów: wdrażaj tym skryptem (runbook wdrozenie-produkcji.md, „Czego jeszcze nie ma”)."
+  echo "⚠️  Bramka /wdroz (Telegram) zna obrazy dopiero po PR #483 (scalony i bramka wdrożona na ops-1); do tego czasu wdrażaj skryptem."
 fi
 if [ "$WDROZ" = 1 ]; then
   if [ "$POLECENIE" = obraz ]; then
