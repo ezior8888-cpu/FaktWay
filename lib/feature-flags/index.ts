@@ -27,7 +27,9 @@ import { getGlobalFlag } from './global-flags';
 export type PerTenantFlag =
   | 'co_pilot_enabled'
   | 'magic_import_enabled'
-  | 'exports_enabled';
+  | 'exports_enabled'
+  /** Pilotaż modułu księgowości JDG (00165, plan księgowości K8); obszary rozstrzyga `lib/ksiegowosc/wylacznik.ts`. */
+  | 'ksiegowosc_enabled';
 
 export type GlobalFlag =
   | 'killAllKsefSubmissions'
@@ -76,7 +78,7 @@ export async function getTenantFlags(
       const supabase = createAdminClient();
       const { data, error } = await supabase
         .from('tenant_feature_flags')
-        .select('co_pilot_enabled, magic_import_enabled, exports_enabled')
+        .select('co_pilot_enabled, magic_import_enabled, exports_enabled, ksiegowosc_enabled')
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
@@ -90,6 +92,7 @@ export async function getTenantFlags(
         co_pilot_enabled: row?.co_pilot_enabled ?? false,
         magic_import_enabled: row?.magic_import_enabled ?? false,
         exports_enabled: row?.exports_enabled ?? false,
+        ksiegowosc_enabled: row?.ksiegowosc_enabled ?? false,
       };
     },
   );
@@ -102,6 +105,7 @@ export async function getTenantFlags(
       co_pilot_enabled: false,
       magic_import_enabled: false,
       exports_enabled: false,
+      ksiegowosc_enabled: false,
     }
   );
 }

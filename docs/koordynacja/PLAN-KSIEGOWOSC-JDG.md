@@ -338,14 +338,23 @@ W pilotażu (kilka firm) oba crony idą pętlą po firmach w jednym zadaniu (`li
 
 Kod można pisać od razu, za wyłącznikiem. Klientom moduł włączamy dopiero, gdy wszystkie punkty są odhaczone z datą:
 
-| # | Warunek | Kto | Stan 4.11.2026 |
+| # | Warunek | Kto | Stan 8.11.2026 |
 |---|---|---|---|
-| B1 | Spółka (OC, regulamin, umowy) | Bartosz | brak (03.11: „firmy jeszcze nie ma”) |
-| B2 | Pisemna opinia prawnika (pytania niżej) | Bartosz | brak |
-| B3 | Polisa OC (wzór: mojaKsięgowa.ai, 1 mln zł) | Bartosz | brak |
-| B4 | Księgowa sprawdziła parametry roku i podpisała złote przypadki G1-G14 | Bartosz + sesja | brak; kwoty 2027 dopiero po komunikatach ze stycznia |
-| B5 | Regulamin modułu (odpowiedzialność, JDG jako konsument, dane podatkowe w RODO) | prawnik | brak |
-| B6 | Pilot: 3-5 firm, księgowa kontroluje 2 pierwsze miesiące | Bartosz + sesja | brak |
+| B1 | Spółka (OC, regulamin, umowy) | Bartosz | brak; Bartosz 8.11: na samym końcu, po pracach nad kodem |
+| B2 | Pisemna opinia prawnika (pytania niżej) | Bartosz | brak; Bartosz 8.11: na samym końcu, po pracach nad kodem |
+| B3 | Polisa OC (wzór: mojaKsięgowa.ai, 1 mln zł) | Bartosz | brak; Bartosz 8.11: na samym końcu, po pracach nad kodem |
+| B4 | Księgowa sprawdziła parametry roku i podpisała złote przypadki G1-G14 | Bartosz + sesja | brak; Bartosz 8.11: na samym końcu, po pracach nad kodem |
+| B5 | Regulamin modułu (odpowiedzialność, JDG jako konsument, dane podatkowe w RODO) | prawnik | brak; Bartosz 8.11: na samym końcu, po pracach nad kodem |
+| B6 | Pilot: 3-5 firm, księgowa kontroluje 2 pierwsze miesiące | Bartosz + sesja | technicznie gotowy (K8): przełącznik „Księgowość (pilotaż)” w `/admin/flags`; firmy po B1-B5 |
+
+**Lista kontrolna pilotażu (K8, operator):**
+1. Migracje z `main` na db-1 przed wdrożeniem: 00172 i 00173 (`./scripts/ops/wgraj-migracje.sh 00172 00173`); 00165-00171 już są.
+2. Wdrożenie: worker (`id=2`), potem aplikacja (`id=1`), `./scripts/ops/wdroz-produkcje.sh`.
+3. Firma pilotażowa: `/admin/flags`, kolumna „Księgowość (pilotaż)”, przełącznik WŁ (audyt `admin.flag.toggled`). Obszary rozstrzyga `lib/ksiegowosc/wylacznik.ts`; `wysylka_jpk` zostaje zablokowany do B2.
+4. Klient przechodzi kreator „Ustawienia podatkowe”; składki za okresy, których moduł nie liczy (np. grudzień 2025 r.), zapisuje jako zapłaty spoza wyliczenia.
+5. Księgowa (rola „księgowa” w firmie) co miesiąc porównuje „Ten miesiąc” (kwoty i wejścia z migawki) z własnym wyliczeniem; rozbieżność to zgłoszenie z miesiącem i pozycją, poprawka według protokołu naprawy błędu.
+6. Kwoty pokazują się dopiero po podpisie sekcji parametrów roku przez księgową (`sprawdzila`, D7, B4); do tego czasu „Ten miesiąc” ma braki, VAT liczy się bez parametrów.
+7. Po dwóch miesiącach bez rozbieżności: włączenie dla wszystkich (krok po bramie): usunięcie `LINEAR_PIT_RATE`, rozsyłka cronów przez zdarzenia zamiast pętli, eksport JPK_V7M z danymi osoby fizycznej (D16), certyfikat produkcyjny MF (D18).
 
 **Pytania do prawnika:**
 1. Czy samoobsługowe wyliczenie podatku, ZUS i terminów z danych klienta to czynność doradztwa podatkowego? Jakie sformułowania są bezpieczne?
@@ -449,5 +458,6 @@ Każda naprawa błędu w trakcie idzie według „Protokołu naprawy błędu” 
 | 8.11.2026 | K7.2 | PR `claude/ksiegowosc-k7-2-zaplata-spoza-wyliczenia` | gotowy, PR otwarty | — | decyzje z planu podjęte za Bartosza (D15-D21, 8.11, „najbardziej korzystne”); D15: zapłata spoza wyliczenia (składki za okres, którego moduł nie liczy, np. za grudzień 2025 r., z kwotą z PUE ZUS) jako wersja rozliczenia z `migawka.reczna`, od razu zapłacona, w karcie „Zapłaty spoza wyliczenia” na „Ten miesiąc” (także przy brakach miesiąca), z audytem `tax_settlement.manual_paid`; migracja 00172 (CHECK okresu od 2025 r., do wgrania przed wdrożeniem); 00167-00171 sprawdzone na db-1 (już były wgrane); typy bazy z produkcji po 00171; RLS 00168 z 00172 na osobnej bazie: 9/9 |
 | 8.11.2026 | K7.3 | PR `claude/ksiegowosc-k7-3-fundusz-pracy-kpir` | gotowy, PR otwarty | — | D21: KPiR dostaje Fundusz Pracy i FS z zapłaconych składek ZUS (kolumna 13, w dniu zapłaty, dowód „Składki ZUS za MM/RRRR”), z przyrostu ponad wcześniejsze zapłacone wersje okresu, także z zapłat spoza wyliczenia; zaliczka PIT i podstawa zdrowotnej od dochodu biorą go z KPiR; widok KPiR mówi, że FP dopisuje FaktWay; złote przypadki dopisują FP z zapłat jak aplikacja (konwencja arkusza zmieniona: „Koszty w KPiR” bez FP); bez migracji |
 | 8.11.2026 | K7.4 | PR `claude/ksiegowosc-k7-4-spis-z-natury` | gotowy, PR otwarty | — | D19: spis z natury w module (`ledger_inventory_counts`, migracja 00173 do wgrania przed wdrożeniem): karta „Spis z natury” w KPiR z formularzem i usuwaniem (audyt `ledger_inventory.*`), plik JPK_PKPIR(3) z P_1, P_2, P_3 = wydatki + P_1 − P_2, P_4 i PKPIRSpis (XSD), karta pliku mówi, jakie spisy są w pliku; RLS 00173 na osobnej bazie 4/4 (z 00168 i 00171: 17/17) |
+| 8.11.2026 | K8 | PR `claude/ksiegowosc-k8-pilotaz` | gotowy, PR otwarty | — | pilotaż technicznie gotowy: flaga `ksiegowosc_enabled` w `/admin/flags` (kolumna „Księgowość (pilotaż)”, audyt, czyszczenie cache) zamiast UPDATE kluczem serwisowym; D20: stary raport `/reports/kpir` u firmy z modułem odsyła do księgi modułu (KPiR albo ewidencja), po odczycie danych raportu, więc strażnik środowiska KSeF dalej zatrzymuje stronę przed innymi odczytami; lista kontrolna pilotażu w sekcji 11; brama B1-B5 na samym końcu (Bartosz 8.11); bez migracji |
 
-**Następny krok:** K8, pilotaż (sekcje 11 i 12): włączanie modułu dla firmy przyciskiem w panelu admina z audytem (zamiast UPDATE kluczem serwisowym), odesłanie ze starego raportu `/reports/kpir` do księgi modułu (D20), lista kontrolna pilotażu. Bartosz 8.11: brama z sekcji 11 (spółka, prawnik, OC, podpis księgowej) na samym końcu; kroki idą bez przerw, stos PR do scalenia na końcu. Przed wdrożeniem: 00172 i 00173 na db-1.
+**Następny krok:** kod planu (K0-K8 z K7.1-K7.4) jest gotowy. Zostaje po stronie Bartosza: scalenie stosu PR K7.2-K8, migracje 00172 i 00173 na db-1, wdrożenie, brama z sekcji 11 (B1-B5) i pilotaż według listy kontrolnej (B6). Potem K9 (Mały ZUS Plus, rozliczenia kwartalne, roczne PIT i zdrowotna, wysyłka JPK_PD z zeznaniem, środki trwałe) jako osobny plan.

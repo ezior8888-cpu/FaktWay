@@ -82,6 +82,12 @@ export default async function AdminFlagsPage(props: {
                 <th className="px-4 py-2.5 font-medium text-center">Co-Pilot</th>
                 <th className="px-4 py-2.5 font-medium text-center">Magic Import</th>
                 <th className="px-4 py-2.5 font-medium text-center">Exports</th>
+                <th
+                  className="px-4 py-2.5 font-medium text-center"
+                  title="Pilotaż księgowości JDG (plan, K8): klientom dopiero po bramie z sekcji 11 planu (spółka, prawnik, OC, podpis księgowej)"
+                >
+                  Księgowość (pilotaż)
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -133,6 +139,14 @@ export default async function AdminFlagsPage(props: {
                       flag="exports_enabled"
                       initialEnabled={t.flags.exports_enabled}
                       label="Exports"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <FlagToggle
+                      tenantId={t.tenantId}
+                      flag="ksiegowosc_enabled"
+                      initialEnabled={t.flags.ksiegowosc_enabled}
+                      label="Księgowość"
                     />
                   </td>
                 </tr>
