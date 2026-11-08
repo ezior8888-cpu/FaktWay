@@ -58,8 +58,9 @@ Bartosz po obejrzeniu wariantów w symulatorze (plan, decyzja D7).
   w listach wyrównane do prawej, format z `lib/format` („1 234,56 zł”, twarda
   spacja przed „zł”). Kwota jest najważniejszą liczbą w wierszu, więc ma
   styl Headline albo Body, nie Caption.
-- **Odstępy ze skali 4, 8, 12, 16, 20, 24, 32.** Margines boczny treści 16 (albo
-  systemowy margines listy). Nie wpisujesz wartości spoza skali.
+- **Odstępy ze skali 4, 8, 12, 16, 20, 24, 32** (plus 2 tylko między liniami
+  tekstu w jednym wierszu listy). Margines boczny treści 16. Nie wpisujesz
+  wartości spoza skali; skala leży w `mobile/src/wyglad/odstepy.ts`.
 - **Cel dotyku minimum 44 × 44 pt** na iOS i 48 × 48 dp na Androidzie, także
   dla ikon w pasku.
 
@@ -172,3 +173,8 @@ Zrzuty z symulatora dołączasz do PR. Ekran jest gotowy, gdy:
 - [ ] etykiety dla czytnika ekranu na ikonach
 - [ ] porównanie ze wzorcem: co jest inaczej i dlaczego (jedno zdanie)
 - [ ] teksty zgodne z sekcją 8
+- [ ] dane do skopiowania (kwoty, NIP, numer KSeF) mają `selectable`
+- [ ] przejrzana lista 20 cech „sztucznego” wyglądu z
+      `.claude/skills/expo-design-system/references/native-slop.md`; żadna nie występuje
+      (najczęstsze: okno na środku zamiast arkusza, alert zamiast cofnięcia, karta wokół każdego wiersza,
+      cienie, ramki 1 px, ten sam odstęp wszędzie, animowane wejście listy)

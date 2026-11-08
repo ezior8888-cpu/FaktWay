@@ -98,8 +98,13 @@ zdaniem „Zrobisz to na faktway.pl” i linkiem.
 - Elementy SwiftUI przez Expo UI tam, gdzie React Native nie ma odpowiednika.
 - Testujemy na **development build**, nie w Expo Go (natywne zakładki, Expo UI
   i efekt szkła nie działają tam pewnie).
-- Typy bazy z `types/` i schematy Zod współdzielone ze stroną (sposób
-  współdzielenia ustala M2).
+- Typy bazy z `types/` i schematy Zod współdzielone ze stroną. M2 ustalił:
+  do M5 aplikacja ma małą kopię formatowania (`mobile/src/lib/format.ts`),
+  a sposób współdzielenia typów i schematów Zod (import przez Metro czy
+  wspólny pakiet) rozstrzyga M5 razem z API.
+- Listy krótkie i stałe (ustawienia, szczegóły) można składać z `@expo/ui`
+  (prawdziwe SwiftUI i Compose); listy danych o nieznanej długości z FlatList
+  albo FlashList. Wybór sprawdza M3 na ekranie wzorcowym.
 
 ### 4.2 Logowanie
 - `@supabase/supabase-js` z sesją w `expo-secure-store`. E-mail i hasło,
@@ -155,8 +160,8 @@ iPhone'a) do czasu płatnego konta; potem EAS Build w chmurze i EAS Submit.
 | Xcode | budowanie i symulator | 27.2 zainstalowany |
 | Symulator iOS | uruchomienie, zrzuty, klikanie i przewijanie przez narzędzie symulatora w aplikacji Claude | iOS 27.2; urządzenia od iPhone 17e do iPhone 18 Pro Max. Dostęp w panelu przyznany 08.11.2026 |
 | iPhone Bartosza | ocena „w ręce”: płynność, wibracje, czytelność | bez płatnego konta: kablem z Xcode, darmowe Apple ID, instalacja ważna 7 dni |
-| Skille Expo | `expo/skills` (m.in. `building-native-ui`), instalacja w M2 | do zrobienia |
-| Skill projektu | `.claude/skills/telefon-app/` odsyła do `ZASADY-DESIGNU.md` i checklisty; Codex czyta zasady z `docs/` | do zrobienia w M2 |
+| Skille Expo | kopie z github.com/expo/skills (MIT) w `.claude/skills/expo-*`: `expo-native-ui`, `expo-router`, `expo-ui`, `expo-animation`, `expo-design-system` | zrobione w M2 |
+| Skill projektu | `.claude/skills/telefon-app/` odsyła do `ZASADY-DESIGNU.md` i checklisty; Codex czyta `mobile/AGENTS.md` i zasady z `docs/` | zrobione w M2 |
 | Wzorce | Mobbin i własne zrzuty w `.agents/mobile-wzorce/` (poza gitem) | czeka na Bartosza |
 
 Zasada: żaden ekran nie idzie do PR bez zrzutów z checklisty i porównania
@@ -214,10 +219,11 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M2 (fundament). D2, D3, D10, D11 przyjęte 08.11.2026;
-D6 (projektant) czeka do M3.
+**Następny krok:** M3 (ekran wzorcowy: lista faktur i szczegół na danych
+przykładowych, warianty D7). D6 (projektant) czeka na Bartosza.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
 | 08.11.2026 | przygotowanie | Xcode 27.2 i symulator iOS 27.2 na Macu Bartosza; test zrzutu z iPhone 18 Pro | (bez PR) |
-| 08.11.2026 | M1 | plan, `docs/mobile/ZASADY-DESIGNU.md`, hasło w `AGENTS.md`; decyzje D2, D3, D10, D11 | (ten PR) |
+| 08.11.2026 | M1 | plan, `docs/mobile/ZASADY-DESIGNU.md`, hasło w `AGENTS.md`; decyzje D2, D3, D10, D11 | #489 |
+| 09.11.2026 | M2 | Expo SDK 58 w `mobile/` (własny workspace pnpm), 4 natywne zakładki, stos w każdej, lista i szczegół faktury, arkusz „Nowa faktura”, Koszty, Ten miesiąc, Konto na danych przykładowych; kolory semantyczne, style tekstu z Dynamic Type, skala odstępów; wyłączenia `mobile/` w tsconfig, eslint, Docker, knip; job CI „Mobile”; skille Expo i `telefon-app`; pierwszy build w Xcode na iPhone 18 Pro, zrzuty w `docs/mobile/zrzuty/m2/`. Strona: `pnpm run ci` i `pnpm build` zielone | (ten PR) |

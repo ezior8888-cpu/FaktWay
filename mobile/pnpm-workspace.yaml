@@ -1,0 +1,5 @@
+# Aplikacja mobilna to osobny workspace pnpm: własny lockfile, główny
+# `pnpm install` i obraz Dockera strony jej nie widzą
+# (docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md, sekcja 4.4).
+# React Native i autolinking CocoaPods działają najpewniej na płaskim node_modules.
+nodeLinker: hoisted
