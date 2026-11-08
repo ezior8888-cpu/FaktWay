@@ -4,6 +4,10 @@
 > (sekcja 0) i pracuj od „Następny krok” na końcu dziennika (sekcja 7).
 > Jeden punkt = jedna gałąź `claude/usp-<etap>-<temat>` = jeden PR. Po etapie
 > raport i stop (punkt 10 protokołu w `AGENTS.md`).
+>
+> **Plan zamknięty 08.11.2026.** Etapy 1 i 2 oraz pomysły z sekcji 4 są
+> zrobione albo odrzucone z powodem. Co wyszło poza plan jako osobne tory,
+> mówi ostatni wiersz dziennika i „Następny krok”.
 
 ## Po co ten plan
 
@@ -341,11 +345,14 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 08.11.2026 | 3.7c podział `invoice-form.tsx` (3.7a `submit-invoice.ts` wstrzymane: kolizja z #417, #413, #369, #195, #190; `duplicate-decision.ts` rusza szkic #336) | #450 | 1 315 linii → formularz 407 + 10 części w `components/invoices/invoice-form-parts/`; niezmienniki przy 3.7; 23 testy zachowania i 10 wzorców znaczników zielone przed i po bez zmian; zrzuty 1440 px i iPhone 13 identyczne bajtowo; `ci` i `build` zielone; 5 osobnych ustaleń w opisie PR; czeka na scalenie |
 | 08.11.2026 | 4.4 Knip i 4.10 Dependabot | #467 | Knip 6.44.1: bez konfiguracji 102 pliki, 432 eksporty, 206 typów; z `knip.jsonc` 30 plików, 77 eksportów, 15 typów, 0 zależności (MDX, skrypty, load-tests, projekty Playwright, `ops/**` wycięte); nic nie usunięte. Dependabot: brak `dependabot.yml`, alerty włączone, security updates włączone (do wyłączenia w Settings, decyzja poza repo). Lokalnie tylko `typecheck` i knip (Mac bez pamięci przy równoległych buildach), pełne CI na GitHubie |
 | 08.11.2026 | 4.5 budżet First Load JS + 4.6 cache tsc/ESLint w CI | #471 | Next 16 usunął First Load JS z wyjścia `next build`, więc pomiar z `.next` (webpack: `rootMainFiles` + wejścia strony i segmentów nadrzędnych + ich zależności, gzip); 88 tras, największa `/(dashboard)/(faktury)/invoices` 713 kB, próg 750 kB; ESLint z `--cache-strategy content` (świeży checkout zmienia czasy plików), `tsconfig.json` bez zmian (`incremental` już był); w CI Typecheck 42 → 7 s, Lint 46 → 2 s (ponowiony job, ten sam SHA); `pnpm build` i pełne `ci` pominięte lokalnie (pamięć Maca), robi CI |
+| 08.11.2026 | Zamknięcie planu: porządek w PR i jedno wdrożenie (polecenie Bartosza „uporządkuj wszystkie PR, scal wszystko stare, jedno wielkie wdrożenie”, decyzje delegowane) | #460, #461, #462, #459, #450, #457, #463, #467, #471 w jednym PR zbiorczym | Paczka A (#460): #189, #320, #336, #409, #411, #412, #415, #416, #449, #455; #461 = #405 + #410; #462 = #283 + #289 (#288 już na `main` przez E3b). Zamknięte: #406 i #458 (Renovate podbijał nadpisania o wersję główną; reguła w #463), #190 (treść na `main` przez #369/#413). Zostają otwarte z komentarzem: #195 (C-16 na `main` przez #234; C-09/C-10 do sesji C4 planu zero), #193 i #197 (szkice Codexa, do odświeżenia). Decyzje: B1 wariant B (wdraża bramka `/wdroz`, bez Tailscale i tokenu Coolify w GitHubie), pakiety GHCR publiczne (krok 7 odpada), 3.2b (testy wizualne na Linuksie w CI) poza planem. Harmonogram sprzątania zainstalowany (#459, launchd, niedziela 3:00). Mac zawiesił się przy kilku równoległych `pnpm build`: od tej pory pełne CI i build lokalnie po jednym, a przy wielu PR na GitHubie |
 
-**Następny krok:** Bartosz: decyzja przy #425 (B1 listy z 08.11: wdrożenie
-przez nowy endpoint czy przez bramkę `/wdroz`), potem jej kroki; scalenie
-odświeżonego #417 (00164 przed wdrożeniem) i #298; sprzątanie worktree
-z harmonogramem (najpierw `main` w głównym katalogu); plugin `design`
-w aplikacji. Sesja: 3.7c (`invoice-form.tsx`) w toku, 3.7a
-(`submit-invoice.ts`) po #417, #195 i #190, 3.7b po decyzji o #336;
-osobno kolejność web/worker w bramce `/wdroz`.
+**Następny krok:** plan zamknięty. Osobne tory: (1) przełączenie wdrożeń
+na obrazy z GHCR według decyzji B1 (wariant B: `obrazy.yml` po scaleniu do
+`main`, Coolify ze źródła „Docker Image”, bramka `/wdroz` i
+`wdroz-produkcje.sh` sprawdzają SHA z etykiety obrazu, usunięcie
+`/api/ops/deploy-state` i kroków Tailscale z runbooka); (2) 3.7 jako
+długi tor: `submit-invoice.ts`, `duplicate-decision.ts`,
+`noUncheckedIndexedAccess`; (3) 3.2b; (4) #193, #197. Bartosz: plugin
+`design` w aplikacji; opcjonalnie wyłączyć „Dependabot security updates”
+(alerty zostają), bo dublują PR Renovate.

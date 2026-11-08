@@ -244,7 +244,11 @@ droga działa bez zmian.
 4. **Pierwszy build bez wdrożenia:**
    `gh workflow run obrazy.yml -f ref=main -f wdroz=false`. Potem w GitHubie
    (profil → Packages) sprawdź, że `faktway-runner` i `faktway-worker` są
-   **prywatne** i podpięte do repo.
+   podpięte do repo. **Decyzja 08.11.2026 (Bartosz, delegowana): pakiety
+   zostają publiczne.** Repo jest publiczne, a obraz ma tylko kod z repo
+   i jawne `NEXT_PUBLIC_*` (build w Actions nie dostaje sekretów ani tokenu
+   Sentry), więc prywatność nic nie chroni, a dokłada token na `app-1`
+   (krok 7). Pierwszy build: 08.11, run 42477139056, oba obrazy zbudowane.
 5. **Tailscale.** Konto (darmowy plan), na `ops-1`:
    `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up`.
    W ACL: `"tagOwners": {"tag:ci": ["autogroup:admin"]}` i reguła dostępu
@@ -258,7 +262,8 @@ droga działa bez zmian.
    `COOLIFY_TOKEN` (Coolify → Keys & Tokens, uprawnienia `read` i `deploy`,
    API włączone w ustawieniach), `COOLIFY_APP_UUID`, `COOLIFY_WORKER_UUID`
    (krok 8). Adresy i UUID tylko w sekretach: repo jest publiczne.
-7. **Pobieranie z GHCR na `app-1`:** token klasyczny GitHuba tylko
+7. **Pobieranie z GHCR na `app-1`** (przy publicznych pakietach zbędne, zob.
+   krok 4): token klasyczny GitHuba tylko
    z `read:packages`, na serwerze `docker login ghcr.io -u ezior8888-cpu`
    jako root (Coolify pobiera obrazy przez Dockera hosta).
 8. **Coolify z obrazu.** Jeśli Coolify pozwala zmienić źródło istniejącej
