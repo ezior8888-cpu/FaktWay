@@ -52,7 +52,14 @@ describe('kiedy przypominać', () => {
     expect(terminyNaDzis('2026-11-19').map((t) => [t.grupy, t.dni])).toEqual([[['ryczalt', 'pit', 'zus'], 1]]);
     expect(grupyFormy(['ryczalt', 'pit', 'zus'], 'ryczalt')).toEqual(['ryczalt', 'zus']);
     expect(grupyFormy(['ryczalt', 'pit', 'zus'], 'liniowy')).toEqual(['pit', 'zus']);
+    // VAT (K7.1) nie zależy od formy; firmę zwolnioną z VAT pomija zadanie.
+    expect(grupyFormy(['vat'], 'ryczalt')).toEqual(['vat']);
     expect(terminyNaDzis('2026-11-16')).toEqual([]);
+  });
+
+  it('VAT (K7.1): termin 25.11.2026 za październik osobno, 5 dni wcześniej (20.11) i dzień wcześniej (24.11)', () => {
+    expect(terminyNaDzis('2026-11-20').map((t) => [t.miesiac, t.grupy, t.dni, t.etap])).toEqual([['2026-10', ['vat'], 5, 'termin-5:2026-11-25']]);
+    expect(terminyNaDzis('2026-11-24').map((t) => [t.grupy, t.dni, t.etap])).toEqual([[['vat'], 1, 'termin-1:2026-11-25']]);
   });
 
   it('termin przesunięty z soboty 20.02.2027 na poniedziałek 22.02.2027 liczy się od dnia faktycznego', () => {

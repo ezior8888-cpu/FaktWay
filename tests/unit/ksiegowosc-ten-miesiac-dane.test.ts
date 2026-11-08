@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   kpirLata: [] as number[],
   kpirWersje: [] as unknown[],
   kpirWKodzie: true,
+  vatWKodzie: true,
+  vat: null as unknown,
+  vatWywolania: [] as { miesiac: string; nadwyzka: number | null }[],
 }));
 
 vi.mock('@/lib/ksiegowosc/parametry', async (orig) => {
@@ -44,9 +47,19 @@ vi.mock('@/lib/ksiegowosc/wylacznik', async (orig) => {
   return {
     ...prawdziwy,
     statusObszaru: (obszar: import('@/lib/ksiegowosc/wylacznik').ObszarModulu) =>
-      obszar === 'kpir' && !mocks.kpirWKodzie ? { wlaczony: false, powod: 'nie_zbudowane' as const } : prawdziwy.statusObszaru(obszar),
+      (obszar === 'kpir' && !mocks.kpirWKodzie) || (obszar === 'vat' && !mocks.vatWKodzie)
+        ? { wlaczony: false, powod: 'nie_zbudowane' as const }
+        : prawdziwy.statusObszaru(obszar),
   };
 });
+// VAT (K7.1): odczyt VAT ma własne testy (`ksiegowosc-vat-dane`); tu tylko to, co z nim robi „Ten miesiąc”.
+vi.mock('@/lib/ksiegowosc/vat-dane', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/vat-dane')>()),
+  czytajVat: async (_c: unknown, _t: string, miesiac: string, nadwyzka: number | null) => {
+    mocks.vatWywolania.push({ miesiac, nadwyzka });
+    return mocks.vat ?? { ok: false, komunikat: 'Firma korzysta ze zwolnienia z VAT (art. 113), więc nie składa JPK_V7M.', zwolniona: true };
+  },
+}));
 vi.mock('@/lib/ksiegowosc/kpir-dane', () => ({
   czytajKpir: async (_c: unknown, _t: string, rok: number, opcje: { wersje?: unknown[] } = {}) => {
     mocks.kpirLata.push(rok);
@@ -136,6 +149,9 @@ beforeEach(() => {
   mocks.kpirLata = [];
   mocks.kpirWersje = [];
   mocks.kpirWKodzie = true;
+  mocks.vatWKodzie = true;
+  mocks.vat = null;
+  mocks.vatWywolania = [];
 });
 
 describe('odczyt rozliczeń', () => {
@@ -267,3 +283,64 @@ describe('odczyt przy skali i liniowym (K7)', () => {
     expect((await czytajTenMiesiac(client, 't1', '2027-02')).ok).toBe(true);
   });
 });
+
+describe('VAT w odczycie „Ten miesiąc” (K7.1)', () => {
+  const WYNIK = { naleznyGr: 690_000, nadwyzkaPoprzedniaGr: 0, naliczonyGr: 195_500, doZaplatyGr: 494_500, nadwyzkaNaNastepnyGr: 0, liczbaSprzedazy: 1, liczbaZakupow: 1 };
+
+  it('czynny VAT: pozycja VAT z odczytu VAT, a nadwyżka z adresu strony trafia do odczytu', async () => {
+    mocks.vat = { ok: true, miesiac: '2027-01', nadwyzka: { zl: 0, zrodlo: 'klient' }, wynik: { ok: true, ...WYNIK }, wysylki: [] };
+    const dane = await czytajTenMiesiac(client, 't1', '2027-01', { nadwyzkaVat: 0 });
+    if (!dane.ok) throw new Error(dane.braki.join(' '));
+    expect(mocks.vatWywolania).toEqual([{ miesiac: '2027-01', nadwyzka: 0 }]);
+    expect(dane.pozycje.find((p) => p.rodzaj === 'vat')).toMatchObject({ ok: true, kwotaGr: 494_500, wejsciaHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(dane.wynik.vat).toMatchObject({ nadwyzka: { zl: 0, zrodlo: 'klient' }, nadwyzkaNieznana: false });
+  });
+
+  it('nieznana nadwyżka: brak z treścią i oznaczeniem; błąd odczytu VAT: brak samego VAT, reszta się liczy', async () => {
+    mocks.vat = { ok: true, miesiac: '2027-01', nadwyzka: null, wynik: null, wysylki: [] };
+    const bezNadwyzki = await czytajTenMiesiac(client, 't1', '2027-01');
+    if (!bezNadwyzki.ok) throw new Error(bezNadwyzki.braki.join(' '));
+    expect(bezNadwyzki.pozycje.find((p) => p.rodzaj === 'vat')).toMatchObject({ ok: false, brak: expect.stringContaining('nadwyżka z deklaracji za grudzień 2026') });
+    expect(bezNadwyzki.wynik.vat).toMatchObject({ nadwyzkaNieznana: true });
+    expect(mocks.vatWywolania).toEqual([{ miesiac: '2027-01', nadwyzka: null }]);
+
+    mocks.vat = { ok: false, komunikat: 'Nie udało się odczytać faktur i kosztów miesiąca.' };
+    const blad = await czytajTenMiesiac(client, 't1', '2027-01');
+    if (!blad.ok) throw new Error(blad.braki.join(' '));
+    expect(blad.pozycje.map((p) => [p.rodzaj, p.ok])).toEqual([
+      ['ryczalt', true],
+      ['zus_spoleczne', true],
+      ['zdrowotna', true],
+      ['vat', false],
+    ]);
+  });
+
+  it('wszystkie sekcje podatku i składek niesprawdzone (D7): VAT z kwotą liczy się dalej, błąd odczytu VAT nie', async () => {
+    mocks.brakujace = (_rok, sekcje) => sekcje.map((x) => ({ sekcja: x as 'zus', powod: 'niesprawdzone' as const, komunikat: `czeka: ${x}`, operator: '' }));
+    mocks.vat = { ok: true, miesiac: '2027-01', nadwyzka: { zl: 0, zrodlo: 'klient' }, wynik: { ok: true, ...WYNIK }, wysylki: [] };
+    const zVatem = await czytajTenMiesiac(client, 't1', '2027-01', { nadwyzkaVat: 0 });
+    if (!zVatem.ok) throw new Error(zVatem.braki.join(' '));
+    expect(zVatem.pozycje.map((p) => [p.rodzaj, p.ok])).toEqual([
+      ['ryczalt', false],
+      ['zus_spoleczne', false],
+      ['zdrowotna', false],
+      ['vat', true],
+    ]);
+    mocks.vat = { ok: false, komunikat: 'Nie udało się odczytać faktur i kosztów miesiąca.' };
+    expect(await czytajTenMiesiac(client, 't1', '2027-01')).toMatchObject({ ok: false, braki: ['czeka: ryczalt', 'czeka: zus', 'czeka: zdrowotna'] });
+  });
+
+  it('firma zwolniona z VAT: bez pozycji VAT; obszar `vat` zablokowany w kodzie: VAT nieczytany', async () => {
+    const zwolniona = await czytajTenMiesiac(client, 't1', '2027-01');
+    if (!zwolniona.ok) throw new Error(zwolniona.braki.join(' '));
+    expect(zwolniona.pozycje.map((p) => p.rodzaj)).toEqual(['ryczalt', 'zus_spoleczne', 'zdrowotna']);
+    expect(zwolniona.wynik.vat).toBeNull();
+
+    mocks.vatWKodzie = false;
+    mocks.vatWywolania = [];
+    const bezObszaru = await czytajTenMiesiac(client, 't1', '2027-01');
+    expect(bezObszaru.ok && bezObszaru.pozycje.map((p) => p.rodzaj)).toEqual(['ryczalt', 'zus_spoleczne', 'zdrowotna']);
+    expect(mocks.vatWywolania).toEqual([]);
+  });
+});
+

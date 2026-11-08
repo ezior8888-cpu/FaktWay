@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   wiersz: null as Record<string, unknown> | null,
   nowszych: 0,
   aktualizacje: [] as Record<string, unknown>[],
+  opcjeOdczytu: [] as unknown[],
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
@@ -35,7 +36,10 @@ vi.mock('@/lib/supabase/auth-context', async (orig) => ({
 vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }) }));
 vi.mock('@/lib/ksiegowosc/ten-miesiac-dane', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/ten-miesiac-dane')>()),
-  czytajTenMiesiac: async () => mocks.dane,
+  czytajTenMiesiac: async (_c: unknown, _t: string, _m: string, opcje?: unknown) => {
+    mocks.opcjeOdczytu.push(opcje);
+    return mocks.dane;
+  },
 }));
 
 const lancuch = (wynik: () => unknown) => {
@@ -113,9 +117,31 @@ beforeEach(() => {
   };
   mocks.nowszych = 0;
   mocks.aktualizacje = [];
+  mocks.opcjeOdczytu = [];
 });
 
 describe('zatwierdzenie miesiąca', () => {
+  it('VAT (K7.1): nadwyżka z ekranu trafia do odczytu, a VAT zapisuje się z P_62 w migawce (P_39 następnego miesiąca)', async () => {
+    const vat = {
+      ok: true,
+      rodzaj: 'vat',
+      kwotaGr: 374_500,
+      termin: { faktyczny: '2026-11-25' },
+      wejscia: { naleznyGr: 690_000, nadwyzkaPoprzedniaGr: 120_000, naliczonyGr: 315_500, nadwyzkaNaNastepnyGr: 0 },
+      szczegoly: { zrodloNadwyzki: 'klient' },
+      wejsciaHash: H('d'),
+    };
+    mocks.dane = { ok: true, wynik: {}, pozycje: [...POZYCJE, vat], parametryWersja: 'abcd1234abcd1234', rozliczenia: [] };
+    expect(await zatwierdzMiesiacAction({ miesiac: '2026-10', skroty: { ...SKROTY, vat: H('d') }, nadwyzkaVat: 1200 })).toEqual({ success: true, nowe: 4 });
+    expect(mocks.opcjeOdczytu).toEqual([{ nadwyzkaVat: 1200 }]);
+    expect(mocks.wstawione[0][3]).toMatchObject({ rodzaj: 'vat', kwota_gr: 374_500, termin: '2026-11-25', migawka: { wejscia: { nadwyzkaNaNastepnyGr: 0 } } });
+    // Bez nadwyżki z ekranu odczyt dostaje null, a nie zgadnięte zero.
+    mocks.wstawione = [];
+    mocks.opcjeOdczytu = [];
+    await zatwierdz();
+    expect(mocks.opcjeOdczytu).toEqual([{ nadwyzkaVat: null }]);
+  });
+
   it('pierwsze zatwierdzenie: trzy rozliczenia w wersji 1, w jednym zapisie, z migawką i audytem', async () => {
     expect(await zatwierdz()).toEqual({ success: true, nowe: 3 });
     expect(mocks.wstawione).toHaveLength(1);

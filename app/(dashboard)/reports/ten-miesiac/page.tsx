@@ -1,21 +1,22 @@
 import { notFound } from 'next/navigation';
-import { RiCalculatorLine, RiFileList3Line, RiHeartPulseLine, RiPercentLine, RiShieldUserLine, RiShoppingBag3Line } from '@remixicon/react';
+import { RiCalculatorLine, RiFileList3Line, RiHeartPulseLine, RiPercentLine, RiScales3Line, RiShieldUserLine, RiShoppingBag3Line } from '@remixicon/react';
 import type { ComponentType } from 'react';
 
 import MonthSelector from '@/components/expenses/finora/month-selector';
 import { StatCell, StatCellError, StatsCardsFrame } from '@/components/expenses/finora/stats-cards';
 import { ZaplaconeRozliczenie, ZatwierdzMiesiac } from '@/components/ksiegowosc/ten-miesiac-akcje';
+import { NadwyzkaPoprzednia } from '@/components/ksiegowosc/vat-akcje';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { monthLabel } from '@/lib/expenses/month';
+import { monthLabel, shiftMonth } from '@/lib/expenses/month';
 import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { miesiacZParametrow } from '@/lib/ksiegowosc/miesiac-strony';
 import { formatujRachunek, mikrorachunekZNip } from '@/lib/ksiegowosc/mikrorachunek';
 import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
-import { NAZWY_ROZLICZEN, type RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
+import { NAZWY_ROZLICZEN, type RodzajRozliczenia, type VatWyniku } from '@/lib/ksiegowosc/ten-miesiac';
 import {
   aktualne,
   czytajTenMiesiac,
@@ -27,6 +28,7 @@ import {
   type PozycjaZeSkrotem,
   type Rozliczenie,
 } from '@/lib/ksiegowosc/ten-miesiac-dane';
+import { nadwyzkaZAdresu } from '@/lib/ksiegowosc/vat-dane';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -35,7 +37,9 @@ export const dynamic = 'force-dynamic';
 /**
  * „Ten miesiąc” w Księgowości (plan księgowości JDG, K4, sekcja 8): ryczałt,
  * składki społeczne i zdrowotna za miesiąc z terminami i danymi do przelewu,
- * „Zatwierdź miesiąc” (D6), „Zapłacone” i historia wersji.
+ * „Zatwierdź miesiąc” (D6), „Zapłacone” i historia wersji. Przy czynnym VAT
+ * także VAT z terminem 25. (K7.1); nieznaną nadwyżkę z poprzedniej deklaracji
+ * klient wpisuje przy pozycji (adres `?nadwyzka=`, jak na ekranie VAT).
  *
  * Za wyłącznikiem (obszar `ten_miesiac`): firma poza pilotażem dostaje 404.
  * Bez parametrów potwierdzonych przez księgową, profilu albo z brakami
@@ -54,20 +58,22 @@ function podpis(rok: number, rokSkladkowy: number): string {
   return `Według Twoich danych i stawek na ${rok} r.${zdrowotna}`;
 }
 
-export default async function TenMiesiacPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string }> }) {
+export default async function TenMiesiacPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string; nadwyzka?: string }> }) {
   const ctx = await getPageContext();
   const werdykt = await czyKsiegowoscWlaczona(ctx.supabase, ctx.tenantId, 'ten_miesiac');
   if (!werdykt.wlaczony) notFound();
 
   const dzis = todayInWarsaw();
-  const miesiac = miesiacZParametrow(await searchParams, dzis);
+  const sp = await searchParams;
+  const miesiac = miesiacZParametrow(sp, dzis);
+  const nadwyzkaVat = nadwyzkaZAdresu(sp.nadwyzka);
   const tytul = monthLabel(miesiac);
   const rok = Number(miesiac.slice(0, 4));
   const rokSkladkowy = rokSkladkowyZdrowotnej(miesiac);
   const canEdit = ctx.role === 'owner' || ctx.role === 'admin';
 
   const [dane, firma] = await Promise.all([
-    czytajTenMiesiac(ctx.supabase, ctx.tenantId, miesiac),
+    czytajTenMiesiac(ctx.supabase, ctx.tenantId, miesiac, { nadwyzkaVat }),
     ctx.supabase.from('tenants').select('nip').eq('id', ctx.tenantId).maybeSingle(),
   ]);
   // `null`: NIP-u nie udało się odczytać (inny komunikat niż „brak NIP w ustawieniach”).
@@ -82,7 +88,9 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-medium">Rozliczenie za {tytul}</h2>
-            <p className="text-muted-foreground text-xs">{podatek}, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.</p>
+            <p className="text-muted-foreground text-xs">
+              {podatek}, składki społeczne {dane.ok && dane.wynik.vat ? ', składka zdrowotna i VAT' : 'i składka zdrowotna'} z terminami i danymi do przelewu.
+            </p>
           </div>
           <MonthSelector month={miesiac} currentMonth={dzis.slice(0, 7)} basePath="/reports/ten-miesiac" query="month-year" ariaLabel="Miesiąc rozliczenia" />
         </CardContent>
@@ -117,6 +125,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
                       {p.ok ? <span className="text-sm font-medium tabular-nums">{zl(p.kwotaGr)}</span> : null}
                     </div>
                     {p.ok ? null : <p className="text-xs">{p.brak}</p>}
+                    {p.rodzaj === 'vat' && dane.wynik.vat ? <NadwyzkaVat vat={dane.wynik.vat} miesiac={miesiac} /> : null}
                     {p.termin ? (
                       <p className="text-muted-foreground text-xs">
                         Termin: {formatIsoDatePl(p.termin.faktyczny)}
@@ -144,6 +153,7 @@ const IKONY: Readonly<Record<RodzajRozliczenia, ComponentType<{ className?: stri
   pit: RiCalculatorLine,
   zus_spoleczne: RiShieldUserLine,
   zdrowotna: RiHeartPulseLine,
+  vat: RiScales3Line,
 };
 
 const ETYKIETY: Readonly<Record<RodzajRozliczenia, string>> = {
@@ -151,10 +161,11 @@ const ETYKIETY: Readonly<Record<RodzajRozliczenia, string>> = {
   pit: 'Zaliczka PIT',
   zus_spoleczne: 'Składki społeczne',
   zdrowotna: 'Składka zdrowotna',
+  vat: 'VAT do zapłaty',
 };
 
 function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
-  const { ryczalt, zdrowotna, przychodGr, kosztyGr, pit, zdrowotnaOdDochodu } = dane.wynik;
+  const { ryczalt, zdrowotna, przychodGr, kosztyGr, pit, zdrowotnaOdDochodu, vat } = dane.wynik;
   const kpir = dane.wynik.profil.forma !== 'ryczalt';
   const ujemne = ryczalt ? [...ryczalt.ujemneNaKolejneGr.values()].reduce((s, gr) => s - gr, 0) : 0;
   return (
@@ -200,13 +211,18 @@ function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
             ? ` Składka zdrowotna: próg „${zdrowotna.prog}”, bo przychód od początku roku po odliczeniu zapłaconych składek ` +
               `społecznych to ${zl(zdrowotna.przychodNarastajacoGr)}.`
             : ''}
+          {vat?.wynik
+            ? ` VAT: należny ${zl(vat.wynik.naleznyGr)}, naliczony ${zl(vat.wynik.naliczonyGr)} (w tym nadwyżka ${zl(vat.wynik.nadwyzkaPoprzedniaGr)} ` +
+              `z deklaracji za ${monthLabel(shiftMonth(dane.wynik.miesiac, -1))})` +
+              `${vat.wynik.nadwyzkaNaNastepnyGr > 0 ? `, nadwyżka na następny miesiąc ${zl(vat.wynik.nadwyzkaNaNastepnyGr)}` : ''}.`
+            : ''}
         </p>
       }
     />
   );
 }
 
-/** Symbol formularza na przelewie podatku: PPE przy ryczałcie, PIT-36 przy skali, PIT-36L przy liniowym. */
+/** Symbol formularza na przelewie podatku: PPE przy ryczałcie, PIT-36 przy skali, PIT-36L przy liniowym (VAT: VAT-7). */
 const SYMBOL: Readonly<Record<'ryczalt' | 'skala' | 'liniowy', string>> = { ryczalt: 'PPE', skala: 'PIT-36', liniowy: 'PIT-36L' };
 
 function daneDoPrzelewu(
@@ -217,10 +233,11 @@ function daneDoPrzelewu(
   nrs: string | null,
   forma: 'ryczalt' | 'skala' | 'liniowy',
 ): string {
-  if (rodzaj === 'ryczalt' || rodzaj === 'pit') {
+  if (rodzaj === 'ryczalt' || rodzaj === 'pit' || rodzaj === 'vat') {
     if (nip === null) return 'Nie udało się odczytać NIP firmy, więc mikrorachunku teraz nie pokazujemy; strona spróbuje ponownie przy następnym otwarciu.';
     if (!mikro) return 'Mikrorachunek podatkowy wylicza się z NIP firmy, a NIP jest w Ustawieniach, w danych firmy.';
-    return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza ${SYMBOL[forma]}, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
+    const symbol = rodzaj === 'vat' ? 'VAT-7' : SYMBOL[forma];
+    return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza ${symbol}, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
   }
   if (!nrs) return 'Numer rachunku składkowego jest w PUE ZUS; można go zapisać w zakładce „Ustawienia podatkowe”.';
   return `Rachunek składkowy ZUS ${formatujRachunek(nrs)}.`;
@@ -291,7 +308,45 @@ function Zatwierdzanie({ dane, miesiac, dzis, canEdit }: { dane: DaneOk; miesiac
   const skroty = Object.fromEntries(dane.pozycje.flatMap((p) => (p.ok ? [[p.rodzaj, p.wejsciaHash]] : [])));
   return (
     <div className="flex justify-end">
-      <ZatwierdzMiesiac miesiac={miesiac} skroty={skroty} etykieta={dane.rozliczenia.length > 0 ? 'Zatwierdź nową wersję' : 'Zatwierdź miesiąc'} />
+      <ZatwierdzMiesiac
+        miesiac={miesiac}
+        skroty={skroty}
+        etykieta={dane.rozliczenia.length > 0 ? 'Zatwierdź nową wersję' : 'Zatwierdź miesiąc'}
+        // Wpisana na ekranie nadwyżka (K7.1): akcja liczy VAT z tą samą kwotą.
+        nadwyzkaVat={dane.wynik.vat?.nadwyzka?.zrodlo === 'klient' ? dane.wynik.vat.nadwyzka.zl : null}
+      />
+    </div>
+  );
+}
+
+/**
+ * Nadwyżka z poprzedniej deklaracji przy pozycji VAT (K7.1): z MF tylko
+ * informacja; w pozostałych przypadkach pole (nieznana nadwyżka albo kwota do
+ * poprawienia, gdy deklaracja złożona poza FaktWay miała inną).
+ */
+function NadwyzkaVat({ vat, miesiac }: { vat: VatWyniku; miesiac: string }) {
+  const poprzedni = monthLabel(shiftMonth(miesiac, -1));
+  if (vat.nadwyzka?.zrodlo === 'mf') {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(vat.nadwyzka.zl * 100)}, z deklaracji przyjętej przez MF.
+      </p>
+    );
+  }
+  // Brak z innego powodu niż nadwyżka (np. odczyt albo dokument, którego plik nie wykaże): pole nic tu nie zmieni.
+  if (!vat.nadwyzka && !vat.nadwyzkaNieznana) return null;
+  return (
+    <div className="flex flex-col gap-2 pt-1">
+      {vat.nadwyzka?.zrodlo === 'zatwierdzone' ? (
+        <p className="text-muted-foreground text-xs">
+          Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(vat.nadwyzka.zl * 100)}, z rozliczenia VAT za {poprzedni} zatwierdzonego w „Ten miesiąc”.
+        </p>
+      ) : null}
+      <NadwyzkaPoprzednia
+        adres={`/reports/ten-miesiac?month=${Number(miesiac.slice(5, 7))}&year=${miesiac.slice(0, 4)}`}
+        poprzedni={poprzedni}
+        wartosc={vat.nadwyzka?.zl ?? null}
+      />
     </div>
   );
 }

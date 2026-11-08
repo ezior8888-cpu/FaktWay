@@ -15,7 +15,7 @@ import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { terminDla } from '@/lib/ksiegowosc/kalendarz';
 import { miesiacZParametrow } from '@/lib/ksiegowosc/miesiac-strony';
 import { formatujRachunek, mikrorachunekZNip } from '@/lib/ksiegowosc/mikrorachunek';
-import { brakNadwyzki, czytajVat, type DaneVat } from '@/lib/ksiegowosc/vat-dane';
+import { brakNadwyzki, czytajVat, nadwyzkaZAdresu, type DaneVat } from '@/lib/ksiegowosc/vat-dane';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { srodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
 import { ocenOdmoweInit, ocenStatus } from '@/lib/ksiegowosc/wysylka-jpk/statusy';
@@ -37,11 +37,6 @@ export const dynamic = 'force-dynamic';
 type DaneOk = Extract<DaneVat, { ok: true }>;
 
 const zl = (gr: number) => `${formatPlMoney(gr / 100)} zł`;
-
-/** P_39 z adresu: pełne złote, bez znaku; inaczej null. */
-function nadwyzkaZAdresu(wartosc: string | undefined): number | null {
-  return wartosc !== undefined && /^\d{1,13}$/.test(wartosc) ? Number(wartosc) : null;
-}
 
 const STANY: Readonly<Record<StanZapisu, string>> = {
   wysylanie: 'Wysyłanie',
@@ -160,6 +155,12 @@ function Nadwyzka({ dane, adres }: { dane: DaneOk; adres: string }) {
     <Card>
       <CardContent className="flex flex-col gap-3">
         {dane.nadwyzka ? null : <p className="text-sm">{brakNadwyzki(dane.miesiac)}</p>}
+        {dane.nadwyzka?.zrodlo === 'zatwierdzone' ? (
+          <p className="text-muted-foreground text-xs">
+            Nadwyżka z deklaracji za {poprzedni} (P_39): {zl(dane.nadwyzka.zl * 100)}, z rozliczenia VAT za {poprzedni} zatwierdzonego w „Ten
+            miesiąc”. Inna kwota z deklaracji złożonej poza FaktWay wpisuje się niżej.
+          </p>
+        ) : null}
         <NadwyzkaPoprzednia adres={adres} poprzedni={poprzedni} wartosc={dane.nadwyzka?.zl ?? null} />
       </CardContent>
     </Card>
