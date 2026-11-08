@@ -250,8 +250,10 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 30.10.2026 | Sesja 19: Pulpit czyta sprzedaż raz na wejście (`lib/dashboard/sales-history.ts` w `cache()`, strażniki liczone na oknie każdej karty, przy błędzie wspólnego odczytu karty czytają osobno jak dawniej), paczki pozycji do 4 naraz, nowy `readCompletePagesByKey` (`readCompletePages` bez zmian) | #352 | PR otwarty, CI w toku; złoty wzorzec 32/32 identyczny z `main`. Zapytania na wejście: dane przykładowe 26 → 14, mikrofirma 35 → 22, duża firma 62 → 40. Cel „ok. 10” osiągnięty tylko dla sprzedaży bez pozycji (19 → 6); zostają pozycje rankingu (paczki po 100, krok 2 = RPC, migracja), koszty i należności (osobne ustalenia w PR) |
 | 03.11.2026 | Scalone i wdrożone: #329 i #337–#352 w zbiorczym #363, poprawka buildu #364 | #363, #364 | 00157 na db-1, aplikacja i worker na 3b428464, w logu workera 29/29 cronów, `db-backup.sh` na db-1 podmieniony. Metryki z sesji 23: web 339 MB, ELU ok. 0,05, render Pulpitu 265 ms. Zmniejszanie zdjęć podpięte w `components/expenses/use-expense-capture.tsx` po scaleniu z #334 i #335 |
 | 03.11.2026 | Decyzje Bartosza po statusie z 30.10 | — | #344 przyjęty. #346: kopia 2000 px wystarcza jako dowód (zapyta księgową; jeśli „nie”, 2600 px, bez trzymania oryginału); pliki ponad 1 MB → sesja 31. #350 przyjęty. #351: `app/error.tsx` dla segmentu głównego, mały osobny PR. #352: krok 2 Pulpitu (RPC) odłożony: wraca, gdy p95 renderu Pulpitu przekroczy 800 ms w dzień terminu albo przed etapem 1b, jako migracja razem z RPC z sesji 28. Nowe sesje 31–34, `products` w sesji 21 |
+| 04.11.2026 | Przegląd starych PR-ów (agent na każdy PR + sceptyk) | — | #236 i #225 zamknięte z komentarzem; #189 i #320 odświeżone (lista kontrolna z #320 w osobnym #415); treść szkicu #190 przeniesiona na #369 i #413; #197 i #193 czekają na decyzję Bartosza. Z przeglądu wyszło też E17 (#416) |
+| 05.11.2026 | `app/error.tsx` dla segmentu głównego: karta panelu i ponowienie także przy awarii layoutu | #414 | w zbiorczym z #367, #369 i #413; do decyzji Bartosza: przeładowanie po `ChunkLoadError` i +7,9 kB JS |
+| 05.11.2026 | Sesja 2: pliki techniczne bez klienta Supabase w proxy | #405 | PR otwarty, CI 11/11; druga, mocniejsza wersja tej samej sesji (więcej ścieżek, 68 przypadków, pomiar na `next start`) czeka lokalnie na decyzję Igora |
 
-**Następny krok:** sesja 2, potem 8 (proxy, odblokowane po #363), dalej według
-kolejności z sekcji 3. Obok: `app/error.tsx` (mały osobny PR) i przegląd
-starych PR-ów (#320, #236, #225, #189, #197, #193, #190). Przy 3–4 gotowych
-PR-ach zbiorczy „Scalenie …”.
+**Następny krok:** sesja 8 (proxy: 1 wywołanie GoTrue zamiast 3), potem 31, 21
+i dalej według kolejności z sekcji 3. Drugi zbiorczy: #405, #320, #415, #189,
+#416.
