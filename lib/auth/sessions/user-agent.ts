@@ -1,4 +1,4 @@
-import { userAgentParts } from '@/lib/auth/passkey/device-label';
+import { sanitizeDeviceLabel, userAgentParts } from '@/lib/auth/passkey/device-label';
 import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent';
 
 /**
@@ -25,21 +25,13 @@ export interface SessionDevice {
 const SERVER_USER_AGENT = /^(node|undici)(\/\S*)?$/i;
 const TABLET_USER_AGENT = /iPad|Tablet|Android(?!.*\bMobile\b)/i;
 const DESKTOP_PLATFORMS: ReadonlySet<string> = new Set(['Mac', 'Windows', 'Chromebook', 'Linux']);
-const MAX_TOOL_LABEL_LENGTH = 40;
 
-function printable(text: string): string {
-  return Array.from(text)
-    .filter((character) => {
-      const code = character.charCodeAt(0);
-      return code >= 0x20 && !(code >= 0x7f && code <= 0x9f);
-    })
-    .join('');
-}
-
-/** Pierwsze słowo nagłówka spoza przeglądarki, np. „curl” z „curl/8.4.0”. */
+/**
+ * Pierwsze słowo nagłówka spoza przeglądarki, np. „curl” z „curl/8.4.0”, oczyszczone
+ * jak nazwa urządzenia biometrii (bez znaków sterujących, najwyżej 60 znaków).
+ */
 function toolLabel(userAgent: string): string | null {
-  const name = printable(userAgent.split(/[\s/;()]/)[0] ?? '').trim();
-  return name ? Array.from(name).slice(0, MAX_TOOL_LABEL_LENGTH).join('') : null;
+  return sanitizeDeviceLabel(userAgent.split(/[\s/;()]/)[0]);
 }
 
 export function describeUserAgent(userAgent: string | null | undefined): SessionDevice {

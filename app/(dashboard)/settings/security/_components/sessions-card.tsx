@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { FieldDescription, FieldLabel } from '@/components/ui/field';
 import type { SessionDeviceKind } from '@/lib/auth/sessions/user-agent';
 import type { AccountSessionView } from '@/lib/auth/sessions/view';
-import { plural } from '@/lib/i18n/plural';
 
 import { revokeOtherSessionsAction, revokeSessionAction, type SessionActionError } from '../session-actions';
 
@@ -110,8 +109,10 @@ export function SessionsCard({ initialSessions, state, stepUpShownAbove = false 
         return;
       }
       setSessions((current) => current.filter((session) => session.isCurrent));
+      // Bez liczby: baza wylogowuje też sesje spoza listy (wygasłe, ponad 50 pokazanych),
+      // więc liczba nie zgadzałaby się z tym, co klient widział. Liczba jest w audycie.
       setNotice(result.count > 0
-        ? `Wylogowaliśmy ${result.count} ${plural(result.count, ['urządzenie', 'urządzenia', 'urządzeń'])}.`
+        ? 'Wylogowaliśmy wszystkie pozostałe urządzenia.'
         : 'Nie było innych zalogowanych urządzeń.');
     });
   };
@@ -188,8 +189,7 @@ export function SessionsCard({ initialSessions, state, stepUpShownAbove = false 
       {others.length > 0 && (confirmingAll ? (
         <div className="flex flex-col gap-2 border p-3">
           <p className="text-sm">
-            Wylogujemy {others.length} {plural(others.length, ['inne urządzenie', 'inne urządzenia', 'innych urządzeń'])}.
-            Na każdym trzeba będzie zalogować się ponownie.
+            Wylogujemy wszystkie urządzenia poza tym. Na każdym trzeba będzie zalogować się ponownie.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="destructive" className="min-h-[44px]" disabled={isPending} onClick={onRevokeOthers}>

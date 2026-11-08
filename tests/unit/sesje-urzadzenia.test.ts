@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_DEVICE_LABEL_LENGTH } from '@/lib/auth/passkey/device-label';
 import { loginMethodFromAmr, readAccessTokenFacts } from '@/lib/auth/sessions/access-token';
-import { formatIpPrefix } from '@/lib/auth/sessions/ip-prefix';
+import { formatIpPrefix, isIpAddress } from '@/lib/auth/sessions/ip-prefix';
 import { describeUserAgent } from '@/lib/auth/sessions/user-agent';
 import { toAccountLoginView, toAccountSessionView } from '@/lib/auth/sessions/view';
 
@@ -65,9 +66,9 @@ describe('urządzenie z nagłówka User-Agent', () => {
     expect(describeUserAgent('python-requests/2.31.0')).toEqual({ kind: 'unknown', label: 'python-requests', fromServer: false });
   });
 
-  it('nazwa z nagłówka bez znaków sterujących i nie dłuższa niż 40 znaków', () => {
+  it('nazwa z nagłówka oczyszczona jak nazwa urządzenia biometrii: bez znaków sterujących, z limitem długości', () => {
     expect(describeUserAgent('\u0007\u0000zly\u0001klient/1.0').label).toBe('zlyklient');
-    expect(Array.from(describeUserAgent(`${'a'.repeat(300)}/1.0`).label ?? '')).toHaveLength(40);
+    expect(Array.from(describeUserAgent(`${'a'.repeat(300)}/1.0`).label ?? '')).toHaveLength(MAX_DEVICE_LABEL_LENGTH);
     expect(describeUserAgent('////').label).toBeNull();
   });
 });
@@ -93,6 +94,11 @@ describe('skrócony adres IP', () => {
       expect(formatIpPrefix(value)).toBeNull();
     },
   );
+
+  it('pełny adres do kolumny INET: IPv4 i IPv6 tak, maska, port, strefa i śmieci nie', () => {
+    for (const value of ['83.21.104.77', '2a02:a311:4a3f:1::5', '::1', '::ffff:83.21.104.77']) expect(isIpAddress(value), value).toBe(true);
+    for (const value of ['', 'x', '83.21.104.0/24', '83.21.104.77:443', 'fe80::1%eth0', '999.1.1.1']) expect(isIpAddress(value), value).toBe(false);
+  });
 
   it('nigdy nie pokazuje pełnego adresu, nawet gdy baza oddała pełny', () => {
     expect(formatIpPrefix('83.21.104.77')).not.toContain('77');

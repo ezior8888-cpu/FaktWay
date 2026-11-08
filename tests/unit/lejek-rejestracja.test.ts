@@ -194,6 +194,19 @@ describe('rejestracja hasłem', () => {
     expect(posthog.messages).toEqual([]);
   });
 
+  it('sesja od razu (bez potwierdzenia e-mailem): wpis auth.signup z identyfikatorem sesji dla listy urządzeń', async () => {
+    // Krok 8.5 (00174): `list_account_sessions` łączy sesję z wpisem po `metadata.session_id`.
+    const sessionId = '5b7e2d1c-3f4a-4b6c-8d9e-0f1a2b3c4d5e';
+    const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const accessToken = [part({ alg: 'HS256' }), part({ sub: USER, session_id: sessionId }), 'podpis'].join('.');
+    h.signUp.mockResolvedValue({ data: { user: goTrueUser(), session: { access_token: accessToken } }, error: null });
+    await expect(signupWithEmail(form())).rejects.toThrow('redirect:/dashboard');
+    expect(h.audit).toHaveBeenCalledWith({
+      action: 'auth.signup', tenantId: null, userId: USER,
+      metadata: { flow: 'session_immediate', session_id: sessionId },
+    });
+  });
+
   it('awaria analityki nie psuje rejestracji', async () => {
     h.jar.set(ATTRIBUTION_COOKIE, encodeFirstTouch(TOUCH));
     db.failures['users:update'] = { code: '08006', message: 'połączenie zerwane' };

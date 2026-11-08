@@ -47,6 +47,15 @@ function ipv6Groups(value: string): number[] | null {
   return missing >= 1 ? [...head, ...Array<number>(missing).fill(0), ...tail] : null;
 }
 
+/**
+ * Pełny adres IPv4 albo IPv6 (bez maski, portu i strefy `%eth0`): tylko taki
+ * przyjmie kolumna INET `audit_logs.ip_address` bez wywrócenia zapisu.
+ */
+export function isIpAddress(value: string): boolean {
+  if (!value || value.includes('/')) return false;
+  return value.includes(':') ? ipv6Groups(value) !== null : ipv4Octets(value) !== null;
+}
+
 export function formatIpPrefix(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const address = value.trim().split('/')[0] ?? '';

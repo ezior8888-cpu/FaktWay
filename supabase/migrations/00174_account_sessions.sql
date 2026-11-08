@@ -202,7 +202,9 @@ END;
 $$;
 
 -- Wylogowanie wszystkich urządzeń konta poza bieżącym (jak `/logout?scope=others`
--- w GoTrue). Zwraca liczbę wylogowanych sesji.
+-- w GoTrue), także sesji spoza listy (wygasłych i ponad 50 pokazanych): token
+-- dostępu takiej sesji działa jeszcze do wygaśnięcia, więc też ma zniknąć.
+-- Zwraca liczbę usuniętych sesji (do audytu; ekran jej nie pokazuje).
 CREATE FUNCTION public.revoke_other_account_sessions()
 RETURNS integer
 LANGUAGE plpgsql
