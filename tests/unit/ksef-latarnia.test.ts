@@ -31,10 +31,14 @@ describe('fetchKsefOfficialStatus', () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
   });
 
-  it('TEST pyta testową Latarnię', async () => {
-    respond({ status: 'AVAILABLE' });
-    await fetchKsefOfficialStatus('test');
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api-latarnia-test.ksef.mf.gov.pl/status');
+  it('TEST nie pyta Latarni: testowa Latarnia MF trzyma demonstracyjną awarię całkowitą', async () => {
+    // 08.11.2026: api-latarnia-test.ksef.mf.gov.pl zwraca od 31.01.2026 stałe
+    // TOTAL_FAILURE (komunikat K/2026/AWR/02), a produkcyjna AVAILABLE. Produkcja
+    // FaktWay działa na KSEF_ENV=test, więc klienci widzieli baner o awarii
+    // całkowitej ogłoszonej przez MF. Ogłoszenia MF dotyczą produkcyjnego KSeF.
+    respond({ status: 'TOTAL_FAILURE', messages: [{ category: 'TOTAL_FAILURE', end: null }] });
+    await expect(fetchKsefOfficialStatus('test')).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('DEMO nie ma Latarni: brak zapytania i brak stanu', async () => {
