@@ -202,9 +202,9 @@ export default function PricingPage() {
               W przygotowaniu (jeszcze niedostępne): wysyłka korekt i faktur rozliczających do KSeF,
               tryb Offline24, eksport JPK_V7M(3), eksport do Comarch Optima i Subiekta (EDI++).
               Odczyt dokumentów ze zdjęcia ma limit dzienny i miesięczny na firmę: dzienny liczy
-              odczyty z ostatnich 24 godzin, miesięczny z bieżącego miesiąca. Dokument wgrany po
-              wyczerpaniu limitu nie zostanie odczytany, więc wgrywasz go ponownie, gdy limit się
-              odnowi. Szczegóły w{' '}
+              odczyty z ostatnich 24 godzin, miesięczny odnawia się z początkiem miesiąca. Dokument
+              wgrany po wyczerpaniu limitu nie zostanie odczytany, więc wgrywasz go ponownie, gdy
+              limit się odnowi. Szczegóły w{' '}
               <Link href="/legal/regulamin" className="font-medium text-primary underline-offset-4 hover:underline">
                 regulaminie
               </Link>

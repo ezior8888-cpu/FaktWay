@@ -121,7 +121,7 @@ export const FLO_TEMPLATE_VARIANTS: Record<string, FloTemplate> = {
   // W-01: odczyt się nie udał, zdjęcie jest w archiwum.
   'expense.review:failed': {
     title: 'Nie odczytałem tego zdjęcia',
-    body: 'Zdjęcie zostało w archiwum, nic nie przepadło. Wgraj je jeszcze raz albo zrób nowe ujęcie.',
+    body: 'Zdjęcie zostało w archiwum, nic nie przepadło. Wgraj je jeszcze raz albo zrób nowe ujęcie. Gdy wyczerpał się limit odczytów, zrób to po jego odnowieniu.',
   },
 };
 

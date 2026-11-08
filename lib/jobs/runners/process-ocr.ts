@@ -245,7 +245,7 @@ export async function onProcessOcrExhausted(
       status: 'failed',
       error_message:
         error.message?.slice(0, 500) ||
-        'Nie udało się rozpoznać paragonu. Spróbuj ponownie.',
+        'Nie udało się rozpoznać paragonu. Spróbuj ponownie za kilka minut.',
       completed_at: new Date().toISOString(),
     })
     .eq('id', ocrJobId)

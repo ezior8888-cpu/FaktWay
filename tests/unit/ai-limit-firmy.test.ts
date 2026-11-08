@@ -67,10 +67,10 @@ describe('budżet AI firmy', () => {
 
 /**
  * Plan kompletnej aplikacji, 2.6: komunikaty odmowy kazały „wprowadzić dane
- * ręcznie”, a formularza kosztu bez zdjęcia nie ma. Prawdziwa droga to
- * ponowne wgranie dokumentu po odnowieniu limitu, więc komunikat mówi, kiedy
+ * ręcznie”, a formularza kosztu bez zdjęcia nie ma. Komunikat mówi, kiedy
  * limit wraca. Trafia do zadania OCR (`error_message`, widoczny przy przycisku
- * „Dodaj wydatek”) i do powiadomienia, które process-ocr ucina do 80 znaków.
+ * „Dodaj wydatek”) i do powiadomienia, które process-ocr ucina do 80 znaków,
+ * więc ma być jednym zdaniem w tej długości (bez urwanego słowa).
  */
 describe('komunikaty odmowy mówią, kiedy limit wraca', () => {
   const odmowa = async (tenantId: string) => {
@@ -79,23 +79,22 @@ describe('komunikaty odmowy mówią, kiedy limit wraca', () => {
     return verdict.message;
   };
 
-  it('miesięczny: wróci od następnego miesiąca, dokument wgrywa się ponownie, bez wpisu ręcznego', async () => {
+  it('miesięczny: wróci od następnego miesiąca, bez wpisu ręcznego, w 80 znakach', async () => {
     mocks.spend.mockResolvedValue({ monthUsd: usd(3.01), todayUsd: 0 });
     const message = await odmowa('t-msg-month');
 
     expect(message).not.toMatch(/ręcznie/i);
-    expect(message).toContain('Wgraj dokument ponownie');
-    // Powiadomienie pokazuje pierwsze 80 znaków: musi w nich być, kiedy limit wraca.
-    expect(message.slice(0, 80)).toContain('miesięczny limit odczytu dokumentów, wróci od następnego miesiąca.');
+    expect(message).toContain('miesięczny limit odczytu dokumentów, wróci od następnego miesiąca.');
+    expect(message.length).toBeLessThanOrEqual(80);
   });
 
-  it('dzienny: wróci w ciągu 24 godzin, dokument wgrywa się ponownie, bez wpisu ręcznego', async () => {
+  it('dzienny: wróci w ciągu 24 godzin, bez wpisu ręcznego, w 80 znakach', async () => {
     for (let i = 0; i < AI_DAILY_OCR_LIMIT; i += 1) await checkTenantAiBudget('t-msg-day', 'ocr');
     const message = await odmowa('t-msg-day');
 
     expect(message).not.toMatch(/ręcznie/i);
-    expect(message).toContain('Wgraj dokument ponownie');
-    expect(message.slice(0, 80)).toContain('dzienny limit odczytu dokumentów, wróci w ciągu 24 godzin.');
+    expect(message).toContain('dzienny limit odczytu dokumentów, wróci w ciągu 24 godzin.');
+    expect(message.length).toBeLessThanOrEqual(80);
   });
 
   it('dzienny limit liczy odczyty z ostatnich 24 godzin: tak mówią komunikat, cennik i pomoc', async () => {

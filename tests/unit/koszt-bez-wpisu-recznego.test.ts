@@ -6,8 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import PricingPage from '@/app/(marketing)/pricing/page';
-import { type FloDbClient } from '@/lib/flo/db-types';
 import { readSpend } from '@/lib/flo/budget';
+import type { FloDbClient } from '@/lib/flo/db-types';
 
 import { tekstBezZnacznikow } from './helpers/tekst-html';
 
@@ -24,7 +24,7 @@ import { tekstBezZnacznikow } from './helpers/tekst-html';
  * Prawdziwa droga to ponowne wgranie dokumentu, gdy limit się odnowi. Teksty
  * mówią to wprost, a poniższe testy sprawdzają w kodzie obie rzeczy, które
  * teksty twierdzą: dzienny limit liczy odczyty z ostatnich 24 godzin
- * (tests/unit/ai-limit-firmy.test.ts), miesięczny z bieżącego miesiąca (niżej).
+ * (tests/unit/ai-limit-firmy.test.ts), miesięczny odnawia się z początkiem miesiąca (niżej).
  *
  * Formularz kosztu bez zdjęcia to krok 3.8 planu
  * (docs/koordynacja/PLAN-KOMPLETNA-APLIKACJA.md). Gdy powstanie, ten plik traci
@@ -33,19 +33,28 @@ import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 const ROOT = join(__dirname, '..', '..');
 
-/** Strony, treści i interfejs kosztów: teksty, które czyta klient. */
-const KATALOGI = ['app/(home)', 'app/(marketing)', 'content', 'components/expenses', 'components/flo'];
-
-/** Komunikaty odczytu i karty agenta leżą w kodzie, nie w katalogach wyżej. */
-const PLIKI = [
-  'lib/ai/tenant-ai-budget.ts',
-  'lib/jobs/runners/process-ocr.ts',
-  'lib/flo/copy.ts',
-  'lib/flo/functions/expense-review.ts',
+/** Strony, treści i interfejs kosztów oraz kod, który składa komunikaty odczytu: teksty, które czyta klient. */
+const KATALOGI = [
+  'app/(home)',
+  'app/(marketing)',
+  'content',
+  'components/expenses',
+  'components/flo',
+  'lib/ai',
+  'lib/ocr',
+  'lib/jobs/runners',
+  'lib/flo/functions',
 ];
 
-/** „Wpisz ręcznie”, „Wpisz kwotę ręcznie”, „wprowadź dane ręcznie”, „dane wpisujesz ręcznie”. */
-const OBIETNICA_WPISU = /(wpisz|wpisuj\w*|wprowadź|wprowadzasz)\s+(\S+\s+){0,2}ręcznie/i;
+/** Pojedyncze pliki z tekstami karty agenta. */
+const PLIKI = ['lib/flo/copy.ts'];
+
+/**
+ * „Wpisz ręcznie”, „Wpisz kwotę ręcznie”, „wprowadź dane ręcznie”, „dane wpisujesz ręcznie”,
+ * „uzupełnij koszt ręcznie”, „dodaj samodzielnie”.
+ */
+const OBIETNICA_WPISU =
+  /(wpisz\w*|wpisuj\w*|wpisać|wprowadź|wprowadzasz|wprowadzić|uzupełni\w*|dodaj|dodasz|dodać)\s+(\S+\s+){0,2}(ręcznie|samodzielnie)/i;
 
 const CZY_TRESC = /\.(tsx?|mdx?)$/;
 const CZY_KOD = /\.tsx?$/;
@@ -91,6 +100,8 @@ describe('po wyczerpaniu limitu odczytu zdjęć nikt nie obiecuje wpisu ręczneg
       'Wpisz kwotę ręcznie albo zrób nowe ujęcie',
       'Wprowadź dane ręcznie albo spróbuj w przyszłym miesiącu',
       'Po jego wyczerpaniu dane wpisujesz ręcznie.',
+      'Uzupełnij koszt ręcznie',
+      'Dodaj go samodzielnie',
     ]) {
       expect(zdanie, zdanie).toMatch(OBIETNICA_WPISU);
     }
@@ -108,14 +119,14 @@ describe('po wyczerpaniu limitu odczytu zdjęć nikt nie obiecuje wpisu ręczneg
     const tekst = bezSpacji(tekstBezZnacznikow(renderToStaticMarkup(createElement(PricingPage))));
 
     expect(tekst).toContain('ma limit dzienny i miesięczny na firmę');
-    expect(tekst).toMatch(/dzienny liczy odczyty z ostatnich 24 godzin, miesięczny z bieżącego miesiąca/i);
+    expect(tekst).toMatch(/dzienny liczy odczyty z ostatnich 24 godzin, miesięczny odnawia się z początkiem miesiąca/i);
     expect(tekst).toMatch(/nie zostanie odczytany, więc wgrywasz go ponownie, gdy limit się odnowi/);
   });
 
   it('pomoc o skanowaniu paragonów mówi to samo co cennik', () => {
     const tresc = bezSpacji(readFileSync(join(ROOT, 'content/help/skanowanie-paragonow-ocr.mdx'), 'utf8'));
 
-    expect(tresc).toMatch(/dzienny liczy odczyty z ostatnich 24 godzin, miesięczny z bieżącego miesiąca/i);
+    expect(tresc).toMatch(/dzienny liczy odczyty z ostatnich 24 godzin, miesięczny odnawia się z początkiem miesiąca/i);
     expect(tresc).toMatch(/nie powstanie z niego koszt/);
     expect(tresc).toMatch(/wgraj dokument ponownie/i);
   });

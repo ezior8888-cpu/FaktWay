@@ -28,7 +28,7 @@ Treść: {{powod}} Zajrzyj na chwilę, zanim to zaksięguję.
 
 Tytuł: Nie odczytałem tego zdjęcia
 
-Treść: Zdjęcie zostało w archiwum, nic nie przepadło. Wgraj je jeszcze raz albo zrób nowe ujęcie przy lepszym świetle.
+Treść: Zdjęcie zostało w archiwum, nic nie przepadło. Wgraj je jeszcze raz albo zrób nowe ujęcie przy lepszym świetle. Gdy wyczerpał się limit odczytów, zrób to po jego odnowieniu.
 
 ## Przyciski
 
