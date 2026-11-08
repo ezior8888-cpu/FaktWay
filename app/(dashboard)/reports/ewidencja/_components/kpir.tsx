@@ -1,4 +1,5 @@
 import { JpkEwpPobierz } from '@/components/ksiegowosc/jpk-ewp-pobierz';
+import { SpisZNaturyForm, UsunSpisPrzycisk } from '@/components/ksiegowosc/spis-z-natury-form';
 import { UsunWpisPrzycisk, WpisRecznyForm } from '@/components/ksiegowosc/wpis-reczny-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,11 +10,13 @@ import { formatPlMoney } from '@/lib/format/pl';
 import { brakiKpirOkresu, NAZWY_KOLUMN, sumyKpir, wierszeKpirOkresu, type Kpir, type WierszKpir, type WpisKpir } from '@/lib/ksiegowosc/kpir';
 import { NAZWY_RODZAJOW_WPISU, type RodzajWpisu } from '@/lib/ksiegowosc/wpisy-reczne';
 import type { WynikKpir } from '@/lib/ksiegowosc/kpir-dane';
+import { spisyPliku, type Spis } from '@/lib/ksiegowosc/spis-z-natury';
 
 /**
  * KPiR w zakładce „Ewidencja” przy skali i liniowym (plan księgowości JDG,
  * K7, sekcja 8): wiersze księgi za miesiąc według wzoru od 2026 r., braki
- * z wyjściem, wpisy ręczne z kolumną KPiR i plik JPK_PKPIR(3) od 1 stycznia.
+ * z wyjściem, wpisy ręczne z kolumną KPiR, spis z natury (K7.4) i plik
+ * JPK_PKPIR(3) od 1 stycznia.
  * Miesiąc z brakiem nie ma sum, a okres z brakiem nie ma pliku (fail-closed).
  */
 
@@ -60,7 +63,8 @@ export function KpirModulu({
     <>
       <KpirMiesiaca kpir={wynik.kpir} od={od} doDnia={doDnia} tytul={tytul} />
       <WpisyKpir wpisy={wynik.wpisy.filter((w) => w.data >= od && w.data <= doDnia)} domyslnaData={doDnia < dzis ? doDnia : dzis} canEdit={canEdit} />
-      <PlikJpkPkpir kpir={wynik.kpir} rok={rok} miesiac={miesiac} koniecMiesiaca={doDnia} dzis={dzis} mozePobrac={mozePobrac} />
+      <SpisZNatury spisy={wynik.spisy} rok={rok} dzis={dzis} canEdit={canEdit} />
+      <PlikJpkPkpir kpir={wynik.kpir} spisy={wynik.spisy} rok={rok} miesiac={miesiac} koniecMiesiaca={doDnia} dzis={dzis} mozePobrac={mozePobrac} />
     </>
   );
 }
@@ -173,9 +177,9 @@ function WpisyKpir({ wpisy, domyslnaData, canEdit }: { wpisy: (WpisKpir & { rodz
           <h2 className="text-sm font-medium">Wpisy ręczne w KPiR</h2>
           <p className="text-muted-foreground text-xs">
             Przychody i koszty bez faktury w KSeF ani dokumentu w Kosztach, np. sprzedaż z kasy rejestrującej. Fundusz Pracy i Fundusz
-            Solidarnościowy z zapłaconych składek ZUS są kosztem w kolumnie 13 i trafiają do KPiR jako wpis ręczny. Składek społecznych (a przy
-            liniowym także zdrowotnej) KPiR nie zawiera: zaliczka PIT odlicza od dochodu te oznaczone jako zapłacone w „Ten miesiąc”. Poprawka to
-            usunięcie wpisu i dodanie nowego.
+            Solidarnościowy FaktWay dopisuje do KPiR sam (kolumna 13) w dniu zapłaty składek oznaczonej w „Ten miesiąc”, więc nie wpisuje się ich
+            ręcznie. Składek społecznych (a przy liniowym także zdrowotnej) KPiR nie zawiera: zaliczka PIT odlicza od dochodu te oznaczone jako
+            zapłacone. Poprawka to usunięcie wpisu i dodanie nowego.
           </p>
         </div>
         {wpisy.length > 0 ? (
@@ -223,8 +227,66 @@ function WpisyKpir({ wpisy, domyslnaData, canEdit }: { wpisy: (WpisKpir & { rodz
   );
 }
 
+/**
+ * Spis z natury (K7.4, D19): spisy roku (od 31 grudnia poprzedniego) z usuwaniem
+ * i formularz. Formularz proponuje spis na początek roku, a gdy już jest, na
+ * koniec roku (nie później niż dziś).
+ */
+function SpisZNatury({ spisy, rok, dzis, canEdit }: { spisy: Spis[]; rok: number; dzis: string; canEdit: boolean }) {
+  const maPoczatek = spisy.some((s) => s.data === `${rok - 1}-12-31` || s.data === `${rok}-01-01`);
+  const koniec = `${rok}-12-31`;
+  const domyslnaData = maPoczatek ? (koniec < dzis ? koniec : dzis) : `${rok - 1}-12-31`;
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-sm font-medium">Spis z natury</h2>
+          <p className="text-muted-foreground text-xs">
+            Spis z natury robi się na 1 stycznia (albo na dzień rozpoczęcia działalności) i na 31 grudnia, a także np. przy zmianie formy
+            opodatkowania. Plik JPK_PKPIR bierze z niego spis na początek roku (z 31 grudnia poprzedniego roku albo z 1 stycznia) i na koniec roku.
+          </p>
+        </div>
+        {spisy.length > 0 ? (
+          <Table aria-label="Spisy z natury">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead className="text-right">Wartość</TableHead>
+                <TableHead>Uwagi</TableHead>
+                {canEdit ? <TableHead className="sr-only">Usuń</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {spisy.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell>{formatIsoDatePl(s.data)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{zl(s.kwotaGr)}</TableCell>
+                  <TableCell className="text-muted-foreground max-w-64 text-xs whitespace-normal">{s.opis}</TableCell>
+                  {canEdit ? (
+                    <TableCell className="text-right">
+                      <UsunSpisPrzycisk id={s.id} data={formatIsoDatePl(s.data)} />
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-muted-foreground text-sm">W {rok} r. nie ma jeszcze spisu z natury.</p>
+        )}
+        {canEdit ? (
+          <SpisZNaturyForm domyslnaData={domyslnaData} dzis={dzis} />
+        ) : (
+          <p className="text-muted-foreground text-xs">Spis dodaje i usuwa właściciel albo administrator firmy.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PlikJpkPkpir({
   kpir,
+  spisy,
   rok,
   miesiac,
   koniecMiesiaca,
@@ -232,6 +294,7 @@ function PlikJpkPkpir({
   mozePobrac,
 }: {
   kpir: Kpir;
+  spisy: Spis[];
   rok: number;
   miesiac: number;
   koniecMiesiaca: string;
@@ -261,11 +324,7 @@ function PlikJpkPkpir({
             Plik {okres}: wiersze {wiersze.length}, przychód {zl(sumy.przychodGr)}, koszty {zl(sumy.kosztyGr)}. Plik za cały zamknięty rok ma cel
             „złożenie po raz pierwszy”, za część roku „na żądanie urzędu”.
           </p>
-          {sumy.kolumny.k10 !== 0 ? (
-            <p className="text-muted-foreground text-xs">
-              Plik zapisuje spis z natury na początek i koniec roku jako zero. Przy zakupie towarów handlowych spis z natury podaje księgowa.
-            </p>
-          ) : null}
+          {sumy.kolumny.k10 !== 0 || spisy.length > 0 ? <p className="text-muted-foreground text-xs">{opisSpisu(spisyPliku(spisy, od, doDnia), rok, doDnia)}</p> : null}
           {mozePobrac ? (
             <JpkEwpPobierz rok={rok} doMiesiaca={miesiac} plik="JPK_PKPIR" />
           ) : (
@@ -285,3 +344,12 @@ function PlikJpkPkpir({
     </Card>
   );
 }
+
+/** Zdanie o spisie z natury w pliku: P_1 i P_2 z datami spisów albo bez spisu. */
+function opisSpisu(spis: ReturnType<typeof spisyPliku>, rok: number, doDnia: string): string {
+  const poczatek = `${zl(spis.poczatekGr)} (${spis.poczatekZ ? `spis z ${formatIsoDatePl(spis.poczatekZ)}` : 'bez spisu'})`;
+  const koniec =
+    doDnia === `${rok}-12-31` ? `${zl(spis.koniecGr)} (${spis.koniecZ ? `spis z ${formatIsoDatePl(spis.koniecZ)}` : 'bez spisu'})` : 'w pliku za cały rok';
+  return `Spis z natury w pliku: na początek roku ${poczatek}, na koniec roku ${koniec}.`;
+}
+

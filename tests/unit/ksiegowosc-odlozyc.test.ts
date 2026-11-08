@@ -14,7 +14,7 @@ const H = 'a'.repeat(64);
 const pozycja = (rodzaj: 'ryczalt' | 'zus_spoleczne' | 'zdrowotna', kwotaGr: number) => ({ ok: true as const, rodzaj, kwotaGr, termin: null, wejscia: {}, wejsciaHash: H });
 
 function dane(pozycje: unknown[], przychodGr: number | null = 1_500_000): DaneMiesiaca {
-  return { ok: true, wynik: { przychodGr } as never, pozycje: pozycje as never, parametryWersja: 'x', rozliczenia: [] };
+  return { ok: true, wynik: { przychodGr } as never, pozycje: pozycje as never, parametryWersja: 'x', rozliczenia: [], zaplatyReczne: [] };
 }
 
 describe('ile odłożyć', () => {
@@ -31,7 +31,7 @@ describe('ile odłożyć', () => {
       braki: ['Etap zaczyna się w trakcie miesiąca.'],
     });
     expect(ileOdlozyc('2026-11', dane([brak]))).toEqual({ ok: false, miesiac: '2026-11', braki: ['Etap zaczyna się w trakcie miesiąca.'] });
-    expect(ileOdlozyc('2026-11', { ok: false, braki: ['Stawki czekają na sprawdzenie.'], rozliczenia: [] })).toEqual({
+    expect(ileOdlozyc('2026-11', { ok: false, braki: ['Stawki czekają na sprawdzenie.'], rozliczenia: [], zaplatyReczne: [] })).toEqual({
       ok: false,
       miesiac: '2026-11',
       braki: ['Stawki czekają na sprawdzenie.'],

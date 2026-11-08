@@ -4,12 +4,12 @@ import type { ComponentType } from 'react';
 
 import MonthSelector from '@/components/expenses/finora/month-selector';
 import { StatCell, StatCellError, StatsCardsFrame } from '@/components/expenses/finora/stats-cards';
-import { ZaplaconeRozliczenie, ZatwierdzMiesiac } from '@/components/ksiegowosc/ten-miesiac-akcje';
+import { ZaplaconeRozliczenie, ZaplataReczna, ZatwierdzMiesiac } from '@/components/ksiegowosc/ten-miesiac-akcje';
 import { NadwyzkaPoprzednia } from '@/components/ksiegowosc/vat-akcje';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { monthLabel, shiftMonth } from '@/lib/expenses/month';
+import { monthLabel, monthRange, shiftMonth } from '@/lib/expenses/month';
 import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -142,6 +142,8 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
           </Card>
         </>
       )}
+
+      {canEdit || dane.zaplatyReczne.length > 0 ? <ZaplatySpozaWyliczenia zaplaty={dane.zaplatyReczne} canEdit={canEdit} dzis={dzis} miesiac={miesiac} /> : null}
 
       {dane.rozliczenia.length > 0 ? <Historia rozliczenia={dane.rozliczenia} canEdit={canEdit} dzis={dzis} /> : null}
     </div>
@@ -353,6 +355,55 @@ function NadwyzkaVat({ vat, miesiac }: { vat: VatWyniku; miesiac: string }) {
         wartosc={vat.nadwyzka?.zl ?? null}
       />
     </div>
+  );
+}
+
+/**
+ * Zapłaty spoza wyliczenia (K7.2, D15): składki za okres, którego moduł nie
+ * liczy, z kwotą z PUE ZUS. Lista pokazuje zapłacone w tym miesiącu i te,
+ * którym brakuje daty zapłaty (wtedy datę ustawia się tutaj).
+ */
+function ZaplatySpozaWyliczenia({ zaplaty, canEdit, dzis, miesiac }: { zaplaty: Rozliczenie[]; canEdit: boolean; dzis: string; miesiac: string }) {
+  const koniec = monthRange(miesiac).to;
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-sm font-medium">Zapłaty spoza wyliczenia</h2>
+          <p className="text-muted-foreground text-xs">
+            Składki za okres, którego FaktWay nie liczy (np. za grudzień 2025 r. albo niepełny miesiąc), zapisuje się tutaj z kwotą z PUE ZUS.
+            Zapisana zapłata pomniejsza podatek tak samo jak składki z wyliczenia oznaczone jako zapłacone.
+          </p>
+        </div>
+        {zaplaty.length > 0 ? (
+          <ul className="flex flex-col gap-3" aria-label="Zapłaty spoza wyliczenia">
+            {zaplaty.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span>
+                  {NAZWY_ROZLICZEN[r.rodzaj]} za {monthLabel(r.miesiac)}: {zl(r.kwotaGr)}
+                  {r.rodzaj === 'zus_spoleczne' ? `, w tym bez Funduszu Pracy i FS ${zl(r.spoleczneBezFpGr)}` : ''}.{' '}
+                  {r.zaplaconeO ? `Zapłacone ${formatIsoDatePl(r.zaplaconeO)}.` : 'Bez daty zapłaty.'}
+                </span>
+                {canEdit ? (
+                  <ZaplaconeRozliczenie
+                    id={r.id}
+                    nazwa={`${NAZWY_ROZLICZEN[r.rodzaj]} za ${monthLabel(r.miesiac)}`}
+                    zaplacone={r.status === 'zaplacone'}
+                    dzis={dzis}
+                    najwczesniej={`${r.miesiac}-01`}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {canEdit ? (
+          <ZaplataReczna domyslnyMiesiac={shiftMonth(miesiac, -1)} domyslnaData={koniec < dzis ? koniec : dzis} dzis={dzis} />
+        ) : (
+          <p className="text-muted-foreground text-xs">Zapłaty zapisuje właściciel albo administrator firmy.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

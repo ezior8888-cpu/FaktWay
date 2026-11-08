@@ -1,10 +1,14 @@
+import Link from 'next/link';
+
 import { KpirView } from '@/components/expenses/kpir-view';
 import { KpirBlocked } from '@/components/reports/kpir/kpir-blocked';
 import { blockingSaleInvoices, kpirMonthTitle } from '@/components/reports/kpir/kpir-model';
 import { KpirToolbar } from '@/components/reports/kpir/kpir-toolbar';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { kpirPrzykladowe, trybDanych } from '@/lib/demo/tryb-danych';
+import { odeslanieDoKsiegi } from '@/lib/ksiegowosc/odeslanie';
 import { getKpirData, resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -24,6 +28,10 @@ export const dynamic = 'force-dynamic';
  * wśród nich `KpirView` po liczbowym `month`, więc pasek i blokada dostają
  * `period`. Waluta nie do potwierdzenia: pasek miesiąca i „Raport
  * wstrzymany” w karcie z zakładkami — bez kwot.
+ *
+ * Firma z modułem księgowości (plan księgowości JDG, K8, D20) widzi nad
+ * raportem odesłanie do księgi modułu (KPiR albo ewidencja w zakładce
+ * „Ewidencja”); firma bez modułu ma raport bez zmian.
  */
 export default async function KpirPage({
   searchParams,
@@ -49,6 +57,8 @@ export default async function KpirPage({
   }
   const data = await getKpirData(supabase, tenantId, sp);
   const period = `${data.year}-${String(data.month).padStart(2, '0')}`;
+  // Po danych raportu, nie równolegle: błąd środowiska KSeF ma zatrzymać stronę, zanim cokolwiek innego czyta bazę.
+  const odeslanie = await odeslanieDoKsiegi(supabase, tenantId, period);
   const today = todayInWarsaw();
   const blockedMessage = data.currencyBlocked;
   const blocked = blockedMessage !== null;
@@ -56,6 +66,17 @@ export default async function KpirPage({
   return (
     <div className="ff-tab-panel flex flex-1 flex-col gap-6">
       <h1 className="sr-only">Książka przychodów i rozchodów</h1>
+      {odeslanie ? (
+        <Alert>
+          <AlertTitle>Księga w module księgowości</AlertTitle>
+          <AlertDescription>
+            {odeslanie.tekst}{' '}
+            <Link href={odeslanie.adres} className="underline underline-offset-4">
+              Zakładka „Ewidencja”
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {blocked ? (
         <KpirToolbar period={period} currentMonth={today.slice(0, 7)} monthTitle={kpirMonthTitle(data.month, data.year)} />
       ) : null}

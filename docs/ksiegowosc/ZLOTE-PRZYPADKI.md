@@ -55,10 +55,10 @@ w programie, która zmieni choćby jeden wynik, nie przejdzie do wydania.
    przechodzi na kolejne miesiące roku. Skala i liniowy: składki społeczne
    odliczane od dochodu, nie w kosztach. Liniowy: składka zdrowotna też
    odliczana od dochodu, nie w kosztach. Fundusz Pracy i Fundusz
-   Solidarnościowy z zapłaconych składek są przy skali i liniowym kosztem,
-   a kolumna „Koszty w KPiR” już je zawiera: nie dolicza się ich osobno
-   (FaktWay sam ich do KPiR nie dopisuje). Jeśli przepisy każą inaczej,
-   prosimy o uwagę.
+   Solidarnościowy z zapłaconych składek są przy skali i liniowym kosztem
+   w dniu zapłaty: kolumna „Koszty w KPiR” ich NIE zawiera, bo FaktWay
+   dopisuje je do KPiR sam z zapłat (kolumna 13). Jeśli przepisy każą
+   inaczej, prosimy o uwagę.
 6. Etap ZUS i chorobowe podaje przypadek. Składka wypadkowa jak dla płatnika
    zgłaszającego do 9 osób.
 7. Bez innych odliczeń i ulg (IP Box, B+R, internet, dzieci, darowizny), bez
@@ -1526,7 +1526,9 @@ oprócz ostatniej:
 - Przypadki skali i liniowego (G8-G11, `zalozenia.forma` `skala` albo
   `liniowy`) liczy KPiR (`lib/ksiegowosc/kpir.ts`) i ten sam silnik co
   „Ten miesiąc”: przychód to faktura, a każda kwota z kolumny „Koszty
-  w KPiR” to jeden koszt w kolumnie 13 (`koszty`, pole `kpir_gr`).
+  w KPiR” to jeden koszt w kolumnie 13 (`koszty`, pole `kpir_gr`); Fundusz
+  Pracy i FS z zapłat (`zaplacone_skladki_za`) dochodzi jako osobny koszt
+  w dniu zapłaty, jak w aplikacji.
   Porównanie bierze bloki `skladki_spoleczne`, `zdrowotna` (`podstawa_gr`,
   `skladka_gr`), `pit` i `terminy` (`ryczalt_lub_pit` to termin zaliczki);
   bloków ryczałtu, progu zdrowotnej i VAT nie liczy. Brak w bloku, który

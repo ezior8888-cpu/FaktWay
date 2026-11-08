@@ -85,7 +85,7 @@ const supabase = {
   },
 };
 
-const { dodajWpisKpirAction, pobierzJpkPkpirAction, usunWpisRecznyAction } = await import('@/app/actions/ksiegowosc-ewidencja');
+const { dodajSpisAction, dodajWpisKpirAction, pobierzJpkPkpirAction, usunSpisAction, usunWpisRecznyAction } = await import('@/app/actions/ksiegowosc-ewidencja');
 
 const WPIS = { rodzaj: 'inny' as const, dataPrzychodu: '2026-10-15', dokument: 'NOTA/1', kwota: '123,45', kolumna: 'k8' as const, opis: 'Odsetki' };
 const OSOBA = { imie: 'Jan', nazwisko: 'Testowy', dataUrodzenia: '1980-01-01' };
@@ -185,20 +185,24 @@ describe('usunięcie wpisu ręcznego', () => {
 describe('plik JPK_PKPIR', () => {
   it('cały 2026 r.: plik przechodzi XSD, cel „złożenie”, audyt z sumami bez danych osoby', async () => {
     const kpir = zbudujKpir({ rok: 2026, faktury: [faktura('2026-03-10', 1_000_000)], koszty: [koszt('2026-03-11', 200_000)], wpisy: [], wersje: [SKALA], kursy: new Map() });
-    mocks.kpir = { ok: true, kpir, wpisy: [], wersje: [SKALA] };
+    mocks.kpir = { ok: true, kpir, wpisy: [], wersje: [SKALA], spisy: [] };
     const wynik = await pobierzJpkPkpirAction({ rok: 2026, doMiesiaca: 12, ...OSOBA });
     if (!wynik.success) throw new Error(wynik.error);
     expect(wynik.nazwa).toBe('JPK_PKPIR_1234567890_2026-01-01_2026-12-31.xml');
     expect(wynik.xml).toContain('<CelZlozenia>1</CelZlozenia>');
     expect(mocks.audit).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'jpk_pkpir.downloaded', metadata: { od: '2026-01-01', do: '2026-12-31', celZlozenia: 1, liczbaWierszy: 2, przychodGr: 1_000_000, kosztyGr: 200_000 } }),
+      // Od K7.4 także wartości spisu z natury w pliku (bez spisów: zero).
+      expect.objectContaining({
+        action: 'jpk_pkpir.downloaded',
+        metadata: { od: '2026-01-01', do: '2026-12-31', celZlozenia: 1, liczbaWierszy: 2, przychodGr: 1_000_000, kosztyGr: 200_000, spisPoczatekGr: 0, spisKoniecGr: 0 },
+      }),
     );
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toMatch(/Testowy|1980-01-01/);
   });
 
   it('KPiR z brakiem w okresie: bez pliku, z treścią braku', async () => {
     const kpir = zbudujKpir({ rok: 2026, faktury: [faktura('2026-03-10', 1_000_000)], koszty: [koszt('2026-03-11', 200_000, null)], wpisy: [], wersje: [SKALA], kursy: new Map() });
-    mocks.kpir = { ok: true, kpir, wpisy: [], wersje: [SKALA] };
+    mocks.kpir = { ok: true, kpir, wpisy: [], wersje: [SKALA], spisy: [] };
     expect(await pobierzJpkPkpirAction({ rok: 2026, doMiesiaca: 12, ...OSOBA })).toMatchObject({
       success: false,
       error: expect.stringContaining('nie ma kolumny KPiR'),
@@ -206,3 +210,46 @@ describe('plik JPK_PKPIR', () => {
     expect(mocks.audit).not.toHaveBeenCalled();
   });
 });
+
+describe('spis z natury (K7.4, D19)', () => {
+  const SPIS_ID = '00173173-0000-4000-8000-000000000001';
+
+  it('zapisuje spis bez autora i daty wpisu (baza), z audytem; plik za cały rok ma P_1, P_2 i spis z ciągu roku', async () => {
+    expect(await dodajSpisAction({ data: '2025-12-31', kwota: '5000', opis: '' })).toEqual({ success: true });
+    expect(mocks.wstawione[0]).toEqual({ tenant_id: 'firma-1', data: '2025-12-31', kwota_gr: 500_000, opis: null });
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'ledger_inventory.created', metadata: { spis: expect.objectContaining({ data: '2025-12-31', kwotaGr: 500_000 }) } }));
+
+    const kpir = zbudujKpir({ rok: 2026, faktury: [faktura('2026-03-10', 1_000_000)], koszty: [koszt('2026-03-11', 200_000, 'col_10')], wpisy: [], wersje: [SKALA], kursy: new Map() });
+    const spisy = [
+      { id: 's1', data: '2025-12-31', kwotaGr: 500_000, opis: null },
+      { id: 's2', data: '2026-06-30', kwotaGr: 650_000, opis: null },
+      { id: 's3', data: '2026-12-31', kwotaGr: 600_000, opis: null },
+    ];
+    mocks.kpir = { ok: true, kpir, wpisy: [], wersje: [SKALA], spisy };
+    mocks.audit.mockReset();
+    const wynik = await pobierzJpkPkpirAction({ rok: 2026, doMiesiaca: 12, ...OSOBA });
+    if (!wynik.success) throw new Error(wynik.error);
+    expect(wynik.xml).toMatch(/<P_1>5000\.00<\/P_1>\s*<P_2>6000\.00<\/P_2>\s*<P_3>1000\.00<\/P_3>\s*<P_4>9000\.00<\/P_4>/);
+    expect(wynik.xml).toContain('<P_5A>2026-06-30</P_5A>');
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'jpk_pkpir.downloaded', metadata: expect.objectContaining({ spisPoczatekGr: 500_000, spisKoniecGr: 600_000 }) }));
+  });
+
+  it('odmowy bez zapisu: data z przyszłości albo sprzed 31.12.2025, kwota ujemna; obszar `kpir` zablokowany', async () => {
+    expect(await dodajSpisAction({ data: '2027-12-31', kwota: '1', opis: null })).toMatchObject({ success: false, pole: 'data' });
+    expect(await dodajSpisAction({ data: '2025-12-30', kwota: '1', opis: null })).toMatchObject({ success: false, pole: 'data' });
+    expect(await dodajSpisAction({ data: '2026-06-30', kwota: '-5', opis: null })).toMatchObject({ success: false, pole: 'kwota' });
+    mocks.kpirWKodzie = false;
+    expect(await dodajSpisAction({ data: '2026-06-30', kwota: '5', opis: null })).toMatchObject({ success: false });
+    expect(mocks.wstawione).toEqual([]);
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it('usunięcie: cały wiersz do audytu; spisu już nie ma: komunikat', async () => {
+    mocks.usuwany = { id: SPIS_ID, data: '2026-12-31', kwota_gr: 600_000, opis: null };
+    expect(await usunSpisAction(SPIS_ID)).toEqual({ success: true });
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'ledger_inventory.deleted', metadata: { spis: { id: SPIS_ID, data: '2026-12-31', kwotaGr: 600_000, opis: null } } }));
+    mocks.usuwany = null;
+    expect(await usunSpisAction(SPIS_ID)).toMatchObject({ success: false, error: expect.stringContaining('już nie ma') });
+  });
+});
+

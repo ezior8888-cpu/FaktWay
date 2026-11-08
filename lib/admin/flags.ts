@@ -80,7 +80,7 @@ export async function listTenantsWithFlags(
   if (tenantIds.length > 0) {
     const { data: flagsData, error: flagsErr } = await supabase
       .from('tenant_feature_flags')
-      .select('tenant_id, co_pilot_enabled, magic_import_enabled, exports_enabled')
+      .select('tenant_id, co_pilot_enabled, magic_import_enabled, exports_enabled, ksiegowosc_enabled')
       .in('tenant_id', tenantIds);
 
     if (flagsErr) {
@@ -94,6 +94,7 @@ export async function listTenantsWithFlags(
           co_pilot_enabled: Boolean(f.co_pilot_enabled),
           magic_import_enabled: Boolean(f.magic_import_enabled),
           exports_enabled: Boolean(f.exports_enabled),
+          ksiegowosc_enabled: Boolean(f.ksiegowosc_enabled),
         },
       ]),
     );
@@ -110,6 +111,7 @@ export async function listTenantsWithFlags(
       co_pilot_enabled: false,
       magic_import_enabled: false,
       exports_enabled: false,
+      ksiegowosc_enabled: false,
     },
   }));
 

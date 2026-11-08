@@ -19,10 +19,15 @@
  * w kosztach). Do księgi należą dni ze skalą albo liniowym; dzień
  * z ryczałtem należy do ewidencji przychodów, dzień bez profilu to brak.
  *
+ * Fundusz Pracy i FS z zapłaconych składek ZUS (K7.3, D21) FaktWay dopisuje
+ * sam: wiersz kolumny 13 w dniu zapłaty, z przyrostu jak odliczenia
+ * (`zaplatyFunduszuPracy`).
+ *
  * Każdy problem to brak z nazwą dokumentu i wyjściem; okres z brakiem nie ma
  * sum ani pliku (fail-closed).
  */
 
+import { monthLabel } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import {
   dzienPrzychodu,
@@ -82,12 +87,59 @@ export interface WpisKpir {
   opis: string | null;
 }
 
+/** Fundusz Pracy i FS z zapłaty składek społecznych (K7.3, D21): koszt w dniu zapłaty. */
+export interface ZaplataFp {
+  id: string;
+  /** RRRR-MM: okres składek. */
+  zaMiesiac: string;
+  /** RRRR-MM-DD: dzień zapłaty (K_2). */
+  data: string;
+  fpGr: number;
+}
+
+/** Zapłacona wersja rozliczenia składek społecznych (`tax_settlements`). */
+export interface ZaplaconeSkladki {
+  id: string;
+  /** RRRR-MM */
+  okres: string;
+  wersja: number;
+  kwotaGr: number;
+  spoleczneBezFpGr: number;
+  /** RRRR-MM-DD */
+  zaplaconeO: string;
+}
+
+/**
+ * Fundusz Pracy i FS z zapłaconych wersji składek społecznych (K7.3, D21).
+ * Jak odliczenia (`przyrostyZaplat`): przy dopłacie liczy się tylko przyrost
+ * ponad najwyższą wcześniej zapłaconą wersję okresu, a FP to przyrost kwoty
+ * minus przyrost części bez FP.
+ */
+export function zaplatyFunduszuPracy(zaplaty: readonly ZaplaconeSkladki[]): ZaplataFp[] {
+  const grupy = new Map<string, ZaplaconeSkladki[]>();
+  for (const z of zaplaty) grupy.set(z.okres, [...(grupy.get(z.okres) ?? []), z]);
+  const wynik: ZaplataFp[] = [];
+  for (const lista of grupy.values()) {
+    let kwota = 0;
+    let bezFp = 0;
+    for (const z of [...lista].sort((a, b) => a.wersja - b.wersja)) {
+      const fp = Math.max(0, z.kwotaGr - kwota) - Math.max(0, z.spoleczneBezFpGr - bezFp);
+      if (fp > 0) wynik.push({ id: z.id, zaMiesiac: z.okres, data: z.zaplaconeO, fpGr: fp });
+      kwota = Math.max(kwota, z.kwotaGr);
+      bezFp = Math.max(bezFp, z.spoleczneBezFpGr);
+    }
+  }
+  return wynik.sort((a, b) => a.data.localeCompare(b.data) || a.id.localeCompare(b.id));
+}
+
 export interface WejscieKpir {
   rok: number;
   /** Faktury sprzedaży; `kontrahent.nazwa` i `adres` z danych nabywcy. */
   faktury: readonly FakturaEwidencji[];
   koszty: readonly KosztKpir[];
   wpisy: readonly WpisKpir[];
+  /** Fundusz Pracy i FS z zapłaconych składek (K7.3); bez pola: brak takich zapłat. */
+  zaplatyFp?: readonly ZaplataFp[];
   wersje: readonly WersjaProfilu[];
   kursy: ReadonlyMap<string, KursPrzychodu>;
 }
@@ -117,7 +169,7 @@ export interface WierszKpir {
   br: { opis: string; kwotaGr: number } | null;
   /** K_17 */
   uwagi: string | null;
-  zrodlo: { typ: 'faktura' | 'koszt' | 'wpis'; id: string };
+  zrodlo: { typ: 'faktura' | 'koszt' | 'wpis' | 'zaplata'; id: string };
 }
 
 export interface Kpir {
@@ -301,8 +353,32 @@ export function zbudujKpir(wejscie: WejscieKpir): Kpir {
     });
   }
 
+  for (const z of wejscie.zaplatyFp ?? []) {
+    if (!wRoku(z.data, rok)) continue;
+    const dowod = `Składki ZUS za ${z.zaMiesiac.slice(5, 7)}/${z.zaMiesiac.slice(0, 4)}`;
+    const nalezy = dzienKsiegi(wersje, z.data, dowod);
+    if (!nalezy.tak) {
+      if (nalezy.brak) braki.push({ dzien: z.data, dokument: dowod, komunikat: nalezy.brak });
+      continue;
+    }
+    wiersze.push({
+      data: z.data,
+      dowod,
+      numerKsef: null,
+      krajKontrahenta: null,
+      idKontrahenta: null,
+      nazwaKontrahenta: 'Zakład Ubezpieczeń Społecznych',
+      adresKontrahenta: BRAK_DANYCH,
+      opis: `Fundusz Pracy i Fundusz Solidarnościowy za ${monthLabel(z.zaMiesiac)}`,
+      kwoty: { ...ZERO, k13: z.fpGr },
+      br: null,
+      uwagi: null,
+      zrodlo: { typ: 'zaplata', id: z.id },
+    });
+  }
+
   // Przychody przed kosztami w tym samym dniu, jak KPiR w aplikacji.
-  const kolejnosc = { faktura: 0, wpis: 1, koszt: 2 } as const;
+  const kolejnosc = { faktura: 0, wpis: 1, koszt: 2, zaplata: 3 } as const;
   wiersze.sort(
     (a, b) =>
       a.data.localeCompare(b.data) ||

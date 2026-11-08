@@ -16,6 +16,8 @@ const ALLOWED_FLAGS: PerTenantFlag[] = [
   'co_pilot_enabled',
   'magic_import_enabled',
   'exports_enabled',
+  // Pilotaż księgowości JDG (K8): włączenie modułu dla firmy z audytem zamiast UPDATE kluczem serwisowym.
+  'ksiegowosc_enabled',
 ];
 
 /**
