@@ -6,9 +6,13 @@
 > i jeden PR. Po kroku: wiersz w dzienniku, nowy „Następny krok”, raport
 > (status, tabela weryfikacji, numer PR, co dalej) i STOP.
 >
-> **Stan 8.11.2026: ETAP 1, plan do akceptacji.** Budowa (ETAP 2) zaczyna się
-> dopiero po „idź dalej” od Bartosza. Do tego czasu nic z tego planu nie
-> działa i żadna reguła z niego nie obowiązuje.
+> **Stan 8.11.2026, 23:10: plan przyjęty, ETAP 2 w toku.** Bartosz napisał
+> „idź dalej” na pytanie o plan i rekomendacje D-F1 do D-F10, więc
+> rekomendacje z A11 obowiązują jako decyzje (zmiana tylko jego słowem).
+> W nocy 8/9.11 kroki idą stosem PR: każdy krok ma bazę w gałęzi poprzedniego
+> (pierwszy w #486), bo nic nie jest scalane bez Bartosza. Scalanie całego
+> stosu: `scripts/ops/zloz-scalenie.sh` w kolejności z dziennika (B12).
+> Reguły filtra działają dopiero po scaleniu danego kroku do `main`.
 
 Zlecenie Bartosza z 8.11.2026: „zanim cokolwiek zbudujesz zrób ŻELAZNY system
 walidacji każdej zmiany, który będzie się zachowywał jak jakiś filtr z wiedzą
@@ -1481,5 +1485,6 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 |---|---|---|---|---|
 | 8.11.2026 | plan (ETAP 1) | #486 | otwarty, czeka na decyzję Bartosza | rozpoznanie stanu (`279e2b4c`), reguł repozytorium i kodu; 16 sygnałów możliwych błędów (B7.1, S-01 do S-16); źródła prawdy z notatki sesji K0 jako `docs/koordynacja/ZRODLA-PRAWDY.md` (B4.0); mapa ryzyka dla sesji planu pełnej aplikacji w folderze notatek |
 
-**Następny krok:** czeka na „idź dalej” i decyzje D-F1 do D-F8 od Bartosza.
-Potem F1 (mapa i klasyfikator).
+| 8.11.2026 | F1 mapa i klasyfikator | #488 | otwarty, w stosie na #486 | `filtr/mapa-ryzyka.json`: 71 obszarów (R1 47, R2 12, R3 12), 5 wyłączeń z powodem, 32 sygnały treści i 8 nazw; `scripts/filtr/mapa.mjs` (klasyfikacja pliku i zmiany, pełny skan, diff, porównanie map dla straży F2); 89 testów; pełny skan: R1 456, R2 409, R3 516, R0 219 (153 wyłączone), 0 niesklasyfikowanych, 0 martwych wzorców; próba na #446, #452, #464, #479: R1 z obszarów modułu; #477 (otwarty) pokazał 7 nowych plików runnera wysyłki poza mapą, dopisane z góry; decyzje kroku w opisie PR |
+
+**Następny krok:** F2 (straż i karta zmiany), gałąź w stosie na F1.
