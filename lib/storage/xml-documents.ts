@@ -47,7 +47,7 @@ export interface XmlDocumentRecord {
  */
 export class XmlDocumentConflictError extends Error {
   constructor() {
-    super(`Oryginał XML tej faktury nie zgadza się z zapisanym plikiem. Niczego nie nadpisujemy — napisz do pomocy FaktWay (${SUPPORT_EMAIL}).`);
+    super(`Oryginał XML tej faktury nie zgadza się z zapisanym plikiem. Niczego nie nadpisujemy, napisz do pomocy FaktWay (${SUPPORT_EMAIL}).`);
     this.name = 'XmlDocumentConflictError';
   }
 }

@@ -9,7 +9,7 @@
  */
 export class XmlArchiveConflictError extends Error {
   constructor(readonly storagePath: string) {
-    super('Archiwum XML: pod tym kluczem jest inny plik — niczego nie nadpisujemy');
+    super('Archiwum XML: pod tym kluczem jest inny plik, niczego nie nadpisujemy');
     this.name = 'XmlArchiveConflictError';
   }
 }

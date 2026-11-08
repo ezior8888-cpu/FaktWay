@@ -1778,7 +1778,7 @@ export async function runSubmitInvoice(
         // Ponowienie dałoby ten sam konflikt; nowe kolejkowanie (cron I6 albo
         // „Wyślij ponownie”) dostaje nowy `sendAttemptId`, więc i nowy klucz.
         if (error instanceof XmlArchiveConflictError) {
-          Sentry.captureMessage('KSeF: pod kluczem próby jest inny plik XML — bez nadpisania, nowa próba', {
+          Sentry.captureMessage('KSeF: pod kluczem próby jest inny plik XML, bez nadpisania, nowa próba', {
             level: 'warning',
             tags: { job: 'submit-invoice', kind: 'xml-archive-conflict' },
             extra: { tenantId, invoiceId, storagePath: error.storagePath },
@@ -1979,7 +1979,7 @@ export async function runSubmitInvoice(
         } else {
           // C-12: wpis `sent` bez skrótu (historia sprzed 01.10.2026). Skrót policzony
           // z obecnego pliku nie dowodzi, że to ten plik poszedł do KSeF.
-          Sentry.captureMessage('KSeF: faktura przyjęta, a wpis wysyłki jest bez skrótu XML — bez wiersza xml_documents', {
+          Sentry.captureMessage('KSeF: faktura przyjęta, a wpis wysyłki jest bez skrótu XML, bez wiersza xml_documents', {
             level: 'warning',
             tags: { area: 'ksef.xml-documents', kind: 'no-payload-hash' },
             extra: { tenantId, invoiceId, via: result.via },
