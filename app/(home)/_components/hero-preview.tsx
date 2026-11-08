@@ -96,6 +96,23 @@ function Row({ row, status }: { row: (typeof ROWS)[number]; status: Status }) {
   );
 }
 
+/** Zarys wiersza, zanim przyjdzie nowa faktura: te same kolumny co `Row`, bez danych. */
+function SkeletonRow() {
+  const bar = 'rounded bg-muted-foreground/15 animate-pulse motion-reduce:animate-none';
+  return (
+    <div className={cn(GRID, 'h-full px-3 py-2.5')}>
+      <div className="min-w-0 space-y-1.5">
+        <span className={cn(bar, 'block h-2.5 w-24')} />
+        <span className={cn(bar, 'block h-2 w-32 max-w-full sm:hidden')} />
+      </div>
+      <span className={cn(bar, 'hidden h-2.5 w-40 max-w-full sm:block')} />
+      <span className={cn(bar, 'hidden h-2.5 w-16 md:block')} />
+      <span className={cn(bar, 'hidden h-2.5 w-16 justify-self-end sm:block')} />
+      <span className={cn(bar, 'h-4 w-20 justify-self-end rounded-full')} />
+    </div>
+  );
+}
+
 export function HeroPreview() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { amount: 0.3 });
@@ -183,12 +200,28 @@ export function HeroPreview() {
                   Miejsce na nową fakturę trzyma niewidoczny wiersz, a ona sama pojawia
                   się nad nim. Karta ma stałą wysokość, więc treść pod podglądem nie
                   skacze co pętlę (wcześniej wiersz rozwijał się od zera: na telefonie
-                  56 px w dół i z powrotem co 8,5 s).
+                  56 px w dół i z powrotem co 8,5 s). Zanim faktura przyjdzie, w tym
+                  miejscu jest zarys wiersza, a nie pusty pasek, który wyglądał jak usterka.
                 */}
                 <div className="relative overflow-hidden">
                   <div className="invisible">
                     <Row row={NEW_ROW} status="przyjeta" />
                   </div>
+                  <AnimatePresence initial={false}>
+                    {shown < 1 ? (
+                      <motion.div
+                        key="szkielet"
+                        data-testid="podglad-szkielet"
+                        className="absolute inset-0"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3, ease: EASE_OUT }}
+                      >
+                        <SkeletonRow />
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                   <AnimatePresence initial={false}>
                     {shown >= 1 ? (
                       <motion.div
