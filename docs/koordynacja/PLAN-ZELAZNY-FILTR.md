@@ -119,6 +119,24 @@ kilka niezależnych sprawdzeń:
   zmianę według stałej listy pytań (zaokrąglenia, granice miesiąca i roku,
   waluty, korekty, zaliczki, brak danych, treści bez porad, dane osobowe).
 
+**Skąd filtr wie, co jest prawdą.** Kod konkurencji jest zamknięty, a ich
+wyniki też mogą być błędne, więc nie są wzorcem. Wzorce mają kolejność, od
+najmocniejszego (szczegóły w [`ZRODLA-PRAWDY.md`](ZRODLA-PRAWDY.md)):
+
+1. systemy państwowe, które same liczą albo przyjmują dokument: testowy KSeF,
+   testowa bramka JPK, aplikacja MF e-mikrofirma (liczy deklarację VAT
+   z ewidencji), e-Płatnik w eZUS (liczy składki);
+2. dokumenty, które prawdziwe firmy już złożyły, a urząd przyjął (pilotaż, za
+   pisemną zgodą firm);
+3. dwie niezależne księgowe liczące te same przypadki;
+4. przykłady urzędowe z broszur, objaśnień i poradników;
+5. druga, niezależna wersja obliczeń;
+6. na końcu programy konkurencji, tylko do ręcznego sprawdzenia kilku
+   przypadków.
+
+Czego nie da się potwierdzić żadnym wzorcem, tego program nie pokazuje jako
+kwoty (jak dziś w module księgowości: bez podpisu księgowej nie ma kwot).
+
 **Pytanie 4. Czy ktoś zmienia samą wiedzę albo sam filtr?** Najprostszy
 sposób na zielony test to zmienić oczekiwany wynik. Dlatego każda zmiana
 oczekiwanych kwot, przepisów, parametrów, schematów albo samego filtra wymaga
@@ -248,8 +266,8 @@ obejmie obszary, które działają dla wszystkich firm już dziś: faktury FA(3)
 korekty, zaliczki, waluty, eksporty, pulpit, wezwania do zapłaty, abonament.
 
 **Rozpoznanie do tego planu już coś znalazło.** Przegląd kodu pod mapę
-wskazał 15 miejsc, które wyglądają na błędy albo na sprawy dla prawnika
-(lista S-01 do S-15 w B7.1). Najpoważniejsze: korekta „przed/po” trafiłaby do
+wskazał 16 miejsc, które wyglądają na błędy albo na sprawy dla prawnika
+(lista S-01 do S-16 w B7.1). Najpoważniejsze: korekta „przed/po” trafiłaby do
 JPK_V7M całą kwotą zamiast różnicy; JPK_V7M nie ma oznaczeń GTU; plik KPiR dla
 księgowej liczy inaczej niż ekran KPiR; import z CSV potrafi źle odczytać
 kwotę. Żaden z nich nie dotknął jeszcze klienta (klientów nie ma, korekty
@@ -265,7 +283,8 @@ zawczasu.
    księgowej i prawnika w rejestrze (B2 i B4 z bramy); pilotaż z kontrolą
    księgowej (B6).
 2. **Przepisy i interpretacje się zmieniają, a filtr sam o tym nie wie.**
-   Dlatego: daty obowiązywania w rejestrze; czujki zmian na stronach
+   Dlatego: daty obowiązywania w rejestrze; czujka nowych aktów w Dzienniku
+   Ustaw i Monitorze Polskim (ELI API Sejmu), czujki zmian na stronach
    urzędowych i w schematach MF; kalendarz ogłoszeń (GUS w styczniu, ZUS pod
    koniec roku, płaca minimalna we wrześniu, stopa wypadkowa w kwietniu,
    stopy NBP dla odsetek); bezpiecznik roku; zasada „bez sprawdzonych
@@ -302,7 +321,12 @@ zawczasu.
 6. Przekazać Igorowi i pozostałym osobom z dostępem (`bielczyk17`,
    `bobbykrysinski-del`): po scaleniu kroku F3 raz `pnpm install` w repo.
 7. Na końcu, przy bramie B2 i B4: przekazać prawnikowi i księgowej materiał
-   z filtra.
+   z filtra; jeśli przyjmiesz D-F10, znaleźć drugą księgową do niezależnego
+   policzenia części przykładów.
+8. Raz przed każdym nowym rokiem parametrów (albo zlecić to księgowej):
+   porównać kilka przypadków w e-mikrofirmie (VAT) i w e-Płatniku (ZUS)
+   według listy kontrolnej z runbooka filtra. Te systemy nie mają API, więc
+   tego nie zrobi automat.
 
 ## A10. Kolejność budowy w skrócie
 
@@ -324,7 +348,7 @@ w kilku sesjach). Szczegóły w B9.
 | III. Przegląd wsteczny | F11 | przegląd K0-K8 (8 obszarów) | D | lista znalezisk FZ z wagą; naprawy osobnymi PR |
 | III. Przegląd wsteczny | F12 | przegląd obszarów działających dla wszystkich | D | jak wyżej |
 | IV. Czujki i bezpieczniki | F13 | strażnicy w działającej aplikacji | Ś | zła kwota nie dojdzie do klienta nawet przy błędzie |
-| IV. Czujki i bezpieczniki | F14 | co tydzień środowiska testowe MF i KSeF | Ś | wiadomo, że urząd przyjmuje nasze pliki |
+| IV. Czujki i bezpieczniki | F14 | co tydzień środowiska testowe MF i KSeF; ręczne porównanie z e-mikrofirmą i e-Płatnikiem raz w roku | Ś | wiadomo, że urząd przyjmuje nasze pliki, a państwowe systemy liczą tak samo |
 | IV. Czujki i bezpieczniki | F15 | czujka przepisów i kalendarz ogłoszeń | N | zmiana przepisu nie przejdzie niezauważona |
 | V. Miara | F16 | testy mutacyjne i próba ogniowa | Ś | liczba, ile błędów filtr łapie |
 | V. Miara | F17 | (opcjonalnie) przegląd agenta w CI | Ś | drugi czytelnik także dla zmian spoza Maca |
@@ -345,7 +369,8 @@ iść po fazie I; funkcje R1 i R2 dopiero, gdy faza II obejmie ich obszar.
 | D-F6 | Tylko metoda scalania „Merge” w regule GitHuba | tak (`AGENTS.md` już tego wymaga, reguła na to pozwala inaczej) |
 | D-F7 | Strażnicy w aplikacji dla funkcji działających dziś (faktury): najpierw tylko alarm przez 2 tygodnie, potem blokada | tak; w module księgowości blokada od razu |
 | D-F8 | Testy RLS jako wymagana kontrola | tak |
-| D-F9 | Kiedy naprawiać sygnały z rozpoznania (S-01 do S-15 w B7.1) | po fazie I (F1-F3), żeby same przeszły przez filtr; każdy osobnym PR według protokołu, najpierw czerwony test; najpierw te, które działają dziś (S-05, S-10, S-07, S-06, S-08, S-12); S-01, S-02, S-04 i S-13 przed zdjęciem wstrzymania korekt i przed pilotażem modułu |
+| D-F9 | Kiedy naprawiać sygnały z rozpoznania (S-01 do S-16 w B7.1) | po fazie I (F1-F3), żeby same przeszły przez filtr; każdy osobnym PR według protokołu, najpierw czerwony test; najpierw te, które działają dziś (S-05, S-10, S-07, S-06, S-08, S-12); S-01, S-02, S-04 i S-13 przed zdjęciem wstrzymania korekt i przed pilotażem modułu |
+| D-F10 | Druga, niezależna księgowa do złotych przypadków (koszt dodatkowego zlecenia) | tak, co najmniej dla przypadków, w których plan księgowości ma pewność niską albo średnią (m.in. G1, G3, G4, G5, G13); różnica między księgowymi rozstrzyga się przed bramą B4 |
 
 ---
 
@@ -571,6 +596,36 @@ działa tak samo w hooku Claude, w pre-push i w CI.
 
 ## B4. Wiedza filtra
 
+### B4.0 Źródła prawdy (warstwa nadrzędna)
+
+Analiza „na czym realnie badamy poprawność” leży w
+[`docs/koordynacja/ZRODLA-PRAWDY.md`](ZRODLA-PRAWDY.md) (zlecenie Bartosza
+z 8.11.2026, wersja w repo z poprawkami tej sesji). Każda kontrola filtra
+mówi, z którego wzorca bierze oczekiwany wynik, a wzorzec mocniejszy wygrywa
+ze słabszym:
+
+| Wzorzec (od najmocniejszego) | Gdzie w filtrze | Jak często |
+|---|---|---|
+| 1. System państwowy: KSeF TEST, testowa bramka JPK, e-mikrofirma, e-Płatnik | B4.7 | KSeF TEST i bramka JPK automatycznie co tydzień i przed zmianą generatora; e-mikrofirma i e-Płatnik ręcznie przed każdym nowym rokiem i przy każdej zmianie obliczeń |
+| 2. Dokumenty przyjęte przez urząd (pilotaż, potem co miesiąc) | B4.12 | raz na starcie pilotażu, potem co miesiąc z alarmem przy różnicy |
+| 3. Dwie niezależne księgowe | B4.3, D-F10 | złote przypadki przed bramą B4 i przy każdym nowym roku |
+| 4. Przykłady urzędowe (broszury MF, objaśnienia, ZUS, podatki.gov.pl, generator mikrorachunku, wizualizacja PDF z generatora MF) | B4.3 | każdy PR (testy) |
+| 5. Druga, niezależna implementacja | B4.4 | każdy PR i w nocy |
+| 6. Programy konkurencji | ręczna lista kontrolna, tylko kilka przypadków | gdy wzorce 1-5 nie wystarczą |
+
+Zasady:
+
+1. Rejestr przepisów (B4.1) przy każdej regule wskazuje jej wzorzec i datę,
+   kiedy go ostatnio sprawdzono.
+2. Reguła bez żadnego wzorca z poziomów 1-4 może działać tylko za
+   wyłącznikiem albo jako brak kwoty dla klienta (fail-closed z wyjściem).
+3. Wzorce 5 i 6 nie potwierdzają przepisu, tylko łapią błędy programistyczne;
+   wspólne złe zrozumienie przepisu łapią wzorce 1-4.
+4. Licencje: kod MF na licencji MIT (`CIRFMF/ksef-api`,
+   `ksef-client-java`, `ksef-client-csharp`, `ksef-pdf-generator`) wolno
+   kopiować z informacją o licencji; kodu bez licencji i kodu GPL nie
+   kopiujemy (repozytorium FaktWay jest publiczne).
+
 ### B4.1 Rejestr przepisów
 
 Katalog `filtr/przepisy/`, jeden plik JSON na obszar (`ksiegowosc.json`,
@@ -591,6 +646,7 @@ Jeden wpis to jedna reguła:
   "testy": ["tests/filtr/niezmienniki/zaokraglenia.test.ts > RP-ZAOKR-01"],
   "niezmienniki": ["NZ-ZAOKR-01", "NZ-ZAOKR-04"],
   "pewnosc": "wysoka",
+  "wzorzec": { "poziom": 4, "opis": "tekst art. 63 § 1 i przykłady z broszury JPK_V7M", "sprawdzono": "2026-11-08" },
   "interpretacja": null,
   "do_rozstrzygniecia": null,
   "sprawdzil": { "ksiegowa": null, "prawnik": null },
@@ -786,7 +842,9 @@ Każdy niezmiennik ma identyfikator, regułę z rejestru i test w
    FA, KOR in minus, KOR in plus, ZAL, ROZ, np II, zw, oo, konsument, UE,
    waluta; to są przypadki z kryterium G5 w `GOTOWOSC-DO-WYDANIA.md`); JPK
    (GJ); terminy (GT); kursy (GW); odsetki (GO). Do podpisu księgowej
-   przy B4.
+   przy B4. **Druga, niezależna księgowa** (D-F10) liczy te same przypadki
+   bez wglądu w wynik pierwszej; różnica między nimi to pytanie do
+   rozstrzygnięcia w rejestrze, zanim przypadek zostanie złoty.
 2. **Wyniki tymczasowe z wyroczni.** Do podpisu księgowej przypadki G mają
    wyniki z wyroczni (B4.4) w osobnym katalogu `tests/filtr/zlote-tymczasowe/`,
    poza arkuszem dla księgowej. Silnik musi się z nimi zgadzać. Po podpisie
@@ -795,7 +853,9 @@ Każdy niezmiennik ma identyfikator, regułę z rejestru i test w
    i datą odczytu): tabele składek ZUS (2026 już odtwarzane co do grosza),
    przykłady z podatki.gov.pl (odliczenia na ryczałcie, skala, liniowy),
    przykłady z broszur JPK_PKPIR(3) i JPK_EWP(4), przykładowe pliki JPK_V7M
-   z gov.pl, przykładowe faktury FA(3) z `CIRFMF/ksef-docs`, kursy NBP
+   z gov.pl, przykładowe faktury FA(3) z `CIRFMF/ksef-api` (dawniej
+   `ksef-docs`), wizualizacje PDF i kody QR z oficjalnego generatora MF
+   (`CIRFMF/ksef-pdf-generator`, MIT) dla tych samych plików XML, kursy NBP
    z archiwum tabel A dla zestawu dni ze świętami, oficjalne wykazy dni
    wolnych.
 4. **Złote pliki** (`tests/filtr/zlote-pliki/`): wygenerowane XML dla
@@ -890,6 +950,15 @@ Każdy niezmiennik ma identyfikator, regułę z rejestru i test w
    i przed zmianą generatora albo wysyłki wymagany jest zielony przebieg
    ręczny (`workflow_dispatch`) z linkiem w karcie PR.
 4. Certyfikat testowy MF wygasa 7.07.2027: czujka przypomina 60 dni wcześniej.
+5. **Systemy państwowe liczone ręcznie** (wzorzec 1 z B4.0, bez API, więc
+   robi to człowiek): kilkanaście ewidencji VAT wpisanych do e-mikrofirmy
+   (aplikacja MF sama liczy część deklaracyjną JPK_V7M) i porównanych pole po
+   polu z naszym plikiem; składki dla każdego etapu ZUS (ulga na start,
+   preferencyjny, pełny, z chorobowym i bez) porównane z e-Płatnikiem w eZUS.
+   Robi to księgowa albo Bartosz przed każdym nowym rokiem parametrów i przy
+   każdej zmianie obliczeń VAT albo ZUS; wynik to protokół
+   w `docs/filtr/PROTOKOLY-RECZNE.md` z datą i wersją kodu. Lista kontrolna
+   jest w `docs/runbooks/filtr.md`.
 
 ### B4.8 Reguły statyczne z zapadką
 
@@ -998,6 +1067,26 @@ Każdy alarm ma kod `FILTR-RT-<id>`: Sentry, `critical-alerts-monitor`
 3. **Kanarek:** w testach filtra stały, celowo zły silnik (np. zaokrąglenie
    w dół), który filtr musi odrzucić. Jeśli kiedyś przejdzie, filtr jest
    zepsuty.
+
+### B4.12 Prawdziwe dane: pilotaż i kontrola po starcie
+
+Najmocniejszy test poza systemem państwowym (wzorzec 2 z B4.0):
+
+1. **Na starcie pilotażu (B6),** za pisemną zgodą firmy i z zapisem w umowie
+   powierzenia: jej ostatnie 12 miesięcy faktur i kosztów oraz to, co jej
+   księgowa naprawdę złożyła i co urząd przyjął (JPK_V7 z UPO, DRA, wpłaty PIT
+   i składek). FaktWay przelicza to samo; porównanie co do grosza. Każda
+   różnica to nasz błąd albo inna decyzja księgowej; rozstrzyga księgowa
+   z bramy B4, a wynik idzie do rejestru (pole `interpretacja`) albo jako FZ.
+2. **Dane zostają na produkcji w UE.** Do testów w repo trafiają tylko
+   zanonimizowane przypadki z fikcyjnym NIP `1234567890`, jako nowe złote
+   przypadki (za `zgoda:wiedza-prawna`).
+3. **Po starcie co miesiąc:** wynik „Ten miesiąc” porównany z tym, co urząd
+   i ZUS przyjęli (UPO, stan konta w PUE ZUS wpisany przez klienta albo
+   księgową); przez pierwsze dwa miesiące sprawdza księgowa (B6), potem
+   automat zakłada alarm `FILTR-RT-ROZNICA` przy każdej różnicy.
+4. Zakres i okres przechowywania tych danych rozstrzyga prawnik (pytanie 6
+   w `PYTANIA-DO-PRAWNIKA.md`).
 
 ## B5. Gdzie działa
 
@@ -1290,6 +1379,7 @@ skutek może dziś dotknąć firmę (klientów jeszcze nie ma).
 | S-13 | Biała lista: nic nie wyklucza z kosztów zapłaty powyżej 15 000 zł na rachunek spoza wykazu (art. 22p ustawy o PIT) | `lib/validation/whitelist-client.ts`, silniki KPiR | do sprawdzenia | nie dla PIT (moduł za wyłącznikiem), tak dla ostrzeżeń | WYS przed pilotażem |
 | S-14 | `audit_logs` czyszczone po 12 miesiącach, a trzymają ślady wysyłek do MF i zatwierdzeń rozliczeń, które mogą być dowodem dłużej | `lib/jobs/runners/cleanup-audit-logs.ts`, migracje 00044, 00052, 00104, 00157 | do sprawdzenia, decyzja prawnika | tak | ŚRED |
 | S-15 | `formatPln` pokazuje −0,50 zł jako „0,50 zł” | `lib/billing/pricing.ts:34-37` | potwierdzony | tylko przy kwotach ujemnych | NISK |
+| S-16 | Czujka schematu FA(3) i runbook pytają `CIRFMF/ksef-docs`, które MF przemianowało na `CIRFMF/ksef-api`; działa tylko dzięki przekierowaniu GitHuba | `scripts/ci/czujka-schematu-fa3.mjs:38`, `docs/runbooks/fa3-ksef.md:53` | potwierdzony (API GitHub 8.11.2026) | tak (czujka co tydzień) | NISK; poprawka w F9 |
 
 Kiedy je naprawiać, rozstrzyga decyzja D-F9 (A11).
 
@@ -1298,7 +1388,7 @@ Kiedy je naprawiać, rozstrzyga decyzja D-F9 (A11).
 | Ograniczenie | Jak zmniejszamy |
 |---|---|
 | Wspólny błąd w rozumieniu przepisu (rejestr, kod i wyrocznia mylą się tak samo) | wyrocznia z tekstu ustawy w czystym pokoju; przykłady urzędowe; złote przypadki księgowej liczone bez wyników programu; podpisy w rejestrze; pilotaż z kontrolą księgowej |
-| Zmiany przepisów i komunikatów | daty obowiązywania; czujka przepisów (odcisk liczb na stronach urzędowych, F15); kalendarz ogłoszeń; czujki schematów; bezpiecznik roku; fail-closed bez podpisu |
+| Zmiany przepisów i komunikatów | daty obowiązywania; czujka przepisów (ELI API Sejmu dla Dz.U. i M.P., odcisk liczb na stronach ZUS i MF, F15); kalendarz ogłoszeń; czujki schematów i wydań `CIRFMF/ksef-api`; bezpiecznik roku; fail-closed bez podpisu |
 | Przypadki, których nikt nie przewidział | niezmienniki ogólne zamiast tylko przykładów; losowe dane w nocy; strażnicy w aplikacji; jawny brak dla nieobsługiwanych sytuacji (np. odwrotne obciążenie) |
 | Systemy zewnętrzne (MF, KSeF, NBP) bywają niedostępne | ich testy nie blokują PR; issue; przebieg ręczny przed zmianą generatora |
 | Warstwy lokalne da się wyłączyć | wszystko powtarza CI, którego nie da się ominąć |
@@ -1328,8 +1418,8 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 | **F11** Przegląd wsteczny K0-K8 | D (P1-P8) | `docs/filtr/USTALENIA.md`, raport po każdym obszarze | każdy obszar przejrzany; każde FZ z dowodem; naprawy osobnymi PR | decyzje o kolejności napraw |
 | **F12** Przegląd wsteczny funkcji działających dziś | D (P9-P10) | jak F11 | jak F11 | jak F11 |
 | **F13** Strażnicy w aplikacji | Ś | `lib/bezpieczniki/`, wpięcie w „Ten miesiąc”, JPK, FA(3), przypomnienia; alarmy `FILTR-RT-*` | testy każdego strażnika; dla faktur tryb „tylko alarm” | D-F7; po 2 tygodniach zgoda na blokadę |
-| **F14** Środowiska testowe co tydzień | Ś | scenariusze GF w KSeF TEST, `jpk-mf-test.yml` | zielony pierwszy przebieg obu | nic |
-| **F15** Czujka przepisów i kalendarz ogłoszeń | N | `scripts/filtr/czujka-przepisow.mjs` (odcisk liczb ze stron z rejestru), kalendarz w rejestrze (`nastepna_zmiana`), issue przed i po terminie ogłoszenia | pierwszy przebieg bez fałszywych alarmów | nic |
+| **F14** Środowiska testowe co tydzień | Ś | scenariusze GF w KSeF TEST, `jpk-mf-test.yml`, porównanie naszego PDF z wizualizacją z `CIRFMF/ksef-pdf-generator`, lista kontrolna i `docs/filtr/PROTOKOLY-RECZNE.md` dla e-mikrofirmy i e-Płatnika | zielony pierwszy przebieg obu; pierwszy protokół ręczny dla 2026 r. | porównanie w e-mikrofirmie i e-Płatniku (albo księgowa) |
+| **F15** Czujka przepisów i kalendarz ogłoszeń | Ś | `scripts/filtr/czujka-przepisow.mjs`: codziennie ELI API Sejmu (`/eli/changes/acts?since=…` i `/eli/acts/search` dla Dz.U. i M.P.), filtr na akty z rejestru (ustawy o VAT, PIT, ryczałcie, systemie ubezpieczeń społecznych, świadczeniach zdrowotnych, Ordynacja podatkowa, dni wolne, rozporządzenia o KPiR, JPK i płacy minimalnej), każde trafienie to issue `filtr`; dodatkowo odcisk liczb ze stron ZUS i podatki.gov.pl z rejestru; wydania `CIRFMF/ksef-api`; kalendarz ogłoszeń w rejestrze (`nastepna_zmiana`) z issue przed i po terminie | pierwszy przebieg bez fałszywych alarmów; próbne trafienie na akcie z 2026 r. (np. Dz.U. 2026 poz. 1213, płaca minimalna 2027) | nic |
 | **F16** Testy mutacyjne i próba ogniowa | Ś | `filtr-mutacje.yml`, `docs/filtr/PROBA-OGNIOWA.md` | co najmniej 90 % zabitych mutantów w silnikach R1; 100 % błędów z próby ogniowej złapanych | zgoda na Stryker (D-F2) |
 | **F17** Przegląd agenta w CI (opcjonalnie) | Ś | job z `claude-code-action` tylko do odczytu dla PR R1 z gałęzi repozytorium; komentarz z uwagami; karta wymaga odpowiedzi | działa na 3 PR bez fałszywych blokad | D-F4 |
 | **F18** Osobne konto agentów | N | konto, ruleset, `CODEOWNERS` z mapy, test zgodności | agent nie może zaakceptować własnego PR | konto i ustawienia (B5.5) |
@@ -1351,6 +1441,9 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 8. Przegląd wsteczny zakończony; 0 otwartych KRYT i WYS.
 9. Materiał dla bramy B2 i B4 gotowy: rejestr z pytaniami, przykłady, lista
    słów.
+10. Każda reguła R1 w rejestrze ma wzorzec z poziomów 1-4 z B4.0 albo działa
+    tylko jako brak kwoty; protokół ręcznego porównania z e-mikrofirmą
+    i e-Płatnikiem dla roku, za który moduł liczy, jest zapisany.
 
 ## B10. Ryzyka samego planu
 
@@ -1369,6 +1462,7 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 
 | Ścieżka | Krok |
 |---|---|
+| `docs/koordynacja/ZRODLA-PRAWDY.md` (źródła prawdy, B4.0) | ten PR (#486) |
 | `filtr/mapa-ryzyka.json`, `filtr/zgody.json`, `filtr/zapadka.json` | F1, F2, F7 |
 | `filtr/przepisy/*.json` | F4, F10 |
 | `scripts/filtr/{mapa,straz,po-edycji,przed-poleceniem,czujka-przepisow,mutacje}.*` | F1-F3, F15, F16 |
@@ -1378,14 +1472,14 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 | `eslint/filtr/*.mjs` | F7 |
 | `lib/bezpieczniki/**` | F13 |
 | `.claude/skills/filtr/SKILL.md`, zmiany w `.claude/settings.json`, `.githooks/pre-push`, `package.json` | F3 |
-| `docs/filtr/{LISTA-KONTROLNA,USTALENIA,WYJATKI,PYTANIA-Z-REJESTRU,PROBA-OGNIOWA}.md`, `docs/runbooks/filtr.md` | F3, F4, F11, F16 |
+| `docs/filtr/{LISTA-KONTROLNA,USTALENIA,WYJATKI,PYTANIA-Z-REJESTRU,PROBA-OGNIOWA,PROTOKOLY-RECZNE}.md`, `docs/runbooks/filtr.md` | F3, F4, F11, F14, F16 |
 | sekcja „Żelazny filtr” w `AGENTS.md`, karta w `.github/pull_request_template.md` | F2, F3 |
 
 ## B12. Dziennik
 
 | Data | Krok | PR | Stan | Uwagi |
 |---|---|---|---|---|
-| 8.11.2026 | plan (ETAP 1) | #486 | otwarty, czeka na decyzję Bartosza | rozpoznanie stanu (`279e2b4c`), reguł repozytorium i kodu; 15 sygnałów możliwych błędów (B7.1, S-01 do S-15); mapa ryzyka dla sesji planu pełnej aplikacji w folderze notatek |
+| 8.11.2026 | plan (ETAP 1) | #486 | otwarty, czeka na decyzję Bartosza | rozpoznanie stanu (`279e2b4c`), reguł repozytorium i kodu; 16 sygnałów możliwych błędów (B7.1, S-01 do S-16); źródła prawdy z notatki sesji K0 jako `docs/koordynacja/ZRODLA-PRAWDY.md` (B4.0); mapa ryzyka dla sesji planu pełnej aplikacji w folderze notatek |
 
 **Następny krok:** czeka na „idź dalej” i decyzje D-F1 do D-F8 od Bartosza.
 Potem F1 (mapa i klasyfikator).
