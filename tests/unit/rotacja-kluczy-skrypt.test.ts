@@ -36,6 +36,7 @@ host=$(cat "$FAKE_DIR/host")
 case "$1" in
   ps)
     if [ "$host" = root@app.example.test ]; then echo apptest-abc123; echo workertest-def456
+    elif [ -f "$FAKE_DIR/db-down" ]; then :
     else echo supabase-auth-xyz; echo supabase-rest-xyz; echo supabase-kong-xyz; echo supabase-db-xyz; fi ;;
   inspect)
     fmt=$3; c=$4
@@ -48,7 +49,7 @@ case "$1" in
           supabase-rest-*) cat "$FAKE_DIR/env-rest" ;;
           supabase-kong-*) cat "$FAKE_DIR/env-kong" ;;
         esac ;;
-      *State*) echo "healthy 2026-11-08T10:00:00Z" ;;
+      *State*) if [ -f "$FAKE_DIR/stan-$c" ]; then cat "$FAKE_DIR/stan-$c"; else echo "healthy 2026-11-08T10:00:00Z"; fi ;;
       *Labels*) echo "projekt-supabase-test" ;;
     esac ;;
   exec)
@@ -307,5 +308,23 @@ describe('rotacja-kluczy.sh', () => {
     expect(out).toContain('Użycie:');
     expect(status).toBe(1);
     expect(existsSync(join(dir, 'host'))).toBe(false);
+  });
+
+  it('nieudany odczyt db-1 nie kasuje punktu odniesienia dla kluczy Supabase', () => {
+    run();
+    writeFileSync(join(dir, 'db-down'), '');
+    const { status } = run();
+    expect(status).toBe(1);
+    rmSync(join(dir, 'db-down'));
+    const { out } = run();
+    expect(out).toMatch(/gotrue\.GOTRUE_JWT_SECRET\s+\S+\s+bez zmian/);
+    expect(out).toMatch(/kong\.SUPABASE_SERVICE_KEY\s+\S+\s+bez zmian/);
+  });
+
+  it('worker tuż po Restarcie (starting): informacja, nie BŁĄD', () => {
+    writeFileSync(join(dir, 'stan-workertest-def456'), 'starting 2026-11-08T10:00:00Z\n');
+    const { out, status } = run();
+    expect(out).toContain('kontener worker: dopiero startuje');
+    expect(status).toBe(0);
   });
 });

@@ -62,7 +62,10 @@
    wszystkich zmiennych Coolify z sekretami w `.agents/backup/faktway-<data>/`
    (`chmod 600`, poza gitem). Stąd bierzesz stare wartości przy cofaniu.
 3. Kontrola wyjściowa: `./scripts/ops/rotacja-kluczy.sh` musi dać „Wszystko
-   OK”. Zapisuje odciski, do których porównuje każda następna kontrola.
+   OK”. Zapisuje odciski; kolumna zmian porównuje zawsze z **poprzednią**
+   kontrolą, więc „ZMIENIONY” widać w pierwszej kontroli po kroku. Przy
+   powtórce tej samej kontroli porównuj odcisk z odciskiem z generatora albo
+   z zapisanym przed krokiem.
    Zapisz z niej, czy `SMTP GoTrue używa tego samego klucza Resend` i czy
    `GOOGLE_CLIENT_SECRET`, `AWS_*`, `SLACK_WEBHOOK_*` w ogóle są ustawione.
 4. Zasady w Coolify, ważne w każdym kroku:
@@ -76,20 +79,12 @@
      Google, captcha) wprowadzasz w Coolify (żeby przetrwały) **i** w pliku
      `.env` usługi na `db-1`, a potem odtwarzasz tylko kontener logowania.
      Nazwę projektu compose wypisuje kontrola („projekt compose: …”); katalog
-     usługi to zwykle `/data/coolify/services/<projekt>` (sprawdź `ls`):
-
-     ```bash
-     ssh -i $K root@$DB
-     ```
-
-     ```bash
-     cd /data/coolify/services/<projekt> && cp .env .env.przed-rotacja-$(date +%Y%m%d-%H%M) && nano .env
-     ```
-
-     ```bash
-     cd /data/coolify/services/<projekt> && docker compose -p <projekt> up -d --no-deps supabase-auth
-     ```
-
+     usługi to zwykle `/data/coolify/services/<projekt>`. To praca w zwykłym
+     Terminalu, nie przyciskiem „Run” (sesja SSH i edytor są interaktywne):
+     `source .agents/infra.env`, potem `ssh -i "$K" root@"$DB"`, a na `db-1`
+     w katalogu usługi: kopia `cp .env .env.przed-rotacja-<data>`, edycja
+     `.env` (`nano .env`) i odtworzenie samego kontenera logowania
+     `docker compose -p <projekt> up -d --no-deps supabase-auth`.
      Kilka sekund bez logowania. Tak zrobiono 17.10.2026 (`docs/rebrand/FAKTWAY.md`,
      krok 8). Restart całej usługi z panelu też działa, ale zatrzymuje
      Postgresa i API na 1–2 minuty. Kopie `.env.przed-rotacja-*` zawierają

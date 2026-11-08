@@ -213,9 +213,16 @@ async function minio() {
     const key = `_kontrola-rotacji/${ROLA}-${Date.now()}.txt`;
     const tresc = `kontrola rotacji ${new Date().toISOString()}`;
     await client.send(new s3.PutObjectCommand({ Bucket: bucket, Key: key, Body: tresc, ContentType: 'text/plain' }), opts);
-    const got = await client.send(new s3.GetObjectCommand({ Bucket: bucket, Key: key }), opts);
-    const odczyt = await got.Body.transformToString();
-    await client.send(new s3.DeleteObjectCommand({ Bucket: bucket, Key: key }), opts);
+    let odczyt;
+    try {
+      const got = await client.send(new s3.GetObjectCommand({ Bucket: bucket, Key: key }), opts);
+      odczyt = await got.Body.transformToString();
+    } finally {
+      // Usuwamy też po nieudanym odczycie; błąd usunięcia zgłasza sama kontrola.
+      await client.send(new s3.DeleteObjectCommand({ Bucket: bucket, Key: key }), {
+        abortSignal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    }
     if (odczyt === tresc) wynik('minio', 'ok', `zapis, odczyt i usunięcie obiektu próbnego w buckecie ${bucket}`);
     else wynik('minio', 'blad', 'odczytany obiekt różni się od zapisanego');
   });

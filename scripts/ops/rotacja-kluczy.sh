@@ -294,6 +294,15 @@ for scope in app worker; do
   fi
 done
 
+# scripts/reencrypt-ksef-credentials.ts w workerze (pełne node_modules i tsx).
+# Bez argumentu: podgląd, niczego nie zapisuje, a odszyfrowuje każdy zapis
+# kluczami z env. `--apply`: zapis. Ostatnia linia wyjścia: `KOD=<kod wyjścia>`.
+ksef_reencrypt() {
+  "${SSH[@]}" "root@$APP" \
+    "C=\$(docker ps --format '{{.Names}}' | grep -E '^$WORKER_PREFIX' | head -1); [ -n \"\$C\" ] && docker exec \"\$C\" node --import ./lib/jobs/server-only-hook.mjs --import tsx scripts/reencrypt-ksef-credentials.ts $* 2>&1; echo \"KOD=\$?\"" 2>/dev/null \
+    || echo "KOD=ssh"
+}
+
 # Krok 4: przeszyfrowanie (tylko w trybie `przeszyfruj-ksef`). Worker ma pełne
 # node_modules i tsx; skrypt czyta zapisy stronami i zapisuje warunkowo
 # (updated_at), więc ponowienie jest bezpieczne.
@@ -303,9 +312,7 @@ if [ "$TRYB" = przeszyfruj-ksef ]; then
   if [ "$FAILS" -gt 0 ]; then
     bad "przeszyfrowanie pominięte: najpierw popraw błędy spójności wyżej"
   else
-    APPLY_OUT=$("${SSH[@]}" "root@$APP" \
-      "C=\$(docker ps --format '{{.Names}}' | grep -E '^$WORKER_PREFIX' | head -1); [ -n \"\$C\" ] && docker exec \"\$C\" node --import ./lib/jobs/server-only-hook.mjs --import tsx scripts/reencrypt-ksef-credentials.ts --apply 2>&1; echo \"KOD=\$?\"" 2>/dev/null) \
-      || APPLY_OUT="KOD=ssh"
+    APPLY_OUT=$(ksef_reencrypt --apply)
     printf '%s\n' "$APPLY_OUT" | grep -v '^KOD=' | sed 's/^/           /'
     if [ "$(printf '%s\n' "$APPLY_OUT" | sed -n 's/^KOD=//p' | tail -1)" = 0 ]; then
       ok "KSeF: przeszyfrowanie zakończone kompletnie"
@@ -330,6 +337,8 @@ for pair in "aplikacja:APP_OUT" "worker:WRK_OUT"; do
   st=$(field "${!var}" stan)
   case "$st" in
     healthy*|running*) ok "kontener $label: ${st%% *}, uruchomiony ${st#* }" ;;
+    # Pierwsze ~30 s po Restarcie: healthcheck jeszcze nie odpowiedział.
+    starting*) info "kontener $label: dopiero startuje (uruchomiony ${st#* }), powtórz kontrolę za minutę" ;;
     "") ;;
     *) bad "kontener $label: ${st}" ;;
   esac
@@ -414,11 +423,8 @@ if [ -n "${PGC:-}" ]; then
   fi
 fi
 
-# Podgląd przeszyfrowania KSeF w workerze (pełne node_modules i tsx): bez
-# `--apply` niczego nie zapisuje, a odszyfrowuje każdy zapis kluczami z env.
-KSEF_OUT=$("${SSH[@]}" "root@$APP" \
-  "C=\$(docker ps --format '{{.Names}}' | grep -E '^$WORKER_PREFIX' | head -1); [ -n \"\$C\" ] && docker exec \"\$C\" node --import ./lib/jobs/server-only-hook.mjs --import tsx scripts/reencrypt-ksef-credentials.ts 2>&1; echo \"KOD=\$?\"" 2>/dev/null) \
-  || KSEF_OUT="KOD=ssh"
+# Podgląd przeszyfrowania KSeF (bez zapisu).
+KSEF_OUT=$(ksef_reencrypt)
 ksef_line=$(printf '%s\n' "$KSEF_OUT" | grep -m1 '^Przeczytano:' || true)
 ksef_code=$(printf '%s\n' "$KSEF_OUT" | sed -n 's/^KOD=//p' | tail -1)
 if [ -z "$ksef_line" ]; then
@@ -435,8 +441,19 @@ else
   fi
 fi
 
-# Zapis odcisków dopiero po pełnym przebiegu: następna kontrola pokaże zmiany.
-printf '%s\n' "$NOW_TXT" | grep -v '^$' | sort >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE" && chmod 600 "$STATE_FILE"
+# Zapis odcisków na koniec: następna kontrola pokaże zmiany. Klucze, których
+# tym razem nie odczytano (SSH, brak kontenera), zostają z poprzedniego zapisu,
+# żeby jeden nieudany przebieg nie kasował punktu odniesienia.
+{
+  printf '%s\n' "$NOW_TXT" | grep -v '^$'
+  if [ -f "$STATE_FILE" ]; then
+    printf '%s\n' "$NOW_TXT" | grep -v '^$' | cut -d= -f1 >"$STATE_FILE.read"
+    grep -v -F -x -f "$STATE_FILE.read" <(cut -d= -f1 "$STATE_FILE") | while IFS= read -r k; do
+      grep -m1 -F "$k=" "$STATE_FILE"
+    done
+    rm -f "$STATE_FILE.read"
+  fi
+} | sort >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE" && chmod 600 "$STATE_FILE"
 
 echo
 echo "── Do sprawdzenia ręcznie (skrypt tego nie umie):"
