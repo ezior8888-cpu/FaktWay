@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * AUD-62 (decyzja B6): Redis (Upstash) nie działa na produkcji, a limiter
- * bez Redisa przepuszczał wszystko — logowanie, rejestracja i reset hasła
- * bez limitu prób. Teraz bez Redisa limit liczony jest w pamięci procesu
+ * AUD-62 (decyzja B6): limiter bez Redisa przepuszczał wszystko — logowanie,
+ * rejestracja i reset hasła bez limitu prób. (Audyt zakładał, że Redisa na
+ * produkcji nie ma; stan 23.10.2026: jest — własny, na app-1. Test pilnuje
+ * ścieżki awaryjnej.) Teraz bez Redisa limit liczony jest w pamięci procesu
  * (web to jedna instancja). IP: najpierw `X-Real-Ip` ustawiany przez
  * Traefika, potem OSTATNI wpis `X-Forwarded-For` (dopisany przez nasze proxy);
  * pierwszy wpis może podać sam klient.

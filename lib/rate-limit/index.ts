@@ -60,15 +60,16 @@ export interface RateLimitResult {
 }
 
 /**
- * Sliding window rate limiter na Upstash Redis (sorted set per identifier).
+ * Sliding window rate limiter na Redisie (sorted set per identifier; klient
+ * HTTP z `lib/cache/redis.ts` — na produkcji własny Redis na app-1).
  *
  * Pipeline atomowo: usuń poza-oknem → dodaj teraz → zlicz → ustaw TTL.
  * Gdy count > limit — odrzucamy bieżący request (został już zapisany, ale
  * to OK, sliding window i tak go wymiotę po `windowSeconds`).
  *
- * Bez Redisa (dziś cała produkcja — Upstash wyłączony) i przy jego awarii
- * limit liczy pamięć procesu (AUD-62). Wcześniej był wtedy fail-open, czyli
- * logowanie, rejestracja i reset hasła bez żadnego limitu prób.
+ * Bez Redisa (lokalnie albo przy jego awarii) limit liczy pamięć procesu
+ * (AUD-62). Wcześniej był wtedy fail-open, czyli logowanie, rejestracja
+ * i reset hasła bez żadnego limitu prób.
  */
 export async function checkRateLimit(
   config: RateLimitConfig,

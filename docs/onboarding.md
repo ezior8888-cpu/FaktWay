@@ -183,7 +183,7 @@ Solo founder dodaje Cię do (zwykle przez SSO/invite):
 - **Resend** (View dla maili).
 - **Cloudflare** (R2 + Turnstile + Cache Rules — Restricted role).
 - **Inngest** dashboard.
-- **Upstash** Redis dashboard.
+- **Redis** — bez osobnego panelu: własny Redis na `app-1` (zob. `AGENTS.md`, „Stack”); chmura Upstash nieużywana.
 - **Slack** workspace + dostęp do `#urgent`, `#bugs`, `#metrics`.
 - **1Password / Bitwarden** vault z env vars + KSeF credentials.
 

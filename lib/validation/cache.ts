@@ -1,6 +1,6 @@
 // Cache wrapper dla walidacji NIP — ogranicza zapytania do Białej Listy / VIES.
 //
-// Faza 22: dorzucamy warstwę Redis (Upstash) przed DB validation_cache, żeby
+// Faza 22: dorzucamy warstwę Redis (`lib/cache`) przed DB validation_cache, żeby
 // powtórne sprawdzenia tego samego NIP-a (typowe przy bulk import 100+ faktur
 // z tym samym kontrahentem) nie hammer-owały Postgres. Hierarchia:
 //

@@ -58,9 +58,16 @@ export async function GET() {
   }
 
   // ROB-1: Redis check — informacyjny, NIE bramkuje ogólnego statusu.
-  // Redis to cache (rate-limit, dashboard) z fail-open wszędzie, więc jego
-  // awaria = degradacja, nie „app down". Przyda się jako smoke target przy
-  // migracji M3 (Valkey). Gdy nieskonfigurowany — pomijamy (graceful).
+  // Celowo: /api/health odpytuje healthcheck kontenera — HEALTHCHECK
+  // z Dockerfile (5xx = unhealthy) i healthcheck Coolify, jeśli ma tę ścieżkę
+  // w ustawieniach — więc 5xx przy awarii Redisa wycofałby wdrożenie albo
+  // oznaczył zdrowy kontener jako unhealthy. Awaria Redisa to jednak NIE tylko
+  // wolniejszy cache: limitery MFA i hasła są fail-closed, więc m.in. logowanie
+  // z 2FA i operacje na haśle staną (lista w `lib/cache/redis.ts`). Kod HTTP
+  // tego nie pokaże. Ślad: `informational.redis` ≠ ok w treści (skrypty ops
+  // i monitor HTTP dziś jej nie czytają, patrzą na kod) oraz wyjątek w Sentry
+  // z tagiem `check: health.redis`, gdy ping rzuci. Gdy nieskonfigurowany —
+  // pomijamy (graceful).
   const informational: Record<string, { status: 'ok' | 'fail' | 'skipped' }> = {};
   if (isRedisConfigured()) {
     try {
