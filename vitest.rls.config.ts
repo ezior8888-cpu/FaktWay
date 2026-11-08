@@ -67,6 +67,9 @@ export default defineConfig({
       // 00171 (plan księgowości JDG, K7): wpisy ręczne KPiR z kolumną; stawka albo kolumna (CHECK),
       // rozdział czytników ewidencji i KPiR, role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-kpir.test.ts',
+      // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
+      // role i izolacja jak w 00167.
+      'tests/rls-ksiegowosc-spis.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

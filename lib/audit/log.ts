@@ -197,6 +197,8 @@ export type AuditAction =
   // KPiR (00171, K7): wpis ręczny KPiR dodany (usunięcie jak w K3) i pobrany
   // plik JPK_PKPIR (okres i sumy, bez danych osoby).
   | 'ledger_entry.kpir_created'
+  | 'ledger_inventory.created'
+  | 'ledger_inventory.deleted'
   | 'jpk_pkpir.downloaded';
 
 export interface AuditLogEntry {

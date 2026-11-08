@@ -8,7 +8,8 @@
  * - wpisy ręczne z kolumną KPiR (00171) i wersje profilu (chyba że poda je
  *   wołający, który już je przeczytał);
  * - zapłacone składki społeczne z `tax_settlements` (K7.3, D21): Fundusz Pracy
- *   i FS jako koszt w dniu zapłaty.
+ *   i FS jako koszt w dniu zapłaty;
+ * - spisy z natury roku (K7.4, D19) dla pliku JPK_PKPIR i widoku.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -22,12 +23,13 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { czytajFakturyRoku, KOMUNIKAT_ODCZYT, KOMUNIKAT_SRODOWISKO, type OpcjeOdczytu } from '@/lib/ksiegowosc/ewidencja-dane';
 import { zaplatyFunduszuPracy, zbudujKpir, type KosztKpir, type Kpir, type WpisKpir, type ZaplaconeSkladki } from '@/lib/ksiegowosc/kpir';
 import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { czytajSpisy, type Spis } from '@/lib/ksiegowosc/spis-z-natury';
 import { czytajWpisyKpir, type RodzajWpisu } from '@/lib/ksiegowosc/wpisy-reczne';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/types/database';
 
 export type WynikKpir =
-  | { ok: true; kpir: Kpir; wpisy: (WpisKpir & { rodzaj: RodzajWpisu })[]; wersje: WersjaProfilu[] }
+  | { ok: true; kpir: Kpir; wpisy: (WpisKpir & { rodzaj: RodzajWpisu })[]; wersje: WersjaProfilu[]; spisy: Spis[] }
   | { ok: false; komunikat: string };
 
 const KOLUMNY_KOSZTU =
@@ -173,6 +175,7 @@ export async function czytajKpir(client: SupabaseClient, tenantId: string, rok: 
     czytajWpisyKpir(client, tenantId, `${rok}-01-01`, `${rok}-12-31`),
     opcje.wersje ? [...opcje.wersje] : czytajWersjeProfilu(client, tenantId),
     zaplaconeSkladki(client, tenantId),
+    czytajSpisy(client, tenantId, rok),
   ]).then(
     (r) => ({ ok: true as const, r }),
     (e: unknown) => ({ ok: false as const, e }),
@@ -185,8 +188,8 @@ export async function czytajKpir(client: SupabaseClient, tenantId: string, rok: 
     console.error('[kpir] odczyt', e instanceof Error ? e.message : e);
     return { ok: false, komunikat: e instanceof Error && e.message.includes('environment') ? KOMUNIKAT_SRODOWISKO : KOMUNIKAT_ODCZYT };
   }
-  const [k, wpisy, wersje, skladki] = odczyt.r;
+  const [k, wpisy, wersje, skladki, spisy] = odczyt.r;
   if (!Array.isArray(k)) return { ok: false, komunikat: k.komunikat };
   const zaplatyFp = zaplatyFunduszuPracy(skladki);
-  return { ok: true, kpir: zbudujKpir({ rok, faktury: faktury.faktury, koszty: k, wpisy, zaplatyFp, wersje, kursy: faktury.kursy }), wpisy, wersje };
+  return { ok: true, kpir: zbudujKpir({ rok, faktury: faktury.faktury, koszty: k, wpisy, zaplatyFp, wersje, kursy: faktury.kursy }), wpisy, wersje, spisy };
 }

@@ -89,6 +89,8 @@ const client = {
     if (tabela === 'expenses') return lancuch(() => ({ data: [KOSZT_KSEF], count: 1, error: null }));
     if (tabela === 'invoices') return lancuch(() => mocks.waluty);
     if (tabela === 'tax_settlements') return lancuch(() => ({ data: mocks.bladZaplat ? null : mocks.zaplacone, count: mocks.zaplacone.length, error: mocks.bladZaplat }));
+    // Spisy z natury (K7.4) mają własny test odczytu; tu żadnych.
+    if (tabela === 'ledger_inventory_counts') return lancuch(() => ({ data: [], count: 0, error: null }));
     throw new Error(tabela);
   },
 } as unknown as import('@supabase/supabase-js').SupabaseClient;
