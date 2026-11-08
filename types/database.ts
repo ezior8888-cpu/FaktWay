@@ -1,6 +1,6 @@
 // Wygenerowane 8.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00171
-// (m.in. 00167-00171 modułu księgowości: wpisy ręczne, rozliczenia, powiadomienia, wysyłki JPK). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00173
+// (m.in. 00167-00173 modułu księgowości: wpisy ręczne, rozliczenia, powiadomienia, wysyłki JPK, spis z natury). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -3288,6 +3288,65 @@ export type Database = {
           },
           {
             foreignKeyName: "ksef_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_inventory_counts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: string
+          id: string
+          kwota_gr: number
+          opis: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data: string
+          id?: string
+          kwota_gr: number
+          opis?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: string
+          id?: string
+          kwota_gr?: number
+          opis?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_inventory_counts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_inventory_counts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ledger_inventory_counts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_inventory_counts_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
