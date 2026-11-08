@@ -120,8 +120,8 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 | 4.2 | Renovate z `minimumReleaseAge` 3 dni (ochrona przed przejętymi paczkami npm) | N | nie | **w 1.4** |
 | 4.3 | `@axe-core/playwright` przy testach wizualnych | N | nie | w 3.2 |
 | 4.4 | Knip (nieużywane pliki, eksporty, zależności): najpierw raport tygodniowy, nie blokada | Ś (fałszywe trafienia przy MDX, workerze, skryptach) | nie | etap 2, po 2.4 |
-| 4.5 | Budżet First Load JS w jobie `build` (liczba z wyjścia `next build`, próg jako liczba w repo) | N | nie | etap 2; zamyka otwarty wątek „lazy-load PostHog” |
-| 4.6 | Cache `.tsbuildinfo` i `.eslintcache` w CI (`actions/cache`) | N | nie | przy 2.8 |
+| 4.5 | Budżet First Load JS w jobie `build` (liczba z wyjścia `next build`, próg jako liczba w repo) | N | nie | **zrobione w #471**: Next 16 nie wypisuje już First Load JS, więc `scripts/ci/budzet-js.mjs` liczy z `.next`; próg 750 kB (`scripts/ci/budzet-js.json`) |
+| 4.6 | Cache `.tsbuildinfo` i `.eslintcache` w CI (`actions/cache`) | N | nie | **zrobione w #471** |
 | 4.7 | Subagent `weryfikator` (Opus, tylko odczyt) w `.claude/agents/` | N | lekko | **odrzucone na razie**: `/code-review` robi to samo |
 | 4.8 | Styl odpowiedzi „raport” | N | **tak**, ładowany zawsze | **odrzucone**: format raportu jest w protokole |
 | 4.9 | Reguły gitleaks dla adresów serwerów | — | — | **odrzucone**: wartości musiałyby być w publicznym repo; 4.1 robi to lokalnie |
@@ -250,6 +250,7 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
 | 07.11.2026 | 3.4 scalenie i instalacja (polecenie Bartosza) | #436 (niesie #435) | oba scalone; restore-drill zainstalowany na `db-1` przez Bartosza (`zainstaluj-restore-drill.sh`, tryb auto blokuje zapis na serwerze), pierwsza próba `WYNIK: OK` w 13 s, ping do checku Healthchecks „restore-drill” wysłany; czujka FA(3) po scaleniu ręcznie na GitHubie: „zgodny z repo”, bez issue |
 | 08.11.2026 | Lista Bartosza A–C (polecenie „zrób wszystkie kroki”) | #448, #298, scalenie #417 | A1: 00170 i 00171 już na db-1; `kontrola-faktur-ksef.sh` tylko do odczytu (PGOPTIONS, sprawdzone na db-1: `on`, `30s`, przebieg bez błędów) i bez pytania dla agenta; #298 odświeżony na 4096 MB; #417 odświeżony w nowym PR (konflikt rejestru, 4 długie myślniki ze strażnika tekstów); 3.7a przekierowana na `invoice-form.tsx` (`submit-invoice.ts` zmienia 5 PR). Znalezione: bramka `/wdroz` wdraża web przed workerem (`ops/bramka/src/deploy.mjs`), odwrotnie niż `wdroz-produkcje.sh` |
+| 08.11.2026 | 4.5 budżet First Load JS + 4.6 cache tsc/ESLint w CI | #471 | Next 16 usunął First Load JS z wyjścia `next build`, więc pomiar z `.next` (webpack: `rootMainFiles` + wejścia strony i segmentów nadrzędnych + ich zależności, gzip); 88 tras, największa `/(dashboard)/(faktury)/invoices` 713 kB, próg 750 kB; ESLint z `--cache-strategy content` (świeży checkout zmienia czasy plików), `tsconfig.json` bez zmian (`incremental` już był); lokalnie tsc 18 → 3 s, ESLint 23 → 1 s; `pnpm build` i pełne `ci` pominięte lokalnie (pamięć Maca), robi CI |
 
 **Następny krok:** Bartosz: decyzja przy #425 (B1 listy z 08.11: wdrożenie
 przez nowy endpoint czy przez bramkę `/wdroz`), potem jej kroki; scalenie
