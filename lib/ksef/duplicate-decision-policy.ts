@@ -22,11 +22,12 @@ import {
 import {
   duplicateCheckAllows,
   duplicateOriginalOffer,
-  FAKTFLOW_SYSTEM_INFO,
   isRecord,
   originalRecheckNeeded,
   ownHistoryInSubmissions,
+  programOf,
   str,
+  trimmed,
 } from './duplicate-decision-jsonb';
 import { decisionOf, duplicateMarker, isCorrectableBuyer, oneOf, retiredRow } from './duplicate-decision-rows';
 import { documentNumber, duplicateEnvLabel, sqlText } from './duplicate-decision-sql-texts';
@@ -76,18 +77,7 @@ const digitsOf = (v: string | null): string | null => {
   return d.length > 0 ? d : null;
 };
 
-export const trimmed = (v: unknown): string | null => {
-  const s = typeof v === 'string' ? v.trim() : '';
-  return s.length > 0 ? s : null;
-};
-
 const sameText = (a: string | null, b: string | null): boolean | null => (a !== null && b !== null ? a === b : null);
-
-/** `FaktWay` dla pliku FaktWay, inaczej nazwa z `SystemInfo`; `null` — nieznany. */
-export function programOf(summary: Record<string, unknown>): string | null {
-  const systemInfo = str(summary.systemInfo);
-  return systemInfo === FAKTFLOW_SYSTEM_INFO ? 'FaktWay' : systemInfo;
-}
 
 /** Tabela porównania (2.2.2) i dwa porównania, od których zależy „Rozumiem skutki”. */
 interface Comparison {

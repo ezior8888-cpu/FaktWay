@@ -36,6 +36,17 @@ export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v =
 export const hasKey = (v: Record<string, unknown>, key: string): boolean => Object.prototype.hasOwnProperty.call(v, key);
 export const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
+export const trimmed = (v: unknown): string | null => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s.length > 0 ? s : null;
+};
+
+/** `FaktWay` dla pliku FaktWay, inaczej nazwa z `SystemInfo`; `null` — nieznany. */
+export function programOf(summary: Record<string, unknown>): string | null {
+  const systemInfo = str(summary.systemInfo);
+  return systemInfo === FAKTFLOW_SYSTEM_INFO ? 'FaktWay' : systemInfo;
+}
+
 /**
  * `->>` z SQL dla skalara jsonb: napis bez zmian (także pusty), liczba i wartość
  * logiczna jako tekst; `null`, brak klucza, obiekt i tablica — `null` (tych

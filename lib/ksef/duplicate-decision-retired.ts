@@ -10,8 +10,7 @@
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { SPECIAL_KIND_LABEL, specialKindOf } from '@/lib/invoices/ksef-send-policy';
 
-import { decisionLabel, isRecord, str } from './duplicate-decision-jsonb';
-import { programOf, trimmed } from './duplicate-decision-policy';
+import { decisionLabel, isRecord, programOf, str, trimmed } from './duplicate-decision-jsonb';
 import { decisionOf, importedDecisionOf, retiredRow, type TakenRowFields } from './duplicate-decision-rows';
 import { documentNumber, sqlText } from './duplicate-decision-sql-texts';
 import { DUPLICATE_DECISION_TEXTS } from './duplicate-decision-texts';

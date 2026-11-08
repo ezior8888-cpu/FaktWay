@@ -130,13 +130,18 @@ describe('3.7b: publiczne API @/lib/ksef/duplicate-decision', () => {
     const modules = decisionModules();
     const parts = [...modules.keys()].filter((name) => name !== 'duplicate-decision');
     expect(parts.length).toBeGreaterThan(0);
-    const partImport = new RegExp(`(?:lib/ksef|\\.)/(?:${parts.join('|')})'`);
-    const tracked = execFileSync('git', ['ls-files', '--', 'app', 'components', 'lib', 'hooks', 'tests', 'e2e', 'scripts'], {
-      cwd: ROOT,
-      encoding: 'utf8',
-    }).split('\n').filter((f) => /\.(tsx?|mts|mjs)$/.test(f));
+    // Jeden `git grep` zamiast czytania każdego pliku; kod wyjścia 1 = brak trafień.
+    let hits = '';
+    try {
+      hits = execFileSync('git', ['grep', '-lE', `(lib/ksef|\\.)/(${parts.join('|')})['"]`, '--', 'app', 'components', 'lib', 'hooks', 'tests', 'e2e', 'scripts'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+      });
+    } catch (e) {
+      if ((e as { status?: number }).status !== 1) throw e;
+    }
     const insideBarrel = (file: string) => file.startsWith('lib/ksef/') && modules.has(file.slice('lib/ksef/'.length, -'.ts'.length));
-    const outside = tracked.filter((file) => !insideBarrel(file) && partImport.test(readFileSync(join(ROOT, file), 'utf8')));
+    const outside = hits.split('\n').filter((file) => file !== '' && !insideBarrel(file));
     expect(outside).toEqual([]);
   });
 
@@ -144,9 +149,9 @@ describe('3.7b: publiczne API @/lib/ksef/duplicate-decision', () => {
     const modules = decisionModules();
     expect(modules.size).toBeGreaterThanOrEqual(1);
     for (const [name, source] of modules) {
-      expect(source, name).not.toMatch(/from '(server-only|node:[^']+|@supabase\/[^']+|@\/lib\/supabase\/[^']+)'/);
-      expect(source, name).not.toMatch(/^import 'server-only'/m);
-      expect(source, name).not.toMatch(/from '[^']*duplicate-verdict'/);
+      // Statyczne `from`, import dla efektu ubocznego, `import()` i `require()`.
+      const forbidden = /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)['"](server-only|node:[^'"]+|@supabase\/[^'"]+|@\/lib\/supabase\/[^'"]+|[^'"]*duplicate-verdict)['"]/;
+      expect(source, name).not.toMatch(forbidden);
       expect(source, name).not.toMatch(/^['"]use (client|server)['"]/m);
       expect(source, name).not.toMatch(/\bnew Date\(\)|\bDate\.now\(/);
     }
