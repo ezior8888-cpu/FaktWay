@@ -80,7 +80,8 @@ export const WIEDZA = [
 /** Testy filtra: dopisywanie wolne, usunięta albo zmieniona linia wymaga zgody. */
 export const TESTY_FILTRA = 'tests/filtr/**';
 
-const TEST = /(?:^tests\/.+|\.test)\.(?:ts|tsx|mjs|js)$/;
+// Test to plik `*.test.*` (w tests/ albo obok kodu, np. lib/xml/); fixture to nie test.
+const TEST = /\.test\.(?:tsx|ts|mjs|js)$/;
 
 export const POLA_KARTY = [
   { id: 'poziom', szablon: 'Poziom i obszary z mapy', etykieta: 'Poziom i obszary z mapy', klucz: /^poziom/i },
@@ -391,7 +392,8 @@ function bledyKarty(karta, { poziom, wiersze, dane, istnieje, wymaganeZgody }) {
       'Wypełnij każde pole karty; gdy pole nie dotyczy zmiany, wpisz „n/d”.',
     );
   }
-  const deklarowany = /R[0-3]/.exec(karta.poziom ?? '')?.[0];
+  // Najwyższy poziom wymieniony w karcie („R3 i R1” to R1).
+  const deklarowany = (karta.poziom?.match(/R[0-3]/g) ?? []).reduce((a, b) => (a ? wyzszyPoziom(a, b) : b), undefined);
   if (!deklarowany || silaPoziomu(deklarowany) < silaPoziomu(poziom)) {
     blad(
       `karta zmiany: poziom w karcie (${deklarowany ?? 'brak'}) niższy niż z mapy (${poziom})`,

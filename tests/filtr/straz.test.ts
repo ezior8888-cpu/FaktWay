@@ -353,3 +353,14 @@ describe('części pomocnicze', () => {
     expect(tekst).toMatch(/\| `lib\/podatki\/ryczalt\.ts` \| silniki \| R1 \|/);
   });
 });
+
+describe('poprawki po przeglądzie (drugi czytelnik F2)', () => {
+  it('fixture w tests/ nie jest testem dla kodu R1', () => {
+    const fixture: Plik = { plik: 'tests/fixtures/ryczalt.json', status: 'modified', patch: patch('{}') };
+    expect(ocenPR(dane({ pliki: [zmianaR1, fixture], opis: KARTA_R1 })).wymaganeZgody.map((z) => z.etykieta)).toEqual([ZGODA_WYJATKU]);
+  });
+
+  it('karta z kilkoma poziomami bierze najwyższy', () => {
+    expect(ocenPR(dane({ pliki: [zmianaR1, testR1], opis: KARTA_R1.replace('R1, silniki', 'R3 i R1, silniki') })).ok).toBe(true);
+  });
+});
