@@ -136,6 +136,9 @@ describe('pulpit — miesiąc w Europe/Warsaw, nie w strefie serwera (§2.4 pkt 
     expect(pazdziernik.daysToVatDue).toBe(41);
     const kwiecien = await getMonthlyFigures(database(), TENANT, new Date('2027-03-10T10:00:00Z'));
     expect(kwiecien.vatDueLabel).toBe('26.04.2027');
+    // Listopad 2026: 25.12 to Boże Narodzenie, 26.12 drugi dzień świąt (sobota), 27.12 niedziela.
+    const listopad = await getMonthlyFigures(database(), TENANT, new Date('2026-11-09T10:00:00Z'));
+    expect(listopad.vatDueLabel).toBe('28.12.2026');
     // Dzień roboczy zostaje bez zmian.
     expect((await getMonthlyFigures(database(), TENANT, PIERWSZY_PAZDZIERNIKA_0030)).vatDueLabel).toBe('25.11.2026');
   });
