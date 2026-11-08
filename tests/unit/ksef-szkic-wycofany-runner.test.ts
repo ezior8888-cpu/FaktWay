@@ -73,7 +73,6 @@ vi.mock('@/lib/storage/r2', async (orig) => {
       const { sha256Hex } = await import('./helpers/ksef-pelna-sciezka');
       return { storagePath, sha256Hash: sha256Hex(xml), sizeBytes: xml.length, etag: '"e"' };
     },
-    invoiceXmlExistsForId: async () => false,
     uploadToR2IfAbsent: async (key: string, body: Buffer) => {
       if (m.storage.has(key)) return false;
       m.storage.set(key, body.toString('utf8'));

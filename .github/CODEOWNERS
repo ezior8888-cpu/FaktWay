@@ -34,6 +34,8 @@
 /.dockerignore               @ezior8888-cpu
 /next.config.ts              @ezior8888-cpu
 /scripts/hetzner/            @ezior8888-cpu
+# Agent uruchamia go bez pytania (.claude/settings.json): zmiana tylko z recenzją
+/scripts/ops/kontrola-faktur-ksef.sh  @ezior8888-cpu
 /ops/                        @ezior8888-cpu
 
 # Baza, uprawnienia, granice dostępu

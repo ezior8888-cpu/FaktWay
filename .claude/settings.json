@@ -27,7 +27,8 @@
       "Bash(pnpm test)",
       "Bash(pnpm run ci)",
       "Bash(pnpm build)",
-      "Bash(bash scripts/dev/przygotuj-worktree.sh)"
+      "Bash(bash scripts/dev/przygotuj-worktree.sh)",
+      "Bash(./scripts/ops/kontrola-faktur-ksef.sh)"
     ],
     "deny": [
       "Bash(git push --force:*)",
