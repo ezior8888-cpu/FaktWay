@@ -25,6 +25,8 @@ const SKALA: WersjaProfilu = {
 const mocks = vi.hoisted(() => ({
   waluty: { data: [] as unknown[] | null, error: null as unknown },
   odczytyProfilu: 0,
+  zaplacone: [] as unknown[],
+  bladZaplat: null as { code: string; message: string } | null,
 }));
 
 vi.mock('@/lib/ksiegowosc/ewidencja-dane', async (orig) => ({
@@ -86,6 +88,7 @@ const client = {
   from: (tabela: string) => {
     if (tabela === 'expenses') return lancuch(() => ({ data: [KOSZT_KSEF], count: 1, error: null }));
     if (tabela === 'invoices') return lancuch(() => mocks.waluty);
+    if (tabela === 'tax_settlements') return lancuch(() => ({ data: mocks.bladZaplat ? null : mocks.zaplacone, count: mocks.zaplacone.length, error: mocks.bladZaplat }));
     throw new Error(tabela);
   },
 } as unknown as import('@supabase/supabase-js').SupabaseClient;
@@ -93,6 +96,8 @@ const client = {
 beforeEach(() => {
   mocks.waluty = { data: [], error: null };
   mocks.odczytyProfilu = 0;
+  mocks.zaplacone = [];
+  mocks.bladZaplat = null;
 });
 
 describe('odczyt KPiR', () => {
@@ -113,4 +118,19 @@ describe('odczyt KPiR', () => {
     expect(wynik.kpir.wiersze.map((w) => [w.dowod, w.kwoty.k13])).toEqual([['FZ/1', 30_000]]);
     expect(mocks.odczytyProfilu).toBe(0);
   });
+
+  it('Fundusz Pracy (K7.3): zapłacone składki społeczne dają wiersz kolumny 13 w dniu zapłaty; przed 00168 bez wierszy, nie awaria', async () => {
+    mocks.waluty = { data: [{ id: 'f-ksef-1', currency: 'PLN' }], error: null };
+    mocks.zaplacone = [{ id: 'r1', okres: '2026-02-01', wersja: 1, kwota_gr: 192_676, zaplacone_o: '2026-03-10', spoleczne_bez_fp: 178_829 }];
+    const wynik = await czytajKpir(client, 'firma-1', 2026, { wersje: [SKALA] });
+    if (!wynik.ok) throw new Error(wynik.komunikat);
+    expect(wynik.kpir.wiersze.map((w) => [w.data, w.dowod, w.kwoty.k13, w.zrodlo.typ])).toEqual([
+      ['2026-03-10', 'Składki ZUS za 02/2026', 13_847, 'zaplata'],
+      ['2026-03-12', 'FZ/1', 30_000, 'koszt'],
+    ]);
+    mocks.bladZaplat = { code: 'PGRST205', message: 'brak tabeli' };
+    const przed00168 = await czytajKpir(client, 'firma-1', 2026, { wersje: [SKALA] });
+    expect(przed00168.ok && przed00168.kpir.wiersze.map((w) => w.zrodlo.typ)).toEqual(['koszt']);
+  });
 });
+

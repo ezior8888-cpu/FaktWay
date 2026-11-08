@@ -6,7 +6,9 @@
  *   koszt (`is_deductible`), pełne strony, filtr środowiska KSeF, a koszt
  *   z KSeF w walucie obcej bez przeglądu zatrzymuje księgę (C-11);
  * - wpisy ręczne z kolumną KPiR (00171) i wersje profilu (chyba że poda je
- *   wołający, który już je przeczytał).
+ *   wołający, który już je przeczytał);
+ * - zapłacone składki społeczne z `tax_settlements` (K7.3, D21): Fundusz Pracy
+ *   i FS jako koszt w dniu zapłaty.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -18,7 +20,7 @@ import { assertKsefExpensesReadyForPln, KsefExpenseCurrencyNotSupportedError } f
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { czytajFakturyRoku, KOMUNIKAT_ODCZYT, KOMUNIKAT_SRODOWISKO, type OpcjeOdczytu } from '@/lib/ksiegowosc/ewidencja-dane';
-import { zbudujKpir, type KosztKpir, type Kpir, type WpisKpir } from '@/lib/ksiegowosc/kpir';
+import { zaplatyFunduszuPracy, zbudujKpir, type KosztKpir, type Kpir, type WpisKpir, type ZaplaconeSkladki } from '@/lib/ksiegowosc/kpir';
 import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { czytajWpisyKpir, type RodzajWpisu } from '@/lib/ksiegowosc/wpisy-reczne';
 import type { createAdminClient } from '@/lib/supabase/admin';
@@ -126,12 +128,51 @@ async function koszty(client: SupabaseClient, tenantId: string, rok: number): Pr
   }));
 }
 
+interface WierszZaplaty {
+  id: string;
+  okres: string;
+  wersja: number;
+  kwota_gr: number | string;
+  zaplacone_o: string;
+  spoleczne_bez_fp: number | string | null;
+}
+
+/**
+ * Zapłacone wersje składek społecznych firmy (wszystkie lata: dopłata za okres
+ * z poprzedniego roku liczy przyrost od wcześniejszej zapłaty). Przed 00168
+ * tabeli nie ma: to brak zapłat, nie awaria.
+ */
+async function zaplaconeSkladki(client: SupabaseClient, tenantId: string): Promise<ZaplaconeSkladki[]> {
+  const wiersze = await readCompletePages<WierszZaplaty>('kpir: zapłacone składki', async (from, to) => {
+    const wynik = await client
+      .from('tax_settlements')
+      .select('id, okres, wersja, kwota_gr, zaplacone_o, spoleczne_bez_fp:migawka->spoleczneBezFpGr', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .eq('rodzaj', 'zus_spoleczne')
+      .eq('status', 'zaplacone')
+      .order('id', { ascending: true })
+      .range(from, to);
+    // Przed wgraniem 00168: Postgres 42P01, PostgREST PGRST205.
+    if (wynik.error && (wynik.error.code === '42P01' || wynik.error.code === 'PGRST205')) return { data: [], count: 0, error: null };
+    return { data: wynik.data as WierszZaplaty[] | null, count: wynik.count, error: wynik.error };
+  });
+  return wiersze.map((w) => ({
+    id: w.id,
+    okres: w.okres.slice(0, 7),
+    wersja: w.wersja,
+    kwotaGr: Number(w.kwota_gr),
+    spoleczneBezFpGr: Number(w.spoleczne_bez_fp ?? 0),
+    zaplaconeO: w.zaplacone_o,
+  }));
+}
+
 export async function czytajKpir(client: SupabaseClient, tenantId: string, rok: number, opcje: OpcjeOdczytu = {}): Promise<WynikKpir> {
   // Faktury (z kursami NBP) i reszta księgi naraz; błąd faktur ma pierwszeństwo.
   const reszta = Promise.all([
     koszty(client, tenantId, rok),
     czytajWpisyKpir(client, tenantId, `${rok}-01-01`, `${rok}-12-31`),
     opcje.wersje ? [...opcje.wersje] : czytajWersjeProfilu(client, tenantId),
+    zaplaconeSkladki(client, tenantId),
   ]).then(
     (r) => ({ ok: true as const, r }),
     (e: unknown) => ({ ok: false as const, e }),
@@ -144,7 +185,8 @@ export async function czytajKpir(client: SupabaseClient, tenantId: string, rok: 
     console.error('[kpir] odczyt', e instanceof Error ? e.message : e);
     return { ok: false, komunikat: e instanceof Error && e.message.includes('environment') ? KOMUNIKAT_SRODOWISKO : KOMUNIKAT_ODCZYT };
   }
-  const [k, wpisy, wersje] = odczyt.r;
+  const [k, wpisy, wersje, skladki] = odczyt.r;
   if (!Array.isArray(k)) return { ok: false, komunikat: k.komunikat };
-  return { ok: true, kpir: zbudujKpir({ rok, faktury: faktury.faktury, koszty: k, wpisy, wersje, kursy: faktury.kursy }), wpisy, wersje };
+  const zaplatyFp = zaplatyFunduszuPracy(skladki);
+  return { ok: true, kpir: zbudujKpir({ rok, faktury: faktury.faktury, koszty: k, wpisy, zaplatyFp, wersje, kursy: faktury.kursy }), wpisy, wersje };
 }

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { zbudujEwidencje, type FakturaEwidencji } from '@/lib/ksiegowosc/ewidencja';
-import { zbudujKpir, type KosztKpir, type Kpir } from '@/lib/ksiegowosc/kpir';
+import { zaplatyFunduszuPracy, zbudujKpir, type KosztKpir } from '@/lib/ksiegowosc/kpir';
 import { terminDla } from '@/lib/ksiegowosc/kalendarz';
 import { parametryRoku, type ParametryRoku } from '@/lib/ksiegowosc/parametry';
 import type { EtapZus, WersjaProfilu } from '@/lib/ksiegowosc/profil';
@@ -141,11 +141,21 @@ export function policzPrzypadek(p: Przypadek, parametry: (rok: number) => Parame
     return ewidencje.get(rok)!;
   };
   const forma = p.zalozenia.forma ?? 'ryczalt';
-  const ksiegi = new Map<number, Kpir>();
-  const kpirRoku = (rok: number) => {
-    if (!ksiegi.has(rok)) ksiegi.set(rok, zbudujKpir({ rok, faktury: faktury(p, rok), koszty: koszty(p, rok), wpisy: [], wersje, kursy: new Map() }));
-    return ksiegi.get(rok)!;
-  };
+  // KPiR na każdy miesiąc od nowa: Fundusz Pracy z zapłat do tego miesiąca (K7.3, D21), jak w odczycie KPiR.
+  const kpirRoku = (rok: number) =>
+    zbudujKpir({
+      rok,
+      faktury: faktury(p, rok),
+      koszty: koszty(p, rok),
+      wpisy: [],
+      zaplatyFp: zaplatyFunduszuPracy(
+        platnosci
+          .filter((z) => z.rodzaj === 'zus_spoleczne')
+          .map((z) => ({ id: `${z.miesiac}-${z.wersja}`, okres: z.miesiac, wersja: z.wersja, kwotaGr: z.kwotaGr, spoleczneBezFpGr: z.spoleczneBezFpGr, zaplaconeO: z.zaplaconeO })),
+      ),
+      wersje,
+      kursy: new Map(),
+    });
   const policzone = new Map<string, { spoleczne: number | null; bezFp: number; zdrowotna: number | null }>();
   const platnosci: Platnosc[] = [];
   const wyniki: Record<string, Record<string, unknown>> = {};
@@ -459,6 +469,8 @@ describe('uruchamianie przypadku (syntetyczny, policzony ręcznie na parametrach
     expect(grudnie.get('G3')?.ryczalt).toMatchObject({ przychod_wg_stawek_gr: { '12.5': 1_100_000 } });
     // G8 (skala, preferencyjny od lipca 2026 r.): składki grudnia z podstawy 30 % płacy minimalnej 2026 r. (1 441,80 zł).
     expect(grudnie.get('G8')?.skladki_spoleczne).toMatchObject({ podstawa_gr: 144_180 });
+    // G9 (skala, pełny ZUS): KPiR ma też Fundusz Pracy z 11 zapłat w 2026 r. (K7.3, D21): 2,45 % z 5652 zł = 138,47 zł.
+    expect(grudnie.get('G9')?.pit).toMatchObject({ koszty_narastajaco_gr: 12 * 200_000 + 11 * 13_847 });
   });
 
   it('skala i liniowy: termin zaliczki PIT jak ryczałtu; brak w bloku wypełnionym przez księgową kończy przypadek treścią braku', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FakturaEwidencji } from '@/lib/ksiegowosc/ewidencja';
-import { sumyKpir, wierszeKpirOkresu, zbudujKpir, type KosztKpir, type WejscieKpir } from '@/lib/ksiegowosc/kpir';
+import { sumyKpir, wierszeKpirOkresu, zaplatyFunduszuPracy, zbudujKpir, type KosztKpir, type WejscieKpir } from '@/lib/ksiegowosc/kpir';
 import { parametryRoku } from '@/lib/ksiegowosc/parametry';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { tenMiesiac, type Platnosc } from '@/lib/ksiegowosc/ten-miesiac';
@@ -220,3 +220,47 @@ describe('„Ten miesiąc” przy skali z KPiR', () => {
     expect(w.wynik.pozycje.find((p) => p.rodzaj === 'zus_spoleczne')).toMatchObject({ ok: true });
   });
 });
+
+describe('Fundusz Pracy w KPiR (K7.3, D21)', () => {
+  const zaplata = (okres: string, wersja: number, kwotaGr: number, bezFpGr: number, zaplaconeO: string, id = `${okres}-${wersja}`) => ({
+    id,
+    okres,
+    wersja,
+    kwotaGr,
+    spoleczneBezFpGr: bezFpGr,
+    zaplaconeO,
+  });
+
+  it('FP z przyrostów zapłaconych wersji: dopłata daje tylko różnicę FP, zapłata bez FP nic', () => {
+    expect(
+      zaplatyFunduszuPracy([
+        zaplata('2026-01', 1, 192_676, 178_829, '2026-02-10'),
+        zaplata('2026-01', 2, 200_000, 185_000, '2026-03-05'),
+        zaplata('2026-02', 1, 45_618, 45_618, '2026-03-10'),
+      ]),
+    ).toEqual([
+      { id: '2026-01-1', zaMiesiac: '2026-01', data: '2026-02-10', fpGr: 13_847 },
+      { id: '2026-01-2', zaMiesiac: '2026-01', data: '2026-03-05', fpGr: 1_153 },
+    ]);
+  });
+
+  it('wiersz kolumny 13 w dniu zapłaty, z opisem okresu; dzień z ryczałtem pomijany, bez ustawień brak', () => {
+    const k = zbudujKpir(wejscie({ zaplatyFp: [{ id: 'z1', zaMiesiac: '2026-02', data: '2026-03-10', fpGr: 13_847 }] }));
+    const w = k.wiersze.find((x) => x.zrodlo.typ === 'zaplata');
+    expect(w).toMatchObject({
+      data: '2026-03-10',
+      dowod: 'Składki ZUS za 02/2026',
+      nazwaKontrahenta: 'Zakład Ubezpieczeń Społecznych',
+      opis: 'Fundusz Pracy i Fundusz Solidarnościowy za luty 2026',
+      kwoty: { k13: 13_847 },
+      zrodlo: { typ: 'zaplata', id: 'z1' },
+    });
+    expect(sumyKpir(wierszeKpirOkresu(k, '2026-03-01', '2026-03-31')).kosztyGr).toBe(13_847);
+    const ryczalt = zbudujKpir(wejscie({ wersje: [{ ...SKALA, forma: 'ryczalt', stawkaDomyslna: 1200 }], zaplatyFp: [{ id: 'z1', zaMiesiac: '2026-02', data: '2026-03-10', fpGr: 13_847 }] }));
+    expect(ryczalt.wiersze).toEqual([]);
+    expect(ryczalt.braki).toEqual([]);
+    const bezUstawien = zbudujKpir(wejscie({ wersje: [{ ...SKALA, validFrom: '2026-06-01' }], zaplatyFp: [{ id: 'z1', zaMiesiac: '2026-02', data: '2026-03-10', fpGr: 13_847 }] }));
+    expect(bezUstawien.braki.map((b) => b.dokument)).toEqual(['Składki ZUS za 02/2026']);
+  });
+});
+
