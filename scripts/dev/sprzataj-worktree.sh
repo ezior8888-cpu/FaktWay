@@ -32,10 +32,14 @@ done
 
 here="$(git rev-parse --show-toplevel)"
 main_root="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
-script="$main_root/scripts/dev/sprzataj-worktree.sh"
 
 if [ "$INSTALL" -eq 1 ]; then
-  [ -f "$script" ] || { echo "Brak $script w głównym katalogu (scal PR i zrób git pull)." >&2; exit 1; }
+  # Główny katalog bywa na dowolnej gałęzi (także bez tego skryptu), więc
+  # harmonogram bierze wersję z origin/main do pliku tymczasowego.
+  git -C "$main_root" cat-file -e origin/main:scripts/dev/sprzataj-worktree.sh 2>/dev/null \
+    || { echo "Brak scripts/dev/sprzataj-worktree.sh w origin/main (git fetch, potem jeszcze raz)." >&2; exit 1; }
+  # shellcheck disable=SC2016 # $f i $(mktemp) rozwija dopiero launchd przez bash -c
+  run='f=$(mktemp) &amp;&amp; git show origin/main:scripts/dev/sprzataj-worktree.sh &gt; "$f" &amp;&amp; /bin/bash "$f" --usun; rm -f "$f"'
   label="pl.faktway.sprzataj-worktree"
   plist="$HOME/Library/LaunchAgents/$label.plist"
   mkdir -p "$HOME/Library/LaunchAgents" "$main_root/.tmp"
@@ -46,7 +50,7 @@ if [ "$INSTALL" -eq 1 ]; then
 <dict>
   <key>Label</key><string>$label</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>$script</string><string>--usun</string></array>
+  <array><string>/bin/bash</string><string>-c</string><string>$run</string></array>
   <key>WorkingDirectory</key><string>$main_root</string>
   <key>StartCalendarInterval</key><dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
   <key>StandardOutPath</key><string>$main_root/.tmp/sprzataj-worktree.log</string>
