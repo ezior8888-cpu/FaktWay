@@ -239,7 +239,7 @@ test('plan: jedna aplikacja na obrazie, druga z repo → blokada (stan niespójn
 test('plan: obraz spoza naszego GHCR → blokada', async () => {
   const { deployer } = setup({ sources: { ...IMAGE_SOURCES, worker: { buildPack: 'dockerimage', image: 'docker.io/obcy/obraz', tag: 'x' } } });
   const p = await deployer.plan();
-  assert.match(p.blockers.join(), /docker\.io\/obcy\/obraz/);
+  assert.ok(p.blockers.join().includes('docker.io/obcy/obraz'), p.blockers.join());
 });
 
 test('start: tryb obraz → wdrożenie obrazu SHA, worker przed webem, bez buildu', async () => {
@@ -279,7 +279,7 @@ test('start: tryb obraz → po sukcesie ostrzeżenie przed Redeploy w panelu', a
 });
 
 test('createCoolify: błąd HTTP niesie komunikat Coolify', async () => {
-  const f = fakeFetch([[/rollback$/, [400, { message: 'Deployment queue full.' }]]]);
+  const f = fakeFetch([[/^https:\/\/coolify\.test\/api\/v1\/applications\/app-1\/rollback$/, [400, { message: 'Deployment queue full.' }]]]);
   const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
   await assert.rejects(coolify.deployImage('app-1', HEAD), /HTTP 400 \(Deployment queue full\.\)/);
 });
@@ -304,7 +304,7 @@ function fakeFetch(routes) {
 }
 
 test('createCoolify.deployImage: POST /applications/<uuid>/rollback z commitem = SHA', async () => {
-  const f = fakeFetch([[/\/applications\/app-1\/rollback$/, [200, { message: 'Rollback deployment queued.', deployment_uuid: 'd-1' }]]]);
+  const f = fakeFetch([[/^https:\/\/coolify\.test\/api\/v1\/applications\/app-1\/rollback$/, [200, { message: 'Rollback deployment queued.', deployment_uuid: 'd-1' }]]]);
   const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
   assert.equal(await coolify.deployImage('app-1', HEAD), 'd-1');
   assert.equal(f.seen[0].method, 'POST');
@@ -312,26 +312,26 @@ test('createCoolify.deployImage: POST /applications/<uuid>/rollback z commitem =
 });
 
 test('createCoolify.deployImage: Coolify pominął wdrożenie → błąd z jego komunikatem', async () => {
-  const f = fakeFetch([[/rollback$/, [200, { message: 'Deployment already queued for this commit.' }]]]);
+  const f = fakeFetch([[/^https:\/\/coolify\.test\/api\/v1\/applications\/app-1\/rollback$/, [200, { message: 'Deployment already queued for this commit.' }]]]);
   const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
   await assert.rejects(coolify.deployImage('app-1', HEAD), /already queued/);
 });
 
 test('createCoolify.source: build_pack, nazwa i tag obrazu', async () => {
-  const f = fakeFetch([[/\/applications\/app-1$/, [200, { status: 'running:healthy', build_pack: 'dockerimage', docker_registry_image_name: RUNNER, docker_registry_image_tag: OLD }]]]);
+  const f = fakeFetch([[/^https:\/\/coolify\.test\/api\/v1\/applications\/app-1$/, [200, { status: 'running:healthy', build_pack: 'dockerimage', docker_registry_image_name: RUNNER, docker_registry_image_tag: OLD }]]]);
   const coolify = createCoolify({ baseUrl: 'https://coolify.test/api/v1', token: 't', fetchImpl: f.impl });
   assert.deepEqual(await coolify.source('app-1'), { buildPack: 'dockerimage', image: RUNNER, tag: OLD });
 });
 
 test('createGhcr.revision: indeks z atestacją → obraz linux/amd64 → etykieta rewizji', async () => {
   const f = fakeFetch([
-    [/ghcr\.io\/token/, [200, { token: 'anon' }]],
-    [/manifests\/sha256:amd64$/, [200, { config: { digest: 'sha256:cfg' } }]],
-    [/manifests\/abcdef/, [200, { manifests: [
+    [/^https:\/\/ghcr\.io\/token\?/, [200, { token: 'anon' }]],
+    [/^https:\/\/ghcr\.io\/v2\/ezior8888-cpu\/faktway-runner\/manifests\/sha256:amd64$/, [200, { config: { digest: 'sha256:cfg' } }]],
+    [/^https:\/\/ghcr\.io\/v2\/ezior8888-cpu\/faktway-runner\/manifests\/abcdef[0-9a-f]{34}$/, [200, { manifests: [
       { digest: 'sha256:att', platform: { os: 'unknown', architecture: 'unknown' } },
       { digest: 'sha256:amd64', platform: { os: 'linux', architecture: 'amd64' } },
     ] }]],
-    [/blobs\/sha256:cfg$/, [200, { config: { Labels: { 'org.opencontainers.image.revision': HEAD } } }]],
+    [/^https:\/\/ghcr\.io\/v2\/ezior8888-cpu\/faktway-runner\/blobs\/sha256:cfg$/, [200, { config: { Labels: { 'org.opencontainers.image.revision': HEAD } } }]],
   ]);
   const ghcr = createGhcr({ fetchImpl: f.impl });
   assert.equal(await ghcr.revision(RUNNER, HEAD), HEAD);
@@ -340,6 +340,6 @@ test('createGhcr.revision: indeks z atestacją → obraz linux/amd64 → etykiet
 });
 
 test('createGhcr.revision: brak tagu (404) → null', async () => {
-  const f = fakeFetch([[/ghcr\.io\/token/, [200, { token: 'anon' }]]]);
+  const f = fakeFetch([[/^https:\/\/ghcr\.io\/token\?/, [200, { token: 'anon' }]]]);
   assert.equal(await createGhcr({ fetchImpl: f.impl }).revision(RUNNER, HEAD), null);
 });
