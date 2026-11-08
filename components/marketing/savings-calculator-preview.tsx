@@ -22,8 +22,9 @@ const SUBSCRIPTION_YEAR_GROSZE = MONTHLY_PRICE_GROSS_GROSZE * 12;
 /**
  * Odczyt ze zdjęcia ma twardy limit miesięczny na firmę: 3 zł budżetu, przy
  * obecnych cenach około 55 rozpoznań (lib/ai/tenant-ai-budget.ts). Po jego
- * wyczerpaniu dane wpisuje się ręcznie, więc z dokumentów ponad limit nie
- * liczymy oszczędności. Wartość jest tu na sztywno, bo plik jest kliencki.
+ * wyczerpaniu dokument czeka na odnowienie limitu i trzeba go wgrać ponownie,
+ * więc z dokumentów ponad limit nie liczymy oszczędności. Wartość jest tu na
+ * sztywno, bo plik jest kliencki.
  */
 const LIMIT_ODCZYTOW_MIESIECZNIE = 55;
 

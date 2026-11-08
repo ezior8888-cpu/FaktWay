@@ -64,3 +64,54 @@ describe('budżet AI firmy', () => {
     expect(mocks.record).toHaveBeenCalledWith('t-rec', 'claude-sonnet-4-6', { inputTokens: 1000, outputTokens: 200 });
   });
 });
+
+/**
+ * Plan kompletnej aplikacji, 2.6: komunikaty odmowy kazały „wprowadzić dane
+ * ręcznie”, a formularza kosztu bez zdjęcia nie ma. Prawdziwa droga to
+ * ponowne wgranie dokumentu po odnowieniu limitu, więc komunikat mówi, kiedy
+ * limit wraca. Trafia do zadania OCR (`error_message`, widoczny przy przycisku
+ * „Dodaj wydatek”) i do powiadomienia, które process-ocr ucina do 80 znaków.
+ */
+describe('komunikaty odmowy mówią, kiedy limit wraca', () => {
+  const odmowa = async (tenantId: string) => {
+    const verdict = await checkTenantAiBudget(tenantId, 'ocr');
+    if (verdict.allowed) throw new Error('oczekiwano odmowy');
+    return verdict.message;
+  };
+
+  it('miesięczny: wróci od następnego miesiąca, dokument wgrywa się ponownie, bez wpisu ręcznego', async () => {
+    mocks.spend.mockResolvedValue({ monthUsd: usd(3.01), todayUsd: 0 });
+    const message = await odmowa('t-msg-month');
+
+    expect(message).not.toMatch(/ręcznie/i);
+    expect(message).toContain('Wgraj dokument ponownie');
+    // Powiadomienie pokazuje pierwsze 80 znaków: musi w nich być, kiedy limit wraca.
+    expect(message.slice(0, 80)).toContain('miesięczny limit odczytu dokumentów, wróci od następnego miesiąca.');
+  });
+
+  it('dzienny: wróci w ciągu 24 godzin, dokument wgrywa się ponownie, bez wpisu ręcznego', async () => {
+    for (let i = 0; i < AI_DAILY_OCR_LIMIT; i += 1) await checkTenantAiBudget('t-msg-day', 'ocr');
+    const message = await odmowa('t-msg-day');
+
+    expect(message).not.toMatch(/ręcznie/i);
+    expect(message).toContain('Wgraj dokument ponownie');
+    expect(message.slice(0, 80)).toContain('dzienny limit odczytu dokumentów, wróci w ciągu 24 godzin.');
+  });
+
+  it('dzienny limit liczy odczyty z ostatnich 24 godzin: tak mówią komunikat, cennik i pomoc', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-08T10:00:00Z'));
+      for (let i = 0; i < AI_DAILY_OCR_LIMIT; i += 1) expect((await checkTenantAiBudget('t-24h', 'ocr')).allowed).toBe(true);
+      expect((await checkTenantAiBudget('t-24h', 'ocr')).allowed).toBe(false);
+
+      vi.setSystemTime(new Date('2026-11-09T09:59:00Z'));
+      expect((await checkTenantAiBudget('t-24h', 'ocr')).allowed).toBe(false);
+
+      vi.setSystemTime(new Date('2026-11-09T10:01:00Z'));
+      expect((await checkTenantAiBudget('t-24h', 'ocr')).allowed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

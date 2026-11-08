@@ -28,13 +28,13 @@ Treść: {{powod}} Zajrzyj na chwilę, zanim to zaksięguję.
 
 Tytuł: Nie odczytałem tego zdjęcia
 
-Treść: Zdjęcie zostało w archiwum, nic nie przepadło. Wpisz kwotę ręcznie albo zrób nowe ujęcie przy lepszym świetle.
+Treść: Zdjęcie zostało w archiwum, nic nie przepadło. Wgraj je jeszcze raz albo zrób nowe ujęcie przy lepszym świetle.
 
 ## Przyciski
 
 - główny (`:done`): Zgadza się
 - główny (`:ask`): Zobacz i zdecyduj
-- główny (`:failed`): Wpisz ręcznie
+- główny (`:failed`): Otwórz Wydatki
 - drugorzędne: Nie teraz · Nigdy więcej takich
 
 ## Zasady, których ten tekst pilnuje

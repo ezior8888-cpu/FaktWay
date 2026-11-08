@@ -31,6 +31,15 @@ const AI_TOOLS_MODEL = 'claude-sonnet-4-6' as const;
 export type TenantAiKind = 'ocr' | 'classify';
 export type TenantAiBudget = { allowed: true } | { allowed: false; message: string };
 
+/**
+ * Komunikat odmowy trafia do zadania OCR (`error_message`, widoczny przy
+ * „Dodaj wydatek”) i do powiadomienia, które process-ocr ucina do 80 znaków,
+ * więc pierwsze zdanie mówi, kiedy limit wraca. Wpisu ręcznego kosztu nie ma
+ * (plan kompletnej aplikacji, 2.6; formularz to krok 3.8), dlatego drogą jest
+ * ponowne wgranie dokumentu. Okna, o których mówi komunikat, sprawdza
+ * tests/unit/ai-limit-firmy.test.ts (dzienny: 24 godziny kroczące) i
+ * tests/unit/koszt-bez-wpisu-recznego.test.ts (miesięczny: od 1. dnia miesiąca).
+ */
 export async function checkTenantAiBudget(tenantId: string, kind: TenantAiKind): Promise<TenantAiBudget> {
   let verdict: ReturnType<typeof evaluateBudget>;
   try {
@@ -45,7 +54,7 @@ export async function checkTenantAiBudget(tenantId: string, kind: TenantAiKind):
   if (!verdict.allowed && verdict.reason === 'monthly') {
     return {
       allowed: false,
-      message: 'Wykorzystano miesięczny limit automatycznego rozpoznawania dokumentów. Wprowadź dane ręcznie albo spróbuj w przyszłym miesiącu.',
+      message: 'Wykorzystano miesięczny limit odczytu dokumentów, wróci od następnego miesiąca. Wgraj dokument ponownie, gdy limit się odnowi.',
     };
   }
   if (verdict.allowed && verdict.alert) {
@@ -65,7 +74,7 @@ export async function checkTenantAiBudget(tenantId: string, kind: TenantAiKind):
   if (!daily.allowed) {
     return {
       allowed: false,
-      message: 'Wykorzystano dzienny limit automatycznego rozpoznawania dokumentów. Spróbuj jutro albo wprowadź dane ręcznie.',
+      message: 'Wykorzystano dzienny limit odczytu dokumentów, wróci w ciągu 24 godzin. Wgraj dokument ponownie, gdy limit się odnowi.',
     };
   }
   return { allowed: true };

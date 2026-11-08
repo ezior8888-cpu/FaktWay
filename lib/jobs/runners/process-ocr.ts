@@ -160,10 +160,10 @@ async function createFailedCardOnce(
 
 /**
  * Wydatek z tego zadania jest w bazie, więc otwarta karta „nie odczytałem”
- * (z wcześniejszego doręczenia tego joba) mówi nieprawdę, a jej „Wpisz ręcznie”
- * prowadzi do drugiego kosztu w KPiR. Zamykamy ją tak, jak producenci FLO
- * zamykają pytanie, na które odpowiedział świat (`stale`), i tylko otwartą,
- * żeby nie nadpisać decyzji klienta. Błąd zapisu rzuca.
+ * (z wcześniejszego doręczenia tego joba) mówi nieprawdę, a jej „Wgraj je
+ * jeszcze raz” prowadzi do drugiego kosztu w KPiR. Zamykamy ją tak, jak
+ * producenci FLO zamykają pytanie, na które odpowiedział świat (`stale`), i
+ * tylko otwartą, żeby nie nadpisać decyzji klienta. Błąd zapisu rzuca.
  */
 async function closeFailedCard(
   supabase: ReturnType<typeof createAdminClient>,
@@ -221,7 +221,7 @@ export async function onProcessOcrExhausted(
 
   // Wydatek mógł już powstać, a na stałe padł dopiero krok po zapisie (karta
   // agenta, powiadomienie — np. autor zdjęcia odszedł z firmy). „Nieudane”
-  // kazałoby klientowi wpisać paragon ręcznie, czyli drugi raz do KPiR.
+  // kazałoby klientowi wgrać paragon jeszcze raz, czyli drugi raz do KPiR.
   // Wtedy zadanie kończy się wskazaniem na zapisany wydatek. Gdy nie da się
   // tego sprawdzić, odczyt rzuca: zadanie zostaje „pending” albo „processing”
   // (run-job zapisze błąd), zamiast ogłaszać porażkę w ciemno.
@@ -245,7 +245,7 @@ export async function onProcessOcrExhausted(
       status: 'failed',
       error_message:
         error.message?.slice(0, 500) ||
-        'Nie udało się rozpoznać paragonu. Spróbuj ponownie lub wprowadź dane ręcznie.',
+        'Nie udało się rozpoznać paragonu. Spróbuj ponownie.',
       completed_at: new Date().toISOString(),
     })
     .eq('id', ocrJobId)
@@ -422,8 +422,8 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
 
     if (!ocrResult.success || !ocrResult.data) {
       // Równoległy przebieg tego samego zadania (wyścig pg-boss) mógł zapisać
-      // wydatek po wczesnym sprawdzeniu. „Nie rozpoznano” z kartą „wpisz
-      // ręcznie” skończyłoby się drugim kosztem w KPiR (B4).
+      // wydatek po wczesnym sprawdzeniu. „Nie rozpoznano” z kartą „wgraj je
+      // jeszcze raz” skończyłoby się drugim kosztem w KPiR (B4).
       const concurrent = await step.run('find-saved-expense-after-ocr', () =>
         findOcrJobExpense(supabase, tenantId, ocrJobId),
       );
