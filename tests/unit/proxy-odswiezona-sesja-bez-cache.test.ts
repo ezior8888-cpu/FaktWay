@@ -31,6 +31,7 @@ vi.mock('next/headers', () => ({ cookies: mocks.cookieStore }));
 
 import { updateSession } from '@/lib/supabase/middleware';
 import { ACTIVE_ORG_COOKIE } from '@/lib/supabase/active-org';
+import { ES256_JWKS, signEs256Jwt } from '../helpers/gotrue-es256';
 
 const SUPABASE_URL = 'https://fixture.supabase.test';
 const COOKIE_NAME = 'sb-fixture-auth-token';
@@ -47,11 +48,13 @@ type Fixture = {
   /** `aal` w tokenie wydanym przy odświeżeniu. */
   aal: Aal;
   /**
-   * `/auth/v1/user`: ten sam użytkownik, inny, od drugiego wywołania odmowa
-   * tokenu (`bad_jwt`) albo sesja usunięta w GoTrue (`session_not_found` —
-   * biblioteka kasuje wtedy ciasteczko: drugi `setAll` w tym samym żądaniu).
+   * `/auth/v1/user`: ten sam użytkownik, inny, odmowa tokenu (`bad_jwt`) albo
+   * sesja usunięta w GoTrue (`session_not_found` — biblioteka kasuje wtedy
+   * ciasteczko: drugi `setAll` w tym samym żądaniu).
    */
-  authUser: 'same' | 'other' | 'rejected-after-first' | 'gone-after-first';
+  authUser: 'same' | 'other' | 'rejected' | 'gone';
+  /** Klucz tokenu. Przy `es256` `getClaims()` weryfikuje lokalnie, bez GoTrue. */
+  keys: 'hs256' | 'es256';
   memberships: number;
 };
 
@@ -63,12 +66,14 @@ const b64url = (value: string) => Buffer.from(value).toString('base64url');
 
 function jwt(exp: number, aal: Aal): string {
   const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    sub: userId, aal, role: 'authenticated', aud: 'authenticated',
+    iat: now, exp, session_id: 'fixture-session',
+  };
+  if (fixture.keys === 'es256') return signEs256Jwt(payload);
   return [
     b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' })),
-    b64url(JSON.stringify({
-      sub: userId, aal, role: 'authenticated', aud: 'authenticated',
-      iat: now, exp, session_id: 'fixture-session',
-    })),
+    b64url(JSON.stringify(payload)),
     b64url('fixture-signature'),
   ].join('.');
 }
@@ -112,12 +117,13 @@ async function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') === 'password') {
     return Response.json({ ...session(Math.floor(Date.now() / 1000) + 3600, 'aal1', 'fixture-refresh-1'), user: user(userId) });
   }
+  if (url.pathname === '/auth/v1/.well-known/jwks.json') return Response.json(ES256_JWKS);
   if (url.pathname === '/auth/v1/user') {
     userCalls += 1;
-    if (fixture.authUser === 'rejected-after-first' && userCalls > 1) {
+    if (fixture.authUser === 'rejected') {
       return gotrueError(403, 'bad_jwt', 'invalid JWT');
     }
-    if (fixture.authUser === 'gone-after-first' && userCalls > 1) {
+    if (fixture.authUser === 'gone') {
       return gotrueError(403, 'session_not_found', 'Session from session_id claim in JWT does not exist');
     }
     return Response.json(user(fixture.authUser === 'other' ? '33333333-3333-4333-8333-333333333333' : userId));
@@ -135,7 +141,7 @@ async function fakeFetch(input: RequestInfo | URL): Promise<Response> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  fixture = { refresh: 'ok', aal: 'aal2', authUser: 'same', memberships: 1 };
+  fixture = { refresh: 'ok', aal: 'aal2', authUser: 'same', keys: 'hs256', memberships: 1 };
   refreshCalls = 0;
   userCalls = 0;
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', SUPABASE_URL);
@@ -181,8 +187,9 @@ type Scenario = {
   /** Treść odmowy API — odróżnia wyjścia o tym samym statusie. */
   error?: string;
   /**
-   * Liczba wywołań `/auth/v1/user` tam, gdzie inne wyjście dałoby ten sam
-   * status: odmowa przy weryfikacji MFA (2) ≠ brak użytkownika po `getClaims` (1).
+   * Liczba wywołań `/auth/v1/user`. Od sesji 8 planu skalowania najwyżej 1: wszystkie
+   * sprawdzenia w żądaniu dzielą jedną odpowiedź GoTrue (dawniej 3 przy niezgodnej
+   * tożsamości i 2 przy odmowie).
    */
   userCalls?: number;
 };
@@ -191,6 +198,9 @@ const scenarios: Scenario[] = [
   // Przepuszczenie do trasy — tu Next łączy nagłówki proxy z nagłówkami trasy.
   { name: 'publiczne API z cache CDN trasy (/api/status/components)', path: '/api/status/components', status: 200 },
   { name: 'statyczna strona marketingowa (/pricing)', path: '/pricing', status: 200 },
+  // Kontrola atrapy kluczy: gdyby JWKS nie pasował, `getClaims()` spadłby do GoTrue,
+  // a scenariusze „odrzucona przy weryfikacji” trafiałyby w inne wyjście.
+  { name: 'klucz asymetryczny: getClaims nie woła GoTrue', path: '/pricing', setup: () => { fixture.keys = 'es256'; }, status: 200, userCalls: 0 },
   { name: 'strona panelu z wybraną firmą', path: '/dashboard', opts: { org: true }, status: 200 },
   { name: 'API panelu z wybraną firmą', path: '/api/invoices', opts: { org: true }, status: 200 },
   // Przekierowania.
@@ -202,13 +212,17 @@ const scenarios: Scenario[] = [
   { name: 'telefon, zalogowany na landingu → pulpit', path: '/', opts: { phone: true }, status: 307, location: '/dashboard' },
   { name: 'przerwa techniczna (strona)', path: '/dashboard', setup: () => { mocks.maintenance.mockResolvedValue(true); }, status: 307, location: '/przerwa-techniczna' },
   { name: 'MFA do potwierdzenia (strona)', path: '/invoices', setup: () => { fixture.aal = 'aal1'; }, status: 307, location: '/login/two-factor?redirect=%2Finvoices' },
-  { name: 'sesja odrzucona przy weryfikacji (strona)', path: '/invoices', setup: () => { fixture.authUser = 'rejected-after-first'; }, status: 307, location: '/login?redirect=%2Finvoices', userCalls: 2 },
+  // Przy HS256 odmowa pada zwykle już w `getClaims()`, czyli na innym wyjściu.
+  // Token weryfikowany lokalnie zawsze dochodzi do kontroli MFA, dlatego te
+  // scenariusze idą na kluczu asymetrycznym. Parametr w adresie odróżnia wyjścia:
+  // kontrola MFA go czyści, a wyjście „brak użytkownika” zachowuje.
+  { name: 'sesja odrzucona przy weryfikacji (strona)', path: '/invoices?x=1', setup: () => { fixture.keys = 'es256'; fixture.authUser = 'rejected'; }, status: 307, location: '/login?redirect=%2Finvoices', userCalls: 1 },
   // Odmowy.
   { name: 'przerwa techniczna (API)', path: '/api/invoices', setup: () => { mocks.maintenance.mockResolvedValue(true); }, status: 503, error: 'maintenance' },
   { name: 'MFA do potwierdzenia (API)', path: '/api/invoices', setup: () => { fixture.aal = 'aal1'; }, status: 403, error: 'mfa_required' },
-  { name: 'niezgodna tożsamość (strona)', path: '/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503, userCalls: 3 },
-  { name: 'niezgodna tożsamość (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503, error: 'session_verification_failed', userCalls: 3 },
-  { name: 'sesja odrzucona przy weryfikacji (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'rejected-after-first'; }, status: 401, error: 'not_authenticated', userCalls: 2 },
+  { name: 'niezgodna tożsamość (strona)', path: '/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503, userCalls: 1 },
+  { name: 'niezgodna tożsamość (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503, error: 'session_verification_failed', userCalls: 1 },
+  { name: 'sesja odrzucona przy weryfikacji (API)', path: '/api/invoices', setup: () => { fixture.keys = 'es256'; fixture.authUser = 'rejected'; }, status: 401, error: 'not_authenticated', userCalls: 1 },
 ];
 
 describe('odświeżona sesja w proxy', () => {
@@ -221,7 +235,7 @@ describe('odświeżona sesja w proxy', () => {
     if (s.location) expect(response.headers.get('location')).toBe('https://app.example.test' + s.location);
     if (s.status === 200) expect(response.headers.get('x-middleware-next')).toBe('1');
     if (s.error) expect(await response.json()).toEqual({ error: s.error });
-    if (s.userCalls) expect(userCalls).toBe(s.userCalls);
+    if (s.userCalls !== undefined) expect(userCalls).toBe(s.userCalls);
     expect(refreshCalls).toBe(1);
     const cookies = sessionSetCookies(response);
     expect(cookies).toHaveLength(1);
@@ -232,15 +246,21 @@ describe('odświeżona sesja w proxy', () => {
 
   // Odświeżenie, a zaraz potem GoTrue mówi, że sesji już nie ma: biblioteka
   // woła `setAll` drugi raz w tym samym żądaniu, tym razem z kasowaniem.
-  // Wygrywa ostatni zapis — ciasteczka i nagłówki.
-  it('odświeżenie, potem sesja usunięta w GoTrue: dwa zapisy w jednym żądaniu, oba bez wspólnego cache', async () => {
-    fixture.authUser = 'gone-after-first';
-    const response = await updateSession(request('/invoices'));
+  // Wygrywa ostatni zapis — ciasteczka i nagłówki. Przy HS256 dzieje się to
+  // w `getClaims()` (wyjście „brak użytkownika”, parametr w adresie zostaje),
+  // przy kluczu asymetrycznym w kontroli MFA (parametr znika).
+  it.each([
+    { keys: 'hs256', location: '/login?x=1&redirect=%2Finvoices' },
+    { keys: 'es256', location: '/login?redirect=%2Finvoices' },
+  ] as const)('odświeżenie, potem sesja usunięta w GoTrue ($keys): dwa zapisy w jednym żądaniu, oba bez wspólnego cache', async ({ keys, location }) => {
+    fixture.keys = keys;
+    fixture.authUser = 'gone';
+    const response = await updateSession(request('/invoices?x=1'));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://app.example.test/login?redirect=%2Finvoices');
+    expect(response.headers.get('location')).toBe('https://app.example.test' + location);
     expect(refreshCalls).toBe(1);
-    expect(userCalls).toBe(2);
+    expect(userCalls).toBe(1);
     const cookies = sessionSetCookies(response);
     expect(cookies).toHaveLength(1);
     expect(cookies[0]).toContain('Max-Age=0');
