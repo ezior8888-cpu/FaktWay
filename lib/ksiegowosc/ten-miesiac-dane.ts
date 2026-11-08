@@ -43,6 +43,8 @@ export interface Rozliczenie {
   zatwierdzoneO: string;
   zaplaconeO: string | null;
   spoleczneBezFpGr: number;
+  /** Zapłata spoza wyliczenia (K7.2, `migawka.reczna`): kwota z PUE ZUS, nie z modułu. */
+  reczna: boolean;
 }
 
 export type PozycjaPoliczona = { ok: true; wejsciaHash: string } & PozycjaDoZaplaty;
@@ -57,11 +59,13 @@ export type DaneMiesiaca =
       parametryWersja: string;
       /** Wszystkie wersje rozliczeń tego miesiąca, rosnąco. */
       rozliczenia: Rozliczenie[];
+      /** Zapłaty spoza wyliczenia (K7.2): zapłacone w tym miesiącu i jeszcze bez daty zapłaty. */
+      zaplatyReczne: Rozliczenie[];
     }
-  | { ok: false; braki: string[]; rozliczenia: Rozliczenie[] };
+  | { ok: false; braki: string[]; rozliczenia: Rozliczenie[]; zaplatyReczne: Rozliczenie[] };
 
 export const KOLUMNY_ROZLICZENIA =
-  'id, okres, rodzaj, wersja, kwota_gr, termin, status, wejscia_hash, zatwierdzone_o, zaplacone_o, spoleczne_bez_fp:migawka->spoleczneBezFpGr';
+  'id, okres, rodzaj, wersja, kwota_gr, termin, status, wejscia_hash, zatwierdzone_o, zaplacone_o, spoleczne_bez_fp:migawka->spoleczneBezFpGr, reczna:migawka->reczna';
 
 interface WierszRozliczenia {
   id: string;
@@ -75,6 +79,7 @@ interface WierszRozliczenia {
   zatwierdzone_o: string;
   zaplacone_o: string | null;
   spoleczne_bez_fp: number | string | null;
+  reczna?: boolean | null;
 }
 
 export function zWierszaRozliczenia(w: WierszRozliczenia): Rozliczenie {
@@ -90,6 +95,7 @@ export function zWierszaRozliczenia(w: WierszRozliczenia): Rozliczenie {
     zatwierdzoneO: w.zatwierdzone_o,
     zaplaconeO: w.zaplacone_o,
     spoleczneBezFpGr: Number(w.spoleczne_bez_fp ?? 0),
+    reczna: w.reczna === true,
   };
 }
 
@@ -138,7 +144,8 @@ export async function czytajRozliczenia(client: SupabaseClient, tenantId: string
       .select(KOLUMNY_ROZLICZENIA, { count: 'exact' })
       .eq('tenant_id', tenantId)
       .lte('okres', okres)
-      .or(`okres.eq.${okres},status.eq.zaplacone`)
+      // Ten miesiąc, zapłacone (odliczenia) i zapłaty spoza wyliczenia jeszcze bez daty (K7.2: lista z wyjściem).
+      .or(`okres.eq.${okres},status.eq.zaplacone,migawka->>reczna.eq.true`)
       .order('id', { ascending: true })
       .range(from, to);
     if (wynik.error && czyBrakTabeli(wynik.error.code)) return { data: [], count: 0, error: null };
@@ -181,16 +188,17 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   const vat = vatMiesiaca(daneVat);
   if (!odczyt.ok) {
     console.error('[ten-miesiac] rozliczenia', odczyt.e instanceof Error ? odczyt.e.message : odczyt.e);
-    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: [] };
+    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: [], zaplatyReczne: [] };
   }
   const tegoMiesiaca = odczyt.r.filter((r) => r.miesiac === miesiac);
+  const zaplatyReczne = odczyt.r.filter((r) => r.reczna && (r.status === 'zatwierdzone' || r.zaplaconeO?.slice(0, 7) === miesiac));
   if (!wersjeOdczyt.ok) {
     console.error('[ten-miesiac] profil', wersjeOdczyt.e instanceof Error ? wersjeOdczyt.e.message : wersjeOdczyt.e);
-    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: tegoMiesiaca };
+    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: tegoMiesiaca, zaplatyReczne };
   }
   const forma = wersjaMiesiaca(wersjeOdczyt.w, miesiac)?.forma ?? 'ryczalt';
   // Skala i liniowy (K7) za obszarem `kpir`; wołający sprawdził już globalny stop i flagę firmy.
-  if (forma !== 'ryczalt' && !statusObszaru('kpir').wlaczony) return { ok: false, braki: [KPIR_WYLACZONA], rozliczenia: tegoMiesiaca };
+  if (forma !== 'ryczalt' && !statusObszaru('kpir').wlaczony) return { ok: false, braki: [KPIR_WYLACZONA], rozliczenia: tegoMiesiaca, zaplatyReczne };
 
   // D7: bez sekcji potwierdzonej przez księgową nie ma kwoty tej pozycji. Liczbę
   // bez wartości (np. stopa wypadkowa ogłaszana w kwietniu) sprawdza silnik,
@@ -209,10 +217,10 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   // VAT nie zależy od parametrów modułu: z kwotą albo z polem na nieznaną nadwyżkę miesiąc liczy się dalej
   // (pozostałe pozycje z brakami D7). Sam błąd odczytu VAT niczego tu nie dodaje.
   const vatNaEkranie = vat !== null && (vat.ok || vat.nadwyzkaNieznana);
-  if (d7.size === sekcje.length && !vatNaEkranie) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };
+  if (d7.size === sekcje.length && !vatNaEkranie) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca, zaplatyReczne };
 
   const ksiegi = await czytajKsiegi(client, tenantId, miesiac, forma, wersjeOdczyt.w);
-  if (!ksiegi.ok) return { ok: false, braki: [ksiegi.komunikat], rozliczenia: tegoMiesiaca };
+  if (!ksiegi.ok) return { ok: false, braki: [ksiegi.komunikat], rozliczenia: tegoMiesiaca, zaplatyReczne };
 
   const platnosci: Platnosc[] = odczyt.r
     .filter((r) => r.status === 'zaplacone' && r.zaplaconeO)
@@ -226,7 +234,7 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
     }));
 
   const wynik = tenMiesiac({ miesiac, ...ksiegi.wejscie, vat, wersje: wersjeOdczyt.w, platnosci, parametry: parametryRoku });
-  if (!wynik.ok) return { ok: false, braki: wynik.braki, rozliczenia: tegoMiesiaca };
+  if (!wynik.ok) return { ok: false, braki: wynik.braki, rozliczenia: tegoMiesiaca, zaplatyReczne };
 
   const maskowane: PozycjaMiesiaca[] = wynik.wynik.pozycje.map((poz) => {
     const brak = d7.get(poz.rodzaj);
@@ -250,7 +258,7 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   const podatek = forma === 'ryczalt' ? { ryczalt: wartosci(p?.ryczalt) } : { [forma]: wartosci(p?.[forma]) };
   const parametryWersja = skrot(stabilnyJson({ ...podatek, zus: wartosci(p?.zus), zdrowotna: wartosci(pz?.zdrowotna) })).slice(0, 16);
 
-  return { ok: true, wynik: bezD7, pozycje, parametryWersja, rozliczenia: tegoMiesiaca };
+  return { ok: true, wynik: bezD7, pozycje, parametryWersja, rozliczenia: tegoMiesiaca, zaplatyReczne };
 }
 
 /**

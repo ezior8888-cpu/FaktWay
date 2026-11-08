@@ -34,6 +34,7 @@ const wersja = (rodzaj: Rozliczenie['rodzaj'], kwotaGr: number, z: Partial<Rozli
   zatwierdzoneO: '2026-11-02T10:00:00Z',
   zaplaconeO: null,
   spoleczneBezFpGr: 0,
+  reczna: false,
   ...z,
 });
 const szkic = (rodzaj: PozycjaZeSkrotem['rodzaj'], kwotaGr: number): PozycjaZeSkrotem => ({

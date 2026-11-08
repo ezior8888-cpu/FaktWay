@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   nowszych: 0,
   aktualizacje: [] as Record<string, unknown>[],
   opcjeOdczytu: [] as unknown[],
+  ostatniaWersja: null as { wersja: number } | null,
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
@@ -44,7 +45,7 @@ vi.mock('@/lib/ksiegowosc/ten-miesiac-dane', async (orig) => ({
 
 const lancuch = (wynik: () => unknown) => {
   const l: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'gt']) l[m] = () => l;
+  for (const m of ['select', 'eq', 'gt', 'order', 'limit']) l[m] = () => l;
   l.maybeSingle = async () => wynik();
   l.then = (ok: (v: unknown) => unknown) => Promise.resolve(wynik()).then(ok);
   return l;
@@ -54,12 +55,21 @@ const supabase = {
   from: (tabela: string) => {
     if (tabela !== 'tax_settlements') throw new Error(`nieoczekiwana tabela ${tabela}`);
     return {
-      insert: async (wiersze: Record<string, unknown>[]) => {
-        mocks.wstawione.push(wiersze);
-        return { error: mocks.bladWstawienia };
+      insert: (wiersze: Record<string, unknown> | Record<string, unknown>[]) => {
+        mocks.wstawione.push(Array.isArray(wiersze) ? wiersze : [wiersze]);
+        const wynik = { error: mocks.bladWstawienia };
+        // Zatwierdzenie czeka na sam zapis; zapłata spoza wyliczenia (K7.2) bierze jeszcze id nowej wersji.
+        return {
+          select: () => ({ single: async () => ({ data: mocks.bladWstawienia ? null : { id: '00168168-0000-4000-8000-000000000172' }, error: mocks.bladWstawienia }) }),
+          then: (ok: (v: unknown) => unknown) => Promise.resolve(wynik).then(ok),
+        };
       },
-      select: (_kolumny: string, opcje?: { head?: boolean }) =>
-        opcje?.head ? lancuch(() => ({ count: mocks.nowszych, error: null })) : lancuch(() => ({ data: mocks.wiersz, error: null })),
+      select: (kolumny: string, opcje?: { head?: boolean }) =>
+        opcje?.head
+          ? lancuch(() => ({ count: mocks.nowszych, error: null }))
+          : kolumny === 'wersja'
+            ? lancuch(() => ({ data: mocks.ostatniaWersja, error: null }))
+            : lancuch(() => ({ data: mocks.wiersz, error: null })),
       update: (zmiana: Record<string, unknown>) => {
         mocks.aktualizacje.push(zmiana);
         return lancuch(() => ({ error: null }));
@@ -68,7 +78,7 @@ const supabase = {
   },
 };
 
-const { oznaczZaplaconeAction, zatwierdzMiesiacAction } = await import('@/app/actions/ksiegowosc-ten-miesiac');
+const { dodajZaplateRecznaAction, oznaczZaplaconeAction, zatwierdzMiesiacAction } = await import('@/app/actions/ksiegowosc-ten-miesiac');
 
 const POZYCJE = [
   { ok: true, rodzaj: 'ryczalt', kwotaGr: 155_600, termin: { faktyczny: '2026-11-20' }, wejscia: { a: 1 }, szczegoly: { lancuch: [] }, wejsciaHash: H('a') },
@@ -118,6 +128,7 @@ beforeEach(() => {
   mocks.nowszych = 0;
   mocks.aktualizacje = [];
   mocks.opcjeOdczytu = [];
+  mocks.ostatniaWersja = null;
 });
 
 describe('zatwierdzenie miesiąca', () => {
@@ -226,3 +237,54 @@ describe('oznaczenie zapłaty', () => {
     expect(mocks.aktualizacje).toHaveLength(2);
   });
 });
+
+describe('zapłata spoza wyliczenia (K7.2, D15)', () => {
+  const ZAPLATA = { zaMiesiac: '2025-12', rodzaj: 'zus_spoleczne' as const, kwota: '1926,76', bezFp: '1788,29', dataZaplaty: '2026-01-15' };
+
+  it('zapisuje wersję rozliczenia z migawką ręcznej zapłaty i od razu datę zapłaty, z audytem', async () => {
+    expect(await dodajZaplateRecznaAction(ZAPLATA)).toEqual({ success: true });
+    expect(mocks.wstawione).toHaveLength(1);
+    const [w] = mocks.wstawione[0];
+    expect(w).toMatchObject({
+      tenant_id: 'firma-1',
+      okres: '2025-12-01',
+      rodzaj: 'zus_spoleczne',
+      wersja: 1,
+      kwota_gr: 192_676,
+      parametry_wersja: 'reczna',
+      migawka: { reczna: true, spoleczneBezFpGr: 178_829, wejscia: { reczna: true, kwotaGr: 192_676, spoleczneBezFpGr: 178_829 } },
+    });
+    expect(w.wejscia_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(w).not.toHaveProperty('status');
+    expect(mocks.aktualizacje).toEqual([{ status: 'zaplacone', zaplacone_o: '2026-01-15' }]);
+    expect(mocks.audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tax_settlement.manual_paid',
+        metadata: expect.objectContaining({ zaMiesiac: '2025-12', rodzaj: 'zus_spoleczne', wersja: 1, kwotaGr: 192_676, spoleczneBezFpGr: 178_829, zaplaconeO: '2026-01-15' }),
+      }),
+    );
+  });
+
+  it('kolejna wersja po istniejącej; składka zdrowotna bez części bez FP', async () => {
+    mocks.ostatniaWersja = { wersja: 2 };
+    expect(await dodajZaplateRecznaAction({ ...ZAPLATA, rodzaj: 'zdrowotna', kwota: '432,54', bezFp: '' })).toEqual({ success: true });
+    expect(mocks.wstawione[0][0]).toMatchObject({ rodzaj: 'zdrowotna', wersja: 3, kwota_gr: 43_254, migawka: { spoleczneBezFpGr: 0 } });
+  });
+
+  it('odmowy przy polu bez zapisu: część bez FP ponad kwotę, data sprzed okresu albo z przyszłości, okres sprzed 2025 r. albo w trakcie', async () => {
+    expect(await dodajZaplateRecznaAction({ ...ZAPLATA, bezFp: '2000' })).toMatchObject({ success: false, pole: 'bezFp' });
+    expect(await dodajZaplateRecznaAction({ ...ZAPLATA, dataZaplaty: '2025-11-30' })).toMatchObject({ success: false, pole: 'dataZaplaty' });
+    expect(await dodajZaplateRecznaAction({ ...ZAPLATA, dataZaplaty: '2026-12-01' })).toMatchObject({ success: false, pole: 'dataZaplaty' });
+    expect(await dodajZaplateRecznaAction({ ...ZAPLATA, zaMiesiac: '2024-12', dataZaplaty: '2025-01-15' })).toMatchObject({ success: false, pole: 'zaMiesiac' });
+    expect(await dodajZaplateRecznaAction({ ...ZAPLATA, zaMiesiac: '2026-11', dataZaplaty: '2026-11-07' })).toMatchObject({ success: false, pole: 'zaMiesiac' });
+    expect(mocks.wstawione).toEqual([]);
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it('członek firmy i firma poza pilotażem: odmowa bez zapisu', async () => {
+    mocks.wlaczony = false;
+    expect(await dodajZaplateRecznaAction(ZAPLATA)).toMatchObject({ success: false });
+    expect(mocks.wstawione).toEqual([]);
+  });
+});
+

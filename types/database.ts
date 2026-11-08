@@ -1,6 +1,6 @@
-// Wygenerowane 5.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00166
-// (m.in. 00165 wyłącznik modułu księgowości i 00166 profil podatkowy). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 8.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00171
+// (m.in. 00167-00171 modułu księgowości: wpisy ręczne, rozliczenia, powiadomienia, wysyłki JPK). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -2231,6 +2231,101 @@ export type Database = {
           },
         ]
       }
+      jpk_submissions: {
+        Row: {
+          blad: string | null
+          cel: number
+          deklaracja: Json
+          id: string
+          numer_referencyjny: string | null
+          okres: string
+          rodzaj: string
+          skrot_pliku: string
+          sprawdzono_o: string | null
+          srodowisko: string
+          stan: string
+          status_kod: number | null
+          status_opis: string | null
+          tenant_id: string
+          upo_sciezka: string | null
+          utworzono_o: string
+          wyslal: string | null
+          wyslano_o: string | null
+          zakonczono_o: string | null
+        }
+        Insert: {
+          blad?: string | null
+          cel: number
+          deklaracja: Json
+          id?: string
+          numer_referencyjny?: string | null
+          okres: string
+          rodzaj: string
+          skrot_pliku: string
+          sprawdzono_o?: string | null
+          srodowisko: string
+          stan?: string
+          status_kod?: number | null
+          status_opis?: string | null
+          tenant_id: string
+          upo_sciezka?: string | null
+          utworzono_o?: string
+          wyslal?: string | null
+          wyslano_o?: string | null
+          zakonczono_o?: string | null
+        }
+        Update: {
+          blad?: string | null
+          cel?: number
+          deklaracja?: Json
+          id?: string
+          numer_referencyjny?: string | null
+          okres?: string
+          rodzaj?: string
+          skrot_pliku?: string
+          sprawdzono_o?: string | null
+          srodowisko?: string
+          stan?: string
+          status_kod?: number | null
+          status_opis?: string | null
+          tenant_id?: string
+          upo_sciezka?: string | null
+          utworzono_o?: string
+          wyslal?: string | null
+          wyslano_o?: string | null
+          zakonczono_o?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jpk_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jpk_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "jpk_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jpk_submissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpir_entries: {
         Row: {
           category: string | null
@@ -3200,6 +3295,80 @@ export type Database = {
           },
         ]
       }
+      ledger_manual_entries: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data_przychodu: string
+          data_wpisu: string
+          dokument: string
+          id: string
+          kolumna: string | null
+          kwota_gr: number
+          opis: string | null
+          rodzaj: string
+          stawka_pb: number | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data_przychodu: string
+          data_wpisu?: string
+          dokument: string
+          id?: string
+          kolumna?: string | null
+          kwota_gr: number
+          opis?: string | null
+          rodzaj?: string
+          stawka_pb?: number | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data_przychodu?: string
+          data_wpisu?: string
+          dokument?: string
+          id?: string
+          kolumna?: string | null
+          kwota_gr?: number
+          opis?: string | null
+          rodzaj?: string
+          stawka_pb?: number | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_manual_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_manual_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ledger_manual_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_manual_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -4052,6 +4221,7 @@ export type Database = {
           notify_inbox_new: boolean
           notify_invoice_accepted: boolean
           notify_invoice_rejected: boolean
+          notify_ksiegowosc: boolean
           notify_payment_received: boolean
           p256dh: string
           tenant_id: string
@@ -4073,6 +4243,7 @@ export type Database = {
           notify_inbox_new?: boolean
           notify_invoice_accepted?: boolean
           notify_invoice_rejected?: boolean
+          notify_ksiegowosc?: boolean
           notify_payment_received?: boolean
           p256dh: string
           tenant_id: string
@@ -4094,6 +4265,7 @@ export type Database = {
           notify_inbox_new?: boolean
           notify_invoice_accepted?: boolean
           notify_invoice_rejected?: boolean
+          notify_ksiegowosc?: boolean
           notify_payment_received?: boolean
           p256dh?: string
           tenant_id?: string
@@ -5309,6 +5481,71 @@ export type Database = {
           },
         ]
       }
+      tax_notifications: {
+        Row: {
+          blad: string | null
+          etap: string
+          id: string
+          rozliczenie: string
+          status: string
+          tenant_id: string
+          utworzono_o: string
+          wynik: Json
+          wyslano_o: string | null
+        }
+        Insert: {
+          blad?: string | null
+          etap: string
+          id?: string
+          rozliczenie: string
+          status?: string
+          tenant_id: string
+          utworzono_o?: string
+          wynik?: Json
+          wyslano_o?: string | null
+        }
+        Update: {
+          blad?: string | null
+          etap?: string
+          id?: string
+          rozliczenie?: string
+          status?: string
+          tenant_id?: string
+          utworzono_o?: string
+          wynik?: Json
+          wyslano_o?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tax_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tax_profiles: {
         Row: {
           chorobowe: boolean
@@ -5316,6 +5553,7 @@ export type Database = {
           created_by: string | null
           forma: string
           id: string
+          najem: boolean
           nrs_zus: string | null
           okres: string
           stawka_domyslna: number | null
@@ -5331,6 +5569,7 @@ export type Database = {
           created_by?: string | null
           forma: string
           id?: string
+          najem?: boolean
           nrs_zus?: string | null
           okres?: string
           stawka_domyslna?: number | null
@@ -5346,6 +5585,7 @@ export type Database = {
           created_by?: string | null
           forma?: string
           id?: string
+          najem?: boolean
           nrs_zus?: string | null
           okres?: string
           stawka_domyslna?: number | null
@@ -5379,6 +5619,86 @@ export type Database = {
           },
           {
             foreignKeyName: "tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_settlements: {
+        Row: {
+          id: string
+          kwota_gr: number
+          migawka: Json
+          okres: string
+          parametry_wersja: string
+          rodzaj: string
+          status: string
+          tenant_id: string
+          termin: string
+          wejscia_hash: string
+          wersja: number
+          zaplacone_o: string | null
+          zatwierdzone_o: string
+          zatwierdzone_przez: string | null
+        }
+        Insert: {
+          id?: string
+          kwota_gr: number
+          migawka: Json
+          okres: string
+          parametry_wersja: string
+          rodzaj: string
+          status?: string
+          tenant_id: string
+          termin: string
+          wejscia_hash: string
+          wersja: number
+          zaplacone_o?: string | null
+          zatwierdzone_o?: string
+          zatwierdzone_przez?: string | null
+        }
+        Update: {
+          id?: string
+          kwota_gr?: number
+          migawka?: Json
+          okres?: string
+          parametry_wersja?: string
+          rodzaj?: string
+          status?: string
+          tenant_id?: string
+          termin?: string
+          wejscia_hash?: string
+          wersja?: number
+          zaplacone_o?: string | null
+          zatwierdzone_o?: string
+          zatwierdzone_przez?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_settlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_settlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tax_settlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_settlements_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

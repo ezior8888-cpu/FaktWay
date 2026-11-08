@@ -188,6 +188,7 @@ export type AuditAction =
   | 'tax_settlement.approved'
   | 'tax_settlement.paid'
   | 'tax_settlement.unpaid'
+  | 'tax_settlement.manual_paid'
   // VAT i JPK_V7M (00170, K6): pobrany plik (miesiąc i kwoty deklaracji, bez
   // danych osoby), wysyłka do MF z numerem referencyjnym i przyjęcie z UPO.
   | 'jpk_v7m.downloaded'
