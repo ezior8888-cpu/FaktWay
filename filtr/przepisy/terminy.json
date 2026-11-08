@@ -44,7 +44,9 @@
         "tests/unit/ksiegowosc-parametry.test.ts > dni miesiąca: 20 dla ryczałtu"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-TERM-02"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": {
         "poziom": 4,
@@ -96,7 +98,10 @@
         "tests/unit/ksiegowosc-kalendarz.test.ts > Wielkanoc i święta ruchome 2027"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-TERM-01",
+        "NZ-TERM-03"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": null,
       "interpretacja": null,

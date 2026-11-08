@@ -105,6 +105,15 @@ export function bledyRejestru({ katalog = KATALOG_REPO, rejestr = wczytajRejestr
       if (kluczeParametrow && !kluczeParametrow.includes(klucz)) bledy.push(`${gdzie}: parametru ${klucz} nie ma w lib/ksiegowosc/parametry`);
     }
   }
+  const katalogNiezmiennikow = join(katalog, 'tests/filtr/niezmienniki');
+  const testyNiezmiennikow = existsSync(katalogNiezmiennikow)
+    ? readdirSync(katalogNiezmiennikow).filter((p) => p.endsWith('.test.ts')).map((p) => readFileSync(join(katalogNiezmiennikow, p), 'utf8')).join('\n')
+    : '';
+  for (const przepis of rejestr.przepisy) {
+    for (const nz of przepis.niezmienniki ?? []) {
+      if (!new RegExp(`\\b${nz}\\b`).test(testyNiezmiennikow)) bledy.push(`${przepis._plik} ${przepis.id}: niezmiennik ${nz} nie ma testu w tests/filtr/niezmienniki`);
+    }
+  }
   if (kluczeParametrow) {
     for (const klucz of kluczeParametrow) if (!uzyteParametry.has(klucz)) bledy.push(`parametr ${klucz} nie jest użyty przez żadną regułę rejestru`);
   }

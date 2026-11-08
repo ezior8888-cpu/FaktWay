@@ -174,7 +174,9 @@
         "tests/unit/ksiegowosc-ten-miesiac.test.ts > ujemny przychód 12 % w lipcu przechodzi na sierpień"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-RYCZ-09"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -435,7 +437,11 @@
         "tests/unit/ksiegowosc-pit.test.ts > podstawa w pełnych złotych: od 50 gr w górę"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZAOKR-01",
+        "NZ-ZAOKR-04",
+        "NZ-ZAOKR-05"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": {
         "poziom": 4,
@@ -483,7 +489,9 @@
         "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZAOKR-02"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": {
         "poziom": 4,
@@ -655,7 +663,9 @@
         "tests/unit/ksiegowosc-profil.test.ts > komunikat bez profilu"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-WSP-03"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": null,
       "interpretacja": null,
@@ -956,7 +966,10 @@
         "ryczalt.stawka5_5",
         "ryczalt.stawka3"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-RYCZ-01",
+        "NZ-RYCZ-02"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": {
         "poziom": 4,
@@ -999,7 +1012,9 @@
         "tests/unit/ksiegowosc-silniki.test.ts > podział co do grosza"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-RYCZ-05"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -1048,7 +1063,10 @@
       "parametry": [
         "ryczalt.odliczenieZdrowotnej"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-RYCZ-03",
+        "NZ-RYCZ-06"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": null,
       "interpretacja": null,
@@ -1267,7 +1285,9 @@
         "skala.prog",
         "skala.kwotaZmniejszajaca"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-PIT-04"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": {
         "poziom": 4,
@@ -1315,7 +1335,13 @@
         "tests/unit/ksiegowosc-kpir.test.ts > brak w KPiR od stycznia zabiera zaliczkę"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-PIT-01",
+        "NZ-PIT-02",
+        "NZ-PIT-03",
+        "NZ-PIT-06",
+        "NZ-PIT-07"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -1365,7 +1391,9 @@
         "liniowy.stawka",
         "liniowy.limitOdliczeniaZdrowotnej"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-PIT-05"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": null,
       "interpretacja": null,
@@ -1412,7 +1440,10 @@
         "zdrowotna.progRyczaltu60Tys",
         "zdrowotna.progRyczaltu300Tys"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZDR-01",
+        "NZ-ZDR-02"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -1548,7 +1579,10 @@
         "zdrowotna.stawkaLiniowy",
         "zdrowotna.minimalna"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZDR-03",
+        "NZ-ZDR-05"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -1734,7 +1768,12 @@
         "zus.stopaWypadkowaOdKwietnia",
         "zus.stopaFunduszPracy"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZUS-01",
+        "NZ-ZUS-04",
+        "NZ-ZUS-05",
+        "NZ-ZUS-06"
+      ],
       "pewnosc": "srednia",
       "wzorzec": {
         "poziom": 4,
@@ -1784,7 +1823,10 @@
         "zus.podstawaPreferencyjnaProc",
         "zus.preferencyjnyMiesiecy"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZUS-01",
+        "NZ-ZUS-05"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -1827,7 +1869,9 @@
       "parametry": [
         "zus.ulgaNaStartMiesiecy"
       ],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZUS-02"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": null,
@@ -1876,7 +1920,10 @@
         "tests/unit/ksiegowosc-ten-miesiac.test.ts > ulga na start od 15.03"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-ZUS-03",
+        "NZ-ZUS-07"
+      ],
       "pewnosc": "srednia",
       "wzorzec": null,
       "interpretacja": "Podstawa proporcjonalna do dni nie jest liczona: zamiast zgadywania jest brak.",
@@ -2686,7 +2733,10 @@
         "tests/unit/ksiegowosc-mikrorachunek.test.ts > niepoprawny NIP nie daje numeru"
       ],
       "parametry": [],
-      "niezmienniki": [],
+      "niezmienniki": [
+        "NZ-MIKRO-01",
+        "NZ-MIKRO-02"
+      ],
       "pewnosc": "wysoka",
       "wzorzec": {
         "poziom": 1,
