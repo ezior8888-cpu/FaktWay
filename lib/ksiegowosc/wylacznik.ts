@@ -20,8 +20,10 @@
  * Ścieżka operatora do czasu przycisku w `/admin/flags` (pilotaż, krok K8):
  * UPDATE na `global_feature_flags` i `tenant_feature_flags` kluczem
  * serwisowym. Od K2 kod puszcza obszar `ustawienia`, od K3 `ewidencja`, od K4
- * `ten_miesiac`, od K5 `terminy`, od K6 `vat`, więc o nich decyduje flaga
- * firmy; pozostałe obszary są zablokowane w kodzie.
+ * `ten_miesiac`, od K5 `terminy`, od K6 `vat`, od K7 `kpir`, więc o nich
+ * decyduje flaga firmy; pozostałe obszary są zablokowane w kodzie. `kpir`
+ * nie ma własnego ekranu: zatrzymuje skalę i liniowy w ekranach `ewidencja`
+ * i `ten_miesiac`, bez ruszania ryczałtu.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -55,8 +57,8 @@ const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
   // K2: kreator zbudowany, więc kod go puszcza; widzi go tylko firma
   // z `ksiegowosc_enabled = true` (pilotaż), reszta dostaje 404.
   ustawienia: { wlaczony: true, notatka: 'Kreator ustawień podatkowych (K2).' },
-  ewidencja: { wlaczony: true, notatka: 'Ewidencja przychodów ryczałtu, wpisy ręczne i JPK_EWP (K3).' },
-  ten_miesiac: { wlaczony: true, notatka: 'Ryczałt, składki i zdrowotna za miesiąc z zatwierdzaniem (K4).' },
+  ewidencja: { wlaczony: true, notatka: 'Ewidencja przychodów ryczałtu, wpisy ręczne i JPK_EWP (K3); przy skali i liniowym KPiR za obszarem `kpir` (K7).' },
+  ten_miesiac: { wlaczony: true, notatka: 'Ryczałt, składki i zdrowotna za miesiąc z zatwierdzaniem (K4); zaliczka PIT przy skali i liniowym za obszarem `kpir` (K7).' },
   terminy: { wlaczony: true, notatka: 'Przypomnienia o terminach, push o wyliczonym miesiącu i karta „Odłóż na podatek” (K5).' },
   vat: { wlaczony: true, notatka: 'VAT za miesiąc, plik JPK_V7M(3) do pobrania, lista wysyłek z UPO (K6).' },
   wysylka_jpk: {
@@ -64,7 +66,7 @@ const BLOKADY: Readonly<Record<ObszarModulu, StatusObszaru>> = {
     powod: 'prawnik',
     notatka: 'Wysyłka JPK_V7M danymi autoryzującymi (D9): po próbie na środowisku testowym MF i opinii prawnika.',
   },
-  kpir: { wlaczony: false, powod: 'nie_zbudowane', notatka: 'KPiR, skala i liniowy: krok K7.' },
+  kpir: { wlaczony: true, notatka: 'KPiR według wzoru 2026, wpisy ręczne KPiR, JPK_PKPIR, zaliczka PIT i zdrowotna od dochodu przy skali i liniowym (K7).' },
 };
 
 export function statusObszaru(obszar: ObszarModulu): StatusObszaru {

@@ -4,18 +4,19 @@ import { useState, useTransition } from 'react';
 import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
-import { pobierzJpkEwpAction } from '@/app/actions/ksiegowosc-ewidencja';
+import { pobierzJpkEwpAction, pobierzJpkPkpirAction } from '@/app/actions/ksiegowosc-ewidencja';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { saveBlob } from '@/lib/download';
 
 /**
- * Pobranie pliku JPK_EWP(4) za okres od 1 stycznia. Imię, nazwisko i datę
- * urodzenia schemat MF wymaga dla osoby fizycznej; FaktWay ich nie zapisuje,
- * więc klient podaje je przy każdym pobraniu (jak dane autoryzujące w D9).
+ * Pobranie pliku JPK_EWP(4) albo, przy skali i liniowym (K7), JPK_PKPIR(3)
+ * za okres od 1 stycznia. Imię, nazwisko i datę urodzenia schemat MF wymaga
+ * dla osoby fizycznej; FaktWay ich nie zapisuje, więc klient podaje je przy
+ * każdym pobraniu (jak dane autoryzujące w D9).
  */
-export function JpkEwpPobierz({ rok, doMiesiaca }: { rok: number; doMiesiaca: number }) {
+export function JpkEwpPobierz({ rok, doMiesiaca, plik = 'JPK_EWP' }: { rok: number; doMiesiaca: number; plik?: 'JPK_EWP' | 'JPK_PKPIR' }) {
   const [imie, setImie] = useState('');
   const [nazwisko, setNazwisko] = useState('');
   const [dataUrodzenia, setDataUrodzenia] = useState('');
@@ -25,10 +26,11 @@ export function JpkEwpPobierz({ rok, doMiesiaca }: { rok: number; doMiesiaca: nu
   const pobierz = () =>
     startTransition(async () => {
       setBlad(null);
-      const wynik = await pobierzJpkEwpAction({ rok, doMiesiaca, imie, nazwisko, dataUrodzenia });
+      const akcja = plik === 'JPK_PKPIR' ? pobierzJpkPkpirAction : pobierzJpkEwpAction;
+      const wynik = await akcja({ rok, doMiesiaca, imie, nazwisko, dataUrodzenia });
       if (wynik.success) {
         saveBlob(new Blob([wynik.xml], { type: 'application/xml' }), wynik.nazwa);
-        toast.success('Plik JPK_EWP pobrany');
+        toast.success(`Plik ${plik} pobrany`);
       } else {
         setBlad({ pole: wynik.pole, tekst: wynik.error });
         toast.error(wynik.error);
@@ -84,7 +86,7 @@ export function JpkEwpPobierz({ rok, doMiesiaca }: { rok: number; doMiesiaca: nu
       <div className="flex justify-end">
         <Button type="button" onClick={pobierz} disabled={pending}>
           {pending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
-          Pobierz JPK_EWP
+          Pobierz {plik}
         </Button>
       </div>
     </FieldGroup>

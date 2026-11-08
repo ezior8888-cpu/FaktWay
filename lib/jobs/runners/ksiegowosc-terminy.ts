@@ -1,6 +1,7 @@
 /**
  * `cron.ksiegowosc-terminy` (plan księgowości JDG, K5, sekcja 9): codziennie
- * o 08:00 przypomina firmom w pilotażu o terminach ryczałtu i składek ZUS,
+ * o 08:00 przypomina firmom w pilotażu o terminach ryczałtu albo zaliczki
+ * PIT i składek ZUS,
  * 5 i 1 dzień przed terminem, jeśli rozliczenie nie ma oznaczonej zapłaty.
  * Push do członków firmy i mail do właściciela.
  *
@@ -9,8 +10,8 @@
  * od zera pomija przypomnienia „sent”; błąd jednej firmy nie zatrzymuje
  * pozostałych, a zadanie kończy się błędem, żeby kolejka je ponowiła.
  *
- * Przypomina się tylko o formie, którą moduł liczy (ryczałt, K4); skala
- * i liniowy dojdą w K7.
+ * O ryczałcie przypomina się firmie na ryczałcie (K4), o zaliczce PIT firmie
+ * na skali albo liniowym (K7); o składkach ZUS każdej.
  *
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
@@ -24,7 +25,7 @@ import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { JobContext } from '@/lib/jobs/registry';
 import { firmyWPilotazu, wlasciciel, zajmij, zamknij } from '@/lib/ksiegowosc/powiadomienia';
 import { czytajWersjeProfilu, wersjaNa } from '@/lib/ksiegowosc/profil';
-import { niezaplacone, terminyNaDzis, trescTerminu, type TerminNaDzis } from '@/lib/ksiegowosc/przypomnienia';
+import { grupyFormy, niezaplacone, terminyNaDzis, trescTerminu, type TerminNaDzis } from '@/lib/ksiegowosc/przypomnienia';
 import { BLAD_ODCZYTU_ROZLICZEN, czytajTenMiesiac } from '@/lib/ksiegowosc/ten-miesiac-dane';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { sendPushToTenant } from '@/lib/push/sender';
@@ -35,12 +36,14 @@ import type { WynikFirmy } from './ksiegowosc-miesiac';
 export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: string, t: TerminNaDzis): Promise<WynikFirmy> {
   if (!(await czyKsiegowoscWlaczona(admin, tenantId, 'terminy')).wlaczony) return 'pominiete';
   const profil = wersjaNa(await czytajWersjeProfilu(admin, tenantId), monthRange(t.miesiac).to);
-  if (!profil || profil.forma !== 'ryczalt') return 'pominiete';
+  if (!profil) return 'pominiete';
+  // Ryczałt albo zaliczka PIT (skala, liniowy, K7) według formy; składki zawsze.
+  const grupy = grupyFormy(t.grupy, profil.forma);
 
   const dane = await czytajTenMiesiac(admin, tenantId, t.miesiac);
   // Bez odczytu zapłat nie wiadomo, co jest zapłacone: ponowienie zamiast przypomnienia „bez zapłaty”.
   if (!dane.ok && dane.braki.includes(BLAD_ODCZYTU_ROZLICZEN)) throw new Error(`Nie udało się odczytać rozliczeń firmy ${tenantId} za ${t.miesiac}`);
-  const pozycje = niezaplacone({ grupy: t.grupy, rozliczenia: dane.rozliczenia, pozycje: dane.ok ? dane.pozycje : null, profil });
+  const pozycje = niezaplacone({ grupy, rozliczenia: dane.rozliczenia, pozycje: dane.ok ? dane.pozycje : null, profil });
   if (pozycje.length === 0) return 'pominiete';
 
   if ((await zajmij(admin, tenantId, t.miesiac, t.etap)) === 'duplikat') return 'duplikaty';

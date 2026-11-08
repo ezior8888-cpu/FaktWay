@@ -132,12 +132,14 @@ describe('ten miesiąc przy ryczałcie', () => {
     expect(w.ok && [w.wynik.zdrowotna?.prog, w.wynik.zdrowotna?.skladkaGr]).toEqual(['do 300 tys.', 83_058]);
   });
 
-  it('braki całego miesiąca: bez ustawień na żaden dzień miesiąca i skala', () => {
+  it('braki całego miesiąca bez ustawień; skala bez KPiR (K7): brak zaliczki i zdrowotnej, składki się liczą', () => {
     expect(tenMiesiac(wejscie({ wersje: [{ ...PROFIL, validFrom: '2026-03-01' }] }))).toMatchObject({
       ok: false,
       braki: [expect.stringContaining('Na luty 2026 nie ma ustawień podatkowych')],
     });
-    expect(tenMiesiac(wejscie({ wersje: [{ ...PROFIL, forma: 'skala', stawkaDomyslna: null }] }))).toMatchObject({ ok: false, braki: [expect.stringContaining('kolejnej wersji modułu')] });
+    const skala = tenMiesiac(wejscie({ wersje: [{ ...PROFIL, forma: 'skala', stawkaDomyslna: null }] }));
+    expect(kwoty(skala)).toEqual([['pit', 'brak'], ['zus_spoleczne', 192_676], ['zdrowotna', 'brak']]);
+    expect(brakPozycji(skala, 'pit')).toContain('Nie udało się odczytać KPiR');
   });
 
   it('braki ewidencji wcześniej w roku zatrzymują ryczałt i zdrowotną, a składki społeczne się liczą', () => {

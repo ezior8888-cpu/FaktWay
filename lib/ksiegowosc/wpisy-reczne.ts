@@ -3,6 +3,10 @@
  * z kasy rejestrującej i inne dowody bez faktury z KSeF. Tabela
  * `ledger_manual_entries` (00167); ten sam schemat Zod sprawdza formularz
  * i akcję serwerową.
+ *
+ * Od K7 (00171) ta sama tabela trzyma wpisy KPiR przy skali i liniowym:
+ * z kolumną KPiR zamiast stawki ryczałtu. Ewidencja czyta tylko wpisy ze
+ * stawką, KPiR tylko wpisy z kolumną.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -10,6 +14,7 @@ import { z } from 'zod';
 
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { STAWKI_JPK_EWP_PB, type WpisReczny } from '@/lib/ksiegowosc/ewidencja';
+import { KOLUMNY_KPIR, type WpisKpir } from '@/lib/ksiegowosc/kpir';
 import { PROFIL_OD_MIN } from '@/lib/ksiegowosc/profil';
 
 export const RODZAJE_WPISU = ['raport_kasy', 'inny'] as const;
@@ -126,6 +131,8 @@ export async function czytajWpisyReczne(
       .from('ledger_manual_entries')
       .select(KOLUMNY_WPISU, { count: 'exact' })
       .eq('tenant_id', tenantId)
+      // Wpisy KPiR (00171) nie mają stawki i nie należą do ewidencji ryczałtu.
+      .not('stawka_pb', 'is', null)
       .gte('data_przychodu', od)
       .lte('data_przychodu', doDnia)
       .order('id', { ascending: true })
@@ -134,4 +141,73 @@ export async function czytajWpisyReczne(
     return { data: wynik.data as WierszWpisu[] | null, count: wynik.count, error: wynik.error };
   });
   return wiersze.map(zWierszaWpisu);
+}
+
+/** Wpis KPiR (K7): te same pola co wpis ewidencji, z kolumną KPiR zamiast stawki. */
+export const wpisKpirSchema = wpisSchema.omit({ stawkaPb: true }).extend({
+  kolumna: z.enum(KOLUMNY_KPIR, { message: 'Brak kolumny KPiR.' }),
+});
+
+export type WpisKpirWejscie = z.input<typeof wpisKpirSchema>;
+
+export const KOLUMNY_WPISU_KPIR = 'id, rodzaj, data_przychodu, dokument, kwota_gr, kolumna, opis';
+
+interface WierszWpisuKpir {
+  id: string;
+  rodzaj: string;
+  data_przychodu: string;
+  dokument: string;
+  kwota_gr: number | string;
+  kolumna: WpisKpir['kolumna'];
+  opis: string | null;
+}
+
+export function zWierszaWpisuKpir(w: WierszWpisuKpir): WpisKpir & { rodzaj: RodzajWpisu } {
+  return {
+    id: w.id,
+    rodzaj: w.rodzaj === 'inny' ? 'inny' : 'raport_kasy',
+    data: w.data_przychodu,
+    dokument: w.dokument,
+    kolumna: w.kolumna,
+    kwotaGr: Number(w.kwota_gr),
+    opis: w.opis,
+  };
+}
+
+export function doWierszaWpisuKpir(tenantId: string, w: z.output<typeof wpisKpirSchema>) {
+  return {
+    tenant_id: tenantId,
+    rodzaj: w.rodzaj,
+    data_przychodu: w.dataPrzychodu,
+    dokument: w.dokument,
+    kwota_gr: w.kwota,
+    kolumna: w.kolumna,
+    opis: w.opis,
+  };
+}
+
+/**
+ * Wpisy KPiR z dniem w [od, do] (00171). Przed wgraniem 00171 nie ma kolumny
+ * (42703), a przed 00167 tabeli: to brak wpisów, nie awaria.
+ */
+export async function czytajWpisyKpir(
+  client: SupabaseClient,
+  tenantId: string,
+  od: string,
+  doDnia: string,
+): Promise<(WpisKpir & { rodzaj: RodzajWpisu })[]> {
+  const wiersze = await readCompletePages<WierszWpisuKpir>('kpir: wpisy ręczne', async (from, to) => {
+    const wynik = await client
+      .from('ledger_manual_entries')
+      .select(KOLUMNY_WPISU_KPIR, { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .not('kolumna', 'is', null)
+      .gte('data_przychodu', od)
+      .lte('data_przychodu', doDnia)
+      .order('id', { ascending: true })
+      .range(from, to);
+    if (wynik.error && (czyBrakTabeli(wynik.error.code) || wynik.error.code === '42703')) return { data: [], count: 0, error: null };
+    return { data: wynik.data as WierszWpisuKpir[] | null, count: wynik.count, error: wynik.error };
+  });
+  return wiersze.map(zWierszaWpisuKpir);
 }

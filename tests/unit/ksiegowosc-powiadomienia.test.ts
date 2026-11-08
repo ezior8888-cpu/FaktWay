@@ -185,7 +185,7 @@ describe('cron.ksiegowosc-terminy', () => {
     expect(mocks.wpisy.get('t1|2026-10|termin-5:2026-11-20')).toMatchObject({ status: 'sent', wynik: { push: 1, mail: true } });
   });
 
-  it('wszystko zapłacone albo forma, której moduł jeszcze nie liczy: bez przypomnienia', async () => {
+  it('wszystko zapłacone: bez przypomnienia; skala (K7): przypomnienie o zaliczce PIT i składkach, bez ryczałtu', async () => {
     mocks.dzis = '2026-11-19';
     const zaplacone = (rodzaj: string, kwotaGr: number) => ({
       id: rodzaj,
@@ -202,10 +202,12 @@ describe('cron.ksiegowosc-terminy', () => {
     });
     mocks.dane = { ...POLICZONE, rozliczenia: [zaplacone('ryczalt', 153_600), zaplacone('zus_spoleczne', 192_676), zaplacone('zdrowotna', 83_058)] };
     expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ pominiete: 1 });
+    expect([mocks.pushe, mocks.maile, mocks.wpisy.size]).toEqual([[], [], 0]);
     mocks.dane = POLICZONE;
     mocks.profil = [{ ...PROFIL, forma: 'skala', stawkaDomyslna: null }];
-    expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ pominiete: 1 });
-    expect([mocks.pushe, mocks.maile, mocks.wpisy.size]).toEqual([[], [], 0]);
+    expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
+    expect(mocks.pushe[0].payload.body).toContain('zaliczka PIT');
+    expect(mocks.pushe[0].payload.body).not.toContain('ryczałt');
   });
 
   it('dzień bez terminu: zadanie kończy się bez odczytu firm', async () => {

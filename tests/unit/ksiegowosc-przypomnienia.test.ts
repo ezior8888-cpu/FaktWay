@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
-import { niezaplacone, terminyNaDzis, trescTerminu, trescWyliczenia } from '@/lib/ksiegowosc/przypomnienia';
+import { grupyFormy, niezaplacone, terminyNaDzis, trescTerminu, trescWyliczenia } from '@/lib/ksiegowosc/przypomnienia';
 import type { PozycjaZeSkrotem, Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
 
 /**
@@ -46,9 +46,12 @@ const szkic = (rodzaj: PozycjaZeSkrotem['rodzaj'], kwotaGr: number): PozycjaZeSk
 });
 
 describe('kiedy przypominać', () => {
-  it('termin 20.11.2026 za październik: 5 dni wcześniej (15.11) i dzień wcześniej (19.11), ryczałt i ZUS w jednym przypomnieniu', () => {
-    expect(terminyNaDzis('2026-11-15').map((t) => [t.miesiac, t.grupy, t.dni, t.etap])).toEqual([['2026-10', ['ryczalt', 'zus'], 5, 'termin-5:2026-11-20']]);
-    expect(terminyNaDzis('2026-11-19').map((t) => [t.grupy, t.dni])).toEqual([[['ryczalt', 'zus'], 1]]);
+  it('termin 20.11.2026 za październik: 5 dni wcześniej (15.11) i dzień wcześniej (19.11), podatek i ZUS w jednym przypomnieniu', () => {
+    // Od K7 także grupa zaliczki PIT (ten sam dzień); o firmie decyduje jej forma (`grupyFormy`).
+    expect(terminyNaDzis('2026-11-15').map((t) => [t.miesiac, t.grupy, t.dni, t.etap])).toEqual([['2026-10', ['ryczalt', 'pit', 'zus'], 5, 'termin-5:2026-11-20']]);
+    expect(terminyNaDzis('2026-11-19').map((t) => [t.grupy, t.dni])).toEqual([[['ryczalt', 'pit', 'zus'], 1]]);
+    expect(grupyFormy(['ryczalt', 'pit', 'zus'], 'ryczalt')).toEqual(['ryczalt', 'zus']);
+    expect(grupyFormy(['ryczalt', 'pit', 'zus'], 'liniowy')).toEqual(['pit', 'zus']);
     expect(terminyNaDzis('2026-11-16')).toEqual([]);
   });
 

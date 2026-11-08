@@ -13,6 +13,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { formatBuyerAddress, type BuyerDataJson } from '@/lib/exports/data-fetcher';
 import type { RateLookup } from '@/lib/flo/nbp';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { MAX_SALE_DAYS_AFTER_ISSUE } from '@/lib/invoices/sale-date';
@@ -46,6 +47,8 @@ export type WynikEwidencji =
 export interface OpcjeOdczytu {
   /** Kurs NBP sprzed dnia przychodu; domyślnie API NBP (`nbpRateForCost`). */
   kurs?: (waluta: string, dzien: string) => Promise<RateLookup>;
+  /** Wersje profilu, jeśli wołający już je przeczytał (bez drugiego zapytania). */
+  wersje?: readonly WersjaProfilu[];
 }
 
 export const KOMUNIKAT_SRODOWISKO =
@@ -94,6 +97,14 @@ export function rodzajFaktury(kind: string | null, type: string | null): RodzajF
   if (kind === 'final') return 'rozliczenie';
   if (kind === 'advance' || typ === 'ZAL') return 'zaliczka';
   return 'zwykla';
+}
+
+/** Nazwa i adres nabywcy (KPiR, K_5A i K_5B); bez danych `null`. */
+export function nazwaIAdres(buyer: unknown): { nazwa: string | null; adres: string | null } {
+  const b = (buyer && typeof buyer === 'object' ? buyer : {}) as BuyerDataJson;
+  const nazwa = typeof b.name === 'string' ? b.name.replace(/\s+/g, ' ').trim() : '';
+  const adres = formatBuyerAddress(b).replace(/\s+/g, ' ').trim();
+  return { nazwa: nazwa || null, adres: adres || null };
 }
 
 /** K_6 i K_7: polski NIP albo numer VAT UE; nabywca bez identyfikatora podatkowego zostaje pusty. */
@@ -168,7 +179,7 @@ async function pozycjeZeStawkami(
   return mapa;
 }
 
-async function kursy(
+export async function kursy(
   faktury: readonly FakturaEwidencji[],
   rok: number,
   kurs: NonNullable<OpcjeOdczytu['kurs']>,
@@ -213,18 +224,24 @@ function zWierszaFaktury(
     waluta: (w.currency ?? 'PLN').trim().toUpperCase() || 'PLN',
     numerKsef: w.ksef_number,
     fp: w.fp === true || w.fp === 'true',
-    kontrahent: kontrahentJpk(w.buyer_data),
+    kontrahent: { ...kontrahentJpk(w.buyer_data), ...nazwaIAdres(w.buyer_data) },
     rozliczoneZaliczkiGr: doGroszy(rozliczone.get(w.id)),
     pozycje: zeStawkami.get(w.id) ?? null,
   };
 }
 
-export async function czytajEwidencje(
+export type FakturyRoku = { ok: true; faktury: FakturaEwidencji[]; kursy: Map<string, KursPrzychodu> } | { ok: false; komunikat: string };
+
+/**
+ * Faktury sprzedaży roku z kursami NBP: wspólny odczyt ewidencji przychodów
+ * (K3) i KPiR (K7), z tymi samymi filtrami i kontrolą środowiska KSeF.
+ */
+export async function czytajFakturyRoku(
   client: SupabaseClient,
   tenantId: string,
   rok: number,
   opcje: OpcjeOdczytu = {},
-): Promise<WynikEwidencji> {
+): Promise<FakturyRoku> {
   const od = `${rok}-01-01`;
   const koniecRoku = `${rok}-12-31`;
   const doWystawienia = addDaysToIsoDate(koniecRoku, MAX_SALE_DAYS_AFTER_ISSUE) ?? koniecRoku;
@@ -259,25 +276,34 @@ export async function czytajEwidencje(
         .range(from, to);
       return { data: wynik.data as WierszFaktury[] | null, count: wynik.count, error: wynik.error };
     });
-
-    const [rozliczone, zeStawkami, wersje, wpisy] = await Promise.all([
+    const [rozliczone, zeStawkami] = await Promise.all([
       fetchSettledAdvancesNet(client, tenantId, wiersze),
       pozycjeZeStawkami(client, wiersze.map((w) => w.id)),
-      czytajWersjeProfilu(client, tenantId),
-      czytajWpisyReczne(client, tenantId, od, koniecRoku),
     ]);
     const faktury = wiersze.map((w) => zWierszaFaktury(w, rozliczone, zeStawkami));
+    return { ok: true, faktury, kursy: await kursy(faktury, rok, opcje.kurs ?? nbpRateForCost) };
+  } catch (e) {
+    console.error('[ewidencja] odczyt', e instanceof Error ? e.message : e);
+    return { ok: false, komunikat: KOMUNIKAT_ODCZYT };
+  }
+}
 
+export async function czytajEwidencje(
+  client: SupabaseClient,
+  tenantId: string,
+  rok: number,
+  opcje: OpcjeOdczytu = {},
+): Promise<WynikEwidencji> {
+  const faktury = await czytajFakturyRoku(client, tenantId, rok, opcje);
+  if (!faktury.ok) return faktury;
+  try {
+    const [wersje, wpisy] = await Promise.all([
+      opcje.wersje ? [...opcje.wersje] : czytajWersjeProfilu(client, tenantId),
+      czytajWpisyReczne(client, tenantId, `${rok}-01-01`, `${rok}-12-31`),
+    ]);
     return {
       ok: true,
-      ewidencja: zbudujEwidencje({
-        rok,
-        faktury,
-        wpisy,
-        wersje,
-        kursy: await kursy(faktury, rok, opcje.kurs ?? nbpRateForCost),
-        najem: progNajmuZParametrow(rok),
-      }),
+      ewidencja: zbudujEwidencje({ rok, faktury: faktury.faktury, wpisy, wersje, kursy: faktury.kursy, najem: progNajmuZParametrow(rok) }),
       wpisy,
       wersje,
     };

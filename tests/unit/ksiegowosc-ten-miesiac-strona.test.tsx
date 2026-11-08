@@ -120,6 +120,43 @@ describe('strona „Ten miesiąc”', () => {
     expect(html).toContain(`data-skroty="${JSON.stringify({ ryczalt: H('a'), zus_spoleczne: H('b'), zdrowotna: H('c') }).replace(/"/g, '&quot;')}"`);
   });
 
+  it('skala i liniowy (K7): zaliczka PIT zamiast ryczałtu, koszty, zdrowotna od dochodu, symbol PIT-36 albo PIT-36L', async () => {
+    const pozycje = [
+      { ok: true, rodzaj: 'pit', kwotaGr: 120_000, termin, wejscia: {}, wejsciaHash: H('d') },
+      { ok: true, rodzaj: 'zus_spoleczne', kwotaGr: 192_676, termin, wejscia: {}, wejsciaHash: H('b') },
+      { ok: true, rodzaj: 'zdrowotna', kwotaGr: 90_000, termin, wejscia: {}, wejsciaHash: H('c') },
+    ];
+    const pit = {
+      miesiac: '2026-10',
+      przychodNarastajacoGr: 15_000_000,
+      kosztyNarastajacoGr: 3_000_000,
+      dochodNarastajacoGr: 12_000_000,
+      spoleczneNarastajacoGr: 1_788_290,
+      zdrowotnaNarastajacoGr: 0,
+      podstawaNarastajacoGr: 10_211_700,
+      podatekNarastajacoGr: 865_404,
+      zaliczkaGr: 120_000,
+    };
+    const skala = (forma: 'skala' | 'liniowy') => {
+      const profil = { ...PROFIL, forma, stawkaDomyslna: null };
+      const wynik = { ...WYNIK, profil, kosztyGr: 300_000, zdrowotna: null, ryczalt: null, pit, pozycje };
+      return { ok: true, wynik: { ...wynik, zdrowotnaOdDochodu: { dochodGr: 1_000_000, podstawaGr: 1_000_000, skladkaGr: 90_000, minimalna: false } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [profil] };
+    };
+    mocks.dane = skala('skala');
+    const html = await strona();
+    const t = tekst(html);
+    expect(t).toContain('Zaliczka na podatek dochodowy, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.');
+    expect(html).toMatch(/3000,00 zł<\/h4><p[^>]*>Koszty w miesiącu/);
+    expect(html).toMatch(/1200,00 zł<\/h4><p[^>]*>Zaliczka PIT/);
+    expect(html).toContain('symbol formularza PIT-36, okres 26M10, identyfikator NIP 1234563218');
+    expect(t).toContain('Zaliczka PIT od dochodu od początku roku 120 000,00 zł po odliczeniu zapłaconych składek społecznych 17 882,90 zł: podstawa 102 117,00 zł');
+    expect(t).toContain('Składka zdrowotna od dochodu z poprzedniego miesiąca (10 000,00 zł po odliczeniu zapłaconych składek społecznych).');
+    expect(t).not.toContain('Ryczałt, składki społeczne');
+    expect(html).toContain(`data-skroty="${JSON.stringify({ pit: H('d'), zus_spoleczne: H('b'), zdrowotna: H('c') }).replace(/"/g, '&quot;')}"`);
+    mocks.dane = skala('liniowy');
+    expect(await strona()).toContain('symbol formularza PIT-36L, okres 26M10');
+  });
+
   it('każda kwota ma podpis z rokiem stawek; w styczniu zdrowotna według roku składkowego', async () => {
     const t = tekst(await strona());
     expect(t).toContain('Według Twoich danych i stawek na 2026 r.');

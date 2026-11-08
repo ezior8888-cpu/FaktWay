@@ -22,12 +22,24 @@ import { aktualne, zaplacono, type PozycjaZeSkrotem, type Rozliczenie } from '@/
 export const DNI_PRZED_TERMINEM = [5, 1] as const;
 export type DniPrzed = (typeof DNI_PRZED_TERMINEM)[number];
 
-/** Rozliczenia z jednym terminem: ryczałt osobno, składki ZUS razem (jedna deklaracja). */
-export type Grupa = 'ryczalt' | 'zus';
+/**
+ * Rozliczenia z jednym terminem: ryczałt albo zaliczka PIT (K7) osobno,
+ * składki ZUS razem (jedna deklaracja). Która z dwóch pierwszych dotyczy
+ * firmy, rozstrzyga jej forma (`grupyFormy`).
+ */
+export type Grupa = 'ryczalt' | 'pit' | 'zus';
 export const RODZAJE_GRUPY: Readonly<Record<Grupa, readonly RodzajRozliczenia[]>> = {
   ryczalt: ['ryczalt'],
+  pit: ['pit'],
   zus: ['zus_spoleczne', 'zdrowotna'],
 };
+
+const TERMIN_GRUPY: Readonly<Record<Grupa, 'ryczalt' | 'zaliczkaPit' | 'zus'>> = { ryczalt: 'ryczalt', pit: 'zaliczkaPit', zus: 'zus' };
+
+/** Grupy z przypomnienia, które dotyczą firmy o tej formie opodatkowania. */
+export function grupyFormy(grupy: readonly Grupa[], forma: WersjaProfilu['forma']): Grupa[] {
+  return grupy.filter((g) => g === 'zus' || (forma === 'ryczalt' ? g === 'ryczalt' : g === 'pit'));
+}
 
 export interface TerminNaDzis {
   /** RRRR-MM: miesiąc rozliczenia. */
@@ -44,15 +56,16 @@ export interface TerminNaDzis {
  * Terminy, o których przypomina się dziś. Termin za miesiąc wypada
  * w następnym miesiącu, więc dziś liczą się rozliczenia za poprzedni miesiąc
  * (i bieżący, gdyby termin z kalendarza wypadł na początku miesiąca).
- * Ryczałt i składki z tym samym dniem terminu idą w jednym przypomnieniu.
+ * Ryczałt albo zaliczka PIT i składki z tym samym dniem terminu idą w jednym
+ * przypomnieniu.
  */
 export function terminyNaDzis(dzis: string): TerminNaDzis[] {
   const wynik = new Map<string, TerminNaDzis>();
   const biezacy = dzis.slice(0, 7);
   for (const miesiac of [shiftMonth(biezacy, -1), biezacy]) {
     const [rok, nr] = miesiac.split('-').map(Number);
-    for (const grupa of ['ryczalt', 'zus'] as const) {
-      const termin = terminDla({ rodzaj: grupa, rok, miesiac: nr });
+    for (const grupa of ['ryczalt', 'pit', 'zus'] as const) {
+      const termin = terminDla({ rodzaj: TERMIN_GRUPY[grupa], rok, miesiac: nr });
       if (!termin) continue;
       for (const dni of DNI_PRZED_TERMINEM) {
         if (addDaysToIsoDate(dzis, dni) !== termin.faktyczny) continue;
@@ -104,6 +117,7 @@ export function niezaplacone(w: {
 
 const NAZWY: Readonly<Record<RodzajRozliczenia, string>> = {
   ryczalt: 'ryczałt',
+  pit: 'zaliczka PIT',
   zus_spoleczne: 'składki społeczne',
   zdrowotna: 'składka zdrowotna',
 };

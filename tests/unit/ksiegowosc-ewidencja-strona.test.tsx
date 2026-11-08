@@ -49,7 +49,7 @@ const WPIS: WpisReczny = {
   opis: 'Sprzedaż z kasy',
 };
 
-const mocks = vi.hoisted(() => ({ wlaczony: true, rola: 'owner', wynik: null as unknown }));
+const mocks = vi.hoisted(() => ({ wlaczony: true, rola: 'owner', wynik: null as unknown, kpir: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -57,8 +57,20 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: async () => ({ supabase: {}, tenantId: 'firma-1', role: mocks.rola }) }));
-vi.mock('@/lib/ksiegowosc/wylacznik', () => ({ czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }) }));
-vi.mock('@/lib/ksiegowosc/ewidencja-dane', () => ({ czytajEwidencje: async () => mocks.wynik }));
+vi.mock('@/lib/ksiegowosc/wylacznik', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/wylacznik')>()),
+  czyKsiegowoscWlaczona: async () => ({ wlaczony: mocks.wlaczony }),
+}));
+vi.mock('@/lib/ksiegowosc/ewidencja-dane', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/ewidencja-dane')>()),
+  czytajEwidencje: async () => mocks.wynik,
+}));
+// Od K7 strona czyta ustawienia sama (forma miesiąca: ewidencja albo KPiR); te same wersje co w wyniku odczytu.
+vi.mock('@/lib/ksiegowosc/profil', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/profil')>()),
+  czytajWersjeProfilu: async () => (mocks.wynik as { wersje?: unknown[] } | null)?.wersje ?? [],
+}));
+vi.mock('@/lib/ksiegowosc/kpir-dane', () => ({ czytajKpir: mocks.kpir }));
 vi.mock('@/lib/format/warsaw-date', async (orig) => ({
   ...(await orig<typeof import('@/lib/format/warsaw-date')>()),
   todayInWarsaw: () => '2026-11-05',
@@ -83,6 +95,7 @@ function wynik(faktury: FakturaEwidencji[], wpisy: WpisReczny[] = [WPIS], wersje
 const strona = async (month = '3') => renderToStaticMarkup(await EwidencjaPage({ searchParams: Promise.resolve({ month, year: '2026' }) }));
 
 beforeEach(() => {
+  mocks.kpir.mockReset();
   mocks.wlaczony = true;
   mocks.rola = 'owner';
   mocks.wynik = wynik([FAKTURA]);
@@ -127,11 +140,21 @@ describe('strona ewidencji', () => {
     expect(html).toContain('Plik pobiera właściciel, administrator albo księgowa firmy.');
   });
 
-  it('nieczytelna ewidencja: komunikat zamiast kwot; skala w całym roku: odesłanie do KPiR', async () => {
+  it('nieczytelna ewidencja: komunikat zamiast kwot; miesiąc przed startem skali w roku bez ryczałtu: odesłanie do KPiR', async () => {
     mocks.wynik = { ok: false, komunikat: 'Nie udało się odczytać danych ewidencji.' };
     expect(await strona()).toContain('Nie udało się odczytać danych ewidencji.');
-    mocks.wynik = wynik([], [], [{ ...RYCZALT, forma: 'skala', stawkaDomyslna: null }]);
+    mocks.wynik = wynik([], [], [{ ...RYCZALT, validFrom: '2026-06-01', forma: 'skala', stawkaDomyslna: null }]);
     expect(await strona()).toContain('Przy skali i podatku liniowym przychody są w KPiR.');
+    expect(mocks.kpir).not.toHaveBeenCalled();
+  });
+
+  it('miesiąc ze skalą (K7): strona pokazuje KPiR, a nie ewidencję przychodów', async () => {
+    mocks.wynik = wynik([], [], [{ ...RYCZALT, forma: 'skala', stawkaDomyslna: null }]);
+    mocks.kpir.mockResolvedValue({ ok: false, komunikat: 'KPiR testowo niedostępna.' });
+    const html = await strona();
+    expect(html).toContain('KPiR, marzec 2026');
+    expect(html).toContain('KPiR testowo niedostępna.');
+    expect(mocks.kpir).toHaveBeenCalledTimes(1);
   });
 
   it('teksty bez długich myślników', async () => {

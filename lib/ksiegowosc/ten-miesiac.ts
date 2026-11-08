@@ -16,24 +16,29 @@
  *   składki społeczne bez FP (sekcja 5, pewność średnia).
  * - Firma, która zaczyna w trakcie miesiąca, liczy się z pierwszej wersji
  *   ustawień z tego miesiąca; składka zdrowotna jest wtedy pełna.
- * - Skala i liniowy: K7.
+ * - Skala i liniowy (K7): zamiast ryczałtu zaliczka PIT narastająco z KPiR
+ *   (`pit.ts`), a składka zdrowotna od dochodu z poprzedniego miesiąca (za
+ *   styczeń z grudnia, więc z KPiR roku poprzedniego).
  */
 
 import { monthLabel, monthRange } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { brakiOkresu, sumyOkresu, wierszeOkresu, type Ewidencja } from '@/lib/ksiegowosc/ewidencja';
+import { brakiKpirOkresu, sumyKpir, wierszeKpirOkresu, type Kpir } from '@/lib/ksiegowosc/kpir';
+import { zaliczkiPit, type FormaPit, type MiesiacPit, type ZaliczkaMiesiaca } from '@/lib/ksiegowosc/pit';
 import { terminDla, type Termin } from '@/lib/ksiegowosc/kalendarz';
 import { rokSkladkowyZdrowotnej, type ParametryRoku } from '@/lib/ksiegowosc/parametry';
 import { wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { ryczaltMiesiaca, type RyczaltMiesiaca, type WejscieRyczaltu } from '@/lib/ksiegowosc/ryczalt';
-import { zdrowotnaRyczaltu, type ZdrowotnaRyczaltu } from '@/lib/ksiegowosc/zdrowotna';
+import { zdrowotnaOdDochodu, zdrowotnaRyczaltu, type ZdrowotnaOdDochodu, type ZdrowotnaRyczaltu } from '@/lib/ksiegowosc/zdrowotna';
 import { PROPORCJA, skladkiSpoleczne, type SkladkiSpoleczne } from '@/lib/ksiegowosc/zus';
 
-export const RODZAJE_ROZLICZEN = ['ryczalt', 'zus_spoleczne', 'zdrowotna'] as const;
+export const RODZAJE_ROZLICZEN = ['ryczalt', 'pit', 'zus_spoleczne', 'zdrowotna'] as const;
 export type RodzajRozliczenia = (typeof RODZAJE_ROZLICZEN)[number];
 
 export const NAZWY_ROZLICZEN: Readonly<Record<RodzajRozliczenia, string>> = {
   ryczalt: 'Ryczałt od przychodów ewidencjonowanych',
+  pit: 'Zaliczka na podatek dochodowy',
   zus_spoleczne: 'Składki społeczne',
   zdrowotna: 'Składka zdrowotna',
 };
@@ -81,9 +86,15 @@ export interface WynikMiesiaca {
   profil: WersjaProfilu;
   /** Przychód miesiąca z ewidencji; `null`, gdy ewidencja ma w tym miesiącu braki. */
   przychodGr: number | null;
+  /** Skala i liniowy: koszty miesiąca z KPiR; przy ryczałcie null. */
+  kosztyGr: number | null;
   skladki: SkladkiSpoleczne | null;
   zdrowotna: ZdrowotnaRyczaltu | null;
+  /** Skala i liniowy: składka od dochodu z poprzedniego miesiąca. */
+  zdrowotnaOdDochodu: ZdrowotnaOdDochodu | null;
   ryczalt: RyczaltMiesiaca | null;
+  /** Skala i liniowy: zaliczka narastająco za ten miesiąc. */
+  pit: ZaliczkaMiesiaca | null;
   pozycje: PozycjaMiesiaca[];
 }
 
@@ -92,8 +103,13 @@ export type TenMiesiac = { ok: true; wynik: WynikMiesiaca } | { ok: false; braki
 export interface WejscieMiesiaca {
   /** RRRR-MM */
   miesiac: string;
-  /** Ewidencja roku miesiąca (K3). */
-  ewidencja: Ewidencja;
+  /** Ewidencja roku miesiąca (K3); potrzebna tylko przy ryczałcie. */
+  ewidencja?: Ewidencja;
+  /**
+   * Skala i liniowy (K7): KPiR roku miesiąca i (dla stycznia) roku poprzedniego;
+   * `brakPoprzedniego` to komunikat odczytu, gdy KPiR roku poprzedniego się nie odczytała.
+   */
+  kpir?: { rok: Kpir; poprzedni: Kpir | null; brakPoprzedniego?: string };
   wersje: readonly WersjaProfilu[];
   /** Wszystkie zapłacone wersje rozliczeń do tego miesiąca (odliczenia liczą się po dniu zapłaty). */
   platnosci: readonly Platnosc[];
@@ -135,29 +151,25 @@ const miesiacNr = (rok: number, m: number) => `${rok}-${String(m).padStart(2, '0
 
 type Czesciowy<T> = ({ ok: true } & T) | { ok: false; brak: string };
 
+/** Wersja ustawień miesiąca: z pierwszego dnia, a przy starcie w trakcie miesiąca pierwsza z tego miesiąca. */
+export function wersjaMiesiaca(wersje: readonly WersjaProfilu[], miesiac: string): WersjaProfilu | null {
+  const { from: od, to: koniec } = monthRange(miesiac);
+  return (
+    wersjaNa(wersje, od) ??
+    [...wersje].filter((v) => v.validFrom > od && v.validFrom <= koniec).sort((a, b) => a.validFrom.localeCompare(b.validFrom))[0] ??
+    null
+  );
+}
+
 export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
   const rok = Number(w.miesiac.slice(0, 4));
   const nr = Number(w.miesiac.slice(5, 7));
   const { from: od, to: koniec } = monthRange(w.miesiac);
 
-  // Wersja z pierwszego dnia, a przy starcie w trakcie miesiąca pierwsza wersja z tego miesiąca.
-  const wersja =
-    wersjaNa(w.wersje, od) ??
-    [...w.wersje].filter((v) => v.validFrom > od && v.validFrom <= koniec).sort((a, b) => a.validFrom.localeCompare(b.validFrom))[0] ??
-    null;
+  const wersja = wersjaMiesiaca(w.wersje, w.miesiac);
   if (!wersja) return { ok: false, braki: [`Na ${monthLabel(w.miesiac)} nie ma ustawień podatkowych, więc nic nie liczymy. ${PROFIL}`] };
-  if (wersja.forma !== 'ryczalt') {
-    return { ok: false, braki: ['Rozliczenie skali podatkowej i podatku liniowego dojdzie w kolejnej wersji modułu.'] };
-  }
   const p = w.parametry(rok);
   if (!p) return { ok: false, braki: [`Brak parametrów na ${rok} r., więc nic nie liczymy.`] };
-
-  const brakiRoku = brakiOkresu(w.ewidencja, `${rok}-01-01`, koniec);
-  const brakEwidencji =
-    brakiRoku.length > 0
-      ? `Ewidencja przychodów ma braki w miesiącach: ${[...new Set(brakiRoku.map((b) => b.dzien.slice(0, 7)))].map(monthLabel).join(', ')}. ` +
-        'Dopóki są, ryczałtu i progu zdrowotnej nie liczymy; lista jest w zakładce „Ewidencja”.'
-      : null;
 
   const przyrosty = przyrostyZaplat(w.platnosci);
   const zaplaconeW = (miesiac: string, rodzaj: RodzajRozliczenia, pole: 'kwotaGr' | 'spoleczneBezFpGr') =>
@@ -183,6 +195,33 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
     }
     return skladkiSpoleczne(w.miesiac, wersja, p.zus.liczby);
   })();
+  const termin = (rodzaj: 'ryczalt' | 'zaliczkaPit' | 'zus') => terminDla({ rodzaj, rok, miesiac: nr });
+  const pozycjaZus: PozycjaMiesiaca = zus.ok
+    ? {
+        ok: true,
+        rodzaj: 'zus_spoleczne',
+        kwotaGr: zus.skladki.razemGr + zus.skladki.funduszPracyGr,
+        spoleczneBezFpGr: zus.skladki.razemGr,
+        termin: termin('zus'),
+        wejscia: { etap: wersja.zusEtap, od: wersja.zusOd, chorobowe: wersja.chorobowe, skladki: zus.skladki },
+      }
+    : { ok: false, rodzaj: 'zus_spoleczne', termin: termin('zus'), brak: zus.brak };
+
+  if (wersja.forma !== 'ryczalt') {
+    return {
+      ok: true,
+      wynik: miesiacKpir(w, wersja.forma, p, przyrosty, termin, pozycjaZus, zus.ok ? zus.skladki : null, wersja),
+    };
+  }
+
+  const ewidencja = w.ewidencja;
+  if (!ewidencja) return { ok: false, braki: ['Nie udało się odczytać ewidencji przychodów, więc nic nie liczymy.'] };
+  const brakiRoku = brakiOkresu(ewidencja, `${rok}-01-01`, koniec);
+  const brakEwidencji =
+    brakiRoku.length > 0
+      ? `Ewidencja przychodów ma braki w miesiącach: ${[...new Set(brakiRoku.map((b) => b.dzien.slice(0, 7)))].map(monthLabel).join(', ')}. ` +
+        'Dopóki są, ryczałtu i progu zdrowotnej nie liczymy; lista jest w zakładce „Ewidencja”.'
+      : null;
 
   // Ryczałt od stycznia: przeniesienie odliczeń i korekt zależy od wcześniejszych miesięcy.
   const ryczalt = ((): Czesciowy<{ ryczalt: RyczaltMiesiaca; wejscie: WejscieRyczaltu; lancuch: Record<string, unknown>[] }> => {
@@ -195,7 +234,7 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
       const miesiac = miesiacNr(rok, m);
       const g = monthRange(miesiac);
       const wejscie: WejscieRyczaltu = {
-        przychodWgStawekGr: sumyOkresu(wierszeOkresu(w.ewidencja, g.from, g.to)).stawki,
+        przychodWgStawekGr: sumyOkresu(wierszeOkresu(ewidencja, g.from, g.to)).stawki,
         ujemneZPoprzednichGr: ujemne,
         spoleczneZaplaconeGr: zaplaconeW(miesiac, 'zus_spoleczne', 'spoleczneBezFpGr'),
         zdrowotnaZaplaconaGr: zaplaconeW(miesiac, 'zdrowotna', 'kwotaGr'),
@@ -227,7 +266,7 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
       };
     }
     if (brakEwidencji) return { ok: false, brak: brakEwidencji };
-    const przychodNarastajacoGr = sumyOkresu(wierszeOkresu(w.ewidencja, `${rok}-01-01`, koniec)).razemGr;
+    const przychodNarastajacoGr = sumyOkresu(wierszeOkresu(ewidencja, `${rok}-01-01`, koniec)).razemGr;
     const spoleczneNarastajacoGr = przyrosty
       .filter((z) => z.rodzaj === 'zus_spoleczne' && z.miesiacZaplaty >= `${rok}-01` && z.miesiacZaplaty <= w.miesiac)
       .reduce((s, z) => s + z.spoleczneBezFpGr, 0);
@@ -236,7 +275,6 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
     return { ok: true, zdrowotna: z.zdrowotna, przychodNarastajacoGr, spoleczneNarastajacoGr };
   })();
 
-  const termin = (rodzaj: 'ryczalt' | 'zus') => terminDla({ rodzaj, rok, miesiac: nr });
   const pozycje: PozycjaMiesiaca[] = [
     ryczalt.ok
       ? {
@@ -254,16 +292,7 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
           szczegoly: { lancuch: ryczalt.lancuch, profil: { id: wersja.id, stawkaDomyslna: wersja.stawkaDomyslna, najem: wersja.najem } },
         }
       : { ok: false, rodzaj: 'ryczalt', termin: termin('ryczalt'), brak: ryczalt.brak },
-    zus.ok
-      ? {
-          ok: true,
-          rodzaj: 'zus_spoleczne',
-          kwotaGr: zus.skladki.razemGr + zus.skladki.funduszPracyGr,
-          spoleczneBezFpGr: zus.skladki.razemGr,
-          termin: termin('zus'),
-          wejscia: { etap: wersja.zusEtap, od: wersja.zusOd, chorobowe: wersja.chorobowe, skladki: zus.skladki },
-        }
-      : { ok: false, rodzaj: 'zus_spoleczne', termin: termin('zus'), brak: zus.brak },
+    pozycjaZus,
     zdrowotna.ok
       ? {
           ok: true,
@@ -281,11 +310,128 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
     wynik: {
       miesiac: w.miesiac,
       profil: wersja,
-      przychodGr: brakiOkresu(w.ewidencja, od, koniec).length === 0 ? sumyOkresu(wierszeOkresu(w.ewidencja, od, koniec)).razemGr : null,
+      przychodGr: brakiOkresu(ewidencja, od, koniec).length === 0 ? sumyOkresu(wierszeOkresu(ewidencja, od, koniec)).razemGr : null,
+      kosztyGr: null,
       skladki: zus.ok ? zus.skladki : null,
       zdrowotna: zdrowotna.ok ? zdrowotna.zdrowotna : null,
+      zdrowotnaOdDochodu: null,
       ryczalt: ryczalt.ok ? ryczalt.ryczalt : null,
+      pit: null,
       pozycje,
     },
+  };
+}
+
+type Przyrost = ReturnType<typeof przyrostyZaplat>[number];
+
+/**
+ * Skala i liniowy (K7): zaliczka PIT narastająco od stycznia z KPiR
+ * i zapłat (społeczne bez FP, przy liniowym też zdrowotna), składka zdrowotna
+ * od dochodu z poprzedniego miesiąca. Brak w KPiR od stycznia do miesiąca
+ * zabiera zaliczkę; brak w poprzednim miesiącu zabiera składkę zdrowotną.
+ */
+function miesiacKpir(
+  w: WejscieMiesiaca,
+  forma: FormaPit,
+  p: ParametryRoku,
+  przyrosty: readonly Przyrost[],
+  termin: (rodzaj: 'ryczalt' | 'zaliczkaPit' | 'zus') => Termin | null,
+  pozycjaZus: PozycjaMiesiaca,
+  skladki: SkladkiSpoleczne | null,
+  wersja: WersjaProfilu,
+): WynikMiesiaca {
+  const rok = Number(w.miesiac.slice(0, 4));
+  const nr = Number(w.miesiac.slice(5, 7));
+  const { from: od, to: koniec } = monthRange(w.miesiac);
+  const kpir = w.kpir ?? null;
+  const zaplaconeW = (miesiac: string, rodzaj: RodzajRozliczenia, pole: 'kwotaGr' | 'spoleczneBezFpGr') =>
+    przyrosty.filter((z) => z.rodzaj === rodzaj && z.miesiacZaplaty === miesiac).reduce((s, z) => s + z[pole], 0);
+  const brakKpir = (miesiace: string[]) =>
+    `KPiR ma braki w miesiącach: ${miesiace.map(monthLabel).join(', ')}. Dopóki są, tej kwoty nie liczymy; lista jest w zakładce „Ewidencja”.`;
+
+  const pit = ((): Czesciowy<{ zaliczka: ZaliczkaMiesiaca; lancuch: MiesiacPit[] }> => {
+    if (!kpir) return { ok: false, brak: 'Nie udało się odczytać KPiR, więc zaliczki nie liczymy.' };
+    const braki = brakiKpirOkresu(kpir.rok, `${rok}-01-01`, koniec);
+    if (braki.length > 0) return { ok: false, brak: brakKpir([...new Set(braki.map((b) => b.dzien.slice(0, 7)))]) };
+    const lancuch: MiesiacPit[] = [];
+    for (let m = 1; m <= nr; m++) {
+      const miesiac = miesiacNr(rok, m);
+      const g = monthRange(miesiac);
+      const sumy = sumyKpir(wierszeKpirOkresu(kpir.rok, g.from, g.to));
+      lancuch.push({
+        miesiac,
+        przychodGr: sumy.przychodGr,
+        kosztyGr: sumy.kosztyGr,
+        spoleczneZaplaconeGr: zaplaconeW(miesiac, 'zus_spoleczne', 'spoleczneBezFpGr'),
+        zdrowotnaZaplaconaGr: zaplaconeW(miesiac, 'zdrowotna', 'kwotaGr'),
+      });
+    }
+    const z = zaliczkiPit(forma, lancuch, { skala: p.skala.liczby, liniowy: p.liniowy.liczby });
+    if (!z.ok) return z;
+    return { ok: true, zaliczka: z.miesiace[z.miesiace.length - 1], lancuch };
+  })();
+
+  const rokSkladkowy = rokSkladkowyZdrowotnej(w.miesiac);
+  const poprzedni = miesiacNr(nr === 1 ? rok - 1 : rok, nr === 1 ? 12 : nr - 1);
+  const zdrowotna = ((): Czesciowy<{ zdrowotna: ZdrowotnaOdDochodu }> => {
+    const pz = w.parametry(rokSkladkowy);
+    if (!pz) {
+      return {
+        ok: false,
+        brak: `Brak parametrów składki zdrowotnej na rok składkowy od lutego ${rokSkladkowy} r. do stycznia ${rokSkladkowy + 1} r., więc tej składki nie liczymy.`,
+      };
+    }
+    const ksiega = nr === 1 ? (kpir?.poprzedni ?? null) : (kpir?.rok ?? null);
+    if (!ksiega) {
+      const powod = nr === 1 ? kpir?.brakPoprzedniego : undefined;
+      return {
+        ok: false,
+        brak: powod
+          ? `Składka zdrowotna liczy się od dochodu za ${monthLabel(poprzedni)}. ${powod}`
+          : `Nie udało się odczytać KPiR za ${monthLabel(poprzedni)}, więc składki zdrowotnej nie liczymy.`,
+      };
+    }
+    const g = monthRange(poprzedni);
+    if (brakiKpirOkresu(ksiega, g.from, g.to).length > 0) return { ok: false, brak: brakKpir([poprzedni]) };
+    const sumy = sumyKpir(wierszeKpirOkresu(ksiega, g.from, g.to));
+    const dochod = sumy.przychodGr - sumy.kosztyGr - zaplaconeW(poprzedni, 'zus_spoleczne', 'spoleczneBezFpGr');
+    return zdrowotnaOdDochodu(forma, dochod, pz.zdrowotna.liczby);
+  })();
+
+  const pozycje: PozycjaMiesiaca[] = [
+    pit.ok
+      ? {
+          ok: true,
+          rodzaj: 'pit',
+          kwotaGr: pit.zaliczka.zaliczkaGr,
+          termin: termin('zaliczkaPit'),
+          wejscia: { forma, lancuch: pit.lancuch },
+          szczegoly: { zaliczka: pit.zaliczka, profil: { id: wersja.id, forma } },
+        }
+      : { ok: false, rodzaj: 'pit', termin: termin('zaliczkaPit'), brak: pit.brak },
+    pozycjaZus,
+    zdrowotna.ok
+      ? {
+          ok: true,
+          rodzaj: 'zdrowotna',
+          kwotaGr: zdrowotna.zdrowotna.skladkaGr,
+          termin: termin('zus'),
+          wejscia: { forma, dochodGr: zdrowotna.zdrowotna.dochodGr, zMiesiaca: poprzedni },
+        }
+      : { ok: false, rodzaj: 'zdrowotna', termin: termin('zus'), brak: zdrowotna.brak },
+  ];
+
+  const miesiaca = kpir && brakiKpirOkresu(kpir.rok, od, koniec).length === 0 ? sumyKpir(wierszeKpirOkresu(kpir.rok, od, koniec)) : null;
+  return {
+    miesiac: w.miesiac,
+    profil: wersja,
+    przychodGr: miesiaca?.przychodGr ?? null,
+    kosztyGr: miesiaca?.kosztyGr ?? null,
+    skladki,
+    zdrowotna: null,
+    zdrowotnaOdDochodu: zdrowotna.ok ? zdrowotna.zdrowotna : null,
+    ryczalt: null,
+    pit: pit.ok ? pit.zaliczka : null,
+    pozycje,
   };
 }

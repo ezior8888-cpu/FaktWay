@@ -13,10 +13,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { monthRange } from '@/lib/expenses/month';
 import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
+import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
+import { czytajWersjeProfilu, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
+import { statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { brakujace, parametryRoku, rokSkladkowyZdrowotnej, type Liczba, type NazwaSekcji } from '@/lib/ksiegowosc/parametry';
 import {
-  RODZAJE_ROZLICZEN,
   tenMiesiac,
+  wersjaMiesiaca,
   type BrakPozycji,
   type Platnosc,
   type PozycjaDoZaplaty,
@@ -143,17 +146,45 @@ export async function czytajRozliczenia(client: SupabaseClient, tenantId: string
 }
 
 /** Rozliczeń nie udało się odczytać: wołający nie może uznać, że nic nie jest zapłacone. */
+export const KPIR_WYLACZONA =
+  'Rozliczenie skali podatkowej i podatku liniowego jest w FaktWay chwilowo wyłączone, więc kwot za ten miesiąc nie liczymy. ' +
+  'Faktury i koszty są w raporcie w zakładce „KPiR”.';
+
 export const BLAD_ODCZYTU_ROZLICZEN = 'Nie udało się odczytać rozliczeń, więc nie pokazujemy kwot. Strona spróbuje ponownie przy następnym otwarciu.';
 
 export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string, miesiac: string): Promise<DaneMiesiaca> {
   const rok = Number(miesiac.slice(0, 4));
   const rokSkladkowy = rokSkladkowyZdrowotnej(miesiac);
 
+  const [odczyt, wersjeOdczyt] = await Promise.all([
+    czytajRozliczenia(client, tenantId, miesiac).then(
+      (r) => ({ ok: true as const, r }),
+      (e: unknown) => ({ ok: false as const, e }),
+    ),
+    czytajWersjeProfilu(client, tenantId).then(
+      (w) => ({ ok: true as const, w }),
+      (e: unknown) => ({ ok: false as const, e }),
+    ),
+  ]);
+  if (!odczyt.ok) {
+    console.error('[ten-miesiac] rozliczenia', odczyt.e instanceof Error ? odczyt.e.message : odczyt.e);
+    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: [] };
+  }
+  const tegoMiesiaca = odczyt.r.filter((r) => r.miesiac === miesiac);
+  if (!wersjeOdczyt.ok) {
+    console.error('[ten-miesiac] profil', wersjeOdczyt.e instanceof Error ? wersjeOdczyt.e.message : wersjeOdczyt.e);
+    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: tegoMiesiaca };
+  }
+  const forma = wersjaMiesiaca(wersjeOdczyt.w, miesiac)?.forma ?? 'ryczalt';
+  // Skala i liniowy (K7) za obszarem `kpir`; wołający sprawdził już globalny stop i flagę firmy.
+  if (forma !== 'ryczalt' && !statusObszaru('kpir').wlaczony) return { ok: false, braki: [KPIR_WYLACZONA], rozliczenia: tegoMiesiaca };
+
   // D7: bez sekcji potwierdzonej przez księgową nie ma kwoty tej pozycji. Liczbę
   // bez wartości (np. stopa wypadkowa ogłaszana w kwietniu) sprawdza silnik,
   // który jej używa, więc nie zabiera ona miesięcy, które jej nie potrzebują.
+  // Podatek to ryczałt albo zaliczka PIT (skala, liniowy) według formy.
   const sekcje: [RodzajRozliczenia, number, NazwaSekcji][] = [
-    ['ryczalt', rok, 'ryczalt'],
+    forma === 'ryczalt' ? ['ryczalt', rok, 'ryczalt'] : ['pit', rok, forma],
     ['zus_spoleczne', rok, 'zus'],
     ['zdrowotna', rokSkladkowy, 'zdrowotna'],
   ];
@@ -162,22 +193,10 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
     const brak = brakujace(r, [sekcja]).find((b) => b.powod !== 'brak_liczby');
     if (brak) d7.set(rodzaj, brak.komunikat);
   }
-  const nicDoLiczenia = d7.size === RODZAJE_ROZLICZEN.length;
+  if (d7.size === sekcje.length) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };
 
-  const [odczyt, ewidencja] = await Promise.all([
-    czytajRozliczenia(client, tenantId, miesiac).then(
-      (r) => ({ ok: true as const, r }),
-      (e: unknown) => ({ ok: false as const, e }),
-    ),
-    nicDoLiczenia ? null : czytajEwidencje(client, tenantId, rok),
-  ]);
-  if (!odczyt.ok) {
-    console.error('[ten-miesiac] rozliczenia', odczyt.e instanceof Error ? odczyt.e.message : odczyt.e);
-    return { ok: false, braki: [BLAD_ODCZYTU_ROZLICZEN], rozliczenia: [] };
-  }
-  const tegoMiesiaca = odczyt.r.filter((r) => r.miesiac === miesiac);
-  if (nicDoLiczenia || !ewidencja) return { ok: false, braki: [...new Set(d7.values())], rozliczenia: tegoMiesiaca };
-  if (!ewidencja.ok) return { ok: false, braki: [ewidencja.komunikat], rozliczenia: tegoMiesiaca };
+  const ksiegi = await czytajKsiegi(client, tenantId, miesiac, forma, wersjeOdczyt.w);
+  if (!ksiegi.ok) return { ok: false, braki: [ksiegi.komunikat], rozliczenia: tegoMiesiaca };
 
   const platnosci: Platnosc[] = odczyt.r
     .filter((r) => r.status === 'zaplacone' && r.zaplaconeO)
@@ -190,7 +209,7 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
       zaplaconeO: r.zaplaconeO as string,
     }));
 
-  const wynik = tenMiesiac({ miesiac, ewidencja: ewidencja.ewidencja, wersje: ewidencja.wersje, platnosci, parametry: parametryRoku });
+  const wynik = tenMiesiac({ miesiac, ...ksiegi.wejscie, wersje: wersjeOdczyt.w, platnosci, parametry: parametryRoku });
   if (!wynik.ok) return { ok: false, braki: wynik.braki, rozliczenia: tegoMiesiaca };
 
   const maskowane: PozycjaMiesiaca[] = wynik.wynik.pozycje.map((poz) => {
@@ -203,16 +222,54 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
   const bezD7: WynikMiesiaca = {
     ...w,
     ryczalt: d7.has('ryczalt') ? null : w.ryczalt,
+    pit: d7.has('pit') ? null : w.pit,
     skladki: d7.has('zus_spoleczne') ? null : w.skladki,
     zdrowotna: d7.has('zdrowotna') ? null : w.zdrowotna,
+    zdrowotnaOdDochodu: d7.has('zdrowotna') ? null : w.zdrowotnaOdDochodu,
     pozycje: maskowane,
   };
 
   const p = parametryRoku(rok);
   const pz = parametryRoku(rokSkladkowy);
-  const parametryWersja = skrot(stabilnyJson({ ryczalt: wartosci(p?.ryczalt), zus: wartosci(p?.zus), zdrowotna: wartosci(pz?.zdrowotna) })).slice(0, 16);
+  const podatek = forma === 'ryczalt' ? { ryczalt: wartosci(p?.ryczalt) } : { [forma]: wartosci(p?.[forma]) };
+  const parametryWersja = skrot(stabilnyJson({ ...podatek, zus: wartosci(p?.zus), zdrowotna: wartosci(pz?.zdrowotna) })).slice(0, 16);
 
   return { ok: true, wynik: bezD7, pozycje, parametryWersja, rozliczenia: tegoMiesiaca };
+}
+
+/**
+ * Księga miesiąca według formy: ewidencja przychodów przy ryczałcie (K3), KPiR
+ * przy skali i liniowym (K7); za styczeń także KPiR roku poprzedniego, bo
+ * składka zdrowotna liczy się od dochodu z grudnia. Wersje profilu są już
+ * przeczytane, więc odczyty ksiąg ich nie powtarzają.
+ */
+async function czytajKsiegi(
+  client: SupabaseClient,
+  tenantId: string,
+  miesiac: string,
+  forma: WersjaProfilu['forma'],
+  wersje: readonly WersjaProfilu[],
+): Promise<{ ok: true; wejscie: Pick<Parameters<typeof tenMiesiac>[0], 'ewidencja' | 'kpir'> } | { ok: false; komunikat: string }> {
+  const rok = Number(miesiac.slice(0, 4));
+  if (forma === 'ryczalt') {
+    const e = await czytajEwidencje(client, tenantId, rok, { wersje });
+    return e.ok ? { ok: true, wejscie: { ewidencja: e.ewidencja } } : e;
+  }
+  const [biezacy, poprzedni] = await Promise.all([
+    czytajKpir(client, tenantId, rok, { wersje }),
+    miesiac.endsWith('-01') ? czytajKpir(client, tenantId, rok - 1, { wersje }) : null,
+  ]);
+  if (!biezacy.ok) return biezacy;
+  return {
+    ok: true,
+    wejscie: {
+      kpir: {
+        rok: biezacy.kpir,
+        poprzedni: poprzedni?.ok ? poprzedni.kpir : null,
+        ...(poprzedni && !poprzedni.ok ? { brakPoprzedniego: poprzedni.komunikat } : {}),
+      },
+    },
+  };
 }
 
 /** Najnowsza wersja każdego rodzaju (aktualne rozliczenie). */

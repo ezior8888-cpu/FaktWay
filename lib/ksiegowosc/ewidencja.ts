@@ -44,8 +44,11 @@ export interface FakturaEwidencji {
   numerKsef: string | null;
   /** Faktura do paragonu (`fa3_data.ksefMarkers.fp`). */
   fp: boolean;
-  /** K_6 i K_7: kraj nadania i identyfikator podatkowy kontrahenta (B2C: null). */
-  kontrahent: { kraj: string | null; identyfikator: string | null };
+  /**
+   * K_6 i K_7: kraj nadania i identyfikator podatkowy kontrahenta (B2C: null);
+   * nazwa i adres nabywcy dla KPiR (K7: K_5A, K_5B).
+   */
+  kontrahent: { kraj: string | null; identyfikator: string | null; nazwa?: string | null; adres?: string | null };
   /** Rozliczenie: netto zaliczek rozliczonych tą fakturą, w groszach waluty faktury. */
   rozliczoneZaliczkiGr: number;
   /** Pozycje, gdy choć jedna ma własną stawkę ryczałtu; null, gdy żadna nie ma. */

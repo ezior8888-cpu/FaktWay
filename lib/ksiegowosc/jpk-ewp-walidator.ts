@@ -20,7 +20,7 @@ import { validateXML } from 'xmllint-wasm';
  * nie chodzi do sieci: prefiksy zdejmujemy przy wczytaniu (jak
  * `jpk-fa-validator.ts`), treść plików zostaje oryginalna.
  */
-const SCHEMA_DIR = resolve(process.cwd(), 'lib/exports/schemas/jpk-ewp4');
+const TYPY_DIR = resolve(process.cwd(), 'lib/exports/schemas/jpk-ewp4');
 const MAIN = 'schemat.xsd';
 const PRELOAD = [
   'StrukturyDanych_v10-0E.xsd',
@@ -39,34 +39,44 @@ export interface JpkEwpValidationResult {
   errors: string[];
 }
 
-let cached: { main: string; preload: { fileName: string; contents: string }[] } | null = null;
-
-function localSchema(fileName: string): string {
+function localSchema(katalog: string, fileName: string): string {
   // Tylko `schemaLocation`; przestrzeń nazw (`namespace=`) zostaje bez zmian.
   return REMOTE_PREFIXES.reduce(
     (tresc, prefix) => tresc.split(`schemaLocation="${prefix}`).join('schemaLocation="'),
-    readFileSync(resolve(SCHEMA_DIR, fileName), 'utf8'),
+    readFileSync(resolve(katalog, fileName), 'utf8'),
   );
 }
 
-function schema() {
-  if (cached) return cached;
-  cached = {
-    main: localSchema(MAIN),
-    preload: PRELOAD.map((fileName) => ({ fileName, contents: localSchema(fileName) })),
+/**
+ * Walidator schematu JPK z typami wspólnymi 2022/01/05 (JPK_EWP(4) w K3,
+ * JPK_PKPIR(3) w K7: ten sam zestaw plików z `jpk-ewp4/`).
+ */
+export function walidatorJpk(katalogSchematu: string, nazwaPliku: string): (xml: string) => Promise<JpkEwpValidationResult> {
+  let cached: { main: string; preload: { fileName: string; contents: string }[] } | null = null;
+  const schema = () =>
+    (cached ??= {
+      main: localSchema(resolve(process.cwd(), katalogSchematu), MAIN),
+      preload: PRELOAD.map((fileName) => ({ fileName, contents: localSchema(TYPY_DIR, fileName) })),
+    });
+  return async (xml) => {
+    const { main, preload } = schema();
+    const result = await validateXML({
+      xml: [{ fileName: nazwaPliku, contents: xml }],
+      schema: [{ fileName: MAIN, contents: main }],
+      preload,
+    });
+    return {
+      valid: result.valid,
+      errors: result.errors.map((e) => e.rawMessage ?? e.message),
+    };
   };
-  return cached;
 }
 
-export async function validateJpkEwp(xml: string): Promise<JpkEwpValidationResult> {
-  const { main, preload } = schema();
-  const result = await validateXML({
-    xml: [{ fileName: 'jpk_ewp.xml', contents: xml }],
-    schema: [{ fileName: MAIN, contents: main }],
-    preload,
-  });
-  return {
-    valid: result.valid,
-    errors: result.errors.map((e) => e.rawMessage ?? e.message),
-  };
-}
+export const validateJpkEwp = walidatorJpk('lib/exports/schemas/jpk-ewp4', 'jpk_ewp.xml');
+
+/**
+ * JPK_PKPIR(3), wzór `http://jpk.mf.gov.pl/wzor/2024/10/30/10302/`
+ * (K7): `jpk-pkpir3/schemat.xsd` pobrany 7.11.2026 z gov.pl (strona KAS
+ * „Struktury JPK w podatkach dochodowych”, za zgodą Bartosza), BEZ zmian.
+ */
+export const validateJpkPkpir = walidatorJpk('lib/exports/schemas/jpk-pkpir3', 'jpk_pkpir.xml');

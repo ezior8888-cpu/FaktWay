@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { RiFileList3Line, RiHeartPulseLine, RiPercentLine, RiShieldUserLine } from '@remixicon/react';
+import { RiCalculatorLine, RiFileList3Line, RiHeartPulseLine, RiPercentLine, RiShieldUserLine, RiShoppingBag3Line } from '@remixicon/react';
 import type { ComponentType } from 'react';
 
 import MonthSelector from '@/components/expenses/finora/month-selector';
@@ -73,6 +73,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
   // `null`: NIP-u nie udało się odczytać (inny komunikat niż „brak NIP w ustawieniach”).
   const nip = firma.error ? null : String(firma.data?.nip ?? '').replace(/\D/g, '');
   const mikro = nip ? mikrorachunekZNip(nip) : null;
+  const podatek = dane.ok && dane.wynik.profil.forma !== 'ryczalt' ? 'Zaliczka na podatek dochodowy' : 'Ryczałt';
 
   return (
     <div className="ff-tab-panel flex flex-1 flex-col gap-6">
@@ -81,7 +82,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-medium">Rozliczenie za {tytul}</h2>
-            <p className="text-muted-foreground text-xs">Ryczałt, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.</p>
+            <p className="text-muted-foreground text-xs">{podatek}, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.</p>
           </div>
           <MonthSelector month={miesiac} currentMonth={dzis.slice(0, 7)} basePath="/reports/ten-miesiac" query="month-year" ariaLabel="Miesiąc rozliczenia" />
         </CardContent>
@@ -122,7 +123,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
                         {p.termin.przesuniety ? ` (ustawowo ${formatIsoDatePl(p.termin.nominalny)}, przesunięty na dzień roboczy)` : ''}.
                       </p>
                     ) : null}
-                    <p className="text-muted-foreground text-xs">{daneDoPrzelewu(p.rodzaj, miesiac, nip, mikro, dane.wynik.profil.nrsZus)}</p>
+                    <p className="text-muted-foreground text-xs">{daneDoPrzelewu(p.rodzaj, miesiac, nip, mikro, dane.wynik.profil.nrsZus, dane.wynik.profil.forma)}</p>
                     <StatusRozliczenia pozycja={p} rozliczenia={dane.rozliczenia} canEdit={canEdit} dzis={dzis} miesiac={miesiac} />
                   </li>
                 ))}
@@ -140,18 +141,21 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
 
 const IKONY: Readonly<Record<RodzajRozliczenia, ComponentType<{ className?: string }>>> = {
   ryczalt: RiPercentLine,
+  pit: RiCalculatorLine,
   zus_spoleczne: RiShieldUserLine,
   zdrowotna: RiHeartPulseLine,
 };
 
 const ETYKIETY: Readonly<Record<RodzajRozliczenia, string>> = {
   ryczalt: 'Ryczałt',
+  pit: 'Zaliczka PIT',
   zus_spoleczne: 'Składki społeczne',
   zdrowotna: 'Składka zdrowotna',
 };
 
 function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
-  const { ryczalt, zdrowotna, przychodGr } = dane.wynik;
+  const { ryczalt, zdrowotna, przychodGr, kosztyGr, pit, zdrowotnaOdDochodu } = dane.wynik;
+  const kpir = dane.wynik.profil.forma !== 'ryczalt';
   const ujemne = ryczalt ? [...ryczalt.ujemneNaKolejneGr.values()].reduce((s, gr) => s - gr, 0) : 0;
   return (
     <StatsCardsFrame
@@ -159,8 +163,12 @@ function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
         przychodGr !== null ? (
           <StatCell label="Przychód w miesiącu" value={zl(przychodGr)} icon={RiFileList3Line} />
         ) : (
-          <StatCellError label="Przychód w miesiącu" message="Ewidencja ma w tym miesiącu braki; lista jest w zakładce „Ewidencja”." />
+          <StatCellError
+            label="Przychód w miesiącu"
+            message={`${kpir ? 'KPiR' : 'Ewidencja'} ma w tym miesiącu braki; lista jest w zakładce „Ewidencja”.`}
+          />
         ),
+        ...(kpir && kosztyGr !== null ? [<StatCell key="koszty" label="Koszty w miesiącu" value={zl(kosztyGr)} icon={RiShoppingBag3Line} />] : []),
         ...dane.pozycje.map((p) =>
           p.ok ? (
             <StatCell key={p.rodzaj} label={ETYKIETY[p.rodzaj]} value={zl(p.kwotaGr)} icon={IKONY[p.rodzaj]} />
@@ -179,6 +187,15 @@ function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
               `${zl(ryczalt.odliczenia.nadwyzkaNaKolejneGr)}. Odlicza się składki oznaczone jako zapłacone, z datą zapłaty.`
             : ''}
           {ujemne > 0 ? ` Korekty większe niż przychód zmniejszą przychód kolejnych miesięcy o ${zl(ujemne)}.` : ''}
+          {pit
+            ? ` Zaliczka PIT od dochodu od początku roku ${zl(pit.dochodNarastajacoGr)} po odliczeniu zapłaconych składek społecznych ` +
+              `${zl(pit.spoleczneNarastajacoGr)}${pit.zdrowotnaNarastajacoGr > 0 ? ` i zapłaconej składki zdrowotnej ${zl(pit.zdrowotnaNarastajacoGr)}` : ''}: ` +
+              `podstawa ${zl(pit.podstawaNarastajacoGr)}, podatek od początku roku ${zl(pit.podatekNarastajacoGr)}, minus zaliczki za wcześniejsze miesiące.`
+            : ''}
+          {zdrowotnaOdDochodu
+            ? ` Składka zdrowotna od dochodu z poprzedniego miesiąca (${zl(zdrowotnaOdDochodu.dochodGr)} po odliczeniu zapłaconych składek społecznych)` +
+              `${zdrowotnaOdDochodu.minimalna ? ', w kwocie minimalnej' : ''}.`
+            : ''}
           {zdrowotna
             ? ` Składka zdrowotna: próg „${zdrowotna.prog}”, bo przychód od początku roku po odliczeniu zapłaconych składek ` +
               `społecznych to ${zl(zdrowotna.przychodNarastajacoGr)}.`
@@ -189,11 +206,21 @@ function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
   );
 }
 
-function daneDoPrzelewu(rodzaj: RodzajRozliczenia, miesiac: string, nip: string | null, mikro: string | null, nrs: string | null): string {
-  if (rodzaj === 'ryczalt') {
+/** Symbol formularza na przelewie podatku: PPE przy ryczałcie, PIT-36 przy skali, PIT-36L przy liniowym. */
+const SYMBOL: Readonly<Record<'ryczalt' | 'skala' | 'liniowy', string>> = { ryczalt: 'PPE', skala: 'PIT-36', liniowy: 'PIT-36L' };
+
+function daneDoPrzelewu(
+  rodzaj: RodzajRozliczenia,
+  miesiac: string,
+  nip: string | null,
+  mikro: string | null,
+  nrs: string | null,
+  forma: 'ryczalt' | 'skala' | 'liniowy',
+): string {
+  if (rodzaj === 'ryczalt' || rodzaj === 'pit') {
     if (nip === null) return 'Nie udało się odczytać NIP firmy, więc mikrorachunku teraz nie pokazujemy; strona spróbuje ponownie przy następnym otwarciu.';
     if (!mikro) return 'Mikrorachunek podatkowy wylicza się z NIP firmy, a NIP jest w Ustawieniach, w danych firmy.';
-    return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza PPE, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
+    return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza ${SYMBOL[forma]}, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
   }
   if (!nrs) return 'Numer rachunku składkowego jest w PUE ZUS; można go zapisać w zakładce „Ustawienia podatkowe”.';
   return `Rachunek składkowy ZUS ${formatujRachunek(nrs)}.`;
