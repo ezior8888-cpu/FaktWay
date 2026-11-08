@@ -588,3 +588,49 @@ describe('P4: układ — karta statusu przed dokumentem na telefonie, aside po p
     expect(status.querySelector('[data-testid="upo"]')).not.toBeNull();
   });
 });
+
+/**
+ * Krok 1.4 planu kompletnej aplikacji (RP-PLAT-01): sekcja „Płatność” dokumentu
+ * dostaje na końcu wiersz „Tytuł przelewu” z tym samym tytułem co PDF (numer
+ * KSeF, potem numer faktury). Decyzja D1 planu: wiersz w istniejącej sekcji
+ * tym samym wzorem (dt/dd), reszta sekcji bez przestawiania. Bez numeru KSeF
+ * sekcja wygląda jak dotąd.
+ */
+describe('Krok 1.4: tytuł przelewu w sekcji „Płatność”', () => {
+  const PRZELEW = { method: 'transfer', dueDate: '2026-10-16', bankAccount: 'PL61109010140000071219812874', currency: 'PLN', amountDue: 1407 };
+
+  /** Pary etykieta i wartość z listy pod nagłówkiem „Płatność:”. */
+  function platnosc(el: HTMLElement): Array<[string, string]> {
+    const naglowek = Array.from(el.querySelectorAll('h2')).find((h) => norm(h.textContent) === 'Płatność:');
+    const lista = naglowek?.parentElement?.querySelector('dl');
+    if (!lista) throw new Error('Brak sekcji „Płatność”');
+    return Array.from(lista.querySelectorAll('dt')).map((dt) => [norm(dt.textContent), norm(dt.nextElementSibling?.textContent)]);
+  }
+  const etykiety = (wiersze: Array<[string, string]>) => wiersze.map(([etykieta]) => etykieta);
+
+  it('przyjęta faktura z numerem KSeF: ostatni wiersz to tytuł, numer KSeF pierwszy, potem numer faktury', () => {
+    const wiersze = platnosc(mount({ ...base, payment_data: PRZELEW }));
+    expect(etykiety(wiersze)).toEqual(['Do zapłaty:', 'Forma płatności:', 'Rachunek:', 'Tytuł przelewu:']);
+    expect(wiersze[wiersze.length - 1]).toEqual(['Tytuł przelewu:', `${KSEF_NR} FV/7/10/2026`]);
+  });
+
+  it('szkic bez numeru KSeF: sekcja jak dotąd, bez wiersza', () => {
+    const wiersze = platnosc(mount({ ...base, payment_data: PRZELEW, ksef_status: 'draft', ksef_number: null, ksef_accepted_at: null }));
+    expect(etykiety(wiersze)).toEqual(['Do zapłaty:', 'Forma płatności:', 'Rachunek:']);
+  });
+
+  it('numer KSeF spoza wzorca: bez wiersza', () => {
+    const el = mount({ ...base, payment_data: PRZELEW, ksef_number: 'KSEF-1' });
+    expect(etykiety(platnosc(el))).not.toContain('Tytuł przelewu:');
+  });
+
+  it('gotówka: bez wiersza', () => {
+    const el = mount({ ...base, payment_data: { ...PRZELEW, method: 'cash' } });
+    expect(etykiety(platnosc(el))).not.toContain('Tytuł przelewu:');
+  });
+
+  it('MPP: wiersz po „MPP:”, wcześniejsze wiersze na swoich miejscach', () => {
+    const wiersze = platnosc(mount({ ...base, payment_data: PRZELEW, split_payment: true }));
+    expect(etykiety(wiersze)).toEqual(['Do zapłaty:', 'Forma płatności:', 'Rachunek:', 'MPP:', 'Tytuł przelewu:']);
+  });
+});

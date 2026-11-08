@@ -604,6 +604,11 @@ export interface InvoiceEmailPayload {
   /** Kwota z walutą, ta sama co „Do zapłaty” na PDF (`amountDueOnPdf`). */
   amountLabel: string;
   dueDate: string;
+  /**
+   * Tytuł przelewu z numerem KSeF, ten sam co na PDF (`transferTitleOnPdf`,
+   * krok 1.4). Brak: mail bez tego wiersza, jak dotąd.
+   */
+  transferTitle?: string | null;
   pdf: Buffer;
   pdfFilename: string;
 }
@@ -643,6 +648,7 @@ export async function sendInvoiceEmail(
       <table style="margin:16px 0;font-size:14px">
         <tr><td style="color:#6b7280;padding-right:16px">${escapeHtml(payload.amountCaption)}</td><td><strong>${escapeHtml(payload.amountLabel)}</strong></td></tr>
         <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
+        ${payload.transferTitle ? `<tr><td style="color:#6b7280;padding-right:16px">Tytuł przelewu</td><td>${escapeHtml(payload.transferTitle)}</td></tr>` : ''}
       </table>
       <p style="color:#9ca3af;font-size:12px">${invoiceEmailFooter(payload.sellerName)}</p>
     </div>

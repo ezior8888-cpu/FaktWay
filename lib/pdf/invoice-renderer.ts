@@ -10,6 +10,7 @@ import {
   REVERSE_CHARGE_LABEL,
   SPLIT_PAYMENT_LABEL,
 } from '@/lib/invoices/annotations';
+import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
 import { PUBLIC_SITE_DOMAIN, PUBLIC_SITE_URL } from '@/lib/site';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -29,7 +30,10 @@ const FONT_DIR = path.join(process.cwd(), 'lib/pdf/fonts');
 const PAGE_MARGIN = 42;
 
 export interface RenderInvoiceOptions {
-  /** Numer KSeF — drukowany w stopce gdy faktura zaakceptowana. */
+  /**
+   * Numer KSeF: drukowany w stopce, gdy faktura zaakceptowana; poprawny
+   * numer trafia też do tytułu przelewu w sekcji płatności (krok 1.4).
+   */
   ksefNumber?: string | null;
   /**
    * Link KOD I do zakodowania w QR (`lib/ksef/qr-verification.ts`) — nie sam
@@ -172,7 +176,7 @@ export async function renderInvoicePdf(
     drawParties(doc, invoice, left, pageWidth);
     drawLineItems(doc, invoice, left, pageWidth);
     drawVatSummary(doc, invoice, left, pageWidth);
-    drawPayment(doc, invoice, left, pageWidth);
+    drawPayment(doc, invoice, transferTitleOnPdf(invoice, opts.ksefNumber), left, pageWidth);
     drawFooter(doc, invoice, opts, left, pageWidth);
 
     if (opts.testWatermark) {
@@ -208,6 +212,19 @@ export function amountDueOnPdf(invoice: Invoice): number {
     if (Number.isFinite(due) && due >= 0 && due <= invoice.grossTotal + 0.005) return due;
   }
   return invoice.grossTotal;
+}
+
+/**
+ * Tytuł przelewu w sekcji płatności (krok 1.4, RP-PLAT-01): numer KSeF, potem
+ * numer faktury. Tylko przy przelewie, z kwotą „Do zapłaty” i poprawnym
+ * numerem KSeF; inaczej `null` i sekcja jak dotąd. Mail z fakturą bierze ten
+ * sam tytuł (`emailInvoiceAction`), więc mail i PDF w załączniku się zgadzają.
+ */
+export function transferTitleOnPdf(invoice: Invoice, ksefNumber: string | null | undefined): string | null {
+  return tytulPrzelewuNaDokumencie(invoice.internalNumber, ksefNumber, {
+    metoda: invoice.payment?.method,
+    doZaplaty: amountDueOnPdf(invoice),
+  });
 }
 
 /**
@@ -524,11 +541,13 @@ function drawVatSummary(
 function drawPayment(
   doc: Doc,
   invoice: Invoice,
+  transferTitle: string | null,
   left: number,
   width: number,
 ): void {
   const p = invoice.payment;
-  ensureSpace(doc, 50);
+  // Wiersz z tytułem przelewu to jeszcze jedna linia w tym samym bloku.
+  ensureSpace(doc, transferTitle ? 62 : 50);
   doc.font('bold').fontSize(8).fillColor('#888888');
   doc.text('PŁATNOŚĆ', left, doc.y);
   doc.font('body').fontSize(9).fillColor('#444444');
@@ -545,6 +564,9 @@ function drawPayment(
       doc.y,
       { width },
     );
+  }
+  if (transferTitle) {
+    doc.text(`Tytuł przelewu: ${transferTitle}`, left, doc.y, { width });
   }
   doc.y += 14;
 }
