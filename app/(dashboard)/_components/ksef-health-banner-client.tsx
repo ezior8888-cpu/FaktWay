@@ -5,6 +5,7 @@ import { RiAlertLine, RiCloseLine, RiCloudOffLine } from '@remixicon/react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { ksefBannerContent, ksefBannerKey } from '@/lib/ksef/health-banner';
 import type { KsefHealthPublic } from '@/lib/ksef/health-status';
 
 /** Widoczna karta odpytuje co 120 s plus losowo do 30 s. */
@@ -18,7 +19,7 @@ interface Props {
 }
 
 /**
- * Banner gdy KSeF jest `degraded` lub `down`. Polluje `/api/ksef/health`
+ * Banner gdy KSeF jest `degraded` lub `down` albo MF ogłosiło przerwę lub awarię. Polluje `/api/ksef/health`
  * tylko z widocznej karty — odpada koszt WebSocket setup'u (Supabase
  * Realtime, dedykowany pub/sub) dla zdarzenia, które realnie zmienia się max
  * kilka razy w tygodniu. Baner siedzi w layoucie panelu, więc odpytuje każda
@@ -31,7 +32,7 @@ interface Props {
  *    najwyżej raz na 60 s — przełączanie kart robi serię zdarzeń.
  *
  * Dismiss: użytkownik może schować banner — flaga w `sessionStorage`, więc
- * po odświeżeniu lub eskalacji do `down` banner wraca.
+ * po odświeżeniu, eskalacji do `down` albo zmianie stanu MF banner wraca.
  */
 export function KsefHealthBannerClient({ initial }: Props) {
   const [snapshot, setSnapshot] = useState<KsefHealthPublic | null>(initial);
@@ -108,26 +109,19 @@ export function KsefHealthBannerClient({ initial }: Props) {
     };
   }, []);
 
-  if (!snapshot || snapshot.level === 'operational') return null;
-  if (dismissedLevel === snapshot.level) return null;
+  const content = snapshot ? ksefBannerContent(snapshot) : null;
+  if (!snapshot || !content) return null;
+  const bannerKey = ksefBannerKey(snapshot);
+  if (dismissedLevel === bannerKey) return null;
 
-  const isDown = snapshot.level === 'down';
-  const Icon = isDown ? RiCloudOffLine : RiAlertLine;
-
-  const title = isDown
-    ? snapshot.isMfOutage
-      ? 'Ministerstwo Finansów zgłasza awarię KSeF'
-      : 'KSeF jest niedostępny'
-    : 'KSeF działa wolno';
-
-  const description = isDown
-    ? 'Nowe faktury pozostaną szkicami. Automatyczny Offline24 jest wstrzymany; po przywróceniu KSeF sprawdź stan dokumentu przed wysyłką.'
-    : `Pingi do KSeF trwają ${snapshot.responseTimeMs ?? '?'}ms. Wysyłka faktur może być wolniejsza, ale działa.`;
+  const isCritical = content.severity === 'critical';
+  const Icon = isCritical ? RiCloudOffLine : RiAlertLine;
+  const { title, description } = content;
 
   const handleDismiss = () => {
-    setDismissedLevel(snapshot.level);
+    setDismissedLevel(bannerKey);
     try {
-      window.sessionStorage.setItem('ff:ksef-banner-dismissed', snapshot.level);
+      window.sessionStorage.setItem('ff:ksef-banner-dismissed', bannerKey);
     } catch {
       // Nawet bez storage user nie zobaczy banera do refresh — OK.
     }
@@ -137,16 +131,16 @@ export function KsefHealthBannerClient({ initial }: Props) {
     <Alert
       role="status"
       aria-live="polite"
-      variant={isDown ? 'destructive' : 'default'}
+      variant={isCritical ? 'destructive' : 'default'}
       className={cn(
         'pr-10',
-        !isDown &&
+        !isCritical &&
           'border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] text-[var(--ff-warn-text)]',
       )}
     >
       <Icon aria-hidden />
       <AlertTitle className="font-semibold">{title}</AlertTitle>
-      <AlertDescription className={cn(!isDown && 'text-[var(--ff-warn-text)]')}>
+      <AlertDescription className={cn(!isCritical && 'text-[var(--ff-warn-text)]')}>
         {description}
       </AlertDescription>
       <button

@@ -50,6 +50,8 @@ it('nie oddaje pola error ze snapshotu', async () => {
     consecutiveFailures: 4,
     isMfOutage: true,
     env: 'test',
+    officialStatus: null,
+    officialEnd: null,
     stale: false,
   });
 });
