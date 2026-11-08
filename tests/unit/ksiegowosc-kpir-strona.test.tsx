@@ -110,8 +110,8 @@ describe('KPiR w zakładce „Ewidencja”', () => {
     expect(html).toContain('Klient Sp. z o.o.');
     expect(html).toContain('1234567890-20260310-0100001AF629-AF');
     expect(html).toContain('Pozostałe wydatki (13)');
-    // Fundusz Pracy to koszt w KPiR, składki społeczne odlicza zaliczka (bez podwójnego odliczenia).
-    expect(html).toContain('Fundusz Pracy i Fundusz Solidarnościowy z zapłaconych składek ZUS są kosztem w kolumnie 13');
+    // Fundusz Pracy dopisuje FaktWay (K7.3, D21), składki społeczne odlicza zaliczka (bez podwójnego odliczenia).
+    expect(html).toContain('Fundusz Pracy i Fundusz Solidarnościowy FaktWay dopisuje do KPiR sam (kolumna 13) w dniu zapłaty składek');
     expect(html).toContain('Składek społecznych (a przy liniowym także zdrowotnej) KPiR nie zawiera');
     // Przychód 10 000 + 50 zł, koszty 300 zł, dochód 9 750 zł.
     expect(html).toMatch(/Razem w miesiącu.*10\s050,00 zł/);
