@@ -12,6 +12,9 @@
  *
  * Bezpieczeństwo:
  *   - HMAC-SHA256 z `EMAIL_UNSUBSCRIBE_SECRET` (osobny od auth/Stripe secrets)
+ *   - Rotacja: stary sekret na 90 dni w `EMAIL_UNSUBSCRIBE_SECRET_PREVIOUS`
+ *     (docs/runbooks/rotacja-kluczy.md, krok 2). Podpis zawsze bieżącym,
+ *     weryfikacja bieżącym albo poprzednim — linki sprzed rotacji działają
  *   - Expiry 90 dni (typowy mail w skrzynce nie żyje dłużej)
  *   - Constant-time compare (timingSafeEqual) — bez tego attacker mógłby
  *     brute-force signature byte-by-byte przez timing
@@ -43,6 +46,17 @@ function getSecret(): string {
     );
   }
   return secret;
+}
+
+/**
+ * Sekrety do weryfikacji: bieżący, potem poprzedni (rotacja). Poprzedni
+ * krótszy niż 32 znaki pomijamy, tak jak bieżący nie przeszedłby `getSecret`.
+ */
+function verificationSecrets(): string[] {
+  const secrets = [getSecret()];
+  const previous = process.env.EMAIL_UNSUBSCRIBE_SECRET_PREVIOUS?.trim();
+  if (previous && previous.length >= 32 && previous !== secrets[0]) secrets.push(previous);
+  return secrets;
 }
 
 function b64UrlEncode(buf: Buffer): string {
@@ -87,19 +101,23 @@ export function verifyUnsubscribeToken(token: string): VerifyResult {
   const [payloadB64, sigB64] = parts;
   if (!payloadB64 || !sigB64) return { valid: false, reason: 'malformed' };
 
-  let expected: Buffer;
+  let expected: Buffer[];
   let received: Buffer;
   try {
-    expected = createHmac('sha256', getSecret()).update(payloadB64).digest();
+    expected = verificationSecrets().map((secret) =>
+      createHmac('sha256', secret).update(payloadB64).digest(),
+    );
     received = b64UrlDecode(sigB64);
   } catch {
     return { valid: false, reason: 'malformed' };
   }
 
-  if (expected.length !== received.length) {
-    return { valid: false, reason: 'invalid_signature' };
-  }
-  if (!timingSafeEqual(expected, received)) {
+  // Każdy sekret sprawdzamy w stałym czasie; liczba prób zależy tylko od
+  // konfiguracji (1 albo 2), nie od tokenu.
+  const signatureOk = expected
+    .map((e) => e.length === received.length && timingSafeEqual(e, received))
+    .includes(true);
+  if (!signatureOk) {
     return { valid: false, reason: 'invalid_signature' };
   }
 

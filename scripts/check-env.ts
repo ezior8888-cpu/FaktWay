@@ -73,6 +73,7 @@ const SPECS: VarSpec[] = [
   { name: 'RESEND_FROM_MARKETING', feature: 'E-maile', level: 'required' },
   { name: 'RESEND_WEBHOOK_SECRET', feature: 'E-maile', level: 'required', note: 'bounce/complaint handling' },
   { name: 'EMAIL_UNSUBSCRIBE_SECRET', feature: 'E-maile', level: 'required', note: 'HMAC linków wypisu — można wygenerować nowy (openssl rand -hex 32)' },
+  { name: 'EMAIL_UNSUBSCRIBE_SECRET_PREVIOUS', feature: 'E-maile', level: 'optional', note: 'tylko na czas rotacji: stary sekret wypisu przez 90 dni, potem usuń' },
 
   // ── AI (OCR paragonów + support chat) ──
   { name: 'ANTHROPIC_API_KEY', feature: 'AI (OCR + chat)', level: 'required', note: 'bez tego OCR i chat rzucają błąd — klucz z console.anthropic.com' },
