@@ -27,6 +27,8 @@
     "test:vitest": "vitest run",
     "test:vitest:watch": "vitest",
     "test:rls": "vitest run --config vitest.rls.config.ts",
+    "filtr:mapa": "node scripts/filtr/mapa.mjs",
+    "filtr:testy": "vitest run --config vitest.filtr.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
