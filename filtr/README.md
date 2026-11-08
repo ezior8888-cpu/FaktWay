@@ -53,3 +53,24 @@ na mapę albo wpis mapy wskazuje plik, którego już nie ma.
 Składnia ścieżek: `**` dowolna liczba katalogów, `*` dowolne znaki bez `/`,
 `?` jeden znak, `{a,b}` alternatywa. Nawiasy okrągłe i kwadratowe są
 dosłowne (`app/(dashboard)/invoices/[id]/`).
+
+## Straż w CI (`scripts/filtr/straz.mjs`, krok F2)
+
+Kontrola „Filtr: straż” (`.github/workflows/filtr-straz.yml`) ocenia każdy PR
+kodem i mapą z `main`; z PR czyta tylko dane przez API. Wymaga:
+
+| Zmiana | Wymaga |
+|---|---|
+| plik z sygnałem poza mapą | dopisania do mapy |
+| maszyneria filtra (`.github/workflows/**`, `scripts/filtr/**`, `scripts/ci/**`, `.githooks/**`, `.claude/**`, szablon PR, `filtr/zgody.json`), osłabienie mapy, wzrost zapadki, zmieniona albo usunięta linia w `tests/filtr/**` | `zgoda:zmiana-filtra` |
+| wiedza prawna (`filtr/przepisy/**`, `lib/ksiegowosc/parametry/**`, złote przypadki, przykłady urzędowe, wyrocznia, schematy `lib/**/schemas/**`) | `zgoda:wiedza-prawna` i źródło w karcie |
+| nowy komentarz `filtr-wyjatek`, kod R1 bez nowego albo zmienionego testu | `zgoda:wyjatek-filtra` i powód w karcie |
+| PR R1 albo R2 | karta zmiany prawnej z szablonu PR, każde pole wypełnione |
+
+Etykieta liczy się tylko od osoby z `zgody.json` (z `main`) i tylko nadana po
+ostatnim pushu; każdy push ją zdejmuje. Etykiety zakłada
+`./scripts/ops/filtr-etykiety.sh` (uruchamia Bartosz). Lokalnie:
+
+```bash
+node scripts/filtr/straz.mjs --pr 488 --tylko-raport
+```

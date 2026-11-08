@@ -1,0 +1,5 @@
+{
+  "wersja": 1,
+  "opis": "Kto nadaje etykiety zgody filtra (zgoda:zmiana-filtra, zgoda:wiedza-prawna, zgoda:wyjatek-filtra). Straż czyta ten plik z main, więc PR nie dopisze sam siebie; zmiana pliku wymaga zgoda:zmiana-filtra. Agenci etykiet zgody nie nadają.",
+  "osoby": ["ezior8888-cpu"]
+}
