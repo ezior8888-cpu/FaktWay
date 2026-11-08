@@ -57,7 +57,6 @@ export function BuyerSection({
   /** Po pierwszej próbie zapisu (`formState.isSubmitted`) — zmiany sprawdzają formularz od nowa. */
   wyslanoRaz: boolean;
 }) {
-  /** Podpowiedź pod polem VAT-UE — na bieżąco, zanim schemat pokaże błąd. */
   const vatUeHint = buildVatUeHint(buyerVatUeWatch);
 
   const handleBuyerSelected = (data: {
