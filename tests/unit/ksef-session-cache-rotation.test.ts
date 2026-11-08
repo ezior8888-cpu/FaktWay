@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   xades: vi.fn(),
   token: vi.fn(),
   credentials: vi.fn(),
+  fetch: vi.fn(),
 }));
 
 vi.mock('@/lib/ksef/auth', () => ({ authenticateWithXades: mocks.xades }));
@@ -42,15 +43,44 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function refreshResponse(accessToken: string, validUntilMs: number): Response {
+  return new Response(
+    JSON.stringify({ accessToken: { token: accessToken, validUntil: new Date(validUntilMs).toISOString() } }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function rejectedRefreshResponse(status: number): Response {
+  return new Response(JSON.stringify({ message: 'atrapa odrzuconego refresh tokenu' }), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function refreshCalls() {
+  return mocks.fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/token/refresh'));
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
+  // Odświeżenie sesji idzie przez prawdziwe refreshKsefSession → ksefFetch →
+  // globalny fetch. Bez atrapy test wysyłał POST /auth/token/refresh do KSeF
+  // TEST i przechodził tylko dzięki temu, że KSeF odpowiadał 401. Żądanie bez
+  // jawnej odpowiedzi w teście ma paść głośno, a nie wyjść do sieci.
+  mocks.fetch.mockImplementation(async (url: unknown) => {
+    throw new Error(`Test nie może iść do sieci: ${String(url)}`);
+  });
+  vi.stubGlobal('fetch', mocks.fetch);
   ksefSessionCache.invalidate(NIP, 'test');
   ksefSessionCache.invalidate(NIP, 'demo');
   ksefSessionCache.invalidate(NIP, 'production');
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('KSeF session cache credential boundary', () => {
   it('reuses a session only for the same certificate and key, even with an unchanged NIP', async () => {
@@ -102,17 +132,48 @@ describe('KSeF session cache credential boundary', () => {
     expect(mocks.xades).toHaveBeenCalledTimes(2);
   });
 
-  it('refreshes when the access token enters the five-minute expiry buffer', async () => {
+  it('refreshes with the refresh token when the access token enters the five-minute expiry buffer', async () => {
     const first = session('nearly-expired', NOW + 5 * 60 * 1000 + 1000);
-    const second = session('refreshed');
+    mocks.xades.mockResolvedValueOnce(first);
+    const auth = xades('CERT_A', 'PRIVATE_KEY_A');
+
+    expect(await ksefSessionCache.getSession(auth, 'test')).toBe(first);
+    vi.mocked(Date.now).mockReturnValue(NOW + 1000);
+    expect(await ksefSessionCache.getSession(auth, 'test')).toBe(first);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+
+    vi.mocked(Date.now).mockReturnValue(NOW + 1001);
+    mocks.fetch.mockResolvedValueOnce(refreshResponse('refreshed', NOW + 20 * 60 * 1000));
+    const refreshed = await ksefSessionCache.getSession(auth, 'test');
+
+    expect(refreshed).toMatchObject({
+      accessToken: 'refreshed',
+      accessTokenExpiresAt: NOW + 20 * 60 * 1000,
+      refreshToken: first.refreshToken,
+      refreshTokenExpiresAt: first.refreshTokenExpiresAt,
+    });
+    expect(mocks.xades).toHaveBeenCalledOnce();
+    expect(refreshCalls()).toHaveLength(1);
+    const [, init] = refreshCalls()[0]!;
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe(`Bearer ${first.refreshToken}`);
+  });
+
+  it('falls back to a full XAdES login when KSeF rejects the refresh token inside the expiry buffer', async () => {
+    const first = session('nearly-expired', NOW + 5 * 60 * 1000 + 1000);
+    const second = session('after-rejected-refresh');
     mocks.xades.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
     const auth = xades('CERT_A', 'PRIVATE_KEY_A');
 
     expect(await ksefSessionCache.getSession(auth, 'test')).toBe(first);
     vi.mocked(Date.now).mockReturnValue(NOW + 1000);
     expect(await ksefSessionCache.getSession(auth, 'test')).toBe(first);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+
     vi.mocked(Date.now).mockReturnValue(NOW + 1001);
+    mocks.fetch.mockResolvedValueOnce(rejectedRefreshResponse(401));
     expect(await ksefSessionCache.getSession(auth, 'test')).toBe(second);
+    expect(refreshCalls()).toHaveLength(1);
     expect(mocks.xades).toHaveBeenCalledTimes(2);
   });
 
