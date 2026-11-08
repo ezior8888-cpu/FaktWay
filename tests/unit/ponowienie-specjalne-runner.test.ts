@@ -112,7 +112,6 @@ vi.mock('@/lib/storage/r2', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/storage/r2')>();
   return {
     ...actual,
-    invoiceXmlExistsForId: vi.fn(async () => false),
     listInvoiceAttemptXmls: vi.fn(async () => []),
     // Prawdziwy skrót prawdziwego pliku — stała wartość przepuściłaby każdą różnicę bajtów.
     uploadInvoiceXml: vi.fn(async (t: string, i: string, issueDate: string, xml: string, o?: { attemptId?: string | null }) => {

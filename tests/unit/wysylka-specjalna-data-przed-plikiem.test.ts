@@ -44,7 +44,6 @@ vi.mock('@/lib/xml/validator', async (importOriginal) => ({
   validateInvoiceXml: vi.fn(async () => ({ valid: true, errors: [] })),
 }));
 vi.mock('@/lib/storage/r2', () => ({
-  invoiceXmlExistsForId: vi.fn(async () => false),
   uploadInvoiceXml: vi.fn(async () => ({ storagePath: 'x.xml', sha256Hash: 'h', sizeBytes: 1 })),
 }));
 vi.mock('@/lib/ksef/submission-log', () => ({

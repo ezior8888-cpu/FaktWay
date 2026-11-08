@@ -5539,23 +5539,6 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
         [
           "eq",
           "id",
-          "xml_documents-7",
-        ],
-      ],
-      "op": "update",
-      "payload": {
-        "file_size_bytes": 2005,
-        "sha256_hash": "3c7ceb183e6cd217c5e79bc455d5d21181e422665cc674926ce6fb984d8b259a",
-        "storage_path": "11111111-1111-4111-8111-111111111111/ksef-import/1234567890-20260910-C00000000001-AF.xml",
-        "storage_provider": "r2",
-      },
-      "table": "xml_documents",
-    },
-    {
-      "filters": [
-        [
-          "eq",
-          "id",
           "invoices-4",
         ],
         [

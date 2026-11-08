@@ -161,6 +161,8 @@ describe('xml_documents przy akceptacji (AUD-12)', () => {
       storagePath: ACCEPTED.xmlStoragePath,
       sha256Hash: ACCEPTED.xmlSha256Hash,
       sizeBytes: ACCEPTED.xmlSizeBytes,
+      // C-12: świeża wysyłka zapisała te bajty w tym przebiegu — bez dodatkowego GET.
+      verifyStoredBytes: false,
     });
   });
 
