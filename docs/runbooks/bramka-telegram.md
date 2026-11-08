@@ -12,7 +12,7 @@ Kod: `ops/bramka/`, baza: migracja `00100_ops_gate.sql`.
 | `/kolejki` | zaległości pg-boss (czeka / w toku / błędy 24 h), faktury utknięte w wysyłce, wstrzymane, Offline24 | tylko odczyt |
 | `/wylacz ksef \| flo \| rejestracja` | natychmiast ustawia flagę „kill” | bez TOTP, bo to kierunek bezpieczny; powiadamia pozostałe osoby; wpis w `audit_logs` |
 | `/wdroz` | pokazuje commit do wdrożenia, CI, listę zmian i blokady | tylko odczyt |
-| `/wdroz <8 znaków SHA> <kod TOTP>` | wdraża web, potem worker, i sprawdza wynik | TOTP; SHA musi być HEAD `main`; zielone CI; wgrane migracje; brak trwającego wdrożenia |
+| `/wdroz <8 znaków SHA> <kod TOTP>` | wdraża worker, potem web, i sprawdza wynik | TOTP; SHA musi być HEAD `main`; zielone CI; wgrane migracje; brak trwającego wdrożenia |
 
 **Czego nie umie (celowo):**
 - Nie włącza z powrotem wyłączonych funkcji. Zdjęcie flagi robisz ręcznie SQL-em: `docs/runbooks/hamulce-ksef.md`.
@@ -26,9 +26,9 @@ API Coolify wdraża zawsze HEAD gałęzi, nie wskazany commit. Bramka:
 1. odmawia, jeśli HEAD `main` nie zaczyna się od podanego SHA;
 2. odmawia, jeśli brakuje zielonych `Typecheck + Lint + Unit tests` i `Next build`, coś jest czerwone lub w toku;
 3. odmawia, jeśli w zakresie od wdrożonej wersji jest migracja, której nie ma w `schema_migrations`;
-4. wdraża **web**, czeka na koniec i sprawdza, czy Coolify zbudował ten SHA;
-5. ponownie sprawdza HEAD. Jeśli `main` się przesunął, **zatrzymuje się przed workerem** i ostrzega o stanie mieszanym;
-6. wdraża **worker** tak samo;
+4. wdraża **worker**, czeka na koniec i sprawdza, czy Coolify zbudował ten SHA;
+5. ponownie sprawdza HEAD. Jeśli `main` się przesunął, **zatrzymuje się przed webem** i ostrzega o stanie mieszanym (worker nowy, web stary);
+6. wdraża **web** tak samo;
 7. sprawdza `/api/health` i stan obu aplikacji w Coolify, potem zapisuje wynik w `audit_logs`.
 
 Postęp przychodzi wiadomościami. Druga osoba dostaje powiadomienie o starcie.
@@ -131,8 +131,8 @@ Kolejność ma znaczenie.
 | Wyciek tokenu bota | @BotFather → `/revoke`, nowy token w Coolify (bramka i aplikacja, jeśli wspólny) |
 | Bramka ma natychmiast przestać działać | Coolify → aplikacja bramki → Stop |
 | 5 błędnych kodów TOTP | blokada na 15 min (licznik w pamięci; restart bramki go zeruje) |
-| Bramka wdrożyła tylko web | wiadomość „stan mieszany”; uruchom `/wdroz` ponownie albo wdroż worker ręcznie (`AGENTS.md`) |
-| Zmiana kodu bramki | wdrażasz ją ręcznie w Coolify — `/wdroz` obejmuje tylko web i worker |
+| Bramka wdrożyła tylko worker | wiadomość „stan mieszany” (worker nowy, web stary); uruchom `/wdroz` ponownie albo wdroż web ręcznie (`AGENTS.md`) |
+| Zmiana kodu bramki | wdrażasz ją ręcznie w Coolify — `/wdroz` obejmuje tylko worker i web |
 
 Bramka działa na **long polling**: nie ma publicznego adresu ani otwartego
 portu. Po wdrożeniu bramki przez kilka sekund mogą działać dwie kopie. Telegram
