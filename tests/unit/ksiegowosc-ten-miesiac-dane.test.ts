@@ -158,7 +158,8 @@ describe('odczyt rozliczeń', () => {
   it('czyta wersje miesiąca i wszystkie zapłacone wersje do tego miesiąca, nie tylko od grudnia', async () => {
     await czytajRozliczenia(client, 't1', '2027-01');
     expect(mocks.filtry).toContain('lte:okres,2027-01-01');
-    expect(mocks.filtry).toContain('or:okres.eq.2027-01-01,status.eq.zaplacone');
+    // Od K7.2 także zapłaty spoza wyliczenia jeszcze bez daty (lista z wyjściem na stronie).
+    expect(mocks.filtry).toContain('or:okres.eq.2027-01-01,status.eq.zaplacone,migawka->>reczna.eq.true');
     expect(mocks.filtry.some((f) => f.startsWith('gte:okres'))).toBe(false);
   });
 
@@ -198,6 +199,29 @@ describe('bramka D7 dla każdej pozycji', () => {
     mocks.brakujace = (_rok, sekcje) => sekcje.map((s) => ({ sekcja: s as 'zus', powod: 'niesprawdzone' as const, komunikat: `czeka: ${s}`, operator: '' }));
     mocks.ewidencja = null;
     expect(await czytajTenMiesiac(client, 't1', '2027-01')).toMatchObject({ ok: false, braki: ['czeka: ryczalt', 'czeka: zus', 'czeka: zdrowotna'] });
+  });
+});
+
+describe('zapłata spoza wyliczenia (K7.2, D15)', () => {
+  it('oznaczenie z migawki, lista zapłaconych w tym miesiącu i jeszcze bez daty, także przy brakach; odliczenie jak każda zapłata', async () => {
+    mocks.wiersze = [
+      { ...rozliczenie('2025-12-01', 'zus_spoleczne', 192_676, '2027-01-15', 178_829), reczna: true },
+      { ...rozliczenie('2026-11-01', 'zdrowotna', 43_254, null), reczna: true },
+      { ...rozliczenie('2026-10-01', 'zdrowotna', 43_254, '2026-11-10'), reczna: true },
+    ];
+    const dane = await czytajTenMiesiac(client, 't1', '2027-01');
+    if (!dane.ok) throw new Error(dane.braki.join(' '));
+    expect(dane.zaplatyReczne.map((r) => [r.miesiac, r.rodzaj, r.status, r.reczna])).toEqual([
+      ['2025-12', 'zus_spoleczne', 'zaplacone', true],
+      ['2026-11', 'zdrowotna', 'zatwierdzone', true],
+    ]);
+    // Zapłata w styczniu za grudzień 2025 r. pomniejsza ryczałt za styczeń jak każda zapłata składek.
+    expect(dane.wynik.ryczalt?.odliczenia.spoleczneZaplaconeGr).toBe(178_829);
+    expect(mocks.filtry).toContain('or:okres.eq.2027-01-01,status.eq.zaplacone,migawka->>reczna.eq.true');
+
+    mocks.brakujace = (_rok, sekcje) => sekcje.map((x) => ({ sekcja: x as 'zus', powod: 'niesprawdzone' as const, komunikat: `czeka: ${x}`, operator: '' }));
+    const zBrakami = await czytajTenMiesiac(client, 't1', '2027-01');
+    expect(zBrakami).toMatchObject({ ok: false, zaplatyReczne: [{ miesiac: '2025-12' }, { miesiac: '2026-11' }] });
   });
 });
 

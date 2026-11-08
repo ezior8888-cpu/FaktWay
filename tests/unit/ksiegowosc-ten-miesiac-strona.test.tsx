@@ -50,6 +50,7 @@ vi.mock('@/components/ksiegowosc/ten-miesiac-akcje', () => ({
   ZaplaconeRozliczenie: (p: { id: string; nazwa: string; zaplacone: boolean }) => (
     <span data-zaplata={p.id}>{p.zaplacone ? `Cofnij zapłatę: ${p.nazwa}` : `Zapłacone: ${p.nazwa}`}</span>
   ),
+  ZaplataReczna: (p: { domyslnyMiesiac: string; domyslnaData: string }) => <form data-zaplata-reczna={p.domyslnyMiesiac} data-data={p.domyslnaData} />,
 }));
 vi.mock('@/components/expenses/finora/month-selector', () => ({ default: (p: { month: string }) => <span data-miesiac={p.month} /> }));
 vi.mock('@/components/ksiegowosc/vat-akcje', () => ({
@@ -102,7 +103,7 @@ const zatw = (rodzaj: string, hash: string, z: Record<string, unknown> = {}) => 
   spoleczneBezFpGr: 0,
   ...z,
 });
-const dane = (rozliczenia: unknown[] = [], pozycje: unknown[] = POZYCJE) => ({ ok: true, wynik: { ...WYNIK, pozycje }, pozycje, parametryWersja: 'x', rozliczenia, wersje: [PROFIL] });
+const dane = (rozliczenia: unknown[] = [], pozycje: unknown[] = POZYCJE) => ({ ok: true, wynik: { ...WYNIK, pozycje }, pozycje, parametryWersja: 'x', rozliczenia, wersje: [PROFIL], zaplatyReczne: [] });
 const strona = async (sp: Record<string, string> = { month: '10', year: '2026' }) => renderToStaticMarkup(await TenMiesiacPage({ searchParams: Promise.resolve(sp) }));
 /** Tekst strony bez znaczników (sprawdza zdania niezależnie od podziału na elementy). */
 const tekst = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
@@ -154,7 +155,7 @@ describe('strona „Ten miesiąc”', () => {
     const skala = (forma: 'skala' | 'liniowy') => {
       const profil = { ...PROFIL, forma, stawkaDomyslna: null };
       const wynik = { ...WYNIK, profil, kosztyGr: 300_000, zdrowotna: null, ryczalt: null, pit, pozycje };
-      return { ok: true, wynik: { ...wynik, zdrowotnaOdDochodu: { dochodGr: 1_000_000, podstawaGr: 1_000_000, skladkaGr: 90_000, minimalna: false } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [profil] };
+      return { ok: true, wynik: { ...wynik, zdrowotnaOdDochodu: { dochodGr: 1_000_000, podstawaGr: 1_000_000, skladkaGr: 90_000, minimalna: false } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [profil], zaplatyReczne: [] };
     };
     mocks.dane = skala('skala');
     const html = await strona();
@@ -176,7 +177,7 @@ describe('strona „Ten miesiąc”', () => {
     const WYNIK_VAT = { naleznyGr: 690_000, nadwyzkaPoprzedniaGr: 120_000, naliczonyGr: 315_500, doZaplatyGr: 374_500, nadwyzkaNaNastepnyGr: 0, liczbaSprzedazy: 3, liczbaZakupow: 2 };
     const zVat = (pozycjaVat: unknown, vat: unknown) => {
       const pozycje = [...POZYCJE, pozycjaVat];
-      return { ok: true, wynik: { ...WYNIK, pozycje, vat }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+      return { ok: true, wynik: { ...WYNIK, pozycje, vat }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL], zaplatyReczne: [] };
     };
     mocks.dane = zVat(
       { ok: true, rodzaj: 'vat', kwotaGr: 374_500, termin: vatTermin, wejscia: {}, wejsciaHash: H('d') },
@@ -212,15 +213,50 @@ describe('strona „Ten miesiąc”', () => {
       nadwyzka: { zl: 3000, zrodlo: 'zatwierdzone' },
       nadwyzkaNieznana: false,
     };
-    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL], zaplatyReczne: [] };
     const html = await strona();
     expect(html).toContain('data-wartosc="3000"');
     const t = tekst(html);
     expect(t).toContain('z rozliczenia VAT za wrzesień 2026 zatwierdzonego w „Ten miesiąc”');
     expect(t).toContain('nadwyżka na następny miesiąc 2500,00 zł');
     // Zatwierdzony miesiąc bez zatwierdzonego poprzedniego: kwota z jego własnej migawki.
-    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat: { ...vat, nadwyzka: { zl: 3000, zrodlo: 'ten_miesiac' } } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL] };
+    mocks.dane = { ok: true, wynik: { ...WYNIK, pozycje, vat: { ...vat, nadwyzka: { zl: 3000, zrodlo: 'ten_miesiac' } } }, pozycje, parametryWersja: 'x', rozliczenia: [], wersje: [PROFIL], zaplatyReczne: [] };
     expect(tekst(await strona())).toContain('Nadwyżka z deklaracji za wrzesień 2026 (P_39): 3000,00 zł, z zatwierdzonego rozliczenia VAT za październik 2026.');
+  });
+
+  it('zapłaty spoza wyliczenia (K7.2): lista z kwotą i stanem, formularz dla właściciela, także przy brakach miesiąca; członek bez formularza', async () => {
+    const reczna = {
+      ...zatw('zus_spoleczne', H('e')),
+      id: 'r1',
+      miesiac: '2025-12',
+      kwotaGr: 192_676,
+      spoleczneBezFpGr: 178_829,
+      status: 'zaplacone',
+      zaplaconeO: '2026-10-15',
+      reczna: true,
+    };
+    const bezDaty = { ...reczna, id: 'r2', rodzaj: 'zdrowotna', miesiac: '2026-09', kwotaGr: 43_254, spoleczneBezFpGr: 0, status: 'zatwierdzone', zaplaconeO: null };
+    mocks.dane = { ...dane(), zaplatyReczne: [reczna, bezDaty] };
+    const html = await strona();
+    const t = tekst(html);
+    expect(t).toContain('Zapłaty spoza wyliczenia');
+    expect(t).toContain('Składki społeczne za grudzień 2025: 1926,76 zł, w tym bez Funduszu Pracy i FS 1788,29 zł. Zapłacone 15.10.2026.');
+    expect(t).toContain('Składka zdrowotna za wrzesień 2026: 432,54 zł. Bez daty zapłaty.');
+    expect(html).toContain('data-zaplata="r1"');
+    expect(html).toContain('data-zaplata="r2"');
+    // Domyślnie składki za poprzedni miesiąc, zapłacone w ostatnim dniu miesiąca strony.
+    expect(html).toContain('data-zaplata-reczna="2026-09"');
+    expect(html).toContain('data-data="2026-10-31"');
+
+    mocks.dane = { ok: false, braki: ['Parametry na 2026 r. czekają na sprawdzenie.'], rozliczenia: [], zaplatyReczne: [reczna] };
+    expect(tekst(await strona())).toContain('Składki społeczne za grudzień 2025: 1926,76 zł');
+
+    mocks.rola = 'member';
+    mocks.dane = { ...dane(), zaplatyReczne: [reczna] };
+    const czlonek = await strona();
+    expect(tekst(czlonek)).toContain('Zapłaty zapisuje właściciel albo administrator firmy.');
+    expect(czlonek).not.toContain('data-zaplata-reczna');
+    expect(czlonek).not.toContain('data-zaplata="r1"');
   });
 
   it('każda kwota ma podpis z rokiem stawek; w styczniu zdrowotna według roku składkowego', async () => {
@@ -294,7 +330,7 @@ describe('strona „Ten miesiąc”', () => {
   });
 
   it('braki całego miesiąca: lista zamiast kwot; teksty bez długich myślników', async () => {
-    mocks.dane = { ok: false, braki: ['Parametry na 2026 r. czekają na sprawdzenie.'], rozliczenia: [] };
+    mocks.dane = { ok: false, braki: ['Parametry na 2026 r. czekają na sprawdzenie.'], rozliczenia: [], zaplatyReczne: [] };
     const html = await strona();
     expect(html).toContain('Kwot za październik 2026 nie liczymy');
     expect(html).not.toContain('Do zapłaty');
