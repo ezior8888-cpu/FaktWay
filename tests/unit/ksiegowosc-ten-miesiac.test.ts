@@ -251,6 +251,9 @@ describe('VAT w „Ten miesiąc” (K7.1)', () => {
       szczegoly: { zrodloNadwyzki: 'zatwierdzone' },
     });
     expect(JSON.stringify(vat && vat.ok ? vat.wejscia : null)).not.toContain('zatwierdzone');
+    // Liczby dokumentów nie są kwotami: dokument bez wpływu na VAT nie tworzy nowej wersji (D6).
+    expect(vat && vat.ok ? vat.wejscia : null).not.toHaveProperty('liczbaSprzedazy');
+    expect(vat && vat.ok ? vat.szczegoly : null).toMatchObject({ liczbaSprzedazy: 3, liczbaZakupow: 2 });
     expect(w.wynik.vat).toEqual({ wynik: WYNIK_VAT, nadwyzka: { zl: 1200, zrodlo: 'zatwierdzone' }, nadwyzkaNieznana: false });
   });
 

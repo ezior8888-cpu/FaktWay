@@ -89,7 +89,7 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
           <div>
             <h2 className="text-sm font-medium">Rozliczenie za {tytul}</h2>
             <p className="text-muted-foreground text-xs">
-              {podatek}, składki społeczne {dane.ok && dane.wynik.vat ? ', składka zdrowotna i VAT' : 'i składka zdrowotna'} z terminami i danymi do przelewu.
+              {podatek}, składki społeczne{dane.ok && dane.wynik.vat ? ', składka zdrowotna i VAT' : ' i składka zdrowotna'} z terminami i danymi do przelewu.
             </p>
           </div>
           <MonthSelector month={miesiac} currentMonth={dzis.slice(0, 7)} basePath="/reports/ten-miesiac" query="month-year" ariaLabel="Miesiąc rozliczenia" />

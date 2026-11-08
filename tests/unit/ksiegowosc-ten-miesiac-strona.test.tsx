@@ -186,6 +186,7 @@ describe('strona „Ten miesiąc”', () => {
     expect(mocks.opcjeOdczytu).toEqual({ nadwyzkaVat: 1200 });
     expect(html).toMatch(/3745,00 zł<\/h4><p[^>]*>VAT do zapłaty/);
     expect(html).toContain('Termin: 25.11.2026');
+    expect(tekst(html)).toContain('Ryczałt, składki społeczne, składka zdrowotna i VAT z terminami i danymi do przelewu.');
     expect(html).toContain('symbol formularza VAT-7, okres 26M10, identyfikator NIP 1234563218');
     expect(html).toContain('data-nadwyzka-vat="1200"');
     // Wpisana kwota zostaje do poprawienia przy pozycji.

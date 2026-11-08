@@ -353,14 +353,22 @@ export function tenMiesiac(w: WejscieMiesiaca): TenMiesiac {
 }
 
 /**
- * Pozycja VAT: kwota to P_51, a wejścia to pozostałe pola deklaracji, w tym
+ * Pozycja VAT: kwota to P_51, a wejścia to pozostałe kwoty deklaracji, w tym
  * P_62 (nadwyżka na następny miesiąc), z którego kolejny miesiąc bierze P_39
- * po zatwierdzeniu. Źródło nadwyżki idzie do szczegółów, poza skrót (D6).
+ * po zatwierdzeniu. Źródło nadwyżki i liczby dokumentów idą do szczegółów,
+ * poza skrót (D6): dokument bez wpływu na kwoty nie tworzy nowej wersji.
  */
 function pozycjaVat(v: VatWejscie, termin: Termin | null): PozycjaMiesiaca {
   if (!v.ok) return { ok: false, rodzaj: 'vat', termin, brak: v.brak };
-  const { doZaplatyGr, ...wejscia } = v.wynik;
-  return { ok: true, rodzaj: 'vat', kwotaGr: doZaplatyGr, termin, wejscia: { ...wejscia }, szczegoly: { zrodloNadwyzki: v.nadwyzka.zrodlo } };
+  const { doZaplatyGr, liczbaSprzedazy, liczbaZakupow, ...kwoty } = v.wynik;
+  return {
+    ok: true,
+    rodzaj: 'vat',
+    kwotaGr: doZaplatyGr,
+    termin,
+    wejscia: { ...kwoty },
+    szczegoly: { zrodloNadwyzki: v.nadwyzka.zrodlo, liczbaSprzedazy, liczbaZakupow },
+  };
 }
 
 function vatWyniku(v: VatWejscie): VatWyniku {

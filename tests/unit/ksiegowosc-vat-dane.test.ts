@@ -107,7 +107,7 @@ describe('nadwyżka z poprzedniej deklaracji (P_39)', () => {
     mocks.bladRozliczen = { code: 'PGRST205', message: 'brak tabeli' };
     expect(await czytajVat(client, 't1', '2026-10', 400)).toMatchObject({ ok: true, nadwyzka: { zl: 400, zrodlo: 'klient' } });
     mocks.bladRozliczen = { code: '57014', message: 'timeout' };
-    expect(await czytajVat(client, 't1', '2026-10', 400)).toMatchObject({ ok: false });
+    expect(await czytajVat(client, 't1', '2026-10', 400)).toMatchObject({ ok: false, komunikat: expect.stringContaining('rozliczeń') });
   });
 
   it('firma zwolniona z VAT (art. 113): odmowa z oznaczeniem zwolnienia, nie błąd odczytu', async () => {

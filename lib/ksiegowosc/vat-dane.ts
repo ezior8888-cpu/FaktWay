@@ -45,7 +45,7 @@ export type DaneVat =
     };
 
 export const BLAD_ODCZYTU_VAT =
-  'Nie udało się odczytać faktur i kosztów miesiąca, więc nie pokazujemy kwot VAT. Strona spróbuje ponownie przy następnym otwarciu.';
+  'Nie udało się odczytać faktur, kosztów albo rozliczeń miesiąca, więc nie pokazujemy kwot VAT. Strona spróbuje ponownie przy następnym otwarciu.';
 
 export async function czytajVat(
   client: SupabaseClient,
