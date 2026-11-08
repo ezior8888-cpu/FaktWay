@@ -35,7 +35,8 @@ case "$1" in
     grep -E ' WARN | ERROR |^\\[ksef\\.send-attempts\\]' "$f" >&2
     exit 0 ;;
   exec)
-    [ "$3" = psql ] || exit 0
+    shift; [ "$1" = -e ] && { export "$2"; shift 2; }
+    [ "$2" = psql ] || exit 0
     sql=""; prev=""; at=0
     for a in "$@"; do [ "$prev" = "-c" ] && sql=$a; [ "$a" = -At ] && at=1; prev=$a; done
     printf '%s\\0' "$sql" >> "$FAKE_DIR/sql"

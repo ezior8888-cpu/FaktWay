@@ -188,6 +188,12 @@ nadpisanie historii i push prosto na `main`):
 
 Zgoda Bartosza w czacie 07.11.2026 („uprawnienia: tak”); zapisane w `.claude/settings.json`.
 
+08.11.2026 (Bartosz: „zrób wszystkie kroki od A do C”, lista z 08.11, punkt C6):
+doszło `Bash(./scripts/ops/kontrola-faktur-ksef.sh)`. Skrypt czyta produkcję,
+więc każde jego `psql` ma w `PGOPTIONS` transakcję tylko do odczytu i limit
+30 s, a sam plik jest w `CODEOWNERS`; pilnuje tego
+`tests/unit/kontrola-skrypt-tylko-odczyt.test.ts`.
+
 ## 6. Instalacja Renovate (klika Bartosz, ok. 3 minuty)
 
 Najpierw scal #373 (1.4): obecny `renovate.json` scala sam poprawki (patch)
@@ -243,11 +249,12 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.4a czujka schematu FA(3) (test KSeF TEST jest w #411) | #435 | wtorek rano: crd.gov.pl po skrócie (normalizacja `schemaLocation`), `CIRFMF/ksef-docs` po liście i blobach; różnica = issue `czujka-fa3` z diffem nazw, MF niedostępny = ostrzeżenie; na żywo zgodne |
 | 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
 | 07.11.2026 | 3.4 scalenie i instalacja (polecenie Bartosza) | #436 (niesie #435) | oba scalone; restore-drill zainstalowany na `db-1` przez Bartosza (`zainstaluj-restore-drill.sh`, tryb auto blokuje zapis na serwerze), pierwsza próba `WYNIK: OK` w 13 s, ping do checku Healthchecks „restore-drill” wysłany; czujka FA(3) po scaleniu ręcznie na GitHubie: „zgodny z repo”, bez issue |
+| 08.11.2026 | Lista Bartosza A–C (polecenie „zrób wszystkie kroki”) | #448, #298, scalenie #417 | A1: 00170 i 00171 już na db-1; `kontrola-faktur-ksef.sh` tylko do odczytu (PGOPTIONS, sprawdzone na db-1: `on`, `30s`, przebieg bez błędów) i bez pytania dla agenta; #298 odświeżony na 4096 MB; #417 odświeżony w nowym PR (konflikt rejestru, 4 długie myślniki ze strażnika tekstów); 3.7a przekierowana na `invoice-form.tsx` (`submit-invoice.ts` zmienia 5 PR). Znalezione: bramka `/wdroz` wdraża web przed workerem (`ops/bramka/src/deploy.mjs`), odwrotnie niż `wdroz-produkcje.sh` |
 
-**Następny krok:** Bartosz: decyzja przy #425 (workflow pyta o migracje
-funkcje `ops` bramki czy nowy endpoint `/api/ops/deploy-state`), potem
-kroki 2–9 z #425; opcjonalnie `bash scripts/dev/sprzataj-worktree.sh
---zainstaluj-harmonogram`; plugin `design` w aplikacji. Sesja: z planu
-zostaje 3.7 (podział `submit-invoice.ts`, `duplicate-decision.ts`,
-`invoice-form.tsx`, stopniowe `noUncheckedIndexedAccess`) jako długi tor,
-jeden gigant na sesję z listą niezmienników spisaną przed zmianą.
+**Następny krok:** Bartosz: decyzja przy #425 (B1 listy z 08.11: wdrożenie
+przez nowy endpoint czy przez bramkę `/wdroz`), potem jej kroki; scalenie
+odświeżonego #417 (00164 przed wdrożeniem) i #298; sprzątanie worktree
+z harmonogramem (najpierw `main` w głównym katalogu); plugin `design`
+w aplikacji. Sesja: 3.7c (`invoice-form.tsx`) w toku, 3.7a
+(`submit-invoice.ts`) po #417, #195 i #190, 3.7b po decyzji o #336;
+osobno kolejność web/worker w bramce `/wdroz`.
