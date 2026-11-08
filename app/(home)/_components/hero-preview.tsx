@@ -53,6 +53,8 @@ const ROWS = [
  */
 const PHASE_AT = [0, 900, 2000, 3600] as const;
 const LOOP_MS = 8500;
+// Przenikanie szkieletu i faktury: symetryczne, bo EASE_OUT robi z resetu pętli mrugnięcie.
+const CROSSFADE = { duration: 0.4, ease: 'easeInOut' } as const;
 
 const GRID =
   'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[8.5rem_minmax(0,1fr)_6.5rem_9rem] md:grid-cols-[8.5rem_minmax(0,1fr)_6rem_6.5rem_9rem]';
@@ -92,6 +94,28 @@ function Row({ row, status }: { row: (typeof ROWS)[number]; status: Status }) {
       <p className="hidden text-muted-foreground md:block">{row.date}</p>
       <p className="hidden text-right font-medium sm:block">{row.amount}</p>
       <StatusPill status={status} />
+    </div>
+  );
+}
+
+/**
+ * Zarys wiersza, zanim przyjdzie nowa faktura: te same kolumny co `Row`, bez danych.
+ * Bez pulsowania: faza trwa 0,9 s, więc puls tylko przygaszałby paski tuż przed fakturą.
+ */
+function SkeletonRow() {
+  const bar = 'rounded bg-muted-foreground/15';
+  return (
+    <div className={cn(GRID, 'h-full px-3 py-2.5')}>
+      {/* `gap`, nie `space-y`: ukryty drugi pasek nie może zostawić marginesu i przesunąć pierwszego. */}
+      <div className="flex min-w-0 flex-col gap-2">
+        <span className={cn(bar, 'h-2.5 w-24')} />
+        <span className={cn(bar, 'h-2 w-32 max-w-full sm:hidden')} />
+      </div>
+      <span className={cn(bar, 'hidden h-2.5 w-40 max-w-full sm:block')} />
+      <span className={cn(bar, 'hidden h-2.5 w-14 md:block')} />
+      <span className={cn(bar, 'hidden h-2.5 w-14 justify-self-end sm:block')} />
+      {/* Kształt plakietki „W kolejce”, w którą zaraz się zmieni. */}
+      <span className={cn(bar, 'h-5 w-16 justify-self-end rounded-full')} />
     </div>
   );
 }
@@ -183,21 +207,42 @@ export function HeroPreview() {
                   Miejsce na nową fakturę trzyma niewidoczny wiersz, a ona sama pojawia
                   się nad nim. Karta ma stałą wysokość, więc treść pod podglądem nie
                   skacze co pętlę (wcześniej wiersz rozwijał się od zera: na telefonie
-                  56 px w dół i z powrotem co 8,5 s).
+                  56 px w dół i z powrotem co 8,5 s). Zanim faktura przyjdzie, w tym
+                  miejscu jest zarys wiersza, a nie pusty pasek, który wyglądał jak usterka.
+                  Podświetlenie nowej faktury ma samo miejsce, więc szkielet od początku
+                  czyta się jako „tu przyjdzie faktura”, a nie jak wczytująca się tabela.
                 */}
-                <div className="relative overflow-hidden">
+                <div className="relative overflow-hidden bg-primary/[0.04]">
                   <div className="invisible">
                     <Row row={NEW_ROW} status="przyjeta" />
                   </div>
+                  {/* Przy „ogranicz ruch” szkielet znika od razu, a nie wygasa pod gotowym wierszem. */}
+                  {reducedMotion ? null : (
+                    <AnimatePresence initial={false}>
+                      {shown < 1 ? (
+                        <motion.div
+                          key="szkielet"
+                          data-testid="podglad-szkielet"
+                          className="absolute inset-0"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={CROSSFADE}
+                        >
+                          <SkeletonRow />
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  )}
                   <AnimatePresence initial={false}>
                     {shown >= 1 ? (
                       <motion.div
                         key={`nowa-${cycle}`}
-                        className="absolute inset-0 bg-primary/[0.04]"
+                        className="absolute inset-0"
                         // Przy „ogranicz ruch” wiersz pojawia się tuż po hydratacji, bez wjazdu.
                         initial={reducedMotion ? false : { opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
+                        exit={{ opacity: 0, transition: CROSSFADE }}
                         transition={{ duration: 0.45, ease: EASE_OUT }}
                       >
                         <Row row={NEW_ROW} status={newStatus} />
