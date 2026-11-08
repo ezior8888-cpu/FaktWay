@@ -77,6 +77,13 @@
    księgowa, pilotaż). Nowe pytania do prawnika i nowe przykłady dla
    księgowej: sekcja 7.
 
+9. **Na czym sprawdzimy wynik.** Przy każdym kroku z ryzykiem plan podaje
+   wzorzec (np. testowy KSeF, bramka testowa MF, e-mikrofirma, e-Płatnik,
+   API NBP, urzędowe przykłady, księgowa) i to, czego jeszcze brakuje, żeby
+   go użyć (sekcja 8.1). Kadry i płace, pełna księgowość spółek, porównanie
+   form opodatkowania i kilka mniejszych rzeczy nie mają takiego wzorca: plan
+   mówi to wprost jako ryzyko (sekcja 8.2).
+
 ---
 
 ## 1. Zakres
@@ -295,6 +302,9 @@ PR po kolei). Przy kroku:
 - **Ryzyko:** poziom z mapy żelaznego filtra (sekcja 8): R1 krytyczny,
   R2 wprowadza w błąd, R3 pomocniczy, R0 bez ryzyka prawnego; przy krokach
   z modułu księgowości także brama dla klientów;
+- **Sprawdzamy na:** wzorzec, czyli źródło prawdy, na którym sprawdzimy
+  wynik (sekcja 8.1), i czego brakuje, żeby go użyć; gdy wzorca nie ma,
+  krok mówi to wprost jako ryzyko;
 - **Prawnik / księgowa:** czy potrzebny i w jakiej sprawie.
 
 ### Etap 0. Start
@@ -330,6 +340,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
 - **Praca:** L; prowadzi plan „zero zgubionych faktur” (nie dublujemy jego
   kart), nowe rodzaje po C4; próby na KSeF TEST.
 - **Ryzyko:** R1 (faktury, korekty i zaliczki, wysyłka do KSeF).
+- **Sprawdzamy na:** testowy KSeF (przyjęcie i UPO dla każdego rodzaju), schemat FA(3) i przykładowe faktury MF, księgowa (10 faktur z KSeF TEST). **Brakuje:** automatycznej wysyłki każdego rodzaju na KSeF TEST (karta H1b planu zero); KSeF przyjmie złą kwotę różnicy, jeśli pasuje do schematu, więc różnice korekt sprawdzają test i księgowa.
 - **Prawnik / księgowa:** księgowa sprawdza 10 faktur z KSeF TEST (kryterium
   G5 z `GOTOWOSC-DO-WYDANIA.md`) i ujęcie korekt w ewidencji, KPiR i JPK.
 
@@ -346,6 +357,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   typ dokumentu FP w JPK_V7 (generator dziś go nie zna).
 - **Praca:** M; OCR jest; zależy od 1.1 tylko w części korekty FP.
 - **Ryzyko:** R1 (faktura i oznaczenie w JPK).
+- **Sprawdzamy na:** testowy KSeF (FA(3) z oznaczeniem FP), broszura JPK_V7(3) (typ dokumentu FP), e-mikrofirma, księgowa (G30). **Brakuje:** ostatecznego tekstu zmiany rozporządzenia o kasach w Dzienniku Ustaw i przykładu FP z broszur w testach.
 - **Prawnik / księgowa:** księgowa: FP w JPK i w przychodzie (złoty przypadek
   G30).
 
@@ -360,6 +372,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   paragonu z fakturą ze skrzynki.
 - **Praca:** S-M; zależy od 1.2 (te same oznaczenia).
 - **Ryzyko:** R1 (odliczenie VAT w kosztach).
+- **Sprawdzamy na:** przepis o okresie przejściowym do 31.12.2026 i broszura JPK_V7(3); księgowa. **Brakuje:** ostatecznego tekstu rozporządzenia o kasach i odpowiedzi księgowej o koszcie w PIT.
 - **Prawnik / księgowa:** księgowa: czy paragon bez faktury zostaje kosztem
   w PIT.
 
@@ -377,6 +390,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   wymagany.
 - **Praca:** M; pełne „do zapłaty” kosztów przychodzi w 3.4.
 - **Ryzyko:** R1 (dane do przelewu).
+- **Sprawdzamy na:** dokumentacja KSeF 2.0 (CIRFMF) z przykładem identyfikatora zbiorczego; KSeF TEST, który identyfikator generuje. **Brakuje:** testu cyfr kontrolnych na wektorze z dokumentacji i próby na KSeF TEST.
 - **Prawnik / księgowa:** nie.
 
 #### 1.5 Tryby szczególne KSeF i drugi kod QR
@@ -396,6 +410,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
 - **Praca:** L; zależy od kart B1 i B2 planu zero (warunki z jego sekcji
   o Offline24).
 - **Ryzyko:** R1 (wysyłka do KSeF, tryb offline, kody QR); kara z art. 106ni grozi za zły wzór albo termin w trybie awaryjnym i offline24.
+- **Sprawdzamy na:** tabela trybów MF (wersja 12); KSeF TEST (faktura z P_1 sprzed dnia wysyłki przyjęta jako Offline, sprawdzone w H1a planu zero); strona MF do weryfikacji kodów QR. **Brakuje:** certyfikatu typu Offline na KSeF TEST i testu, że oba kody z naszego PDF przechodzą weryfikację MF; awarii KSeF nie da się wywołać na zamówienie, więc tryb awaryjny sprawdzają tylko testy terminów (ryzyko).
 - **Prawnik / księgowa:** prawnik: teksty dla klienta o trybach (już na liście
   planu zero, sekcja 9).
 
@@ -409,6 +424,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   historii bez wysyłki.
 - **Praca:** S.
 - **Ryzyko:** R1 (import faktur do historii), komunikaty R2.
+- **Sprawdzamy na:** import: XSD FA(3) i pliki z KSeF; komunikaty: przegląd treści bez porad (D8 planu księgowości). **Brakuje:** nic istotnego.
 - **Prawnik / księgowa:** nie.
 
 ### Etap 2. Faktury: pełny zestaw
@@ -425,6 +441,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   księgowości); import faktur walutowych z KSeF (dziś odrzucany).
 - **Praca:** L; klient NBP jest (`lib/nbp/client.ts`).
 - **Ryzyko:** R1 (waluty i kursy NBP).
+- **Sprawdzamy na:** API NBP (archiwalne tabele A) i reguła z art. 31a ustawy o VAT; KSeF TEST (KodWaluty, VAT w złotych); przykład faktury walutowej z broszury FA(3); księgowa (G29). **Brakuje:** testów na archiwalnych tabelach NBP z dniami wolnymi i przełomem roku oraz przykładu z broszury w testach.
 - **Prawnik / księgowa:** księgowa: kurs przy zaliczce i korekcie (złoty
   przypadek G29 razem z różnicami kursowymi).
 
@@ -437,6 +454,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   w ustawieniach firmy; XML zostaje według schematu MF (język dotyczy wydruku).
 - **Praca:** M; zależy od 2.1 (kwoty w walucie na wydruku).
 - **Ryzyko:** R1 (PDF faktury).
+- **Sprawdzamy na:** dane na PDF porównane automatycznie z XML wysłanym do KSeF; kody QR jak w 1.5. **Brakuje:** urzędowego wzorca tłumaczeń etykiet; taki nie istnieje (ryzyko: słownik sprawdzają tłumacz i księgowa).
 - **Prawnik / księgowa:** nie. Języki: decyzja D3.
 
 #### 2.3 Sprzedaż za granicę
@@ -450,6 +468,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   i JPK (4.5).
 - **Praca:** M; zależy od 2.1.
 - **Ryzyko:** R1 (stawki i adnotacje).
+- **Sprawdzamy na:** VIES (API UE); KSeF TEST (P_13_6_2, P_13_6_3); broszura JPK_V7(3) (K_21, K_22) i e-mikrofirma; księgowa (G21). **Brakuje:** porównania z e-mikrofirmą i podpisu G21.
 - **Prawnik / księgowa:** księgowa: warunki stawki 0 % i termin dowodów
   (złoty przypadek G21).
 
@@ -473,6 +492,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   w formularzu; numer zajęty w KSeF dalej blokowany (plan zero).
 - **Praca:** M.
 - **Ryzyko:** R1 (numeracja faktur).
+- **Sprawdzamy na:** art. 106e ustawy o VAT (kolejny numer w serii); KSeF odrzuca duplikat numeru (440); test na prawdziwej bazie dla dwóch wystawień naraz. **Brakuje:** testu wyścigu na bazie.
 - **Prawnik / księgowa:** nie.
 
 #### 2.6 Produkty i usługi w formularzu
@@ -486,6 +506,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   (P_9B, P_11A).
 - **Praca:** M.
 - **Ryzyko:** R1 (stawki z katalogu trafiają na faktury).
+- **Sprawdzamy na:** słowniki GTU (broszura JPK_V7) i PKWiU (GUS); XSD FA(3). **Brakuje:** nic istotnego.
 - **Prawnik / księgowa:** nie (stawkę wybiera klient, D8 planu księgowości).
 
 #### 2.7 Rzadsze rodzaje faktur i adnotacje
@@ -507,6 +528,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   „nie” na sztywno; każdy rodzaj z próbą na KSeF TEST i XSD.
 - **Praca:** L, kilka PR (jeden rodzaj na PR).
 - **Ryzyko:** R1 (rodzaje faktur i adnotacje).
+- **Sprawdzamy na:** XSD FA(3) i przykłady z broszury FA(3) (uproszczona, marża, podmiot trzeci, samofakturowanie, załącznik); KSeF TEST (samofakturowanie po nadaniu uprawnienia, faktura VAT RR); broszura JPK_V7(3) (procedury marży). **Brakuje:** uprawnienia do samofakturowania na KSeF TEST; urzędowego przykładu kaucji na fakturze; taki nie istnieje (ryzyko: decyduje księgowa).
 - **Prawnik / księgowa:** księgowa: marża w JPK i ewidencji.
 
 #### 2.8 Wygoda wystawiania i wysyłki
@@ -524,6 +546,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   idempotencji na okres (wzór z `PLAN-FINORA.md`, N1).
 - **Praca:** L, kilka PR.
 - **Ryzyko:** R1 (wysyłka masowa, faktury cykliczne bez człowieka); autozapis i szablony R0.
+- **Sprawdzamy na:** KSeF TEST (sesja wsadowa) i dokumentacja CIRFMF; dla faktur cyklicznych niezmiennik „jedna faktura na okres” na prawdziwej bazie. **Brakuje:** próby sesji wsadowej na KSeF TEST.
 - **Prawnik / księgowa:** nie. Automat cyklicznych: decyzja D5.
 
 #### 2.9 Dokumenty poza fakturą
@@ -540,6 +563,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   czwartego etapu przypomnień, którego szablon już jest.
 - **Praca:** M.
 - **Ryzyko:** R1 (odsetki, rekompensata, dokumenty dla kontrahenta).
+- **Sprawdzamy na:** obwieszczenia o stawce odsetek za opóźnienie w transakcjach handlowych (Monitor Polski) i ustawa o przeciwdziałaniu nadmiernym opóźnieniom (rekompensata w euro po kursie NBP). **Brakuje:** rejestru stawek ze źródłem (dziś `RATES_VERIFIED=false`); urzędowego przykładu wyliczenia; taki nie istnieje (ryzyko: przykłady liczy księgowa).
 - **Prawnik / księgowa:** księgowa: przychód z odsetek i not w KPiR.
 
 #### 2.10 Strona faktury dla nabywcy
@@ -551,6 +575,7 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   faktur, z limitem prób i wygasaniem; zgodność z RODO (dane konsumenta).
 - **Praca:** M.
 - **Ryzyko:** R1 (dokument dla nabywcy); bezpieczeństwo strony jak przy portalu księgowej.
+- **Sprawdzamy na:** jak 2.2 (PDF zgodny z XML, kod QR). **Brakuje:** zewnętrznego testu zabezpieczeń strony.
 - **Prawnik / księgowa:** nie.
 
 ### Etap 3. Pieniądze
@@ -567,6 +592,7 @@ u operatora płatności.
   (00158), z testem RLS na bazie; karta FLO przestaje być jedyną drogą.
 - **Praca:** S-M.
 - **Ryzyko:** R1 (data zapłaty zasila kasowy PIT, metodę kasową i złe długi).
+- **Sprawdzamy na:** niezmienniki na prawdziwej bazie (suma wpłat równa zapłaconej kwocie, ta sama wpłata zapisana dwa razy liczy się raz); zewnętrznego wzorca nie ma, bo to dane klienta. **Brakuje:** testu RLS nowego RPC.
 - **Prawnik / księgowa:** nie.
 
 #### 3.2 Import wyciągu bankowego
@@ -582,6 +608,7 @@ u operatora płatności.
   po imporcie); ekran Bank z Finory (P12).
 - **Praca:** L; zależy od 1.4 (numer KSeF w tytule) i 3.1.
 - **Ryzyko:** R1 (zapisuje zapłaty).
+- **Sprawdzamy na:** specyfikacje formatów (MT940 banków, CAMT.053 według ISO 20022) i zanonimizowane prawdziwe wyciągi. **Brakuje:** przykładowych plików od każdego banku (za zgodą firm z pilotażu).
 - **Prawnik / księgowa:** prawnik: RODO przy wyciągach (pytanie 8). Wchodzi
   tylko przy „tak” w decyzji P1.
 
@@ -597,6 +624,7 @@ u operatora płatności.
   w tytule.
 - **Praca:** L; zależy od 2.10 i 3.1.
 - **Ryzyko:** R1 (zapisuje zapłaty, przechowuje klucze operatora).
+- **Sprawdzamy na:** tryb testowy operatora płatności. **Brakuje:** konta testowego u wybranego operatora (część wymaga spółki).
 - **Prawnik / księgowa:** prawnik: czy to usługa płatnicza (pytanie 7).
   Wchodzi tylko przy „tak” w decyzji P2.
 
@@ -613,6 +641,7 @@ u operatora płatności.
   plik przelewów (format importu banków, np. Elixir-0 albo CSV).
 - **Praca:** M; zależy od 1.4.
 - **Ryzyko:** R1 (koszt w PIT zależy od białej listy).
+- **Sprawdzamy na:** API białej listy MF i VIES; specyfikacja pliku przelewów banku. **Brakuje:** testów na odpowiedziach API w każdym stanie (rachunek w wykazie, poza nim, podmiot wykreślony).
 - **Prawnik / księgowa:** nie.
 
 #### 3.5 Złe długi
@@ -626,6 +655,7 @@ u operatora płatności.
   zapłaty); wpisy w KPiR i w zaliczce PIT.
 - **Praca:** M; zależy od 3.1, 3.4 i 4.5.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** ustawa o VAT (art. 89a, 89b) i broszura JPK_V7(3) (pola korekty); e-mikrofirma; księgowa (G28). **Brakuje:** urzędowego przykładu z terminem 90 dni w testach i podpisu G28.
 - **Prawnik / księgowa:** księgowa: złoty przypadek G28.
 
 #### 3.6 Różnice kursowe
@@ -636,6 +666,7 @@ u operatora płatności.
   z opisem.
 - **Praca:** M; zależy od 2.1 i 3.1.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** API NBP i przepisy ustawy o PIT o różnicach kursowych; księgowa (G29). **Brakuje:** urzędowego kalkulatora; taki nie istnieje (ryzyko: tylko księgowa i przykłady).
 - **Prawnik / księgowa:** księgowa: złoty przypadek G29.
 
 #### 3.7 Gotówka
@@ -646,6 +677,7 @@ u operatora płatności.
   gotówką”), raport za okres.
 - **Praca:** M.
 - **Ryzyko:** R1 (dowody kasowe dla kontrahenta).
+- **Sprawdzamy na:** rozporządzenie o KPiR (elementy dowodu); księgowa. **Brakuje:** urzędowego wzoru KP i KW; taki nie istnieje, więc dowód musi mieć elementy wymagane rozporządzeniem.
 - **Prawnik / księgowa:** nie.
 
 #### 3.8 Koszty bez zdjęcia i podróże służbowe
@@ -661,6 +693,7 @@ u operatora płatności.
   podróży służbowej).
 - **Praca:** M.
 - **Ryzyko:** R1 (koszty, kolumna KPiR, stawki diet).
+- **Sprawdzamy na:** rozporządzenie o należnościach z tytułu podróży służbowej (stawki diet w kraju i za granicą); księgowa. **Brakuje:** rejestru stawek diet ze źródłem i datą.
 - **Prawnik / księgowa:** księgowa: podróże właściciela firmy w KPiR.
 
 ### Etap 4. Księgowość w ciągu roku (K9, część 1)
@@ -682,6 +715,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   jako komunikaty, bez porady.
 - **Praca:** L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** XSD i broszura JPK_V7K(3), testowa bramka MF (działa od K6), e-mikrofirma, przykłady zaliczek kwartalnych z podatki.gov.pl; księgowa (G15, G16). **Brakuje:** sprawdzenia, czy e-mikrofirma obsługuje V7K w potrzebnym zakresie, i podpisów G15, G16.
 - **Prawnik / księgowa:** księgowa: złote przypadki G15, G16.
 
 #### 4.2 Kasowy PIT
@@ -693,6 +727,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   dwóch lat od wystawienia faktury; `Kasowy_PIT` w JPK_EWP (dziś zawsze „NIE”).
 - **Praca:** M; zależy od 3.1 (daty wpłat).
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** ustawa o PIT (kasowy PIT) i broszura JPK_EWP(4) (`Kasowy_PIT`); księgowa (G17). **Brakuje:** potwierdzenia limitu w ustawie (biznes.gov.pl: 2 mln zł) i urzędowych przykładów.
 - **Prawnik / księgowa:** księgowa: złoty przypadek G17; limit przychodu
   potwierdzić w ustawie (biznes.gov.pl podaje 2 mln zł).
 
@@ -713,6 +748,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   wpisany przez klienta.
 - **Praca:** L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** tabele ZUS i e-Płatnik w eZUS (ZUS sam liczy DRA, także przy Małym ZUS Plus i wakacjach składkowych); księgowa (G18, G19). **Brakuje:** konta płatnika do porównań co rok (robi to człowiek).
 - **Prawnik / księgowa:** księgowa: złote przypadki G18, G19; porównanie
   z e-Płatnikiem ZUS.
 
@@ -726,6 +762,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   wczytuje plik).
 - **Praca:** M; zależy od 4.3.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** schemat KEDU ZUS i import pliku w ePłatniku (ZUS sprawdza plik przy wczytaniu); e-Płatnik. **Brakuje:** środowiska testowego ZUS; takie nie istnieje, więc plik sprawdzamy wczytaniem na koncie firmy z pilotażu, bez wysyłki.
 - **Prawnik / księgowa:** prawnik: pytanie 10; księgowa: porównanie
   z e-Płatnikiem.
 
@@ -743,6 +780,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   fizycznej (D16 planu księgowości).
 - **Praca:** L, kilka PR; zależy od 2.3 i 2.7.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** XSD i broszura JPK_V7(3) z sumami kontrolnymi, testowa bramka MF, e-mikrofirma; księgowa (G20, G21). **Brakuje:** sum kontrolnych z broszury jako testów i porównania z e-mikrofirmą pole po polu.
 - **Prawnik / księgowa:** księgowa: złote przypadki G20, G21; porównanie
   z e-mikrofirmą MF.
 
@@ -757,6 +795,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   o rejestracji VAT-UE (bez porady); wysyłka w 5.5.
 - **Praca:** M; zależy od 4.5.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** XSD e-Deklaracji i formularze interaktywne MF (VAT-UE, VAT-8, VAT-9M); VIES; księgowa (G20). **Brakuje:** potwierdzenia środowiska testowego bramki e-Deklaracji; dla podatku u źródła wzorca do liczenia nie ma, więc zostaje tylko ostrzeżenie (ryzyko).
 - **Prawnik / księgowa:** księgowa: złoty przypadek G20; podatek u źródła
   tylko jako ostrzeżenie (decyzja prawnika, pytanie 13).
 
@@ -772,6 +811,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   limity 100/150/225 tys. zł dla aut wprowadzonych od 1.01.2026.
 - **Praca:** L; zależy od 5.1 dla amortyzacji.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** ustawa o VAT (art. 86a) i o PIT (art. 23), odpowiedź MF o limitach od 2026 r., wzór VAT-26; księgowa (G22). **Brakuje:** urzędowego przykładu limitu przy leasingu w testach.
 - **Prawnik / księgowa:** księgowa: złoty przypadek G22.
 
 #### 4.8 Proporcja VAT i zmiana statusu VAT w trakcie roku
@@ -783,6 +823,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   z datą w historii ustawień; limit zwolnienia jest na pulpicie.
 - **Praca:** M.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** ustawa o VAT (art. 90, 91) i objaśnienia MF; księgowa. **Brakuje:** urzędowych przykładów proporcji w testach.
 - **Prawnik / księgowa:** księgowa.
 
 ### Etap 5. Środki trwałe i rozliczenie roku (K9, część 2)
@@ -799,6 +840,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   JPK_ST).
 - **Praca:** L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** XSD i broszura JPK_ST(1), interaktywny formularz MF JPK_ST(1), KŚT i wykaz stawek amortyzacyjnych z ustawy o PIT; księgowa (G23). **Brakuje:** przykładowych plików z broszury jako testów.
 - **Prawnik / księgowa:** księgowa: złoty przypadek G23.
 
 #### 5.2 Zeznanie PIT-28
@@ -810,6 +852,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   po polu; plik do wysyłki (5.5).
 - **Praca:** L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** XSD PIT-28 na dany rok i formularz w e-Urzędzie Skarbowym (Twój e-PIT), który liczy podatek z wpisanych danych; księgowa (G26). **Brakuje:** wzoru i XSD na dany rok (publikuje MF) oraz ręcznej listy porównań z e-Urzędem przed każdym rokiem.
 - **Prawnik / księgowa:** księgowa: złoty przypadek G26; najem prywatny:
   decyzja D6.
 
@@ -827,6 +870,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
 - **Praca:** XL, kilka PR (najpierw PIT-36L, potem PIT-36 bez ulg, potem ulgi
   i wspólne rozliczenie).
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** jak 5.2 (PIT-36, PIT-36L, PIT/B, PIT/O); księgowa (G24, G25). **Brakuje:** jak 5.2; przy wspólnym rozliczeniu dane małżonka spoza FaktWay.
 - **Prawnik / księgowa:** prawnik: pytania 12, 13; księgowa: złote przypadki
   G24, G25.
 
@@ -838,6 +882,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
 - **W aplikacji:** osobna ewidencja i formularze PIT/IP i PIT/BR.
 - **Praca:** L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5; łatwo tu o poradę i o błąd w kwalifikacji.
+- **Sprawdzamy na:** objaśnienia MF do IP Box z przykładami, formularze PIT/IP i PIT/BR. **Brakuje:** wzorca dla kwalifikacji dochodu i kosztów; taki nie istnieje, bo to ocena, a nie rachunek (ryzyko: decyduje klient z doradcą).
 - **Prawnik / księgowa:** prawnik: pytanie 13 (czy to doradztwo);
   księgowa: przykłady.
 
@@ -852,6 +897,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   statusy i UPO; środowisko testowe, jeśli MF je udostępnia.
 - **Praca:** L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** specyfikacja wejścia-wyjścia bramki e-Deklaracji i UPO. **Brakuje:** potwierdzenia, czy MF ma środowisko testowe tej bramki.
 - **Prawnik / księgowa:** prawnik: pytanie 9 (jak pytanie 3 dla JPK).
 
 #### 5.6 JPK_PKPIR, JPK_EWP i JPK_ST razem z zeznaniem
@@ -861,6 +907,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   i korekty plików; JPK_ST z 5.1.
 - **Praca:** M; zależy od 5.1.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** testowa bramka JPK (działa od K6) i XSD. **Brakuje:** próby wysyłki JPK_PKPIR, JPK_EWP i JPK_ST na teście.
 - **Prawnik / księgowa:** prawnik: pytanie 3 (to samo co JPK_V7M).
 
 #### 5.7 Roczna składka zdrowotna
@@ -872,6 +919,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   kwiecień; wpis w KEDU (4.4).
 - **Praca:** M; zależy od 4.4.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** e-Płatnik (DRA za kwiecień z rocznym rozliczeniem), kalkulator składki zdrowotnej i przykłady ZUS; księgowa (G27). **Brakuje:** konta płatnika do porównań i przykładów ZUS jako testów.
 - **Prawnik / księgowa:** księgowa: złoty przypadek G27; termin potwierdzić
   na zus.pl.
 
@@ -886,6 +934,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   wynik trzech wyliczeń bez zalecenia (D8 planu księgowości).
 - **Praca:** M; porównanie form L.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5; porównanie form to pozycja „czerwona” planu księgowości, tylko po opinii prawnika.
+- **Sprawdzamy na:** nowe parametry: rejestr źródeł i czujka filtra; porównanie form: każdą formę liczą te same silniki co rozliczenia, więc złote przypadki. **Brakuje:** wzorca dla samego porównania; taki nie istnieje, bo to symulacja, a ryzykiem jest porada, nie rachunek.
 - **Prawnik / księgowa:** prawnik: pisemna opinia przed porównaniem form
   (pytanie 13).
 
@@ -899,6 +948,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   z listą obowiązków.
 - **Praca:** M.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** ustawa o VAT (art. 14) i przepisy ZUS; księgowa. **Brakuje:** urzędowego kalkulatora; taki nie istnieje (ryzyko: tylko księgowa i przykłady).
 - **Prawnik / księgowa:** księgowa.
 
 ### Etap 6. Księgowa, przeprowadzka i dane
@@ -913,6 +963,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   z 29.09.2026); waluty po 2.1.
 - **Praca:** M, jeden program na PR.
 - **Ryzyko:** R2 (eksporty dla księgowych).
+- **Sprawdzamy na:** próbny import w programie biura (Optima, Subiekt i Rewizor, Symfonia, Wapro). **Brakuje:** kont próbnych tych programów (przez biuro albo księgową).
 - **Prawnik / księgowa:** księgowa z biura: próbny import.
 
 #### 6.2 Księgowa w FaktWay
@@ -930,6 +981,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   roli księgowej.
 - **Praca:** L.
 - **Ryzyko:** R1 (uprawnienia w KSeF), portal R2.
+- **Sprawdzamy na:** KSeF TEST (API uprawnień) i dokumentacja CIRFMF. **Brakuje:** próby nadania i odebrania uprawnienia na KSeF TEST.
 - **Prawnik / księgowa:** nie.
 
 #### 6.3 Przeprowadzka z innego programu
@@ -946,6 +998,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   programu, produktów w katalogu (2.6) i raportu „co przeniesione, czego brak”.
 - **Praca:** M.
 - **Ryzyko:** R1 (import faktur i kosztów).
+- **Sprawdzamy na:** pliki eksportu z każdego programu (zanonimizowane) i sumy z raportów tych programów; historia z KSeF. **Brakuje:** przykładowych plików z kont próbnych Fakturowni, inFaktu, wFirmy i IFIRMY.
 - **Prawnik / księgowa:** nie.
 
 #### 6.4 Wyjście, archiwum i kontrola skarbowa
@@ -958,6 +1011,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   końcu abonamentu (decyzja D9); JPK z wybranym celem „na żądanie”.
 - **Praca:** M.
 - **Ryzyko:** R1 (przechowywanie i usuwanie danych).
+- **Sprawdzamy na:** XSD JPK na żądanie i przepisy o przechowywaniu. **Brakuje:** opinii prawnika (pytanie 16).
 - **Prawnik / księgowa:** prawnik: pytanie 16.
 
 #### 6.5 KSeF bez plików
@@ -969,6 +1023,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   TEST.
 - **Praca:** M; zależy od spółki (brama B1).
 - **Ryzyko:** R1 (KSeF).
+- **Sprawdzamy na:** KSeF TEST (uprawnienie dla NIP, token). **Brakuje:** NIP spółki (brama B1).
 - **Prawnik / księgowa:** prawnik: pytanie 14.
 
 ### Etap 7. API i automatyzacja
@@ -984,6 +1039,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
   walidacja, wysyłka przez kolejkę).
 - **Praca:** L.
 - **Ryzyko:** R1 (API wystawia faktury); zewnętrzny test zabezpieczeń przed startem.
+- **Sprawdzamy na:** te same testy co interfejs, bo API woła te same akcje. **Brakuje:** zewnętrznego testu zabezpieczeń.
 - **Prawnik / księgowa:** prawnik: regulamin API (pytanie 15).
 
 #### 7.2 Łącze dla asystentów AI (MCP)
@@ -1003,6 +1059,7 @@ liczenia z sekcji 4 planu księgowości (grosze, zaokrąglenia, parametry ze
 - **W aplikacji:** adres kalendarza z niezgadywalnym kluczem.
 - **Praca:** S.
 - **Ryzyko:** R1 (terminy podatkowe).
+- **Sprawdzamy na:** kalendarz terminów modułu (testy na lata 2025-2028). **Brakuje:** nic istotnego.
 - **Prawnik / księgowa:** nie.
 
 ### Etap 8. Wygoda i zasięg
@@ -1077,6 +1134,7 @@ Te kroki wchodzą tylko przy „tak” Bartosza w sekcji 6.
   składki pracownika, koszty uzyskania, PPK) i wyłącznikiem.
 - **Praca:** XL (osobny plan z listą inwariantów).
 - **Ryzyko:** R1, osobny moduł za wyłącznikiem do bramy B1-B5.
+- **Sprawdzamy na:** tylko częściowy: e-Płatnik sprawdza składki w ZUS RCA i DRA; są schematy PIT-4R i PIT-11. **Brakuje:** państwowego wzorca dla listy płac (wynagrodzenie netto, zaliczka PIT pracownika, PPK, potrącenia); taki nie istnieje, więc to ryzyko wprost: wynik sprawdzają tylko księgowa kadrowa i druga niezależna implementacja.
 - **Prawnik / księgowa:** prawnik: pytanie 11; księgowa kadrowa.
 
 #### 9.2 Spółka cywilna i jawna na KPiR
@@ -1088,6 +1146,7 @@ Te kroki wchodzą tylko przy „tak” Bartosza w sekcji 6.
   podział przychodów i kosztów.
 - **Praca:** L; zależy od etapów 4 i 5.
 - **Ryzyko:** R1, w module księgowości za wyłącznikiem `ksiegowosc` do bramy B1-B5.
+- **Sprawdzamy na:** silniki JDG liczone dla każdego wspólnika; księgowa. **Brakuje:** wzorca dla podziału między wspólników; taki nie istnieje (ryzyko: tylko księgowa).
 - **Prawnik / księgowa:** księgowa.
 
 #### 9.3 Kasa fiskalna: limit i raporty (decyzja P6)
@@ -1099,6 +1158,7 @@ Te kroki wchodzą tylko przy „tak” Bartosza w sekcji 6.
   bez połączenia z kasami i drukarkami.
 - **Praca:** S.
 - **Ryzyko:** R2 (licznik limitu).
+- **Sprawdzamy na:** rozporządzenie o zwolnieniach z kas (limit, lista czynności). **Brakuje:** nic istotnego.
 - **Prawnik / księgowa:** nie.
 
 #### 9.4 OSS: licznik progu (decyzja P5)
@@ -1109,12 +1169,14 @@ Te kroki wchodzą tylko przy „tak” Bartosza w sekcji 6.
   VIU-DO.
 - **Praca:** S; zależy od 2.1.
 - **Ryzyko:** R2 (licznik progu).
+- **Sprawdzamy na:** objaśnienia MF do OSS (próg) i kurs NBP. **Brakuje:** nic istotnego.
 - **Prawnik / księgowa:** nie.
 
 #### 9.5 Pełna księgowość (decyzja P4)
 Rekomendacja: nie budujemy (sekcja 6). Jeśli Bartosz zdecyduje inaczej,
 powstaje osobny plan: księgi rachunkowe, plan kont, sprawozdanie finansowe,
-CIT, JPK_KR_PD.
+CIT, JPK_KR_PD. Wzorca do sprawdzenia poprawności tu nie ma (sekcja 8.2):
+to ryzyko wprost i kolejny powód rekomendacji „nie”.
 
 ---
 
@@ -1232,10 +1294,55 @@ z wyjściem.
 ruszają, gdy faza II filtra obejmie ich obszar. Prawie cały ten plan to R1,
 a etap 1 ma twardy termin 1.01.2027, dlatego decyzja D11 w sekcji 6.
 
-Wzorce, na których sprawdzamy wynik (notatka „Źródła prawdy” z 8.11.2026):
-system państwowy, który przyjmuje dokument, prawdziwe dokumenty z pilotażu,
-dwie niezależne księgowe, urzędowe przykłady, druga niezależna implementacja
-i czujka na zmiany przepisów.
+### 8.1 Na czym sprawdzamy wynik
+
+Według notatki „Źródła prawdy” z 8.11.2026 (analiza zlecona przez Bartosza).
+Wzorce od najmocniejszego:
+1. system państwowy, który sam liczy albo przyjmuje dokument;
+2. dokumenty, które prawdziwe firmy złożyły i urząd przyjął (pilotaż, za
+   zgodą firm);
+3. dwie niezależne księgowe;
+4. urzędowe przykłady z broszur, objaśnień i poradników;
+5. druga, niezależna implementacja;
+6. na końcu programy konkurencji, tylko do ręcznego sprawdzenia kilku
+   przypadków.
+
+| Obszar | Wzorzec | Już mamy | Czego brakuje | Kroki |
+|---|---|---|---|---|
+| Faktury FA(3) i KSeF | schemat FA(3), dokumentacja KSeF 2.0 (CIRFMF), KSeF TEST, przykładowe faktury MF | XSD FA(3) lokalnie; próba wysyłki na prawdziwym KSeF TEST (H1a planu zero) | automatyczna wysyłka każdego rodzaju (H1b); certyfikat typu Offline na TEST; uprawnienie do samofakturowania na TEST | 1.1-1.5, 2.1-2.10, 6.2, 6.5 |
+| JPK_V7M i JPK_V7K | XSD i broszura JPK_V7(3), testowa bramka MF, e-mikrofirma | XSD; próba K6.0 na bramce testowej (status 200, UPO) | sumy kontrolne z broszury jako testy; porównanie z e-mikrofirmą pole po polu, ręcznie przed każdą zmianą | 1.2, 3.5, 4.1, 4.5 |
+| JPK_EWP, JPK_PKPIR, JPK_ST | XSD, broszury i formularze interaktywne MF, rozporządzenie o KPiR | XSD EWP i PKPIR | XSD i przykłady JPK_ST; próba wysyłki z zeznaniem na teście | 5.1, 5.6 |
+| VAT-UE, VAT-8, VAT-9M, VAT-26, zeznania PIT | XSD e-Deklaracji, formularze interaktywne MF, e-Urząd Skarbowy (Twój e-PIT liczy podatek z wpisanych danych) | nic | wzory na dany rok; potwierdzenie środowiska testowego bramki e-Deklaracji; ręczna lista porównań z e-Urzędem co rok | 4.6, 4.7, 5.2-5.5 |
+| Składki ZUS, DRA, roczna zdrowotna | tabele ZUS, e-Płatnik w eZUS (sam liczy DRA), import KEDU w ePłatniku, kalkulator składki zdrowotnej ZUS | tabele 2026 odtworzone co do grosza (K1) | konto płatnika do porównań (człowiek, co rok); ZUS nie ma środowiska testowego | 4.3, 4.4, 5.7 |
+| Stawki, progi, limity roku | Dziennik Ustaw, Monitor Polski, tabele ZUS, limity MF | rejestr parametrów 2026 i 2027 ze źródłami, podpis księgowej (D7 planu księgowości) | parametry nowych obszarów (diety, odsetki, limity aut, Mały ZUS Plus); czujka ELI API | 2.9, 3.8, 4.3, 4.7 |
+| Reguły liczenia (PIT, ryczałt, odliczenia, złe długi, różnice kursowe, amortyzacja) | teksty jednolite ustaw (ISAP), objaśnienia MF, przykłady z podatki.gov.pl i zus.pl | szkielety złotych przypadków G1-G14 | G15-G30 podpisane przez dwie niezależne księgowe (B4); druga niezależna implementacja | 3.5, 3.6, 4.1-4.8, 5.1-5.9 |
+| Kursy walut | API NBP (tabela A) i reguły z ustaw | klient NBP | testy na archiwalnych tabelach z dniami wolnymi i przełomem roku | 2.1, 3.6 |
+| Kontrahenci i rachunki | GUS (BIR), biała lista MF (API), VIES | GUS, status NIP na białej liście, VIES w walidacji | sprawdzenie rachunku podpięte przy kosztach; testy każdego stanu odpowiedzi API | 2.3, 3.4 |
+| Terminy i dni wolne | ustawa o dniach wolnych, Ordynacja podatkowa (art. 12 § 5), terminy z ustaw | kalendarz z testami | nowe terminy (kwartalne, roczne, VAT-26, ZAW-NR, wniosek RWS) w tym samym kalendarzu | 4.1, 4.3, 4.7, 5.2, 7.3 |
+| Eksporty dla biur i przeprowadzka | próbny import w programie docelowym; pliki eksportu z programów | JPK_FA, CSV | konta próbne Optimy, Subiekta, Symfonii i Wapro; pliki z kont próbnych Fakturowni, inFaktu, wFirmy i IFIRMY | 6.1, 6.3 |
+| Prawdziwe dane | dokumenty z pilotażu przyjęte przez urząd i ZUS (UPO, stan konta w PUE ZUS) | nic | firmy pilotażowe i ich zgoda na porównanie 12 miesięcy (B6) | wszystkie kroki R1 |
+
+### 8.2 Funkcje bez wzorca: ryzyko wprost
+
+Dla tych rzeczy nie ma systemu państwowego ani urzędowego przykładu, który
+potwierdzi wynik. Sprawdzą je tylko księgowa, niezmienniki i druga niezależna
+implementacja, więc ryzyko błędu zostaje wyższe niż przy reszcie planu:
+- kadry i płace (9.1): lista płac, zaliczka PIT pracownika, PPK i potrącenia;
+  ZUS sprawdzi tylko składki;
+- pełna księgowość spółek (9.5): systemy, które przyjmują sprawozdania,
+  sprawdzają format, a nie poprawność;
+- podział wyniku między wspólników spółki cywilnej i jawnej (9.2);
+- porównanie form opodatkowania (5.8): to symulacja, a ryzykiem jest porada;
+- kwalifikacja dochodu i kosztów w IP Box i uldze B+R (5.4);
+- podatek u źródła przy zakupach z zagranicy (4.6): tylko ostrzeżenie, bez
+  liczenia;
+- kaucja na fakturze (2.7), noty odsetkowe (2.9), różnice kursowe (3.6),
+  zawieszenie i zamknięcie firmy (5.9): brak urzędowych przykładów, liczy
+  księgowa;
+- tryb awaryjny KSeF (1.5): awarii nie da się wywołać na zamówienie, zostają
+  testy terminów;
+- tłumaczenia etykiet faktury i aplikacji (2.2, 8.2): nie ma urzędowego
+  słownika.
 
 ---
 
@@ -1340,6 +1447,7 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | Data | Krok | PR | Stan | Uwagi |
 |---|---|---|---|---|
 | 8.11.2026 | plan | #485 | do zatwierdzenia | spis kodu `279e2b4c`, przepisy ze źródeł urzędowych, luki wobec liderów, poziomy ryzyka z mapy żelaznego filtra; czeka na decyzje z sekcji 6 |
+| 8.11.2026 | plan: wzorce | #485 | do zatwierdzenia | na prośbę sesji zlecającej: przy 51 krokach z ryzykiem wzorzec do sprawdzenia wyniku i czego brakuje (według notatki „Źródła prawdy”), tabela wzorców według obszaru (8.1) i lista funkcji bez wzorca jako ryzyko wprost (8.2) |
 
 **Następny krok:** Bartosz czyta plan i podejmuje decyzje z sekcji 6 (P1-P6,
 D1-D11). Potem krok 0.1 (fraza w `AGENTS.md`, decyzje, pytania do prawnika,
