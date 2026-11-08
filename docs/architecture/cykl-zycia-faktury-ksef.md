@@ -170,3 +170,6 @@ Operator w `/admin/ksef`: lista naruszeń I1–I9 (bez I5D), lista „Czekają n
 | D4 | Kto klika „Wyślij ponownie” / „Wróć do szkicu”: każdy członek czy owner/admin? | owner/admin (jak dane firmy), member tylko podgląd |
 | D5 | Co z plikiem XML w R2 po resecie: usunąć czy kluczować po `sendAttemptId`? | kluczować po `sendAttemptId` (ścieżka `tenant/invoice/attempt.xml`), stare obiekty czyści retencja; zero ryzyka nadpisania pliku, który poszedł do KSeF |
 | D6 | Czy `offline_queued` zostaje w CHECK i wyzwalaczach? | zostaje; usunięcie to osobna decyzja po rozstrzygnięciu Offline24 z prawnikiem |
+| D7 | Co z fakturą, która nie wyszła w dniu daty P_1? | założenie robocze z 05.11.2026: wysyłamy bez zmian do końca następnego dnia roboczego (art. 106nda ust. 2 i 16), potem zatrzymanie i nowy dokument; prawnik na końcu rundy (plan „zero zgubionych faktur”, sekcja 9) |
+| D8 | Czy oferujemy Offline24 z wydaniem dokumentu nabywcy przed wysłaniem? | założenie robocze: nie w pierwszym wydaniu; art. 106nda ust. 1 daje uprawnienie podatnikowi, nie obowiązek programowi |
+| D9 | Jak komunikujemy awarię KSeF? | założenie robocze: baner i mail według stanu Latarni MF (sesja B3) |

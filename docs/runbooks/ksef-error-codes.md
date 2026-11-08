@@ -436,8 +436,8 @@ KOR/ROZ sprzed 00137 (bez `special_data`) albo ZAL sprzed 02.10.2026 (bez
      samej zmiany w lustrze TypeScript; dziś zgodność lustra z 00148
      pilnuje `tests/unit/ksef-decyzja-duplikatu-migracja.test.ts` (U16e) —
      nowa migracja musi dostać takie samo sprawdzenie. Punkt bramki: plan
-     „zero zgubionych faktur”, sekcja 8.
-  9. **Zapisane osobno** (dziennik planu, sekcja 9): D-A4-1b-3-S
+     „zero zgubionych faktur”, sekcja 9 (pakiet dla prawnika).
+  9. **Zapisane osobno** (`PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md`): D-A4-1b-3-S
      (KOR/ZAL/ROZ z nierozstrzygniętym 440), D-A4-1b-3-KN-Y (zapis Y po
      decyzji `known-number`), D-A4-1b-3-OWN-KN (akceptacja własnej sesji
      przed sprawdzeniem znanego numeru), treść szkicu wycofanego poza
