@@ -1339,7 +1339,7 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 
 | Data | Krok | PR | Stan | Uwagi |
 |---|---|---|---|---|
-| 8.11.2026 | plan | (ten PR) | do zatwierdzenia | spis kodu `279e2b4c`, przepisy ze źródeł urzędowych, luki wobec liderów; czeka na decyzje z sekcji 6 |
+| 8.11.2026 | plan | #485 | do zatwierdzenia | spis kodu `279e2b4c`, przepisy ze źródeł urzędowych, luki wobec liderów, poziomy ryzyka z mapy żelaznego filtra; czeka na decyzje z sekcji 6 |
 
 **Następny krok:** Bartosz czyta plan i podejmuje decyzje z sekcji 6 (P1-P6,
 D1-D11). Potem krok 0.1 (fraza w `AGENTS.md`, decyzje, pytania do prawnika,
