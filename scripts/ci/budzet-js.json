@@ -1,0 +1,5 @@
+{
+  "opis": "Plan usprawnień 4.5: próg First Load JS (gzip, kB) dla każdej trasy App Routera. Liczy scripts/ci/budzet-js.mjs po next build w jobie „Next build”. Ustawiony 08.11.2026 na największą trasę + ok. 5 % zapasu (liczby w opisie PR). Podnosisz go tylko świadomie, z uzasadnieniem w PR. Pole „trasy” daje próg pojedynczej trasie, np. {\"/(auth)/login\": 400}.",
+  "maxFirstLoadKB": 750,
+  "trasy": {}
+}
