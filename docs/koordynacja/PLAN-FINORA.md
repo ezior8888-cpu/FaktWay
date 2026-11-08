@@ -485,7 +485,10 @@ szkice, VAT należny, sprzedaż brutto, termin VAT) są w tych kartach.
   i faktury w walucie obcej dostają „—”, nigdy plakietkę „Opłacona”. ·
   Actions → **Podgląd, PDF, ⋯**. W menu: **Korekta** →
   `/invoices/new/correction?parentId=<id>`, tylko dla faktur, które formularz
-  korekty przyjmuje (warunki z `new/correction/page.tsx`); **Pobierz XML**;
+  korekty przyjmuje (`correctionParentRefusal` z
+  `lib/invoices/correction-parents.ts` zwraca `null`; korektę w toku
+  sprawdza `loadCorrectionPicker`, więc link na fakturę z korektą w toku
+  pokaże komunikat K4, nie pusty wybór); **Pobierz XML**;
   **Usuń** tylko dla szkicu. „Oznacz jako zapłaconą” nie istnieje (N6).
   „Duplikuj” i „Ustaw jako cykliczną” dodaje E9 (N1).
 - **Kosz z akcji Finory: tylko dla szkiców.** Faktury wysłanej do KSeF nie

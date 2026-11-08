@@ -4,6 +4,10 @@
 > (sekcja 0) i pracuj od „Następny krok” na końcu dziennika (sekcja 7).
 > Jeden punkt = jedna gałąź `claude/usp-<etap>-<temat>` = jeden PR. Po etapie
 > raport i stop (punkt 10 protokołu w `AGENTS.md`).
+>
+> **Plan zamknięty 08.11.2026.** Etapy 1 i 2 oraz pomysły z sekcji 4 są
+> zrobione albo odrzucone z powodem. Co wyszło poza plan jako osobne tory,
+> mówi ostatni wiersz dziennika i „Następny krok”.
 
 ## Po co ten plan
 
@@ -112,6 +116,94 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 | 3.6 | Sprzątanie: archiwizacja sesji po scaleniu PR (ustawienie aplikacji, za zgodą), cotygodniowe usuwanie `.next` w worktree bezczynnych > 7 dni (`scripts/dev/sprzataj-worktree.sh`) | N | |
 | 3.7 | Później: podział `submit-invoice.ts`, `duplicate-decision.ts`, `invoice-form.tsx` z listą niezmienników spisaną przed zmianą; stopniowe `noUncheckedIndexedAccess` (katalog po katalogu) | W | każdy gigant osobna sesja |
 
+#### 3.7c Niezmienniki `components/invoices/invoice-form.tsx` (spisane przed podziałem)
+
+Stan: `main` @ `41c1db25`, 1 315 linii. Odnośniki `plik:linia` do tego
+stanu. Podział ma zostawić każdy punkt bez zmian; dowodem są testy
+charakteryzujące (`tests/unit/invoice-form-charakterystyka*.test.tsx`)
+zielone przed podziałem i po nim bez zmian w treści testów.
+
+1. **Publiczne API.** Moduł `@/components/invoices/invoice-form` eksportuje
+   tylko `InvoiceForm`, z propsami `tenantId` (wymagany), `seller`,
+   `prefill`, `suggestedNumber`, `vatExempt`, `initialValues`,
+   `recurringInvoiceId`, `recurringPeriod` i domyślnymi `null`/`false`
+   (`invoice-form.tsx:152-194`). Jedyny użytkownik w aplikacji:
+   `app/(dashboard)/invoices/new/regular/page.tsx:177`. Testy importują
+   i mockują tę ścieżkę (`wystaw-fakture-uklad`, `nabywca-ue-formularz`,
+   `mpp-formularz`, `faktury-cykliczne-formularz`, `-strona`,
+   `wystaw-fakture-strona-zwykla`).
+2. **Klient, nie serwer.** Plik zaczyna się od `'use client'` (`:1`); akcje
+   `saveDraftAction`, `saveAndSendInvoiceAction` i typ `PrefillFromLastInvoice`
+   idą z `./actions` (`'use server'`, `:25-29`). Hooki i API przeglądarki
+   (`window.matchMedia` `:222`, `confirm` `:415,433`, `useRouter`, `toast`)
+   żyją tylko w kodzie klienta. Każdy nowy moduł z hookami lub obsługą
+   zdarzeń ma `'use client'` albo jest importowany wyłącznie z pliku
+   klienta.
+3. **Schemat i walidacja.** `useForm` z `zodResolver(invoiceFormSchema)`
+   (`:233-234`; schemat w `lib/schemas/invoice-form.ts:143`, wspólny
+   z serwerem). Wartości domyślne (`:235-260`): numer = `suggestedNumber`
+   albo pusty, `issueDate` i `saleDate` = dziś w Warszawie, termin = dziś
+   + 14 dni (`:230-231`, F-013), jedna pozycja `szt`, 1, 0 zł, stawka `23`
+   albo `zw` przy `vatExempt` (`:65-71,195-197`), przelew, MPP wyłączone;
+   potem `initialValues` nadpisuje, a `recurringInvoiceId`
+   i `recurringPeriod` wchodzą tylko w trybie cyklicznym (`:257-259`).
+   Błąd walidacji przy zapisie i wysyłce: toast z pierwszym komunikatem
+   z drzewa błędów albo „Sprawdź pola formularza (czerwone podpowiedzi).”
+   (`:73-92,395-398,459-462`).
+4. **Kolejność pól i fokus.** Kolejność w DOM: ukryte pola cykliczne
+   (`:549-550`), nagłówek telefonu i nagłówek strony (`:556-584`), baner
+   „Wypełnij” (`:589-609`), nagłówek dokumentu: numer, data wystawienia,
+   data sprzedaży, termin z pigułkami 7/14/30 (`:615-673`), Nabywca: rodzaj
+   (3 radio), pola rodzaju, nazwa, adres 1 i 2, e-mail (`:679-954`),
+   Płatność: metoda, rachunek, MPP (`:957-1006`), Pozycje (`:1013-1233`),
+   podsumowanie (`:1238`), Uwagi (`:1242-1247`), karta akcji (`:1250-1269`),
+   pasek przyklejony (`:1273-1312`). Formularz nie ustawia fokusu sam
+   (brak `autoFocus`, `focus()`, `setFocus`); `onSubmit` tylko
+   `preventDefault` (`:548`), więc Enter nic nie wysyła. Identyfikatory
+   i `name` pól, których używają e2e i testy (`buyer-is-consumer`,
+   `internalNumber`, `lines.N.*` …), bez zmian.
+5. **Układ pozycji.** Naraz w DOM tylko jeden wariant: wiersze siatki od
+   `(min-width: 1360px)`, inaczej karty (`:106,219-227,1015`). Przed
+   efektem (SSR, pierwszy render) zawsze karty. Usunięcie pozycji
+   zablokowane przy jednej (`:1091,1129`), „Dodaj pozycję” dokłada pustą
+   pozycję z punktu 3 (`:1229`).
+6. **Sumy i VAT.** Pozycje do podsumowania liczone przy każdym renderze
+   z `useWatch('lines')` przez `calculateLineItem`
+   i `calculateInvoiceTotals` (`:299-318`); pusta liczba = 0, brak stawki
+   = `23`. Ta sama tablica idzie do `InvoiceTotals` (rozbicie na stawki,
+   `:1238`). Wiersz i karta liczą brutto i netto pozycji tak samo
+   (`:1029-1033,1113-1117`). Podpowiedź MPP tylko dla firmy z Polski, gdy
+   MPP wyłączone i `suggestsSplitPayment(brutto)` (`:321,996`).
+7. **Szkic i wysyłka; autozapisu nie ma.** Formularz nie zapisuje niczego
+   sam (brak `localStorage`, timerów, zapisu przy zmianie). „Szkic”
+   (telefon, `:568-577`), „Zapisz szkic” (karta i pasek) wołają
+   `saveDraftAction(values, tenantId)`; „Wystaw i wyślij”
+   `saveAndSendInvoiceAction(values, tenantId)` (`:381,444`; pilnuje
+   `firma-z-formularza-straznik.test.ts`, który czyta wywołania z tego
+   pliku). Kolejność przy wysyłce (`:401-457`): blokada `submitInFlightRef`
+   (podwójne kliknięcie, audyt #11, `:211`), pytanie o cenę 0 zł, pytanie
+   o kontrahenta spoza białej listy (tylko firma z Polski, `:423-439`),
+   akcja; sukces: toast i przejście na `/invoices/{id}`; błąd: toast,
+   a z `invoiceId` także przejście. W trybie cyklicznym brak szkicu
+   w nagłówku, karcie i pasku, zamiast tego tekst C2 (`:146,1250-1284`).
+8. **Rodzaj nabywcy.** Zmiana czyści identyfikatory pozostałych rodzajów
+   i stan białej listy, ustawia PESEL dla osoby prywatnej, czyści błędy
+   pól nabywcy i po pierwszej próbie zapisu sprawdza całość
+   (`:489-519`). Prefiks VAT-UE podpowiada kraj tylko przy zmianie
+   prefiksu (`:526-535`); podpowiedź pod polem VAT-UE (`:283-293`). Zmiana
+   typu dokumentu osoby czyści PESEL i numer dokumentu (`:861-871`).
+   Wynik białej listy z nazwą wpisuje nazwę tylko w puste pole
+   (`:830-840`).
+9. **Wypełnienie z ostatniej faktury.** Nie rusza numeru ani dat;
+   podmienia nabywcę (z UE: VAT-UE i kraj), metodę, rachunek (tylko
+   niepusty), pozycje; baner znika; toast z nazwą kontrahenta
+   (`:339-359`). Pigułki terminu liczą od daty wystawienia z formularza
+   (`:367-373`).
+10. **Wygląd.** Te same klasy, teksty i atrybuty; podział niczego nie
+    dopisuje (Mac zamrożony). Strażnik tekstów
+    (`tests/unit/fixtures/teksty-stan.json`) liczy myślniki na plik: przy
+    przeniesieniu suma się nie zmienia (dziś 8 w tym pliku).
+
 ## 4. Pomysły z przeglądu 04.11
 
 | # | Pomysł | Koszt | Zawęża? | Decyzja |
@@ -119,13 +211,13 @@ wypisywane. Pominięcie: `SKIP_PREPUSH=1 git push`.
 | 4.1 | Blokada adresów z `infra.env` w pre-push (lokalnie, bez publikowania wartości) | N | nie | **zrobione w 1.3** |
 | 4.2 | Renovate z `minimumReleaseAge` 3 dni (ochrona przed przejętymi paczkami npm) | N | nie | **w 1.4** |
 | 4.3 | `@axe-core/playwright` przy testach wizualnych | N | nie | w 3.2 |
-| 4.4 | Knip (nieużywane pliki, eksporty, zależności): najpierw raport tygodniowy, nie blokada | Ś (fałszywe trafienia przy MDX, workerze, skryptach) | nie | etap 2, po 2.4 |
-| 4.5 | Budżet First Load JS w jobie `build` (liczba z wyjścia `next build`, próg jako liczba w repo) | N | nie | etap 2; zamyka otwarty wątek „lazy-load PostHog” |
-| 4.6 | Cache `.tsbuildinfo` i `.eslintcache` w CI (`actions/cache`) | N | nie | przy 2.8 |
+| 4.4 | Knip (nieużywane pliki, eksporty, zależności): najpierw raport tygodniowy, nie blokada | Ś (fałszywe trafienia przy MDX, workerze, skryptach) | nie | **zrobione w #467**: `knip.jsonc`, raport w poniedziałek rano (`knip.yml`), bez blokady |
+| 4.5 | Budżet First Load JS w jobie `build` (liczba z wyjścia `next build`, próg jako liczba w repo) | N | nie | **zrobione w #471**: Next 16 nie wypisuje już First Load JS, więc `scripts/ci/budzet-js.mjs` liczy z `.next`; próg 750 kB (`scripts/ci/budzet-js.json`) |
+| 4.6 | Cache `.tsbuildinfo` i `.eslintcache` w CI (`actions/cache`) | N | nie | **zrobione w #471** |
 | 4.7 | Subagent `weryfikator` (Opus, tylko odczyt) w `.claude/agents/` | N | lekko | **odrzucone na razie**: `/code-review` robi to samo |
 | 4.8 | Styl odpowiedzi „raport” | N | **tak**, ładowany zawsze | **odrzucone**: format raportu jest w protokole |
 | 4.9 | Reguły gitleaks dla adresów serwerów | — | — | **odrzucone**: wartości musiałyby być w publicznym repo; 4.1 robi to lokalnie |
-| 4.10 | Dependabot obok Renovate | — | — | po instalacji Renovate wyłączyć PR wersji Dependabota (alerty zostają), inaczej podwójne PR |
+| 4.10 | Dependabot obok Renovate | — | — | **sprawdzone w #467**: `dependabot.yml` nie ma, więc PR wersji są wyłączone; alerty zostają; włączone „Dependabot security updates” dublują `vulnerabilityAlerts` Renovate, wyłączenie w ustawieniach repo (opis w PR) |
 | 4.11 | `pnpm approve-builds`: `sharp` i `unrs-resolver` celowo w `ignoredBuiltDependencies` | — | — | bez zmian, tylko notatka |
 
 ## 5. Do decyzji Bartosza (poza repo)
@@ -250,11 +342,17 @@ Bartosz” i i tak nie przejdzie przez ochronę `main`.
 | 07.11.2026 | 3.4b cotygodniowy restore-drill z alarmem | #436 | `restore-drill.sh` z werdyktem (7 przypadków czerwonych na `main`); timer na `db-1` (niedziela 03:30 UTC), osobny check Healthchecks 7 dni + 1 dzień; nic nie zainstalowane: 3 kroki Bartosza w opisie #436. Odczyt `db-1` zablokowany przez tryb auto, pierwsza próba to pokaże. Później: wynik w raporcie dziennym albo `critical-alerts-monitor` (wymaga migracji `backup_kind`), przeniesienie na `ops-1` po Storage Boxie |
 | 07.11.2026 | 3.4 scalenie i instalacja (polecenie Bartosza) | #436 (niesie #435) | oba scalone; restore-drill zainstalowany na `db-1` przez Bartosza (`zainstaluj-restore-drill.sh`, tryb auto blokuje zapis na serwerze), pierwsza próba `WYNIK: OK` w 13 s, ping do checku Healthchecks „restore-drill” wysłany; czujka FA(3) po scaleniu ręcznie na GitHubie: „zgodny z repo”, bez issue |
 | 08.11.2026 | Lista Bartosza A–C (polecenie „zrób wszystkie kroki”) | #448, #298, scalenie #417 | A1: 00170 i 00171 już na db-1; `kontrola-faktur-ksef.sh` tylko do odczytu (PGOPTIONS, sprawdzone na db-1: `on`, `30s`, przebieg bez błędów) i bez pytania dla agenta; #298 odświeżony na 4096 MB; #417 odświeżony w nowym PR (konflikt rejestru, 4 długie myślniki ze strażnika tekstów); 3.7a przekierowana na `invoice-form.tsx` (`submit-invoice.ts` zmienia 5 PR). Znalezione: bramka `/wdroz` wdraża web przed workerem (`ops/bramka/src/deploy.mjs`), odwrotnie niż `wdroz-produkcje.sh` |
+| 08.11.2026 | 3.7c podział `invoice-form.tsx` (3.7a `submit-invoice.ts` wstrzymane: kolizja z #417, #413, #369, #195, #190; `duplicate-decision.ts` rusza szkic #336) | #450 | 1 315 linii → formularz 407 + 10 części w `components/invoices/invoice-form-parts/`; niezmienniki przy 3.7; 23 testy zachowania i 10 wzorców znaczników zielone przed i po bez zmian; zrzuty 1440 px i iPhone 13 identyczne bajtowo; `ci` i `build` zielone; 5 osobnych ustaleń w opisie PR; czeka na scalenie |
+| 08.11.2026 | 4.4 Knip i 4.10 Dependabot | #467 | Knip 6.44.1: bez konfiguracji 102 pliki, 432 eksporty, 206 typów; z `knip.jsonc` 30 plików, 77 eksportów, 15 typów, 0 zależności (MDX, skrypty, load-tests, projekty Playwright, `ops/**` wycięte); nic nie usunięte. Dependabot: brak `dependabot.yml`, alerty włączone, security updates włączone (do wyłączenia w Settings, decyzja poza repo). Lokalnie tylko `typecheck` i knip (Mac bez pamięci przy równoległych buildach), pełne CI na GitHubie |
+| 08.11.2026 | 4.5 budżet First Load JS + 4.6 cache tsc/ESLint w CI | #471 | Next 16 usunął First Load JS z wyjścia `next build`, więc pomiar z `.next` (webpack: `rootMainFiles` + wejścia strony i segmentów nadrzędnych + ich zależności, gzip); 88 tras, największa `/(dashboard)/(faktury)/invoices` 713 kB, próg 750 kB; ESLint z `--cache-strategy content` (świeży checkout zmienia czasy plików), `tsconfig.json` bez zmian (`incremental` już był); w CI Typecheck 42 → 7 s, Lint 46 → 2 s (ponowiony job, ten sam SHA); `pnpm build` i pełne `ci` pominięte lokalnie (pamięć Maca), robi CI |
+| 08.11.2026 | Zamknięcie planu: porządek w PR i jedno wdrożenie (polecenie Bartosza „uporządkuj wszystkie PR, scal wszystko stare, jedno wielkie wdrożenie”, decyzje delegowane) | #460, #461, #462, #459, #450, #457, #463, #467, #471 w jednym PR zbiorczym | Paczka A (#460): #189, #320, #336, #409, #411, #412, #415, #416, #449, #455; #461 = #405 + #410; #462 = #283 + #289 (#288 już na `main` przez E3b). Zamknięte: #406 i #458 (Renovate podbijał nadpisania o wersję główną; reguła w #463), #190 (treść na `main` przez #369/#413). Zostają otwarte z komentarzem: #195 (C-16 na `main` przez #234; C-09/C-10 do sesji C4 planu zero), #193 i #197 (szkice Codexa, do odświeżenia). Decyzje: B1 wariant B (wdraża bramka `/wdroz`, bez Tailscale i tokenu Coolify w GitHubie), pakiety GHCR publiczne (krok 7 odpada), 3.2b (testy wizualne na Linuksie w CI) poza planem. Harmonogram sprzątania zainstalowany (#459, launchd, niedziela 3:00). Mac zawiesił się przy kilku równoległych `pnpm build`: od tej pory pełne CI i build lokalnie po jednym, a przy wielu PR na GitHubie |
 
-**Następny krok:** Bartosz: decyzja przy #425 (B1 listy z 08.11: wdrożenie
-przez nowy endpoint czy przez bramkę `/wdroz`), potem jej kroki; scalenie
-odświeżonego #417 (00164 przed wdrożeniem) i #298; sprzątanie worktree
-z harmonogramem (najpierw `main` w głównym katalogu); plugin `design`
-w aplikacji. Sesja: 3.7c (`invoice-form.tsx`) w toku, 3.7a
-(`submit-invoice.ts`) po #417, #195 i #190, 3.7b po decyzji o #336;
-osobno kolejność web/worker w bramce `/wdroz`.
+**Następny krok:** plan zamknięty. Osobne tory: (1) przełączenie wdrożeń
+na obrazy z GHCR według decyzji B1 (wariant B: `obrazy.yml` po scaleniu do
+`main`, Coolify ze źródła „Docker Image”, bramka `/wdroz` i
+`wdroz-produkcje.sh` sprawdzają SHA z etykiety obrazu, usunięcie
+`/api/ops/deploy-state` i kroków Tailscale z runbooka); (2) 3.7 jako
+długi tor: `submit-invoice.ts`, `duplicate-decision.ts`,
+`noUncheckedIndexedAccess`; (3) 3.2b; (4) #193, #197. Bartosz: plugin
+`design` w aplikacji; opcjonalnie wyłączyć „Dependabot security updates”
+(alerty zostają), bo dublują PR Renovate.

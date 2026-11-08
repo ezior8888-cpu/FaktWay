@@ -170,9 +170,9 @@ describe('KSeF certificate claim action', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it('does not turn the in-memory limiter (no Redis on production) into a denial, but still enforces it', async () => {
-    // Produkcja ma wyłączony Upstash, więc `fallback: true` jest tam zawsze. Dawniej oznaczało to
-    // odmowę dla KAŻDEGO wgrania certyfikatu. Limit w pamięci procesu nadal obowiązuje.
+  it('does not turn the in-memory limiter (Redis missing or down) into a denial, but still enforces it', async () => {
+    // Produkcja ma Redisa; `fallback: true` pojawia się tylko przy jego braku albo awarii. Dawniej
+    // oznaczało to wtedy odmowę dla KAŻDEGO wgrania certyfikatu. Limit w pamięci procesu nadal obowiązuje.
     mocks.rateLimit.mockResolvedValueOnce({ allowed: true, fallback: true, remaining: 4, retryAfter: 0 });
     await expect(uploadCertificateAction(pem)).resolves.toMatchObject({ success: true });
 

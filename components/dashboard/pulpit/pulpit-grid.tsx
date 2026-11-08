@@ -77,13 +77,15 @@ export const PULPIT_GENERIC_ERROR = 'Nie udało się wczytać karty. Odśwież s
 const CUSTOMER_MESSAGE_PREFIXES = ['Nie można ', 'Przyjęte faktury ', 'Koszty ze skrzynki KSeF '];
 
 /**
- * Treść wyjątku dla klienta. Strażniki walut i środowiska mówią po polsku, co
- * klient ma zrobić — te pokazujemy. `readCompletePages` i odczyty dopisują po
+ * Polska treść wyjątku, którą klient może przeczytać, albo `null`, gdy wyjątek
+ * jest techniczny. Strażniki walut i środowiska mówią po polsku, co klient ma
+ * zrobić — te pokazujemy w całości. `readCompletePages` i odczyty dopisują po
  * dwukropku tekst PostgREST-a (po angielsku, techniczny), więc z nich zostaje
  * polska część przed dwukropkiem. Wszystko inne (konfiguracja serwera, błąd
- * programu) to ogólny komunikat, a pełny wyjątek idzie do logu.
+ * programu) to `null`. Używaj tam, gdzie komunikat ogólny ma własną treść
+ * (alerty strony listy faktur); karta bierze `pulpitErrorMessage`.
  */
-export function pulpitErrorMessage(error: unknown): string {
+export function customerErrorDetail(error: unknown): string | null {
   if (
     error instanceof OutgoingInvoiceCurrencyNotSupportedError ||
     error instanceof KsefExpenseCurrencyNotSupportedError ||
@@ -96,7 +98,15 @@ export function pulpitErrorMessage(error: unknown): string {
   if (CUSTOMER_MESSAGE_PREFIXES.some((prefix) => message.startsWith(prefix))) {
     return message.split(': ')[0]!;
   }
-  return PULPIT_GENERIC_ERROR;
+  return null;
+}
+
+/**
+ * Treść wyjątku dla klienta na karcie: polska część (`customerErrorDetail`)
+ * albo ogólny komunikat, a wtedy pełny wyjątek idzie do logu.
+ */
+export function pulpitErrorMessage(error: unknown): string {
+  return customerErrorDetail(error) ?? PULPIT_GENERIC_ERROR;
 }
 
 /** Ładowarka karty: dane albo karta błędu z treścią wyjątku. */

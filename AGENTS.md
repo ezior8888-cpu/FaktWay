@@ -7,7 +7,7 @@
 > | Hasło | Plan |
 > |---|---|
 > | „Kontynuuj plan z agentem” (sesje Igora z Claude) | [`PLAN-AGENTA-CLAUDE.md`](docs/koordynacja/PLAN-AGENTA-CLAUDE.md) |
-> | „Kontynuuj plan zero zgubionych faktur, sesja N” | [`PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md), tylko sesja N, dziennik w sekcji 9 |
+> | „Kontynuuj plan zero zgubionych faktur, sesja N” | [`PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md), tylko sesja N, dziennik w `PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md` |
 > | „Kontynuuj plan Finora” | [`PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md), dziennik w sekcji 12 |
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |
 > | „Kontynuuj plan księgowość JDG” | [`PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md), tylko krok z „Następny krok”, dziennik w sekcji 15, potem raport i STOP |
@@ -28,6 +28,7 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - Supabase **self-hosted** na Hetznerze (`db-1`, NBG1 — Norymberga): Postgres + RLS, GoTrue (logowanie e-mail/hasło + Google OAuth, MFA), PostgREST
 - pg-boss — background jobs (worker = druga aplikacja w Coolify, `lib/jobs/`; lokalnie `pnpm worker:dev` z `DATABASE_URL`). Inngest odpięty 02.10.2026 (etap 10) — bez ścieżki powrotu
 - Magazyn plików przez API S3 (`lib/storage/r2.ts`, zmienne `R2_*`; na produkcji MinIO na `ops-1`) — XML FA(3), UPO, zdjęcia
+- Redis — cache i limity prób (`lib/cache/redis.ts`): własny redis:7.2 na `app-1` z nakładką `hiett/serverless-redis-http`, która udaje REST API Upstash — stąd zmienne `UPSTASH_REDIS_REST_*` i biblioteka `@upstash/redis`. To NIE chmura Upstash i nie podprocesor (dane na Hetznerze). Używają go aplikacja i worker; bez niego m.in. 2FA i operacje na haśle odmawiają (fail-closed, pełna lista w nagłówku `lib/cache/redis.ts`)
 - Hosting: Hetzner + Coolify — jedyny od 14.09.2026 (szczegóły w „Infrastruktura i dostępy”)
 - **pnpm** — menedżer pakietów (`pnpm-lock.yaml`); w root nie używaj `npm install` (brak `package-lock.json`; globalny `.npmrc` z opcjami pnpm potrafi psuć npm).
 
@@ -115,7 +116,7 @@ chmurowa Hetznera (`ufw` jest wyłączony).
 
 | Serwer (Hetzner NBG1) | Co tam działa |
 |---|---|
-| `app-1` (`$APP`) | aplikacja Next.js + worker pg-boss; tu też budują się obrazy |
+| `app-1` (`$APP`) | aplikacja Next.js + worker pg-boss + Redis z nakładką SRH (API zgodne z Upstash); tu też budują się obrazy |
 | `ops-1` (`$OPS`) | panel Coolify (port 8000, filtr IP, wejście tunelem), MinIO z plikami aplikacji (`R2_ENDPOINT`) |
 | `db-1` (`$DB`) | Supabase self-hosted: Postgres (`$PGC`), GoTrue, Kong, PostgREST (`$RESTC`), Logflare; drugi MinIO tylko z pustym `stub` |
 

@@ -6,7 +6,7 @@ import PQueue from 'p-queue';
  * nie blokował innych.
  *
  * UWAGA: To in-memory rate limiter - reset przy każdym redeploy.
- * Dla produkcji z wieloma instancjami - użyj Upstash Redis.
+ * Dla produkcji z wieloma instancjami - przenieś licznik do Redisa (`lib/cache`).
  */
 class PerTenantRateLimiter {
   private queues = new Map<string, PQueue>();

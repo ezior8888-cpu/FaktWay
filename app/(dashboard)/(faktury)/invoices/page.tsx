@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { customerErrorDetail } from '@/components/dashboard/pulpit/pulpit-grid';
 import { receivableBaseFilterOps, settledFilterOps } from '@/lib/dashboard/receivables';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
@@ -35,6 +36,9 @@ export const dynamic = 'force-dynamic';
 const LIST_COLUMNS = `id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path, payment_status, payment_due_date, paid_amount, currency, invoice_kind, last_error_code, ${LIST_ROW_FACT_COLUMNS}`;
 
 type ListQueryRow = InvoiceRow & ListRowFactsRow;
+
+/** Wyjście z alertu błędu (AGENTS.md pkt 4): co zrobić, gdy odświeżenie nie pomaga. */
+const ALERT_RETRY_HINT = 'Odśwież stronę za chwilę; jeśli błąd się powtarza, zgłoś go w pomocy FaktWay.';
 
 /**
  * Lista faktur wystawionych (P3, PLAN-FINORA §5): pasek filtrów (kafle w layoucie sekcji),
@@ -114,6 +118,8 @@ export default async function InvoicesPage({
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(rangeFrom, rangeTo);
+  // Klient widzi polski alert bez treści błędu PostgREST-a; pełny błąd idzie do logu.
+  if (error) console.error('[invoices] odczyt listy faktur', error);
 
   const rows = (invoices ?? []) as unknown as ListQueryRow[];
   const total = count ?? rows.length;
@@ -121,13 +127,16 @@ export default async function InvoicesPage({
 
   // Fakty wierszy tej strony (≤ 50): ikona płatności, „Do zapłaty”, „Korekta”.
   // Błąd odczytu nie chowa listy — wiersze dostają „—”, a kafle mają własne granice błędów.
+  // Klient dostaje tylko polską część wyjątku (bez ogona PostgREST-a i bez
+  // konfiguracji serwera), pełny wyjątek idzie do logu.
   let facts = new Map<string, InvoiceListRowFacts>();
-  let factsError: string | null = null;
+  let factsFailure: { detail: string | null } | null = null;
   if (!error && rows.length > 0) {
     try {
       facts = await loadInvoiceListRowFacts(supabase, tenantId, rows);
     } catch (e) {
-      factsError = e instanceof Error ? e.message : 'Nie udało się policzyć płatności';
+      console.error('[invoices] fakty płatności listy', e);
+      factsFailure = { detail: customerErrorDetail(e) };
     }
   }
   const factsById: InvoiceFactsById = Object.fromEntries(facts);
@@ -162,17 +171,20 @@ export default async function InvoicesPage({
         ) : error ? (
           <div className="px-4 pb-4">
             <Alert variant="destructive">
-              <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
+              <AlertTitle>Nie udało się pobrać faktur</AlertTitle>
+              <AlertDescription>{ALERT_RETRY_HINT}</AlertDescription>
             </Alert>
           </div>
         ) : (
           <>
-            {factsError ? (
+            {factsFailure ? (
               <div className="px-4 pb-4">
                 <Alert>
                   <AlertTitle>Nie udało się policzyć płatności</AlertTitle>
                   <AlertDescription>
-                    Kolumny „Płatność”, „Do zapłaty” i akcja „Korekta” są chwilowo ukryte: {factsError}
+                    {`Kolumny „Płatność”, „Do zapłaty” i akcja „Korekta” są chwilowo ukryte.${
+                      factsFailure.detail ? ` ${factsFailure.detail}.` : ''
+                    } ${ALERT_RETRY_HINT}`}
                   </AlertDescription>
                 </Alert>
               </div>

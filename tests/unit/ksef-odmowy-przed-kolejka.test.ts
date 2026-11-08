@@ -147,7 +147,8 @@ describe('odmowa przed kolejką zostawia wiersz refused w dzienniku prób', () =
   it('wysyłka zakolejkowana: bez wiersza odmowy', async () => {
     const result = await enqueueKsefSubmitAfterDraft(params());
 
-    expect(result).toEqual({ ok: true, mode: 'online_queued' });
+    // PR D: wynik niesie `sendAttemptId` (audyt „Sprawdź ponownie”); tu liczy się tryb i brak odmowy.
+    expect(result).toEqual({ ok: true, mode: 'online_queued', sendAttemptId: expect.any(String) });
     expect(mocks.ledger).toHaveLength(0);
   });
 

@@ -3,7 +3,7 @@
 Kilka rzeczy może zablokować dostęp user-a do konta. Ten runbook listuje
 najczęstsze + procedurę odblokowania.
 
-> Aktualizacja 2026-09-14 dotyczy §2 (MFA). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
+> Aktualizacja 2026-09-14 i 2026-11-04 (operator limitera) dotyczy §2 (MFA), 2026-10-23 i 2026-11-04 — §1 krok 2 (Redis na app-1, klucze), 2026-11-02 — §7 (biometria, wraz z wierszem w macierzy). Pozostałe sekcje są historyczne i wymagają porównania z aktualnym kodem oraz własnym serwerem Hetzner/Coolify przed użyciem operacyjnym.
 
 ## Macierz scenariuszy
 
@@ -30,12 +30,44 @@ Po przekroczeniu user dostaje 429 z `Retry-After`.
 ### Procedura
 
 1. **Zwykle** — poczekaj okno wygasa (15 min), wszystko wraca.
-2. **Awaryjnie** — reset w Upstash Redis:
-   ```bash
-   # CLI Upstash (https://console.upstash.com/redis/<id>/data)
-   DEL "rl:auth:login:<email>"
-   DEL "rl:auth:login:<ip>"
+2. **Awaryjnie** — usunięcie klucza limitu w Redisie (zapis na produkcji,
+   robi to Bartosz). Stan 23.10.2026: Redis to własny redis:7.2 na `app-1`
+   z nakładką SRH — konsoli Upstash nie ma. Klucze trzymają skrót, nie
+   jawny e-mail ani IP (`hashIdentifier()` w `lib/rate-limit/index.ts`:
+   SHA-256 z tekstu małymi literami, pierwsze 32 znaki):
    ```
+   rl:login:<skrót("<IP>:<email>")>        # lib/rate-limit/auth.ts
+   rl:register:<skrót("<IP>")>
+   ```
+   Skrót, np. dla adresu z puli dokumentacyjnej:
+   ```bash
+   h() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sha256sum | cut -c1-32; }
+   h '203.0.113.7:jan@example.com'
+   ```
+   Formularz „zapomniałem hasła” ma osobny limit (`lib/rate-limit/password.ts`,
+   stałe okno 1 h: 10 na IP, 5 na e-mail), a skrót jest w nim liczony DWA razy
+   (`checkPasswordResetRateLimit` z `auth.ts` nie ma wywołań):
+   ```
+   rl:password:resetIp:account:<skrót(skrót("<IP>"))>       # h "$(h '<IP>')"
+   rl:password:resetEmail:account:<skrót(skrót("<email>"))> # h "$(h '<email>')"
+   ```
+   (Nie przepuszczaj wyniku `cut` drugi raz przez potok — znak nowej linii
+   zmieni skrót; `$(…)` go usuwa.)
+
+   Potem `DEL <klucz>` przez `redis-cli` w kontenerze z obrazem `redis:7.2`,
+   nie w nakładce SRH — ta też pasuje do `grep -i redis`, ale nie ma
+   `redis-cli`: `docker ps --format '{{.Names}}\t{{.Image}}' | grep 'redis:7'`.
+   Redis z Coolify ma hasło (zasób Redis w Coolify); bez niego `redis-cli`
+   zwróci `NOAUTH`. Podaj je przez zmienną `REDISCLI_AUTH`, nie przez `-a`,
+   i nie wpisuj go do repo. `<IP>` to adres, który widzi aplikacja
+   (`X-Real-Ip` od Traefika, `lib/auth/get-client-ip.ts`). Odmowa na kroku
+   hasła nie zostawia adresu, a `audit_logs.ip_address` liczony jest inaczej
+   (`lib/audit/log.ts`), więc zapytaj użytkownika o jego publiczne IP.
+   E-mail wpisz bez spacji i małymi literami (`tr` nie zmienia liter spoza
+   ASCII). Limity MFA, zmiany hasła i biometrii (`rl:mfa:account:…`,
+   `rl:password:attempt|send|recoveryUse:account:…`, `rl:passkey_*:…`) mają
+   inne klucze i okna — przeczytaj `mfa.ts`, `password.ts` i `passkey.ts`,
+   zanim je wyczyścisz.
 3. **Jeśli legit user (np. dyrektor zapomniał laptopa)** — zresetuj hasło
    z admin panelu: `/admin/users/<userId>` → "Send password reset". User dostanie
    email z linkiem (omija rate limit logowania).
@@ -59,7 +91,7 @@ stanowią obecnie sposobu logowania.
 Weryfikacja i konfiguracja TOTP współdzielą limit pięciu operacji na konto
 w stałym oknie 300 s od pierwszej próby. Próba po przekroczeniu nie przedłuża
 okna. Niedostępność limitera blokuje operację; diagnoza jego dostępności
-i uprawnień EVAL należy do operatora używanego SRH/Valkey.
+i uprawnień EVAL należy do operatora Redisa na `app-1` (nakładka SRH, §1 krok 2).
 
 ### Obsługa zgłoszenia
 

@@ -115,4 +115,26 @@ describe('podgląd panelu na stronie głównej', () => {
     expect(texts[0]).toContain('W kolejce');
     expect(pages[2]).toContain('FV/2026/11/004 przyjęta, UPO pobrane');
   });
+
+  it('zanim przyjdzie nowa faktura, jej miejsce wypełnia szkielet wiersza, a nie pusty pasek', async () => {
+    // Sprawdzenie produkcji 08.11.2026: przez ok. 1 s w każdej pętli u góry tabeli był
+    // pusty pasek wysokości wiersza, który mógł wyglądać jak usterka.
+    const { HeroPreview } = await import('@/app/(home)/_components/hero-preview');
+    host = document.createElement('div');
+    document.body.append(host);
+    await act(async () => {
+      root = createRoot(host!);
+      root.render(<HeroPreview />);
+    });
+
+    const tableEl = table(host);
+    const skeleton = tableEl.querySelector<HTMLElement>('[data-testid="podglad-szkielet"]');
+    expect(skeleton).not.toBeNull();
+    // Szkielet to nakładka w tym samym miejscu co nowa faktura: nie zmienia wysokości tabeli.
+    expect(skeleton!.classList.contains('absolute')).toBe(true);
+    expect(skeleton!.classList.contains('inset-0')).toBe(true);
+    expect(skeleton!.parentElement!.querySelector(':scope > .invisible')).not.toBeNull();
+    // Same kształty, bez tekstu, który czytelnik mógłby wziąć za dane.
+    expect(skeleton!.textContent).toBe('');
+  });
 });

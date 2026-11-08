@@ -2,7 +2,7 @@
 
 > ## ⚠️ TEN DOKUMENT JEST NIEAKTUALNY
 >
-> Opis architektury z czasów Vercela, Supabase Cloud (Frankfurt), Inngest i Edge Config. Produkcja stoi na **Hetznerze pod Coolify**,
+> Opis architektury z czasów Vercela, Supabase Cloud (Frankfurt), Inngest, chmury Upstash i Edge Config. Produkcja stoi na **Hetznerze pod Coolify**,
 > joby chodzą na **pg-boss**, baza to **Supabase self-hosted** na `db-1`.
 >
 > **Aktualne procedury: `AGENTS.md`, sekcja „Infrastruktura i dostępy",

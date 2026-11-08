@@ -57,6 +57,12 @@
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "labels": ["dependencies", "breaking-changes"]
+    },
+    {
+      "description": "Nadpisania w pnpm-workspace.yaml trzymają łatki w obrębie wersji głównej, której oczekują zależności. Bez podbicia o wersję główną (#406 i #458 zamknięte 08.11.2026)",
+      "matchPackageNames": ["brace-expansion", "@hono/node-server"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     }
   ],
   "vulnerabilityAlerts": {

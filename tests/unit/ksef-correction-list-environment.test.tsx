@@ -12,6 +12,7 @@ vi.mock('@/components/invoices/correction-form', () => ({
 }));
 
 import NewCorrectionPage from '@/app/(dashboard)/invoices/new/correction/page';
+import { memoryClient } from './helpers/baza-w-pamieci';
 
 const rows = [
   { id: '1', tenant_id: 'tenant-a', internal_number: 'PROD-A', direction: 'outgoing', ksef_status: 'accepted', invoice_kind: 'regular', ksef_environment: 'production', ksef_number: 'prod-1', issue_date: '2026-09-01' },
@@ -26,24 +27,11 @@ const rows = [
   { id: '70', tenant_id: 'tenant-a', internal_number: 'KOR-7', direction: 'outgoing', ksef_status: 'rejected', invoice_kind: 'correction', ksef_environment: 'production', ksef_number: null, issue_date: '2026-09-05', parent_invoice_id: '7' },
 ];
 let reads: number;
-const from = vi.fn(() => {
+// Baza w pamięci z `in`/`range`/`count` — od F-005 strona czyta korekty
+// kandydatów w całości (`readCompletePages`), nie pierwsze 500 firmy.
+const from = vi.fn((table: string) => {
   reads++;
-  const filters: Array<(row: typeof rows[number]) => boolean> = [];
-  const chain = {
-    select: () => chain,
-    eq: (key: string, value: unknown) => {
-      filters.push((row) => row[key as keyof typeof row] === value);
-      return chain;
-    },
-    not: (key: string, operator: string, value: unknown) => {
-      if (operator !== 'is' || value !== null) throw new Error('Unexpected PostgREST filter');
-      filters.push((row) => row[key as keyof typeof row] !== null);
-      return chain;
-    },
-    order: () => chain,
-    limit: async () => ({ data: rows.filter((row) => filters.every((filter) => filter(row))) }),
-  };
-  return chain;
+  return memoryClient({ invoices: rows.map((row) => ({ ...row })) }).from(table);
 });
 
 beforeEach(() => {
@@ -61,7 +49,7 @@ it('lists only current-tenant accepted parents with PROD provenance and KSeF num
   expect(html).not.toMatch(/TEST-A|LEGACY-A|PROD-B|NO-NUMBER/);
   // UX-01: firma listy idzie do formularza — zapis korekty sprawdzi, że to wciąż aktywna firma.
   expect(html).toContain('firma:tenant-a ');
-  // Dwa odczyty: rodzice + korekty firmy (K4 — rodzic z otwartą korektą nie jest kandydatem).
+  // Dwa odczyty: rodzice + ich korekty (K4 — rodzic z otwartą korektą nie jest kandydatem).
   expect(reads).toBe(2);
 });
 

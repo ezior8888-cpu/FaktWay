@@ -73,14 +73,15 @@ const SPECS: VarSpec[] = [
   { name: 'RESEND_FROM_MARKETING', feature: 'E-maile', level: 'required' },
   { name: 'RESEND_WEBHOOK_SECRET', feature: 'E-maile', level: 'required', note: 'bounce/complaint handling' },
   { name: 'EMAIL_UNSUBSCRIBE_SECRET', feature: 'E-maile', level: 'required', note: 'HMAC linków wypisu — można wygenerować nowy (openssl rand -hex 32)' },
+  { name: 'EMAIL_UNSUBSCRIBE_SECRET_PREVIOUS', feature: 'E-maile', level: 'optional', note: 'tylko na czas rotacji: stary sekret wypisu przez 90 dni, potem usuń' },
 
   // ── AI (OCR paragonów + support chat) ──
   { name: 'ANTHROPIC_API_KEY', feature: 'AI (OCR + chat)', level: 'required', note: 'bez tego OCR i chat rzucają błąd — klucz z console.anthropic.com' },
   { name: 'ANTHROPIC_OCR_MODEL', feature: 'AI (OCR + chat)', level: 'optional', note: 'default w kodzie' },
   { name: 'ANTHROPIC_SUPPORT_MODEL', feature: 'AI (OCR + chat)', level: 'optional', note: 'default w kodzie' },
 
-  // ── Cache + rate limiting (Upstash → Valkey po Etapie 4) ──
-  { name: 'UPSTASH_REDIS_REST_URL', feature: 'Cache + limity (Redis)', level: 'optional', note: 'poza produkcją od migracji na Hetznera — cache passthrough, limity prób w pamięci procesu (AUD-62)' },
+  // ── Cache + rate limiting (produkcja: redis:7.2 + serverless-redis-http na app-1, API zgodne z Upstash) ──
+  { name: 'UPSTASH_REDIS_REST_URL', feature: 'Cache + limity (Redis)', level: 'optional', note: 'na produkcji ustawiony (własny Redis na app-1, nie chmura Upstash); bez niego cache passthrough, ale m.in. kod TOTP i włączanie 2FA, operacje na haśle i usunięcie konta RODO odmawiają (fail-closed) — pełna lista w nagłówku lib/cache/redis.ts' },
   { name: 'UPSTASH_REDIS_REST_TOKEN', feature: 'Cache + limity (Redis)', level: 'optional' },
 
   // ── Ochrona przed botami ──

@@ -26,6 +26,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { createAdminClient } from '@/lib/supabase/admin';
 
 import { readDuplicateDecisionBlocker, readDuplicateDecisionBlockerForSession } from './duplicate-decision-rpc';
+import { DUPLICATE_RECHECK_AUDIT_ACTION } from './duplicate-recheck';
 import {
   duplicateMarker,
   type DuplicateDecisionFacts,
@@ -193,4 +194,28 @@ async function loadKnownInvoice(
       && y.ksef_number === marker.original_ksef_number
       && y.id !== invoiceId,
   };
+}
+
+/**
+ * Czas ostatniego „Sprawdź ponownie” klienta dla faktury (PR D, cooldown 10 minut): najnowszy wpis audytu
+ * `invoice.duplicate_recheck`, który sesja klienta czyta z `audit_logs` własnej firmy. `null` — brak wpisu.
+ * Błąd odczytu rzuca (akcja: Sentry i ogólne zdanie; strona karty łapie go i pokazuje przycisk bez cooldownu,
+ * bo akcja i tak sprawdza go od nowa).
+ */
+export async function loadLastDuplicateRecheckAt(
+  client: SupabaseClient,
+  tenantId: string,
+  invoiceId: string,
+): Promise<string | null> {
+  const { data, error } = await client
+    .from('audit_logs')
+    .select('created_at')
+    .eq('tenant_id', tenantId)
+    .eq('entity_id', invoiceId)
+    .eq('action', DUPLICATE_RECHECK_AUDIT_ACTION)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw readFailure('audytu ponownego sprawdzenia', error);
+  const createdAt = (data?.[0] as { created_at?: unknown } | undefined)?.created_at;
+  return typeof createdAt === 'string' ? createdAt : null;
 }

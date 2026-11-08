@@ -253,7 +253,8 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 04.11.2026 | Przegląd starych PR-ów (agent na każdy PR + sceptyk) | — | #236 i #225 zamknięte z komentarzem; #189 i #320 odświeżone (lista kontrolna z #320 w osobnym #415); treść szkicu #190 przeniesiona na #369 i #413; #197 i #193 czekają na decyzję Bartosza. Z przeglądu wyszło też E17 (#416) |
 | 05.11.2026 | `app/error.tsx` dla segmentu głównego: karta panelu i ponowienie także przy awarii layoutu | #414 | w zbiorczym z #367, #369 i #413; do decyzji Bartosza: przeładowanie po `ChunkLoadError` i +7,9 kB JS |
 | 05.11.2026 | Sesja 2: pliki techniczne bez klienta Supabase w proxy | #405 | PR otwarty, CI 11/11; druga, mocniejsza wersja tej samej sesji (więcej ścieżek, 68 przypadków, pomiar na `next start`) czeka lokalnie na decyzję Igora |
+| 05.11.2026 | Sesja 8: jedno GET /auth/v1/user na żądanie chronione, przez `fetch` na żądanie (`lib/supabase/auth-user-fetch.ts`) zamiast przebudowy kontroli MFA (odstępstwo od opisu sesji) | #410 | na żądanie chronione 3 → 1; decyzje bramki i testy MFA bez zmian |
+| 08.11.2026 | #405 i #410 odświeżone od `main` w jednej gałęzi (`claude/odswiezenie-405-410`); konflikt w `NO_SESSION_PATHS` rozwiązany: `/api/ops/deploy-state` z `main` plus 4 pliki techniczne z #405 | zbiorczy „Scalenie #405 i #410” | PR otwarty; lokalnie typecheck, eslint i 24 pliki testów proxy/MFA zielone, pełne testy i build w CI |
 
-**Następny krok:** sesja 8 (proxy: 1 wywołanie GoTrue zamiast 3), potem 31, 21
-i dalej według kolejności z sekcji 3. Drugi zbiorczy: #405, #320, #415, #189,
-#416.
+**Następny krok:** po scaleniu zbiorczego z #405 i #410 sesja 31, potem 21
+i dalej według kolejności z sekcji 3. Drugi zbiorczy: #320, #415, #189, #416.
