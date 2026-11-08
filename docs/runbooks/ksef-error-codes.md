@@ -48,7 +48,7 @@ z kolumny „Luka” są w nim wypisane jawnie.
 | `KSEF_PAUSED` | hold | wyłącznik operatora | czeka, bez przycisków (zwykła — automat po zdjęciu; KOR/ZAL¹ tylko dziś); bez danych (także zwykła), dokument specjalny po dacie albo wstrzymany rodzaj — Wróć do szkicu z powodem | I7: po zdjęciu hamulca (KOR/ZAL¹ tylko w dniu wystawienia) | Wyślij ponownie / szkic | — |
 | `KOR_HOLD` | hold | hamulec korekt | brak przycisków (decyzja a); komunikat: sami nie wyślemy, napisz do pomocy FaktFlow | — (I7 wznawia tylko `KSEF_PAUSED`) | TEST: „Wyślij ponownie”¹; PROD: Wróć do szkicu (bez dowodu) | PROD z dowodem kontaktu — C4 |
 | `ROZ_HOLD_RECONCILE` | hold | hamulec ROZ | brak przycisków (decyzja a); komunikat: sami nie wyślemy, napisz do pomocy FaktFlow | — (jak wyżej) | Wróć do szkicu (bez dowodu) | z dowodem kontaktu — C4 |
-| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z innego programu bez naszego pliku do porównania (`no-own-file`), oryginał z oznaczeniem naszego programu o innym pliku (`faktflow-original`; od 00156 z oceną pliku), numer KSeF w innej fakturze firmy (`known-number`), oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | Decyzja klienta (no-own-file, known-number, `faktflow-original` z oceną „importable”; zwykła faktura): przycisk na karcie faktury — „To ta sama sprzedaż” / „To inna sprzedaż” (właściciel albo administrator; 00148 i 00156, D-A4-1b-3 PR B i PR C; e-mail „czeka na Twoją decyzję” raz). Przy `faktflow-original` oba przyciski zapisują fakturę z KSeF w FaktWay (numer przechodzi na nią), a dla pliku z historii tego dokumentu albo o tej samej treści jest jeden przycisk „Zapisz fakturę z KSeF w FaktWay”. Plik do przeglądu operatora (I5R): tekst `provenance-review` (sprawdzamy, nie wystawiaj ponownie, damy znać), bez przycisku. Pozostałe powody i rodzaje: dane oryginału z KSeF na karcie faktury (00144), „nie wystawiaj ponownie”, pytania do pomocy FaktFlow | I5D: bez automatu i bez alarmu (`I5D-env`: alarm); I5R (przegląd pliku): bez automatu, alarm krytyczny `I5R-72h` po 72 h od ostatniego sprawdzenia pliku; I5 dla pozostałych powodów: przy otwartym wpisie > 48 h weryfikacja od nowa, także dla `faktflow-original` bez oceny pliku albo z `recheckNeeded` (`recheck-needed`) i dla `known-now` (cron sam robi nowy werdykt) | „Zapisz decyzję klienta” (tylko decyzja przekazana przez klienta, notatka: kanał, data, osoba) i „Przypomnij klientowi” (raz na 24 h, decyzja 07.10 (12); nie przy `provenance-review` ani `recheck-needed`); w przeglądzie (I5R) „Zapisz fakturę z KSeF w FaktWay” (po rozmowie z klientem, tylko gdy plik da się zapisać) albo „Oddaj decyzję klientowi (plik nie z FaktWay)”; „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum, decyzja, powiadomienie) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b; `cross-tenant` (K albo numer dokumentu ma faktura innej firmy z tym NIP): martwy koniec → „Oryginał w innej firmie” (D-A4-1b-3 PR C), decyzja Bartosza; bez decyzji w panelu: `same-content-other-program` → D-A4-1b-2, `download-*`/`storage-pending`/`archive-pending` → PR D (do tego czasu I5 i „Tylko uzgodnij”), KOR/ZAL/ROZ → D-A4-1b-3-S |
+| `KSEF_DUPLICATE_RECONCILE` | reconcile | 440, którego automat nie rozstrzygnął: oryginał z innego programu bez naszego pliku do porównania (`no-own-file`), oryginał z oznaczeniem naszego programu o innym pliku (`faktflow-original`; od 00156 z oceną pliku), numer KSeF w innej fakturze firmy (`known-number`), oryginału nie da się pobrać (403 — token bez `InvoiceRead`; po ponowieniach 5xx/429/21164/21165) | Decyzja klienta (no-own-file, known-number, `faktflow-original` z oceną „importable”; zwykła faktura): przycisk na karcie faktury — „To ta sama sprzedaż” / „To inna sprzedaż” (właściciel albo administrator; 00148 i 00156, D-A4-1b-3 PR B i PR C; e-mail „czeka na Twoją decyzję” raz). Przy `faktflow-original` oba przyciski zapisują fakturę z KSeF w FaktWay (numer przechodzi na nią), a dla pliku z historii tego dokumentu albo o tej samej treści jest jeden przycisk „Zapisz fakturę z KSeF w FaktWay”. Plik do przeglądu operatora (I5R): tekst `provenance-review` (sprawdzamy, nie wystawiaj ponownie, damy znać), bez przycisku. Bez danych oryginału (pobranie 403/5xx, magazyn, archiwum, brak zapisu sprawdzenia `no-check`, dane z innego środowiska KSeF): przycisk „Sprawdź ponownie” (właściciel albo administrator, PR D; `requeue_ksef_send(p_reconcile_only)`, nigdy nie wysyła; cooldown 10 minut; przy 403 wskazówka o uprawnieniu `InvoiceRead`). Pozostałe powody i rodzaje: dane oryginału z KSeF na karcie faktury (00144), „nie wystawiaj ponownie”, pytania do pomocy FaktFlow | I5D: bez automatu i bez alarmu (`I5D-env`: alarm); I5R (przegląd pliku): bez automatu, alarm krytyczny `I5R-72h` po 72 h od ostatniego sprawdzenia pliku; I5 dla pozostałych powodów: przy otwartym wpisie > 48 h weryfikacja od nowa, także dla `faktflow-original` bez oceny pliku albo z `recheckNeeded` (`recheck-needed`) i dla `known-now` (cron sam robi nowy werdykt) | „Zapisz decyzję klienta” (tylko decyzja przekazana przez klienta, notatka: kanał, data, osoba) i „Przypomnij klientowi” (raz na 24 h, decyzja 07.10 (12); nie przy `provenance-review` ani `recheck-needed`); w przeglądzie (I5R) „Zapisz fakturę z KSeF w FaktWay” (po rozmowie z klientem, tylko gdy plik da się zapisać) albo „Oddaj decyzję klientowi (plik nie z FaktWay)”; „Tylko uzgodnij” przy otwartym wpisie (powtarza weryfikację); karta `/admin/ksef/[id]`: `original_check` (powód, dane, skrót, archiwum, decyzja, powiadomienie) | bez otwartego wpisu: **ślepa uliczka** → ręczny werdykt D-A4-1b; `cross-tenant` (K albo numer dokumentu ma faktura innej firmy z tym NIP): martwy koniec → „Oryginał w innej firmie” (D-A4-1b-3 PR C), decyzja Bartosza; bez decyzji w panelu: `same-content-other-program` → D-A4-1b-2, KOR/ZAL/ROZ → D-A4-1b-3-S; `download-*`/`storage-pending`/`archive-pending`/`no-check`/inne środowisko mają przycisk klienta „Sprawdź ponownie” (PR D), a I5 i „Tylko uzgodnij” są drugim wyjściem |
 | `RESULT_UNCERTAIN` | reconcile | niepewny wynik, KSeF nie odpowiada | „nie wystawiaj ponownie” | I5 (A3): „tylko uzgodnij” raz na dobę, także KOR/ZAL¹ bez względu na datę | „Tylko uzgodnij” (KOR/ZAL¹ każdego dnia) / **Wyślij ponownie** (A4; KOR/ZAL¹ tylko w dniu wystawienia) | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
 | `INVALID_EVENT` | reconcile | zły payload zdarzenia | „zajmujemy się” | — | **Wyślij ponownie** (A4) — zdarzenie odtworzone z wiersza (KOR/ZAL¹ tylko w dniu wystawienia) | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
 | `ENQUEUE_LOST` | reconcile | `queued` bez zlecenia, z dowodem kontaktu (I1) | „zajmujemy się” | I5 przy otwartym wpisie > 48 h (także KOR/ZAL¹ bez względu na datę) | **Wyślij ponownie** (A4; KOR/ZAL¹ tylko w dniu wystawienia) / „Tylko uzgodnij” | dokument specjalny po dacie wystawienia bez otwartego wpisu — do B2 |
@@ -930,6 +930,48 @@ numer, który w KSeF ma już…”. Cofnąć ją można tylko wtedy, gdy zapytan
 `importedInvoiceId` dało 0. Faktury zapisane z KSeF zostają (są poprawnym zapisem
 wystawionych faktur), szkice wycofane bez numeru zostają bez numeru. Po SQL
 `NOTIFY pgrst, 'reload schema'`. Nigdy nie odtwarzaj pliku 00149.
+
+#### „Sprawdź ponownie” (D-A4-1b-3 PR D, bez migracji)
+
+Klient (właściciel albo administrator) widzi na karcie faktury w
+`failed / KSEF_DUPLICATE_RECONCILE` przycisk „Sprawdź ponownie”, gdy FaktWay nie ma jeszcze danych
+oryginału z KSeF. Przycisk nie czeka na cron I5 (48 godzin) ani na operatora.
+
+| Powód na znaczniku | Co widzi klient |
+|---|---|
+| brak zapisu sprawdzenia (`no-check`, znacznik sprzed 00144) | numer KSeF, „numer nadany {dzień}” (z `acquiredAt` albo z numeru KSeF), przycisk, „Nie wystawiaj tej faktury ponownie.” |
+| `download-refused` | to samo; przy kodzie 403 dodatkowo: dane logowania KSeF w FaktWay (certyfikat) nie mają uprawnienia do odczytu faktur (`InvoiceRead`); sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF, potem „Sprawdź ponownie” (klient nie ma tokenu do nadania uprawnienia) |
+| `download-pending`, `storage-pending`, `archive-pending` | to samo bez wskazówki o `InvoiceRead` |
+| `original_check.env` ≠ `KSEF_ENV` | „Dane oryginału pochodzą z innego środowiska KSeF…” i przycisk, bez zdania o automatycznym sprawdzeniu: powód decyzyjny (`no-own-file`, `known-number`, `faktflow-original`) z innego środowiska to I5D (blokada SQL nie patrzy na środowisko), a cron I5 ponawia tylko I5; alarm I5D liczy takie wiersze |
+
+Nie dotyczy powodów z panelem decyzji (`no-own-file`, `known-number`, `faktflow-original` z oceną pliku)
+ani deterministycznych (`same-content-other-program`, `archive-conflict`).
+
+- **Co robi.** Akcja `recheckKsefDuplicateAction` wymaga roli właściciela albo administratora, otwartego wpisu
+  `sent`/`intent` ze znacznikiem oryginału i tych samych faktów co „Tylko uzgodnij” operatora (kopia danych
+  zdarzenia, rodzaj niewstrzymany, znane `KSEF_ENV`; wspólny rdzeń `reconcileOnlyBlocker` w
+  `lib/ksef/duplicate-recheck.ts`). Kolejkuje `requeue_ksef_send(p_reconcile_only = true)` i zdarzenie
+  z `reconcileOnly: true` w jednej transakcji pg-boss. Runner w tym trybie nigdy nie wysyła: pobiera oryginał
+  jeszcze raz i wydaje nowy werdykt (panel decyzji, zapis K, albo ponownie brak danych).
+- **Cooldown.** 10 minut od ostatniego wpisu audytu `invoice.duplicate_recheck` tej faktury (metadane:
+  `reason`, `originalKsefNumber`, `sendAttemptId`). Klient dostaje zdanie z numerem dokumentu i minutami
+  do końca; widok niesie czas względny (`cooldownMsLeft`), a karta sama odświeża się sekundę po jego końcu,
+  więc przycisk wraca bez ręcznego odświeżania strony. Status `queued`/`sending`: „Sprawdzamy ponownie w KSeF… odśwież stronę za kilka minut”.
+- **Hamulce.** Wyłącznik wysyłek (`killAllKsefSubmissions`), niemożność jego odczytu, brak certyfikatu KSeF
+  i nieznane środowisko aplikacji (`KSEF_ENV`; `RECHECK.ENV_UNKNOWN`) zwracają zdania o sprawdzaniu (nie o wysyłce) z numerem dokumentu; faktura zostaje `failed`. W tym trybie
+  nie działa Offline24 (wysyłałby fakturę).
+- **Co widzi operator.** Wpis `invoice.send_requeued` z `reconcile_only = true` i aktorem = klient (RPC),
+  `invoice.submit_requested` z `send = requeue` oraz `invoice.duplicate_recheck`. Karta `/admin/ksef/[id]`
+  pokazuje nowy `original_check` po przebiegu. Cron I5 liczy swoje próby tylko z aktorem NULL, więc klikanie
+  klienta nie zjada jego limitu.
+- **Podwójne kliknięcie i ponowienie joba.** Zlecenie ma `singletonKey = faktura`, a `failed → queued` przechodzi
+  raz; drugie kliknięcie widzi `queued`. Ponowienie joba tylko pyta KSeF o ten sam numer.
+- **Zapytanie kontrolne.** `SELECT created_at, user_id, entity_id, metadata FROM audit_logs WHERE action =
+  'invoice.duplicate_recheck' ORDER BY created_at DESC LIMIT 20;` Powtarzające się wpisy jednej faktury co 10 minut
+  oznaczają, że werdykt wciąż nie zapada (np. 403 bez nadanego uprawnienia): sprawdź `original_check.reason`
+  i `httpStatus` na karcie operatora.
+- **Poza zakresem (zapisane).** 440 bez numeru oryginału (brak znacznika z `original_ksef_number`): karta nie
+  ma wtedy panelu, więc przycisku też nie; wyjście to „Tylko uzgodnij” operatora i I5.
 
 #### Zapytania kontrolne
 

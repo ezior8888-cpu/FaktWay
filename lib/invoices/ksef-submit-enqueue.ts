@@ -29,6 +29,7 @@ import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 import { addToOfflineQueue } from '@/lib/ksef/offline-queue';
 import {
   isCorrectionHeldForEnv,
@@ -53,7 +54,8 @@ import type {
 } from '@/types/invoice-types';
 
 export type KsefSubmitEnqueueResult =
-  | { ok: true; mode: 'online_queued' | 'offline_queued' }
+  /** `sendAttemptId` — właściciel przejęcia wysyłki tej próby (tylko kolejka online); audyt akcji klienta go zapisuje. */
+  | { ok: true; mode: 'online_queued' | 'offline_queued'; sendAttemptId?: string }
   | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED' };
 
 export interface EnqueueKsefSubmitParams {
@@ -98,7 +100,7 @@ function missingCredentialsMessage(kind: EnqueueKsefSubmitParams['auditKind']): 
  * wychodzi do wołającego — odpowiedź dla klienta jest ta sama co dotąd.
  */
 type EnqueueDecision =
-  | { ok: true; mode: 'online_queued' | 'offline_queued' }
+  | { ok: true; mode: 'online_queued' | 'offline_queued'; sendAttemptId?: string }
   | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED'; refusal: SendRefusalCode };
 
 /**
@@ -150,6 +152,10 @@ async function decideKsefSubmitEnqueue(
   } = params;
   // Ponowna wysyłka z `failed` (K3, A4b PR2b): odmowa zostawia fakturę z błędem wysyłki, nie szkicem.
   const resend = params.mode?.kind === 'requeue';
+  // D-A4-1b-3 PR D: „Sprawdź ponownie” — uzgodnienie bez wysyłki (`requeue_ksef_send(p_reconcile_only)`).
+  // Odmowy mówią wtedy o sprawdzaniu, nie o wysyłce, i nazywają dokument; Offline24 jest pominięty (wysyłałby).
+  const reconcileOnly = params.mode?.kind === 'requeue' && params.mode.reconcileOnly === true;
+  const documentNumber = internalNumberForAudit ?? invoice.internalNumber ?? '(bez numeru)';
 
   // Covers existing ROZ drafts and callers that bypass the final invoice action.
   // Do this before both online and Offline24 enqueue paths.
@@ -173,14 +179,22 @@ async function decideKsefSubmitEnqueue(
   }
   try {
     if (await isKsefSubmissionPaused()) {
-      return { ok: false, refusal: 'KSEF_PAUSED', error: resend ? resendPausedMessage(auditKind) : KSEF_PAUSED_MESSAGE };
+      return {
+        ok: false,
+        refusal: 'KSEF_PAUSED',
+        error: reconcileOnly
+          ? DUPLICATE_DECISION_TEXTS.RECHECK.PAUSED(documentNumber)
+          : resend ? resendPausedMessage(auditKind) : KSEF_PAUSED_MESSAGE,
+      };
     }
   } catch {
     // Bez pewności, że wyłącznik jest zdjęty, nie kolejkujemy (fail-closed).
     return {
       ok: false,
       refusal: 'PAUSE_UNKNOWN',
-      error: resend
+      error: reconcileOnly
+        ? DUPLICATE_DECISION_TEXTS.RECHECK.PAUSE_UNKNOWN(documentNumber)
+        : resend
         ? resendPauseUnknownMessage(auditKind)
         : 'Nie można sprawdzić, czy wysyłka do KSeF jest dostępna. Faktura została zapisana — spróbuj ponownie za chwilę.',
     };
@@ -230,7 +244,13 @@ async function decideKsefSubmitEnqueue(
   }
 
   if (!tenantKsef?.ksef_credentials_encrypted) {
-    return { ok: false, refusal: 'NO_CERTIFICATE', error: resend ? resendMissingCredentialsMessage(auditKind) : missingCredentialsMessage(auditKind) };
+    return {
+      ok: false,
+      refusal: 'NO_CERTIFICATE',
+      error: reconcileOnly
+        ? DUPLICATE_DECISION_TEXTS.RECHECK.NO_CERTIFICATE(documentNumber)
+        : resend ? resendMissingCredentialsMessage(auditKind) : missingCredentialsMessage(auditKind),
+    };
   }
 
   let decrypted: ReturnType<typeof decryptCredentials>;
@@ -257,7 +277,8 @@ async function decideKsefSubmitEnqueue(
   }
 
   // AUD-14: na KSeF produkcyjnym bez automatycznego Offline24 (`offline24-policy.ts`).
-  const health = isOffline24Enabled(env)
+  // PR D: uzgodnienie nigdy nie idzie ścieżką Offline24 (ta wysyła fakturę); zdrowia KSeF nie pytamy.
+  const health = !reconcileOnly && isOffline24Enabled(env)
     ? await shouldUseOfflineMode(env)
     : { offline: false as const, isMfOutage: false };
 
@@ -336,6 +357,9 @@ async function decideKsefSubmitEnqueue(
           finalData,
           finalAdvanceSettlementRows,
           sendAttemptId,
+          // Runner czyta tryb ze zdarzenia: bez tego „Sprawdź ponownie” wysłałoby fakturę od nowa (PR D).
+          // Klucz tylko w trybie uzgodnienia — zwykłe zdarzenia wyglądają jak dotąd.
+          ...(reconcileOnly ? { reconcileOnly: true } : {}),
         },
       },
       { inTransaction: ksefSendTransactionStep(mode, { invoiceId, tenantId, attemptId: sendAttemptId }) },
@@ -362,5 +386,5 @@ async function decideKsefSubmitEnqueue(
 
   revalidatePath('/invoices');
   revalidatePath(`/invoices/${invoiceId}`);
-  return { ok: true, mode: 'online_queued' };
+  return { ok: true, mode: 'online_queued', sendAttemptId };
 }

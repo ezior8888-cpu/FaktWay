@@ -19,7 +19,8 @@ import {
   type DuplicateDecisionView,
   type RetiredDraftView,
 } from '@/lib/ksef/duplicate-decision';
-import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
+import { loadDuplicateDecisionFacts, loadLastDuplicateRecheckAt } from '@/lib/ksef/duplicate-decision-facts';
+import { duplicateRecheckView, type DuplicateRecheckView } from '@/lib/ksef/duplicate-recheck';
 import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
@@ -138,6 +139,20 @@ export default async function InvoiceDetailPage({
   const duplicateDecision: DuplicateDecisionView | null = awaitingDecision && facts
     ? duplicateDecisionOptions({ facts, actor: 'client', canManage: canManageSend, environment: env, now: new Date() })
     : null;
+  // D-A4-1b-3 PR D: „Sprawdź ponownie”, gdy brakuje danych oryginału (pobranie, magazyn, archiwum, brak zapisu
+  // sprawdzenia, inne środowisko KSeF). Ostatni wpis audytu czyta sesja klienta; błąd odczytu zostawia przycisk
+  // bez zdania o cooldownie (akcja sprawdza go od nowa i jest rozstrzygająca).
+  let lastRecheckAt: string | null = null;
+  if (awaitingDecision && facts) {
+    try {
+      lastRecheckAt = await loadLastDuplicateRecheckAt(supabase, invoice.tenant_id as string, id);
+    } catch {
+      lastRecheckAt = null;
+    }
+  }
+  const duplicateRecheck: DuplicateRecheckView | null = awaitingDecision && facts
+    ? duplicateRecheckView({ facts, sendFacts: resendFacts, canManage: canManageSend, environment: env, lastRecheckAt, now: new Date() })
+    : null;
   const marker = awaitingDecision && facts ? duplicateMarker(facts.submissions) : null;
   const original = marker?.original_ksef_number
     ? describeDuplicateOriginal(internalNumber, marker.original_ksef_number, parseDuplicateCheck(marker.original_check))
@@ -228,6 +243,8 @@ export default async function InvoiceDetailPage({
     ksef_duplicate_original: duplicateOriginal,
     // D-A4-1b-3 PR B: widoki liczone na serwerze — bez surowego `original_check`.
     ksef_duplicate_decision: duplicateDecision,
+    // D-A4-1b-3 PR D: „Sprawdź ponownie” (liczy serwer tą samą polityką co akcja).
+    ksef_duplicate_recheck: duplicateRecheck,
     ksef_retired_draft: retiredDraft,
     // D-A4-1b-3 PR C: panel odsyła do akcji środowisko, które zobaczył (INV-8); karta K — skąd faktura się wzięła (6.5).
     ksef_server_environment: env,

@@ -106,7 +106,8 @@ describe('kolejkowanie wysyłki: RPC w transakcji ze zleceniem', () => {
 
     const result = await enqueueKsefSubmitAfterDraft(params());
 
-    expect(result).toEqual({ ok: true, mode: 'online_queued' });
+    // PR D: wynik niesie `sendAttemptId` (audyt „Sprawdź ponownie”); tu liczy się tryb i brak odmowy.
+    expect(result).toEqual({ ok: true, mode: 'online_queued', sendAttemptId: expect.any(String) });
     const event = sentEvent();
     expect(event.singletonKey).toBe(ID);
     expect(event.groupId).toBe(TENANT);
@@ -125,7 +126,8 @@ describe('kolejkowanie wysyłki: RPC w transakcji ze zleceniem', () => {
 
     const result = await enqueueKsefSubmitAfterDraft(params({ mode: { kind: 'requeue', actorUserId: USER, reconcileOnly: true } }));
 
-    expect(result).toEqual({ ok: true, mode: 'online_queued' });
+    // PR D: wynik niesie `sendAttemptId` (audyt „Sprawdź ponownie”); tu liczy się tryb i brak odmowy.
+    expect(result).toEqual({ ok: true, mode: 'online_queued', sendAttemptId: expect.any(String) });
     const [sql, values] = tx.executeSql.mock.calls[0] as [string, unknown[]];
     expect(sql).toMatch(/public\.requeue_ksef_send\(/);
     expect(values).toEqual([ID, TENANT, sentEvent().data.sendAttemptId, USER, true]);

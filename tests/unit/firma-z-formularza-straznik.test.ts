@@ -43,6 +43,7 @@ const EXEMPT: Record<string, string> = {
   resendInvoiceAction: ID_BOUND,
   resetInvoiceToDraftAction: ID_BOUND,
   decideKsefDuplicateAction: ID_BOUND,
+  recheckKsefDuplicateAction: ID_BOUND,
   emailInvoiceAction: ID_BOUND,
   sendDraftInvoiceAction: ID_BOUND,
   deleteDraftInvoiceAction: ID_BOUND,
