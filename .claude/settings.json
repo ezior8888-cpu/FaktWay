@@ -28,14 +28,24 @@
       "Bash(pnpm run ci)",
       "Bash(pnpm build)",
       "Bash(bash scripts/dev/przygotuj-worktree.sh)",
-      "Bash(./scripts/ops/kontrola-faktur-ksef.sh)"
+      "Bash(./scripts/ops/kontrola-faktur-ksef.sh)",
+      "Bash(pnpm filtr:mapa:*)",
+      "Bash(pnpm filtr:testy)",
+      "Bash(pnpm filtr:lokalnie:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push --force-with-lease:*)",
       "Bash(git push origin main:*)",
-      "Bash(git push origin HEAD:main:*)"
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push --no-verify:*)",
+      "Bash(SKIP_PREPUSH=1 git push:*)",
+      "Bash(git -c core.hooksPath:*)",
+      "Bash(gh pr merge --admin:*)",
+      "Bash(gh label create zgoda:*)",
+      "Bash(gh label delete zgoda:*)",
+      "Bash(gh label edit zgoda:*)"
     ]
   },
   "hooks": {
@@ -59,6 +69,23 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/dev/lint-po-edycji.sh\"",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/filtr/po-edycji.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/filtr/przed-poleceniem.sh\"",
+            "timeout": 15
           }
         ]
       }

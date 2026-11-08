@@ -7,7 +7,8 @@
 # Włącza go `scripts/dev/przygotuj-worktree.sh` (git config core.hooksPath
 # .githooks). Milczy, gdy wszystko gra. Trwa od kilku sekund do ok. 3 minut
 # (zmiana w pliku importowanym wszędzie uruchamia większość testów).
-# Pominięcie w razie potrzeby: SKIP_PREPUSH=1 git push   albo   git push --no-verify
+# Pominięcie tylko przy awarii: SKIP_PREPUSH=1 git push   albo   git push --no-verify
+# (w sesjach Claude blokuje to hook żelaznego filtra; CI i tak powtarza filtr).
 set -uo pipefail
 
 [ "${SKIP_PREPUSH:-}" = 1 ] && exit 0
@@ -38,8 +39,31 @@ if [ -f .agents/infra.env ]; then
     fi
   done
 fi
+# Żelazny filtr (docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B5.3): plik z sygnałem
+# poza mapą ryzyka zatrzymuje push; zmiana R1 albo R2 uruchamia niżej testy
+# filtra. Błąd samego klasyfikatora tylko ostrzega (CI i tak powtarza filtr).
+filtr_poziom=""
+if [ -f scripts/filtr/mapa.mjs ]; then
+  filtr_diff="$(mktemp)"
+  for r in "${ranges[@]}"; do git diff --no-color -M -U0 "$r"; done >"$filtr_diff"
+  filtr_out="$(node scripts/filtr/mapa.mjs --diff-z-pliku "$filtr_diff" 2>&1)"
+  filtr_kod=$?
+  rm -f "$filtr_diff"
+  if [ "$filtr_kod" -eq 1 ]; then
+    echo "pre-push: żelazny filtr, plik z sygnałem poza mapą ryzyka; push zatrzymany." >&2
+    printf '%s\n' "$filtr_out" | tail -30 >&2
+    exit 1
+  elif [ "$filtr_kod" -ne 0 ]; then
+    echo "pre-push: klasyfikator filtra nie zadziałał (kod $filtr_kod), sprawdzi to CI:" >&2
+    printf '%s\n' "$filtr_out" | tail -5 >&2
+  fi
+  filtr_poziom="$(printf '%s\n' "$filtr_out" | sed -n 's/^\[FILTR\] Poziom zmiany: \(R[0-3]\).*/\1/p' | head -1)"
+fi
+filtr_testy=0
+case "$filtr_poziom" in R1|R2) [ -f vitest.filtr.config.ts ] && filtr_testy=1 ;; esac
+
 code="$(printf '%s' "$changed" | grep -E '\.(ts|tsx|js|mjs|cjs)$' | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
-[ -n "$code" ] || exit 0
+[ -n "$code" ] || [ "$filtr_testy" -eq 1 ] || exit 0
 # Typy, eslint i testy potrzebują zależności; kontrola adresów wyżej ich nie potrzebuje.
 [ -d node_modules ] || { echo "pre-push: brak node_modules, typy i testy pominięte (pnpm install)" >&2; exit 0; }
 
@@ -52,9 +76,14 @@ fail() {
   exit 1
 }
 
-pnpm -s typecheck >"$log" 2>&1 || fail "pnpm typecheck czerwony"
-# shellcheck disable=SC2086
-printf '%s\n' "$code" | xargs pnpm -s eslint --no-warn-ignored >"$log" 2>&1 || fail "eslint zmienionych plików czerwony"
-# shellcheck disable=SC2086
-printf '%s\n' "$code" | xargs pnpm -s vitest related --run --passWithNoTests >"$log" 2>&1 || fail "vitest related czerwony"
+if [ -n "$code" ]; then
+  pnpm -s typecheck >"$log" 2>&1 || fail "pnpm typecheck czerwony"
+  # shellcheck disable=SC2086
+  printf '%s\n' "$code" | xargs pnpm -s eslint --no-warn-ignored >"$log" 2>&1 || fail "eslint zmienionych plików czerwony"
+  # shellcheck disable=SC2086
+  printf '%s\n' "$code" | xargs pnpm -s vitest related --run --passWithNoTests >"$log" 2>&1 || fail "vitest related czerwony"
+fi
+if [ "$filtr_testy" -eq 1 ]; then
+  pnpm -s exec vitest run --config vitest.filtr.config.ts >"$log" 2>&1 || fail "testy żelaznego filtra (zmiana $filtr_poziom) czerwone"
+fi
 exit 0
