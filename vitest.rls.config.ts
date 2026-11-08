@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00174 (krok 8.5 planu kompletnej aplikacji): zalogowane urządzenia i historia logowań;
+      // tylko własne sesje, anon bez dostępu, krok kodu przy 2FA, wylogowanie widziane przez GoTrue.
+      'tests/rls-sesje-konta.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

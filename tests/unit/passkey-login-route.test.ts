@@ -192,9 +192,10 @@ describe('POST /api/auth/passkey/login/verify', () => {
     // Logowanie passkey liczy się jak „zapamiętaj mnie”.
     expect(cookieWrites.get('ksef.remember_me')?.options).toMatchObject({ httpOnly: true, maxAge: 90 * 24 * 60 * 60 });
 
+    // Krok 8.5: identyfikator sesji ze zweryfikowanych claimów łączy wpis z listą urządzeń (00174).
     expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'auth.login', userId: USER_ID, tenantId: 'tenant-1',
-      metadata: expect.objectContaining({ method: 'passkey' }),
+      metadata: { method: 'passkey', passkey_id: 'passkey-1', session_id: SESSION_ID },
     }));
     expect(h.track).toHaveBeenCalledWith(expect.objectContaining({
       userId: USER_ID, event: 'login_completed', properties: { method: 'passkey' },

@@ -36,6 +36,11 @@ export type AuditAction =
   | 'auth.mfa_recovery_codes_regenerated'
   | 'auth.passkey_added'
   | 'auth.passkey_removed'
+  // Wylogowanie na odległość (00174, krok 8.5): jedno urządzenie (`metadata.session_id`)
+  // albo wszystkie poza bieżącym (`metadata.count`). Wpis `auth.login` niesie od
+  // tego kroku `metadata.session_id`, po którym lista urządzeń łączy sesję z przeglądarką.
+  | 'auth.session_revoked'
+  | 'auth.other_sessions_revoked'
   | 'gdpr.export_requested'
   | 'gdpr.deletion_requested'
   | 'gdpr.deletion_canceled'
