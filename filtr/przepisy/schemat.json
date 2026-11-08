@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reguła rejestru przepisów żelaznego filtra",
+  "description": "Jeden wpis to jedna reguła. Plan: docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B4.1. Sprawdza tests/filtr/rejestr.test.ts (scripts/filtr/rejestr.mjs).",
+  "type": "object",
+  "required": ["id", "regula", "podstawa", "obowiazuje", "obszary", "kod", "testy", "parametry", "niezmienniki", "pewnosc", "wzorzec", "interpretacja", "do_rozstrzygniecia", "sprawdzil", "odczyt", "zrodlo_planu", "stan", "uwagi"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^RP-[A-Z0-9]+(?:-[A-Z0-9]+)*$" },
+    "regula": { "type": "string", "minLength": 20 },
+    "podstawa": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["akt", "przepis"], "properties": { "akt": { "type": "string" }, "przepis": { "type": "string" }, "url": { "type": "string" } } } },
+    "obowiazuje": { "type": "object", "required": ["od", "do"], "properties": { "od": { "type": "string", "format": "date" }, "do": { "type": ["string", "null"], "format": "date" } } },
+    "obszary": { "type": "array", "minItems": 1, "items": { "type": "string", "description": "id obszaru z filtr/mapa-ryzyka.json" } },
+    "kod": { "type": "array", "items": { "type": "string", "pattern": "^[^#]+#[A-Za-z0-9_]+$", "description": "plik#symbol (wyeksportowany)" } },
+    "testy": { "type": "array", "items": { "type": "string", "pattern": "^[^>]+ > .*$", "description": "plik > fragment nazwy testu (pusty fragment: cały plik)" } },
+    "parametry": { "type": "array", "items": { "type": "string", "pattern": "^[a-z]+\\.[A-Za-z0-9_]+$", "description": "sekcja.klucz z lib/ksiegowosc/parametry" } },
+    "niezmienniki": { "type": "array", "items": { "type": "string", "pattern": "^NZ-" } },
+    "pewnosc": { "enum": ["wysoka", "srednia", "niska"] },
+    "wzorzec": { "type": ["object", "null"], "required": ["poziom", "opis", "sprawdzono"], "properties": { "poziom": { "enum": [1, 2, 3, 4, 5, 6] }, "opis": { "type": "string" }, "sprawdzono": { "type": "string", "format": "date" } } },
+    "interpretacja": { "type": ["string", "null"] },
+    "do_rozstrzygniecia": { "type": ["object", "null"], "required": ["kto", "pytanie", "przypadki"], "properties": { "kto": { "enum": ["księgowa", "prawnik"] }, "pytanie": { "type": "string" }, "przypadki": { "type": "array", "items": { "type": "string" } } } },
+    "sprawdzil": { "type": "object", "required": ["ksiegowa", "prawnik"], "properties": { "ksiegowa": { "type": ["object", "null"] }, "prawnik": { "type": ["object", "null"] } } },
+    "odczyt": { "type": "string", "format": "date" },
+    "zrodlo_planu": { "type": "string" },
+    "stan": { "enum": ["dziala", "poza-v1", "obserwacja"], "description": "dziala: kod i test wymagane; poza-v1: reguła spisana, kod w późniejszym kroku; obserwacja: zmiana przepisów do śledzenia" },
+    "uwagi": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,189 @@
+{
+  "wersja": 1,
+  "obszar": "terminy podatkowe i składkowe",
+  "opis": "Rejestr przepisów żelaznego filtra: terminy podatkowe i składkowe. Plan: docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B4.1. Każda zmiana wymaga etykiety zgoda:wiedza-prawna i źródła w karcie PR.",
+  "przepisy": [
+    {
+      "id": "RP-TERM-01",
+      "regula": "Ryczałt, zaliczka PIT i składki ZUS za miesiąc: do 20. dnia następnego miesiąca (za grudzień do 20 stycznia); JPK_V7M i VAT: do 25.; termin nominalny zostaje obok faktycznego.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 21 ust. 1"
+        },
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 44 ust. 6"
+        },
+        {
+          "akt": "ustawa o systemie ubezpieczeń społecznych",
+          "przepis": "art. 47 ust. 1"
+        },
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 99 ust. 1 i art. 103 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kalendarz",
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kalendarz.ts#terminDla",
+        "lib/ksiegowosc/parametry/terminy.ts#TERMINY",
+        "lib/ksiegowosc/parametry/index.ts#terminyNa"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kalendarz.test.ts > ryczałt, zaliczka i ZUS za",
+        "tests/unit/ksiegowosc-kalendarz.test.ts > JPK_V7M i VAT za",
+        "tests/unit/ksiegowosc-kalendarz.test.ts > termin nominalny zostaje obok faktycznego",
+        "tests/unit/ksiegowosc-parametry.test.ts > dni miesiąca: 20 dla ryczałtu"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "kalendarz 2027 z planu księgowości, sekcja 5 (podatki.gov.pl, zus.pl)",
+        "sprawdzono": "2026-11-04"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ryczałt: termin”, „Skala”, „ZUS: termin”, kalendarz 2027",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-TERM-02",
+      "regula": "Termin przypadający w sobotę, niedzielę albo dzień ustawowo wolny przesuwa się na najbliższy dzień roboczy (zawsze do przodu); Wigilia jest dniem wolnym od 2025 r.",
+      "podstawa": [
+        {
+          "akt": "Ordynacja podatkowa",
+          "przepis": "art. 12 § 5"
+        },
+        {
+          "akt": "ustawa o dniach wolnych od pracy",
+          "przepis": "art. 1 (Wigilia od 2025 r.)"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kalendarz"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kalendarz.ts#najblizszyDzienRoboczy",
+        "lib/ksiegowosc/kalendarz.ts#czyDzienRoboczy",
+        "lib/ksiegowosc/kalendarz.ts#czySwieto",
+        "lib/ksiegowosc/kalendarz.ts#dniWolne",
+        "lib/ksiegowosc/kalendarz.ts#wielkanoc",
+        "lib/ksiegowosc/kalendarz.ts#WIGILIA_WOLNA_OD"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kalendarz.test.ts > przesunięcie zawsze do przodu",
+        "tests/unit/ksiegowosc-kalendarz.test.ts > Wigilia jest dniem wolnym od 2025 r.",
+        "tests/unit/ksiegowosc-kalendarz.test.ts > Wielkanoc i święta ruchome 2027"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 kalendarz 2027",
+      "stan": "dziala",
+      "uwagi": "Druga lista świąt w lib/ksef/idempotency.ts (duplikat z mapy filtra B2, pkt 7)."
+    },
+    {
+      "id": "RP-TERM-03",
+      "regula": "Rozliczenie kwartalne bierze ostatni miesiąc kwartału; bez znanych terminów program nie zgaduje.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 21 ust. 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kalendarz"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kalendarz.ts#ostatniMiesiacKwartalu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kalendarz.test.ts > ostatni miesiąc kwartału",
+        "tests/unit/ksiegowosc-kalendarz.test.ts > bez znanych terminów nie zgaduje"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 kalendarz 2027",
+      "stan": "dziala",
+      "uwagi": "Wpłaty kwartalne w całości to krok K9."
+    },
+    {
+      "id": "RP-TERM-04",
+      "regula": "Roczne rozliczenie składki zdrowotnej do 20 maja (do potwierdzenia).",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 81 ust. 2ze"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kalendarz"
+      ],
+      "kod": [],
+      "testy": [],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "niska",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić termin i zakres rocznego rozliczenia zdrowotnej dla każdej formy.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 kalendarz 2027",
+      "stan": "poza-v1",
+      "uwagi": null
+    }
+  ]
+}
