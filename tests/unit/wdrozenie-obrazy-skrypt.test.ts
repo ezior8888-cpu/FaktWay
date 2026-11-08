@@ -132,10 +132,11 @@ echo "Filesystem 1G-blocks Used Available Capacity Mounted"
 echo "/dev/sda1 38G 26G $(cat "$FAKE_DIR/free")G 72% /"
 `;
 
-// Po pierwszym czekaniu wykonuje $FAKE_DIR/po-sleep (np. „obraz się pojawia”).
+// Po czekaniu wykonuje $FAKE_DIR/po-sleep (np. „obraz się pojawia”); usuwa go,
+// gdy skończy się kodem 0 (kod 1 = „jeszcze nie teraz”).
 const FAKE_SLEEP = `#!/usr/bin/env bash
 echo "sleep $1" >> "$FAKE_DIR/sleep.log"
-if [ -f "$FAKE_DIR/po-sleep" ]; then bash "$FAKE_DIR/po-sleep"; rm -f "$FAKE_DIR/po-sleep"; fi
+if [ -f "$FAKE_DIR/po-sleep" ] && bash "$FAKE_DIR/po-sleep"; then rm -f "$FAKE_DIR/po-sleep"; fi
 `;
 
 let dir: string;
@@ -360,6 +361,38 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log().filter((l) => l.startsWith('wdrozenie'))).toEqual([`wdrozenie 2 ${SHA}`]);
   });
 
+  it('brak stanu z Coolify (SSH/tinker milczy): stan nieznany, tag zostaje na SHA', () => {
+    imageMode(OLD);
+    publish(SHA);
+    write(fake('status-2'), '');
+    const r = run('wdroz-produkcje.sh', ['--obraz', SHA]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('Stan nieznany');
+    expect(r.out).not.toContain('przywracam tag');
+    expect(state(2)).toBe(`dockerimage|${WORKER}|${SHA}|/Dockerfile|worker`);
+    expect(log().filter((l) => l.startsWith('wdrozenie'))).toEqual([`wdrozenie 2 ${SHA}`]);
+  });
+
+  it('stary kontener chwilę na liście: czeka, aż zostanie tylko nowy', () => {
+    imageMode(OLD);
+    publish(SHA);
+    // Po wdrożeniu workera stary kontener jeszcze widać; znika po pierwszym czekaniu.
+    write(
+      join(dir, 'bin/docker'),
+      FAKE_DOCKER.replace(
+        '[ -f "$FAKE_DIR/running-2" ] && echo "workertest-20261108 $(cat "$FAKE_DIR/running-2")"',
+        '[ -f "$FAKE_DIR/running-2" ] && echo "workertest-20261108 $(cat "$FAKE_DIR/running-2")"\n    [ -f "$FAKE_DIR/stary-2" ] && echo "workertest-20261101 workertest:' + OLD + '"',
+      ),
+      0o755,
+    );
+    write(fake('stary-2'), '1');
+    // Pierwsze czekanie to odpytywanie kolejki; stary znika dopiero przy drugim.
+    write(fake('po-sleep'), '[ "$(wc -l < "$FAKE_DIR/sleep.log")" -ge 2 ] || exit 1\nrm -f "$FAKE_DIR/stary-2"\n');
+    const r = run('wdroz-produkcje.sh', ['--obraz', SHA]);
+    expect(r.code, r.out).toBe(0);
+    expect(log()).toContain('kontrola');
+  });
+
   it('aplikacje na buildzie z repo: odmawia i podpowiada coolify-zrodlo.sh obraz', () => {
     repoMode();
     publish(SHA);
@@ -381,6 +414,7 @@ describe('coolify-zrodlo.sh', () => {
       `zmiana 1 dockerimage|${RUNNER}|${OLD}|/Dockerfile|runner`,
     ]);
     expect(r.out).toContain(`wdroz-produkcje.sh --obraz ${OLD}`);
+    expect(r.out).toContain('Bramka /wdroz');
     expect(tinkerLog()).toContain('whereKey(2)->update(');
     expect(tinkerLog()).not.toContain('->save(');
   });
@@ -447,6 +481,17 @@ describe('coolify-zrodlo.sh', () => {
     const r = run('coolify-zrodlo.sh', ['obraz', OLD, '--wdroz']);
     expect(r.code, r.out).toBe(0);
     expect(log().filter((l) => !l.startsWith('zmiana'))).toEqual([`wdrozenie 2 ${OLD}`, `wdrozenie 1 ${OLD}`, 'kontrola']);
+  });
+
+  it('obraz --wdroz przy braku miejsca na app-1 niczego nie przełącza', () => {
+    repoMode();
+    publish(OLD);
+    write(fake('free'), '2');
+    const r = run('coolify-zrodlo.sh', ['obraz', OLD, '--wdroz']);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('wolne tylko 2 GB');
+    expect(log()).toEqual([]);
+    expect(state(2)).toBe('dockerfile|||/Dockerfile|worker');
   });
 
   it('repo --wdroz wraca i wdraża buildem z repo', () => {

@@ -181,7 +181,8 @@ czekaj_na_obrazy() {
     gotowe=1
     for id in "$WORKER_ID" "$WEB_ID"; do
       obraz=$(obraz_ghcr "$id")
-      rev=$(ghcr_rewizja "$obraz" "$sha" || true)
+      # 404 brakującego tagu to oczekiwany stan w trakcie czekania: bez szumu.
+      rev=$(ghcr_rewizja "$obraz" "$sha" 2>/dev/null || true)
       if [ -n "$rev" ] && [ "$rev" != "$sha" ]; then
         die "$obraz:$sha ma etykietę rewizji $rev, a nie $sha. Nie wdrażam obrazu z cudzego commita; zbuduj go od nowa: gh workflow run obrazy.yml -f ref=$sha -f wdroz=false"
       fi
@@ -200,17 +201,33 @@ czekaj_na_obrazy() {
   done
 }
 
-# Tag obrazu działającego kontenera aplikacji na app-1 (dla obu źródeł to
+# Tag obrazu działających kontenerów aplikacji na app-1 (dla obu źródeł to
 # SHA: Coolify taguje build z repo pełnym SHA, a obraz z GHCR ma tag SHA).
+# Kilka kontenerów na różnych tagach (np. stary jeszcze nie zniknął po
+# wdrożeniu) = tagi po przecinku, więc porównanie z jednym SHA nie przejdzie.
 sha_dzialajacego() {
   local prefiks
   prefiks=$(prefiks_kontenera "$1")
   [ -n "$prefiks" ] || return 0
   ssh -i "$K" -o BatchMode=yes root@"$APP" "docker ps --format '{{.Names}} {{.Image}}'" \
-    | awk -v p="$prefiks" 'index($1, p) == 1 { n = split($2, a, ":"); print a[n]; exit }' || true
+    | awk -v p="$prefiks" 'index($1, p) == 1 { n = split($2, a, ":"); if (!(a[n] in w)) { w[a[n]] = 1; o = o (o == "" ? "" : ",") a[n] } } END { print o }' || true
 }
+
+MIN_WOLNE_GB=${WDROZ_MIN_WOLNE_GB:-4}
 
 # Wolne miejsce na / app-1 w GB.
 wolne_gb_app1() {
   ssh -i "$K" -o BatchMode=yes root@"$APP" "df -P -BG / | awk 'NR == 2 { print \$4 }'" | tr -dc '0-9' || true
+}
+
+# Odmawia (exit 1), gdy na app-1 jest mniej niż MIN_WOLNE_GB wolnego miejsca:
+# obraz workera zajmuje po pobraniu ok. 1,5 GB, a 8.11.2026 dysk się zapchał.
+sprawdz_miejsce_app1() {
+  local wolne
+  wolne=$(wolne_gb_app1)
+  [ -n "$wolne" ] || die "Nie odczytałem wolnego miejsca na app-1. Nic nie zmieniłem."
+  if [ "$wolne" -lt "$MIN_WOLNE_GB" ]; then
+    die "Na app-1 wolne tylko $wolne GB (próg $MIN_WOLNE_GB GB). Usuń stare obrazy (ssh … 'docker image ls', zostaw poprzednią wersję do cofnięcia), potem uruchom skrypt ponownie. Nic nie zmieniłem."
+  fi
+  echo "   app-1: wolne $wolne GB"
 }

@@ -68,8 +68,6 @@ else
   zaladuj_infra_env K OPS
 fi
 
-MIN_WOLNE_GB=${WDROZ_MIN_WOLNE_GB:-4}
-
 # ── Źródło w Coolify musi pasować do trybu ──
 # Poprzednie tagi w POPRZEDNI_TAG_<id> (bash 3.2 z macOS nie ma tablic
 # asocjacyjnych).
@@ -108,16 +106,12 @@ if [ "$TRYB" = obraz ]; then
   echo "── Obrazy $SHA w GHCR"
   czekaj_na_obrazy "$SHA" "${WDROZ_CZEKAJ_MIN:-45}" || exit 1
   echo "   oba obrazy są, etykieta rewizji = $SHA"
-  wolne=$(wolne_gb_app1)
-  [ -n "$wolne" ] || die "Nie odczytałem wolnego miejsca na app-1. Nic nie wdrożyłem."
-  if [ "$wolne" -lt "$MIN_WOLNE_GB" ]; then
-    die "Na app-1 wolne tylko $wolne GB (próg $MIN_WOLNE_GB GB; obraz workera ma ok. 2 GB). Usuń stare obrazy (ssh … 'docker image ls', zostaw poprzednią wersję do cofnięcia), potem uruchom skrypt ponownie."
-  fi
-  echo "   app-1: wolne $wolne GB"
+  sprawdz_miejsce_app1
 fi
 
 # Czeka na koniec wdrożenia. Kod 0 = finished, 1 = failed/cancelled (log na
-# ekranie), 2 = przekroczony czas.
+# ekranie), 2 = stan nieznany (przekroczony czas albo brak odpowiedzi): przy 2
+# wdrożenie mogło się jeszcze udać, więc niczego nie cofamy.
 czekaj_na_wdrozenie() {
   local uuid=$1 name=$2 odstep=$3 limit=$4
   local status="" waited=0 puste=0
@@ -134,12 +128,13 @@ czekaj_na_wdrozenie() {
         return 1
         ;;
       "")
-        # Brak wiersza w kolejce trzy razy z rzędu: Coolify odrzucił
-        # wdrożenie albo tinker nie odpowiada. Nie czekamy 40 minut na nic.
+        # Brak stanu pięć razy z rzędu: Coolify odrzucił wdrożenie albo SSH
+        # do ops-1 nie odpowiada (zdarza się przy wielu połączeniach). Stan
+        # nieznany, a nie porażka: wdrożenie może dalej trwać.
         puste=$((puste + 1))
-        if [ "$puste" -ge 3 ]; then
-          echo "Wdrożenie $name ($uuid): trzy razy brak stanu w kolejce Coolify. Sprawdź kolejkę w panelu." >&2
-          return 1
+        if [ "$puste" -ge 5 ]; then
+          echo "Wdrożenie $name ($uuid): pięć razy brak stanu z Coolify (tinker/SSH). Stan nieznany; sprawdź kolejkę w panelu." >&2
+          return 2
         fi
         ;;
       *) puste=0 ;;
@@ -183,7 +178,14 @@ deploy_obraz() {
     echo "Tag $name zostaje na $SHA. Po sprawdzeniu w panelu uruchom skrypt ponownie albo cofnij: ./scripts/ops/wdroz-produkcje.sh --obraz <poprzedni sha>" >&2
     exit 1
   fi
-  dziala=$(sha_dzialajacego "$app_id")
+  # Stary kontener może chwilę jeszcze być na liście: do minuty na jeden,
+  # nowy kontener.
+  local proba
+  for proba in 1 2 3 4 5 6; do
+    dziala=$(sha_dzialajacego "$app_id")
+    [ "$dziala" = "$SHA" ] && break
+    [ "$proba" = 6 ] || sleep 10
+  done
   if [ "$dziala" != "$SHA" ]; then
     die "$name: Coolify zgłosił finished, ale kontener na app-1 działa na „${dziala:-?}”, nie na $SHA. Sprawdź kontenery: ./scripts/ops/kontrola-faktur-ksef.sh"
   fi
@@ -203,7 +205,8 @@ if [ "$TRYB" = repo ]; then
 else
   deploy_obraz "$WORKER_ID"
   if ! (deploy_obraz "$WEB_ID"); then
-    echo "⚠️  Worker jest na $SHA, aplikacja na poprzedniej wersji (stan mieszany). Cofnięcie workera: ./scripts/ops/wdroz-produkcje.sh --obraz $(poprzedni_tag "$WORKER_ID")" >&2
+    cofnij=$(poprzedni_tag "$WORKER_ID")
+    echo "⚠️  Worker jest na $SHA, aplikacja na poprzedniej wersji (stan mieszany). Cofnięcie workera: ./scripts/ops/wdroz-produkcje.sh --obraz ${cofnij:-<poprzedni sha>}" >&2
     exit 1
   fi
 fi

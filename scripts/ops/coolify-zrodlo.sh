@@ -118,6 +118,9 @@ if [ "$POLECENIE" = obraz ]; then
   echo "── Obrazy $SHA w GHCR"
   czekaj_na_obrazy "$SHA" 0 || exit 1
   echo "   oba są, etykieta rewizji = $SHA"
+  # Z --wdroz wdrożenie i tak sprawdzi miejsce, ale dopiero po przełączeniu;
+  # brak miejsca zostawiłby Coolify na obrazie z kontenerami z buildu.
+  [ "$WDROZ" = 0 ] || sprawdz_miejsce_app1
 fi
 
 for id in "$WORKER_ID" "$WEB_ID"; do
@@ -141,6 +144,9 @@ done
 echo "── Nowy stan:"
 pokaz_stan
 
+if [ "$POLECENIE" = obraz ]; then
+  echo "⚠️  Bramka /wdroz (Telegram) nie zna jeszcze obrazów: wdrażaj tym skryptem (runbook wdrozenie-produkcji.md, „Czego jeszcze nie ma”)."
+fi
 if [ "$WDROZ" = 1 ]; then
   if [ "$POLECENIE" = obraz ]; then
     exec "$ROOT/scripts/ops/wdroz-produkcje.sh" --obraz "$SHA"
