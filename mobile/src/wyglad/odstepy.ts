@@ -22,3 +22,6 @@ export const CEL_DOTYKU = 44;
 
 /** Zaokrąglenie sekcji listy w stylu „inset grouped” (iOS 26 i nowsze). */
 export const PROMIEN_SEKCJI = 26;
+
+/** Od tej skali tekstu z ustawień dostępności wiersze list układają wartość pod tytułem. */
+export const SKALA_PIONOWA = 1.5;

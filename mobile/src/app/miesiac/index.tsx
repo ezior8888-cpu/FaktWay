@@ -31,7 +31,7 @@ export default function EkranMiesiaca() {
         ) : null}
       </View>
 
-      <Sekcja naglowek="Podatki i składki" stopka="Kwoty przykładowe. Prawdziwe wyliczenia podłączy etap M9.">
+      <Sekcja naglowek="Podatki i składki" stopka="Kwoty przykładowe.">
         {MIESIAC.platnosci.map((p) => (
           <Wiersz
             key={p.id}

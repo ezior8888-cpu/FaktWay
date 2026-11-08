@@ -45,6 +45,13 @@ i porządku, nie z efektów.
 Główna akcja („Nowa faktura”) ma jedno stałe miejsce. Jakie dokładnie, decyduje
 Bartosz po obejrzeniu wariantów w symulatorze (plan, decyzja D7).
 
+**Główna akcja ekranu w treści, nie w dolnym pasku narzędzi.** W aplikacji z
+zakładkami dolny pasek narzędzi chowa się pod paskiem zakładek (sprawdzone w M3).
+Akcję w rodzaju „Oznacz jako zapłaconą” stawiamy pod nagłówkiem ekranu jako
+`PrzyciskGlowny` (na iOS natywny SwiftUI w stylu Liquid Glass, na całą szerokość).
+Przycisk główny jest jeden na ekran; cofnięcie tej samej akcji ma wariant
+drugorzędny (szkło bez wypełnienia).
+
 ## 3. Typografia i odstępy
 
 - **Tylko systemowa czcionka** (SF Pro na iOS, Roboto na Androidzie) i tylko
@@ -71,7 +78,10 @@ Bartosz po obejrzeniu wariantów w symulatorze (plan, decyzja D7).
   sztywno.
 - **Jeden kolor akcentu:** niebieski FaktWay (`--primary` w `app/globals.css`)
   do czasu decyzji projektanta. Akcent oznacza „to jest klikalne” albo
-  „to jest główna akcja”, nic więcej.
+  „to jest główna akcja”, nic więcej. Tekst i ikony biorą `akcent` (jaśniejszy
+  w trybie ciemnym), a wypełnienie z białym napisem `akcentWypelnienie`
+  (`#2463EF` w obu trybach), bo jasny akcent pod białym tekstem daje kontrast
+  tylko około 2,6:1.
 - **Kolory statusów** tylko systemowe: zielony (przyjęta przez KSeF, zapłacona),
   pomarańczowy (czeka, po terminie do 7 dni), czerwony (odrzucona, po terminie
   dłużej, akcje niszczące). Status zawsze ma też tekst, nie tylko kolor.
@@ -86,8 +96,12 @@ Bartosz po obejrzeniu wariantów w symulatorze (plan, decyzja D7).
   Wiersz faktury: kontrahent (Body), numer i data (Subheadline, drugorzędny),
   kwota po prawej, status tekstem.
 - **Gesty na wierszu:** przesunięcie w lewo daje akcje (np. „Zapłacona”),
-  przytrzymanie daje menu kontekstowe z podglądem. Każda akcja z gestu jest
-  też dostępna na ekranie szczegółu.
+  przytrzymanie daje podgląd i menu (`Link.Preview`, `Link.Menu`). Każda akcja
+  z gestu jest też dostępna na ekranie szczegółu. Akcja przesunięcia jest
+  widoczna tylko w trakcie gestu, a ekran pokazany w podglądzie nie ustawia
+  paska nawigacji (`useIsPreview`).
+- **Wymiary jak w systemie** (porównanie z Ustawieniami iOS 27 w M3): wiersz
+  jednoliniowy 52 pt, separator wcięty z obu stron, rogi sekcji 26 pt.
 - **Odświeżanie pociągnięciem** na każdej liście z danymi z serwera.
 - **Każdy ekran ma cztery stany:** ładowanie (szkielet w kształcie treści,
   nie kręciołek na cały ekran), pusty (jedno zdanie i jedna akcja), błąd (co

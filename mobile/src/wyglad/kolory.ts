@@ -23,6 +23,8 @@ export type Kolory = {
   wypelnienie: ColorValue;
   separator: ColorValue;
   akcent: ColorValue;
+  /** Tło przycisku głównego z białym napisem: ciemny niebieski w obu trybach (kontrast ok. 5:1; jasny akcent dawałby 2,6:1). */
+  akcentWypelnienie: ColorValue;
   sukces: ColorValue;
   ostrzezenie: ColorValue;
   blad: ColorValue;
@@ -38,6 +40,7 @@ const IOS: Kolory = {
   wypelnienie: Color.ios.tertiarySystemFill,
   separator: Color.ios.separator,
   akcent: Platform.OS === 'ios' ? DynamicColorIOS({ light: AKCENT_JASNY, dark: AKCENT_CIEMNY }) : AKCENT_JASNY,
+  akcentWypelnienie: AKCENT_JASNY,
   sukces: Color.ios.systemGreen,
   ostrzezenie: Color.ios.systemOrange,
   blad: Color.ios.systemRed,
@@ -55,6 +58,7 @@ function koloryAndroid(ciemny: boolean): Kolory {
     wypelnienie: d.surfaceContainerHighest,
     separator: d.outlineVariant,
     akcent: ciemny ? AKCENT_CIEMNY : AKCENT_JASNY,
+    akcentWypelnienie: AKCENT_JASNY,
     sukces: ciemny ? '#4ADE80' : '#15803D',
     ostrzezenie: ciemny ? '#FBBF24' : '#B45309',
     blad: d.error,

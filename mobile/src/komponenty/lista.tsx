@@ -4,11 +4,19 @@
  */
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ScrollViewProps,
+} from 'react-native';
 
 import { Tekst } from '@/komponenty/tekst';
 import { useKolory, type Kolory } from '@/wyglad/kolory';
-import { CEL_DOTYKU, MARGINES, ODSTEP, PROMIEN_SEKCJI } from '@/wyglad/odstepy';
+import { CEL_DOTYKU, MARGINES, ODSTEP, PROMIEN_SEKCJI, SKALA_PIONOWA } from '@/wyglad/odstepy';
 
 /**
  * Przewijany ekran z tłem listy grupowanej. `contentInsetAdjustmentBehavior`
@@ -63,6 +71,10 @@ type WierszProps = {
   /** Druga linia po prawej, pod wartością (np. status). */
   wartoscPodpis?: string;
   wartoscPodpisKolor?: keyof Kolory;
+  /** Kolor wartości (domyślnie drugorzędny, jak w systemowych listach). */
+  wartoscKolor?: keyof Kolory;
+  /** Dane do skopiowania (NIP, numer KSeF): tekst da się zaznaczyć. */
+  zaznaczalna?: boolean;
   ikona?: SFSymbol;
   ikonaKolor?: keyof Kolory;
   /** Strzałka w prawo: wiersz prowadzi do kolejnego ekranu ustawień. */
@@ -82,6 +94,8 @@ export function Wiersz({
   wartosc,
   wartoscPodpis,
   wartoscPodpisKolor = 'etykietaDrugorzedna',
+  wartoscKolor,
+  zaznaczalna,
   ikona,
   ikonaKolor = 'akcent',
   strzalka,
@@ -92,6 +106,9 @@ export function Wiersz({
   etykietaDostepnosci,
 }: WierszProps) {
   const kolory = useKolory();
+  const { fontScale } = useWindowDimensions();
+  // Przy dużym tekście z ustawień wartość schodzi pod tytuł, żeby nic się nie ucinało.
+  const pionowo = fontScale >= SKALA_PIONOWA && Boolean(wartosc || wartoscPodpis);
   const tresc = (
     <>
       {ikona ? (
@@ -105,15 +122,24 @@ export function Wiersz({
           {tytul}
         </Tekst>
         {podtytul ? (
-          <Tekst styl="subheadline" kolor="etykietaDrugorzedna" numberOfLines={2}>
+          <Tekst
+            styl="subheadline"
+            kolor="etykietaDrugorzedna"
+            numberOfLines={pionowo ? 4 : 2}
+            selectable={zaznaczalna}>
             {podtytul}
           </Tekst>
         ) : null}
       </View>
       {wartosc || wartoscPodpis ? (
-        <View style={styles.prawa}>
+        <View style={pionowo ? styles.prawaPionowa : styles.prawa}>
           {wartosc ? (
-            <Tekst styl="body" kolor={podtytul ? 'etykieta' : 'etykietaDrugorzedna'} cyfry numberOfLines={1}>
+            <Tekst
+              styl="body"
+              kolor={wartoscKolor ?? (podtytul ? 'etykieta' : 'etykietaDrugorzedna')}
+              cyfry
+              selectable={zaznaczalna}
+              numberOfLines={pionowo ? 2 : 1}>
               {wartosc}
             </Tekst>
           ) : null}
@@ -139,7 +165,10 @@ export function Wiersz({
 
   if (!onPress) {
     return (
-      <View style={styles.wiersz} accessible accessibilityLabel={etykietaDostepnosci}>
+      <View
+        style={[styles.wiersz, pionowo ? styles.wierszPionowy : null]}
+        accessible={!zaznaczalna}
+        accessibilityLabel={etykietaDostepnosci}>
         {tresc}
       </View>
     );
@@ -152,6 +181,7 @@ export function Wiersz({
       android_ripple={{ color: kolory.wypelnienie as string }}
       style={({ pressed }) => [
         styles.wiersz,
+        pionowo ? styles.wierszPionowy : null,
         pressed && Platform.OS === 'ios' ? { backgroundColor: kolory.wypelnienie } : null,
       ]}>
       {tresc}
@@ -165,9 +195,11 @@ const styles = StyleSheet.create({
   naglowek: { marginBottom: ODSTEP.xs, marginLeft: ODSTEP.xxs },
   stopka: { marginTop: ODSTEP.xs, marginHorizontal: MARGINES },
   karta: { borderRadius: PROMIEN_SEKCJI, borderCurve: 'continuous', overflow: 'hidden' },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: MARGINES },
+  // Jak w listach iOS 26 i nowszych: separator wcięty z obu stron (porównanie z Ustawieniami, M3).
+  separator: { height: StyleSheet.hairlineWidth, marginHorizontal: MARGINES },
   wiersz: {
-    minHeight: CEL_DOTYKU + ODSTEP.s,
+    // 52 pt jak jednoliniowy wiersz w Ustawieniach iOS 27.
+    minHeight: CEL_DOTYKU + ODSTEP.xs,
     paddingHorizontal: MARGINES,
     paddingVertical: ODSTEP.s,
     flexDirection: 'row',
@@ -177,5 +209,7 @@ const styles = StyleSheet.create({
   ikona: { width: 28, height: 28 },
   lewa: { flex: 1, gap: ODSTEP.linia },
   prawa: { alignItems: 'flex-end', gap: ODSTEP.linia, maxWidth: '50%' },
+  prawaPionowa: { alignItems: 'flex-start', gap: ODSTEP.linia },
+  wierszPionowy: { flexDirection: 'column', alignItems: 'stretch', gap: ODSTEP.xxs },
   strzalka: { width: 10, height: 14 },
 });

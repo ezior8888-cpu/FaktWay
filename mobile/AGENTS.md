@@ -24,7 +24,8 @@ uruchamiasz po kolei, nigdy razem.
 | Katalog | Co |
 |---|---|
 | `src/app/` | trasy Expo Router: `_layout.tsx` to zakładki systemowe, każdy folder zakładki ma własny `Stack` |
-| `src/komponenty/` | `Tekst`, `EkranListy`, `Sekcja`, `Wiersz`, `StanPusty`; ekrany składasz tylko z nich i z komponentów systemowych |
+| `src/komponenty/` | `Tekst`, `EkranListy`, `Sekcja`, `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny` (Liquid Glass), `StanPusty`; ekrany składasz tylko z nich i z komponentów systemowych |
+| `src/stan/` | stan wspólny dla ekranów (na danych przykładowych: oznaczenie zapłaty, wariant D7) |
 | `src/wyglad/` | kolory semantyczne, style tekstu, skala odstępów; jedyne miejsce na wartości wyglądu |
 | `src/lib/` | formatowanie i logika bez interfejsu |
 | `src/dane-przykladowe/` | dane do etapów M2 i M3 (zmyślone firmy, NIP testowy) |
@@ -44,3 +45,17 @@ uruchamiasz po kolei, nigdy razem.
 - Po dodaniu biblioteki z kodem natywnym potrzebny jest nowy build (`pnpm run ios`);
   Expo Go nie pokazuje natywnych zakładek ani efektu szkła, więc go nie używamy.
 - Teksty po polsku, nazwa produktu tylko „FaktWay” (pilnuje `tests/unit/nazwa-produktu.test.ts`).
+
+## Pułapki (sprawdzone w symulatorze)
+
+- `Link` z `asChild` spłaszcza style dziecka (`StyleSheet.flatten`), więc styl
+  w postaci funkcji (`({ pressed }) => ...`) ginie. Stan wciśnięcia trzymaj w
+  `useState` (`onPressIn`, `onPressOut`), jak w `komponenty/wiersz-faktury.tsx`.
+- `Stack.Toolbar placement="bottom"` chowa się pod paskiem zakładek. Główna
+  akcja ekranu idzie do treści (`komponenty/przycisk-glowny`).
+- Ekran otwierany też jako podgląd (`Link.Preview`) nie może ustawiać paska:
+  `Stack.Screen` i `Stack.Toolbar` tylko gdy `!useIsPreview()`.
+- Typy tras (`/koszty/[id]`) generuje Metro przy starcie: po dodaniu trasy
+  uruchom `pnpm start`, zanim `tsc` przestanie zgłaszać błąd.
+- Zmiana pliku ze stanem (`src/stan/`) przy szybkim odświeżaniu zeruje stan
+  aplikacji; to nie błąd.

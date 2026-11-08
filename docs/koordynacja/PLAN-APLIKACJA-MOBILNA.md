@@ -63,7 +63,7 @@ i poziom porządnych aplikacji fintech.
 | D4 | **Konta deweloperskie:** Apple (99 USD rocznie) i Google Play (25 USD jednorazowo) zakładamy jako firma, po założeniu spółki. Konto Apple dla JDG pokazuje w sklepie imię i nazwisko; nowe konto osobiste Google wymaga zamkniętego testu z 12 testerami przez 14 dni | do decyzji Bartosza |
 | D5 | **Płatności:** v1 nie sprzedaje abonamentu w aplikacji. Brak cen i przycisku „kup”, zakup na faktway.pl. Przed zgłoszeniem sprawdzić aktualne wytyczne Apple 3.1 | rekomendacja |
 | D6 | **Projektant iOS:** na zlecenie, raz: system (kolor, typografia, ikona aplikacji) i 8 do 10 kluczowych ekranów w Figmie na zestawie Apple. Bez projektanta: Claude daje 2 do 3 wariantów ekranu wzorcowego, Bartosz wybiera | do decyzji Bartosza |
-| D7 | **Miejsce „Nowa faktura”:** przycisk w pasku ekranu Faktury albo osobny okrągły przycisk obok paska zakładek (w PWA Bartosz wybrał plus na dolnym pasku). Decyzja po obejrzeniu obu wariantów w symulatorze w etapie M3 | otwarta |
+| D7 | **Miejsce „Nowa faktura”:** w M3 gotowe trzy warianty, przełącznik w zakładce Konto: A plus w pasku u góry (wzór Maila), B szeroki przycisk pod sumą „Do zapłaty”, C pasek „Nowa faktura” nad zakładkami, widoczny z każdej zakładki (najbliżej plusa z PWA). Dolny pasek narzędzi odpada (chowa się pod zakładkami). Rekomendacja Claude: A, a C, jeśli wystawianie ma być akcją numer jeden z każdego miejsca | otwarta, wybiera Bartosz |
 | D8 | **Kolejność platform:** najpierw iOS do poziomu „wzorzec”, potem dopasowanie Androida z tego samego kodu przed betą Google Play | rekomendacja |
 | D9 | **Powiadomienia:** z workera pg-boss bezpośrednio do APNs i FCM albo przez usługę push Expo (nowy podmiot przetwarzający, serwery poza UE). W obu przypadkach treść bez kwot i danych kontrahenta | otwarta, rozstrzygnąć w M10 |
 | D10 | **Identyfikator aplikacji:** `pl.faktway.app` na iOS (bundle ID) i Androidzie (package). Po publikacji nie do zmiany | przyjęta 08.11.2026 |
@@ -219,11 +219,13 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M3 (ekran wzorcowy: lista faktur i szczegół na danych
-przykładowych, warianty D7). D6 (projektant) czeka na Bartosza.
+**Następny krok:** czeka na Bartosza: ocena ekranu wzorcowego na telefonie
+albo w panelu symulatora („to jest to” albo lista uwag), wybór D7 (A, B, C)
+i D6 (projektant). Po akceptacji M4 (logowanie).
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
 | 08.11.2026 | przygotowanie | Xcode 27.2 i symulator iOS 27.2 na Macu Bartosza; test zrzutu z iPhone 18 Pro | (bez PR) |
 | 08.11.2026 | M1 | plan, `docs/mobile/ZASADY-DESIGNU.md`, hasło w `AGENTS.md`; decyzje D2, D3, D10, D11 | #489 |
 | 09.11.2026 | M2 | Expo SDK 58 w `mobile/` (własny workspace pnpm), 4 natywne zakładki, stos w każdej, lista i szczegół faktury, arkusz „Nowa faktura”, Koszty, Ten miesiąc, Konto na danych przykładowych; kolory semantyczne, style tekstu z Dynamic Type, skala odstępów; wyłączenia `mobile/` w tsconfig, eslint, Docker, knip; job CI „Mobile”; skille Expo i `telefon-app`; pierwszy build w Xcode na iPhone 18 Pro, zrzuty w `docs/mobile/zrzuty/m2/`. Strona: `pnpm run ci` i `pnpm build` zielone | #493 |
+| 09.11.2026 | M3 | ekran wzorcowy na danych przykładowych: podsumowanie „Do zapłaty”, natywny przełącznik Wszystkie/Do zapłaty, wiersz z podglądem i menu przy przytrzymaniu oraz przesunięciem „Zapłacona” (wibracje), szczegół z przyciskiem Liquid Glass, wspólny stan zapłaty, szczegół kosztu, warianty D7 A/B/C, bez atrap (alertów „w etapie”); Dynamic Type do AX5 (układ pionowy), iPhone 17e i 18 Pro Max, tryb ciemny; poprawki z porównania z Ustawieniami iOS 27; zrzuty `docs/mobile/zrzuty/m3/` | (ten PR) |

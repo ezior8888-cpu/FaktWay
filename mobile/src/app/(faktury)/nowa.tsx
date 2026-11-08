@@ -20,7 +20,7 @@ export default function EkranNowejFaktury() {
         <StanPusty
           ikona="doc.badge.plus"
           tytul="Formularz w przygotowaniu"
-          opis="Szybka faktura dla ostatniego kontrahenta pojawi się w kolejnym etapie."
+          opis="Tu będzie szybka faktura dla ostatniego kontrahenta."
         />
       </EkranListy>
     </>
