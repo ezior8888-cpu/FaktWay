@@ -14,9 +14,13 @@
  * Szczegół dla operatora to `HTTP {status} {ścieżka} kody:{…}` — nigdy treść
  * odpowiedzi (mogłaby nieść dane kontrahenta).
  *
- * Kody błędów KSeF czyta LOKALNA kopia parsera z `lib/ksef/submit.ts`
- * (`ksefErrorCodes`) — tamtego modułu nie wolno importować: to ścieżka
- * wysyłki (strażnik OUTGOING_SINKS w tests/unit/flo-architecture.test.ts).
+ * Kody błędów KSeF czyta LOKALNA kopia parsera `ksefErrorCodes` z
+ * `lib/ksef/client.ts`. Kopia powstała, gdy parser mieszkał w `lib/ksef/submit.ts`,
+ * którego stąd nie wolno importować: to ścieżka wysyłki (strażnik OUTGOING_SINKS
+ * w tests/unit/flo-architecture.test.ts). `client.ts` nie ma tego ograniczenia,
+ * więc kopia jest do usunięcia (osobne ustalenie, F-093-KOPIA w
+ * docs/koordynacja/PLAN-AGENTA-CLAUDE.md). Do tego czasu
+ * tests/unit/ksef-kod-bledu.test.ts sprawdza obie na tych samych danych.
  */
 
 import { KsefApiError } from '@/lib/ksef/client';
@@ -53,9 +57,10 @@ export class KsefHistoryEmptyXmlError extends Error {
 }
 
 /**
- * Kopia `ksefErrorCodes` z `lib/ksef/submit.ts` (ten sam kształt: `errors[].code`,
+ * Kopia `ksefErrorCodes` z `lib/ksef/client.ts` (ten sam kształt: `errors[].code`,
  * `exception.exceptionDetailList[].exceptionCode`, `exceptionDetailList[]` na
- * wierzchu; tekst `application/problem+json` parsowany jak JSON).
+ * wierzchu; JSON w tekście parsowany). Nigdy nie rzuca: kształt spoza schematu
+ * daje pustą listę, a kod to tylko dodatnia liczba całkowita w zakresie `integer`.
  */
 export function historyKsefErrorCodes(body: unknown): number[] {
   if (typeof body === 'string') {
@@ -67,16 +72,26 @@ export function historyKsefErrorCodes(body: unknown): number[] {
   }
   if (!body || typeof body !== 'object') return [];
   const b = body as {
-    errors?: Array<{ code?: unknown }>;
-    exception?: { exceptionDetailList?: Array<{ exceptionCode?: unknown }> };
-    exceptionDetailList?: Array<{ exceptionCode?: unknown }>;
+    errors?: unknown;
+    exception?: { exceptionDetailList?: unknown } | null;
+    exceptionDetailList?: unknown;
   };
   const codes = [
-    ...(b.errors ?? []).map((e) => e.code),
-    ...(b.exception?.exceptionDetailList ?? []).map((e) => e.exceptionCode),
-    ...(b.exceptionDetailList ?? []).map((e) => e.exceptionCode),
+    ...errorEntries(b.errors).map((e) => e?.code),
+    ...errorEntries(b.exception?.exceptionDetailList).map((e) => e?.exceptionCode),
+    ...errorEntries(b.exceptionDetailList).map((e) => e?.exceptionCode),
   ];
-  return codes.map(Number).filter((c) => Number.isInteger(c));
+  return codes.map(toKsefCode).filter((c) => c !== null);
+}
+
+function errorEntries(value: unknown): Array<Record<string, unknown> | null | undefined> {
+  return Array.isArray(value) ? value : [];
+}
+
+function toKsefCode(value: unknown): number | null {
+  const code =
+    typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isInteger(code) && code > 0 && code <= 2_147_483_647 ? code : null;
 }
 
 /** Ścieżka z komunikatu `KSeF API {METODA} {ścieżka} …` — bez query i bez numerów faktur. */

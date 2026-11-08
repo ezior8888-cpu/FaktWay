@@ -12,16 +12,30 @@
 
 export type KsefEnvironment = 'test' | 'demo' | 'production';
 
+/**
+ * Odpowiedź błędu KSeF w jednym z dwóch kształtów (`open-api.json` MF):
+ * `application/problem+json` z `errors[]` albo starszy `exception` z listą
+ * `exceptionDetailList` W ŚRODKU. Wszystkie pola opcjonalne — to sparsowany
+ * JSON z zewnątrz; kody odczytuj przez `ksefErrorCodes` (`lib/ksef/client.ts`).
+ */
 export interface KsefErrorResponse {
-  exception: {
-    serviceCtx: string;
-    serviceCode: string;
-    serviceName: string;
-  };
-  exceptionDetailList: Array<{
-    exceptionCode: number;
-    exceptionDescription: string;
+  /** problem+json */
+  title?: string;
+  status?: number;
+  errors?: Array<{
+    code?: number;
+    description?: string;
   }>;
+  /** Starszy kształt. */
+  exception?: {
+    serviceCtx?: string;
+    serviceCode?: string;
+    serviceName?: string;
+    exceptionDetailList?: Array<{
+      exceptionCode?: number;
+      exceptionDescription?: string;
+    }>;
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
