@@ -11,9 +11,9 @@
  * - Rozliczenie (ROZ) jest pomniejszone o rozliczone zaliczki, jak w KPiR
  *   (`kpirRevenueNet`), więc zaliczki się nie dublują.
  * - Faktura do paragonu (FP) nie jest przychodem: sprzedaż wchodzi z raportu kasy.
- *   FP jest poza ewidencją tylko wtedy, gdy miesiąc jej sprzedaży ma wpis
- *   „Raport z kasy rejestrującej”; bez niego brak (krok 1.2 planu kompletnej
- *   aplikacji: FP nie może po cichu zniknąć ani być drugim przychodem).
+ *   Do czasu reguły, która sprawdzi, że raport kasy obejmuje sprzedaż z FP
+ *   (następny PR kroku 1.2, złoty przypadek G30), FP daje brak: miesiąc bez
+ *   sum, bo FP nie może po cichu zniknąć ani być drugim przychodem.
  * - Waluta: kurs średni NBP z ostatniego dnia roboczego przed dniem przychodu.
  * - Stawka: z pozycji, a bez niej domyślna z wersji profilu na dzień przychodu
  *   (`stawkaRyczaltuPozycji`). Dzień ze skalą albo liniowym nie należy do
@@ -186,26 +186,19 @@ const PROFIL_TEKST = 'Ustawienia są w Księgowości, w zakładce „Ustawienia 
 const POMOC_TEKST = 'Taki dokument rozdzielimy ręcznie po zgłoszeniu w Pomocy.';
 
 /**
- * Czy miesiąc dnia `dzien` ma wpis „Raport z kasy rejestrującej” (00167).
- * Wpis bez rodzaju (np. stary kształt) nie jest raportem kasy: fail-closed.
+ * Brak przy fakturze do paragonu (krok 1.2 planu kompletnej aplikacji). Art.
+ * 109 ust. 3d ustawy o VAT i zasada 2 planu księgowości: sprzedaż z paragonu
+ * wchodzi z raportu kasy, a sama FP nie jest przychodem. FaktWay nie sprawdza
+ * jeszcze, czy raport kasy obejmuje tę sprzedaż (wpis ręczny może być innym
+ * dowodem), więc miesiąc nie ma sum: FP nie zniknie ani nie wejdzie drugi raz.
+ * Wyjście jak przy innych dokumentach, których ewidencja nie rozdzieli: Pomoc.
  */
-export function maRaportKasyWMiesiacu(wpisy: readonly { rodzaj?: string; dzien: string }[], dzien: string): boolean {
-  const miesiac = dzien.slice(0, 7);
-  return wpisy.some((w) => w.rodzaj === 'raport_kasy' && w.dzien.slice(0, 7) === miesiac);
-}
-
-/**
- * Brak przy fakturze do paragonu bez raportu kasy w miesiącu sprzedaży (krok
- * 1.2). Art. 109 ust. 3d ustawy o VAT i zasada 2 planu księgowości: sprzedaż
- * z paragonu wchodzi z raportu kasy, a sama FP nie jest przychodem. Bez
- * raportu ta sprzedaż nie byłaby nigdzie, więc miesiąc nie ma sum.
- */
-export function brakRaportuKasyDlaFp(numer: string, dzien: string, gdzie: 'ewidencji' | 'księgi'): string {
+export function brakFakturyDoParagonu(numer: string, dzien: string, gdzie: 'ewidencji' | 'księgi'): string {
   return (
     `Faktura ${numer} z ${formatIsoDatePl(dzien)} to faktura do paragonu: sprzedaż z paragonu wchodzi do ${gdzie} ` +
-    `z raportu kasy, a za ${monthLabel(dzien.slice(0, 7))} nie ma wpisu „Raport z kasy rejestrującej”, więc ta sprzedaż ` +
-    `nie trafiłaby do ${gdzie}. Raport z kasy dodaje się na liście wpisów ręcznych; gdy sprzedaż jest w raporcie ` +
-    'z innego miesiąca, rozdzielimy to po zgłoszeniu w Pomocy.'
+    `z raportu kasy, a sama faktura nie jest przychodem. FaktWay nie sprawdza jeszcze, czy raport kasy za ` +
+    `${monthLabel(dzien.slice(0, 7))} obejmuje tę sprzedaż, więc tego miesiąca nie liczy, żeby sprzedaż nie zniknęła ` +
+    'ani nie weszła dwa razy. Miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.'
   );
 }
 
@@ -357,11 +350,7 @@ export function zbudujEwidencje(wejscie: WejscieEwidencji): Ewidencja {
     if (wersja.forma !== 'ryczalt') continue;
 
     if (f.fp) {
-      if (maRaportKasyWMiesiacu(wejscie.wpisy.map((w) => ({ rodzaj: w.rodzaj, dzien: w.dataPrzychodu })), dzien)) {
-        pominiete.push({ numer: f.numer, dzien, powod: 'Faktura do paragonu: sprzedaż wchodzi do ewidencji z raportu kasy.' });
-      } else {
-        braki.push({ dzien, dokument: f.numer, komunikat: brakRaportuKasyDlaFp(f.numer, dzien, 'ewidencji') });
-      }
+      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'ewidencji') });
       continue;
     }
 

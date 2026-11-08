@@ -19,16 +19,23 @@ import { errorTextClass, type BuyerKind } from './constants';
  * (art. 106b ust. 3) i przy firmie potwierdzenie NIP na paragonie (art. 106b
  * ust. 5). Reguły i komunikaty: `lib/invoices/receipt-invoice.ts`.
  *
- * Stan (`useWatch`) trzyma formularz, ta część go pokazuje.
+ * Stan (`useWatch`) i data sprzedaży sprzed zaznaczenia FP są w formularzu,
+ * ta część je pokazuje i woła jego obsługę zdarzeń.
  */
 export function ReceiptInvoiceFields({
   form,
   enabled,
   buyerKind,
+  onToggle,
+  onReceiptDateChange,
 }: {
   form: UseFormReturn<InvoiceFormValues>;
   enabled: boolean;
   buyerKind: BuyerKind;
+  /** Zaznaczenie albo odznaczenie FP (formularz przywraca wtedy datę sprzedaży). */
+  onToggle: (checked: boolean) => void;
+  /** Data paragonu jest datą sprzedaży na fakturze do paragonu. */
+  onReceiptDateChange: (value: string) => void;
 }) {
   const errors = form.formState.errors;
   const error = (message: string | undefined): ReactNode =>
@@ -45,7 +52,14 @@ export function ReceiptInvoiceFields({
     <div data-testid="pola-faktury-do-paragonu" className="space-y-3">
       <div className="space-y-1.5">
         <label className="flex items-center gap-3 text-sm">
-          <input id="receipt-invoice" type="checkbox" className="accent-primary h-4 w-4" {...form.register('receiptInvoice')} />
+          <input
+            id="receipt-invoice"
+            type="checkbox"
+            className="accent-primary h-4 w-4"
+            {...form.register('receiptInvoice', {
+              onChange: (e: { target: { checked: boolean } }) => onToggle(e.target.checked),
+            })}
+          />
           Faktura do paragonu
         </label>
         {receiptInvoiceError ?? (
@@ -69,9 +83,7 @@ export function ReceiptInvoiceFields({
               id="receipt-date"
               type="date"
               {...form.register('receiptDate', {
-                // Data sprzedaży na fakturze do paragonu to data z paragonu.
-                onChange: (e: { target: { value: string } }) =>
-                  form.setValue('saleDate', e.target.value, { shouldValidate: form.formState.isSubmitted }),
+                onChange: (e: { target: { value: string } }) => onReceiptDateChange(e.target.value),
               })}
             />
           </DocumentHeaderRow>

@@ -16,6 +16,7 @@ import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { formatBuyerAddress, type BuyerDataJson } from '@/lib/exports/data-fetcher';
 import type { RateLookup } from '@/lib/flo/nbp';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
+import { isReceiptInvoiceColumns } from '@/lib/invoices/receipt-invoice';
 import { MAX_SALE_DAYS_AFTER_ISSUE } from '@/lib/invoices/sale-date';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
@@ -226,7 +227,7 @@ function zWierszaFaktury(
     nettoGr: doGroszy(w.net_total),
     waluta: (w.currency ?? 'PLN').trim().toUpperCase() || 'PLN',
     numerKsef: w.ksef_number,
-    fp: w.fp === true || w.fp === 'true' || (w.fp_paragon !== undefined && w.fp_paragon !== null),
+    fp: isReceiptInvoiceColumns(w.fp_paragon, w.fp),
     kontrahent: { ...kontrahentJpk(w.buyer_data), ...nazwaIAdres(w.buyer_data) },
     rozliczoneZaliczkiGr: doGroszy(rozliczone.get(w.id)),
     pozycje: zeStawkami.get(w.id) ?? null,

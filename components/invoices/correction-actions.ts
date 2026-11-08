@@ -24,7 +24,7 @@ import {
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
-import { isReceiptInvoiceFa3, receiptCorrectionRefusal } from '@/lib/invoices/receipt-invoice';
+import { isReceiptInvoiceColumns, receiptCorrectionRefusal } from '@/lib/invoices/receipt-invoice';
 import {
   resolveAmountChangeVatRate,
   zeroVatRateFromParentLines,
@@ -558,8 +558,7 @@ async function readAcceptedCorrectionParent(
   }
   // Generator korekty nie pisze FP, a korekty są na produkcji wstrzymane (KOR_HOLD):
   // korekta faktury do paragonu zostaje na później (krok 1.2, plan kompletnej aplikacji).
-  // `->>` daje tekst: „true” z importu KSeF (C5b).
-  if (isReceiptInvoiceFa3({ receipt: row.fp_paragon, ksefMarkers: { fp: String(row.fp_ksef) === 'true' } })) {
+  if (isReceiptInvoiceColumns(row.fp_paragon, row.fp_ksef)) {
     throw new Error(receiptCorrectionRefusal(row.internal_number as string | null));
   }
   // K4 — łańcuch korekt: kolejna korekta liczy różnicę od stanu PO

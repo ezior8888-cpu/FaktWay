@@ -1,4 +1,4 @@
-import { isReceiptInvoiceFa3, receiptFromJson } from '@/lib/invoices/receipt-invoice';
+import { isReceiptInvoiceColumns, receiptFromJson } from '@/lib/invoices/receipt-invoice';
 import type { CorrectedInvoiceRef } from '@/lib/pdf/invoice-renderer';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -202,7 +202,7 @@ export async function loadInvoiceForPdf(
 
   // Krok 1.2: paragon tylko w pełnym kształcie; każde inne oznaczenie FP daje samo „Faktura do paragonu”.
   const receipt = receiptFromJson(row.receipt);
-  const receiptInvoice = isReceiptInvoiceFa3({ receipt: row.receipt, ksefMarkers: { fp: row.ksef_fp === 'true' } });
+  const receiptInvoice = isReceiptInvoiceColumns(row.receipt, row.ksef_fp);
 
   const invoice: Invoice = {
     internalNumber: row.internal_number ?? row.id.slice(0, 8),

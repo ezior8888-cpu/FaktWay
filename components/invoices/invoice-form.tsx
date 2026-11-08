@@ -170,6 +170,26 @@ export function InvoiceForm({
   const buyerKind: BuyerKind = buyerIsEu ? 'eu' : buyerIsConsumer ? 'consumer' : 'pl';
   const receiptInvoice = useWatch({ control: form.control, name: 'receiptInvoice' }) === true;
 
+  // Faktura do paragonu (krok 1.2): data paragonu ustawia datę sprzedaży. Po
+  // odznaczeniu FP wraca data sprzedaży sprzed zaznaczenia, jeśli od tamtej
+  // pory zmieniła ją tylko data paragonu: zwykła faktura nie może po cichu
+  // zostać z datą sprzedaży z paragonu (P_6).
+  const saleDateBeforeReceipt = useRef<string | null>(null);
+  const onReceiptInvoiceChange = (checked: boolean) => {
+    if (checked) {
+      saleDateBeforeReceipt.current = form.getValues('saleDate') ?? '';
+      return;
+    }
+    const before = saleDateBeforeReceipt.current;
+    saleDateBeforeReceipt.current = null;
+    const receiptDate = form.getValues('receiptDate');
+    if (before !== null && receiptDate && form.getValues('saleDate') === receiptDate) {
+      form.setValue('saleDate', before, { shouldValidate: form.formState.isSubmitted });
+    }
+  };
+  const onReceiptDateChange = (value: string) =>
+    form.setValue('saleDate', value, { shouldValidate: form.formState.isSubmitted });
+
   // Ta sama tablica idzie do sum i do `InvoiceTotals` (rozbicie VAT na stawki).
   const lineItems = toLineItems(watchedLines);
 
@@ -342,7 +362,13 @@ export function InvoiceForm({
           header={
             <InvoiceDocumentHeader seller={seller}>
               <DocumentHeaderFields form={form} />
-              <ReceiptInvoiceFields form={form} enabled={receiptInvoice} buyerKind={buyerKind} />
+              <ReceiptInvoiceFields
+                form={form}
+                enabled={receiptInvoice}
+                buyerKind={buyerKind}
+                onToggle={onReceiptInvoiceChange}
+                onReceiptDateChange={onReceiptDateChange}
+              />
             </InvoiceDocumentHeader>
           }
         >

@@ -249,6 +249,15 @@ export function isReceiptInvoiceFa3(fa3: unknown): boolean {
   return isRecord(fa3.ksefMarkers) && fa3.ksefMarkers.fp === true;
 }
 
+/**
+ * To samo co `isReceiptInvoiceFa3`, z kolumn wybranych aliasami
+ * (`fa3_data->receipt` i `fa3_data->ksefMarkers->>fp`, który PostgREST zwraca
+ * jako tekst „true”). Jedna definicja FP dla odczytów bez całego `fa3_data`.
+ */
+export function isReceiptInvoiceColumns(receipt: unknown, ksefFp: unknown): boolean {
+  return isReceiptInvoiceFa3({ receipt, ksefMarkers: { fp: ksefFp === true || ksefFp === 'true' } });
+}
+
 /** Wiersz danych paragonu na PDF i w widoku faktury. */
 export function receiptDetailsLine(receipt: ReceiptInvoiceData, formatDate: (iso: string) => string = (iso) => iso): string {
   return `Paragon nr ${receipt.receiptNumber} z dnia ${formatDate(receipt.receiptDate)}, numer unikatowy kasy ${receipt.cashRegisterNumber}`;
