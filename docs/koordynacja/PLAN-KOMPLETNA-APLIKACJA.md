@@ -1459,7 +1459,11 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 |---|---|---|---|---|
 | 8.11.2026 | plan | #485 | do zatwierdzenia | spis kodu `279e2b4c`, przepisy ze źródeł urzędowych, luki wobec liderów, poziomy ryzyka z mapy żelaznego filtra; czeka na decyzje z sekcji 6 |
 | 8.11.2026 | plan: wzorce | #485 | do zatwierdzenia | na prośbę sesji zlecającej: przy 51 krokach z ryzykiem wzorzec do sprawdzenia wyniku i czego brakuje (według notatki „Źródła prawdy”), tabela wzorców według obszaru (8.1) i lista funkcji bez wzorca jako ryzyko wprost (8.2) |
+| 8.11.2026 | decyzje z sekcji 6 | #485 | przyjęte | Bartosz: „tak przyjmuje” na pytanie o rekomendacje z sekcji 6; przyjęte wszystkie (P1-P6, D1-D11) |
+| 9.11.2026 | 0.1 | #485 | gotowe do scalenia | hasło w `AGENTS.md`; pytania 7-17 w `PYTANIA-DO-PRAWNIKA.md`; arkusz G15-G30 w `ZLOTE-PRZYPADKI-2.md` (puste wyniki do policzenia przez księgową); szkic rejestru przepisów w `REJESTR-PRZEPISOW-KOMPLETNA.md` (44 wpisy, pola rejestru żelaznego filtra) |
 
-**Następny krok:** Bartosz czyta plan i podejmuje decyzje z sekcji 6 (P1-P6,
-D1-D11). Potem krok 0.1 (fraza w `AGENTS.md`, decyzje, pytania do prawnika,
-złote przypadki), a po nim 1.1.
+**Następny krok:** krok 1.1 prowadzi plan „zero zgubionych faktur” (sesje C1-C4,
+tor Igora), więc ta sesja bierze pozostałe kroki etapu 1: 1.4 (numer KSeF
+w tytule przelewu), potem 1.2 (faktura do paragonu), 1.6 i 1.3. Równolegle,
+w innych plikach: 8.5 (sesje i historia logowań, R0). Kroki R1 powstają jako PR
+według protokołu z kartą zmiany prawnej; o scaleniu decyduje Bartosz według D11.
