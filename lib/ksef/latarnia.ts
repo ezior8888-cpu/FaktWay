@@ -12,9 +12,11 @@ import { z } from 'zod';
 
 import type { KsefEnvironment } from '@/types/ksef';
 
+// Tylko produkcja. Testowa Latarnia (api-latarnia-test) trzyma od 31.01.2026
+// demonstracyjne TOTAL_FAILURE, a ogłoszenia MF (art. 106ne) dotyczą
+// produkcyjnego KSeF; przy KSEF_ENV=test baner pokazywałby fałszywą awarię.
 const LATARNIA_URLS: Partial<Record<KsefEnvironment, string>> = {
   production: 'https://api-latarnia.ksef.mf.gov.pl',
-  test: 'https://api-latarnia-test.ksef.mf.gov.pl',
 };
 
 const TIMEOUT_MS = 5000;
