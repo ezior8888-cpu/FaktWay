@@ -1,0 +1,65 @@
+name: Filtr noc
+
+# Żelazny filtr, krok F5 (plan B5.4): 50 000 przypadków na własność
+# z losowym ziarnem, w czterech strefach czasowych. Błąd zakłada issue
+# z etykietą `filtr`, ziarnem i strefą (przykład odtwarza:
+# FILTR_ZIARNO=<ziarno> FILTR_PRZYPADKI=50000 TZ=<strefa> pnpm filtr:testy).
+on:
+  schedule:
+    # 02:37 UTC (3:37 zimą, 4:37 latem w Warszawie), poza godziną pełną.
+    - cron: '37 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  noc:
+    name: Filtr noc (TZ ${{ matrix.tz }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write # issue z etykietą `filtr` przy błędzie
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [Europe/Warsaw, UTC, Pacific/Kiritimati, America/Los_Angeles]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install XML schema validator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libxml2-utils
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Ziarno
+        id: ziarno
+        run: echo "wartosc=$(( (RANDOM << 15) | RANDOM ))" >> "$GITHUB_OUTPUT"
+      - name: Testy filtra (50 000 przypadków na własność)
+        run: node_modules/.bin/vitest run --config vitest.filtr.config.ts
+        env:
+          TZ: ${{ matrix.tz }}
+          FILTR_PRZYPADKI: '50000'
+          FILTR_ZIARNO: ${{ steps.ziarno.outputs.wartosc }}
+      - name: Issue przy błędzie
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIARNO: ${{ steps.ziarno.outputs.wartosc }}
+          STREFA: ${{ matrix.tz }}
+          PRZEBIEG: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" --label filtr \
+            --title "Filtr noc: czerwone testy prawne (TZ $STREFA, ziarno $ZIARNO)" \
+            --body "Nocny przebieg żelaznego filtra znalazł przypadek, który łamie niezmiennik. Przebieg: $PRZEBIEG. Odtworzenie: \`FILTR_ZIARNO=$ZIARNO FILTR_PRZYPADKI=50000 TZ=$STREFA pnpm filtr:testy\`. Co dalej: kontrprzykład z logu to gotowy czerwony test; naprawa według protokołu (AGENTS.md), decyzję o sesji podejmuje Bartosz (plan filtra B6)." \
+            || echo "Nie udało się założyć issue (etykieta filtr istnieje? ./scripts/ops/filtr-etykiety.sh)"

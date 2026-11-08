@@ -755,11 +755,11 @@ Każdy niezmiennik ma identyfikator, regułę z rejestru i test w
 | Id | Niezmiennik |
 |---|---|
 | NZ-PIT-01 | Zaliczka nie jest ujemna; zaliczka to podatek od początku roku minus zaliczki należne za wcześniejsze miesiące (art. 44 ust. 3f ustawy o PIT) |
-| NZ-PIT-02 | Dodanie kosztu nigdy nie podnosi zaliczki, ani w tym miesiącu, ani w kolejnych |
+| NZ-PIT-02 | Dodanie kosztu nigdy nie podnosi sumy zaliczek do zapłaty od początku roku (do każdego miesiąca). Doprecyzowane w F5: zaliczka jednego późniejszego miesiąca może wzrosnąć, bo wcześniej zapłacono mniej |
 | NZ-PIT-03 | Dodanie przychodu nigdy nie obniża podatku od początku roku |
 | NZ-PIT-04 | Skala: ciągłość na progu 120 000 zł; dochód do kwoty wolnej daje 0 zł podatku |
 | NZ-PIT-05 | Liniowy: odliczenie zdrowotnej od początku roku nie przekracza limitu rocznego |
-| NZ-PIT-06 | Podstawa do pełnych złotych przed podatkiem, podatek do pełnych złotych |
+| NZ-PIT-06 | Podstawa do pełnych złotych przed podatkiem, zaliczka do pełnych złotych (podatek od początku roku liczy się w groszach, zaokrągla się zaliczka; doprecyzowane w F5) |
 | NZ-PIT-07 | Strata miesiąca zmniejsza dochód od początku roku; nie przechodzi na kolejny rok w zaliczkach |
 | NZ-PIT-08 | Składki odliczane od dochodu nie trafiają do kosztów KPiR (bez podwójnego odliczenia); FP i FS są kosztem w kolumnie 13 w dniu zapłaty, dokładnie raz |
 
@@ -1493,4 +1493,6 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 
 | 9.11.2026 | F4 rejestr: księgowość JDG | #492 | otwarty, w stosie na #491 | `filtr/przepisy/ksiegowosc.json` (64 reguły) i `terminy.json` (4) z sekcji 4, 5 i 13 planu księgowości: przepis, kod `plik#symbol`, testy `plik > fragment`, parametry, pewność, wzorzec, pytania; `pomocnicze.json` (66 eksportów bez reguły z powodem); `schemat.json`; `scripts/filtr/rejestr.mjs` (spójność i lista pytań); `docs/filtr/PYTANIA-Z-REJESTRU.md` (21 pytań do księgowej, 3 do prawnika); test: każdy z 183 eksportów silników przypisany, każdy z 39 parametrów roku użyty, każdy obszar R1 modułu ma regułę; nic nie podpisane |
 
-**Następny krok:** F7 (reguły statyczne z zapadką), potem F5 (niezmienniki i losowe dane), gałąź w stosie na F4. F5 przed F7 wymaga `fast-check` (D-F2 przyjęta).
+| 9.11.2026 | F5 niezmienniki i losowe dane | (numer po otwarciu) | otwarty, w stosie na #492 | `fast-check` 4.10.2 (tylko testy, D-F2); generatory `tests/filtr/generatory/`; 43 własności w `tests/filtr/niezmienniki/` (zaokrąglenia, ryczałt, ZUS, zdrowotna, PIT, terminy, mikrorachunek), 300 przypadków w PR, 50 000 w nocy (lokalnie 63 s na strefę, ziarno 4711 zielone); `filtr.yml` („Filtr: testy prawne”, TZ Warszawa i UTC, Vitest wprost), `filtr-noc.yml` (4 strefy, losowe ziarno, issue `filtr`); rejestr wskazuje niezmienniki, a test pilnuje, że każdy ma test; FZ-001 w `docs/filtr/USTALENIA.md` (`.fails`); NZ-PIT-02 i NZ-PIT-06 doprecyzowane |
+
+**Następny krok:** F7 (reguły statyczne z zapadką), gałąź w stosie na F5.

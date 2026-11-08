@@ -16,5 +16,7 @@ export default defineConfig({
     ...bazowa.test,
     include: ['tests/filtr/**/*.test.ts'],
     exclude: [],
+    // Noc (FILTR_PRZYPADKI=50000): jedna własność potrafi liczyć kilkadziesiąt sekund.
+    testTimeout: Number(process.env.FILTR_PRZYPADKI ?? 300) > 1_000 ? 600_000 : 30_000,
   },
 });
