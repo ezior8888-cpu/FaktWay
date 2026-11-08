@@ -121,6 +121,7 @@ test('/wdroz z poprawnym TOTP startuje i powiadamia drugą osobę', async () => 
   const { sent, calls, say } = setup();
   await say(BARTOSZ, '/wdroz ABCDEF12 123456');
   assert.deepEqual(calls.start, [{ sha8: 'abcdef12', actor: `tg:${BARTOSZ}` }]);
+  assert.match(sent.find((m) => m.chatId === BARTOSZ).html, /najpierw worker, potem web/);
   assert.match(sent.find((m) => m.chatId === IGOR).html, /uruchomił\(a\) wdrożenie/);
 });
 
@@ -164,4 +165,10 @@ test('formatStatus: nieaktualna kopia i brak kopii są oznaczone', () => {
 
 test('formatQueues: pusto', () => {
   assert.match(formatQueues([], {}, NOW), /brak zaległości/);
+});
+
+test('/help: /wdroz opisane jako worker, potem web', async () => {
+  const { sent, say } = setup();
+  await say(BARTOSZ, '/help');
+  assert.match(sent[0].html, /wdraża worker i web/);
 });
