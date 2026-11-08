@@ -348,7 +348,9 @@ test.describe('Propozycja na telefonie', () => {
 
   test('przyjęcie dodaje urządzenie; pole „Zapamiętaj mnie” domyślnie włączone, cele dotyku co najmniej 44 px', async ({ browser, baseURL, seededUser }) => {
     const context = await browser.newContext({ ...devices['Pixel 7'], baseURL });
-    await prepareContext(context);
+    // Telefon bez zapamiętanego klucza pokazuje przycisk tylko z podpowiedzią w polu e-mail
+    // (`components/auth/passkey-login.tsx`), więc tu jej nie wyłączamy.
+    await prepareContext(context, { autofill: true });
     const page = await context.newPage();
     const authenticator = await addVirtualAuthenticator(page);
 
