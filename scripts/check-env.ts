@@ -48,6 +48,7 @@ const SPECS: VarSpec[] = [
   { name: 'NEXT_PUBLIC_SUPABASE_URL', feature: 'Baza + logowanie', level: 'required' },
   { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', feature: 'Baza + logowanie', level: 'required' },
   { name: 'SUPABASE_SERVICE_ROLE_KEY', feature: 'Baza + logowanie', level: 'required' },
+  { name: 'SUPABASE_JWT_SECRET', feature: 'Publiczne API', level: 'optional', note: 'JWT_SECRET Supabase; bez niego /api/v1 odpowiada 503' },
 
   // ── KSeF (serce produktu) ──
   { name: 'KSEF_ENV', feature: 'KSeF', level: 'required', note: 'test do Fazy 40, potem production' },
