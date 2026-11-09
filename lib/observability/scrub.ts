@@ -8,7 +8,8 @@ const URL_KEY = /^(url|uri|from|to|referrer|referer)$|[._](url|uri)$/i;
 export function scrubTelemetryText(value: string): string {
   return value
     .replace(/(https?:\/\/)[^/\s@]+:[^/\s@]+@/gi, '$1' + REDACTED + '@')
-    .replace(/\/(accountant|invite)\/[^/?#\s"'<>]+/gi, '/$1/' + REDACTED)
+    // Tokeny w ścieżce: portal księgowej, zaproszenie, strona faktury dla nabywcy (krok 2.10).
+    .replace(/\/(accountant|invite|faktura)\/[^/?#\s"'<>]+/gi, '/$1/' + REDACTED)
     // URLs can carry OAuth, GDPR and object-store signatures. Drop ALL parameters.
     .replace(/([?#])[^\s"'<>]*/g, '$1' + REDACTED)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer ' + REDACTED)

@@ -19,6 +19,8 @@ const ACTION_LABELS: Record<string, string> = {
   'invoice.submit_succeeded': 'Faktura zaakceptowana przez KSeF',
   'invoice.submit_failed': 'Faktura odrzucona przez KSeF',
   'invoice.xml_downloaded': 'Pobrano XML faktury',
+  'invoice.share_link_created': 'Utworzono link do faktury dla nabywcy',
+  'invoice.share_link_revoked': 'Cofnięto link do faktury dla nabywcy',
   'invoice.resubmit_requested': 'Ponowna wysyłka faktury',
   'ksef.credentials_uploaded': 'Wgrano certyfikat KSeF',
   'ksef.credentials_removed': 'Usunięto certyfikat KSeF',

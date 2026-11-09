@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00179 (plan kompletnej aplikacji, krok 2.10): link do faktury dla nabywcy; polityki, granty kolumnowe,
+      // cofnięcie jednokierunkowe i funkcja odczytu publicznego (ważny, wygasły, cofnięty, cudzy token).
+      'tests/rls-link-dla-nabywcy.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

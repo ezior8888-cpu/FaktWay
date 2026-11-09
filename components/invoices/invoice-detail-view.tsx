@@ -102,6 +102,8 @@ export interface InvoiceDetailInitial {
   can_set_recurring?: boolean;
   /** „Duplikuj” w karcie „Dokument”: zwykła faktura z FaktWay (ten sam predykat co menu „⋯” listy). */
   can_duplicate?: boolean;
+  /** Krok 2.10: „Link dla nabywcy” w karcie „Dokument” (liczy serwer; brak pola = bez przycisku). */
+  can_share_with_buyer?: boolean;
   /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
   qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
@@ -365,6 +367,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     can_correct: inv.can_correct,
     can_set_recurring: inv.can_set_recurring ?? false,
     can_duplicate: inv.can_duplicate ?? false,
+    can_share_with_buyer: inv.can_share_with_buyer ?? false,
   };
 
   return (

@@ -467,6 +467,14 @@ export async function listInvoiceAttemptXmls(
   return keys;
 }
 
+/** Pobranie przez podpisany adres jako plik (strona faktury dla nabywcy, krok 2.10). */
+export interface SignedDownloadOptions {
+  /** Nazwa w `Content-Disposition: attachment`; znaki spoza ASCII i cudzysłowy zamieniamy na „_”. */
+  downloadFilename?: string;
+  /** Typ treści odpowiedzi magazynu (np. `application/pdf`), niezależnie od metadanych obiektu. */
+  contentType?: string;
+}
+
 /**
  * Zwraca pre-signed URL do pobrania XML lub UPO - URL ważny `expiresInSeconds`
  * sekund (domyślnie 300). Przekazuj do frontendu jako link do pobrania,
@@ -476,10 +484,14 @@ export async function getSignedInvoiceUrl(
   storagePath: string,
   tenantId: string,
   expiresInSeconds: number = 300,
+  options: SignedDownloadOptions = {},
 ): Promise<string> {
   assertTenantStoragePath(storagePath, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
+  const filename = options.downloadFilename
+    ?.replace(/[^A-Za-z0-9._-]+/g, '_')
+    .slice(0, 120);
 
   return getSignedUrl(
     client,
@@ -489,6 +501,8 @@ export async function getSignedInvoiceUrl(
       Bucket: bucketName,
       Key: storagePath,
       ResponseCacheControl: 'private, no-store',
+      ...(filename ? { ResponseContentDisposition: `attachment; filename="${filename}"` } : {}),
+      ...(options.contentType ? { ResponseContentType: options.contentType } : {}),
     }),
     { expiresIn: expiresInSeconds },
   );
