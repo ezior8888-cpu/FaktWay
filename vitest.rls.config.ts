@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API firmy (owner/admin, skrót, odwołanie
+      // nieodwracalne, audyt wyzwalaczem) i rola `api_key_client`: tylko firma i zakres klucza, bez zapisu.
+      'tests/rls-api-klucze.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

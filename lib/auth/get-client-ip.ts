@@ -13,7 +13,11 @@ import { headers } from 'next/headers';
  * globalny (wszyscy w dev mają wspólny bucket), co jest OK do testów.
  */
 export async function getClientIp(): Promise<string> {
-  const headersList = await headers();
+  return clientIpFromHeaders(await headers());
+}
+
+/** To samo z nagłówków żądania, gdy trasa ma je pod ręką (`/api/v1`). */
+export function clientIpFromHeaders(headersList: Pick<Headers, 'get'>): string {
   const realIp = headersList.get('x-real-ip')?.trim();
   if (realIp) return realIp;
   const forwarded = headersList.get('x-forwarded-for');

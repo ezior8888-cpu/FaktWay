@@ -22,9 +22,11 @@
  *     włączanie 2FA, zmiana i reset hasła, ponowne uwierzytelnienie
  *     (`lib/auth/reauth.ts`: wyłączenie 2FA, usunięcie konta RODO i jego
  *     anulowanie hasłem; anulowanie linkiem z maila działa);
- *   - podgląd przypomnienia o płatności (`app/actions/reminders.ts`): jedyna
- *     akcja, która `fallback: true` z ogólnego limitera
- *     (`lib/rate-limit/index.ts` liczy wtedy w pamięci) traktuje jak odmowę.
+ *   - podgląd przypomnienia o płatności (`app/actions/reminders.ts`) i publiczne
+ *     API `/api/v1` (`lib/api/v1/auth.ts`, limit na klucz i adres): jedyne
+ *     miejsca, które `fallback: true` z ogólnego limitera
+ *     (`lib/rate-limit/index.ts` liczy wtedy w pamięci) traktują jak odmowę;
+ *     API odpowiada wtedy 503, także gdy Redis nie jest skonfigurowany.
  * Skutek pośredni: kodu nie da się podać ani włączyć 2FA, więc to, co wymaga
  * potwierdzonego 2FA (`getVerifiedMfaState`), działa tylko w sesji już
  * potwierdzonej kodem: wgranie certyfikatu KSeF, wstrzymanie historii KSeF

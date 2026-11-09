@@ -14,4 +14,9 @@ export type GlobalFlag =
   /** AAL2 dla owner/admin przy KSeF, certyfikacie i płatnościach (AUD-65). */
   | 'requireMfaForSensitive'
   /** Zatrzymuje CAŁY moduł księgowości (plan księgowości JDG, D10; wiersz z 00165). */
-  | 'killKsiegowosc';
+  | 'killKsiegowosc'
+  /**
+   * WŁĄCZNIK publicznego API `/api/v1` i kluczy API w Ustawieniach (00181, krok 7.1).
+   * Odwrotnie niż `kill*`: brak wiersza albo błąd odczytu = API zamknięte.
+   */
+  | 'publicApiEnabled';
