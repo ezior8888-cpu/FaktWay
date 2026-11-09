@@ -9,7 +9,7 @@ import { PRZYPADKI, ZIARNO } from '../generatory/ustawienia';
 
 /**
  * Faktura zaliczkowa FA(3) ZAL na losowych danych (żelazny filtr F9, plan
- * B4.6). Kwotę podatku zaliczki określa art. 106f ust. 1 pkt 4 ustawy o VAT:
+ * B4.6). Kwotę podatku zaliczki określa art. 106f ust. 1 pkt 3 ustawy o VAT:
  * KP = (ZB × SP) / (100 + SP). Test liczy ten wzór sam, w groszach na
  * liczbach całkowitych (zaokrąglenie do grosza, połowa w górę), bez kodu
  * aplikacji:
@@ -66,7 +66,7 @@ function zal(stawka: Stawka, zaliczka: number, zamowienie: number, opis: string)
 }
 
 describe('FA(3) ZAL: losowe zaliczki', () => {
-  it('XSD, P_15 = kwota zaliczki, VAT wzorem z art. 106f ust. 1 pkt 4, zamówienie w `Zamowienie` (NZ-FA-10, NZ-FA-01)', async () => {
+  it('XSD, P_15 = kwota zaliczki, VAT wzorem z art. 106f ust. 1 pkt 3, zamówienie w `Zamowienie` (pkt 4) (NZ-FA-10, NZ-FA-01)', async () => {
     await fc.assert(
       fc.asyncProperty(przypadek, async ({ stawka, zamowienie, promile, opis }) => {
         const zaliczka = Math.max(1, Math.floor((zamowienie * promile) / 1000));
