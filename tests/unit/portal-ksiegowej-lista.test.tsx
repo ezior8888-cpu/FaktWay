@@ -104,6 +104,23 @@ describe('portal księgowej — lista (F-063)', () => {
     expect(html).not.toContain('>accepted<');
   });
 
+  it('kwota faktury zakupu w walucie obcej z kodem waluty, nie „zł” (krok 6.2, jak lista faktur w aplikacji)', () => {
+    const foreign = [{ ...rows[1]!, id: 'i9', gross_total: 50, currency: 'EUR' }];
+    const out = renderToStaticMarkup(<AccountantInvoiceList invoices={foreign} total={1} canDownload={false} token="t" />);
+    expect(out).toContain('50,00 EUR');
+    expect(out).not.toContain('50,00 zł');
+  });
+
+  it('ładowarka czyta walutę faktury', async () => {
+    st.count = 1;
+    await loadAccountantPortal('token-1');
+    const select = st.calls
+      .filter(([name]) => name === 'invoices.select')
+      .map(([, args]) => args[0] as string)
+      .find((cols) => cols.includes('internal_number'))!;
+    expect(select).toContain('currency');
+  });
+
   it('„Pobierz XML” tylko przy dokumencie z plikiem', () => {
     // Plan Finora §7.2: tabela od `lg` i karty poniżej to ten sam zbiór
     // dokumentów — warunek liczymy w KAŻDYM z widoków osobno.

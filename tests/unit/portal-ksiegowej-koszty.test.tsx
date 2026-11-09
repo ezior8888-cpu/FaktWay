@@ -67,6 +67,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { AccountantExpenseList } from '@/components/accountant/expense-list';
 import { loadAccountantExpenses } from '@/lib/accountant/load-accountant-expenses';
+import { expenseAmountsCurrency } from '@/lib/expenses/amount-currency';
 
 const ACCESS = {
   id: 'acc-1', tenant_id: 'ten-1', accountant_name: 'Anna', accountant_email: 'anna@example.test',
@@ -90,6 +91,12 @@ const NO_FILE_COST = { ...PHOTO_COST, id: 'e3', source: 'manual', source_file_pa
 const FOREIGN_PATH_COST = { ...PHOTO_COST, id: 'e4', source_file_path: 'tenants/ten-2/expenses/2026/10/job-9.jpg' };
 const LINKED_INVOICE = {
   id: 'inv-1', tenant_id: 'ten-1', ksef_number: '1234567890-20261005-ABCDEF123456-01', xml_storage_path: 'ten-1/2026/10/inv-1.xml',
+  currency: 'PLN',
+};
+/** Ślad kursu NBP przy koszcie KSeF w walucie (runner kategoryzacji skrzynki). */
+const KSEF_FX_TRAIL = {
+  source: 'ksef_inbox', currency: 'EUR', net_amount: 100, gross_amount: 123,
+  fx: { currency: 'EUR', mid: 4.25, tableNo: '194/A/NBP/2026', effectiveDate: '2026-10-02', appliedFor: '2026-10-05' },
 };
 
 beforeEach(() => {
@@ -185,11 +192,63 @@ describe('portal księgowej: lista kosztów (dane)', () => {
   });
 });
 
+describe('portal księgowej: waluta kwot kosztu (bez „zł” przy kwotach w walucie obcej)', () => {
+  const ksef = { source: 'ksef_inbox', ksef_invoice_id: 'inv-1', issue_date: '2026-10-05', is_deductible: false, ocr_extracted_data: null };
+  const ocr = { source: 'ocr_photo', ksef_invoice_id: null, issue_date: '2026-10-05', is_deductible: true, ocr_extracted_data: null };
+
+  it('koszt z KSeF: waluta faktury; w walucie obcej złote tylko ze śladem kursu NBP; brak waluty to „nie wiadomo”', () => {
+    expect(expenseAmountsCurrency(ksef, 'PLN')).toBe('PLN');
+    expect(expenseAmountsCurrency(ksef, ' eur ')).toBe('EUR');
+    expect(expenseAmountsCurrency({ ...ksef, ocr_extracted_data: KSEF_FX_TRAIL }, 'EUR')).toBe('PLN');
+    expect(expenseAmountsCurrency(ksef, null)).toBeNull();
+    expect(expenseAmountsCurrency(ksef, 'euro')).toBeNull();
+    expect(expenseAmountsCurrency({ ...ksef, ksef_invoice_id: null }, null)).toBeNull();
+  });
+
+  it('koszt ze zdjęcia: kwoty w walucie dokumentu, dopóki nie ma kursu i koszt jest poza KPiR', () => {
+    expect(expenseAmountsCurrency(ocr, null)).toBe('PLN');
+    expect(expenseAmountsCurrency({ ...ocr, ocr_extracted_data: { currency: 'PLN' } }, null)).toBe('PLN');
+    expect(expenseAmountsCurrency({ ...ocr, is_deductible: false, ocr_extracted_data: { currency: 'USD' } }, null)).toBe('USD');
+    expect(expenseAmountsCurrency({ ...ocr, is_deductible: false, ocr_extracted_data: { currency: 'USD', fx: { mid: 3.9 } } }, null)).toBe('PLN');
+  });
+
+  it('ładowarka bierze walutę z faktury KSeF tej firmy i nie przekazuje śladu odczytu do widoku', async () => {
+    st.expenses = [{ ...KSEF_COST, ocr_extracted_data: null }];
+    st.invoices = [{ ...LINKED_INVOICE, currency: 'EUR' }];
+    const data = await loadAccountantExpenses('token-1', { month: '2026-10', page: 1 });
+    if (data!.expenses.status !== 'ok') throw new Error('oczekiwana lista');
+    expect(data!.expenses.rows[0]).toMatchObject({ id: 'e1', amount_currency: 'EUR' });
+    expect(data!.expenses.rows[0]).not.toHaveProperty('ocr_extracted_data');
+    const invoiceSelect = callsOf('invoices', 'select')[0]![0] as string;
+    expect(invoiceSelect).toContain('currency');
+  });
+
+  it('lista: kwoty w walucie obcej z kodem waluty, nieznana waluta bez kwot', () => {
+    const html = renderToStaticMarkup(
+      <AccountantExpenseList
+        rows={[
+          { ...KSEF_COST, ksef_number: LINKED_INVOICE.ksef_number, file_kind: 'xml', amount_currency: 'EUR' },
+          { ...PHOTO_COST, id: 'e9', net_amount: 55.5, ksef_number: null, file_kind: null, amount_currency: null },
+        ]}
+        page={{ page: 1, pages: 1, total: 2, pageSize: 50 }}
+        canDownload={false}
+        token="t"
+        month="2026-10"
+      />,
+    );
+    expect(html).toContain('100,00 EUR');
+    expect(html).toContain('123,00 EUR');
+    expect(html).not.toContain('123,00 zł');
+    expect(html).toContain('waluta do wyjaśnienia');
+    expect(html).not.toContain('55,50');
+  });
+});
+
 describe('portal księgowej: lista kosztów (widok)', () => {
   const rows = [
-    { ...KSEF_COST, ksef_number: LINKED_INVOICE.ksef_number, file_kind: 'xml' as const },
-    { ...PHOTO_COST, ksef_number: null, file_kind: 'photo' as const },
-    { ...NO_FILE_COST, ksef_number: null, file_kind: null },
+    { ...KSEF_COST, ksef_number: LINKED_INVOICE.ksef_number, file_kind: 'xml' as const, amount_currency: 'PLN' },
+    { ...PHOTO_COST, ksef_number: null, file_kind: 'photo' as const, amount_currency: 'PLN' },
+    { ...NO_FILE_COST, ksef_number: null, file_kind: null, amount_currency: 'PLN' },
   ];
   const page = { page: 1, pages: 1, total: 3, pageSize: 50 };
   const render = (canDownload: boolean) =>

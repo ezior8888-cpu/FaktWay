@@ -27,7 +27,37 @@ interface Props {
   footer?: React.ReactNode;
 }
 
-const money = (amount: number) => `${formatPlMoney(amount)} zł`;
+type Amounts =
+  | { kind: 'pln'; net: string; vat: string; gross: string }
+  | { kind: 'other'; gross: string | null; summary: string };
+
+/**
+ * Kwoty wiersza z jednostką: „zł” tylko przy kwotach w złotych. Koszt
+ * w walucie obcej bez przeliczenia ma netto i brutto z kodem waluty, bez VAT
+ * (przy koszcie z KSeF VAT w złotych jest tylko w metadanych). Nieznana
+ * waluta: bez kwot, z komunikatem.
+ */
+function amountsOf(row: AccountantExpenseRow): Amounts {
+  const currency = row.amount_currency;
+  if (currency === 'PLN') {
+    return {
+      kind: 'pln',
+      net: `${formatPlMoney(row.net_amount)} zł`,
+      vat: `${formatPlMoney(row.vat_amount)} zł`,
+      gross: `${formatPlMoney(row.gross_amount)} zł`,
+    };
+  }
+  if (currency) {
+    const gross = `${formatPlMoney(row.gross_amount)} ${currency}`;
+    return {
+      kind: 'other',
+      gross,
+      summary: `Netto ${formatPlMoney(row.net_amount)} ${currency} · brutto ${gross}, bez przeliczenia na zł`,
+    };
+  }
+  return { kind: 'other', gross: null, summary: 'Bez kwot: waluta do wyjaśnienia' };
+}
+
 const reviewStatus = (row: AccountantExpenseRow): ReviewStatus => (row.is_reviewed ? 'reviewed' : 'unreviewed');
 const kpirLabel = (column: string | null) => (column ? kpirShortLabel(column) : 'bez kolumny');
 
@@ -71,10 +101,56 @@ function FileLinks({ row, canDownload, token }: { row: AccountantExpenseRow; can
   );
 }
 
+function ExpenseTableRow({ row, canDownload, token }: { row: AccountantExpenseRow; canDownload: boolean; token: string }) {
+  const amounts = amountsOf(row);
+  return (
+    <TableRow>
+      <TableCell className="text-muted-foreground h-14 pl-4 tabular-nums">{formatIsoDatePl(row.issue_date)}</TableCell>
+      <TableCell>
+        <div className="flex max-w-56 flex-col">
+          <span className="truncate font-medium" title={row.seller_name}>
+            {row.seller_name}
+          </span>
+          <span className="text-muted-foreground font-mono text-xs">
+            {row.seller_nip ? `NIP ${row.seller_nip}` : 'bez NIP'}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-col">
+          <span className="font-mono">{row.document_number ?? 'bez numeru'}</span>
+          <span className="text-muted-foreground text-xs">{documentLabel(row.document_type)}</span>
+        </div>
+      </TableCell>
+      <TableCell className="text-muted-foreground max-w-44 font-mono text-xs break-all whitespace-normal">
+        {row.ksef_number ?? 'brak'}
+      </TableCell>
+      {amounts.kind === 'pln' ? (
+        <>
+          <TableCell className="text-right tabular-nums">{amounts.net}</TableCell>
+          <TableCell className="text-right tabular-nums">{amounts.vat}</TableCell>
+          <TableCell className="text-right font-medium tabular-nums">{amounts.gross}</TableCell>
+        </>
+      ) : (
+        <TableCell colSpan={3} className="text-muted-foreground max-w-64 text-right text-xs whitespace-normal tabular-nums">
+          {amounts.summary}
+        </TableCell>
+      )}
+      <TableCell className="text-muted-foreground">{kpirLabel(row.kpir_column)}</TableCell>
+      <TableCell>
+        <ReviewBadge row={row} />
+      </TableCell>
+      <TableCell className="pr-4">
+        <FileLinks row={row} canDownload={canDownload} token={token} />
+      </TableCell>
+    </TableRow>
+  );
+}
+
 /**
  * Koszty firmy w portalu księgowej (krok 6.2): Card + Table jak lista
- * dokumentów (od `lg`) i karty poniżej. Kwoty tylko do wyświetlenia,
- * w złotych, jak zapisane przy koszcie.
+ * dokumentów (od `lg`) i karty poniżej. Kwoty tylko do wyświetlenia, jak
+ * zapisane przy koszcie, z jednostką z `amountsOf` (bez sum i bez liczenia).
  */
 export function AccountantExpenseList({ rows, page, canDownload, token, month, footer }: Props) {
   const period = monthLabel(month);
@@ -114,67 +190,43 @@ export function AccountantExpenseList({ rows, page, canDownload, token, month, f
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="text-muted-foreground h-14 pl-4 tabular-nums">{formatIsoDatePl(row.issue_date)}</TableCell>
-                <TableCell>
-                  <div className="flex max-w-56 flex-col">
-                    <span className="truncate font-medium" title={row.seller_name}>
-                      {row.seller_name}
-                    </span>
-                    <span className="text-muted-foreground font-mono text-xs">
-                      {row.seller_nip ? `NIP ${row.seller_nip}` : 'bez NIP'}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-mono">{row.document_number ?? 'bez numeru'}</span>
-                    <span className="text-muted-foreground text-xs">{documentLabel(row.document_type)}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground max-w-44 font-mono text-xs break-all whitespace-normal">
-                  {row.ksef_number ?? 'brak'}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{money(row.net_amount)}</TableCell>
-                <TableCell className="text-right tabular-nums">{money(row.vat_amount)}</TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{money(row.gross_amount)}</TableCell>
-                <TableCell className="text-muted-foreground">{kpirLabel(row.kpir_column)}</TableCell>
-                <TableCell>
-                  <ReviewBadge row={row} />
-                </TableCell>
-                <TableCell className="pr-4">
-                  <FileLinks row={row} canDownload={canDownload} token={token} />
-                </TableCell>
-              </TableRow>
+              <ExpenseTableRow key={row.id} row={row} canDownload={canDownload} token={token} />
             ))}
           </TableBody>
         </Table>
       </div>
 
       <div data-view="cards" className="divide-y lg:hidden">
-        {rows.map((row) => (
-          <div key={row.id} className="space-y-2 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{row.seller_name}</p>
-                <p className="text-muted-foreground text-xs">
-                  {`${formatIsoDatePl(row.issue_date)} · ${documentLabel(row.document_type)} ${row.document_number ?? 'bez numeru'}`}
-                </p>
+        {rows.map((row) => {
+          const amounts = amountsOf(row);
+          const details =
+            amounts.kind === 'pln' ? `Netto ${amounts.net} · VAT ${amounts.vat}` : amounts.summary;
+          return (
+            <div key={row.id} className="space-y-2 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{row.seller_name}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {`${formatIsoDatePl(row.issue_date)} · ${documentLabel(row.document_type)} ${row.document_number ?? 'bez numeru'}`}
+                  </p>
+                </div>
+                {amounts.gross ? (
+                  <p className="shrink-0 text-sm font-medium tabular-nums">{amounts.gross}</p>
+                ) : null}
               </div>
-              <p className="shrink-0 text-sm font-medium tabular-nums">{money(row.gross_amount)}</p>
+              {row.ksef_number ? (
+                <p className="text-muted-foreground font-mono text-xs break-all">{`KSeF: ${row.ksef_number}`}</p>
+              ) : null}
+              <p className="text-muted-foreground text-xs tabular-nums">
+                {`${details} · KPiR: ${kpirLabel(row.kpir_column)}`}
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <ReviewBadge row={row} />
+                <FileLinks row={row} canDownload={canDownload} token={token} />
+              </div>
             </div>
-            {row.ksef_number ? (
-              <p className="text-muted-foreground font-mono text-xs break-all">{`KSeF: ${row.ksef_number}`}</p>
-            ) : null}
-            <p className="text-muted-foreground text-xs tabular-nums">
-              {`Netto ${money(row.net_amount)} · VAT ${money(row.vat_amount)} · KPiR: ${kpirLabel(row.kpir_column)}`}
-            </p>
-            <div className="flex items-center justify-between gap-3">
-              <ReviewBadge row={row} />
-              <FileLinks row={row} canDownload={canDownload} token={token} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {footer}

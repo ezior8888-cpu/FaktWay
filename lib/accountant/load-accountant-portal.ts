@@ -17,6 +17,8 @@ export interface AccountantPortalData {
     internal_number: string | null;
     issue_date: string;
     gross_total: number | null;
+    /** Waluta faktury (`null` jak w liście faktur aplikacji: złote). Faktura zakupu z KSeF bywa w walucie obcej. */
+    currency?: string | null;
     ksef_status: string | null;
     /** `outgoing` = sprzedaż, `incoming` = koszt. */
     direction: string | null;
@@ -70,7 +72,7 @@ export async function loadAccountantPortal(
   if (!invoicesError) {
     const { data, error } = await admin
       .from('invoices')
-      .select('id, internal_number, issue_date, gross_total, ksef_status, direction, xml_storage_path')
+      .select('id, internal_number, issue_date, gross_total, currency, ksef_status, direction, xml_storage_path')
       .eq('tenant_id', access.tenant_id)
       .in('ksef_status', [...ACCOUNTANT_PORTAL_STATUSES])
       .order('issue_date', { ascending: false })

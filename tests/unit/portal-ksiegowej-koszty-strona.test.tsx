@@ -39,6 +39,7 @@ const ROW = {
   id: 'e1', issue_date: '2026-10-05', seller_name: 'Hurtownia Testowa', seller_nip: '1234567890',
   document_type: 'invoice', document_number: 'FV/10/2026', net_amount: 100, vat_amount: 23, gross_amount: 123,
   kpir_column: 'col_13', is_reviewed: true, ksef_number: '1234567890-20261005-ABCDEF123456-01', file_kind: 'xml',
+  amount_currency: 'PLN',
 };
 
 function expensesData(page = { page: 2, pages: 3, total: 120, pageSize: 50 }) {

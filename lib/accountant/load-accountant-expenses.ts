@@ -9,8 +9,10 @@ import {
   type PortalAccess,
   type PortalPage,
 } from '@/lib/accountant/portal-access';
+import { expenseAmountsCurrency } from '@/lib/expenses/amount-currency';
 import { monthRange, parseExpenseMonth } from '@/lib/expenses/month';
 import { createAdminClient } from '@/lib/supabase/server';
+import type { Json } from '@/types/database';
 
 /** Wiersz listy kosztów w portalu: bez ścieżek magazynu, plik tylko jako rodzaj. */
 export interface AccountantExpenseRow {
@@ -25,6 +27,11 @@ export interface AccountantExpenseRow {
   net_amount: number;
   vat_amount: number;
   gross_amount: number;
+  /**
+   * Waluta kwot: `'PLN'`, kod waluty obcej (koszt bez przeliczenia na złote)
+   * albo `null`, gdy nie wiadomo (`expenseAmountsCurrency`). Tylko `'PLN'` to „zł”.
+   */
+  amount_currency: string | null;
   kpir_column: string | null;
   is_reviewed: boolean;
   /** `null`: koszt bez pliku w FaktWay (np. wpisany bez zdjęcia albo XML nie dotarł z KSeF). */
@@ -45,7 +52,7 @@ export interface AccountantExpensesData {
 
 const EXPENSE_COLUMNS =
   'id, issue_date, seller_name, seller_nip, document_type, document_number, net_amount, vat_amount, gross_amount, ' +
-  'kpir_column, is_reviewed, source, source_file_path, source_file_mime, ksef_invoice_id';
+  'kpir_column, is_reviewed, is_deductible, source, source_file_path, source_file_mime, ksef_invoice_id, ocr_extracted_data';
 
 interface ExpenseDbRow {
   id: string;
@@ -59,15 +66,19 @@ interface ExpenseDbRow {
   gross_amount: number | string;
   kpir_column: string | null;
   is_reviewed: boolean;
+  is_deductible: boolean | null;
   source: string;
   source_file_path: string | null;
   source_file_mime: string | null;
   ksef_invoice_id: string | null;
+  /** Ślad odczytu i kursu: tylko do ustalenia waluty kwot, nie trafia do widoku. */
+  ocr_extracted_data: Json | null;
 }
 
 interface LinkedInvoiceRow extends LinkedInvoiceFile {
   tenant_id: string;
   ksef_number: string | null;
+  currency: string | null;
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -113,7 +124,7 @@ async function readExpensesPage(
   if (invoiceIds.length > 0) {
     const linked = await admin
       .from('invoices')
-      .select('id, tenant_id, ksef_number, xml_storage_path')
+      .select('id, tenant_id, ksef_number, xml_storage_path, currency')
       .eq('tenant_id', tenantId)
       .in('id', invoiceIds);
     if (linked.error) return { status: 'error' };
@@ -139,6 +150,7 @@ async function readExpensesPage(
         net_amount: Number(row.net_amount),
         vat_amount: Number(row.vat_amount),
         gross_amount: Number(row.gross_amount),
+        amount_currency: expenseAmountsCurrency(row, invoice?.currency),
         kpir_column: row.kpir_column,
         is_reviewed: row.is_reviewed,
         file_kind: expenseFileKind(row, invoice, tenantId),
