@@ -1467,11 +1467,18 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 9.11.2026 | 1.2, część 1 | #509 | gotowe do scalenia (D11) | faktura do paragonu: formularz, FA(3) z `FP`, PDF, widok; KSeF TEST przyjął (scenariusz 14 w teście tygodniowym); moduł księgowości i JPK odmawiają przy FP do części 2; bez migracji; CI zielone |
 | 9.11.2026 | 3.1 | #510 | gotowe do scalenia | wpłaty częściowe z historią i cofaniem (rozszerzona tabela `payments`); migracja 00176 przed wdrożeniem; CI zielone; dalej zdarzenie o wpłacie (8.1) i wyciąg (3.2) |
 | 9.11.2026 | 1.3, część 1 | #517 | gotowe do scalenia (D11) | paragon z NIP z datą od 1.01.2027 bez odliczenia VAT (JPK_V7M, „Ten miesiąc”, kafle), z informacją przy koszcie; OCR zapisywał paragon z NIP jako `invoice`, więc rodzaj idzie z odczytu OCR; PIT bez zmian do odpowiedzi księgowej; łączenie FP ze skrzynki z paragonem w części 2 |
-| 9.11.2026 | 8.1, część 1 | #519 | gotowe do scalenia po #510 (stos) | zdarzenie o wpłacie z `paymentId`; push „Otrzymana płatność” i „Wpłata częściowa”; przypomnienia anulowane tylko przy pełnej zapłacie |
+| 9.11.2026 | 8.1, część 1 | #519 | czeka na decyzję Bartosza (CI czerwone słusznie) | zdarzenie o wpłacie z `paymentId`; push „Otrzymana płatność” i „Wpłata częściowa”; przypomnienia anulowane tylko przy pełnej zapłacie |
 | 9.11.2026 | 8.5, część 2 | #518 | gotowe do scalenia po #506 (stos) | mail o logowaniu z nowego urządzenia (przeglądarka, system, sieć /24 albo /48); jedna sesja to najwyżej jeden mail (klucz dostawcy) |
+| 9.11.2026 | 1.3, naprawa: paragon z NIP powyżej 450 zł | #520 | gotowe do scalenia po #517 (stos) | błąd działający dziś: paragon z NIP powyżej 450 zł dawał odliczenie VAT (art. 106e ust. 5 pkt 3); próg w groszach |
+| 9.11.2026 | 1.2, naprawa: FP w raportach i po terminie | #521 | gotowe do scalenia po #509 (stos) | KPiR w Raportach, Excel, szacunek i przepływy bez sumy w okresie z FP (komunikat); FP poza przypomnieniami i listą po terminie |
+| 9.11.2026 | 8.5, naprawa: zaufany adres IP | #522 | gotowe do scalenia po #506 (stos) | ustawienia konta i eksport portalu biorą IP jak `logAudit`, nie z podrabialnego pierwszego wpisu X-Forwarded-For |
+| 9.11.2026 | protokół: `singletonKey` | #523 | gotowe do scalenia | `AGENTS.md`, punkt 5: `singletonKey` w pg-boss (polityka `standard`) nie deduplikuje; 4 miejsca z kluczem mają drugą ochronę, Stripe chroniony |
+| 9.11.2026 | 1.3, część 2 | #524 | CI w toku; po #517 (stos) | FP ze skrzynki łączona z paragonem z NIP (pewne dopasowanie samo, reszta jako ostrzeżenie i wybór klienta); migracja 00175 przed wdrożeniem |
 
-**Następny krok:** naprawy w toku: paragon z NIP powyżej 450 zł (stos na #517)
-i FP w raportach przychodu oraz na liście po terminie (stos na #509). Potem: 1.3 część 2 (łączenie FP ze skrzynki z paragonem), 1.2 część 2 (FP w JPK i ze zdjęcia paragonu), 1.4 część 2
-(identyfikator zbiorczy), 1.6. Kroki w formularzu faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509,
-bo zmieniają te same pliki. #506 i #510 zmieniają rejestr migracji i listę testów
-RLS: scalać zbiorczo (`./scripts/ops/zloz-scalenie.sh`).
+**Następny krok:** decyzje Bartosza: wariant #519 („sam push” czy usunięcie joba
+i przełącznika), limit czasu sesji GoTrue (#506), termin scalania kroków R1
+etapu 1 (D11). Potem: OCR zapisuje paragon z NIP jako `invoice` (następny PR
+kroku 1.3), 1.2 część 2 (FP w JPK i ze zdjęcia paragonu), 1.4 część 2
+(identyfikator zbiorczy), 1.6. Kroki w formularzu faktury (2.4, 2.5, 2.6, 2.8)
+po scaleniu #509. Scalanie stosów i migracji 00174, 00175, 00176 zbiorczo
+(`./scripts/ops/zloz-scalenie.sh`).
