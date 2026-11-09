@@ -1,0 +1,28 @@
+import { Stack } from 'expo-router';
+
+/** Lista zakładki zawsze leży pod spodem: arkusze i ekrany otwarte linkiem mają „wstecz” i prezentują się jako arkusze. */
+export const unstable_settings = { anchor: 'index' };
+
+/** Stos zakładki Więcej: kontrahenci, import, FLO i wszystkie ustawienia ze strony. */
+export default function UkladWiecej() {
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ title: 'Więcej', headerLargeTitle: true }} />
+      <Stack.Screen name="kontrahenci/index" options={{ title: 'Kontrahenci', headerLargeTitle: true }} />
+      <Stack.Screen name="kontrahenci/[id]" options={{ title: '' }} />
+      <Stack.Screen name="import" options={{ title: 'Import danych' }} />
+      <Stack.Screen name="flo" options={{ title: 'Flo' }} />
+      <Stack.Screen name="ustawienia/firma" options={{ title: 'Firma' }} />
+      <Stack.Screen name="ustawienia/bezpieczenstwo" options={{ title: 'Bezpieczeństwo' }} />
+      <Stack.Screen name="ustawienia/powiadomienia" options={{ title: 'Powiadomienia' }} />
+      <Stack.Screen name="ustawienia/ksef" options={{ title: 'KSeF' }} />
+      <Stack.Screen name="ustawienia/przypomnienia" options={{ title: 'Przypomnienia' }} />
+      <Stack.Screen name="ustawienia/ksiegowa" options={{ title: 'Księgowa' }} />
+      <Stack.Screen name="ustawienia/zespol" options={{ title: 'Zespół' }} />
+      <Stack.Screen name="ustawienia/abonament" options={{ title: 'Abonament' }} />
+      <Stack.Screen name="ustawienia/flo" options={{ title: 'Ustawienia Flo' }} />
+      <Stack.Screen name="ustawienia/dziennik" options={{ title: 'Dziennik zdarzeń' }} />
+      <Stack.Screen name="ustawienia/konto" options={{ title: 'Konto i dane (RODO)' }} />
+    </Stack>
+  );
+}

@@ -1,7 +1,7 @@
 /**
  * Formatowanie kwot i dat po polsku. Te same zasady co `lib/format/pl.ts`
  * strony: kwota „1 234,56 zł” z twardą spacją przed walutą. Kopia, nie import:
- * sposób współdzielenia kodu ze stroną ustala etap M5 planu
+ * sposób współdzielenia kodu ze stroną ustala etap M6 planu
  * (docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md).
  */
 const KWOTA = new Intl.NumberFormat('pl-PL', {
@@ -33,4 +33,35 @@ export function dataPelna(iso: string): string {
 export function dniMiedzy(od: string, doDnia: string): number {
   const ms = new Date(`${doDnia}T12:00:00`).getTime() - new Date(`${od}T12:00:00`).getTime();
   return Math.round(ms / 86_400_000);
+}
+
+const KWOTA_KROTKA = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 });
+
+/** Kwota w kaflu: „34,6 tys. zł”, „1,2 mln zł”, poniżej 10 tys. pełna. */
+export function kwotaKrotka(grosze: number): string {
+  const zl = grosze / 100;
+  const abs = Math.abs(zl);
+  if (abs >= 1_000_000) return `${KWOTA_KROTKA.format(zl / 1_000_000)}\u00a0mln\u00a0zł`;
+  if (abs >= 10_000) return `${KWOTA_KROTKA.format(zl / 1_000)}\u00a0tys.\u00a0zł`;
+  return kwota(grosze);
+}
+
+/** Zmiana procentowa ze znakiem: „+2%”, „−6%”, „0%”. */
+export function zmiana(pct: number): string {
+  if (pct > 0) return `+${pct}%`;
+  if (pct < 0) return `\u2212${Math.abs(pct)}%`;
+  return '0%';
+}
+
+/** Kwota wpisana w polu („1500”, „1 500,50”) w groszach; puste albo błędne to NaN. */
+export function groszeZPola(tekst: string): number {
+  const t = tekst.replace(/\s/g, '').replace(',', '.');
+  if (!t) return NaN;
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+}
+
+/** Grosze do pola formularza: 1500,50 (bez waluty i spacji). */
+export function doPola(grosze: number): string {
+  return (grosze / 100).toFixed(2).replace('.', ',');
 }

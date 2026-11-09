@@ -65,9 +65,9 @@ i poziom porządnych aplikacji fintech.
 | D6 | **Projektant iOS:** na zlecenie, raz: system (kolor, typografia, ikona aplikacji) i 8 do 10 kluczowych ekranów w Figmie na zestawie Apple. Bez projektanta: Claude daje 2 do 3 wariantów ekranu wzorcowego, Bartosz wybiera | do decyzji Bartosza |
 | D7 | **Miejsce „Nowa faktura”:** szeroki bloczek (przycisk Liquid Glass na całą szerokość) u góry listy faktur, pod sumą „Do zapłaty”; nie plus w pasku i nie pasek nad zakładkami | przyjęta 09.11.2026 (Bartosz: „u góry w bloczku, nie w krzyżyku”) |
 | D8 | **Kolejność platform:** najpierw iOS do poziomu „wzorzec”, potem dopasowanie Androida z tego samego kodu przed betą Google Play | rekomendacja |
-| D9 | **Powiadomienia:** z workera pg-boss bezpośrednio do APNs i FCM albo przez usługę push Expo (nowy podmiot przetwarzający, serwery poza UE). W obu przypadkach treść bez kwot i danych kontrahenta | otwarta, rozstrzygnąć w M10 |
+| D9 | **Powiadomienia:** z workera pg-boss bezpośrednio do APNs i FCM albo przez usługę push Expo (nowy podmiot przetwarzający, serwery poza UE). W obu przypadkach treść bez kwot i danych kontrahenta | otwarta, rozstrzygnąć w M11 |
 | D10 | **Identyfikator aplikacji:** `pl.faktway.app` na iOS (bundle ID) i Androidzie (package). Po publikacji nie do zmiany | przyjęta 08.11.2026 |
-| D11 | **Zakładki:** Faktury (z filtrem „Do zapłaty”), Koszty (skrzynka KSeF i wydatki), Ten miesiąc, Konto | przyjęta 08.11.2026, do korekty w M3 |
+| D11 | **Zakładki (5):** Pulpit, Faktury, Koszty (wydatki i skrzynka KSeF), Księgowość (Ten miesiąc, KPiR, ewidencja, VAT, eksport), Więcej (kontrahenci, import, Flo, wszystkie ustawienia). Pięć to granica paska zakładek iOS; reszta strony siedzi w Więcej | zmieniona 09.11.2026 (M4, po zmianie D3) |
 
 ---
 
@@ -88,6 +88,36 @@ strony i ich odpowiedników na telefonie leży w sekcji 3a.
 ~~Zostaje na komputerze~~: nieaktualne od zmiany D3 (09.11.2026). Na komputerze
 zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 
+## 3a. Mapa: strona na telefonie (M4, 09.11.2026)
+
+Każda sekcja panelu strony ma odpowiednik w aplikacji (`mobile/src/app/`).
+Na razie na danych przykładowych; dane z bazy podłączają etapy od M7.
+
+| Strona (`app/(dashboard)/`) | Telefon | Trasy |
+|---|---|---|
+| `dashboard` (pulpit, wykresy, należności, najlepsi klienci) | zakładka Pulpit | `(pulpit)/index` |
+| `przeplywy` | Pulpit → Przepływy | `(pulpit)/przeplywy` |
+| `analizy` (sprzedaż, koszty) | Pulpit → Analizy (przełącznik, wykres kołowy, kalendarz) | `(pulpit)/analizy` |
+| `flo/wrapped` | Pulpit → Twój rok w liczbach | `(pulpit)/twoj-rok` |
+| `(faktury)`, `invoices` (lista, Wystawione, Cykliczne, Po terminie, filtry) | zakładka Faktury, bloczek „Nowa faktura” (D7) | `faktury/index` |
+| `invoices/[id]` (status, UPO, zapłata, PDF, XML, korekta, duplikat, cykliczna, e-mail) | szczegół faktury, menu akcji, Popraw i Edytuj dla szkicu i odrzuconej | `faktury/[id]`, `faktury/email` |
+| `invoices/new` (zwykła, korygująca, zaliczkowa, rozliczająca) | arkusz: wybór rodzaju, formularz | `faktury/nowa/index`, `faktury/nowa/[rodzaj]` |
+| `invoices/recurring` | arkusz faktury cyklicznej | `faktury/cykliczna` |
+| przypomnienia o zapłacie | arkusz przypomnienia z faktury | `faktury/przypomnienie` |
+| `(koszty)`, `expenses` (wydatki, skrzynka KSeF, OCR, opis) | zakładka Koszty, „Dodaj wydatek”, opis i akceptacja | `koszty/index`, `koszty/dodaj`, `koszty/[id]` |
+| `reports` (Ten miesiąc, KPiR, ewidencja, VAT i JPK, eksport) | zakładka Księgowość | `ksiegowosc/*` |
+| ustawienia podatkowe | Księgowość → Ustawienia podatkowe | `ksiegowosc/ustawienia-podatkowe` |
+| `contractors` | Więcej → Kontrahenci | `wiecej/kontrahenci/*` |
+| `import-danych` | Więcej → Import danych | `wiecej/import` |
+| `flo` | Więcej → Flo | `wiecej/flo` |
+| `settings` (firma, bezpieczeństwo, powiadomienia, KSeF, przypomnienia, księgowa, zespół, abonament, Flo, dziennik, konto) | Więcej → Ustawienia, ekran na kartę | `wiecej/ustawienia/*` |
+
+Symulowane na danych przykładowych: przyjęcie w KSeF (2,5 s), odczyt OCR,
+wysyłka e-maili i JPK, pliki PDF i XML (arkusz udostępniania z opisem),
+pobieranie historii KSeF. Abonament tylko do odczytu (D5). Znane
+uproszczenie do M7: stawki zw, oo i np zapisują się jako 0%, bo model
+przykładowy trzyma stawkę jako liczbę.
+
 ---
 
 ## 4. Architektura
@@ -100,9 +130,9 @@ zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 - Testujemy na **development build**, nie w Expo Go (natywne zakładki, Expo UI
   i efekt szkła nie działają tam pewnie).
 - Typy bazy z `types/` i schematy Zod współdzielone ze stroną. M2 ustalił:
-  do M5 aplikacja ma małą kopię formatowania (`mobile/src/lib/format.ts`),
+  do M6 aplikacja ma małą kopię formatowania (`mobile/src/lib/format.ts`),
   a sposób współdzielenia typów i schematów Zod (import przez Metro czy
-  wspólny pakiet) rozstrzyga M5 razem z API.
+  wspólny pakiet) rozstrzyga M6 razem z API.
 - Listy krótkie i stałe (ustawienia, szczegóły) można składać z `@expo/ui`
   (prawdziwe SwiftUI i Compose); listy danych o nieznanej długości z FlatList
   albo FlashList. Wybór sprawdza M3 na ekranie wzorcowym.
@@ -133,7 +163,7 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
 - Limity prób jak na stronie (`lib/rate-limit`), wpis w `audit_logs` dla akcji
   istotnych, jak na stronie.
 - Tokeny push urządzeń: nowa tabela z `tenant_id` i RLS (migracja z rejestru
-  w `CLAUDE-DO-CODEXA.md`, w M10).
+  w `CLAUDE-DO-CODEXA.md`, w M11).
 
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
@@ -178,8 +208,8 @@ ze wzorcem. Wibracji i płynności Claude nie oceni; ocenia Bartosz na telefonie
 | Mobbin i 3 do 4 aplikacji wzorcowych (zrzuty do `.agents/mobile-wzorce/`) | wzorce dla ekranów | przed M3 |
 | Decyzja D6 (D2 i D3 przyjęte 08.11.2026) | sposób pracy nad wyglądem | przed M3 |
 | Projektant iOS (jeśli D6 na tak) | system i ekrany kluczowe | najlepiej przed M3 |
-| Spółka, D-U-N-S, konta Apple i Google (D4) | TestFlight, push, logowanie Apple, sklep | przed M10 |
-| Dane usługodawcy w polityce prywatności | sklepy wymagają polityki i etykiet prywatności | przed M12 |
+| Spółka, D-U-N-S, konta Apple i Google (D4) | TestFlight, push, logowanie Apple, sklep | przed M11 |
+| Dane usługodawcy w polityce prywatności | sklepy wymagają polityki i etykiet prywatności | przed M13 |
 
 ---
 
@@ -193,15 +223,16 @@ częścią „gotowe” od M3.
 | M1 | Plan i zasady designu (ten plik, `ZASADY-DESIGNU.md`, hasło w `AGENTS.md`) | PR otwarty |
 | M2 | Fundament: Expo w `mobile/`, wyłączenia z 4.4, natywne zakładki i stos, kolory semantyczne i tryb ciemny, skille Expo i `telefon-app`, dane przykładowe | aplikacja startuje w symulatorze, zrzuty jasny i ciemny, CI strony bez zmian |
 | M3 | **Ekran wzorcowy** na danych przykładowych: lista faktur i szczegół, dopracowane do checklisty; warianty D7 | Bartosz na swoim iPhonie mówi „to jest to”. Bez tego nie ma kolejnych ekranów |
-| M4 | Logowanie: e-mail i hasło, Google, 2FA, Face ID | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
-| M5 | API `app/api/mobile/v1` (szkielet, token, limity, audyt) i pierwsze trasy | testy tras na brak i zły token, RLS na bazie |
-| M6 | Faktury i skrzynka KSeF na prawdziwych danych | lista i szczegół z bazy, odświeżanie, stany ekranu |
-| M7 | Szybka faktura z wysyłką do KSeF (środowisko TEST) | faktura przyjęta przez KSeF TEST z telefonu |
-| M8 | Wydatek ze zdjęcia: skaner, OCR, sprawdzenie | wydatek zapisany ze skanu |
-| M9 | Należności, przypomnienia, PDF i udostępnianie, „Ten miesiąc” | zadania 4 do 6 z sekcji 3 działają |
-| M10 | Powiadomienia push (D9), logowanie Apple; wymaga płatnego konta | powiadomienie o nowej fakturze na telefonie |
-| M11 | Android: dopasowanie konwencji (sekcja 10 zasad) | checklista na emulatorze Androida |
-| M12 | Sklep: ikona, zrzuty, opisy, polityka i etykiety prywatności, konto dla recenzenta, beta TestFlight i zamknięty test Google | aplikacja zgłoszona do przeglądu |
+| M4 | **Pełny zakres na danych przykładowych** (D3): wszystkie sekcje strony według mapy 3a, pięć zakładek (D11), bloczek „Nowa faktura” (D7) | każdy ekran z 3a otwiera się w symulatorze, jasny, ciemny i duży tekst bez ucięć; przegląd kodu |
+| M5 | Logowanie: e-mail i hasło, Google, 2FA, Face ID | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
+| M6 | API `app/api/mobile/v1` (szkielet, token, limity, audyt) i pierwsze trasy | testy tras na brak i zły token, RLS na bazie |
+| M7 | Faktury i skrzynka KSeF na prawdziwych danych | lista i szczegół z bazy, odświeżanie, stany ekranu |
+| M8 | Szybka faktura z wysyłką do KSeF (środowisko TEST) | faktura przyjęta przez KSeF TEST z telefonu |
+| M9 | Wydatek ze zdjęcia: skaner, OCR, sprawdzenie | wydatek zapisany ze skanu |
+| M10 | Pozostałe ekrany z 3a na prawdziwych danych (należności, przypomnienia, PDF, księgowość, ustawienia) | każdy ekran z 3a czyta i zapisuje bazę |
+| M11 | Powiadomienia push (D9), logowanie Apple; wymaga płatnego konta | powiadomienie o nowej fakturze na telefonie |
+| M12 | Android: dopasowanie konwencji (sekcja 10 zasad) | checklista na emulatorze Androida |
+| M13 | Sklep: ikona, zrzuty, opisy, polityka i etykiety prywatności, konto dla recenzenta, beta TestFlight i zamknięty test Google | aplikacja zgłoszona do przeglądu |
 
 ---
 
@@ -210,8 +241,8 @@ częścią „gotowe” od M3.
 | Ryzyko | Co robimy |
 |---|---|
 | Odrzucenie przez Apple za „stronę w ramce” (4.2) | aplikacja natywna z funkcjami telefonu: skaner, Face ID, powiadomienia, udostępnianie |
-| Brak logowania Apple przy logowaniu Google (4.8) | M10, przed zgłoszeniem |
-| Brak spółki blokuje konta firmowe | M1 do M9 nie potrzebują płatnych kont |
+| Brak logowania Apple przy logowaniu Google (4.8) | M11, przed zgłoszeniem |
+| Brak spółki blokuje konta firmowe | M1 do M10 nie potrzebują płatnych kont |
 | Pamięć Maca | sekcja 0, punkt 4 |
 | Rozjazd logiki strony i aplikacji | trasy API wołają te same funkcje z `lib/`, schematy Zod wspólne |
 | „Ładne, ale nijakie” | wzorce, ekran wzorcowy z akceptacją Bartosza (M3), projektant (D6) |
@@ -220,9 +251,9 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M4: pełny zakres ekranów na danych przykładowych (D3 po
-zmianie 09.11.2026), zaczynając od spisu funkcji strony (sekcja 3a). Ekran
-wzorcowy M3 przyjęty przez wybór D7; D6 (projektant) dalej otwarta.
+**Następny krok:** Bartosz ogląda M4 na swoim iPhonie (zrzuty
+`docs/mobile/zrzuty/m4/`, obchód ekranów z mapy 3a) i daje uwagi albo „idź
+dalej”. Potem M5: logowanie. Otwarte: D4 (konta jako firma), D6 (projektant).
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -230,3 +261,4 @@ wzorcowy M3 przyjęty przez wybór D7; D6 (projektant) dalej otwarta.
 | 08.11.2026 | M1 | plan, `docs/mobile/ZASADY-DESIGNU.md`, hasło w `AGENTS.md`; decyzje D2, D3, D10, D11 | #489 |
 | 09.11.2026 | M2 | Expo SDK 58 w `mobile/` (własny workspace pnpm), 4 natywne zakładki, stos w każdej, lista i szczegół faktury, arkusz „Nowa faktura”, Koszty, Ten miesiąc, Konto na danych przykładowych; kolory semantyczne, style tekstu z Dynamic Type, skala odstępów; wyłączenia `mobile/` w tsconfig, eslint, Docker, knip; job CI „Mobile”; skille Expo i `telefon-app`; pierwszy build w Xcode na iPhone 18 Pro, zrzuty w `docs/mobile/zrzuty/m2/`. Strona: `pnpm run ci` i `pnpm build` zielone | #493 |
 | 09.11.2026 | M3 | ekran wzorcowy na danych przykładowych: podsumowanie „Do zapłaty”, natywny przełącznik Wszystkie/Do zapłaty, wiersz z podglądem i menu przy przytrzymaniu oraz przesunięciem „Zapłacona” (wibracje), szczegół z przyciskiem Liquid Glass, wspólny stan zapłaty, szczegół kosztu, warianty D7 A/B/C, bez atrap (alertów „w etapie”); Dynamic Type do AX5 (układ pionowy), iPhone 17e i 18 Pro Max, tryb ciemny; poprawki z porównania z Ustawieniami iOS 27; zrzuty `docs/mobile/zrzuty/m3/` | #502 |
+| 09.11.2026 | M4 | pełny zakres strony na telefonie (D3): 5 zakładek (Pulpit, Faktury, Koszty, Księgowość, Więcej), mapa 3a; Pulpit z wykresami (Swift Charts), przepływami, analizami i „Twój rok”; faktury: widoki Wystawione, Cykliczne, Po terminie, filtry, formularze zwykłej, korygującej, zaliczkowej i rozliczającej, edycja szkicu i poprawka odrzuconej, cykliczne, przypomnienia, e-mail; koszty: dodawanie (symulowany OCR), skrzynka KSeF, opis; księgowość: Ten miesiąc, KPiR, ewidencja, VAT i JPK, eksport, ustawienia podatkowe; Więcej: kontrahenci, import, Flo, 11 ekranów ustawień; D7 = bloczek pod sumą; formularze i kafle w układzie pionowym przy dużym tekście; 10 poprawek z przeglądu kodu; zrzuty `docs/mobile/zrzuty/m4/` | #PR |

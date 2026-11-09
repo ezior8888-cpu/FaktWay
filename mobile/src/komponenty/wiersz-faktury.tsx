@@ -43,7 +43,7 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
   );
 
   const tresc = (
-    <Link href={{ pathname: '/faktura/[id]', params: { id: f.id } }} asChild>
+    <Link href={{ pathname: '/faktury/[id]', params: { id: f.id } }} asChild>
       <Link.Trigger>
         <Pressable
           accessibilityLabel={`${f.kontrahent}, ${kwota(f.brutto)}, ${status.tekst}`}

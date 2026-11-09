@@ -35,9 +35,15 @@ export function EkranListy({ children, ...reszta }: ScrollViewProps & { children
   );
 }
 
-type SekcjaProps = { naglowek?: string; stopka?: string; children: ReactNode };
+type SekcjaProps = {
+  naglowek?: string;
+  stopka?: string;
+  /** Treść bez karty listy (wykres, kafle, kalendarz): sama rysuje swoje tło i marginesy. */
+  swobodna?: boolean;
+  children?: ReactNode;
+};
 
-export function Sekcja({ naglowek, stopka, children }: SekcjaProps) {
+export function Sekcja({ naglowek, stopka, swobodna, children }: SekcjaProps) {
   const kolory = useKolory();
   const wiersze = Children.toArray(children).filter(isValidElement);
   return (
@@ -47,14 +53,18 @@ export function Sekcja({ naglowek, stopka, children }: SekcjaProps) {
           {naglowek}
         </Tekst>
       ) : null}
-      <View style={[styles.karta, { backgroundColor: kolory.tloKomorki }]}>
-        {wiersze.map((w, i) => (
-          <Fragment key={w.key ?? i}>
-            {i > 0 ? <View style={[styles.separator, { backgroundColor: kolory.separator }]} /> : null}
-            {w}
-          </Fragment>
-        ))}
-      </View>
+      {swobodna ? (
+        children
+      ) : wiersze.length > 0 ? (
+        <View style={[styles.karta, { backgroundColor: kolory.tloKomorki }]}>
+          {wiersze.map((w, i) => (
+            <Fragment key={w.key ?? i}>
+              {i > 0 ? <View style={[styles.separator, { backgroundColor: kolory.separator }]} /> : null}
+              {w}
+            </Fragment>
+          ))}
+        </View>
+      ) : null}
       {stopka ? (
         <Tekst styl="footnote" kolor="etykietaDrugorzedna" style={styles.stopka}>
           {stopka}
@@ -79,6 +89,8 @@ type WierszProps = {
   ikonaKolor?: keyof Kolory;
   /** Strzałka w prawo: wiersz prowadzi do kolejnego ekranu ustawień. */
   strzalka?: boolean;
+  /** Znacznik wyboru po prawej, jak w systemowej liście jednokrotnego wyboru. */
+  zaznaczony?: boolean;
   /** Akcja niszcząca (np. „Wyloguj”): czerwony tekst, bez wartości. */
   niszczacy?: boolean;
   /** Tekst akcji w kolorze akcentu (np. „Oznacz jako zapłaconą”). */
@@ -99,6 +111,7 @@ export function Wiersz({
   ikona,
   ikonaKolor = 'akcent',
   strzalka,
+  zaznaczony,
   niszczacy,
   akcja,
   onPress,
@@ -108,7 +121,8 @@ export function Wiersz({
   const kolory = useKolory();
   const { fontScale } = useWindowDimensions();
   // Przy dużym tekście z ustawień wartość schodzi pod tytuł, żeby nic się nie ucinało.
-  const pionowo = fontScale >= SKALA_PIONOWA && Boolean(wartosc || wartoscPodpis);
+  const duzyTekst = fontScale >= SKALA_PIONOWA;
+  const pionowo = duzyTekst && Boolean(wartosc || wartoscPodpis);
   const tresc = (
     <>
       {ikona ? (
@@ -118,14 +132,14 @@ export function Wiersz({
         <Tekst
           styl="body"
           kolor={niszczacy ? 'blad' : akcja ? 'akcent' : 'etykieta'}
-          numberOfLines={2}>
+          numberOfLines={duzyTekst ? 5 : 2}>
           {tytul}
         </Tekst>
         {podtytul ? (
           <Tekst
             styl="subheadline"
             kolor="etykietaDrugorzedna"
-            numberOfLines={pionowo ? 4 : 2}
+            numberOfLines={pionowo ? 6 : 4}
             selectable={zaznaczalna}>
             {podtytul}
           </Tekst>
@@ -151,6 +165,9 @@ export function Wiersz({
         </View>
       ) : null}
       {prawaStrona}
+      {zaznaczony ? (
+        <SymbolView name="checkmark" size={17} weight="semibold" tintColor={kolory.akcent as string} style={styles.znacznik} />
+      ) : null}
       {strzalka ? (
         <SymbolView
           name="chevron.right"
@@ -178,6 +195,7 @@ export function Wiersz({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={etykietaDostepnosci}
+      accessibilityState={zaznaczony === undefined ? undefined : { selected: zaznaczony }}
       android_ripple={{ color: kolory.wypelnienie as string }}
       style={({ pressed }) => [
         styles.wiersz,
@@ -191,10 +209,10 @@ export function Wiersz({
 
 const styles = StyleSheet.create({
   tresc: { paddingBottom: ODSTEP.xxl },
-  sekcja: { marginTop: ODSTEP.xl, marginHorizontal: MARGINES },
-  naglowek: { marginBottom: ODSTEP.xs, marginLeft: ODSTEP.xxs },
-  stopka: { marginTop: ODSTEP.xs, marginHorizontal: MARGINES },
-  karta: { borderRadius: PROMIEN_SEKCJI, borderCurve: 'continuous', overflow: 'hidden' },
+  sekcja: { marginTop: ODSTEP.xl },
+  naglowek: { marginBottom: ODSTEP.xs, marginLeft: MARGINES + ODSTEP.xxs, marginRight: MARGINES },
+  stopka: { marginTop: ODSTEP.xs, marginHorizontal: MARGINES * 2 },
+  karta: { marginHorizontal: MARGINES, borderRadius: PROMIEN_SEKCJI, borderCurve: 'continuous', overflow: 'hidden' },
   // Jak w listach iOS 26 i nowszych: separator wcięty z obu stron (porównanie z Ustawieniami, M3).
   separator: { height: StyleSheet.hairlineWidth, marginHorizontal: MARGINES },
   wiersz: {
@@ -212,4 +230,5 @@ const styles = StyleSheet.create({
   prawaPionowa: { alignItems: 'flex-start', gap: ODSTEP.linia },
   wierszPionowy: { flexDirection: 'column', alignItems: 'stretch', gap: ODSTEP.xxs },
   strzalka: { width: 10, height: 14 },
+  znacznik: { width: 20, height: 20 },
 });
