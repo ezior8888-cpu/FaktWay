@@ -11,6 +11,7 @@ import { create } from 'xmlbuilder2';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
+import { documentAllowsVatDeduction } from '@/lib/expenses/vat-deduction-document';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
 
 import type { ExportExpense } from './data-fetcher';
@@ -176,19 +177,18 @@ function aggregateSales(invoices: readonly JpkInvoice[]): RateBucket {
 }
 
 /**
- * Dokumenty dające prawo do odliczenia VAT: faktura i faktura uproszczona.
- * Paragon bez NIP i „inne” — nie.
- */
-const VAT_DEDUCTIBLE_DOCUMENTS: ReadonlySet<string> = new Set(['invoice', 'simplified_invoice']);
-
-/**
  * Zakupy do ewidencji VAT: koszty uznane przez klienta, na dokumencie z prawem
  * do odliczenia, z niezerowym VAT do odliczenia (`vatDeductibleAmount`).
+ * Prawo do odliczenia z rodzaju i daty dokumentu: faktura tak, paragon bez
+ * NIP i „inne” nie, paragon z NIP tylko z datą do 31.12.2026
+ * (`documentAllowsVatDeduction`, krok 1.3 planu kompletnej aplikacji).
  */
 export function vatPurchases(expenses: readonly ExportExpense[]): ExportExpense[] {
   return expenses.filter(
     // `!== 0`, nie `> 0`: korekta zakupu „in minus” zmniejsza odliczenie (#68).
-    (e) => VAT_DEDUCTIBLE_DOCUMENTS.has(e.documentType) && e.vatDeductibleAmount !== 0,
+    (e) =>
+      documentAllowsVatDeduction({ documentType: e.documentType, issueDate: e.issueDate }) &&
+      e.vatDeductibleAmount !== 0,
   );
 }
 

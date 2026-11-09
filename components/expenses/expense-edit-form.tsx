@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
+import { costDocumentType, vatDeductionForDocument } from '@/lib/expenses/vat-deduction-document';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
 import { cn } from '@/lib/utils';
@@ -183,6 +184,13 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
     });
   };
 
+  // Krok 1.3: paragon z NIP z datą od 1.01.2027 nie daje odliczenia VAT. Data
+  // z formularza, bo klient może ją poprawić; bez VAT do odliczenia (np. firma
+  // zwolniona) nie ma czego tracić, więc informacji nie ma.
+  const vatRule = vatDeductionForDocument({ documentType: costDocumentType(expense), issueDate: form.issue_date });
+  const receiptNotice =
+    !vatRule.deductible && Number(expense.vat_deductible_amount ?? 0) !== 0 ? vatRule.notice : null;
+
   const reviewStatus = expense.is_reviewed ? 'reviewed' : 'unreviewed';
   const deductibleToggleDisabled =
     (foreignKsef && !hasKsefRate && !form.is_deductible) || (ksefCurrencyUnknown && !form.is_deductible);
@@ -245,6 +253,15 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
                 <span>Sprawdziłem XML, kurs i kwoty PLN; świadomie zatwierdzam ten wydatek.</span>
               </label>
             )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {receiptNotice ? (
+        <Alert className="border-amber-600/30">
+          <AlertTitle>{receiptNotice.title}</AlertTitle>
+          <AlertDescription>
+            <p>{receiptNotice.body}</p>
           </AlertDescription>
         </Alert>
       ) : null}

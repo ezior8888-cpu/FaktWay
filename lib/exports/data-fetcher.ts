@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { costDocumentType } from '@/lib/expenses/vat-deduction-document';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
@@ -197,7 +198,13 @@ async function fetchExpensesForExport(
     id: String(row.id),
     issueDate: String(row.issue_date),
     documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
-    documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+    // Paragon z NIP ze zdjęcia jest zapisany jako `invoice`; rodzaj z odczytu OCR (krok 1.3).
+    documentType: costDocumentType({
+      document_type: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+      source: typeof row.source === 'string' ? row.source : null,
+      ksef_invoice_id: typeof row.ksef_invoice_id === 'string' ? row.ksef_invoice_id : null,
+      ocr_extracted_data: row.ocr_extracted_data,
+    }),
     sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
     sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
     sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
