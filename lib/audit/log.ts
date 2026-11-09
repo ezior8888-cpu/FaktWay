@@ -1,6 +1,5 @@
 import { headers } from 'next/headers';
-import { clientIpFromHeaders } from '@/lib/auth/client-ip';
-import { isIpAddress } from '@/lib/auth/sessions/ip-prefix';
+import { trustedClientIp } from '@/lib/auth/client-ip';
 import { createAdminClient } from '@/lib/supabase/server';
 
 /**
@@ -16,8 +15,7 @@ async function readRequestClientHints(): Promise<{
 }> {
   try {
     const hdrs = await headers();
-    const candidate = clientIpFromHeaders(hdrs);
-    const ip = candidate && isIpAddress(candidate) ? candidate : null;
+    const ip = trustedClientIp(hdrs);
     const userAgent = hdrs.get('user-agent') ?? null;
     return { ip, userAgent };
   } catch {
