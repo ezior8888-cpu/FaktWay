@@ -1501,4 +1501,6 @@ maszynerię filtra albo wiedzę, Bartosz nadaje etykietę po ostatnim pushu.
 
 | 9.11.2026 | F9 i F8 (część): XSD na losowych danych i złote pliki JPK w PIT | #503 | otwarty, w stosie na #501 | `tests/filtr/xsd/jpk-pit.test.ts`: losowe JPK_EWP(4) i JPK_PKPIR(3) (polskie znaki, znaki specjalne XML, korekty, numery KSeF, koszty w kolumnach) przechodzą oficjalne XSD MF przez xmllint, 30 przypadków w PR i 400 w nocy (24 s); generator NIP poprawiony (kod urzędu bez „00”, jak wzorzec TNumerKSeF); `tests/filtr/zlote-pliki/`: pełne pliki JPK_EWP i JPK_PKPIR dla stałych danych (zmiana znaku widoczna w PR, chroni straż). Reszta F8 i F9 (przykłady ZUS i podatki.gov.pl poza istniejącymi testami, złote pliki V7M, FA i FA(3), testy walidatora na plikach zepsutych, czujki schematów JPK) czeka |
 
-**Następny krok:** reszta F9 (FA(3) i JPK_V7M na losowych danych) albo F6 (wyrocznia w czystym pokoju), gałąź w stosie na F9.
+| 9.11.2026 | F9 i F8 (część 2): FA(3) | (numer po otwarciu) | otwarty, w stosie na #503 | `tests/filtr/xsd/fa3.test.ts`: losowe faktury zwykłe (1-12 pozycji, stawki 23, 8, 5, 0 i zw z podstawą zwolnienia, ilości z częścią dziesiętną, znaki specjalne XML) przechodzą oficjalny XSD FA(3) i spełniają NZ-FA-01 (P_15 = Σ P_13_x + Σ P_14_x) oraz Σ P_13_x = Σ P_11; 25 w PR, 300 w nocy (10 s); złoty plik `tests/filtr/zlote-pliki/fa3-zwykla.xml` (sumy sprawdzone ręcznie). Dalej: KOR, ZAL, ROZ, JPK_V7M i JPK_FA |
+
+**Następny krok:** F6 (wyrocznia w czystym pokoju) albo F8/F9 dla korekt, zaliczek i JPK_V7M, gałąź w stosie na F9 część 2.
