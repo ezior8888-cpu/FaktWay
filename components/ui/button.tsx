@@ -45,9 +45,11 @@ const buttonVariantsCva = cva(
  * Klasy przycisku, już scalone przez `cn()` (tailwind-merge), także dla
  * `<Link>` i `<a>` w stylu przycisku. Sam cva zostawia obok siebie klasy
  * bazy i wariantu na tę samą właściwość: `border-transparent` przy
- * `border-border` (outline), `size-4` ikon przy `size-3` (xs). Tailwind
- * sortuje je po nazwie, więc w arkuszu wygrywa baza: link outline w jasnym
- * motywie nie miał ramki (16 miejsc, test `przycisk-link-ramka`).
+ * `border-border` (outline), `size-4` ikon przy `size-3` (xs). O wyniku
+ * decyduje kolejność reguł w arkuszu, nie w atrybucie `class`; Tailwind
+ * układa klasy jednej właściwości po nazwie i w tych parach baza wypadała
+ * później, więc wygrywała: link outline w jasnym motywie nie miał ramki
+ * (16 miejsc, test `przycisk-link-ramka`).
  */
 function buttonVariants(props?: Parameters<typeof buttonVariantsCva>[0]): string {
   return cn(buttonVariantsCva(props))
