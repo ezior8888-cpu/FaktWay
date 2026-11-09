@@ -312,7 +312,8 @@
       "testy": [
         "tests/unit/ksiegowosc-ewidencja.test.ts > kwota w EUR przeliczona do grosza",
         "tests/unit/ksiegowosc-ewidencja.test.ts > bez kursu: brak z nazwą faktury",
-        "tests/unit/ksiegowosc-kpir-dane.test.ts > koszt z KSeF w EUR bez przeglądu kursu"
+        "tests/unit/ksiegowosc-kpir-dane.test.ts > koszt z KSeF w EUR bez przeglądu kursu",
+        "tests/filtr/roznicowe/kurs-dzien.test.ts > każdy dzień 2026-2060: kurs z ostatniego dnia roboczego przed zdarzeniem"
       ],
       "parametry": [],
       "niezmienniki": [],
