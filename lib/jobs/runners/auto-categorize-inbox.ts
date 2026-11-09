@@ -17,6 +17,8 @@ import { nbpRateForCost } from '@/lib/nbp/client';
 import { costInPln, documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
+import { kolumnyPlatnosci } from '@/lib/expenses/platnosc-kosztu';
+import { wczytajWarunkiPlatnosciKsef, zapiszWarunkiNaKoszcie } from '@/lib/expenses/platnosc-kosztu-ksef';
 import { fa3Record, INBOX_PENDING_FLAG, markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { Database, Json } from '@/types/database';
@@ -246,9 +248,24 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     const xml = await step.run('archive-ksef-xml', () =>
       archiveInboxInvoiceXml({ tenantId, invoiceId, environment }));
 
-    // Koszt już jest, brakowało tylko XML: bez drugiego liczenia kategorii i bez AI.
+    // Krok 3.4 (koszty do zapłaty): termin, rachunek sprzedawcy i MPP z pliku
+    // w archiwum. Metadane skrzynki ich nie mają. Chwilowy błąd odczytu nie
+    // blokuje kosztu, ale zostawia znacznik: cron uzupełniający ponowi.
+    const platnosc = xml.archived || xml.reason === 'has-xml'
+      ? await step.run('read-payment-terms', () => wczytajWarunkiPlatnosciKsef(supabase, { tenantId, invoiceId }))
+      : null;
+    const xmlSettled = xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable';
+    const settled = xmlSettled && platnosc?.stan !== 'blad';
+
+    // Koszt już jest, brakowało tylko XML albo warunków płatności: bez drugiego
+    // liczenia kategorii i bez AI. Warunki dochodzą raz (`payment_terms IS NULL`).
     if (current.hasExpense) {
-      if (xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable') {
+      if (platnosc?.stan === 'odczytano') {
+        const { warunki } = platnosc;
+        await step.run('apply-payment-terms', () =>
+          zapiszWarunkiNaKoszcie(supabase, { tenantId, invoiceId, warunki }));
+      }
+      if (settled) {
         await closeInboxInvoice({ supabase, tenantId, invoiceId, step, logger });
       }
       return { success: true as const, skipped: 'expense-exists' as const };
@@ -439,6 +456,8 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
           categorization_method: categorization.method,
           categorization_confidence: categorization.confidence,
           is_reviewed: !needsCurrencyReview && categorization.confidence > 0.9,
+          // Kolumny 00177 (typy bazy dojdą po wgraniu migracji, AGENTS.md).
+          ...(platnosc?.stan === 'odczytano' ? kolumnyPlatnosci(platnosc.warunki, new Date().toISOString()) : {}),
         })
         .select('id')
         .single();
@@ -467,9 +486,8 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     // ponownie dla faktur, które tu nie doszły. Znacznik gaśnie dopiero, gdy
     // koszt istnieje (utworzony albo zastany wyżej) i XML jest w archiwum albo
     // nie jest potrzebny. Błąd pobrania XML zostawia znacznik — cron spróbuje
-    // ponownie, a koszt już jest.
-    const xmlSettled = xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable';
-    if (xmlSettled) {
+    // ponownie, a koszt już jest. Tak samo chwilowy błąd odczytu warunków płatności.
+    if (settled) {
       await closeInboxInvoice({ supabase, tenantId, invoiceId, step, logger });
     }
 
