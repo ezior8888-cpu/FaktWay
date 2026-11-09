@@ -23,6 +23,7 @@
  * reszta po zaliczkach nie jest więc liczona (niedoszacowanie).
  */
 
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 export const LIMIT_KASY_PLN = 20000;
 /** Od tego udziału limitu licznik mówi „blisko”. */
 export const LIMIT_KASY_BLISKO = 0.8;
@@ -55,7 +56,7 @@ export interface WynikLimituKasy {
   exceededMonth: string | null;
 }
 
-const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const round2 = (n: number) => roundToCents(n);
 
 function osobaPrywatna(s: SprzedazDlaLimitu): boolean {
   if (s.isB2c === true) return true;
