@@ -58,15 +58,23 @@ function database(initialInvoices: StoredInvoice[] = [], initialLineInvoiceIds: 
       let countRequested = false;
       const equals = new Map<string, unknown>();
       const ins = new Map<string, unknown[]>();
+      // Odczyty duplikatów idą stronami po `id` (sesja 32 planu skalowania): gt / order / limit jak w bazie.
+      const greater = new Map<string, unknown>();
+      let sortById = false;
+      let limitN: number | null = null;
 
       const matches = (row: Record<string, unknown>) =>
         [...equals].every(([field, value]) => row[field] === value) &&
-        [...ins].every(([field, values]) => values.includes(row[field]));
+        [...ins].every(([field, values]) => values.includes(row[field])) &&
+        [...greater].every(([field, value]) => String(row[field]) > String(value));
 
       const result = () => {
         if (table === 'invoices') {
           if (operation === 'select') {
-            return { data: invoices.filter((row) => matches(row)), error: null, count: null };
+            let rows = invoices.filter((row) => matches(row));
+            if (sortById) rows = [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+            if (limitN !== null) rows = rows.slice(0, limitN);
+            return { data: rows, error: null, count: null };
           }
           if (operation === 'insert') {
             const row = inserted as Record<string, unknown>;
@@ -115,6 +123,9 @@ function database(initialInvoices: StoredInvoice[] = [], initialLineInvoiceIds: 
         },
         eq: (field: string, value: unknown) => { equals.set(field, value); return query; },
         in: (field: string, values: unknown[]) => { ins.set(field, values); return query; },
+        gt: (field: string, value: unknown) => { greater.set(field, value); return query; },
+        order: (field: string) => { sortById = field === 'id'; return query; },
+        limit: (n: number) => { limitN = n; return query; },
         insert: (rows: Record<string, unknown> | Record<string, unknown>[]) => {
           operation = 'insert'; inserted = rows; return query;
         },

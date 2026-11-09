@@ -7,6 +7,7 @@
  * kontrahenci, produkty, znaczniki czasu i lista ostrzeżeń.
  */
 
+import { readAllByIdInList } from '@/lib/pagination/in-list';
 import { KeysetPageError, readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
@@ -218,19 +219,28 @@ async function upsertContractors(
 
   if (contractorsMap.size === 0) return { created, updated };
 
-  const nips = Array.from(contractorsMap.keys());
-  const { data: existing, error: selErr } = await supabase
-    .from('contractors')
-    .select('id, nip, name, email, address')
-    .eq('tenant_id', tenantId)
-    .in('nip', nips);
-
-  if (selErr) {
-    warnings.push(`Kontrahenci: odczyt — ${selErr.message}`);
+  // NIP-y z pliku paczkami po 100, każda stronami po `id` (sesja 32 planu
+  // skalowania, F-089): cała lista w jednym `.in()` to adres GET, który
+  // bramka odrzuca. Błąd którejkolwiek strony = nic nie zapisujemy (jak
+  // dotąd przy błędzie odczytu) — częściowa lista dałaby INSERT istniejących.
+  let existing: Array<{ id: string; nip: string; name: string; email: string | null; address: Json | null }>;
+  try {
+    existing = await readAllByIdInList('Kontrahenci: odczyt', Array.from(contractorsMap.keys()), (nips, afterId, limit) => {
+      let query = supabase
+        .from('contractors')
+        .select('id, nip, name, email, address')
+        .eq('tenant_id', tenantId)
+        .in('nip', nips);
+      if (afterId) query = query.gt('id', afterId);
+      return query.order('id', { ascending: true }).limit(limit);
+    });
+  } catch (error) {
+    if (!(error instanceof KeysetPageError)) throw error;
+    warnings.push(`Kontrahenci: odczyt — ${error.reason}`);
     return { created: 0, updated: 0 };
   }
 
-  const existingMap = new Map(existing?.map((c) => [c.nip, c]) ?? []);
+  const existingMap = new Map(existing.map((c) => [c.nip, c]));
 
   const rowsToInsert = Array.from(contractorsMap.values()).filter((s) => !existingMap.has(s.nip));
 
@@ -462,16 +472,31 @@ async function insertInvoices(
     matches.add(ksefNumber);
     existingNumbers.set(key, matches);
   };
+  // Odczyty duplikatów paczkami po 100 wartości, każda stronami po `id`
+  // (sesja 32 planu skalowania, F-089): jedno `.in()` z całą listą z pliku
+  // to adres, który bramka odrzuca, a jedna odpowiedź ma najwyżej 1000
+  // wierszy — numer zakupu nie jest unikalny (00120: dwóch sprzedawców może
+  // wystawić FV/1), więc paczka może dopasować więcej. Błąd którejkolwiek
+  // strony przerywa import przed zapisem faktur (jak dotąd przy błędzie
+  // odczytu), nigdy „brak duplikatu” z niepełnej listy.
   if (numbers.length > 0) {
-    const { data: existingNums, error: exNumErr } = await supabase
-      .from('invoices')
-      .select('internal_number, seller_nip, issue_date, ksef_number')
-      .eq('tenant_id', tenantId)
-      .eq('direction', invoiceDirection)
-      .in('internal_number', numbers);
-
-    if (exNumErr) throw new Error(`Faktury: odczyt duplikatów (numer) — ${exNumErr.message}`);
-    for (const row of existingNums ?? []) {
+    let existingNums: Array<{ id: string; internal_number: string | null; seller_nip: string | null; issue_date: string; ksef_number: string | null }>;
+    try {
+      existingNums = await readAllByIdInList('Faktury: odczyt duplikatów (numer)', numbers, (values, afterId, limit) => {
+        let query = supabase
+          .from('invoices')
+          .select('id, internal_number, seller_nip, issue_date, ksef_number')
+          .eq('tenant_id', tenantId)
+          .eq('direction', invoiceDirection)
+          .in('internal_number', values);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
+    } catch (error) {
+      if (!(error instanceof KeysetPageError)) throw error;
+      throw new Error(`Faktury: odczyt duplikatów (numer) — ${error.reason}`);
+    }
+    for (const row of existingNums) {
       if (row.internal_number?.trim()) {
         rememberNumber(
           numberKey(row.internal_number.trim(), row.seller_nip, row.issue_date),
@@ -493,18 +518,26 @@ async function insertInvoices(
   };
   const existingKsef = new Map<string, ExistingKsefInvoice[]>();
   if (ksefNumbers.length > 0) {
-    let query = supabase
-      .from('invoices')
-      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin, stored_annotations:fa3_data->annotations')
-      .eq('tenant_id', tenantId)
-      .eq('direction', invoiceDirection);
-    if (invoiceDirection === 'incoming' && ksefEnvironment) {
-      query = query.eq('ksef_environment', ksefEnvironment);
+    let ksefExisting: Array<ExistingKsefInvoice & { ksef_number: string | null }>;
+    try {
+      ksefExisting = await readAllByIdInList('Faktury: odczyt duplikatów (ksef)', ksefNumbers, (values, afterId, limit) => {
+        let query = supabase
+          .from('invoices')
+          .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin, stored_annotations:fa3_data->annotations')
+          .eq('tenant_id', tenantId)
+          .eq('direction', invoiceDirection);
+        if (invoiceDirection === 'incoming' && ksefEnvironment) {
+          query = query.eq('ksef_environment', ksefEnvironment);
+        }
+        query = query.in('ksef_number', values);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
+    } catch (error) {
+      if (!(error instanceof KeysetPageError)) throw error;
+      throw new Error(`Faktury: odczyt duplikatów (ksef) — ${error.reason}`);
     }
-    const { data: ksefExisting, error: exKErr } = await query.in('ksef_number', ksefNumbers);
-
-    if (exKErr) throw new Error(`Faktury: odczyt duplikatów (ksef) — ${exKErr.message}`);
-    for (const row of ksefExisting ?? []) {
+    for (const row of ksefExisting) {
       const ksefNumber = row.ksef_number?.trim();
       if (ksefNumber) {
         const matches = existingKsef.get(ksefNumber) ?? [];
