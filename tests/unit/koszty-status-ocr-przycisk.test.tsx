@@ -27,8 +27,9 @@ vi.mock('next/navigation', () => ({ useRouter: () => mocks.router }));
 vi.mock('sonner', () => ({ toast: mocks.toast }));
 vi.mock('@/app/actions/expenses', () => ({
   getOcrJobStatusAction: mocks.getStatus,
-  uploadExpensePhotoAction: mocks.upload,
 }));
+// Wgranie: trasa `/api/uploads/expense` (plan skalowania, sesja 31).
+vi.mock('@/lib/uploads/client', () => ({ postExpenseUpload: mocks.upload }));
 
 import { CaptureButton } from '@/components/expenses/capture-button';
 

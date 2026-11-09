@@ -20,7 +20,9 @@ export type RateLimitBucket =
   | 'passkey_login_options'
   | 'passkey_login_verify'
   | 'passkey_manage'
-  | 'ksef_inbox_check';
+  | 'ksef_inbox_check'
+  /** Wgrania plików (koszt, import), klucz `rodzaj:firma:osoba` — `lib/uploads/server.ts`. */
+  | 'file_upload';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

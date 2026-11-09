@@ -6,9 +6,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/lib/supabase/auth-context', () => ({
-  requireUserAndActiveOrg: async () => ({ user: { id: 'u-1' }, tenantId: 'ten-1' }),
-}));
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
@@ -39,14 +36,20 @@ vi.mock('@/lib/storage/expenses', async (orig) => ({
   deleteExpensePhoto: vi.fn(),
 }));
 
-import { uploadExpensePhotoAction } from '@/app/actions/expenses';
+import { acceptExpenseDocument } from '@/lib/expenses/accept-upload';
 
 /**
  * AUD-105: upload zdjęcia kosztu przyjmował dowolny plik i zapisywał go
  * z typem podanym przez przeglądarkę. Teraz liczy się zawartość pliku:
  * tylko formaty, które czyta OCR (JPG, PNG, GIF, WEBP, PDF), zapisane
  * z typem wykrytym po sygnaturze.
+ *
+ * Od sesji 31 planu skalowania ciało dawnej akcji to `acceptExpenseDocument`
+ * (woła je trasa `/api/uploads/expense` i `/share-target` po bramce sesji).
  */
+
+const upload = (fd: FormData) =>
+  acceptExpenseDocument({ userId: 'u-1', tenantId: 'ten-1', file: fd.get('photo') as File });
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46]);
@@ -72,7 +75,7 @@ describe('zdjęcie kosztu — typ pliku z zawartości (AUD-105)', () => {
     ['PDF', PDF, 'application/pdf'],
     ['WEBP', WEBP, 'image/webp'],
   ])('%s przyjęty i zapisany z typem z sygnatury', async (_opis, bytes, mime) => {
-    const out = await uploadExpensePhotoAction(form(bytes, ''));
+    const out = await upload(form(bytes, ''));
 
     expect(out).toMatchObject({ success: true });
     expect(mocks.uploads).toEqual([{ mime }]);
@@ -80,7 +83,7 @@ describe('zdjęcie kosztu — typ pliku z zawartości (AUD-105)', () => {
   });
 
   it('HTML podpisany jako image/png — odrzucony, bez zapisu i bez joba', async () => {
-    const out = await uploadExpensePhotoAction(form(HTML, 'image/png', 'faktura.png'));
+    const out = await upload(form(HTML, 'image/png', 'faktura.png'));
 
     expect(out).toMatchObject({ success: false });
     expect((out as { error: string }).error).toMatch(/JPG|PDF/);
@@ -89,7 +92,7 @@ describe('zdjęcie kosztu — typ pliku z zawartości (AUD-105)', () => {
   });
 
   it('typ z przeglądarki nie wygrywa z zawartością (JPG podpisany jako PDF)', async () => {
-    await uploadExpensePhotoAction(form(JPG, 'application/pdf'));
+    await upload(form(JPG, 'application/pdf'));
 
     expect(mocks.uploads).toEqual([{ mime: 'image/jpeg' }]);
   });
