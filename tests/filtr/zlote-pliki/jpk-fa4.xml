@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JPK xmlns="http://jpk.mf.gov.pl/wzor/2022/02/17/02171/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2018/08/24/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="JPK_FA (4)" wersjaSchemy="1-0">JPK_FA</KodFormularza>
+    <WariantFormularza>4</WariantFormularza>
+    <CelZlozenia>1</CelZlozenia>
+    <DataWytworzeniaJPK>2026-10-01T08:00:00.000Z</DataWytworzeniaJPK>
+    <DataOd>2026-09-01</DataOd>
+    <DataDo>2026-09-30</DataDo>
+    <KodUrzedu>1433</KodUrzedu>
+  </Naglowek>
+  <Podmiot1>
+    <IdentyfikatorPodmiotu>
+      <NIP>1234567890</NIP>
+      <PelnaNazwa>ACME sp. z o.o.</PelnaNazwa>
+    </IdentyfikatorPodmiotu>
+    <AdresPodmiotu>
+      <etd:KodKraju>PL</etd:KodKraju>
+      <etd:Wojewodztwo>MAZOWIECKIE</etd:Wojewodztwo>
+      <etd:Powiat>Warszawa</etd:Powiat>
+      <etd:Gmina>Mokotów</etd:Gmina>
+      <etd:Ulica>ul. Puławska</etd:Ulica>
+      <etd:NrDomu>12</etd:NrDomu>
+      <etd:NrLokalu>3</etd:NrLokalu>
+      <etd:Miejscowosc>Warszawa</etd:Miejscowosc>
+      <etd:KodPocztowy>02-566</etd:KodPocztowy>
+    </AdresPodmiotu>
+  </Podmiot1>
+  <Faktura>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-09-10</P_1>
+    <P_2A>FV/1</P_2A>
+    <P_3A>Klient Sp. z o.o.</P_3A>
+    <P_3B>ul. Klienta 10, 02-001 Warszawa</P_3B>
+    <P_3C>ACME sp. z o.o.</P_3C>
+    <P_3D>ul. Puławska 12/3, 02-566 Warszawa</P_3D>
+    <P_4B>1234567890</P_4B>
+    <P_5B>1234567890</P_5B>
+    <P_13_1>1000.00</P_13_1>
+    <P_14_1>230.01</P_14_1>
+    <P_13_2>100.00</P_13_2>
+    <P_14_2>8.00</P_14_2>
+    <P_15>1338.01</P_15>
+    <P_16>true</P_16>
+    <P_17>false</P_17>
+    <P_18>false</P_18>
+    <P_18A>true</P_18A>
+    <P_19>false</P_19>
+    <P_20>false</P_20>
+    <P_21>false</P_21>
+    <P_22>false</P_22>
+    <P_23>false</P_23>
+    <P_106E_2>false</P_106E_2>
+    <P_106E_3>false</P_106E_3>
+    <RodzajFaktury>VAT</RodzajFaktury>
+  </Faktura>
+  <Faktura>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-09-10</P_1>
+    <P_2A>FV/2</P_2A>
+    <P_3A>Klient Sp. z o.o.</P_3A>
+    <P_3B>ul. Klienta 10, 02-001 Warszawa</P_3B>
+    <P_3C>ACME sp. z o.o.</P_3C>
+    <P_3D>ul. Puławska 12/3, 02-566 Warszawa</P_3D>
+    <P_4B>1234567890</P_4B>
+    <P_5B>1234567890</P_5B>
+    <P_13_7>500.00</P_13_7>
+    <P_15>500.00</P_15>
+    <P_16>false</P_16>
+    <P_17>false</P_17>
+    <P_18>false</P_18>
+    <P_18A>false</P_18A>
+    <P_19>true</P_19>
+    <P_19A>art. 113 ust. 1 ustawy o VAT</P_19A>
+    <P_20>false</P_20>
+    <P_21>false</P_21>
+    <P_22>false</P_22>
+    <P_23>false</P_23>
+    <P_106E_2>false</P_106E_2>
+    <P_106E_3>false</P_106E_3>
+    <RodzajFaktury>VAT</RodzajFaktury>
+  </Faktura>
+  <Faktura>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-09-10</P_1>
+    <P_2A>FV/3</P_2A>
+    <P_3C>ACME sp. z o.o.</P_3C>
+    <P_3D>ul. Puławska 12/3, 02-566 Warszawa</P_3D>
+    <P_4B>1234567890</P_4B>
+    <P_13_4>400.00</P_13_4>
+    <P_14_4>0.00</P_14_4>
+    <P_13_5>200.00</P_13_5>
+    <P_13_6>100.00</P_13_6>
+    <P_15>700.00</P_15>
+    <P_16>false</P_16>
+    <P_17>false</P_17>
+    <P_18>true</P_18>
+    <P_18A>false</P_18A>
+    <P_19>false</P_19>
+    <P_20>false</P_20>
+    <P_21>false</P_21>
+    <P_22>false</P_22>
+    <P_23>false</P_23>
+    <P_106E_2>false</P_106E_2>
+    <P_106E_3>false</P_106E_3>
+    <RodzajFaktury>VAT</RodzajFaktury>
+  </Faktura>
+  <Faktura>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-09-10</P_1>
+    <P_2A>ZAL/1</P_2A>
+    <P_3A>Klient Sp. z o.o.</P_3A>
+    <P_3B>ul. Klienta 10, 02-001 Warszawa</P_3B>
+    <P_3C>ACME sp. z o.o.</P_3C>
+    <P_3D>ul. Puławska 12/3, 02-566 Warszawa</P_3D>
+    <P_4B>1234567890</P_4B>
+    <P_5B>1234567890</P_5B>
+    <P_13_1>1000.00</P_13_1>
+    <P_14_1>230.00</P_14_1>
+    <P_15>1230.00</P_15>
+    <P_16>false</P_16>
+    <P_17>false</P_17>
+    <P_18>false</P_18>
+    <P_18A>false</P_18A>
+    <P_19>false</P_19>
+    <P_20>false</P_20>
+    <P_21>false</P_21>
+    <P_22>false</P_22>
+    <P_23>false</P_23>
+    <P_106E_2>false</P_106E_2>
+    <P_106E_3>false</P_106E_3>
+    <RodzajFaktury>ZAL</RodzajFaktury>
+  </Faktura>
+  <Faktura>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-09-10</P_1>
+    <P_2A>ROZ/1</P_2A>
+    <P_3A>Klient Sp. z o.o.</P_3A>
+    <P_3B>ul. Klienta 10, 02-001 Warszawa</P_3B>
+    <P_3C>ACME sp. z o.o.</P_3C>
+    <P_3D>ul. Puławska 12/3, 02-566 Warszawa</P_3D>
+    <P_4B>1234567890</P_4B>
+    <P_5B>1234567890</P_5B>
+    <P_13_1>3500.00</P_13_1>
+    <P_14_1>805.00</P_14_1>
+    <P_15>4305.00</P_15>
+    <P_16>false</P_16>
+    <P_17>false</P_17>
+    <P_18>false</P_18>
+    <P_18A>false</P_18A>
+    <P_19>false</P_19>
+    <P_20>false</P_20>
+    <P_21>false</P_21>
+    <P_22>false</P_22>
+    <P_23>false</P_23>
+    <P_106E_2>false</P_106E_2>
+    <P_106E_3>false</P_106E_3>
+    <RodzajFaktury>VAT</RodzajFaktury>
+    <NrFaZaliczkowej>ZAL/1, ZAL/2</NrFaZaliczkowej>
+  </Faktura>
+  <FakturaCtrl>
+    <LiczbaFaktur>5</LiczbaFaktur>
+    <WartoscFaktur>8073.01</WartoscFaktur>
+  </FakturaCtrl>
+  <FakturaWiersz>
+    <P_2B>FV/1</P_2B>
+    <P_7>Projekt</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>1000.00</P_9A>
+    <P_11>1000.00</P_11>
+    <P_12>23</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>FV/1</P_2B>
+    <P_7>Książka</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>100.00</P_9A>
+    <P_11>100.00</P_11>
+    <P_12>8</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>FV/2</P_2B>
+    <P_7>Szkolenie</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>2.5</P_8B>
+    <P_9A>200.00</P_9A>
+    <P_11>500.00</P_11>
+    <P_12>zw</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>FV/3</P_2B>
+    <P_7>Złom</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>400.00</P_9A>
+    <P_11>400.00</P_11>
+    <P_12>oo</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>FV/3</P_2B>
+    <P_7>Usługa w DE</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>200.00</P_9A>
+    <P_11>200.00</P_11>
+    <P_12>np</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>FV/3</P_2B>
+    <P_7>Eksport</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>100.00</P_9A>
+    <P_11>100.00</P_11>
+    <P_12>0</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>ZAL/1</P_2B>
+    <P_7>Zaliczka: strona WWW</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>1000.00</P_9A>
+    <P_11>1000.00</P_11>
+    <P_12>23</P_12>
+  </FakturaWiersz>
+  <FakturaWiersz>
+    <P_2B>ROZ/1</P_2B>
+    <P_7>Strona WWW</P_7>
+    <P_8A>szt.</P_8A>
+    <P_8B>1</P_8B>
+    <P_9A>5000.00</P_9A>
+    <P_11>5000.00</P_11>
+    <P_12>23</P_12>
+  </FakturaWiersz>
+  <FakturaWierszCtrl>
+    <LiczbaWierszyFaktur>8</LiczbaWierszyFaktur>
+    <WartoscWierszyFaktur>8300.00</WartoscWierszyFaktur>
+  </FakturaWierszCtrl>
+</JPK>
