@@ -32,7 +32,7 @@ import {
   type Fa3Markers,
   type MarginScheme,
 } from '@/lib/xml/fa3-annotations';
-import { roundToCents, summarizeVatPerRate } from '@/lib/xml/invoice-calculator';
+import { differenceSummaries, roundToCents, summarizeVatPerRate } from '@/lib/xml/invoice-calculator';
 import { SUPPORT_EMAIL } from '@/lib/site';
 import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 
@@ -137,6 +137,14 @@ export interface JpkInvoice {
   // Korekty
   correctedInvoiceNumber?: string;
   correctionReason?: string;
+  /**
+   * KOR „przed/po”: oba stany pozycji (z `special_data.correctionData`).
+   * Pozycje zapisane na wierszu korekty to stan PO, więc kwoty JPK liczy się
+   * z różnicy stanów, tak jak P_13/P_14 korekty w KSeF (S-01).
+   */
+  correctionStates?: { before: JpkInvoiceLine[]; after: JpkInvoiceLine[] };
+  /** KOR „przed/po” bez zapisanych stanów: JPK odmawia z nazwą dokumentu, zamiast wykazać stan po (S-01). */
+  correctionStatesMissing?: boolean;
 
   // Numer KSeF (informacyjnie)
   ksefNumber?: string;
@@ -484,10 +492,22 @@ export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
       !inv.importedTotalsUnknown,
     );
   }
+  if (inv.invoiceType === 'correction' && inv.correctionStatesMissing) {
+    throw new JpkDocumentNotSupportedError(
+      inv.invoiceNumber,
+      inv.ksefNumber,
+      'to korekta „przed/po” bez zapisanych stanów przed i po korekcie, więc FaktWay nie wykaże jej różnicy w JPK.',
+    );
+  }
   const byRate =
     inv.invoiceType === 'final'
       ? settlementVatSummaries(items, inv.advanceSettlement ?? [])
-      : summarizeVatPerRate(items);
+      : inv.invoiceType === 'correction' && inv.correctionStates
+        ? differenceSummaries(
+            inv.correctionStates.before.map((line) => toLineItem(line, inv)),
+            inv.correctionStates.after.map((line) => toLineItem(line, inv)),
+          )
+        : summarizeVatPerRate(items);
 
   const rates = byRate
     .map((s) => ({ rate: String(s.rate), net: s.netSum, vat: s.vatSum }))
