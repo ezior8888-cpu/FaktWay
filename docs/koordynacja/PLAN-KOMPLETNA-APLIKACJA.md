@@ -1461,9 +1461,15 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 8.11.2026 | plan: wzorce | #485 | do zatwierdzenia | na prośbę sesji zlecającej: przy 51 krokach z ryzykiem wzorzec do sprawdzenia wyniku i czego brakuje (według notatki „Źródła prawdy”), tabela wzorców według obszaru (8.1) i lista funkcji bez wzorca jako ryzyko wprost (8.2) |
 | 8.11.2026 | decyzje z sekcji 6 | #485 | przyjęte | Bartosz: „tak przyjmuje” na pytanie o rekomendacje z sekcji 6; przyjęte wszystkie (P1-P6, D1-D11) |
 | 9.11.2026 | 0.1 | #485 | gotowe do scalenia | hasło w `AGENTS.md`; pytania 7-17 w `PYTANIA-DO-PRAWNIKA.md`; arkusz G15-G30 w `ZLOTE-PRZYPADKI-2.md` (puste wyniki do policzenia przez księgową); szkic rejestru przepisów w `REJESTR-PRZEPISOW-KOMPLETNA.md` (44 wpisy, pola rejestru żelaznego filtra) |
+| 9.11.2026 | niespójność z 2.6: cennik | #487 | gotowe do scalenia | sesja „cennik”: cennik, pomoc, komunikaty limitu i karta FLO bez obietnicy ręcznego wpisu kosztu; test czerwony przed poprawką; CI zielone |
+| 9.11.2026 | 1.4, część 1 | #498 | gotowe do scalenia (D11) | tytuł przelewu z numerem KSeF w PDF faktury, mailu, przypomnieniach 1-3, wezwaniu i na ekranie faktury; przy MPP sam numer KSeF; najwyżej 140 znaków; CI zielone; identyfikator zbiorczy w części 2 |
+| 9.11.2026 | 8.5, część 1 | #506 | gotowe do scalenia | zalogowane urządzenia, wylogowanie na odległość, historia logowań; migracja 00174 przed wdrożeniem; mail o nowym urządzeniu w części 2; ustalenia w PR (limit czasu sesji GoTrue do decyzji Bartosza) |
+| 9.11.2026 | 1.2, część 1 | #509 | gotowe do scalenia (D11) | faktura do paragonu: formularz, FA(3) z `FP`, PDF, widok; KSeF TEST przyjął (scenariusz 14 w teście tygodniowym); moduł księgowości i JPK odmawiają przy FP do części 2; bez migracji; CI zielone |
+| 9.11.2026 | 3.1 | #510 | gotowe do scalenia | wpłaty częściowe z historią i cofaniem (rozszerzona tabela `payments`); migracja 00176 przed wdrożeniem; CI zielone; dalej zdarzenie o wpłacie (8.1) i wyciąg (3.2) |
 
-**Następny krok:** krok 1.1 prowadzi plan „zero zgubionych faktur” (sesje C1-C4,
-tor Igora), więc ta sesja bierze pozostałe kroki etapu 1: 1.4 (numer KSeF
-w tytule przelewu), potem 1.2 (faktura do paragonu), 1.6 i 1.3. Równolegle,
-w innych plikach: 8.5 (sesje i historia logowań, R0). Kroki R1 powstają jako PR
-według protokołu z kartą zmiany prawnej; o scaleniu decyduje Bartosz według D11.
+**Następny krok:** 1.3, część 1 (paragon z NIP od 2027 r. bez odliczenia VAT,
+PR w toku). Potem: 1.2 część 2 (FP w JPK i ze zdjęcia paragonu), 1.4 część 2
+(identyfikator zbiorczy), 8.1 po #510 (zdarzenie o wpłacie i push „Otrzymana
+płatność”), 1.6. Kroki w formularzu faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509,
+bo zmieniają te same pliki. #506 i #510 zmieniają rejestr migracji i listę testów
+RLS: scalać zbiorczo (`./scripts/ops/zloz-scalenie.sh`).
