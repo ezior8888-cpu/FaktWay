@@ -41,7 +41,8 @@
         "tests/unit/ksiegowosc-kalendarz.test.ts > ryczałt, zaliczka i ZUS za",
         "tests/unit/ksiegowosc-kalendarz.test.ts > JPK_V7M i VAT za",
         "tests/unit/ksiegowosc-kalendarz.test.ts > termin nominalny zostaje obok faktycznego",
-        "tests/unit/ksiegowosc-parametry.test.ts > dni miesiąca: 20 dla ryczałtu"
+        "tests/unit/ksiegowosc-parametry.test.ts > dni miesiąca: 20 dla ryczałtu",
+        "tests/filtr/roznicowe/terminy.test.ts > terminy za każdy miesiąc 2026-2060"
       ],
       "parametry": [],
       "niezmienniki": [
@@ -95,7 +96,9 @@
       "testy": [
         "tests/unit/ksiegowosc-kalendarz.test.ts > przesunięcie zawsze do przodu",
         "tests/unit/ksiegowosc-kalendarz.test.ts > Wigilia jest dniem wolnym od 2025 r.",
-        "tests/unit/ksiegowosc-kalendarz.test.ts > Wielkanoc i święta ruchome 2027"
+        "tests/unit/ksiegowosc-kalendarz.test.ts > Wielkanoc i święta ruchome 2027",
+        "tests/filtr/roznicowe/terminy.test.ts > każdy dzień 2011-2060",
+        "tests/filtr/roznicowe/terminy.test.ts > święta ustawowe w latach 2011-2100"
       ],
       "parametry": [],
       "niezmienniki": [
