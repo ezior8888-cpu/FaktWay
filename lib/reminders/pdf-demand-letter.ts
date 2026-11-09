@@ -3,6 +3,8 @@
 
 import PDFDocument from 'pdfkit';
 
+import { registerPdfFonts } from '@/lib/pdf/fonts';
+
 /**
  * Rekompensata za koszty odzyskiwania należności (art. 10 ust. 1 ustawy
  * o przeciwdziałaniu nadmiernym opóźnieniom w transakcjach handlowych):
@@ -99,15 +101,17 @@ export async function generateDemandLetterPdf(
       });
 
       const chunks: Buffer[] = [];
+      // S-09: wbudowane fonty pdfkit nie mają polskich znaków; fonty jak na fakturze.
+      registerPdfFonts(doc);
       doc.on('data', (chunk) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
       // ============== HEADER (sprzedawca po lewej) ==============
-      doc.fontSize(10).font('Helvetica-Bold').text(data.sellerName, 60, 60);
+      doc.fontSize(10).font('bold').text(data.sellerName, 60, 60);
 
       doc
-        .font('Helvetica')
+        .font('body')
         .fontSize(9)
         .text(data.sellerAddress)
         .text(`NIP: ${data.sellerNip}`);
@@ -123,11 +127,11 @@ export async function generateDemandLetterPdf(
       doc.moveDown(3);
       doc
         .fontSize(11)
-        .font('Helvetica-Bold')
+        .font('bold')
         .text(data.buyerName, 350, doc.y, { align: 'right' });
 
       doc
-        .font('Helvetica')
+        .font('body')
         .fontSize(10)
         .text(data.buyerAddress, { align: 'right' });
 
@@ -139,18 +143,18 @@ export async function generateDemandLetterPdf(
       doc.moveDown(4);
       doc
         .fontSize(16)
-        .font('Helvetica-Bold')
+        .font('bold')
         .fillColor('#000')
         .text('PRZEDSĄDOWE WEZWANIE DO ZAPŁATY', { align: 'center' });
 
-      doc.moveDown(0.3).fontSize(10).font('Helvetica-Oblique').fillColor('#666').text(
+      doc.moveDown(0.3).fontSize(10).font('body').fillColor('#666').text(
         `dotyczy faktury VAT nr ${data.invoiceNumber} z dnia ${formatDate(data.issueDate)}`,
         { align: 'center' },
       );
 
       // ============== TREŚĆ ==============
       doc.moveDown(2);
-      doc.fillColor('#000').font('Helvetica').fontSize(11);
+      doc.fillColor('#000').font('body').fontSize(11);
 
       const paragraph1 = demandLetterOpening(data.invoiceNumber);
 
@@ -187,7 +191,7 @@ export async function generateDemandLetterPdf(
       doc.strokeColor('#666666').lineWidth(1).moveTo(60, doc.y).lineTo(535, doc.y).stroke();
 
       doc.moveDown(0.3);
-      doc.fontSize(13).font('Helvetica-Bold').text(
+      doc.fontSize(13).font('bold').text(
         `POZOSTAŁA KWOTA DO ZAPŁATY: ${data.amountDue.toFixed(2)} PLN`,
         { align: 'right' },
       );
@@ -201,7 +205,7 @@ export async function generateDemandLetterPdf(
 
       // ============== WEZWANIE ==============
       doc.moveDown(2);
-      doc.fontSize(11).font('Helvetica');
+      doc.fontSize(11).font('body');
 
       doc.text('Wzywam do zapłaty powyższej kwoty w nieprzekraczalnym terminie:', {
         lineGap: 4,
@@ -211,13 +215,13 @@ export async function generateDemandLetterPdf(
 
       doc
         .fontSize(13)
-        .font('Helvetica-Bold')
+        .font('bold')
         .fillColor('#cc0000')
         .text('7 dni od daty otrzymania niniejszego wezwania', {
           align: 'center',
         });
 
-      doc.fillColor('#000').font('Helvetica').fontSize(11);
+      doc.fillColor('#000').font('body').fontSize(11);
 
       doc.moveDown(1);
       doc.text('na rachunek bankowy:', { lineGap: 4 });
@@ -226,7 +230,7 @@ export async function generateDemandLetterPdf(
         align: 'center',
       });
 
-      doc.font('Helvetica').fontSize(10).fillColor('#666');
+      doc.font('body').fontSize(10).fillColor('#666');
       doc.moveDown(0.3);
       doc.text(`Tytuł przelewu: ${data.invoiceNumber}`, { align: 'center' });
 
@@ -243,9 +247,9 @@ export async function generateDemandLetterPdf(
       doc.fontSize(11).text('Z poważaniem,');
 
       doc.moveDown(2);
-      doc.font('Helvetica-Bold').fontSize(11).text(data.senderName);
+      doc.font('bold').fontSize(11).text(data.senderName);
       doc
-        .font('Helvetica')
+        .font('body')
         .fontSize(9)
         .fillColor('#666')
         .text(data.senderEmail);
@@ -277,12 +281,12 @@ function drawTableRow(doc: PdfKitDoc, label: string, value: string) {
   doc
     .fontSize(10)
     .fillColor('#666')
-    .font('Helvetica')
+    .font('body')
     .text(label, 60, y, { width: 200 });
 
   doc
     .fillColor('#000')
-    .font('Helvetica-Bold')
+    .font('bold')
     .text(value, 280, y, { width: 250 });
 
   doc.moveDown(0.4);
