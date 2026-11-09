@@ -19,6 +19,7 @@ import { getClientIp } from '@/lib/auth/get-client-ip';
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
 import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent';
 import { readAccessTokenFacts, sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
+import { requestNewLoginCheck } from '@/lib/auth/sessions/new-login-check';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
@@ -103,6 +104,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
       userId: signedIn.id,
       metadata: { method: 'password', ...sessionAuditMetadata(sessionId) },
     });
+    await requestNewLoginCheck({ userId: signedIn.id, sessionId });
     await trackServer({
       userId: signedIn.id,
       event: ANALYTICS_EVENTS.loginCompleted,

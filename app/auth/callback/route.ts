@@ -3,6 +3,7 @@ import { recordGoogleSignupIfNew } from '@/lib/analytics/funnel';
 import { logAudit } from '@/lib/audit/log';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
 import { loginMethodFromAmr, readAccessTokenFacts, sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
+import { requestNewLoginCheck } from '@/lib/auth/sessions/new-login-check';
 import { getTrustedAppOrigin } from '@/lib/auth/trusted-origin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -28,6 +29,7 @@ async function logCallbackLogin(userId: string | undefined, accessToken: string 
     userId,
     metadata: { ...(method ? { method } : {}), ...sessionAuditMetadata(facts.sessionId) },
   });
+  await requestNewLoginCheck({ userId, sessionId: facts.sessionId });
 }
 
 /** Complete PKCE using only the configured public origin. */

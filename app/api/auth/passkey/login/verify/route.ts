@@ -10,6 +10,7 @@ import { finishPasskeyLogin } from '@/lib/auth/passkey/login';
 import { loginVerifyBody } from '@/lib/auth/passkey/schemas';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
 import { sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
+import { requestNewLoginCheck } from '@/lib/auth/sessions/new-login-check';
 import { checkPasskeyLoginVerifyRateLimit } from '@/lib/rate-limit/passkey';
 import { createClient } from '@/lib/supabase/server';
 
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
       // `session_id` łączy wpis z sesją na liście urządzeń (00174).
       metadata: { method: 'passkey', passkey_id: passkeyId, ...sessionAuditMetadata(sessionId) },
     });
+    await requestNewLoginCheck({ userId, sessionId });
     await trackServer({
       userId,
       event: ANALYTICS_EVENTS.loginCompleted,

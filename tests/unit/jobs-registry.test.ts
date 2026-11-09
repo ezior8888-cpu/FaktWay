@@ -65,7 +65,7 @@ describe('rejestr jobów', () => {
     for (const q of packageA) expect(queues, `brak ${q}`).toContain(q);
   });
 
-  it('paczka B: 19 jobów e-mail/billing/przypomnienia', () => {
+  it('paczka B: 20 jobów e-mail/billing/przypomnienia', () => {
     const packageB = [
       'cron.critical-alerts-monitor',
       'cron.ksiegowosc-miesiac',
@@ -80,6 +80,8 @@ describe('rejestr jobów', () => {
       'billing.payment.failed',
       'reminders.send.requested',
       'invoice.payment.received',
+      // 19 → 20: mail o logowaniu z nowego urządzenia (krok 8.5, część 2).
+      'auth.login.completed',
       'user.registered',
       'email.trial-day-1',
       'email.trial-day-4',
@@ -87,7 +89,7 @@ describe('rejestr jobów', () => {
       'email.trial-day-12',
       'email.trial-day-14',
     ];
-    expect(packageB.length).toBe(19);
+    expect(packageB.length).toBe(20);
     for (const q of packageB) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -196,7 +198,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 52 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości)', () => {
+  it('KOMPLET: 53 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -210,7 +212,8 @@ describe('rejestr jobów', () => {
     // 52: od K5 księgowości (07.11.2026) — +2 crony `cron.ksiegowosc-miesiac`
     // i `cron.ksiegowosc-terminy` (pętla po firmach pilotażu, bez kolejki
     // fan-out; plan, sekcja 9). Worker: 56 kolejek, „31/31 cronów”.
-    expect(registered.length).toBe(52);
+    // 53: od kroku 8.5 część 2 — +1 `auth.login.completed` (mail o nowym urządzeniu).
+    expect(registered.length).toBe(53);
   });
 
   it('parytet limitów równoległości paczki C', () => {
