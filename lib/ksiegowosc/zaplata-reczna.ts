@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 
+import { shiftMonth } from '@/lib/expenses/month';
 import { kwotaNaGrosze } from '@/lib/ksiegowosc/wpisy-reczne';
 
 export const RODZAJE_ZAPLATY_RECZNEJ = ['zus_spoleczne', 'zdrowotna'] as const;
@@ -63,6 +64,27 @@ export const zaplataRecznaSchema = z
 
 export type ZaplataRecznaWejscie = z.input<typeof zaplataRecznaSchema>;
 export type ZaplataReczna = z.output<typeof zaplataRecznaSchema>;
+
+/** Ostatni okres zapłaty spoza wyliczenia: poprzedni miesiąc (miesiąc w trakcie zapisuje się po jego zakończeniu). */
+export function ostatniMiesiacZaplatyRecznej(dzis: string): string {
+  return shiftMonth(dzis.slice(0, 7), -1);
+}
+
+/**
+ * Reguły zależne od dzisiejszej daty (RRRR-MM-DD, czas polski), poza stałym
+ * schematem: formularz sprawdza je przed wysłaniem z datą ze strony, akcja
+ * jeszcze raz z własną. Pole formularza bierze granice z tej samej funkcji.
+ */
+export function bladDatyZaplatyRecznej(
+  z: { zaMiesiac: string; dataZaplaty: string },
+  dzis: string,
+): { pole: 'zaMiesiac' | 'dataZaplaty'; error: string } | null {
+  if (z.dataZaplaty > dzis) return { pole: 'dataZaplaty', error: 'Data zapłaty nie może być późniejsza niż dziś.' };
+  if (z.zaMiesiac > ostatniMiesiacZaplatyRecznej(dzis)) {
+    return { pole: 'zaMiesiac', error: 'Składki za miesiąc w trakcie zapisuje się po jego zakończeniu.' };
+  }
+  return null;
+}
 
 /** Wejścia wersji ręcznej (skrót D6 liczy się z nich i z kwoty). */
 export function wejsciaZaplatyRecznej(z: ZaplataReczna): Record<string, unknown> {

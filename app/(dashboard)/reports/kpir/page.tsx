@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { kpirPrzykladowe, trybDanych } from '@/lib/demo/tryb-danych';
-import { odeslanieDoKsiegi } from '@/lib/ksiegowosc/odeslanie';
+import { odeslanieDoKsiegi, type OdeslanieDoKsiegi } from '@/lib/ksiegowosc/odeslanie';
 import { getKpirData, resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -31,7 +31,9 @@ export const dynamic = 'force-dynamic';
  *
  * Firma z modułem księgowości (plan księgowości JDG, K8, D20) widzi nad
  * raportem odesłanie do księgi modułu (KPiR albo ewidencja w zakładce
- * „Ewidencja”); firma bez modułu ma raport bez zmian.
+ * „Ewidencja”), także przed weryfikacją KSeF, bo księga modułu liczy
+ * prawdziwe dane bez względu na tryb raportu; firma bez modułu ma raport bez
+ * zmian.
  */
 export default async function KpirPage({
   searchParams,
@@ -43,20 +45,23 @@ export default async function KpirPage({
   const { supabase, tenantId } = ctx;
   // Poprawka Bartosza 21.10.2026: przed weryfikacją KSeF księga z danymi
   // przykładowymi (lib/demo/kpir-przykladowe.ts) i plakietką — klient widzi
-  // pełną okazałość ekranu. Prawdziwych danych wtedy nie czytamy. Decyzję
-  // podejmuje jedna funkcja trybu (lib/demo/tryb-danych.ts, Z15).
+  // pełną okazałość ekranu. Prawdziwych danych raportu wtedy nie czytamy
+  // (odesłanie czyta tylko wyłącznik i ustawienia modułu). Decyzję podejmuje
+  // jedna funkcja trybu (lib/demo/tryb-danych.ts, Z15).
   if ((await trybDanych(ctx, new Date())).tryb === 'przyklad') {
     const { month, year } = resolveKpirPeriod(sp);
     const demo = kpirPrzykladowe(month, year);
+    const odeslanie = await odeslanieDoKsiegi(supabase, tenantId, okresKpir(month, year));
     return (
       <div className="ff-tab-panel flex flex-1 flex-col gap-6">
         <h1 className="sr-only">Książka przychodów i rozchodów</h1>
+        {odeslanie ? <OdeslanieDoKsiegiModulu odeslanie={odeslanie} /> : null}
         <KpirView key={`${year}-${month}`} month={month} year={year} expenses={demo.expenses} invoices={demo.invoices} today={todayInWarsaw()} demo />
       </div>
     );
   }
   const data = await getKpirData(supabase, tenantId, sp);
-  const period = `${data.year}-${String(data.month).padStart(2, '0')}`;
+  const period = okresKpir(data.month, data.year);
   // Po danych raportu, nie równolegle: błąd środowiska KSeF ma zatrzymać stronę, zanim cokolwiek innego czyta bazę.
   const odeslanie = await odeslanieDoKsiegi(supabase, tenantId, period);
   const today = todayInWarsaw();
@@ -66,17 +71,7 @@ export default async function KpirPage({
   return (
     <div className="ff-tab-panel flex flex-1 flex-col gap-6">
       <h1 className="sr-only">Książka przychodów i rozchodów</h1>
-      {odeslanie ? (
-        <Alert>
-          <AlertTitle>Księga w module księgowości</AlertTitle>
-          <AlertDescription>
-            {odeslanie.tekst}{' '}
-            <Link href={odeslanie.adres} className="underline underline-offset-4">
-              Zakładka „Ewidencja”
-            </Link>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      {odeslanie ? <OdeslanieDoKsiegiModulu odeslanie={odeslanie} /> : null}
       {blocked ? (
         <KpirToolbar period={period} currentMonth={today.slice(0, 7)} monthTitle={kpirMonthTitle(data.month, data.year)} />
       ) : null}
@@ -106,5 +101,25 @@ export default async function KpirPage({
         />
       ) : null}
     </div>
+  );
+}
+
+/** Okres raportu jako RRRR-MM. */
+function okresKpir(month: number, year: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/** Baner nad raportem: gdzie jest księga modułu za ten sam miesiąc (K8, D20). */
+function OdeslanieDoKsiegiModulu({ odeslanie }: { odeslanie: OdeslanieDoKsiegi }) {
+  return (
+    <Alert>
+      <AlertTitle>Księga w module księgowości</AlertTitle>
+      <AlertDescription>
+        {odeslanie.tekst}{' '}
+        <Link href={odeslanie.adres} className="underline underline-offset-4">
+          Zakładka „Ewidencja”
+        </Link>
+      </AlertDescription>
+    </Alert>
   );
 }
