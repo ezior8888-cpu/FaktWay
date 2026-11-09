@@ -1466,9 +1466,10 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 9.11.2026 | 8.5, część 1 | #506 | gotowe do scalenia | zalogowane urządzenia, wylogowanie na odległość, historia logowań; migracja 00174 przed wdrożeniem; mail o nowym urządzeniu w części 2; ustalenia w PR (limit czasu sesji GoTrue do decyzji Bartosza) |
 | 9.11.2026 | 1.2, część 1 | #509 | gotowe do scalenia (D11) | faktura do paragonu: formularz, FA(3) z `FP`, PDF, widok; KSeF TEST przyjął (scenariusz 14 w teście tygodniowym); moduł księgowości i JPK odmawiają przy FP do części 2; bez migracji; CI zielone |
 | 9.11.2026 | 3.1 | #510 | gotowe do scalenia | wpłaty częściowe z historią i cofaniem (rozszerzona tabela `payments`); migracja 00176 przed wdrożeniem; CI zielone; dalej zdarzenie o wpłacie (8.1) i wyciąg (3.2) |
+| 9.11.2026 | 1.3, część 1 | #517 | gotowe do scalenia (D11) | paragon z NIP z datą od 1.01.2027 bez odliczenia VAT (JPK_V7M, „Ten miesiąc”, kafle), z informacją przy koszcie; OCR zapisywał paragon z NIP jako `invoice`, więc rodzaj idzie z odczytu OCR; PIT bez zmian do odpowiedzi księgowej; łączenie FP ze skrzynki z paragonem w części 2 |
 
-**Następny krok:** 1.3, część 1 (paragon z NIP od 2027 r. bez odliczenia VAT,
-PR w toku). Potem: 1.2 część 2 (FP w JPK i ze zdjęcia paragonu), 1.4 część 2
+**Następny krok:** 8.1, część 1 (zdarzenie o wpłacie i push, PR w toku na #510).
+Potem: 1.3 część 2 (łączenie FP ze skrzynki z paragonem), 1.2 część 2 (FP w JPK i ze zdjęcia paragonu), 1.4 część 2
 (identyfikator zbiorczy), 8.1 po #510 (zdarzenie o wpłacie i push „Otrzymana
 płatność”), 1.6. Kroki w formularzu faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509,
 bo zmieniają te same pliki. #506 i #510 zmieniają rejestr migracji i listę testów
