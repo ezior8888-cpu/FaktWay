@@ -74,6 +74,20 @@ export function isPauseError(error: unknown): boolean {
 }
 
 /**
+ * Pauza, która mieści się w budżecie łańcucha — czyli „darmowe” czekanie bez
+ * zużycia próby. Ta sama reguła dla `decideRetry`, dziennika prób
+ * (`waiting`) i zapisu przebiegu w `run-job.ts`, żeby się nie rozjechały.
+ */
+export function isPauseWithinBudget(
+  error: unknown,
+  pause: { sinceMs: number | null; nowMs: number },
+): boolean {
+  if (!isPauseError(error)) return false;
+  const since = pause.sinceMs ?? pause.nowMs;
+  return pause.nowMs - since < MAX_PAUSE_CHAIN_MS;
+}
+
+/**
  * `NonRetriableError` z `./errors`. Rozpoznajemy także po `name` — błąd
  * z innej instancji modułu (np. po `vi.resetModules` w testach) nie przejdzie
  * `instanceof`, a job nie może być wtedy bezsensownie ponawiany.
@@ -105,9 +119,16 @@ export function decideRetry(
   const explicit = explicitRetryDelayMs(error);
   if (explicit !== null && isPauseError(error)) {
     const since = pause.sinceMs ?? pause.nowMs;
-    if (pause.nowMs - since < MAX_PAUSE_CHAIN_MS) {
+    if (isPauseWithinBudget(error, pause)) {
       return { action: 'retry', delayMs: explicit, nextAttempt: attempt, nextWaits: waits, nextPauseSince: since };
     }
+    // Po budżecie: zwykła próba, z POMINIĘCIEM gałęzi odczekań (pauza ma
+    // `countsAsAttempt: false`) i z zachowanym początkiem łańcucha — inaczej
+    // każda doba otwierałaby nową i wyjście przychodziłoby po ok. 31 dniach.
+    if (attempt >= policy.maxRetries) {
+      return { action: 'exhausted', reason: 'attempts-exhausted' };
+    }
+    return { action: 'retry', delayMs: explicit, nextAttempt: attempt + 1, nextWaits: waits, nextPauseSince: since };
   }
   if (explicit !== null && isWaitError(error) && waits < MAX_WAIT_RETRIES) {
     return { action: 'retry', delayMs: explicit, nextAttempt: attempt, nextWaits: waits + 1 };

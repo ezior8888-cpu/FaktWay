@@ -325,10 +325,14 @@ async function withRequestCount<T>(
 ): Promise<{ requests: string[]; value?: T; error?: unknown }> {
   const original = globalThis.fetch;
   const requests: string[] = [];
+  const base = getKsefBaseUrl(ENV);
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
+    // Liczymy i blokujemy tylko żądania do KSeF. Ruch do Redisa (moduł pauzy,
+    // gdy w środowisku są UPSTASH_REDIS_REST_*) idzie dalej bez liczenia.
+    if (!url.startsWith(base)) return original(input, init);
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
-    requests.push(`${method} ${url.replace(getKsefBaseUrl(ENV), '')}`);
+    requests.push(`${method} ${url.replace(base, '')}`);
     if (mode === 'block') throw new Error('skrypt: żądanie zatrzymane w kroku bramki L1a');
     return original(input, init);
   };

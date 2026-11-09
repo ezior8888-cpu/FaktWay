@@ -110,8 +110,8 @@ import {
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import {
   getKsefRetryDelay,
-  ksefRetryDelayFor,
   ksefRetryDelayMs,
+  ksefRetryDelayMsFor,
   KSEF_MAX_RETRIES,
 } from '../retry-schedule';
 
@@ -152,10 +152,11 @@ interface SubmitOutcome {
  *
  * Ponowienia (Faza 23 sekcja 2, stan 08.11.2026 po L1a):
  * - Harmonogram 30s → 2min → 5min → 15min → 1h przez `RetryAfterError`,
- *   z rozrzutem do +20% w uzgodnieniu i rozstrzygnięciu zamiaru
- *   (`ksefRetryDelayMs`), żeby faktury, które padły razem, nie wracały razem.
+ *   z rozrzutem do +20% (`ksefRetryDelayMs`), żeby faktury, które padły
+ *   razem, nie wracały razem.
  * - 5xx i timeout — ponowienie z opóźnieniem; `Retry-After` z KSeF (np. przy
- *   503) w pełnej długości (`ksefRetryDelayFor`).
+ *   503) ma pierwszeństwo, najwyżej godzinę, bo czekanie trwa z fakturą
+ *   w `sending` (`ksefRetryDelayMsFor`).
  * - 429 = PAUZA FIRMY (L1a, `lib/ksef/rate-limit-pause.ts`): MF liczy limity
  *   na parę (NIP, adres IP), a cała platforma wysyła z jednego adresu. Po 429
  *   żadne żądanie KSeF tej firmy nie wychodzi do końca `Retry-After` (bramka
@@ -1341,15 +1342,15 @@ export async function runSubmitInvoice(
     });
 
     // Krok 3: pełny flow (generuj XML → waliduj XSD → R2 → KSeF).
-    // Credentials wczytujemy świeżo wewnątrz tego step.run — return value
-    // tego stepu jest stripowany przez `submitInvoiceFullFlow` do meta-danych
-    // wyniku (ksefNumber, hash, path), więc nic wrażliwego nie wycieka do
-    // Inngest store'u.
+    // Credentials wczytujemy świeżo wewnątrz tego kroku, a wynik kroku to
+    // same meta-dane (ksefNumber, hash, path) — bez PEM-a i tokenu.
     //
-    // Ten step ma własny retry — błąd sieciowy retryuje TYLKO jego, nie
-    // wcześniejszych (status w DB już 'sending'). Przy retry credentials
-    // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
-    // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
+    // Ponowienie (pg-boss) wykonuje CAŁY handler od nowa, bez pamięci kroków:
+    // strażnik idempotencji, krok pauzy po 429 (przed przejęciem), przejęcie
+    // tym samym właścicielem, potem uzgodnienie wcześniejszej próby (zamiar,
+    // wpis `sent`) zamiast drugiej wysyłki. 429 w trakcie wysyłki zwalnia
+    // przejęcie (`sending` → `queued`, `releaseSendClaimForPause`), więc
+    // czekanie na koniec pauzy nie trzyma faktury w `sending`.
     // Krok 2.5 (AUD-01): jeśli wcześniejsza próba dotarła do KSeF (mamy jej
     // numery referencyjne), pytamy o status TEJ wysyłki zamiast wysyłać fakturę
     // drugi raz. Bez tego timeout pollingu, 5xx albo padnięty worker kończyły
@@ -1396,10 +1397,10 @@ export async function runSubmitInvoice(
             });
             continue;
           }
-          // Harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
+          // Retry-After odpowiedzi albo harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
           throw new RetryAfterError(
             `Uzgadnianie zamiaru wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
-            ksefRetryDelayMs(attempt, invoiceId),
+            ksefRetryDelayMsFor(error, attempt, invoiceId),
             { cause: error instanceof Error ? error : undefined },
           );
         }
@@ -1653,7 +1654,7 @@ export async function runSubmitInvoice(
           throw await rateLimitPause(downloadError, credentials.nip, unverified,
             new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, unverified, { cause: downloadError }));
         }
-        if (transient) throw pending(unverified, ksefRetryDelayFor(downloadError, attempt), downloadError);
+        if (transient) throw pending(unverified, ksefRetryDelayMsFor(downloadError, attempt, invoiceId), downloadError);
         // 403 (token bez InvoiceRead) i inne 4xx: operator. Wpis zostaje otwarty
         // ze znacznikiem 440 — „Tylko uzgodnij” i cron I5 powtórzą weryfikację.
         alertOperator('download-refused', { status: api?.status, otherInvoice: known?.internalNumber ?? null });
@@ -1845,7 +1846,7 @@ export async function runSubmitInvoice(
           // S22: oczekiwanie na wynik KSeF nie zużywa próby.
           throw new RetryAfterError(
             'KSeF nadal przetwarza wcześniejszą wysyłkę tej faktury — czekam zamiast wysyłać ponownie',
-            getKsefRetryDelay(attempt),
+            ksefRetryDelayMs(attempt, invoiceId),
             { countsAsAttempt: false },
           );
         }
@@ -1922,10 +1923,10 @@ export async function runSubmitInvoice(
           return null;
         }
         // Awaria łącza albo KSeF: ponawiamy UZGADNIANIE, nigdy wysyłkę.
-        // Harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
+        // Retry-After odpowiedzi albo harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
         throw new RetryAfterError(
           `Uzgadnianie wcześniejszej wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
-          ksefRetryDelayMs(attempt, invoiceId),
+          ksefRetryDelayMsFor(error, attempt, invoiceId),
           { cause: error instanceof Error ? error : undefined },
         );
       }
@@ -2090,8 +2091,9 @@ export async function runSubmitInvoice(
         // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
         //
         // Odpowiedź z `Retry-After` (np. 503) — jeśli MF mówi nam konkretnie,
-        // ile czekać, słuchamy (AUD-92). Inaczej harmonogram.
-        const customDelay = ksefRetryDelayFor(error, attempt);
+        // ile czekać, słuchamy (AUD-92), najwyżej godzinę (faktura jest w
+        // `sending`). Inaczej harmonogram z rozrzutem (L1a).
+        const customDelay = ksefRetryDelayMsFor(error, attempt, invoiceId);
         const isKsefApi = error instanceof KsefApiError;
         const errorLabel = isKsefApi
           ? `KSeF HTTP ${error.status}: ${error.message}`

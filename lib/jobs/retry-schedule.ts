@@ -72,11 +72,18 @@ export function getKsefRetryDelay(attempt: number): DurationStr {
  */
 export function ksefRetryDelayFor(error: unknown, attempt: number): DurationStr {
   if (error instanceof KsefApiError && error.retryAfterMs !== null) {
-    const seconds = Math.max(1, Math.ceil(Math.min(KSEF_PAUSE_MAX_MS, error.retryAfterMs) / 1000));
+    // 429 = pauza firmy, pełna długość. Inne odpowiedzi (503 itp.) czekają
+    // z fakturą przejętą (`sending`), więc najwyżej godzinę jak dawniej —
+    // dłużej włączałoby alarm „faktura w sending” i I2 (przegląd L1a).
+    const cap = error.status === 429 ? KSEF_PAUSE_MAX_MS : KSEF_RETRY_AFTER_MAX_MS;
+    const seconds = Math.max(1, Math.ceil(Math.min(cap, error.retryAfterMs) / 1000));
     return `${seconds}s`;
   }
   return getKsefRetryDelay(attempt);
 }
+
+/** Górna granica `Retry-After` dla odpowiedzi innych niż 429 (czekanie z fakturą w `sending`). */
+export const KSEF_RETRY_AFTER_MAX_MS = 3_600_000;
 
 /** Rozrzut harmonogramu: do +20% opóźnienia, deterministycznie z ziarna (np. id faktury). */
 const KSEF_RETRY_JITTER_SHARE = 0.2;
@@ -89,6 +96,18 @@ const KSEF_RETRY_JITTER_SHARE = 0.2;
 export function ksefRetryDelayMs(attempt: number, seed: string): number {
   const base = parseDurationMs(getKsefRetryDelay(attempt));
   return base + Math.floor(seedFraction(seed) * base * KSEF_RETRY_JITTER_SHARE);
+}
+
+/**
+ * Jedna reguła opóźnienia ponowienia w runnerze wysyłki (L1a, pkt 4 karty):
+ * `Retry-After` z odpowiedzi KSeF, jeśli jest (`ksefRetryDelayFor`), inaczej
+ * harmonogram z rozrzutem po ziarnie (id faktury).
+ */
+export function ksefRetryDelayMsFor(error: unknown, attempt: number, seed: string): number {
+  if (error instanceof KsefApiError && error.retryAfterMs !== null) {
+    return parseDurationMs(ksefRetryDelayFor(error, attempt));
+  }
+  return ksefRetryDelayMs(attempt, seed);
 }
 
 /**

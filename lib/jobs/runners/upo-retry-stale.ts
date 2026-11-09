@@ -309,7 +309,13 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
   if (missingNipRejected) Sentry.captureMessage('UPO retry skipped — invoice seller NIP requires reconciliation', {
     level: 'warning', extra: { count: missingNipRejected },
   });
-  if (scanTruncated) Sentry.captureMessage('UPO retry missing scan truncated — manual reconciliation required', {
+  // L1a: strony pełne faktur firm w pauzie po 429 też „obcinają” skan, ale to
+  // nie wymaga operatora — następny przebieg po końcu pauzy je dokończy.
+  if (scanTruncated && pausedSkipped > 0) {
+    logger.info('UPO retry: skan brakujących UPO przerwany przez faktury firm w pauzie po 429 — dokończy następny przebieg', {
+      knownScanned: known.scanned, legacyScanned: legacy.scanned, pausedSkipped,
+    });
+  } else if (scanTruncated) Sentry.captureMessage('UPO retry missing scan truncated — manual reconciliation required', {
     level: 'warning', extra: { knownScanned: known.scanned, legacyScanned: legacy.scanned },
   });
   if (pausedSkipped) {

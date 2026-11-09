@@ -166,10 +166,22 @@ export async function recordKsefRateLimit(
   remoteBrakeReads.delete(env);
 
   if (!isRedisConfigured()) return until;
-  const redis = getRedis();
+  // Pamięć tylko wydłużana: równoległy zapis krótszej pauzy (inne żądanie tej
+  // firmy) nie może skrócić dłuższej, zapisanej w międzyczasie.
+  const remember = (value: number, persisted: boolean) => {
+    const current = memoryPauses.get(key);
+    if (current && current.until > value) {
+      memoryPauses.set(key, { until: current.until, persisted: current.persisted && persisted });
+      return current.until;
+    }
+    memoryPauses.set(key, { until: value, persisted });
+    return value;
+  };
   // Pauza i okno hamulca równolegle: przy wiszącym Redisie całość trwa ~1 s, nie 2 s.
+  // `getRedis()` w środku: błędna konfiguracja nie może zamienić 429 z KSeF na inny błąd.
   const pauseWrite = (async () => {
     try {
+      const redis = getRedis();
       const stored = asMs(await withTimeout(redis.get(key), KSEF_PAUSE_STORE_TIMEOUT_MS));
       if (stored !== null && stored >= until) {
         // Dłuższa pauza innego procesu (albo wcześniejsza tego) wygrywa — nigdy nie skracamy.
@@ -177,15 +189,16 @@ export async function recordKsefRateLimit(
       } else {
         await withTimeout(redis.set(key, String(until), { px: Math.max(1_000, until - now) }), KSEF_PAUSE_STORE_TIMEOUT_MS);
       }
-      memoryPauses.set(key, { until, persisted: true });
+      until = remember(until, true);
       remoteReads.set(key, { at: now, until });
     } catch (error) {
       warnStore('zapis', error);
-      memoryPauses.set(key, { until, persisted: false });
+      until = remember(until, false);
     }
   })();
   const brakeWrite = (async () => {
     try {
+      const redis = getRedis();
       const brakeKey = cacheKeys.ksefRateLimitedFirms(env);
       await withTimeout(
         Promise.all([

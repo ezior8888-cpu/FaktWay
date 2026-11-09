@@ -18,7 +18,7 @@ import { retryPolicyFor, type JobDefinition } from './registry';
 import {
   ATTEMPT_KEY,
   decideRetry,
-  isPauseError,
+  isPauseWithinBudget,
   PAUSE_SINCE_KEY,
   readAttempt,
   readPauseSince,
@@ -89,7 +89,8 @@ async function runOne(
     // L1a: pauza po 429 to zaplanowane czekanie, nie porażka joba — bez wiersza
     // 'failed', który przy fali 429 włączałby alarm „≥10 porażek w 5 min”.
     // Ślad pauzy zostaje w dzienniku prób wysyłki (`ksef_send_attempts`, 'waiting').
-    const paused = isPauseError(error);
+    // Po budżecie łańcucha pauza zużywa próbę — wtedy to zwykła porażka ('failed').
+    const paused = isPauseWithinBudget(error, { sinceMs: pauseSince, nowMs: Date.now() });
     await recordJobRun(paused
       ? { queue: def.queue, runId: job.id, status: 'succeeded', durationMs: Date.now() - startedAt }
       : { queue: def.queue, runId: job.id, status: 'failed', durationMs: Date.now() - startedAt, error });

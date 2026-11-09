@@ -49,6 +49,8 @@ describe('Retry-After z KSeF', () => {
     // Absurdalny nagłówek: bezpiecznik `KSEF_PAUSE_MAX_MS` (doba), nie godzina.
     const absurd = new KsefApiError(429, 'x', 'x', 48 * 3600_000);
     expect(ksefRetryDelayFor(absurd, 0)).toBe('86400s');
+    // Inne odpowiedzi z Retry-After (503) czekają z fakturą w `sending`: najwyżej godzinę.
+    expect(ksefRetryDelayFor(new KsefApiError(503, 'x', 'x', 2 * 3600_000), 0)).toBe('3600s');
     expect(ksefRetryDelayFor(new KsefApiError(503, 'x', 'x'), 1)).toBe('2m');
     expect(ksefRetryDelayFor(new Error('ECONNRESET'), 0)).toBe('30s');
   });

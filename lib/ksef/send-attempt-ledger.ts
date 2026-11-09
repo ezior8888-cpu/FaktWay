@@ -35,7 +35,7 @@
 import * as Sentry from '@sentry/nextjs';
 
 import type { JobContext } from '@/lib/jobs/registry';
-import { isPauseError, MAX_WAIT_RETRIES, readWaits } from '@/lib/jobs/retry';
+import { isPauseError, isPauseWithinBudget, MAX_WAIT_RETRIES, readPauseSince, readWaits } from '@/lib/jobs/retry';
 import type { JobStep } from '@/lib/jobs/step-shim';
 import { isKsefLocalPause, KsefApiError } from '@/lib/ksef/client';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -75,7 +75,9 @@ export type SendAttemptStatus = 'started' | 'succeeded' | 'failed' | 'waiting' |
  */
 const STEP_STAGE: Readonly<Record<string, SendAttemptStage>> = {
   'idempotency-guard': 'guard',
-  'ksef-rate-limit-pause': 'pause',
+  // 'ksef-rate-limit-pause' celowo bez wpisu: etap 'pause' dostaje tylko wykonanie,
+  // które krok pauzy zatrzymał (`describeSendAttemptFailure`). Wpis tutaj zostawiałby
+  // 'pause' na odmowach strażnika odwołań, które biegną po tym kroku bez własnego kroku.
   'check-ksef-health': 'offline',
   'try-redirect-offline-queue': 'offline',
   'audit-redirect-offline': 'offline',
@@ -180,12 +182,16 @@ export function describeSendAttemptFailure(
   stage: SendAttemptStage,
   /** Licznik odczekań joba (`__waits`); po `MAX_WAIT_RETRIES` pg-boss liczy oczekiwanie jako próbę. */
   waits = 0,
+  /** Łańcuch pauz po 429 (`__pauseSince`); po `MAX_PAUSE_CHAIN_MS` pauza zużywa próbę (L1a). */
+  pause: { sinceMs: number | null; nowMs: number } = { sinceMs: null, nowMs: Date.now() },
 ): SendAttemptFailure {
   const errors = chain(error);
   const top = errors[0];
+  const paused = isPauseError(top);
   const waiting =
-    isPauseError(top) ||
-    (top !== undefined &&
+    isPauseWithinBudget(top, pause) ||
+    (!paused &&
+      top !== undefined &&
       top.name === 'RetryAfterError' &&
       (top as { countsAsAttempt?: unknown }).countsAsAttempt === false &&
       waits < MAX_WAIT_RETRIES);
@@ -207,7 +213,9 @@ export function describeSendAttemptFailure(
   const classified = waiting ? null : classifySendError(error);
   return {
     status: waiting ? 'waiting' : 'failed',
-    stage: refineStage(stage, error),
+    // Pauza przed przejęciem (krok `ksef-rate-limit-pause` w etapie strażnika) = etap 'pause';
+    // pauza po 429 w trakcie wysyłki zostaje w swoim etapie (reconcile, submit…).
+    stage: paused && stage === 'guard' ? 'pause' : refineStage(stage, error),
     error_code: classified?.code ?? null,
     error_class: classified?.class ?? null,
     error_message: sendAttemptMessage(top ? `${top.name}: ${top.message}` : String(error)),
@@ -413,7 +421,10 @@ export function withSendAttemptLedger<TData, TResult>(
     } catch (error) {
       // Opis porażki nie może zastąpić błędu runnera — ten zawsze wychodzi bez zmian.
       try {
-        const failure = describeSendAttemptFailure(error, stage, readWaits(data));
+        const failure = describeSendAttemptFailure(error, stage, readWaits(data), {
+          sinceMs: readPauseSince(data),
+          nowMs: Date.now(),
+        });
         await writer.finish({ ...failure });
         ctx.logger.info('ksef.send.attempt', {
           invoiceId: identity.invoiceId,

@@ -17,6 +17,8 @@ const r = vi.hoisted(() => {
     hang: false,
     /** Odpowiedź GET jako liczba (domyślna deserializacja `@upstash/redis`). */
     numericGet: false,
+    /** `getRedis()` rzuca (np. błędny URL w konfiguracji). */
+    getRedisThrows: false,
     strings: new Map<string, string>(),
     zsets: new Map<string, Map<string, number>>(),
     calls: [] as Array<[string, ...unknown[]]>,
@@ -74,7 +76,10 @@ const r = vi.hoisted(() => {
 
 vi.mock('@/lib/cache/redis', () => ({
   isRedisConfigured: () => r.state.configured,
-  getRedis: () => r.client,
+  getRedis: () => {
+    if (r.state.getRedisThrows) throw new Error('zły URL Redisa');
+    return r.client;
+  },
 }));
 
 import {
@@ -428,5 +433,21 @@ describe('kontekst NIP-u w kolejce firmy', () => {
     expect(new Set(seen)).toEqual(new Set([queueNip]));
     // Poza zadaniem kontekstu nie ma.
     expect(currentKsefNip()).toBeNull();
+  });
+});
+
+describe('przegląd przed PR (L1a): zapis pauzy odporny na błędy konfiguracji i wyścigi', () => {
+  it('getRedis rzuca (błędna konfiguracja): recordKsefRateLimit nie rzuca, pauza działa z pamięci', async () => {
+    r.state.getRedisThrows = true;
+    try {
+      const until = await recordKsefRateLimit('test', NIP, 30_000);
+      expect(until).toBe(T0 + 30_000);
+      r.state.getRedisThrows = false;
+      // Redis znów działa i jest pusty: pauza nie była w nim zapisana, więc pamięć ją trzyma.
+      vi.setSystemTime(T0 + 6_000);
+      expect(await pausedUntil('test', NIP)).toBe(until);
+    } finally {
+      r.state.getRedisThrows = false;
+    }
   });
 });
