@@ -21,7 +21,7 @@ import {
   stabilnyJson,
   zWierszaRozliczenia,
 } from '@/lib/ksiegowosc/ten-miesiac-dane';
-import { wejsciaZaplatyRecznej, zaplataRecznaSchema, type ZaplataRecznaWejscie } from '@/lib/ksiegowosc/zaplata-reczna';
+import { bladDatyZaplatyRecznej, wejsciaZaplatyRecznej, zaplataRecznaSchema, type ZaplataRecznaWejscie } from '@/lib/ksiegowosc/zaplata-reczna';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { ActionAuthError, requireOrgRole } from '@/lib/supabase/auth-context';
 
@@ -231,11 +231,8 @@ export async function dodajZaplateRecznaAction(wejscie: ZaplataRecznaWejscie): P
     return { success: false, error: issue?.message ?? BLAD, pole: issue?.path.join('.') };
   }
   const z = parsed.data;
-  const dzis = todayInWarsaw();
-  if (z.dataZaplaty > dzis) return { success: false, error: 'Data zapłaty nie może być późniejsza niż dziś.', pole: 'dataZaplaty' };
-  if (z.zaMiesiac >= dzis.slice(0, 7)) {
-    return { success: false, error: 'Składki za miesiąc w trakcie zapisuje się po jego zakończeniu.', pole: 'zaMiesiac' };
-  }
+  const bladDaty = bladDatyZaplatyRecznej(z, todayInWarsaw());
+  if (bladDaty) return { success: false, ...bladDaty };
 
   const client = ctx.supabase as unknown as SupabaseClient;
   if (!(await wlaczony(client, ctx.tenantId))) return { success: false, error: NIEDOSTEPNE };
