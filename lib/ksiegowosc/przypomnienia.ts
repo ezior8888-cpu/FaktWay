@@ -95,7 +95,10 @@ export interface PozycjaPrzypomnienia {
 
 /**
  * Rozliczenia grup bez oznaczonej zapłaty. Etap ZUS bez składek społecznych
- * (ulga na start, etat obok) pomija składki społeczne; kwota zero nie wymaga
+ * (ulga na start, etat obok) pomija składki społeczne, chyba że silnik daje
+ * dla nich brak: ulga się skończyła (6 miesięcy), a ustawień nie zmieniono,
+ * albo etap zmienia się w trakcie miesiąca (F11-B1). Wtedy przypomnienie
+ * wymienia składki bez kwoty, jak przy każdym braku. Kwota zero nie wymaga
  * przypomnienia.
  */
 export function niezaplacone(w: {
@@ -106,8 +109,10 @@ export function niezaplacone(w: {
   profil: WersjaProfilu;
 }): PozycjaPrzypomnienia[] {
   const wynik: PozycjaPrzypomnienia[] = [];
+  const brakSkladek = w.pozycje?.some((p) => p.rodzaj === 'zus_spoleczne' && !p.ok) ?? false;
   for (const rodzaj of w.grupy.flatMap((g) => RODZAJE_GRUPY[g])) {
-    if (rodzaj === 'zus_spoleczne' && (w.profil.zusEtap === 'ulga_na_start' || w.profil.zusEtap === 'etat_obok')) continue;
+    const etapBezSkladek = w.profil.zusEtap === 'ulga_na_start' || w.profil.zusEtap === 'etat_obok';
+    if (rodzaj === 'zus_spoleczne' && etapBezSkladek && !brakSkladek) continue;
     const ostatnia = aktualne(w.rozliczenia).get(rodzaj) ?? null;
     const szkic = w.pozycje?.find((p) => p.rodzaj === rodzaj && p.ok);
     const kwotaGr = ostatnia ? ostatnia.kwotaGr : szkic?.ok ? szkic.kwotaGr : null;
