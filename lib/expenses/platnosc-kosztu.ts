@@ -27,6 +27,7 @@
 import { XMLParser } from 'fast-xml-parser';
 
 import { readFa3Annotations, readTDataT } from '@/lib/xml/fa3-annotations';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 export interface WarunkiPlatnosciKosztu {
   /** Najwcześniejszy poprawny `Termin` (RRRR-MM-DD) albo `null`. */
@@ -178,7 +179,7 @@ export function czytajWarunkiPlatnosci(xml: string): WarunkiPlatnosciKosztu {
       else czytelne = false;
     }
     if (!czytelne) problemy.push('zapłata częściowa');
-    if (znacznik === '1' && czytelne) w.zaplaconoCzesciowo = Math.round(suma * 100) / 100;
+    if (znacznik === '1' && czytelne) w.zaplaconoCzesciowo = roundToCents(suma);
     if (znacznik === '2') {
       daty.sort();
       const ostatnia = daty[daty.length - 1];
