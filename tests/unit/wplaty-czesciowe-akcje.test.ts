@@ -20,6 +20,7 @@ vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: m.logAudit }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: m.invalidate }));
 vi.mock('@/lib/analytics/server', () => ({ trackServer: m.track }));
+vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: vi.fn(async () => ({ ids: [] })) }));
 vi.mock('@/lib/supabase/auth-context', () => {
   class ActionAuthError extends Error {}
   return { ActionAuthError, requireOrgRole: m.requireOrgRole };

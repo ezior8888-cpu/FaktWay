@@ -90,7 +90,8 @@ describe('runCancelRemindersOnPayment', () => {
 
     const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
 
-    expect(result).toMatchObject({ skipped: true });
+    // Wpłata częściowa: nic nie anulowane (push idzie osobno, gdy zdarzenie ma paymentId).
+    expect(result).toMatchObject({ cancelled: 0 });
     expect(store.reminders[0]!.status).toBe('pending');
   });
 
@@ -117,7 +118,8 @@ describe('runCancelRemindersOnPayment', () => {
 
     const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
 
-    expect(result).toMatchObject({ skipped: true });
+    // Wpłata częściowa: nic nie anulowane (push idzie osobno, gdy zdarzenie ma paymentId).
+    expect(result).toMatchObject({ cancelled: 0 });
     expect(store.reminders[0]!.status).toBe('pending');
   });
 
@@ -131,7 +133,8 @@ describe('runCancelRemindersOnPayment', () => {
     const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
 
     // Fail-safe → due = gross_total (12300); 9840 < 12300, więc nie odwołujemy.
-    expect(result).toMatchObject({ skipped: true });
+    // Wpłata częściowa: nic nie anulowane (push idzie osobno, gdy zdarzenie ma paymentId).
+    expect(result).toMatchObject({ cancelled: 0 });
     expect(store.reminders[0]!.status).toBe('pending');
   });
 });
