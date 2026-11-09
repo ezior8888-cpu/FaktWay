@@ -434,7 +434,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > podstawa i ryczałt w pełnych złotych",
-        "tests/unit/ksiegowosc-pit.test.ts > podstawa w pełnych złotych: od 50 gr w górę"
+        "tests/unit/ksiegowosc-pit.test.ts > podstawa w pełnych złotych: od 50 gr w górę",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
       ],
       "parametry": [],
       "niezmienniki": [
@@ -1277,7 +1278,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-pit.test.ts > kwota zmniejszająca 3 600 zł",
-        "tests/unit/ksiegowosc-pit.test.ts > ponad próg 120 000 zł"
+        "tests/unit/ksiegowosc-pit.test.ts > ponad próg 120 000 zł",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
       ],
       "parametry": [
         "skala.stawkaDoProgu",
@@ -1332,7 +1334,8 @@
       "testy": [
         "tests/unit/ksiegowosc-pit.test.ts > strata w miesiącu: zaliczka zero",
         "tests/unit/ksiegowosc-kpir.test.ts > marzec: zaliczka narastająco od stycznia",
-        "tests/unit/ksiegowosc-kpir.test.ts > brak w KPiR od stycznia zabiera zaliczkę"
+        "tests/unit/ksiegowosc-kpir.test.ts > brak w KPiR od stycznia zabiera zaliczkę",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
       ],
       "parametry": [],
       "niezmienniki": [
@@ -1385,7 +1388,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-pit.test.ts > 19 % od dochodu po społecznych i zapłaconej zdrowotnej",
-        "tests/unit/ksiegowosc-pit.test.ts > zdrowotna odliczana do limitu rocznego 14 100 zł"
+        "tests/unit/ksiegowosc-pit.test.ts > zdrowotna odliczana do limitu rocznego 14 100 zł",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
       ],
       "parametry": [
         "liniowy.stawka",
