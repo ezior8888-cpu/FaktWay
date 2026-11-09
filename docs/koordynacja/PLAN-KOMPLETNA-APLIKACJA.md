@@ -1470,7 +1470,6 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 
 **Następny krok:** 8.1, część 1 (zdarzenie o wpłacie i push, PR w toku na #510).
 Potem: 1.3 część 2 (łączenie FP ze skrzynki z paragonem), 1.2 część 2 (FP w JPK i ze zdjęcia paragonu), 1.4 część 2
-(identyfikator zbiorczy), 8.1 po #510 (zdarzenie o wpłacie i push „Otrzymana
-płatność”), 1.6. Kroki w formularzu faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509,
+(identyfikator zbiorczy), 1.6. Kroki w formularzu faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509,
 bo zmieniają te same pliki. #506 i #510 zmieniają rejestr migracji i listę testów
 RLS: scalać zbiorczo (`./scripts/ops/zloz-scalenie.sh`).
