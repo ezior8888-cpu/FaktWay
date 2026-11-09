@@ -20,7 +20,7 @@ import { PRZYPADKI, ZIARNO } from '../generatory/ustawienia';
  *   stawce P_13 + netto zaliczek = netto zamówienia i P_14 + VAT zaliczek =
  *   VAT zamówienia; Σ P_11 (pozycje) = netto całego zamówienia.
  *
- * VAT zaliczki bez rozbicia liczy test sam, wzorem z art. 106f ust. 1 pkt 4
+ * VAT zaliczki bez rozbicia liczy test sam, wzorem z art. 106f ust. 1 pkt 3
  * (KP = ZB × SP / (100 + SP), do grosza); rozbicie z faktury zaliczkowej ma
  * pierwszeństwo, także gdy różni się od wzoru o grosz. Kwoty zamówienia
  * według stawek z `summarizeVatPerRate` (ta sama metoda co faktura zwykła).
