@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaFa>2026-11-09T10:00:00Z</DataWytworzeniaFa>
+    <SystemInfo>KSeF SaaS v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>5260001246</NIP>
+      <Nazwa>ACME Software sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Przykładowa 1/2</AdresL1>
+      <AdresL2>00-001 Warszawa</AdresL2>
+    </Adres>
+    <DaneKontaktowe>
+      <Email>biuro@acme.test</Email>
+    </DaneKontaktowe>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <NIP>5252241585</NIP>
+      <Nazwa>Klient „Nowak &amp; Syn” sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Klienta 10</AdresL1>
+      <AdresL2>02-001 Warszawa</AdresL2>
+    </Adres>
+    <DaneKontaktowe>
+      <Email>kontakt@klient.test</Email>
+    </DaneKontaktowe>
+    <JST>2</JST>
+    <GV>2</GV>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-11-09</P_1>
+    <P_2>FV 2026/11/001</P_2>
+    <P_6>2026-11-06</P_6>
+    <P_13_1>574.83</P_13_1>
+    <P_14_1>132.21</P_14_1>
+    <P_13_2>12.35</P_13_2>
+    <P_14_2>0.99</P_14_2>
+    <P_13_3>99.99</P_13_3>
+    <P_14_3>5.00</P_14_3>
+    <P_13_6_1>10.00</P_13_6_1>
+    <P_15>835.37</P_15>
+    <Adnotacje>
+      <P_16>2</P_16>
+      <P_17>2</P_17>
+      <P_18>2</P_18>
+      <P_18A>2</P_18A>
+      <Zwolnienie>
+        <P_19N>1</P_19N>
+      </Zwolnienie>
+      <NoweSrodkiTransportu>
+        <P_22N>1</P_22N>
+      </NoweSrodkiTransportu>
+      <P_23>2</P_23>
+      <PMarzy>
+        <P_PMarzyN>1</P_PMarzyN>
+      </PMarzy>
+    </Adnotacje>
+    <RodzajFaktury>VAT</RodzajFaktury>
+    <FaWiersz>
+      <NrWierszaFa>1</NrWierszaFa>
+      <P_7>Licencja SaaS &lt;Pro&gt;</P_7>
+      <P_8A>usł.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9A>199.0000</P_9A>
+      <P_11>199.00</P_11>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>2</NrWierszaFa>
+      <P_7>Wdrożenie (godziny)</P_7>
+      <P_8A>godz.</P_8A>
+      <P_8B>2.5000</P_8B>
+      <P_9A>150.3300</P_9A>
+      <P_11>375.83</P_11>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>3</NrWierszaFa>
+      <P_7>Książka</P_7>
+      <P_8A>szt.</P_8A>
+      <P_8B>3.0000</P_8B>
+      <P_9A>33.3300</P_9A>
+      <P_11>99.99</P_11>
+      <P_12>5</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>4</NrWierszaFa>
+      <P_7>Usługa gastronomiczna</P_7>
+      <P_8A>usł.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9A>12.3500</P_9A>
+      <P_11>12.35</P_11>
+      <P_12>8</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>5</NrWierszaFa>
+      <P_7>Dostawa krajowa 0 %</P_7>
+      <P_8A>szt.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9A>10.0000</P_9A>
+      <P_11>10.00</P_11>
+      <P_12>0 KR</P_12>
+    </FaWiersz>
+    <Platnosc>
+      <TerminPlatnosci>
+        <Termin>2026-11-23</Termin>
+      </TerminPlatnosci>
+      <FormaPlatnosci>6</FormaPlatnosci>
+      <RachunekBankowy>
+        <NrRB>61109010140000071219812874</NrRB>
+        <NazwaBanku>Santander Bank Polska</NazwaBanku>
+      </RachunekBankowy>
+    </Platnosc>
+  </Fa>
+</Faktura>
