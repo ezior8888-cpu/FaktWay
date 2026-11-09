@@ -1154,7 +1154,9 @@ export async function checkKsefHistoryRateLimited(): Promise<AlertCheckResult> {
   if (!(await shouldSendAlert(type))) return { type, fired: false, reason: 'dedup' };
   await alertCritical(
     'Historia KSeF: KSeF ogranicza tempo',
-    'KSeF ogranicza tempo wielu firmom — pobieranie historii wstrzymane automatycznie, żeby nie ryzykować blokady adresu. Wysyłka i skrzynka działają. Sprawdź `ksef-historia.sh stan`; w razie potrzeby `wstrzymaj-wszystko`.',
+    // L1a: 429 zatrzymuje całą firmę (`lib/ksef/rate-limit-pause.ts`), więc
+    // dawne „wysyłka i skrzynka działają” nie jest już prawdą dla tych firm.
+    'KSeF ogranicza tempo wielu firmom — pobieranie historii wstrzymane automatycznie, żeby nie ryzykować blokady adresu. Firma z 429 czeka w całości (wysyłka, UPO, skrzynka i historia) do końca pauzy z `Retry-After` i rusza sama; pozostałe firmy działają, a przy 429 u wielu firm naraz wysyłka zwalnia. Sprawdź `ksef-historia.sh stan`; w razie potrzeby `wstrzymaj-wszystko`.',
     { fields: [{ label: 'Firmy z 429 w ostatniej godzinie', value: String(count) }] },
   );
   await markAlertDelivered(type);

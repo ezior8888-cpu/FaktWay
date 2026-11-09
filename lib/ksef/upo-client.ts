@@ -10,11 +10,19 @@ import type { KsefEnvironment } from '@/types/ksef';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { requireMatchingKsefEnvironment } from './claim-environment';
 
-import { getKsefBaseUrl } from './client';
+import { getKsefBaseUrl, isKsefLocalPause, KsefApiError, parseRetryAfterMs } from './client';
+import { ksefPauseLengthMs, ksefPausedUntil, recordKsefRateLimit } from './rate-limit-pause';
 import { ksefRateLimiter } from './rate-limiter';
 import { ksefSessionCache } from './session-cache';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * Kod wyniku „firma w pauzie po 429 z KSeF” (L1a). To NIE `KSEF_PAUSED`
+ * (wyłącznik operatora, klasa hold): pauza mija sama po `Retry-After`.
+ * Runner (`download-upo.ts`) porównuje ten sam napis.
+ */
+const KSEF_RATE_LIMIT_PAUSE = 'KSEF_RATE_LIMIT_PAUSE';
 
 export interface UpoDownloadResult {
   success: true;
@@ -29,12 +37,36 @@ export interface UpoDownloadError {
   error: string;
   errorCode?: string;
   retryable: boolean;
+  /** Pauza firmy po 429 (`errorCode: 'KSEF_RATE_LIMIT_PAUSE'`): ile ms zostało do jej końca. */
+  retryAfterMs?: number;
 }
 
 export type UpoDownloadResponse = UpoDownloadResult | UpoDownloadError;
 
 function resolveEnv(env?: KsefEnvironment): KsefEnvironment {
   return requireMatchingKsefEnvironment(env);
+}
+
+/**
+ * Wynik „firma w pauzie po 429” (L1a): bez żądania do KSeF, do ponowienia po
+ * końcu pauzy. Komunikat mówi o limicie KSeF, nie o certyfikacie — 429 przy
+ * logowaniu nie znaczy, że poświadczenia są złe.
+ */
+function rateLimitPaused(remainingMs: number): UpoDownloadError {
+  const ms = Number.isFinite(remainingMs) ? Math.max(0, Math.ceil(remainingMs)) : 0;
+  return {
+    success: false,
+    error: `KSeF chwilowo ogranicza zapytania tej firmy (429) — UPO pobierze się samo po pauzie (jeszcze ${Math.ceil(ms / 1000)} s)`,
+    errorCode: KSEF_RATE_LIMIT_PAUSE,
+    retryable: true,
+    retryAfterMs: ms,
+  };
+}
+
+/** Pozostały czas pauzy firmy (ms) albo `null`, gdy firma nie jest w pauzie. */
+async function pauseRemainingMs(env: KsefEnvironment, nip: string): Promise<number | null> {
+  const until = await ksefPausedUntil(env, nip);
+  return until === null ? null : until - Date.now();
 }
 
 /**
@@ -122,18 +154,38 @@ export async function downloadUpoFromKsef(
       };
     }
 
+    // L1a: firma w pauzie po 429 — żadnego żądania do KSeF (MF wydłuża
+    // blokadę przy powtórkach). Przed logowaniem: przy sesji w pamięci
+    // `getSession` nie pyta KSeF, więc bramka w `ksefFetch` by tego nie złapała.
+    const pausedBeforeSession = await pauseRemainingMs(env, auth.nip);
+    if (pausedBeforeSession !== null) return rateLimitPaused(pausedBeforeSession);
+
     let session;
     try {
       session = await ksefRateLimiter.enqueue(auth.nip, () =>
         ksefSessionCache.getSession(auth, env),
       );
-    } catch {
+    } catch (sessionErr) {
+      // 429 przy logowaniu albo odświeżeniu sesji: prawdziwy (pauzę zapisał
+      // już `ksefFetch`, kontekst NIP z `getSession`) albo lokalny z pauzy.
+      // To limit KSeF, nie zły certyfikat — UPO wraca po pauzie.
+      if ((sessionErr instanceof KsefApiError && sessionErr.status === 429) || isKsefLocalPause(sessionErr)) {
+        const remaining = await pauseRemainingMs(env, auth.nip);
+        const fromError = (sessionErr as { retryAfterMs?: number | null }).retryAfterMs;
+        return rateLimitPaused(remaining ?? ksefPauseLengthMs(fromError));
+      }
       return {
         success: false,
         error: 'Brak aktywnej sesji KSeF — sprawdź certyfikat',
         retryable: false,
       };
     }
+
+    // Drugi odczyt tuż przed żądaniem UPO: samo żądanie idzie surowym `fetch`
+    // (poza bramką `ksefFetch`), a pauza mogła się zacząć w trakcie logowania
+    // albo czekania w kolejce firmy (429 innego zadania tej firmy).
+    const pausedBeforeUpo = await pauseRemainingMs(env, auth.nip);
+    if (pausedBeforeUpo !== null) return rateLimitPaused(pausedBeforeUpo);
 
     const baseUrl = getKsefBaseUrl(env);
     const upoEndpoint = `${baseUrl}/sessions/${encodeURIComponent(sessionReferenceNumber)}/invoices/ksef/${encodeURIComponent(ksefNumber)}/upo`;
@@ -175,6 +227,16 @@ export async function downloadUpoFromKsef(
           errorCode: 'SESSION_EXPIRED',
           retryable: true,
         };
+      }
+
+      if (response.status === 429) {
+        // L1a: 429 z samego żądania UPO zatrzymuje całą firmę na pełny
+        // `Retry-After` (to żądanie omija `ksefFetch`, więc zapis jest tutaj).
+        // Wynik dla TEGO 429 zostaje jak dotąd (błąd ostateczny `HTTP_429`
+        // niżej; UPO wraca z `upo-retry-stale`, gdy wpis ma ponad 24 h i pauza
+        // minęła): zmiana jego klasyfikacji to sesja D1 planu „zero zgubionych
+        // faktur” (decyzja sesji nadrzędnej L1a).
+        await recordKsefRateLimit(env, auth.nip, parseRetryAfterMs(response.headers.get('retry-after')));
       }
 
       const errorText = await response.text();

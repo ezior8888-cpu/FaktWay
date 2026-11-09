@@ -26,12 +26,26 @@ const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ATTEMPT = '22222222-2222-4222-8222-222222222222';
 const T0 = new Date('2026-11-09T09:00:00.000Z');
 
+type Query = {
+  table: string;
+  op: 'select' | 'update';
+  payload?: Record<string, unknown>;
+  filters: Record<string, unknown>;
+  /** Krok runnera, w którym padło zapytanie (`step.run`). */
+  step: string | null;
+};
+
 const m = vi.hoisted(() => ({
   fullFlow: vi.fn(),
   findOpen: vi.fn(),
   status: vi.fn(),
   rpc: vi.fn(),
   invoice: {} as Record<string, unknown>,
+  /** Zapytania do bazy w kolejności (atrapa klienta serwisowego). */
+  queries: [] as Query[],
+  /** Bieżący i wszystkie wykonane kroki runnera. */
+  step: null as string | null,
+  steps: [] as string[],
 }));
 
 vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlagForExecution: async () => false }));
@@ -73,14 +87,30 @@ vi.mock('@/lib/supabase/admin-queries', async (importOriginal) => ({
   updateInvoiceStatus: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({
-  createAdminClient: async () => {
-    const q = {
-      select: () => q, eq: () => q, in: () => q, or: () => q, update: () => q,
-      maybeSingle: async () => ({ data: { ...m.invoice }, error: null }),
-      then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
-    };
-    return { from: () => q, rpc: m.rpc };
-  },
+  createAdminClient: async () => ({
+    from: (table: string) => {
+      const query: Query = { table, op: 'select', filters: {}, step: m.step };
+      m.queries.push(query);
+      // Warunkowy UPDATE jak w Postgresie: zmienia fakturę tylko, gdy pasują wszystkie filtry `eq`.
+      const matches = () => Object.entries(query.filters).every(([key, value]) => m.invoice[key] === value);
+      const q = {
+        select: () => q,
+        eq: (key: string, value: unknown) => { query.filters[key] = value; return q; },
+        in: () => q,
+        or: () => q,
+        update: (payload: Record<string, unknown>) => { query.op = 'update'; query.payload = payload; return q; },
+        maybeSingle: async () => {
+          if (query.op !== 'update') return { data: { ...m.invoice }, error: null };
+          if (!matches()) return { data: null, error: null };
+          Object.assign(m.invoice, query.payload);
+          return { data: { id: m.invoice.id }, error: null };
+        },
+        then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
+      };
+      return q;
+    },
+    rpc: m.rpc,
+  }),
 }));
 vi.mock('@/lib/storage/xml-documents', () => ({ recordXmlDocument: vi.fn() }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: vi.fn() }));
@@ -88,16 +118,21 @@ vi.mock('@/lib/analytics/server', () => ({ trackServer: vi.fn() }));
 vi.mock('@/lib/analytics/funnel', () => ({ recordFirstInvoiceAccepted: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn() }));
 
+import * as Sentry from '@sentry/nextjs';
+
 import { decideRetry, MAX_WAIT_RETRIES } from '@/lib/jobs/retry';
 import { KSEF_MAX_RETRIES, KSEF_TENANT_CONCURRENCY_LIMIT, getKsefRetryDelay } from '@/lib/jobs/retry-schedule';
 import { parseDurationMs } from '@/lib/jobs/duration';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import { KsefApiError, ksefFetch } from '@/lib/ksef/client';
 import { queryReceivedInvoices } from '@/lib/ksef/inbox';
+import { KSEF_SEND_BRAKE_MIN_FIRMS, KSEF_SEND_BRAKE_RETRY_MS } from '@/lib/ksef/rate-limit-pause';
 import { ksefRateLimiter } from '@/lib/ksef/rate-limiter';
 import { describeSendAttemptFailure } from '@/lib/ksef/send-attempt-ledger';
 import { submitInvoice } from '@/lib/ksef/submit';
+import { findKsefSessionRow } from '@/lib/ksef/submission-log';
 import { downloadUpoFromKsef } from '@/lib/ksef/upo-client';
+import { updateInvoiceStatus } from '@/lib/supabase/admin-queries';
 
 const policy = { maxRetries: KSEF_MAX_RETRIES, getDelayMs: (a: number) => parseDurationMs(getKsefRetryDelay(a)) };
 const authA = { type: 'token', nip: NIP_A, token: 't' } as KsefAuth;
@@ -122,7 +157,20 @@ const at = (seconds: number) => vi.setSystemTime(new Date(T0.getTime() + seconds
 const ctx = (attempt = 0): JobContext => ({
   attempt,
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-  step: { run: async (_n, fn) => fn(), sleep: vi.fn(), sendEvent: vi.fn(), scheduleAfter: vi.fn() },
+  step: {
+    run: async (name, fn) => {
+      m.step = name;
+      m.steps.push(name);
+      try {
+        return await fn();
+      } finally {
+        m.step = null;
+      }
+    },
+    sleep: vi.fn(),
+    sendEvent: vi.fn(),
+    scheduleAfter: vi.fn(),
+  },
 });
 const event = (tenantId: string, invoiceId: string) => ({
   invoiceId, tenantId, nip: tenantId === TENANT_B ? NIP_B : NIP_A, environment: 'test' as const, sendAttemptId: ATTEMPT,
@@ -131,6 +179,8 @@ const event = (tenantId: string, invoiceId: string) => ({
 const ACCEPTED = { ksefNumber: 'K-1', xmlStoragePath: 'x.xml', xmlSha256Hash: 'h', xmlSizeBytes: 1, sessionReferenceNumber: 'S-2', invoiceReferenceNumber: 'R-2' };
 const claimCalls = () => m.rpc.mock.calls.filter(([fn]) => fn === 'claim_ksef_send');
 const uuid = (n: number) => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
+const invoiceUpdates = () => m.queries.filter((q) => q.table === 'invoices' && q.op === 'update');
+type PauseError = Error & { retryAfterMs: number; pause: boolean; cause?: unknown };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -143,9 +193,19 @@ beforeEach(() => {
   stubKsef();
   m.fullFlow.mockResolvedValue(ACCEPTED);
   m.findOpen.mockResolvedValue(null);
-  m.rpc.mockImplementation(async (fn: string) =>
-    fn === 'claim_ksef_send' ? { data: '2026-11-09T09:00:00.000000+00:00', error: null } : { data: false, error: null });
-  m.invoice = { id: uuid(1), direction: 'outgoing', ksef_status: 'queued', ksef_number: null, ksef_environment: 'test', invoice_type: 'VAT', invoice_kind: 'regular', fa3_data: {} };
+  // Przejęcie jak `claim_ksef_send` (00124): faktura z tego wiersza przechodzi w `sending` tej próby.
+  m.rpc.mockImplementation(async (fn: string, args: Record<string, unknown> = {}) => {
+    if (fn !== 'claim_ksef_send') return { data: false, error: null };
+    const claimedAt = new Date().toISOString();
+    if (args.p_invoice_id === m.invoice.id && args.p_tenant_id === m.invoice.tenant_id) {
+      Object.assign(m.invoice, { ksef_status: 'sending', ksef_send_owner: args.p_owner ?? null, submitted_to_ksef_at: claimedAt });
+    }
+    return { data: claimedAt, error: null };
+  });
+  m.invoice = { id: uuid(1), tenant_id: TENANT_A, direction: 'outgoing', ksef_status: 'queued', ksef_number: null, ksef_environment: 'test', invoice_type: 'VAT', invoice_kind: 'regular', fa3_data: {} };
+  m.queries = [];
+  m.step = null;
+  m.steps = [];
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -233,20 +293,151 @@ describe('runner wysyłki w pauzie firmy', () => {
     expect(waits).toBe(0);
   });
 
-  it('pauza w trakcie wysyłki tej faktury (`sending` po wcześniejszym wykonaniu): czekanie w kawałkach z odświeżoną dzierżawą, bez alarmu I2', async () => {
+  // Karta L1a: „czekanie wypada przed przejęciem wysyłki albo po jego zwolnieniu,
+  // nigdy z fakturą w `sending`” — pauza trwa tyle, ile podał MF (tu godzinę),
+  // a `sending` alarmuje po 15 min (`stale_ksef_sending_invoices`) i po 30 min (I2).
+  it('pauza zastaje fakturę w `sending` tej próby (po wcześniejszym wykonaniu): przejęcie zwolnione do `queued`, bez nowego przejęcia i bez wysyłki', async () => {
     m.fullFlow.mockRejectedValueOnce(new KsefApiError(429, '{}', 'KSeF 429', 3_600_000));
     await settle(runSubmitInvoice(event(TENANT_A, uuid(20)), ctx()));
     m.rpc.mockClear();
-    m.invoice = { ...m.invoice, id: uuid(20), ksef_status: 'sending', ksef_send_owner: ATTEMPT };
+    m.fullFlow.mockClear();
+    m.queries = [];
+    // Stan po wcześniejszym wykonaniu tej próby (np. 503 po przejęciu albo padnięty worker).
+    const claimedAt = '2026-11-09T08:59:00.000Z';
+    m.invoice = { ...m.invoice, id: uuid(20), ksef_status: 'sending', ksef_send_owner: ATTEMPT, submitted_to_ksef_at: claimedAt };
 
     at(60);
-    const error = await settle(runSubmitInvoice(event(TENANT_A, uuid(20)), ctx())) as Error & { retryAfterMs: number };
+    const error = await settle(runSubmitInvoice(event(TENANT_A, uuid(20)), ctx())) as PauseError;
     expect(error.name).toBe('RetryAfterError');
-    // I2 alarmuje po 30 min od `submitted_to_ksef_at` — kawałek oczekiwania krótszy.
-    expect(error.retryAfterMs).toBeLessThanOrEqual(10 * 60_000);
-    expect(claimCalls()).toHaveLength(1);
-    expect(claimCalls()[0]![1]).toMatchObject({ p_owner: ATTEMPT });
+    expect(error.pause).toBe(true);
+    // Czeka do końca pauzy (3600 s − 60 s), z rozrzutem w górę — bez obcięcia.
+    expect(error.retryAfterMs).toBeGreaterThanOrEqual(3_540_000);
+    // Zwolnienie: świeży odczyt i warunkowy UPDATE własnego przejęcia, w kroku pauzy.
+    expect(m.queries.filter((q) => q.step === 'ksef-rate-limit-pause' && q.op === 'select')).toHaveLength(1);
+    expect(invoiceUpdates()).toEqual([expect.objectContaining({
+      step: 'ksef-rate-limit-pause',
+      payload: { ksef_status: 'queued' },
+      filters: { id: uuid(20), tenant_id: TENANT_A, ksef_status: 'sending', ksef_send_owner: ATTEMPT },
+    })]);
+    // Właściciel i znacznik przejęcia zostają: po pauzie ta sama próba przejmie od razu (00124).
+    expect(m.invoice).toMatchObject({ ksef_status: 'queued', ksef_send_owner: ATTEMPT, submitted_to_ksef_at: claimedAt });
+    expect(claimCalls()).toHaveLength(0);
     expect(m.fullFlow).not.toHaveBeenCalled();
+  });
+
+  it('pauza: faktury w `sending` innej próby nie zwalnia (cudza dzierżawa wygrywa)', async () => {
+    m.fullFlow.mockRejectedValueOnce(new KsefApiError(429, '{}', 'KSeF 429', 600_000));
+    await settle(runSubmitInvoice(event(TENANT_A, uuid(21)), ctx()));
+    m.queries = [];
+    m.invoice = { ...m.invoice, id: uuid(21), ksef_status: 'sending', ksef_send_owner: '99999999-9999-4999-8999-999999999999' };
+
+    at(10);
+    const error = await settle(runSubmitInvoice(event(TENANT_A, uuid(21)), ctx())) as PauseError;
+    expect(error).toMatchObject({ name: 'RetryAfterError', pause: true });
+    expect(invoiceUpdates()).toEqual([]);
+    expect(m.invoice.ksef_status).toBe('sending');
+  });
+
+  it('429 po przejęciu (krok wysyłki): przejęcie zwolnione do `queued`, firma w pauzie, próba niezużyta', async () => {
+    m.invoice = { ...m.invoice, id: uuid(50) };
+    m.fullFlow.mockRejectedValueOnce(new KsefApiError(429, '{}', 'KSeF API POST /sessions/online failed: 429', 120_000));
+
+    const error = await settle(runSubmitInvoice(event(TENANT_A, uuid(50)), ctx(3))) as PauseError;
+    expect(claimCalls()).toHaveLength(1);
+    expect(error).toMatchObject({ name: 'RetryAfterError', pause: true });
+    expect(error.retryAfterMs).toBeGreaterThanOrEqual(120_000);
+    expect(error.cause).toBeInstanceOf(KsefApiError);
+    expect(invoiceUpdates()).toEqual([expect.objectContaining({
+      step: 'submit-to-ksef',
+      payload: { ksef_status: 'queued' },
+      filters: { id: uuid(50), tenant_id: TENANT_A, ksef_status: 'sending', ksef_send_owner: ATTEMPT },
+    })]);
+    expect(m.invoice).toMatchObject({ ksef_status: 'queued', ksef_send_owner: ATTEMPT });
+    expect(decideRetry(error, 3, policy, 0)).toMatchObject({ action: 'retry', nextAttempt: 3, nextWaits: 0 });
+
+    // Następne wykonanie tej faktury (przed końcem pauzy): czeka przed przejęciem.
+    m.rpc.mockClear();
+    at(30);
+    const next = await settle(runSubmitInvoice(event(TENANT_A, uuid(50)), ctx(3))) as PauseError;
+    expect(next).toMatchObject({ name: 'RetryAfterError', pause: true });
+    expect(next.retryAfterMs).toBeGreaterThanOrEqual(90_000);
+    expect(claimCalls()).toHaveLength(0);
+  });
+
+  it('firma bez pauzy i bez hamulca: krok pauzy nie czyta bazy', async () => {
+    m.invoice = { ...m.invoice, id: uuid(70) };
+    await expect(runSubmitInvoice(event(TENANT_A, uuid(70)), ctx())).resolves.toMatchObject({ success: true });
+    // Warunek dodatni: krok się wykonał (inaczej brak zapytań nic nie dowodzi).
+    expect(m.steps).toContain('ksef-rate-limit-pause');
+    expect(m.steps.indexOf('ksef-rate-limit-pause')).toBeLessThan(m.steps.indexOf('mark-as-sending'));
+    expect(m.queries.filter((q) => q.step === 'ksef-rate-limit-pause')).toEqual([]);
+  });
+
+  it('hamulec 429: 5 firm z 429 w oknie — część faktur kolejnej firmy czeka (bez przejęcia), część wychodzi; alarm raz', async () => {
+    const limitedFirm = async (nip: string) => {
+      atrapa.limited = true;
+      const r = await settle(ksefRateLimiter.enqueue(nip, () => ksefFetch('/sessions/online', { method: 'POST', env: 'test' })));
+      expect((r as KsefApiError).status).toBe(429);
+    };
+    const runMany = async (from: number, count: number) => {
+      const out: unknown[] = [];
+      for (let i = 0; i < count; i += 1) {
+        m.invoice = { ...m.invoice, id: uuid(from + i), tenant_id: TENANT_B, ksef_status: 'queued', ksef_send_owner: null };
+        out.push(await settle(runSubmitInvoice(event(TENANT_B, uuid(from + i)), ctx())));
+      }
+      return out;
+    };
+
+    // Firmy inne niż A i B (fikcyjne NIP-y 1234567892…); próg z modułu pauzy (dziś 5, jak skrzynka).
+    const nips = Array.from({ length: KSEF_SEND_BRAKE_MIN_FIRMS }, (_, i) => String(1_234_567_892 + i));
+    // Warunek dodatni: o jedną firmę mniej niż próg — hamulec jeszcze nie działa, wszystko wychodzi.
+    for (const nip of nips.slice(0, -1)) await limitedFirm(nip);
+    expect((await runMany(100, 8)).every((r) => r === 'ok')).toBe(true);
+
+    // Kolejna firma z 429 w 10 minut (próg osiągnięty): hamulec.
+    await limitedFirm(nips.at(-1)!);
+    m.rpc.mockClear();
+    m.fullFlow.mockClear();
+    const results = await runMany(200, 20);
+    const waiting = results.filter((r): r is PauseError => r instanceof Error && r.name === 'RetryAfterError');
+    const passed = results.filter((r) => r === 'ok');
+    expect(waiting.length + passed.length).toBe(20);
+    expect(waiting.length).toBeGreaterThan(0);
+    expect(passed.length).toBeGreaterThan(0);
+    for (const w of waiting) {
+      expect(w.pause).toBe(true);
+      expect(w.retryAfterMs).toBeGreaterThanOrEqual(KSEF_SEND_BRAKE_RETRY_MS);
+    }
+    // Zatrzymane przez hamulec nie przejmują wysyłki i nie idą do KSeF.
+    expect(claimCalls()).toHaveLength(passed.length);
+    expect(m.fullFlow).toHaveBeenCalledTimes(passed.length);
+    const brakeAlerts = vi.mocked(Sentry.captureMessage).mock.calls.filter(([msg]) => String(msg).includes('hamulec 429'));
+    expect(brakeAlerts).toHaveLength(1);
+  });
+
+  it('data nadania oryginału przy własnym duplikacie: 429 to pauza, nie przyjęcie numeru bez daty', async () => {
+    const K = '1234567890-20261109-0123456789AB-01';
+    const HASH = 'ab'.repeat(32);
+    m.invoice = { ...m.invoice, id: uuid(60) };
+    m.findOpen.mockResolvedValue({
+      sessionReferenceNumber: 'SES-1', invoiceReferenceNumber: 'REF-1', attemptedAt: T0.toISOString(),
+      originalKsefNumber: K, originalSessionReferenceNumber: 'SES-0', payloadHash: HASH,
+    });
+    // Sesja oryginału jest w historii tej faktury z tym samym plikiem — własny duplikat.
+    vi.mocked(findKsefSessionRow).mockResolvedValueOnce({ requestPayloadHash: HASH, xmlStoragePath: 'x.xml', invoiceReferenceNumber: 'REF-0' } as never);
+    // Data nadania po referencji własnej sesji: KSeF odpowiada 429.
+    m.status.mockRejectedValueOnce(new KsefApiError(429, '{}', 'KSeF 429', 120_000));
+
+    const error = await settle(runSubmitInvoice(event(TENANT_A, uuid(60)), ctx())) as PauseError;
+    expect(m.status).toHaveBeenCalledTimes(1);
+    expect(error).toMatchObject({ name: 'RetryAfterError', pause: true });
+    expect(error.retryAfterMs).toBeGreaterThanOrEqual(120_000);
+    expect(error.cause).toBeInstanceOf(KsefApiError);
+    // Bez przyjęcia numeru bez daty nadania (art. 106na) i bez alarmu „brak daty”.
+    expect(updateInvoiceStatus).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.captureMessage).mock.calls.map(([msg]) => String(msg)))
+      .not.toContain('KSeF: brak daty przyjęcia oryginału przy przyjęciu numeru z duplikatu');
+    expect(m.invoice).toMatchObject({ ksef_status: 'queued', ksef_send_owner: ATTEMPT });
   });
 
   it('uzgodnienie po referencji: 429 czeka na Retry-After (nie stały harmonogram) i nie zużywa próby', async () => {

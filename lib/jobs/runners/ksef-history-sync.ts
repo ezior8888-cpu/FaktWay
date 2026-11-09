@@ -42,6 +42,7 @@ import {
 } from '@/lib/import/ksef-xml-archive';
 import type { KsefAuth } from '@/lib/ksef/auth';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { isKsefLocalPause } from '@/lib/ksef/client';
 import { estimateRunSeconds, planFanOut, readYieldSignals, type FanOutCandidate } from '@/lib/ksef/history-sync/budget';
 import {
   classifyDiscovered,
@@ -397,7 +398,8 @@ export async function runKsefHistorySync({ step, logger }: JobContext): Promise<
 type KsefHistorySyncTenantData = Parameters<typeof ksefHistorySyncTenant.create>[0];
 
 type StopReason =
-  | { kind: 'pause'; pauseMs: number; detail: string }
+  /** `localPause`: firma już była w pauzie po 429 (L1a) — `ksefFetch` nie wysłał żądania. */
+  | { kind: 'pause'; pauseMs: number; detail: string; localPause: boolean }
   | { kind: 'session'; code: KsefHistorySessionErrorCode; detail: string };
 
 interface RunState {
@@ -605,7 +607,7 @@ async function runLeased(
     if (!outcome) throw error;
     switch (outcome.kind) {
       case 'pause':
-        state.stop = { kind: 'pause', pauseMs: outcome.pauseMs, detail: outcome.detail };
+        state.stop = { kind: 'pause', pauseMs: outcome.pauseMs, detail: outcome.detail, localPause: isKsefLocalPause(error) };
         return outcome;
       case 'session':
         if (outcome.invalidateSession && auth) ksefSessionCache.invalidate(auth.nip, env);
@@ -701,7 +703,11 @@ async function runLeased(
         rate_limited_at: at,
         rate_limit_hits: leased.rate_limit_hits + 1,
       });
-      logger.warn('Historia KSeF: 429 — pauza firmy', { tenantId, pauseMs: state.stop.pauseMs });
+      logger.warn('Historia KSeF: 429 — pauza firmy', {
+        tenantId,
+        pauseMs: state.stop.pauseMs,
+        localPause: state.stop.localPause,
+      });
     } else if (state.stop?.kind === 'session') {
       await updateStreamById(history, leased.id, {
         last_error_code: state.stop.code,

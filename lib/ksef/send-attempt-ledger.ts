@@ -35,9 +35,9 @@
 import * as Sentry from '@sentry/nextjs';
 
 import type { JobContext } from '@/lib/jobs/registry';
-import { MAX_WAIT_RETRIES, readWaits } from '@/lib/jobs/retry';
+import { isPauseError, MAX_WAIT_RETRIES, readWaits } from '@/lib/jobs/retry';
 import type { JobStep } from '@/lib/jobs/step-shim';
-import { KsefApiError } from '@/lib/ksef/client';
+import { isKsefLocalPause, KsefApiError } from '@/lib/ksef/client';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { SendRefusalCode } from '@/lib/ksef/send-error-classes';
 import { classifySendError, sendErrorClassOf } from '@/lib/ksef/send-error-codes';
@@ -50,6 +50,8 @@ import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 export const SEND_ATTEMPT_STAGES = [
   'start',
   'guard',
+  // L1a: pauza firmy po 429 z KSeF albo hamulec 429 (wiele firm naraz) — przed przejęciem.
+  'pause',
   'offline',
   'credentials',
   'health',
@@ -73,6 +75,7 @@ export type SendAttemptStatus = 'started' | 'succeeded' | 'failed' | 'waiting' |
  */
 const STEP_STAGE: Readonly<Record<string, SendAttemptStage>> = {
   'idempotency-guard': 'guard',
+  'ksef-rate-limit-pause': 'pause',
   'check-ksef-health': 'offline',
   'try-redirect-offline-queue': 'offline',
   'audit-redirect-offline': 'offline',
@@ -109,13 +112,18 @@ function isNamed<T extends Error>(e: Error, cls: abstract new (...args: never[])
   return e instanceof cls || e.name === name;
 }
 
-/** Etap `submit` doprecyzowany po błędzie: XML (generator, XSD) albo odpowiedź KSeF. */
+/**
+ * Etap `submit` doprecyzowany po błędzie: XML (generator, XSD) albo odpowiedź
+ * KSeF. Lokalna pauza firmy po 429 (L1a, `KsefRateLimitPausedError`) to nie
+ * odpowiedź KSeF — żądanie nie wyszło.
+ */
 export function refineStage(stage: SendAttemptStage, error: unknown): SendAttemptStage {
   if (stage !== 'submit') return stage;
   for (const e of chain(error)) {
     if (isNamed(e, InvoiceXmlSchemaError, 'InvoiceXmlSchemaError') || isNamed(e, InvoiceValidationError, 'InvoiceValidationError')) {
       return 'xml';
     }
+    if (isKsefLocalPause(e)) continue;
     if (isNamed(e, KsefApiError, 'KsefApiError') || isNamed(e, KsefInvoiceRejectedError, 'KsefInvoiceRejectedError')) {
       return 'ksef';
     }
@@ -161,6 +169,11 @@ export interface SendAttemptFailure {
  * KSeF nadal przetwarza) to `waiting` bez kodu — nie porażka. Po wyczerpaniu
  * limitu odczekań (`decideRetry`) to samo oczekiwanie zużywa próbę i może
  * zakończyć job — wtedy jest zwykłą porażką z kodem.
+ *
+ * Pauza firmy po 429 (L1a, `RetryAfterError` z `pause: true`) to zawsze
+ * `waiting` bez kodu: nie korzysta z budżetu odczekań (`__waits`), więc ich
+ * licznik jej nie dotyczy. Status HTTP tylko z prawdziwej odpowiedzi KSeF:
+ * lokalna pauza (`localPause`, żądanie nie wyszło) nie jest „HTTP 429”.
  */
 export function describeSendAttemptFailure(
   error: unknown,
@@ -171,14 +184,16 @@ export function describeSendAttemptFailure(
   const errors = chain(error);
   const top = errors[0];
   const waiting =
-    top !== undefined &&
-    top.name === 'RetryAfterError' &&
-    (top as { countsAsAttempt?: unknown }).countsAsAttempt === false &&
-    waits < MAX_WAIT_RETRIES;
+    isPauseError(top) ||
+    (top !== undefined &&
+      top.name === 'RetryAfterError' &&
+      (top as { countsAsAttempt?: unknown }).countsAsAttempt === false &&
+      waits < MAX_WAIT_RETRIES);
   const retryable = !(top !== undefined && top.name === 'NonRetriableError');
   let httpStatus: number | null = null;
   let ksefCode: number | null = null;
   for (const e of errors) {
+    if (isKsefLocalPause(e)) continue;
     if (httpStatus === null && isNamed(e, KsefApiError, 'KsefApiError')) {
       const api = e;
       httpStatus = typeof api.status === 'number' ? api.status : null;

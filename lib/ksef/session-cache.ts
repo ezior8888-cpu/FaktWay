@@ -119,7 +119,7 @@ class SessionCache {
 
     // L1a: logowanie i odświeżenie w kontekście NIP-u firmy — każde żądanie
     // `/auth/*` przechodzi przez pauzę po 429, także gdy wołający jest poza
-    // kolejką firmy (archiwum XML skrzynki, otwarcie sesji historii, UPO).
+    // kolejką firmy (otwarcie sesji historii, sesja UPO, skrypty).
     // Wspólna obietnica logowania (`locks`) jest wtedy zawsze objęta bramką.
     const authPromise = runWithKsefNip(auth.nip, () => this.refreshOrAuth(cacheKey, auth, refreshable, env));
     const pending: PendingAuth = { fingerprint, promise: authPromise };

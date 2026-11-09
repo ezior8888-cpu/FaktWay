@@ -88,7 +88,14 @@ export function currentKsefNip(): string | null {
 // Magazyn: pamięć procesu + Redis
 // ═══════════════════════════════════════════════════════════════
 
-const memoryPauses = new Map<string, number>();
+/**
+ * Pauzy w pamięci procesu. `persisted` = ta wartość (albo dłuższa) jest
+ * w Redisie: wtedy świeży odczyt Redisa jest źródłem prawdy, więc `DEL`
+ * operatora (`scripts/ops/ksef-pauza.sh zdejmij`) zdejmuje pauzę także
+ * w procesie, który ją zapisał. Bez zapisu w Redisie (awaria, brak
+ * konfiguracji) pamięć trzyma pauzę do końca.
+ */
+const memoryPauses = new Map<string, { until: number; persisted: boolean }>();
 const remoteReads = new Map<string, { at: number; until: number | null }>();
 const memoryFirms = new Map<string, Map<string, number>>();
 const remoteBrakeReads = new Map<string, { at: number; firms: number }>();
@@ -148,9 +155,10 @@ export async function recordKsefRateLimit(
   const now = Date.now();
   const key = pauseKey(env, nip);
   const candidate = now + ksefPauseLengthMs(retryAfterMs);
-  const until = Math.max(candidate, memoryPauses.get(key) ?? 0);
-  memoryPauses.set(key, until);
-  remoteReads.set(key, { at: now, until });
+  const previous = memoryPauses.get(key);
+  let until = Math.max(candidate, previous && previous.until > now ? previous.until : 0);
+  // Najpierw pamięć: równoległe żądania tej firmy w tym procesie widzą pauzę od razu.
+  memoryPauses.set(key, { until, persisted: false });
 
   const firms = memoryFirms.get(env) ?? new Map<string, number>();
   firms.set(nip, now);
@@ -158,56 +166,87 @@ export async function recordKsefRateLimit(
   remoteBrakeReads.delete(env);
 
   if (!isRedisConfigured()) return until;
-  try {
-    const redis = getRedis();
-    const stored = asMs(await withTimeout(redis.get(key), KSEF_PAUSE_STORE_TIMEOUT_MS));
-    if (stored === null || stored < until) {
-      await withTimeout(redis.set(key, String(until), { px: Math.max(1_000, until - now) }), KSEF_PAUSE_STORE_TIMEOUT_MS);
+  const redis = getRedis();
+  // Pauza i okno hamulca równolegle: przy wiszącym Redisie całość trwa ~1 s, nie 2 s.
+  const pauseWrite = (async () => {
+    try {
+      const stored = asMs(await withTimeout(redis.get(key), KSEF_PAUSE_STORE_TIMEOUT_MS));
+      if (stored !== null && stored >= until) {
+        // Dłuższa pauza innego procesu (albo wcześniejsza tego) wygrywa — nigdy nie skracamy.
+        until = stored;
+      } else {
+        await withTimeout(redis.set(key, String(until), { px: Math.max(1_000, until - now) }), KSEF_PAUSE_STORE_TIMEOUT_MS);
+      }
+      memoryPauses.set(key, { until, persisted: true });
+      remoteReads.set(key, { at: now, until });
+    } catch (error) {
+      warnStore('zapis', error);
+      memoryPauses.set(key, { until, persisted: false });
     }
-    const brakeKey = cacheKeys.ksefRateLimitedFirms(env);
-    await withTimeout(
-      Promise.all([
-        redis.zadd(brakeKey, { score: now, member: nip }),
-        redis.zremrangebyscore(brakeKey, 0, now - KSEF_SEND_BRAKE_WINDOW_MS),
-        redis.pexpire(brakeKey, KSEF_SEND_BRAKE_WINDOW_MS),
-      ]),
-      KSEF_PAUSE_STORE_TIMEOUT_MS,
-    );
-  } catch (error) {
-    warnStore('zapis', error);
-  }
+  })();
+  const brakeWrite = (async () => {
+    try {
+      const brakeKey = cacheKeys.ksefRateLimitedFirms(env);
+      await withTimeout(
+        Promise.all([
+          redis.zadd(brakeKey, { score: now, member: nip }),
+          redis.zremrangebyscore(brakeKey, 0, now - KSEF_SEND_BRAKE_WINDOW_MS),
+          redis.pexpire(brakeKey, KSEF_SEND_BRAKE_WINDOW_MS),
+        ]),
+        KSEF_PAUSE_STORE_TIMEOUT_MS,
+      );
+    } catch (error) {
+      warnStore('zapis hamulca', error);
+    }
+  })();
+  await Promise.all([pauseWrite, brakeWrite]);
   return until;
 }
 
 /**
  * Koniec pauzy firmy (ms) albo `null`, gdy firma nie jest w pauzie. Czyta
  * pamięć procesu i (najwyżej co `KSEF_PAUSE_REMOTE_REFRESH_MS`) Redis.
- * Nigdy nie rzuca; awaria Redisa = sama pamięć (fail-open).
+ * Nigdy nie rzuca; awaria Redisa = sama pamięć (fail-open). Pauza aktywna,
+ * gdy `now < koniec`.
  */
 export async function ksefPausedUntil(env: KsefEnvironment, nip: string): Promise<number | null> {
   const now = Date.now();
   const key = pauseKey(env, nip);
-  let until = memoryPauses.get(key) ?? null;
-  if (until !== null && until <= now) {
+  let local = memoryPauses.get(key) ?? null;
+  if (local !== null && local.until <= now) {
     memoryPauses.delete(key);
-    until = null;
+    local = null;
   }
+  let until = local?.until ?? null;
 
   if (isRedisConfigured()) {
     const cached = remoteReads.get(key);
     let remote: number | null;
+    let fresh = false;
     if (cached && now - cached.at < KSEF_PAUSE_REMOTE_REFRESH_MS) {
       remote = cached.until;
     } else {
       try {
         remote = asMs(await withTimeout(getRedis().get(key), KSEF_PAUSE_STORE_TIMEOUT_MS));
+        fresh = true;
       } catch (error) {
         warnStore('odczyt', error);
         remote = cached?.until ?? null;
       }
       remoteReads.set(key, { at: now, until: remote });
     }
-    if (remote !== null && remote > now && (until === null || remote > until)) until = remote;
+    if (fresh && local?.persisted) {
+      // Pauza tego procesu jest w Redisie: świeży odczyt rozstrzyga (DEL operatora, wygaśnięcie).
+      if (remote === null || remote <= now) {
+        memoryPauses.delete(key);
+        until = null;
+      } else {
+        memoryPauses.set(key, { until: remote, persisted: true });
+        until = remote;
+      }
+    } else if (remote !== null && remote > now && (until === null || remote > until)) {
+      until = remote;
+    }
   }
 
   return until !== null && until > now ? until : null;

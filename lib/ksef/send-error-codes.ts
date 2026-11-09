@@ -61,10 +61,14 @@ export interface ClassifiedSendError {
  * cudzego 440). Klasyfikator bierze jego kod PRZED klasami KSeF z łańcucha
  * przyczyn — inaczej `KsefInvoiceRejectedError(440)` albo błąd HTTP pobrania
  * oryginału przesłoniłby werdykt (403 → KSEF_SESSION z automatem itd.).
+ *
+ * `cause` (L1a): błąd, z którego werdykt wynika (np. `KsefApiError` pobrania
+ * oryginału po 440) — dziennik prób czyta z niego status HTTP. Klasyfikacji
+ * nie zmienia: kod werdyktu wygrywa z całym łańcuchem (krok 0 w `codeFor`).
  */
 export class KsefSendVerdictError extends Error {
-  constructor(readonly code: SendErrorCode, message: string) {
-    super(message);
+  constructor(readonly code: SendErrorCode, message: string, options?: { cause?: unknown }) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'KsefSendVerdictError';
   }
 }

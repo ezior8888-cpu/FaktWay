@@ -180,7 +180,10 @@ describe('rejestr jobów', () => {
 
   it('limity per tenant/NIP w rdzeniu KSeF', () => {
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
-    expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(100);
+    // L1a (08.11.2026): MF liczy limity na parę (NIP, IP), a cała platforma
+    // wysyła z jednego adresu — firma ma najwyżej 2 wysyłki naraz (wcześniej
+    // 100, czyli bez limitu: jedna firma zajmowała wszystkie sloty).
+    expect(byQueue.get('invoice.submit.requested')?.groupConcurrency).toBe(2);
     expect(byQueue.get('invoice.upo.requested')?.groupConcurrency).toBe(3);
     expect(byQueue.get('inbox.poll.tenant')?.groupConcurrency).toBe(1); // AUD-91: jeden przebieg skrzynki na NIP
     // Harmonogram 00160: ponowieniem przebiegu jest termin zależny od rodzaju błędu,

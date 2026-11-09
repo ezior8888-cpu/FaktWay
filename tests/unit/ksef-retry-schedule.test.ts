@@ -54,7 +54,11 @@ describe('stałe limitów', () => {
     }
   });
 
-  it('limity per-tenant zgodne ze spec Fazy 23', () => {
-    expect(KSEF_TENANT_CONCURRENCY_LIMIT).toBe(100);
+  it('limit wysyłek naraz na firmę: 2 (L1a)', () => {
+    // L1a (08.11.2026): MF liczy limity na parę (NIP, IP), a cała platforma
+    // wysyła z jednego adresu. Dawne 100 ze spec Fazy 23 oznaczało brak limitu:
+    // jedna firma zajmowała wszystkie 5 slotów wysyłki. 2 wysyłki naraz to do
+    // ok. 60 zapytań o status na minutę przy limicie MF 120 (`invoiceStatus`).
+    expect(KSEF_TENANT_CONCURRENCY_LIMIT).toBe(2);
   });
 });
