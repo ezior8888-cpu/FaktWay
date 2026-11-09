@@ -10,6 +10,7 @@ import {
   REVERSE_CHARGE_LABEL,
   SPLIT_PAYMENT_LABEL,
 } from '@/lib/invoices/annotations';
+import { vatSummaryAgreesWithGross } from '@/lib/invoices/vat-summary';
 import { PUBLIC_SITE_DOMAIN, PUBLIC_SITE_URL } from '@/lib/site';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -465,6 +466,9 @@ function drawLineItems(
   doc.y += 14;
 }
 
+/** Faktury korygujące: pozycje mogą być stanem po, a nagłówek różnicą (S-01b). */
+const CORRECTION_TYPES: ReadonlySet<Invoice['type']> = new Set(['KOR', 'KOR_ZAL', 'KOR_ROZ']);
+
 function drawVatSummary(
   doc: Doc,
   invoice: Invoice,
@@ -483,11 +487,20 @@ function drawVatSummary(
     cur.gross += line.grossAmount;
     byRate.set(line.vatRate, cur);
   }
+  // S-01b: korekta „przed/po” ma w pozycjach stan PO, a w `grossTotal` różnicę
+  // (00200), więc wiersze stawek z pozycji byłyby kwotami stanu po, nie
+  // korekty. Jak na ekranie (`vatSummaryAgreesWithGross`) zostaje wtedy samo
+  // „Do zapłaty”; różnice stawek tej korekty są w XML w KSeF (P_13, P_14).
+  // Tylko korekty: ROZ ma w `grossTotal` całe zamówienie, tak jak jego pozycje.
+  const showRates =
+    !CORRECTION_TYPES.has(invoice.type) ||
+    vatSummaryAgreesWithGross([...byRate].map(([rate, sums]) => ({ rate, ...sums })), invoice.grossTotal);
+  const rateRows = showRates ? [...byRate] : [];
 
   const boxW = 250;
   const boxX = left + width - boxW;
   // Nagłówek + stawki + zaliczki + „Do zapłaty” — całość na jednej stronie.
-  ensureSpace(doc, 13 + byRate.size * 12 + 16 + 22);
+  ensureSpace(doc, 13 + rateRows.length * 12 + 16 + 22);
   let y = doc.y;
 
   doc.font('bold').fontSize(8).fillColor('#888888');
@@ -497,7 +510,7 @@ function drawVatSummary(
   y += 13;
 
   doc.font('body').fontSize(8).fillColor('#333333');
-  for (const [rate, sums] of byRate) {
+  for (const [rate, sums] of rateRows) {
     doc.text(
       `${vatRateLabel(rate)}  netto ${money(sums.net)}  VAT ${money(sums.vat)}`,
       boxX,
