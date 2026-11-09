@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00175 (plan kompletnej aplikacji, krok 1.3): faktura do paragonu ze skrzynki KSeF i paragon
+      // z NIP; połączenie, ostrzeżenie, ponowienie bez zmian, decyzja klienta, wyzwalacz KPiR, izolacja.
+      'tests/rls-faktura-do-paragonu.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

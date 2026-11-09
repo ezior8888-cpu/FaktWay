@@ -9,6 +9,17 @@ import type { JobContext } from '@/lib/jobs/registry';
 
 import { categorizeExpense } from '@/lib/categorization';
 import {
+  fpInvoiceFacts,
+  fpMarkerFromXml,
+  isSureReceiptMatch,
+  RECEIPT_MATCH_LIMIT,
+  receiptCandidates,
+  receiptMatchWindow,
+  type FpMarker,
+  type ReceiptCandidateRow,
+} from '@/lib/expenses/receipt-invoice-match';
+import { downloadFromR2 } from '@/lib/storage/r2';
+import {
   extractedInvoiceSchema,
   type ExtractedInvoice,
 } from '@/lib/ocr/schema';
@@ -227,12 +238,17 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
         .eq('tenant_id', tenantId)
         .maybeSingle();
       // Błąd odczytu nie jest powodem do pominięcia: pełna droga sama zapyta o stan.
-      if (error || !row) return { processed: false, hasExpense: false };
+      if (error || !row) return { processed: false, hasExpense: false, expenseId: null };
       const fa3 = fa3Record(row.fa3_data);
       const expenses = (row as unknown as { expenses: unknown }).expenses;
+      const first = Array.isArray(expenses) ? expenses[0] : expenses;
+      const expenseId = first && typeof first === 'object' && typeof (first as { id?: unknown }).id === 'string'
+        ? (first as { id: string }).id
+        : null;
       return {
         processed: fa3[INBOX_PENDING_FLAG] === false,
         hasExpense: Array.isArray(expenses) ? expenses.length > 0 : Boolean(expenses),
+        expenseId,
       };
     });
     if (current.processed) {
@@ -248,6 +264,11 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
 
     // Koszt już jest, brakowało tylko XML: bez drugiego liczenia kategorii i bez AI.
     if (current.hasExpense) {
+      // Ponowienie po awarii między zapisem kosztu a dopasowaniem paragonu:
+      // RPC 00175 zapisuje dopasowanie faktury raz, więc to jest bezpieczne.
+      if (current.expenseId) {
+        await matchReceiptForFpInvoice({ supabase, tenantId, invoiceId, expenseId: current.expenseId, step, logger });
+      }
       if (xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable') {
         await closeInboxInvoice({ supabase, tenantId, invoiceId, step, logger });
       }
@@ -328,7 +349,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
       return categorizeExpense(tenantId, unsignedForCategorization(amountsForCategory));
     });
 
-    await step.run('create-expense', async () => {
+    const created = await step.run('create-expense', async () => {
       // fetch-invoice may have been memoized before a deployment switched the
       // KSeF environment. Recheck the actual invoice before the financial write.
       if (environment !== requireConfiguredKsefEnvironment()) {
@@ -462,6 +483,10 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
       return { skipped: false as const, expenseId: expense.id };
     });
 
+    // Krok 1.3: faktura do paragonu łączy się z wgranym paragonem z NIP przed
+    // domknięciem, więc awaria tutaj zostawia znacznik i ponowienie wraca.
+    await matchReceiptForFpInvoice({ supabase, tenantId, invoiceId, expenseId: created.expenseId, step, logger });
+
     // K2 (rewizja 03.10.2026): domknięcie przebiegu. Odbiór skrzynki zapala
     // `fa3_data._pendingFullFetch`; cron `inbox-backfill` emituje zdarzenie
     // ponownie dla faktur, które tu nie doszły. Znacznik gaśnie dopiero, gdy
@@ -474,6 +499,109 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     }
 
     return { success: true as const };
+}
+
+/**
+ * Krok 1.3 (część 2): faktura do paragonu (FP) ze skrzynki a paragon z NIP
+ * wgrany wcześniej (`lib/expenses/receipt-invoice-match.ts`). Bez kandydata
+ * nic się nie zmienia i XML nie jest pobierany. Z kandydatami odczyt `Fa/FP`
+ * z archiwum XML rozstrzyga: zwykła faktura jak dziś, FP z jednym pewnym
+ * kandydatem łączy się, reszta (kilku kandydatów, niepewna data, brak XML)
+ * to ostrzeżenie na obu dokumentach do decyzji klienta.
+ *
+ * Ponowienie od zera: odczyty bez efektów; RPC 00175 w jednej transakcji
+ * zapisuje dopasowanie faktury raz (blokada wiersza kosztu i warunek „brak
+ * zapisu dla tej faktury”), więc drugie wykonanie zwraca `already_recorded`.
+ */
+async function matchReceiptForFpInvoice(input: {
+  supabase: ReturnType<typeof createAdminClient>;
+  tenantId: string;
+  invoiceId: string;
+  expenseId: string;
+  step: JobContext['step'];
+  logger: JobContext['logger'];
+}): Promise<void> {
+  const { supabase, tenantId, invoiceId, expenseId, step, logger } = input;
+
+  const found = await step.run('find-receipt-for-fp', async () => {
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select('id, issue_date, currency, gross_total, seller_nip, seller_data, fa3_data, xml_storage_path')
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error) throw new Error('Nie można odczytać faktury do dopasowania paragonu');
+    if (!invoice) return null;
+    const facts = fpInvoiceFacts(invoice, resolveSellerNip(invoice as unknown as InvoiceWithLines));
+    if (!facts) return null;
+
+    const window = receiptMatchWindow(facts.issueDay);
+    const { data: rows, error: rowsError } = await supabase
+      .from('expenses')
+      .select('id, issue_date, gross_amount, seller_nip, document_type, source, ksef_invoice_id, ocr_extracted_data')
+      .eq('tenant_id', tenantId)
+      .is('ksef_invoice_id', null)
+      .neq('source', 'ksef_inbox')
+      .eq('gross_amount', facts.grossGr / 100)
+      .gte('issue_date', window.from)
+      .lte('issue_date', window.to)
+      .order('id', { ascending: true })
+      .limit(RECEIPT_MATCH_LIMIT);
+    if (rowsError) throw new Error('Nie można sprawdzić paragonów do faktury');
+    const candidates = receiptCandidates(facts, (rows ?? []) as ReceiptCandidateRow[]);
+    if (candidates.length === 0) return null;
+    return {
+      issueDay: facts.issueDay,
+      candidates,
+      xmlStoragePath: typeof invoice.xml_storage_path === 'string' ? invoice.xml_storage_path : null,
+    };
+  });
+  if (!found) return;
+
+  const fp = await step.run('read-fp-marker', () => readFpMarker(tenantId, invoiceId, found.xmlStoragePath, logger));
+  if (fp === false) return;
+
+  const autoLink = isSureReceiptMatch(fp, found.issueDay, found.candidates);
+  const result = await step.run('record-receipt-match', async () => {
+    const { data, error } = await supabase.rpc('match_receipt_to_ksef_invoice', {
+      p_tenant_id: tenantId,
+      p_invoice_expense_id: expenseId,
+      p_receipt_expense_ids: found.candidates.map((c) => c.id),
+      p_auto_link: autoLink,
+    });
+    if (error) throw new Error(`Nie udało się zapisać dopasowania paragonu: ${error.message}`);
+    return data;
+  });
+  logger.info('Skrzynka: faktura do paragonu a paragon z NIP', {
+    invoiceId, expenseId, fp, candidates: found.candidates.length, autoLink, result,
+  });
+}
+
+/**
+ * `Fa/FP` z archiwum XML. Brak pliku albo błąd odczytu to „nie wiadomo”:
+ * wtedy nic nie łączy się samo, a kandydaci dostają ostrzeżenie.
+ */
+async function readFpMarker(
+  tenantId: string,
+  invoiceId: string,
+  storagePath: string | null,
+  logger: JobContext['logger'],
+): Promise<FpMarker> {
+  if (!storagePath) return null;
+  try {
+    const bytes = await downloadFromR2(storagePath, tenantId);
+    return fpMarkerFromXml(bytes.toString('utf8'));
+  } catch (e) {
+    logger.warn('Skrzynka: nie udało się odczytać XML faktury do sprawdzenia FP', {
+      invoiceId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    Sentry.captureException(e, {
+      tags: { job: 'auto-categorize-inbox', step: 'read-fp-marker' },
+      extra: { tenantId, invoiceId },
+    });
+    return null;
+  }
 }
 
 /**
