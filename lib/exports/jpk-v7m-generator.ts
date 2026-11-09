@@ -187,7 +187,7 @@ export function vatPurchases(expenses: readonly ExportExpense[]): ExportExpense[
   return expenses.filter(
     // `!== 0`, nie `> 0`: korekta zakupu „in minus” zmniejsza odliczenie (#68).
     (e) =>
-      documentAllowsVatDeduction({ documentType: e.documentType, issueDate: e.issueDate }) &&
+      documentAllowsVatDeduction({ documentType: e.documentType, issueDate: e.issueDate, grossAmount: e.grossAmount }) &&
       e.vatDeductibleAmount !== 0,
   );
 }

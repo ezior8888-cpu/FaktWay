@@ -12,6 +12,13 @@
  * z NIP z datą od 1.01.2027 odliczenia nie daje. VAT odliczy się z faktury do
  * paragonu w KSeF, która przychodzi do skrzynki jak każda faktura.
  *
+ * Limit 450 zł: paragon z NIP jest fakturą uproszczoną tylko przy kwocie
+ * należności ogółem (brutto) do 450,00 zł włącznie (art. 106e ust. 5 pkt 3,
+ * do 31.12.2026 z art. 145n ust. 1 pkt 2). Powyżej nie jest fakturą, więc
+ * nie daje odliczenia. Koszty są tylko w PLN (inna waluta jest odrzucana),
+ * więc alternatywny próg 100 euro nie jest potrzebny. Grosze liczymy jako
+ * liczby całkowite.
+ *
  * Koszt w PIT (`kpirCostAmount`) celowo zostaje bez zmian, dopóki księgowa
  * nie rozstrzygnie, czy paragon bez faktury jest kosztem i w jakiej kwocie.
  *
@@ -26,6 +33,9 @@ export const RECEIPT_WITH_NIP_NOT_INVOICE_FROM = '2027-01-01';
 
 /** Paragon z NIP nabywcy do 450 zł, czyli faktura uproszczona spoza KSeF (rodzaj z OCR). */
 const RECEIPT_WITH_NIP = 'simplified_invoice';
+
+/** Limit kwoty należności ogółem paragonu z NIP, w groszach (450,00 zł włącznie). */
+export const RECEIPT_WITH_NIP_LIMIT_GR = 45000;
 
 export interface CostNotice {
   title: string;
@@ -48,17 +58,33 @@ export const RECEIPT_WITH_NIP_NO_DATE_NOTICE: CostNotice = {
     'więc FaktWay nie odlicza z niego VAT. Datę z paragonu wpisuje się w polu „Data wystawienia”.',
 };
 
+export const RECEIPT_WITH_NIP_OVER_LIMIT_NOTICE: CostNotice = {
+  title: 'Paragon z NIP powyżej 450 zł nie jest fakturą',
+  body:
+    'Paragon z NIP na kwotę powyżej 450 zł nie jest fakturą uproszczoną (art. 106e ust. 5 pkt 3 ustawy o VAT). ' +
+    'VAT odliczysz z faktury, więc poproś sprzedawcę o fakturę do paragonu.',
+};
+
+export const RECEIPT_WITH_NIP_NO_AMOUNT_NOTICE: CostNotice = {
+  title: 'Brak kwoty paragonu',
+  body:
+    'Paragon z NIP jest fakturą uproszczoną tylko do 450 zł (art. 106e ust. 5 pkt 3 ustawy o VAT), a bez kwoty brutto ' +
+    'nie da się tego sprawdzić, więc FaktWay nie odlicza z niego VAT. Kwotę brutto wpisuje się w formularzu kosztu.',
+};
+
 export interface CostDocument {
   /** Rodzaj dokumentu (`costDocumentType`); brak to faktura, jak dotąd w JPK i KPiR. */
   documentType: string | null | undefined;
   /** Data wystawienia dokumentu: RRRR-MM-DD albo znacznik czasu ISO. */
   issueDate: string | null | undefined;
+  /** Kwota brutto (należność ogółem) w PLN; potrzebna do limitu 450 zł paragonu z NIP. */
+  grossAmount?: number | string | null;
 }
 
 export type VatDeduction =
   | { deductible: true }
   | { deductible: false; reason: 'document_type'; notice: null }
-  | { deductible: false; reason: 'receipt_with_nip_from_2027' | 'missing_issue_date'; notice: CostNotice };
+  | { deductible: false; reason: 'receipt_with_nip_from_2027' | 'missing_issue_date' | 'receipt_with_nip_over_limit' | 'missing_amount'; notice: CostNotice };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
@@ -89,6 +115,13 @@ export function vatDeductionForDocument(doc: CostDocument): VatDeduction {
   }
   if (day >= RECEIPT_WITH_NIP_NOT_INVOICE_FROM) {
     return { deductible: false, reason: 'receipt_with_nip_from_2027', notice: RECEIPT_WITH_NIP_2027_NOTICE };
+  }
+  const gross = doc.grossAmount === null || doc.grossAmount === undefined || doc.grossAmount === '' ? NaN : Number(doc.grossAmount);
+  if (!Number.isFinite(gross)) {
+    return { deductible: false, reason: 'missing_amount', notice: RECEIPT_WITH_NIP_NO_AMOUNT_NOTICE };
+  }
+  if (Math.round(gross * 100) > RECEIPT_WITH_NIP_LIMIT_GR) {
+    return { deductible: false, reason: 'receipt_with_nip_over_limit', notice: RECEIPT_WITH_NIP_OVER_LIMIT_NOTICE };
   }
   return { deductible: true };
 }

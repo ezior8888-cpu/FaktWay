@@ -14,7 +14,11 @@ import {
  * ustawy o VAT), od 1.01.2027 nie jest fakturą (art. 86 ust. 2 pkt 1 lit. a).
  */
 
-const paragon = (issueDate: string | null) => ({ documentType: 'simplified_invoice', issueDate });
+const paragon = (issueDate: string | null, grossAmount: number | null = 123) => ({
+  documentType: 'simplified_invoice',
+  issueDate,
+  grossAmount,
+});
 
 describe('paragon z NIP na granicy roku (Europe/Warsaw)', () => {
   it('pierwszy dzień bez faktury uproszczonej to 1.01.2027', () => {
@@ -62,6 +66,45 @@ describe('paragon z NIP na granicy roku (Europe/Warsaw)', () => {
   it('teksty bez długich myślników', () => {
     for (const issueDate of ['2027-01-01', null]) {
       const wynik = vatDeductionForDocument(paragon(issueDate));
+      const tekst = wynik.deductible ? '' : `${wynik.notice?.title} ${wynik.notice?.body}`;
+      expect(tekst).not.toMatch(/[—–]/);
+    }
+  });
+});
+
+describe('limit 450 zł brutto: paragon z NIP z 2026 r. (art. 106e ust. 5 pkt 3)', () => {
+  it.each([
+    [450, true],
+    [449.99, true],
+    [450.01, false],
+    [451, false],
+    [600, false],
+    // Błąd zmiennoprzecinkowy: 450.0000000001 po zaokrągleniu do groszy to 450,00.
+    [450.0000000001, true],
+    [0.1 + 0.2 + 449.7, true],
+  ])('kwota brutto %s zł: odliczenie %s', (gross, deductible) => {
+    expect(documentAllowsVatDeduction(paragon('2026-06-01', gross))).toBe(deductible);
+  });
+
+  it('powyżej 450 zł: powód i prośba o fakturę do paragonu', () => {
+    const wynik = vatDeductionForDocument(paragon('2026-06-01', 450.01));
+    expect(wynik).toMatchObject({ deductible: false, reason: 'receipt_with_nip_over_limit' });
+    expect(wynik.deductible === false && wynik.notice?.body).toContain('art. 106e ust. 5 pkt 3 ustawy o VAT');
+    expect(wynik.deductible === false && wynik.notice?.body).toContain('poproś sprzedawcę o fakturę do paragonu');
+  });
+
+  it.each([null, undefined, NaN])('bez kwoty (%s): brak odliczenia z komunikatem', (gross) => {
+    const wynik = vatDeductionForDocument({ documentType: 'simplified_invoice', issueDate: '2026-06-01', grossAmount: gross });
+    expect(wynik).toMatchObject({ deductible: false, reason: 'missing_amount' });
+  });
+
+  it('limit dotyczy tylko paragonu z NIP: faktura na 600 zł dalej daje odliczenie', () => {
+    expect(documentAllowsVatDeduction({ documentType: 'invoice', issueDate: '2026-06-01', grossAmount: 600 })).toBe(true);
+  });
+
+  it('teksty bez długich myślników', () => {
+    for (const gross of [600, null]) {
+      const wynik = vatDeductionForDocument(paragon('2026-06-01', gross));
       const tekst = wynik.deductible ? '' : `${wynik.notice?.title} ${wynik.notice?.body}`;
       expect(tekst).not.toMatch(/[—–]/);
     }
