@@ -174,6 +174,8 @@ describe('KSeF session cache credential boundary', () => {
     mocks.fetch.mockResolvedValueOnce(rejectedRefreshResponse(401));
     expect(await ksefSessionCache.getSession(auth, 'test')).toBe(second);
     expect(refreshCalls()).toHaveLength(1);
+    const [, init] = refreshCalls()[0]!;
+    expect(init.headers.Authorization).toBe(`Bearer ${first.refreshToken}`);
     expect(mocks.xades).toHaveBeenCalledTimes(2);
   });
 
