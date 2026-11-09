@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/storage/r2', () => ({ downloadInvoiceXml: mocks.download }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
+// Limit prób portalu (krok 6.2): tu zawsze przepuszcza.
+vi.mock('@/lib/auth/get-client-ip', () => ({ getClientIp: async () => '203.0.113.5' }));
+vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: async () => ({ allowed: true, remaining: 10, retryAfter: 0 }) }));
 
 import { GET as downloadXml } from '@/app/accountant/[token]/download/[invoiceId]/route';
 

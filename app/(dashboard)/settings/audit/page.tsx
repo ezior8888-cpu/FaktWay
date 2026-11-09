@@ -33,6 +33,8 @@ const ACTION_LABELS: Record<string, string> = {
   'tenant.ksef_nip_ownership_claimed': 'Przypisanie NIP do organizacji (KSeF)',
   'retention.deletion_requested': 'Żądanie usunięcia danych',
   'retention.deletion_executed': 'Wykonano usunięcie danych',
+  'accountant.expense_file_viewed': 'Księgowa otworzyła dokument kosztu',
+  'accountant.expense_file_downloaded': 'Księgowa pobrała dokument kosztu',
 };
 
 /**

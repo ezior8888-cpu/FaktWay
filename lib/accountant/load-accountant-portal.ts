@@ -1,17 +1,17 @@
-import { hashToken } from '@/lib/accountant/tokens';
-import { logAuditSystem } from '@/lib/audit/log-system';
+import {
+  portalPage,
+  publicPortalAccess,
+  recordPortalVisit,
+  resolvePortalAccess,
+  type PortalAccess,
+  type PortalPage,
+} from '@/lib/accountant/portal-access';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export interface AccountantPortalData {
-  access: {
-    id: string;
-    accountant_name: string;
-    accountant_email: string;
-    access_level: string;
-    tenant_id: string;
-    expires_at: string;
-  };
+  access: PortalAccess;
   tenant: { name: string; nip: string };
+  /** Dokumenty bieżącej strony listy (najnowsze na górze). */
   invoices: Array<{
     id: string;
     internal_number: string | null;
@@ -23,6 +23,10 @@ export interface AccountantPortalData {
     /** XML w magazynie — bez niego nie ma czego pobrać. */
     xml_storage_path: string | null;
   }>;
+  /** Strona listy (krok 6.2: strony po 50 zamiast jednej listy do 100). */
+  invoicesPage: PortalPage;
+  /** Odczyt listy się nie udał: strona pokazuje komunikat, nie „brak dokumentów”. */
+  invoicesError: boolean;
 }
 
 /**
@@ -35,77 +39,57 @@ export const ACCOUNTANT_PORTAL_STATUSES = ['accepted', 'received', 'offline_queu
 /**
  * Weryfikuje token (hash) i zwraca dane do widoku portalu księgowej.
  * Używa service_role — wyłącznie po stronie serwera, bez sesji użytkownika.
+ * Lista strona po stronie: najpierw liczba dokumentów, potem wiersze strony
+ * (strona za końcem listy to ostatnia strona).
  */
 export async function loadAccountantPortal(
-  rawToken: string
+  rawToken: string,
+  options: { page?: number } = {},
 ): Promise<AccountantPortalData | null> {
-  const trimmed = rawToken.trim();
-  if (!trimmed) return null;
-
-  const hash = hashToken(trimmed);
   const admin = createAdminClient();
-
-  const { data: access, error } = await admin
-    .from('accountant_access')
-    .select(
-      'id, tenant_id, accountant_name, accountant_email, access_level, expires_at, revoked_at, use_count'
-    )
-    .eq('token_hash', hash)
-    .maybeSingle();
-
-  if (error || !access) return null;
-  if (access.revoked_at != null) return null;
-  if (new Date(access.expires_at as string) < new Date()) return null;
+  const access = await resolvePortalAccess(admin, rawToken);
+  if (!access) return null;
 
   const { data: tenant } = await admin
     .from('tenants')
     .select('name, nip')
-    .eq('id', access.tenant_id as string)
+    .eq('id', access.tenant_id)
     .maybeSingle();
 
   if (!tenant?.nip) return null;
 
-  const { data: invoices } = await admin
+  const counted = await admin
     .from('invoices')
-    .select('id, internal_number, issue_date, gross_total, ksef_status, direction, xml_storage_path')
-    .eq('tenant_id', access.tenant_id as string)
-    .in('ksef_status', [...ACCOUNTANT_PORTAL_STATUSES])
-    .order('issue_date', { ascending: false })
-    .limit(100);
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', access.tenant_id)
+    .in('ksef_status', [...ACCOUNTANT_PORTAL_STATUSES]);
 
-  const nextCount = Number(access.use_count ?? 0) + 1;
-  await admin
-    .from('accountant_access')
-    .update({
-      last_used_at: new Date().toISOString(),
-      use_count: nextCount,
-    })
-    .eq('id', access.id as string);
+  const page = portalPage(counted.count ?? 0, options.page ?? 1);
+  let invoices: AccountantPortalData['invoices'] = [];
+  let invoicesError = Boolean(counted.error) || counted.count == null;
+  if (!invoicesError) {
+    const { data, error } = await admin
+      .from('invoices')
+      .select('id, internal_number, issue_date, gross_total, ksef_status, direction, xml_storage_path')
+      .eq('tenant_id', access.tenant_id)
+      .in('ksef_status', [...ACCOUNTANT_PORTAL_STATUSES])
+      .order('issue_date', { ascending: false })
+      .order('id', { ascending: true })
+      .range(page.from, page.to);
+    invoicesError = Boolean(error) || !data;
+    invoices = (data ?? []) as AccountantPortalData['invoices'];
+  }
 
-  await logAuditSystem({
-    action: 'accountant.access_used',
-    tenantId: access.tenant_id as string,
-    entityType: 'accountant_access',
-    entityId: access.id as string,
-    metadata: {
-      accountantEmail: access.accountant_email as string,
-      via: 'accountant_portal',
-    },
-  });
+  await recordPortalVisit(admin, access);
 
   return {
-    access: {
-      id: access.id as string,
-      accountant_name: access.accountant_name as string,
-      accountant_email: access.accountant_email as string,
-      access_level: access.access_level as string,
-      tenant_id: access.tenant_id as string,
-      expires_at: access.expires_at as string,
-    },
+    access: publicPortalAccess(access),
     tenant: {
       name: tenant.name as string,
       nip: tenant.nip as string,
     },
-    invoices: (invoices ?? []) as AccountantPortalData['invoices'],
+    invoices,
+    invoicesPage: { page: page.page, pages: page.pages, total: page.total, pageSize: page.pageSize },
+    invoicesError,
   };
 }
