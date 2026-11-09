@@ -538,7 +538,8 @@
         "lib/ksiegowosc/vat.ts#vatMiesiaca"
       ],
       "testy": [
-        "tests/unit/jpk-v7m3.test.ts > "
+        "tests/unit/jpk-v7m3.test.ts > ",
+        "tests/filtr/roznicowe/vat.test.ts > pola P_10-P_62 w pliku i rozliczenie w module VAT"
       ],
       "parametry": [],
       "niezmienniki": [],
@@ -2026,7 +2027,8 @@
       "testy": [
         "tests/unit/ksiegowosc-ten-miesiac.test.ts > czynny VAT: pozycja z P_51 i terminem 25.",
         "tests/unit/ksiegowosc-vat-dane.test.ts > wpis klienta wygrywa z zatwierdzonym rozliczeniem",
-        "tests/unit/ksiegowosc-vat-dane.test.ts > bez żadnego źródła kwot nie ma"
+        "tests/unit/ksiegowosc-vat-dane.test.ts > bez żadnego źródła kwot nie ma",
+        "tests/filtr/roznicowe/vat.test.ts > pola P_10-P_62 w pliku i rozliczenie w module VAT"
       ],
       "parametry": [],
       "niezmienniki": [],
