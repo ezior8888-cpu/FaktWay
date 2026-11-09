@@ -26,6 +26,9 @@
 export type DurationStr = `${number}${'ms' | 's' | 'm' | 'h' | 'd'}`;
 
 import { KsefApiError } from '@/lib/ksef/client';
+import { KSEF_PAUSE_MAX_MS, seedFraction } from '@/lib/ksef/rate-limit-pause';
+
+import { parseDurationMs } from './duration';
 
 /**
  * Maksymalna liczba ponowień joba wysyłki (`maxRetries` w rejestrze workera).
@@ -58,27 +61,52 @@ export function getKsefRetryDelay(attempt: number): DurationStr {
   return KSEF_BACKOFF_SCHEDULE[attempt]!;
 }
 
-/** Górna granica oczekiwania z `Retry-After` — dłużej czeka już Offline24. */
-const MAX_RETRY_AFTER_SECONDS = 3600;
-
 /**
  * Opóźnienie ponowienia wysyłki: `Retry-After` z KSeF ma pierwszeństwo
- * przed harmonogramem (AUD-92), ale nie dłużej niż godzinę.
+ * przed harmonogramem (AUD-92), w pełnej długości (L1a, 08.11.2026): dawne
+ * obcięcie do godziny zakładało Offline24, wstrzymany od 02.10.2026, a krótsze
+ * czekanie niż podał MF tylko wydłuża blokadę. Bezpiecznik na absurdalny
+ * nagłówek: doba (`KSEF_PAUSE_MAX_MS`). 429 runner wysyłki obsługuje jako
+ * pauzę firmy (`lib/ksef/rate-limit-pause.ts`); tu zostają inne odpowiedzi
+ * z `Retry-After` (np. 503).
  */
 export function ksefRetryDelayFor(error: unknown, attempt: number): DurationStr {
   if (error instanceof KsefApiError && error.retryAfterMs !== null) {
-    const seconds = Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(1, Math.ceil(error.retryAfterMs / 1000)));
+    const seconds = Math.max(1, Math.ceil(Math.min(KSEF_PAUSE_MAX_MS, error.retryAfterMs) / 1000));
     return `${seconds}s`;
   }
   return getKsefRetryDelay(attempt);
 }
 
+/** Rozrzut harmonogramu: do +20% opóźnienia, deterministycznie z ziarna (np. id faktury). */
+const KSEF_RETRY_JITTER_SHARE = 0.2;
+
 /**
- * Limit równoległości per tenant dla `submit-invoice` (Faza 23 sekcja 2) —
- * `groupConcurrency` kolejki w workerze pg-boss. Dawny limit tempa (60/min)
- * był tylko w Inngest; tempo wobec KSeF pilnuje limiter per NIP.
- *
- * NIP byłby gorszym kluczem — multi-org pozwala mieć kilku tenantów z tym
- * samym NIP-em (Faza 36 multi-org). Tenant_id jest naturalnym kluczem.
+ * Opóźnienie z harmonogramu z rozrzutem tylko w górę (L1a): faktury, które
+ * padły razem (awaria KSeF, fala 429), nie wracają w tej samej sekundzie.
+ * Ziarno = id faktury, więc ponowienie tej samej faktury dostaje ten sam rozrzut.
  */
-export const KSEF_TENANT_CONCURRENCY_LIMIT = 100;
+export function ksefRetryDelayMs(attempt: number, seed: string): number {
+  const base = parseDurationMs(getKsefRetryDelay(attempt));
+  return base + Math.floor(seedFraction(seed) * base * KSEF_RETRY_JITTER_SHARE);
+}
+
+/**
+ * Limit równoległości wysyłki na firmę w aplikacji (`groupConcurrency` kolejki
+ * `invoice.submit.requested`, `groupId = tenantId`). 2 od L1a (08.11.2026),
+ * wcześniej 100, czyli bez limitu: jedna firma mogła zająć wszystkie 5 slotów
+ * (`localConcurrency`, `lib/jobs/handlers/package-d.ts`).
+ *
+ * Dlaczego 2: MF liczy limity na parę (NIP, adres IP), a wysyłka otwiera sesję
+ * na fakturę i odpytuje status co 2 s (do 30 razy). Dwie wysyłki naraz to do
+ * ok. 60 zapytań o status na minutę przy limicie 120 (`invoiceStatus`) i
+ * zapas na otwarcia sesji (30/min); więcej równoległości nie daje
+ * przepustowości, bo sufitem jest 120 otwarć sesji na godzinę. Liczba slotów
+ * razem (5) bez zmian — podnosi ją sesja 15 planu skalowania po pomiarze.
+ * Limit pg-boss jest miękki (równoległe pobrania mogą go chwilowo
+ * przekroczyć); przed MF chroni pauza po 429.
+ *
+ * Kilka firm w aplikacji z tym samym NIP-em dzieli jeden budżet MF, a ten
+ * limit liczy się per firma w aplikacji (multi-org) — budżet na NIP to L1b.
+ */
+export const KSEF_TENANT_CONCURRENCY_LIMIT = 2;
