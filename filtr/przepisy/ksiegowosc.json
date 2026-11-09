@@ -171,7 +171,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > ujemny przychód stawki przechodzi na kolejny miesiąc",
-        "tests/unit/ksiegowosc-ten-miesiac.test.ts > ujemny przychód 12 % w lipcu przechodzi na sierpień"
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > ujemny przychód 12 % w lipcu przechodzi na sierpień",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
       ],
       "parametry": [],
       "niezmienniki": [
@@ -487,7 +488,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-parametry.test.ts > pełny ZUS: 1 926,76 zł",
-        "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł"
+        "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
       ],
       "parametry": [],
       "niezmienniki": [
@@ -1010,7 +1012,9 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > dwie stawki: odliczenia proporcjonalnie do przychodu",
-        "tests/unit/ksiegowosc-silniki.test.ts > podział co do grosza"
+        "tests/unit/ksiegowosc-silniki.test.ts > podział co do grosza",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > remis reszt przy podziale odliczeń",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
       ],
       "parametry": [],
       "niezmienniki": [
@@ -1059,7 +1063,8 @@
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > odliczenia: społeczne bez FP i połowa zdrowotnej",
         "tests/unit/ksiegowosc-silniki.test.ts > odliczenia większe niż przychód przechodzą",
-        "tests/unit/ksiegowosc-ten-miesiac.test.ts > nadwyżka odliczeń ze stycznia przechodzi na luty"
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > nadwyżka odliczeń ze stycznia przechodzi na luty",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
       ],
       "parametry": [
         "ryczalt.odliczenieZdrowotnej"
@@ -1433,7 +1438,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > progi 60 i 300 tys. zł włącznie",
-        "tests/unit/ksiegowosc-parametry.test.ts > zdrowotna na ryczałcie: 9 % z 60, 100 i 180 %"
+        "tests/unit/ksiegowosc-parametry.test.ts > zdrowotna na ryczałcie: 9 % z 60, 100 i 180 %",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt: kwota według progu przychodu"
       ],
       "parametry": [
         "zdrowotna.stawka",
@@ -1577,7 +1583,8 @@
       "testy": [
         "tests/unit/ksiegowosc-pit.test.ts > skala 9 % dochodu z poprzedniego miesiąca",
         "tests/unit/ksiegowosc-pit.test.ts > liniowy 4,9 % dochodu",
-        "tests/unit/ksiegowosc-kpir.test.ts > styczeń bierze dochód z grudnia"
+        "tests/unit/ksiegowosc-kpir.test.ts > styczeń bierze dochód z grudnia",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > od dochodu, nie mniej niż 9"
       ],
       "parametry": [
         "zdrowotna.stawkaLiniowy",
@@ -1760,7 +1767,8 @@
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > pełne z chorobową: 1926,76 zł",
         "tests/unit/ksiegowosc-silniki.test.ts > stopa wypadkowa zmienia się od kwietnia",
-        "tests/unit/ksiegowosc-parametry.test.ts > pełny ZUS: 1 926,76 zł"
+        "tests/unit/ksiegowosc-parametry.test.ts > pełny ZUS: 1 926,76 zł",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
       ],
       "parametry": [
         "zus.prognozowanePrzecietneWynagrodzenie",
@@ -1821,7 +1829,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > preferencyjne z chorobową: 456,18 zł",
-        "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł"
+        "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
       ],
       "parametry": [
         "zus.podstawaPreferencyjnaProc",
@@ -1868,7 +1877,8 @@
         "lib/ksiegowosc/zus.ts#skladkiSpoleczne"
       ],
       "testy": [
-        "tests/unit/ksiegowosc-silniki.test.ts > ulga na start: zero przez 6 miesięcy"
+        "tests/unit/ksiegowosc-silniki.test.ts > ulga na start: zero przez 6 miesięcy",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
       ],
       "parametry": [
         "zus.ulgaNaStartMiesiecy"
