@@ -42,8 +42,8 @@ i porządku, nie z efektów.
 | Potwierdzenie usunięcia | systemowy arkusz akcji z czerwoną opcją | własne okno „Czy na pewno?” |
 | Wyszukiwanie | pole wyszukiwania w pasku nawigacji listy | osobny ekran wyszukiwarki |
 
-Główna akcja („Nowa faktura”) ma jedno stałe miejsce. Jakie dokładnie, decyduje
-Bartosz po obejrzeniu wariantów w symulatorze (plan, decyzja D7).
+Główna akcja sekcji ma jedno stałe miejsce: szeroki bloczek u góry listy, pod
+podsumowaniem (decyzja D7, 09.11.2026: „Nowa faktura” w bloczku, nie plus w pasku).
 
 **Główna akcja ekranu w treści, nie w dolnym pasku narzędzi.** W aplikacji z
 zakładkami dolny pasek narzędzi chowa się pod paskiem zakładek (sprawdzone w M3).

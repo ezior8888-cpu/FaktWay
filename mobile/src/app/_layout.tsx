@@ -3,9 +3,8 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { PrzyciskNowejNadZakladkami } from '@/komponenty/przycisk-nowej';
 import { KOSZTY } from '@/dane-przykladowe';
-import { StanFaktur, useStanFaktur } from '@/stan/faktury';
+import { StanFaktur } from '@/stan/faktury';
 import { useKolory } from '@/wyglad/kolory';
 
 const DO_OPISANIA = KOSZTY.filter((k) => k.zrodlo === 'ksef' && k.doOpisania).length;
@@ -30,14 +29,8 @@ export default function UkladGlowny() {
 
 function Zakladki() {
   const kolory = useKolory();
-  const { wariantNowej } = useStanFaktur();
   return (
     <NativeTabs tintColor={kolory.akcent} minimizeBehavior="onScrollDown">
-      {wariantNowej === 'nad-zakladkami' ? (
-        <NativeTabs.BottomAccessory>
-          <PrzyciskNowejNadZakladkami />
-        </NativeTabs.BottomAccessory>
-      ) : null}
       <NativeTabs.Trigger name="(faktury)">
         <NativeTabs.Trigger.Label>Faktury</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'doc.text', selected: 'doc.text.fill' }} md="description" />

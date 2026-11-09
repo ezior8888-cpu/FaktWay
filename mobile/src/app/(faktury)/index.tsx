@@ -38,7 +38,7 @@ function suma(faktury: Faktura[]): number {
 
 export default function EkranFaktur() {
   const router = useRouter();
-  const { faktury, wariantNowej } = useStanFaktur();
+  const { faktury } = useStanFaktur();
   const [filtr, setFiltr] = useState(0);
   const [szukaj, setSzukaj] = useState('');
   const tylkoDoZaplaty = filtr === 1;
@@ -62,11 +62,6 @@ export default function EkranFaktur() {
   return (
     <>
       <Stack.SearchBar placeholder="Kontrahent albo numer" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
-      {wariantNowej === 'pasek' ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button icon="plus" accessibilityLabel="Nowa faktura" onPress={nowa} />
-        </Stack.Toolbar>
-      ) : null}
 
       <EkranListy keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
@@ -93,7 +88,8 @@ export default function EkranFaktur() {
           </View>
         )}
 
-        {wariantNowej === 'pod-suma' && !szukaj ? (
+        {/* D7 (Bartosz, 09.11.2026): „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku. */}
+        {!szukaj ? (
           <View style={styles.akcja}>
             <PrzyciskGlowny tytul="Nowa faktura" ikona="plus" onPress={nowa} />
           </View>

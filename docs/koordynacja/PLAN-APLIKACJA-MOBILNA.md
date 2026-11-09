@@ -59,11 +59,11 @@ i poziom porządnych aplikacji fintech.
 |---|---|---|
 | D1 | **Technologia:** Expo (React Native), nowa aplikacja natywna; nie opakowane PWA (ryzyko odrzucenia z wytycznej 4.2 i ten sam „dziwny” wygląd), nie osobno Swift i Kotlin (dwie aplikacje to za dużo dla zespołu) | przyjęta 08.11.2026 (start etapu M1) |
 | D2 | **Gdzie kod:** folder `mobile/` w tym repo, żeby aplikacja i jej API zmieniały się w jednym PR i agenci widzieli oba końce. Koszt: wyłączenia w konfiguracji (sekcja 4.4) | przyjęta 08.11.2026 (Bartosz: start M2) |
-| D3 | **Zakres v1:** sześć zadań z sekcji 3 | przyjęta 08.11.2026 |
+| D3 | **Zakres: pełna zgodność ze stroną.** Na telefonie są wszystkie funkcje i karty aplikacji webowej, w stylu Apple, bez „okrojonej” wersji. Powód (Bartosz): klienci inFaktu złoszczą się, że płacą abonament, a na telefonie mają tylko część. Pierwotne „sześć zadań” z sekcji 3 to teraz kolejność budowy, nie granica zakresu. Wyjątek: zakup abonamentu (D5) | zmieniona 09.11.2026 (Bartosz) |
 | D4 | **Konta deweloperskie:** Apple (99 USD rocznie) i Google Play (25 USD jednorazowo) zakładamy jako firma, po założeniu spółki. Konto Apple dla JDG pokazuje w sklepie imię i nazwisko; nowe konto osobiste Google wymaga zamkniętego testu z 12 testerami przez 14 dni | do decyzji Bartosza |
 | D5 | **Płatności:** v1 nie sprzedaje abonamentu w aplikacji. Brak cen i przycisku „kup”, zakup na faktway.pl. Przed zgłoszeniem sprawdzić aktualne wytyczne Apple 3.1 | rekomendacja |
 | D6 | **Projektant iOS:** na zlecenie, raz: system (kolor, typografia, ikona aplikacji) i 8 do 10 kluczowych ekranów w Figmie na zestawie Apple. Bez projektanta: Claude daje 2 do 3 wariantów ekranu wzorcowego, Bartosz wybiera | do decyzji Bartosza |
-| D7 | **Miejsce „Nowa faktura”:** w M3 gotowe trzy warianty, przełącznik w zakładce Konto: A plus w pasku u góry (wzór Maila), B szeroki przycisk pod sumą „Do zapłaty”, C pasek „Nowa faktura” nad zakładkami, widoczny z każdej zakładki (najbliżej plusa z PWA). Dolny pasek narzędzi odpada (chowa się pod zakładkami). Rekomendacja Claude: A, a C, jeśli wystawianie ma być akcją numer jeden z każdego miejsca | otwarta, wybiera Bartosz |
+| D7 | **Miejsce „Nowa faktura”:** szeroki bloczek (przycisk Liquid Glass na całą szerokość) u góry listy faktur, pod sumą „Do zapłaty”; nie plus w pasku i nie pasek nad zakładkami | przyjęta 09.11.2026 (Bartosz: „u góry w bloczku, nie w krzyżyku”) |
 | D8 | **Kolejność platform:** najpierw iOS do poziomu „wzorzec”, potem dopasowanie Androida z tego samego kodu przed betą Google Play | rekomendacja |
 | D9 | **Powiadomienia:** z workera pg-boss bezpośrednio do APNs i FCM albo przez usługę push Expo (nowy podmiot przetwarzający, serwery poza UE). W obu przypadkach treść bez kwot i danych kontrahenta | otwarta, rozstrzygnąć w M10 |
 | D10 | **Identyfikator aplikacji:** `pl.faktway.app` na iOS (bundle ID) i Androidzie (package). Po publikacji nie do zmiany | przyjęta 08.11.2026 |
@@ -71,7 +71,10 @@ i poziom porządnych aplikacji fintech.
 
 ---
 
-## 3. Zakres v1: sześć zadań z telefonu
+## 3. Zakres: wszystko, co na stronie (D3 od 09.11.2026)
+
+Tabela niżej to pierwsze zadania (kolejność budowy). Pełny spis funkcji
+strony i ich odpowiedników na telefonie leży w sekcji 3a.
 
 | Zadanie | Co klient robi | Element natywny | Skąd dane i akcje dziś |
 |---|---|---|---|
@@ -82,10 +85,8 @@ i poziom porządnych aplikacji fintech.
 | Podgląd i PDF | otwiera fakturę, udostępnia PDF mailem albo komunikatorem | systemowy arkusz udostępniania | `app/api/invoices/[id]/pdf/route.ts` |
 | Ten miesiąc | widzi, ile podatku, ZUS i VAT zapłacić i do kiedy | lista z kwotami, przypomnienie | `app/actions/ksiegowosc-ten-miesiac.ts`, moduł `lib/ksiegowosc/` (za wyłącznikiem `ksiegowosc`) |
 
-**Zostaje na komputerze (v1):** ustawienia firmy i KSeF (certyfikat, kreator),
-import danych, eksporty, panel księgowej, faktury cykliczne, korekty i zaliczki,
-pełna księgowość (KPiR, JPK), FLO, admin. W aplikacji te miejsca kończą się
-zdaniem „Zrobisz to na faktway.pl” i linkiem.
+~~Zostaje na komputerze~~: nieaktualne od zmiany D3 (09.11.2026). Na komputerze
+zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 
 ---
 
@@ -219,9 +220,9 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** czeka na Bartosza: ocena ekranu wzorcowego na telefonie
-albo w panelu symulatora („to jest to” albo lista uwag), wybór D7 (A, B, C)
-i D6 (projektant). Po akceptacji M4 (logowanie).
+**Następny krok:** M4: pełny zakres ekranów na danych przykładowych (D3 po
+zmianie 09.11.2026), zaczynając od spisu funkcji strony (sekcja 3a). Ekran
+wzorcowy M3 przyjęty przez wybór D7; D6 (projektant) dalej otwarta.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|

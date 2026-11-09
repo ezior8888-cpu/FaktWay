@@ -10,15 +10,10 @@ import { Share } from 'react-native';
 import { FAKTURY, type Faktura } from '@/dane-przykladowe';
 import { kwota } from '@/lib/format';
 
-/** Warianty miejsca „Nowa faktura” do decyzji D7 (plan, sekcja 2). */
-export type WariantNowej = 'pasek' | 'pod-suma' | 'nad-zakladkami';
-
 type Stan = {
   faktury: Faktura[];
   /** Oznacza albo cofa zapłatę (z wibracją); jedno miejsce dla gestu, menu i przycisku. */
   przelaczZaplate: (f: Faktura) => void;
-  wariantNowej: WariantNowej;
-  ustawWariantNowej: (w: WariantNowej) => void;
 };
 
 const Kontekst = createContext<Stan | null>(null);
@@ -27,7 +22,6 @@ export function StanFaktur({ children }: { children: ReactNode }) {
   const [zaplacone, setZaplacone] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(FAKTURY.map((f) => [f.id, f.zaplacona])),
   );
-  const [wariantNowej, ustawWariantNowej] = useState<WariantNowej>('pasek');
 
   const wartosc = useMemo<Stan>(
     () => ({
@@ -36,10 +30,8 @@ export function StanFaktur({ children }: { children: ReactNode }) {
         setZaplacone((z) => ({ ...z, [f.id]: !f.zaplacona }));
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       },
-      wariantNowej,
-      ustawWariantNowej,
     }),
-    [zaplacone, wariantNowej],
+    [zaplacone],
   );
 
   return <Kontekst value={wartosc}>{children}</Kontekst>;
