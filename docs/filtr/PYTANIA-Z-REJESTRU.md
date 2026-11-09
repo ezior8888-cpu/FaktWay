@@ -8,8 +8,12 @@
 > Numery artykułów w regułach spisała sesja agenta z planu księgowości i źródeł urzędowych;
 > prawnik sprawdza każdy przed podpisem (`sprawdzil.prawnik`), także w regułach bez pytania.
 
-## Dla księgowej (21)
+## Dla księgowej (22)
 
+- **RP-FA-ROZ-01** (pewność średnia): Czy na fakturze rozliczającej (art. 106f ust. 3) P_13_x i P_14_x to wartość i podatek zamówienia pomniejszone o zaliczki w tej samej stawce, przy pełnych pozycjach FaWiersz? Opis pól w schemacie potwierdza tylko P_15 (kwota pozostała do zapłaty). Przypadki: zamówienie 10 000 zł netto 23%, zaliczka 2 460 zł brutto: P_13_1 = 8 000, P_14_1 = 1 840, P_15 = 9 840.
+  - Reguła: Faktura rozliczająca: pozycje (FaWiersz) pokazują pełne zamówienie, a P_13_x i P_14_x to wartość i podatek zamówienia w stawce pomniejszone o zaliczki w tej stawce (rozbicie z faktury zaliczkowej ma pierwszeństwo przed wzorem); P_15 to kwota pozostała do zapłaty.
+  - Podstawa: art. 106f ust. 3 (ustawa o podatku od towarów i usług); opis pola P_15 (schemat FA(3) Ministerstwa Finansów (lib/xml/schemas/fa3/schemat.xsd)).
+  - Jak liczy program: P_13_x i P_14_x faktury rozliczającej po odjęciu zaliczek w tej samej stawce, pozycje pełne (zmiana z 28.09.2026; wcześniej zaliczki odejmowało Rozliczenie/Odliczenia i VAT zaliczek był na fakturze drugi raz).
 - **RP-DATA-01** (pewność średnia): Czy pominięcie zapłaty otrzymanej przed wystawieniem faktury (bez faktury zaliczkowej) jest bezpieczne dla JDG w pilotażu?
   - Reguła: Dzień przychodu to dzień wydania rzeczy albo wykonania usługi, nie później niż dzień wystawienia faktury albo zapłaty; ewidencja i KPiR liczą go tą samą funkcją.
   - Podstawa: art. 14 ust. 1c (ustawa o podatku dochodowym od osób fizycznych); art. 6 ust. 1a (ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne).
