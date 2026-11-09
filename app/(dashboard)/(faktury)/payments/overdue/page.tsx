@@ -3,6 +3,7 @@ import {
   OverdueDashboardError,
   type OverdueInvoice,
 } from '@/components/reminders/overdue-dashboard';
+import { RECEIPT_REVENUE_COLUMNS } from '@/lib/invoices/receipt-revenue-guard';
 import { createClient } from '@/lib/supabase/server';
 import { getDashboardOrgSwitcherProps } from '@/lib/dashboard-shell-data';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -90,7 +91,7 @@ export default async function OverduePage() {
     for (const id of ids) seenViewIds.add(id);
     const matching = await supabase
       .from('invoices')
-      .select('id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data', { count: 'exact' })
+      .select(`id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data, ${RECEIPT_REVENUE_COLUMNS}`, { count: 'exact' })
       .eq('tenant_id', tenantId)
       .in('id', ids);
     if (matching.error || !matching.data || matching.count === null ||

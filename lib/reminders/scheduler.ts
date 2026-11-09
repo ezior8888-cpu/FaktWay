@@ -1,5 +1,7 @@
 // Decyzje: który etap przypomnienia i kiedy zaplanować wysyłkę.
 
+import { RECEIPT_REVENUE_COLUMNS } from '@/lib/invoices/receipt-revenue-guard';
+import { isReceiptInvoice } from '@/lib/reminders/delivery-schema';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import type { Database, Json } from '@/types/database';
@@ -331,7 +333,7 @@ export async function findInvoicesRequiringReminders(): Promise<
     let query = supabase
       .from('invoices')
       .select(
-        'id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused, invoice_kind, payment_data',
+        `id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused, invoice_kind, payment_data, ${RECEIPT_REVENUE_COLUMNS}`,
       )
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -352,6 +354,9 @@ export async function findInvoicesRequiringReminders(): Promise<
 
     const page = data ?? [];
     for (const row of page) {
+      // Krok 1.2: faktura do paragonu jest zapłacona przy kasie (status płatności zostaje,
+      // ale przypomnienia dla niej nie powstają). Strona kursora liczy się bez filtra.
+      if (isReceiptInvoice(row)) continue;
       out.push({
         id: row.id,
         tenant_id: row.tenant_id,
