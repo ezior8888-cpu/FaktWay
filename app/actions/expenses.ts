@@ -7,6 +7,11 @@ import { sendJobEvent } from '@/lib/jobs/enqueue';
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
+import {
+  ocrAmountsAwaitingPln,
+  ocrForeignCurrency,
+  withPlnConfirmation,
+} from '@/lib/expenses/ocr-currency-review';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import {
   ocrProcessPhotoRequested,
@@ -32,6 +37,12 @@ type ExpenseReviewUpdates = {
   gross_amount?: number;
   /** Potwierdzenie porównania walutowej faktury KSeF z XML i kwotami PLN. */
   confirmForeignCurrencyReview?: boolean;
+  /**
+   * Koszt OCR w walucie bez kursu NBP: klient potwierdza, że wpisane kwoty
+   * są już w złotych (`lib/expenses/ocr-currency-review.ts`). Nie dla KSeF:
+   * ścisły schemat KSeF odrzuca to pole.
+   */
+  confirmPlnAmounts?: boolean;
 };
 
 // Server Action arguments are untrusted at runtime. This schema is applied
@@ -329,6 +340,22 @@ export async function reviewExpenseAction(
     }
   }
 
+  // E17b: koszt OCR w walucie bez kursu NBP ma kwoty w walucie dokumentu.
+  // Do KPiR wejdzie dopiero po jawnym potwierdzeniu, że klient wpisał złote;
+  // bez niego KPiR liczyłaby np. 100 AED jako 100 zł. Ścieżka KSeF wyżej.
+  const awaitingPlnCurrency = isKsefExpense ? null : ocrAmountsAwaitingPln(existing.ocr_extracted_data);
+  const plnConfirmed = awaitingPlnCurrency !== null && updates.confirmPlnAmounts === true;
+  if (
+    awaitingPlnCurrency !== null &&
+    !plnConfirmed &&
+    (updates.is_deductible ?? existing.is_deductible) === true
+  ) {
+    return {
+      success: false as const,
+      error: `Kwoty tego wydatku są w ${awaitingPlnCurrency}. Wpisz je w złotych i zaznacz w formularzu, że są w złotych. Dopiero wtedy wydatek wejdzie do KPiR.`,
+    };
+  }
+
   const kpirChanged =
     updates.kpir_column !== undefined &&
     updates.kpir_column !== existing.kpir_column;
@@ -340,14 +367,37 @@ export async function reviewExpenseAction(
   const patch = buildExpenseUpdatePatch(updates, categoryChanged);
   if (excludedWithoutCurrencyReview || missingKsefFxRate) patch.is_reviewed = false;
 
+  if (awaitingPlnCurrency !== null) {
+    if (plnConfirmed) {
+      // Potwierdzenie złotych sam włącza koszt do KPiR (karta FLO i notatka
+      // OCR obiecują: „wejdzie z kwotą w złotych”), chyba że klient świadomie
+      // odznaczył KPiR. Ślad potwierdzenia dochodzi obok oryginału z dokumentu.
+      patch.is_deductible = updates.is_deductible ?? true;
+      patch.ocr_extracted_data = withPlnConfirmation(
+        existing.ocr_extracted_data,
+        user.id,
+        new Date().toISOString(),
+      );
+    } else {
+      // Zapis poza KPiR bez potwierdzenia: kwoty dalej w walucie, koszt
+      // zostaje „do opisania” (jak koszt KSeF bez potwierdzonego kursu).
+      patch.is_reviewed = false;
+    }
+  }
+
   // Formularz wysyła VAT zawsze — odliczenie liczymy od nowa tylko przy
   // faktycznej zmianie, inaczej JPK_V7M odliczałby odczyt OCR.
   const vatBefore = Number(existing.vat_amount ?? 0);
   if (updates.vat_amount !== undefined && updates.vat_amount !== vatBefore) {
-    patch.vat_deductible_amount = deductibleAfterVatChange(
-      { vat: vatBefore, deductible: Number(existing.vat_deductible_amount ?? 0) },
-      updates.vat_amount,
-    );
+    // Dokument OCR w walucie obcej: VAT nie idzie do odliczenia automatycznie
+    // (`lib/ocr/currency.ts`, `vatDeductible: 0`), także po ręcznej poprawce.
+    // Bez tego poprawka z 0 dawała pełne odliczenie (`before.vat === 0`).
+    patch.vat_deductible_amount = !isKsefExpense && ocrForeignCurrency(existing.ocr_extracted_data) !== null
+      ? 0
+      : deductibleAfterVatChange(
+        { vat: vatBefore, deductible: Number(existing.vat_deductible_amount ?? 0) },
+        updates.vat_amount,
+      );
   }
 
   if (isKsefExpense) {
