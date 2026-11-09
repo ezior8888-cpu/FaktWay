@@ -1475,8 +1475,8 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 9.11.2026 | protokół: `singletonKey` | #523 | gotowe do scalenia | `AGENTS.md`, punkt 5: `singletonKey` w pg-boss (polityka `standard`) nie deduplikuje; 4 miejsca z kluczem mają drugą ochronę, Stripe chroniony |
 | 9.11.2026 | 1.3, część 2 | #524 | gotowe do scalenia po #517 (stos) | FP ze skrzynki łączona z paragonem z NIP (pewne dopasowanie samo, reszta jako ostrzeżenie i wybór klienta); migracja 00175 przed wdrożeniem |
 | 9.11.2026 | 1.3, naprawa: OCR i paragon z NIP | #525 | gotowe do scalenia po #517 (stos) | OCR zapisuje paragon z NIP jako `simplified_invoice`, a nie `invoice`; kwoty bez zmian, nowa etykieta „Faktura uproszczona” |
-| 9.11.2026 | 3.4, część 1 | #531 | CI w toku; po #498 (stos) | termin, rachunek i MPP z FA(3) skrzynki; lista „Do zapłaty” z tytułem przelewu; oznaczenie zapłaty z cofnięciem; biała lista z trzema wynikami (naprawa: błąd API był „poza wykazem”, prefiks PL nie pasował); migracja 00177 przed wdrożeniem; plik przelewów w części 2 |
-| 9.11.2026 | 6.4, część 1 | #533 | CI w toku | archiwum ZIP (XML z KSeF, PDF, UPO, zdjęcia, CSV, spis braków) i paczka na kontrolę z JPK_FA; migracja 00178 przed wdrożeniem; usuwanie wygasłych paczek w części 2; tryb tylko do odczytu po rezygnacji czeka na pytanie 16 |
+| 9.11.2026 | 3.4, część 1 | #531 | gotowe do scalenia po #498 (stos) | termin, rachunek i MPP z FA(3) skrzynki; lista „Do zapłaty” z tytułem przelewu; oznaczenie zapłaty z cofnięciem; biała lista z trzema wynikami (naprawa: błąd API był „poza wykazem”, prefiks PL nie pasował); migracja 00177 przed wdrożeniem; plik przelewów w części 2 |
+| 9.11.2026 | 6.4, część 1 | #533 | gotowe do scalenia | archiwum ZIP (XML z KSeF, PDF, UPO, zdjęcia, CSV, spis braków) i paczka na kontrolę z JPK_FA; migracja 00178 przed wdrożeniem; usuwanie wygasłych paczek w części 2; tryb tylko do odczytu po rezygnacji czeka na pytanie 16 |
 
 **Następny krok:** decyzje Bartosza: wariant #519 („sam push” czy usunięcie joba
 i przełącznika), limit czasu sesji GoTrue (#506), termin scalania kroków R1
