@@ -97,6 +97,13 @@ export type AuditAction =
   // (RPC `record_invoice_payment` i `void_invoice_payment`) w transakcji z wpłatą, nie aplikacja.
   | 'invoice.payment_recorded'
   | 'invoice.payment_voided'
+  // Import wyciągu bankowego (00180, plan kompletnej aplikacji 3.2): metadane bez danych osób
+  // trzecich (liczby, kwota, dzień, rodzaj dopasowania). Zapisuje baza (RPC `import_bank_operations`,
+  // `confirm_bank_operation`, `skip_bank_operation`, `undo_bank_operation`), nie aplikacja.
+  | 'bank.statement_imported'
+  | 'bank.operation_confirmed'
+  | 'bank.operation_skipped'
+  | 'bank.operation_undone'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'
