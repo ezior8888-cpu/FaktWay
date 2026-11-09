@@ -5,6 +5,10 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { amountsOf } from '@/lib/exports/jpk-fa-generator';
+import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
+import { calculateLineItem } from '@/lib/xml/invoice-calculator';
+import type { CorrectionInvoiceData } from '@/types/invoice-types';
+import type { VatRate } from '@/types/invoice';
 
 /**
  * S-01 (sygnał z rozpoznania żelaznego filtra, plan B7.1; WAGA KRYTYCZNA):
@@ -124,5 +128,64 @@ describe('S-01: korekta „przed/po” w JPK to różnica, nie stan po', () => {
     const dane = await fetchInvoicesForExport({ tenantId: 'firma-a', periodStart: '2026-09-01', periodEnd: '2026-09-30', direction: 'issued' });
     const korekta = dane.issuedInvoices.find((i) => i.invoiceNumber === 'KOR/2/09/2026');
     expect(() => amountsOf(korekta!)).toThrow(/KOR\/2\/09\/2026/);
+  });
+});
+
+/**
+ * Test różnicowy: ta sama koperta `special_data.correctionData` idzie do
+ * generatora FA(3) KOR (to, co przyjmuje KSeF) i do JPK (`data-fetcher`
+ * i `amountsOf`). Kwoty stawek w JPK mają być równe P_13_x i P_14_x z XML.
+ */
+type Poz = { name: string; unit: string; quantity: number; unitPriceNet: number; vatRate: VatRate };
+const poz = (o: Partial<Poz> = {}): Poz => ({ name: 'Usługa', unit: 'szt.', quantity: 1, unitPriceNet: 1000, vatRate: '23', ...o });
+
+function koperta(przed: Poz[], po: Poz[]): CorrectionInvoiceData {
+  return {
+    invoiceType: 'correction', internalNumber: 'KOR/9/09/2026', issueDate: '2026-09-25',
+    paymentMethod: 'transfer', paymentDueDate: '2026-10-09',
+    parentInvoiceId: '00000000-0000-4000-8000-000000000001', parentInvoiceNumber: 'FV/9/09/2026',
+    parentInvoiceIssueDate: '2026-09-02', parentKsefNumber: '1234567890-20260902-0A1B2C3D4E5F-AB',
+    correctionType: 'before_after', correctionReason: 'Zmiana po reklamacji', typKorekty: '2',
+    seller: { nip: '1234567890', name: 'Firma testowa', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' } },
+    buyer: { type: 'b2b', idType: 'nip', nip: '1234567890', name: 'Nabywca testowy', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' } },
+    linesBefore: przed, linesAfter: po,
+  } as unknown as CorrectionInvoiceData;
+}
+
+const POLA_XML: Array<[string, string, string]> = [['23', 'P_13_1', 'P_14_1'], ['8', 'P_13_2', 'P_14_2'], ['5', 'P_13_3', 'P_14_3']];
+function stawkiZXml(xml: string) {
+  return POLA_XML.flatMap(([rate, n, v]) => {
+    const net = new RegExp(`<${n}>(-?[0-9.]+)</${n}>`).exec(xml);
+    const vat = new RegExp(`<${v}>(-?[0-9.]+)</${v}>`).exec(xml);
+    return net ? [{ rate, net: Number(net[1]), vat: vat ? Number(vat[1]) : 0 }] : [];
+  });
+}
+const wgStawki = <T extends { rate: string }>(a: T[]) => [...a].sort((x, y) => x.rate.localeCompare(y.rate));
+
+describe('S-01: JPK korekty „przed/po” = P_13 i P_14 tej korekty w KSeF', () => {
+  it.each([
+    { nazwa: 'ilość 10 → 8 po 100 zł (23%)', przed: [poz({ quantity: 10, unitPriceNet: 100 })], po: [poz({ quantity: 8, unitPriceNet: 100 })] },
+    { nazwa: 'zmiana stawki 23% → 8%', przed: [poz()], po: [poz({ vatRate: '8' })] },
+    {
+      nazwa: 'pozycja 8% w dół, nowa pozycja 5%, 23% bez zmiany',
+      przed: [poz(), poz({ name: 'Szkolenie', unitPriceNet: 500, vatRate: '8' })],
+      po: [poz(), poz({ name: 'Szkolenie', unitPriceNet: 300, vatRate: '8' }), poz({ name: 'Książka', unitPriceNet: 200, vatRate: '5' })],
+    },
+    { nazwa: 'grosze: 3 × 0,33 zł → 7 × 0,33 zł (8%)', przed: [poz({ quantity: 3, unitPriceNet: 0.33, vatRate: '8' })], po: [poz({ quantity: 7, unitPriceNet: 0.33, vatRate: '8' })] },
+  ])('$nazwa', async ({ przed, po }) => {
+    const env = koperta(przed, po);
+    const xml = generateCorrectionInvoiceXml(env, { generatedAt: new Date('2026-09-25T10:00:00Z') });
+    tables.invoices.push(
+      faktura({
+        id: 'kor-9', internal_number: 'KOR/9/09/2026', invoice_kind: 'correction', correction_type: 'before_after', issue_date: '2026-09-25',
+        fa3_data: { lines: po.map((l, i) => ({ ordinal: i + 1, ...l, ...calculateLineItem(l) })) },
+        special_data: { correctionData: env },
+      }),
+    );
+    const dane = await fetchInvoicesForExport({ tenantId: 'firma-a', periodStart: '2026-09-01', periodEnd: '2026-09-30', direction: 'issued' });
+    const korekta = dane.issuedInvoices.find((i) => i.invoiceNumber === 'KOR/9/09/2026');
+    const zXml = stawkiZXml(xml);
+    expect(zXml.length).toBeGreaterThan(0);
+    expect(wgStawki(amountsOf(korekta!).rates)).toEqual(wgStawki(zXml));
   });
 });
