@@ -15,6 +15,9 @@
  * 8 → 7: Magiczny import z KSeF wycofany (decyzja Bartosza 22.10.2026) —
  * historię pobiera automatycznie `ksef.history-sync.tenant` (paczka D),
  * a kolejka `import.ksef-history.requested` jest w RETIRED_QUEUES.
+ *
+ * 7 → 8 (09.11.2026): archiwum dokumentów firmy i paczka na kontrolę
+ * (`archive.document.requested`, krok 6.4 planu kompletnej aplikacji).
  */
 
 import { runAutoCategorizeInbox } from '../runners/auto-categorize-inbox';
@@ -27,6 +30,7 @@ import {
   runCoPilotMonthly,
   runCoPilotSendPackage,
 } from '../runners/co-pilot-monthly';
+import { onDocumentArchiveExhausted, runDocumentArchive } from '../runners/document-archive';
 import { onExportsGenerateExhausted, runExportsGenerate } from '../runners/exports-generate';
 import {
   onProcessOcrExhausted,
@@ -93,4 +97,17 @@ registerJob<Parameters<typeof runCoPilotSendPackage>[0]>({
   maxRetries: 2,
   batchSize: 3,
   handler: (data, ctx) => runCoPilotSendPackage(data, ctx),
+});
+
+// ── Archiwum dokumentów firmy i paczka na kontrolę (krok 6.4) ──
+// ZIP powstaje w pamięci workera (do 150 MB źródeł), więc jedna paczka naraz
+// w procesie (`batchSize` i domyślne `localConcurrency` = 1). Ponowienie od
+// zera jest bezpieczne: plik pod stałym kluczem z zapisem warunkowym, gotowość
+// tylko ze stanu `generating`, e-mail ze znacznikiem i kluczem idempotencji.
+registerJob<Parameters<typeof runDocumentArchive>[0]>({
+  queue: 'archive.document.requested',
+  maxRetries: 2,
+  batchSize: 1,
+  handler: (data, ctx) => runDocumentArchive(data, ctx),
+  onExhausted: onDocumentArchiveExhausted,
 });

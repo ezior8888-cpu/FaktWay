@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00178 (plan kompletnej aplikacji, krok 6.4): zlecenia archiwum dokumentów; owner/admin, izolacja firm,
+      // limit 10 minut i zamykanie utkniętych (wyzwalacz), jedno aktywne na okres, CHECK-i pliku i okresu.
+      'tests/rls-archiwum-dokumentow.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

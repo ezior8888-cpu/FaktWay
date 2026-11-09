@@ -20,6 +20,8 @@
  * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1.
  */
 export const EVENT_QUEUE_MAP = {
+  // Archiwum dokumentów i paczka na kontrolę (krok 6.4 planu kompletnej aplikacji, 00178).
+  'archive/document.requested': ['archive.document.requested'],
   'billing/payment.failed': ['billing.payment.failed'],
   'billing/payment.succeeded': ['billing.payment.succeeded'],
   'email/trial-day-1': ['email.trial-day-1'],
