@@ -218,9 +218,11 @@ idzie więc tak:
    Blokada bez wyjścia to nowy błąd, nie zabezpieczenie.
 5. **Ponowienie od zera.** Worker pg-boss wykonuje cały handler ponownie, bez
    memoizacji kroków. Każdy krok z efektem zewnętrznym (mail, wysyłka,
-   zapis, zdarzenie) jest idempotentny albo ma klucz (`idempotencyKey`,
-   `singletonKey`, warunek w UPDATE). W opisie PR piszesz, co się stanie przy
-   ponowieniu po każdym kroku.
+   zapis, zdarzenie) jest idempotentny albo ma klucz: `idempotencyKey` u
+   dostawcy, unikalny indeks albo warunek w UPDATE. `singletonKey` w pg-boss na
+   kolejkach FaktWay (polityka `standard`) nie deduplikuje zadań, więc nie jest
+   ochroną (`lib/jobs/enqueue.ts:22-30`). W opisie PR piszesz, co się stanie
+   przy ponowieniu po każdym kroku.
 6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
    `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
    wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,
