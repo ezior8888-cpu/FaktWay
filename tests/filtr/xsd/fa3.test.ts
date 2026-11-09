@@ -27,7 +27,9 @@ const pozycja = fc.record({
   vatRate: fc.constantFrom('23', '8', '5', '0', 'zw') as fc.Arbitrary<'23' | '8' | '5' | '0' | 'zw'>,
 });
 
-function faktura(linie: fc.RecordValue<{ name: string; unit: string; quantity: number; unitPriceNet: number; vatRate: '23' | '8' | '5' | '0' | 'zw' }>[]): InvoiceInput {
+type Linia = { name: string; unit: string; quantity: number; unitPriceNet: number; vatRate: '23' | '8' | '5' | '0' | 'zw' };
+
+function faktura(linie: Linia[]): InvoiceInput {
   return {
     internalNumber: 'FV 2026/11/001',
     type: 'VAT',
