@@ -17,7 +17,10 @@ export type SettingsTab = {
 
 // Kolejność jak w Finorze: General → Security → Notifications → Connected
 // Accounts, potem nasze zakładki bez odpowiednika, Privacy & Data na końcu.
-export function settingsTabsForRole(role: UserRole): SettingsTab[] {
+// „API” (klucze API, krok 7.1 planu kompletnej aplikacji) dochodzi za
+// „Abonament” tylko po udostępnieniu API (flaga `publicApiEnabled`, liczy
+// layout); reszta zakładek się nie przesuwa (D1).
+export function settingsTabsForRole(role: UserRole, options: { publicApi?: boolean } = {}): SettingsTab[] {
   const isOwner = role === 'owner'
   const canManage = isOwner || role === 'admin'
 
@@ -31,7 +34,8 @@ export function settingsTabsForRole(role: UserRole): SettingsTab[] {
     ...(canManage
       ? [
           { href: '/settings/team', label: 'Zespół' },
-          { href: '/settings/billing', label: 'Abonament' }
+          { href: '/settings/billing', label: 'Abonament' },
+          ...(options.publicApi ? [{ href: '/settings/api', label: 'API' }] : [])
         ]
       : []),
     { href: '/settings/flo', label: 'FLO' },

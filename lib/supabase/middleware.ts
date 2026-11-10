@@ -94,12 +94,28 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   { path: '/sitemap.xml', match: 'exact' },
 ];
 
+/**
+ * Publiczne API (plan kompletnej aplikacji, krok 7.1): `/api/v1/…` każda
+ * trasa uwierzytelnia sama, kluczem API z nagłówka `Authorization: Bearer`
+ * (`lib/api/v1/auth.ts`), a `/api/docs` to statyczna dokumentacja. Proxy nie
+ * tworzy dla nich klienta Supabase: sesja z ciasteczek nie otwiera w API
+ * niczego i nie jest tu odświeżana. Tylko te dwa prefiksy (dokładnie albo
+ * z `/`); `/api/v10`, `/api/v1x` i `/api/docsy` zostają za bramką sesji.
+ */
+const API_KEY_PREFIXES = ['/api/v1', '/api/docs'] as const;
+
+export function isPublicApiPath(pathname: string): boolean {
+  return API_KEY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 export function isNoSessionPath(pathname: string): boolean {
   // Tunele PostHog i Sentry mają własny mechanizm (`lib/telemetry-tunnel.ts`,
   // wołany w `proxy.ts` przed `updateSession`: zdejmuje też ciasteczka).
   // Delegacja zamiast drugiego wpisu — jedna lista, żeby obie ścieżki nie
   // rozjechały się przy następnej zmianie przepisań w `next.config.ts`.
   if (isTelemetryTunnelPath(pathname)) return true;
+  // Publiczne API ma własne uwierzytelnienie kluczem (`isPublicApiPath`).
+  if (isPublicApiPath(pathname)) return true;
   return NO_SESSION_PATHS.some(({ path, match }) =>
     pathname === path || (match === 'prefix' && pathname.startsWith(`${path}/`)),
   );

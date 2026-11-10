@@ -1,5 +1,6 @@
 import SettingsView from '@/components/settings/finora/settings-view';
 import { settingsTabsForRole } from '@/components/settings/finora/settings-tabs';
+import { isPublicApiEnabled } from '@/lib/api/v1/availability';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -14,7 +15,8 @@ export default async function SettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { role } = await getPageContext();
+  // Zakładka „API” dopiero po udostępnieniu API (flaga `publicApiEnabled`, 00181).
+  const [{ role }, publicApi] = await Promise.all([getPageContext(), isPublicApiEnabled()]);
 
-  return <SettingsView tabs={settingsTabsForRole(role)}>{children}</SettingsView>;
+  return <SettingsView tabs={settingsTabsForRole(role, { publicApi })}>{children}</SettingsView>;
 }

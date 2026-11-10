@@ -159,6 +159,12 @@ export type AuditAction =
   | 'accountant.token_revoked'
   | 'accountant.access_used'
   | 'accountant.portal_export'
+  // Publiczne API (00181, krok 7.1): zapisuje baza, nie aplikacja. Utworzenie
+  // i odwołanie klucza wyzwalacz `audit_api_key_change` (nazwa, prefiks, zakresy),
+  // każde użycie `api_key_session()` (punkt, identyfikator żądania, adres, bez treści odpowiedzi).
+  | 'api_key.created'
+  | 'api_key.revoked'
+  | 'api_key.used'
   // Kontrahenci — poprawka danych i usunięcie z bazy (audyt bloku 1, F-011).
   | 'contractor.updated'
   | 'contractor.deleted'

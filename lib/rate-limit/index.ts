@@ -20,7 +20,10 @@ export type RateLimitBucket =
   | 'passkey_login_options'
   | 'passkey_login_verify'
   | 'passkey_manage'
-  | 'ksef_inbox_check';
+  | 'ksef_inbox_check'
+  /** Publiczne API (`lib/api/v1/auth.ts`): każde żądanie z adresu i każde z klucza. */
+  | 'api_v1_ip'
+  | 'api_v1_key';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */
