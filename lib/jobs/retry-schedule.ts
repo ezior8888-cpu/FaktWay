@@ -63,12 +63,12 @@ export function getKsefRetryDelay(attempt: number): DurationStr {
 
 /**
  * Opóźnienie ponowienia wysyłki: `Retry-After` z KSeF ma pierwszeństwo
- * przed harmonogramem (AUD-92), w pełnej długości (L1a, 08.11.2026): dawne
- * obcięcie do godziny zakładało Offline24, wstrzymany od 02.10.2026, a krótsze
- * czekanie niż podał MF tylko wydłuża blokadę. Bezpiecznik na absurdalny
- * nagłówek: doba (`KSEF_PAUSE_MAX_MS`). 429 runner wysyłki obsługuje jako
- * pauzę firmy (`lib/ksef/rate-limit-pause.ts`); tu zostają inne odpowiedzi
- * z `Retry-After` (np. 503).
+ * przed harmonogramem (AUD-92). Dla 429 w pełnej długości (L1a, 08.11.2026),
+ * z bezpiecznikiem doby (`KSEF_PAUSE_MAX_MS`): krótsze czekanie niż podał MF
+ * tylko wydłuża blokadę (runner i tak obsługuje 429 jako pauzę firmy,
+ * `lib/ksef/rate-limit-pause.ts`). Inne odpowiedzi z `Retry-After` (np. 503)
+ * najwyżej godzinę (`KSEF_RETRY_AFTER_MAX_MS`), bo czekanie trwa z fakturą
+ * w `sending`.
  */
 export function ksefRetryDelayFor(error: unknown, attempt: number): DurationStr {
   if (error instanceof KsefApiError && error.retryAfterMs !== null) {
