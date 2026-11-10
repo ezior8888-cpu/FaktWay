@@ -124,6 +124,7 @@ function buildAdvanceEnvelope(parsed: AdvanceInvoiceSchemaIn, cashMethod: boolea
     advanceAmount: parsed.advanceAmount,
     totalContractAmount: parsed.totalContractAmount,
     expectedDeliveryDate: parsed.expectedDeliveryDate,
+    advanceReceivedDate: parsed.advanceReceivedDate || undefined,
     vatRate: parsed.vatRate,
     description: parsed.description,
   };
@@ -153,6 +154,8 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
     internalNumber: envelope.internalNumber,
     type: 'ZAL',
     issueDate: envelope.issueDate,
+    // F12-D1: P_6 zaliczki to data otrzymania zapłaty (PDF i eksport z `sale_date`).
+    saleDate: envelope.advanceReceivedDate,
     seller,
     buyer,
     lines: [line],
@@ -188,6 +191,7 @@ async function insertAdvanceDraft(
       invoice_kind: 'advance',
       invoice_type: 'ZAL',
       issue_date: ghost.issueDate,
+      sale_date: envelope.advanceReceivedDate ?? null,
       seller_nip: ghost.seller.nip,
       buyer_nip: ghost.buyer.nip ?? null,
       seller_data: ghost.seller,
