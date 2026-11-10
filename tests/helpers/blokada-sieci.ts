@@ -30,10 +30,15 @@
  * uruchamiają bash z własnymi atrapami poleceń), `worker_threads`, UDP
  * (`node:dgram`) i samych zapytań DNS.
  *
+ * Przypisanie do testu bierze nazwę testu trwającego w chwili próby
+ * (`expect.getState()`). Próba z kodu, który wyciekł z poprzedniego testu
+ * (timer, niedoczekana obietnica), albo z `it.concurrent` trafia więc na test
+ * akurat trwający; adres w komunikacie wskazuje wtedy prawdziwe źródło.
+ *
  * Wyjście: test, który naprawdę potrzebuje sieci, oznacz
  * `it.runIf(process.env.VITEST_PRAWDZIWA_SIEC === '1')` i uruchamiaj ręcznie
  * z `VITEST_PRAWDZIWA_SIEC=1`. Flaga wyłącza blokadę dla całego przebiegu,
- * głośno (ostrzeżenie w konsoli), i nie może trafić do CI
+ * głośno (ostrzeżenie na stderr raz na proces), i nie może trafić do CI
  * (pilnuje tego `tests/unit/siec-blokada-testow.test.ts`).
  */
 import net from 'node:net';
@@ -46,22 +51,21 @@ export interface ProbaSieci {
   kanal: 'fetch' | 'gniazdo';
   /** Metoda i adres (fetch) albo host:port (gniazdo), bez loginu, hasła i zapytania. */
   adres: string;
-  /** Pełna nazwa testu z Vitest albo plik, gdy próba padła poza testem. */
+  /** Test trwający w chwili próby albo plik, gdy próba padła poza testem. */
   zrodlo: string;
 }
 
 type Connect = net.Socket['connect'];
 
 interface StanBlokady {
-  natywnyFetch: typeof fetch;
-  natywnyConnect: Connect;
   proby: ProbaSieci[];
 }
 
 // Stan w `globalThis`, nie w module: setup i plik testu mogą dostać osobne
 // egzemplarze tego modułu, a łatka na `fetch` i `Socket` jest jedna na proces.
 const KLUCZ: unique symbol = Symbol.for('faktway.testy.blokada-sieci');
-type GlobalZBlokada = typeof globalThis & { [KLUCZ]?: StanBlokady };
+const KLUCZ_OSTRZEZENIA: unique symbol = Symbol.for('faktway.testy.blokada-sieci.ostrzezenie');
+type GlobalZBlokada = typeof globalThis & { [KLUCZ]?: StanBlokady; [KLUCZ_OSTRZEZENIA]?: true };
 
 const PROTOKOLY_SIECIOWE = new Set(['http:', 'https:', 'ws:', 'wss:']);
 
@@ -70,7 +74,7 @@ export class ZablokowanaSiecError extends Error {
 
   constructor(proba: ProbaSieci) {
     super(
-      `Blokada sieci w testach: ${proba.zrodlo} próbował połączyć się z ${proba.adres} (${proba.kanal}). ` +
+      `Blokada sieci w testach: połączenie z ${proba.adres} (${proba.kanal}) w trakcie: ${proba.zrodlo}. ` +
         'Testy jednostkowe nie wychodzą poza 127.0.0.1, localhost i ::1. ' +
         "Podstaw atrapę: vi.stubGlobal('fetch', …) albo vi.mock modułu klienta. " +
         `Test, który naprawdę potrzebuje sieci: ${FLAGA_PRAWDZIWEJ_SIECI}=1, opis w tests/helpers/blokada-sieci.ts.`,
@@ -80,17 +84,29 @@ export class ZablokowanaSiecError extends Error {
   }
 }
 
-/** Pętla zwrotna: `localhost`, 127.0.0.0/8 i `::1` (także w nawiasach z URL). */
+/** Pętla zwrotna: `localhost`, 127.0.0.0/8 i `::1` w każdym zapisie IPv6 (także w nawiasach z URL). */
 export function czyHostLokalny(host: string): boolean {
   const h = host.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
   if (h === 'localhost') return true;
   if (net.isIPv4(h)) return h.split('.')[0] === '127';
-  if (net.isIPv6(h)) return h === '::1' || h === '0:0:0:0:0:0:0:1';
+  if (net.isIPv6(h)) {
+    // Parser URL sprowadza każdy zapis (0::1, 0:0:0:0:0:0:0:1) do postaci kanonicznej.
+    try {
+      return new URL(`http://[${h}]/`).hostname === '[::1]';
+    } catch {
+      return false;
+    }
+  }
   return false;
 }
 
 function stan(): StanBlokady | undefined {
   return (globalThis as GlobalZBlokada)[KLUCZ];
+}
+
+/** Czy blokada działa w tym procesie (setup ją zainstalował i flaga jej nie wyłączyła). */
+export function czyBlokadaZainstalowana(): boolean {
+  return stan() !== undefined;
 }
 
 function zrodloProby(): string {
@@ -168,24 +184,29 @@ function zablokowaneGniazdo(args: readonly unknown[]): string | null {
 
 /**
  * Instaluje blokadę w tym procesie. Zwraca `false`, gdy flaga
- * `VITEST_PRAWDZIWA_SIEC=1` ją wyłącza (z ostrzeżeniem, nigdy po cichu).
- * Drugie wywołanie niczego nie zmienia.
+ * `VITEST_PRAWDZIWA_SIEC=1` ją wyłącza (z ostrzeżeniem raz na proces, nigdy
+ * po cichu). Drugie wywołanie niczego nie zmienia.
  */
 export function zainstalujBlokadeSieci(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
+  const globalny = globalThis as GlobalZBlokada;
   if (env[FLAGA_PRAWDZIWEJ_SIECI] === '1') {
-    console.warn(
-      `[blokada sieci] ${FLAGA_PRAWDZIWEJ_SIECI}=1: testy mogą łączyć się z prawdziwą siecią. Tylko ręcznie, nigdy w CI.`,
-    );
+    if (!globalny[KLUCZ_OSTRZEZENIA]) {
+      globalny[KLUCZ_OSTRZEZENIA] = true;
+      // Prosto do stderr: `console` w setupie Vitest 4 przechwytuje i przy
+      // zielonym pliku nie pokazuje, a to ostrzeżenie ma być widać zawsze.
+      process.stderr.write(
+        `[blokada sieci] ${FLAGA_PRAWDZIWEJ_SIECI}=1: testy mogą łączyć się z prawdziwą siecią. Tylko ręcznie, nigdy w CI.\n`,
+      );
+    }
     return false;
   }
-  const globalny = globalThis as GlobalZBlokada;
   if (globalny[KLUCZ]) return true;
 
   const natywnyFetch = globalThis.fetch;
   const natywnyConnect = net.Socket.prototype.connect;
-  globalny[KLUCZ] = { natywnyFetch, natywnyConnect, proby: [] };
+  globalny[KLUCZ] = { proby: [] };
 
   const fetchZBlokada: typeof fetch = (input, init) => {
     const adres = zablokowanyFetch(input, init);

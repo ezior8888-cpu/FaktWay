@@ -14,11 +14,12 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { createServer, get, type Server } from 'node:http';
-import { connect, type AddressInfo } from 'node:net';
+import { connect, Socket, type AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FLAGA_PRAWDZIWEJ_SIECI,
+  czyBlokadaZainstalowana,
   czyHostLokalny,
   sprawdzBlokadeSieci,
   zabierzZablokowanePolaczenia,
@@ -27,6 +28,10 @@ import {
 
 const ZEWNETRZNY = 'https://blokada-sieci.invalid/v2/auth/token/refresh';
 const KOMUNIKAT = /Blokada sieci w testach/;
+// Ręczny przebieg z flagą celowo wyłącza blokadę (głośno), więc jej testy
+// nie mają wtedy czego sprawdzać. Bez flagi biegną zawsze: zepsuty setup
+// (blokada niezainstalowana) daje czerwone, nie pominięte.
+const FLAGA_WLACZONA = process.env[FLAGA_PRAWDZIWEJ_SIECI] === '1';
 
 function obecnyTest(): string {
   return expect.getState().currentTestName ?? '';
@@ -41,7 +46,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('blokada sieci w testach jednostkowych', () => {
+describe.skipIf(FLAGA_WLACZONA)('blokada sieci w testach jednostkowych', () => {
+  it('setup z vitest.config.ts zainstalował blokadę w tym procesie', () => {
+    expect(czyBlokadaZainstalowana()).toBe(true);
+  });
+
   it('globalny fetch na adres zewnętrzny odrzuca od razu, z adresem i nazwą testu', async () => {
     const blad = await fetch(ZEWNETRZNY).then(
       () => null,
@@ -139,6 +148,8 @@ describe('blokada sieci w testach jednostkowych', () => {
     ['127.0.0.53', true],
     ['::1', true],
     ['[::1]', true],
+    ['0::1', true],
+    ['0:0:0:0:0:0:0:1', true],
     ['api-test.ksef.mf.gov.pl', false],
     ['wyszukiwarkaregontest.stat.gov.pl', false],
     ['localhost.example.com', false],
@@ -152,14 +163,26 @@ describe('blokada sieci w testach jednostkowych', () => {
 });
 
 describe(`flaga ${FLAGA_PRAWDZIWEJ_SIECI}`, () => {
-  it('wyłącza blokadę tylko jawnie i głośno, bez zmiany już zainstalowanej', () => {
-    const ostrzezenie = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  it.skipIf(FLAGA_WLACZONA)('wyłącza blokadę tylko jawnie i głośno, z jednym ostrzeżeniem na proces', () => {
+    const ostrzezenie = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const fetchPrzed = globalThis.fetch;
 
     expect(zainstalujBlokadeSieci({ [FLAGA_PRAWDZIWEJ_SIECI]: '1' })).toBe(false);
+    expect(zainstalujBlokadeSieci({ [FLAGA_PRAWDZIWEJ_SIECI]: '1' })).toBe(false);
+    expect(ostrzezenie).toHaveBeenCalledTimes(1);
     expect(ostrzezenie).toHaveBeenCalledWith(expect.stringContaining(`${FLAGA_PRAWDZIWEJ_SIECI}=1`));
+    // Inna wartość niż „1” nie wyłącza blokady.
+    expect(zainstalujBlokadeSieci({ [FLAGA_PRAWDZIWEJ_SIECI]: 'true' })).toBe(true);
+    expect(globalThis.fetch).toBe(fetchPrzed);
+  });
+
+  it.skipIf(FLAGA_WLACZONA)('drugie zainstalowanie bez flagi niczego nie podmienia', () => {
+    const fetchPrzed = globalThis.fetch;
+    const connectPrzed = Socket.prototype.connect;
+
     expect(zainstalujBlokadeSieci({})).toBe(true);
     expect(globalThis.fetch).toBe(fetchPrzed);
+    expect(Socket.prototype.connect).toBe(connectPrzed);
   });
 
   it('nie jest ustawiona w CI ani w konfiguracji Vitest', () => {
