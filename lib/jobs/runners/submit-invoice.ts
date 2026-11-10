@@ -44,7 +44,9 @@ import {
   faktflowOriginalVerdictMessage,
   hexHashToBase64,
   knownNumberVerdictMessage,
+  numberTakenLogMessage,
   numberTakenMessage,
+  operatorVerdictLogMessage,
   operatorVerdictMessage,
   summarizeInvoiceXml,
 } from '@/lib/ksef/duplicate-verdict';
@@ -96,6 +98,7 @@ import {
   isContentRejection,
   KsefSendVerdictError,
   SEND_ERROR_CODES,
+  sendVerdictIn,
   type SendErrorCode,
 } from '@/lib/ksef/send-error-codes';
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
@@ -606,6 +609,14 @@ export async function onSubmitInvoiceExhausted(
         : HOLD_MARKER.test(error.message)
           ? error.message.replace(HOLD_MARKER, '')
           : `${error.name}: ${error.message}`;
+      // F-093-440: przy werdykcie 440 komunikat błędu to tekst operatora (log,
+      // audyt). Klient dostaje na fakturę i w mailu tekst werdyktu jak dotąd,
+      // z danymi pobranego oryginału: na nich decyduje, czy to ta sama sprzedaż.
+      // Ten sam tekst = ten sam klucz idempotencji maila.
+      const verdictCarrier = heldRoz ? null : sendVerdictIn(error);
+      const customerFailureMessage = verdictCarrier && failureMessage === verdictCarrier.message
+        ? verdictCarrier.customerMessage
+        : failureMessage;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -688,7 +699,7 @@ export async function onSubmitInvoiceExhausted(
               invoiceId,
               tenantId,
               'failed',
-              `${failureMessage} (Offline24 ${offlineResult.reason})`,
+              `${customerFailureMessage} (Offline24 ${offlineResult.reason})`,
               code,
             ));
         }
@@ -710,7 +721,7 @@ export async function onSubmitInvoiceExhausted(
             invoiceId,
             tenantId,
             isBusinessRejection ? 'rejected' : 'failed',
-            failureMessage,
+            customerFailureMessage,
             code,
           ));
       }
@@ -759,7 +770,7 @@ export async function onSubmitInvoiceExhausted(
         data: {
           invoiceId,
           tenantId,
-          error: failureMessage,
+          error: customerFailureMessage,
           errorCode: code,
           environment: parsed.data.environment,
           fromOfflineQueue: data.fromOfflineQueue,
@@ -1278,8 +1289,12 @@ export async function runSubmitInvoice(
       const original = error.originalKsefNumber;
       const originalSession = error.originalSessionReferenceNumber;
       const ourSession = error.ourSessionReferenceNumber;
-      const verdict = (code: SendErrorCode, message: string) =>
-        new NonRetriableError(`[${code}] ${message}`, { cause: new KsefSendVerdictError(code, message) });
+      // F-093-440: komunikat błędu to tekst operatora (`operatorText`, domyślnie ten
+      // sam); tekst klienta jedzie w nośniku i wraca w `onSubmitInvoiceExhausted`.
+      const verdict = (code: SendErrorCode, customerText: string, operatorText: string = customerText) =>
+        new NonRetriableError(`[${code}] ${operatorText}`, {
+          cause: new KsefSendVerdictError(code, operatorText, customerText),
+        });
       const pending = (message: string, delay: number | string) =>
         new RetryAfterError(message, delay, {
           cause: new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, message),
@@ -1584,6 +1599,9 @@ export async function runSubmitInvoice(
               : cmp.verdict === 'operator'
                 ? operatorVerdictMessage(original, cmp)
                 : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
+          // F-093-440: tekst werdyktu „operator” opisuje oryginał (nabywca, NIP, data,
+          // kwota, program); operator i telemetria dostają sam rodzaj i numer KSeF.
+          !known && !importGate && cmp.verdict === 'operator' ? operatorVerdictLogMessage(original, cmp) : undefined,
         );
       }
       // Oryginał z innego programu o innej treści: numer zajęty. Wszystkie wpisy
@@ -1592,6 +1610,7 @@ export async function runSubmitInvoice(
       throw verdict(
         SEND_ERROR_CODES.KSEF_NUMBER_TAKEN,
         numberTakenMessage(invoice.internalNumber ?? '', original, cmp.summary),
+        numberTakenLogMessage(original),
       );
     };
 

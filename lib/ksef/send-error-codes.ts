@@ -61,12 +61,34 @@ export interface ClassifiedSendError {
  * cudzego 440). Klasyfikator bierze jego kod PRZED klasami KSeF z łańcucha
  * przyczyn — inaczej `KsefInvoiceRejectedError(440)` albo błąd HTTP pobrania
  * oryginału przesłoniłby werdykt (403 → KSEF_SESSION z automatem itd.).
+ *
+ * F-093-440: `message` to tekst operatora (rodzaj werdyktu i numer KSeF
+ * oryginału). Idzie do logu workera, `inngest_run_log`, dziennika prób
+ * i audytu. Tekst dla klienta może opisywać pobrany oryginał (nabywca, NIP,
+ * data, kwota, program), więc leży w polu prywatnym, którego JSON, `inspect`
+ * ani Sentry nie serializują. Do `invoices.last_error` i zdarzenia
+ * `invoice/submit.failed` (e-mail) wkłada go tylko `onSubmitInvoiceExhausted`.
+ * Bez osobnego tekstu klienta oba teksty są te same.
  */
 export class KsefSendVerdictError extends Error {
-  constructor(readonly code: SendErrorCode, message: string) {
+  readonly #customerMessage: string;
+
+  constructor(readonly code: SendErrorCode, message: string, customerMessage: string = message) {
     super(message);
     this.name = 'KsefSendVerdictError';
+    this.#customerMessage = customerMessage;
   }
+
+  /** Tekst werdyktu dla klienta (karta faktury, e-mail). Nigdy do logów i telemetrii. */
+  get customerMessage(): string {
+    return this.#customerMessage;
+  }
+}
+
+/** Werdykt runnera w łańcuchu przyczyn błędu (pierwszy od wierzchu) albo `null`. */
+export function sendVerdictIn(error: unknown): KsefSendVerdictError | null {
+  const found = chain(error).find((e) => e instanceof KsefSendVerdictError || e.name === 'KsefSendVerdictError');
+  return (found as KsefSendVerdictError | undefined) ?? null;
 }
 
 export function classifySendError(error: unknown): ClassifiedSendError {
