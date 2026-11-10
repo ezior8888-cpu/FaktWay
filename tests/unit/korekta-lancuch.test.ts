@@ -19,6 +19,7 @@ const st = vi.hoisted(() => ({
   inserted: [] as Row[],
   corrections: [] as Row[],
   linesByInvoice: {} as Record<string, Row[]>,
+  parentOverride: {} as Row,
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -44,6 +45,7 @@ vi.mock('@/lib/supabase/server', () => ({
         net_total: 1000, vat_total: 230, gross_total: 1230, fa3_data: null,
         seller_data: { nip: '1234567890', name: 'Firma testowa', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' } },
         buyer_data: { nip: '1234567890', name: 'Nabywca testowy', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' } },
+        ...st.parentOverride,
       };
       const result = () => {
         if (table === 'tenants') return { data: { id: TENANT, nip: '1234567890', name: 'Firma testowa', address_json: null }, error: null };
@@ -110,6 +112,7 @@ const kor1 = (o: Row = {}): Row => ({
 beforeEach(() => {
   st.inserted = [];
   st.corrections = [];
+  st.parentOverride = {};
   st.linesByInvoice = { [PARENT]: [dbLine(10)], [KOR1]: [dbLine(8)] };
 });
 
@@ -184,5 +187,27 @@ describe('łańcuch korekt (K4)', () => {
       { parent_invoice_id: 'c', ksef_status: 'rejected' },
     ]);
     expect(out.map((p) => p.id)).toEqual(['a', 'c']);
+  });
+
+  // F12-D6 (pkt 4 protokołu): odmowa ma numer faktury i następny krok.
+  it('nabywca bez NIP i bez VAT-UE: komunikat z numerem faktury i krokiem', async () => {
+    st.parentOverride = { buyer_data: { name: 'Nabywca bez numeru', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' } } };
+    const r = await getCorrectionParentContextAction(PARENT);
+    expect(r).toMatchObject({ success: false, error: expect.stringContaining('FV 1/09/2026') });
+    expect(r).toMatchObject({ error: expect.stringContaining('Napisz do nas, a przygotujemy korektę z Tobą.') });
+  });
+
+  it('niezgodność sum przy przyjętej korekcie: komunikat z numerem faktury i krokiem', async () => {
+    st.corrections = [kor1({ net_total: -100, vat_total: -23, gross_total: -123 })];
+    const r = await getCorrectionParentContextAction(PARENT);
+    expect(r).toMatchObject({ success: false, error: expect.stringContaining('FV 1/09/2026') });
+    expect(r).toMatchObject({ error: expect.stringContaining('Napisz do nas, a przygotujemy korektę z Tobą.') });
+  });
+
+  it('pozycje pierwotnej niezgodne z kwotą: komunikat z numerem faktury i krokiem', async () => {
+    st.linesByInvoice = { [PARENT]: [dbLine(9)] };
+    const r = await getCorrectionParentContextAction(PARENT);
+    expect(r).toMatchObject({ success: false, error: expect.stringContaining('FV 1/09/2026') });
+    expect(r).toMatchObject({ error: expect.stringContaining('Napisz do nas, a przygotujemy korektę z Tobą.') });
   });
 });
