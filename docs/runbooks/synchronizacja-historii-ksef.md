@@ -95,7 +95,10 @@ termin końca tylko po przeszukaniu całej historii.
 bez zużywania prób. Od L1a (09.11.2026) 429 z historii zatrzymuje też całą
 firmę we wspólnej pauzie (`lib/ksef/rate-limit-pause.ts`, `hamulce-ksef.md`):
 wysyłka, UPO i skrzynka tej firmy czekają razem z historią, a 429 z nich
-pauzuje historię (lokalny 429, log z `localPause: true`). ≥ 3 firmy z 429 w godzinie = globalny bezpiecznik
+pauzuje historię (lokalny 429, log z `localPause: true`). Taka lokalna pauza
+też zapisuje `rate_limited_at` i `rate_limit_hits`, więc wlicza się do
+globalnego bezpiecznika (≥ 3 firmy w godzinie) i do alarmu długiej pauzy —
+świadomie: firma naprawdę ma 429, tylko z innej ścieżki. ≥ 3 firmy z 429 w godzinie = globalny bezpiecznik
 (cron nie robi fan-outu) + alarm.
 
 ## 3. Problemy kursorów i błędy firmy

@@ -405,7 +405,7 @@ function reportSendBrake(env: KsefEnvironment, extra: Record<string, unknown>): 
   const last = lastSendBrakeAlertAt.get(env);
   if (last !== undefined && now - last < SEND_BRAKE_ALERT_INTERVAL_MS) return;
   lastSendBrakeAlertAt.set(env, now);
-  Sentry.captureMessage('KSeF: hamulec 429 — wiele firm z 429 naraz, wysyłka zwolniona', {
+  Sentry.captureMessage('KSeF: hamulec 429, wiele firm z 429 naraz, wysyłka zwolniona', {
     level: 'warning',
     tags: { job: 'submit-invoice', kind: 'ksef-rate-limit-brake', env },
     fingerprint: ['ksef-rate-limit-brake'],
@@ -1046,14 +1046,14 @@ export async function runSubmitInvoice(
       if (pausedUntil !== null) {
         await releaseOwnClaimBeforeWait();
         const remaining = pausedUntil - Date.now();
-        logger.warn('Firma w pauzie po 429 z KSeF — wysyłka czeka przed przejęciem', {
+        logger.warn('Firma w pauzie po 429 z KSeF: wysyłka czeka przed przejęciem', {
           code: KSEF_RATE_LIMIT_PAUSE,
           tenantId,
           invoiceId,
           attempt,
           remainingMs: remaining,
         });
-        const message = `Firma w pauzie po 429 z KSeF — wysyłka czeka do końca blokady MF (jeszcze ${Math.ceil(Math.max(0, remaining) / 1000)} s)`;
+        const message = `Firma w pauzie po 429 z KSeF: wysyłka czeka do końca blokady MF (jeszcze ${Math.ceil(Math.max(0, remaining) / 1000)} s)`;
         throw ksefPauseRetryError(message, remaining, invoiceId,
           new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_RATE_LIMIT, message));
       }
@@ -1063,13 +1063,13 @@ export async function runSubmitInvoice(
       if (await ksefSendBrakeActive(env) && !ksefSendBrakeAllows(invoiceId, Date.now())) {
         await releaseOwnClaimBeforeWait();
         reportSendBrake(env, { tenantId, invoiceId });
-        logger.warn('Hamulec 429 (wiele firm z 429 naraz) — wysyłka czeka', {
+        logger.warn('Hamulec 429 (wiele firm z 429 naraz): wysyłka czeka', {
           code: KSEF_RATE_LIMIT_PAUSE,
           tenantId,
           invoiceId,
           attempt,
         });
-        const message = 'Hamulec 429: KSeF ogranicza wiele firm naraz — wysyłka czeka, żeby nie wydłużać blokady';
+        const message = 'Hamulec 429: KSeF ogranicza wiele firm naraz, wysyłka czeka, żeby nie wydłużać blokady';
         throw ksefPauseRetryError(message, KSEF_SEND_BRAKE_RETRY_MS, invoiceId,
           new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_RATE_LIMIT, message));
       }
@@ -1094,7 +1094,7 @@ export async function runSubmitInvoice(
         ? error.retryAfterMs ?? KSEF_PAUSE_DEFAULT_MS
         : (await recordKsefRateLimit(env, authNip ?? nip, error.retryAfterMs)) - Date.now();
       const released = await releaseSendClaimForPause(invoiceId, tenantId, parsed.data.sendAttemptId);
-      logger.warn('429 z KSeF po przejęciu wysyłki — firma w pauzie, przejęcie zwolnione', {
+      logger.warn('429 z KSeF po przejęciu wysyłki: firma w pauzie, przejęcie zwolnione', {
         code: KSEF_RATE_LIMIT_PAUSE,
         tenantId,
         invoiceId,
@@ -1380,7 +1380,7 @@ export async function runSubmitInvoice(
           // L1a: 429 — pauza firmy na pełny `Retry-After` (nie stały
           // harmonogram), przejęcie zwolnione; zamiar rozstrzygamy po pauzie.
           if (isKsefRateLimit(error)) {
-            throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF — rozstrzygnięcie zamiaru wysyłki po jej końcu');
+            throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF: rozstrzygnięcie zamiaru wysyłki po jej końcu');
           }
           // KSeF nie zna sesji sprzed ponad 48 h — jak STALE dla wpisu `sent`:
           // ślad zostaje, wysyłka idzie od nowa, a gdyby KSeF jednak miał plik,
@@ -1511,7 +1511,7 @@ export async function runSubmitInvoice(
           return (await fetchKsefAcquisitionDate(original!, credentials, env, { tenantId, invoiceId })) ?? undefined;
         } catch (e) {
           if (isKsefRateLimit(e)) {
-            throw await rateLimitPause(e, authNip, `Pauza firmy po 429 z KSeF — data nadania numeru ${original} po jej końcu`);
+            throw await rateLimitPause(e, authNip, `Pauza firmy po 429 z KSeF: data nadania numeru ${original} po jej końcu`);
           }
           logger.warn('Nie ustalono daty przyjęcia oryginału duplikatu', {
             invoiceId,
@@ -1883,7 +1883,7 @@ export async function runSubmitInvoice(
         // L1a: 429 — pauza firmy na pełny `Retry-After` (nie stały harmonogram),
         // przejęcie zwolnione; po pauzie dalej UZGADNIAMY, nigdy nie wysyłamy.
         if (isKsefRateLimit(error)) {
-          throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF — uzgodnienie wcześniejszej wysyłki po jej końcu');
+          throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF: uzgodnienie wcześniejszej wysyłki po jej końcu');
         }
         // Okno 48 h (I5): KSeF odpowiada błędem klienta o wysyłce sprzed dwóch
         // dób — wpis nie zostanie rozstrzygnięty. Zamykamy go jako STALE
@@ -2050,7 +2050,7 @@ export async function runSubmitInvoice(
         // zamiar albo wpis `sent` (A2), więc po pauzie idzie uzgodnienie, nie
         // druga wysyłka; po przyjęciu pliku czeka tylko odpytywanie.
         if (isKsefRateLimit(error)) {
-          throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF — wysyłka po jej końcu');
+          throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF: wysyłka po jej końcu');
         }
         if (error instanceof KsefApiError && !error.isRetryable) {
           Sentry.captureException(error, {

@@ -56,7 +56,7 @@ function rateLimitPaused(remainingMs: number): UpoDownloadError {
   const ms = Number.isFinite(remainingMs) ? Math.max(0, Math.ceil(remainingMs)) : 0;
   return {
     success: false,
-    error: `KSeF chwilowo ogranicza zapytania tej firmy (429) — UPO pobierze się samo po pauzie (jeszcze ${Math.ceil(ms / 1000)} s)`,
+    error: `KSeF chwilowo ogranicza zapytania tej firmy (429). UPO pobierze się samo po pauzie (jeszcze ${Math.ceil(ms / 1000)} s)`,
     errorCode: KSEF_RATE_LIMIT_PAUSE,
     retryable: true,
     retryAfterMs: ms,

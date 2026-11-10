@@ -147,8 +147,25 @@ wyżej, nie ta pauza.
 
 Proces, który dostał 429 (zwykle worker), trzyma kopię pauzy w pamięci.
 Awaria albo brak Redisa nie zatrzymuje wysyłki: odczyt ma limit 1 s, potem
-liczy się sama pamięć procesu (fail-open). Inny proces (aplikacja web, worker
-po restarcie) widzi pauzę z Redisa z opóźnieniem do 5 s.
+liczy się sama pamięć procesu (fail-open). Inny proces (worker po restarcie)
+widzi pauzę z Redisa z opóźnieniem do 5 s.
+
+**Czego pauza NIE obejmuje (stan 10.11.2026).**
+
+- Logowania w kreatorze połączenia KSeF w aplikacji web
+  (`components/settings/actions.ts`): idzie bez kontekstu NIP, więc nie czeka
+  na pauzę, a jego 429 jej nie zapisuje. Ruch mały (ręczne logowanie, limit
+  prób), do dopięcia osobno.
+- Sondy zdrowia KSeF i Latarni (bez uwierzytelnienia, bez NIP-u).
+- Wyniku prawdziwego 429 na samym żądaniu UPO: pauza firmy jest zapisana,
+  ale ten jeden wpis UPO dalej kończy się jak dotąd (`HTTP_429`, `failed`,
+  powrót przez `upo-retry-stale` po 24 h). Zmianę klasyfikacji robi sesja D1
+  planu „zero zgubionych faktur”. Pozostałe żądania UPO tej firmy czekają na
+  pauzę.
+- Skrzynki i historii jako harmonogramu: mają własne terminy (`next_poll_at`,
+  `paused_until`) liczone z pozostałego czasu pauzy, więc nigdy nie ruszą
+  przed jej końcem. Przy 429 bez `Retry-After` skrzynka i historia czekają
+  po swojemu 15 min, a wspólna pauza firmy tylko 60 s.
 
 **Ile trwa.**
 
@@ -173,7 +190,8 @@ w `queued`. 429 w trakcie wysyłki zwalnia przejęcie (`sending` → `queued`,
 `cykl-zycia-faktury-ksef.md`, sekcja 4), więc pauza nie trzyma faktury
 w `sending` i nie włącza alarmu I2. Po pauzie job najpierw uzgadnia
 poprzednią próbę (zamiar albo wpis `sent`), więc nie wyśle faktury drugi
-raz. UPO w pauzie czeka na ponowienie zamiast kończyć się błędem. Skrzynka
+raz. UPO w pauzie czeka na ponowienie zamiast kończyć się błędem (poza
+prawdziwym 429 na samym żądaniu UPO, sekcja wyżej). Skrzynka
 przesuwa przebieg firmy na koniec pauzy (`skrzynka-ksef-pojemnosc.md`).
 
 **Skąd widać pauzę.**
@@ -205,6 +223,11 @@ przesuwa przebieg firmy na koniec pauzy (`skrzynka-ksef-pojemnosc.md`).
    w chwili awarii Redisa żyje tylko w pamięci procesu i kończy się sama
    (najwyżej po dobie); restart workera to wdrożenie, czyli zgoda Bartosza
    (AGENTS.md), a nie sposób na pauzę.
+   `DEL` NIE przyspiesza zadań, które już czekają: każde ma w pg-boss termin
+   startu (`start_after`) z chwili zapisu pauzy i ruszy dopiero wtedy. Od razu
+   ruszają nowe zlecenia i żądania (np. „Wyślij ponownie”, nowa faktura).
+   Skrzynka i historia trzymają też własny termin (`next_poll_at`,
+   `paused_until` w bazie, `ksef-historia.sh wznow`).
 4. Skrypt nie był jeszcze uruchomiony na serwerze (stan 09.11.2026). Pierwsze
    użycie zacznij od `stan`. Założenia w nagłówku skryptu: kontener z obrazem
    `redis:7…` na `app-1` (nie nakładka SRH; przy kilku pasujących podaj
@@ -220,6 +243,11 @@ minutę z rozrzutem, bez zużycia próby. Hamulec gaśnie sam po 10 minutach bez
 sprawdź, czy to nie nasz rytm (wdrożenie, fala ponowień po awarii KSeF) i czy
 MF nie obniżył limitów. Skrzynka ma własny hamulec, który liczy też firmy we
 wspólnej pauzie (`skrzynka-ksef-pojemnosc.md`).
+W odróżnieniu od hamulca skrzynki ten nie ma warunku udziału (20% aktywnych
+firm), bo proces nie liczy firm, które w oknie wysyłały: przy dużym ruchu
+5 firm z 429 też go włącza. Świadomie ostrożnie: hamulec tylko spowalnia
+(1/4 zadań na minutę), niczego nie zatrzymuje na stałe. Licznik na żądanie
+i na adres IP to karta L1b.
 
 ## Faktura utknęła w wysyłce (I1/I2)
 
