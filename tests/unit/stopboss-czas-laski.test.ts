@@ -150,6 +150,35 @@ describe('stopBoss a czas łaski kontenera (G1)', () => {
     expect(przerwane).toMatch(/przerwan/);
   });
 
+  it('po stopBoss handler, który dalej biegnie, nie stawia nowego pg-boss w zamykanym procesie', async () => {
+    // Po failWip handler biegnie dalej (nie słucha job.signal) aż do process.exit,
+    // a ponowienie w run-job.ts woła startBoss(). Nowa instancja w umierającym
+    // procesie miałaby harmonogram, nadzór i wysłałaby drugie ponowienie joba,
+    // który pg-boss już sam ponawia.
+    mocks.stop.mockImplementation(stopJakPgBoss12(JOB_MS));
+    const { stopBoss, startBoss } = await wystartowanyBoss();
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+
+    const { wynik } = await stopPo(stopBoss, NAJPOZNIEJ_MS);
+    await wynik;
+
+    await expect(startBoss()).rejects.toThrow(/zamyka/);
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('drugi SIGTERM w trakcie zamykania dostaje to samo zamykanie, bez drugiego stop()', async () => {
+    mocks.stop.mockImplementation(stopJakPgBoss12(JOB_MS));
+    const { stopBoss } = await wystartowanyBoss();
+
+    const pierwszy = stopBoss();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const drugi = stopBoss();
+    await vi.advanceTimersByTimeAsync(NAJPOZNIEJ_MS);
+    await Promise.all([pierwszy, drugi]);
+
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+  });
+
   it('job skończony przed zamknięciem nie trafia do logu przerwanych', async () => {
     mocks.stop.mockImplementation(stopJakPgBoss12(0));
     const { trackActiveJobs } = await import('@/lib/jobs/active-jobs');
