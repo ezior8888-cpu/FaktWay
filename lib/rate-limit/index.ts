@@ -107,16 +107,22 @@ export async function checkRateLimit(
     if (config.countDenied === false) await removeRedisHit(key, member);
 
     // Najstarszy timestamp w oknie wyznacza moment, w którym slot się zwolni.
-    const oldest = (await redis.zrange(key, 0, 0, {
-      withScores: true,
-    })) as Array<string | number>;
     let retryAfter = config.windowSeconds;
-    if (oldest.length >= 2) {
-      const oldestTs = Number(oldest[1]);
-      retryAfter = Math.max(
-        1,
-        Math.ceil((oldestTs + config.windowSeconds * 1000 - now) / 1000),
-      );
+    try {
+      const oldest = (await redis.zrange(key, 0, 0, {
+        withScores: true,
+      })) as Array<string | number>;
+      if (oldest.length >= 2) {
+        const oldestTs = Number(oldest[1]);
+        retryAfter = Math.max(
+          1,
+          Math.ceil((oldestTs + config.windowSeconds * 1000 - now) / 1000),
+        );
+      }
+    } catch (err) {
+      // Odmowa już zapadła w Redisie. Błąd samego odczytu czasu (obwód, limit 500 ms)
+      // nie może jej zamienić w zgodę z pustego licznika w pamięci; czekanie = całe okno.
+      console.error('[rate-limit] Redis error przy odczycie czasu odblokowania:', err);
     }
 
     return { allowed: false, remaining: 0, retryAfter };
