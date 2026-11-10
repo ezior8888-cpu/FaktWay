@@ -375,7 +375,7 @@ async function upsertProducts(
   for (const summary of productsMap.values()) {
     // Klucz od jednostki zapisywanej w bazie: pusta zapisuje się jako „szt.”,
     // więc klucz z pustej nigdy nie trafiał w swój produkt i każdy import
-    // dokładał dubel (od 00184 UNIQUE: błąd 23505).
+    // dokładał dubel (od 00186 UNIQUE: błąd 23505).
     const unit = summary.unit || 'szt.';
     const key = normalizeProductKey(summary.name, unit);
     if (!key) continue;
@@ -426,7 +426,7 @@ async function upsertProducts(
     return 0;
   }
 
-  // 00184: UNIQUE na kluczu katalogu (uq_products_tenant_catalog_key). Paczka
+  // 00186: UNIQUE na kluczu katalogu (uq_products_tenant_catalog_key). Paczka
   // wstawia się atomowo, więc jeden produkt dopisany w międzyczasie przez drugi
   // import (równoległy job tej firmy) cofa całą paczkę. Wtedy wiersz po
   // wierszu: zajęty klucz pomijamy (produkt już jest; liczba użyć z tego

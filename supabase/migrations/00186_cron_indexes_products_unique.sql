@@ -1,4 +1,4 @@
--- 00184_cron_indexes_products_unique.sql
+-- 00186_cron_indexes_products_unique.sql
 --
 -- Plan skalowania 3000, sesja 21 (ustalenia DB-02, DB-V02, DB-08 z raportu
 -- „Pojemność FaktWay” + osobne ustalenie z #345). Cztery części, jedna
@@ -96,7 +96,7 @@
 -- jedną transakcją, a CONCURRENTLY w transakcji nie działa. Ostrzeżenia psql
 -- o transakcji przy --single-transaction są oczekiwane, jak przy 00164.
 --
--- PO: schema_migrations ('00184','cron_indexes_products_unique'), NOTIFY pgrst
+-- PO: schema_migrations ('00186','cron_indexes_products_unique'), NOTIFY pgrst
 -- (jest też na końcu pliku), weryfikacja (tylko odczyt):
 --   SELECT c.relname, i.indisunique, i.indisvalid
 --     FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
@@ -143,7 +143,7 @@ BEGIN
     HAVING count(*) > 1
   ) AS duplicates;
   IF v_groups > 0 THEN
-    RAISE EXCEPTION 'products ma duble w katalogu firmy (ta sama nazwa i jednostka): % grup. Rozwiąż je przed 00184 według nagłówka migracji (zapytanie PRZED), potem wgraj ją ponownie.', v_groups;
+    RAISE EXCEPTION 'products ma duble w katalogu firmy (ta sama nazwa i jednostka): % grup. Rozwiąż je przed 00186 według nagłówka migracji (zapytanie PRZED), potem wgraj ją ponownie.', v_groups;
   END IF;
 END;
 $$;
@@ -155,12 +155,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_products_tenant_catalog_key
     md5(lower(regexp_replace(unit, '^\s+|\s+$', '', 'g')))
   );
 COMMENT ON INDEX public.uq_products_tenant_catalog_key IS
-  'Jeden produkt na klucz katalogu w firmie (00184, plan skalowania sesja 21): nazwa bez skrajnych odstępów, odstępy zwinięte, małe litery | jednostka bez skrajnych odstępów, małe litery — jak normalizeProductKey w lib/import/import-engine.ts. md5 każdej części, bo nazwa i jednostka nie mają limitu długości (wpis btree ma).';
+  'Jeden produkt na klucz katalogu w firmie (00186, plan skalowania sesja 21): nazwa bez skrajnych odstępów, odstępy zwinięte, małe litery | jednostka bez skrajnych odstępów, małe litery — jak normalizeProductKey w lib/import/import-engine.ts. md5 każdej części, bo nazwa i jednostka nie mają limitu długości (wpis btree ma).';
 
 CREATE INDEX IF NOT EXISTS idx_products_tenant_id
   ON public.products (tenant_id, id);
 COMMENT ON INDEX public.idx_products_tenant_id IS
-  'Odczyt katalogu firmy stronami po kluczu w imporcie (readAllById: tenant_id = …, id > kursor, ORDER BY id) — 00184.';
+  'Odczyt katalogu firmy stronami po kluczu w imporcie (readAllById: tenant_id = …, id > kursor, ORDER BY id) — 00186.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 2. Indeksy częściowe pod crony KSeF (zapytania bez tenant_id)
@@ -169,33 +169,33 @@ CREATE INDEX IF NOT EXISTS idx_invoices_ksef_status_in_flight
   ON public.invoices (ksef_status)
   WHERE ksef_status IN ('queued', 'sending', 'failed', 'rejected');
 COMMENT ON INDEX public.idx_invoices_ksef_status_in_flight IS
-  'Crony bez tenant_id (00184): ksef_lifecycle_violations I1, I2, I4, I5D, I9; critical-alerts-monitor (sending); kandydaci ponowień ksef-lifecycle-reconcile (failed).';
+  'Crony bez tenant_id (00186): ksef_lifecycle_violations I1, I2, I4, I5D, I9; critical-alerts-monitor (sending); kandydaci ponowień ksef-lifecycle-reconcile (failed).';
 
 CREATE INDEX IF NOT EXISTS idx_invoices_outgoing_number_not_accepted
   ON public.invoices (tenant_id)
   WHERE direction = 'outgoing' AND ksef_number IS NOT NULL
     AND (ksef_status IS NULL OR ksef_status <> 'accepted');
 COMMENT ON INDEX public.idx_invoices_outgoing_number_not_accepted IS
-  'critical-alerts-monitor (00184): faktura wychodząca z numerem KSeF, a nie accepted — anomalia, indeks prawie pusty.';
+  'critical-alerts-monitor (00186): faktura wychodząca z numerem KSeF, a nie accepted — anomalia, indeks prawie pusty.';
 
 CREATE INDEX IF NOT EXISTS idx_invoices_last_error_code
   ON public.invoices (last_error_code)
   WHERE last_error_code IS NOT NULL;
 COMMENT ON INDEX public.idx_invoices_last_error_code IS
-  'Crony po kodzie błędu bez tenant_id (00184): critical-alerts-monitor (ROZ_HOLD_RECONCILE), I5D, kandydaci ponowień ksef-lifecycle-reconcile.';
+  'Crony po kodzie błędu bez tenant_id (00186): critical-alerts-monitor (ROZ_HOLD_RECONCILE), I5D, kandydaci ponowień ksef-lifecycle-reconcile.';
 
 CREATE INDEX IF NOT EXISTS idx_invoices_inbox_pending_full_fetch
   ON public.invoices (created_at)
   WHERE direction = 'incoming' AND origin = 'ksef_inbox'
     AND (fa3_data ->> '_pendingFullFetch') = 'true';
 COMMENT ON INDEX public.idx_invoices_inbox_pending_full_fetch IS
-  'inbox-backfill (00184): faktury ze skrzynki czekające na pełne pobranie, od najstarszej. fa3_data w warunku: UPDATE zmieniający fa3_data nie jest HOT (świadomy koszt).';
+  'inbox-backfill (00186): faktury ze skrzynki czekające na pełne pobranie, od najstarszej. fa3_data w warunku: UPDATE zmieniający fa3_data nie jest HOT (świadomy koszt).';
 
 CREATE INDEX IF NOT EXISTS idx_ksef_submissions_open_status
   ON public.ksef_submissions (status, attempted_at)
   WHERE status IN ('intent', 'sent', 'number_taken');
 COMMENT ON INDEX public.idx_ksef_submissions_open_status IS
-  'ksef_lifecycle_violations (00184): I5 — otwarte intent/sent starsze niż 48 h; I3K — wpisy number_taken z decyzją importu.';
+  'ksef_lifecycle_violations (00186): I5 — otwarte intent/sent starsze niż 48 h; I3K — wpisy number_taken z decyzją importu.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 3. Indeksy pod klucze obce (DB-08)
@@ -203,13 +203,13 @@ COMMENT ON INDEX public.idx_ksef_submissions_open_status IS
 CREATE INDEX IF NOT EXISTS idx_ksef_send_attempts_invoice_id
   ON public.ksef_send_attempts (invoice_id);
 COMMENT ON INDEX public.idx_ksef_send_attempts_invoice_id IS
-  'ON DELETE CASCADE z invoices (00184): wiersze faktury bez skanu całej tabeli (istniejący indeks zaczyna się od tenant_id).';
+  'ON DELETE CASCADE z invoices (00186): wiersze faktury bez skanu całej tabeli (istniejący indeks zaczyna się od tenant_id).';
 
 CREATE INDEX IF NOT EXISTS idx_ocr_jobs_expense
   ON public.ocr_jobs (expense_id)
   WHERE expense_id IS NOT NULL;
 COMMENT ON INDEX public.idx_ocr_jobs_expense IS
-  'ON DELETE SET NULL z expenses (00184): zadania OCR wydatku bez skanu całej tabeli.';
+  'ON DELETE SET NULL z expenses (00186): zadania OCR wydatku bez skanu całej tabeli.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 4. ksef_upo_expected do wklejenia w zapytanie + funkcja pomocnicza
@@ -239,7 +239,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_upo_expected_submission(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_upo_expected_submission(uuid, uuid, text) TO service_role;
 COMMENT ON FUNCTION public.ksef_upo_expected_submission(uuid, uuid, text) IS
-  'Część ksef_upo_expected z podzapytaniem (00184): czy faktura (albo jej numer KSeF jako numer odpowiedzi lub oryginału 440) ma wpis naszej wysyłki w ksef_submissions tej firmy. Osobno, bo planista nie wkleja funkcji z podzapytaniem.';
+  'Część ksef_upo_expected z podzapytaniem (00186): czy faktura (albo jej numer KSeF jako numer odpowiedzi lub oryginału 440) ma wpis naszej wysyłki w ksef_submissions tej firmy. Osobno, bo planista nie wkleja funkcji z podzapytaniem.';
 
 CREATE OR REPLACE FUNCTION public.ksef_upo_expected(i public.invoices)
 RETURNS boolean
@@ -253,7 +253,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_upo_expected(public.invoices) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_upo_expected(public.invoices) TO service_role;
 COMMENT ON FUNCTION public.ksef_upo_expected(public.invoices) IS
-  'UPO istnieje tylko dla faktur wysłanych sesją FaktWay (00155, decyzja Bartosza 22.10.2026): true dla faktur spoza historii KSeF; dla origin = ksef_import tylko, gdy ksef_upo_expected_submission znajdzie wpis naszej wysyłki. 00184: bez SET i bez podzapytania, więc planista wkleja ją w zapytanie (I3, upo-retry-stale, raport) zamiast wołać dla każdego wiersza; wynik ten sam co w 00155. Pole wyliczane PostgREST; EXECUTE tylko service_role.';
+  'UPO istnieje tylko dla faktur wysłanych sesją FaktWay (00155, decyzja Bartosza 22.10.2026): true dla faktur spoza historii KSeF; dla origin = ksef_import tylko, gdy ksef_upo_expected_submission znajdzie wpis naszej wysyłki. 00186: bez SET i bez podzapytania, więc planista wkleja ją w zapytanie (I3, upo-retry-stale, raport) zamiast wołać dla każdego wiersza; wynik ten sam co w 00155. Pole wyliczane PostgREST; EXECUTE tylko service_role.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 5. Strażnik bez I3 dla crona uzgadniania
@@ -402,7 +402,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_lifecycle_violations_without_i3() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_lifecycle_violations_without_i3() TO service_role;
 COMMENT ON FUNCTION public.ksef_lifecycle_violations_without_i3() IS
-  'ksef_lifecycle_violations() bez I3 (00184, plan skalowania sesja 21): dla crona uzgadniania (ksef-lifecycle-reconcile), który czyta tylko I1 i I5 — I3 to najdroższy blok (wszystkie przyjęte faktury wychodzące). Ciało znak w znak jak w pełnej funkcji poza blokiem I3; zmiana pełnej wymaga tej samej zmiany tutaj (tests/unit/ksef-cykl-zycia-bez-i3.test.ts).';
+  'ksef_lifecycle_violations() bez I3 (00186, plan skalowania sesja 21): dla crona uzgadniania (ksef-lifecycle-reconcile), który czyta tylko I1 i I5 — I3 to najdroższy blok (wszystkie przyjęte faktury wychodzące). Ciało znak w znak jak w pełnej funkcji poza blokiem I3; zmiana pełnej wymaga tej samej zmiany tutaj (tests/unit/ksef-cykl-zycia-bez-i3.test.ts).';
 
 NOTIFY pgrst, 'reload schema';
 

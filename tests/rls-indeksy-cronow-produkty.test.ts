@@ -8,19 +8,19 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getRlsTestDatabaseUrl, getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
- * 00184 (plan skalowania 3000, sesja 21) na prawdziwej bazie:
+ * 00186 (plan skalowania 3000, sesja 21) na prawdziwej bazie:
  *
  *  - wynik `ksef_lifecycle_violations()` ten sam co przed migracją: w jednej
- *    wycofywanej transakcji liczymy go po 00184, potem przywracamy
+ *    wycofywanej transakcji liczymy go po 00186, potem przywracamy
  *    `ksef_upo_expected` z 00155 i usuwamy nowe indeksy cronów (stan sprzed
- *    00184) i liczymy jeszcze raz;
+ *    00186) i liczymy jeszcze raz;
  *  - `ksef_lifecycle_violations_without_i3()` = pełna funkcja bez wierszy I3;
  *  - planista wkleja `ksef_upo_expected` (w planie zostaje tylko funkcja
  *    pomocnicza) i używa nowych indeksów w zapytaniach cronów;
  *  - równoległe importy tej samej nowej pozycji tworzą jeden produkt;
  *  - kontrola dubli w migracji przerywa ją przy dublach katalogu.
  *
- * Czerwień przed naprawą: bez 00184 nie ma lekkiej funkcji (42883), indeksów
+ * Czerwień przed naprawą: bez 00186 nie ma lekkiej funkcji (42883), indeksów
  * ani unikalności (cztery importy = cztery produkty); bez poprawki importu
  * przegrane importy zgłaszają „Produkty: insert — duplicate key”.
  * Silnik importu bierze klienta serwisowego tej bazy (atrapa modułów klienta).
@@ -47,13 +47,13 @@ const admin: SupabaseClient = environment
   : (null as unknown as SupabaseClient);
 supabaseMock.client = admin;
 
-const ORG = '00184182-0000-4000-8000-000000000001';
-const ORG_B = '00184182-0000-4000-8000-000000000002';
-const ORG_P = '00184182-0000-4000-8000-000000000003';
+const ORG = '00186182-0000-4000-8000-000000000001';
+const ORG_B = '00186182-0000-4000-8000-000000000002';
+const ORG_P = '00186182-0000-4000-8000-000000000003';
 const NIP = '9480000014';
 const MIGRATIONS = join(process.cwd(), 'supabase/migrations');
 
-/** Indeksy 00184 pod crony KSeF (invoices, ksef_submissions). */
+/** Indeksy 00186 pod crony KSeF (invoices, ksef_submissions). */
 const CRON_INDEXES = [
   'idx_invoices_ksef_status_in_flight',
   'idx_invoices_outgoing_number_not_accepted',
@@ -63,12 +63,12 @@ const CRON_INDEXES = [
 ] as const;
 
 let counter = 0;
-const ksefNumber = (n: number) => `${NIP}-20261001-000000184${String(n).padStart(3, '0')}-00`;
+const ksefNumber = (n: number) => `${NIP}-20261001-000000186${String(n).padStart(3, '0')}-00`;
 
 async function invoice(tenantId: string, patch: Record<string, unknown> = {}): Promise<string> {
   counter += 1;
-  const id = `00184aaa-0000-4000-8000-${String(counter).padStart(12, '0')}`;
-  const number = `FV/00184/${counter}`;
+  const id = `00186aaa-0000-4000-8000-${String(counter).padStart(12, '0')}`;
+  const number = `FV/00186/${counter}`;
   const { error } = await admin.from('invoices').insert({
     id, tenant_id: tenantId, direction: 'outgoing', internal_number: number, invoice_type: 'VAT',
     issue_date: '2026-10-01', seller_nip: NIP, buyer_nip: '1234567890',
@@ -84,7 +84,7 @@ async function submission(tenantId: string, invoiceId: string, patch: Record<str
   counter += 1;
   const { error } = await admin.from('ksef_submissions').insert({
     tenant_id: tenantId, invoice_id: invoiceId, submission_type: 'online', status: 'sent',
-    session_reference_number: `SES-00184-${counter}`, invoice_reference_number: `REF-00184-${counter}`,
+    session_reference_number: `SES-00186-${counter}`, invoice_reference_number: `REF-00186-${counter}`,
     ...patch,
   });
   if (error) throw new Error(`ksef_submissions: ${error.message}`);
@@ -141,13 +141,13 @@ async function rolledBack<T>(fn: (tx: SqlRunner) => Promise<T>): Promise<T> {
   return value as T;
 }
 
-/** Treść 00184 bez własnej transakcji: uruchamiamy ją wewnątrz wycofywanej. */
-const migrationBody = () => readFileSync(join(MIGRATIONS, '00184_cron_indexes_products_unique.sql'), 'utf8')
+/** Treść 00186 bez własnej transakcji: uruchamiamy ją wewnątrz wycofywanej. */
+const migrationBody = () => readFileSync(join(MIGRATIONS, '00186_cron_indexes_products_unique.sql'), 'utf8')
   .replace(/\r\n/g, '\n')
   .replace(/^BEGIN;$/m, '')
   .replace(/^COMMIT;$/m, '');
 
-/** `ksef_upo_expected` z 00155 (SET search_path, EXISTS w ciele) — stan sprzed 00184. */
+/** `ksef_upo_expected` z 00155 (SET search_path, EXISTS w ciele) — stan sprzed 00186. */
 function upoExpectedFrom00155(): string {
   const sql = readFileSync(join(MIGRATIONS, '00155_ksef_history_sync.sql'), 'utf8').replace(/\r\n/g, '\n');
   const match = /CREATE OR REPLACE FUNCTION public\.ksef_upo_expected\(i public\.invoices\)[\s\S]*?\n\$\$;/.exec(sql);
@@ -179,16 +179,16 @@ const indexNames = (node: PlanNode): string[] => [
   ...(node.Plans ?? []).flatMap(indexNames),
 ];
 
-describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog produktów', { timeout: 120_000 }, () => {
+describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog produktów', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     boss = new PgBoss({ connectionString: getRlsTestDatabaseUrl(), schema: 'pgboss', schedule: false, supervise: false });
     await boss.start();
     for (const org of [ORG, ORG_B, ORG_P]) await cleanup(org);
     await admin.from('tenants').delete().in('id', [ORG, ORG_B, ORG_P]);
     const { error } = await admin.from('tenants').insert([
-      { id: ORG, nip: NIP, name: 'Firma 00184' },
-      { id: ORG_B, nip: '9480000021', name: 'Firma B 00184' },
-      { id: ORG_P, nip: NIP, name: 'Firma produkty 00184' },
+      { id: ORG, nip: NIP, name: 'Firma 00186' },
+      { id: ORG_B, nip: '9480000021', name: 'Firma B 00186' },
+      { id: ORG_P, nip: NIP, name: 'Firma produkty 00186' },
     ]);
     if (error) throw error;
   }, 120_000);
@@ -200,7 +200,7 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
     await boss?.stop({ graceful: false, close: true });
   }, 60_000);
 
-  describe('strażnik cyklu życia: wynik przed i po 00184', () => {
+  describe('strażnik cyklu życia: wynik przed i po 00186', () => {
     const f: Record<string, string> = {};
 
     beforeAll(async () => {
@@ -314,7 +314,7 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
     });
   });
 
-  describe('indeksy 00184 w zapytaniach cronów', () => {
+  describe('indeksy 00186 w zapytaniach cronów', () => {
     it('definicje: kolumny i warunki jak w migracji (nazwa nie jest zajęta przez inny indeks)', async () => {
       const { rows } = await db().executeSql(
         `SELECT c.relname AS name, i.indisunique AS "unique", i.indisvalid AS valid, pg_get_indexdef(i.indexrelid) AS def
@@ -340,7 +340,7 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
       expect(def('uq_products_tenant_catalog_key')).toMatch(/products USING btree \(tenant_id, md5\(/);
     });
 
-    const ID = '00184aaa-0000-4000-8000-ffffffffffff';
+    const ID = '00186aaa-0000-4000-8000-ffffffffffff';
     const CASES: ReadonlyArray<{ index: string; sql: string; param?: unknown }> = [
       // ksef_lifecycle_violations I4 / I9
       { index: 'idx_invoices_ksef_status_in_flight', sql: "SELECT id FROM public.invoices WHERE direction = 'outgoing' AND ksef_status IN ('failed', 'rejected')" },
@@ -374,7 +374,7 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
           explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${sql}`);
         } else {
           // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
-          const name = `rls_00184_q_${Date.now()}`;
+          const name = `rls_00186_q_${Date.now()}`;
           await tx.executeSql(`PREPARE ${name}(text) AS ${sql}`);
           explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${name}('${String(param)}')`);
           await tx.executeSql(`DEALLOCATE ${name}`);
@@ -396,10 +396,10 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
 
     it('ten sam klucz (wielkość liter, odstępy) odpada 23505; inna jednostka to osobny produkt', async () => {
       await cleanup(ORG_P);
-      expect((await admin.from('products').insert({ tenant_id: ORG_P, name: 'Szkolenie zespolu 00184', unit: 'usł.' })).error).toBeNull();
+      expect((await admin.from('products').insert({ tenant_id: ORG_P, name: 'Szkolenie zespolu 00186', unit: 'usł.' })).error).toBeNull();
 
-      const same = await admin.from('products').insert({ tenant_id: ORG_P, name: '  SZKOLENIE   zespolu 00184 ', unit: ' usł. ' });
-      const otherUnit = await admin.from('products').insert({ tenant_id: ORG_P, name: 'Szkolenie zespolu 00184', unit: 'h' });
+      const same = await admin.from('products').insert({ tenant_id: ORG_P, name: '  SZKOLENIE   zespolu 00186 ', unit: ' usł. ' });
+      const otherUnit = await admin.from('products').insert({ tenant_id: ORG_P, name: 'Szkolenie zespolu 00186', unit: 'h' });
 
       expect(same.error?.code).toBe('23505');
       expect(otherUnit.error).toBeNull();
@@ -407,10 +407,10 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
     });
 
     const parsed = (n: number, name: string): ParsedInvoice => ({
-      invoiceNumber: `FV/00184/IMP/${n}`,
+      invoiceNumber: `FV/00186/IMP/${n}`,
       issueDate: '2026-10-01',
       invoiceType: 'regular',
-      seller: { nip: NIP, name: 'Firma produkty 00184' },
+      seller: { nip: NIP, name: 'Firma produkty 00186' },
       buyer: { nip: '1234567890', name: 'Nabywca testowy' },
       lines: [{ position: 1, name, unit: 'usł.', quantity: 1, unitPriceNet: 100, vatRate: '23', netAmount: 100 }],
       totals: { netTotal: 100, vatTotal: 23, grossTotal: 123 },
@@ -419,11 +419,11 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
 
     it('cztery równoległe importy tej samej nowej pozycji: jeden produkt, bez ostrzeżeń zapisu katalogu', async () => {
       await cleanup(ORG_P);
-      const names = ['Wdrozenie systemu 00184', 'wdrozenie  systemu 00184', ' WDROZENIE systemu 00184', 'Wdrozenie systemu 00184 '];
+      const names = ['Wdrozenie systemu 00186', 'wdrozenie  systemu 00186', ' WDROZENIE systemu 00186', 'Wdrozenie systemu 00186 '];
 
       const runs = await Promise.all(names.map((name, i) => processImportedInvoices({
         tenantId: ORG_P,
-        importJobId: `rls-00184-${i}`,
+        importJobId: `rls-00186-${i}`,
         invoices: [parsed(i, name)],
         source: 'csv',
         invoiceDirection: 'outgoing',
@@ -449,7 +449,7 @@ describe.skipIf(!hasDatabase)('00184: indeksy cronów, predykat UPO i katalog pr
         await tx.executeSql('DROP INDEX public.uq_products_tenant_catalog_key');
         await tx.executeSql(
           `INSERT INTO public.products (tenant_id, name, unit)
-           VALUES ($1, 'Usluga  Wdrozeniowa 00184', 'szt.'), ($1, ' usluga wdrozeniowa 00184 ', ' SZT. ')`,
+           VALUES ($1, 'Usluga  Wdrozeniowa 00186', 'szt.'), ($1, ' usluga wdrozeniowa 00186 ', ' SZT. ')`,
           [ORG_P],
         );
         await tx.executeSql(migrationBody());

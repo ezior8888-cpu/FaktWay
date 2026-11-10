@@ -7,12 +7,12 @@ import { describe, expect, it } from 'vitest';
  * Sesja 21 planu skalowania (DB-02, DB-V02): cron uzgadniania co 15 minut
  * czytał pełne `ksef_lifecycle_violations()`, choć używa tylko I1 i I5.
  * Najdroższy blok to I3 (wszystkie przyjęte faktury wychodzące, predykat
- * UPO wiersz po wierszu). 00184 dodaje `ksef_lifecycle_violations_without_i3()`:
+ * UPO wiersz po wierszu). 00186 dodaje `ksef_lifecycle_violations_without_i3()`:
  * to samo ciało bez bloku I3, nic poza tym. Strażnik pilnuje, żeby obie
  * funkcje się nie rozjechały: zmiana pełnej bez lekkiej (albo odwrotnie)
  * psuje ten test. Wynik na bazie sprawdza tests/rls-indeksy-cronow-produkty.test.ts.
  *
- * Tu też statycznie: `ksef_upo_expected` po 00184 da się wkleić w zapytanie
+ * Tu też statycznie: `ksef_upo_expected` po 00186 da się wkleić w zapytanie
  * (SQL, bez SET, bez SECURITY DEFINER, bez podzapytania w ciele). Planista
  * nie wkleja funkcji z `SET search_path` ani z podzapytaniem, więc I3
  * i upo-retry-stale liczyły ją osobno dla każdej przyjętej faktury.
@@ -22,7 +22,7 @@ const DIR = join(process.cwd(), 'supabase/migrations');
 const FULL = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.ksef_lifecycle_violations\s*\(/i;
 const LIGHT = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.ksef_lifecycle_violations_without_i3\s*\(/i;
 const PREDICATE = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.ksef_upo_expected\s*\(/i;
-const MIGRATION = '00184_cron_indexes_products_unique.sql';
+const MIGRATION = '00186_cron_indexes_products_unique.sql';
 
 const stripComments = (sql: string) => sql.replace(/\r\n/g, '\n').replace(/--[^\n]*/g, '');
 const migrations = readdirSync(DIR)
@@ -73,12 +73,12 @@ describe('ksef_lifecycle_violations_without_i3 = pełna funkcja bez I3', () => {
   });
 });
 
-describe('ksef_upo_expected po 00184: da się wkleić w zapytanie', () => {
+describe('ksef_upo_expected po 00186: da się wkleić w zapytanie', () => {
   const { file, definition } = latestDefinition(PREDICATE);
   const header = normalized(definition.slice(0, definition.indexOf('$$')));
   const body = normalized(definition.slice(definition.indexOf('$$') + 2, definition.lastIndexOf('$$')));
 
-  it('najnowsza definicja jest w 00184', () => {
+  it('najnowsza definicja jest w 00186', () => {
     expect(file).toBe(MIGRATION);
   });
 

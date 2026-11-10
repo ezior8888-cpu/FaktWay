@@ -284,14 +284,14 @@ export async function runKsefLifecycleReconcile({ step, logger }: JobContext): P
   });
 
   // ── I1: queued bez zlecenia ───────────────────────────────────────
-  // Cron czyta tylko I1 i I5, więc strażnik bez I3 (00184): I3 to najdroższy
+  // Cron czyta tylko I1 i I5, więc strażnik bez I3 (00186): I3 to najdroższy
   // blok (wszystkie przyjęte faktury wychodzące). Bez migracji (PGRST202 —
   // funkcji nie ma) pełna funkcja jak dotąd, z ostrzeżeniem w logu.
   const violations = await step.run('read-violations', async (): Promise<ViolationRow[]> => {
     const light = await supabase.rpc('ksef_lifecycle_violations_without_i3');
     if (!light.error) return (light.data ?? []) as ViolationRow[];
     if (light.error.code !== 'PGRST202') throw new Error(`ksef_lifecycle_violations_without_i3: ${light.error.message}`);
-    logger.warn('Cykl życia: brak ksef_lifecycle_violations_without_i3 — czy migracja 00184 jest wgrana? Odczyt pełnym strażnikiem.');
+    logger.warn('Cykl życia: brak ksef_lifecycle_violations_without_i3 — czy migracja 00186 jest wgrana? Odczyt pełnym strażnikiem.');
     const { data, error } = await supabase.rpc('ksef_lifecycle_violations');
     if (error) throw new Error(`ksef_lifecycle_violations: ${error.message}`);
     return (data ?? []) as ViolationRow[];

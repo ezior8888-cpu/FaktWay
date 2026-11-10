@@ -42,7 +42,7 @@ const m = vi.hoisted(() => ({
   violations: [] as Array<{ invariant: string; invoice_id: string; tenant_id: string; detail?: Row }>,
   /** Nazwy wołanych RPC, po kolei. */
   rpcs: [] as string[],
-  /** Baza bez 00184: lekkiego strażnika nie ma (PostgREST: PGRST202). */
+  /** Baza bez 00186: lekkiego strażnika nie ma (PostgREST: PGRST202). */
   lightMissing: false,
   release: vi.fn(),
   send: vi.fn(),
@@ -326,7 +326,7 @@ describe('I1 — queued bez zlecenia', () => {
     expect(m.captureMessage).toHaveBeenCalled();
   });
 
-  it('00184: czyta strażnika bez I3 (cron używa tylko I1 i I5), pełnego nie woła', async () => {
+  it('00186: czyta strażnika bez I3 (cron używa tylko I1 i I5), pełnego nie woła', async () => {
     m.violations = [{ invariant: 'I1', invoice_id: ID1, tenant_id: TENANT }];
 
     const report = await runKsefLifecycleReconcile(ctx);
@@ -336,7 +336,7 @@ describe('I1 — queued bez zlecenia', () => {
     expect(m.rpcs).not.toContain('ksef_lifecycle_violations');
   });
 
-  it('baza bez 00184 (PGRST202): pełny strażnik jak dotąd, ostrzeżenie w logu, I1 dalej porządkowane', async () => {
+  it('baza bez 00186 (PGRST202): pełny strażnik jak dotąd, ostrzeżenie w logu, I1 dalej porządkowane', async () => {
     m.lightMissing = true;
     m.violations = [{ invariant: 'I1', invoice_id: ID1, tenant_id: TENANT }];
 
@@ -347,7 +347,7 @@ describe('I1 — queued bez zlecenia', () => {
       'ksef_lifecycle_violations_without_i3', 'ksef_lifecycle_violations',
     ]);
     const warned = (ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.map(([message]) => String(message));
-    expect(warned.some((message) => message.includes('00184'))).toBe(true);
+    expect(warned.some((message) => message.includes('00186'))).toBe(true);
   });
 });
 

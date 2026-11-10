@@ -4,7 +4,7 @@ import { memoryClient, type MemoryTables, type Row } from './helpers/baza-w-pami
 
 /**
  * Sesja 21 planu skalowania (DB-08 + #345): `products` dostaje UNIQUE na
- * kluczu katalogu (00184), więc dwa importy naraz nie tworzą dubla. Silnik
+ * kluczu katalogu (00186), więc dwa importy naraz nie tworzą dubla. Silnik
  * importu musi wtedy przeżyć 23505: drugi zapis tej samej pozycji to nie
  * awaria, a reszta nowych produktów z tej samej paczki ma trafić do katalogu.
  *
@@ -33,7 +33,7 @@ let productInserts = 0;
 /** Nazwa produktu, którego pojedynczy zapis pada innym błędem niż 23505. */
 let brokenRow: string | null = null;
 
-/** Klucz indeksu `uq_products_tenant_catalog_key` (00184) w wersji JS. */
+/** Klucz indeksu `uq_products_tenant_catalog_key` (00186) w wersji JS. */
 const dbKey = (r: Row) => [
   r.tenant_id,
   String(r.name).replace(/\s+/g, ' ').trim().toLowerCase(),
@@ -114,7 +114,7 @@ beforeEach(() => {
   state.client = uniqueProductsClient(memoryClient(tables));
 });
 
-describe('UNIQUE na katalogu produktów (00184): import przeżywa 23505', () => {
+describe('UNIQUE na katalogu produktów (00186): import przeżywa 23505', () => {
   it('drugi import dopisał ten sam produkt w międzyczasie: bez dubla, reszta paczki trafia do katalogu', async () => {
     concurrentWriter = [{ id: 'p-obcy', tenant_id: T, name: 'Szkolenie zespołu', unit: 'usł.', use_count: 1 }];
 
