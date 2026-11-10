@@ -1477,11 +1477,16 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 9.11.2026 | 1.3, naprawa: OCR i paragon z NIP | #525 | gotowe do scalenia po #517 (stos) | OCR zapisuje paragon z NIP jako `simplified_invoice`, a nie `invoice`; kwoty bez zmian, nowa etykieta „Faktura uproszczona” |
 | 9.11.2026 | 3.4, część 1 | #531 | gotowe do scalenia po #498 (stos) | termin, rachunek i MPP z FA(3) skrzynki; lista „Do zapłaty” z tytułem przelewu; oznaczenie zapłaty z cofnięciem; biała lista z trzema wynikami (naprawa: błąd API był „poza wykazem”, prefiks PL nie pasował); migracja 00177 przed wdrożeniem; plik przelewów w części 2 |
 | 9.11.2026 | 6.4, część 1 | #533 | gotowe do scalenia | archiwum ZIP (XML z KSeF, PDF, UPO, zdjęcia, CSV, spis braków) i paczka na kontrolę z JPK_FA; migracja 00178 przed wdrożeniem; usuwanie wygasłych paczek w części 2; tryb tylko do odczytu po rezygnacji czeka na pytanie 16 |
+| 9.11.2026 | 9.3, część 1 | #541 | gotowe do scalenia | licznik sprzedaży dla osób prywatnych i limit kasy fiskalnej 20 000 zł (proporcjonalnie w roku rozpoczęcia), § 5 ust. 1 rozporządzenia o zwolnieniach z kas; sekcja na /analizy/sprzedaz |
+| 9.11.2026 | 3.2, część 1 | #549 | gotowe do scalenia po #510 (stos) | import wyciągu (MT940, CAMT.053, CSV PKO); wpłata zapisuje się po potwierdzeniu klienta; RODO: tylko uznania w PLN, „Pomiń” usuwa dane osób trzecich; migracja 00180 przed wdrożeniem |
+| 9.11.2026 | 2.10 | #552 | gotowe do scalenia | strona faktury dla nabywcy `/faktura/<token>` bez logowania; token 256 bitów, w bazie skrót, 90 dni; migracja 00179 przed wdrożeniem; przed udostępnieniem test zabezpieczeń |
+| 9.11.2026 | 6.2, część 1 | #557 | gotowe do scalenia | koszty i pliki kosztów w portalu księgowej; nowy limit prób w portalu; kwoty w walucie z kodem waluty |
+| 10.11.2026 | 7.1, część 1 | #573 | gotowe do scalenia | klucze API firmy, odczyt faktur i kosztów, OpenAPI i /api/docs; zastępuje #554 i #555 (skan sekretów, test RLS, CodeQL); migracja 00181 przed wdrożeniem; API wyłączone flagą `publicApiEnabled` |
+| 10.11.2026 | 7.1, część 2 | #583 | gotowe do scalenia po #573 (stos) | `POST /api/v1/invoices` z `Idempotency-Key`, ta sama walidacja i numeracja co formularz; migracja 00184 przed wdrożeniem |
+| 10.11.2026 | 3.4, część 2 | #575 | gotowe do scalenia po #531 (stos) | plik przelewów Elixir-0 (ING, mBank), MPP tylko przy rachunku w ING albo mBanku, biała lista z dowodem; rachunek firmy w ustawieniach (migracja 00183 przed wdrożeniem); przed udostępnieniem próbny import w banku |
+| 10.11.2026 | 7.3 | #568 | gotowe do scalenia | adres iCal z należnościami, fakturami cyklicznymi i terminami podatków i ZUS (przy włączonym module); migracja 00182 przed wdrożeniem |
+| 10.11.2026 | 6.2, część 2 | #582 | gotowe do scalenia | ekran „Moi klienci” dla księgowej z wieloma firmami; migracja 00185 przed wdrożeniem |
+| 10.11.2026 | 8.1, część 1 (zmiana) | #519 | gotowe do scalenia po #510 (stos) | wariant „sam push” przyjęty według rekomendacji, do potwierdzenia przy scalaniu: job tylko powiadamia, anulowanie przypomnień w funkcjach bazy 00158 i 00176 |
+| 10.11.2026 | 8.5, limit sesji | #564 | gotowe do scalenia po #506 (stos) | wylogowanie po 30 dniach bezczynności przyjęte według rekomendacji, do potwierdzenia przy scalaniu; na produkcji zmienna GoTrue (runbook `docs/runbooks/limit-sesji-gotrue.md`) |
 
-**Następny krok:** decyzje Bartosza: wariant #519 („sam push” czy usunięcie joba
-i przełącznika), limit czasu sesji GoTrue (#506), termin scalania kroków R1
-etapu 1 (D11). Potem: 3.4 część 2 (plik przelewów Elixir-0), 6.4 część 2
-(usuwanie wygasłych paczek), 1.2 część 2 (FP w JPK, po S-01 żelaznego filtra, bo to
-ten sam generator), 1.4 część 2 (identyfikator zbiorczy), 1.6. Kroki w formularzu
-faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509. Migracje 00174-00178 i stosy scalać
-zbiorczo (`./scripts/ops/zloz-scalenie.sh`), migracje przed wdrożeniem.
+**Następny krok:** decyzja Bartosza o kolejności scalania (stosy i migracje 00174-00185 przed wdrożeniem, scalanie zbiorcze `./scripts/ops/zloz-scalenie.sh`) i o D11 dla kroków R1 etapu 1. Dalej w planie: 6.4 część 2 (usuwanie wygasłych paczek), 7.1 część 3 (webhooki), 3.2 część 2 (wydatki i przelewy ZUS z wyciągu), 8.1 część 2 (powiadomienia w aplikacji), 1.2 część 2 (FP w JPK po S-01 filtra), 1.4 część 2 (identyfikator zbiorczy), 1.6; kroki formularza faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509.
