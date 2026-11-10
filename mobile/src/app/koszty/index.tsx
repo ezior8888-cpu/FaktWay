@@ -13,6 +13,8 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { dataKrotka, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { useKolory } from '@/wyglad/kolory';
 
 const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
   { etykieta: 'Wszystkie źródła' },
@@ -27,6 +29,7 @@ const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
  * z kafelkami miesiąca, filtrami i dodawaniem wydatku ze zdjęcia.
  */
 export default function EkranKosztow() {
+  const kolory = useKolory();
   const router = useRouter();
   const { koszty } = useStanFaktur();
   const [widok, setWidok] = useState(0);
@@ -81,7 +84,7 @@ export default function EkranKosztow() {
       <Stack.SearchBar placeholder="Sprzedawca, NIP, numer" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
       {widok === 0 ? (
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Menu icon="line.3.horizontal.decrease" title="Filtry wydatków">
+          <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={kolory.etykieta} title="Filtry wydatków">
             <Stack.Toolbar.Menu title="Widok" inline>
               <Stack.Toolbar.MenuAction isOn={!tylkoDoOpisania} onPress={() => setTylkoDoOpisania(false)}>
                 Wszystkie
@@ -118,13 +121,14 @@ export default function EkranKosztow() {
               status="Tylko koszty w KPiR"
             />
             <View style={styles.akcja}>
-              <PrzyciskGlowny tytul="Dodaj wydatek" ikona="camera" onPress={() => router.push('/koszty/dodaj')} />
+              <PrzyciskGlowny tytul="Dodaj wydatek" ikona="camera-line" onPress={() => router.push('/koszty/dodaj')} />
             </View>
             <Kafle
               kafle={[
-                { klucz: 'vat', podpis: 'VAT do odliczenia', wartosc: kwota(vatDoOdliczenia), opis: 'Z faktur, jak w JPK_V7M' },
+                { klucz: 'vat', ikona: 'percent-line', podpis: 'VAT do odliczenia', wartosc: kwota(vatDoOdliczenia), opis: 'Z faktur, jak w JPK_V7M' },
                 {
                   klucz: 'opisanie',
+                  ikona: 'edit-box-line',
                   podpis: 'Do opisania',
                   wartosc: String(doOpisania.length),
                   opis: doOpisania.length > 0 ? `${doOpisania.length} czeka na sprawdzenie` : 'Wszystko opisane',
@@ -139,7 +143,7 @@ export default function EkranKosztow() {
                   podpis: 'Ostatnie pobranie z KSeF',
                   wartosc: sprawdzam ? 'Sprawdzam…' : pobranie,
                   opis: 'Sprawdzamy KSeF co 15 minut. Dotknij, żeby sprawdzić teraz.',
-                  ikona: 'arrow.clockwise',
+                  ikona: 'refresh-line',
                   onPress: sprawdzam ? undefined : sprawdzTeraz,
                 },
               ]}
@@ -151,14 +155,14 @@ export default function EkranKosztow() {
 
         {widok === 0 ? (
           widoczne.length === 0 ? (
-            <StanPusty ikona="tray" tytul="Brak wydatków" opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Dodaj wydatek ze zdjęcia albo poczekaj na faktury z KSeF.'} />
+            <StanPusty ikona="inbox-archive-line" tytul="Brak wydatków" opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Dodaj wydatek ze zdjęcia albo poczekaj na faktury z KSeF.'} />
           ) : (
             <Sekcja naglowek={tylkoDoOpisania ? 'Do opisania' : 'Listopad 2026'} stopka={zrodlo !== 'Wszystkie źródła' || kategoria !== 'Wszystkie kategorie' ? `Filtr: ${zrodlo}, ${kategoria}.` : undefined}>
               {widoczne.map(wiersz)}
             </Sekcja>
           )
         ) : skrzynka.length === 0 ? (
-          <StanPusty ikona="tray" tytul="Brak faktur przychodzących" opis="Faktury kosztowe z KSeF pojawią się tu same." />
+          <StanPusty ikona="inbox-archive-line" tytul="Brak faktur przychodzących" opis="Faktury kosztowe z KSeF pojawią się tu same." />
         ) : (
           <Sekcja naglowek="Faktury przychodzące z KSeF" stopka="Pokazujemy 200 najnowszych faktur według daty przyjęcia w KSeF.">
             {skrzynka.map((k) => (

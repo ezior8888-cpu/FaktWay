@@ -34,10 +34,10 @@ export default function EkranImportu() {
     <EkranListy>
       <Kafle
         kafle={[
-          { klucz: 'ksef', podpis: 'Historia z KSeF', wartosc: `${s.pobrano + z.pobrano}`, opis: 'sprzedaż i zakupy' },
-          { klucz: 'pliki', podpis: 'Z plików', wartosc: String(IMPORT.zPlikow) },
-          { klucz: 'kontrahenci', podpis: 'Nowi kontrahenci', wartosc: String(IMPORT.nowiKontrahenci) },
-          { klucz: 'pobranie', podpis: 'Ostatnie pobranie z KSeF', wartosc: IMPORT.ostatniePobranie },
+          { klucz: 'ksef', ikona: 'shield-check-line', podpis: 'Historia z KSeF', wartosc: `${s.pobrano + z.pobrano}`, opis: 'sprzedaż i zakupy' },
+          { klucz: 'pliki', ikona: 'file-upload-line', podpis: 'Z plików', wartosc: String(IMPORT.zPlikow) },
+          { klucz: 'kontrahenci', ikona: 'contacts-book3-line', podpis: 'Nowi kontrahenci', wartosc: String(IMPORT.nowiKontrahenci) },
+          { klucz: 'pobranie', ikona: 'refresh-line', podpis: 'Ostatnie pobranie z KSeF', wartosc: IMPORT.ostatniePobranie },
         ]}
       />
 

@@ -39,8 +39,8 @@ export default function EkranVat() {
       <NaglowekKwoty podpis={`VAT za ${v.miesiac}, do wpłaty (P_51)`} wartosc={kwota(doWplaty)} styl="title1" status={`Termin ${dataPelna(v.termin)}`} />
       <Kafle
         kafle={[
-          { klucz: 'p38', podpis: 'Podatek należny (P_38)', wartosc: kwotaKrotka(v.nalezny) },
-          { klucz: 'p48', podpis: 'Podatek naliczony (P_48)', wartosc: kwotaKrotka(v.naliczony) },
+          { klucz: 'p38', ikona: 'arrow-right-up-line', podpis: 'Podatek należny (P_38)', wartosc: kwotaKrotka(v.nalezny) },
+          { klucz: 'p48', ikona: 'arrow-right-down-line', podpis: 'Podatek naliczony (P_48)', wartosc: kwotaKrotka(v.naliczony) },
         ]}
       />
 
@@ -54,11 +54,11 @@ export default function EkranVat() {
         <PoleTekstowe etykieta="Nazwisko" wartosc={nazwisko} onZmiana={setNazwisko} />
         <PoleDaty etykieta="Data urodzenia" wartosc={urodzenie} onZmiana={setUrodzenie} />
         <PoleTekstowe etykieta="E-mail w pliku" wartosc={email} onZmiana={setEmail} klawiatura="email-address" />
-        <Wiersz tytul="Pobierz JPK_V7M" ikona="arrow.down.doc" akcja onPress={() => void Share.share({ message: `JPK_V7M za ${v.miesiac} (dane przykładowe).` })} />
+        <Wiersz tytul="Pobierz JPK_V7M" ikona="file-download-line" akcja onPress={() => void Share.share({ message: `JPK_V7M za ${v.miesiac} (dane przykładowe).` })} />
       </Sekcja>
 
       <Sekcja naglowek="Wysyłka do Ministerstwa Finansów" stopka="Plik podpisujemy danymi autoryzującymi (przychód z zeznania za poprzedni rok).">
-        <Wiersz tytul="Wyślij do MF" ikona="paperplane" akcja onPress={wyslij} />
+        <Wiersz tytul="Wyślij do MF" ikona="send-plane-line" akcja onPress={wyslij} />
         {wysylki.map((w) => (
           <Wiersz
             key={w.numer}

@@ -23,7 +23,7 @@ export default function EkranPowiadomien() {
 
       <Sekcja naglowek={`Twoje urządzenia (${URZADZENIA_PUSH.length})`}>
         {URZADZENIA_PUSH.map((u) => (
-          <Wiersz key={u.id} tytul={u.nazwa} podtytul={`Dodane ${dataPelna(u.dodane)}`} ikona={u.nazwa.includes('iPhone') ? 'iphone' : 'laptopcomputer'} />
+          <Wiersz key={u.id} tytul={u.nazwa} podtytul={`Dodane ${dataPelna(u.dodane)}`} ikona={u.nazwa.includes('iPhone') ? 'smartphone-line' : 'macbook-line'} />
         ))}
       </Sekcja>
 

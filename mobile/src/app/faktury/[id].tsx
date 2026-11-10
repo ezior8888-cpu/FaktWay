@@ -11,6 +11,8 @@ import { dataPelna, kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { useKolory } from '@/wyglad/kolory';
 
 const NAZWA_STATUSU_KSEF: Record<StatusKsef, string> = {
   przyjeta: 'Zaakceptowana',
@@ -34,6 +36,7 @@ function wedlugStawek(f: Faktura) {
  * karta dokumentu, akcje: e-mail, PDF, XML, korekta, duplikat, cykliczna).
  */
 export default function EkranFaktury() {
+  const kolory = useKolory();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { faktury, przelaczZaplate, wyslijDoKsef, wrocDoSzkicu, usunSzkic } = useStanFaktur();
@@ -44,7 +47,7 @@ export default function EkranFaktury() {
   if (!f) {
     return (
       <EkranListy>
-        <StanPusty ikona="doc.questionmark" tytul="Nie ma takiej faktury" opis="Mogła zostać usunięta na komputerze." />
+        <StanPusty ikona="file-unknow-line" tytul="Nie ma takiej faktury" opis="Mogła zostać usunięta na komputerze." />
       </EkranListy>
     );
   }
@@ -77,8 +80,8 @@ export default function EkranFaktury() {
         <>
           <Stack.Screen options={{ title: f.numer }} />
           <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button icon="square.and.arrow.up" accessibilityLabel="Pobierz PDF i udostępnij" onPress={() => udostepnijFakture(f)} />
-            <Stack.Toolbar.Menu icon="ellipsis" title="Akcje faktury">
+            <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={kolory.etykieta} accessibilityLabel="Pobierz PDF i udostępnij" onPress={() => udostepnijFakture(f)} />
+            <Stack.Toolbar.Menu icon={IKONY_PASKA.wiecej} iconRenderingMode="template" tintColor={kolory.etykieta} title="Akcje faktury">
               <Stack.Toolbar.MenuAction icon="envelope" onPress={() => router.push({ pathname: '/faktury/email', params: { id: f.id } })}>
                 Wyślij e-mailem
               </Stack.Toolbar.MenuAction>
@@ -129,14 +132,14 @@ export default function EkranFaktury() {
           <View style={styles.akcja}>
             {f.statusKsef === 'robocza' ? (
               <>
-                <PrzyciskGlowny tytul="Wyślij do KSeF" ikona="paperplane" onPress={() => wyslijDoKsef(f.id)} />
-                <PrzyciskGlowny tytul="Edytuj" ikona="pencil" wariant="drugorzedny" onPress={edytuj} />
+                <PrzyciskGlowny tytul="Wyślij do KSeF" ikona="send-plane-line" onPress={() => wyslijDoKsef(f.id)} />
+                <PrzyciskGlowny tytul="Edytuj" ikona="pencil-line" wariant="drugorzedny" onPress={edytuj} />
               </>
             ) : (
               // Odrzucona: najpierw poprawka (np. NIP), ponowna wysyłka bez zmian jako druga droga.
               <>
-                <PrzyciskGlowny tytul="Popraw fakturę" ikona="pencil" onPress={edytuj} />
-                <PrzyciskGlowny tytul="Wyślij ponownie bez zmian" ikona="paperplane" wariant="drugorzedny" onPress={() => wyslijDoKsef(f.id)} />
+                <PrzyciskGlowny tytul="Popraw fakturę" ikona="pencil-line" onPress={edytuj} />
+                <PrzyciskGlowny tytul="Wyślij ponownie bez zmian" ikona="send-plane-line" wariant="drugorzedny" onPress={() => wyslijDoKsef(f.id)} />
               </>
             )}
           </View>
@@ -145,7 +148,7 @@ export default function EkranFaktury() {
           <View style={styles.akcja}>
             <PrzyciskGlowny
               tytul={f.zaplacona ? 'Cofnij zapłatę' : 'Zapłacone'}
-              ikona={f.zaplacona ? 'arrow.uturn.backward' : 'checkmark'}
+              ikona={f.zaplacona ? 'arrow-go-back-line' : 'check-line'}
               wariant={f.zaplacona ? 'drugorzedny' : 'glowny'}
               onPress={() => przelaczZaplate(f)}
             />
@@ -154,7 +157,7 @@ export default function EkranFaktury() {
 
         {f.blad ? (
           <Sekcja naglowek="Dlaczego KSeF odrzucił fakturę" stopka={f.blad.podpowiedz}>
-            <Wiersz tytul={f.blad.komunikat} ikona="exclamationmark.triangle.fill" ikonaKolor="blad" />
+            <Wiersz tytul={f.blad.komunikat} ikona="alert-fill" ikonaKolor="blad" />
             <Wiersz tytul="Pole" wartosc={f.blad.pole} />
             <Wiersz tytul="Ustawienia KSeF" strzalka onPress={() => router.push('/wiecej/ustawienia/ksef')} />
           </Sekcja>
@@ -176,7 +179,7 @@ export default function EkranFaktury() {
           />
           {f.numerKsef ? <Wiersz tytul="Numer KSeF" podtytul={f.numerKsef} zaznaczalna /> : null}
           {przyjeta ? (
-            <Wiersz tytul="Urzędowe Poświadczenie Odbioru" podtytul="UPO dostępne" ikona="checkmark.seal" ikonaKolor="sukces" strzalka onPress={() => pobierz('UPO (PDF)')} />
+            <Wiersz tytul="Urzędowe Poświadczenie Odbioru" podtytul="UPO dostępne" ikona="verified-badge-line" ikonaKolor="sukces" strzalka onPress={() => pobierz('UPO (PDF)')} />
           ) : null}
           {f.zaplacona && przyjeta ? <Wiersz tytul="Płatność" wartosc="Zapłacona" wartoscKolor="sukces" /> : null}
         </Sekcja>

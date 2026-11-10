@@ -15,6 +15,8 @@ import { dataKrotka, dniMiedzy, kwota, kwotaKrotka } from '@/lib/format';
 import { dni, doZaplaty, ileFaktur, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { useKolory } from '@/wyglad/kolory';
 
 /** Widoki jak zakładki strony: Wystawione, Cykliczne, Po terminie. */
 const WIDOKI = ['Wystawione', 'Cykliczne', 'Po terminie'] as const;
@@ -74,6 +76,7 @@ function widokZParametru(parametr: string | undefined): number {
  * D7: „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku.
  */
 export default function EkranFaktur() {
+  const kolory = useKolory();
   const router = useRouter();
   const { widok: widokParam } = useLocalSearchParams<{ widok?: string }>();
   const { faktury, cykliczne, flagi } = useStanFaktur();
@@ -119,7 +122,7 @@ export default function EkranFaktur() {
       <Stack.SearchBar placeholder="Numer albo kontrahent" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
       {widok === 0 ? (
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Menu icon={filtrowAktywnych > 0 ? 'line.3.horizontal.decrease.circle.fill' : 'line.3.horizontal.decrease'} title="Filtry">
+          <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={filtrowAktywnych > 0 ? kolory.akcent : kolory.etykieta} title="Filtry">
             <Stack.Toolbar.Menu title="Status KSeF" inline>
               {STATUSY_KSEF.map((s) => (
                 <Stack.Toolbar.MenuAction key={s} isOn={statusKsef === s} onPress={() => setStatusKsef(s)}>
@@ -157,25 +160,25 @@ export default function EkranFaktur() {
             />
             {/* D7 (Bartosz, 09.11.2026): „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku. */}
             <View style={styles.akcja}>
-              <PrzyciskGlowny tytul="Nowa faktura" ikona="plus" onPress={() => router.push('/faktury/nowa')} />
+              <PrzyciskGlowny tytul="Nowa faktura" ikona="add-line" onPress={() => router.push('/faktury/nowa')} />
             </View>
             <Kafle
               kafle={[
                 {
-                  klucz: 'miesiac',
+                  klucz: 'miesiac', ikona: 'file-list3-line',
                   podpis: 'Faktury w tym miesiącu',
                   wartosc: String(przyjeteWMiesiacu.length),
                   opis: szkice.length > 0 ? `+ ${szkice.length} ${szkice.length === 1 ? 'szkic' : 'szkice'} poza KSeF` : 'Wszystkie w KSeF',
                 },
-                { klucz: 'oplacone', podpis: 'Opłacone w tym miesiącu', wartosc: kwotaKrotka(suma(oplaconeWMiesiacu)) },
+                { klucz: 'oplacone', ikona: 'checkbox-circle-line', podpis: 'Opłacone w tym miesiącu', wartosc: kwotaKrotka(suma(oplaconeWMiesiacu)) },
                 {
-                  klucz: 'kontrahenci',
+                  klucz: 'kontrahenci', ikona: 'contacts-book3-line',
                   podpis: 'Kontrahenci',
                   wartosc: String(KONTRAHENCI.length),
                   onPress: () => router.push('/wiecej/kontrahenci'),
                 },
                 {
-                  klucz: 'cykliczne',
+                  klucz: 'cykliczne', ikona: 'repeat-line',
                   podpis: 'Cykliczne',
                   wartosc: String(cykliczne.length),
                   opis: cykliczneDoWystawienia.length > 0 ? `${cykliczneDoWystawienia.length} czeka na wystawienie` : 'Nic nie czeka',
@@ -192,7 +195,7 @@ export default function EkranFaktur() {
         {widok === 0 ? (
           widoczne.length === 0 ? (
             <StanPusty
-              ikona={szukaj || filtrowAktywnych > 0 ? 'magnifyingglass' : 'doc.text'}
+              ikona={szukaj || filtrowAktywnych > 0 ? 'search-line' : 'file-text-line'}
               tytul={szukaj || filtrowAktywnych > 0 ? 'Brak faktur dla tych filtrów' : 'Brak faktur wystawionych'}
               opis={szukaj || filtrowAktywnych > 0 ? 'Zmień wyszukiwanie albo filtry w menu u góry.' : 'Wystaw pierwszą fakturę przyciskiem „Nowa faktura”.'}
             />
@@ -221,7 +224,7 @@ export default function EkranFaktur() {
                 onPress={() => router.push({ pathname: '/faktury/cykliczna', params: { id: c.id } })}
               />
             ))}
-            <Wiersz tytul="Nowa faktura cykliczna" ikona="plus.circle.fill" akcja onPress={() => router.push('/faktury/cykliczna')} />
+            <Wiersz tytul="Nowa faktura cykliczna" ikona="add-circle-fill" akcja onPress={() => router.push('/faktury/cykliczna')} />
           </Sekcja>
         ) : null}
 
@@ -229,15 +232,15 @@ export default function EkranFaktur() {
           <>
             <Kafle
               kafle={[
-                { klucz: 'suma', podpis: 'Po terminie', wartosc: kwotaKrotka(suma(zalegle)), opisKolor: 'ostrzezenie' },
-                { klucz: 'liczba', podpis: 'Faktur po terminie', wartosc: String(zalegle.length) },
-                { klucz: 'wyslane', podpis: 'Przypomnień w miesiącu', wartosc: String(wyslanePrzypomnienia) },
-                { klucz: 'wstrzymane', podpis: 'Wstrzymanych', wartosc: String(wstrzymane) },
+                { klucz: 'suma', ikona: 'alarm-warning-line', podpis: 'Po terminie', wartosc: kwotaKrotka(suma(zalegle)), opisKolor: 'ostrzezenie' },
+                { klucz: 'liczba', ikona: 'error-warning-line', podpis: 'Faktur po terminie', wartosc: String(zalegle.length) },
+                { klucz: 'wyslane', ikona: 'mail-line', podpis: 'Przypomnień w miesiącu', wartosc: String(wyslanePrzypomnienia) },
+                { klucz: 'wstrzymane', ikona: 'pause-line', podpis: 'Wstrzymanych', wartosc: String(wstrzymane) },
               ]}
             />
             <Sekcja naglowek="Po terminie" stopka="Od najdłużej zaległej. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.">
               {poTerminie.length === 0
-                ? [<StanPusty key="pusto" ikona="checkmark.circle" tytul="Brak pozycji gotowych do przypomnienia" opis="Żadna faktura nie jest po terminie." />]
+                ? [<StanPusty key="pusto" ikona="checkbox-circle-line" tytul="Brak pozycji gotowych do przypomnienia" opis="Żadna faktura nie jest po terminie." />]
                 : poTerminie.map((f) => {
                     const wstrzymana = flagi[`przypomnienia-wstrzymane-${f.id}`];
                     const p = f.przypomnienie;
@@ -254,7 +257,7 @@ export default function EkranFaktur() {
                       />
                     );
                   })}
-              <Wiersz tytul="Ustawienia przypomnień" ikona="bell.badge" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />
+              <Wiersz tytul="Ustawienia przypomnień" ikona="notification-badge-line" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />
             </Sekcja>
           </>
         ) : null}

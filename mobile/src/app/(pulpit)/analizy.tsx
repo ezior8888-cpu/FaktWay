@@ -10,16 +10,17 @@ import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { Wykres } from '@/komponenty/wykres';
 import { dataKrotka, kwota, kwotaKrotka, zmiana } from '@/lib/format';
 import { dni } from '@/lib/status-faktury';
-import type { Kolory } from '@/wyglad/kolory';
+import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { useKolory } from '@/wyglad/kolory';
 
 const MIESIACE = ['Listopad 2026', 'Październik 2026', 'Wrzesień 2026', 'Sierpień 2026', 'Lipiec 2026', 'Czerwiec 2026'];
-const KOLORY_KOLA: (keyof Kolory)[] = ['akcent', 'sukces', 'ostrzezenie', 'blad', 'etykietaTrzeciorzedna'];
 
 /**
  * Analizy sprzedaży i kosztów: odpowiednik `app/(dashboard)/analizy/sprzedaz`
  * i `analizy/koszty` (przełącznik Sprzedaż/Koszty, wybór miesiąca).
  */
 export default function EkranAnaliz() {
+  const kolory = useKolory();
   const router = useRouter();
   const { rodzaj } = useLocalSearchParams<{ rodzaj?: string }>();
   const [widok, setWidok] = useState(rodzaj === 'koszty' ? 1 : 0);
@@ -37,7 +38,7 @@ export default function EkranAnaliz() {
   return (
     <>
       <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon="calendar" title="Wybierz miesiąc">
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={kolory.etykieta} title="Wybierz miesiąc">
           {MIESIACE.map((m) => (
             <Stack.Toolbar.MenuAction key={m} isOn={miesiac === m} onPress={() => setMiesiac(m)}>
               {m}
@@ -52,21 +53,21 @@ export default function EkranAnaliz() {
         <Sekcja
           naglowek={sprzedaz ? `Sprzedaż: ${miesiac}` : `Wydatki: ${miesiac}`}
           stopka={sprzedaz ? 'Śledź sprzedaż, należności i stałych klientów miesiąc po miesiącu.' : 'Śledź wydatki, VAT i stałe koszty miesiąc po miesiącu.'}
-          swobodna>
+          bezKarty>
           <Kafle
             kafle={
               sprzedaz
                 ? [
-                    { klucz: 'sprzedano', podpis: 'Sprzedano (netto)', wartosc: kwotaKrotka(a.sprzedanoNetto) },
-                    { klucz: 'dziennie', podpis: 'Średnio dziennie', wartosc: kwotaKrotka(a.srednioDziennie) },
-                    { klucz: 'zmiana', podpis: 'Wobec poprzedniego miesiąca', wartosc: zmiana(a.zmiana), opisKolor: 'sukces' },
-                    { klucz: 'klient', podpis: 'Najlepszy klient', wartosc: a.najlepszyKlient },
+                    { klucz: 'sprzedano', ikona: 'line-chart-line', podpis: 'Sprzedano (netto)', wartosc: kwotaKrotka(a.sprzedanoNetto) },
+                    { klucz: 'dziennie', ikona: 'calendar-line', podpis: 'Średnio dziennie', wartosc: kwotaKrotka(a.srednioDziennie) },
+                    { klucz: 'zmiana', ikona: 'percent-line', podpis: 'Wobec poprzedniego miesiąca', wartosc: zmiana(a.zmiana), opisKolor: 'sukces' },
+                    { klucz: 'klient', ikona: 'user-star-line', podpis: 'Najlepszy klient', wartosc: a.najlepszyKlient },
                   ]
                 : [
-                    { klucz: 'dokumenty', podpis: 'Dokumenty (brutto)', wartosc: kwotaKrotka(k.dokumentyBrutto) },
-                    { klucz: 'dziennie', podpis: 'Średnio dziennie', wartosc: kwotaKrotka(k.srednioDziennie) },
-                    { klucz: 'zmiana', podpis: 'Wobec poprzedniego miesiąca', wartosc: zmiana(k.zmiana) },
-                    { klucz: 'kategoria', podpis: 'Największa kategoria', wartosc: k.najwiekszaKategoria },
+                    { klucz: 'dokumenty', ikona: 'receipt-line', podpis: 'Dokumenty (brutto)', wartosc: kwotaKrotka(k.dokumentyBrutto) },
+                    { klucz: 'dziennie', ikona: 'calendar-line', podpis: 'Średnio dziennie', wartosc: kwotaKrotka(k.srednioDziennie) },
+                    { klucz: 'zmiana', ikona: 'percent-line', podpis: 'Wobec poprzedniego miesiąca', wartosc: zmiana(k.zmiana) },
+                    { klucz: 'kategoria', ikona: 'price-tag3-line', podpis: 'Największa kategoria', wartosc: k.najwiekszaKategoria },
                   ]
             }
           />
@@ -83,7 +84,7 @@ export default function EkranAnaliz() {
           <Wykres
             rodzaj="kolo"
             wysokosc={220}
-            punkty={(sprzedaz ? a.produkty : k.kategorie).map((p, i) => ({ ...p, kolor: KOLORY_KOLA[i % KOLORY_KOLA.length], opis: kwota(p.y * 100) }))}
+            punkty={(sprzedaz ? a.produkty : k.kategorie).map((p) => ({ ...p, opis: kwota(p.y * 100) }))}
             etykieta={sprzedaz ? 'Udział produktów w sprzedaży' : 'Udział kategorii w wydatkach'}
           />
         </Sekcja>

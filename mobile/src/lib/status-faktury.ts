@@ -4,9 +4,10 @@
  */
 import type { Faktura } from '@/dane-przykladowe';
 import { dataKrotka, dniMiedzy } from '@/lib/format';
-import type { Kolory } from '@/wyglad/kolory';
+import type { Kolory, Ton } from '@/wyglad/kolory';
 
-export type Status = { tekst: string; kolor: keyof Kolory; zalegla: boolean };
+/** `ton` to plakietka na liście (jak `status-badge.tsx` strony), `kolor` to ten sam status jako tekst. */
+export type Status = { tekst: string; kolor: keyof Kolory; ton: Ton; zalegla: boolean; trwa?: boolean };
 
 /** „1 dzień”, „2 dni”, „5 dni”. */
 export function dni(n: number): string {
@@ -14,16 +15,16 @@ export function dni(n: number): string {
 }
 
 export function statusFaktury(f: Faktura, dzis: string): Status {
-  if (f.statusKsef === 'robocza') return { tekst: 'Szkic', kolor: 'etykietaDrugorzedna', zalegla: false };
-  if (f.statusKsef === 'wysylanie') return { tekst: 'Wysyłanie do KSeF', kolor: 'etykietaDrugorzedna', zalegla: false };
-  if (f.statusKsef === 'odrzucona') return { tekst: 'Odrzucona przez KSeF', kolor: 'blad', zalegla: false };
-  if (f.zaplacona) return { tekst: 'Zapłacona', kolor: 'sukces', zalegla: false };
+  if (f.statusKsef === 'robocza') return { tekst: 'Szkic', kolor: 'etykietaDrugorzedna', ton: 'neutralny', zalegla: false };
+  if (f.statusKsef === 'wysylanie') return { tekst: 'Wysyłanie do KSeF', kolor: 'info', ton: 'info', zalegla: false, trwa: true };
+  if (f.statusKsef === 'odrzucona') return { tekst: 'Odrzucona przez KSeF', kolor: 'blad', ton: 'blad', zalegla: false };
+  if (f.zaplacona) return { tekst: 'Zapłacona', kolor: 'sukces', ton: 'sukces', zalegla: false };
 
   const poTerminie = dniMiedzy(f.terminPlatnosci, dzis);
-  if (poTerminie > 7) return { tekst: `${dni(poTerminie)} po terminie`, kolor: 'blad', zalegla: true };
-  if (poTerminie > 0) return { tekst: `${dni(poTerminie)} po terminie`, kolor: 'ostrzezenie', zalegla: true };
-  if (poTerminie === 0) return { tekst: 'Termin dziś', kolor: 'ostrzezenie', zalegla: false };
-  return { tekst: `Termin ${dataKrotka(f.terminPlatnosci)}`, kolor: 'etykietaDrugorzedna', zalegla: false };
+  if (poTerminie > 7) return { tekst: `${dni(poTerminie)} po terminie`, kolor: 'blad', ton: 'blad', zalegla: true };
+  if (poTerminie > 0) return { tekst: `${dni(poTerminie)} po terminie`, kolor: 'ostrzezenie', ton: 'ostrzezenie', zalegla: true };
+  if (poTerminie === 0) return { tekst: 'Termin dziś', kolor: 'ostrzezenie', ton: 'ostrzezenie', zalegla: false };
+  return { tekst: `Termin ${dataKrotka(f.terminPlatnosci)}`, kolor: 'etykietaDrugorzedna', ton: 'neutralny', zalegla: false };
 }
 
 /**

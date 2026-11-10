@@ -30,15 +30,15 @@ export default function EkranKontrahentow() {
         {szukaj ? null : (
           <Kafle
             kafle={[
-              { klucz: 'wszyscy', podpis: 'Kontrahenci', wartosc: String(KONTRAHENCI.length) },
-              { klucz: 'aktywni', podpis: 'Aktywni (90 dni)', wartosc: String(KONTRAHENCI.length - 1) },
-              { klucz: 'zalegli', podpis: 'Z zaległościami', wartosc: String(zZaleglosciami), opisKolor: 'ostrzezenie' },
-              { klucz: 'vat', podpis: 'Status VAT do sprawdzenia', wartosc: '0' },
+              { klucz: 'wszyscy', ikona: 'contacts-book3-line', podpis: 'Kontrahenci', wartosc: String(KONTRAHENCI.length) },
+              { klucz: 'aktywni', ikona: 'team-line', podpis: 'Aktywni (90 dni)', wartosc: String(KONTRAHENCI.length - 1) },
+              { klucz: 'zalegli', ikona: 'alarm-warning-line', podpis: 'Z zaległościami', wartosc: String(zZaleglosciami), opisKolor: 'ostrzezenie' },
+              { klucz: 'vat', ikona: 'verified-badge-line', podpis: 'Status VAT do sprawdzenia', wartosc: '0' },
             ]}
           />
         )}
         {lista.length === 0 ? (
-          <StanPusty ikona="person.crop.rectangle.stack" tytul="Brak kontrahentów" opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Kontrahentów zapisujemy z wystawionych faktur.'} />
+          <StanPusty ikona="contacts-book3-line" tytul="Brak kontrahentów" opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Kontrahentów zapisujemy z wystawionych faktur.'} />
         ) : (
           <Sekcja naglowek="Wszyscy" stopka="Zapisani automatycznie z faktur. Dane pobieramy z bazy GUS REGON.">
             {lista.map((k) => {

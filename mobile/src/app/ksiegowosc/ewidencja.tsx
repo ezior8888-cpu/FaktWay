@@ -50,7 +50,7 @@ export default function EkranEwidencji() {
           />
         ))}
         {wpisy.map((t, i) => (
-          <Wiersz key={`r${i}`} tytul={t} ikona="pencil.circle" />
+          <Wiersz key={`r${i}`} tytul={t} ikona="edit-circle-line" />
         ))}
       </Sekcja>
 
@@ -90,7 +90,7 @@ export default function EkranEwidencji() {
         <PoleTekstowe etykieta="Pierwsze imię" wartosc={imie} onZmiana={setImie} />
         <PoleTekstowe etykieta="Nazwisko" wartosc={nazwisko} onZmiana={setNazwisko} />
         <PoleDaty etykieta="Data urodzenia" wartosc={urodzenie} onZmiana={setUrodzenie} />
-        <Wiersz tytul="Pobierz JPK_PKPIR" ikona="arrow.down.doc" akcja onPress={() => void Share.share({ message: 'JPK_PKPIR od stycznia do listopada 2026 (dane przykładowe).' })} />
+        <Wiersz tytul="Pobierz JPK_PKPIR" ikona="file-download-line" akcja onPress={() => void Share.share({ message: 'JPK_PKPIR od stycznia do listopada 2026 (dane przykładowe).' })} />
       </Sekcja>
     </EkranListy>
   );

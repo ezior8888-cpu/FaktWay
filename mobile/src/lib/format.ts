@@ -37,12 +37,18 @@ export function dniMiedzy(od: string, doDnia: string): number {
 
 const KWOTA_KROTKA = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 });
 
+/** Liczba w skrócie: „34,6 tys.”, „1,2 mln”, poniżej progu bez skrótu (osie wykresów, kafle). */
+export function liczbaKrotka(n: number, progTysiecy = 1000): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${KWOTA_KROTKA.format(n / 1_000_000)}\u00a0mln`;
+  if (abs >= progTysiecy) return `${KWOTA_KROTKA.format(n / 1_000)}\u00a0tys.`;
+  return KWOTA_KROTKA.format(n);
+}
+
 /** Kwota w kaflu: „34,6 tys. zł”, „1,2 mln zł”, poniżej 10 tys. pełna. */
 export function kwotaKrotka(grosze: number): string {
   const zl = grosze / 100;
-  const abs = Math.abs(zl);
-  if (abs >= 1_000_000) return `${KWOTA_KROTKA.format(zl / 1_000_000)}\u00a0mln\u00a0zł`;
-  if (abs >= 10_000) return `${KWOTA_KROTKA.format(zl / 1_000)}\u00a0tys.\u00a0zł`;
+  if (Math.abs(zl) >= 10_000) return `${liczbaKrotka(zl, 10_000)}\u00a0zł`;
   return kwota(grosze);
 }
 

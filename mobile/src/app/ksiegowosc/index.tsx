@@ -14,6 +14,8 @@ import { dataPelna, kwota, kwotaKrotka } from '@/lib/format';
 import { kiedyTermin } from '@/lib/status-faktury';
 import { useFlaga } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { useKolory } from '@/wyglad/kolory';
 
 const MIESIACE = ['październik 2026', 'wrzesień 2026', 'sierpień 2026'];
 
@@ -24,6 +26,7 @@ const MIESIACE = ['październik 2026', 'wrzesień 2026', 'sierpień 2026'];
  * Ustawienia podatkowe).
  */
 export default function EkranKsiegowosci() {
+  const kolory = useKolory();
   const router = useRouter();
   const r = ROZLICZENIE;
   const [miesiac, setMiesiac] = useState(MIESIACE[0] ?? '');
@@ -39,7 +42,7 @@ export default function EkranKsiegowosci() {
   return (
     <>
       <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon="calendar" title="Miesiąc rozliczenia">
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={kolory.etykieta} title="Miesiąc rozliczenia">
           {MIESIACE.map((m) => (
             <Stack.Toolbar.MenuAction key={m} isOn={miesiac === m} onPress={() => setMiesiac(m)}>
               {m}
@@ -59,28 +62,28 @@ export default function EkranKsiegowosci() {
 
         <Kafle
           kafle={[
-            { klucz: 'przychod', podpis: 'Przychód w miesiącu', wartosc: kwotaKrotka(r.przychod) },
-            { klucz: 'koszty', podpis: 'Koszty w miesiącu', wartosc: kwotaKrotka(r.koszty) },
-            { klucz: 'pit', podpis: 'Zaliczka PIT', wartosc: kwota(kwotaPozycji('pit')) },
-            { klucz: 'spoleczne', podpis: 'Składki społeczne', wartosc: kwota(kwotaPozycji('spoleczne')) },
-            { klucz: 'zdrowotna', podpis: 'Składka zdrowotna', wartosc: kwota(kwotaPozycji('zdrowotna')) },
-            { klucz: 'vat', podpis: 'VAT do zapłaty', wartosc: kwota(kwotaPozycji('vat')), onPress: () => router.push('/ksiegowosc/vat') },
+            { klucz: 'przychod', ikona: 'wallet-line', podpis: 'Przychód w miesiącu', wartosc: kwotaKrotka(r.przychod) },
+            { klucz: 'koszty', ikona: 'bank-card-line', podpis: 'Koszty w miesiącu', wartosc: kwotaKrotka(r.koszty) },
+            { klucz: 'pit', ikona: 'bank-line', podpis: 'Zaliczka PIT', wartosc: kwota(kwotaPozycji('pit')) },
+            { klucz: 'spoleczne', ikona: 'team-line', podpis: 'Składki społeczne', wartosc: kwota(kwotaPozycji('spoleczne')) },
+            { klucz: 'zdrowotna', ikona: 'shield-check-line', podpis: 'Składka zdrowotna', wartosc: kwota(kwotaPozycji('zdrowotna')) },
+            { klucz: 'vat', ikona: 'percent-line', podpis: 'VAT do zapłaty', wartosc: kwota(kwotaPozycji('vat')), onPress: () => router.push('/ksiegowosc/vat') },
           ]}
         />
 
         <Sekcja naglowek="Rejestry i pliki" stopka={`${NAZWA_FORMY[PROFIL.forma]}, ${PROFIL.vat.toLowerCase()}.`}>
-          <Wiersz tytul="KPiR" podtytul="Księga przychodów i rozchodów" ikona="book" strzalka onPress={() => router.push('/ksiegowosc/kpir')} />
-          <Wiersz tytul="Ewidencja" podtytul="Wpisy, spis z natury, JPK_PKPIR" ikona="list.bullet.rectangle" strzalka onPress={() => router.push('/ksiegowosc/ewidencja')} />
-          <Wiersz tytul="VAT" podtytul="JPK_V7M i wysyłka do Ministerstwa Finansów" ikona="percent" strzalka onPress={() => router.push('/ksiegowosc/vat')} />
-          <Wiersz tytul="Eksport" podtytul="Pliki dla księgowej i programów" ikona="square.and.arrow.up.on.square" strzalka onPress={() => router.push('/ksiegowosc/eksport')} />
-          <Wiersz tytul="Ustawienia podatkowe" podtytul="Forma opodatkowania, ZUS" ikona="slider.horizontal.3" strzalka onPress={() => router.push('/ksiegowosc/ustawienia-podatkowe')} />
+          <Wiersz tytul="KPiR" podtytul="Księga przychodów i rozchodów" ikona="book2-line" strzalka onPress={() => router.push('/ksiegowosc/kpir')} />
+          <Wiersz tytul="Ewidencja" podtytul="Wpisy, spis z natury, JPK_PKPIR" ikona="file-list2-line" strzalka onPress={() => router.push('/ksiegowosc/ewidencja')} />
+          <Wiersz tytul="VAT" podtytul="JPK_V7M i wysyłka do Ministerstwa Finansów" ikona="percent-line" strzalka onPress={() => router.push('/ksiegowosc/vat')} />
+          <Wiersz tytul="Eksport" podtytul="Pliki dla księgowej i programów" ikona="share-box-line" strzalka onPress={() => router.push('/ksiegowosc/eksport')} />
+          <Wiersz tytul="Ustawienia podatkowe" podtytul="Forma opodatkowania, ZUS" ikona="equalizer-line" strzalka onPress={() => router.push('/ksiegowosc/ustawienia-podatkowe')} />
         </Sekcja>
 
         {zatwierdzony ? null : (
           <View style={styles.akcja}>
             <PrzyciskGlowny
               tytul="Zatwierdź miesiąc"
-              ikona="checkmark.seal"
+              ikona="verified-badge-line"
               onPress={() => {
                 setZatwierdzony(true);
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -119,7 +122,7 @@ export default function EkranKsiegowosci() {
 
         <Sekcja naglowek="Zapłaty spoza wyliczenia" stopka="Np. składki zapłacone w innej kwocie albo za inny miesiąc.">
           {zapisaneZaplaty.map((z, i) => (
-            <Wiersz key={i} tytul={z} ikona="checkmark.circle.fill" ikonaKolor="sukces" />
+            <Wiersz key={i} tytul={z} ikona="checkbox-circle-fill" ikonaKolor="sukces" />
           ))}
           <PoleWyboru
             etykieta="Rodzaj składek"

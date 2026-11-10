@@ -36,7 +36,7 @@ export default function EkranPrzypomnienia() {
   const [zlecone, setZlecone] = useState(false);
   const [blad, setBlad] = useState<string>();
 
-  if (!f) return <StanPusty ikona="doc.questionmark" tytul="Nie ma takiej faktury" opis="Mogła zostać zapłacona albo usunięta." />;
+  if (!f) return <StanPusty ikona="file-unknow-line" tytul="Nie ma takiej faktury" opis="Mogła zostać zapłacona albo usunięta." />;
   const poTerminie = dniMiedzy(f.terminPlatnosci, DZIS);
 
   const zlec = () => {
@@ -62,7 +62,7 @@ export default function EkranPrzypomnienia() {
         <View style={styles.akcja}>
           <PrzyciskGlowny
             tytul={f.zaplacona ? 'Cofnij zapłatę' : 'Zapłacone'}
-            ikona="checkmark"
+            ikona="check-line"
             wariant={f.zaplacona ? 'drugorzedny' : 'glowny'}
             onPress={() => przelaczZaplate(f)}
           />
@@ -76,7 +76,7 @@ export default function EkranPrzypomnienia() {
 
         {wstrzymane || f.zaplacona ? null : zlecone ? (
           <Sekcja naglowek="Przypomnienie zlecone" stopka="Wyślemy je w najbliższym oknie wysyłki z ustawień przypomnień.">
-            <Wiersz tytul={`Do: ${email}`} ikona="checkmark.circle.fill" ikonaKolor="sukces" />
+            <Wiersz tytul={`Do: ${email}`} ikona="checkbox-circle-fill" ikonaKolor="sukces" />
           </Sekcja>
         ) : (
           <>
@@ -88,7 +88,7 @@ export default function EkranPrzypomnienia() {
               <PolePrzelacznik etykieta="Zgadzam się na wysyłkę tej wiadomości" wartosc={zgoda} onZmiana={setZgoda} />
             </Sekcja>
             <View style={styles.akcja}>
-              <PrzyciskGlowny tytul="Zatwierdź i zleć wysyłkę" ikona="paperplane" onPress={zlec} />
+              <PrzyciskGlowny tytul="Zatwierdź i zleć wysyłkę" ikona="send-plane-line" onPress={zlec} />
             </View>
           </>
         )}

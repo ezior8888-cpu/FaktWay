@@ -24,9 +24,11 @@ uruchamiasz po kolei, nigdy razem.
 | Katalog | Co |
 |---|---|
 | `src/app/` | trasy Expo Router: `_layout.tsx` to zakładki systemowe, każdy folder zakładki ma własny `Stack` |
-| `src/komponenty/` | `Tekst`, `EkranListy`, `Sekcja`, `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny` (Liquid Glass), `StanPusty`, `NaglowekKwoty`, `Kafle`, `Wykres` (Swift Charts), `Kalendarz`, pola formularza (`formularz.tsx`); ekrany składasz tylko z nich i z komponentów systemowych |
+| `src/komponenty/` | wygląd FaktWay (plan D12): `Tekst`, `EkranListy`, `Sekcja` (karta), `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny`, `Dotyk` (animacja wciśnięcia), `Ikona` i `KoloIkony` (Remix), `Znacznik` (plakietka statusu), `NaglowekKwoty`, `Kafle`, `Wykres` (SVG: słupki, linia, pierścień), `Kubelki`, `Kalendarz`, `LogoFaktWay`, `PasekMarki`, pola formularza (`formularz.tsx`); ekrany składasz tylko z nich i z komponentów systemowych |
 | `src/stan/` | stan wspólny dla ekranów na danych przykładowych: faktury, cykliczne, wydatki, przełączniki ustawień |
-| `src/wyglad/` | kolory semantyczne, style tekstu, skala odstępów; jedyne miejsce na wartości wyglądu |
+| `src/wyglad/` | paleta strony (jasna i ciemna), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
+| `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit i IBM Plex Mono (OFL, `LICENCJE.txt`); ikony Remix zakładek i paska jako obrazy szablonowe |
+| `scripts/ikony-remix.cjs` | generuje `src/komponenty/ikony-remix.ts` z pakietu `@remixicon/react` strony; nową ikonę dopisz tam |
 | `src/lib/` | formatowanie i logika bez interfejsu |
 | `src/dane-przykladowe/` | dane do etapów M2 do M4 (zmyślone firmy, NIP testowy) |
 
@@ -70,8 +72,19 @@ uruchamiasz po kolei, nigdy razem.
   parametrem (wzór w `app/faktury/index.tsx`).
 - Timery w ekranach arkuszy czyść przy zamknięciu (`useEffect` ze sprzątaniem):
   arkusz zamknięty gestem nie może potem nawigować ani zapisywać.
-- Wiersz formularza: etykieta nie może się ściskać (łamie słowa); długą
-  wartość skraca systemowe menu. Przy dużym tekście pola schodzą pod etykietę.
+- Pole formularza ma etykietę zawsze nad polem (jak na stronie), więc nie
+  łamie słów przy długich wartościach i dużym tekście. Pola mają własne
+  odstępy (`pole = true` na komponencie), karta nie rysuje między nimi linii.
 - Obchód w symulatorze: linki otwieraj narzędziem symulatora (`open_url`), nie
   `xcrun simctl openurl`, który pokazuje systemowe pytanie „Otworzyć w
   FaktWay?”.
+- Pasek nawigacji bez `headerStyle`/`headerLargeStyle` z kolorem tła: na iOS 27
+  chowa wtedy duży tytuł. Opcje pasków tylko z `wyglad/naglowki.ts`.
+- Własna czcionka: wagę wybiera plik (`czcionka('semibold')`), nie
+  `fontWeight` (na Androidzie wraca wtedy czcionka systemowa).
+- Wartości Reanimated w zdarzeniach i efektach zapisuj przez `.set()`, nie
+  `.value =`: lint React Compiler (`react-hooks/immutability`) odrzuca przypisanie.
+- `borderStyle: 'dashed'` z obwódką z jednej strony nie działa w React Native;
+  przerywane linie rysuj w SVG (`Line strokeDasharray`).
+- Linki z innej zakładki nie przejdą, gdy na wierzchu jest arkusz (np. „Nowa
+  faktura”): przy obchodzie zamknij arkusz albo uruchom aplikację od nowa.

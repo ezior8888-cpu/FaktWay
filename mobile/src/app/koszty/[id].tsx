@@ -34,7 +34,7 @@ export default function EkranWydatku() {
   const [notatki, setNotatki] = useState(k?.opis ?? '');
   const [blad, setBlad] = useState<string>();
 
-  if (!k) return <StanPusty ikona="doc.questionmark" tytul="Nie ma takiego wydatku" opis="Mógł zostać usunięty na komputerze." />;
+  if (!k) return <StanPusty ikona="file-unknow-line" tytul="Nie ma takiego wydatku" opis="Mógł zostać usunięty na komputerze." />;
   const zKsef = k.zrodlo === 'ksef';
   const vat = (grosze(brutto) || 0) - (grosze(netto) || 0);
 
@@ -76,7 +76,7 @@ export default function EkranWydatku() {
 
         {k.zrodlo !== 'reczny' ? (
           <Sekcja stopka="Kategorię i kolumnę dobraliśmy z dostawcy i treści dokumentu. Zmień, jeśli się nie zgadza.">
-            <Wiersz tytul={`Wykryto: ${k.kategoria} · Kol. ${k.kolumna}`} ikona="sparkles" ikonaKolor="akcent" />
+            <Wiersz tytul={`Wykryto: ${k.kategoria} · Kol. ${k.kolumna}`} ikona="price-tag3-line" ikonaKolor="akcent" />
           </Sekcja>
         ) : null}
 
@@ -118,7 +118,7 @@ export default function EkranWydatku() {
         </Sekcja>
 
         <View style={styles.przyciski}>
-          <PrzyciskGlowny tytul={przycisk} ikona="checkmark" onPress={zapisz} />
+          <PrzyciskGlowny tytul={przycisk} ikona="check-line" onPress={zapisz} />
         </View>
 
         {zKsef ? (

@@ -59,7 +59,7 @@ i poziom porządnych aplikacji fintech.
 |---|---|---|
 | D1 | **Technologia:** Expo (React Native), nowa aplikacja natywna; nie opakowane PWA (ryzyko odrzucenia z wytycznej 4.2 i ten sam „dziwny” wygląd), nie osobno Swift i Kotlin (dwie aplikacje to za dużo dla zespołu) | przyjęta 08.11.2026 (start etapu M1) |
 | D2 | **Gdzie kod:** folder `mobile/` w tym repo, żeby aplikacja i jej API zmieniały się w jednym PR i agenci widzieli oba końce. Koszt: wyłączenia w konfiguracji (sekcja 4.4) | przyjęta 08.11.2026 (Bartosz: start M2) |
-| D3 | **Zakres: pełna zgodność ze stroną.** Na telefonie są wszystkie funkcje i karty aplikacji webowej, w stylu Apple, bez „okrojonej” wersji. Powód (Bartosz): klienci inFaktu złoszczą się, że płacą abonament, a na telefonie mają tylko część. Pierwotne „sześć zadań” z sekcji 3 to teraz kolejność budowy, nie granica zakresu. Wyjątek: zakup abonamentu (D5) | zmieniona 09.11.2026 (Bartosz) |
+| D3 | **Zakres: pełna zgodność ze stroną.** Na telefonie są wszystkie funkcje i karty aplikacji webowej, natywnie i płynnie (wygląd: D12), bez „okrojonej” wersji. Powód (Bartosz): klienci inFaktu złoszczą się, że płacą abonament, a na telefonie mają tylko część. Pierwotne „sześć zadań” z sekcji 3 to teraz kolejność budowy, nie granica zakresu. Wyjątki: zakup abonamentu (D5) i Flo (D13) | zmieniona 09.11.2026 (Bartosz) |
 | D4 | **Konta deweloperskie:** Apple (99 USD rocznie) i Google Play (25 USD jednorazowo) zakładamy jako firma, po założeniu spółki. Konto Apple dla JDG pokazuje w sklepie imię i nazwisko; nowe konto osobiste Google wymaga zamkniętego testu z 12 testerami przez 14 dni | do decyzji Bartosza |
 | D5 | **Płatności:** v1 nie sprzedaje abonamentu w aplikacji. Brak cen i przycisku „kup”, zakup na faktway.pl. Przed zgłoszeniem sprawdzić aktualne wytyczne Apple 3.1 | rekomendacja |
 | D6 | **Projektant iOS:** na zlecenie, raz: system (kolor, typografia, ikona aplikacji) i 8 do 10 kluczowych ekranów w Figmie na zestawie Apple. Bez projektanta: Claude daje 2 do 3 wariantów ekranu wzorcowego, Bartosz wybiera | do decyzji Bartosza |
@@ -67,7 +67,9 @@ i poziom porządnych aplikacji fintech.
 | D8 | **Kolejność platform:** najpierw iOS do poziomu „wzorzec”, potem dopasowanie Androida z tego samego kodu przed betą Google Play | rekomendacja |
 | D9 | **Powiadomienia:** z workera pg-boss bezpośrednio do APNs i FCM albo przez usługę push Expo (nowy podmiot przetwarzający, serwery poza UE). W obu przypadkach treść bez kwot i danych kontrahenta | otwarta, rozstrzygnąć w M11 |
 | D10 | **Identyfikator aplikacji:** `pl.faktway.app` na iOS (bundle ID) i Androidzie (package). Po publikacji nie do zmiany | przyjęta 08.11.2026 |
-| D11 | **Zakładki (5):** Pulpit, Faktury, Koszty (wydatki i skrzynka KSeF), Księgowość (Ten miesiąc, KPiR, ewidencja, VAT, eksport), Więcej (kontrahenci, import, Flo, wszystkie ustawienia). Pięć to granica paska zakładek iOS; reszta strony siedzi w Więcej | zmieniona 09.11.2026 (M4, po zmianie D3) |
+| D12 | **Wygląd: FaktWay, nie „produkt Apple”.** Treść ekranów mówi językiem wersji na komputer (plan Finora, D2): czcionka Outfit, liczby, numery i daty w IBM Plex Mono, kolory presetu Modern Minimal z `app/globals.css` (niebieski `#2463EF`), płaskie karty z cienką obwódką i nagłówkiem w środku, okrągłe ikony Remix na jasnoniebieskim tle, statusy jak `components/invoices/status-badge.tsx`, wykresy w odcieniach niebieskiego. Natywne zostaje to, co daje płynność: stos ekranów, pasek zakładek, arkusze, gesty, wibracje, menu i podgląd przy przytrzymaniu | przyjęta 10.11.2026 (Bartosz: „wygląda dosłownie jak produkt Apple, zrób bardziej pod FaktWay”) |
+| D13 | **Bez Flo.** Na telefonie nie ma ekranu Flo, ustawień Flo, „Twój rok w liczbach” (na stronie `flo/wrapped`) ani podpowiedzi „Mogę wypełnić to za Ciebie” | przyjęta 10.11.2026 (Bartosz: „na razie zrezygnowaliśmy”) |
+| D11 | **Zakładki (5):** Pulpit, Faktury, Koszty (wydatki i skrzynka KSeF), Księgowość (Ten miesiąc, KPiR, ewidencja, VAT, eksport), Więcej (kontrahenci, import, wszystkie ustawienia). Pięć to granica paska zakładek iOS; reszta strony siedzi w Więcej | zmieniona 09.11.2026 (M4, po zmianie D3) |
 
 ---
 
@@ -98,7 +100,6 @@ Na razie na danych przykładowych; dane z bazy podłączają etapy od M7.
 | `dashboard` (pulpit, wykresy, należności, najlepsi klienci) | zakładka Pulpit | `(pulpit)/index` |
 | `przeplywy` | Pulpit → Przepływy | `(pulpit)/przeplywy` |
 | `analizy` (sprzedaż, koszty) | Pulpit → Analizy (przełącznik, wykres kołowy, kalendarz) | `(pulpit)/analizy` |
-| `flo/wrapped` | Pulpit → Twój rok w liczbach | `(pulpit)/twoj-rok` |
 | `(faktury)`, `invoices` (lista, Wystawione, Cykliczne, Po terminie, filtry) | zakładka Faktury, bloczek „Nowa faktura” (D7) | `faktury/index` |
 | `invoices/[id]` (status, UPO, zapłata, PDF, XML, korekta, duplikat, cykliczna, e-mail) | szczegół faktury, menu akcji, Popraw i Edytuj dla szkicu i odrzuconej | `faktury/[id]`, `faktury/email` |
 | `invoices/new` (zwykła, korygująca, zaliczkowa, rozliczająca) | arkusz: wybór rodzaju, formularz | `faktury/nowa/index`, `faktury/nowa/[rodzaj]` |
@@ -109,8 +110,7 @@ Na razie na danych przykładowych; dane z bazy podłączają etapy od M7.
 | ustawienia podatkowe | Księgowość → Ustawienia podatkowe | `ksiegowosc/ustawienia-podatkowe` |
 | `contractors` | Więcej → Kontrahenci | `wiecej/kontrahenci/*` |
 | `import-danych` | Więcej → Import danych | `wiecej/import` |
-| `flo` | Więcej → Flo | `wiecej/flo` |
-| `settings` (firma, bezpieczeństwo, powiadomienia, KSeF, przypomnienia, księgowa, zespół, abonament, Flo, dziennik, konto) | Więcej → Ustawienia, ekran na kartę | `wiecej/ustawienia/*` |
+| `settings` (firma, bezpieczeństwo, powiadomienia, KSeF, przypomnienia, księgowa, zespół, abonament, dziennik, konto; bez Flo, D13) | Więcej → Ustawienia, ekran na kartę | `wiecej/ustawienia/*` |
 
 Symulowane na danych przykładowych: przyjęcie w KSeF (2,5 s), odczyt OCR,
 wysyłka e-maili i JPK, pliki PDF i XML (arkusz udostępniania z opisem),
@@ -224,6 +224,7 @@ częścią „gotowe” od M3.
 | M2 | Fundament: Expo w `mobile/`, wyłączenia z 4.4, natywne zakładki i stos, kolory semantyczne i tryb ciemny, skille Expo i `telefon-app`, dane przykładowe | aplikacja startuje w symulatorze, zrzuty jasny i ciemny, CI strony bez zmian |
 | M3 | **Ekran wzorcowy** na danych przykładowych: lista faktur i szczegół, dopracowane do checklisty; warianty D7 | Bartosz na swoim iPhonie mówi „to jest to”. Bez tego nie ma kolejnych ekranów |
 | M4 | **Pełny zakres na danych przykładowych** (D3): wszystkie sekcje strony według mapy 3a, pięć zakładek (D11), bloczek „Nowa faktura” (D7) | każdy ekran z 3a otwiera się w symulatorze, jasny, ciemny i duży tekst bez ucięć; przegląd kodu |
+| M4b | **Wygląd FaktWay** (D12) i usunięcie Flo (D13) na tych samych ekranach | zrzuty jasne i ciemne obok wersji M4; duży tekst bez ucięć; przegląd kodu |
 | M5 | Logowanie: e-mail i hasło, Google, 2FA, Face ID | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
 | M6 | API `app/api/mobile/v1` (szkielet, token, limity, audyt) i pierwsze trasy | testy tras na brak i zły token, RLS na bazie |
 | M7 | Faktury i skrzynka KSeF na prawdziwych danych | lista i szczegół z bazy, odświeżanie, stany ekranu |
@@ -251,9 +252,10 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** Bartosz ogląda M4 na swoim iPhonie (zrzuty
-`docs/mobile/zrzuty/m4/`, obchód ekranów z mapy 3a) i daje uwagi albo „idź
-dalej”. Potem M5: logowanie. Otwarte: D4 (konta jako firma), D6 (projektant).
+**Następny krok:** Bartosz ogląda M4b (wygląd FaktWay, D12) na swoim iPhonie:
+zrzuty `docs/mobile/zrzuty/m4b/` obok `m4/`, build poleceniem z `mobile/AGENTS.md`.
+Uwagi do wyglądu albo „idź dalej”; potem M5: logowanie. Otwarte: D4 (konta
+jako firma), D6 (projektant).
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -262,3 +264,4 @@ dalej”. Potem M5: logowanie. Otwarte: D4 (konta jako firma), D6 (projektant).
 | 09.11.2026 | M2 | Expo SDK 58 w `mobile/` (własny workspace pnpm), 4 natywne zakładki, stos w każdej, lista i szczegół faktury, arkusz „Nowa faktura”, Koszty, Ten miesiąc, Konto na danych przykładowych; kolory semantyczne, style tekstu z Dynamic Type, skala odstępów; wyłączenia `mobile/` w tsconfig, eslint, Docker, knip; job CI „Mobile”; skille Expo i `telefon-app`; pierwszy build w Xcode na iPhone 18 Pro, zrzuty w `docs/mobile/zrzuty/m2/`. Strona: `pnpm run ci` i `pnpm build` zielone | #493 |
 | 09.11.2026 | M3 | ekran wzorcowy na danych przykładowych: podsumowanie „Do zapłaty”, natywny przełącznik Wszystkie/Do zapłaty, wiersz z podglądem i menu przy przytrzymaniu oraz przesunięciem „Zapłacona” (wibracje), szczegół z przyciskiem Liquid Glass, wspólny stan zapłaty, szczegół kosztu, warianty D7 A/B/C, bez atrap (alertów „w etapie”); Dynamic Type do AX5 (układ pionowy), iPhone 17e i 18 Pro Max, tryb ciemny; poprawki z porównania z Ustawieniami iOS 27; zrzuty `docs/mobile/zrzuty/m3/` | #502 |
 | 09.11.2026 | M4 | pełny zakres strony na telefonie (D3): 5 zakładek (Pulpit, Faktury, Koszty, Księgowość, Więcej), mapa 3a; Pulpit z wykresami (Swift Charts), przepływami, analizami i „Twój rok”; faktury: widoki Wystawione, Cykliczne, Po terminie, filtry, formularze zwykłej, korygującej, zaliczkowej i rozliczającej, edycja szkicu i poprawka odrzuconej, cykliczne, przypomnienia, e-mail; koszty: dodawanie (symulowany OCR), skrzynka KSeF, opis; księgowość: Ten miesiąc, KPiR, ewidencja, VAT i JPK, eksport, ustawienia podatkowe; Więcej: kontrahenci, import, Flo, 11 ekranów ustawień; D7 = bloczek pod sumą; formularze i kafle w układzie pionowym przy dużym tekście; 10 poprawek z przeglądu kodu; zrzuty `docs/mobile/zrzuty/m4/` | #534 |
+| 10.11.2026 | M4b | wygląd FaktWay zamiast „produktu Apple” (D12): Outfit i IBM Plex Mono wbudowane w aplikację, paleta strony (jasna i ciemna), płaskie karty z obwódką i nagłówkiem w środku, ikony Remix ze strony (także w pasku zakładek i przyciskach paska), plakietki statusów jak na stronie, przyciski i pola jak na stronie z płynną animacją, zakładki sekcji z kreską, wykresy w SVG (słupki składane, linia z polem, pierścień, wiek należności) z animacją wejścia i dymkiem, Pulpit z logo FaktWay; bez Flo (D13): usunięte ekran Flo, ustawienia Flo, „Twój rok w liczbach” i podpowiedź w formularzu; `ZASADY-DESIGNU.md` w wersji 2; 7 uwag z przeglądu kodu (5 poprawionych); zrzuty `docs/mobile/zrzuty/m4b/` | #PR |

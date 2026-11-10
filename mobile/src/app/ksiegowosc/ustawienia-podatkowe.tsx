@@ -61,7 +61,7 @@ export default function EkranUstawienPodatkowych() {
       <View style={styles.akcja}>
         <PrzyciskGlowny
           tytul={zapisano ? 'Zapisano' : 'Zapisz'}
-          ikona="checkmark"
+          ikona="check-line"
           onPress={() => {
             setZapisano(true);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

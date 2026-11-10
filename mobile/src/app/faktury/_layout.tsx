@@ -1,5 +1,7 @@
 import { Stack } from 'expo-router';
 
+import { useOpcjeStosu } from '@/wyglad/naglowki';
+
 /** Lista zakładki zawsze leży pod spodem: arkusze i ekrany otwarte linkiem mają „wstecz” i prezentują się jako arkusze. */
 export const unstable_settings = { anchor: 'index' };
 
@@ -9,8 +11,9 @@ export const unstable_settings = { anchor: 'index' };
  * przypomnienie o zapłacie, wysyłka e-mailem.
  */
 export default function UkladFaktur() {
+  const opcje = useOpcjeStosu();
   return (
-    <Stack>
+    <Stack screenOptions={opcje}>
       <Stack.Screen name="index" options={{ title: 'Faktury', headerLargeTitle: true }} />
       <Stack.Screen name="[id]" options={{ title: '' }} />
       <Stack.Screen name="nowa" options={{ presentation: 'modal', headerShown: false }} />

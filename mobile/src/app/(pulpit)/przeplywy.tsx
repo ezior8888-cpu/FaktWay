@@ -19,7 +19,8 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { Wykres } from '@/komponenty/wykres';
 import { dataKrotka, kwota, kwotaKrotka, zmiana } from '@/lib/format';
 import { doZaplaty, kiedyTermin } from '@/lib/status-faktury';
-import type { Kolory } from '@/wyglad/kolory';
+import { useKolory, type Kolory } from '@/wyglad/kolory';
+import { IKONY_PASKA } from '@/wyglad/ikony-paska';
 
 const OKRESY: { klucz: Okres; nazwa: string }[] = [
   { klucz: 'tygodniowo', nazwa: 'Tygodniowo' },
@@ -40,6 +41,7 @@ const STATUSY = ['Wszystkie', 'Opłacona', 'Korekta', 'Zatwierdzony', 'Do akcept
 
 /** Przepływy pieniężne: odpowiednik `app/(dashboard)/przeplywy`. */
 export default function EkranPrzeplywow() {
+  const kolory = useKolory();
   const router = useRouter();
   const [okres, setOkres] = useState(1);
   const [kategoria, setKategoria] = useState<(typeof KATEGORIE)[number]>('Wszystkie');
@@ -58,7 +60,7 @@ export default function EkranPrzeplywow() {
   return (
     <>
       <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon="line.3.horizontal.decrease" title="Filtruj operacje">
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={kolory.etykieta} title="Filtruj operacje">
           <Stack.Toolbar.Menu title="Kategoria" inline>
             {KATEGORIE.map((k) => (
               <Stack.Toolbar.MenuAction key={k} isOn={kategoria === k} onPress={() => setKategoria(k)}>
@@ -80,8 +82,8 @@ export default function EkranPrzeplywow() {
         <Segmenty wartosci={OKRESY.map((o) => o.nazwa)} wybrany={okres} onZmiana={setOkres} etykieta="Okres przepływów" />
         <Kafle
           kafle={[
-            { klucz: 'wplywy', podpis: 'Suma wpływów', wartosc: kwotaKrotka(sumaWplywow * 100), ikona: 'arrow.down.circle.fill', ikonaKolor: 'sukces' },
-            { klucz: 'koszty', podpis: 'Suma kosztów', wartosc: kwotaKrotka(sumaKosztow * 100), ikona: 'arrow.up.circle.fill', ikonaKolor: 'blad' },
+            { klucz: 'wplywy', podpis: 'Suma wpływów', wartosc: kwotaKrotka(sumaWplywow * 100), ikona: 'arrow-down-circle-fill', ikonaKolor: 'sukces' },
+            { klucz: 'koszty', podpis: 'Suma kosztów', wartosc: kwotaKrotka(sumaKosztow * 100), ikona: 'arrow-up-circle-fill', ikonaKolor: 'blad' },
           ]}
         />
         <Sekcja
@@ -101,9 +103,9 @@ export default function EkranPrzeplywow() {
 
         <Kafle
           kafle={[
-            { klucz: 'wplynelo', podpis: 'Wpłynęło w tym miesiącu', wartosc: kwotaKrotka(WPLYNELO_MIESIAC.kwota), opis: `${zmiana(WPLYNELO_MIESIAC.zmiana)} wobec poprzedniego miesiąca`, opisKolor: WPLYNELO_MIESIAC.zmiana < 0 ? 'blad' : 'sukces' },
-            { klucz: 'kosztymies', podpis: 'Koszty w tym miesiącu (brutto)', wartosc: kwotaKrotka(KOSZTY_MIESIAC.kwota), opis: `${zmiana(KOSZTY_MIESIAC.zmiana)} wobec poprzedniego miesiąca`, onPress: () => router.push('/koszty') },
-            { klucz: 'podatek', podpis: 'Odłóż na podatek', wartosc: kwotaKrotka(ODLOZ_NA_PODATEK.kwota), opis: `${ODLOZ_NA_PODATEK.procent}%, szacunek: liniowy, bez ZUS`, ikona: 'banknote', onPress: () => router.push('/ksiegowosc') },
+            { klucz: 'wplynelo', ikona: 'wallet-line', podpis: 'Wpłynęło w tym miesiącu', wartosc: kwotaKrotka(WPLYNELO_MIESIAC.kwota), opis: `${zmiana(WPLYNELO_MIESIAC.zmiana)} wobec poprzedniego miesiąca`, opisKolor: WPLYNELO_MIESIAC.zmiana < 0 ? 'blad' : 'sukces' },
+            { klucz: 'kosztymies', ikona: 'bank-card-line', podpis: 'Koszty w tym miesiącu (brutto)', wartosc: kwotaKrotka(KOSZTY_MIESIAC.kwota), opis: `${zmiana(KOSZTY_MIESIAC.zmiana)} wobec poprzedniego miesiąca`, onPress: () => router.push('/koszty') },
+            { klucz: 'podatek', podpis: 'Odłóż na podatek', wartosc: kwotaKrotka(ODLOZ_NA_PODATEK.kwota), opis: `${ODLOZ_NA_PODATEK.procent}%, szacunek: liniowy, bez ZUS`, ikona: 'cash-line', onPress: () => router.push('/ksiegowosc') },
           ]}
         />
 
@@ -140,7 +142,7 @@ export default function EkranPrzeplywow() {
           naglowek="Wszystkie operacje"
           stopka={kategoria !== 'Wszystkie' || status !== 'Wszystkie' ? `Filtr: ${kategoria}, ${status}.` : undefined}>
           {operacje.length === 0
-            ? [<StanPusty key="pusto" ikona="tray" tytul="Brak operacji" opis="Oznacz zapłatę przy fakturze, a pojawi się tutaj." />]
+            ? [<StanPusty key="pusto" ikona="inbox-archive-line" tytul="Brak operacji" opis="Oznacz zapłatę przy fakturze, a pojawi się tutaj." />]
             : operacje.map((o) => (
                 <Wiersz
                   key={o.id}

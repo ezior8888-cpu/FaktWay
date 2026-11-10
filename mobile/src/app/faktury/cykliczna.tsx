@@ -90,7 +90,7 @@ export default function EkranFakturyCyklicznej() {
           <View style={styles.przyciski}>
             <PrzyciskGlowny
               tytul="Wystaw teraz"
-              ikona="paperplane"
+              ikona="send-plane-line"
               onPress={() =>
                 istniejaca.wstrzymana
                   ? Alert.alert('Faktura cykliczna jest wstrzymana', 'Wznów ją, żeby wystawić fakturę.')
@@ -99,7 +99,7 @@ export default function EkranFakturyCyklicznej() {
             />
             <PrzyciskGlowny
               tytul={istniejaca.wstrzymana ? 'Wznów' : 'Wstrzymaj'}
-              ikona={istniejaca.wstrzymana ? 'play' : 'pause'}
+              ikona={istniejaca.wstrzymana ? 'play-line' : 'pause-line'}
               wariant="drugorzedny"
               onPress={() => zapisz({ wstrzymana: !istniejaca.wstrzymana })}
             />

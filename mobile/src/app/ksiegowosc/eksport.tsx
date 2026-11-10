@@ -70,7 +70,7 @@ export default function EkranEksportu() {
       </Sekcja>
 
       <View style={styles.akcja}>
-        <PrzyciskGlowny tytul="Wygeneruj plik" ikona="doc.badge.arrow.up" onPress={generuj} />
+        <PrzyciskGlowny tytul="Wygeneruj plik" ikona="file-upload-line" onPress={generuj} />
       </View>
 
       <Sekcja naglowek="Historia" stopka="Pliki są dostępne 30 dni.">

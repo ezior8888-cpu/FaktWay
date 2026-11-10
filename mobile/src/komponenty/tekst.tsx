@@ -1,35 +1,32 @@
 import { Text, type TextProps } from 'react-native';
 
 import { useKolory, type Kolory } from '@/wyglad/kolory';
-import { RAMPA, STYLE_TEKSTU, type StylTekstu } from '@/wyglad/typografia';
+import { RAMPA, stylTekstu, type StylTekstu, type Waga } from '@/wyglad/typografia';
 
 type Props = TextProps & {
-  /** Systemowy styl tekstu; domyślnie Body. */
+  /** Styl ze skali (`typografia.ts`); domyślnie Body. */
   styl?: StylTekstu;
   /** Kolor semantyczny; domyślnie etykieta główna. */
   kolor?: keyof Kolory;
-  /** Cyfry o stałej szerokości: kwoty i liczby w kolumnach. */
+  /** Liczby, kwoty, numery, NIP-y i daty: IBM Plex Mono, jak na stronie. */
   cyfry?: boolean;
-  /** Pogrubienie wewnątrz stylu (np. kwota w wierszu). */
+  /** Skrót dla `waga="semibold"` (np. kwota w wierszu). */
   pogrubiony?: boolean;
+  /** Waga czcionki; domyślnie waga stylu. */
+  waga?: Waga;
 };
 
 /**
- * Jedyny komponent tekstu w aplikacji. Pilnuje skali stylów, Dynamic Type
- * i kolorów semantycznych (docs/mobile/ZASADY-DESIGNU.md, sekcja 3).
+ * Jedyny komponent tekstu w aplikacji. Pilnuje czcionek FaktWay (Outfit,
+ * IBM Plex Mono), skali stylów, Dynamic Type i kolorów semantycznych
+ * (docs/mobile/ZASADY-DESIGNU.md, sekcja 3).
  */
-export function Tekst({ styl = 'body', kolor = 'etykieta', cyfry, pogrubiony, style, ...reszta }: Props) {
+export function Tekst({ styl = 'body', kolor = 'etykieta', cyfry, pogrubiony, waga, style, ...reszta }: Props) {
   const kolory = useKolory();
   return (
     <Text
       dynamicTypeRamp={RAMPA[styl]}
-      style={[
-        STYLE_TEKSTU[styl],
-        { color: kolory[kolor] },
-        cyfry ? { fontVariant: ['tabular-nums'] } : null,
-        pogrubiony ? { fontWeight: '600' } : null,
-        style,
-      ]}
+      style={[stylTekstu(styl, { cyfry, waga: waga ?? (pogrubiony ? 'semibold' : undefined) }), { color: kolory[kolor] }, style]}
       {...reszta}
     />
   );

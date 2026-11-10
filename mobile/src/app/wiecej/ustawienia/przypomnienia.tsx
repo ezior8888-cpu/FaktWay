@@ -31,7 +31,7 @@ export default function EkranUstawienPrzypomnien() {
   return (
     <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Sekcja stopka="Przypomnienia przygotowujemy do Twojego zatwierdzenia. Nic nie wychodzi samo.">
-        <PolePrzelacznik etykieta={glowny ? 'Flo pilnuje terminów' : 'Flo nie pilnuje terminów'} wartosc={glowny} onZmiana={(v) => ustawFlage('przyp-wlaczone', v)} />
+        <PolePrzelacznik etykieta="Przypomnienia o zapłacie" wartosc={glowny} onZmiana={(v) => ustawFlage('przyp-wlaczone', v)} />
       </Sekcja>
 
       {glowny ? (
@@ -65,7 +65,7 @@ export default function EkranUstawienPrzypomnien() {
       <View style={styles.akcja}>
         <PrzyciskGlowny
           tytul={zapisano ? 'Zapisano' : 'Zapisz ustawienia'}
-          ikona="checkmark"
+          ikona="check-line"
           onPress={() => {
             setZapisano(true);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

@@ -30,7 +30,7 @@ export default function EkranKontrahenta() {
   const [edycja, setEdycja] = useState(false);
   const [przypomnienia, setPrzypomnienia] = useFlaga(`przypomnienia-kontrahent-${id}`, k?.przypomnienia ?? true);
 
-  if (!k) return <StanPusty ikona="person.crop.circle.badge.questionmark" tytul="Nie ma takiego kontrahenta" opis="Mógł zostać usunięty na komputerze." />;
+  if (!k) return <StanPusty ikona="user-search-line" tytul="Nie ma takiego kontrahenta" opis="Mógł zostać usunięty na komputerze." />;
   const jego = faktury.filter((f) => f.kontrahent === k.nazwa);
   const otwarte = jego.filter(doZaplaty);
   const zalegle = otwarte.filter((f) => statusFaktury(f, DZIS).zalegla);
@@ -49,7 +49,7 @@ export default function EkranKontrahenta() {
           statusKolor={zalegle.length > 0 ? 'ostrzezenie' : 'etykietaDrugorzedna'}
         />
         <View style={styles.akcja}>
-          <PrzyciskGlowny tytul="Wystaw fakturę" ikona="plus" onPress={() => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj: 'vat', wzor: jego[0]?.id ?? '', wprost: '1' } })} />
+          <PrzyciskGlowny tytul="Wystaw fakturę" ikona="add-line" onPress={() => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj: 'vat', wzor: jego[0]?.id ?? '', wprost: '1' } })} />
         </View>
 
         <Sekcja naglowek="Dane" stopka={edycja ? 'NIP nie da się zmienić: to identyfikator kontrahenta.' : undefined}>

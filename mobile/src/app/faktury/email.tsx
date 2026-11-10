@@ -40,7 +40,7 @@ export default function EkranEmaila() {
       <EkranListy keyboardShouldPersistTaps="handled">
         <Sekcja stopka={blad ?? (f ? `Faktura ${f.numer} jako PDF w załączniku.` : undefined)}>
           {wyslano ? (
-            <Wiersz tytul={`Wysłano do ${do_}`} ikona="checkmark.circle.fill" ikonaKolor="sukces" />
+            <Wiersz tytul={`Wysłano do ${do_}`} ikona="checkbox-circle-fill" ikonaKolor="sukces" />
           ) : (
             <PoleTekstowe etykieta="Do" wartosc={do_} onZmiana={setDo} podpowiedz="adres e-mail" klawiatura="email-address" />
           )}

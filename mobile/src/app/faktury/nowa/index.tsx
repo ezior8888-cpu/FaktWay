@@ -13,10 +13,10 @@ export default function EkranRodzajuFaktury() {
       </Stack.Toolbar>
       <EkranListy>
         <Sekcja naglowek="Rodzaj faktury">
-          <Wiersz tytul="Faktura zwykła" podtytul="Standardowa faktura sprzedażowa B2B lub B2C" ikona="doc.text" strzalka onPress={() => otworz('vat')} />
-          <Wiersz tytul="Faktura korygująca" podtytul="Korekta wystawionej faktury (dane, kwoty, anulowanie)" ikona="arrow.uturn.left.square" strzalka onPress={() => otworz('korygujaca')} />
-          <Wiersz tytul="Faktura zaliczkowa" podtytul="Zaliczka na poczet przyszłej dostawy lub usługi" ikona="banknote" strzalka onPress={() => otworz('zaliczkowa')} />
-          <Wiersz tytul="Faktura rozliczająca" podtytul="Rozliczenie wcześniej wystawionych zaliczek" ikona="checkmark.rectangle.stack" strzalka onPress={() => otworz('rozliczajaca')} />
+          <Wiersz tytul="Faktura zwykła" podtytul="Standardowa faktura sprzedażowa B2B lub B2C" ikona="file-text-line" strzalka onPress={() => otworz('vat')} />
+          <Wiersz tytul="Faktura korygująca" podtytul="Korekta wystawionej faktury (dane, kwoty, anulowanie)" ikona="arrow-go-back-line" strzalka onPress={() => otworz('korygujaca')} />
+          <Wiersz tytul="Faktura zaliczkowa" podtytul="Zaliczka na poczet przyszłej dostawy lub usługi" ikona="cash-line" strzalka onPress={() => otworz('zaliczkowa')} />
+          <Wiersz tytul="Faktura rozliczająca" podtytul="Rozliczenie wcześniej wystawionych zaliczek" ikona="checkbox-multiple-line" strzalka onPress={() => otworz('rozliczajaca')} />
         </Sekcja>
       </EkranListy>
     </>

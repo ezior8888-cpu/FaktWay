@@ -44,7 +44,7 @@ export default function EkranKsef() {
         <Sekcja naglowek="Połączenie">
           <Wiersz tytul="NIP" wartosc={KSEF.nip} />
           <Wiersz tytul="Certyfikat ważny do" wartosc={dataPelna(KSEF.certyfikatDo)} />
-          <Wiersz tytul="Odnów certyfikat" ikona="arrow.clockwise" akcja onPress={() => setKrok(0)} />
+          <Wiersz tytul="Odnów certyfikat" ikona="refresh-line" akcja onPress={() => setKrok(0)} />
         </Sekcja>
         <Sekcja naglowek="Historia faktur z KSeF">
           <Wiersz tytul="Zobacz postęp pobierania" strzalka onPress={() => router.push('/wiecej/import')} />
@@ -73,9 +73,9 @@ export default function EkranKsef() {
       {krok === 0 ? (
         <>
           <Sekcja naglowek="Warunki">
-            <Wiersz tytul="NIP firmy" ikona="checkmark.circle.fill" ikonaKolor="sukces" />
-            <Wiersz tytul="Właściciel firmy" ikona="checkmark.circle.fill" ikonaKolor="sukces" />
-            <Wiersz tytul="Logowanie dwuetapowe" ikona="checkmark.circle.fill" ikonaKolor="sukces" />
+            <Wiersz tytul="NIP firmy" ikona="checkbox-circle-fill" ikonaKolor="sukces" />
+            <Wiersz tytul="Właściciel firmy" ikona="checkbox-circle-fill" ikonaKolor="sukces" />
+            <Wiersz tytul="Logowanie dwuetapowe" ikona="checkbox-circle-fill" ikonaKolor="sukces" />
           </Sekcja>
           <View style={styles.akcja}>
             <PrzyciskGlowny tytul="Dalej" onPress={() => setKrok(1)} />
@@ -92,7 +92,7 @@ export default function EkranKsef() {
             <Wiersz tytul="4. „Generuj” zapisze plik .key" />
             <Wiersz tytul="5. Wybierz „Uwierzytelnienie w systemie KSeF”" />
             <Wiersz tytul="6. Pobierz plik .crt" />
-            <Wiersz tytul="Otwórz Aplikację Podatnika" ikona="safari" akcja onPress={() => void WebBrowser.openBrowserAsync('https://ksef.podatki.gov.pl')} />
+            <Wiersz tytul="Otwórz Aplikację Podatnika" ikona="global-line" akcja onPress={() => void WebBrowser.openBrowserAsync('https://ksef.podatki.gov.pl')} />
           </Sekcja>
           <View style={styles.akcja}>
             <PrzyciskGlowny tytul="Mam oba pliki i hasło, dalej" onPress={() => setKrok(2)} />
@@ -124,11 +124,11 @@ export default function EkranKsef() {
       {krok === 4 ? (
         <>
           <Sekcja naglowek="Połączono z KSeF">
-            <Wiersz tytul={`NIP ${KSEF.nip}`} ikona="checkmark.seal.fill" ikonaKolor="sukces" />
+            <Wiersz tytul={`NIP ${KSEF.nip}`} ikona="verified-badge-fill" ikonaKolor="sukces" />
             <Wiersz tytul="Certyfikat ważny do" wartosc={dataPelna('2028-11-09')} />
           </Sekcja>
           <View style={styles.akcja}>
-            <PrzyciskGlowny tytul="Wystaw pierwszą fakturę" ikona="plus" onPress={() => router.push('/faktury/nowa')} />
+            <PrzyciskGlowny tytul="Wystaw pierwszą fakturę" ikona="add-line" onPress={() => router.push('/faktury/nowa')} />
             <PrzyciskGlowny tytul="Gotowe" wariant="drugorzedny" onPress={() => setKrok(null)} />
           </View>
         </>

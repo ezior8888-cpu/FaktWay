@@ -1,12 +1,15 @@
 import { Stack } from 'expo-router';
 
+import { useOpcjeStosu } from '@/wyglad/naglowki';
+
 /** Lista zakładki zawsze leży pod spodem: arkusze i ekrany otwarte linkiem mają „wstecz” i prezentują się jako arkusze. */
 export const unstable_settings = { anchor: 'index' };
 
 /** Stos zakładki Koszty: wydatki i skrzynka KSeF, opis wydatku, dodawanie ze zdjęcia. */
 export default function UkladKosztow() {
+  const opcje = useOpcjeStosu();
   return (
-    <Stack>
+    <Stack screenOptions={opcje}>
       <Stack.Screen name="index" options={{ title: 'Koszty', headerLargeTitle: true }} />
       <Stack.Screen name="[id]" options={{ title: '' }} />
       <Stack.Screen

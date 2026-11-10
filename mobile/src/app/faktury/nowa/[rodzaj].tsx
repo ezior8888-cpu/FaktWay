@@ -58,7 +58,7 @@ function doPozycji(p: PozycjaFormularza): Pozycja {
   return { nazwa: p.nazwa.trim(), ilosc: liczba(p.ilosc) || 0, jednostka: p.jednostka || 'szt', cenaNetto: grosze(p.cena) || 0, stawkaVat: stawkaProcent(p.stawka) };
 }
 
-/** Pozycja zapisanej faktury z powrotem w polach formularza (wzór, Flo, korekta, edycja). */
+/** Pozycja zapisanej faktury z powrotem w polach formularza (wzór, korekta, edycja). */
 function zPozycji(p: Pozycja): PozycjaFormularza {
   return { nazwa: p.nazwa, ilosc: String(p.ilosc), jednostka: p.jednostka, cena: doPola(p.cenaNetto), stawka: String(p.stawkaVat) };
 }
@@ -89,7 +89,6 @@ export default function EkranFormularzaFaktury() {
   // Edycja szkicu albo odrzuconej faktury: te same pola, zapis w miejscu starej.
   const edytowana = faktury.find((f) => f.id === edytuj && (f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona'));
   const wzorFaktury = edytowana ?? faktury.find((f) => f.id === wzor);
-  const ostatnia = faktury.find((f) => f.rodzaj === 'vat' && f.statusKsef === 'przyjeta');
 
   const startowy = KONTRAHENCI.find((k) => k.nazwa === (wzorFaktury?.kontrahent ?? faktury.find((f) => f.id === z)?.kontrahent));
   const [ulicaStart, miastoStart] = startowy?.adres.split(', ') ?? [];
@@ -302,24 +301,11 @@ export default function EkranFormularzaFaktury() {
           </Sekcja>
         ) : null}
 
-        {rodzaj === 'vat' && !wzorFaktury && ostatnia && !nazwa ? (
-          <Sekcja>
-            <Wiersz
-              tytul={`Mogę wypełnić to za Ciebie na podstawie ostatniej faktury dla ${ostatnia.kontrahent}.`}
-              ikona="sparkles"
-              strzalka
-              onPress={() => {
-                wypelnijZ(ostatnia.kontrahent);
-                setPozycje(ostatnia.pozycje.map(zPozycji));
-              }}
-            />
-          </Sekcja>
-        ) : null}
 
         <Sekcja
           naglowek={rodzaj === 'korygujaca' ? 'Dane korekty' : 'Numer i daty'}
           stopka={rodzaj === 'korygujaca' ? 'Typ KSeF mówi, od kiedy korekta działa. Najczęściej: 2, od daty korekty.' : undefined}>
-          <PoleTekstowe etykieta={rodzaj === 'korygujaca' ? 'Numer korekty' : 'Numer faktury'} wartosc={numer} onZmiana={setNumer} blad={bledy.numer} />
+          <PoleTekstowe etykieta={rodzaj === 'korygujaca' ? 'Numer korekty' : 'Numer faktury'} wartosc={numer} onZmiana={setNumer} blad={bledy.numer} cyfry />
           <PoleDaty etykieta={rodzaj === 'korygujaca' ? 'Data korekty' : 'Data wystawienia'} wartosc={dataWyst} onZmiana={setDataWyst} />
           {rodzaj === 'vat' ? <PoleDaty etykieta="Data sprzedaży" wartosc={dataSprz} onZmiana={setDataSprz} /> : null}
           <PoleWyboru
@@ -390,7 +376,7 @@ export default function EkranFormularzaFaktury() {
               />
             ) : null}
             {/^\d{10}$/.test(nip.replace(/\D/g, '')) && !nazwa ? (
-              <Wiersz tytul="Uzupełnij danymi z GUS" ikona="building.columns" akcja onPress={() => wypelnijZ(KONTRAHENCI[0]?.nazwa ?? '')} />
+              <Wiersz tytul="Uzupełnij danymi z GUS" ikona="bank-line" akcja onPress={() => wypelnijZ(KONTRAHENCI[0]?.nazwa ?? '')} />
             ) : null}
             <PoleTekstowe etykieta="Nazwa" wartosc={nazwa} onZmiana={setNazwa} podpowiedz="Nazwa firmy" blad={bledy.nazwa} />
             <PoleTekstowe etykieta="Adres" wartosc={adres1} onZmiana={setAdres1} podpowiedz="Ulica i numer" />
@@ -460,7 +446,7 @@ export default function EkranFormularzaFaktury() {
               </Sekcja>
             ))}
             <Sekcja>
-              <Wiersz tytul="Dodaj pozycję" ikona="plus.circle.fill" akcja onPress={() => setPozycje((l) => [...l, PUSTA])} />
+              <Wiersz tytul="Dodaj pozycję" ikona="add-circle-fill" akcja onPress={() => setPozycje((l) => [...l, PUSTA])} />
             </Sekcja>
           </>
         )}
@@ -507,7 +493,7 @@ export default function EkranFormularzaFaktury() {
               ))}
             </View>
           ) : null}
-          <PrzyciskGlowny tytul={przyciskWyslij} ikona="paperplane" onPress={() => zapisz(true)} />
+          <PrzyciskGlowny tytul={przyciskWyslij} ikona="send-plane-line" onPress={() => zapisz(true)} />
           <PrzyciskGlowny tytul="Zapisz szkic" wariant="drugorzedny" onPress={() => zapisz(false)} />
         </View>
       </EkranListy>

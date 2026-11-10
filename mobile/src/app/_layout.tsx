@@ -1,22 +1,34 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useColorScheme } from 'react-native';
+import { LogBox, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { StanFaktur, useStanFaktur } from '@/stan/faktury';
-import { useKolory } from '@/wyglad/kolory';
+import { paleta, useKolory } from '@/wyglad/kolory';
+import { czcionka } from '@/wyglad/typografia';
+
+// Znane ostrzeżenie React Native w wersji deweloperskiej przy przejściach ekranów
+// (wartości `Animated` bez nasłuchu); nie dotyczy naszego kodu i zasłaniało dół ekranu.
+LogBox.ignoreLogs(['Sending `onAnimatedValueUpdate` with no listeners registered']);
 
 /**
- * Pięć systemowych zakładek jak w menu strony (plan, D3 i D11 po zmianie
- * 09.11.2026). Na iOS 26 i nowszym pasek rysuje system (Liquid Glass);
- * ThemeProvider dopasowuje tło pod paskiem do trybu jasnego i ciemnego,
- * żeby nic nie mrugało przy przejściach.
+ * Pięć zakładek jak w menu strony (plan, D3 i D11). Pasek rysuje system
+ * (płynność, na iOS 26 i nowszym Liquid Glass), ale ikony, napisy i kolor
+ * są FaktWay (D12): ikony Remix z menu strony (`lib/dashboard-nav-config.ts`),
+ * kontur w spoczynku i wypełnienie po wybraniu, napisy w Outfit.
+ * Motyw nawigacji ma kolory marki, żeby tło pod paskiem nie mrugało.
  */
 export default function UkladGlowny() {
-  const schemat = useColorScheme();
+  const ciemny = useColorScheme() === 'dark';
+  const k = paleta(ciemny);
+  const baza = ciemny ? DarkTheme : DefaultTheme;
+  const motyw = {
+    ...baza,
+    colors: { ...baza.colors, primary: k.akcent, background: k.tloGrupowane, card: k.tloGrupowane, text: k.etykieta, border: k.obwodka },
+  };
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={schemat === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={motyw}>
         <StanFaktur>
           <Zakladki />
         </StanFaktur>
@@ -29,27 +41,51 @@ function Zakladki() {
   const kolory = useKolory();
   const doOpisania = useStanFaktur().koszty.filter((k) => k.doOpisania).length;
   return (
-    <NativeTabs tintColor={kolory.akcent} minimizeBehavior="onScrollDown">
+    <NativeTabs
+      tintColor={kolory.akcent}
+      iconColor={{ default: kolory.etykietaDrugorzedna, selected: kolory.akcent }}
+      labelStyle={{ default: { fontFamily: czcionka('medium'), fontSize: 10, color: kolory.etykietaDrugorzedna }, selected: { fontFamily: czcionka('medium'), fontSize: 10, color: kolory.akcent } }}
+      minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="(pulpit)">
         <NativeTabs.Trigger.Label>Pulpit</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'square.grid.2x2', selected: 'square.grid.2x2.fill' }} md="dashboard" />
+        <NativeTabs.Trigger.Icon
+          src={{ default: require('../../assets/zakladki/pulpit-line.png'), selected: require('../../assets/zakladki/pulpit-fill.png') }}
+          renderingMode="template"
+          md="dashboard"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="faktury">
         <NativeTabs.Trigger.Label>Faktury</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'doc.text', selected: 'doc.text.fill' }} md="description" />
+        <NativeTabs.Trigger.Icon
+          src={{ default: require('../../assets/zakladki/faktury-line.png'), selected: require('../../assets/zakladki/faktury-fill.png') }}
+          renderingMode="template"
+          md="description"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="koszty">
         <NativeTabs.Trigger.Label>Koszty</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'tray', selected: 'tray.fill' }} md="inbox" />
+        <NativeTabs.Trigger.Icon
+          src={{ default: require('../../assets/zakladki/koszty-line.png'), selected: require('../../assets/zakladki/koszty-fill.png') }}
+          renderingMode="template"
+          md="receipt_long"
+        />
         {doOpisania > 0 ? <NativeTabs.Trigger.Badge>{String(doOpisania)}</NativeTabs.Trigger.Badge> : <NativeTabs.Trigger.Badge hidden />}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ksiegowosc">
         <NativeTabs.Trigger.Label>Księgowość</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'book.closed', selected: 'book.closed.fill' }} md="menu_book" />
+        <NativeTabs.Trigger.Icon
+          src={{ default: require('../../assets/zakladki/ksiegowosc-line.png'), selected: require('../../assets/zakladki/ksiegowosc-fill.png') }}
+          renderingMode="template"
+          md="menu_book"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="wiecej">
         <NativeTabs.Trigger.Label>Więcej</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="ellipsis.circle" md="more_horiz" />
+        <NativeTabs.Trigger.Icon
+          src={{ default: require('../../assets/zakladki/wiecej-line.png'), selected: require('../../assets/zakladki/wiecej-fill.png') }}
+          renderingMode="template"
+          md="more_horiz"
+        />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

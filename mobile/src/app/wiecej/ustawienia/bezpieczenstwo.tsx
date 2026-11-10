@@ -69,7 +69,7 @@ export default function EkranBezpieczenstwa() {
         ))}
         <Wiersz
           tytul="Dodaj urządzenie"
-          ikona="faceid"
+          ikona="fingerprint-line"
           akcja
           onPress={() => setKlucze((l) => [...l, { id: `p${Date.now()}`, nazwa: 'Ten iPhone, Face ID', ostatnio: '2026-11-09' }])}
         />

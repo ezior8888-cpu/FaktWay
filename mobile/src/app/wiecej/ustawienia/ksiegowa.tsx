@@ -60,7 +60,7 @@ export default function EkranKsiegowej() {
             ))}
             <Wiersz
               tytul="Wyślij teraz (za poprzedni miesiąc)"
-              ikona="paperplane"
+              ikona="send-plane-line"
               akcja
               onPress={() => {
                 setPaczki((l) => [{ id: `k${Date.now()}`, okres: 'Październik 2026', status: 'Wysłane', data: '2026-11-09' }, ...l]);
@@ -89,7 +89,7 @@ export default function EkranKsiegowej() {
         ))}
         <Wiersz
           tytul="Nowy dostęp"
-          ikona="link.badge.plus"
+          ikona="link-m"
           akcja
           onPress={() => {
             setDostepy((l) => [...l, { id: `d${Date.now()}`, nazwa: biuro || imie, email, poziom: 'Tylko podgląd', status: 'Aktywny', wygasa: '2026-12-09', uzycia: 0 }]);

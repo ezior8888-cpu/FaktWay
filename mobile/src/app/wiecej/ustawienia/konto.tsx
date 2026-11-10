@@ -19,7 +19,7 @@ export default function EkranKonta() {
   return (
     <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Sekcja naglowek="Pobierz moje dane" stopka="Plik JSON ze wszystkimi Twoimi danymi.">
-        <Wiersz tytul="Pobierz dane (JSON)" ikona="arrow.down.doc" akcja onPress={() => void Share.share({ message: 'Eksport danych konta FaktWay (przykładowy).' })} />
+        <Wiersz tytul="Pobierz dane (JSON)" ikona="file-download-line" akcja onPress={() => void Share.share({ message: 'Eksport danych konta FaktWay (przykładowy).' })} />
       </Sekcja>
 
       <Sekcja naglowek="Analityka" stopka="Bez analityki zbieramy tylko dane niezbędne do działania.">

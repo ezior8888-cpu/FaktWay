@@ -52,7 +52,7 @@ export default function EkranZespolu() {
           ]}
           onZmiana={setRola}
         />
-        <Wiersz tytul="Wyślij zaproszenie" ikona="paperplane" akcja onPress={zapros} />
+        <Wiersz tytul="Wyślij zaproszenie" ikona="send-plane-line" akcja onPress={zapros} />
       </Sekcja>
 
       {zaproszenia.length > 0 ? (

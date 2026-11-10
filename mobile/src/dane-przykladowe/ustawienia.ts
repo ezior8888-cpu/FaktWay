@@ -1,6 +1,6 @@
 /**
  * Ustawienia, zespół, import i FLO na danych przykładowych. Odpowiedniki
- * `app/(dashboard)/settings/*`, `import-danych`, `flo` ze strony.
+ * `app/(dashboard)/settings/*`, `import-danych` ze strony (bez Flo, plan D13).
  */
 
 export const FIRMA = {
@@ -83,11 +83,3 @@ export const IMPORT = {
     { id: 'i2', zrodlo: 'Historia z KSeF', rozpoczeto: '2026-10-12', wynik: '650 faktur', status: 'W toku' },
   ],
 };
-
-export type PropozycjaFlo = { id: string; tytul: string; opis: string; akcja: string };
-
-export const FLO_PROPOZYCJE: PropozycjaFlo[] = [
-  { id: 'p1', tytul: 'Przypomnienie dla Hotel Nad Zatoką', opis: 'Faktura FV/10/2026/9 jest 5 dni po terminie. Przygotowałem uprzejme przypomnienie.', akcja: 'Przygotuj przypomnienie' },
-  { id: 'p2', tytul: 'Opisz 2 wydatki z KSeF', opis: 'Telekom Wschód i Coworking Kwadrat czekają na opis. Kategorie już dobrałem.', akcja: 'Przejdź do kosztów' },
-  { id: 'p3', tytul: 'Odłóż 4215 zł na podatek', opis: 'Szacunek PIT od 1 stycznia przy podatku liniowym, bez ZUS.', akcja: 'Zobacz rozliczenie' },
-];

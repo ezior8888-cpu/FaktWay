@@ -70,9 +70,9 @@ export default function EkranDodawaniaWydatku() {
   return (
     <EkranListy>
       <Sekcja stopka="Zdjęcie paragonu albo faktury: dane odczytamy sami. Potem tylko sprawdzasz i zatwierdzasz.">
-        <Wiersz tytul="Zrób zdjęcie" ikona="camera" strzalka onPress={odczytaj} />
-        <Wiersz tytul="Wybierz z galerii" podtytul="Zdjęcie lub PDF z plików" ikona="photo.on.rectangle" strzalka onPress={odczytaj} />
-        <Wiersz tytul="Wpisz ręcznie" ikona="square.and.pencil" strzalka onPress={reczny} />
+        <Wiersz tytul="Zrób zdjęcie" ikona="camera-line" strzalka onPress={odczytaj} />
+        <Wiersz tytul="Wybierz z galerii" podtytul="Zdjęcie lub PDF z plików" ikona="image-line" strzalka onPress={odczytaj} />
+        <Wiersz tytul="Wpisz ręcznie" ikona="edit-box-line" strzalka onPress={reczny} />
       </Sekcja>
     </EkranListy>
   );

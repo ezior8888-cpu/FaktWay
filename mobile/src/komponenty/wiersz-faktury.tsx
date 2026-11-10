@@ -5,14 +5,15 @@
  * na ekranie szczegółu.
  */
 import { Link } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View, type ColorValue } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 import { DZIS, type Faktura } from '@/dane-przykladowe';
+import { Ikona } from '@/komponenty/ikona';
 import { Tekst } from '@/komponenty/tekst';
+import { Znacznik } from '@/komponenty/znacznik';
 import { dataKrotka, kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
@@ -22,6 +23,9 @@ import { CEL_DOTYKU, MARGINES, ODSTEP, SKALA_PIONOWA } from '@/wyglad/odstepy';
 const SZEROKOSC_AKCJI = 96;
 /** Biały na kolorowym tle akcji przesunięcia, jak w akcjach systemowych iOS (wyjątek od kolorów semantycznych). */
 const NA_AKCJI = '#FFFFFF';
+/** Tła akcji przesunięcia stałe w obu trybach: jasna zieleń trybu ciemnego nie niesie białego napisu. */
+const TLO_ZAPLACONA = '#15803D';
+const TLO_COFNIJ = '#6C727E';
 
 export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
   const kolory = useKolory();
@@ -38,7 +42,7 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
     <AkcjaPrzesuniecia
       postep={postep}
       zaplacona={f.zaplacona}
-      tlo={f.zaplacona ? kolory.etykietaDrugorzedna : kolory.sukces}
+      tlo={f.zaplacona ? TLO_COFNIJ : TLO_ZAPLACONA}
     />
   );
 
@@ -56,20 +60,20 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
             { backgroundColor: wcisniety ? kolory.wypelnienie : kolory.tloKomorki },
           ])}>
           <View style={styles.lewa}>
-            <Tekst styl="body" numberOfLines={pionowo ? 3 : 1}>
+            <Tekst styl="body" waga="medium" numberOfLines={pionowo ? 3 : 1}>
               {f.kontrahent}
             </Tekst>
-            <Tekst styl="subheadline" kolor="etykietaDrugorzedna" numberOfLines={pionowo ? 2 : 1}>
+            <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry numberOfLines={pionowo ? 2 : 1}>
               {f.numer} · {dataKrotka(f.dataWystawienia)}
             </Tekst>
           </View>
           <View style={pionowo ? styles.prawaPionowa : styles.prawa}>
-            <Tekst styl="body" cyfry numberOfLines={1}>
+            <Tekst styl="callout" cyfry waga="medium" numberOfLines={1}>
               {kwota(f.brutto)}
             </Tekst>
-            <Tekst styl="subheadline" kolor={status.kolor} numberOfLines={pionowo ? 2 : 1}>
+            <Znacznik ton={status.ton} trwa={status.trwa}>
               {status.tekst}
-            </Tekst>
+            </Znacznik>
           </View>
         </Pressable>
       </Link.Trigger>
@@ -109,19 +113,13 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
  * Akcja pod wierszem. Widoczna tylko w trakcie przesuwania: przy przytrzymaniu
  * system unosi wiersz do podglądu i bez tego spod spodu wyglądałaby akcja.
  */
-type AkcjaProps = { postep: SharedValue<number>; zaplacona: boolean; tlo: ColorValue };
+type AkcjaProps = { postep: SharedValue<number>; zaplacona: boolean; tlo: string };
 
 function AkcjaPrzesuniecia({ postep, zaplacona, tlo }: AkcjaProps) {
   const widocznosc = useAnimatedStyle(() => ({ opacity: postep.value > 0.01 ? 1 : 0 }));
   return (
     <Animated.View style={[styles.akcja, { backgroundColor: tlo }, widocznosc]}>
-      <SymbolView
-        name={zaplacona ? 'arrow.uturn.backward' : 'checkmark'}
-        size={20}
-        weight="semibold"
-        tintColor={NA_AKCJI}
-        style={styles.ikonaAkcji}
-      />
+      <Ikona nazwa={zaplacona ? 'arrow-go-back-line' : 'check-line'} rozmiar={22} kolor={NA_AKCJI} />
       <Tekst styl="footnote" pogrubiony style={styles.tekstAkcji} numberOfLines={1}>
         {zaplacona ? 'Cofnij' : 'Zapłacona'}
       </Tekst>
@@ -140,9 +138,8 @@ const styles = StyleSheet.create({
   },
   wierszPionowy: { flexDirection: 'column', alignItems: 'stretch', gap: ODSTEP.xxs },
   lewa: { flex: 1, gap: ODSTEP.linia },
-  prawa: { alignItems: 'flex-end', gap: ODSTEP.linia },
-  prawaPionowa: { alignItems: 'flex-start', gap: ODSTEP.linia },
+  prawa: { alignItems: 'flex-end', gap: ODSTEP.xxs },
+  prawaPionowa: { alignItems: 'flex-start', gap: ODSTEP.xxs },
   akcja: { width: SZEROKOSC_AKCJI, alignItems: 'center', justifyContent: 'center', gap: ODSTEP.xxs },
-  ikonaAkcji: { width: 24, height: 24 },
   tekstAkcji: { color: NA_AKCJI },
 });
