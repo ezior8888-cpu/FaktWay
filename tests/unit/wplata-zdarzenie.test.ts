@@ -140,7 +140,7 @@ describe('runner po wpłacie', () => {
   it('wpłata częściowa: przypomnienia zostają, push „Wpłata częściowa” z kwotą, numerem i resztą', async () => {
     const result = await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
     expect(m.reminders[0]!.status).toBe('pending');
-    expect(result).toMatchObject({ cancelled: 0 });
+    expect(result).toMatchObject({ push: { sent: 1 } });
     expect(m.push).toHaveBeenCalledTimes(1);
     const [tenant, type, payload] = m.push.mock.calls[0]!;
     expect(tenant).toBe(TENANT);
@@ -149,11 +149,11 @@ describe('runner po wpłacie', () => {
     expect(payload.tag).toBe(`payment-${PAYMENT}`);
   });
 
-  it('pełna zapłata: anuluje przypomnienia, push „Otrzymana płatność” z kwotą, numerem i nabywcą', async () => {
+  it('pełna zapłata: push „Otrzymana płatność” z kwotą, numerem i nabywcą, przypomnienia bez zmian (anuluje baza)', async () => {
     m.invoice = { ...m.invoice, paid_amount: 1230 };
     m.payment = { amount: 230, voided_at: null };
     await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
-    expect(m.reminders[0]!.status).toBe('cancelled');
+    expect(m.reminders[0]!.status).toBe('pending');
     const payload = m.push.mock.calls[0]![2];
     expect(plain(payload.body)).toBe('Otrzymana płatność: 230,00 zł za FV/1/2026 od Acme Sp. z o.o.');
     expect(payload.title).toBe('Otrzymana płatność');
@@ -164,7 +164,7 @@ describe('runner po wpłacie', () => {
     m.invoice = { ...m.invoice, paid_amount: 1230 };
     await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
     const again = await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
-    expect(again).toMatchObject({ cancelled: 0 });
+    expect(again).toMatchObject({ push: { sent: 1 } });
     // Ten sam tag: przeglądarka zastępuje powiadomienie, nie dokłada drugiego.
     expect(m.push.mock.calls.map((c) => c[2].tag)).toEqual([`payment-${PAYMENT}`, `payment-${PAYMENT}`]);
   });
