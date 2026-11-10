@@ -10,7 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { zaplataRecznaSchema, type RodzajZaplatyRecznej } from '@/lib/ksiegowosc/zaplata-reczna';
+import {
+  bladDatyZaplatyRecznej,
+  ostatniMiesiacZaplatyRecznej,
+  ZAPLATA_RECZNA_OD,
+  zaplataRecznaSchema,
+  type RodzajZaplatyRecznej,
+} from '@/lib/ksiegowosc/zaplata-reczna';
 
 /**
  * „Zatwierdź miesiąc” (D6): zapisuje wersje rozliczeń, których dane się
@@ -136,6 +142,12 @@ export function ZaplataReczna({ domyslnyMiesiac, domyslnaData, dzis }: { domysln
       setBledy(nowe);
       return;
     }
+    // Wartość wpisana ręcznie (np. przeglądarka bez wyboru miesiąca) może wyjść poza granice pól; akcja sprawdza to jeszcze raz.
+    const bladDaty = bladDatyZaplatyRecznej(parsed.data, dzis);
+    if (bladDaty) {
+      setBledy({ [bladDaty.pole]: bladDaty.error });
+      return;
+    }
     setBledy({});
     startTransition(async () => {
       const wynik = await dodajZaplateRecznaAction(wejscie());
@@ -156,7 +168,15 @@ export function ZaplataReczna({ domyslnyMiesiac, domyslnaData, dzis }: { domysln
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="zaplata-za-miesiac">Składki za miesiąc</FieldLabel>
-          <Input id="zaplata-za-miesiac" type="month" value={zaMiesiac} max={dzis.slice(0, 7)} disabled={pending} onChange={(e) => setZaMiesiac(e.target.value)} />
+          <Input
+            id="zaplata-za-miesiac"
+            type="month"
+            value={zaMiesiac}
+            min={ZAPLATA_RECZNA_OD}
+            max={ostatniMiesiacZaplatyRecznej(dzis)}
+            disabled={pending}
+            onChange={(e) => setZaMiesiac(e.target.value)}
+          />
           {blad('zaMiesiac')}
         </Field>
         <Field>
