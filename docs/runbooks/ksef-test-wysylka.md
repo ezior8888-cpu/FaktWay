@@ -44,5 +44,6 @@ Zasady: dokładnie jeden wyzwolony 429, najwyżej jedna sonda na grupę, nigdy d
    - firma B z 429: MF blokuje cały adres IP, czyli wszystkie firmy naraz. Zgłoś Bartoszowi przed kolejnym wydaniem;
    - „blokada … dłużej niż 5 min”: MF podał długi `Retry-After`. Skrypt nie czekał i nie przywrócił limitów, które zostają na jednorazowym fikcyjnym NIP (nikt go więcej nie użyje);
    - zasięg `grupa` to nie błąd, tylko wynik pomiaru: wtedy według karty L1a można zawęzić pauzę do grupy (osobna decyzja). `kontekst` potwierdza dzisiejszą pauzę całej firmy.
+   - pierwszy pomiar (10.11.2026, przebieg 98822DEB): `grupa`. Inny wynik w kolejnym biegu oznacza zmianę zachowania MF: zapisz go w `docs/runbooks/hamulce-ksef.md` („Pauza firmy po 429”).
 
 Dane TEST są współdzielone między integratorami. Nigdy nie wysyłaj tu prawdziwych danych.

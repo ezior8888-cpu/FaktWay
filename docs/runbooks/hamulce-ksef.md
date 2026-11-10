@@ -138,6 +138,13 @@ wysyła wtedy żadnego żądania tej firmy i od razu zwraca lokalny 429
 kod `KSEF_RATE_LIMIT_PAUSE`; `KSEF_PAUSED` to wyłącznik operatora z sekcji
 wyżej, nie ta pauza.
 
+**Pomiar na KSeF TEST (10.11.2026, scenariusz 17, przebieg 98822DEB).** Po
+429 na otwarciu sesji (`onlineSession`, `Retry-After` 58 s) MF blokował tylko
+tę grupę: `GET /rate-limits` (`other`) i status faktury (`invoiceStatus`)
+odpowiadały 200, a inna firma wysłała bez czekania. Pauza całej firmy jest
+więc ostrożniejsza niż MF; zostaje świadomie (eskalacja blokady do podmiotu
+albo zakresu IP). Zawężenie pauzy do grupy to osobna decyzja.
+
 **Gdzie jest stan.** Redis na `app-1` (bez migracji, stan ulotny):
 
 | Klucz | Co trzyma | Wygasa |
