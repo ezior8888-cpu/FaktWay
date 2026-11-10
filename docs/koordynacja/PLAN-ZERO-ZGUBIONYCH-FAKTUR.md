@@ -38,7 +38,7 @@ Stan sprawdzony w kodzie 05.11.2026. „Nieustalone” znaczy, że sprawdzenie n
 | C6 (nowa) | nie | okres JPK po `issue_date` (`data-fetcher.ts:286`) |
 | D1 | nie | bez limitu prób na wpis, przycisku operatora i podziału I3 |
 | D2 | częściowo | skrót z `xml_storage_path` faktury (`lib/pdf/invoice-data.ts:252`) |
-| E1 | nie | `break` przy `hasMore` przed `isTruncated` (`inbox.ts:114`); wiersz bez środowiska rzuca błąd (`inbox-polling.ts:142`) |
+| E1 | częściowo | W10 w PR #574 (skrzynka i historia KSeF, 10.11.2026); S12 (wiersz bez środowiska rzuca błąd, `inbox-polling.ts:142`) i S9 otwarte; z przeglądu nowe W10-b (okno ponad ok. 16 stron nie mieści się w limicie MF) i W10-c w sekcji 8 |
 | E2 | skreślona | decyzja Bartosza 22.10: Magiczny import znika |
 | F1 | nie | brak runbooka przełączenia |
 | F2 | częściowo | pulpit i analizy mają kontrolę środowiska, `kpir-data.ts` i portal księgowej nie |
@@ -472,8 +472,10 @@ Dotąd leżały w kolumnie „co zostało” dziennika, bez właściciela. Przyd
 | C-09, C-10, C-16 | ROZ z bazy i środowiska | C4 albo pierwsze wydanie bez ROZ | #195 konflikt od 03.10 |
 | C-12, C-20 | niezmienny dowód XML | D2 | #369, #190 (szkice) |
 | C5c-c | `P_14_x` z sumy VAT pozycji | sekcja 9 | pytanie do doradcy |
+| W10-b | skrzynka: okno ponad ok. 16 stron (ok. 4 000 faktur, np. po przerwie certyfikatu) nie mieści się w limicie MF 16/min i 20/h; przebieg idzie od HWM bez tempa i bez częściowego postępu, 429 w pętli, HWM stoi, nowe faktury firmy też; wyjścia brak (`lib/ksef/inbox.ts:77`, `inbox-polling.ts:250`; runbook pojemności liczy 1 zapytanie na przebieg) | E1 (propozycja: budżet zapytań na przebieg, częściowy HWM = data ostatniego rekordu po zawężeniu) | sprawdzone 10.11.2026: otwarte (z przeglądu W10) |
+| W10-c | zawężenie po `isTruncated` zakłada, że `dateRange.from` jest włączne (rekord graniczny w tej samej chwili); przy wyłącznym rekord tuż za limitem ginie | H1b (sprawdzić na KSeF TEST) | do sprawdzenia |
 
-**Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT, zapis stanu KSeF do bazy bez Redisa (z B3), typy bazy z produkcji (`types/database.ts` kończy się na 00154), limity 5 s w `ksef-connect-credentials*` pod obciążeniem (zasada 5) oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
+**Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT, zapis stanu KSeF do bazy bez Redisa (z B3), typy bazy z produkcji (`types/database.ts` kończy się na 00154), limity 5 s w `ksef-connect-credentials*` pod obciążeniem (zasada 5), z przeglądu W10 (10.11.2026): W10-d (historia: zawężenie z kursorem równym końcowi okna pyta o `[end, end]`, `windows.ts:249`), W10-e (decyzja „zawęź / koniec / następna strona” w trzech kopiach: `inbox.ts`, `applyBackfillPage`, `applyLivePage`), W10-f (`FAKTFLOW-DLA-AI.md:153` opisuje nieistniejący `continuationToken`) oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
 
 ---
 
