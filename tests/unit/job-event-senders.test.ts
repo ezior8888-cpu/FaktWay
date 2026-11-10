@@ -54,13 +54,6 @@ function nadawcy(zdarzenie: string, stala: string | undefined): string[] {
  * Znany dług — lista nie może rosnąć po cichu ani trzymać wpisów naprawionych.
  */
 const ZNANE: Record<string, string> = {
-  // Anulowanie przypomnień po wpłacie + push „Otrzymana płatność”. Jedyny
-  // zapis wpłaty w kodzie to FLO `payment.confirm`, który tego nie wysyła.
-  // NIE podpinać w obecnym kształcie: krok „anuluj pending” zmazałby sygnał
-  // ręcznej weryfikacji, na którym stoi watchdog przypomnień (wiersz pending
-  // > 30 min = „sprawdź, czy wiadomość wyszła”). Decyzja produktowa: albo sam
-  // push z `payment.confirm`, albo usunięcie joba i przełącznika w ustawieniach.
-  'invoice/payment.received': 'martwy: brak nadawcy, patrz komentarz',
   // Maile triala z dnia 12 i 14 wstrzymane 01.10.2026 (sprzeczne z regulaminem
   // i retencją — `email-sequence.ts`, `runEmailDay8`). Kolejki zostają, żeby
   // odebrać zdarzenia zaplanowane przed wdrożeniem; po ~14 dniach od wdrożenia

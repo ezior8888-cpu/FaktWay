@@ -1,5 +1,10 @@
-// Po wpłacie przy fakturze: anuluj przypomnienia (tylko przy pełnej zapłacie)
-// i wyślij push „Otrzymana płatność” / „Wpłata częściowa” (krok 8.1 planu kompletnej aplikacji).
+// Po wpłacie przy fakturze: push „Otrzymana płatność” / „Wpłata częściowa”
+// (krok 8.1 planu kompletnej aplikacji).
+// Decyzja: sam push. Nazwa runnera i kolejki zostaje (zmiana to ryzyko przy
+// wdrożeniu), ale job NIE dotyka `payment_reminders`: anulowanie przypomnień
+// po pełnej zapłacie robią funkcje bazy 00158 i 00176, a watchdog `pending`
+// (wiersz > 30 min = „sprawdź, czy wiadomość wyszła”) zostaje nietknięty.
+// Ponowienie: push idzie z tym samym `tag`, więc przeglądarka go zastępuje.
 
 import { invoicePaymentReceived } from '@/lib/jobs/events';
 import type { JobContext } from '@/lib/jobs/registry';
@@ -46,25 +51,6 @@ export async function runCancelRemindersOnPayment(data: Parameters<typeof invoic
       return { skipped: true as const, reason: 'brak_kwoty_brutto' as const };
     }
 
-    // Wpłata częściowa: przypomnienia zostają, reszta dalej jest do zapłaty.
-    // Anulowanie to UPDATE z warunkiem `pending`, więc ponowienie nic nie zmienia.
-    const cancelled = isFullyPaid
-      ? await step.run('cancel-pending-reminders', async () => {
-          const { data, error } = await supabase
-            .from('payment_reminders')
-            .update({
-              status: 'cancelled',
-              failure_reason: 'Faktura zapłacona',
-            })
-            .eq('invoice_id', invoiceId)
-            .eq('status', 'pending')
-            .select('id');
-
-          if (error) throw new Error(error.message);
-          return { count: data?.length ?? 0 };
-        })
-      : { count: 0 };
-
     const pushResult = await step.run('push-payment-received', async () => {
       if (!invoice.tenant_id) {
         return { skipped: true as const, reason: 'no-tenant' as const };
@@ -106,7 +92,7 @@ export async function runCancelRemindersOnPayment(data: Parameters<typeof invoic
       });
     });
 
-    return { cancelled: cancelled.count, push: pushResult };
+    return { push: pushResult };
 }
 
 function buyerNameOf(buyerData: unknown): string | null {

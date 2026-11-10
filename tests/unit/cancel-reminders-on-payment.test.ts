@@ -2,44 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobContext } from '@/lib/jobs/registry';
 
 /**
- * C-16 (00145) — anulowanie przypomnień po wpłacie musi liczyć „zapłacona
- * w całości" od `payment_data.amountDue` (ROZ), nie od `gross_total`.
- * Inaczej ROZ z rozliczoną zaliczką nigdy nie odwołałaby swoich przypomnień,
- * choć klient wpłacił już wszystko, czego ta faktura jeszcze żądała.
+ * Krok 8.1, wariant „sam push”: job tylko powiadamia. Anulowanie przypomnień
+ * po pełnej zapłacie robią funkcje bazy (00158, 00176), a wiersz `pending`
+ * jest sygnałem watchdoga przypomnień, więc runner NIE dotyka
+ * `payment_reminders` (atrapa rzuca na każdy dostęp do tej tabeli).
+ * „Zapłacona w całości” liczy się od `payment_data.amountDue` (C-16, 00145).
  */
 
 const store = vi.hoisted(() => ({
   invoice: null as Record<string, unknown> | null,
-  reminders: [] as Array<{ id: string; invoice_id: string; status: string }>,
-  pushCalls: 0,
+  payment: null as Record<string, unknown> | null,
+  pushes: [] as Array<{ tenantId: string; payload: Record<string, unknown> }>,
+  tables: [] as string[],
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
+      store.tables.push(table);
       if (table === 'invoices') {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: store.invoice, error: null }),
-            }),
-          }),
-        };
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: store.invoice, error: null }) }) }) };
       }
-      if (table === 'payment_reminders') {
-        return {
-          update: (patch: Record<string, unknown>) => ({
-            eq: () => ({
-              eq: () => ({
-                select: async () => {
-                  const cancelled = store.reminders.filter((r) => r.status === 'pending');
-                  for (const r of cancelled) Object.assign(r, patch);
-                  return { data: cancelled.map((r) => ({ id: r.id })), error: null };
-                },
-              }),
-            }),
-          }),
-        };
+      if (table === 'payments') {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: store.payment, error: null }) }) }) };
       }
       throw new Error(`unexpected table: ${table}`);
     },
@@ -47,8 +32,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 vi.mock('@/lib/push/sender', () => ({
-  sendPushToTenant: vi.fn(async () => {
-    store.pushCalls++;
+  sendPushToTenant: vi.fn(async (tenantId: string, _kind: string, payload: Record<string, unknown>) => {
+    store.pushes.push({ tenantId, payload });
     return { sent: 1, failed: 0 };
   }),
 }));
@@ -61,80 +46,77 @@ const context: JobContext = {
   step: { run: async (_name, fn) => fn(), sleep: vi.fn(), sendEvent: vi.fn(), scheduleAfter: vi.fn() },
 };
 
+const event = { invoiceId: 'A', paymentId: 'pay-1' };
+
 beforeEach(() => {
   store.invoice = null;
-  store.reminders = [];
-  store.pushCalls = 0;
+  store.payment = { amount: 100, voided_at: null };
+  store.pushes = [];
+  store.tables = [];
 });
 
-describe('runCancelRemindersOnPayment', () => {
-  it('regular/ZAL: odwołuje tylko gdy paid >= gross_total, jak dotąd', async () => {
+describe('runCancelRemindersOnPayment (sam push)', () => {
+  it('pełna zapłata: push „Otrzymana płatność”, bez dotykania payment_reminders', async () => {
     store.invoice = {
       paid_amount: 4300, gross_total: 4300, tenant_id: 'ten-1', internal_number: 'FV/1',
-      invoice_kind: 'regular', payment_data: null,
+      invoice_kind: 'regular', payment_data: null, buyer_data: { name: 'Acme' },
     };
-    store.reminders = [{ id: 'r1', invoice_id: 'A', status: 'pending' }];
+    await runCancelRemindersOnPayment(event, context);
 
-    const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
-
-    expect(result).toMatchObject({ cancelled: 1 });
-    expect(store.reminders[0]!.status).toBe('cancelled');
+    expect(store.pushes).toHaveLength(1);
+    expect(store.pushes[0]!.payload).toMatchObject({ title: 'Otrzymana płatność', tag: 'payment-pay-1' });
+    expect(store.tables).not.toContain('payment_reminders');
   });
 
-  it('regular: wpłata częściowa (paid < gross_total) nie odwołuje', async () => {
+  it('wpłata częściowa: push „Wpłata częściowa”, bez dotykania payment_reminders', async () => {
     store.invoice = {
       paid_amount: 1000, gross_total: 4300, tenant_id: 'ten-1', internal_number: 'FV/1',
-      invoice_kind: 'regular', payment_data: null,
+      invoice_kind: 'regular', payment_data: null, buyer_data: null,
     };
-    store.reminders = [{ id: 'r1', invoice_id: 'A', status: 'pending' }];
+    await runCancelRemindersOnPayment(event, context);
 
-    const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
-
-    // Wpłata częściowa: nic nie anulowane (push idzie osobno, gdy zdarzenie ma paymentId).
-    expect(result).toMatchObject({ cancelled: 0 });
-    expect(store.reminders[0]!.status).toBe('pending');
+    expect(store.pushes[0]!.payload).toMatchObject({ title: 'Wpłata częściowa' });
+    expect(store.tables).not.toContain('payment_reminders');
   });
 
-  it('ROZ: wpłata 9 840 odwołuje przypomnienia, choć gross_total (12 300) nie jest pokryte (C-16, 00145)', async () => {
+  it('ROZ: wpłata równa amountDue to pełna zapłata (C-16)', async () => {
     store.invoice = {
       paid_amount: 9840, gross_total: 12300, tenant_id: 'ten-1', internal_number: 'FV/ROZ-1',
-      invoice_kind: 'final', payment_data: { amountDue: 9840 },
+      invoice_kind: 'final', payment_data: { amountDue: 9840 }, buyer_data: null,
     };
-    store.reminders = [{ id: 'r1', invoice_id: 'A', status: 'pending' }];
-
-    const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
-
-    expect(result).toMatchObject({ cancelled: 1 });
-    expect(store.reminders[0]!.status).toBe('cancelled');
+    await runCancelRemindersOnPayment(event, context);
+    expect(store.pushes[0]!.payload).toMatchObject({ title: 'Otrzymana płatność' });
   });
 
-  it('ROZ: wpłata poniżej amountDue nie odwołuje, choćby już bliska gross_total', async () => {
-    store.invoice = {
-      // 9000 < amountDue (9840), choć znacznie więcej niż samo udziałowa zaliczka.
-      paid_amount: 9000, gross_total: 12300, tenant_id: 'ten-1', internal_number: 'FV/ROZ-1',
-      invoice_kind: 'final', payment_data: { amountDue: 9840 },
-    };
-    store.reminders = [{ id: 'r1', invoice_id: 'A', status: 'pending' }];
-
-    const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
-
-    // Wpłata częściowa: nic nie anulowane (push idzie osobno, gdy zdarzenie ma paymentId).
-    expect(result).toMatchObject({ cancelled: 0 });
-    expect(store.reminders[0]!.status).toBe('pending');
-  });
-
-  it('ROZ: amountDue zepsute/brakujące liczy fail-safe od gross_total (zgodnie z amountDueOf)', async () => {
+  it('ROZ: amountDue zepsute liczy fail-safe od gross_total, więc wpłata częściowa', async () => {
     store.invoice = {
       paid_amount: 9840, gross_total: 12300, tenant_id: 'ten-1', internal_number: 'FV/ROZ-1',
-      invoice_kind: 'final', payment_data: { amountDue: 'zepsute' },
+      invoice_kind: 'final', payment_data: { amountDue: 'zepsute' }, buyer_data: null,
     };
-    store.reminders = [{ id: 'r1', invoice_id: 'A', status: 'pending' }];
+    await runCancelRemindersOnPayment(event, context);
+    expect(store.pushes[0]!.payload).toMatchObject({ title: 'Wpłata częściowa' });
+  });
 
-    const result = await runCancelRemindersOnPayment({ invoiceId: 'A' }, context);
+  it('ponowienie: drugie wykonanie wysyła push z tym samym tagiem (przeglądarka go zastępuje)', async () => {
+    store.invoice = {
+      paid_amount: 4300, gross_total: 4300, tenant_id: 'ten-1', internal_number: 'FV/1',
+      invoice_kind: 'regular', payment_data: null, buyer_data: null,
+    };
+    await runCancelRemindersOnPayment(event, context);
+    await runCancelRemindersOnPayment(event, context);
 
-    // Fail-safe → due = gross_total (12300); 9840 < 12300, więc nie odwołujemy.
-    // Wpłata częściowa: nic nie anulowane (push idzie osobno, gdy zdarzenie ma paymentId).
-    expect(result).toMatchObject({ cancelled: 0 });
-    expect(store.reminders[0]!.status).toBe('pending');
+    expect(store.pushes).toHaveLength(2);
+    expect(store.pushes[1]!.payload.tag).toBe(store.pushes[0]!.payload.tag);
+    expect(store.tables).not.toContain('payment_reminders');
+  });
+
+  it('wpłata cofnięta: bez pusha', async () => {
+    store.invoice = {
+      paid_amount: 4300, gross_total: 4300, tenant_id: 'ten-1', internal_number: 'FV/1',
+      invoice_kind: 'regular', payment_data: null, buyer_data: null,
+    };
+    store.payment = { amount: 4300, voided_at: '2026-11-10T10:00:00Z' };
+    await runCancelRemindersOnPayment(event, context);
+    expect(store.pushes).toHaveLength(0);
   });
 });
