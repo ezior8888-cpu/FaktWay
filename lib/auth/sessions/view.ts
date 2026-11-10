@@ -59,6 +59,12 @@ export interface AccountSessionView {
   method: string | null;
   signedInAt: string | null;
   lastActiveAt: string | null;
+  /**
+   * Ostatnia aktywność starsza niż limit sesji (30 dni, `GOTRUE_SESSIONS_INACTIVITY_TIMEOUT`).
+   * GoTrue odrzuci taką sesję przy następnym użyciu albo odświeżeniu; do tego czasu wiersz
+   * jeszcze jest w `auth.sessions`. Bieżąca sesja nigdy: właśnie jej używamy.
+   */
+  inactiveOver30Days: boolean;
 }
 
 export type AccountLoginStatus = 'current' | 'active' | 'ended' | 'unknown';
@@ -105,7 +111,10 @@ export interface CurrentRequestDevice {
  * Bieżąca sesja bez wpisu logowania (zalogowana przed krokiem 8.5) bierze urządzenie
  * z bieżącego żądania: to na pewno to urządzenie, a GoTrue zna tylko serwer FaktWay.
  */
-export function toAccountSessionView(row: AccountSessionRow, current?: CurrentRequestDevice): AccountSessionView {
+const SESSION_INACTIVITY_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function toAccountSessionView(row: AccountSessionRow, current?: CurrentRequestDevice, now: Date = new Date()): AccountSessionView {
+  const lastActiveMs = row.last_active_at ? Date.parse(row.last_active_at) : Number.NaN;
   const fromRequest = row.is_current && row.device_source === 'session' && current;
   return {
     id: row.session_id,
@@ -114,6 +123,7 @@ export function toAccountSessionView(row: AccountSessionRow, current?: CurrentRe
     method: loginMethodLabel(row.login_method),
     signedInAt: formatted(row.signed_in_at),
     lastActiveAt: formatted(row.last_active_at),
+    inactiveOver30Days: !row.is_current && now.getTime() - lastActiveMs > SESSION_INACTIVITY_LIMIT_MS,
   };
 }
 
