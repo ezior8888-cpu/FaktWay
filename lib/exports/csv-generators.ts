@@ -21,17 +21,18 @@ export interface CsvExportInput {
  */
 const FORMULA_START = /^[=+@\t\r]|^-(?![\d\s.,]*$)/;
 
-/** Początek każdej odmowy CSV — po nim job może rozpoznać powód dla człowieka. */
+/**
+ * Początek każdej odmowy CSV. Odmowa z numerem dokumentu trafi do klienta,
+ * gdy job eksportu zacznie rozpoznawać ten początek (F12-E2b, po #521).
+ */
 export const CSV_REFUSAL_PREFIX = 'Eksport CSV wstrzymany:';
 
 export class CsvForeignCurrencyNotSupportedError extends Error {
-  constructor(invoiceNumber?: string, currency?: string | null) {
-    super(
-      invoiceNumber
-        ? `${CSV_REFUSAL_PREFIX} faktura ${invoiceNumber} jest w walucie ${currency?.trim().toUpperCase() || 'innej niż PLN'}, a plik CSV zawiera tylko kwoty w PLN. ` +
-            'Kwoty PLN tej faktury trzeba uzgodnić z oryginałem w KSeF (z księgową) i wprowadzić ręcznie; po wykluczeniu tej faktury z okresu eksport się powiedzie.'
-        : `${CSV_REFUSAL_PREFIX} faktura walutowa wymaga uzgodnienia kwot PLN z XML.`,
-    );
+  constructor() {
+    // Treść bez numeru celowo: job pokazuje klientowi tylko komunikaty z listy
+    // dokładnych treści (`HUMAN_EXPORT_ERRORS`); numer faktury (F12-E6) dojdzie
+    // razem z rozpoznawaniem `CSV_REFUSAL_PREFIX` w jobie.
+    super(`${CSV_REFUSAL_PREFIX} faktura walutowa wymaga uzgodnienia kwot PLN z XML.`);
     this.name = 'CsvForeignCurrencyNotSupportedError';
   }
 }
@@ -48,6 +49,10 @@ export class CsvDocumentNotSupportedError extends CsvForeignCurrencyNotSupported
     this.name = 'CsvDocumentNotSupportedError';
   }
 }
+
+/** Wyjście z odmowy: plik bez dnia tej faktury, a sama faktura ręcznie. */
+const WYJSCIE_ODMOWY =
+  'Wyeksportuj zakresy dat bez dnia tej faktury, a samą fakturę wpisz w programie księgowym ręcznie. W razie pytań napisz do nas przez Pomoc.';
 
 // ============================================================================
 // Insert Subiekt GT
@@ -191,27 +196,28 @@ function allInvoices(
   // Każdy format CSV poniżej zakłada PLN; metadane KSeF mają przy obcej
   // walucie netto/brutto w walucie dokumentu, ale VAT w PLN. Nie wolno
   // oznaczyć takiego wiersza jako PLN ani wyeksportować mieszanych jednostek.
-  for (const { inv } of invoices) {
-    if (inv.currency?.trim().toUpperCase() !== 'PLN') {
-      throw new CsvForeignCurrencyNotSupportedError(inv.invoiceNumber, inv.currency);
-    }
+  if (invoices.some(({ inv }) => inv.currency?.trim().toUpperCase() !== 'PLN')) {
+    throw new CsvForeignCurrencyNotSupportedError();
   }
-  // F12-E2: faktura do paragonu (art. 109 ust. 3d ustawy o VAT) nie jest w
-  // ewidencji sprzedaży, bo sprzedaż jest już w raporcie kasy; w CSV
-  // zdublowałaby sprzedaż i VAT. Kwoty nieznane z importu to nie 0,00.
+  // F12-E2: sprzedaż z faktury do paragonu (art. 109 ust. 3d ustawy o VAT)
+  // weszła już raportem z kasy, a formaty CSV nie mają oznaczenia FP: zwykły
+  // wiersz policzyłby ją drugi raz. KPiR i ewidencja ryczałtu pomijają FP
+  // z adnotacją, JPK_FA odmawia. FP po stronie zakupu to zwykły koszt.
   for (const inv of data.issuedInvoices) {
     if (inv.ksefMarkers?.fp) {
       throw new CsvDocumentNotSupportedError(
         inv.invoiceNumber,
-        'jest fakturą do paragonu (FP). Jej sprzedaż jest już w raporcie kasy rejestrującej, więc w CSV zdublowałaby sprzedaż i VAT. Wyłącz ją z okresu eksportu (albo wyeksportuj pozostałe faktury innym zakresem dat) i uzgodnij ujęcie z księgową.',
+        'jest fakturą do paragonu (FP). Jej sprzedaż weszła już raportem z kasy, więc w pliku CSV policzyłaby się drugi raz razem z VAT. ' +
+          `${WYJSCIE_ODMOWY} Fakturę do paragonu wpisuje się z oznaczeniem FP.`,
       );
     }
   }
+  // Kwoty nieznane z importu to nie 0,00 (FaktWay nie wpisze za nie zer).
   for (const { inv } of invoices) {
     if (inv.importedTotalsUnknown) {
       throw new CsvDocumentNotSupportedError(
         inv.invoiceNumber,
-        'została zaimportowana z KSeF bez sum netto i VAT, więc FaktWay nie zna jej kwot. Kwoty trzeba wziąć z oryginału w KSeF (z księgową) i wprowadzić ręcznie; do czasu uzupełnienia danych eksport CSV tej faktury nie powstanie.',
+        `została zaimportowana z KSeF bez sum netto i VAT, więc FaktWay nie zna jej kwot. Kwoty weź z oryginału w KSeF. ${WYJSCIE_ODMOWY}`,
       );
     }
   }
