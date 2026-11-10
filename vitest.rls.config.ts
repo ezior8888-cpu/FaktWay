@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
+      // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
+      'tests/rls-kalendarz.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

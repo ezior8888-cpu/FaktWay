@@ -154,6 +154,10 @@ export const KNOWN_AUDIT_ACTIONS = [
   'ksef.history.paused',
   'ksef.history.resumed',
   'ksef.history.operator',
+  // Adres kalendarza (krok 7.3)
+  'calendar_feed.created',
+  'calendar_feed.regenerated',
+  'calendar_feed.deleted',
   // Accountants
   'accountant.token_created',
   'accountant.token_revoked',

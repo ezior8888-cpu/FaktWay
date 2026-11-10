@@ -98,6 +98,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-jpk.test.ts',
       'tests/rls-ksiegowosc-kpir.test.ts',
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
+      // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
+      'tests/rls-kalendarz.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
