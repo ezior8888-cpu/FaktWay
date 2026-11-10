@@ -343,7 +343,7 @@ export async function readUploadForm(
     return { ok: true, form };
   } catch {
     if (overLimit) {
-      return refuse(413, 'too_large', `Plik przekracza ${UPLOAD_FILE_LIMIT_LABEL} — tyle można wgrać najwyżej.`);
+      return refuse(413, 'too_large', `Plik przekracza ${UPLOAD_FILE_LIMIT_LABEL}: tyle można wgrać najwyżej.`);
     }
     if (timedOut) {
       return refuse(408, 'timeout', 'Wysyłanie pliku trwało za długo. Sprawdź połączenie i spróbuj ponownie.');

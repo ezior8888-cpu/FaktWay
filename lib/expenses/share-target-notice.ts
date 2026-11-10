@@ -68,18 +68,18 @@ function tooLargeText(notice: { size?: number; document?: 'zdjecie' | 'pdf' }): 
   if (notice.document === 'pdf') {
     const first = size
       ? `Udostępniony PDF ma ${size}, a można wgrać najwyżej ${UPLOAD_FILE_LIMIT_LABEL}.`
-      : `Udostępniony PDF przekracza ${UPLOAD_FILE_LIMIT_LABEL} — tyle można wgrać najwyżej.`;
+      : `Udostępniony PDF przekracza ${UPLOAD_FILE_LIMIT_LABEL}: tyle można wgrać najwyżej.`;
     return {
-      title: 'PDF jest za duży — nie zapisaliśmy go',
+      title: 'PDF jest za duży, nie zapisaliśmy go',
       body: `${first} Zapisz go w niższej rozdzielczości albo podziel na mniejsze pliki i dodaj ${ADD_HERE}.`,
     };
   }
   if (notice.document === 'zdjecie') {
     const first = size
       ? `Udostępnione zdjęcie ma ${size}, a do odczytu można wysłać najwyżej ${UPLOAD_IMAGE_LIMIT_LABEL}.`
-      : `Udostępnione zdjęcie przekracza ${UPLOAD_IMAGE_LIMIT_LABEL} — tyle przyjmuje odczyt.`;
+      : `Udostępnione zdjęcie przekracza ${UPLOAD_IMAGE_LIMIT_LABEL}: tyle przyjmuje odczyt.`;
     return {
-      title: 'Zdjęcie jest za duże — nie zapisaliśmy go',
+      title: 'Zdjęcie jest za duże, nie zapisaliśmy go',
       body: `${first} Dodaj je ${ADD_HERE} (tam zdjęcia zmniejszamy sami) albo zrób zdjęcie w niższej rozdzielczości.`,
     };
   }
@@ -87,7 +87,7 @@ function tooLargeText(notice: { size?: number; document?: 'zdjecie' | 'pdf' }): 
     ? `Udostępniony plik ma ${size}, a można wysłać najwyżej ${UPLOAD_FILE_LIMIT_LABEL} (PDF) albo ${UPLOAD_IMAGE_LIMIT_LABEL} (zdjęcie).`
     : `Udostępniony plik przekracza limit: ${UPLOAD_FILE_LIMIT_LABEL} dla PDF, ${UPLOAD_IMAGE_LIMIT_LABEL} dla zdjęcia.`;
   return {
-    title: 'Plik jest za duży — nie zapisaliśmy go',
+    title: 'Plik jest za duży, nie zapisaliśmy go',
     body: `${first} Zdjęcie dodaj ${ADD_HERE} (tam zmniejszamy je sami).`,
   };
 }
