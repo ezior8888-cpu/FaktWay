@@ -35,6 +35,10 @@ const AUTH_PUBLIC_PREFIXES = [
   '/onboarding',
   '/invite',
   '/accountant',
+  // Od sesji 31 planu skalowania `/share-target` jest poza matcherem proxy
+  // (`proxy.ts`) i sam sprawdza sesję. Wpis zostaje jako zabezpieczenie:
+  // gdyby trasa wróciła pod proxy, POST bez sesji nie może skończyć się
+  // przekierowaniem, które gubi ciało.
   '/share-target',
   '/gdpr',
 ] as const;

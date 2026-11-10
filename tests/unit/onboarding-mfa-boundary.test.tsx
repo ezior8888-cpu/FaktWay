@@ -26,6 +26,7 @@ vi.mock('@/lib/jobs/events', () => ({
   importFileUploaded: { create: (data: unknown) => ({ name: 'file', data }) },
 }));
 vi.mock('@/lib/ksef/history-sync/client-pause', () => ({ setKsefHistoryClientPause: mocks.pause }));
+vi.mock('@/lib/feature-flags/maintenance', () => ({ MAINTENANCE_PATH: '/przerwa-techniczna', isMaintenanceMode: async () => false }));
 vi.mock('@/components/onboarding/form', () => ({ OnboardingForm: () => null }));
 vi.mock('@/components/onboarding/import-source-selector', () => ({ ImportSourceSelector: () => null }));
 vi.mock('@/components/onboarding/import-progress-view', () => ({ ImportProgressView: () => null }));
@@ -36,7 +37,8 @@ vi.mock('lucide-react', () => ({ ArrowLeft: () => null, CheckCircle2: () => null
 
 import { createOrganizationAction, skipOnboardingWithoutNipAction, acceptInvitationAction, requestJoinAction } from '@/app/actions/organizations';
 import { lookupNipAction } from '@/components/onboarding/actions';
-import { setKsefHistoryPausedAction, startFileImportAction } from '@/app/actions/import-danych';
+import { setKsefHistoryPausedAction } from '@/app/actions/import-danych';
+import { POST as importUploadRoute } from '@/app/api/uploads/import/route';
 import OnboardingPage from '@/app/onboarding/page';
 import ImportSourcePage from '@/app/onboarding/import-source/page';
 import ProgressPage from '@/app/onboarding/progress/[jobId]/page';
@@ -120,13 +122,25 @@ function uploadForm(tenantId = org) {
   form.set('source', 'fakturownia_csv'); form.set('tenantId', tenantId);
   return form;
 }
+// Import z pliku to od sesji 31 planu skalowania trasa `/api/uploads/import` (poza proxy, z własną
+// bramką sesji), nie Server Action. Żądanie jak z `fetch` w przeglądarce; wynik to ciało JSON trasy.
+async function startFileImport(form: FormData) {
+  const url = 'https://faktway.test/api/uploads/import';
+  const encoded = new Request(url, { method: 'POST', body: form });
+  const body = await encoded.arrayBuffer();
+  const res = await importUploadRoute(new Request(url, { method: 'POST', body, headers: {
+    'content-type': encoded.headers.get('content-type')!, 'content-length': String(body.byteLength),
+    origin: 'https://faktway.test', host: 'faktway.test',
+  } }));
+  return res.json() as Promise<Record<string, unknown>>;
+}
 const actions = [
-  { name: 'create organization', invoke: () => createOrganizationAction(company) },
-  { name: 'skip NIP', invoke: () => skipOnboardingWithoutNipAction() },
-  { name: 'accept invitation', invoke: () => acceptInvitationAction(inviteToken) },
-  { name: 'request membership', invoke: () => requestJoinAction({ organizationId: org }) },
-  { name: 'GUS lookup', invoke: () => lookupNipAction(company.nip) },
-  { name: 'file import', invoke: () => startFileImportAction(uploadForm()) },
+  { name: 'create organization', invoke: () => createOrganizationAction(company), noSession: 'Niezalogowany' },
+  { name: 'skip NIP', invoke: () => skipOnboardingWithoutNipAction(), noSession: 'Niezalogowany' },
+  { name: 'accept invitation', invoke: () => acceptInvitationAction(inviteToken), noSession: 'Niezalogowany' },
+  { name: 'request membership', invoke: () => requestJoinAction({ organizationId: org }), noSession: 'Niezalogowany' },
+  { name: 'GUS lookup', invoke: () => lookupNipAction(company.nip), noSession: 'Niezalogowany' },
+  { name: 'file import', invoke: () => startFileImport(uploadForm()), noSession: 'Sesja wygasła. Zaloguj się ponownie i wgraj plik jeszcze raz.' },
 ];
 function expectNoEffects() {
   expect(mocks.createAdminClient).not.toHaveBeenCalled();
@@ -142,7 +156,7 @@ function expectNoEffects() {
 }
 
 // The entry points, optional MFA helper and tenant guard are real; only IO is mocked.
-describe.each(actions)('$name', ({ invoke }) => {
+describe.each(actions)('$name', ({ invoke, noSession }) => {
   it.each(['totp', 'phone', 'webauthn'])('denies AAL1 with verified %s before any IO or account mutation', async (factor) => {
     aal = 'aal1'; factorType = factor;
     await expect(invoke()).resolves.toMatchObject({ success: false, error: 'Wymagana weryfikacja dwuetapowa' });
@@ -152,7 +166,7 @@ describe.each(actions)('$name', ({ invoke }) => {
   });
   it('denies a missing session before IO', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: null }, error: null });
-    await expect(invoke()).resolves.toMatchObject({ success: false, error: 'Niezalogowany' });
+    await expect(invoke()).resolves.toMatchObject({ success: false, error: noSession });
     expectNoEffects();
   });
   it('fails closed without exposing an Auth outage', async () => {
@@ -187,7 +201,7 @@ it('accepts an invitation without requiring existing membership and preserves th
   expect(mocks.setCookie).toHaveBeenCalledWith(expect.objectContaining({ value: org }));
 });
 describe('file import', () => {
-  const invoke = (tenantId = org) => startFileImportAction(uploadForm(tenantId));
+  const invoke = (tenantId = org) => startFileImport(uploadForm(tenantId));
   it.each(['aal2', 'no-factor'])('works for a verified active member with %s', async (state) => {
     if (state === 'no-factor') { aal = 'aal1'; factorType = null; }
     await expect(invoke()).resolves.toEqual({ success: true, importJobId: 'job' });
@@ -200,7 +214,7 @@ describe('file import', () => {
   // Decyzja Bartosza 22.10.2026: tylko cztery programy — JPK_FA i nieznane źródła odpadają przed IO.
   it.each(['jpk_fa', 'ksef_history', 'other'])('rejects the %s source before import IO', async (source) => {
     const form = uploadForm(); form.set('source', source);
-    await expect(startFileImportAction(form)).resolves.toEqual({ success: false, error: 'Nieobsługiwane źródło pliku.' });
+    await expect(startFileImport(form)).resolves.toEqual({ success: false, error: 'Nieobsługiwane źródło pliku.' });
     expect(queries.every((entry) => entry.table === 'memberships')).toBe(true);
     expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.upload).not.toHaveBeenCalled();
   });
