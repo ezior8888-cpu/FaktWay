@@ -42,7 +42,7 @@ Stan sprawdzony w kodzie 05.11.2026. „Nieustalone” znaczy, że sprawdzenie n
 | E2 | skreślona | decyzja Bartosza 22.10: Magiczny import znika |
 | F1 | nie | brak runbooka przełączenia |
 | F2 | częściowo | pulpit i analizy mają kontrolę środowiska, `kpir-data.ts` i portal księgowej nie |
-| G1 | nie | `stopBoss()` bez limitu czasu (`boss.ts:50`) |
+| G1 | częściowo | stopBoss w PR #577, idempotencja jobów zostaje (przypomnienia po #519, #521, #550); czas łaski Coolify do potwierdzenia (G1-LASKA) |
 | G2 | częściowo | wysyłka ma `localConcurrency: 5` (`package-d.ts:67`), reszta `batchSize` |
 | G3 | nieustalone | runnery `retention-delete.ts`, `archive-old-invoices.ts` istnieją, warunków z karty nie sprawdzono |
 | H1a | PR do scalenia | #411: wynik na prawdziwym KSeF TEST w karcie B1 |
@@ -472,6 +472,11 @@ Dotąd leżały w kolumnie „co zostało” dziennika, bez właściciela. Przyd
 | C-09, C-10, C-16 | ROZ z bazy i środowiska | C4 albo pierwsze wydanie bez ROZ | #195 konflikt od 03.10 |
 | C-12, C-20 | niezmienny dowód XML | D2 | #369, #190 (szkice) |
 | C5c-c | `P_14_x` z sumy VAT pozycji | sekcja 9 | pytanie do doradcy |
+| G1-LASKA | czas łaski kontenera workera w Coolify nie jest zapisany w repo; budżet `WORKER_SHUTDOWN_BUDGET` (`boss.ts`) zakłada 10 s (domyślny `docker stop`) | G1 | pytanie do Bartosza w #577 |
+| G1-START | SIGTERM w trakcie startu workera przepada: node jako PID 1 nie ma handlera do końca `main()` (`worker.ts:163`), więc zatrzymanie przy starcie kończy się SIGKILL | G1 | sprawdzone 10.11: otwarte |
+| G1-PACZKA | `failWip` oblewa całą paczkę (`batchSize` > 1: offline-queue 25, `inbox.invoice-received` 10, OCR, import, eksporty 5), więc już przerobione joby wykonają się ponownie | G1 (idempotencja) | sprawdzone 10.11: otwarte |
+| G1-LIMIT | trzecie przerwanie tego samego joba (`retryLimit: 2`) daje `failed` bez `onExhausted`; wysyłka zostaje w `sending`, widać ją tylko w I2 i alarmie po 15 min | G1, po #561 (`run-job.ts`) | sprawdzone 10.11: otwarte |
+| G1-POAKCEPT | śmierć po zapisie akceptacji (`submit-invoice.ts:1901`) kończy ponowienie na strażniku (`:867-881`): ginie wiersz `xml_documents`, emit-success, audit-success | D2 | sprawdzone 10.11: otwarte |
 
 **Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT, zapis stanu KSeF do bazy bez Redisa (z B3), typy bazy z produkcji (`types/database.ts` kończy się na 00154), limity 5 s w `ksef-connect-credentials*` pod obciążeniem (zasada 5) oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
 
