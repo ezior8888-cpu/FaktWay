@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { logAudit } from '@/lib/audit/log';
+import { logAudit, logAuditWithResult } from '@/lib/audit/log';
 import { wczytajKosztyDoPliku } from '@/lib/expenses/do-zaplaty-dane';
 import { rekordElixir } from '@/lib/expenses/elixir0';
 import { zakodujPlikElixir } from '@/lib/expenses/elixir0-kodowanie';
@@ -104,7 +104,7 @@ async function sprawdzBialaLista(
       ? { blad: wynik.errorCode }
       : { requestId: wynik.requestId, requestDateTime: wynik.requestDateTime }),
   };
-  const zapisany = await logAudit({
+  const zapisany = await logAuditWithResult({
     action: 'expense.whitelist_checked',
     tenantId: wpis.tenantId,
     userId: wpis.userId,

@@ -227,10 +227,17 @@ export interface AuditLogEntry {
  * Zapisuje wpis do audit_logs. Wywołuj z Server Actions po ważnych operacjach.
  *
  * Nie rzuca — przy błędzie audytu główna operacja ma się i tak udać.
- * Zwraca, czy wpis się zapisał: tam, gdzie wpis jest dowodem (sprawdzenie
- * białej listy przy pliku przelewów), wywołujący odmawia bez zapisu.
  */
-export async function logAudit(entry: AuditLogEntry): Promise<boolean> {
+export async function logAudit(entry: AuditLogEntry): Promise<void> {
+  await logAuditWithResult(entry);
+}
+
+/**
+ * Jak `logAudit` (nie rzuca, ten sam zapis i ten sam komunikat w konsoli),
+ * ale mówi, czy wpis się zapisał. Tam, gdzie wpis jest dowodem (sprawdzenie
+ * białej listy przy pliku przelewów, krok 3.4), wywołujący bez zapisu odmawia.
+ */
+export async function logAuditWithResult(entry: AuditLogEntry): Promise<boolean> {
   try {
     const { ip, userAgent } = await readRequestClientHints();
 

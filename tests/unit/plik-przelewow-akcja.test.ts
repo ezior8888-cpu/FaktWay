@@ -66,7 +66,8 @@ vi.mock('@/lib/supabase/auth-context', () => {
     }),
   };
 });
-vi.mock('@/lib/audit/log', () => ({ logAudit: s.audit }));
+// Jedna atrapa dla obu zapisów audytu: `logAuditWithResult` (dowód sprawdzenia) i `logAudit` (plik).
+vi.mock('@/lib/audit/log', () => ({ logAudit: s.audit, logAuditWithResult: s.audit }));
 
 function nrbZ(bban: string): string {
   let r = 0;
