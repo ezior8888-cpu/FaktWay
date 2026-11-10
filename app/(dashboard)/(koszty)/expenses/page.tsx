@@ -8,6 +8,7 @@ import { Alert, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
 import { listaDoZaplaty } from '@/lib/expenses/do-zaplaty';
 import { wczytajKosztyDoZaplaty } from '@/lib/expenses/do-zaplaty-dane';
+import { readTenantBankAccount } from '@/lib/expenses/rachunek-firmy';
 import { monthRange, parseExpenseMonth } from '@/lib/expenses/month';
 import { canChangeExpensePayment } from '@/lib/expenses/zaplata-kosztu';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -48,9 +49,15 @@ export default async function ExpensesPage({
   if (toPay) {
     const dzis = todayInWarsaw();
     const srodowisko = configuredKsefEnvironment();
-    const dane = srodowisko
-      ? await wczytajKosztyDoZaplaty(supabase, tenantId, srodowisko)
-      : { blad: 'nie ustawiono środowiska KSeF aplikacji' };
+    // Krok 3.4, część 2: rachunek firmy do pliku przelewów. Błąd odczytu to tu
+    // brak rachunku (blok pliku poprosi o uzupełnienie); akcja pliku czyta go
+    // jeszcze raz i przy błędzie odmawia.
+    const [dane, rachunekFirmy] = await Promise.all([
+      srodowisko
+        ? wczytajKosztyDoZaplaty(supabase, tenantId, srodowisko)
+        : Promise.resolve({ blad: 'nie ustawiono środowiska KSeF aplikacji' } as const),
+      readTenantBankAccount(supabase, tenantId).catch(() => null),
+    ]);
     return (
       <div className="ff-tab-panel flex w-full flex-1 flex-col pt-2">
         <h1 className="sr-only">Wydatki do zapłaty</h1>
@@ -71,6 +78,7 @@ export default async function ExpensesPage({
             dzis={dzis}
             mozeOznaczac={canChangeExpensePayment(role)}
             obcieta={dane.obcieta}
+            rachunekFirmy={rachunekFirmy}
           />
         )}
       </div>
