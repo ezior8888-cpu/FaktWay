@@ -17,27 +17,27 @@ export interface ActiveJob {
   runningSeconds: number;
 }
 
-const active = new Map<string, { queue: string; startedAt: number }>();
+// Wpis na przebieg paczki, nie na id: ten sam job pobrany ponownie (heartbeat
+// oblał go, a stary handler dalej biegnie) nie kasuje wpisu drugiego przebiegu.
+const active = new Set<{ queue: string; ids: string[]; startedAt: number }>();
 
 export function trackActiveJobs<J extends { id: string }, R>(
   queue: string,
   handler: (jobs: J[]) => Promise<R>,
 ): (jobs: J[]) => Promise<R> {
   return async (jobs) => {
-    const startedAt = Date.now();
-    for (const job of jobs) active.set(job.id, { queue, startedAt });
+    const entry = { queue, ids: jobs.map((job) => job.id), startedAt: Date.now() };
+    active.add(entry);
     try {
       return await handler(jobs);
     } finally {
-      for (const job of jobs) active.delete(job.id);
+      active.delete(entry);
     }
   };
 }
 
 export function listActiveJobs(now: number = Date.now()): ActiveJob[] {
-  return [...active].map(([id, { queue, startedAt }]) => ({
-    queue,
-    id,
-    runningSeconds: Math.round((now - startedAt) / 1000),
-  }));
+  return [...active].flatMap(({ queue, ids, startedAt }) =>
+    ids.map((id) => ({ queue, id, runningSeconds: Math.round((now - startedAt) / 1000) })),
+  );
 }

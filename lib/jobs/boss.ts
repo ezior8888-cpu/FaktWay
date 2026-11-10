@@ -16,6 +16,9 @@ const log = createJobLogger('boss');
 let cached: PgBoss | null = null;
 let started = false;
 let workerRole = false;
+/** Trwające zamykanie (drugi sygnał dostaje to samo) i koniec życia singletonu po nim. */
+let stopping: Promise<void> | null = null;
+let closed = false;
 
 /**
  * Proces workera prowadzi harmonogram cronów i nadzór pg-boss (wygaszanie,
@@ -83,9 +86,6 @@ export const WORKER_SHUTDOWN_BUDGET = {
   drainMs: 5_000,
 } as const;
 
-let stopping: Promise<void> | null = null;
-let closed = false;
-
 /** Zamyka pg-boss w budżecie `WORKER_SHUTDOWN_BUDGET`; drugi sygnał dostaje to samo zamykanie. */
 export function stopBoss(): Promise<void> {
   if (!stopping) {
@@ -121,7 +121,7 @@ async function doStopBoss(): Promise<void> {
     if (outcome === 'deadline') {
       log.error(
         `pg-boss nie zamknął się w ${hardStopMs / 1000} s, wychodzimy bez niego: ` +
-          'przerwane joby zostają active do wykrycia przez heartbeat nowego workera',
+          'joby, których failWip nie zdążył oblać, zostają active do wykrycia przez heartbeat nowego workera',
         { przerwane: left },
       );
       return;
