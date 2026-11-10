@@ -127,6 +127,10 @@ M = dzień. Identyfikatory ustaleń odsyłają do prywatnego raportu (numeracja
 inna niż w „Rejestrze braków” z 17.10).
 
 **Zrobione i wdrożone (03.11, zbiorczy #363):** 23, 22, 20, 26, 27, 4, 1, 9, 19.
+**Zrobione poza tym planem:** 13 i 17 (Bartosz, #360 w #363); z 14 zostaje
+tylko próba na KSeF TEST (kod też w #360). 2 i 8 (#405, #410, wdrożone 08.11).
+Częściowo: 7 (#350, #351), 28 (alarm skrzynki liczony w bazie, 00160), 29
+(lista korekt, #283). Przegląd 08.11 w dzienniku (sekcja 6).
 
 **Kolejność wykonania (Bartosz, 03.11):** 2 → 8 → 31 → 21 → 13 → 28 → 14 →
 17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24 → 29 → 30 → 32 → 34 → 33, a po
@@ -255,6 +259,13 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 05.11.2026 | Sesja 2: pliki techniczne bez klienta Supabase w proxy | #405 | PR otwarty, CI 11/11; druga, mocniejsza wersja tej samej sesji (więcej ścieżek, 68 przypadków, pomiar na `next start`) czeka lokalnie na decyzję Igora |
 | 05.11.2026 | Sesja 8: jedno GET /auth/v1/user na żądanie chronione, przez `fetch` na żądanie (`lib/supabase/auth-user-fetch.ts`) zamiast przebudowy kontroli MFA (odstępstwo od opisu sesji) | #410 | na żądanie chronione 3 → 1; decyzje bramki i testy MFA bez zmian |
 | 08.11.2026 | #405 i #410 odświeżone od `main` w jednej gałęzi (`claude/odswiezenie-405-410`); konflikt w `NO_SESSION_PATHS` rozwiązany: `/api/ops/deploy-state` z `main` plus 4 pliki techniczne z #405 | zbiorczy „Scalenie #405 i #410” | PR otwarty; lokalnie typecheck, eslint i 24 pliki testów proxy/MFA zielone, pełne testy i build w CI |
+| 08.11.2026 | Przegląd: które sesje planu zrobił już ktoś inny (agent na każdą grupę sesji + sceptyk) | — | 13 i 17 zrobione przez #360 (FaktWay 1.0), z 14 została próba na KSeF TEST; częściowo 7, 28, 29; 2 i 8 zrobione na drugim laptopie. Kolidowały wtedy: 21 (rejestr migracji przy otwartym #473), 5 i 7 (proxy), 11 i 16 (pliki sesji 31), 24 (tor usprawnień: `Dockerfile`, obrazy). `CREATE INDEX CONCURRENTLY` nie przejdzie przez `wgraj-migracje.sh` (jedna transakcja na plik) |
+| 09.11.2026 | Uzupełnienie sesji 2: `/opengraph-image` i `/przerwa-techniczna` bez klienta Supabase, bez listy `STATIC_PUBLIC_EXACT`, mocniejszy test | #476 | w zbiorczym; pomiar z prawdziwego buildu w komentarzu pod #405 |
+| 09.11.2026 | Sesja 31: pliki ponad 1 MB przez trasy wgrywania z własnym limitem rozmiaru i liczby wgrań, `/share-target` z limitem poniżej progu OCR | #538 | w zbiorczym |
+| 09.11.2026 | Sesja 6: klient Redisa z limitem 500 ms, jednym ponowieniem i obwodem, osobny ping w `/api/health` | #539 | w zbiorczym; wyprzedziła kolejność, bo 21 czekała na #473 |
+| 09.11.2026 | Sesja 32: odczyty duplikatów importu paczkami po 100 (F-089) | #558 | w zbiorczym |
 
-**Następny krok:** po scaleniu zbiorczego z #405 i #410 sesja 31, potem 21
-i dalej według kolejności z sekcji 3. Drugi zbiorczy: #320, #415, #189, #416.
+**Następny krok:** sesja 21 (#473 scalony 08.11, więc rejestr wolny; numer
+migracji przy otwarciu PR; indeksy bez `CONCURRENTLY`). Nie równolegle z 28.
+Dalej 28, próba 14 na KSeF TEST, 5 i 7, 3, 12, 18, 10, 11, 24, 29, 30, 34, 33,
+a po pomiarze 15 i 16.
