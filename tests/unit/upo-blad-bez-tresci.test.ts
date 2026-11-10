@@ -172,8 +172,8 @@ describe('F-093-UPO: błąd pobrania UPO bez treści odpowiedzi KSeF', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(error).toBeInstanceOf(NonRetriableError);
     expectNoPrivateData(error.message);
-    expect(error.message).toContain('HTTP 400');
-    expect(error.message).toContain('kody:21405,21406');
+    // Cały napis: żaden fragment treści (tytuł, początek opisu) nie może się dokleić.
+    expect(error.message).toBe('KSeF zwrócił HTTP 400 kody:21405,21406');
 
     const row = receipt();
     expect(row.status).toBe('failed');
@@ -189,8 +189,19 @@ describe('F-093-UPO: błąd pobrania UPO bez treści odpowiedzi KSeF', () => {
 
     expect(error).not.toBeInstanceOf(NonRetriableError);
     expectNoPrivateData(error.message);
-    expect(error.message).toContain('HTTP 500');
-    expect(error.message).toContain('kody:21405,21406');
+    expect(error.message).toBe('KSeF zwrócił HTTP 500 kody:21405,21406');
+    expect(receipt().last_error).toBe(error.message);
+  });
+
+  it('kody bez powtórzeń i najwyżej 10: lista z odpowiedzi nie wydłuża last_error bez końca', async () => {
+    const codes = [21405, 21405, ...Array.from({ length: 12 }, (_, i) => 30001 + i)];
+    replyWith(400, JSON.stringify({ errors: codes.map((code) => ({ code, description: 'Jan Kowalski' })) }));
+
+    const error = await runFailing();
+
+    expect(error.message).toBe(
+      'KSeF zwrócił HTTP 400 kody:21405,30001,30002,30003,30004,30005,30006,30007,30008,30009',
+    );
     expect(receipt().last_error).toBe(error.message);
   });
 
@@ -199,10 +210,8 @@ describe('F-093-UPO: błąd pobrania UPO bez treści odpowiedzi KSeF', () => {
 
     const error = await runFailing();
 
-    expectNoPrivateData(error.message);
-    expect(error.message).toContain('HTTP 502');
-    expect(error.message).toContain('kody:-');
-    expectNoPrivateData(receipt().last_error);
+    expect(error.message).toBe('KSeF zwrócił HTTP 502 kody:-');
+    expect(receipt().last_error).toBe(error.message);
   });
 });
 

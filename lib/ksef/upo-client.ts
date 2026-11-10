@@ -234,8 +234,9 @@ const MAX_CODES_IN_MESSAGE = 10;
 /**
  * Komunikat błędu HTTP pobrania UPO: status i kody KSeF, bez treści odpowiedzi.
  * Reguła jak w `lib/ksef/history-sync/errors.ts` („HTTP {status} {ścieżka}
- * kody:{…}”), tylko bez ścieżki: UPO ma jedną, a krótki napis grupuje się
- * w `scripts/ops/kontrola-faktur-ksef.sh` (pierwsze 60 znaków `last_error`).
+ * kody:{…}”), tylko bez ścieżki: UPO ma jedną. Krótki napis grupuje się
+ * w `scripts/ops/kontrola-faktur-ksef.sh` (pierwsze 60 znaków `last_error`):
+ * mieści się tam do 5 kodów pięciocyfrowych, dalsze kody widać w panelu.
  */
 function upoHttpErrorMessage(status: number, codes: readonly number[]): string {
   const shown = [...new Set(codes)].slice(0, MAX_CODES_IN_MESSAGE);
