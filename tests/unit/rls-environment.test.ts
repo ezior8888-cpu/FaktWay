@@ -98,6 +98,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-jpk.test.ts',
       'tests/rls-ksiegowosc-kpir.test.ts',
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
+      // z członkostwem zalogowanego, z cudzej firmy nic.
+      'tests/rls-moi-klienci.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

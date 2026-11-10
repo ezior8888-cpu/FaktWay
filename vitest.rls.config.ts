@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
+      // z aktywnym członkostwem zalogowanego, bez względu na nagłówek aktywnej firmy; z cudzej nic.
+      'tests/rls-moi-klienci.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
