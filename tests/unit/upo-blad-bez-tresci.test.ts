@@ -236,9 +236,15 @@ describe('F-093-UPO: decyzja o ponowieniu bez zmian', () => {
 
     const result = await downloadUpoFromKsef(TENANT, KSEF_NUMBER, { env: 'test', sessionReferenceNumber: SESSION_REF });
     expect(result).toMatchObject({ success: false, retryable, errorCode });
+    if (result.success) throw new Error('KSeF odpowiedział błędem, wynik nie może być sukcesem');
+    if (status === 401) expect(mocks.invalidate).toHaveBeenCalledWith('1234567890', 'test');
+    mocks.invalidate.mockClear();
 
-    // Ten sam wynik w runnerze: bez ponowień tylko `NonRetriableError`.
+    // Ten sam wynik w runnerze: ten sam komunikat w błędzie joba i w last_error,
+    // a bez ponowień kończy się tylko `NonRetriableError`.
     const error = await runFailing();
+    expect(error.message).toBe(result.error);
+    expect(receipt().last_error).toBe(result.error);
     expect(error instanceof NonRetriableError).toBe(!retryable);
     if (status === 401) expect(mocks.invalidate).toHaveBeenCalledWith('1234567890', 'test');
   });
