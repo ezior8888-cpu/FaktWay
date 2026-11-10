@@ -56,24 +56,12 @@ const PUBLIC_API_PREFIXES = [
 const PUBLIC_API_EXACT = ['/api/stripe/webhook'] as const;
 
 /**
- * Publiczne, ale z sesją: proxy dalej tworzy klienta i odświeża ciasteczka.
- * Pliki techniczne (`/sw.js`, manifest, robots, sitemap) są w
- * `NO_SESSION_PATHS`, a tunele telemetrii w `lib/telemetry-tunnel.ts`.
- */
-const STATIC_PUBLIC_EXACT = [
-  // Podgląd linku; do 1.10.2026 kończył się przekierowaniem na /login. Zostaje
-  // z sesją, bo pobierają go roboty bez ciasteczek, a bez ciasteczek klient
-  // nie woła GoTrue.
-  '/opengraph-image',
-  MAINTENANCE_PATH, // tu kieruje bramka przerwy technicznej — musi być osiągalna
-] as const;
-
-/**
  * Ścieżki obsługiwane BEZ klienta Supabase: proxy nie czyta sesji, nie
  * odświeża ciasteczek i nie woła GoTrue (przy kluczu HS256 każde sprawdzenie
  * sesji to wywołanie sieciowe). Tylko trasy, które nie zależą od tego, kto
  * pyta, i nie zwracają danych firmy. Odpowiedź nie niesie `Set-Cookie`, więc
- * trasa może ją oznaczyć jako cache'owalną.
+ * trasa może ją oznaczyć jako cache'owalną. Wszystkie są publiczne
+ * (`isPublicPath`).
  * `exact` — tylko `path`; `prefix` — `path` albo `path/…`. Trasy API dawaj
  * jako `exact`: sąsiednie trasy (`/api/ksef/...`) zostają za bramką.
  */
@@ -92,6 +80,12 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   { path: '/manifest.webmanifest', match: 'exact' },
   { path: '/robots.txt', match: 'exact' },
   { path: '/sitemap.xml', match: 'exact' },
+  // Podgląd linku: obrazek statyczny, ten sam dla każdego. Do 1.10.2026
+  // kończył się przekierowaniem na /login.
+  { path: '/opengraph-image', match: 'exact' },
+  // Tu kieruje bramka przerwy technicznej, więc musi być osiągalna. Strona jest
+  // statyczna i nie czyta sesji, a powrót do panelu znów przechodzi bramkę.
+  { path: MAINTENANCE_PATH, match: 'exact' },
 ];
 
 export function isNoSessionPath(pathname: string): boolean {
@@ -112,17 +106,16 @@ export function isMarketingPath(pathname: string): boolean {
 }
 
 /**
- * Trasy dostępne bez sesji (marketing + auth + wybrane API + statyczne).
+ * Trasy dostępne bez sesji (techniczne + marketing + auth + wybrane API).
  * Całość `/api/*` NIE jest publiczna — tylko jawne prefiksy (bezpieczeństwo).
  */
 export function isPublicPath(pathname: string): boolean {
-  // Obejmuje pliki techniczne i tunele telemetrii (PostHog musi być
+  // Obejmuje `NO_SESSION_PATHS` i tunele telemetrii (PostHog musi być
   // publiczny: skrypt ładuje się przed logowaniem). `startsWith('/ingest')`
   // robiło publicznymi też `/ingestion` i `/ingest-raport`, których Next
   // nie przepisuje do PostHog.
   if (isNoSessionPath(pathname)) return true;
   if (isMarketingPath(pathname)) return true;
-  if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
   if (pathname.startsWith('/api/')) {
     return PUBLIC_API_EXACT.some((p) => pathname === p) || PUBLIC_API_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
