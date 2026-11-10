@@ -29,6 +29,7 @@ import {
   zeroVatRateFromParentLines,
 } from '@/lib/invoices/correction-amount-change';
 import { isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { formatPlMoney } from '@/lib/format/pl';
 import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
 import type {
@@ -757,6 +758,19 @@ async function normalizePayload(
     if (!parentRate && rate === '0' && original.some((line) => ZERO_VAT_RATES.has(line.vatRate))) {
       return {
         error: 'Korekta kwotowa bez VAT faktury z różnymi stawkami (w tym np., np. II lub oo) jest niejednoznaczna — skoryguj pozycje („przed / po”).',
+      };
+    }
+    // F12-D2: różnica według stawek faktury korygowanej (art. 106j ust. 2 pkt 5).
+    if (!original.some((line) => line.vatRate === rate)) {
+      const stawka = /^\d+$/.test(rate) ? `${rate}%` : `„${rate}”`;
+      return {
+        error: `Kwoty korekty wskazują stawkę ${stawka}, a faktura nie ma pozycji w tej stawce. Korekta wykazuje różnicę według stawek faktury korygowanej (art. 106j ust. 2 pkt 5 ustawy o VAT): sprawdź kwoty netto i VAT albo skoryguj pozycje („przed / po”).`,
+      };
+    }
+    // F12-D2: korekta nie schodzi poniżej zera (stan bieżący: faktura i przyjęte korekty).
+    if (roundToCents(baseline.totals.net + amounts.netDelta) < 0 || roundToCents(baseline.totals.gross + amounts.grossDelta) < 0) {
+      return {
+        error: `Korekta obniżyłaby wartość faktury poniżej zera: dziś to ${formatPlMoney(baseline.totals.net)} zł netto i ${formatPlMoney(baseline.totals.gross)} zł brutto. Zwrot całej kwoty to anulowanie faktury.`,
       };
     }
   }
