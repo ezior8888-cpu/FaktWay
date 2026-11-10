@@ -360,9 +360,9 @@ async function upsertProducts(
     if (k) existingByKey.set(k, { id: row.id, use_count: row.use_count ?? 0 });
   }
 
-  let created = 0;
-
-  const toInsert: {
+  // Nowe produkty po kluczu katalogu: dwie pozycje o tym samym kluczu (np. pusta
+  // jednostka i „szt.”) to jeden wiersz z zsumowaną liczbą użyć.
+  const pending = new Map<string, {
     tenant_id: string;
     name: string;
     unit: string;
@@ -370,11 +370,21 @@ async function upsertProducts(
     default_vat_rate: string;
     use_count: number;
     last_used_at: string;
-  }[] = [];
+  }>();
 
   for (const summary of productsMap.values()) {
-    const key = normalizeProductKey(summary.name, summary.unit);
+    // Klucz od jednostki zapisywanej w bazie: pusta zapisuje się jako „szt.”,
+    // więc klucz z pustej nigdy nie trafiał w swój produkt i każdy import
+    // dokładał dubel (od 00184 UNIQUE: błąd 23505).
+    const unit = summary.unit || 'szt.';
+    const key = normalizeProductKey(summary.name, unit);
     if (!key) continue;
+
+    const queued = pending.get(key);
+    if (queued) {
+      queued.use_count += summary.useCount;
+      continue;
+    }
 
     const hit = existingByKey.get(key);
     if (hit && policy === 'insert-only') continue; // bez zwiększania `use_count` (IMP-PROD)
@@ -388,20 +398,21 @@ async function upsertProducts(
         .eq('id', hit.id);
 
       if (error) warnings.push(`Produkt „${summary.name.slice(0, 40)}…”: update — ${error.message}`);
+      else hit.use_count += summary.useCount; // ten sam produkt może trafić drugi raz w tym imporcie
     } else {
-      toInsert.push({
+      pending.set(key, {
         tenant_id: tenantId,
         name: summary.name,
-        unit: summary.unit || 'szt.',
+        unit,
         default_price_net: summary.defaultPriceNet,
         default_vat_rate: summary.defaultVatRate,
         use_count: summary.useCount,
         last_used_at: new Date().toISOString(),
       });
-      existingByKey.set(key, { id: '__pending__', use_count: summary.useCount });
     }
   }
 
+  const toInsert = [...pending.values()];
   if (toInsert.length === 0) return 0;
 
   const { data: insData, error: insErr } = await supabase
@@ -409,12 +420,25 @@ async function upsertProducts(
     .insert(toInsert)
     .select('id');
 
-  if (insErr) {
+  if (!insErr) return insData?.length ?? 0;
+  if (insErr.code !== '23505') {
     warnings.push(`Produkty: insert — ${insErr.message}`);
     return 0;
   }
 
-  created = insData?.length ?? 0;
+  // 00184: UNIQUE na kluczu katalogu (uq_products_tenant_catalog_key). Paczka
+  // wstawia się atomowo, więc jeden produkt dopisany w międzyczasie przez drugi
+  // import (równoległy job tej firmy) cofa całą paczkę. Wtedy wiersz po
+  // wierszu: zajęty klucz pomijamy (produkt już jest; liczba użyć z tego
+  // importu przepada — to tylko kolejność podpowiedzi), resztę wstawiamy.
+  // Ponowienie joba: zapisane wiersze są już w katalogu, więc trafiają w
+  // `existingByKey` albo w ten sam 23505 — bez dubla.
+  let created = 0;
+  for (const row of toInsert) {
+    const { error } = await supabase.from('products').insert(row);
+    if (!error) created += 1;
+    else if (error.code !== '23505') warnings.push(`Produkt „${row.name.slice(0, 40)}…” nie trafił do katalogu: ${error.message}`);
+  }
   return created;
 }
 

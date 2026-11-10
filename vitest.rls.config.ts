@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00184 (plan skalowania 3000, sesja 21): wynik strażnika cyklu życia przed i po, lekka funkcja bez I3,
+      // wklejanie ksef_upo_expected, indeksy cronów w planach, UNIQUE katalogu produktów i kontrola dubli.
+      'tests/rls-indeksy-cronow-produkty.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
