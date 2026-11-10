@@ -21,10 +21,31 @@ export interface CsvExportInput {
  */
 const FORMULA_START = /^[=+@\t\r]|^-(?![\d\s.,]*$)/;
 
+/** Początek każdej odmowy CSV — po nim job może rozpoznać powód dla człowieka. */
+export const CSV_REFUSAL_PREFIX = 'Eksport CSV wstrzymany:';
+
 export class CsvForeignCurrencyNotSupportedError extends Error {
-  constructor() {
-    super('Eksport CSV wstrzymany: faktura walutowa wymaga uzgodnienia kwot PLN z XML.');
+  constructor(invoiceNumber?: string, currency?: string | null) {
+    super(
+      invoiceNumber
+        ? `${CSV_REFUSAL_PREFIX} faktura ${invoiceNumber} jest w walucie ${currency?.trim().toUpperCase() || 'innej niż PLN'}, a plik CSV zawiera tylko kwoty w PLN. ` +
+            'Kwoty PLN tej faktury trzeba uzgodnić z oryginałem w KSeF (z księgową) i wprowadzić ręcznie; po wykluczeniu tej faktury z okresu eksport się powiedzie.'
+        : `${CSV_REFUSAL_PREFIX} faktura walutowa wymaga uzgodnienia kwot PLN z XML.`,
+    );
     this.name = 'CsvForeignCurrencyNotSupportedError';
+  }
+}
+
+/**
+ * F12-E2: faktura, której CSV nie może uczciwie wykazać (FP albo kwoty
+ * nieznane z importu). Rozszerza błąd walutowy, żeby job traktował ją tak samo
+ * (bez ponowień).
+ */
+export class CsvDocumentNotSupportedError extends CsvForeignCurrencyNotSupportedError {
+  constructor(invoiceNumber: string, reason: string) {
+    super();
+    this.message = `${CSV_REFUSAL_PREFIX} faktura ${invoiceNumber} ${reason}`;
+    this.name = 'CsvDocumentNotSupportedError';
   }
 }
 
@@ -170,8 +191,29 @@ function allInvoices(
   // Każdy format CSV poniżej zakłada PLN; metadane KSeF mają przy obcej
   // walucie netto/brutto w walucie dokumentu, ale VAT w PLN. Nie wolno
   // oznaczyć takiego wiersza jako PLN ani wyeksportować mieszanych jednostek.
-  if (invoices.some(({ inv }) => inv.currency?.trim().toUpperCase() !== 'PLN')) {
-    throw new CsvForeignCurrencyNotSupportedError();
+  for (const { inv } of invoices) {
+    if (inv.currency?.trim().toUpperCase() !== 'PLN') {
+      throw new CsvForeignCurrencyNotSupportedError(inv.invoiceNumber, inv.currency);
+    }
+  }
+  // F12-E2: faktura do paragonu (art. 109 ust. 3d ustawy o VAT) nie jest w
+  // ewidencji sprzedaży, bo sprzedaż jest już w raporcie kasy; w CSV
+  // zdublowałaby sprzedaż i VAT. Kwoty nieznane z importu to nie 0,00.
+  for (const inv of data.issuedInvoices) {
+    if (inv.ksefMarkers?.fp) {
+      throw new CsvDocumentNotSupportedError(
+        inv.invoiceNumber,
+        'jest fakturą do paragonu (FP). Jej sprzedaż jest już w raporcie kasy rejestrującej, więc w CSV zdublowałaby sprzedaż i VAT. Wyłącz ją z okresu eksportu (albo wyeksportuj pozostałe faktury innym zakresem dat) i uzgodnij ujęcie z księgową.',
+      );
+    }
+  }
+  for (const { inv } of invoices) {
+    if (inv.importedTotalsUnknown) {
+      throw new CsvDocumentNotSupportedError(
+        inv.invoiceNumber,
+        'została zaimportowana z KSeF bez sum netto i VAT, więc FaktWay nie zna jej kwot. Kwoty trzeba wziąć z oryginału w KSeF (z księgową) i wprowadzić ręcznie; do czasu uzupełnienia danych eksport CSV tej faktury nie powstanie.',
+      );
+    }
   }
   return invoices.sort((a, b) => a.inv.issueDate.localeCompare(b.inv.issueDate));
 }
