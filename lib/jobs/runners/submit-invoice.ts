@@ -118,6 +118,20 @@ export const KSEF_DUPLICATE_RECONCILE = SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCIL
 /** Znacznik `[KOD] ` na początku treści błędu — do zdjęcia przed zapisem `last_error`. */
 const HOLD_MARKER = /^\[[A-Z_]+\] /;
 
+/**
+ * F-093-STATUS: odrzucenie w statusie (kod 400–499 poza 440) w łańcuchu
+ * przyczyn błędu joba. Jego `customerMessage` z opisem i szczegółami KSeF
+ * idzie tylko do klienta; 440 ma własne werdykty runnera.
+ */
+function statusRejectionIn(error: Error): KsefInvoiceRejectedError | null {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 8; depth += 1) {
+    if (current instanceof KsefInvoiceRejectedError) return current.isDuplicate ? null : current;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
 /** Wynik wysyłki niezależnie od drogi: nowa wysyłka, uzgodnienie albo własny duplikat. */
 interface SubmitOutcome {
   ksefNumber: string;
@@ -606,6 +620,13 @@ export async function onSubmitInvoiceExhausted(
         : HOLD_MARKER.test(error.message)
           ? error.message.replace(HOLD_MARKER, '')
           : `${error.name}: ${error.message}`;
+      // F-093-STATUS: przy odrzuceniu w statusie komunikat błędu to sam status
+      // (log, audyt). Klient dostaje na fakturę i w mailu opis i szczegóły
+      // z KSeF jak dotąd: to jego faktura i jedyna wskazówka, co poprawić.
+      const statusRejection = heldRoz ? null : statusRejectionIn(error);
+      const customerFailureMessage = statusRejection
+        ? `${error.name}: ${statusRejection.customerMessage}`
+        : failureMessage;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -688,7 +709,7 @@ export async function onSubmitInvoiceExhausted(
               invoiceId,
               tenantId,
               'failed',
-              `${failureMessage} (Offline24 ${offlineResult.reason})`,
+              `${customerFailureMessage} (Offline24 ${offlineResult.reason})`,
               code,
             ));
         }
@@ -710,7 +731,7 @@ export async function onSubmitInvoiceExhausted(
             invoiceId,
             tenantId,
             isBusinessRejection ? 'rejected' : 'failed',
-            failureMessage,
+            customerFailureMessage,
             code,
           ));
       }
@@ -759,7 +780,8 @@ export async function onSubmitInvoiceExhausted(
         data: {
           invoiceId,
           tenantId,
-          error: failureMessage,
+          // Do klienta: e-mail i powiadomienie „odrzucona”, karta FLO.
+          error: customerFailureMessage,
           errorCode: code,
           environment: parsed.data.environment,
           fromOfflineQueue: data.fromOfflineQueue,
