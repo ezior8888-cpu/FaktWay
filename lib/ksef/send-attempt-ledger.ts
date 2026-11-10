@@ -130,8 +130,10 @@ const MAX_MESSAGE = 500;
  * bez sekretów z adresów i tokenów (`scrubTelemetryText`), bez NIP-ów,
  * numerów rachunków i VAT-UE, kwot i innych liczb oraz wartości pól
  * w cudzysłowach (walidator i XSD powtarzają treść dokumentu). Zostają
- * nazwy pól (`P_15`), klasa błędu i opis — HTTP i kod KSeF mają własne
- * kolumny. Najwyżej 500 znaków. Pełny ostatni błąd jest na fakturze.
+ * nazwy pól (`P_15`), klasa błędu i opis z naszych komunikatów — HTTP i kod
+ * KSeF mają własne kolumny. Odrzucenie w statusie KSeF ma w komunikacie sam
+ * status, bez opisu i szczegółów z KSeF (F-093-STATUS). Najwyżej 500 znaków.
+ * Pełny ostatni błąd jest na fakturze.
  */
 export function sendAttemptMessage(message: string): string {
   return scrubTelemetryText(message)

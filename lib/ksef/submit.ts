@@ -284,9 +284,12 @@ export interface RejectedAttempt {
  * Opis i szczegóły z KSeF są w polach prywatnych (`ksefDescription`,
  * `ksefDetails`), których JSON, `inspect` ani Sentry nie serializują. Tekst
  * dla klienta (jego faktura, jedyna wskazówka, co poprawić) daje
- * `customerMessage`; na fakturę i do maila „odrzucona” wkłada go tylko
- * `onSubmitInvoiceExhausted`. Przedrostek „KSeF odrzucił fakturę” zostaje,
- * bo czyta go zapasowa reguła klasyfikatora (`send-error-codes.ts`).
+ * `customerMessage`; do `invoices.last_error` i zdarzenia
+ * `invoice/submit.failed` (e-mail „odrzucona”) wkłada go tylko
+ * `onSubmitInvoiceExhausted`. `last_error` czytają też panele operatora
+ * (`/admin/ksef`, `/admin/support`): to osobne ustalenie, nie ten błąd.
+ * Przedrostek „KSeF odrzucił fakturę” zostaje, bo czyta go zapasowa reguła
+ * klasyfikatora (`send-error-codes.ts`).
  */
 export class KsefInvoiceRejectedError extends Error {
   readonly code: number;
@@ -315,8 +318,11 @@ export class KsefInvoiceRejectedError extends Error {
     this.ourInvoiceHash = attempt.invoiceHash ?? null;
     this.ourSessionReferenceNumber = attempt.sessionReferenceNumber ?? null;
     this.ourInvoiceReferenceNumber = attempt.invoiceReferenceNumber ?? null;
-    // Dane z zewnątrz: konstruktor nie może rzucić, bo wtedy odrzucenie
-    // (bez ponowień) zamieniłoby się w zwykły błąd z ponowną wysyłką.
+    // Dane z zewnątrz: ani konstruktor, ani `customerMessage` nie mogą rzucić.
+    // Rzucający konstruktor zamieniał odrzucenie w zwykły błąd: ponowienia
+    // uzgadniania i na końcu „do uzgodnienia” (RESULT_UNCERTAIN) zamiast
+    // KSEF_REJECTED z powodem dla klienta. `customerMessage` czyta
+    // `onSubmitInvoiceExhausted` przed zapisem stanu faktury.
     const details: unknown = status.details;
     this.#description = typeof status.description === 'string' ? status.description : '';
     this.#details = Array.isArray(details)

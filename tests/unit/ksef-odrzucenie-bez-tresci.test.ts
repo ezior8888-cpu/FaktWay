@@ -23,8 +23,9 @@ import type { FakeKsef, MemoryDb, Row } from './helpers/ksef-pelna-sciezka';
  * Ścieżka prawdziwa: job zarejestrowany w `handlers/package-d.ts` →
  * `wrapHandler` (pg-boss, dziennik prób, `inngest_run_log`, obsługa
  * wyczerpania) → runner → `submitInvoiceFullFlow` → `submitInvoice` →
- * polling statusu. Atrapy tylko dla HTTP KSeF, bazy, magazynu plików,
- * kolejki i Sentry.
+ * polling statusu. Atrapy dla HTTP KSeF, bazy, magazynu plików, kolejki
+ * i Sentry oraz dla strażników i pomocników spoza drogi komunikatu (XSD,
+ * granice firmy i referencji, flagi, zdrowie KSeF, sesja, limiter).
  */
 
 const T = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -184,8 +185,13 @@ vi.mock('@/lib/jobs/boss', () => ({ startBoss: async () => ({ send: m.bossSend }
 vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvents: m.sendEvents, sendJobEvent: vi.fn() }));
 
 import '@/lib/jobs/handlers/package-d';
+import { NonRetriableError } from '@/lib/jobs/errors';
+import { createJobLogger } from '@/lib/jobs/logger';
 import { getRegisteredJobs } from '@/lib/jobs/registry';
 import { wrapHandler } from '@/lib/jobs/run-job';
+import { onSubmitInvoiceExhausted } from '@/lib/jobs/runners/submit-invoice';
+import { createJobStep } from '@/lib/jobs/step-shim';
+import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
 import { freshKsef } from './helpers/ksef-pelna-sciezka';
 
@@ -338,5 +344,38 @@ describe('F-093-STATUS: odrzucenie znalezione przy uzgadnianiu wcześniejszej wy
     ]);
     expect(m.invoice).toMatchObject({ ksef_status: 'rejected', last_error_code: 'KSEF_REJECTED', last_error: TEKST_KLIENTA });
     expect(zdarzeniePorazki()?.data).toMatchObject({ error: TEKST_KLIENTA });
+  });
+});
+
+describe('F-093-OPIS: przerwanie po stronie KSeF (5xx w statusie)', () => {
+  it('ponowienie bez opisu z KSeF w logu, dzienniku prób i Sentry', async () => {
+    m.ksef.statusRejection = { code: 550, description: OPIS, details: [SZCZEGOL] };
+
+    await run([job()] as never);
+
+    // 5xx to nie odrzucenie: ponowienie zaplanowane, faktura nie jest „odrzucona”.
+    expect(m.bossSend).toHaveBeenCalledTimes(1);
+    expect(m.invoice.ksef_status).not.toBe('rejected');
+    expect(wycieki()).toEqual([]);
+    expect([...m.ledger.values()]).toEqual([
+      expect.objectContaining({ error_message: 'RetryAfterError: Error: KSeF przerwał przetwarzanie faktury (status <n>)' }),
+    ]);
+  });
+});
+
+describe('F-093-STATUS: 440 w łańcuchu przyczyn zostaje przy werdykcie runnera', () => {
+  it('werdykt duplikatu (znacznik [KOD]) idzie do klienta bez tekstu klasy 440', async () => {
+    const duplikat = new KsefInvoiceRejectedError(440, {
+      code: 440, description: 'Duplikat faktury', details: [SZCZEGOL],
+      extensions: { originalKsefNumber: 'K-1', originalSessionReferenceNumber: 'S-0' },
+    });
+    const blad = new NonRetriableError('[KSEF_DUPLICATE_RECONCILE] Werdykt testowy', { cause: duplikat });
+    const log = createJobLogger('test');
+
+    await onSubmitInvoiceExhausted(blad, job().data, { attempt: 0, logger: log, step: createJobStep(log), jobId: JOB_1 });
+
+    expect(m.invoice).toMatchObject({ last_error: 'Werdykt testowy', last_error_code: 'KSEF_DUPLICATE_RECONCILE' });
+    expect(zdarzeniePorazki()?.data).toMatchObject({ error: 'Werdykt testowy' });
+    expect(wycieki()).toEqual([]);
   });
 });

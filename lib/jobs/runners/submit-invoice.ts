@@ -121,7 +121,8 @@ const HOLD_MARKER = /^\[[A-Z_]+\] /;
 /**
  * F-093-STATUS: odrzucenie w statusie (kod 400–499 poza 440) w łańcuchu
  * przyczyn błędu joba. Jego `customerMessage` z opisem i szczegółami KSeF
- * idzie tylko do klienta; 440 ma własne werdykty runnera.
+ * idzie do kanałów klienta (`last_error`, zdarzenie dla e-maila), nie do logu
+ * ani audytu. 440 ma własne werdykty runnera.
  */
 function statusRejectionIn(error: Error): KsefInvoiceRejectedError | null {
   let current: unknown = error;
@@ -780,7 +781,8 @@ export async function onSubmitInvoiceExhausted(
         data: {
           invoiceId,
           tenantId,
-          // Do klienta: e-mail i powiadomienie „odrzucona”, karta FLO.
+          // Kanały klienta: e-mail i powiadomienie „odrzucona”, karta FLO
+          // (F-093-STATUS: tu opis i szczegóły KSeF zostają, jak w `last_error`).
           error: customerFailureMessage,
           errorCode: code,
           environment: parsed.data.environment,
