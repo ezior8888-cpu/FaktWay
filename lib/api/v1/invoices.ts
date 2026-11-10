@@ -148,7 +148,7 @@ export function toApiInvoice(row: Row): ApiInvoice {
   };
 }
 
-function toApiItem(row: Row): ApiInvoiceItem {
+export function toApiItem(row: Row): ApiInvoiceItem {
   return {
     position: Number(row.ordinal),
     name: text(row.name),

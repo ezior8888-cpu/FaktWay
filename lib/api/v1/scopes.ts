@@ -6,13 +6,22 @@ import { z } from 'zod';
  * Generator i skrót klucza: `lib/api/v1/keys.ts` (tylko serwer).
  */
 
-/** Ta sama lista co CHECK `api_keys_scopes_check` (00181). */
-export const API_KEY_SCOPES = ['invoices:read', 'expenses:read'] as const;
+/**
+ * Ta sama lista co CHECK `api_keys_scopes_check` (00181, `invoices:write` od
+ * 00184). Kolejność jest kolejnością zapisu w bazie (`canonicalScopes`).
+ */
+export const API_KEY_SCOPES = ['invoices:read', 'expenses:read', 'invoices:write'] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 export const API_KEY_SCOPE_LABELS: Record<ApiKeyScope, string> = {
   'invoices:read': 'Odczyt faktur',
   'expenses:read': 'Odczyt kosztów',
+  'invoices:write': 'Wystawianie faktur',
+};
+
+/** Dopisek przy zakresie w formularzu: co program zrobi w imieniu firmy. */
+export const API_KEY_SCOPE_HINTS: Partial<Record<ApiKeyScope, string>> = {
+  'invoices:write': 'Program wystawi faktury tej firmy i może wysłać je do KSeF.',
 };
 
 /** Ten sam limit pilnuje wyzwalacz `guard_api_key` (00181). */
@@ -32,7 +41,7 @@ export const apiKeyCreateSchema = z.object({
     .max(80, 'Nazwa klucza może mieć najwyżej 80 znaków.'),
   scopes: z
     .array(z.enum(API_KEY_SCOPES))
-    .min(1, 'Zaznacz, co program może czytać.')
+    .min(1, 'Zaznacz, co program może robić.')
     .max(API_KEY_SCOPES.length),
 });
 

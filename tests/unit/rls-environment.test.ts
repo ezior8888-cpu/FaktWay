@@ -100,6 +100,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-spis.test.ts',
       // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API i rola `api_key_client`.
       'tests/rls-api-klucze.test.ts',
+      // 00184 (krok 7.1, część 2): wystawianie faktur kluczem API.
+      'tests/rls-api-wystawianie.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

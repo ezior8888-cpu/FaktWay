@@ -43,6 +43,11 @@ export const API_RATE_LIMITS = {
   key: { limit: 60, windowSeconds: 60 },
   /** Na adres IP: 600 na minutę, np. biuro rachunkowe z kluczami wielu firm. */
   ip: { limit: 600, windowSeconds: 60 },
+  /**
+   * Zapis na klucz (POST, krok 7.1, część 2): 20 na minutę, osobno i dodatkowo
+   * do limitu zapytań. Każdy zapis to faktura i być może wysyłka do KSeF.
+   */
+  write: { limit: 20, windowSeconds: 60 },
 } as const;
 
 export interface ApiKeyIdentity {
@@ -89,6 +94,29 @@ function parseSession(data: unknown): ApiKeyIdentity | null {
     return null;
   }
   return { id: row.key_id, tenantId: row.tenant_id, scopes, prefix: row.key_prefix };
+}
+
+/**
+ * Osobny limit zapisu (POST) dla klucza po udanym uwierzytelnieniu. `null`
+ * znaczy „można iść dalej”. Bez liczenia odmów, jak limit na klucz; awaria
+ * Redisa daje 503 (fail-closed).
+ */
+export async function checkApiWriteLimit(
+  auth: Extract<ApiAuthResult, { ok: true }>,
+): Promise<NextResponse | null> {
+  const result = await checkRateLimit({
+    bucket: 'api_v1_write',
+    identifier: auth.key.id,
+    ...API_RATE_LIMITS.write,
+    countDenied: false,
+  });
+  if (result.fallback) return apiError(503, 'service_unavailable', UNAVAILABLE, auth.headers);
+  if (result.allowed) return null;
+  const retryAfter = String(Math.max(1, result.retryAfter));
+  return apiError(429, 'rate_limited', `Za dużo zapisów tym kluczem. Spróbuj ponownie za ${retryAfter} s.`, {
+    ...auth.headers,
+    'Retry-After': retryAfter,
+  });
 }
 
 export async function authenticateApiRequest(

@@ -272,7 +272,8 @@ describe.skipIf(!hasDatabase)('00181: klucze API i rola api_key_client na prawdz
     for (const forged of [{ created_by: otherId }, { last_used_at: '2026-01-01T00:00:00Z' }, { revoked_at: '2026-01-01T00:00:00Z' }, { created_at: '2020-01-01T00:00:00Z' }]) {
       expect((await owner.from('api_keys').insert({ ...row(generateCompanyKey(), ORG, ['invoices:read'], 'X'), ...forged })).error?.message).toMatch(/permission denied/);
     }
-    expect((await owner.from('api_keys').insert(row(generateCompanyKey(), ORG, ['invoices:write'], 'X'))).error?.message).toMatch(/api_keys_scopes_check/);
+    // `invoices:write` jest zakresem od 00184 (krok 7.1, część 2); nieznany zakres dalej nie przejdzie.
+    expect((await owner.from('api_keys').insert(row(generateCompanyKey(), ORG, ['expenses:write'], 'X'))).error?.message).toMatch(/api_keys_scopes_check/);
     expect((await owner.from('api_keys').insert(row(generateCompanyKey(), ORG, [], 'X'))).error?.message).toMatch(/api_keys_scopes_check/);
     expect((await owner.from('api_keys').insert({ ...row(generateCompanyKey(), ORG, ['invoices:read'], 'X'), key_hash: 'abc' })).error?.message).toMatch(/api_keys_key_hash_check/);
     expect((await owner.from('api_keys').insert(row(generateCompanyKey(), ORG, ['invoices:read'], '  '))).error?.message).toMatch(/api_keys_name_check/);

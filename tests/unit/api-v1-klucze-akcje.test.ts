@@ -117,6 +117,13 @@ describe('utworzenie klucza API', () => {
     expect(mocks.revalidate).toHaveBeenCalledWith('/settings/api');
   });
 
+  it('krok 7.1, część 2: zakres invoices:write (wystawianie faktur) zapisany w stałej kolejności', async () => {
+    const result = await createCompanyKeyAction({ name: 'Sklep', scopes: ['invoices:write', 'invoices:read'] });
+    expect(result.success).toBe(true);
+    const [insert] = ops('insert');
+    expect((insert?.args[0] as { scopes: string[] }).scopes).toEqual(['invoices:read', 'invoices:write']);
+  });
+
   it('każdy klucz jest inny', async () => {
     const first = await createCompanyKeyAction({ name: 'A', scopes: ['invoices:read'] });
     const second = await createCompanyKeyAction({ name: 'B', scopes: ['invoices:read'] });
@@ -150,7 +157,7 @@ describe('utworzenie klucza API', () => {
     ['pusta nazwa', { name: '   ', scopes: ['invoices:read'] }],
     ['za długa nazwa', { name: 'x'.repeat(81), scopes: ['invoices:read'] }],
     ['bez zakresu', { name: 'Program', scopes: [] }],
-    ['nieznany zakres', { name: 'Program', scopes: ['invoices:write'] }],
+    ['nieznany zakres', { name: 'Program', scopes: ['expenses:write'] }],
   ])('%s: odmowa bez zapisu', async (_name, input) => {
     const result = await createCompanyKeyAction(input as { name: string; scopes: string[] });
     expect(result.success).toBe(false);

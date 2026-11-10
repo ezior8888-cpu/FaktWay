@@ -76,6 +76,9 @@ export default defineConfig({
       // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API firmy (owner/admin, skrót, odwołanie
       // nieodwracalne, audyt wyzwalaczem) i rola `api_key_client`: tylko firma i zakres klucza, bez zapisu.
       'tests/rls-api-klucze.test.ts',
+      // 00184 (krok 7.1, część 2): wystawianie faktur kluczem z `invoices:write` przez
+      // `api_create_invoice()`, idempotencja w transakcji z fakturą, izolacja firm.
+      'tests/rls-api-wystawianie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

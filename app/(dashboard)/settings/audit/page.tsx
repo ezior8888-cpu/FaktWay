@@ -28,7 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
   'accountant.access_used': 'Księgowa pobrała dane',
   'api_key.created': 'Utworzono klucz API',
   'api_key.revoked': 'Odwołano klucz API',
-  'api_key.used': 'Program pobrał dane kluczem API',
+  'api_key.used': 'Program użył klucza API',
   'tenant.created': 'Utworzenie firmy w systemie',
   'tenant.updated': 'Aktualizacja firmy',
   'tenant.user_role_changed': 'Zmiana roli użytkownika',

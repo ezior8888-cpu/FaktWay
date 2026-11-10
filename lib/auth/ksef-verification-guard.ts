@@ -9,6 +9,8 @@
  * Dla Inngest / skryptów bez sesji użytkownika: {@link requireKsefVerificationForBackgroundJob}.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/supabase/active-org';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -37,12 +39,19 @@ export interface KsefVerificationStatus {
  * - generowaniem oficjalnego PDF z danymi firmy,
  * - wysłaniem faktury e-mailem do kontrahenta.
  */
-export async function requireKsefVerification(tenantId: string): Promise<void> {
+export async function requireKsefVerification(
+  tenantId: string,
+  /**
+   * Klient z RLS zamiast sesji z ciasteczek: publiczne API (krok 7.1) czyta
+   * znacznik tokenem klucza, który widzi tylko swoją firmę (00184).
+   */
+  client?: SupabaseClient,
+): Promise<void> {
   if (!isUuid(tenantId)) {
     throw new KsefNotVerifiedError('INVALID_TENANT_ID');
   }
 
-  const supabase = await createClient();
+  const supabase = client ?? await createClient();
   const { data: tenant, error } = await supabase
     .from('tenants')
     .select('ksef_verified_at, ksef_verified_environment')

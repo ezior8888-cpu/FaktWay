@@ -17,6 +17,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
+  API_KEY_SCOPE_HINTS,
   API_KEY_SCOPE_LABELS,
   API_KEY_SCOPES,
   apiKeyCreateSchema,
@@ -95,7 +96,7 @@ export function ApiKeysList({ keys }: { keys: ApiKeyPublicRow[] }) {
               <RiKey2Line />
             </EmptyMedia>
             <EmptyTitle>Brak kluczy API</EmptyTitle>
-            <EmptyDescription>Utwórz klucz, żeby Twój program mógł czytać faktury albo koszty tej firmy.</EmptyDescription>
+            <EmptyDescription>Utwórz klucz, żeby Twój program mógł czytać faktury i koszty tej firmy albo wystawiać jej faktury.</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
@@ -163,16 +164,21 @@ function CreateKeyForm({ onSuccess, onCancel }: { onSuccess: (key: string) => vo
           />
         </Field>
         <Field>
-          <FieldLabel>Co program może czytać</FieldLabel>
+          <FieldLabel>Co program może robić</FieldLabel>
           <div className="flex flex-col gap-2">
             {API_KEY_SCOPES.map((scope) => (
-              <label key={scope} className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox
-                  checked={scopes.includes(scope)}
-                  onCheckedChange={(checked) => toggleScope(scope, checked === true)}
-                />
-                {API_KEY_SCOPE_LABELS[scope]}
-              </label>
+              <div key={scope} className="flex flex-col gap-0.5">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={scopes.includes(scope)}
+                    onCheckedChange={(checked) => toggleScope(scope, checked === true)}
+                  />
+                  {API_KEY_SCOPE_LABELS[scope]}
+                </label>
+                {API_KEY_SCOPE_HINTS[scope] ? (
+                  <p className="text-muted-foreground pl-6 text-xs">{API_KEY_SCOPE_HINTS[scope]}</p>
+                ) : null}
+              </div>
             ))}
           </div>
         </Field>
