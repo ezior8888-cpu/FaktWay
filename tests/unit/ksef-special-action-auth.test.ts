@@ -122,7 +122,9 @@ function from(table: string) {
     if (table === 'invoices') {
       return { data: [{ id: advanceId, internal_number: 'ZAL/2026/1',
         ksef_number: 'KSEF-TEST-1', issue_date: '2026-09-20', advance_amount: 123,
-        gross_total: 123, invoice_kind: 'advance' }], error: null };
+        gross_total: 123, invoice_kind: 'advance',
+        // Ten sam nabywca co w formularzu rozliczenia (F12-D4).
+        buyer_nip: buyer.nip, buyer_data: { nip: buyer.nip, name: buyer.name } }], error: null };
     }
     return { data: null, error: null };
   };
