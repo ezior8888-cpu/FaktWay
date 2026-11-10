@@ -13,7 +13,7 @@
  * z `tests/setup.ts` oblałby test.
  */
 import { readdirSync, readFileSync } from 'node:fs';
-import { createServer, get, type Server } from 'node:http';
+import { Agent, createServer, get, type Server } from 'node:http';
 import { connect, Socket, type AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -32,6 +32,10 @@ const KOMUNIKAT = /Blokada sieci w testach/;
 // nie mają wtedy czego sprawdzać. Bez flagi biegną zawsze: zepsuty setup
 // (blokada niezainstalowana) daje czerwone, nie pominięte.
 const FLAGA_WLACZONA = process.env[FLAGA_PRAWDZIWEJ_SIECI] === '1';
+// Tryb „bez sieci” z AGENTS.md / pamięci sesji: NODE_USE_ENV_PROXY=1 i martwe proxy 127.0.0.1:9.
+const PROXY_Z_ENV =
+  process.env.NODE_USE_ENV_PROXY === '1' &&
+  [process.env.HTTP_PROXY, process.env.HTTPS_PROXY, process.env.http_proxy, process.env.https_proxy].some(Boolean);
 
 function obecnyTest(): string {
   return expect.getState().currentTestName ?? '';
@@ -84,13 +88,21 @@ describe.skipIf(FLAGA_WLACZONA)('blokada sieci w testach jednostkowych', () => {
     expect(proba.adres).not.toMatch(/haslo|sekret|uzytkownik/);
   });
 
-  it('node:http na host zewnętrzny dostaje błąd blokady zamiast połączenia', async () => {
-    const zadanie = get('http://blokada-sieci.invalid/gus');
+  it('node:http z własnym agentem (jak SDK) na host zewnętrzny dostaje błąd blokady', async () => {
+    const zadanie = get('http://blokada-sieci.invalid/gus', { agent: new Agent() });
     const blad = await bladZdarzenia(zadanie);
 
     expect(blad.message).toMatch(KOMUNIKAT);
     expect(blad.message).toContain('blokada-sieci.invalid:80');
     expect(blad.message).toContain(obecnyTest());
+    expect(zabierzZablokowanePolaczenia()).toMatchObject([{ kanal: 'gniazdo', adres: 'blokada-sieci.invalid:80' }]);
+  });
+
+  // Z proxy ze zmiennych globalny agent łączy się z proxy, nie z celem (opis w blokada-sieci.ts).
+  it.skipIf(PROXY_Z_ENV)('node:http z globalnym agentem na host zewnętrzny dostaje błąd blokady', async () => {
+    const blad = await bladZdarzenia(get('http://blokada-sieci.invalid/gus'));
+
+    expect(blad.message).toMatch(KOMUNIKAT);
     expect(zabierzZablokowanePolaczenia()).toMatchObject([{ kanal: 'gniazdo', adres: 'blokada-sieci.invalid:80' }]);
   });
 
@@ -103,7 +115,14 @@ describe.skipIf(FLAGA_WLACZONA)('blokada sieci w testach jednostkowych', () => {
     expect(zabierzZablokowanePolaczenia()).toMatchObject([{ kanal: 'gniazdo', adres: '192.0.2.10:443' }]);
   });
 
-  it('serwer lokalny na 127.0.0.1 działa jak dotąd (testy Stripe)', async () => {
+  it('adres bez sieci (data:) idzie do prawdziwego fetch', async () => {
+    expect(await (await fetch('data:text/plain,lokalnie')).text()).toBe('lokalnie');
+    expect(zabierzZablokowanePolaczenia()).toEqual([]);
+  });
+
+  // Z proxy ze zmiennych i pustym NO_PROXY Node wysyła przez proxy nawet 127.0.0.1,
+  // z blokadą czy bez, więc lokalnego serwera nie da się wtedy osiągnąć globalnym fetch.
+  it.skipIf(PROXY_Z_ENV)('serwer lokalny na 127.0.0.1 działa jak dotąd (testy Stripe)', async () => {
     const serwer: Server = createServer((_req, res) => res.end('lokalnie'));
     await new Promise<void>((resolve) => serwer.listen(0, '127.0.0.1', resolve));
     try {

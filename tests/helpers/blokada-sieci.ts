@@ -28,7 +28,11 @@
  *
  * Czego nie widzi: procesów potomnych (testy skryptów `scripts/ops/*.sh`
  * uruchamiają bash z własnymi atrapami poleceń), `worker_threads`, UDP
- * (`node:dgram`) i samych zapytań DNS.
+ * (`node:dgram`) i samych zapytań DNS. Przy `NODE_USE_ENV_PROXY=1`
+ * z `HTTP(S)_PROXY` globalny agent `node:http(s)` łączy się z proxy, nie
+ * z celem: proxy poza pętlą zwrotną blokada odrzuca (z adresem proxy w
+ * komunikacie), proxy na 127.0.0.1 przepuszcza. Globalny `fetch` sprawdza
+ * adres docelowy przed proxy, więc jego to nie dotyczy.
  *
  * Przypisanie do testu bierze nazwę testu trwającego w chwili próby
  * (`expect.getState()`). Próba z kodu, który wyciekł z poprzedniego testu
