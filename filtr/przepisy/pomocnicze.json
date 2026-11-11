@@ -11,6 +11,10 @@
       "powod": "komunikat braku przy fakturze do paragonu w ewidencji i KPiR (RP-FP-01)"
     },
     {
+      "symbol": "lib/ksiegowosc/ewidencja.ts#brakFakturyZImportu",
+      "powod": "komunikat braku przy fakturze z importu z niepewną datą albo kwotą (F11-C4, RP-PRZYCH-01)"
+    },
+    {
       "symbol": "lib/ksiegowosc/jpk-ewp.ts#JPK_EWP_NAMESPACE",
       "powod": "przestrzeń nazw schematu"
     },
@@ -81,6 +85,14 @@
     {
       "symbol": "lib/ksiegowosc/vat-dane.ts#BLAD_ODCZYTU_VAT",
       "powod": "komunikat błędu odczytu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/vat-dane.ts#KOMUNIKAT_WALUTA_VAT",
+      "powod": "komunikat braku VAT przy koszcie z KSeF w walucie przed przeglądem kursu (RP-WAL-01, F11-A4)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/vat-dane.ts#KOMUNIKAT_SRODOWISKO_VAT",
+      "powod": "komunikat braku VAT przy fakturach bez środowiska KSeF (RP-PRZYCH-01, F11-A4)"
     },
     {
       "symbol": "lib/ksiegowosc/vat-dane.ts#komunikatPrzychodowRecznych",

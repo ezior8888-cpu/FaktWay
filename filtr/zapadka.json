@@ -31,9 +31,7 @@
       "lib/reminders/scheduler.ts": 1,
       "lib/reports/kpir-data.ts": 1,
       "lib/storage/expenses.ts": 2,
-      "lib/stripe/financial-gap-audit.ts": 1,
-      "lib/validation/cache.ts": 1,
-      "lib/validation/whitelist-client.ts": 2
+      "lib/stripe/financial-gap-audit.ts": 1
     },
     "kwoty-bez-float": {
       "components/exports/export-formats.ts": 1,

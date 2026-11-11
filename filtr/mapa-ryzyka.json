@@ -235,7 +235,10 @@
         "lib/noty/**",
         "lib/api/v1/invoice-create.ts",
         "app/api/v1/invoices/route.ts",
-        "app/api/noty/**"
+        "app/api/noty/**",
+        "app/actions/proformy.ts",
+        "lib/proformy/**",
+        "app/api/proformy/**"
       ]
     },
     {
@@ -834,7 +837,7 @@
       "poziom": "R1",
       "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja).",
       "sciezki": [
-        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193}_*.sql"
+        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql"
       ]
     },
     {
