@@ -14,6 +14,8 @@ export type RateLimitBucket =
   | 'ai_ocr'
   | 'ai_classify'
   | 'invoice_email'
+  // Noty obciążeniowe i uznaniowe mailem (00193, krok 2.9): limit na firmę jak przy fakturach.
+  | 'accounting_note_email'
   | 'invitation'
   | 'batch_pdf'
   | 'ksef_certificate'

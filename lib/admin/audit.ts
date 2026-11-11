@@ -137,6 +137,12 @@ export const KNOWN_AUDIT_ACTIONS = [
   'invoice.upo_downloaded',
   'invoice.xml_downloaded',
   'invoice.resubmit_requested',
+  // Noty obciążeniowe i uznaniowe (00193)
+  'accounting_note.draft_created',
+  'accounting_note.draft_updated',
+  'accounting_note.draft_deleted',
+  'accounting_note.issued',
+  'accounting_note.emailed',
   // KSeF integration
   'ksef.credentials_uploaded',
   'ksef.credentials_removed',

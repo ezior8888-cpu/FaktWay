@@ -98,6 +98,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-jpk.test.ts',
       'tests/rls-ksiegowosc-kpir.test.ts',
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe.
+      'tests/rls-noty.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

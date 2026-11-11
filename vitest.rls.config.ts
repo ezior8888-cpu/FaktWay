@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe; izolacja firm,
+      // rola jak przy fakturach, numer z bazy bez dubli naraz, wystawionej nie zmienia nikt, historia wysyłek.
+      'tests/rls-noty.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

@@ -88,6 +88,14 @@ export type AuditAction =
   | 'invoice.operator_original_release'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
+  // Noty obciążeniowe i uznaniowe (00193, krok 2.9): szkic zapisuje aplikacja (metadane:
+  // rodzaj, suma, liczba pozycji); wystawienie (numer) i wysyłkę mailem (adres, id wiadomości)
+  // zapisuje baza (RPC `issue_accounting_note`, `record_accounting_note_email`) w tej samej transakcji.
+  | 'accounting_note.draft_created'
+  | 'accounting_note.draft_updated'
+  | 'accounting_note.draft_deleted'
+  | 'accounting_note.issued'
+  | 'accounting_note.emailed'
   // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
   // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
   | 'invoice.marked_paid'
