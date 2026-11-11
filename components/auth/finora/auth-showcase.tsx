@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 
 // Third-party Imports
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { Check } from 'lucide-react'
 
 // Util Imports
