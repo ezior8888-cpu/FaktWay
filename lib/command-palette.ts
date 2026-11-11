@@ -20,8 +20,9 @@ export interface PaletteEntry {
   group: string;
   label: string;
   /**
-   * Unikalna wartość cmdk (`grupa:etykieta`). „Wystaw fakturę” jest i w menu,
-   * i w akcjach — zdublowana wartość psuje nawigację strzałkami.
+   * Unikalna wartość cmdk (`grupa:etykieta`). Ta sama etykieta może stać
+   * w menu i w akcjach (do 11.11.2026 „Wystaw fakturę”), a zdublowana wartość
+   * psuje nawigację strzałkami.
    */
   value: string;
   href: string;
