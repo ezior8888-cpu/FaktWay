@@ -2,7 +2,6 @@ import { createPrivateKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Crypto } from '@peculiar/webcrypto';
 import * as xadesjs from 'xadesjs';
-import * as XmlCore from 'xml-core';
 import { DOMParser, XMLSerializer, DOMImplementation } from '@xmldom/xmldom';
 import { isSensitiveDebugAllowed } from '@/lib/security/debug';
 import { KsefAuthRejectedError } from './auth-errors';
@@ -18,11 +17,13 @@ import type {
 
 // Jednorazowa konfiguracja xadesjs dla Node.js:
 // 1. WebCrypto polyfill (do kryptografii)
-// 2. DOMParser/XMLSerializer (xml-core nie potrafi sam ich zaimportować)
+// 2. DOMParser/XMLSerializer (xml-core nie potrafi sam ich zaimportować).
+//    Rejestrujemy je przez xadesjs, czyli w tej kopii xml-core, której używa
+//    podpis. Bezpośredni import `xml-core` potrafi wskazać inną kopię: xadesjs
+//    2.6.8 przyniósł xml-core 1.2.6 obok naszego 1.2.5 i podpis padał na
+//    „Node dependency not found: DOMParser” (Renovate #512).
 xadesjs.Application.setEngine('NodeJS', new Crypto());
-(XmlCore as unknown as {
-  setNodeDependencies: (deps: Record<string, unknown>) => void;
-}).setNodeDependencies({
+xadesjs.setNodeDependencies({
   DOMParser,
   XMLSerializer,
   DOMImplementation: new DOMImplementation(),
