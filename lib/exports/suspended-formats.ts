@@ -24,13 +24,15 @@ export const SUSPENDED_EXPORT_FORMATS: Readonly<Record<string, string>> = {
   // 29.09.2026 (decyzja Igora): „Symfonia”, „Wapro”, „Insert Subiekt” to były
   // zwykłe CSV z wymyślonymi kolumnami — żaden z tych programów ich wprost
   // nie przyjmuje. Symfonia FK i WAPRO Kaper importują JPK_FA(4), Subiekt
-  // i Rewizor GT — EDI++ (.epp).
+  // i Rewizor GT — EDI++ (.epp). Generator EDI++ jest w
+  // `edi-plus-plus-generator.ts` (plan kompletnej aplikacji, krok 6.1); odwieszenie
+  // = usunięcie `insert_subiekt` stąd po próbnym imporcie.
   symfonia:
     'Eksport „Symfonia” jest wyłączony: plik nie był w formacie, który Symfonia importuje. Symfonia FK wczytuje faktury z JPK_FA(4) — wybierz JPK_FA.',
   wapro:
     'Eksport „Wapro” jest wyłączony: plik nie był w formacie, który WAPRO importuje. WAPRO Kaper wczytuje faktury z JPK_FA — wybierz JPK_FA.',
   insert_subiekt:
-    'Eksport „Insert Subiekt” jest wyłączony: Subiekt i Rewizor GT wczytują faktury w formacie EDI++ (.epp), a nie z tego pliku. Do czasu obsługi EDI++ wybierz uniwersalny CSV.',
+    'Eksport „Insert Subiekt” jest wyłączony: Subiekt i Rewizor GT wczytują faktury w formacie EDI++ (.epp), a nie z dawnego pliku CSV. Plik EDI++ jest już przygotowany i czeka na próbny import w Subiekcie albo Rewizorze; do tego czasu wybierz uniwersalny CSV.',
 };
 
 /**
