@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion, useInView } from 'framer-motion';
+import { AnimatePresence, motion, useInView } from 'motion/react';
 import {
   RiBarChartBoxLine,
   RiCheckLine,

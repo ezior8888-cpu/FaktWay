@@ -20,8 +20,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Pętla rusza tylko, gdy podgląd jest na ekranie.
-vi.mock('framer-motion', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('framer-motion')>()),
+vi.mock('motion/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('motion/react')>()),
   useInView: () => true,
 }));
 

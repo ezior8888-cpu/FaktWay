@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.23.4
       - name: Install verified Gitleaks
         shell: bash
         run: |
@@ -66,16 +66,16 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.23.4
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
       # JS/TS i Actions analizujemy bez instalacji zależności i uruchamiania apki.
       - name: Analyze
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           category: /language:${{ matrix.language }}
           output: ${{ runner.temp }}/codeql-results

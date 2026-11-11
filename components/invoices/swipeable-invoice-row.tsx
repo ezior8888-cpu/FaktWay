@@ -7,7 +7,7 @@ import {
   useMotionValue,
   useTransform,
   type PanInfo,
-} from 'framer-motion';
+} from 'motion/react';
 import { RiDownloadLine, RiLoader4Line } from '@remixicon/react';
 import Link from 'next/link';
 import { toast } from 'sonner';

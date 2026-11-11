@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { AnimatePresence, motion, useInView } from 'framer-motion';
+import { AnimatePresence, motion, useInView } from 'motion/react';
 import {
   RiAddLine,
   RiCameraLine,
