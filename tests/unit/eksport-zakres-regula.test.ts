@@ -226,8 +226,14 @@ describe('strażnik FIR-01: zakres eksportu ma jedno źródło', () => {
     const callers = filesWhere((source) => source.includes('fetchInvoicesForExport('))
       .filter((file) => file !== 'lib/exports/data-fetcher.ts');
     // Kontrola pozytywna: skaner widzi runner, portal księgowej i ekran VAT
-    // modułu księgowości (K6: te same dane co plik JPK_V7M).
-    expect(callers).toEqual(['app/api/portal/exports/generate/route.ts', 'lib/jobs/runners/exports-generate.ts', 'lib/ksiegowosc/vat-dane.ts']);
+    // modułu księgowości (K6: te same dane co plik JPK_V7M). Od 09.11.2026
+    // także JPK_FA w paczce na kontrolę (krok 6.4 planu kompletnej aplikacji).
+    expect(callers).toEqual([
+      'app/api/portal/exports/generate/route.ts',
+      'lib/archiwum/paczka.ts',
+      'lib/jobs/runners/exports-generate.ts',
+      'lib/ksiegowosc/vat-dane.ts',
+    ]);
     for (const file of callers) {
       expect(SOURCES.get(file), file).toMatch(SCOPE_IMPORT);
       expect(SOURCES.get(file), file).toContain('direction: scope.invoiceDirection');

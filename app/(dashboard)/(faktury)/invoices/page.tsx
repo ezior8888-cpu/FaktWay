@@ -33,7 +33,7 @@ import { InvoicesToolbar } from '@/app/(dashboard)/invoices/_components/invoices
 export const dynamic = 'force-dynamic';
 
 /** Kolumny listy: widok wiersza + pola płatności i błędu KSeF + fakty §2.4 pkt 11. */
-const LIST_COLUMNS = `id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path, payment_status, payment_due_date, paid_amount, currency, invoice_kind, last_error_code, ${LIST_ROW_FACT_COLUMNS}`;
+const LIST_COLUMNS = `id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path, payment_status, payment_due_date, paid_amount, currency, invoice_kind, recurring_invoice_id, last_error_code, ${LIST_ROW_FACT_COLUMNS}`;
 
 type ListQueryRow = InvoiceRow & ListRowFactsRow;
 

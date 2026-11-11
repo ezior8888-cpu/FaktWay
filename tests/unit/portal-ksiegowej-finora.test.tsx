@@ -5,6 +5,9 @@ const st = vi.hoisted(() => ({ load: vi.fn(), notFound: vi.fn(() => { throw new 
 vi.mock('next/navigation', () => ({ notFound: st.notFound, useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock('@/lib/accountant/load-accountant-portal', () => ({ loadAccountantPortal: st.load }));
 vi.mock('@/components/exports/accountant-export-buttons', () => ({ AccountantExportButtons: () => 'PRZYCISKI-EKSPORTU' }));
+// Limit prób portalu (krok 6.2): w tych testach zawsze przepuszcza.
+vi.mock('@/lib/auth/get-client-ip', () => ({ getClientIp: async () => '203.0.113.5' }));
+vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: async () => ({ allowed: true, remaining: 10, retryAfter: 0 }) }));
 
 import { metadata } from '@/app/accountant/layout';
 import AccountantPortalPage from '@/app/accountant/[token]/page';
@@ -19,14 +22,19 @@ function portal(level: string) {
     access: { id: 'a', tenant_id: 'ten-1', accountant_name: 'Anna', accountant_email: 'a@example.test', access_level: level, expires_at: '2026-12-31T23:30:00Z' },
     tenant: { name: 'Moja Firma', nip: '5260001246' },
     invoices: [{ id: 'i1', internal_number: 'FV/1', issue_date: '2026-09-10', gross_total: 1230, ksef_status: 'accepted', direction: 'outgoing', xml_storage_path: 'x/1.xml' }],
+    invoicesPage: { page: 1, pages: 1, total: 1, pageSize: 50 },
+    invoicesError: false,
   };
 }
+
+const page = (token: string) =>
+  AccountantPortalPage({ params: Promise.resolve({ token }), searchParams: Promise.resolve({}) });
 
 describe('portal księgowej — wygląd Finory', () => {
   it('nagłówek, dostęp z pobieraniem, eksport i lista w kartach Finory', async () => {
     st.load.mockResolvedValue(portal('download'));
-    const html = renderToStaticMarkup(await AccountantPortalPage({ params: Promise.resolve({ token: 'tok%20en' }) }));
-    expect(st.load).toHaveBeenCalledWith('tok en');
+    const html = renderToStaticMarkup(await page('tok%20en'));
+    expect(st.load).toHaveBeenCalledWith('tok en', { page: 1 });
     for (const text of ['Moja Firma', 'NIP: 5260001246', 'Z pobieraniem', 'Anna', 'Pobierz dane księgowe',
       'PRZYCISKI-EKSPORTU', 'FV/1', '1230,00 zł', '10.09.2026', 'Przyjęta w KSeF', 'Powered by FaktWay']) {
       expect(html).toContain(text);
@@ -44,14 +52,15 @@ describe('portal księgowej — wygląd Finory', () => {
     'opis listy: %i dokumentów → „%s”', async (count, text) => {
       const data = portal('download');
       data.invoices = Array.from({ length: count }, (_, i) => ({ ...data.invoices[0], id: `i${i}`, internal_number: `FV/${i}` }));
+      data.invoicesPage = { page: 1, pages: 1, total: count, pageSize: 50 };
       st.load.mockResolvedValue(data);
-      const html = renderToStaticMarkup(await AccountantPortalPage({ params: Promise.resolve({ token: 't' }) }));
+      const html = renderToStaticMarkup(await page('t'));
       expect(html).toMatch(new RegExp(`${text.split(' ')[0]} (<!-- -->)?${text.split(' ')[1]} (<!-- -->)?· najnowsze na górze`));
     });
 
   it('tylko podgląd: bez eksportu i bez „Pobierz XML”', async () => {
     st.load.mockResolvedValue(portal('read_only'));
-    const html = renderToStaticMarkup(await AccountantPortalPage({ params: Promise.resolve({ token: 't' }) }));
+    const html = renderToStaticMarkup(await page('t'));
     expect(html).toContain('Tylko podgląd');
     expect(html).not.toContain('PRZYCISKI-EKSPORTU');
     expect(html).not.toContain('Pobierz XML');
@@ -59,7 +68,7 @@ describe('portal księgowej — wygląd Finory', () => {
 
   it('nieważny token → notFound; layout bez Referer i bez indeksowania', async () => {
     st.load.mockResolvedValue(null);
-    await expect(AccountantPortalPage({ params: Promise.resolve({ token: 'x' }) })).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(page('x')).rejects.toThrow('NEXT_NOT_FOUND');
     expect(metadata.referrer).toBe('no-referrer');
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });

@@ -173,7 +173,10 @@ describe('alarmy w monitorze', () => {
     db.tables.ksef_history_sync.push(streamRow({ tenant_id: id(4), direction: 'outgoing', rate_limited_at: hoursAgo(2) }));
     await expect(checkKsefHistoryRateLimited()).resolves.toEqual({ type: 'ksef_history_rate_limited', fired: true });
     const [, body, rich] = m.alertCritical.mock.calls[0]!;
-    expect(body).toContain('Wysyłka i skrzynka działają');
+    // L1a: 429 zatrzymuje całą firmę (wysyłka, UPO, skrzynka, historia), więc
+    // dawne „Wysyłka i skrzynka działają” wprowadzałoby operatora w błąd.
+    expect(body).not.toContain('Wysyłka i skrzynka działają');
+    expect(body).toContain('Firma z 429 czeka w całości (wysyłka, UPO, skrzynka i historia)');
     expect(rich.fields).toEqual([{ label: 'Firmy z 429 w ostatniej godzinie', value: '3' }]);
   });
 

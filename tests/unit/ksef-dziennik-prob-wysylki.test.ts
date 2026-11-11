@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Sentry from '@sentry/nextjs';
 
 import type { Invoice } from '@/types/invoice';
-import { KsefApiError } from '@/lib/ksef/client';
+import { KsefApiError, KsefRateLimitPausedError } from '@/lib/ksef/client';
 
 /**
  * A5 (plan „zero zgubionych faktur”, brief centrum dowodzenia §5): każde
@@ -358,6 +358,38 @@ describe('A5: oczekiwanie i odporność', () => {
     expect(rows()).toHaveLength(1);
     expect(rows()[0]).toMatchObject({ status: 'failed', stage: 'claim', retryable: true });
     expect(rows()[0]!.error_code).toEqual(expect.any(String));
+  });
+
+  // L1a: pauza firmy po 429 nie korzysta z budżetu odczekań (`__waits`), więc
+  // także przy wyczerpanym budżecie jest oczekiwaniem, nie porażką z kodem.
+  it('pauza po 429 przy wyczerpanym limicie odczekań: waiting bez kodu, HTTP 429 z odpowiedzi KSeF', async () => {
+    mocks.fullFlow.mockRejectedValue(new KsefApiError(429, '{}', 'KSeF API POST /sessions/online failed: 429', 30_000));
+
+    await run([job(JOB_1, 0, { __waits: MAX_WAIT_RETRIES })] as never);
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({
+      status: 'waiting', stage: 'ksef', error_code: null, error_class: null, ksef_http_status: 429, retryable: true,
+    });
+    // Ponowienie bez zużycia próby i odczekań, z początkiem łańcucha pauz.
+    expect(mocks.bossSend).toHaveBeenCalledOnce();
+    expect(mocks.bossSend.mock.calls[0]![1]).toMatchObject({ __attempt: 0, __waits: MAX_WAIT_RETRIES, __pauseSince: expect.any(Number) });
+    expect(mocks.invoice.ksef_status).toBe('queued');
+
+    // Następne zadanie tej firmy: czeka w kroku pauzy, przed przejęciem — bez HTTP.
+    await run([job(JOB_2)] as never);
+    expect(rows()[1]).toMatchObject({ status: 'waiting', stage: 'pause', error_code: null, ksef_http_status: null });
+    expect(mocks.fullFlow).toHaveBeenCalledOnce();
+  });
+
+  it('lokalna pauza firmy (żądanie nie wyszło): waiting, bez HTTP 429 i bez etapu „odpowiedź KSeF”', async () => {
+    mocks.fullFlow.mockRejectedValue(new KsefRateLimitPausedError('POST', '/sessions/online', 20_000));
+
+    await run([job(JOB_1)] as never);
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ status: 'waiting', stage: 'submit', error_code: null, ksef_http_status: null, ksef_code: null });
+    expect(mocks.bossSend).toHaveBeenCalledOnce();
   });
 
   it('zawieszony zapis dziennika (blokada tabeli) nie zatrzymuje wysyłki — przerwanie po limicie czasu', async () => {

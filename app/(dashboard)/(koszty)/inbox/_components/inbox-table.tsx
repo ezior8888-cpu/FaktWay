@@ -66,6 +66,18 @@ function StatusBadge({ status, history = false }: { status: InboxStatus | null; 
   return <Badge className={STATUS_STYLES[status]}>{INBOX_STATUS_LABELS[status]}</Badge>;
 }
 
+/** Krok 1.3 (00175): faktura do paragonu może dublować paragon z NIP w kosztach. */
+export const RECEIPT_DOUBLE_COST_NOTE = 'Możliwy podwójny koszt';
+
+function ReceiptMatchNote({ row }: { row: Pick<InboxRow, 'receiptMatch'> }) {
+  if (row.receiptMatch !== 'candidates') return null;
+  return (
+    <span className="text-xs text-amber-700 dark:text-amber-400" title="Paragon z NIP w kosztach może dotyczyć tej faktury. Decyzja na stronie wydatku.">
+      {RECEIPT_DOUBLE_COST_NOTE}
+    </span>
+  );
+}
+
 function RowAction({ row }: { row: InboxRow }) {
   if (!row.expenseId) {
     return (
@@ -159,7 +171,12 @@ export const inboxColumns: ColumnDef<InboxRow>[] = [
     id: 'status',
     accessorFn: statusValue,
     filterFn: 'equalsString',
-    cell: ({ row }) => <StatusBadge status={row.original.status} history={isHistoryArchive(row.original)} />,
+    cell: ({ row }) => (
+      <div className="flex flex-col items-start gap-1">
+        <StatusBadge status={row.original.status} history={isHistoryArchive(row.original)} />
+        <ReceiptMatchNote row={row.original} />
+      </div>
+    ),
     size: 100,
     meta: {
       filterVariant: 'select',
@@ -236,6 +253,7 @@ function InboxCard({ row, statusUnavailable }: { row: InboxRow; statusUnavailabl
           <span className="tabular-nums">wyst. {plDate(row.issueDate)}</span>
           {row.number ? <span className="font-mono">{row.number}</span> : null}
           {statusUnavailable ? null : <StatusBadge status={row.status} history={isHistoryArchive(row)} />}
+          {statusUnavailable ? null : <ReceiptMatchNote row={row} />}
         </div>
         <p className="text-muted-foreground mt-1 truncate font-mono text-xs">{row.ksefNumber ?? '—'}</p>
       </div>

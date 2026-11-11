@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   useSyncExternalStore,
@@ -103,11 +104,25 @@ export function SupportWidget({
   // Osobno od oceny: akcja czeka na zapis i alerty, a klient ma widzieć, że prośba idzie.
   const [escalating, startEscalation] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // A-10: fokus przechodzi do pola po otwarciu i wraca do bąbelka po zamknięciu.
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const bubbleRef = useRef<HTMLButtonElement>(null);
+  const bylOtwarty = useRef(false);
+  const titleId = useId();
   const pathname = usePathname();
   // false na serwerze i przy hydratacji, true w przeglądarce: to samo co dawny
   // setState w useLayoutEffect, bez dodatkowego renderu z efektu.
   const portalReady = useSyncExternalStore(subscribeNothing, () => true, () => false);
   const kontener = usePortalContainer();
+
+  useEffect(() => {
+    if (open) {
+      inputRef.current?.focus();
+    } else if (bylOtwarty.current) {
+      bubbleRef.current?.focus();
+    }
+    bylOtwarty.current = open;
+  }, [open]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -206,8 +221,10 @@ export function SupportWidget({
       {!open && (
         <button
           type="button"
+          ref={bubbleRef}
           onClick={() => setOpen(true)}
           aria-label="Otwórz pomoc"
+          aria-expanded={false}
           /* Warstwa 45: nad treścią i nad dolną nawigacją (40), ale POD
              arkuszami i oknami dialogowymi (50). Przy z-70 bąbelek
              pływał nad otwartym arkuszem „Więcej" i zasłaniał w nim
@@ -225,12 +242,19 @@ export function SupportWidget({
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-[calc(1.25rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-5 z-[45] flex h-[600px] max-h-[calc(100dvh-2.5rem-var(--ff-bottom-nav-h)-var(--ff-safe-b))] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-2xl backdrop-blur-glass-lg">
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby={titleId}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false);
+          }}
+          className="fixed bottom-[calc(1.25rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-5 z-[45] flex h-[600px] max-h-[calc(100dvh-2.5rem-var(--ff-bottom-nav-h)-var(--ff-safe-b))] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-glass-border bg-glass-white shadow-2xl backdrop-blur-glass-lg">
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-glass-border px-4 py-3">
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-muted-foreground" />
-              <span className="font-medium">Pomoc FaktWay</span>
+              <span id={titleId} className="font-medium">Pomoc FaktWay</span>
               {/* Art. 50 ust. 1 AI Act (od 2.08.2026): rozmówca ma wiedzieć,
                   że pisze z systemem AI — widoczne przez całą rozmowę. */}
               <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -250,6 +274,8 @@ export function SupportWidget({
           {/* Body */}
           <div
             ref={scrollRef}
+            aria-live="polite"
+            aria-busy={isStreaming}
             className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
           >
             {messages.length === 0 ? (
@@ -303,6 +329,8 @@ export function SupportWidget({
             }}
           >
             <textarea
+              ref={inputRef}
+              aria-label="Wiadomość do pomocy"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {

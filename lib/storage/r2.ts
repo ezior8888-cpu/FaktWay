@@ -12,7 +12,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'node:crypto';
 
 import { getR2Client, getR2Config } from './r2-client';
-import { assertTenantStoragePath } from './tenant-path';
+import { assertTenantStoragePath, isDocumentArchiveFileKey } from './tenant-path';
 import { XmlArchiveConflictError } from './xml-archive-conflict';
 
 /**
@@ -323,6 +323,8 @@ export async function uploadToR2IfAbsent(
   key: string,
   body: Buffer,
   contentType: string,
+  /** Metadane obiektu (`x-amz-meta-*`), np. liczby ze spisu archiwum. */
+  metadata?: Record<string, string>,
 ): Promise<boolean> {
   const { bucketName } = getR2Config();
   const client = getR2Client();
@@ -335,6 +337,7 @@ export async function uploadToR2IfAbsent(
         Body: body,
         ContentType: contentType,
         IfNoneMatch: '*',
+        ...(metadata ? { Metadata: metadata } : {}),
       }),
     );
     return true;
@@ -441,6 +444,51 @@ export async function invoiceXmlExists(storagePath: string): Promise<boolean> {
 export const r2ObjectExists = invoiceXmlExists;
 
 /**
+ * HEAD obiektu firmy: rozmiar i metadane zapisane przy `uploadToR2IfAbsent`.
+ * `null`, gdy obiektu nie ma; inny błąd rzuca (ponowienie zadania).
+ */
+export async function statR2Object(
+  key: string,
+  tenantId: string,
+): Promise<{ sizeBytes: number; metadata: Record<string, string> } | null> {
+  assertTenantStoragePath(key, tenantId);
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+  try {
+    const head = await client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+    return { sizeBytes: head.ContentLength ?? 0, metadata: head.Metadata ?? {} };
+  } catch (error) {
+    const name = (error as { name?: string }).name;
+    if (error instanceof NoSuchKey || name === 'NotFound') return null;
+    throw error;
+  }
+}
+
+/**
+ * Usuwa plik paczki archiwum dokumentów (krok 6.4, część 2) i nic innego:
+ * jeden obiekt o kluczu z wiersza `document_archives`, tylko w katalogu tego
+ * zlecenia (`isDocumentArchiveFileKey`). Bez usuwania po prefiksie i bez
+ * listowania katalogu firmy. Brak obiektu to sukces (ponowienie po udanym
+ * usunięciu); inny błąd rzuca, a zadanie się ponowi.
+ */
+export async function deleteDocumentArchiveFile(key: string, tenantId: string, archiveId: string): Promise<void> {
+  if (!isDocumentArchiveFileKey(key, tenantId, archiveId)) {
+    // Celowo bez klucza i identyfikatorów w treści (jak assertTenantStoragePath).
+    throw new Error('Storage key is not a file of this document archive');
+  }
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
+  } catch (error) {
+    // S3 i MinIO odpowiadają 204 także bez obiektu; inne zgodne magazyny bywają ostrzejsze.
+    const name = (error as { name?: string }).name;
+    if (error instanceof NoSuchKey || name === 'NoSuchKey' || name === 'NotFound') return;
+    throw error;
+  }
+}
+
+/**
  * Wszystkie pliki prób wysyłki faktury (folder `invoiceXmlAttemptPrefix`) —
  * retencja usuwa je razem z fakturą (D5: stare próby czyści retencja).
  * Rzuca przy błędzie listowania: „nie wiem, jakie pliki” ≠ „nie ma plików”.
@@ -467,6 +515,14 @@ export async function listInvoiceAttemptXmls(
   return keys;
 }
 
+/** Pobranie przez podpisany adres jako plik (strona faktury dla nabywcy, krok 2.10). */
+export interface SignedDownloadOptions {
+  /** Nazwa w `Content-Disposition: attachment`; znaki spoza ASCII i cudzysłowy zamieniamy na „_”. */
+  downloadFilename?: string;
+  /** Typ treści odpowiedzi magazynu (np. `application/pdf`), niezależnie od metadanych obiektu. */
+  contentType?: string;
+}
+
 /**
  * Zwraca pre-signed URL do pobrania XML lub UPO - URL ważny `expiresInSeconds`
  * sekund (domyślnie 300). Przekazuj do frontendu jako link do pobrania,
@@ -476,10 +532,14 @@ export async function getSignedInvoiceUrl(
   storagePath: string,
   tenantId: string,
   expiresInSeconds: number = 300,
+  options: SignedDownloadOptions = {},
 ): Promise<string> {
   assertTenantStoragePath(storagePath, tenantId);
   const { bucketName } = getR2Config();
   const client = getR2Client();
+  const filename = options.downloadFilename
+    ?.replace(/[^A-Za-z0-9._-]+/g, '_')
+    .slice(0, 120);
 
   return getSignedUrl(
     client,
@@ -489,6 +549,8 @@ export async function getSignedInvoiceUrl(
       Bucket: bucketName,
       Key: storagePath,
       ResponseCacheControl: 'private, no-store',
+      ...(filename ? { ResponseContentDisposition: `attachment; filename="${filename}"` } : {}),
+      ...(options.contentType ? { ResponseContentType: options.contentType } : {}),
     }),
     { expiresIn: expiresInSeconds },
   );

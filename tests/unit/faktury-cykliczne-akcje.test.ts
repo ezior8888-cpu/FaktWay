@@ -117,6 +117,55 @@ describe('createRecurringInvoiceAction', () => {
     expect(mocks.audit).not.toHaveBeenCalled();
   });
 
+  describe('F12-G1: faktura wystawiona z innej pozycji cyklicznej nie jest wzorem drugiej', () => {
+    const ODMOWA =
+      'Ta faktura powstała z pozycji cyklicznej „Abonament Klient”. Nowa pozycja z tym wzorem wystawiałaby drugą fakturę w każdym okresie. Zmień ustawienia istniejącej pozycji na liście faktur cyklicznych.';
+    const SRC = '3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c99';
+    const Y = TPL_2;
+
+    beforeEach(() => {
+      // A (aktywna) ma własny wzór TPL; faktura Y powstała z A.
+      db.tables.invoices = [wzor(), wzor({ id: Y, internal_number: 'FV/8/10/2026', recurring_invoice_id: POS, recurring_period: '2026-10' })];
+      db.tables.recurring_invoices = [pozycja({ name: 'Abonament Klient' })];
+    });
+
+    it('odmawia z nazwą pozycji A i nie zapisuje (aktywna)', async () => {
+      await expect(createRecurringInvoiceAction({ ...dane, templateInvoiceId: Y })).resolves.toEqual({ success: false, error: ODMOWA });
+      expect(db.tables.recurring_invoices).toHaveLength(1);
+      expect(mocks.audit).not.toHaveBeenCalled();
+    });
+
+    it('odmawia także, gdy A jest wstrzymana (może wrócić)', async () => {
+      db.tables.recurring_invoices = [pozycja({ name: 'Abonament Klient', active: false })];
+      await expect(createRecurringInvoiceAction({ ...dane, templateInvoiceId: Y })).resolves.toEqual({ success: false, error: ODMOWA });
+      expect(db.tables.recurring_invoices).toHaveLength(1);
+    });
+
+    it('pozycja A usunięta (SET NULL zerował wskaźnik) → zapis jak dziś', async () => {
+      db.tables.invoices = [wzor(), wzor({ id: Y, internal_number: 'FV/8/10/2026', recurring_invoice_id: null, recurring_period: '2026-10' })];
+      db.tables.recurring_invoices = [];
+      const r = await createRecurringInvoiceAction({ ...dane, templateInvoiceId: Y });
+      expect(r).toMatchObject({ success: true, recurringInvoice: { template_invoice_id: Y } });
+    });
+
+    it('wskaźnik na pozycję, której nie ma w tej firmie → zapis jak dziś', async () => {
+      db.tables.invoices = [wzor({ id: Y, recurring_invoice_id: SRC })];
+      db.tables.recurring_invoices = [];
+      const r = await createRecurringInvoiceAction({ ...dane, templateInvoiceId: Y });
+      expect(r.success).toBe(true);
+    });
+
+    it('edycja: zmiana wzoru na fakturę z innej pozycji odmawia, a z własnej pozycji przechodzi', async () => {
+      db.tables.recurring_invoices = [
+        pozycja({ name: 'Abonament Klient' }),
+        pozycja({ id: SRC, template_invoice_id: '7f1c2d3e-4b5a-4c6d-8e7f-901234567899', name: 'Druga' }),
+      ];
+      await expect(updateRecurringInvoiceAction(SRC, { ...dane, templateInvoiceId: Y })).resolves.toEqual({ success: false, error: ODMOWA });
+      const own = await updateRecurringInvoiceAction(POS, { ...dane, templateInvoiceId: Y });
+      expect(own.success).toBe(true);
+    });
+  });
+
   it('wyścig dwóch arkuszy: indeks unikalny wzoru (23505) → ten sam komunikat (K2)', async () => {
     db.failures['recurring_invoices:insert'] = {
       code: '23505',
@@ -241,7 +290,7 @@ describe('updateRecurringInvoiceAction', () => {
 });
 
 describe('wstrzymanie i wznowienie', () => {
-  it('wstrzymanie zostawia datę; wznowienie po miesiącach zostawia ostatni czekający okres', async () => {
+  it('wstrzymanie zostawia datę; wznowienie po miesiącach zostawia pierwszy trwający okres', async () => {
     db.tables.recurring_invoices = [pozycja({ next_run_date: '2026-03-10' })];
     const p = await pauseRecurringInvoiceAction(POS);
     expect(p).toMatchObject({ success: true, recurringInvoice: { active: false, next_run_date: '2026-03-10' } });
@@ -250,6 +299,13 @@ describe('wstrzymanie i wznowienie', () => {
     const w = await resumeRecurringInvoiceAction(POS);
     expect(w).toMatchObject({ success: true, recurringInvoice: { active: true, next_run_date: '2026-10-10' } });
     expect(mocks.audit).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'recurring_invoice.resumed' }));
+  });
+
+  it('F12-G2: wznowienie 03.09 po pauzie od czerwca daje wrzesień, nie sierpień', async () => {
+    vi.setSystemTime(new Date('2026-09-03T08:00:00Z'));
+    db.tables.recurring_invoices = [pozycja({ active: false, next_run_date: '2026-06-10', day_of_month: 10 })];
+    const w = await resumeRecurringInvoiceAction(POS);
+    expect(w).toMatchObject({ success: true, recurringInvoice: { active: true, next_run_date: '2026-09-10' } });
   });
 
   it('wznowienie aktywnej — bez zmian i bez wpisu audytu', async () => {

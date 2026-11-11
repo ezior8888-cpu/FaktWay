@@ -32,9 +32,11 @@ export const TRIAL_DAYS = 30;
 
 /** „29,99 zł” — zwykła spacja przed „zł”, bez separatora tysięcy (ceny < 1000 zł). */
 export function formatPln(grosze: number): string {
-  const zl = Math.trunc(grosze / 100);
-  const gr = Math.abs(grosze % 100).toString().padStart(2, '0');
-  return `${zl},${gr} zł`;
+  // Znak osobno: dla -0,50 zł Math.trunc daje -0, a „-0” w napisie to „0” (S-15).
+  const znak = grosze < 0 ? '-' : '';
+  const zl = Math.trunc(Math.abs(grosze) / 100);
+  const gr = (Math.abs(grosze) % 100).toString().padStart(2, '0');
+  return `${znak}${zl},${gr} zł`;
 }
 
 /** „29,99 zł” */

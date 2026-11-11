@@ -24,6 +24,8 @@ export interface RecurringVisibilityRow {
   invoice_type?: string | null;
   ksef_status?: string | null;
   currency?: string | null;
+  /** Pozycja cykliczna, z której wystawiono fakturę (F12-G1); brak pola = nie wiadomo, nie blokuje. */
+  recurring_invoice_id?: string | null;
 }
 
 /** „Duplikuj”: zwykła faktura sprzedaży wystawiona w FaktWay. */
@@ -33,6 +35,10 @@ export function canDuplicateInvoice(row: RecurringVisibilityRow): boolean {
 
 /** „Ustaw jako cykliczną”: faktura spełnia warunki wzoru N1; brak waluty w wierszu to brak dowodu, że jest w PLN. */
 export function canSetAsRecurring(row: RecurringVisibilityRow): boolean {
+  // F12-G1: faktura z pozycji cyklicznej nie staje się wzorem drugiej (druga faktura w okresie).
+  // Wiersz nie mówi, czy tamta pozycja jeszcze istnieje, więc ukrywamy przy każdym wskaźniku;
+  // dokładną kontrolę robi akcja tworzenia.
+  if (row.recurring_invoice_id) return false;
   return (
     templateRejection({
       direction: row.direction ?? 'outgoing',

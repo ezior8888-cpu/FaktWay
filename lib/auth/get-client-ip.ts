@@ -1,5 +1,7 @@
 import { headers } from 'next/headers';
 
+import { clientIpFromHeaders } from './client-ip';
+
 /**
  * IP klienta do limitów prób (AUD-62).
  *
@@ -7,19 +9,11 @@ import { headers } from 'next/headers';
  * konfiguracji nadpisuje nagłówki przysłane przez klienta), potem OSTATNI
  * wpis `X-Forwarded-For` — dopisany przez nasze proxy. Pierwszy wpis może
  * podać sam klient, więc klucz limitu dałby się podmieniać przy każdym
- * żądaniu.
+ * żądaniu. Tę samą kolejność bierze audyt (`lib/auth/client-ip.ts`).
  *
  * Zwraca 'unknown' lokalnie — wtedy rate limiting per-IP staje się
  * globalny (wszyscy w dev mają wspólny bucket), co jest OK do testów.
  */
 export async function getClientIp(): Promise<string> {
-  const headersList = await headers();
-  const realIp = headersList.get('x-real-ip')?.trim();
-  if (realIp) return realIp;
-  const forwarded = headersList.get('x-forwarded-for');
-  if (forwarded) {
-    const last = forwarded.split(',').map((p) => p.trim()).filter(Boolean).pop();
-    if (last) return last;
-  }
-  return 'unknown';
+  return clientIpFromHeaders(await headers()) ?? 'unknown';
 }

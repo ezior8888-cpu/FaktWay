@@ -155,10 +155,6 @@
     "myslniki": 2,
     "plakietki": 0
   },
-  "components/dashboard/notification-dropdown.tsx": {
-    "myslniki": 1,
-    "plakietki": 0
-  },
   "components/dashboard/pulpit/recent-invoices-card.tsx": {
     "myslniki": 3,
     "plakietki": 0
@@ -639,8 +635,12 @@
     "myslniki": 6,
     "plakietki": 0
   },
-  "lib/ksef/duplicate-decision.ts": {
-    "myslniki": 100,
+  "lib/ksef/duplicate-decision-sql-texts.ts": {
+    "myslniki": 27,
+    "plakietki": 0
+  },
+  "lib/ksef/duplicate-decision-texts.ts": {
+    "myslniki": 73,
     "plakietki": 0
   },
   "lib/ksef/duplicate-verdict.ts": {
@@ -772,10 +772,6 @@
     "plakietki": 0
   },
   "lib/support/support-actions.ts": {
-    "myslniki": 1,
-    "plakietki": 0
-  },
-  "lib/validation/whitelist-client.ts": {
     "myslniki": 1,
     "plakietki": 0
   },

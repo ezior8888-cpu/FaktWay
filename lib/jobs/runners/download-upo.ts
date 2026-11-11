@@ -1,5 +1,5 @@
 import type { Json } from '@/types/database';
-import { NonRetriableError } from '../errors';
+import { NonRetriableError, type RetryAfterError } from '../errors';
 import type { JobContext } from '@/lib/jobs/registry';
 
 import { logAuditSystem } from '@/lib/audit/log-system';
@@ -9,6 +9,7 @@ import { generateUpoPdf } from '@/lib/ksef/upo-pdf-generator';
 import { uploadUpoPdf, uploadUpoXml } from '@/lib/ksef/upo-storage';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { KSEF_PAUSE_DEFAULT_MS, ksefPausedUntil, ksefPauseRetryError } from '@/lib/ksef/rate-limit-pause';
 
 import { invoiceUpoRequested } from '../events';
 import { assertUpoReceipt, readUpoReceipt, requireAcceptedUpoInvoice, requireUpoBoundary } from './upo-identity';
@@ -21,6 +22,22 @@ function stringFromBuyerData(buyerData: Json | null): string {
   }
   const n = (buyerData as BuyerBlob).name;
   return typeof n === 'string' ? n : '';
+}
+
+/**
+ * Kod wyniku klienta UPO „firma w pauzie po 429” (`lib/ksef/upo-client.ts`).
+ * Napis, nie import: testy granic zastępują cały moduł klienta atrapą.
+ */
+const KSEF_RATE_LIMIT_PAUSE = 'KSEF_RATE_LIMIT_PAUSE';
+
+/** Błąd ponowienia na czas pauzy firmy (L1a): bez zużycia próby, rozrzut po fakturze. */
+function upoPauseError(invoiceId: string, remainingMs: number): RetryAfterError {
+  return ksefPauseRetryError(
+    `${KSEF_RATE_LIMIT_PAUSE}: UPO faktury ${invoiceId} czeka na koniec pauzy firmy po 429 z KSeF ` +
+      `(jeszcze ${Math.ceil(Math.max(0, remainingMs) / 1000)} s)`,
+    remainingMs,
+    invoiceId,
+  );
 }
 
 /**
@@ -45,6 +62,17 @@ export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested
   const existingUpo = await readUpoReceipt(identity);
   if (existingUpo?.status === 'downloaded') {
     return { skipped: true, reason: 'UPO already downloaded' };
+  }
+
+  // L1a: firma w pauzie po 429 z KSeF — czekamy do końca pauzy, zanim
+  // cokolwiek zapiszemy (bez `pending`/`failed` i bez `download_attempts`)
+  // i zanim zapytamy KSeF. Po każdym powrocie ten odczyt idzie od nowa.
+  // NIP ze zdarzenia (klucz grupy kolejki); klient UPO sprawdza jeszcze NIP
+  // z poświadczeń firmy.
+  const pausedUntil = data.nip ? await ksefPausedUntil(data.environment, data.nip) : null;
+  if (pausedUntil !== null) {
+    logger.info('UPO czeka na koniec pauzy firmy po 429', { invoiceId, tenantId, code: KSEF_RATE_LIMIT_PAUSE });
+    throw upoPauseError(invoiceId, pausedUntil - Date.now());
   }
 
   const upoRecord = await step.run('upsert-upo-record', async () => {
@@ -85,6 +113,12 @@ export async function runDownloadUpo(data: Parameters<typeof invoiceUpoRequested
     return downloadUpoFromKsef(tenantId, ksefNumber, { invoiceId, sessionReferenceNumber });
   });
   if (!downloadResult.success) {
+    // L1a: klient UPO nie zapytał KSeF, bo firma jest w pauzie (NIP
+    // z poświadczeń, pauza mogła się zacząć po odczycie wyżej). To czekanie,
+    // nie porażka: bez `failed` i bez kolejnej próby w `download_attempts`.
+    if (downloadResult.errorCode === KSEF_RATE_LIMIT_PAUSE) {
+      throw upoPauseError(invoiceId, downloadResult.retryAfterMs ?? KSEF_PAUSE_DEFAULT_MS);
+    }
     await step.run('mark-failed', async () => {
       const { receipt } = await requireUpoBoundary(identity, upoRecord.id);
       const { data: updated, error } = await createAdminClient().from('upo_receipts')

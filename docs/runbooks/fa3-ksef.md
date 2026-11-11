@@ -50,7 +50,7 @@ z zakładki Actions) uruchamia `scripts/ci/czujka-schematu-fa3.mjs`:
   `lib/xml/schemas/fa3/`. Normalizacja: końce linii i `schemaLocation`
   z pełnym adresem MF zamienione na samą nazwę pliku. Łapie poprawki MF
   wprowadzone w miejscu.
-- **`CIRFMF/ksef-docs`** (`faktury/schemy/FA`): nowy plik (np. nowa wersja
+- **`CIRFMF/ksef-api`** (dawniej `ksef-docs`; `faktury/schemy/FA`): nowy plik (np. nowa wersja
   FA), zmieniony albo usunięty względem listy `ZNANE_W_DOCS` w skrypcie.
   Zmiany FA(2) są pomijane.
 
@@ -62,7 +62,7 @@ i dodaje komentarz. MF niedostępny: ostrzeżenie w logu przebiegu, bez issue.
 Co zrobić z issue:
 
 1. Przeczytaj komunikat MF (podatki.gov.pl/ksef, `api-changelog.md`
-   w `ksef-docs`): poprawka w miejscu czy nowa wersja z datą obowiązywania.
+   w `ksef-api`): poprawka w miejscu czy nowa wersja z datą obowiązywania.
 2. Pobierz nowe pliki do `lib/xml/schemas/fa3/`. `schemat.xsd` zostaje jak
    z MF; `schemat-local.xsd` (używa go walidator) to ta sama treść
    z `schemaLocation="StrukturyDanych_v10-0E.xsd"`, a pliki bazowe
@@ -73,7 +73,7 @@ Co zrobić z issue:
    `docs/fa3-schema-analysis.md`. Termin wejścia ustala Bartosz.
 4. `pnpm verify:fa3`, `pnpm test`, pełny `pnpm vitest run`.
 5. W tym samym PR zaktualizuj `ZNANE_W_DOCS` (skróty blobów:
-   `gh api repos/CIRFMF/ksef-docs/contents/faktury/schemy/FA -q '.[] | .path+" "+.sha'`).
+   `gh api repos/CIRFMF/ksef-api/contents/faktury/schemy/FA -q '.[] | .path+" "+.sha'`).
    Ręczny przebieg czujki po scaleniu ma dać „zgodny z repo”.
 
 Zamknięcie issue bez zmiany repo wycisza tę wersję MF.

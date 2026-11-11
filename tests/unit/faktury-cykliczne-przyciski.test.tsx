@@ -129,6 +129,9 @@ describe('widoczność przycisków (warunki wzoru N1)', () => {
     // Brak waluty albo pochodzenia w wierszu to brak dowodu — przycisk ukryty.
     expect(canSetAsRecurring({ ...WZOR, currency: null })).toBe(false);
     expect(canSetAsRecurring({ ...WZOR, origin: undefined })).toBe(false);
+    // F12-G1: faktura wystawiona z pozycji cyklicznej nie jest wzorem drugiej pozycji.
+    expect(canSetAsRecurring({ ...WZOR, recurring_invoice_id: ID })).toBe(false);
+    expect(canSetAsRecurring({ ...WZOR, recurring_invoice_id: null })).toBe(true);
   });
 
   it('„Duplikuj” dla zwykłej faktury z FaktWay (także szkicu i odrzuconej), nie dla korekty, zaliczki, końcowej ani importu', () => {

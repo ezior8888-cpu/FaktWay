@@ -24,6 +24,7 @@ import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices
 import type { createAdminClient } from '@/lib/supabase/admin';
 
 import { vatMiesiaca, type VatMiesiaca } from './vat';
+import { czytajWpisyKpir, czytajWpisyReczne, NAZWY_RODZAJOW_WPISU, type RodzajWpisu } from './wpisy-reczne';
 import { srodowiskoMf } from './wysylka-jpk/certyfikaty';
 import { czytajWysylki, nadwyzkaPrzyjetej, type Wysylka } from './wysylka-jpk/zapis';
 
@@ -65,8 +66,9 @@ export async function czytajVat(
   let dane: FetchedInvoiceData;
   let wysylki: Wysylka[];
   let zatwierdzone: NadwyzkiZatwierdzone;
+  let przychodyReczne: PrzychodReczny[];
   try {
-    [zwolnienie, dane, wysylki, zatwierdzone] = await Promise.all([
+    [zwolnienie, dane, wysylki, zatwierdzone, przychodyReczne] = await Promise.all([
       readTenantVatExemption(client, tenantId),
       fetchInvoicesForExport(
         {
@@ -81,6 +83,7 @@ export async function czytajVat(
       ),
       czytajWysylki(client, tenantId, [`${miesiac}-01`, `${poprzedni}-01`]),
       nadwyzkiZatwierdzone(client, tenantId, poprzedni, miesiac),
+      czytajPrzychodyReczne(client, tenantId, from, to),
     ]);
   } catch (e) {
     Sentry.captureException(e, { tags: { area: 'ksiegowosc.vat' }, extra: { tenantId, miesiac } });
@@ -88,6 +91,11 @@ export async function czytajVat(
   }
   if (isSubjectiveVatExemption(zwolnienie)) {
     return { ok: false, komunikat: 'Firma korzysta ze zwolnienia z VAT (art. 113), więc nie składa JPK_V7M.', zwolniona: true };
+  }
+  // F11-A1: sprzedaż z wpisów ręcznych (raport z kasy, inny dowód) nie ma
+  // stawki VAT, a JPK_V7M jej nie wykazuje, więc kwoty VAT byłyby zaniżone.
+  if (przychodyReczne.length > 0) {
+    return { ok: false, komunikat: komunikatPrzychodowRecznych(miesiac, przychodyReczne) };
   }
 
   const srodowisko = srodowiskoMf();
@@ -162,3 +170,44 @@ export function brakNadwyzki(miesiac: string): string {
     '(pole P_62 tamtej deklaracji, także 0 zł).'
   );
 }
+
+interface PrzychodReczny {
+  rodzaj: RodzajWpisu;
+  dokument: string;
+}
+
+/**
+ * Wpisy ręczne przychodu z dniem w [od, do]: ewidencja ryczałtu (wpisy ze
+ * stawką) i KPiR (kolumny 7 i 8). Koszty z wpisów KPiR nie zaniżają podatku
+ * należnego, więc tu ich nie ma. Brak tabeli albo kolumny przed migracjami
+ * 00167 i 00171 to brak wpisów (tak czytają `czytajWpisy*`); inny błąd rzuca.
+ */
+async function czytajPrzychodyReczne(client: SupabaseClient, tenantId: string, od: string, doDnia: string): Promise<PrzychodReczny[]> {
+  const [ewidencja, kpir] = await Promise.all([
+    czytajWpisyReczne(client, tenantId, od, doDnia),
+    czytajWpisyKpir(client, tenantId, od, doDnia),
+  ]);
+  return [
+    ...ewidencja.map((w) => ({ rodzaj: w.rodzaj, dokument: w.dokument })),
+    ...kpir.filter((w) => w.kolumna === 'k7' || w.kolumna === 'k8').map((w) => ({ rodzaj: w.rodzaj, dokument: w.dokument })),
+  ];
+}
+
+/**
+ * Brak VAT przy wpisach ręcznych przychodu (F11-A1): nazwy pierwszych trzech
+ * wpisów i co zrobić. Takiej sprzedaży FaktWay nie wykazuje w JPK_V7M, a bez
+ * niej podatek należny byłby zaniżony.
+ */
+export function komunikatPrzychodowRecznych(miesiac: string, wpisy: readonly PrzychodReczny[]): string {
+  const lista = wpisy
+    .slice(0, 3)
+    .map((w) => `„${NAZWY_RODZAJOW_WPISU[w.rodzaj]} ${w.dokument}”`)
+    .join(', ');
+  const reszta = wpisy.length > 3 ? ` i ${wpisy.length - 3} kolejne` : '';
+  return (
+    `W ewidencji za ${monthLabel(miesiac)} są wpisy ręczne przychodu: ${lista}${reszta}. ` +
+    'Sprzedaży spoza faktur (np. z kasy rejestrującej) FaktWay nie wykazuje w JPK_V7M, więc nie pokazujemy kwot VAT, żeby nie zaniżyć podatku należnego. ' +
+    'JPK_V7M za ten miesiąc przygotuj poza FaktWay, np. z księgową. Jeśli wpis nie jest sprzedażą opodatkowaną VAT, napisz do nas.'
+  );
+}
+

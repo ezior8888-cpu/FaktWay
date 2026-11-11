@@ -8,6 +8,7 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { specialDataInsertError } from '@/lib/invoices/special-data';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
@@ -124,6 +125,7 @@ function buildAdvanceEnvelope(parsed: AdvanceInvoiceSchemaIn, cashMethod: boolea
     advanceAmount: parsed.advanceAmount,
     totalContractAmount: parsed.totalContractAmount,
     expectedDeliveryDate: parsed.expectedDeliveryDate,
+    advanceReceivedDate: parsed.advanceReceivedDate || undefined,
     vatRate: parsed.vatRate,
     description: parsed.description,
   };
@@ -153,6 +155,8 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
     internalNumber: envelope.internalNumber,
     type: 'ZAL',
     issueDate: envelope.issueDate,
+    // F12-D1: P_6 zaliczki to data otrzymania zapłaty (PDF i eksport z `sale_date`).
+    saleDate: envelope.advanceReceivedDate,
     seller,
     buyer,
     lines: [line],
@@ -188,6 +192,7 @@ async function insertAdvanceDraft(
       invoice_kind: 'advance',
       invoice_type: 'ZAL',
       issue_date: ghost.issueDate,
+      sale_date: envelope.advanceReceivedDate ?? null,
       seller_nip: ghost.seller.nip,
       buyer_nip: ghost.buyer.nip ?? null,
       seller_data: ghost.seller,
@@ -206,7 +211,11 @@ async function insertAdvanceDraft(
     .single();
 
   if (invErr || !inserted) {
-    return { success: false, error: invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej' };
+    return {
+      success: false,
+      error: specialDataInsertError(invErr, `zaliczki ${ghost.internalNumber}`)
+        ?? invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej',
+    };
   }
 
   const invoiceId = inserted.id as string;

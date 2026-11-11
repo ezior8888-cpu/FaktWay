@@ -148,7 +148,8 @@ jobs:
           # Ten sam pułap sterty co build produkcyjny (Dockerfile). Z domyślną
           # stertą runnera (~4 GB) CI przechodziło, a build na app-1 padał
           # z „heap out of memory” (20.10.2026). Strażnik: tests/unit/build-pamiec-sterty.test.ts.
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          # 11.11.2026: 5120 MB, gałąź zbiorcza z 30 PR przekracza 4096 MB.
+          NODE_OPTIONS: '--max-old-space-size=5120'
         # Bez sekretów aplikacji — build ma przechodzić bez nich (jak lokalnie).
       # Plan usprawnień 4.5: Next 16 nie wypisuje już „First Load JS”, więc
       # skrypt liczy go z plików .next (gzip, per trasa) i porównuje z progiem

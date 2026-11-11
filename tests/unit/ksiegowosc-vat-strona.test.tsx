@@ -100,7 +100,7 @@ describe('ekran VAT', () => {
     await expect(strona()).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
-  it('kafle z części deklaracyjnej, termin 25 listopada i mikrorachunek z symbolem VAT-7; plik do pobrania z nadwyżką klienta', async () => {
+  it('kafle z części deklaracyjnej, termin 25 listopada i mikrorachunek z symbolem JPK-V7M; plik do pobrania z nadwyżką klienta', async () => {
     const html = await strona({ month: '10', year: '2026', nadwyzka: '300' });
     expect(mocks.nadwyzkaOdczytu).toBe(300);
     expect(html).toContain('Podatek należny (P_38)');
@@ -109,7 +109,7 @@ describe('ekran VAT', () => {
     expect(html).toContain('Do wpłaty (P_51)');
     expect(html).toContain('2000,00 zł');
     expect(html).toContain('do 25.11.2026');
-    expect(html).toContain('symbol formularza VAT-7, okres 26M10, identyfikator NIP 1234563218');
+    expect(html).toContain('symbol formularza JPK-V7M, okres 26M10, identyfikator NIP 1234563218');
     expect(html).toContain('data-pobierz="2026-10:300"');
     expect(html).toContain('data-pole-nadwyzki="300"');
     // Odmiana przez liczebnik (w przeglądarce był „1 faktur” i „1 kosztów”).

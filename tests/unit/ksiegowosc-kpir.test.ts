@@ -87,7 +87,10 @@ describe('KPiR 2026', () => {
     expect(sumyKpir(k.wiersze)).toMatchObject({ przychodGr: 1_000_000, kosztyGr: 70_000, liczbaWierszy: 3 });
   });
 
-  it('korekta w dniu wystawienia, rozliczenie bez zaliczek, faktura do paragonu poza księgą', () => {
+  it('korekta w dniu wystawienia, rozliczenie bez zaliczek, faktura do paragonu poza przychodem z brakiem', () => {
+    // Krok 1.2 planu kompletnej aplikacji (świadoma zmiana testu): FP dalej nie
+    // jest przychodem, ale do reguły pokrycia raportem kasy (następny PR, G30)
+    // daje brak zamiast cichego pominięcia, także gdy w miesiącu jest wpis raportu.
     const k = zbudujKpir(
       wejscie({
         faktury: [
@@ -95,13 +98,16 @@ describe('KPiR 2026', () => {
           faktura('2026-04-20', 300_000, { rodzaj: 'rozliczenie', rozliczoneZaliczkiGr: 100_000, numer: 'ROZ/1' }),
           faktura('2026-04-21', 50_000, { fp: true, numer: 'FP/1' }),
         ],
+        wpisy: [{ id: 'rk-4', data: '2026-04-30', dokument: 'RK/04/2026', kolumna: 'k7', kwotaGr: 80_000, opis: null }],
       }),
     );
     expect(k.wiersze.map((w) => [w.dowod, w.data, w.kwoty.k7, w.uwagi])).toEqual([
       ['KOR/1', '2026-04-15', -20_000, 'Korekta (różnica)'],
       ['ROZ/1', '2026-04-20', 200_000, 'Rozliczenie, pomniejszone o zaliczki 1000,00 PLN'],
+      ['RK/04/2026', '2026-04-30', 80_000, null],
     ]);
-    expect(k.pominiete).toEqual([expect.objectContaining({ numer: 'FP/1' })]);
+    expect(k.pominiete).toEqual([]);
+    expect(k.braki).toEqual([expect.objectContaining({ dokument: 'FP/1', dzien: '2026-04-21' })]);
   });
 
   it('waluta po kursie NBP, bez kursu brak; dzień z ryczałtem poza KPiR bez braku, dzień bez profilu z brakiem', () => {

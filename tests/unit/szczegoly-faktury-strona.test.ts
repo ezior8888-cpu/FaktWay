@@ -24,6 +24,8 @@ const st = vi.hoisted(() => ({
   notCalls: [] as Array<{ table: string; args: unknown[] }>,
   /** Odpowiedź RPC `invoice_manual_payment` (00158). */
   manualPayment: { data: null as unknown, error: null as { message: string } | null },
+  /** Odpowiedź RPC `invoice_payments` (00176, historia wpłat). */
+  paymentsHistory: { data: [] as unknown, error: null as { message: string } | null },
   rpcCalls: [] as Array<{ fn: string; args: unknown }>,
 }));
 
@@ -44,7 +46,7 @@ vi.mock('@/lib/supabase/server', () => ({
     auth: { getUser: async () => ({ data: { user: { id: st.user } }, error: null }) },
     rpc: async (fn: string, args: unknown) => {
       st.rpcCalls.push({ fn, args });
-      return st.manualPayment;
+      return fn === 'invoice_payments' ? st.paymentsHistory : st.manualPayment;
     },
   }),
 }));
@@ -212,6 +214,7 @@ beforeEach(() => {
   st.notCalls.length = 0;
   st.rpcCalls.length = 0;
   st.manualPayment = { data: null, error: null };
+  st.paymentsHistory = { data: [], error: null };
   vi.stubEnv('KSEF_ENV', 'test');
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
@@ -523,11 +526,13 @@ describe('„Zapłacone”: panel płatności liczony na serwerze', () => {
   }
   const put = (...rows: Row[]) => st.db!.tables.invoices!.push(...rows);
   const panel = async () => (await loadInitial(ID)).payment_panel;
+  /** Historia wpłat (00176) to osobne RPC `invoice_payments`; tu liczy się tylko odczyt wpłaty ręcznej. */
+  const manualCalls = () => st.rpcCalls.filter((call) => call.fn === 'invoice_manual_payment');
 
   it('otwarta faktura: przycisk i dziś w Warszawie jako granica daty', async () => {
     put(faktura());
     expect(await panel()).toEqual({ canMark: true, canUndo: false, paidOn: null, paidOnFromDocument: false, ...PANEL_TODAY });
-    expect(st.rpcCalls).toEqual([]);
+    expect(manualCalls()).toEqual([]);
   });
 
   it('import z pliku i historia KSeF też mają przycisk', async () => {
@@ -539,7 +544,7 @@ describe('„Zapłacone”: panel płatności liczony na serwerze', () => {
     put(faktura({ payment_status: 'paid', paid_amount: 123, paid_at: '2026-09-20T10:00:00Z' }));
     st.manualPayment = { data: { amount: 123, paid_on: '2026-09-20' }, error: null };
     expect(await panel()).toEqual({ canMark: false, canUndo: true, paidOn: '2026-09-20', paidOnFromDocument: false, ...PANEL_TODAY });
-    expect(st.rpcCalls).toEqual([{ fn: 'invoice_manual_payment', args: { p_invoice_id: ID } }]);
+    expect(manualCalls()).toEqual([{ fn: 'invoice_manual_payment', args: { p_invoice_id: ID } }]);
   });
 
   it('zapłacona z banku albo FLO: bez cofnięcia, dzień z `paid_at` w Warszawie', async () => {
@@ -564,7 +569,7 @@ describe('„Zapłacone”: panel płatności liczony na serwerze', () => {
     st.db!.tables.memberships![0]!.role = 'accountant';
     put(faktura({ payment_status: 'paid', paid_amount: 123, paid_at: '2026-09-20T10:00:00Z' }));
     expect(await panel()).toEqual({ canMark: false, canUndo: false, paidOn: '2026-09-20', paidOnFromDocument: false, ...PANEL_TODAY });
-    expect(st.rpcCalls).toEqual([]);
+    expect(manualCalls()).toEqual([]);
 
     st.db!.tables.invoices!.length = 0;
     put(faktura());
@@ -597,6 +602,127 @@ describe('„Zapłacone”: panel płatności liczony na serwerze', () => {
     vi.stubEnv('KSEF_ENV', 'bogus');
     put(faktura());
     expect(await panel()).toBeNull();
+  });
+});
+
+/**
+ * Wpłaty częściowe i historia wpłat (plan kompletnej aplikacji, krok 3.1, 00176):
+ * historię czyta sesja przez RPC `invoice_payments` (`payments` jest zamknięta dla
+ * sesji, 00074), a resztę do zapłaty i stan bierze strona z wiersza faktury.
+ * „Zapisz wpłatę” ma te same warunki co „Zapłacone” plus PLN; błąd odczytu albo
+ * suma historii niezgodna z `paid_amount` zdejmują zapis (fail-closed z komunikatem).
+ */
+describe('Wpłaty: historia liczona na serwerze', () => {
+  const ID = '33333333-3333-4333-8333-333333333371';
+  const P1 = '55555555-5555-4555-8555-555555555571';
+
+  function faktura(patch: Row = {}): Row {
+    return invoiceRow(ID, {
+      ksef_status: 'accepted',
+      ksef_number: '1234567890-20261002-0100A0B0C0D0-1A',
+      ksef_accepted_at: '2026-10-02T09:00:00Z',
+      last_error: null,
+      last_error_code: null,
+      ksef_environment: 'test',
+      currency: 'PLN',
+      origin: 'app',
+      gross_total: 123,
+      paid_amount: 23,
+      paid_at: null,
+      payment_status: 'partial',
+      ...patch,
+    });
+  }
+  const put = (...rows: Row[]) => st.db!.tables.invoices!.push(...rows);
+  const historia = async () => (await loadInitial(ID)).payment_history;
+  const rpcWiersz = (over: Record<string, unknown> = {}) => ({
+    id: P1, amount: 23, paid_on: '2026-10-01', source: 'manual_entry', note: 'zaliczka',
+    recorded_at: '2026-10-01T09:00:00+00:00', voided_at: null, ...over,
+  });
+
+  it('częściowo zapłacona: wiersze z RPC sesją, zapłacono i reszta z faktury, zapis i cofnięcie dla właściciela', async () => {
+    put(faktura());
+    st.paymentsHistory = { data: [rpcWiersz()], error: null };
+
+    expect(await historia()).toEqual({
+      entries: [{
+        id: P1, amount: 23, paidOn: '2026-10-01', source: 'manual_entry', note: 'zaliczka',
+        recordedAt: '2026-10-01T09:00:00+00:00', voidedAt: null,
+      }],
+      status: 'partial',
+      due: 123,
+      paid: 23,
+      remaining: 100,
+      currency: 'PLN',
+      canRecord: true,
+      canVoid: true,
+      today: TODAY,
+      loadError: false,
+      mismatch: false,
+    });
+    expect(st.rpcCalls.filter((call) => call.fn === 'invoice_payments')).toEqual([{ fn: 'invoice_payments', args: { p_invoice_id: ID } }]);
+  });
+
+  it('otwarta bez wpłat: sekcja z „Zapisz wpłatę”', async () => {
+    put(faktura({ paid_amount: 0, payment_status: 'unpaid' }));
+
+    expect(await historia()).toMatchObject({ entries: [], paid: 0, remaining: 123, canRecord: true, loadError: false, mismatch: false });
+  });
+
+  it('cofnięta wpłata zostaje w historii i nie liczy się do sumy', async () => {
+    put(faktura({ paid_amount: 0, payment_status: 'unpaid' }));
+    st.paymentsHistory = { data: [rpcWiersz({ voided_at: '2026-10-02T08:00:00+00:00' })], error: null };
+
+    expect(await historia()).toMatchObject({ entries: [{ id: P1, voidedAt: '2026-10-02T08:00:00+00:00' }], paid: 0, mismatch: false, canRecord: true });
+  });
+
+  it('księgowa: historia do wglądu, bez zapisu i bez cofnięcia', async () => {
+    st.db!.tables.memberships![0]!.role = 'accountant';
+    put(faktura());
+    st.paymentsHistory = { data: [rpcWiersz()], error: null };
+
+    expect(await historia()).toMatchObject({ entries: [{ id: P1 }], canRecord: false, canVoid: false });
+  });
+
+  it('błąd odczytu historii: komunikat zamiast listy, bez zapisu; podgląd faktury działa', async () => {
+    put(faktura());
+    st.paymentsHistory = { data: null, error: { message: 'boom' } };
+
+    const initial = await loadInitial(ID);
+
+    expect(initial.payment_history).toMatchObject({ entries: [], loadError: true, canRecord: false });
+    expect(initial.id).toBe(ID);
+  });
+
+  it('suma niecofniętych wpłat różna od paid_amount: ostrzeżenie i bez zapisu (fail-closed)', async () => {
+    put(faktura({ paid_amount: 50 }));
+    st.paymentsHistory = { data: [rpcWiersz()], error: null };
+
+    expect(await historia()).toMatchObject({ mismatch: true, canRecord: false, canVoid: true });
+  });
+
+  it('faktura w walucie obcej: historia bez zapisu (wpłaty dziś tylko w PLN)', async () => {
+    put(faktura({ currency: 'EUR' }));
+    st.paymentsHistory = { data: [rpcWiersz()], error: null };
+
+    expect(await historia()).toMatchObject({ currency: 'EUR', canRecord: false });
+  });
+
+  it('zapłacona z datą z FA(3) bez wpłat: sekcji nie ma', async () => {
+    put(faktura({ origin: 'ksef_import', paid_amount: 0, payment_status: 'unpaid', fa3_data: { parsed: { paidDate: '2026-09-01' } } }));
+
+    expect(await historia()).toBeNull();
+  });
+
+  it.each([
+    ['szkic', { ksef_status: 'draft', ksef_number: null }],
+    ['zakup', { direction: 'incoming' }],
+    ['inne środowisko', { ksef_environment: 'demo' }],
+  ] as const)('%s: sekcji nie ma i RPC historii nie jest wołane', async (_label, patch) => {
+    put(faktura(patch));
+
+    expect(await historia()).toBeNull();
+    expect(st.rpcCalls.filter((call) => call.fn === 'invoice_payments')).toEqual([]);
   });
 });
 

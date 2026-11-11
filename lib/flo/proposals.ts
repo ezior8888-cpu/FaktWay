@@ -239,29 +239,31 @@ export async function createProposal(
  * Świadomie nie kasujemy wierszy: wygasła propozycja jest informacją o tym,
  * co agent widział i czego człowiek nie potrzebował. To materiał do pomiaru
  * trafności, a nie śmieć.
+ *
+ * JEDEN UPDATE Z WARUNKIEM W ZAPYTANIU (FLO-01). Wcześniej najpierw szedł
+ * odczyt listy id, a potem ta lista wracała w adresie PATCH-a. Odczyt
+ * PostgREST ucina do 1000 wierszy, a adres rósł z każdą kartą: od ok. 200
+ * kart przekraczał 8000 znaków, a wyjątek zatrzymywał cały puls. Teraz adres
+ * ma stałą długość, karty wybiera i liczy baza (`count: 'exact'`), a warunek
+ * na status sprawdza się w chwili zapisu — karta, którą wykonawca właśnie
+ * przejął, nie zostanie przestawiona na „wygasła”. Drugi przebieg niczego
+ * nie zmienia, bo wygasła karta nie spełnia już warunku.
  */
 export async function expireStale(
   now: Date = new Date(),
   db: FloDbClient = floDb(),
 ): Promise<number> {
-
-  const stale = await db
+  const { error, count } = await db
     .from('flo_proposals')
-    .select('id')
+    .update(
+      { status: 'expired', dismissed_reason: 'auto_expired' },
+      { count: 'exact' },
+    )
     .in('status', ['open', 'approved'])
     .lt('expires_at', now.toISOString());
 
-  if (stale.error) throw new Error(stale.error.message);
-  const ids = (stale.data ?? []).map((r) => r.id);
-  if (ids.length === 0) return 0;
-
-  const patch = await db
-    .from('flo_proposals')
-    .update({ status: 'expired', dismissed_reason: 'auto_expired' })
-    .in('id', ids);
-
-  if (patch.error) throw new Error(patch.error.message);
-  return ids.length;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 // ═══════════════════════════════════════════════════════════════

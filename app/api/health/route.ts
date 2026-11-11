@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 
-import { getRedis, isRedisConfigured } from '@/lib/cache/redis';
+import { getRedisHealthProbe, isRedisConfigured } from '@/lib/cache/redis';
 import { resolveJobsBackend } from '@/lib/jobs/config';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -68,10 +68,14 @@ export async function GET() {
   // i monitor HTTP dziś jej nie czytają, patrzą na kod) oraz wyjątek w Sentry
   // z tagiem `check: health.redis`, gdy ping rzuci. Gdy nieskonfigurowany —
   // pomijamy (graceful).
+  // Ping idzie osobnym klientem z limitem 300 ms i bez obwodu aplikacji
+  // (`getRedisHealthProbe`, plan skalowania, sesja 6): zawieszony Redis nie
+  // przeciągnie odpowiedzi poza 5 s healthchecku kontenera, a przy otwartym
+  // obwodzie ping dalej pokazuje prawdziwy stan.
   const informational: Record<string, { status: 'ok' | 'fail' | 'skipped' }> = {};
   if (isRedisConfigured()) {
     try {
-      const pong = await getRedis().ping();
+      const pong = await getRedisHealthProbe().ping();
       informational.redis = { status: pong === 'PONG' ? 'ok' : 'fail' };
     } catch (error) {
       Sentry.captureException(error, { tags: { check: 'health.redis' } });

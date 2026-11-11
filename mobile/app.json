@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "FaktWay",
+    "slug": "faktway",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/ikona.png",
+    "scheme": "faktway",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "pl.faktway.app",
+      "supportsTablet": false,
+      "icon": "./assets/images/ikona.png",
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "pl",
+        "CFBundleLocalizations": [
+          "pl"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "pl.faktway.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#2463EF",
+        "foregroundImage": "./assets/images/android-ikona-pierwszy-plan.png",
+        "monochromeImage": "./assets/images/android-ikona-mono.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Outfit-Regular.ttf",
+            "./assets/fonts/Outfit-Medium.ttf",
+            "./assets/fonts/Outfit-SemiBold.ttf",
+            "./assets/fonts/Outfit-Bold.ttf",
+            "./assets/fonts/IBMPlexMono-Regular.ttf",
+            "./assets/fonts/IBMPlexMono-Medium.ttf",
+            "./assets/fonts/IBMPlexMono-SemiBold.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/ekran-startowy.png",
+          "imageWidth": 88,
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/images/ekran-startowy.png",
+            "backgroundColor": "#161616"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

@@ -168,16 +168,32 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
     expect(() => queuesForEvent('foo/bar')).toThrow(/Nieznany event/);
   });
 
-  it('fan-out: wynik wysyłki faktury trafia do DWÓCH kolejek', () => {
+  it('fan-out: wynik wysyłki faktury trafia do CZTERECH kolejek (przyjęcie: webhook i dzwonek)', () => {
     // Parytet z Inngest: powiadomienie użytkownika ORAZ obsługa Offline24
     // słuchają tego samego eventu. Pominięcie jednej = cicho martwy job.
+    // Krok 7.1, część 3 (00187): przyjęcie w KSeF to także zdarzenie webhooka
+    // `invoice.ksef_accepted` dla programów klienta (bez zmian w wysyłce).
+    // 2 → 4: dzwonek w aplikacji (krok 8.1 planu kompletnej aplikacji, część 2,
+    // 00188) to osobny odbiorca tych samych zdarzeń; wysyłka bez zmian.
     expect(queuesForEvent('invoice/submit.succeeded')).toEqual([
       'invoice.submit.succeeded.notify',
       'invoice.submit.succeeded.offline-queue',
+      'invoice.submit.succeeded.webhook',
+      'invoice.submit.succeeded.bell',
     ]);
     expect(queuesForEvent('invoice/submit.failed')).toEqual([
       'invoice.submit.failed.notify',
       'invoice.submit.failed.offline-queue',
+      'invoice.submit.failed.bell',
+    ]);
+  });
+
+  it('fan-out: wpłata do faktury trafia do DWÓCH kolejek (push i dzwonek)', () => {
+    // 1 → 2: wpis w dzwonku przy wpłacie (krok 8.1 planu kompletnej aplikacji,
+    // część 3, 00197) to osobny odbiorca tego samego zdarzenia; push bez zmian.
+    expect(queuesForEvent('invoice/payment.received')).toEqual([
+      'invoice.payment.received',
+      'invoice.payment.received.bell',
     ]);
   });
 });
@@ -210,10 +226,18 @@ describe('CRON_JOBS', () => {
     // `cron.ksiegowosc-terminy` (codziennie o 08:00, 1 przebieg na dobę);
     // oba pracują tylko dla firm w pilotażu, a idempotencję trzyma
     // `tax_notifications` (00169).
+    // 31 → 32: `cron.webhooks-deliver` (krok 7.1, część 3, 00187) co minutę:
+    // ponowienia dostaw webhooków (1 min, 5 min, 30 min, 2 h, 12 h). 1 440
+    // przebiegów na dobę; przy wyłączonej fladze `publicApiEnabled` kończy
+    // się na odczycie flagi z pamięci podręcznej, a przy włączonej to jedno
+    // zapytanie o należne dostawy (indeks częściowy na `pending`).
+    // 32 → 33: `cron.document-archive-cleanup` (11.11.2026, plan kompletnej
+    // aplikacji, krok 6.4, część 2): raz na dobę o 04:30 (1 przebieg na dobę)
+    // usuwa z magazynu pliki paczek archiwum po wygaśnięciu linku (00190).
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(31);
+    expect(CRON_JOBS.length).toBe(33);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {

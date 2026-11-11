@@ -455,3 +455,34 @@ describe('przebieg: firma i dzierżawa', () => {
     }
   });
 });
+
+// E1-W10 (plan „zero zgubionych faktur”): ostatnia strona obciętego wyniku może
+// mieć `isTruncated` przy `hasMore = false` (skrócony scenariusz MF tego
+// przypadku nie opisuje). Kursor uznawał wtedy okno za kompletne — zaległość
+// szła do następnego okna, a bieżący kursor do HWM — i faktury ponad 10 000.
+// rekordem nie trafiały do dziennika.
+describe('przebieg: isTruncated na ostatniej stronie (hasMore = false)', () => {
+  it('zaległość — okno się zawęża od ostatniego rekordu, nie zamyka się', async () => {
+    m.fetch.mockResolvedValueOnce({
+      invoices: [meta(1), meta(2)], hasMore: false, isTruncated: true, permanentStorageHwmDate: '2026-10-22T09:00:00Z',
+    });
+    await expect(runKsefHistorySyncTenant(event, ctx)).resolves.toMatchObject({ succeededCalls: 1, stopped: null });
+    expect(stream('outgoing')).toMatchObject({
+      backfill_window_end: '2026-10-01T00:00:00.000Z',
+      backfill_cursor: '2026-09-10T10:02:00.000Z',
+      backfill_page_offset: 0,
+      backfill_completed_at: null,
+      backfill_issue: null,
+    });
+  });
+
+  it('bieżąca sprzedaż — kursor do ostatniego rekordu, nie do HWM', async () => {
+    db.tables.ksef_history_sync = [outgoing({ live_checked_at: '2026-10-22T09:00:00.000Z' })];
+    m.fetch.mockResolvedValueOnce({
+      invoices: [meta(1, { permanentStorageDate: '2026-10-05T10:00:00Z' })],
+      hasMore: false, isTruncated: true, permanentStorageHwmDate: '2026-10-22T09:00:00Z',
+    });
+    await runKsefHistorySyncTenant(event, ctx);
+    expect(stream('outgoing')).toMatchObject({ live_hwm: '2026-10-05T10:00:00.000Z', live_page_offset: 0 });
+  });
+});

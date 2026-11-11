@@ -3,6 +3,11 @@
 
 export interface TemplateVariables {
   numerFaktury: string;
+  /**
+   * Gotowy tytuł przelewu (`lib/invoices/tytul-przelewu.ts`, krok 1.4): numer
+   * KSeF, potem numer faktury; bez numeru KSeF sam numer faktury.
+   */
+  tytulPrzelewu: string;
   kwota: string; // formatted "1 234,56 PLN"
   kwotaDoZaplaty: string; // jeśli częściowo zapłacona
   dataWystawienia: string; // "15.04.2026"
@@ -42,6 +47,7 @@ Może umknęło Państwu w skrzynce — wystawiona przez nas faktura {numerFaktu
 Kwota do zapłaty: {kwotaDoZaplaty}
 
 Rachunek bankowy: {rachunekBankowy}
+Tytuł przelewu: {tytulPrzelewu}
 
 Jeśli płatność jest już w drodze — proszę zignorować ten email. W razie pytań lub problemów z płatnością, prosimy o kontakt zwrotny.
 
@@ -63,7 +69,7 @@ Pozostała kwota do zapłaty: {kwotaDoZaplaty}
 Bardzo prosimy o pilne uregulowanie należności na rachunek:
 {rachunekBankowy}
 
-W tytule przelewu prosimy podać numer faktury: {numerFaktury}
+Tytuł przelewu: {tytulPrzelewu}
 
 Jeśli wystąpiły problemy z płatnością lub potrzebujecie Państwo dłuższego terminu, prosimy o kontakt — wspólnie znajdziemy rozwiązanie.
 
@@ -90,7 +96,7 @@ W przypadku braku wpłaty w terminie 7 dni od daty otrzymania niniejszego pisma 
 Numer rachunku bankowego do wpłaty:
 {rachunekBankowy}
 
-Tytuł przelewu: {numerFaktury}
+Tytuł przelewu: {tytulPrzelewu}
 
 Mamy nadzieję na polubowne rozwiązanie sprawy. W razie pytań prosimy o pilny kontakt.
 
@@ -147,6 +153,7 @@ export function resolveTemplate(
 function replaceVariables(text: string, variables: TemplateVariables): string {
   return text
     .replace(/{numerFaktury}/g, variables.numerFaktury)
+    .replace(/{tytulPrzelewu}/g, variables.tytulPrzelewu)
     .replace(/{kwota}/g, variables.kwota)
     .replace(/{kwotaDoZaplaty}/g, variables.kwotaDoZaplaty)
     .replace(/{dataWystawienia}/g, variables.dataWystawienia)

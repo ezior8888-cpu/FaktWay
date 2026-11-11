@@ -7,9 +7,11 @@ import {
   INBOX_BACKFILL_ATTEMPTS_FIELD,
   INBOX_PENDING_FLAG,
 } from '@/lib/ksef/inbox-pending';
+import { ksefPausedUntil } from '@/lib/ksef/rate-limit-pause';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { findWaitingJobsByDataField } from '@/lib/jobs/pending-jobs';
 import { queuesForEvent } from '@/lib/jobs/queues';
+import type { KsefEnvironment } from '@/types/ksef';
 
 import { inboxInvoiceReceivedAutoCategorize } from '../events';
 
@@ -32,6 +34,16 @@ import { inboxInvoiceReceivedAutoCategorize } from '../events';
  * i zużywał wszystkie próby, zanim pierwsze ruszyło. Dubel, który i tak powstanie
  * (wyścig, błąd odczytu kolejki), kończy się jednym odczytem w `auto-categorize-inbox`.
  *
+ * Faktury firm w pauzie po 429 z KSeF (L1a, `rate-limit-pause.ts`) też pomijamy,
+ * bez emisji i bez zużycia próby. Archiwum XML w pauzie nie wysyła żądania
+ * (wynik `rate_limited`), a cron co 15 min zużywałby próbę za próbą: pauza
+ * dłuższa niż ok. 75–90 min wyczerpałaby `INBOX_BACKFILL_MAX_ATTEMPTS` i faktura
+ * zostałaby bez XML na stałe. Pauza jest na (środowisko, NIP): środowisko to
+ * skonfigurowane środowisko KSeF (tylko takie faktury cron bierze), NIP to
+ * `tenants.nip` — ten sam, którym firma loguje się do KSeF
+ * (`getTenantKsefCredentials`). Przebieg, który mimo to trafi w pauzę (pauza
+ * zaczęła się po emisji), próbę oddaje `auto-categorize-inbox`.
+ *
  * Po `INBOX_BACKFILL_MAX_ATTEMPTS` faktura wypada z automatu i trafia do
  * operatora (Sentry + log); `auto-categorize-inbox` kończy ją
  * `NonRetriableError` z przyczyną (np. brak waluty w metadanych).
@@ -41,8 +53,35 @@ export const INBOX_BACKFILL_MIN_AGE_MS = 15 * 60 * 1000;
 export const INBOX_BACKFILL_MAX_ATTEMPTS = 6;
 /** Rozsądna paczka na przebieg — przy zaległości kolejne przebiegi dobiorą resztę. */
 export const INBOX_BACKFILL_LIMIT = 200;
+/** Firm na jedno zapytanie o NIP (`in.(…)` w adresie PostgREST), jak `TENANTS_PER_QUERY` historii. */
+export const INBOX_BACKFILL_TENANTS_PER_QUERY = 100;
 
 type PendingRow = { id: string; tenant_id: string; created_at: string; fa3_data: unknown };
+
+/**
+ * Firmy (spośród `tenantIds`) w pauzie po 429 w środowisku `env`. Pauzę czyta
+ * `ksefPausedUntil` (pamięć procesu + Redis, nigdy nie rzuca); rzuca tylko
+ * błąd odczytu NIP-ów z bazy.
+ */
+async function pausedTenantIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  env: KsefEnvironment,
+  tenantIds: string[],
+): Promise<Set<string>> {
+  const paused = new Set<string>();
+  for (let i = 0; i < tenantIds.length; i += INBOX_BACKFILL_TENANTS_PER_QUERY) {
+    const part = tenantIds.slice(i, i + INBOX_BACKFILL_TENANTS_PER_QUERY);
+    const { data, error } = await supabase.from('tenants').select('id, nip').in('id', part);
+    if (error) throw new Error(`Skrzynka: nie można odczytać NIP-ów firm: ${error.message}`);
+    const tenants = (data ?? []) as Array<{ id: string; nip: string | null }>;
+    // Równolegle: przy awarii Redisa każdy odczyt czeka do swojego limitu czasu.
+    const until = await Promise.all(tenants.map((t) => (t.nip ? ksefPausedUntil(env, t.nip) : null)));
+    tenants.forEach((t, index) => {
+      if (until[index] !== null) paused.add(t.id);
+    });
+  }
+  return paused;
+}
 
 /**
  * Runner joba (worker pg-boss).
@@ -92,10 +131,26 @@ export async function runInboxBackfill({ step, logger }: JobContext) {
     }
   });
 
-  if (toEmit.length > 0) {
+  const { ready, paused } = await step.run('skip-paused', async (): Promise<{ ready: PendingRow[]; paused: number }> => {
+    if (toEmit.length === 0) return { ready: toEmit, paused: 0 };
+    try {
+      const pausedTenants = await pausedTenantIds(supabase, env, [...new Set(toEmit.map((row) => row.tenant_id))]);
+      const notPaused = toEmit.filter((row) => !pausedTenants.has(row.tenant_id));
+      return { ready: notPaused, paused: toEmit.length - notPaused.length };
+    } catch (e) {
+      // Bez NIP-ów emitujemy jak dawniej: archiwum w pauzie skończy się
+      // `rate_limited` bez żądania do KSeF, a próbę odda `auto-categorize-inbox`.
+      logger.warn('Skrzynka: nie udało się sprawdzić pauzy firm po 429, cron wysyła wszystkie', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return { ready: toEmit, paused: 0 };
+    }
+  });
+
+  if (ready.length > 0) {
     await step.sendEvent(
       'backfill-auto-categorize',
-      toEmit.map((row) => ({
+      ready.map((row) => ({
         ...inboxInvoiceReceivedAutoCategorize.create({
           invoiceId: row.id,
           tenantId: row.tenant_id,
@@ -106,7 +161,7 @@ export async function runInboxBackfill({ step, logger }: JobContext) {
     );
 
     await step.run('bump-attempts', async () => {
-      for (const row of toEmit) {
+      for (const row of ready) {
         await bumpInboxBackfillAttempt(supabase, row);
       }
     });
@@ -142,9 +197,10 @@ export async function runInboxBackfill({ step, logger }: JobContext) {
 
   logger.info('Skrzynka: uzupełnianie kategoryzacji', {
     scanned: pending.length,
-    emitted: toEmit.length,
+    emitted: ready.length,
+    paused,
     exhausted,
   });
 
-  return { scanned: pending.length, emitted: toEmit.length, exhausted };
+  return { scanned: pending.length, emitted: ready.length, paused, exhausted };
 }

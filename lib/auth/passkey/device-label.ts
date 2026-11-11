@@ -26,10 +26,18 @@ function match(table: Array<[RegExp, string]>, userAgent: string): string | null
   return table.find(([pattern]) => pattern.test(userAgent))?.[1] ?? null;
 }
 
+/**
+ * System i przeglądarka z nagłówka User-Agent. Ta sama lista nazywa urządzenia
+ * biometrii i zalogowane urządzenia (`lib/auth/sessions/user-agent.ts`), więc
+ * na jednej stronie ustawień oba spisy mówią tak samo.
+ */
+export function userAgentParts(userAgent: string | null | undefined): { platform: string | null; browser: string | null } {
+  if (!userAgent) return { platform: null, browser: null };
+  return { platform: match(PLATFORMS, userAgent), browser: match(BROWSERS, userAgent) };
+}
+
 export function deviceLabelFromUserAgent(userAgent: string | null | undefined): string {
-  if (!userAgent) return FALLBACK;
-  const platform = match(PLATFORMS, userAgent);
-  const browser = match(BROWSERS, userAgent);
+  const { platform, browser } = userAgentParts(userAgent);
   if (platform && browser) return `${platform} (${browser})`;
   return platform ?? browser ?? FALLBACK;
 }

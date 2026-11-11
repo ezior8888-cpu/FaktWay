@@ -54,8 +54,9 @@ fi
 
 # 4. Hook przed pushem (.githooks/pre-push). Ścieżka względna, więc każdy
 #    worktree używa własnej kopii; gałąź bez katalogu .githooks po prostu go nie ma.
-if [ -d .githooks ] && [ -z "$(git config --get core.hooksPath)" ]; then
-  git config core.hooksPath .githooks && done_items+=("hook przed pushem włączony")
+hook_msg="$(bash "$root/scripts/dev/napraw-hook.sh")"
+if [ -n "$hook_msg" ]; then
+  done_items+=("$hook_msg")
 fi
 # Żelazny filtr (F3): hook przed pushem musi wskazywać katalog .githooks
 # (ten albo głównego katalogu), inaczej krok filtra nie działa.

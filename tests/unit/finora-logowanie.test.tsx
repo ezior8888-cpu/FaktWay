@@ -33,7 +33,6 @@ vi.mock('@/app/(auth)/register/actions', () => ({ signupWithEmail: vi.fn() }));
 vi.mock('@/app/(auth)/forgot-password/actions', () => ({ requestPasswordReset: vi.fn() }));
 vi.mock('@/app/actions/import-danych', () => ({
   skipImportStepAction: vi.fn(),
-  startFileImportAction: vi.fn(),
 }));
 vi.mock('@/app/actions/organizations', () => ({
   acceptInvitationAction: vi.fn(),
@@ -159,7 +158,7 @@ describe('logowanie (login/index.tsx Finory)', () => {
     expect(html).toContain('name="password"');
     expect(html).toContain('autoComplete="current-password"');
     expect(buttonsNamed(html, 'Zaloguj się')).toBe(1);
-    expect(html).toMatch(/<h2[^>]*>Zaloguj się<\/h2>/);
+    expect(html).toMatch(/<h1[^>]*>Zaloguj się<\/h1>/);
   });
 
   it('teksty z P15: Google, „lub e‑mailem”, „Nie pamiętasz hasła?”, „Nie masz konta? Utwórz konto”', async () => {
@@ -245,7 +244,7 @@ describe('reset hasła (forgot-password/index.tsx Finory)', () => {
     expect(html).toContain('maxLength="254"');
     expect(buttonsNamed(html, 'Wyślij link resetujący')).toBe(1);
     expect(html).toMatch(/<a[^>]*href="\/login"[^>]*>[\s\S]*Wróć do logowania<\/a>/);
-    expect(html).toMatch(/<h2[^>]*>Nie pamiętasz hasła\?<\/h2>/);
+    expect(html).toMatch(/<h1[^>]*>Nie pamiętasz hasła\?<\/h1>/);
     expect(html).not.toMatch(/Back to login|Send Reset Link|No worries/);
   });
 

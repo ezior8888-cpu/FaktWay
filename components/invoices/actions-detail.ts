@@ -61,6 +61,7 @@ import type { KsefEnvironment } from '@/types/ksef';
 import { validateInvoice } from '@/lib/xml/invoice-calculator';
 import { generateInvoicePdf, verifyInvoicePdfDeliveryState } from '@/lib/pdf/invoice-pdf';
 import { loadInvoiceForPdf } from '@/lib/pdf/invoice-data';
+import { transferTitleOnPdf } from '@/lib/pdf/invoice-renderer';
 import { invoiceEmailAmount } from '@/lib/email/invoice-email-amount';
 import { sendInvoiceEmail } from '@/lib/email/send';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -911,6 +912,10 @@ export async function emailInvoiceAction(
     amountCaption: amount.caption,
     amountLabel: amount.label,
     dueDate: inv.payment.dueDate,
+    // Krok 1.4: ten sam tytuł przelewu co na PDF w załączniku. Klucz PDF
+    // zawiera numer KSeF, więc `verifyInvoicePdfDeliveryState` wyżej odmawia,
+    // gdy numer zmienił się po wygenerowaniu PDF.
+    transferTitle: transferTitleOnPdf(inv, data.ksefNumber),
     pdf: pdfResult.pdf,
     pdfFilename: pdfResult.filename,
   });

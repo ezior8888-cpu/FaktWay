@@ -61,6 +61,7 @@ const WEJSCIE = {
   zusOd: null,
   chorobowe: false,
   nrsZus: null,
+  zakresV1: true,
 };
 
 beforeEach(() => {
@@ -92,6 +93,16 @@ describe('zapis profilu podatkowego', () => {
     const wynik = await zapiszProfilPodatkowyAction(WEJSCIE);
     expect(wynik).toMatchObject({ success: false, error: expect.stringContaining('nie są jeszcze dostępne') });
     expect(mocks.zapisy).toEqual([]);
+  });
+
+  it('bez potwierdzenia zakresu v1: odmowa z polem, bez zapisu i audytu', async () => {
+    const { zakresV1: _pominiete, ...bez } = WEJSCIE;
+    for (const wejscie of [bez, { ...bez, zakresV1: false }]) {
+      const wynik = await zapiszProfilPodatkowyAction(wejscie);
+      expect(wynik).toMatchObject({ success: false, pole: 'zakresV1', error: expect.stringContaining('zakresie modułu') });
+    }
+    expect(mocks.zapisy).toEqual([]);
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 
   it('błędne dane: komunikat z polem, bez zapisu', async () => {
@@ -132,6 +143,7 @@ describe('zapis profilu podatkowego', () => {
         entityType: 'tax_profile',
         metadata: expect.objectContaining({
           validFrom: '2027-01-01',
+          zakresV1: true,
           przed: expect.objectContaining({ stawkaDomyslna: 850 }),
           po: expect.objectContaining({ stawkaDomyslna: 1200 }),
         }),

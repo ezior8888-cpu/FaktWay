@@ -14,13 +14,26 @@ export type RateLimitBucket =
   | 'ai_ocr'
   | 'ai_classify'
   | 'invoice_email'
+  // Noty obciążeniowe i uznaniowe mailem (00193, krok 2.9): limit na firmę jak przy fakturach.
+  | 'accounting_note_email'
   | 'invitation'
+  // Portal księgowej: strony i pliki (`lib/rate-limit/accountant-portal.ts`, krok 6.2).
+  | 'accountant_portal'
   | 'batch_pdf'
   | 'ksef_certificate'
   | 'passkey_login_options'
   | 'passkey_login_verify'
   | 'passkey_manage'
-  | 'ksef_inbox_check';
+  | 'ksef_inbox_check'
+  | 'invoice_share_view'
+  | 'calendar_feed'
+  /** Publiczne API (`lib/api/v1/auth.ts`): każde żądanie z adresu i każde z klucza. */
+  | 'api_v1_ip'
+  | 'api_v1_key'
+  /** Publiczne API: zapis (POST) kluczem, osobno od zapytań (krok 7.1, część 2). */
+  | 'api_v1_write'
+  /** Wgrania plików (koszt, import), klucz `rodzaj:firma:osoba` — `lib/uploads/server.ts`. */
+  | 'file_upload';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */
@@ -105,16 +118,22 @@ export async function checkRateLimit(
     if (config.countDenied === false) await removeRedisHit(key, member);
 
     // Najstarszy timestamp w oknie wyznacza moment, w którym slot się zwolni.
-    const oldest = (await redis.zrange(key, 0, 0, {
-      withScores: true,
-    })) as Array<string | number>;
     let retryAfter = config.windowSeconds;
-    if (oldest.length >= 2) {
-      const oldestTs = Number(oldest[1]);
-      retryAfter = Math.max(
-        1,
-        Math.ceil((oldestTs + config.windowSeconds * 1000 - now) / 1000),
-      );
+    try {
+      const oldest = (await redis.zrange(key, 0, 0, {
+        withScores: true,
+      })) as Array<string | number>;
+      if (oldest.length >= 2) {
+        const oldestTs = Number(oldest[1]);
+        retryAfter = Math.max(
+          1,
+          Math.ceil((oldestTs + config.windowSeconds * 1000 - now) / 1000),
+        );
+      }
+    } catch (err) {
+      // Odmowa już zapadła w Redisie. Błąd samego odczytu czasu (obwód, limit 500 ms)
+      // nie może jej zamienić w zgodę z pustego licznika w pamięci; czekanie = całe okno.
+      console.error('[rate-limit] Redis error przy odczycie czasu odblokowania:', err);
     }
 
     return { allowed: false, remaining: 0, retryAfter };
