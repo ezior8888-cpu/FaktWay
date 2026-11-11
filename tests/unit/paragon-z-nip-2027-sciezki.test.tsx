@@ -83,6 +83,18 @@ function jpk(periodStart: string, periodEnd: string, expenses: ExportExpense[]) 
   return { issuer: ISSUER, periodStart, periodEnd, issuedInvoices: [sprzedaz(periodStart)], expenses };
 }
 
+describe('JPK_V7M: paragon z NIP powyżej 450 zł z 2026 r.', () => {
+  it('paragon z NIP na 600 zł: bez wiersza zakupu i bez K_43; na 450 zł zostaje', () => {
+    const duzy = { ...paragonZNip('2026-06-10'), id: 'duzy', documentNumber: 'PAR 600', netAmount: 487.8, vatAmount: 112.2, grossAmount: 600, vatDeductibleAmount: 112.2 };
+    const graniczny = { ...paragonZNip('2026-06-11'), id: 'gr', documentNumber: 'PAR 450', netAmount: 365.85, vatAmount: 84.15, grossAmount: 450, vatDeductibleAmount: 84.15 };
+    const data = jpk('2026-06-01', '2026-06-30', [duzy, graniczny]);
+    const xml = generateJpkV7m(data);
+    expect(vatPurchases(data.expenses).map((e) => e.id)).toEqual(['gr']);
+    expect(xml).not.toContain('PAR 600');
+    expect(xml).toContain('PAR 450');
+  });
+});
+
 describe('JPK_V7M: paragon z NIP a data wystawienia', () => {
   it('paragon z NIP z 1.01.2027: bez wiersza zakupu i bez K_43; faktura obok zostaje', () => {
     const data = jpk('2027-01-01', '2027-01-31', [koszt(), paragonZNip('2027-01-01')]);
@@ -177,6 +189,18 @@ describe('kafle „VAT do odliczenia” (getCosts) i PIT', () => {
     expect(entry?.cost).toBe(100);
   });
 
+  it('paragon z NIP na 600 zł z 2026 r.: VAT do odliczenia 0 (nie jest fakturą uproszczoną)', async () => {
+    const duzy = wydatekOcr('e-1', '2026-06-10', { net_amount: 487.8, vat_amount: 112.2, gross_amount: 600, vat_deductible_amount: 112.2 });
+    const [entry] = await getCosts(supabase([duzy]), FIRMA, { from: '2026-06-01', toExclusive: '2026-07-01' });
+    expect(entry?.vatDeductible).toBe(0);
+  });
+
+  it('paragon z NIP na 450 zł z 2026 r.: odliczenie zostaje', async () => {
+    const gr = wydatekOcr('e-1', '2026-06-10', { net_amount: 365.85, vat_amount: 84.15, gross_amount: 450, vat_deductible_amount: 84.15 });
+    const [entry] = await getCosts(supabase([gr]), FIRMA, { from: '2026-06-01', toExclusive: '2026-07-01' });
+    expect(entry?.vatDeductible).toBe(84.15);
+  });
+
   it('KPiR: koszt paragonu z NIP z 2027 r. dalej netto (przypięcie dzisiejszego PIT)', () => {
     expect(kpirCostAmount({ net_amount: 100, vat_amount: 23, vat_deductible_amount: 23, document_type: 'simplified_invoice' })).toBe(100);
     expect(kpirCostAmount({ net_amount: 100, vat_amount: 23, vat_deductible_amount: 23, document_type: 'invoice' })).toBe(100);
@@ -211,6 +235,11 @@ describe('przegląd kosztu: informacja o paragonie z NIP od 2027 r.', () => {
     expect(markup).toContain('Od 1 stycznia 2027 r. paragon z NIP nie jest fakturą');
     expect(markup).toContain('VAT odliczysz tylko z faktury w KSeF, więc poproś sprzedawcę o fakturę do paragonu.');
     expect(markup).toContain('W kosztach podatku dochodowego paragon zostaje na razie tak jak dotąd');
+  });
+
+  it('paragon z NIP na 600 zł z 2026 r.: informacja o limicie 450 zł', () => {
+    const markup = ekran(wydatekNaEkranie('2026-06-10', { gross_amount: 600 }));
+    expect(markup).toContain('powyżej 450 zł nie jest fakturą uproszczoną');
   });
 
   it('bez informacji: paragon z NIP z 2026 r., paragon bez NIP, firma bez odliczenia VAT', () => {

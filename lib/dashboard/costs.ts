@@ -155,7 +155,7 @@ export async function getCosts(
     cost: kpirCostAmount(row),
     outflow: Number(row.gross_amount ?? 0),
     // Ta sama reguła co JPK_V7M: rodzaj (paragon z NIP ze zdjęcia z odczytu OCR) i data wystawienia.
-    vatDeductible: documentAllowsVatDeduction({ documentType: costDocumentType(row), issueDate: row.issue_date })
+    vatDeductible: documentAllowsVatDeduction({ documentType: costDocumentType(row), issueDate: row.issue_date, grossAmount: row.gross_amount })
       ? Number(row.vat_deductible_amount ?? 0)
       : 0,
     categoryLabel: typeof row.category_label === 'string' && row.category_label.trim()

@@ -189,7 +189,11 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency, paymentSectio
   // Krok 1.3: paragon z NIP z datą od 1.01.2027 nie daje odliczenia VAT. Data
   // z formularza, bo klient może ją poprawić; bez VAT do odliczenia (np. firma
   // zwolniona) nie ma czego tracić, więc informacji nie ma.
-  const vatRule = vatDeductionForDocument({ documentType: costDocumentType(expense), issueDate: form.issue_date });
+  const vatRule = vatDeductionForDocument({
+    documentType: costDocumentType(expense),
+    issueDate: form.issue_date,
+    grossAmount: expense.gross_amount,
+  });
   const receiptNotice =
     !vatRule.deductible && Number(expense.vat_deductible_amount ?? 0) !== 0 ? vatRule.notice : null;
 
