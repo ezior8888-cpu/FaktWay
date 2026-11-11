@@ -28,7 +28,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { getGlobalFlag } from '@/lib/feature-flags/global-flags';
+import { getGlobalFlagForExecution } from '@/lib/feature-flags/global-flags';
 import { isMissingColumnError } from '@/lib/invoices/business-start';
 
 export type ObszarModulu =
@@ -125,14 +125,16 @@ export async function czytajFlageFirmy(client: SupabaseClient, tenantId: string)
 /**
  * Czy obszar modułu działa dla firmy. Klient z sesji (RLS) na stronach,
  * klucz serwisowy w zadaniach. Kod blokuje, zanim padnie jakiekolwiek
- * zapytanie.
+ * zapytanie. Globalny stop czyta się rozstrzygająco, bez pamięci podręcznej
+ * (`getGlobalFlagForExecution`): błąd odczytu rzuca, bo „nie wiem” to nie
+ * „nie” (RP-WYL-01, F11-B6), tak samo jak przy fladze firmy.
  */
 export async function czyKsiegowoscWlaczona(
   client: SupabaseClient,
   tenantId: string,
   obszar: ObszarModulu,
   /** Wstrzykiwany tylko w testach; produkcyjnie zawsze prawdziwy odczyt flagi. */
-  czytajGlobalnyStop: () => Promise<boolean> = () => getGlobalFlag('killKsiegowosc'),
+  czytajGlobalnyStop: () => Promise<boolean> = () => getGlobalFlagForExecution('killKsiegowosc'),
 ): Promise<Werdykt> {
   const kod = statusObszaru(obszar);
   if (!kod.wlaczony) return rozstrzygnij({ globalnyStop: false, kod, firmaWlaczona: false });

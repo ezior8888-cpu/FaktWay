@@ -52,6 +52,7 @@ function tickResult(overrides: Partial<FloTickResult> = {}): FloTickResult {
   return {
     expired: 0,
     released: 0,
+    failedCleanup: [],
     rules: [],
     withheld: 0,
     failedTenants: 0,

@@ -64,6 +64,9 @@ ai_todo.md
 **/*.roles.[sS][qQ][lL]
 **/*.roles.[sS][qQ][lL].*
 
+# Aplikacja mobilna (Expo) nie wchodzi do obrazu strony.
+mobile
+
 # Artefakty
 tsconfig.tsbuildinfo
 posthog-setup-report.md

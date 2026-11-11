@@ -1,3 +1,5 @@
+import { inspect } from 'node:util';
+
 import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -162,7 +164,75 @@ describe('submitInvoice: odrzucenie w statusie faktury', () => {
     const b = (await submitInvoice('<xml/>', {} as KsefAuth, 'test').catch((e: unknown) => e)) as KsefInvoiceRejectedError;
     expect(b).toBeInstanceOf(KsefInvoiceRejectedError);
     expect(b.isDuplicate).toBe(false);
-    expect(b.message).toBe('KSeF odrzucił fakturę: Błąd weryfikacji semantyki dokumentu faktury. Szczegóły: P_2');
+    // F-093-STATUS: komunikat (logi, telemetria) to sam status; opis i szczegóły tylko dla klienta.
+    expect(b.message).toBe('KSeF odrzucił fakturę (status 450)');
+    expect(b.customerMessage).toBe('KSeF odrzucił fakturę: Błąd weryfikacji semantyki dokumentu faktury. Szczegóły: P_2');
+    expect(b.ksefDescription).toBe('Błąd weryfikacji semantyki dokumentu faktury');
+    expect(b.ksefDetails).toEqual(['P_2']);
+  });
+});
+
+describe('F-093-STATUS: treść odpowiedzi KSeF poza komunikatem błędu', () => {
+  const NABYWCA = 'Nabywca Wartownik Testowy, NIP 9876543210';
+
+  it('serializacja błędu (JSON, inspect, rozpakowanie) nie pokazuje opisu ani szczegółów', () => {
+    const b = new KsefInvoiceRejectedError(450, { code: 450, description: 'Opis Wartownika', details: [NABYWCA] });
+    const widoczne = [
+      b.message,
+      String(b.stack),
+      JSON.stringify(b),
+      JSON.stringify({ ...b }),
+      inspect(b, { depth: 8 }),
+      inspect(new Error('opakowanie', { cause: b }), { depth: 8 }),
+    ].join('\n');
+
+    expect(widoczne).not.toContain('Wartownik');
+    expect(widoczne).not.toContain('9876543210');
+    expect(b.customerMessage).toBe(`KSeF odrzucił fakturę: Opis Wartownika. Szczegóły: ${NABYWCA}`);
+  });
+
+  it('440: komunikat bez szczegółów z KSeF, numer oryginału zostaje', async () => {
+    ksefZwraca(DUPLIKAT);
+    const b = (await submitInvoice('<xml/>', {} as KsefAuth, 'test').catch((e: unknown) => e)) as KsefInvoiceRejectedError;
+
+    expect(b.message).toContain(`numer KSeF ${ORYGINAL}`);
+    expect(b.message).not.toContain('Szczegóły');
+    expect(b.message).not.toContain('została już prawidłowo przesłana');
+    expect(b.ksefDetails).toEqual(DUPLIKAT.details);
+    expect(b.customerMessage).toBe(b.message);
+  });
+
+  it.each([
+    ['tekst', 'jeden szczegół', ['jeden szczegół']],
+    ['obiekt', { pole: 'P_2' }, []],
+    ['null', null, []],
+    ['lista z nie-tekstem', ['P_2', 7, null], ['P_2']],
+  ])('details jako %s: konstruktor nie rzuca (odrzucenie zostaje odrzuceniem)', (_opis, details, oczekiwane) => {
+    const b = new KsefInvoiceRejectedError(450, { code: 450, description: 'Opis', details } as never);
+
+    expect(b.message).toBe('KSeF odrzucił fakturę (status 450)');
+    expect(b.ksefDetails).toEqual(oczekiwane);
+  });
+
+  it('opis nie-tekstem: pusty opis, bez wyjątku', () => {
+    const b = new KsefInvoiceRejectedError(450, { code: 450, description: { x: 1 }, details: ['P_2'] } as never);
+
+    expect(b.ksefDescription).toBe('');
+    expect(b.customerMessage).toBe('KSeF odrzucił fakturę: . Szczegóły: P_2');
+  });
+
+  it('F-093-OPIS: 5xx w statusie bez opisu z KSeF w komunikacie', async () => {
+    ksefZwraca({ code: 550, description: 'Opis Wartownika 550' });
+    const blad = (await submitInvoice('<xml/>', {} as KsefAuth, 'test').catch((e: unknown) => e)) as Error;
+
+    expect(blad.message).toBe('KSeF przerwał przetwarzanie faktury (status 550)');
+  });
+
+  it('F-093-OPIS: faktura przyjęta bez numeru KSeF, komunikat bez opisu z KSeF', async () => {
+    ksefZwraca({ code: 200, description: 'Opis Wartownika 200' });
+    const blad = (await submitInvoice('<xml/>', {} as KsefAuth, 'test').catch((e: unknown) => e)) as Error;
+
+    expect(blad.message).toBe('KSeF: faktura przetworzona bez numeru KSeF (status 200)');
   });
 });
 

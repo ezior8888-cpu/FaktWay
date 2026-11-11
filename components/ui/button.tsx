@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'
 
-const buttonVariants = cva(
+const buttonVariantsCva = cva(
   "group/button focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 inline-flex shrink-0 items-center justify-center rounded-none border border-transparent bg-clip-padding text-xs font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:ring-1 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:ring-1 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [@media(pointer:coarse)]:min-h-[44px]",
   {
     variants: {
@@ -40,6 +40,20 @@ const buttonVariants = cva(
     }
   }
 )
+
+/**
+ * Klasy przycisku, już scalone przez `cn()` (tailwind-merge), także dla
+ * `<Link>` i `<a>` w stylu przycisku. Sam cva zostawia obok siebie klasy
+ * bazy i wariantu na tę samą właściwość: `border-transparent` przy
+ * `border-border` (outline), `size-4` ikon przy `size-3` (xs). O wyniku
+ * decyduje kolejność reguł w arkuszu, nie w atrybucie `class`; Tailwind
+ * układa klasy jednej właściwości po nazwie i w tych parach baza wypadała
+ * później, więc wygrywała: link outline w jasnym motywie nie miał ramki
+ * (16 miejsc, test `przycisk-link-ramka`).
+ */
+function buttonVariants(props?: Parameters<typeof buttonVariantsCva>[0]): string {
+  return cn(buttonVariantsCva(props))
+}
 
 function Button({
   className,

@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   odczytyProfilu: 0,
   zaplacone: [] as unknown[],
   bladZaplat: null as { code: string; message: string } | null,
+  koszty: null as unknown[] | null,
 }));
 
 vi.mock('@/lib/ksiegowosc/ewidencja-dane', async (orig) => ({
@@ -86,7 +87,10 @@ function lancuch(wynik: () => unknown) {
 
 const client = {
   from: (tabela: string) => {
-    if (tabela === 'expenses') return lancuch(() => ({ data: [KOSZT_KSEF], count: 1, error: null }));
+    if (tabela === 'expenses') {
+      const koszty = mocks.koszty ?? [KOSZT_KSEF];
+      return lancuch(() => ({ data: koszty, count: koszty.length, error: null }));
+    }
     if (tabela === 'invoices') return lancuch(() => mocks.waluty);
     if (tabela === 'tax_settlements') return lancuch(() => ({ data: mocks.bladZaplat ? null : mocks.zaplacone, count: mocks.zaplacone.length, error: mocks.bladZaplat }));
     // Spisy z natury (K7.4) mają własny test odczytu; tu żadnych.
@@ -100,6 +104,7 @@ beforeEach(() => {
   mocks.odczytyProfilu = 0;
   mocks.zaplacone = [];
   mocks.bladZaplat = null;
+  mocks.koszty = null;
 });
 
 describe('odczyt KPiR', () => {
@@ -134,5 +139,27 @@ describe('odczyt KPiR', () => {
     const przed00168 = await czytajKpir(client, 'firma-1', 2026, { wersje: [SKALA] });
     expect(przed00168.ok && przed00168.kpir.wiersze.map((w) => w.zrodlo.typ)).toEqual(['koszt']);
   });
-});
 
+  // F11-C1: ten sam dokument (NIP sprzedawcy i numer) jako dwa koszty, np.
+  // zdjęcie faktury i ta sama faktura ze Skrzynki KSeF: dwa wiersze KPiR,
+  // podwójny koszt i zaniżona zaliczka PIT. KPiR ma jeden wiersz na dowód.
+  it('F11-C1: ten sam dokument dwa razy (Skrzynka KSeF i zdjęcie): brak z numerem i sprzedawcą, nie podwójny koszt', async () => {
+    mocks.waluty = { data: [{ id: 'f-ksef-1', currency: 'PLN' }], error: null };
+    mocks.koszty = [
+      KOSZT_KSEF,
+      { ...KOSZT_KSEF, id: 'k2', source: 'ocr_photo', ksef_invoice_id: null, document_number: ' fz/1 ', seller_nip: '526-000-12-46' },
+    ];
+    const wynik = await czytajKpir(client, 'firma-1', 2026, { wersje: [SKALA] });
+    expect(wynik.ok).toBe(false);
+    if (wynik.ok) return;
+    expect(wynik.komunikat).toContain('FZ/1');
+    expect(wynik.komunikat).toContain('Dostawca');
+  });
+
+  it('F11-C1: dwa różne dokumenty tego samego sprzedawcy: KPiR liczy oba', async () => {
+    mocks.waluty = { data: [{ id: 'f-ksef-1', currency: 'PLN' }], error: null };
+    mocks.koszty = [KOSZT_KSEF, { ...KOSZT_KSEF, id: 'k2', source: 'ocr_photo', ksef_invoice_id: null, document_number: 'FZ/2' }];
+    const wynik = await czytajKpir(client, 'firma-1', 2026, { wersje: [SKALA] });
+    expect(wynik.ok).toBe(true);
+  });
+});

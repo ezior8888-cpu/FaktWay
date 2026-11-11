@@ -33,10 +33,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install XML schema validator
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libxml2-utils
-          xmllint --version
+        # Zapasowy serwer pakietów przy awarii mirrora Azure (11.11.2026).
+        run: bash scripts/ci/zainstaluj-xmllint.sh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Audit production dependencies
@@ -93,9 +91,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install XML schema validator
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libxml2-utils
+        # Zapasowy serwer pakietów przy awarii mirrora Azure (11.11.2026).
+        run: bash scripts/ci/zainstaluj-xmllint.sh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Vitest, część ${{ matrix.shard }} z 3
@@ -214,8 +211,7 @@ jobs:
       - name: Install dependencies
         if: steps.detect.outputs.run == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libxml2-utils
+          bash scripts/ci/zainstaluj-xmllint.sh
           pnpm install --frozen-lockfile
       - name: New tests must fail on base
         if: steps.detect.outputs.run == 'true'

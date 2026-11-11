@@ -85,6 +85,7 @@ function kliknij(element: Element | null | undefined) {
 }
 
 const przycisk = (tekst: string) => [...kontener.querySelectorAll('button')].find((b) => b.textContent?.trim() === tekst);
+const potwierdzZakres = () => kliknij(kontener.querySelector('[role="checkbox"]'));
 const radio = (etykieta: string) =>
   [...kontener.querySelectorAll('label')].find((l) => l.textContent?.includes(etykieta))?.querySelector('[role="radio"]');
 
@@ -127,6 +128,13 @@ describe('strona ustawień podatkowych', () => {
     expect(html).toContain('od 01.01.2027');
     expect(html).toContain('Pełne składki, z chorobowym');
   });
+
+  it('kreator mówi o zakresie v1 i prosi o potwierdzenie', async () => {
+    const html = renderToStaticMarkup(await UstawieniaPodatkowePage());
+    expect(html).toContain('Małego ZUS Plus');
+    expect(html).toContain('JPK_V7M');
+    expect(html).toContain('Moje rozliczenie mieści się w zakresie modułu');
+  });
 });
 
 describe('kreator', () => {
@@ -135,6 +143,15 @@ describe('kreator', () => {
     kliknij(przycisk('Zapisz'));
     expect(mocks.akcja).not.toHaveBeenCalled();
     expect(kontener.textContent).toContain('Brak formy opodatkowania.');
+  });
+
+  it('bez potwierdzenia zakresu nie wysyła i pokazuje błąd przy polu', () => {
+    pokaz({ poczatkowa: WERSJA });
+    kliknij(przycisk('Zapisz'));
+    expect(mocks.akcja).not.toHaveBeenCalled();
+    expect(kontener.querySelector('#blad-zakresV1')?.textContent).toContain('zakresie modułu');
+    potwierdzZakres();
+    expect(kontener.querySelector('#blad-zakresV1')).toBeNull();
   });
 
   it('komunikat przy polu znika, gdy klient je poprawi; inne zostają', () => {
@@ -158,6 +175,7 @@ describe('kreator', () => {
 
   it('pełny profil idzie do akcji tym samym kształtem co schemat', async () => {
     pokaz({ poczatkowa: WERSJA });
+    potwierdzZakres();
     await act(async () => {
       przycisk('Zapisz')!.click();
     });
@@ -170,6 +188,7 @@ describe('kreator', () => {
       chorobowe: true,
       najem: false,
       nrsZus: null,
+      zakresV1: true,
     });
     expect(mocks.toastSuccess).toHaveBeenCalled();
   });
@@ -177,6 +196,7 @@ describe('kreator', () => {
   it('odmowa akcji pokazuje komunikat przy polu', async () => {
     mocks.akcja.mockResolvedValueOnce({ success: false, error: 'Forma opodatkowania zmienia się tylko od 1 stycznia.', pole: 'validFrom' });
     pokaz({ poczatkowa: WERSJA });
+    potwierdzZakres();
     await act(async () => {
       przycisk('Zapisz')!.click();
     });

@@ -32,6 +32,8 @@ export interface InvoiceRow {
    */
   origin?: string | null;
   invoice_type?: string | null;
+  /** F12-G1: pozycja cykliczna, z której wystawiono fakturę (ukrywa „Ustaw jako cykliczną”). */
+  recurring_invoice_id?: string | null;
 }
 
 /** Fakty wierszy (`loadInvoiceListRowFacts`) jako zwykły obiekt: id → fakty. */

@@ -18,6 +18,7 @@ import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
 import { earlierSaleRemark, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
 import { monthLabel } from '@/lib/expenses/month';
 import { formatPlCompactMoney, formatPlMoney } from '@/lib/format/pl';
+import { receiptRevenueRow } from '@/lib/invoices/receipt-revenue-guard';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 import {
   kpirInvoiceRevenue,
@@ -442,7 +443,10 @@ export function kpirPeriodFromParams(
  */
 export function blockingSaleInvoices(invoices: readonly KpirInvoiceRow[]): { id: string; number: string }[] {
   return invoices
-    .filter((inv) => (inv as { currency?: string | null }).currency?.trim().toUpperCase() !== 'PLN')
+    .filter((inv) =>
+      (inv as { currency?: string | null }).currency?.trim().toUpperCase() !== 'PLN' ||
+      // Krok 1.2: faktura do paragonu też wstrzymuje raport (`receipt-revenue-guard`).
+      receiptRevenueRow(inv).isReceipt)
     .map((inv) => ({ id: inv.id, number: inv.internal_number?.trim() || 'Faktura bez numeru' }));
 }
 

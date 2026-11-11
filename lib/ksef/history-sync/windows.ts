@@ -232,6 +232,26 @@ export function applyBackfillPage(
   const cursor = ms(state.backfill_cursor);
   const end = ms(state.backfill_window_end);
 
+  // `isTruncated` przed `hasMore` (E1-W10, `lib/ksef/inbox.ts`): ostatnia strona
+  // obciętego wyniku może mieć `hasMore = false`, a wtedy HWM ≥ koniec okna
+  // zamykał okno bez rekordów ponad limitem 10 000.
+  if (page.isTruncated) {
+    const last = page.invoices[page.invoices.length - 1]?.permanentStorageDate;
+    const lastMs = last ? ms(last) : Number.NaN;
+    if (!Number.isFinite(lastMs) || lastMs <= cursor) {
+      return { kind: 'issue', issue: 'internal', detail: 'okno nie do zawężenia (isTruncated bez postępu)' };
+    }
+    return {
+      kind: 'advance',
+      next: {
+        backfill_window_end: state.backfill_window_end,
+        backfill_cursor: iso(Math.min(lastMs, end)),
+        backfill_page_offset: 0,
+        backfill_completed_at: null,
+      },
+    };
+  }
+
   if (!page.hasMore) {
     const hwm = page.hwm ? ms(page.hwm) : Number.NaN;
     const confirmed = Number.isFinite(hwm)
@@ -268,23 +288,6 @@ export function applyBackfillPage(
     };
   }
 
-  if (page.isTruncated) {
-    const last = page.invoices[page.invoices.length - 1]?.permanentStorageDate;
-    const lastMs = last ? ms(last) : Number.NaN;
-    if (!Number.isFinite(lastMs) || lastMs <= cursor) {
-      return { kind: 'issue', issue: 'internal', detail: 'okno nie do zawężenia (isTruncated bez postępu)' };
-    }
-    return {
-      kind: 'advance',
-      next: {
-        backfill_window_end: state.backfill_window_end,
-        backfill_cursor: iso(Math.min(lastMs, end)),
-        backfill_page_offset: 0,
-        backfill_completed_at: null,
-      },
-    };
-  }
-
   return {
     kind: 'advance',
     next: {
@@ -315,12 +318,8 @@ export function applyLivePage(
   page: MetadataPageShape,
 ): CursorStep<{ live_hwm: string; live_page_offset: number }> {
   const from = ms(window.from);
-  if (!page.hasMore) {
-    if (!page.hwm) {
-      return { kind: 'issue', issue: 'waiting_for_ksef', detail: 'KSeF nie podał HWM — kursor bieżący stoi' };
-    }
-    return { kind: 'advance', next: { live_hwm: nextInboxHwm(page.hwm, window), live_page_offset: 0 } };
-  }
+  // `isTruncated` przed `hasMore` (E1-W10): inaczej kursor skakał do HWM ponad
+  // rekordy poza limitem 10 000.
   if (page.isTruncated) {
     const last = page.invoices[page.invoices.length - 1]?.permanentStorageDate;
     const lastMs = last ? ms(last) : Number.NaN;
@@ -328,6 +327,12 @@ export function applyLivePage(
       return { kind: 'issue', issue: 'internal', detail: 'okno bieżące nie do zawężenia (isTruncated bez postępu)' };
     }
     return { kind: 'advance', next: { live_hwm: iso(lastMs), live_page_offset: 0 } };
+  }
+  if (!page.hasMore) {
+    if (!page.hwm) {
+      return { kind: 'issue', issue: 'waiting_for_ksef', detail: 'KSeF nie podał HWM — kursor bieżący stoi' };
+    }
+    return { kind: 'advance', next: { live_hwm: nextInboxHwm(page.hwm, window), live_page_offset: 0 } };
   }
   return {
     kind: 'advance',

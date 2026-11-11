@@ -239,7 +239,8 @@ describe('overdue reminder status', () => {
     expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
     expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
     expect(queries.filter((query) => query.table === 'invoices' && query.selection.includes('ksef_environment'))
-      .every((query) => query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data' && query.exactCount)).toBe(true);
+      .every((query) => // Krok 1.2: kolumny znaczników FP (faktura do paragonu nie jest zaległością), świadoma zmiana.
+      query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data, receipt:fa3_data->receipt, ksef_fp:fa3_data->ksefMarkers->>fp' && query.exactCount)).toBe(true);
   });
 
   it('notes the 100-invoice cap only when more overdue invoices may exist (poprawka Bartosza 21.10.2026)', async () => {

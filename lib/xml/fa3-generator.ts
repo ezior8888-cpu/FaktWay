@@ -9,6 +9,7 @@ import {
   validateInvoice,
   ZW_WITHOUT_BASIS_MESSAGE,
 } from './invoice-calculator';
+import { RECEIPT_ONLY_REGULAR_MESSAGE, RECEIPT_XML_KEYS } from '@/lib/invoices/receipt-invoice';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
 
 // ═══════════════════════════════════════════════════════════════
@@ -362,6 +363,8 @@ function buildFa(
 
   fa.ele('RodzajFaktury').txt(invoice.type);
 
+  buildFakturaDoParagonu(fa, invoice);
+
   for (const line of invoice.lines) {
     buildFaWiersz(fa, line);
   }
@@ -466,6 +469,40 @@ function buildAdnotacje(
     ]);
   }
   adn.ele('PMarzy').ele('P_PMarzyN').txt('1');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// <FP> i <DodatkowyOpis>: faktura do paragonu (krok 1.2)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Faktura do paragonu. XSD `Fa`: po `RodzajFaktury` (i danych korekty, których
+ * zwykła faktura nie ma) idą kolejno `FP`, `TP`, `DodatkowyOpis`, potem
+ * `FaWiersz`. `FP` (etd:TWybor1) = „Faktura, o której mowa w art. 109 ust. 3d
+ * ustawy”, wartość „1”. Dane paragonu z art. 106h ust. 1 (numer dokumentu
+ * i numer unikatowy kasy) oraz data paragonu w `DodatkowyOpis` (klucz-wartość,
+ * po 256 znaków), żeby zostały w KSeF razem z fakturą.
+ *
+ * Reguły FP sprawdza `validateInvoice` (`lib/invoices/receipt-invoice.ts`);
+ * tu tylko bezpiecznik przy `validate: false`: paragon wyłącznie przy VAT.
+ */
+function buildFakturaDoParagonu(fa: XMLBuilder, invoice: Invoice): void {
+  const receipt = invoice.receipt;
+  if (!receipt) return;
+  if (invoice.type !== 'VAT') {
+    throw new InvoiceValidationError([RECEIPT_ONLY_REGULAR_MESSAGE]);
+  }
+  fa.ele('FP').txt('1');
+  const entries: Array<[string, string]> = [
+    [RECEIPT_XML_KEYS.receiptNumber, requireText(receipt.receiptNumber?.trim(), 'receipt.receiptNumber')],
+    [RECEIPT_XML_KEYS.receiptDate, formatDate(receipt.receiptDate)],
+    [RECEIPT_XML_KEYS.cashRegisterNumber, requireText(receipt.cashRegisterNumber, 'receipt.cashRegisterNumber')],
+  ];
+  for (const [klucz, wartosc] of entries) {
+    const opis = fa.ele('DodatkowyOpis');
+    opis.ele('Klucz').txt(klucz);
+    opis.ele('Wartosc').txt(wartosc);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

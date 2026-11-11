@@ -74,7 +74,12 @@ duplikat numeru wewnętrznego).
 Pełne mapowanie kodów → polskie komunikaty: [ksef-error-codes.md](./ksef-error-codes.md).
 
 **Co zrobić:**
-1. Sprawdź `ksef_submissions` w DB — tam jest `error_code` + raw response.
+1. Sprawdź `ksef_submissions` w DB: `error_code` to kod HTTP albo statusu
+   KSeF. Treści odpowiedzi KSeF tam nie ma, w Sentry i logach też nie
+   (F-093-STATUS: walidator KSeF może powtarzać dane z dokumentu). Przy
+   odrzuceniu w statusie (np. 450) opis i szczegóły KSeF są tylko
+   w `invoices.last_error`: karta faktury klienta, `/admin/ksef/<id>`
+   (ramka pod danymi faktury) i `/admin/support`.
 2. Pokaż user-owi błąd w UI (już robimy w `/invoices/[id]`).
 3. Jeśli to bug walidacji — fix XML generator + retest na `KSEF_ENV=test`.
 

@@ -40,6 +40,10 @@ type Recorded = Array<[string, unknown]>;
 const m = vi.hoisted(() => ({
   tables: { invoices: [] as Row[], audit_logs: [] as Row[] },
   violations: [] as Array<{ invariant: string; invoice_id: string; tenant_id: string; detail?: Row }>,
+  /** Nazwy wołanych RPC, po kolei. */
+  rpcs: [] as string[],
+  /** Baza bez 00186: lekkiego strażnika nie ma (PostgREST: PGRST202). */
+  lightMissing: false,
   release: vi.fn(),
   send: vi.fn(),
   paused: vi.fn(),
@@ -111,6 +115,12 @@ function project(row: Row, columns: string): Row {
 function fakeAdmin() {
   return {
     rpc: async (fn: string, args?: Record<string, unknown>) => {
+      m.rpcs.push(fn);
+      if (fn === 'ksef_lifecycle_violations_without_i3') {
+        return m.lightMissing
+          ? { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.ksef_lifecycle_violations_without_i3 without parameters in the schema cache' } }
+          : { data: m.violations.filter((v) => v.invariant !== 'I3'), error: null };
+      }
       if (fn === 'ksef_lifecycle_violations') return { data: m.violations, error: null };
       if (fn === 'release_ksef_enqueue') return { data: await m.release(args), error: null };
       throw new Error(`rpc ${fn}`);
@@ -277,6 +287,8 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   m.tables = { invoices: [], audit_logs: [] };
   m.violations = [];
+  m.rpcs = [];
+  m.lightMissing = false;
   m.updates = [];
   m.selects = [];
   m.ins = [];
@@ -312,6 +324,30 @@ describe('I1 — queued bez zlecenia', () => {
       ksef_status: 'failed', last_error_code: 'ENQUEUE_LOST', last_error: ENQUEUE_LOST_MESSAGE, ksef_send_owner: null,
     });
     expect(m.captureMessage).toHaveBeenCalled();
+  });
+
+  it('00186: czyta strażnika bez I3 (cron używa tylko I1 i I5), pełnego nie woła', async () => {
+    m.violations = [{ invariant: 'I1', invoice_id: ID1, tenant_id: TENANT }];
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i1Released: 1, errors: 0 });
+    expect(m.rpcs).toContain('ksef_lifecycle_violations_without_i3');
+    expect(m.rpcs).not.toContain('ksef_lifecycle_violations');
+  });
+
+  it('baza bez 00186 (PGRST202): pełny strażnik jak dotąd, ostrzeżenie w logu, I1 dalej porządkowane', async () => {
+    m.lightMissing = true;
+    m.violations = [{ invariant: 'I1', invoice_id: ID1, tenant_id: TENANT }];
+
+    const report = await runKsefLifecycleReconcile(ctx);
+
+    expect(report).toMatchObject({ i1Released: 1, errors: 0 });
+    expect(m.rpcs.filter((fn) => fn.startsWith('ksef_lifecycle_violations'))).toEqual([
+      'ksef_lifecycle_violations_without_i3', 'ksef_lifecycle_violations',
+    ]);
+    const warned = (ctx.logger.warn as ReturnType<typeof vi.fn>).mock.calls.map(([message]) => String(message));
+    expect(warned.some((message) => message.includes('00186'))).toBe(true);
   });
 });
 

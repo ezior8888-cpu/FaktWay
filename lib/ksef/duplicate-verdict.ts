@@ -145,7 +145,8 @@ function describeOriginal(ksefNumber: string, s: OriginalInvoiceSummary): string
 }
 
 /**
- * Komunikat `KSEF_NUMBER_TAKEN` dla klienta (trafia do `last_error`). Szkic po
+ * Komunikat `KSEF_NUMBER_TAKEN` dla klienta (trafia do `last_error` i e-maila,
+ * nie do logów: tekst operatora to `numberTakenLogMessage`). Szkic po
  * „Wróć do szkicu” jest wycofany (wpis `number_taken`, 00148): nie wyślesz go,
  * a zwykłej faktury i zaliczki nie usuniesz — stąd bez „usuń go” (decyzje
  * Bartosza 07.10.2026 (3) i (9)). Tekst: `DUPLICATE_DECISION_TEXTS`, przegląd prawnika.
@@ -186,6 +187,31 @@ export function knownNumberVerdictMessage(
 export function faktflowOriginalVerdictMessage(ksefNumber: string, gateKind: 'importable' | 'review'): string {
   const FF = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
   return gateKind === 'review' ? FF.LAST_ERROR_REVIEW(ksefNumber) : FF.LAST_ERROR(ksefNumber);
+}
+
+/**
+ * F-093-440: teksty werdyktów dla operatora i telemetrii (komunikat błędu
+ * joba: log workera, `inngest_run_log`, dziennik prób, audyt). Rodzaj
+ * werdyktu i numer KSeF oryginału, bez danych z pliku oryginału (nabywca,
+ * NIP, data, kwota, program): reguła z `lib/ksef/history-sync/errors.ts`,
+ * operator dostaje status i kody, nigdy treść. Klient dostaje pełny tekst
+ * (`numberTakenMessage`, `operatorVerdictMessage`) przez
+ * `KsefSendVerdictError.customerMessage`.
+ */
+export function numberTakenLogMessage(ksefNumber: string): string {
+  return `KSeF ma już fakturę o tym numerze (numer KSeF ${ksefNumber}) spoza FaktWay, o innej treści: numer zajęty.`;
+}
+
+/** Tekst operatora dla werdyktu „operator” (F-093-440, jak `numberTakenLogMessage`). */
+export function operatorVerdictLogMessage(ksefNumber: string, cmp: DuplicateComparison): string {
+  const head = `KSeF ma już fakturę o tym numerze (numer KSeF ${ksefNumber})`;
+  if (cmp.reason === 'same-content-other-program') {
+    return `${head} spoza FaktWay, z tą samą treścią: ta sama sprzedaż, do uzgodnienia przez operatora.`;
+  }
+  return (
+    `${head} z oznaczeniem FaktWay, ` +
+    `${cmp.sameContentExceptHeader ? 'z inną datą wytworzenia (treść zgodna)' : 'o innej treści'}: do uzgodnienia przez operatora.`
+  );
 }
 
 /** Komunikat werdyktu „operator” (trafia do `last_error`; przy panelu duplikatu klient go nie widzi — karta błędu jest ukryta). */

@@ -1,27 +1,31 @@
 import {
-  ACTION_FILE_LIMIT_BYTES,
-  ACTION_FILE_LIMIT_LABEL,
   formatUploadSize,
-  uploadRejectedMessage,
+  UPLOAD_FAILED_MESSAGE,
+  UPLOAD_FILE_LIMIT_BYTES,
+  UPLOAD_FILE_LIMIT_LABEL,
+  UPLOAD_IMAGE_LIMIT_BYTES,
+  UPLOAD_IMAGE_LIMIT_LABEL,
 } from '@/lib/upload-limit';
+import type { ExpenseUploadResult } from '@/lib/uploads/client';
 
 /**
  * Wysyłka zdjęcia albo PDF-u kosztu z przeglądarki (plan skalowania,
- * sesja 4; EXT-09, HOR-V1, DBC-02, BCK-09).
+ * sesje 4 i 31; EXT-09, HOR-V1, DBC-02, BCK-09).
  *
- * PO CO. Zdjęcie z aparatu telefonu ma 2–5 MB, a Server Action przyjmuje
- * 1 MB (`lib/upload-limit.ts`) — typowe zdjęcie paragonu nie dochodziło do
- * serwera. Do odczytu wystarcza dłuższy bok 2000 px: OCR (Anthropic) i tak
- * skaluje obraz do ok. 1568 px. Mniejszy plik to też mniej miejsca
- * w magazynie plików i kopiach.
+ * PO CO. Zdjęcie z aparatu telefonu ma 2–5 MB. Do odczytu wystarcza dłuższy
+ * bok 2000 px: OCR (Anthropic) i tak skaluje obraz do ok. 1568 px. Mniejszy
+ * plik to mniej miejsca w magazynie plików i kopiach (kopia 2000 px wystarcza
+ * jako dowód — decyzja Bartosza po #346). Od sesji 31 plik idzie trasą
+ * `/api/uploads/expense` z własnym limitem (PDF 10 MB, zdjęcie 7 MB — próg
+ * odczytu), a nie Server Action z limitem 1 MB.
  *
  * ZASADY ZMNIEJSZANIA:
  * - PDF bez zmian.
- * - JPEG, PNG, WEBP i GIF, które mieszczą się w limicie, idą bez ponownego
+ * - JPEG, PNG, WEBP i GIF do 1 MB (`PHOTO_KEEP_MAX_BYTES`) idą bez ponownego
  *   kodowania (nie tracą jakości, długi zrzut ekranu zostaje czytelny).
  * - Reszta obrazów: dekodowanie z orientacją z EXIF (`createImageBitmap`,
  *   zapas `<img>`), dłuższy bok ≤ 2000 px, JPEG 0,8, a gdy dalej ponad
- *   limit — 0,6. Wyjątek: obraz węższy niż 1:2 (zrzut przewijany) zachowuje
+ *   1 MB — 0,6. Wyjątek: obraz węższy niż 1:2 (zrzut przewijany) zachowuje
  *   krótszy bok ≥ 1000 px przy dłuższym ≤ 4096 px. Pod przezroczystością
  *   PNG białe tło. Animowany GIF daje pierwszą klatkę.
  * - Oryginał zostaje, gdy dekodowanie zawiedzie (np. HEIC poza Safari),
@@ -37,12 +41,19 @@ import {
 /** Dłuższy bok zmniejszonego zdjęcia. */
 export const PHOTO_MAX_EDGE_PX = 2000;
 
+/**
+ * Zdjęcie do tej wielkości idzie bez ponownego kodowania, większe kodujemy do
+ * niej (1 MB dziesiętnie). Do sesji 31 to był limit Server Action; zostaje
+ * jako cel zmniejszania — miejsce w magazynie i kopiach, nie limit wysyłki.
+ */
+export const PHOTO_KEEP_MAX_BYTES = 1_000_000;
+
 /** Krótszy bok, poniżej którego nie zwężamy długich zrzutów… */
 const TALL_MIN_SHORT_EDGE_PX = 1000;
 /** …o ile dłuższy bok nie przekroczy tej wartości. */
 const TALL_MAX_EDGE_PX = 4096;
 
-/** Jakość JPEG; druga tylko wtedy, gdy pierwsza nie mieści się w limicie. */
+/** Jakość JPEG; druga tylko wtedy, gdy pierwsza daje plik ponad `PHOTO_KEEP_MAX_BYTES`. */
 const JPEG_QUALITIES = [0.8, 0.6] as const;
 
 /** Formaty, które serwer przyjmuje (`detectExpensePhotoType`), poza PDF. */
@@ -57,9 +68,6 @@ const PROBE: ReadonlyArray<readonly [string, readonly [number, number, number]]>
 ];
 /** Drobny szum, który dokładają Brave, Safari i Firefox w trybie ochrony, przechodzi. */
 const PROBE_TOLERANCE = 24;
-
-/** Wynik akcji wgrania — kształt zwracany przez `uploadExpensePhotoAction`. */
-export type ExpenseUploadResult = { success: true; ocrJobId: string } | { success: false; error: string };
 
 type Decoded = { source: CanvasImageSource; width: number; height: number; release: () => void };
 
@@ -178,7 +186,7 @@ export interface ShrinkResult {
 export async function shrinkReceiptPhoto(file: File): Promise<ShrinkResult> {
   if (isPdf(file)) return { file, status: 'kept' };
   const accepted = SERVER_IMAGE_TYPES.has(file.type);
-  if (accepted && file.size <= ACTION_FILE_LIMIT_BYTES) return { file, status: 'kept' };
+  if (accepted && file.size <= PHOTO_KEEP_MAX_BYTES) return { file, status: 'kept' };
 
   try {
     if (!canvasReadable()) return { file, status: 'blocked' };
@@ -198,7 +206,7 @@ export async function shrinkReceiptPhoto(file: File): Promise<ShrinkResult> {
       let blob: Blob | null = null;
       for (const quality of JPEG_QUALITIES) {
         blob = await toJpeg(canvas, quality);
-        if (!blob || blob.size <= ACTION_FILE_LIMIT_BYTES) break;
+        if (!blob || blob.size <= PHOTO_KEEP_MAX_BYTES) break;
       }
       if (!blob) return { file, status: 'failed' };
       if (accepted && blob.size >= file.size) return { file, status: 'shrunk' };
@@ -215,17 +223,19 @@ export async function shrinkReceiptPhoto(file: File): Promise<ShrinkResult> {
 }
 
 /**
- * Komunikat dla pliku, który nie zmieści się w limicie Server Action;
- * `null` = mieści się. Rozmiar w komunikacie to rozmiar pliku wybranego
- * przez klienta, nie wyniku zmniejszania.
+ * Komunikat dla pliku ponad limit trasy wgrywania (PDF 10 MB, zdjęcie 7 MB —
+ * próg odczytu); `null` = mieści się. Rozmiar w komunikacie to rozmiar pliku
+ * wybranego przez klienta, nie wyniku zmniejszania. Serwer sprawdza to samo
+ * (`lib/expenses/accept-upload.ts`) po typie z zawartości.
  */
 export function expenseFileTooLargeMessage(original: File, result: ShrinkResult): string | null {
-  if (result.file.size <= ACTION_FILE_LIMIT_BYTES) return null;
   const size = formatUploadSize(original.size);
-  const limit = ACTION_FILE_LIMIT_LABEL;
   if (isPdf(original)) {
-    return `PDF ma ${size}, a można wgrać najwyżej ${limit}. Zapisz go w niższej rozdzielczości albo, jeśli ma jedną stronę, wgraj jego zdjęcie — zdjęcia zmniejszamy sami.`;
+    if (result.file.size <= UPLOAD_FILE_LIMIT_BYTES) return null;
+    return `PDF ma ${size}, a można wgrać najwyżej ${UPLOAD_FILE_LIMIT_LABEL}. Zapisz go w niższej rozdzielczości albo podziel na mniejsze pliki; jeśli ma jedną stronę, wgraj jego zdjęcie — zdjęcia zmniejszamy sami.`;
   }
+  if (result.file.size <= UPLOAD_IMAGE_LIMIT_BYTES) return null;
+  const limit = UPLOAD_IMAGE_LIMIT_LABEL;
   switch (result.status) {
     case 'shrunk':
       return `Zdjęcie (${size}) nawet po zmniejszeniu przekracza ${limit}. Zrób zdjęcie z bliska, samego dokumentu, albo je przytnij i spróbuj ponownie.`;
@@ -237,9 +247,10 @@ export function expenseFileTooLargeMessage(original: File, result: ShrinkResult)
 }
 
 /**
- * Zmniejsza zdjęcie, zatrzymuje plik ponad limit i wysyła resztę akcją.
- * Odrzucona obietnica akcji wraca jako zwykły błąd: w `startTransition`
- * trafiłaby do granicy błędu strony zamiast do toastu.
+ * Zmniejsza zdjęcie, zatrzymuje plik ponad limit i wysyła resztę
+ * (`postExpenseUpload` z `lib/uploads/client.ts`). Odrzucona obietnica
+ * wysyłki wraca jako zwykły błąd: w `startTransition` trafiłaby do granicy
+ * błędu strony zamiast do toastu.
  */
 export async function sendExpenseFile(
   file: File,
@@ -253,6 +264,6 @@ export async function sendExpenseFile(
   form.append('photo', result.file);
   return upload(form).catch((error: unknown): ExpenseUploadResult => {
     console.error('[koszty] wgranie pliku odrzucone', error);
-    return { success: false, error: uploadRejectedMessage(error) };
+    return { success: false, error: UPLOAD_FAILED_MESSAGE };
   });
 }

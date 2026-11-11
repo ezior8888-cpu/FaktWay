@@ -132,3 +132,32 @@ describe('treść', () => {
     expect(wszystko).not.toMatch(/[—–]|Zapłać|Sprawdź|Uzupełnij|Otwórz|Pamiętaj/);
   });
 });
+
+describe('F11-B2: dane zmienione po zatwierdzeniu', () => {
+  // Październik zatwierdzony (ryczałt 1536 zł) i zapłacony; potem faktura za
+  // usługę z 31.10, więc szkic według bieżących danych to 1836 zł (inny skrót
+  // wejść). Strona pokazuje dopłatę 300 zł, przypomnienie musi ją wymienić.
+  it('szkic z innym skrótem niż zapłacona wersja: przypomnienie o różnicy 300 zł, nie cisza', () => {
+    const zmieniony = { ...szkic('ryczalt', 183_600), wejsciaHash: 'b'.repeat(64) } as PozycjaZeSkrotem;
+    expect(
+      niezaplacone({
+        grupy: ['ryczalt'],
+        rozliczenia: [wersja('ryczalt', 153_600, { status: 'zaplacone', zaplaconeO: '2026-11-02' })],
+        pozycje: [zmieniony],
+        profil: PROFIL,
+      }),
+    ).toEqual([{ rodzaj: 'ryczalt', kwotaGr: 30_000 }]);
+  });
+
+  it('szkic z tym samym skrótem co wersja: kwota z wersji, jak dotąd (zapłacone, bez przypomnienia)', () => {
+    expect(
+      niezaplacone({
+        grupy: ['ryczalt'],
+        rozliczenia: [wersja('ryczalt', 153_600, { status: 'zaplacone', zaplaconeO: '2026-11-02' })],
+        pozycje: [{ ...szkic('ryczalt', 153_600), wejsciaHash: 'a'.repeat(64) } as PozycjaZeSkrotem],
+        profil: PROFIL,
+      }),
+    ).toEqual([]);
+  });
+});
+

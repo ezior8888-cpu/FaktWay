@@ -27,6 +27,17 @@ describe('równoległość kolejek KSeF', () => {
     expect(options.perJobResults).toBe(true);
   });
 
+  it('wysyłka: 5 slotów razem, najwyżej 2 na firmę (L1a)', () => {
+    // L1a (08.11.2026): MF liczy limity na parę (NIP, IP), a cała platforma
+    // wysyła z jednego adresu, więc jedna firma nie może zająć wszystkich
+    // slotów (wcześniej `groupConcurrency` 100). Liczba slotów razem (5) bez
+    // zmian — decyzja Bartosza z 03.11: podnosi ją sesja 15 planu skalowania
+    // po pomiarze.
+    const options = workOptionsFor(def('invoice.submit.requested'));
+    expect(options.groupConcurrency).toBe(2);
+    expect(options.localConcurrency).toBe(5);
+  });
+
   it('kolejka bez ustawienia — jak dotąd jeden worker', () => {
     expect(workOptionsFor({})).toEqual({ batchSize: 1, perJobResults: true });
   });

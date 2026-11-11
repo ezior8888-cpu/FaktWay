@@ -6,6 +6,7 @@ import { buildMonthReport, type MonthReport } from '@/lib/dashboard/pulpit-repor
 import { estimateIncomeTaxThisYear, type TaxEstimate } from '@/lib/dashboard/tax-estimate';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { assertNoReceiptInvoicesInRevenue, RECEIPT_REVENUE_COLUMNS, receiptRevenueRow } from '@/lib/invoices/receipt-revenue-guard';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
@@ -47,8 +48,11 @@ export const CASH_FLOW_AVERAGE_MONTHS = 12;
 
 export type CashFlowInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
-  'id' | 'issue_date' | 'net_total' | 'gross_total' | 'invoice_kind' | 'advance_invoice_ids' | 'currency'
+  'id' | 'issue_date' | 'net_total' | 'gross_total' | 'invoice_kind' | 'advance_invoice_ids' | 'currency' | 'internal_number'
 > & {
+  /** Znaczniki FP (`RECEIPT_REVENUE_COLUMNS`). */
+  receipt?: unknown;
+  ksef_fp?: unknown;
   /** ROZ: suma netto zaliczek, które już są w przychodzie (`fetchSettledAdvancesNet`). */
   settled_advances_net: number | null;
 };
@@ -83,7 +87,7 @@ export interface CashFlowData {
   costEntries: CostEntry[];
 }
 
-const INVOICE_COLUMNS = 'id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids, currency';
+const INVOICE_COLUMNS = `id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids, currency, internal_number, ${RECEIPT_REVENUE_COLUMNS}`;
 
 function monthKey(year: number, monthIndex: number): string {
   const d = new Date(Date.UTC(year, monthIndex, 1));
@@ -149,6 +153,8 @@ export async function getCashFlowData(
   invoices.sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
   // C-11: sumy w złotych — faktura sprzedaży w walucie obcej zatrzymuje odczyt.
   assertOutgoingInvoicesInPln(invoices);
+  // Krok 1.2: FP w oknie odczytu (12 miesięcy) wstrzymuje przychód, wykres i szacunek podatku.
+  assertNoReceiptInvoicesInRevenue(invoices.map(receiptRevenueRow));
 
   // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie.
   // Błąd odczytu rzuca — zerowa suma zaliczek zawyżyłaby dochód i podatek.

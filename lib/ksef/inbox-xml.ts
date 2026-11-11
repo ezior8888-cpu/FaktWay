@@ -8,11 +8,17 @@
  *
  * Błąd nie blokuje kosztu (kategoryzacja idzie dalej): PDF zostaje wtedy
  * podglądem z dopiskiem (decyzja B14), a zdarzenie widać w Sentry.
+ *
+ * 429 z KSeF albo lokalna pauza firmy po 429 (L1a, `rate-limit-pause.ts`) to
+ * nie awaria, tylko czekanie: wynik `rate_limited`, bez zgłoszenia do Sentry.
+ * Znacznik `_pendingFullFetch` zostaje, a cron `inbox-backfill` pomija firmę
+ * do końca pauzy i takiego przebiegu nie liczy jako próby.
  */
 
 import * as Sentry from '@sentry/nextjs';
 
 import { archiveImportedKsefXml } from '@/lib/import/ksef-xml-archive';
+import { KsefApiError } from '@/lib/ksef/client';
 import { fetchInvoiceXmlBytes } from '@/lib/ksef/history-fetcher';
 import { recordXmlDocument } from '@/lib/storage/xml-documents';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -20,7 +26,7 @@ import type { KsefEnvironment } from '@/types/ksef';
 
 export type InboxXmlResult =
   | { archived: true }
-  | { archived: false; reason: 'invoice' | 'not-applicable' | 'has-xml' | 'error' };
+  | { archived: false; reason: 'invoice' | 'not-applicable' | 'has-xml' | 'rate_limited' | 'error' };
 
 export async function archiveInboxInvoiceXml(params: {
   tenantId: string;
@@ -63,6 +69,11 @@ export async function archiveInboxInvoiceXml(params: {
     }
     return { archived: true };
   } catch (e) {
+    // L1a: lokalna pauza firmy (bez żądania) albo prawdziwy 429 z MF (pauza
+    // już zapisana w `ksefFetch`). XML dobierze cron po pauzie.
+    if (e instanceof KsefApiError && e.status === 429) {
+      return { archived: false, reason: 'rate_limited' };
+    }
     Sentry.captureException(e, {
       tags: { area: 'ksef.inbox-xml' },
       extra: { invoiceId },

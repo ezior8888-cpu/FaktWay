@@ -190,6 +190,11 @@ export interface AdvanceInvoiceData extends InvoiceCommonFields {
   advanceAmount: number; // kwota zaliczki (brutto)
   totalContractAmount: number; // łączna wartość umowy (brutto)
   expectedDeliveryDate?: string; // przewidywana data realizacji
+  /**
+   * Data otrzymania zaliczki (P_6), gdy różni się od daty wystawienia
+   * (art. 106f ust. 1 pkt 1 w zw. z art. 106e ust. 1 pkt 6 ustawy o VAT; F12-D1).
+   */
+  advanceReceivedDate?: string;
 
   // Stawka VAT zaliczki (zwykle ta sama co finalnej)
   vatRate: '23' | '8' | '5' | '0';

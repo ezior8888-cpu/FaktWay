@@ -180,6 +180,24 @@ describe('OverdueDashboard — układ Finory', () => {
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Przygotuj przypomnienie"/);
   });
 
+  it('numer faktury w tabeli: własna wysokość, wyrównanie do lewej, bez odstępów przycisku', () => {
+    // `cn` to tailwind-merge: z dwóch sprzecznych klas zostaje PÓŹNIEJSZA. Własne klasy stojące
+    // przed `buttonVariants(...)` przegrywały z `h-8`, `justify-center` i `px-2.5` wariantu, więc
+    // numer był wyśrodkowany w komórce, a „Do zapłaty …” pod nim wyrównane do lewej.
+    const html = renderToStaticMarkup(<OverdueDashboard overdueInvoices={[overdue()]} stats={stats} />);
+    const table = html.slice(html.indexOf('<table'), html.indexOf('</table>'));
+    const link = table.match(new RegExp(`<a[^>]*href="/invoices/${INVOICE}"[^>]*>`))?.[0] ?? '';
+    const classes = (link.match(/class="([^"]*)"/)?.[1] ?? '').split(' ');
+    expect(classes).toEqual(expect.arrayContaining(['h-auto', 'justify-start', 'px-0', 'font-mono']));
+    expect(classes).not.toContain('h-8');
+    expect(classes).not.toContain('justify-center');
+    expect(classes).not.toContain('px-2.5');
+    // Dotyk: 28 px zamiast 44 px z bazy przycisku. Wiersz trzymają na 44 px przyciski „Akcje”,
+    // a pod linkiem jest jeszcze linia 16 px, więc 44 px rozpychało każdy wiersz o 16 px.
+    expect(classes).toContain('[@media(pointer:coarse)]:min-h-7');
+    expect(classes).not.toContain('[@media(pointer:coarse)]:min-h-[44px]');
+  });
+
   it('stan pusty i błąd listy', () => {
     const empty = renderToStaticMarkup(
       <OverdueDashboard overdueInvoices={[]} stats={{ ...stats, totalCount: 0, totalAmount: 0, sentThisMonth: 0 }} canManageSettings />,

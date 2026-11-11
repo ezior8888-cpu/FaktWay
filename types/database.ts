@@ -770,6 +770,47 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_receipt_matches: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_expense_id: string
+          receipt_expense_id: string
+          receipt_was_deductible: boolean | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_expense_id: string
+          receipt_expense_id: string
+          receipt_was_deductible?: boolean | null
+          status: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_expense_id?: string
+          receipt_expense_id?: string
+          receipt_was_deductible?: boolean | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_receipt_matches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           categorization_confidence: number | null
@@ -6742,6 +6783,15 @@ export type Database = {
         }
         Returns: Json
       }
+      decide_receipt_invoice_match: {
+        Args: {
+          p_actor_user_id: string
+          p_invoice_expense_id: string
+          p_receipt_expense_id?: string | null
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       deny_join_request: { Args: { p_request_id: string }; Returns: undefined }
       enqueue_ksef_send: {
         Args: {
@@ -7063,6 +7113,15 @@ export type Database = {
       mark_invoice_paid: {
         Args: { p_invoice_id: string; p_paid_on?: string }
         Returns: Json
+      }
+      match_receipt_to_ksef_invoice: {
+        Args: {
+          p_auto_link: boolean
+          p_invoice_expense_id: string
+          p_receipt_expense_ids: string[]
+          p_tenant_id: string
+        }
+        Returns: string
       }
       note_ksef_inbox_activity: {
         Args: {

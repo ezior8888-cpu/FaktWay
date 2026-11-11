@@ -7,6 +7,7 @@
  * kontrahenci, produkty, znaczniki czasu i lista ostrzeżeń.
  */
 
+import { readAllByIdInList } from '@/lib/pagination/in-list';
 import { KeysetPageError, readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { Json } from '@/types/database';
@@ -218,19 +219,28 @@ async function upsertContractors(
 
   if (contractorsMap.size === 0) return { created, updated };
 
-  const nips = Array.from(contractorsMap.keys());
-  const { data: existing, error: selErr } = await supabase
-    .from('contractors')
-    .select('id, nip, name, email, address')
-    .eq('tenant_id', tenantId)
-    .in('nip', nips);
-
-  if (selErr) {
-    warnings.push(`Kontrahenci: odczyt — ${selErr.message}`);
+  // NIP-y z pliku paczkami po 100, każda stronami po `id` (sesja 32 planu
+  // skalowania, F-089): cała lista w jednym `.in()` to adres GET, który
+  // bramka odrzuca. Błąd którejkolwiek strony = nic nie zapisujemy (jak
+  // dotąd przy błędzie odczytu) — częściowa lista dałaby INSERT istniejących.
+  let existing: Array<{ id: string; nip: string; name: string; email: string | null; address: Json | null }>;
+  try {
+    existing = await readAllByIdInList('Kontrahenci: odczyt', Array.from(contractorsMap.keys()), (nips, afterId, limit) => {
+      let query = supabase
+        .from('contractors')
+        .select('id, nip, name, email, address')
+        .eq('tenant_id', tenantId)
+        .in('nip', nips);
+      if (afterId) query = query.gt('id', afterId);
+      return query.order('id', { ascending: true }).limit(limit);
+    });
+  } catch (error) {
+    if (!(error instanceof KeysetPageError)) throw error;
+    warnings.push(`Kontrahenci: odczyt — ${error.reason}`);
     return { created: 0, updated: 0 };
   }
 
-  const existingMap = new Map(existing?.map((c) => [c.nip, c]) ?? []);
+  const existingMap = new Map(existing.map((c) => [c.nip, c]));
 
   const rowsToInsert = Array.from(contractorsMap.values()).filter((s) => !existingMap.has(s.nip));
 
@@ -360,9 +370,9 @@ async function upsertProducts(
     if (k) existingByKey.set(k, { id: row.id, use_count: row.use_count ?? 0 });
   }
 
-  let created = 0;
-
-  const toInsert: {
+  // Nowe produkty po kluczu katalogu: dwie pozycje o tym samym kluczu (np. pusta
+  // jednostka i „szt.”) to jeden wiersz z zsumowaną liczbą użyć.
+  const pending = new Map<string, {
     tenant_id: string;
     name: string;
     unit: string;
@@ -370,11 +380,21 @@ async function upsertProducts(
     default_vat_rate: string;
     use_count: number;
     last_used_at: string;
-  }[] = [];
+  }>();
 
   for (const summary of productsMap.values()) {
-    const key = normalizeProductKey(summary.name, summary.unit);
+    // Klucz od jednostki zapisywanej w bazie: pusta zapisuje się jako „szt.”,
+    // więc klucz z pustej nigdy nie trafiał w swój produkt i każdy import
+    // dokładał dubel (od 00186 UNIQUE: błąd 23505).
+    const unit = summary.unit || 'szt.';
+    const key = normalizeProductKey(summary.name, unit);
     if (!key) continue;
+
+    const queued = pending.get(key);
+    if (queued) {
+      queued.use_count += summary.useCount;
+      continue;
+    }
 
     const hit = existingByKey.get(key);
     if (hit && policy === 'insert-only') continue; // bez zwiększania `use_count` (IMP-PROD)
@@ -388,20 +408,21 @@ async function upsertProducts(
         .eq('id', hit.id);
 
       if (error) warnings.push(`Produkt „${summary.name.slice(0, 40)}…”: update — ${error.message}`);
+      else hit.use_count += summary.useCount; // ten sam produkt może trafić drugi raz w tym imporcie
     } else {
-      toInsert.push({
+      pending.set(key, {
         tenant_id: tenantId,
         name: summary.name,
-        unit: summary.unit || 'szt.',
+        unit,
         default_price_net: summary.defaultPriceNet,
         default_vat_rate: summary.defaultVatRate,
         use_count: summary.useCount,
         last_used_at: new Date().toISOString(),
       });
-      existingByKey.set(key, { id: '__pending__', use_count: summary.useCount });
     }
   }
 
+  const toInsert = [...pending.values()];
   if (toInsert.length === 0) return 0;
 
   const { data: insData, error: insErr } = await supabase
@@ -409,12 +430,25 @@ async function upsertProducts(
     .insert(toInsert)
     .select('id');
 
-  if (insErr) {
+  if (!insErr) return insData?.length ?? 0;
+  if (insErr.code !== '23505') {
     warnings.push(`Produkty: insert — ${insErr.message}`);
     return 0;
   }
 
-  created = insData?.length ?? 0;
+  // 00186: UNIQUE na kluczu katalogu (uq_products_tenant_catalog_key). Paczka
+  // wstawia się atomowo, więc jeden produkt dopisany w międzyczasie przez drugi
+  // import (równoległy job tej firmy) cofa całą paczkę. Wtedy wiersz po
+  // wierszu: zajęty klucz pomijamy (produkt już jest; liczba użyć z tego
+  // importu przepada — to tylko kolejność podpowiedzi), resztę wstawiamy.
+  // Ponowienie joba: zapisane wiersze są już w katalogu, więc trafiają w
+  // `existingByKey` albo w ten sam 23505 — bez dubla.
+  let created = 0;
+  for (const row of toInsert) {
+    const { error } = await supabase.from('products').insert(row);
+    if (!error) created += 1;
+    else if (error.code !== '23505') warnings.push(`Produkt „${row.name.slice(0, 40)}…” nie trafił do katalogu: ${error.message}`);
+  }
   return created;
 }
 
@@ -462,16 +496,31 @@ async function insertInvoices(
     matches.add(ksefNumber);
     existingNumbers.set(key, matches);
   };
+  // Odczyty duplikatów paczkami po 100 wartości, każda stronami po `id`
+  // (sesja 32 planu skalowania, F-089): jedno `.in()` z całą listą z pliku
+  // to adres, który bramka odrzuca, a jedna odpowiedź ma najwyżej 1000
+  // wierszy — numer zakupu nie jest unikalny (00120: dwóch sprzedawców może
+  // wystawić FV/1), więc paczka może dopasować więcej. Błąd którejkolwiek
+  // strony przerywa import przed zapisem faktur (jak dotąd przy błędzie
+  // odczytu), nigdy „brak duplikatu” z niepełnej listy.
   if (numbers.length > 0) {
-    const { data: existingNums, error: exNumErr } = await supabase
-      .from('invoices')
-      .select('internal_number, seller_nip, issue_date, ksef_number')
-      .eq('tenant_id', tenantId)
-      .eq('direction', invoiceDirection)
-      .in('internal_number', numbers);
-
-    if (exNumErr) throw new Error(`Faktury: odczyt duplikatów (numer) — ${exNumErr.message}`);
-    for (const row of existingNums ?? []) {
+    let existingNums: Array<{ id: string; internal_number: string | null; seller_nip: string | null; issue_date: string; ksef_number: string | null }>;
+    try {
+      existingNums = await readAllByIdInList('Faktury: odczyt duplikatów (numer)', numbers, (values, afterId, limit) => {
+        let query = supabase
+          .from('invoices')
+          .select('id, internal_number, seller_nip, issue_date, ksef_number')
+          .eq('tenant_id', tenantId)
+          .eq('direction', invoiceDirection)
+          .in('internal_number', values);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
+    } catch (error) {
+      if (!(error instanceof KeysetPageError)) throw error;
+      throw new Error(`Faktury: odczyt duplikatów (numer) — ${error.reason}`);
+    }
+    for (const row of existingNums) {
       if (row.internal_number?.trim()) {
         rememberNumber(
           numberKey(row.internal_number.trim(), row.seller_nip, row.issue_date),
@@ -493,18 +542,26 @@ async function insertInvoices(
   };
   const existingKsef = new Map<string, ExistingKsefInvoice[]>();
   if (ksefNumbers.length > 0) {
-    let query = supabase
-      .from('invoices')
-      .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin, stored_annotations:fa3_data->annotations')
-      .eq('tenant_id', tenantId)
-      .eq('direction', invoiceDirection);
-    if (invoiceDirection === 'incoming' && ksefEnvironment) {
-      query = query.eq('ksef_environment', ksefEnvironment);
+    let ksefExisting: Array<ExistingKsefInvoice & { ksef_number: string | null }>;
+    try {
+      ksefExisting = await readAllByIdInList('Faktury: odczyt duplikatów (ksef)', ksefNumbers, (values, afterId, limit) => {
+        let query = supabase
+          .from('invoices')
+          .select('id, ksef_number, internal_number, ksef_status, ksef_environment, xml_storage_path, origin, stored_annotations:fa3_data->annotations')
+          .eq('tenant_id', tenantId)
+          .eq('direction', invoiceDirection);
+        if (invoiceDirection === 'incoming' && ksefEnvironment) {
+          query = query.eq('ksef_environment', ksefEnvironment);
+        }
+        query = query.in('ksef_number', values);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
+    } catch (error) {
+      if (!(error instanceof KeysetPageError)) throw error;
+      throw new Error(`Faktury: odczyt duplikatów (ksef) — ${error.reason}`);
     }
-    const { data: ksefExisting, error: exKErr } = await query.in('ksef_number', ksefNumbers);
-
-    if (exKErr) throw new Error(`Faktury: odczyt duplikatów (ksef) — ${exKErr.message}`);
-    for (const row of ksefExisting ?? []) {
+    for (const row of ksefExisting) {
       const ksefNumber = row.ksef_number?.trim();
       if (ksefNumber) {
         const matches = existingKsef.get(ksefNumber) ?? [];

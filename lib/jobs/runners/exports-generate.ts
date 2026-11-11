@@ -27,6 +27,7 @@ import {
 import { generateComarchOptimaXml } from '@/lib/exports/comarch-optima-generator';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { EDI_REFUSAL_PREFIX, generateEdiPlusPlus } from '@/lib/exports/edi-plus-plus-generator';
+import { RECEIPT_REVENUE_REFUSAL_PREFIX } from '@/lib/invoices/receipt-revenue-guard';
 import {
   CsvForeignCurrencyNotSupportedError,
   generateSymfoniaCsv,
@@ -257,6 +258,8 @@ export async function onExportsGenerateExhausted(
     // W9: odmowa dokumentu ma w treści jego numer — rozpoznawana po początku.
     failure.message.startsWith(JPK_DOCUMENT_REFUSAL_PREFIX) ||
     failure.message.startsWith(EDI_REFUSAL_PREFIX) ||
+    // Krok 1.2: odmowa KPiR przy fakturze do paragonu ma w treści numer faktury.
+    failure.message.startsWith(RECEIPT_REVENUE_REFUSAL_PREFIX) ||
     Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
   const message = human
     ? failure.message

@@ -22,6 +22,7 @@ vi.mock('@/lib/supabase/server', () => ({
       Object.assign(q, {
         select: () => q,
         eq: () => q,
+        in: () => q,
         maybeSingle: async () => ({ data: m.expense, error: null }),
       });
       return q;
