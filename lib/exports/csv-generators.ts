@@ -22,17 +22,30 @@ export interface CsvExportInput {
 const FORMULA_START = /^[=+@\t\r]|^-(?![\d\s.,]*$)/;
 
 /**
- * Początek każdej odmowy CSV. Odmowa z numerem dokumentu trafi do klienta,
- * gdy job eksportu zacznie rozpoznawać ten początek (F12-E2b, po #521).
+ * Początek każdej odmowy CSV. Job eksportu pokazuje klientowi odmowę po tym
+ * początku (F12-E2b), a Centrum eksportu wyciąga z niej numer faktury
+ * (`components/exports/export-fixes.ts`, ten sam napis pilnuje test).
  */
 export const CSV_REFUSAL_PREFIX = 'Eksport CSV wstrzymany:';
 
+/** Wyjście z odmowy: plik bez dnia tej faktury, a sama faktura ręcznie. */
+const WYJSCIE_ODMOWY =
+  'Wyeksportuj zakresy dat bez dnia tej faktury, a samą fakturę wpisz w programie księgowym ręcznie. W razie pytań napisz do nas przez Pomoc.';
+
+/**
+ * Faktura, której waluta nie jest PLN. Z numerem (F12-E6), bo jedna taka
+ * faktura wstrzymuje cały plik; bez numeru zostaje treść ogólna.
+ */
 export class CsvForeignCurrencyNotSupportedError extends Error {
-  constructor() {
-    // Treść bez numeru celowo: job pokazuje klientowi tylko komunikaty z listy
-    // dokładnych treści (`HUMAN_EXPORT_ERRORS`); numer faktury (F12-E6) dojdzie
-    // razem z rozpoznawaniem `CSV_REFUSAL_PREFIX` w jobie.
-    super(`${CSV_REFUSAL_PREFIX} faktura walutowa wymaga uzgodnienia kwot PLN z XML.`);
+  constructor(invoiceNumber?: string, currency?: string | null) {
+    const waluta = currency?.trim().toUpperCase();
+    super(
+      invoiceNumber
+        ? `${CSV_REFUSAL_PREFIX} faktura ${invoiceNumber} ${waluta ? `jest w walucie ${waluta}` : 'jest bez podanej waluty'}, ` +
+            'a plik CSV ma kwoty tylko w złotych. Kwot tej faktury w złotych FaktWay nie wylicza bez jej pliku XML. ' +
+            WYJSCIE_ODMOWY
+        : `${CSV_REFUSAL_PREFIX} faktura walutowa wymaga uzgodnienia kwot PLN z XML.`,
+    );
     this.name = 'CsvForeignCurrencyNotSupportedError';
   }
 }
@@ -49,10 +62,6 @@ export class CsvDocumentNotSupportedError extends CsvForeignCurrencyNotSupported
     this.name = 'CsvDocumentNotSupportedError';
   }
 }
-
-/** Wyjście z odmowy: plik bez dnia tej faktury, a sama faktura ręcznie. */
-const WYJSCIE_ODMOWY =
-  'Wyeksportuj zakresy dat bez dnia tej faktury, a samą fakturę wpisz w programie księgowym ręcznie. W razie pytań napisz do nas przez Pomoc.';
 
 // ============================================================================
 // Insert Subiekt GT
@@ -196,8 +205,9 @@ function allInvoices(
   // Każdy format CSV poniżej zakłada PLN; metadane KSeF mają przy obcej
   // walucie netto/brutto w walucie dokumentu, ale VAT w PLN. Nie wolno
   // oznaczyć takiego wiersza jako PLN ani wyeksportować mieszanych jednostek.
-  if (invoices.some(({ inv }) => inv.currency?.trim().toUpperCase() !== 'PLN')) {
-    throw new CsvForeignCurrencyNotSupportedError();
+  const walutowa = invoices.find(({ inv }) => inv.currency?.trim().toUpperCase() !== 'PLN');
+  if (walutowa) {
+    throw new CsvForeignCurrencyNotSupportedError(walutowa.inv.invoiceNumber, walutowa.inv.currency);
   }
   // F12-E2: sprzedaż z faktury do paragonu (art. 109 ust. 3d ustawy o VAT)
   // weszła już raportem z kasy, a formaty CSV nie mają oznaczenia FP: zwykły
