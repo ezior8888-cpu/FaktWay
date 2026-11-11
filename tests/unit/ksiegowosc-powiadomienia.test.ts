@@ -319,7 +319,7 @@ describe('cron.ksiegowosc-terminy', () => {
       expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
       expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 0, duplikaty: 1 });
       expect(mocks.pushe).toHaveLength(1);
-      expect(mocks.pushe[0].payload.body).toBe('Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT za październik 2026 wynosi 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.');
+      expect(mocks.pushe[0].payload.body).toBe('Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.');
       expect(mocks.maile[0].opcje).toMatchObject({ idempotencyKey: 'ksiegowosc/t1/2026-10/termin-5:2026-11-25' });
       expect([...mocks.wpisy.keys()]).toEqual(['t1|2026-10|termin-5:2026-11-25']);
     });

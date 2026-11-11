@@ -122,11 +122,11 @@ describe('F11-B5: VAT 0 zł', () => {
   it('treść: fakty o VAT 0 zł i terminie JPK_V7M, razem z pozycjami do zapłaty', () => {
     const [t] = terminyNaDzis('2026-11-20');
     expect(trescTerminu({ miesiac: '2026-10', termin: t.termin, dni: 5, pozycje: [{ rodzaj: 'vat', kwotaGr: 0 }] }).tresc).toBe(
-      'Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT za październik 2026 wynosi 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.',
+      'Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.',
     );
     const razem = trescTerminu({ miesiac: '2026-10', termin: t.termin, dni: 1, pozycje: [{ rodzaj: 'zdrowotna', kwotaGr: 100 }, { rodzaj: 'vat', kwotaGr: 0 }] }).tresc;
     expect(razem).toContain('Bez oznaczonej zapłaty: składka zdrowotna 1,00 zł.');
-    expect(razem).toContain('VAT za październik 2026 wynosi 0,00 zł');
+    expect(razem).toContain('VAT do zapłaty za październik 2026: 0,00 zł');
     expect(razem).not.toMatch(/[—–]|Zapłać|zalecamy|powinieneś/);
   });
 });

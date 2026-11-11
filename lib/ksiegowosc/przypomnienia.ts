@@ -172,7 +172,7 @@ export function trescTerminu(w: { miesiac: string; termin: Termin; dni: DniPrzed
   const zdania = [`${kiedy}, ${data}, mija termin za ${monthLabel(w.miesiac)}.`];
   if (doZaplaty.length > 0 || w.pozycje.length === 0) zdania.push(`Bez oznaczonej zapłaty: ${lista(doZaplaty)}.`);
   if (doZaplaty.length < w.pozycje.length) {
-    zdania.push(`VAT za ${monthLabel(w.miesiac)} wynosi ${zl(0)}; JPK_V7M za ten miesiąc ma ten sam termin.`);
+    zdania.push(`VAT do zapłaty za ${monthLabel(w.miesiac)}: ${zl(0)}; JPK_V7M za ten miesiąc ma ten sam termin.`);
   }
   return {
     tytul: `Termin ${data}: rozliczenie za ${monthLabel(w.miesiac)}`,
