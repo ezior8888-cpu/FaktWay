@@ -11,6 +11,6 @@
     "test": "node --test test/"
   },
   "dependencies": {
-    "pg": "8.23.0"
+    "pg": "8.23.1"
   }
 }
