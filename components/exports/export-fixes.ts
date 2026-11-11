@@ -28,6 +28,8 @@ type FixableJob = Pick<ManualExportJobWithFiles, 'status' | 'format' | 'error_me
 
 /** = `JPK_DOCUMENT_REFUSAL_PREFIX` z `lib/exports/jpk-fa-generator.ts` (pilnuje test). */
 export const DOCUMENT_REFUSAL_PREFIX = 'JPK wstrzymany:';
+/** = `CSV_REFUSAL_PREFIX` z `lib/exports/csv-generators.ts` (pilnuje test; F12-E2b). */
+export const CSV_DOCUMENT_REFUSAL_PREFIX = 'Eksport CSV wstrzymany:';
 
 /** Fragmenty komunikatów z `lib/` — każdy przypięty testem do prawdziwej klasy błędu. */
 export const FIX_MARKERS = {
@@ -50,15 +52,19 @@ export const FIX_MARKERS = {
 } as const;
 
 /**
- * Numer faktury z odmowy dokumentu: „JPK wstrzymany: faktura FV/1 (KSeF …) ma …”.
+ * Numer faktury z odmowy dokumentu: „JPK wstrzymany: faktura FV/1 (KSeF …) ma …”
+ * albo „Eksport CSV wstrzymany: faktura FV/1 jest …”.
  * Numer może mieć spacje, więc tniemy przed „(KSeF” albo przed powodem
- * („ma …”, „to …”, „jest …”); w razie wątpliwości — pierwsze słowo.
+ * („ma …”, „to …”, „jest …”, „została …”); w razie wątpliwości pierwsze słowo
+ * (tylko przy JPK; odmowa CSV bez numeru nie zgaduje).
  */
 export function refusedInvoiceNumber(message: string): string | null {
-  const head = `${DOCUMENT_REFUSAL_PREFIX} faktura `;
-  if (!message.startsWith(head)) return null;
+  const head = [DOCUMENT_REFUSAL_PREFIX, CSV_DOCUMENT_REFUSAL_PREFIX].map((p) => `${p} faktura `).find((h) => message.startsWith(h));
+  if (!head) return null;
   const rest = message.slice(head.length);
-  const m = /^(.+?)(?: \(KSeF [^)]*\))? (?:ma|to|jest) /.exec(rest);
+  const m = /^(.+?)(?: \(KSeF [^)]*\))? (?:ma|to|jest|została) /.exec(rest);
+  // Odmowa CSV bez numeru („faktura walutowa wymaga …”, zapisana przed F12-E6) nie zgaduje numeru.
+  if (!m && head.startsWith(CSV_DOCUMENT_REFUSAL_PREFIX)) return null;
   const number = (m?.[1] ?? rest.split(/\s+/)[0] ?? '').trim();
   return number || null;
 }

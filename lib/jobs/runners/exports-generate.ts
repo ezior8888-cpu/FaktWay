@@ -29,6 +29,7 @@ import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency
 import { EDI_REFUSAL_PREFIX, generateEdiPlusPlus } from '@/lib/exports/edi-plus-plus-generator';
 import { RECEIPT_REVENUE_REFUSAL_PREFIX } from '@/lib/invoices/receipt-revenue-guard';
 import {
+  CSV_REFUSAL_PREFIX,
   CsvForeignCurrencyNotSupportedError,
   generateSymfoniaCsv,
   generateUniversalCsv,
@@ -260,6 +261,8 @@ export async function onExportsGenerateExhausted(
     failure.message.startsWith(EDI_REFUSAL_PREFIX) ||
     // Krok 1.2: odmowa KPiR przy fakturze do paragonu ma w treści numer faktury.
     failure.message.startsWith(RECEIPT_REVENUE_REFUSAL_PREFIX) ||
+    // F12-E2b: odmowa CSV (FP, nieznane kwoty z importu, waluta) ma numer faktury.
+    failure.message.startsWith(CSV_REFUSAL_PREFIX) ||
     Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
   const message = human
     ? failure.message
