@@ -79,7 +79,7 @@ export default defineConfig({
       // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu; duplikaty po kluczu, wpłata
       // dopiero po potwierdzeniu i raz, maskowanie po „Pomiń”, cofnięcie ze śladem, obca firma i role.
       'tests/rls-wyciag-bankowy.test.ts',
-      // 00186 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu
+      // 00189 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu
       // jako zapłaty rozliczeń; rachunek firmy, wyłącznik modułu, zapis raz, role, różnica kwot, cofnięcie.
       'tests/rls-wyciag-podatki.test.ts',
     ],

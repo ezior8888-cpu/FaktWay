@@ -74,7 +74,7 @@ const TOUCH = 'max-lg:min-h-[44px] max-lg:min-w-[44px]';
 const READ_ONLY = 'Wyciąg wgrywa i wpłaty potwierdza właściciel, administrator albo członek firmy. Księgowa ma tu wgląd.';
 const PRIVACY_NOTE =
   'Zapisujemy tylko wpływy w złotych potrzebne do dopasowania. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek nadawcy, a zostają kwota, dzień i znacznik, że ta operacja już była.';
-/** Przy włączonym module księgowości zapisujemy też przelewy do ZUS i urzędu (00186). */
+/** Przy włączonym module księgowości zapisujemy też przelewy do ZUS i urzędu (00189). */
 const PRIVACY_NOTE_TAX =
   'Zapisujemy tylko wpływy w złotych potrzebne do dopasowania oraz przelewy do ZUS i urzędu skarbowego; innych wypływów nie zapisujemy. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek drugiej strony, a zostają kwota, dzień i znacznik, że ta operacja już była.';
 

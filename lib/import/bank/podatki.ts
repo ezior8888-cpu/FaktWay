@@ -39,7 +39,7 @@ import { foldText } from './tekst';
 
 // ─── Rozpoznanie po rachunku ─────────────────────────────────────────────
 
-/** Rodzaj przelewu podatkowego; ta sama lista stoi w CHECK-u `payment_imports.tax_kind` (00186). */
+/** Rodzaj przelewu podatkowego; ta sama lista stoi w CHECK-u `payment_imports.tax_kind` (00189). */
 export const RODZAJE_PRZELEWU = ['zus', 'us'] as const;
 export type RodzajPrzelewu = (typeof RODZAJE_PRZELEWU)[number];
 
@@ -251,7 +251,7 @@ export interface OpcjaZaplaty {
 }
 
 export type SposobPrzypisania = 'tytul' | 'kwota';
-/** Rodzaj dopasowania przy potwierdzeniu; ta sama lista stoi w `confirm_bank_tax_payment` (00186). */
+/** Rodzaj dopasowania przy potwierdzeniu; ta sama lista stoi w `confirm_bank_tax_payment` (00189). */
 export const RODZAJE_DOPASOWANIA_PODATKU = ['title', 'amount', 'manual'] as const;
 export type RodzajDopasowaniaPodatku = (typeof RODZAJE_DOPASOWANIA_PODATKU)[number];
 
@@ -484,7 +484,7 @@ export function opisRozstrzygniecia(
   };
 }
 
-// ─── Odczyt `bank_tax_operations` (00186) ────────────────────────────────
+// ─── Odczyt `bank_tax_operations` (00189) ────────────────────────────────
 
 export interface PrzelewCzekajacy extends OperacjaPodatkowa {
   /** Własny rachunek z wyciągu. */

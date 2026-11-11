@@ -104,7 +104,7 @@ export type AuditAction =
   | 'bank.operation_confirmed'
   | 'bank.operation_skipped'
   | 'bank.operation_undone'
-  // Przelewy do ZUS i urzędu jako zapłaty rozliczeń (00186, plan kompletnej aplikacji 3.2, część 2):
+  // Przelewy do ZUS i urzędu jako zapłaty rozliczeń (00189, plan kompletnej aplikacji 3.2, część 2):
   // metadane z rozliczeniami, dniem zapłaty, kwotą z banku, wyliczoną i różnicą. Zapisuje baza
   // (RPC `confirm_bank_tax_payment`, `undo_bank_tax_payment`) razem z `tax_settlement.paid`/`unpaid`.
   | 'bank.tax_payment_confirmed'

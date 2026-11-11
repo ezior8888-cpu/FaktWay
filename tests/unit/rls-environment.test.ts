@@ -102,7 +102,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-wplaty-czesciowe.test.ts',
       // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu bankowego.
       'tests/rls-wyciag-bankowy.test.ts',
-      // 00186 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu.
+      // 00189 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu.
       'tests/rls-wyciag-podatki.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
