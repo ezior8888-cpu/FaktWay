@@ -216,24 +216,17 @@ export function DataTableView<T>({
                     }
                   >
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                      <div
-                        className='flex h-full cursor-pointer items-center justify-between gap-2 select-none'
+                      <button
+                        type='button'
+                        className='flex h-full w-full cursor-pointer items-center justify-between gap-2 text-left select-none'
                         onClick={header.column.getToggleSortingHandler()}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            header.column.getToggleSortingHandler()?.(e)
-                          }
-                        }}
-                        role='button'
-                        tabIndex={0}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         {{
                           asc: <RiArrowUpSLine className='size-4 shrink-0 opacity-60' aria-hidden='true' />,
                           desc: <RiArrowDownSLine className='size-4 shrink-0 opacity-60' aria-hidden='true' />
                         }[header.column.getIsSorted() as string] ?? null}
-                      </div>
+                      </button>
                     ) : (
                       flexRender(header.column.columnDef.header, header.getContext())
                     )}
