@@ -35,9 +35,9 @@
 import * as Sentry from '@sentry/nextjs';
 
 import type { JobContext } from '@/lib/jobs/registry';
-import { MAX_WAIT_RETRIES, readWaits } from '@/lib/jobs/retry';
+import { isPauseError, isPauseWithinBudget, MAX_WAIT_RETRIES, readPauseSince, readWaits } from '@/lib/jobs/retry';
 import type { JobStep } from '@/lib/jobs/step-shim';
-import { KsefApiError } from '@/lib/ksef/client';
+import { isKsefLocalPause, KsefApiError } from '@/lib/ksef/client';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { SendRefusalCode } from '@/lib/ksef/send-error-classes';
 import { classifySendError, sendErrorClassOf } from '@/lib/ksef/send-error-codes';
@@ -50,6 +50,8 @@ import { InvoiceXmlSchemaError } from '@/lib/xml/validator';
 export const SEND_ATTEMPT_STAGES = [
   'start',
   'guard',
+  // L1a: pauza firmy po 429 z KSeF albo hamulec 429 (wiele firm naraz) — przed przejęciem.
+  'pause',
   'offline',
   'credentials',
   'health',
@@ -73,6 +75,9 @@ export type SendAttemptStatus = 'started' | 'succeeded' | 'failed' | 'waiting' |
  */
 const STEP_STAGE: Readonly<Record<string, SendAttemptStage>> = {
   'idempotency-guard': 'guard',
+  // 'ksef-rate-limit-pause' celowo bez wpisu: etap 'pause' dostaje tylko wykonanie,
+  // które krok pauzy zatrzymał (`describeSendAttemptFailure`). Wpis tutaj zostawiałby
+  // 'pause' na odmowach strażnika odwołań, które biegną po tym kroku bez własnego kroku.
   'check-ksef-health': 'offline',
   'try-redirect-offline-queue': 'offline',
   'audit-redirect-offline': 'offline',
@@ -109,13 +114,18 @@ function isNamed<T extends Error>(e: Error, cls: abstract new (...args: never[])
   return e instanceof cls || e.name === name;
 }
 
-/** Etap `submit` doprecyzowany po błędzie: XML (generator, XSD) albo odpowiedź KSeF. */
+/**
+ * Etap `submit` doprecyzowany po błędzie: XML (generator, XSD) albo odpowiedź
+ * KSeF. Lokalna pauza firmy po 429 (L1a, `KsefRateLimitPausedError`) to nie
+ * odpowiedź KSeF — żądanie nie wyszło.
+ */
 export function refineStage(stage: SendAttemptStage, error: unknown): SendAttemptStage {
   if (stage !== 'submit') return stage;
   for (const e of chain(error)) {
     if (isNamed(e, InvoiceXmlSchemaError, 'InvoiceXmlSchemaError') || isNamed(e, InvoiceValidationError, 'InvoiceValidationError')) {
       return 'xml';
     }
+    if (isKsefLocalPause(e)) continue;
     if (isNamed(e, KsefApiError, 'KsefApiError') || isNamed(e, KsefInvoiceRejectedError, 'KsefInvoiceRejectedError')) {
       return 'ksef';
     }
@@ -161,24 +171,35 @@ export interface SendAttemptFailure {
  * KSeF nadal przetwarza) to `waiting` bez kodu — nie porażka. Po wyczerpaniu
  * limitu odczekań (`decideRetry`) to samo oczekiwanie zużywa próbę i może
  * zakończyć job — wtedy jest zwykłą porażką z kodem.
+ *
+ * Pauza firmy po 429 (L1a, `RetryAfterError` z `pause: true`) to zawsze
+ * `waiting` bez kodu: nie korzysta z budżetu odczekań (`__waits`), więc ich
+ * licznik jej nie dotyczy. Status HTTP tylko z prawdziwej odpowiedzi KSeF:
+ * lokalna pauza (`localPause`, żądanie nie wyszło) nie jest „HTTP 429”.
  */
 export function describeSendAttemptFailure(
   error: unknown,
   stage: SendAttemptStage,
   /** Licznik odczekań joba (`__waits`); po `MAX_WAIT_RETRIES` pg-boss liczy oczekiwanie jako próbę. */
   waits = 0,
+  /** Łańcuch pauz po 429 (`__pauseSince`); po `MAX_PAUSE_CHAIN_MS` pauza zużywa próbę (L1a). */
+  pause: { sinceMs: number | null; nowMs: number } = { sinceMs: null, nowMs: Date.now() },
 ): SendAttemptFailure {
   const errors = chain(error);
   const top = errors[0];
+  const paused = isPauseError(top);
   const waiting =
-    top !== undefined &&
-    top.name === 'RetryAfterError' &&
-    (top as { countsAsAttempt?: unknown }).countsAsAttempt === false &&
-    waits < MAX_WAIT_RETRIES;
+    isPauseWithinBudget(top, pause) ||
+    (!paused &&
+      top !== undefined &&
+      top.name === 'RetryAfterError' &&
+      (top as { countsAsAttempt?: unknown }).countsAsAttempt === false &&
+      waits < MAX_WAIT_RETRIES);
   const retryable = !(top !== undefined && top.name === 'NonRetriableError');
   let httpStatus: number | null = null;
   let ksefCode: number | null = null;
   for (const e of errors) {
+    if (isKsefLocalPause(e)) continue;
     if (httpStatus === null && isNamed(e, KsefApiError, 'KsefApiError')) {
       const api = e;
       httpStatus = typeof api.status === 'number' ? api.status : null;
@@ -192,7 +213,9 @@ export function describeSendAttemptFailure(
   const classified = waiting ? null : classifySendError(error);
   return {
     status: waiting ? 'waiting' : 'failed',
-    stage: refineStage(stage, error),
+    // Pauza przed przejęciem (krok `ksef-rate-limit-pause` w etapie strażnika) = etap 'pause';
+    // pauza po 429 w trakcie wysyłki zostaje w swoim etapie (reconcile, submit…).
+    stage: paused && stage === 'guard' ? 'pause' : refineStage(stage, error),
     error_code: classified?.code ?? null,
     error_class: classified?.class ?? null,
     error_message: sendAttemptMessage(top ? `${top.name}: ${top.message}` : String(error)),
@@ -398,7 +421,10 @@ export function withSendAttemptLedger<TData, TResult>(
     } catch (error) {
       // Opis porażki nie może zastąpić błędu runnera — ten zawsze wychodzi bez zmian.
       try {
-        const failure = describeSendAttemptFailure(error, stage, readWaits(data));
+        const failure = describeSendAttemptFailure(error, stage, readWaits(data), {
+          sinceMs: readPauseSince(data),
+          nowMs: Date.now(),
+        });
         await writer.finish({ ...failure });
         ctx.logger.info('ksef.send.attempt', {
           invoiceId: identity.invoiceId,

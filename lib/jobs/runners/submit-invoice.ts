@@ -25,7 +25,16 @@ import {
   updateInvoiceStatus,
 } from '@/lib/supabase/admin-queries';
 import { createAdminClient } from '@/lib/supabase/server';
-import { KsefApiError } from '@/lib/ksef/client';
+import { isKsefLocalPause, isKsefRateLimitResponse, KsefApiError } from '@/lib/ksef/client';
+import {
+  KSEF_PAUSE_DEFAULT_MS,
+  KSEF_SEND_BRAKE_RETRY_MS,
+  ksefPausedUntil,
+  ksefPauseRetryError,
+  ksefSendBrakeActive,
+  ksefSendBrakeAllows,
+  recordKsefRateLimit,
+} from '@/lib/ksef/rate-limit-pause';
 import {
   checkInvoiceStatusByReference,
   downloadKsefInvoice,
@@ -101,7 +110,8 @@ import {
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import {
   getKsefRetryDelay,
-  ksefRetryDelayFor,
+  ksefRetryDelayMs,
+  ksefRetryDelayMsFor,
   KSEF_MAX_RETRIES,
 } from '../retry-schedule';
 
@@ -140,23 +150,34 @@ interface SubmitOutcome {
  * Trigger: event 'invoice/submit.requested' (publikowany z Server Action
  * po kliknięciu "Wyślij do KSeF" w UI).
  *
- * Retry policy (Faza 23 sekcja 2):
- * - Custom backoff: 30s → 2min → 5min → 15min → 1h przez `RetryAfterError`.
- *   Override Inngest defaultu (10s/30s/1m/5m/15m), dający MF ponad godzinę
- *   na recovery po większej awarii.
- * - Błędy 5xx i 429 — retry z opóźnieniem.
+ * Ponowienia (Faza 23 sekcja 2, stan 08.11.2026 po L1a):
+ * - Harmonogram 30s → 2min → 5min → 15min → 1h przez `RetryAfterError`,
+ *   z rozrzutem do +20% (`ksefRetryDelayMs`), żeby faktury, które padły
+ *   razem, nie wracały razem.
+ * - 5xx i timeout — ponowienie z opóźnieniem; `Retry-After` z KSeF (np. przy
+ *   503) ma pierwszeństwo, najwyżej godzinę, bo czekanie trwa z fakturą
+ *   w `sending` (`ksefRetryDelayMsFor`).
+ * - 429 = PAUZA FIRMY (L1a, `lib/ksef/rate-limit-pause.ts`): MF liczy limity
+ *   na parę (NIP, adres IP), a cała platforma wysyła z jednego adresu. Po 429
+ *   żadne żądanie KSeF tej firmy nie wychodzi do końca `Retry-After` (bramka
+ *   w `ksefFetch`); job czeka z rozrzutem, nie zużywa ani próby, ani odczekań
+ *   (`RetryAfterError` z `pause: true`). Czekanie wypada przed przejęciem
+ *   wysyłki (krok `ksef-rate-limit-pause`) albo po jego zwolnieniu
+ *   (`releaseSendClaimForPause`) — nigdy z fakturą w `sending`. Kod w logach:
+ *   `KSEF_RATE_LIMIT_PAUSE` (nie `KSEF_PAUSED` — to wyłącznik operatora).
+ *   Hamulec 429: od kilku firm z 429 w 10 minut przechodzi ok. co czwarte
+ *   zadanie (sygnał, że MF ogranicza nasz adres, M11).
  * - Błędy treści (XSD, odrzucenie przez KSeF) — `NonRetriableError`, po
  *   `onExhausted` faktura `rejected`; inne błędy bez ponowień (strażnik
  *   dokumentu, brak certyfikatu) kończą jako `failed` z kodem z katalogu
  *   `ksef_error_codes` (`lib/ksef/send-error-codes.ts`).
  *
- * Concurrency + throttle (Faza 23 sekcja 2):
- * - Per-tenant concurrency: max 100 równoległych submit'ów. Wyższy limit
- *   per-tenant (vs poprzednie 3 per-NIP) dla dużych tenantów z 1000+ fakturami
- *   miesięcznie; rate-limiter per-NIP wewnątrz KSeF clienta i tak zatrzyma
- *   nadmiar.
- * - Per-tenant throttle: 60 wysyłek/min — chroni MF przed zalaniem przy
- *   bulk import, nawet jeśli concurrency 100 da chwilowy spike.
+ * Równoległość (`lib/jobs/handlers/package-d.ts`):
+ * - `groupConcurrency` 2 na firmę w aplikacji (`KSEF_TENANT_CONCURRENCY_LIMIT`,
+ *   L1a; wcześniej 100, czyli bez limitu), 5 slotów razem.
+ * - Nie ma throttle'a „60 wysyłek/min” (był w Inngest, odpięty 02.10.2026)
+ *   ani limitera per NIP liczącego żądania: `ksefRateLimiter` liczy zadania
+ *   i niesie NIP do pauzy. Budżet na żądanie według grup MF to karta L1b.
  */
 
 /**
@@ -316,6 +337,80 @@ async function markFailureUnlessAccepted(
     .maybeSingle();
   if (error) throw new Error('Nie można zapisać wyniku wysyłki faktury');
   return updated?.id === invoiceId;
+}
+
+/**
+ * Kod pauzy limitu w logach (L1a). Nie `KSEF_PAUSED` ani znacznik
+ * `[KSEF_PAUSED]` — to wyłącznik operatora (klasa hold, cron I7).
+ */
+const KSEF_RATE_LIMIT_PAUSE = 'KSEF_RATE_LIMIT_PAUSE';
+
+/** 429 z KSeF: prawdziwa odpowiedź MF albo lokalna pauza firmy (żądanie nie wyszło). */
+function isKsefRateLimit(error: unknown): error is KsefApiError {
+  return isKsefRateLimitResponse(error) || (error instanceof KsefApiError && isKsefLocalPause(error));
+}
+
+/**
+ * L1a: zwolnienie przejęcia wysyłki na czas pauzy firmy po 429. Karta L1a:
+ * „czekanie wypada przed przejęciem wysyłki albo po jego zwolnieniu, nigdy
+ * z fakturą w `sending`”. Pauza trwa tyle, ile podał MF (do doby), a faktura
+ * w `sending` po 15 min włącza alarm `stale_ksef_sending_invoices`
+ * (`critical-alerts-monitor.ts`), po 30 min jest naruszeniem I2 cyklu życia.
+ *
+ * Warunkowy UPDATE `sending` → `queued` tylko dla własnego przejęcia tej
+ * próby (`ksef_send_owner` = `sendAttemptId`): przyjęcie przez inny worker
+ * i cudza dzierżawa wygrywają. `ksef_send_owner` i `submitted_to_ksef_at`
+ * ZOSTAJĄ — po pauzie `claim_ksef_send` tym samym właścicielem przejdzie od
+ * razu (00124), a inna próba dopiero po końcu dzierżawy, więc dwie wysyłki
+ * naraz dalej są niemożliwe. Wyzwalacze 00119/00132/00148 dopuszczają to
+ * przejście dla service_role. `queued` z zaplanowanym ponowieniem w pg-boss
+ * nie jest naruszeniem I1; gdyby zlecenie zginęło, I1 woła
+ * `release_ksef_enqueue`, które fakturze z dowodem kontaktu odmawia powrotu
+ * do szkicu (`ENQUEUE_LOST` dla operatora).
+ *
+ * Bez `sendAttemptId` (zdarzenia sprzed AUD-10) nie zwalniamy — nie wiadomo,
+ * czyje to przejęcie. Błąd zapisu = zwykły `Error` (ponowienie): pauza
+ * z fakturą w `sending` to dokładnie stan, którego karta zabrania.
+ */
+async function releaseSendClaimForPause(
+  invoiceId: string,
+  tenantId: string,
+  owner: string | null | undefined,
+): Promise<boolean> {
+  if (!owner) return false;
+  const { data, error } = await (await createAdminClient())
+    .from('invoices')
+    .update({ ksef_status: 'queued' })
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .eq('ksef_status', 'sending')
+    .eq('ksef_send_owner', owner)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error('Nie można zwolnić przejęcia wysyłki faktury na czas pauzy KSeF');
+  return data?.id === invoiceId;
+}
+
+/** Alarm hamulca 429 najwyżej raz na tyle ms na środowisko (każde zatrzymane zadanie to nie nowy alarm). */
+const SEND_BRAKE_ALERT_INTERVAL_MS = 10 * 60_000;
+const lastSendBrakeAlertAt = new Map<KsefEnvironment, number>();
+
+/**
+ * Hamulec 429 (L1a): wiele firm dostało 429 w ostatnich 10 minutach — sygnał,
+ * że MF ogranicza nasz adres IP, nie jedną firmę (M11). To NIE hamulec
+ * operatora (`KSEF_PAUSED`, `KOR_HOLD`): sam się zdejmuje, gdy okno minie.
+ */
+function reportSendBrake(env: KsefEnvironment, extra: Record<string, unknown>): void {
+  const now = Date.now();
+  const last = lastSendBrakeAlertAt.get(env);
+  if (last !== undefined && now - last < SEND_BRAKE_ALERT_INTERVAL_MS) return;
+  lastSendBrakeAlertAt.set(env, now);
+  Sentry.captureMessage('KSeF: hamulec 429, wiele firm z 429 naraz, wysyłka zwolniona', {
+    level: 'warning',
+    tags: { job: 'submit-invoice', kind: 'ksef-rate-limit-brake', env },
+    fingerprint: ['ksef-rate-limit-brake'],
+    extra: { env, ...extra },
+  });
 }
 
 /**
@@ -920,6 +1015,97 @@ export async function runSubmitInvoice(
     // Przed sondą zdrowia i Offline24 — wstrzymanej faktury nie wolno też zaparkować.
     await assertSubmissionNotHeld(parsed.data, current, env);
 
+    // L1a: własne przejęcie tej próby (`sending` po wcześniejszym wykonaniu,
+    // np. po 503 albo padniętym workerze) zwalniamy przed czekaniem — pauza
+    // nie może trzymać faktury w `sending` (`releaseSendClaimForPause`).
+    // Świeży odczyt, bo stan z `current` nie niesie właściciela przejęcia.
+    const releaseOwnClaimBeforeWait = async (): Promise<void> => {
+      const owner = parsed.data.sendAttemptId;
+      if (!owner) return;
+      const { data: row, error } = await (await createAdminClient())
+        .from('invoices')
+        .select('ksef_status, ksef_send_owner')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (error) throw new Error('Nie można sprawdzić przejęcia wysyłki faktury przed pauzą KSeF');
+      if (row?.ksef_status === 'sending' && row.ksef_send_owner === owner) {
+        await releaseSendClaimForPause(invoiceId, tenantId, owner);
+      }
+    };
+
+    // L1a: pauza firmy po 429 z KSeF i hamulec 429 — przed odwołaniami,
+    // poświadczeniami, sondą zdrowia i przejęciem wysyłki („po każdym powrocie
+    // zadanie najpierw sprawdza pauzę”, karta L1a pkt 2). Firma bez pauzy przy
+    // wyłączonym hamulcu: tylko pamięć procesu i Redis, bez odczytu bazy.
+    // Przyczyna `KSEF_RATE_LIMIT` — gdyby łańcuch pauz przekroczył dobę
+    // (`MAX_PAUSE_CHAIN_MS`), `onExhausted` zapisze limit KSeF (klasa
+    // transient, I6), a nie awarię infrastruktury.
+    await step.run('ksef-rate-limit-pause', async () => {
+      const pausedUntil = await ksefPausedUntil(env, nip);
+      if (pausedUntil !== null) {
+        await releaseOwnClaimBeforeWait();
+        const remaining = pausedUntil - Date.now();
+        logger.warn('Firma w pauzie po 429 z KSeF: wysyłka czeka przed przejęciem', {
+          code: KSEF_RATE_LIMIT_PAUSE,
+          tenantId,
+          invoiceId,
+          attempt,
+          remainingMs: remaining,
+        });
+        const message = `Firma w pauzie po 429 z KSeF: wysyłka czeka do końca blokady MF (jeszcze ${Math.ceil(Math.max(0, remaining) / 1000)} s)`;
+        throw ksefPauseRetryError(message, remaining, invoiceId,
+          new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_RATE_LIMIT, message));
+      }
+      // Hamulec 429 (wiele firm z 429 naraz, sygnał ograniczenia naszego adresu
+      // IP): przechodzi ok. co czwarte zadanie na minutę, reszta czeka minutę
+      // z rozrzutem i losuje od nowa — bez zużycia próby.
+      if (await ksefSendBrakeActive(env) && !ksefSendBrakeAllows(invoiceId, Date.now())) {
+        await releaseOwnClaimBeforeWait();
+        reportSendBrake(env, { tenantId, invoiceId });
+        logger.warn('Hamulec 429 (wiele firm z 429 naraz): wysyłka czeka', {
+          code: KSEF_RATE_LIMIT_PAUSE,
+          tenantId,
+          invoiceId,
+          attempt,
+        });
+        const message = 'Hamulec 429: KSeF ogranicza wiele firm naraz, wysyłka czeka, żeby nie wydłużać blokady';
+        throw ksefPauseRetryError(message, KSEF_SEND_BRAKE_RETRY_MS, invoiceId,
+          new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_RATE_LIMIT, message));
+      }
+    });
+
+    /**
+     * L1a: 429 PO przejęciu wysyłki (odpowiedź MF albo lokalna pauza firmy) —
+     * zwolnienie przejęcia i pauza do końca blokady, bez zużycia próby.
+     * Prawdziwy 429 zapisuje pauzę firmy (tylko wydłużanie; `ksefFetch` robi to
+     * już przy samej odpowiedzi, tu także dla błędu spoza kontekstu NIP-u).
+     * Lokalna pauza niczego nie odnawia: czeka pozostały czas. `cause` niesie
+     * oryginalny `KsefApiError` (dziennik prób, klasyfikacja po wyczerpaniu).
+     */
+    const rateLimitPause = async (
+      error: KsefApiError,
+      authNip: string | null | undefined,
+      message: string,
+      cause: unknown = error,
+    ): Promise<RetryAfterError> => {
+      const local = isKsefLocalPause(error);
+      const remaining = local
+        ? error.retryAfterMs ?? KSEF_PAUSE_DEFAULT_MS
+        : (await recordKsefRateLimit(env, authNip ?? nip, error.retryAfterMs)) - Date.now();
+      const released = await releaseSendClaimForPause(invoiceId, tenantId, parsed.data.sendAttemptId);
+      logger.warn('429 z KSeF po przejęciu wysyłki: firma w pauzie, przejęcie zwolnione', {
+        code: KSEF_RATE_LIMIT_PAUSE,
+        tenantId,
+        invoiceId,
+        attempt,
+        localPause: local,
+        released,
+        remainingMs: remaining,
+      });
+      return ksefPauseRetryError(`${message}: ${error.message}`, remaining, invoiceId, cause);
+    };
+
     // Odwołania dokumentu specjalnego (rodzic korekty, zaliczki ROZ) muszą
     // wskazywać faktury tej firmy przyjęte w tym środowisku KSeF (#63, Codex).
     const documentKind = await assertSubmitReferences({
@@ -1156,15 +1342,15 @@ export async function runSubmitInvoice(
     });
 
     // Krok 3: pełny flow (generuj XML → waliduj XSD → R2 → KSeF).
-    // Credentials wczytujemy świeżo wewnątrz tego step.run — return value
-    // tego stepu jest stripowany przez `submitInvoiceFullFlow` do meta-danych
-    // wyniku (ksefNumber, hash, path), więc nic wrażliwego nie wycieka do
-    // Inngest store'u.
+    // Credentials wczytujemy świeżo wewnątrz tego kroku, a wynik kroku to
+    // same meta-dane (ksefNumber, hash, path) — bez PEM-a i tokenu.
     //
-    // Ten step ma własny retry — błąd sieciowy retryuje TYLKO jego, nie
-    // wcześniejszych (status w DB już 'sending'). Przy retry credentials
-    // wczytamy ponownie z DB — koszt: jeden dodatkowy SELECT + decrypt,
-    // zysk: brak wycieku PEM-a do zewnętrznego storage'u.
+    // Ponowienie (pg-boss) wykonuje CAŁY handler od nowa, bez pamięci kroków:
+    // strażnik idempotencji, krok pauzy po 429 (przed przejęciem), przejęcie
+    // tym samym właścicielem, potem uzgodnienie wcześniejszej próby (zamiar,
+    // wpis `sent`) zamiast drugiej wysyłki. 429 w trakcie wysyłki zwalnia
+    // przejęcie (`sending` → `queued`, `releaseSendClaimForPause`), więc
+    // czekanie na koniec pauzy nie trzyma faktury w `sending`.
     // Krok 2.5 (AUD-01): jeśli wcześniejsza próba dotarła do KSeF (mamy jej
     // numery referencyjne), pytamy o status TEJ wysyłki zamiast wysyłać fakturę
     // drugi raz. Bez tego timeout pollingu, 5xx albo padnięty worker kończyły
@@ -1191,6 +1377,11 @@ export async function runSubmitInvoice(
           if (error instanceof KsefApiError && error.status === 401) {
             ksefSessionCache.invalidate(credentials.nip, env);
           }
+          // L1a: 429 — pauza firmy na pełny `Retry-After` (nie stały
+          // harmonogram), przejęcie zwolnione; zamiar rozstrzygamy po pauzie.
+          if (isKsefRateLimit(error)) {
+            throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF: rozstrzygnięcie zamiaru wysyłki po jej końcu');
+          }
           // KSeF nie zna sesji sprzed ponad 48 h — jak STALE dla wpisu `sent`:
           // ślad zostaje, wysyłka idzie od nowa, a gdyby KSeF jednak miał plik,
           // 440 wskaże tę sesję z historii (własny duplikat).
@@ -1206,9 +1397,10 @@ export async function runSubmitInvoice(
             });
             continue;
           }
+          // Retry-After odpowiedzi albo harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
           throw new RetryAfterError(
             `Uzgadnianie zamiaru wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
-            getKsefRetryDelay(attempt),
+            ksefRetryDelayMsFor(error, attempt, invoiceId),
             { cause: error instanceof Error ? error : undefined },
           );
         }
@@ -1280,9 +1472,15 @@ export async function runSubmitInvoice(
       const ourSession = error.ourSessionReferenceNumber;
       const verdict = (code: SendErrorCode, message: string) =>
         new NonRetriableError(`[${code}] ${message}`, { cause: new KsefSendVerdictError(code, message) });
-      const pending = (message: string, delay: number | string) =>
+      // `cause` (L1a): błąd KSeF, z którego wynika oczekiwanie — dziennik prób
+      // pokaże jego status HTTP; kod werdyktu dalej wygrywa w klasyfikacji.
+      const pending = (message: string, delay: number | string, cause?: unknown) =>
         new RetryAfterError(message, delay, {
-          cause: new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, message),
+          cause: new KsefSendVerdictError(
+            SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
+            message,
+            cause !== undefined ? { cause } : undefined,
+          ),
         });
       const alertOperator = (kind: string, extra: Record<string, unknown> = {}) =>
         Sentry.captureMessage('KSeF: duplikat 440 do uzgodnienia przez operatora', {
@@ -1293,9 +1491,14 @@ export async function runSubmitInvoice(
       // Data nadania numeru oryginałowi (art. 106na: wystawienie i otrzymanie).
       // Własna sesja — status po referencji (bez uprawnienia InvoiceRead);
       // inaczej metadane po numerze KSeF. Brak daty nie cofa werdyktu — alarm.
+      // L1a: 429 to nie „brak daty”, tylko chwilowa blokada MF — pauza firmy
+      // (wyżej, przed przyjęciem numeru albo zapisem werdyktu), żeby data
+      // nadania nie przepadła przez limit. Inne błędy jak dotąd: bez daty.
       const originalAcquisition = async (ownInvoiceReference: string | null): Promise<string | undefined> => {
+        let authNip: string | null = null;
         try {
           const credentials = await getTenantKsefCredentials(tenantId);
+          authNip = credentials.nip;
           if (originalSession && ownInvoiceReference) {
             const status = await checkInvoiceStatusByReference(
               { sessionReferenceNumber: originalSession, invoiceReferenceNumber: ownInvoiceReference },
@@ -1307,6 +1510,9 @@ export async function runSubmitInvoice(
           }
           return (await fetchKsefAcquisitionDate(original!, credentials, env, { tenantId, invoiceId })) ?? undefined;
         } catch (e) {
+          if (isKsefRateLimit(e)) {
+            throw await rateLimitPause(e, authNip, `Pauza firmy po 429 z KSeF: data nadania numeru ${original} po jej końcu`);
+          }
           logger.warn('Nie ustalono daty przyjęcia oryginału duplikatu', {
             invoiceId,
             ksefNumber: original,
@@ -1441,7 +1647,14 @@ export async function runSubmitInvoice(
           httpStatus: api?.status ?? null,
           knownInvoice: known,
         });
-        if (transient) throw pending(unverified, ksefRetryDelayFor(downloadError, attempt));
+        // L1a: 429 — pauza firmy i zwolnione przejęcie. Przyczyna: werdykt „do
+        // uzgodnienia” (klasyfikacja bez zmian), a pod nim błąd HTTP pobrania,
+        // więc dziennik prób pokaże 429 (dawniej `pending()` go gubił).
+        if (isKsefRateLimit(downloadError)) {
+          throw await rateLimitPause(downloadError, credentials.nip, unverified,
+            new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, unverified, { cause: downloadError }));
+        }
+        if (transient) throw pending(unverified, ksefRetryDelayMsFor(downloadError, attempt, invoiceId), downloadError);
         // 403 (token bez InvoiceRead) i inne 4xx: operator. Wpis zostaje otwarty
         // ze znacznikiem 440 — „Tylko uzgodnij” i cron I5 powtórzą weryfikację.
         alertOperator('download-refused', { status: api?.status, otherInvoice: known?.internalNumber ?? null });
@@ -1633,7 +1846,7 @@ export async function runSubmitInvoice(
           // S22: oczekiwanie na wynik KSeF nie zużywa próby.
           throw new RetryAfterError(
             'KSeF nadal przetwarza wcześniejszą wysyłkę tej faktury — czekam zamiast wysyłać ponownie',
-            getKsefRetryDelay(attempt),
+            ksefRetryDelayMs(attempt, invoiceId),
             { countsAsAttempt: false },
           );
         }
@@ -1666,6 +1879,11 @@ export async function runSubmitInvoice(
         }
         if (error instanceof KsefApiError && error.status === 401) {
           ksefSessionCache.invalidate(credentials.nip, env);
+        }
+        // L1a: 429 — pauza firmy na pełny `Retry-After` (nie stały harmonogram),
+        // przejęcie zwolnione; po pauzie dalej UZGADNIAMY, nigdy nie wysyłamy.
+        if (isKsefRateLimit(error)) {
+          throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF: uzgodnienie wcześniejszej wysyłki po jej końcu');
         }
         // Okno 48 h (I5): KSeF odpowiada błędem klienta o wysyłce sprzed dwóch
         // dób — wpis nie zostanie rozstrzygnięty. Zamykamy go jako STALE
@@ -1705,9 +1923,10 @@ export async function runSubmitInvoice(
           return null;
         }
         // Awaria łącza albo KSeF: ponawiamy UZGADNIANIE, nigdy wysyłkę.
+        // Retry-After odpowiedzi albo harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
         throw new RetryAfterError(
           `Uzgadnianie wcześniejszej wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
-          getKsefRetryDelay(attempt),
+          ksefRetryDelayMsFor(error, attempt, invoiceId),
           { cause: error instanceof Error ? error : undefined },
         );
       }
@@ -1825,6 +2044,14 @@ export async function runSubmitInvoice(
             { cause: error },
           );
         }
+        // L1a: 429 (odpowiedź MF albo lokalna pauza firmy) — pauza firmy na
+        // pełny `Retry-After`, bez zużycia próby, z przejęciem zwolnionym.
+        // Bezpieczne przy ponowieniu: plik, który zdążył dotrzeć do KSeF, ma
+        // zamiar albo wpis `sent` (A2), więc po pauzie idzie uzgodnienie, nie
+        // druga wysyłka; po przyjęciu pliku czeka tylko odpytywanie.
+        if (isKsefRateLimit(error)) {
+          throw await rateLimitPause(error, credentials.nip, 'Pauza firmy po 429 z KSeF: wysyłka po jej końcu');
+        }
         if (error instanceof KsefApiError && !error.isRetryable) {
           Sentry.captureException(error, {
             tags: { job: 'submit-invoice', kind: 'ksef-rejection' },
@@ -1859,14 +2086,14 @@ export async function runSubmitInvoice(
           });
           throw new NonRetriableError(error.message, { cause: error });
         }
-        // Retry-owalne — 5xx, 429, timeout, ECONNRESET. Zamiast pozwolić
-        // Inngestowi użyć defaultowego exponential backoff (10s/30s/1m/5m/15m),
-        // rzucamy `RetryAfterError` z naszym custom schedule:
+        // Retry-owalne — 5xx, timeout, ECONNRESET (429 obsłużony wyżej jako
+        // pauza firmy). `RetryAfterError` z naszym harmonogramem:
         // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
         //
-        // KsefApiError 429 może mieć `Retry-After` header — jeśli MF mówi
-        // nam konkretnie ile czekać, słuchamy (AUD-92). Inaczej harmonogram.
-        const customDelay = ksefRetryDelayFor(error, attempt);
+        // Odpowiedź z `Retry-After` (np. 503) — jeśli MF mówi nam konkretnie,
+        // ile czekać, słuchamy (AUD-92), najwyżej godzinę (faktura jest w
+        // `sending`). Inaczej harmonogram z rozrzutem (L1a).
+        const customDelay = ksefRetryDelayMsFor(error, attempt, invoiceId);
         const isKsefApi = error instanceof KsefApiError;
         const errorLabel = isKsefApi
           ? `KSeF HTTP ${error.status}: ${error.message}`

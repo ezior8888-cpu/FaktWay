@@ -30,7 +30,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
 import { kolumnyPlatnosci } from '@/lib/expenses/platnosc-kosztu';
 import { wczytajWarunkiPlatnosciKsef, zapiszWarunkiNaKoszcie } from '@/lib/expenses/platnosc-kosztu-ksef';
-import { fa3Record, INBOX_PENDING_FLAG, markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
+import {
+  fa3Record,
+  INBOX_BACKFILL_ATTEMPTS_FIELD,
+  INBOX_PENDING_FLAG,
+  inboxBackfillAttempts,
+  markInboxInvoiceProcessed,
+} from '@/lib/ksef/inbox-pending';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import { publishAppNotification } from '@/lib/app-notifications/publish';
@@ -266,6 +272,15 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     // błąd nie przerywa joba — PDF zostaje podglądem (B14).
     const xml = await step.run('archive-ksef-xml', () =>
       archiveInboxInvoiceXml({ tenantId, invoiceId, environment }));
+
+    // L1a: XML odłożony przez pauzę firmy po 429 to nie nieudana próba.
+    // Znacznik zostaje (niżej), a próbę doliczoną przy emisji z crona oddajemy.
+    if (!xml.archived && xml.reason === 'rate_limited') {
+      logger.info('Skrzynka: XML odłożony — firma w pauzie po 429 z KSeF, cron uzupełniający dobierze po pauzie', {
+        invoiceId,
+      });
+      await releaseRateLimitedBackfillAttempt({ supabase, tenantId, invoiceId, step, logger });
+    }
 
     // Krok 3.4 (koszty do zapłaty): termin, rachunek sprzedawcy i MPP z pliku
     // w archiwum. Metadane skrzynki ich nie mają. Chwilowy błąd odczytu nie
@@ -547,6 +562,77 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
     }
 
     return { success: true as const };
+}
+
+/** Przy próbie crona: chwila emisji, za którą próbę już oddano (`_backfillAt` z `bumpInboxBackfillAttempt`). */
+const INBOX_BACKFILL_RELEASED_FIELD = '_backfillReleasedAt';
+
+/**
+ * L1a: oddaje próbę crona `inbox-backfill`, gdy XML nie przyszedł przez pauzę
+ * firmy po 429 (`rate_limited`). Cron pomija firmy w pauzie, ale pauza mogła
+ * zacząć się po emisji. Bez tego seria pauz wyczerpałaby
+ * `INBOX_BACKFILL_MAX_ATTEMPTS` i faktura zostałaby bez XML na stałe.
+ *
+ * Ponowienie od zera i dubel zadania: kluczem jest `_backfillAt` (chwila
+ * emisji zapisana przy próbie). Za jedną emisję próba wraca najwyżej raz
+ * (`_backfillReleasedAt` = `_backfillAt`), a UPDATE przechodzi tylko, gdy od
+ * odczytu nie doszła nowa próba ani domknięcie faktury (warunki na
+ * `_backfillAt` i `_pendingFullFetch`). Pierwsze zdarzenie ze skrzynki (bez
+ * próby crona) nie ma czego oddać. Błąd zapisu nie wywraca joba: kosztuje
+ * najwyżej jedną zużytą próbę.
+ */
+async function releaseRateLimitedBackfillAttempt(input: {
+  supabase: ReturnType<typeof createAdminClient>;
+  tenantId: string;
+  invoiceId: string;
+  step: JobContext['step'];
+  logger: JobContext['logger'];
+}): Promise<void> {
+  const { supabase, tenantId, invoiceId, step, logger } = input;
+  try {
+    await step.run('release-backfill-attempt', async () => {
+      const { data: row, error } = await supabase
+        .from('invoices')
+        .select('fa3_data')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (error || !row) {
+        throw new Error(error?.message ?? 'Nie można odczytać faktury skrzynki do oddania próby');
+      }
+      const fa3 = fa3Record(row.fa3_data);
+      const attempts = inboxBackfillAttempts(fa3);
+      const emittedAt = typeof fa3._backfillAt === 'string' ? fa3._backfillAt : null;
+      if (
+        attempts === 0
+        || !emittedAt
+        || fa3[INBOX_BACKFILL_RELEASED_FIELD] === emittedAt
+        || fa3[INBOX_PENDING_FLAG] !== true
+      ) {
+        return { released: false };
+      }
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({
+          fa3_data: {
+            ...fa3,
+            [INBOX_BACKFILL_ATTEMPTS_FIELD]: attempts - 1,
+            [INBOX_BACKFILL_RELEASED_FIELD]: emittedAt,
+          },
+        })
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .eq('fa3_data->>_backfillAt', emittedAt)
+        .eq(`fa3_data->>${INBOX_PENDING_FLAG}`, 'true');
+      if (updateError) throw new Error(updateError.message);
+      return { released: true };
+    });
+  } catch (e) {
+    logger.warn('Skrzynka: nie udało się oddać próby uzupełnienia po pauzie 429', {
+      invoiceId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
 }
 
 /**

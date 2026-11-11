@@ -133,7 +133,17 @@ describe('odświeżanie sesji KSeF', () => {
     await expect(ksefSessionCache.getSession(auth, 'test')).rejects.toBeInstanceOf(KsefApiError);
     expect(mocks.xades).toHaveBeenCalledOnce();
 
-    // Następny przebieg próbuje znów odświeżyć, nie logować.
+    if (status === 429) {
+      // L1a: 429 zatrzymuje firmę na Retry-After (120 s) — w tym czasie
+      // odświeżenie czeka lokalnie, bez żądania do KSeF i bez logowania.
+      const calls = mocks.fetch.mock.calls.length;
+      await expect(ksefSessionCache.getSession(auth, 'test')).rejects.toMatchObject({ status: 429, localPause: true });
+      expect(mocks.fetch.mock.calls.length).toBe(calls);
+      expect(mocks.xades).toHaveBeenCalledOnce();
+      vi.mocked(Date.now).mockReturnValue(NOW + 11 * MIN + 121_000);
+    }
+
+    // Następny przebieg (po pauzie) próbuje znów odświeżyć, nie logować.
     mocks.fetch.mockResolvedValueOnce(refreshResponse('udalo-sie', NOW + 26 * MIN));
     await expect(ksefSessionCache.getSession(auth, 'test')).resolves.toMatchObject({ accessToken: 'udalo-sie' });
     expect(mocks.xades).toHaveBeenCalledOnce();

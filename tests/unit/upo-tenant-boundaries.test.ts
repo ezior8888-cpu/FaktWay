@@ -35,6 +35,9 @@ vi.mock('@sentry/nextjs', () => ({ captureMessage: mocks.sentry, addBreadcrumb: 
 import { runDownloadUpo } from '@/lib/jobs/runners/download-upo';
 import { runUpoRetryStale } from '@/lib/jobs/runners/upo-retry-stale';
 import { UPO_IDENTITY_MISMATCH } from '@/lib/jobs/runners/upo-identity';
+import { RetryAfterError } from '@/lib/jobs/errors';
+import { decideRetry } from '@/lib/jobs/retry';
+import { recordKsefRateLimit } from '@/lib/ksef/rate-limit-pause';
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -554,5 +557,83 @@ describe('UPO retry cron boundaries', () => {
     errors.add('upo_receipts');
     await expect(runUpoRetryStale(cachedContext({ 'find-stale-upo': [candidate] }))).rejects.toThrow('ponownie sprawdzić');
     expect(writes()).toEqual([]); expect(sendEvent).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * L1a (plan „zero zgubionych faktur”, 08.11.2026): pauza firmy po 429 z KSeF.
+ * Do tej zmiany runner UPO pytał KSeF także w pauzie firmy, a odmowę zapisywał
+ * jako `failed` z kolejną próbą; cron co godzinę dokładał joby firm w pauzie.
+ * Pauza prawdziwa (`rate-limit-pause.ts`, pamięć procesu, czyszczona przed
+ * każdym testem w `tests/setup.ts`); atrapy tylko bazy i klienta UPO.
+ */
+describe('UPO w pauzie firmy po 429 (L1a)', () => {
+  const NIP_A = '1234567890';
+  const NIP_B = '1234567891';
+  const THIRD = '66666666-6666-4666-8666-666666666666';
+  const policy = { maxRetries: 5, getDelayMs: () => 30_000 };
+  const pauseResult = { success: false, retryable: true, errorCode: 'KSEF_RATE_LIMIT_PAUSE', retryAfterMs: 45_000,
+    error: 'KSeF chwilowo ogranicza zapytania tej firmy (429)' };
+
+  it('firma w pauzie: runner nie pyta KSeF, nie zapisuje upo_receipts i czeka do końca pauzy bez zużycia próby', async () => {
+    tables.upo_receipts = [receipt({ status: 'failed', download_attempts: 3, last_error: 'test-earlier-failure' })];
+    await recordKsefRateLimit('test', NIP_A, 30_000);
+    const error = await runDownloadUpo(event, { ...context, attempt: 4 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RetryAfterError);
+    const pause = error as RetryAfterError;
+    expect(pause.pause).toBe(true);
+    expect(pause.retryAfterMs).toBeGreaterThanOrEqual(29_000);
+    expect(pause.message).toContain('KSEF_RATE_LIMIT_PAUSE');
+    expect(pause.message).not.toContain('KSEF_PAUSED');
+    // Ostatnia próba (4 z 5) nie przepada: pauza nie liczy się jak próba.
+    expect(decideRetry(error, 4, policy, 0)).toMatchObject({ action: 'retry', nextAttempt: 4, nextWaits: 0 });
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
+    expect(tables.upo_receipts[0]).toMatchObject({ status: 'failed', download_attempts: 3, last_error: 'test-earlier-failure' });
+    expectNoExternalEffects();
+  });
+
+  it('wynik KSEF_RATE_LIMIT_PAUSE z klienta UPO: pauza (RetryAfterError) przed mark-failed, wpis bez zmian', async () => {
+    tables.upo_receipts = [receipt({ status: 'pending', download_attempts: 2 })];
+    mocks.download.mockResolvedValue(pauseResult);
+    const error = await runDownloadUpo(event, context).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RetryAfterError);
+    expect((error as RetryAfterError).pause).toBe(true);
+    expect((error as RetryAfterError).retryAfterMs).toBeGreaterThanOrEqual(45_000);
+    expect(mocks.download).toHaveBeenCalledTimes(1);
+    expect(tables.upo_receipts[0]).toMatchObject({ status: 'pending', download_attempts: 2, last_error: null });
+    expect(writes().some((q) => q.patch?.status === 'failed')).toBe(false);
+    expect(mocks.xml).not.toHaveBeenCalled(); expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it('pauza innej firmy albo innego środowiska nie zatrzymuje UPO tej firmy', async () => {
+    await recordKsefRateLimit('test', NIP_B, 30_000);
+    await recordKsefRateLimit('production', NIP_A, 30_000);
+    await expect(runDownloadUpo(event, context)).resolves.toMatchObject({ success: true });
+    expect(mocks.download).toHaveBeenCalledTimes(1);
+  });
+
+  it('cron pomija firmy w pauzie (zaległe UPO i brakujące wpisy), wysyła resztę i loguje, ile pominął', async () => {
+    tables.invoices = [
+      invoice(),
+      invoice({ id: OTHER, tenant_id: B, seller_nip: NIP_B, tenants: { id: B, name: 'Test seller B', nip: NIP_B } }),
+      oldInvoice({ id: THIRD }),
+    ];
+    tables.upo_receipts = [receipt(), receipt({ id: OTHER, invoice_id: OTHER, tenant_id: B })];
+    await recordKsefRateLimit('test', NIP_A, 600_000);
+    const info = vi.fn();
+    const ctx = { ...context, logger: { ...context.logger, info } };
+    await expect(runUpoRetryStale(ctx)).resolves.toMatchObject({ missing: 1, dispatched: 1, pausedSkipped: 2 });
+    expect(sendEvent).toHaveBeenCalledWith('re-request-upo', [{ name: 'invoice/upo.requested', groupId: NIP_B,
+      data: { invoiceId: OTHER, tenantId: B, ksefNumber: REF, nip: NIP_B, environment: 'test' } }]);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('pauzie'), expect.objectContaining({ count: 2 }));
+    // Wpisy firmy w pauzie zostają jak były: cron niczego nie oznacza.
+    expect(writes()).toEqual([]);
+  });
+
+  it('cron: pauza tej firmy w innym środowisku nie wstrzymuje ponowień', async () => {
+    tables.upo_receipts = [receipt()];
+    await recordKsefRateLimit('production', NIP_A, 600_000);
+    await expect(runUpoRetryStale(context)).resolves.toMatchObject({ dispatched: 1, pausedSkipped: 0 });
   });
 });

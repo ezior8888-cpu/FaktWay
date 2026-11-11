@@ -1,6 +1,8 @@
 import { isBypassAllowedEnv } from '@/lib/security/environment';
 import type { KsefEnvironment, KsefErrorResponse } from '@/types/ksef';
 
+import { currentKsefNip, ksefPausedUntil, recordKsefRateLimit } from './rate-limit-pause';
+
 /**
  * Zwraca bazowy URL API KSeF dla danego środowiska.
  */
@@ -90,6 +92,39 @@ export class KsefApiError extends Error {
   get ksefCode(): number | null {
     return ksefErrorCodes(this.body)[0] ?? null;
   }
+}
+
+/**
+ * Lokalny 429 (L1a): firma jest w pauzie po 429 z KSeF (`rate-limit-pause.ts`),
+ * więc `ksefFetch` NIE wysłał żądania. Dziedziczy po `KsefApiError` (status
+ * 429, `retryAfterMs` = pozostały czas pauzy), żeby każda istniejąca obsługa
+ * 429 (wysyłka, skrzynka, historia) zadziałała bez zmian. `localPause` odróżnia
+ * go od prawdziwej odpowiedzi MF: nie trafia do dziennika prób jako HTTP 429,
+ * nie odnawia pauzy ani okna hamulca i nie ma wiersza `audit_logs`.
+ */
+export class KsefRateLimitPausedError extends KsefApiError {
+  readonly localPause = true as const;
+
+  constructor(method: string, path: string, remainingMs: number) {
+    const ms = Number.isFinite(remainingMs) ? Math.max(0, Math.ceil(remainingMs)) : 0;
+    super(
+      429,
+      'Lokalna pauza firmy po 429 z KSeF',
+      `KSeF API ${method} ${path} paused: 429 (lokalna pauza firmy, jeszcze ${Math.ceil(ms / 1000)} s)`,
+      ms,
+    );
+    this.name = 'KsefRateLimitPausedError';
+  }
+}
+
+/** Lokalny 429 z pauzy firmy (także z innej kopii modułu: po polu, nie `instanceof`). */
+export function isKsefLocalPause(error: unknown): boolean {
+  return error instanceof Error && (error as { localPause?: unknown }).localPause === true;
+}
+
+/** Prawdziwa odpowiedź 429 z KSeF (nie lokalna pauza). */
+export function isKsefRateLimitResponse(error: unknown): error is KsefApiError {
+  return error instanceof KsefApiError && error.status === 429 && !isKsefLocalPause(error);
 }
 
 /**
@@ -332,6 +367,19 @@ export async function ksefFetch<TResponse = unknown>(
 
   const url = `${getKsefBaseUrl(env)}${path}`;
 
+  // L1a: firma w pauzie po 429 — żadnego żądania do KSeF, dopóki pauza trwa
+  // (MF wydłuża blokadę przy powtórkach). NIP z kontekstu kolejki firmy
+  // (`ksefRateLimiter.enqueue`, logowanie w `session-cache`); bez kontekstu
+  // (sonda zdrowia, skrypty) żądanie idzie jak dotąd. Przed timerem, żeby
+  // lokalny 429 nie zostawiał wiszącego `setTimeout`.
+  const pauseNip = currentKsefNip();
+  if (pauseNip) {
+    const pausedUntil = await ksefPausedUntil(env, pauseNip);
+    if (pausedUntil !== null) {
+      throw new KsefRateLimitPausedError(method, path, pausedUntil - Date.now());
+    }
+  }
+
   const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -421,6 +469,10 @@ export async function ksefFetch<TResponse = unknown>(
     }
 
     if (!responseOk) {
+      // L1a: 429 z KSeF zatrzymuje całą firmę na pełny `Retry-After`.
+      if (responseStatus === 429 && pauseNip) {
+        await recordKsefRateLimit(env, pauseNip, retryAfterMs);
+      }
       throw new KsefApiError(
         responseStatus,
         parsedBody as KsefErrorResponse | string,
