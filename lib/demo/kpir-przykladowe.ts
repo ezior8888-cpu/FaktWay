@@ -59,6 +59,8 @@ export function kpirPrzykladowe(month: number, year: number): { expenses: KpirEx
       vat_amount: r2(gross - net), vat_deductible_amount: r2(gross - net), vat_rate: '23', kpir_column: col,
       is_deductible: true, is_reviewed: col !== null, source: 'manual', ksef_invoice_id: null, notes: null,
       categorization_confidence: null, categorization_method: null, created_by: null, ocr_extracted_data: null,
+      // Płatność kosztu (00177, krok 3.4): przykładowe koszty bez terminu i zapłaty.
+      paid_at: null, payment_account: null, payment_due_date: null, payment_split: null, payment_terms: null,
       ocr_job_id: null, source_file_mime: null, source_file_path: null,
       created_at: `${date}T10:00:00Z`, updated_at: `${date}T10:00:00Z`,
       ...extra,
