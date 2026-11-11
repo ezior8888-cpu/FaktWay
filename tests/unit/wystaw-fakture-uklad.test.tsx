@@ -233,10 +233,10 @@ describe('P5: faktura rozliczająca', () => {
   });
 });
 
-describe('P5: wybór rodzaju faktury w kartach Finory', () => {
+describe('Wybór rodzaju faktury (przeprojektowanie 11.11.2026)', () => {
   const html = renderToStaticMarkup(<InvoiceTypeSelector />);
 
-  it('cztery karty-linki z dotychczasowymi adresami i tekstami', () => {
+  it('cztery karty-linki z dotychczasowymi adresami i nazwami', () => {
     for (const [type, label] of [
       ['regular', 'Faktura zwykła'],
       ['correction', 'Faktura korygująca'],
@@ -245,12 +245,30 @@ describe('P5: wybór rodzaju faktury w kartach Finory', () => {
     ]) {
       expect(html).toMatch(new RegExp(`<a[^>]*href="/invoices/new/${type}"[\\s\\S]*?${label}`));
     }
-    // Piąta karta (pierwsza w siatce) to „Wydatek” ze zdjęcia — nie link,
-    // tylko przyciski aparatu i pliku (poprawka Bartosza 25.10.2026).
+    // Piąta karta to pas „Wydatek” ze zdjęcia: nie link, tylko przyciski
+    // aparatu i pliku (poprawka Bartosza 25.10.2026).
     expect(html.match(/data-slot="card"/g)).toHaveLength(5);
-    expect(html.indexOf('>Wydatek<')).toBeLessThan(html.indexOf('Faktura zwykła'));
     bezZakazanych(html);
     expect(html).not.toContain('material-symbols');
+  });
+
+  it('karty mają tę samą budowę: miniatura dokumentu zamiast ikony, nazwa, opis', () => {
+    for (const type of ['regular', 'correction', 'advance', 'final']) {
+      expect(openTag(html, `miniatura-${type}`)).toMatch(/aria-hidden="true"/);
+    }
+    // Bez ikon w awatarach ze starej wersji.
+    expect(html).not.toContain('data-slot="avatar"');
+    // Jeden rząd czterech kart od xl, 2×2 od sm.
+    expect(html).toMatch(/class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"/);
+  });
+
+  it('„Wydatek” w DOM za kartami (Tab na komputerze), poniżej lg wizualnie na górze', () => {
+    expect(html.indexOf('>Wydatek<')).toBeGreaterThan(html.indexOf('Faktura rozliczająca'));
+    expect(html).toMatch(/<section aria-label="Wydatek" class="max-lg:order-first">/);
+  });
+
+  it('opisy bez długich myślników', () => {
+    expect(tekstBezZnacznikow(html)).not.toMatch(/[—–]/);
   });
 });
 

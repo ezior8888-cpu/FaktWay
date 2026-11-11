@@ -44,11 +44,16 @@ function mount() {
 }
 
 describe('Nowa faktura — kafel „Wydatek”', () => {
-  it('jest pierwszym kaflem, przed rodzajami faktur', () => {
+  // Świadoma zmiana 11.11.2026: w DOM pas „Wydatek” stoi za kartami faktur
+  // (Tab na komputerze idzie jak wzrok), a poniżej lg, czyli na telefonie
+  // z dolnym paskiem, `max-lg:order-first` stawia go na górze.
+  it('na telefonie stoi na górze, przed rodzajami faktur', () => {
     const m = mount();
     const titles = [...m.host.querySelectorAll('h2')].map((h) => h.textContent);
-    expect(titles[0]).toBe('Wydatek');
-    expect(titles.slice(1)).toEqual(['Faktura zwykła', 'Faktura korygująca', 'Faktura zaliczkowa', 'Faktura rozliczająca']);
+    expect(titles).toEqual(['Faktura zwykła', 'Faktura korygująca', 'Faktura zaliczkowa', 'Faktura rozliczająca', 'Wydatek']);
+    const pas = m.host.querySelector('section[aria-label="Wydatek"]')!;
+    expect(pas.classList.contains('max-lg:order-first')).toBe(true);
+    expect(pas.parentElement!.classList.contains('flex')).toBe(true);
     m.unmount();
   });
 

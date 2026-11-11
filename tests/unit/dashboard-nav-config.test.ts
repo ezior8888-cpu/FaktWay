@@ -6,12 +6,15 @@ import {
   dashboardMobileTabs,
   dashboardNavItems,
   dashboardNavSections,
+  dashboardNewInvoiceAction,
   getDashboardMoreSections,
   getDashboardPrefetchHrefs,
   isActiveNavPath,
 } from '@/lib/dashboard-nav-config';
 
 describe('isActiveNavPath (plan Finora §4)', () => {
+  // Także po 11.11.2026, gdy „Wystaw fakturę” wyszła z menu: na kreatorze
+  // świeci plus dolnego paska, „Faktury” świeciłyby razem z nim.
   it('/invoices nie jest aktywne dla kreatora /invoices/new', () => {
     for (const p of ['/invoices/new', '/invoices/new/regular']) {
       expect(isActiveNavPath(p, '/invoices'), p).toBe(false);
@@ -102,7 +105,7 @@ describe('zakładki ekranu Księgowości (poprawka 21.10.2026)', () => {
 
 describe('zakładki ekranu Faktur (poprawka 21.10.2026)', () => {
   // Cykliczne i po terminie to zakładki „Faktur”, nie pozycje menu — w menu
-  // świeci wtedy „Faktury”, a „Wystaw fakturę” nie.
+  // świeci wtedy „Faktury”, a adres kreatora (/invoices/new) nie pasuje.
   it('„Faktury” są aktywne dla /invoices/recurring* i /payments/overdue*', () => {
     for (const p of ['/invoices/recurring', '/invoices/recurring/x', '/payments/overdue', '/payments/overdue/x']) {
       expect(isActiveNavPath(p, '/invoices'), p).toBe(true);
@@ -146,8 +149,8 @@ describe('struktura menu (plan Finora §4)', () => {
       {
         title: 'Sprzedaż',
         items: [
+          // 11.11.2026: bez „Wystaw fakturę”, zastąpił ją przycisk pod logo.
           ['Faktury', '/invoices'],
-          ['Wystaw fakturę', '/invoices/new'],
           ['Kontrahenci', '/contractors'],
         ],
       },
@@ -162,10 +165,19 @@ describe('struktura menu (plan Finora §4)', () => {
     ]);
   });
 
+  it('„Nowa faktura” to przycisk pod logo, nie pozycja menu (poprawka 11.11.2026)', () => {
+    expect([dashboardNewInvoiceAction.label, dashboardNewInvoiceAction.href]).toEqual(['Nowa faktura', '/invoices/new']);
+    expect(dashboardNavItems.map((i) => i.href)).not.toContain('/invoices/new');
+    expect(dashboardNavItems.map((i) => i.label)).not.toContain('Wystaw fakturę');
+    // Kreator dalej ma prefetch, jak pozycja menu.
+    expect(getDashboardPrefetchHrefs()).toContain('/invoices/new');
+  });
+
   it('każdy adres menu ma katalog trasy w app/(dashboard)', () => {
     const root = join(process.cwd(), 'app', '(dashboard)');
     const hrefs = [
       ...dashboardNavItems.map((i) => i.href),
+      dashboardNewInvoiceAction.href,
       ...dashboardMobileTabs.flatMap((t) => (t.href ? [t.href] : [])),
     ];
     for (const href of hrefs) {
