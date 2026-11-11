@@ -112,6 +112,29 @@ export function summarizeVatPerRate(lines: InvoiceLineItem[]): VatSummaryPerRate
 }
 
 /**
+ * Kwoty faktury korygującej według stawek = różnica między stanem po i przed
+ * korektą (XSD FA(3): „kwota różnicy, o której mowa w art. 106j ust. 2 pkt 5”).
+ * Liczona z PEŁNYCH stanów obu dokumentów, żeby zaokrąglenia VAT były te same
+ * co na fakturze pierwotnej i na fakturze po korekcie. Stawki bez różnicy nie
+ * są wykazywane. Jedna funkcja dla P_13/P_14 korekty w KSeF i dla JPK (S-01).
+ */
+export function differenceSummaries(before: InvoiceLineItem[], after: InvoiceLineItem[]): VatSummaryPerRate[] {
+  const byRate = new Map<VatRate, VatSummaryPerRate>();
+  for (const s of summarizeVatPerRate(after)) byRate.set(s.rate, { ...s });
+  for (const s of summarizeVatPerRate(before)) {
+    const cur = byRate.get(s.rate);
+    byRate.set(s.rate, {
+      rate: s.rate,
+      netSum: (cur?.netSum ?? 0) - s.netSum,
+      vatSum: (cur?.vatSum ?? 0) - s.vatSum,
+    });
+  }
+  return [...byRate.values()]
+    .map((s) => ({ rate: s.rate, netSum: roundToCents(s.netSum), vatSum: roundToCents(s.vatSum) }))
+    .filter((s) => s.netSum !== 0 || s.vatSum !== 0);
+}
+
+/**
  * Totale całej faktury - sumy wszystkich pozycji.
  */
 export interface InvoiceTotals {

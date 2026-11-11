@@ -21,6 +21,8 @@ import type { Database, Json } from '@/types/database';
 import type { JpkFaInputData, JpkInvoice, JpkInvoiceLine } from './jpk-fa-generator';
 import { jpkAnnotationsFromJson, type Fa3Markers } from '@/lib/xml/fa3-annotations';
 import type { KsefLineFields } from '@/lib/import/fa3-line-amounts';
+import { calculateLineItem } from '@/lib/xml/invoice-calculator';
+import type { VatRate } from '@/types/invoice';
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type LineItemRow = Database['public']['Tables']['invoice_line_items']['Row'];
@@ -518,11 +520,55 @@ function mapInvoiceRow(
 
     correctedInvoiceNumber: correctedNumber,
     correctionReason: row.correction_reason ?? undefined,
+    ...correctionStatesFields(row),
     ksefNumber: row.ksef_number ?? undefined,
     annotations: annotationsFromFa3(row.fa3_data),
     ...contentFlags,
     ...(lineProblems.length ? { importedLineAmountProblems: lineProblems } : {}),
   };
+}
+
+/**
+ * S-01: korekta „przed/po” ma na wierszu pozycje w stanie PO (tak zapisuje je
+ * `createCorrectionInvoiceAction`), a oba stany leżą w kopercie
+ * `special_data.correctionData` (A4b). JPK liczy z nich różnicę stawek, tak
+ * jak faktura korygująca w KSeF. Brak kopert: odmowa w `amountsOf`, nie stan po.
+ */
+function correctionStatesFields(row: InvoiceRow): Pick<JpkInvoice, 'correctionStates' | 'correctionStatesMissing'> {
+  if (row.invoice_kind !== 'correction' || row.correction_type !== 'before_after') return {};
+  const data = row.special_data && typeof row.special_data === 'object' && !Array.isArray(row.special_data)
+    ? (row.special_data as Record<string, unknown>).correctionData
+    : undefined;
+  const envelope = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : undefined;
+  const before = correctionStateLines(envelope?.linesBefore);
+  const after = correctionStateLines(envelope?.linesAfter);
+  return before && after ? { correctionStates: { before, after } } : { correctionStatesMissing: true };
+}
+
+/** Pozycje stanu korekty z koperty: kwoty z kalkulatora faktury, jak w generatorze FA(3) KOR. */
+function correctionStateLines(raw: unknown): JpkInvoiceLine[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const lines: JpkInvoiceLine[] = [];
+  for (const [i, item] of raw.entries()) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const o = item as Record<string, unknown>;
+    const quantity = Number(o.quantity);
+    const unitPriceNet = Number(o.unitPriceNet);
+    const vatRate = String(o.vatRate ?? '');
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitPriceNet) || !vatRate) return null;
+    const { netAmount, vatAmount } = calculateLineItem({ quantity, unitPriceNet, vatRate: vatRate as VatRate });
+    lines.push({
+      position: typeof o.ordinal === 'number' ? o.ordinal : i + 1,
+      name: typeof o.name === 'string' ? o.name : '',
+      unit: typeof o.unit === 'string' ? o.unit : 'szt.',
+      quantity,
+      unitPriceNet,
+      netAmount,
+      vatRate,
+      vatAmount,
+    });
+  }
+  return lines;
 }
 
 /** Adnotacje z `fa3_data.annotations` (#60, #75, #79; C5b: import KSeF) — JPK_FA: P_16–P_19C. */
