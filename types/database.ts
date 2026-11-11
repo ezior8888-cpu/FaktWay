@@ -1,6 +1,6 @@
-// Wygenerowane 8.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00173
-// (m.in. 00167-00173 modułu księgowości: wpisy ręczne, rozliczenia, powiadomienia, wysyłki JPK, spis z natury). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 11.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00197
+// (m.in. 00174-00197 planu kompletnej aplikacji i 00186 planu skalowania). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -231,6 +231,210 @@ export type Database = {
           },
         ]
       }
+      accounting_note_emails: {
+        Row: {
+          id: string
+          idempotency_key: string
+          note_id: string
+          provider_message_id: string | null
+          recipient: string
+          sent_at: string
+          sent_by: string | null
+          tenant_id: string
+        }
+        Insert: {
+          id?: string
+          idempotency_key: string
+          note_id: string
+          provider_message_id?: string | null
+          recipient: string
+          sent_at?: string
+          sent_by?: string | null
+          tenant_id: string
+        }
+        Update: {
+          id?: string
+          idempotency_key?: string
+          note_id?: string
+          provider_message_id?: string | null
+          recipient?: string
+          sent_at?: string
+          sent_by?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounting_note_emails_note_fk"
+            columns: ["tenant_id", "note_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_notes"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "accounting_note_emails_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_note_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_note_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "accounting_note_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_note_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounting_notes: {
+        Row: {
+          bank_account: string | null
+          contractor_id: string | null
+          counterparty: Json
+          created_at: string
+          created_by: string | null
+          currency: string
+          due_date: string | null
+          id: string
+          issue_date: string
+          issued_at: string | null
+          issued_by: string | null
+          issuer: Json | null
+          items: Json
+          kind: string
+          number: string | null
+          number_seq: number | null
+          number_year: number | null
+          related_document: string | null
+          status: string
+          tenant_id: string
+          title: string
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          bank_account?: string | null
+          contractor_id?: string | null
+          counterparty: Json
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          due_date?: string | null
+          id?: string
+          issue_date: string
+          issued_at?: string | null
+          issued_by?: string | null
+          issuer?: Json | null
+          items: Json
+          kind: string
+          number?: string | null
+          number_seq?: number | null
+          number_year?: number | null
+          related_document?: string | null
+          status?: string
+          tenant_id: string
+          title: string
+          total: number
+          updated_at?: string
+        }
+        Update: {
+          bank_account?: string | null
+          contractor_id?: string | null
+          counterparty?: Json
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          due_date?: string | null
+          id?: string
+          issue_date?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          issuer?: Json | null
+          items?: Json
+          kind?: string
+          number?: string | null
+          number_seq?: number | null
+          number_year?: number | null
+          related_document?: string | null
+          status?: string
+          tenant_id?: string
+          title?: string
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounting_notes_contractor_same_tenant_fk"
+            columns: ["tenant_id", "contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "accounting_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_notes_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "accounting_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_user_notes: {
         Row: {
           archived_at: string | null
@@ -263,6 +467,241 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      api_idempotency_keys: {
+        Row: {
+          api_key_id: string
+          created_at: string
+          endpoint: string
+          id: string
+          idempotency_key: string
+          invoice_id: string | null
+          request_hash: string
+          request_id: string | null
+          send_requested: boolean
+          tenant_id: string
+        }
+        Insert: {
+          api_key_id: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          idempotency_key: string
+          invoice_id?: string | null
+          request_hash: string
+          request_id?: string | null
+          send_requested?: boolean
+          tenant_id: string
+        }
+        Update: {
+          api_key_id?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          idempotency_key?: string
+          invoice_id?: string | null
+          request_hash?: string
+          request_id?: string | null
+          send_requested?: boolean
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_idempotency_keys_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_idempotency_keys_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_idempotency_keys_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "api_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          key_hash: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          revoked_by: string | null
+          scopes: string[]
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_hash: string
+          key_prefix: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          scopes: string[]
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_hash?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          scopes?: string[]
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "api_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          link: string | null
+          object_key: string
+          read_at: string | null
+          tenant_id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          link?: string | null
+          object_key: string
+          read_at?: string | null
+          tenant_id: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          object_key?: string
+          read_at?: string | null
+          tenant_id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "app_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -496,6 +935,283 @@ export type Database = {
           },
         ]
       }
+      calendar_feed_tokens: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          tenant_id: string
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          tenant_id: string
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          tenant_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_feed_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_feed_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "calendar_feed_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_feed_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_documents: {
+        Row: {
+          amount: number
+          correction_reason: string | null
+          corrects_id: string | null
+          corrects_number: string | null
+          counterparty: Json
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          invoice_id: string | null
+          invoice_number: string | null
+          issue_date: string
+          issued_at: string
+          issued_by: string | null
+          issued_by_name: string
+          issuer: Json
+          kind: string
+          number: string
+          number_seq: number
+          number_year: number
+          operation_date: string
+          payment_id: string | null
+          register_id: string
+          related_document: string | null
+          tenant_id: string
+          title: string
+        }
+        Insert: {
+          amount: number
+          correction_reason?: string | null
+          corrects_id?: string | null
+          corrects_number?: string | null
+          counterparty: Json
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key: string
+          invoice_id?: string | null
+          invoice_number?: string | null
+          issue_date: string
+          issued_at?: string
+          issued_by?: string | null
+          issued_by_name: string
+          issuer: Json
+          kind: string
+          number: string
+          number_seq: number
+          number_year: number
+          operation_date: string
+          payment_id?: string | null
+          register_id: string
+          related_document?: string | null
+          tenant_id: string
+          title: string
+        }
+        Update: {
+          amount?: number
+          correction_reason?: string | null
+          corrects_id?: string | null
+          corrects_number?: string | null
+          counterparty?: Json
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string
+          invoice_id?: string | null
+          invoice_number?: string | null
+          issue_date?: string
+          issued_at?: string
+          issued_by?: string | null
+          issued_by_name?: string
+          issuer?: Json
+          kind?: string
+          number?: string
+          number_seq?: number
+          number_year?: number
+          operation_date?: string
+          payment_id?: string | null
+          register_id?: string
+          related_document?: string | null
+          tenant_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_documents_corrects_fk"
+            columns: ["tenant_id", "corrects_id"]
+            isOneToOne: false
+            referencedRelation: "cash_documents"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_documents_invoice_fk"
+            columns: ["tenant_id", "invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_documents_invoice_fk"
+            columns: ["tenant_id", "invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_documents_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_documents_payment_fk"
+            columns: ["tenant_id", "payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_documents_register_fk"
+            columns: ["tenant_id", "register_id"]
+            isOneToOne: false
+            referencedRelation: "cash_registers"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "cash_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_registers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          currency: string
+          id: string
+          opening_balance: number
+          opening_date: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          opening_balance: number
+          opening_date: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          opening_balance?: number
+          opening_date?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_registers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_registers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_registers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "cash_registers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_registers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categorization_rules: {
         Row: {
           category_label: string
@@ -668,6 +1384,101 @@ export type Database = {
           },
         ]
       }
+      document_archives: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          expires_at: string | null
+          file_deleted_at: string | null
+          file_key: string | null
+          file_name: string | null
+          files_count: number | null
+          finished_at: string | null
+          id: string
+          kind: string
+          missing_count: number | null
+          notified_at: string | null
+          period_end: string
+          period_start: string
+          requested_by: string | null
+          size_bytes: number | null
+          started_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string | null
+          file_deleted_at?: string | null
+          file_key?: string | null
+          file_name?: string | null
+          files_count?: number | null
+          finished_at?: string | null
+          id?: string
+          kind: string
+          missing_count?: number | null
+          notified_at?: string | null
+          period_end: string
+          period_start: string
+          requested_by?: string | null
+          size_bytes?: number | null
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string | null
+          file_deleted_at?: string | null
+          file_key?: string | null
+          file_name?: string | null
+          files_count?: number | null
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          missing_count?: number | null
+          notified_at?: string | null
+          period_end?: string
+          period_start?: string
+          requested_by?: string | null
+          size_bytes?: number | null
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_archives_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_archives_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "document_archives_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_archives_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_bounces: {
         Row: {
           bounce_type: Database["public"]["Enums"]["email_bounce_type_enum"]
@@ -770,6 +1581,95 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_comments: {
+        Row: {
+          author_id: string | null
+          author_role: string
+          body: string
+          created_at: string
+          expense_id: string
+          id: string
+          kind: string
+          resolved_at: string | null
+          resolved_by: string | null
+          tenant_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_role: string
+          body: string
+          created_at?: string
+          expense_id: string
+          id?: string
+          kind: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          tenant_id: string
+        }
+        Update: {
+          author_id?: string | null
+          author_role?: string
+          body?: string
+          created_at?: string
+          expense_id?: string
+          id?: string
+          kind?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_comments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_comments_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "expense_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_receipt_matches: {
         Row: {
           created_at: string
@@ -803,6 +1703,41 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "expense_receipt_matches_invoice_same_tenant_fk"
+            columns: ["tenant_id", "invoice_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "expense_receipt_matches_receipt_same_tenant_fk"
+            columns: ["tenant_id", "receipt_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "expense_receipt_matches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_receipt_matches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "expense_receipt_matches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expense_receipt_matches_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -833,6 +1768,11 @@ export type Database = {
           notes: string | null
           ocr_extracted_data: Json | null
           ocr_job_id: string | null
+          paid_at: string | null
+          payment_account: string | null
+          payment_due_date: string | null
+          payment_split: boolean | null
+          payment_terms: Json | null
           seller_address: string | null
           seller_name: string
           seller_nip: string | null
@@ -866,6 +1806,11 @@ export type Database = {
           notes?: string | null
           ocr_extracted_data?: Json | null
           ocr_job_id?: string | null
+          paid_at?: string | null
+          payment_account?: string | null
+          payment_due_date?: string | null
+          payment_split?: boolean | null
+          payment_terms?: Json | null
           seller_address?: string | null
           seller_name: string
           seller_nip?: string | null
@@ -899,6 +1844,11 @@ export type Database = {
           notes?: string | null
           ocr_extracted_data?: Json | null
           ocr_job_id?: string | null
+          paid_at?: string | null
+          payment_account?: string | null
+          payment_due_date?: string | null
+          payment_split?: boolean | null
+          payment_terms?: Json | null
           seller_address?: string | null
           seller_name?: string
           seller_nip?: string | null
@@ -1986,6 +2936,91 @@ export type Database = {
           },
         ]
       }
+      invoice_share_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          invoice_id: string
+          last_opened_at: string | null
+          open_count: number
+          revoked_at: string | null
+          revoked_by: string | null
+          tenant_id: string
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          invoice_id: string
+          last_opened_at?: string | null
+          open_count?: number
+          revoked_at?: string | null
+          revoked_by?: string | null
+          tenant_id: string
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          invoice_id?: string
+          last_opened_at?: string | null
+          open_count?: number
+          revoked_at?: string | null
+          revoked_by?: string | null
+          tenant_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_share_links_invoice_fk"
+            columns: ["tenant_id", "invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "invoice_share_links_invoice_fk"
+            columns: ["tenant_id", "invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "invoice_share_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_share_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "invoice_share_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_share_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           advance_amount: number | null
@@ -2475,6 +3510,86 @@ export type Database = {
           notes?: string | null
         }
         Relationships: []
+      }
+      ksef_collective_identifiers: {
+        Row: {
+          attempt: string
+          claimed_at: string
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          id: string
+          identifier: string | null
+          invoices_key: string
+          ksef_environment: string
+          ksef_numbers: string[]
+          requested_by: string | null
+          seller_nip: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          attempt?: string
+          claimed_at?: string
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          identifier?: string | null
+          invoices_key: string
+          ksef_environment: string
+          ksef_numbers: string[]
+          requested_by?: string | null
+          seller_nip: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          attempt?: string
+          claimed_at?: string
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          identifier?: string | null
+          invoices_key?: string
+          ksef_environment?: string
+          ksef_numbers?: string[]
+          requested_by?: string | null
+          seller_nip?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_collective_identifiers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_collective_identifiers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_collective_identifiers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_collective_identifiers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ksef_error_codes: {
         Row: {
@@ -3045,6 +4160,101 @@ export type Database = {
           },
           {
             foreignKeyName: "ksef_offline_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ksef_permission_grants: {
+        Row: {
+          attempt: string
+          can_delegate: boolean
+          checked_at: string | null
+          claimed_at: string
+          created_at: string
+          error_code: string | null
+          granted_at: string | null
+          id: string
+          ksef_environment: string
+          ksef_status_code: number | null
+          ksef_status_description: string | null
+          operation_references: string[]
+          requested_by: string | null
+          revoked_at: string | null
+          scopes: string[]
+          status: string
+          subject_name: string
+          subject_nip: string
+          tenant_id: string
+        }
+        Insert: {
+          attempt?: string
+          can_delegate: boolean
+          checked_at?: string | null
+          claimed_at?: string
+          created_at?: string
+          error_code?: string | null
+          granted_at?: string | null
+          id?: string
+          ksef_environment: string
+          ksef_status_code?: number | null
+          ksef_status_description?: string | null
+          operation_references?: string[]
+          requested_by?: string | null
+          revoked_at?: string | null
+          scopes: string[]
+          status?: string
+          subject_name: string
+          subject_nip: string
+          tenant_id: string
+        }
+        Update: {
+          attempt?: string
+          can_delegate?: boolean
+          checked_at?: string | null
+          claimed_at?: string
+          created_at?: string
+          error_code?: string | null
+          granted_at?: string | null
+          id?: string
+          ksef_environment?: string
+          ksef_status_code?: number | null
+          ksef_status_description?: string | null
+          operation_references?: string[]
+          requested_by?: string | null
+          revoked_at?: string | null
+          scopes?: string[]
+          status?: string
+          subject_name?: string
+          subject_nip?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_permission_grants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_permission_grants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_permission_grants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_permission_grants_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -3869,17 +5079,28 @@ export type Database = {
           amount: number
           bank_name: string | null
           booking_date: string | null
+          confirm_attempt: number
           counterparty_account: string | null
           counterparty_name: string | null
           counterparty_nip: string | null
           currency: string
+          decided_at: string | null
+          decided_by: string | null
+          expense_ids: string[] | null
+          file_format: string | null
           id: string
           ignored: boolean
+          import_batch_id: string | null
           imported_at: string
+          imported_by: string | null
           is_matched: boolean
           matched_payment_id: string | null
           provider: string
+          redacted_at: string | null
           reference: string | null
+          tax_kind: string | null
+          tax_marked_ids: string[] | null
+          tax_settlement_ids: string[] | null
           tenant_id: string
           title: string | null
           transaction_date: string
@@ -3891,17 +5112,28 @@ export type Database = {
           amount: number
           bank_name?: string | null
           booking_date?: string | null
+          confirm_attempt?: number
           counterparty_account?: string | null
           counterparty_name?: string | null
           counterparty_nip?: string | null
           currency?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          expense_ids?: string[] | null
+          file_format?: string | null
           id?: string
           ignored?: boolean
+          import_batch_id?: string | null
           imported_at?: string
+          imported_by?: string | null
           is_matched?: boolean
           matched_payment_id?: string | null
           provider?: string
+          redacted_at?: string | null
           reference?: string | null
+          tax_kind?: string | null
+          tax_marked_ids?: string[] | null
+          tax_settlement_ids?: string[] | null
           tenant_id: string
           title?: string | null
           transaction_date: string
@@ -3913,17 +5145,28 @@ export type Database = {
           amount?: number
           bank_name?: string | null
           booking_date?: string | null
+          confirm_attempt?: number
           counterparty_account?: string | null
           counterparty_name?: string | null
           counterparty_nip?: string | null
           currency?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          expense_ids?: string[] | null
+          file_format?: string | null
           id?: string
           ignored?: boolean
+          import_batch_id?: string | null
           imported_at?: string
+          imported_by?: string | null
           is_matched?: boolean
           matched_payment_id?: string | null
           provider?: string
+          redacted_at?: string | null
           reference?: string | null
+          tax_kind?: string | null
+          tax_marked_ids?: string[] | null
+          tax_settlement_ids?: string[] | null
           tenant_id?: string
           title?: string | null
           transaction_date?: string
@@ -4114,7 +5357,9 @@ export type Database = {
           bank_payer_name: string | null
           bank_transaction_ref: string | null
           created_at: string
+          created_by: string | null
           id: string
+          idempotency_key: string | null
           invoice_id: string
           is_auto_matched: boolean
           is_confirmed: boolean
@@ -4125,6 +5370,8 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method_enum"]
           tenant_id: string
           updated_at: string
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           amount: number
@@ -4133,7 +5380,9 @@ export type Database = {
           bank_payer_name?: string | null
           bank_transaction_ref?: string | null
           created_at?: string
+          created_by?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id: string
           is_auto_matched?: boolean
           is_confirmed?: boolean
@@ -4144,6 +5393,8 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method_enum"]
           tenant_id: string
           updated_at?: string
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           amount?: number
@@ -4152,7 +5403,9 @@ export type Database = {
           bank_payer_name?: string | null
           bank_transaction_ref?: string | null
           created_at?: string
+          created_by?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string
           is_auto_matched?: boolean
           is_confirmed?: boolean
@@ -4163,6 +5416,8 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method_enum"]
           tenant_id?: string
           updated_at?: string
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -5865,6 +7120,7 @@ export type Database = {
       tenants: {
         Row: {
           address_json: Json | null
+          bank_account: string | null
           business_started_on: string | null
           created_at: string | null
           created_by_user_id: string | null
@@ -5892,6 +7148,7 @@ export type Database = {
         }
         Insert: {
           address_json?: Json | null
+          bank_account?: string | null
           business_started_on?: string | null
           created_at?: string | null
           created_by_user_id?: string | null
@@ -5919,6 +7176,7 @@ export type Database = {
         }
         Update: {
           address_json?: Json | null
+          bank_account?: string | null
           business_started_on?: string | null
           created_at?: string | null
           created_by_user_id?: string | null
@@ -6245,6 +7503,179 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      webhook_deliveries: {
+        Row: {
+          attempts: number
+          created_at: string
+          data: Json
+          delivered_at: string | null
+          event_id: string
+          event_type: string
+          finished_at: string | null
+          id: string
+          last_attempt_at: string | null
+          last_duration_ms: number | null
+          last_error: string | null
+          last_status_code: number | null
+          locked_until: string | null
+          next_attempt_at: string
+          occurred_at: string
+          status: string
+          tenant_id: string
+          webhook_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          data: Json
+          delivered_at?: string | null
+          event_id: string
+          event_type: string
+          finished_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_duration_ms?: number | null
+          last_error?: string | null
+          last_status_code?: number | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          occurred_at: string
+          status?: string
+          tenant_id: string
+          webhook_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          data?: Json
+          delivered_at?: string | null
+          event_id?: string
+          event_type?: string
+          finished_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_duration_ms?: number | null
+          last_error?: string | null
+          last_status_code?: number | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          occurred_at?: string
+          status?: string
+          tenant_id?: string
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_deliveries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_deliveries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "webhook_deliveries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_deliveries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_deliveries_webhook_fkey"
+            columns: ["tenant_id", "webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_endpoints"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
+      }
+      webhook_endpoints: {
+        Row: {
+          consecutive_failures: number
+          created_at: string
+          created_by: string | null
+          disabled_at: string | null
+          disabled_reason: string | null
+          events: string[]
+          id: string
+          last_failure_at: string | null
+          last_success_at: string | null
+          secret_ciphertext: string
+          tenant_id: string
+          url: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          disabled_reason?: string | null
+          events: string[]
+          id?: string
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          secret_ciphertext: string
+          tenant_id: string
+          url: string
+        }
+        Update: {
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          disabled_reason?: string | null
+          events?: string[]
+          id?: string
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          secret_ciphertext?: string
+          tenant_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_endpoints_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_endpoints_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "webhook_endpoints_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_endpoints_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       xml_documents: {
         Row: {
@@ -6622,6 +8053,11 @@ export type Database = {
         Args: { p_token_hash: string }
         Returns: string
       }
+      account_ip_prefix: { Args: { p_ip: unknown }; Returns: string }
+      account_security_session: { Args: never; Returns: string }
+      accounting_note_items_total: { Args: { p_items: Json }; Returns: number }
+      accounting_note_items_valid: { Args: { p_items: Json }; Returns: boolean }
+      accounting_note_party_valid: { Args: { p_party: Json }; Returns: boolean }
       admin_database_size: { Args: never; Returns: number }
       admin_funnel_weekly: {
         Args: { p_environment?: string; p_weeks?: number }
@@ -6650,6 +8086,85 @@ export type Database = {
       }
       analytics_tenant_owner: { Args: { p_tenant_id: string }; Returns: string }
       anonymize_user_audit_logs: { Args: { p_user_id: string }; Returns: Json }
+      api_create_invoice: {
+        Args: {
+          p_idempotency_key: string
+          p_invoice: Json
+          p_lines: Json
+          p_request_hash: string
+          p_request_id: string
+          p_send: boolean
+        }
+        Returns: Json
+      }
+      api_expense_invoice_currencies: {
+        Args: { p_expense_ids: string[] }
+        Returns: {
+          currency: string
+          expense_id: string
+        }[]
+      }
+      api_invoice_idempotent_result: {
+        Args: { p_idempotency_key: string; p_request_hash: string }
+        Returns: Json
+      }
+      api_invoice_number_context: { Args: never; Returns: Json }
+      api_invoice_numbers_taken: {
+        Args: { p_numbers: string[] }
+        Returns: string[]
+      }
+      api_invoice_request_result: {
+        Args: { p_idempotency_id: string; p_status: string }
+        Returns: Json
+      }
+      api_key_request_hash: { Args: never; Returns: string }
+      api_key_request_tenant: { Args: { p_scope: string }; Returns: string }
+      api_key_request_writer: {
+        Args: never
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          key_hash: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          revoked_by: string | null
+          scopes: string[]
+          tenant_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "api_keys"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      api_key_session: {
+        Args: {
+          p_endpoint: string
+          p_ip?: string
+          p_request_id: string
+          p_user_agent?: string
+        }
+        Returns: Json
+      }
+      app_notification_publish: {
+        Args: {
+          p_body?: string
+          p_kind: string
+          p_link?: string
+          p_object_key: string
+          p_tenant_id: string
+          p_title: string
+        }
+        Returns: number
+      }
+      app_notifications_mark_read: {
+        Args: { p_ids?: string[] }
+        Returns: number
+      }
       apply_stripe_subscription_sync: {
         Args: {
           p_claim_token: string
@@ -6664,6 +8179,25 @@ export type Database = {
         Returns: string
       }
       auth_email_registered: { Args: { p_email: string }; Returns: boolean }
+      bank_account_key: { Args: { p_account: string }; Returns: string }
+      bank_expense_operations: { Args: never; Returns: Json }
+      bank_known_operations: { Args: { p_keys: string[] }; Returns: Json }
+      bank_operations: { Args: never; Returns: Json }
+      bank_tax_operations: { Args: never; Returns: Json }
+      calendar_feed_tenant: { Args: { p_token_hash: string }; Returns: string }
+      cash_lowest_balance: {
+        Args: { p_from: string; p_tenant_id: string }
+        Returns: {
+          balance: number
+          on_day: string
+        }[]
+      }
+      cash_party_valid: {
+        Args: { p_party: Json; p_require_nip: boolean }
+        Returns: boolean
+      }
+      cash_receipt_payments: { Args: never; Returns: Json }
+      cash_report: { Args: { p_from: string; p_to: string }; Returns: Json }
       change_membership_role: {
         Args: { p_membership_id: string; p_new_role: string }
         Returns: undefined
@@ -6677,6 +8211,14 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      claim_ksef_collective_identifier: {
+        Args: {
+          p_environment: string
+          p_ksef_numbers: string[]
+          p_seller_nip: string
+        }
+        Returns: Json
       }
       claim_ksef_inbox_polls: {
         Args: {
@@ -6693,6 +8235,20 @@ export type Database = {
       claim_ksef_nip_ownership: {
         Args: { p_tenant_id: string }
         Returns: string
+      }
+      claim_ksef_permission_grant: {
+        Args: {
+          p_can_delegate: boolean
+          p_environment: string
+          p_scopes: string[]
+          p_subject_name: string
+          p_subject_nip: string
+        }
+        Returns: Json
+      }
+      claim_ksef_permission_revoke: {
+        Args: { p_environment: string; p_id: string }
+        Returns: Json
       }
       claim_ksef_send: {
         Args: {
@@ -6731,6 +8287,43 @@ export type Database = {
       cleanup_expired_validation_cache: { Args: never; Returns: number }
       cleanup_old_audit_logs: {
         Args: { p_retention_months?: number }
+        Returns: Json
+      }
+      complete_ksef_collective_identifier: {
+        Args: { p_attempt: string; p_id: string; p_identifier: string }
+        Returns: Json
+      }
+      confirm_bank_expense_payment: {
+        Args: {
+          p_expense_ids: string[]
+          p_file_format: string
+          p_match_kind: string
+          p_operation: Json
+        }
+        Returns: Json
+      }
+      confirm_bank_operation: {
+        Args: {
+          p_invoice_id: string
+          p_match_kind: string
+          p_operation_id: string
+        }
+        Returns: Json
+      }
+      confirm_bank_tax_payment: {
+        Args: {
+          p_match_kind: string
+          p_operation_id: string
+          p_settlement_ids: string[]
+        }
+        Returns: Json
+      }
+      correct_cash_document: {
+        Args: {
+          p_document_id: string
+          p_idempotency_key: string
+          p_reason: string
+        }
         Returns: Json
       }
       create_billing_vat_invoice: {
@@ -6787,7 +8380,7 @@ export type Database = {
         Args: {
           p_actor_user_id: string
           p_invoice_expense_id: string
-          p_receipt_expense_id?: string | null
+          p_receipt_expense_id?: string
           p_tenant_id: string
         }
         Returns: string
@@ -6879,6 +8472,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      expense_comment_add: {
+        Args: {
+          p_body: string
+          p_comment_id?: string
+          p_expense_id: string
+          p_kind: string
+        }
+        Returns: Json
+      }
+      expense_document_request_resolve: {
+        Args: { p_comment_id: string }
+        Returns: Json
+      }
+      fail_ksef_collective_identifier: {
+        Args: {
+          p_attempt: string
+          p_detail?: string
+          p_error_code: string
+          p_id: string
+        }
+        Returns: Json
+      }
       finalize_ksef_certificate_claim: {
         Args: {
           p_actor_user_id: string
@@ -6909,6 +8524,19 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      finish_ksef_permission_attempt: {
+        Args: {
+          p_attempt: string
+          p_detail?: string
+          p_error_code?: string
+          p_id: string
+          p_ksef_code?: number
+          p_ksef_description?: string
+          p_references?: string[]
+          p_status: string
+        }
+        Returns: Json
       }
       flag_ksef_original_recheck: {
         Args: {
@@ -6957,6 +8585,10 @@ export type Database = {
         Returns: boolean
       }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
+      import_bank_operations: {
+        Args: { p_file_format: string; p_operations: Json }
+        Returns: Json
+      }
       increment_export_file_download: {
         Args: { p_file_id: string; p_user_id: string }
         Returns: undefined
@@ -6970,10 +8602,34 @@ export type Database = {
         Returns: undefined
       }
       invoice_manual_payment: { Args: { p_invoice_id: string }; Returns: Json }
+      invoice_payments: { Args: { p_invoice_id: string }; Returns: Json }
+      invoice_share_link_view: {
+        Args: { p_count_open?: boolean; p_token_hash: string }
+        Returns: Json
+      }
+      invoice_shareable: {
+        Args: { p_invoice_id: string; p_tenant_id: string }
+        Returns: boolean
+      }
       is_member_of: { Args: { p_org: string }; Returns: boolean }
       is_nip_ksef_claimed: {
         Args: { p_nip: string; p_tenant_id: string }
         Returns: boolean
+      }
+      issue_accounting_note: { Args: { p_note_id: string }; Returns: Json }
+      issue_cash_document: {
+        Args: {
+          p_amount: number
+          p_counterparty: Json
+          p_idempotency_key: string
+          p_invoice_id?: string
+          p_kind: string
+          p_operation_date: string
+          p_payment_id?: string
+          p_related_document?: string
+          p_title: string
+        }
+        Returns: Json
       }
       ksef_duplicate_check_allows: {
         Args: { p_check: Json; p_choice: string }
@@ -7079,6 +8735,15 @@ export type Database = {
           tenant_id: string
         }[]
       }
+      ksef_lifecycle_violations_without_i3: {
+        Args: never
+        Returns: {
+          detail: Json
+          invariant: string
+          invoice_id: string
+          tenant_id: string
+        }[]
+      }
       ksef_original_import_mismatch: {
         Args: {
           p_import: Json
@@ -7104,11 +8769,53 @@ export type Database = {
         Args: { i: Database["public"]["Tables"]["invoices"]["Row"] }
         Returns: boolean
       }
+      ksef_upo_expected_submission: {
+        Args: {
+          p_invoice_id: string
+          p_ksef_number: string
+          p_tenant_id: string
+        }
+        Returns: boolean
+      }
+      list_account_logins: {
+        Args: { p_limit?: number }
+        Returns: {
+          action: string
+          ip_prefix: string
+          is_active: boolean
+          is_current: boolean
+          login_method: string
+          session_id: string
+          signed_in_at: string
+          user_agent: string
+        }[]
+      }
+      list_account_sessions: {
+        Args: never
+        Returns: {
+          device_source: string
+          ip_prefix: string
+          is_current: boolean
+          last_active_at: string
+          login_method: string
+          session_id: string
+          signed_in_at: string
+          user_agent: string
+        }[]
+      }
       list_public_tables: {
         Args: never
         Returns: {
           table_name: string
         }[]
+      }
+      mark_document_archive_file_deleted: {
+        Args: { p_archive_id: string; p_file_key: string }
+        Returns: boolean
+      }
+      mark_expense_paid: {
+        Args: { p_expense_id: string; p_paid_on?: string }
+        Returns: Json
       }
       mark_invoice_paid: {
         Args: { p_invoice_id: string; p_paid_on?: string }
@@ -7123,6 +8830,26 @@ export type Database = {
         }
         Returns: string
       }
+      my_organizations_summary: {
+        Args: { p_ksef_environment: string }
+        Returns: {
+          expenses_to_review: number
+          has_ksef_credentials: boolean
+          ksef_certificate_expiry: string
+          ksef_verified_at: string
+          ksef_verified_environment: string
+          ksiegowosc_enabled: boolean
+          name: string
+          nip: string
+          organization_id: string
+          overdue_count: number
+          overdue_foreign_count: number
+          overdue_grosze: number
+          role: string
+          unknown_environment_count: number
+          vat_exemption_basis: string
+        }[]
+      }
       note_ksef_inbox_activity: {
         Args: {
           p_min_gap_seconds: number
@@ -7135,6 +8862,10 @@ export type Database = {
           retry_after_seconds: number
           status: string
         }[]
+      }
+      open_cash_register: {
+        Args: { p_opening_balance: number; p_opening_date: string }
+        Returns: Json
       }
       prune_stripe_webhook_payloads: {
         Args: { p_retention_days?: number }
@@ -7151,6 +8882,37 @@ export type Database = {
       purge_ksef_health_log_batch: {
         Args: { p_limit?: number }
         Returns: number
+      }
+      record_accounting_note_email: {
+        Args: {
+          p_idempotency_key: string
+          p_note_id: string
+          p_provider_message_id?: string
+          p_recipient: string
+        }
+        Returns: Json
+      }
+      record_invoice_payment: {
+        Args: {
+          p_amount: number
+          p_currency?: string
+          p_idempotency_key: string
+          p_invoice_id: string
+          p_note?: string
+          p_paid_on?: string
+        }
+        Returns: Json
+      }
+      record_ksef_permission_check: {
+        Args: {
+          p_error_code?: string
+          p_id: string
+          p_ksef_code?: number
+          p_ksef_description?: string
+          p_references: string[]
+          p_status: string
+        }
+        Returns: Json
       }
       record_stripe_checkout_session: {
         Args: {
@@ -7423,10 +9185,15 @@ export type Database = {
         }
         Returns: string
       }
+      revoke_account_session: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       revoke_membership: {
         Args: { p_membership_id: string }
         Returns: undefined
       }
+      revoke_other_account_sessions: { Args: never; Returns: number }
       session_may_grant_access: { Args: never; Returns: boolean }
       session_may_manage_passkeys: { Args: never; Returns: boolean }
       set_invoice_reminders_paused: {
@@ -7446,6 +9213,11 @@ export type Database = {
         Returns: boolean
       }
       shares_active_org_with: { Args: { p_user: string }; Returns: boolean }
+      skip_bank_expense_operation: {
+        Args: { p_file_format: string; p_operation: Json }
+        Returns: Json
+      }
+      skip_bank_operation: { Args: { p_operation_id: string }; Returns: Json }
       stripe_lock_financial_refs: {
         Args: {
           p_charge_id: string
@@ -7467,7 +9239,56 @@ export type Database = {
           withdrawn: boolean
         }[]
       }
+      undo_bank_expense_payment: {
+        Args: { p_operation_id: string }
+        Returns: Json
+      }
+      undo_bank_operation: { Args: { p_operation_id: string }; Returns: Json }
+      undo_bank_tax_payment: { Args: { p_operation_id: string }; Returns: Json }
+      undo_expense_paid: { Args: { p_expense_id: string }; Returns: Json }
       undo_invoice_paid: { Args: { p_invoice_id: string }; Returns: Json }
+      void_invoice_payment: { Args: { p_payment_id: string }; Returns: Json }
+      webhook_claim_deliveries: {
+        Args: { p_delivery_ids?: string[]; p_limit?: number }
+        Returns: {
+          attempt: number
+          data: Json
+          delivery_id: string
+          event_id: string
+          event_type: string
+          occurred_at: string
+          secret_ciphertext: string
+          tenant_id: string
+          url: string
+          webhook_id: string
+        }[]
+      }
+      webhook_create_deliveries: {
+        Args: {
+          p_data: Json
+          p_event_id: string
+          p_event_type: string
+          p_occurred_at: string
+          p_tenant_id: string
+        }
+        Returns: string[]
+      }
+      webhook_note_final_failure: {
+        Args: { p_webhook_id: string }
+        Returns: boolean
+      }
+      webhook_record_attempt: {
+        Args: {
+          p_attempt: number
+          p_counts_toward_disable?: boolean
+          p_delivery_id: string
+          p_duration_ms: number
+          p_error: string
+          p_status_code: number
+          p_succeeded: boolean
+        }
+        Returns: Json
+      }
     }
     Enums: {
       backup_kind: "daily" | "weekly" | "manual"
