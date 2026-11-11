@@ -8,6 +8,7 @@ import { enqueueKsefSubmitAfterDraft } from '@/lib/invoices/ksef-submit-enqueue'
 import { requireUserAndActiveOrg, type FormTenantCheck } from '@/lib/supabase/auth-context';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import { calculateAdvanceTotals } from '@/lib/invoices/calculator';
+import { specialDataInsertError } from '@/lib/invoices/special-data';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
@@ -210,7 +211,11 @@ async function insertAdvanceDraft(
     .single();
 
   if (invErr || !inserted) {
-    return { success: false, error: invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej' };
+    return {
+      success: false,
+      error: specialDataInsertError(invErr, `zaliczki ${ghost.internalNumber}`)
+        ?? invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej',
+    };
   }
 
   const invoiceId = inserted.id as string;
