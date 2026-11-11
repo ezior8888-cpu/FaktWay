@@ -60,7 +60,7 @@ export const RECURRING_DRAFT_LEFT_NOTE =
 const TAXED_RATES = ['23', '8', '5'];
 
 export function exemptTenantTaxedRateMessage(name: string, rate: string): string {
-  return `Pozycja cykliczna „${name}” ma we wzorze stawkę VAT ${rate} %, a firma korzysta ze zwolnienia z VAT (art. 113). Na takiej fakturze VAT trzeba by zapłacić. Zmień stawki we wzorze na „zw” albo status VAT w ustawieniach firmy.`;
+  return `Pozycja cykliczna „${name}” ma we wzorze stawkę VAT ${rate} %, a firma korzysta ze zwolnienia z VAT (art. 113). Na takiej fakturze VAT trzeba by zapłacić. Zmień wzór pozycji na fakturę ze stawką „zw” (Edytuj pozycję) albo status VAT w ustawieniach firmy.`;
 }
 
 /** Powiązanie zapisywanej faktury z okresem pozycji cyklicznej. */
@@ -88,12 +88,12 @@ export async function loadRecurringIssueLink(
   supabase: AnyClient,
   tenantId: string,
   recurringInvoiceId: string,
-  /** Stawki VAT pozycji faktury, którą klient zapisuje (z formularza). */
+  /** Stawki faktury z formularza (dokładniejsze niż wzór); bez nich — z wierszy wzoru w bazie. */
   lineRates?: readonly string[],
 ): Promise<RecurringIssueLinkResult> {
   const { data, error } = await recurringDb(supabase)
     .from('recurring_invoices')
-    .select('id, name, active, next_run_date, frequency, day_of_month')
+    .select('id, name, template_invoice_id, active, next_run_date, frequency, day_of_month')
     .eq('id', recurringInvoiceId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -106,7 +106,19 @@ export async function loadRecurringIssueLink(
   // zapisem (podatek wykazany na fakturze trzeba zapłacić, art. 108 ust. 1).
   // Zwolnienie przedmiotowe (art. 43) nie blokuje. Błąd odczytu ustawień
   // firmy = odmowa z komunikatem odczytu (fail-closed, bez zgadywania).
-  const taxed = lineRates?.find((r) => TAXED_RATES.includes(r));
+  let rates: readonly string[];
+  if (lineRates) {
+    rates = lineRates;
+  } else {
+    const { data: lines, error: linesError } = await recurringDb(supabase)
+      .from('invoice_line_items')
+      .select('vat_rate')
+      .eq('invoice_id', data.template_invoice_id)
+      .eq('tenant_id', tenantId);
+    if (linesError || !lines) return { ok: false, error: RECURRING_READ_ERROR_MESSAGE };
+    rates = lines.map((l) => String(l.vat_rate));
+  }
+  const taxed = rates.find((r) => TAXED_RATES.includes(r));
   if (taxed) {
     let basis: string | null;
     try {

@@ -626,12 +626,7 @@ async function recurringLinkForForm(
   values: InvoiceFormValues,
 ): Promise<{ ok: true; link: RecurringIssueLink | undefined } | { ok: false; error: string }> {
   if (!values.recurringInvoiceId) return { ok: true, link: undefined };
-  const loaded = await loadRecurringIssueLink(
-    supabase,
-    tenantId,
-    values.recurringInvoiceId,
-    values.lines?.map((l) => l.vatRate),
-  );
+  const loaded = await loadRecurringIssueLink(supabase, tenantId, values.recurringInvoiceId);
   if (!loaded.ok) return loaded;
   const formPeriod = values.recurringPeriod;
   if (formPeriod && formPeriod !== loaded.link.period) {
