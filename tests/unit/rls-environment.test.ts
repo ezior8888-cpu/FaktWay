@@ -141,6 +141,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-wyciag-koszty.test.ts',
       // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
       'tests/rls-dzwonek-wplaty.test.ts',
+      'tests/rls-indeksy-cronow-produkty.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

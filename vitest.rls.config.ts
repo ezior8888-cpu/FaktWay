@@ -145,6 +145,9 @@ export default defineConfig({
       // prawdziwe RPC wpłat z sesji, runner kolejki przez PostgREST, odbiorcy, ponowienie bez dubla,
       // stan po wpłacie, wpłata cofnięta i usunięta, obca firma, CHECK rodzajów.
       'tests/rls-dzwonek-wplaty.test.ts',
+      // 00186 (plan skalowania 3000, sesja 21): wynik strażnika cyklu życia przed i po, lekka funkcja bez I3,
+      // wklejanie ksef_upo_expected, indeksy cronów w planach, UNIQUE katalogu produktów i kontrola dubli.
+      'tests/rls-indeksy-cronow-produkty.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
