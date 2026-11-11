@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, type _Object } from '@aws-sdk/client-s3';
 import { getR2Client, getR2Config } from '@/lib/storage/r2-client';
 
@@ -69,7 +71,11 @@ export async function uploadSnapshot(
   );
 }
 
-export async function downloadSnapshot(fullKey: string): Promise<Buffer> {
+/**
+ * Plik kopii jako strumień (weryfikacja czyta go kawałkami, CPU-V2), zamiast
+ * całego pliku w pamięci. W Node SDK zwraca `Readable`.
+ */
+export async function openSnapshotStream(fullKey: string): Promise<Readable> {
   const client = getR2Client();
   const { bucket } = getBackupCtx();
   const out = await client.send(
@@ -78,12 +84,10 @@ export async function downloadSnapshot(fullKey: string): Promise<Buffer> {
   if (!out.Body) {
     throw new Error(`snapshot_empty: ${fullKey}`);
   }
-  const chunks: Uint8Array[] = [];
-  // @ts-expect-error Node.js stream typing — SDK zwraca Readable.
-  for await (const chunk of out.Body) {
-    chunks.push(chunk as Uint8Array);
+  if (!(out.Body instanceof Readable)) {
+    throw new Error(`snapshot_body_not_stream: ${fullKey}`);
   }
-  return Buffer.concat(chunks);
+  return out.Body;
 }
 
 export async function deleteSnapshot(fullKey: string): Promise<void> {

@@ -266,3 +266,48 @@ SELECT id, kind, status, size_bytes, r2_key, started_at
 Ta warstwa nie zawiera kont użytkowników (`auth.*`), więc nie nadaje się do
 odtworzenia całej aplikacji. Przydaje się do odzyskania pojedynczych wierszy
 `public` sprzed wielu dni (retencja 30 dni / 8 tygodni).
+
+### Jak kopia czyta bazę i jak wygląda plik
+
+Od sesji 12 planu skalowania (JOB-02, QAL-01, CPU-03, CPU-V2):
+
+| Co | Jak |
+|---|---|
+| Odczyt tabeli | stronami po 500 wierszy, po kluczu (`id` albo klucz główny z `SNAPSHOT_KEYS` w `lib/backup/snapshot-tables.ts`), od ostatniego klucza poprzedniej strony. Nowy wiersz dopisany w trakcie nie przesuwa stron, więc nic się nie gubi ani nie dubluje. |
+| Plik | dalej jeden JSON (`{"version":1,…,"tables":{…},"row_counts":{…}}`), ale każdy wiersz tabeli w osobnej linii (`"layout":"line-per-row"`). Starsze kopie są jednoliniowe. |
+| Zapis | pakowany w locie (`gzip` strumieniem). Spakowany plik czeka w pamięci workera na jedno wgranie do MinIO. |
+| Weryfikacja | czyta plik strumieniem i parsuje linia po linii. Linia ponad 64 MiB jest liczona bez parsowania (ostrzeżenie `row_not_parsed`). Stara kopia jednoliniowa ponad 64 MiB ma sprawdzaną tylko sumę kontrolną (`legacy_snapshot_not_parsed`); takie kopie znikną same po 8 tygodniach. Komunikaty błędów nie zawierają treści wierszy. |
+
+Jeden wiersz z pliku:
+
+```bash
+gunzip -c 11-010000.json.gz | grep -n '"id":"<uuid>"'
+```
+
+**Błąd `dump_table_failed: <tabela>: brak kolumny klucza kopii`.** Tabela
+nie ma kolumny `id`. Dopisz ją do `SNAPSHOT_KEYS` z jej kluczem głównym (albo
+do `SKIP_TABLES`, jeśli kopia jej nie potrzebuje). Strażnik
+`tests/unit/backup-readable-tables.test.ts` łapie takie tabele z migracji
+w CI; ten błąd zobaczysz tylko dla tabeli założonej poza migracjami.
+
+### Alarm „Kopia JSON bazy niepełna”
+
+Kopia przekroczyła `MAX_SNAPSHOT_JSON_BYTES` (512 MB JSON-a przed spakowaniem,
+`lib/backup/snapshot-tables.ts`). Wtedy przerywa czytanie, nie wgrywa pliku,
+zapisuje w `backup_log` status `failed` z komunikatem `kopia_niepelna: …`
+i kończy job bez ponowień. Alarm przychodzi raz na dzień (klucz w Redisie
+`alerts:backup:json-incomplete:<data UTC>`); po 26 h dołączy do niego alarm
+świeżości, bo nie ma nowej udanej kopii. Warstwa A (`pg_dump`) działa osobno
+i ten próg jej nie dotyczy.
+
+Co zrobić, po kolei:
+
+1. Sprawdź, że warstwa A ma świeży zrzut (§ 2, § 5). Jeśli tak, nic nie jest
+   pilne: tracisz tylko szybkie odzyskiwanie pojedynczych wierszy.
+2. Rozmiar JSON-a w ostatnich udanych kopiach widać w alarmie „DB snapshot
+   zakończony” na kanale metryk (`json_mb`).
+3. Wybierz jedno: podnieś próg (PR, potem wdrożenie workera; spakowany plik
+   to zwykle kilka do kilkunastu procent JSON-a, tyle dochodzi do pamięci
+   workera), przenieś duże tabele, które ma warstwa A, do `SKIP_TABLES`, albo
+   zamów zmianę na wgrywanie w częściach (multipart), żeby plik nie czekał
+   w pamięci.

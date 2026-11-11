@@ -73,6 +73,9 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // Plan skalowania 3000, sesja 12 (QAL-01, bez migracji): nocna kopia JSON czyta
+      // tabele stronami po kluczu; filtry kursora (też klucz złożony) przez prawdziwy PostgREST.
+      'tests/rls-kopia-json-stronicowanie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
