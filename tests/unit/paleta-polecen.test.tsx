@@ -138,9 +138,11 @@ describe('buildPaletteNavEntries — obie analizy (Analizy 1:1 z Finory, 21.10.2
 });
 
 describe('buildPaletteNavEntries — unikalne wartości cmdk', () => {
-  it('„Wystaw fakturę” jest i w menu, i w akcjach, a wartości (value) się nie powtarzają', () => {
+  // Świadoma zmiana 11.11.2026: „Wystaw fakturę” wyszła z menu (zastąpił ją
+  // przycisk „Nowa faktura” pod logo), w ⌘K zostaje sama akcja.
+  it('„Wystaw fakturę” jest raz, w akcjach, a wartości (value) się nie powtarzają', () => {
     const entries = buildPaletteNavEntries();
-    expect(entries.filter((e) => e.label === 'Wystaw fakturę').length).toBeGreaterThan(1);
+    expect(entries.filter((e) => e.label === 'Wystaw fakturę').map((e) => e.group)).toEqual(['Akcje']);
     const values = entries.map((e) => e.value);
     expect(new Set(values).size).toBe(values.length);
     // Etykieta zostaje w słowach kluczowych, by dopasowanie po nazwie działało.

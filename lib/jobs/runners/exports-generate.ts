@@ -31,6 +31,7 @@ import { zglosAlarmy } from '@/lib/bezpieczniki/alarm';
 import { ODMOWA_JPK_V7M_PREFIX, OdmowaJpkV7mError, sprawdzJpkV7m } from '@/lib/bezpieczniki/jpk-v7m';
 import { RECEIPT_REVENUE_REFUSAL_PREFIX } from '@/lib/invoices/receipt-revenue-guard';
 import {
+  CSV_REFUSAL_PREFIX,
   CsvForeignCurrencyNotSupportedError,
   generateSymfoniaCsv,
   generateUniversalCsv,
@@ -269,6 +270,8 @@ export async function onExportsGenerateExhausted(
     failure.message.startsWith(EDI_REFUSAL_PREFIX) ||
     // Krok 1.2: odmowa KPiR przy fakturze do paragonu ma w treści numer faktury.
     failure.message.startsWith(RECEIPT_REVENUE_REFUSAL_PREFIX) ||
+    // F12-E2b: odmowa CSV (FP, nieznane kwoty z importu, waluta) ma numer faktury.
+    failure.message.startsWith(CSV_REFUSAL_PREFIX) ||
     // F13 część 2b: odmowa strażnika pliku JPK_V7M ma w treści kod alarmu.
     failure.message.startsWith(ODMOWA_JPK_V7M_PREFIX) ||
     Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);

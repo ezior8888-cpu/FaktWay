@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CSV_REFUSAL_PREFIX,
   CsvDocumentNotSupportedError,
   CsvForeignCurrencyNotSupportedError,
   generateInsertSubiektCsv,
@@ -95,7 +96,9 @@ describe.each(generatory)('CSV %s', (_n, generuj) => {
     expect(() => generuj(d)).toThrow(/FZ\/3\/2026/);
   });
 
-  it('faktura w walucie obcej: treść znana jobowi (lista dokładnych komunikatów)', () => {
+  // F12-E6 (11.11): treść ma numer faktury; job pokazuje ją po początku
+  // `CSV_REFUSAL_PREFIX` (F12-E2b), więc nie musi być już na liście dokładnych treści.
+  it('faktura w walucie obcej: odmowa z numerem i początkiem znanym jobowi', () => {
     const d = dane({ receivedInvoices: [faktura({ invoiceNumber: 'FZ/7/2026', currency: 'EUR' })] });
     expect(() => generuj(d)).toThrow(CsvForeignCurrencyNotSupportedError);
     let tresc = '';
@@ -104,7 +107,8 @@ describe.each(generatory)('CSV %s', (_n, generuj) => {
     } catch (e) {
       tresc = (e as Error).message;
     }
-    expect(tresc).toBe(new CsvForeignCurrencyNotSupportedError().message);
+    expect(tresc.startsWith(CSV_REFUSAL_PREFIX)).toBe(true);
+    expect(tresc).toContain('faktura FZ/7/2026 jest w walucie EUR');
   });
 
   it('zwykła faktura PLN przechodzi', () => {

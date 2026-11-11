@@ -138,6 +138,7 @@ export const KNOWN_AUDIT_ACTIONS = [
   'invoice.submit_failed',
   'invoice.upo_downloaded',
   'invoice.xml_downloaded',
+  'invoice.batch_pdf_downloaded',
   'invoice.share_link_created',
   'invoice.share_link_revoked',
   'invoice.resubmit_requested',
