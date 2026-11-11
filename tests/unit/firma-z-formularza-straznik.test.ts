@@ -82,6 +82,7 @@ const EXEMPT_FILES: Record<string, string> = {
   'app/admin/ksef/actions.ts': 'operator w /admin: ponowienie wysyłki i decyzja o duplikacie istniejącego dokumentu; firma z wiersza faktury',
   'lib/jobs/runners/bulk-import.ts': 'job: import z pliku (silnik importu); firma z danych joba',
   'lib/jobs/runners/ksef-history-sync.ts': 'job: pobranie historii z KSeF (silnik importu); firma z danych joba',
+  'lib/api/v1/invoice-create.ts': 'publiczne API (POST /api/v1/invoices, krok 7.1): bez sesji i ciasteczka firmy; firmę ustala baza ze skrótu klucza w tokenie (api_create_invoice, 00184), a wysyłka dostaje firmę klucza z api_key_session',
 };
 
 const MIGRATIONS = join(process.cwd(), 'supabase', 'migrations');

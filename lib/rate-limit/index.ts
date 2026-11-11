@@ -27,7 +27,9 @@ export type RateLimitBucket =
   | 'calendar_feed'
   /** Publiczne API (`lib/api/v1/auth.ts`): każde żądanie z adresu i każde z klucza. */
   | 'api_v1_ip'
-  | 'api_v1_key';
+  | 'api_v1_key'
+  /** Publiczne API: zapis (POST) kluczem, osobno od zapytań (krok 7.1, część 2). */
+  | 'api_v1_write';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

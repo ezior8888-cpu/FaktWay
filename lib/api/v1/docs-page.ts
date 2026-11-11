@@ -23,7 +23,7 @@ type Parameter = { name: string; in: string; description?: string; required?: bo
 type Operation = { summary: string; description: string; parameters?: Parameter[] };
 
 const schemas = spec.components.schemas as unknown as Record<string, Schema>;
-const paths = spec.paths as unknown as Record<string, { get: Operation }>;
+const paths = spec.paths as unknown as Record<string, { get: Operation; post?: Operation }>;
 
 function escapeHtml(value: string): string {
   return value
@@ -44,7 +44,9 @@ function typeLabel(schema: Schema | undefined): string {
   if (schema.$ref) {
     const name = refName(schema.$ref);
     if (name === 'Decimal') return 'kwota (tekst)';
+    if (name === 'DecimalInput') return 'liczba (tekst albo liczba)';
     if (name === 'Party') return 'obiekt: name, nip';
+    if (name === 'InvoiceCreateBuyer') return 'obiekt: nabywca (niżej)';
     return typeLabel(schemas[name]);
   }
   if (schema.oneOf) {
@@ -84,10 +86,12 @@ function fieldsTable(schemaName: string): string {
   return `<div class="table"><table><thead><tr><th>Pole</th><th>Typ</th><th>Opis</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+const PARAMETER_PLACES: Record<string, string> = { path: 'w adresie', query: 'w zapytaniu', header: 'w nagłówku' };
+
 function parametersTable(parameters: Parameter[]): string {
   if (parameters.length === 0) return '';
   const rows = parameters
-    .map((p) => `<tr><td><code>${escapeHtml(p.name)}</code></td><td>${p.in === 'path' ? 'w adresie' : 'w zapytaniu'}</td><td>${escapeHtml(typeLabel(p.schema))}</td><td>${escapeHtml(p.description ?? '')}</td></tr>`)
+    .map((p) => `<tr><td><code>${escapeHtml(p.name)}</code></td><td>${PARAMETER_PLACES[p.in] ?? 'w zapytaniu'}</td><td>${escapeHtml(typeLabel(p.schema))}</td><td>${escapeHtml(p.description ?? '')}</td></tr>`)
     .join('');
   return `<div class="table"><table><thead><tr><th>Parametr</th><th>Gdzie</th><th>Wartości</th><th>Opis</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -122,12 +126,64 @@ function endpointSection(path: string, operation: Operation): string {
   ].join('\n');
 }
 
+/**
+ * `POST /api/v1/invoices` (krok 7.1, część 2): przykład, pola treści i wynik
+ * wysyłki. Klucz API i klucz idempotencji w zmiennych środowiskowych, nigdy
+ * jako wartość w treści strony (skan sekretów).
+ */
+function createSection(path: string, operation: Operation): string {
+  const fullPath = `/api/v1${path}`;
+  const example = JSON.stringify({
+    buyer: { type: 'company', nip: '1111111111', name: 'Nabywca sp. z o.o.', address_line1: 'ul. Przykładowa 1', address_line2: '00-001 Warszawa' },
+    items: [{ name: 'Usługa', unit: 'szt.', quantity: '1', unit_price_net: '1000.00', vat_rate: '23' }],
+    payment_method: 'transfer',
+    bank_account: 'PL61109010140000071219812874',
+    send: true,
+  });
+  const curl = [
+    `curl -X POST "${PUBLIC_SITE_URL}${fullPath}" \\`,
+    '  -H "Authorization: Bearer $FAKTWAY_API_KEY" \\',
+    '  -H "Idempotency-Key: $NUMER_ZAMOWIENIA" \\',
+    '  -H "Content-Type: application/json" \\',
+    `  -d '${example}'`,
+  ].join('\n');
+  return [
+    `<section class="endpoint" id="${escapeHtml(`post${path.replace(/[^a-z]/g, '-')}`)}">`,
+    `<h3><span class="method">POST</span> <code>${escapeHtml(fullPath)}</code></h3>`,
+    `<p><strong>${escapeHtml(operation.summary)}.</strong> ${escapeHtml(operation.description)}</p>`,
+    parametersTable(operation.parameters ?? []),
+    `<pre><code>${escapeHtml(curl)}</code></pre>`,
+    '<p>W przykładzie numer zamówienia jest w zmiennej <code>NUMER_ZAMOWIENIA</code>: ten sam numer przy ponowieniu (np. po zerwanym połączeniu) zwraca tę samą fakturę zamiast drugiej.</p>',
+    '<p>Pola treści (JSON):</p>',
+    fieldsTable('InvoiceCreate'),
+    '<p>Nabywca, <code>buyer</code>:</p>',
+    fieldsTable('InvoiceCreateBuyer'),
+    '<p>Pozycja, element listy <code>items</code>:</p>',
+    fieldsTable('InvoiceCreateItem'),
+    '<p>Odpowiedź 201: <code>{ "data": { … }, "ksef_submission": { … } }</code>; <code>data</code> to faktura z pozycjami, tak jak w <code>GET /api/v1/invoices/{id}</code>. Wynik wysyłki do KSeF:</p>',
+    fieldsTable('KsefSubmission'),
+    '</section>',
+  ].join('\n');
+}
+
 const ERROR_ROWS: [string, string, string][] = [
   ['400', 'invalid_parameter', 'Nieznany albo błędny parametr. Opis podaje jego nazwę.'],
+  ['400', 'missing_idempotency_key', 'Zapis bez nagłówka Idempotency-Key.'],
+  ['400', 'invalid_idempotency_key', 'Klucz idempotencji pusty, za długi albo ze znakami spoza ASCII.'],
+  ['400', 'invalid_json', 'Treść zapisu nie jest poprawnym JSON.'],
   ['401', 'missing_api_key', 'Brak nagłówka Authorization: Bearer.'],
   ['401', 'invalid_api_key', 'Klucz nieprawidłowy albo odwołany.'],
   ['403', 'insufficient_scope', 'Klucz nie ma zakresu potrzebnego temu punktowi.'],
   ['404', 'not_found', 'Nie ma takiej faktury w firmie klucza.'],
+  ['409', 'idempotency_conflict', 'Klucz idempotencji użyty wcześniej z inną treścią (albo jego faktura została usunięta).'],
+  ['409', 'number_taken', 'Numer faktury jest już zajęty w firmie.'],
+  ['413', 'payload_too_large', 'Treść zapisu większa niż 1 000 000 bajtów.'],
+  ['415', 'unsupported_media_type', 'Treść zapisu bez Content-Type: application/json.'],
+  ['422', 'validation_failed', 'Faktura ma błędy. Lista pól w error.fields.'],
+  ['422', 'unsupported_invoice_kind', 'Rodzaj faktury spoza tej wersji API (korekta, zaliczka, faktura końcowa, faktura do paragonu).'],
+  ['422', 'unsupported_currency', 'Waluta inna niż PLN.'],
+  ['422', 'unsupported_buyer', 'Nabywca spoza tej wersji API (firma z UE, osoba z PESEL albo dokumentem).'],
+  ['422', 'number_required', 'FaktWay nie wyliczy kolejnego numeru: podaj pole number.'],
   ['429', 'rate_limited', 'Za dużo zapytań. Nagłówek Retry-After podaje, po ilu sekundach spróbować.'],
   ['503', 'api_disabled', 'API nie jest jeszcze udostępnione.'],
   ['503', 'maintenance', 'Przerwa techniczna.'],
@@ -156,7 +212,7 @@ export function renderApiDocsHtml(): string {
     .map(([status, code, text]) => `<tr><td>${status}</td><td><code>${code}</code></td><td>${escapeHtml(text)}</td></tr>`)
     .join('');
   const endpoints = Object.entries(paths)
-    .map(([path, item]) => endpointSection(path, item.get))
+    .flatMap(([path, item]) => [endpointSection(path, item.get), ...(item.post ? [createSection(path, item.post)] : [])])
     .join('\n');
 
   return `<!doctype html>
@@ -165,13 +221,13 @@ export function renderApiDocsHtml(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FaktWay API</title>
-<meta name="description" content="Dokumentacja publicznego API FaktWay: odczyt faktur i kosztów firmy kluczem API.">
+<meta name="description" content="Dokumentacja publicznego API FaktWay: odczyt faktur i kosztów firmy oraz wystawianie faktur kluczem API.">
 <style>${STYLE}</style>
 </head>
 <body>
 <main>
 <h1>FaktWay API</h1>
-<p>Odczyt faktur (wystawionych i otrzymanych z KSeF) i kosztów jednej firmy z Twojego programu. Wersja ${escapeHtml(spec.info.version)}. Opis w formacie OpenAPI 3.1: <a href="/api/docs/openapi.json"><code>/api/docs/openapi.json</code></a>.</p>
+<p>Odczyt faktur (wystawionych i otrzymanych z KSeF) i kosztów jednej firmy oraz wystawianie jej faktur z Twojego programu. Wersja ${escapeHtml(spec.info.version)}. Opis w formacie OpenAPI 3.1: <a href="/api/docs/openapi.json"><code>/api/docs/openapi.json</code></a>.</p>
 
 <h2>Klucz API</h2>
 <ul>
@@ -198,7 +254,16 @@ export function renderApiDocsHtml(): string {
 </ul>
 
 <h2>Limity</h2>
-<p>60 zapytań na minutę na klucz i 600 na minutę z jednego adresu IP. Po przekroczeniu odpowiedź 429 z nagłówkiem <code>Retry-After</code>. Nagłówek <code>X-RateLimit-Remaining</code> mówi, ile zapytań zostało w bieżącej minucie.</p>
+<p>60 zapytań na minutę na klucz i 600 na minutę z jednego adresu IP, a do tego 20 zapisów (POST) na minutę na klucz. Po przekroczeniu odpowiedź 429 z nagłówkiem <code>Retry-After</code>. Nagłówek <code>X-RateLimit-Remaining</code> mówi, ile zapytań zostało w bieżącej minucie.</p>
+
+<h2>Wystawianie faktur</h2>
+<ul>
+<li>Klucz z zakresem <code>invoices:write</code> wystawia zwykłą fakturę VAT krajową w złotych tą samą drogą co formularz w FaktWay: te same sprawdzenia, ta sama numeracja i szkic widoczny na liście faktur.</li>
+<li>Bez pola <code>send</code> faktura zostaje szkicem. Z <code>send: true</code> FaktWay od razu kolejkuje jej wysyłkę do KSeF; data wystawienia musi być wtedy dzisiejsza. Gdy wysyłka nie wyjdzie (np. brak certyfikatu KSeF), szkic zostaje, a powód jest w <code>ksef_submission.message</code>.</li>
+<li>Każdy zapis wymaga nagłówka <code>Idempotency-Key</code> z Twoim identyfikatorem faktury, np. numerem zamówienia. Ponowienie z tym samym kluczem i tą samą treścią zwraca tę samą fakturę i nie wysyła jej drugi raz; ten sam klucz z inną treścią to błąd 409.</li>
+<li>Kwoty netto, VAT i brutto liczy FaktWay. Ilość i cenę podawaj jako tekst dziesiętny z kropką, np. <code>"100.50"</code>.</li>
+<li>Każdą fakturę z API widać w dzienniku zdarzeń firmy z identyfikatorem klucza, którym ją wystawiono.</li>
+</ul>
 
 <h2>Błędy</h2>
 <p>Błąd to JSON: <code>{ "error": { "code": "…", "message": "…" } }</code>. Program rozpoznaje błąd po polu <code>code</code>; <code>message</code> to opis po polsku dla człowieka. Każda odpowiedź ma nagłówek <code>X-Request-Id</code>: podaj go przy zgłoszeniu problemu na <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.</p>
