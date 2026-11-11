@@ -145,6 +145,8 @@ describe('separate RLS test configuration', () => {
       // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
       'tests/rls-dzwonek-wplaty.test.ts',
       'tests/rls-indeksy-cronow-produkty.test.ts',
+      // Plan skalowania 3000, sesja 12: stronicowanie nocnej kopii JSON przez PostgREST.
+      'tests/rls-kopia-json-stronicowanie.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
