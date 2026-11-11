@@ -149,6 +149,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-kopia-json-stronicowanie.test.ts',
       // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta, powiązanie z fakturą.
       'tests/rls-proformy.test.ts',
+      // 00199 (krok 2.5): serie numeracji faktur, wyścig dwóch wystawień w jednej serii na prawdziwej bazie.
+      'tests/rls-numeracja.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
