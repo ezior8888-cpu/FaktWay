@@ -12,6 +12,11 @@ set -uo pipefail
 
 [ "${SKIP_PREPUSH:-}" = 1 ] && exit 0
 cd "$(git rev-parse --show-toplevel)" || exit 0
+# Git przekazuje hookowi GIT_DIR i pokrewne zmienne prawdziwego repo. Po `cd`
+# git sam znajduje repo, a narzędzia niżej (node, vitest z testami, które
+# zakładają własne repo w katalogu tymczasowym) nie mogą ich dziedziczyć:
+# 11.11.2026 `git init` w teście przestawił przez GIT_DIR prawdziwe repo na core.bare=true.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 
 zero=0000000000000000000000000000000000000000
 changed=""
