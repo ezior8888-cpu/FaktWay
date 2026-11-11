@@ -89,9 +89,11 @@ export async function getDocumentArchiveLinkAction(archiveId: string): Promise<A
   if (order.status !== 'completed' || !order.file_key || !order.expires_at) {
     return { success: false, error: 'Paczka nie jest jeszcze gotowa.' };
   }
-  if (new Date(order.expires_at).getTime() <= Date.now()) {
+  // Plik usuwa zadanie `cron.document-archive-cleanup` po wygaśnięciu linku (00190).
+  if (order.file_deleted_at || new Date(order.expires_at).getTime() <= Date.now()) {
     const day = new Date(order.expires_at).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
-    return { success: false, error: `Link do tej paczki wygasł ${archivePlDate(day)}. Zleć paczkę ponownie.` };
+    const gone = order.file_deleted_at ? ', a plik paczki usunęliśmy' : '';
+    return { success: false, error: `Link do tej paczki wygasł ${archivePlDate(day)}${gone}. Zleć paczkę ponownie.` };
   }
   if (!isTenantStoragePath(order.file_key, tenantId)) return { success: false, error: 'Nie znaleziono paczki.' };
 

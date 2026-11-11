@@ -236,6 +236,9 @@ export type AuditAction =
   // aplikacji): zlecenie (rodzaj i okres) i pobranie gotowej paczki.
   | 'document_archive.requested'
   | 'document_archive.downloaded'
+  // Plik wygasłej paczki usunięty z magazynu (00190, krok 6.4, część 2). Wpis
+  // dopisuje funkcja bazy `mark_document_archive_file_deleted` razem ze znacznikiem.
+  | 'document_archive.file_deleted'
   // Profil podatkowy (00166, plan księgowości JDG K2): wersja przed i po zapisie.
   | 'tax_profile.saved'
   // Ewidencja przychodów (00167, K3): wpis ręczny dodany albo usunięty (cała

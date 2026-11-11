@@ -222,10 +222,13 @@ describe('CRON_JOBS', () => {
     // przebiegów na dobę; przy wyłączonej fladze `publicApiEnabled` kończy
     // się na odczycie flagi z pamięci podręcznej, a przy włączonej to jedno
     // zapytanie o należne dostawy (indeks częściowy na `pending`).
+    // 32 → 33: `cron.document-archive-cleanup` (11.11.2026, plan kompletnej
+    // aplikacji, krok 6.4, część 2): raz na dobę o 04:30 (1 przebieg na dobę)
+    // usuwa z magazynu pliki paczek archiwum po wygaśnięciu linku (00190).
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(32);
+    expect(CRON_JOBS.length).toBe(33);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {

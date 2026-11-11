@@ -12,7 +12,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'node:crypto';
 
 import { getR2Client, getR2Config } from './r2-client';
-import { assertTenantStoragePath } from './tenant-path';
+import { assertTenantStoragePath, isDocumentArchiveFileKey } from './tenant-path';
 import { XmlArchiveConflictError } from './xml-archive-conflict';
 
 /**
@@ -460,6 +460,30 @@ export async function statR2Object(
   } catch (error) {
     const name = (error as { name?: string }).name;
     if (error instanceof NoSuchKey || name === 'NotFound') return null;
+    throw error;
+  }
+}
+
+/**
+ * Usuwa plik paczki archiwum dokumentów (krok 6.4, część 2) i nic innego:
+ * jeden obiekt o kluczu z wiersza `document_archives`, tylko w katalogu tego
+ * zlecenia (`isDocumentArchiveFileKey`). Bez usuwania po prefiksie i bez
+ * listowania katalogu firmy. Brak obiektu to sukces (ponowienie po udanym
+ * usunięciu); inny błąd rzuca, a zadanie się ponowi.
+ */
+export async function deleteDocumentArchiveFile(key: string, tenantId: string, archiveId: string): Promise<void> {
+  if (!isDocumentArchiveFileKey(key, tenantId, archiveId)) {
+    // Celowo bez klucza i identyfikatorów w treści (jak assertTenantStoragePath).
+    throw new Error('Storage key is not a file of this document archive');
+  }
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
+  } catch (error) {
+    // S3 i MinIO odpowiadają 204 także bez obiektu; inne zgodne magazyny bywają ostrzejsze.
+    const name = (error as { name?: string }).name;
+    if (error instanceof NoSuchKey || name === 'NoSuchKey' || name === 'NotFound') return;
     throw error;
   }
 }

@@ -46,13 +46,16 @@ describe('rejestr jobów', () => {
     expect(bezHandlera, 'kolejki zdarzeń bez zarejestrowanego joba').toEqual([]);
   });
 
-  it('paczka A: 14 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b; + retencja czatu)', () => {
+  it('paczka A: 15 cronów utrzymaniowych (bez odświeżania widoków, AUD-118; + cykl życia, PR 4b; + retencja czatu; + pliki paczek archiwum)', () => {
     const packageA = [
       'cron.archive-old-invoices',
       'cron.cert-expiry-alert',
       'cron.cleanup-audit-logs',
       'cron.cleanup-old-backups',
       'cron.daily-db-snapshot',
+      // 14 → 15 (11.11.2026, plan kompletnej aplikacji, krok 6.4, część 2): usuwanie
+      // z magazynu plików paczek archiwum po wygaśnięciu linku (00190), raz na dobę.
+      'cron.document-archive-cleanup',
       'cron.gdpr-process-deletions',
       'cron.jobs-watchdog',
       'cron.ksef-health-check',
@@ -63,7 +66,7 @@ describe('rejestr jobów', () => {
       'cron.support-chat-retention',
       'cron.verify-backup',
     ];
-    expect(packageA.length).toBe(14);
+    expect(packageA.length).toBe(15);
     for (const q of packageA) expect(queues, `brak ${q}`).toContain(q);
   });
 
@@ -110,6 +113,9 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('cron.cleanup-audit-logs')?.maxRetries).toBe(1);
     // Reszta: default Inngest 4.
     expect(byQueue.get('cron.daily-summary-email')?.maxRetries).toBe(4);
+    // Pliki paczek archiwum (00190): przebieg idempotentny, ponowienie po błędzie magazynu
+    // bierze tylko pliki bez znacznika, więc domyślne 4 próby.
+    expect(byQueue.get('cron.document-archive-cleanup')?.maxRetries).toBe(4);
   });
 
   it('dunning ma limit równoległości per tenant (grupa pg-boss)', () => {
@@ -205,7 +211,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 59 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów + 2 kolejki dzwonka)', () => {
+  it('KOMPLET: 60 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów + 2 kolejki dzwonka + sprzątanie plików archiwum)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -232,7 +238,9 @@ describe('rejestr jobów', () => {
     // `invoice.submit.succeeded.bell` i `invoice.submit.failed.bell` (po jednym
     // jobie na wysłaną fakturę, bez cronów; wzór trzeciej kolejki webhooków
     // z #595). Worker: 62 kolejek (60 + 2), cronów bez zmian („32/32 cronów”).
-    expect(registered.length).toBe(59);
+    // 60: od 11.11.2026 (krok 6.4, część 2) +1 job `document-archive-cleanup` (00190,
+    // cron `cron.document-archive-cleanup` raz na dobę o 04:30). Worker: 63 kolejki, „33/33 cronów”.
+    expect(registered.length).toBe(60);
   });
 
   it('paczka W: 3 joby webhooków publicznego API (krok 7.1, część 3)', () => {

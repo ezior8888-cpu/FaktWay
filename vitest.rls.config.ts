@@ -110,6 +110,9 @@ export default defineConfig({
       // aktywnego członka firmy, UNIQUE bez dubli przy ponowieniu, odczyt tylko własnych wpisów aktywnej
       // firmy, bez zapisu kluczem użytkownika, oznaczanie tylko przez RPC, CHECK linku.
       'tests/rls-powiadomienia-w-aplikacji.test.ts',
+      // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania
+      // (service_role), w jednej transakcji z audit_logs; CHECK znacznika; runner sprzątania przez PostgREST.
+      'tests/rls-archiwum-sprzatanie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

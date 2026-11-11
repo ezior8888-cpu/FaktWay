@@ -122,6 +122,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-webhooki.test.ts',
       // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji.
       'tests/rls-powiadomienia-w-aplikacji.test.ts',
+      // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania,
+      // z wpisem audit_logs; CHECK znacznika; runner sprzątania przez prawdziwy PostgREST.
+      'tests/rls-archiwum-sprzatanie.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

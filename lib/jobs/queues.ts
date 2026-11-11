@@ -96,7 +96,7 @@ export interface CronJobDef {
 
 const TZ = 'Europe/Warsaw';
 
-/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF, księgowość (K5). */
+/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF, księgowość (K5), pliki paczek archiwum (6.4). */
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
@@ -109,6 +109,10 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.daily-analytics-digest', cron: '0 6 * * *', tz: TZ },
   { queue: 'cron.daily-db-snapshot', cron: '0 2 * * *', tz: TZ },
   { queue: 'cron.daily-summary-email', cron: '0 6 * * *', tz: TZ },
+  // Pliki wygasłych paczek archiwum (krok 6.4, część 2, 00190): raz na dobę o 04:30,
+  // po retencji faktur i kopii (04:00). Jeden przebieg na dobę; plik znika najpóźniej
+  // ok. doby po wygaśnięciu linku (7 dni od gotowości) i godzinie zapasu.
+  { queue: 'cron.document-archive-cleanup', cron: '30 4 * * *', tz: TZ },
   // Puls agenta FLO: sprząta po sobie i (od bloku 3) tworzy propozycje.
   // 07:30, czyli po ciszy nocnej, a przed tym, jak ktokolwiek otworzy apkę.
   { queue: 'cron.flo-tick', cron: '30 7 * * *', tz: TZ },

@@ -147,6 +147,15 @@ describe('link do pobrania paczki', () => {
     expect(h.sign).not.toHaveBeenCalled();
   });
 
+  it('plik paczki usunięty po wygaśnięciu linku (krok 6.4, część 2): odmowa z datą, informacją o usunięciu i wyjściem', async () => {
+    vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+    h.order = { ...h.order!, file_deleted_at: '2026-11-17T03:30:00Z' };
+    const result = await getDocumentArchiveLinkAction(A1);
+    expect(result).toEqual({ success: false, error: 'Link do tej paczki wygasł 16.11.2026, a plik paczki usunęliśmy. Zleć paczkę ponownie.' });
+    expect(h.sign).not.toHaveBeenCalled();
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
   it('członek firmy bez roli: odmowa bez linku', async () => {
     h.role = 'member';
     const result = await getDocumentArchiveLinkAction(A1);
