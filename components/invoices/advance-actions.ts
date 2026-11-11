@@ -25,6 +25,13 @@ import {
   sellerPartyFromSellerData,
 } from '@/lib/invoices/map-buyer-party';
 import {
+  salesQuoteConflictMessage,
+  salesQuoteConvertedAudit,
+  salesQuoteLinkForSave,
+  withSalesQuoteColumns,
+  type SalesQuoteIssueLink,
+} from '@/lib/proformy/powiazanie';
+import {
   advanceInvoiceSchema,
   type AdvanceInvoiceSchemaIn,
 } from '@/lib/validators/invoice-validators';
@@ -185,6 +192,10 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
 }
 
 /**
+ * `salesQuote` (krok 2.4): zaliczka z proformy albo oferty. Powiązanie idzie
+ * w TYM SAMYM INSERT (`uq_invoices_sales_quote_seq`, 00198); bez dokumentu
+ * wiersz jest taki jak dotąd.
+ *
  * `numberColumns` (krok 2.5, 00199): seria, okres, licznik i klucz zapisu;
  * bez serii pusty obiekt (wiersz jak dotąd). Odmowę numeru przez bazę wynik
  * niesie w `numberConflict` dla `saveWithInvoiceNumber`.
@@ -194,11 +205,12 @@ async function insertAdvanceDraft(
   tenantId: string,
   ghost: Invoice,
   envelope: AdvanceInvoiceData,
+  salesQuote?: { link: SalesQuoteIssueLink; userId: string },
   numberColumns: NumberColumns = {},
 ): Promise<NumberedResult<ActionResult>> {
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
-    .insert({
+    .insert(withSalesQuoteColumns({
       ...numberColumns,
       tenant_id: tenantId,
       direction: 'outgoing',
@@ -221,11 +233,16 @@ async function insertAdvanceDraft(
       advance_amount: envelope.advanceAmount,
       notes: envelope.notes ?? null,
       fa3_data: ghost,
-    })
+    }, salesQuote?.link))
     .select('id')
     .single();
 
   if (invErr || !inserted) {
+    // Krok 2.4: numer zamiany dokumentu zajęła inna faktura (dwa zapisy naraz).
+    if (salesQuote) {
+      const taken = await salesQuoteConflictMessage(supabase, tenantId, salesQuote.link, invErr);
+      if (taken) return { success: false, error: taken };
+    }
     const numberConflict = numberConflictOf(invErr);
     return {
       success: false,
@@ -257,6 +274,16 @@ async function insertAdvanceDraft(
     return { success: false, error: `Błąd zapisu pozycji: ${lineErr.message}` };
   }
 
+  if (salesQuote) {
+    await logAudit(
+      salesQuoteConvertedAudit(salesQuote.link, tenantId, salesQuote.userId, {
+        invoiceId,
+        internalNumber: ghost.internalNumber,
+        invoiceKind: 'advance',
+      }),
+    );
+  }
+
   return { success: true, invoiceId };
 }
 
@@ -274,11 +301,16 @@ export async function saveAdvanceAction(raw: unknown, expectedTenantId: string):
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
 
+    // Krok 2.4: dokument (proforma, oferta) z formularza sprawdzony przed zapisem.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, parsed.data.salesQuoteId, parsed.data.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
+    const quoteIssue = salesQuote.link ? { link: salesQuote.link, userId } : undefined;
+
     // Krok 2.5: numer z licznika serii albo z pola, ten sam w kolumnie, w kopercie i w fa3_data.
     const saved = await saveWithInvoiceNumber(supabase, numberRequestOf(parsed.data), envelope.issueDate, async (assigned) => {
       const numbered = { ...envelope, internalNumber: assigned.number };
       const ghost = ghostAdvanceInvoice(numbered);
-      return { result: await insertAdvanceDraft(supabase, tenant.id, ghost, numbered, assigned.columns), built: ghost };
+      return { result: await insertAdvanceDraft(supabase, tenant.id, ghost, numbered, quoteIssue, assigned.columns), built: ghost };
     });
     const result = saved.result;
     if (result.success && saved.built) {
@@ -314,12 +346,17 @@ export async function saveAndSendAdvanceAction(raw: unknown, expectedTenantId: s
     const notToday = issueDateNotTodayError(envelope.issueDate, 'special');
     if (notToday) return { success: false, error: notToday };
 
+    // Krok 2.4: dokument z formularza: wystawiony, tej firmy, numer zamiany wolny.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, parsed.data.salesQuoteId, parsed.data.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
+    const quoteIssue = salesQuote.link ? { link: salesQuote.link, userId } : undefined;
+
     // Krok 2.5: numer z licznika serii albo z pola; kolejka KSeF dostaje
     // kopertę i fakturę z numerem, który się zapisał.
     const numbered = await saveWithInvoiceNumber(supabase, numberRequestOf(parsed.data), envelope.issueDate, async (assigned) => {
       const env = { ...envelope, internalNumber: assigned.number };
       const ghost = ghostAdvanceInvoice(env);
-      return { result: await insertAdvanceDraft(supabase, tenant.id, ghost, env, assigned.columns), built: { ghost, env } };
+      return { result: await insertAdvanceDraft(supabase, tenant.id, ghost, env, quoteIssue, assigned.columns), built: { ghost, env } };
     });
     const saved = numbered.result;
     if (!saved.success) return saved;

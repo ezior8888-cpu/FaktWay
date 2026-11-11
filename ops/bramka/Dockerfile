@@ -1,7 +1,7 @@
 # Bramka FaktWay (B-2) — osobny, mały obraz: bez kodu aplikacji, bez kluczy
 # service_role. Coolify: aplikacja na ops-1, Base Directory `/ops/bramka`,
 # Dockerfile `/Dockerfile`, bez portów i domen. docs/runbooks/bramka-telegram.md
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production

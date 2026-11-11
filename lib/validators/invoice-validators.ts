@@ -7,7 +7,11 @@ import { numberingFormFields } from '@/lib/numeracja/pola';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
 import { isForeignEuVat, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
-import { NP_II_CORRECTION_BUYER_MESSAGE, NP_II_NOT_FOR_XI_MESSAGE } from '@/lib/schemas/invoice-form';
+import {
+  NP_II_CORRECTION_BUYER_MESSAGE,
+  NP_II_NOT_FOR_XI_MESSAGE,
+  SALES_QUOTE_LINK_MESSAGE,
+} from '@/lib/schemas/invoice-form';
 
 // ============================================================================
 // Helpers walidacyjne
@@ -325,6 +329,16 @@ export const advanceInvoiceSchema = z
     advanceReceivedDate: dateSchema.optional(),
     vatRate: z.enum(['23', '8', '5', '0']),
     description: z.string().min(5).max(1000),
+    /**
+     * Proforma albo oferta (krok 2.4, 00198), z której otwarto formularz
+     * (`?proforma=<id>`): ukryte pola, oba razem albo żadne. Brak = zwykła zaliczka.
+     */
+    salesQuoteId: z.string().uuid(SALES_QUOTE_LINK_MESSAGE).optional(),
+    salesQuoteSeq: z.string().regex(/^[1-9]\d{0,3}$/, SALES_QUOTE_LINK_MESSAGE).optional(),
+  })
+  .refine((data) => !data.salesQuoteId === !data.salesQuoteSeq, {
+    message: SALES_QUOTE_LINK_MESSAGE,
+    path: ['salesQuoteId'],
   })
   .refine((data) => data.advanceAmount <= data.totalContractAmount, {
     message: 'Zaliczka nie może być większa niż wartość umowy',

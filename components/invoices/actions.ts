@@ -44,6 +44,13 @@ import {
   type NumberColumns,
   type NumberedResult,
 } from '@/lib/numeracja/nadanie';
+import {
+  salesQuoteConflictMessage,
+  salesQuoteConvertedAudit,
+  salesQuoteLinkForSave,
+  withSalesQuoteColumns,
+  type SalesQuoteIssueLink,
+} from '@/lib/proformy/powiazanie';
 import { addDaysToIsoDate, dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
   EU_BUYER_COUNTRIES,
@@ -250,16 +257,23 @@ async function insertInvoiceAndLines(
   invoice: Invoice,
   formValues?: InvoiceFormValues,
   recurringIssue?: { link: RecurringIssueLink; userId: string },
+  salesQuoteIssue?: { link: SalesQuoteIssueLink; userId: string },
   numberColumns: NumberColumns = {},
 ): Promise<NumberedResult<InvoiceActionResult>> {
   const recurring = recurringIssue?.link;
   const recurringUserId = recurringIssue?.userId ?? null;
+  // Krok 2.4: faktura z proformy albo oferty niesie powiązanie w tym samym INSERT
+  // (`uq_invoices_sales_quote_seq`, 00198); zwykła faktura ma wiersz bez zmian.
+  const salesQuote = salesQuoteIssue?.link;
 
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
     // N1: tylko faktura z pozycji cyklicznej niesie dwie nowe kolumny —
     // zwykła faktura ma wiersz bez zmian (bez tych kluczy, nie z NULL-ami).
-    .insert({ ...withRecurringColumns(draftInvoiceRow(tenantId, invoice, formValues), recurring), ...numberColumns })
+    .insert({
+      ...withSalesQuoteColumns(withRecurringColumns(draftInvoiceRow(tenantId, invoice, formValues), recurring), salesQuote),
+      ...numberColumns,
+    })
     .select('id')
     .single();
 
@@ -298,6 +312,13 @@ async function insertInvoiceAndLines(
           error: 'Faktura za ten okres jest już wystawiona. Sprawdź listę faktur.',
         };
       }
+    }
+    // Krok 2.4: numer zamiany dokumentu zajęła inna faktura (dwa zapisy naraz albo
+    // ponowienie). Sprawdzamy przy każdym 23505, jak przy okresie faktury cyklicznej:
+    // Postgres zgłasza jeden z indeksów, a klient ma dostać numer tamtej faktury.
+    if (salesQuote) {
+      const taken = await salesQuoteConflictMessage(supabase, tenantId, salesQuote, invErr);
+      if (taken) return { success: false, error: taken };
     }
     // Krok 2.5: numer z serii zajęty w międzyczasie albo drugi zapis z tym
     // samym kluczem — `saveWithInvoiceNumber` bierze następny numer albo
@@ -355,6 +376,16 @@ async function insertInvoiceAndLines(
         nextRunDateAdvanced: advanced,
       },
     });
+  }
+
+  if (salesQuote) {
+    await logAudit(
+      salesQuoteConvertedAudit(salesQuote, tenantId, salesQuoteIssue?.userId ?? null, {
+        invoiceId: inserted.id as string,
+        internalNumber: invoice.internalNumber,
+        invoiceKind: 'regular',
+      }),
+    );
   }
 
   return { success: true, invoiceId: inserted.id as string };
@@ -415,12 +446,24 @@ export async function saveDraftAction(
     // Bez 00094 nie znamy prawnej adnotacji P_16; nie zapisujemy dokumentu.
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
 
+    // Krok 2.4: dokument (proforma, oferta) z formularza sprawdzony przed zapisem.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, values.salesQuoteId, values.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
     // Zwykły szkic — bez pozycji cyklicznej (odmowa wyżej). Krok 2.5: numer
     // z licznika serii, gdy w polu została podpowiedź serii, inaczej z pola.
     const saved = await saveWithInvoiceNumber(supabase, numberRequestOf(values), values.issueDate, async (assigned) => {
       const numbered = { ...values, internalNumber: assigned.number };
       const built = buildInvoiceFromForm(numbered, tenant, vatExemptionBasis, cashMethod);
-      return { result: await insertInvoiceAndLines(supabase, tenant.id, built, numbered, undefined, assigned.columns), built };
+      const result = await insertInvoiceAndLines(
+        supabase,
+        tenant.id,
+        built,
+        numbered,
+        undefined,
+        salesQuote.link ? { link: salesQuote.link, userId } : undefined,
+        assigned.columns,
+      );
+      return { result, built };
     });
     const result = saved.result;
     const invoice = saved.built;
@@ -478,6 +521,9 @@ export async function saveAndSendInvoiceAction(
     // N1: pozycja wstrzymana, usunięta albo obca — odmowa przed zapisem.
     const recurring = await recurringLinkForForm(supabase, tenant.id, values);
     if (!recurring.ok) return { success: false, error: recurring.error };
+    // Krok 2.4: proforma albo oferta z formularza: wystawiona, tej firmy, numer zamiany wolny.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, values.salesQuoteId, values.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
     //    Krok 2.5: numer z licznika serii nadaje baza przy tym zapisie; faktura
     //    do kolejki KSeF (XML, P_2) ma numer, który się zapisał.
@@ -490,6 +536,7 @@ export async function saveAndSendInvoiceAction(
         built,
         formValues,
         recurring.link ? { link: recurring.link, userId } : undefined,
+        salesQuote.link ? { link: salesQuote.link, userId } : undefined,
         assigned.columns,
       );
       return { result, built };

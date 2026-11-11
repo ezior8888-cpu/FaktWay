@@ -147,6 +147,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-indeksy-cronow-produkty.test.ts',
       // Plan skalowania 3000, sesja 12: stronicowanie nocnej kopii JSON przez PostgREST.
       'tests/rls-kopia-json-stronicowanie.test.ts',
+      // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta, powiązanie z fakturą.
+      'tests/rls-proformy.test.ts',
       // 00199 (krok 2.5): serie numeracji faktur, wyścig dwóch wystawień w jednej serii na prawdziwej bazie.
       'tests/rls-numeracja.test.ts',
     ]);

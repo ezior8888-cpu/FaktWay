@@ -57,6 +57,8 @@ export function InvoiceForm({
   initialValues = null,
   recurringInvoiceId = null,
   recurringPeriod = null,
+  salesQuoteId = null,
+  salesQuoteSeq = null,
 }: {
   /**
    * Firma, dla której strona wyrenderowała formularz (UX-01). Zapis odsyła ją
@@ -96,6 +98,13 @@ export function InvoiceForm({
   recurringInvoiceId?: string | null;
   /** Okres z banera strony (np. `2026-11`) — ukryte pole; zapis sprawdza, czy pozycja go nie zmieniła (C3). */
   recurringPeriod?: string | null;
+  /**
+   * Proforma albo oferta (krok 2.4, `?proforma=`), z której stronę otwarto:
+   * ukryte pola; zapis wpisuje powiązanie w tym samym INSERT co fakturę.
+   * Numer kolejnej zamiany nadaje strona (druga faktura tylko po potwierdzeniu).
+   */
+  salesQuoteId?: string | null;
+  salesQuoteSeq?: string | null;
 }) {
   const newLine: InvoiceFormValues['lines'][number] = vatExempt
     ? { ...defaultLine, vatRate: 'zw' }
@@ -166,6 +175,7 @@ export function InvoiceForm({
       numberRequestKey,
       ...(recurringInvoiceId ? { recurringInvoiceId } : {}),
       ...(recurringInvoiceId && recurringPeriod ? { recurringPeriod } : {}),
+      ...(salesQuoteId && salesQuoteSeq ? { salesQuoteId, salesQuoteSeq } : {}),
     },
   });
   /** Tryb „Wystaw teraz” z faktury cyklicznej — bez szkicu (C2). */
@@ -365,6 +375,8 @@ export function InvoiceForm({
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6 pb-32 lg:pb-10">
       {recurringInvoiceId ? <input type="hidden" {...form.register('recurringInvoiceId')} /> : null}
       {recurringInvoiceId && recurringPeriod ? <input type="hidden" {...form.register('recurringPeriod')} /> : null}
+      {salesQuoteId && salesQuoteSeq ? <input type="hidden" {...form.register('salesQuoteId')} /> : null}
+      {salesQuoteId && salesQuoteSeq ? <input type="hidden" {...form.register('salesQuoteSeq')} /> : null}
       {/* NAGŁÓWEK — dwa układy.
           Na telefonie pasek z makiety: strzałka wstecz, tytuł z podtytułem,
           „Szkic” po prawej. Zapis szkicu wchodzi tu z dolnego paska, żeby

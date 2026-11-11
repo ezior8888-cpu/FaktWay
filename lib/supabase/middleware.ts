@@ -216,8 +216,12 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           );
-          sessionCacheHeaders = headers;
-          for (const [name, value] of Object.entries(headers)) supabaseResponse.headers.set(name, value);
+          // Od `@supabase/ssr` 0.12 nagłówki przychodzą tylko w pierwszym
+          // `setAll` żądania, kolejne (np. skasowanie sesji zaraz po
+          // odświeżeniu) dostają `{}`. Zbieramy je, żeby nowa odpowiedź
+          // ich nie zgubiła.
+          sessionCacheHeaders = { ...sessionCacheHeaders, ...headers };
+          for (const [name, value] of Object.entries(sessionCacheHeaders)) supabaseResponse.headers.set(name, value);
         },
       },
       global: {

@@ -14,6 +14,8 @@ import { recurringPeriodKey, recurringPeriodLabel } from '@/lib/invoices/recurri
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { loadInvoiceNumbering } from '@/lib/numeracja/baza';
 import { selectedNumberingOption } from '@/lib/numeracja/model';
+import { loadQuoteSource, regularInvoiceFromQuote } from '@/lib/proformy/zamiana';
+import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 import { getPageContext, type PageContext } from '@/lib/supabase/page-context';
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -34,9 +36,10 @@ interface Notice {
   link?: { href: string; label: string };
 }
 
-/** Podkład ze wskazanej faktury albo pozycji cyklicznej (plan Finora N1). */
+/** Podkład ze wskazanej faktury albo pozycji cyklicznej (plan Finora N1) albo z proformy (krok 2.4). */
 interface Source {
-  initialValues: PrefillFromInvoice['values'];
+  /** Z proformy bez numeru i dat (zostają domyślne formularza), stąd `Partial`. */
+  initialValues: PrefillFromInvoice['values'] | Partial<InvoiceFormValues>;
   recurringInvoiceId: string | null;
   /**
    * Okres, który pokazał baner (`recurringPeriodKey(next_run_date)` w chwili
@@ -45,6 +48,12 @@ interface Source {
    * następny miesiąc pod etykietą tego, który klient widział (C3).
    */
   recurringPeriod: string | null;
+  /**
+   * Krok 2.4: proforma albo oferta (`?proforma=`) i numer kolejnej zamiany
+   * do ukrytych pól; zapis wpisuje powiązanie w tym samym INSERT co fakturę.
+   */
+  salesQuoteId?: string;
+  salesQuoteSeq?: string;
 }
 
 /**
@@ -52,6 +61,10 @@ interface Source {
  * aktywna; formularz z podkładem faktury-wzoru i ukrytym polem pozycji
  * (zapis zajmie okres — `insertInvoiceAndLines`).
  * `?wzor=<id>` — „Duplikuj”: sam podkład, bez pozycji cyklicznej.
+ *
+ * `?proforma=<id>` — „Wystaw fakturę” z proformy albo oferty (krok 2.4):
+ * dane dokumentu i ukryte powiązanie; gdy z dokumentu jest już faktura, tylko
+ * z `&kolejna=1` (potwierdzenie na ekranie dokumentu), inaczej pusty formularz.
  *
  * Nieznane, obce albo wstrzymane id: pusty formularz z komunikatem, nie 500.
  * Żaden z tych parametrów niczego nie zapisuje — fakturę wystawia człowiek.
@@ -107,6 +120,23 @@ async function loadSource(
         title: `Faktura cykliczna „${pozycja.name}” — ${okres}`,
         text: `Wypełniliśmy formularz na podstawie faktury ${prefill.sourceNumber ?? 'wzoru'} z nowym numerem i dzisiejszą datą. Sprawdź dane i wystaw fakturę.`,
       },
+    };
+  }
+
+  const proformaId = param(params, 'proforma');
+  if (proformaId) {
+    const loaded = await loadQuoteSource(ctx.supabase, ctx.tenantId, proformaId, param(params, 'kolejna') === '1');
+    if (!loaded.ok) return { source: null, notice: loaded.notice };
+    const { initialValues, notice } = regularInvoiceFromQuote(loaded.source);
+    return {
+      source: {
+        initialValues,
+        recurringInvoiceId: null,
+        recurringPeriod: null,
+        salesQuoteId: loaded.source.quote.id,
+        salesQuoteSeq: String(loaded.source.seq),
+      },
+      notice,
     };
   }
 
@@ -191,6 +221,9 @@ export default async function NewRegularInvoicePage({
             initialValues: source.initialValues,
             recurringInvoiceId: source.recurringInvoiceId,
             ...(source.recurringPeriod ? { recurringPeriod: source.recurringPeriod } : {}),
+            ...(source.salesQuoteId && source.salesQuoteSeq
+              ? { salesQuoteId: source.salesQuoteId, salesQuoteSeq: source.salesQuoteSeq }
+              : {}),
           }
         : {})}
     />

@@ -7,7 +7,7 @@ import {
   useMotionValue,
   useTransform,
   type PanInfo,
-} from 'framer-motion';
+} from 'motion/react';
 import { RiDownloadLine, RiLoader4Line } from '@remixicon/react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -92,7 +92,7 @@ export function SwipeableInvoiceRow({ invoice, facts, today, onMarkPaid }: Props
 
   return (
     <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-6">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-between px-6">
         <motion.div
           style={{ opacity: leftActionOpacity }}
           className="text-primary flex items-center gap-2"
