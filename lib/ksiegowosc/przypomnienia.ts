@@ -5,8 +5,10 @@
  *
  * - Termin: 5 i 1 dzień kalendarzowy przed terminem z kalendarza (K1), tylko
  *   rozliczenia bez oznaczonej zapłaty. Kwota z najnowszej zatwierdzonej
- *   wersji (minus to, co już zapłacone), a bez niej ze szkicu; bez kwoty,
- *   gdy moduł jej nie liczy (D7), samo przypomnienie o terminie.
+ *   wersji (minus to, co już zapłacone), a bez niej ze szkicu; gdy dane
+ *   zmieniły się po zatwierdzeniu (inny skrót wejść), ze szkicu, jak dopłata
+ *   na stronie (F11-B2); bez kwoty, gdy moduł jej nie liczy (D7), samo
+ *   przypomnienie o terminie.
  * - Teksty bez trybu rozkazującego i bez porad (D8).
  */
 
@@ -115,7 +117,9 @@ export function niezaplacone(w: {
     if (rodzaj === 'zus_spoleczne' && etapBezSkladek && !brakSkladek) continue;
     const ostatnia = aktualne(w.rozliczenia).get(rodzaj) ?? null;
     const szkic = w.pozycje?.find((p) => p.rodzaj === rodzaj && p.ok);
-    const kwotaGr = ostatnia ? ostatnia.kwotaGr : szkic?.ok ? szkic.kwotaGr : null;
+    // F11-B2: dane zmienione po zatwierdzeniu: kwota według bieżących danych.
+    const zmienione = !!ostatnia && !!szkic?.ok && szkic.wejsciaHash !== ostatnia.wejsciaHash;
+    const kwotaGr = zmienione && szkic?.ok ? szkic.kwotaGr : ostatnia ? ostatnia.kwotaGr : szkic?.ok ? szkic.kwotaGr : null;
     const zaplaconoGr = zaplacono(w.rozliczenia, rodzaj);
     if (kwotaGr === null) {
       // Bez kwoty: przypomnienie tylko wtedy, gdy nic nie jest oznaczone jako zapłacone.
