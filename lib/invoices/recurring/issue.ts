@@ -110,11 +110,19 @@ export async function loadRecurringIssueLink(
   if (lineRates) {
     rates = lineRates;
   } else {
-    const { data: lines, error: linesError } = await recurringDb(supabase)
+    // Wiersze pozycji nie mają `tenant_id`: najpierw wzór z warunkiem firmy.
+    const db = recurringDb(supabase);
+    const { data: template, error: templateError } = await db
+      .from('invoices')
+      .select('id')
+      .eq('id', data.template_invoice_id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (templateError || !template) return { ok: false, error: RECURRING_READ_ERROR_MESSAGE };
+    const { data: lines, error: linesError } = await db
       .from('invoice_line_items')
       .select('vat_rate')
-      .eq('invoice_id', data.template_invoice_id)
-      .eq('tenant_id', tenantId);
+      .eq('invoice_id', template.id);
     if (linesError || !lines) return { ok: false, error: RECURRING_READ_ERROR_MESSAGE };
     rates = lines.map((l) => String(l.vat_rate));
   }

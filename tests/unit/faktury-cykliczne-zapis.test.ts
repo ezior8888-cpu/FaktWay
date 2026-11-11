@@ -124,6 +124,10 @@ function fakeSupabase() {
         if (name === 'invoice_line_items' && state.failTemplateLines) {
           return { data: null, error: { code: '08006', message: 'połączenie zerwane' } };
         }
+        // Faktura-wzór pozycji (poza `state.invoices`, żeby nie mieszać z fakturami z zapisu).
+        if (name === 'invoices' && filters.some(([k, v]) => k === 'id' && v === 'tpl-1')) {
+          return { data: filters.some(([k, v]) => k === 'tenant_id' && v === TENANT) ? [{ id: 'tpl-1' }] : [], error: null };
+        }
         return { data: rows().filter(matches), error: null };
       };
 
