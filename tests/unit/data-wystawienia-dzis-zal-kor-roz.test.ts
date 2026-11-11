@@ -88,7 +88,7 @@ const correctionInput = (issueDate: string): CorrectionInvoiceSchemaIn => ({
 });
 
 type Row = Record<string, unknown>;
-type QueryLog = { table: string; operation: string; filters: Record<string, unknown> };
+type QueryLog = { table: string; operation: string; filters: Record<string, unknown>; payload?: unknown };
 let queries: QueryLog[];
 const parent: Row = {
   id: parentId, tenant_id: tenantId, direction: 'outgoing', invoice_kind: 'regular',
@@ -130,7 +130,7 @@ function from(table: string) {
     in: (key: string, values: unknown[]) => { record.filters[key] = values; return chain; },
     overlaps: () => chain,
     order: () => chain,
-    insert: () => { record.operation = 'insert'; return chain; },
+    insert: (payload?: unknown) => { record.operation = 'insert'; record.payload = payload; return chain; },
     delete: () => { record.operation = 'delete'; return chain; },
     maybeSingle: async () => result(),
     single: async () => result(),
@@ -179,6 +179,13 @@ describe('zaliczka (ZAL) — wysyłka tylko z dzisiejszą datą wystawienia', ()
     expect(r).toMatchObject({ success: true });
     expect(inserted()).toBe(true);
     expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('F12-D1: data otrzymania zaliczki trafia do sale_date i do fa3_data (P_6, art. 106e ust. 1 pkt 6)', async () => {
+    const r = await saveAdvanceAction({ ...advanceInput('2026-10-05'), advanceReceivedDate: '2026-09-28' }, tenantId);
+    expect(r).toMatchObject({ success: true });
+    const zapis = queries.find((q) => q.table === 'invoices' && q.operation === 'insert')?.payload as Record<string, unknown>;
+    expect(zapis).toMatchObject({ sale_date: '2026-09-28', fa3_data: expect.objectContaining({ saleDate: '2026-09-28' }) });
   });
 });
 

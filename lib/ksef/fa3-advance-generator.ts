@@ -435,6 +435,11 @@ export function generateAdvanceInvoiceXml(
   fa.ele('KodWaluty').txt('PLN');
   fa.ele('P_1').txt(formatDate(data.issueDate));
   fa.ele('P_2').txt(requireText(data.internalNumber, 'internalNumber'));
+  // F12-D1: P_6 to data otrzymania zaliczki, o ile różni się od daty wystawienia
+  // (art. 106f ust. 1 pkt 1 w zw. z art. 106e ust. 1 pkt 6; opis P_6 w schemacie).
+  if (data.advanceReceivedDate && data.advanceReceivedDate !== data.issueDate) {
+    fa.ele('P_6').txt(formatDate(data.advanceReceivedDate));
+  }
 
   emitVatSummariesFromMap(fa, summaries, FULL_VAT_RATE_MAP);
   fa.ele('P_15').txt(formatDecimal(advanceLine.grossAmount));

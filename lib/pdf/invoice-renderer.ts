@@ -279,7 +279,7 @@ function drawHeader(
   );
   if (invoice.saleDate && invoice.saleDate !== invoice.issueDate) {
     doc.text(
-      `Data sprzedaży: ${fmtDate(invoice.saleDate)}`,
+      `${invoice.type === 'ZAL' ? 'Data otrzymania zapłaty' : 'Data sprzedaży'}: ${fmtDate(invoice.saleDate)}`,
       left,
       PAGE_MARGIN + 56,
     );
