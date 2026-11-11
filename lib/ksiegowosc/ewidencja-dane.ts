@@ -5,9 +5,12 @@
  * faktury `outgoing` przyjęte w aktywnym środowisku KSeF, sumy przez
  * `readCompletePages`, zaliczki przez `fetchSettledAdvancesNet`.
  *
- * Okno wystawienia sięga 60 dni za koniec roku: faktura z 10 stycznia za
- * sprzedaż z 28 grudnia to przychód roku poprzedniego
- * (`MAX_SALE_DAYS_AFTER_ISSUE`, jak licznik limitu VAT).
+ * Przychód roku to faktury wystawione w roku i faktury wystawione później
+ * za sprzedaż z tego roku: dzień przychodu to dzień sprzedaży, nie później
+ * niż dzień wystawienia (art. 14 ust. 1c ustawy o PIT). Faktura z 10 stycznia
+ * albo z 5 marca za sprzedaż z 28 grudnia to przychód roku poprzedniego
+ * (F11-C3: do 11.11 okno kończyło się 60 dni po roku i faktura z marca ginęła
+ * z obu lat).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -15,9 +18,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { formatBuyerAddress, type BuyerDataJson } from '@/lib/exports/data-fetcher';
 import type { RateLookup } from '@/lib/flo/nbp';
-import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isReceiptInvoiceColumns } from '@/lib/invoices/receipt-invoice';
-import { MAX_SALE_DAYS_AFTER_ISSUE } from '@/lib/invoices/sale-date';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -248,7 +250,12 @@ export async function czytajFakturyRoku(
 ): Promise<FakturyRoku> {
   const od = `${rok}-01-01`;
   const koniecRoku = `${rok}-12-31`;
-  const doWystawienia = addDaysToIsoDate(koniecRoku, MAX_SALE_DAYS_AFTER_ISSUE) ?? koniecRoku;
+  // F11-C3: faktura za sprzedaż z roku może przyjść dowolnie później
+  // (spóźniona albo na żądanie nabywcy, art. 106b ust. 3 ustawy o VAT), więc
+  // kontrola środowiska obejmuje wystawione do dziś, a odczyt: wystawione
+  // w roku albo później za sprzedaż z roku. Rok liczy potem dzień przychodu.
+  const dzis = todayInWarsaw();
+  const doWystawienia = dzis > koniecRoku ? dzis : koniecRoku;
 
   let srodowisko;
   try {
@@ -275,7 +282,7 @@ export async function czytajFakturyRoku(
         .eq('ksef_status', 'accepted')
         .eq('ksef_environment', srodowisko)
         .gte('issue_date', od)
-        .lte('issue_date', doWystawienia)
+        .or(`issue_date.lte.${koniecRoku},sale_date.lte.${koniecRoku}`)
         .order('id', { ascending: true })
         .range(from, to);
       return { data: wynik.data as WierszFaktury[] | null, count: wynik.count, error: wynik.error };
