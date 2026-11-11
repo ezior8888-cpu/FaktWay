@@ -497,10 +497,22 @@ describe('onProcessOcrExhausted — karta porażki po wyczerpaniu prób', () => 
     expect(card.topic_key).toBe(`expense.review:ocr:${OCR_JOB}`);
     expect(card.title).toBe('Nie odczytałem tego zdjęcia');
     expect(card.body).toContain('Zdjęcie zostało w archiwum');
+    // Formularza kosztu bez zdjęcia nie ma (plan kompletnej aplikacji, 2.6), więc
+    // karta nie każe wpisywać ręcznie: prowadzi do Wydatków, gdzie jest „+ Dodaj wydatek”.
+    expect(card.body).toContain('Wgraj je jeszcze raz');
+    expect(card.body).not.toMatch(/ręcznie/i);
+    // Karta powstaje też po odmowie limitu, więc nie każe ponawiać bez zastrzeżenia.
+    expect(card.body).toContain('Gdy wyczerpał się limit odczytów, zrób to po jego odnowieniu');
     const view = toProposalView(card);
     expect(view?.ocrCard).toEqual({ failed: true, ocrJobId: OCR_JOB });
-    expect(view?.primary).toMatchObject({ intent: 'open', label: 'Wpisz ręcznie' });
+    expect(view?.primary).toMatchObject({ intent: 'open', label: 'Otwórz Wydatki' });
     expect(view?.evidence[0]?.href).toBe('/expenses');
+  });
+
+  it('bez komunikatu błędu zadanie dostaje opis, który nie obiecuje wpisu ręcznego', async () => {
+    await onProcessOcrExhausted(new Error(''), event, ctx);
+
+    expect(jobRow()).toMatchObject({ status: 'failed', error_message: 'Nie udało się rozpoznać paragonu. Spróbuj ponownie za kilka minut.' });
   });
 
   it('drugie wywołanie (pg-boss ponowił obsłużony job) nie robi drugiej karty', async () => {

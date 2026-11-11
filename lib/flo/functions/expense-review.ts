@@ -398,10 +398,12 @@ export function buildOcrFailedProposal(
       ocrJobId,
       failed: 1,
       // Wydatku jeszcze nie ma, więc domyślne „Zgadza się” zawsze kończyło się
-      // „Propozycja bez identyfikatora wydatku”. Droga wyjścia to wpisanie
-      // kosztu ręcznie — przycisk prowadzi do listy wydatków (pierwszy dowód).
+      // „Propozycja bez identyfikatora wydatku”. Wpisu ręcznego kosztu nie ma
+      // (plan kompletnej aplikacji, 2.6; formularz to krok 3.8), więc droga
+      // wyjścia to ponowne wgranie dokumentu: przycisk prowadzi do listy
+      // wydatków, gdzie jest „+ Dodaj wydatek” (pierwszy dowód).
       primaryIntent: 'open',
-      primaryLabel: 'Wpisz ręcznie',
+      primaryLabel: 'Otwórz Wydatki',
     },
     evidence: [{ label: 'Wydatki', href: '/expenses' }],
   };

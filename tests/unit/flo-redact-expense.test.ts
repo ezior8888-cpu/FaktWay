@@ -271,7 +271,10 @@ describe('W-01 — karta dla klienta', () => {
     // Klient musi wiedzieć, że dokument nie przepadł — inaczej wyrzuci
     // paragon i po miesiącu nie będzie czego odtwarzać.
     expect(proposal.body).toContain('archiwum');
-    expect(proposal.body).toMatch(/ręcznie|nowe ujęcie/);
+    // Drogą wyjścia jest ponowne wgranie dokumentu. Wpisu ręcznego kosztu nie ma
+    // (plan kompletnej aplikacji, 2.6; formularz to krok 3.8).
+    expect(proposal.body).toMatch(/Wgraj je jeszcze raz.*nowe ujęcie/);
+    expect(proposal.body).not.toMatch(/ręcznie/i);
     expect(proposal.topicKey).toBe('expense.review:ocr:ocr-7');
   });
 
@@ -285,7 +288,7 @@ describe('W-01 — karta dla klienta', () => {
       ocrJobId: 'ocr-7',
       failed: 1,
       primaryIntent: 'open',
-      primaryLabel: 'Wpisz ręcznie',
+      primaryLabel: 'Otwórz Wydatki',
     });
     expect(proposal.evidence?.[0]?.href).toBe('/expenses');
     // Odcisk bez zmian — wciąż tylko z identyfikatora zadania OCR.
