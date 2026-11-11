@@ -20,6 +20,7 @@ import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { formatInvoiceDate } from '@/lib/invoices/display-date';
+import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
@@ -332,6 +333,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
   const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
+  // Krok 1.4: tytuł przelewu jak na PDF (numer KSeF, potem numer faktury; przy
+  // MPP sam numer KSeF); bez numeru KSeF, przy innej zapłacie niż przelew albo
+  // bez kwoty wiersza nie ma.
+  const transferTitle = tytulPrzelewuNaDokumencie(inv.internal_number ?? '', inv.ksef_number, {
+    metoda: payment?.method,
+    doZaplaty: inv.amount_due,
+    mpp: inv.split_payment,
+  });
   const lines = inv.lines;
   // Panel „W KSeF jest już faktura o tym numerze” (decyzja albo nota z danymi oryginału).
   // Obok niego bez karty błędu: tekst runnera jest dla operatora, klient ma panel.
@@ -561,6 +570,12 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                     <>
                       <dt className="text-foreground">MPP:</dt>
                       <dd>Mechanizm podzielonej płatności</dd>
+                    </>
+                  )}
+                  {transferTitle && (
+                    <>
+                      <dt className="text-foreground">Tytuł przelewu:</dt>
+                      <dd className="break-all">{transferTitle}</dd>
                     </>
                   )}
                 </dl>

@@ -7,6 +7,7 @@ import { DEFAULT_TEMPLATES, formatDatePl, formatPln } from './templates';
 import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint, isReminderInvoiceChaseable } from './delivery-schema';
 import { assertNoRelatedInvoice } from './reconciliation-guard';
 import { outstandingOf } from '@/lib/invoices/amount-due';
+import { tytulPrzelewu } from '@/lib/invoices/tytul-przelewu';
 import type { ReminderDelivery, ReminderDeliveryStage } from '@/types/reminder-delivery';
 import type { Json } from '@/types/database';
 
@@ -93,11 +94,17 @@ export async function buildReminderDelivery(
   const replyToRaw = text(settings?.reply_to_email, 254) || text(settings?.sender_email, 254);
   const replyTo = replyToRaw ? email(replyToRaw) : null;
   const invoiceLabel = text(invoice.internal_number, 150) || text(invoice.ksef_number, 150) || 'bez numeru';
+  // Krok 1.4 (RP-PLAT-01): numer KSeF pierwszy, potem numer faktury; przy MPP
+  // sam numer KSeF. Tytuł bierze własny numer faktury, nie `invoiceLabel`:
+  // bez niego etykietą jest surowy `ksef_number`, a numer spoza wzorca KSeF
+  // nie może trafić do tytułu. Ten sam tytuł w mailu i w wezwaniu PDF.
+  const splitPayment = object(object(invoice.fa3_data).annotations ?? null).splitPayment === 1;
+  const transferTitle = tytulPrzelewu(text(invoice.internal_number, 150), invoice.ksef_number, { mpp: splitPayment }) || 'bez numeru';
   const bankAccount = text(payment.bankAccount, 100);
   const source = template ? { subject: text(template.email_subject, 998), body: text(template.email_body, 20000) } : DEFAULT_TEMPLATES[stage];
   if (!source.subject || !source.body) throw new Error('Szablon przypomnienia jest pusty.');
   const variables: Record<string, string | number> = {
-    numerFaktury: invoiceLabel, kwota: formatPln(gross), kwotaDoZaplaty: formatPln(outstanding),
+    numerFaktury: invoiceLabel, tytulPrzelewu: transferTitle, kwota: formatPln(gross), kwotaDoZaplaty: formatPln(outstanding),
     dataWystawienia: formatDatePl(invoice.issue_date), terminPlatnosci: formatDatePl(invoice.payment_due_date!),
     dniPoTerminie: daysOverdue, nazwaFirmy: text(tenant.name), nazwaKontrahenta: text(buyer.name),
     rachunekBankowy: bankAccount, imieNadawcy: senderName, linkPlatnosci: '',
@@ -114,7 +121,7 @@ export async function buildReminderDelivery(
     const buffer = await generateDemandLetterPdf({
       sellerName: text(tenant.name), sellerNip: text(tenant.nip), sellerAddress,
       buyerName: text(buyer.name), buyerNip: text(buyer.nip) || text(invoice.buyer_nip) || undefined,
-      buyerAddress: address(buyer.address), invoiceNumber: invoiceLabel, issueDate: invoice.issue_date,
+      buyerAddress: address(buyer.address), invoiceNumber: invoiceLabel, transferTitle, issueDate: invoice.issue_date,
       dueDate: invoice.payment_due_date!, grossAmount: gross, paidAmount: paid, amountDue: outstanding,
       bankAccount, daysOverdue, senderName, senderEmail: replyTo ?? fromEmail,
       placeOfIssue: sellerAddress.match(/\d{2}-\d{3}\s+([^,]+)/)?.[1]?.trim() || 'Polska',
