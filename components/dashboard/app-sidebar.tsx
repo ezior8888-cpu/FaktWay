@@ -29,6 +29,7 @@ import {
 // Config Imports
 import {
   dashboardNavSections,
+  dashboardNewInvoiceAction,
   dashboardSettingsNavItem,
   isActiveNavPath,
   type DashboardNavItem
@@ -43,6 +44,16 @@ const SIDEBAR_COLLAPSIBLE = 'icon'
  */
 const ACTIVE_ITEM_CLASS =
   'data-active:bg-primary/10! dark:data-active:bg-primary/20! data-active:text-chart-3 hover:data-active:text-chart-3 dark:data-active:text-primary dark:hover:data-active:text-primary'
+
+/**
+ * Przycisk „Nowa faktura” (poprawka Bartosza 11.11.2026). Pełny kolor
+ * `primary` z cienkim jasnym brzegiem u góry i cieniem, żeby stał nad listą jak
+ * przycisk, a nie jak kolejna pozycja. Wykrzykniki (`!`) przebijają tło i tekst
+ * `hover`/`active` z `SidebarMenuButton`. Zwinięty pasek: kwadrat 2rem z plusem
+ * i podpowiedzią (rozmiar narzuca `SidebarMenuButton`).
+ */
+const NEW_INVOICE_CLASS =
+  'h-10 justify-center gap-2 bg-primary text-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.12),0_4px_12px_-4px_color-mix(in_oklch,var(--primary)_55%,transparent)] transition-[background-color,box-shadow,width,height,padding] hover:bg-primary/90! hover:text-primary-foreground! active:bg-primary/85! active:text-primary-foreground! focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar [&_svg]:size-4.5'
 
 function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
   return e.pointerType !== 'mouse' || (e.button === 0 && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)
@@ -87,6 +98,31 @@ const NavItem = memo(function NavItem({ item, active, current, onPrimaryDown, on
     </SidebarMenuItem>
   )
 })
+
+/**
+ * „Nowa faktura” pod logo, nad menu. Prowadzi do wyboru rodzaju faktury;
+ * celowo bez `isActive` (to akcja, nie miejsce), na kreatorze ma `aria-current`.
+ */
+function NewInvoiceButton({ current, onPrefetchHover }: { current: boolean; onPrefetchHover: (href: string) => void }) {
+  const { href, label, icon: Icon } = dashboardNewInvoiceAction
+
+  return (
+    <div className='flex justify-center px-3 pt-1 pb-3 group-data-[collapsible=icon]:px-2'>
+      <SidebarMenuButton
+        tooltip={label}
+        aria-current={current ? 'page' : undefined}
+        data-testid='nowa-faktura'
+        className={NEW_INVOICE_CLASS}
+        render={<Link href={href} />}
+        onPointerEnter={() => onPrefetchHover(href)}
+        onFocus={() => onPrefetchHover(href)}
+      >
+        <Icon aria-hidden />
+        <span>{label}</span>
+      </SidebarMenuButton>
+    </div>
+  )
+}
 
 /** Kliknięty cel i adres, z którego go kliknięto. */
 interface PendingNav {
@@ -163,6 +199,11 @@ export function AppSidebar() {
           <FaktWayMark className='size-7' />
         </Link>
       </SidebarHeader>
+
+      <NewInvoiceButton
+        current={isActiveNavPath(pathname, dashboardNewInvoiceAction.href)}
+        onPrefetchHover={armPrefetch}
+      />
 
       <nav aria-label='Nawigacja główna' className='flex min-h-0 flex-1 flex-col'>
       <SidebarContent className='group-data-[collapsible=icon]:overflow-y-auto'>

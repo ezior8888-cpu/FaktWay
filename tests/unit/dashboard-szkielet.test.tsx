@@ -85,14 +85,33 @@ describe('AppSidebar — pasek boczny Finory', () => {
     anchorFor(html, dashboardSettingsNavItem.href);
   });
 
-  it('podgląd faktury podświetla „Faktury”, a kreator nie', () => {
+  it('podgląd faktury podświetla „Faktury”, kreator nie; przycisk „Nowa faktura” nigdy', () => {
     const podglad = renderSidebar('/invoices/abc');
     expect(anchorFor(podglad, '/invoices')).toMatch(ACTIVE_ATTR);
     expect(anchorFor(podglad, '/invoices/new')).not.toMatch(ACTIVE_ATTR);
 
+    // Świadoma zmiana 11.11.2026: kreator nie ma już pozycji „Wystaw fakturę”,
+    // a przycisk „Nowa faktura” nie dostaje pigułki aktywnej pozycji.
     const kreator = renderSidebar('/invoices/new/regular');
     expect(anchorFor(kreator, '/invoices')).not.toMatch(ACTIVE_ATTR);
-    expect(anchorFor(kreator, '/invoices/new')).toMatch(ACTIVE_ATTR);
+    expect(anchorFor(kreator, '/invoices/new')).not.toMatch(ACTIVE_ATTR);
+  });
+
+  it('„Nowa faktura”: jeden przycisk pod logo, nad menu, bez pozycji „Wystaw fakturę”', () => {
+    const html = renderSidebar('/dashboard');
+    const przycisk = anchorFor(html, '/invoices/new');
+    expect(przycisk).toContain('data-testid="nowa-faktura"');
+    expect(przycisk).toMatch(/\sbg-primary\s/);
+    expect(przycisk).toMatch(/\stext-primary-foreground\s/);
+    expect(html).toContain('>Nowa faktura</span>');
+    expect(html).not.toContain('Wystaw fakturę');
+    // Kolejność: logo (nagłówek) → przycisk → nawigacja główna.
+    const logo = html.indexOf('data-slot="sidebar-header"');
+    const btn = html.indexOf('data-testid="nowa-faktura"');
+    const nav = html.indexOf('aria-label="Nawigacja główna"');
+    expect(logo).toBeGreaterThanOrEqual(0);
+    expect(logo).toBeLessThan(btn);
+    expect(btn).toBeLessThan(nav);
   });
 
   it('Ustawienia w stopce paska świecą na podstronach ustawień', () => {
@@ -174,6 +193,15 @@ describe('AppSidebar — dostępność', () => {
     expect(u.link('/settings').getAttribute('aria-current')).toBe('page');
     expect(u.link('/dashboard').getAttribute('aria-current')).toBeNull();
     u.unmount();
+
+    // „Nowa faktura” ma aria-current na wyborze rodzaju i w formularzach.
+    const n = mountSidebar('/invoices/new');
+    expect(n.link('/invoices/new').getAttribute('aria-current')).toBe('page');
+    n.przejdz('/invoices/new/regular');
+    expect(n.link('/invoices/new').getAttribute('aria-current')).toBe('page');
+    n.przejdz('/invoices');
+    expect(n.link('/invoices/new').getAttribute('aria-current')).toBeNull();
+    n.unmount();
   });
 
   it('menu jest w nawigacji z etykietą „Nawigacja główna”', () => {

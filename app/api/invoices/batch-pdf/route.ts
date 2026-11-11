@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import PQueue from 'p-queue';
 
+import { logAudit } from '@/lib/audit/log';
 import { attachmentDisposition } from '@/lib/http/content-disposition';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { packageZip, type PackagedFile } from '@/lib/exports/zip-packager';
@@ -107,13 +108,13 @@ export async function GET(req: Request): Promise<Response> {
   }
   batchesInFlight += 1;
   try {
-    return await buildBatch(req, tenantId);
+    return await buildBatch(req, tenantId, ctx.userId);
   } finally {
     batchesInFlight -= 1;
   }
 }
 
-async function buildBatch(req: Request, tenantId: string): Promise<Response> {
+async function buildBatch(req: Request, tenantId: string, userId: string): Promise<Response> {
   const quota = await checkRateLimit({
     bucket: 'batch_pdf',
     identifier: tenantId,
@@ -209,6 +210,20 @@ async function buildBatch(req: Request, tenantId: string): Promise<Response> {
     }
 
     const zip = await packageZip(files);
+    // Zbiorcze pobranie danych fakturowych zostawia ślad (nie rzuca: audyt nie psuje pobrania).
+    try {
+      await logAudit({
+        action: 'invoice.batch_pdf_downloaded',
+        tenantId,
+        userId,
+        entityType: 'invoice',
+        metadata: selection.mode === 'ids'
+          ? { mode: 'ids', count: files.length, invoiceIds: selection.ids }
+          : { mode: 'range', count: files.length, from: selection.from, to: selection.to },
+      });
+    } catch {
+      console.error('[batch-pdf] audit_failed');
+    }
     return new NextResponse(new Uint8Array(zip), {
       status: 200,
       headers: {

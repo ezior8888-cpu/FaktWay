@@ -93,6 +93,7 @@ export type AuditAction =
   | 'invoice.submit_failed'
   | 'invoice.upo_downloaded'
   | 'invoice.xml_downloaded'
+  | 'invoice.batch_pdf_downloaded'
   // Panel operatora /admin/ksef (cykl życia faktury, PR 3c) — aktor = operator.
   | 'invoice.operator_requeue'
   | 'invoice.operator_reconcile'
