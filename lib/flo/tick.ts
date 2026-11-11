@@ -377,7 +377,8 @@ async function readActiveTenantIds(): Promise<string[]> {
  * się w chwili zapisu, a baza odsyła dokładnie karty podniesione: zakończona
  * w trakcie przebiegu nie wraca do zatwierdzenia i nie dostaje wpisu
  * w audycie. PostgREST (od wersji 10) nie ucina wierszy zwracanych przez
- * zapis — limit 1000 dotyczy odczytu — więc wpis dostaje każda podniesiona.
+ * zapis — limit 1000 dotyczy odczytu — więc wpis dostaje każda podniesiona
+ * (1200 kart na prawdziwym PostgREST: `tests/rls-flo-sprzatanie.test.ts`).
  */
 async function releaseStuck(now: Date, db: FloDbClient): Promise<number> {
   const cutoff = new Date(now.getTime() - STUCK_AFTER_MS).toISOString();

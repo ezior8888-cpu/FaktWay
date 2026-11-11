@@ -4,7 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const captureException = vi.hoisted(() => vi.fn());
 vi.mock('@sentry/nextjs', () => ({ captureException }));
 
-const audit = vi.hoisted(() => vi.fn(async (_entry: { entityId?: string }) => undefined));
+/** Wpis audytu: tylko pola, które te testy sprawdzają. */
+interface AuditEntry {
+  tenantId?: string | null;
+  action?: string;
+  entityId?: string;
+  metadata?: Record<string, unknown>;
+}
+const audit = vi.hoisted(() => vi.fn(async (_entry: AuditEntry) => undefined));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: audit }));
 
 import type { FloDbClient } from '@/lib/flo/db-types';
@@ -178,7 +185,8 @@ function stuckCards(n: number): Row[] {
   return Array.from({ length: n }, (_, i) => ({
     id: uuid(3, i),
     tenant_id: uuid(9, i % 7),
-    kind: 'payment.chase',
+    // Różne rodzaje: wpis audytu ma nieść rodzaj TEJ karty.
+    kind: i % 3 === 0 ? 'payment.confirm' : 'payment.chase',
     status: 'executing',
     expires_at: FUTURE,
     approved_at: LONG_AGO,
@@ -304,6 +312,16 @@ describe('FLO-01 — strażnik kart porzuconych w „wykonuję”', () => {
     const logged = audit.mock.calls.map(([entry]) => entry.entityId);
     expect(new Set(logged)).toEqual(new Set(proposals.slice(0, 500).map((p) => p.id)));
     expect(logged).toHaveLength(500);
+    // Wpis ma firmę i rodzaj TEJ karty: trafia do audytu właściwego konta.
+    const byId = new Map(proposals.slice(0, 500).map((p) => [p.id, p]));
+    for (const [entry] of audit.mock.calls) {
+      const source = byId.get(entry.entityId)!;
+      expect(entry).toMatchObject({
+        tenantId: source.tenant_id,
+        action: 'flo.proposal.failed',
+        metadata: expect.objectContaining({ kind: source.kind }),
+      });
+    }
 
     audit.mockClear();
     const afterFirst = structuredClone(proposals);
