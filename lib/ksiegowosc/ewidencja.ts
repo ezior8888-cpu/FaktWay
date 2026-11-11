@@ -48,6 +48,8 @@ export interface FakturaEwidencji {
   numerKsef: string | null;
   /** Faktura do paragonu (`fa3_data.ksefMarkers.fp`). */
   fp: boolean;
+  /** F11-C4: dane z importu KSeF, których FaktWay nie zna pewnie (te same powody co odmowa JPK). */
+  niepewnyImport?: NiepewnyImport | null;
   /**
    * K_6 i K_7: kraj nadania i identyfikator podatkowy kontrahenta (B2C: null);
    * nazwa i adres nabywcy dla KPiR (K7: K_5A, K_5B).
@@ -193,6 +195,33 @@ const POMOC_TEKST = 'Taki dokument rozdzielimy ręcznie po zgłoszeniu w Pomocy.
  * dowodem), więc miesiąc nie ma sum: FP nie zniknie ani nie wejdzie drugi raz.
  * Wyjście jak przy innych dokumentach, których ewidencja nie rozdzieli: Pomoc.
  */
+/**
+ * F11-C4: faktura z importu KSeF, której JPK odmawia, bo FaktWay nie zna
+ * pewnie jej dnia przychodu albo kwoty (`importedContentFlags` w
+ * `lib/exports/data-fetcher.ts`): import sprzed odczytu daty sprzedaży
+ * i adnotacji (C5b), różne albo nieczytelne daty sprzedaży, nieznane sumy.
+ */
+export type NiepewnyImport = 'przed_odczytem' | 'daty_sprzedazy' | 'sumy';
+
+const NIEPEWNY_IMPORT: Readonly<Record<NiepewnyImport, string>> = {
+  przed_odczytem: 'jest zaimportowana z KSeF przed odczytem daty sprzedaży z pliku, więc nie wiadomo, w którym dniu powstał przychód',
+  daty_sprzedazy: 'ma pozycje z różnymi datami sprzedaży albo nieczytelną datę sprzedaży, a przychód powstaje w dniu sprzedaży',
+  sumy: 'została zaimportowana z KSeF bez sum netto i VAT, więc FaktWay nie zna jej kwoty',
+};
+
+/** Brak przy fakturze z importu, której dnia przychodu albo kwoty FaktWay nie zna (F11-C4). */
+export function brakFakturyZImportu(numer: string, dzien: string, powod: NiepewnyImport, gdzie: 'ewidencji' | 'księgi'): string {
+  const wyjscie =
+    powod === 'przed_odczytem'
+      ? 'FaktWay uzupełnia datę sprzedaży automatycznie z oryginału w KSeF (postęp: Import danych → Historia z KSeF) i wtedy policzy miesiąc. ' +
+        'Jeśli ten komunikat zostaje dłużej niż dobę, napisz do nas przez Pomoc.'
+      : 'Miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.';
+  return (
+    `Faktura ${numer} z ${formatIsoDatePl(dzien)} ${NIEPEWNY_IMPORT[powod]}. Tego miesiąca (${monthLabel(dzien.slice(0, 7))}) ` +
+    `FaktWay nie liczy, żeby przychód nie wszedł do ${gdzie} z błędną datą albo kwotą. ${wyjscie}`
+  );
+}
+
 export function brakFakturyDoParagonu(numer: string, dzien: string, gdzie: 'ewidencji' | 'księgi'): string {
   return (
     `Faktura ${numer} z ${formatIsoDatePl(dzien)} to faktura do paragonu: sprzedaż z paragonu wchodzi do ${gdzie} ` +
@@ -349,6 +378,10 @@ export function zbudujEwidencje(wejscie: WejscieEwidencji): Ewidencja {
     }
     if (wersja.forma !== 'ryczalt') continue;
 
+    if (f.niepewnyImport) {
+      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyZImportu(f.numer, dzien, f.niepewnyImport, 'ewidencji') });
+      continue;
+    }
     if (f.fp) {
       braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'ewidencji') });
       continue;

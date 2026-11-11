@@ -7,7 +7,9 @@ import { MARK } from '@/lib/brand/faktway-logo-paths';
 import {
   CASH_METHOD_LABEL,
   hasReverseChargeLine,
+  MARGIN_SCHEME_LABELS,
   REVERSE_CHARGE_LABEL,
+  SELF_INVOICING_LABEL,
   SPLIT_PAYMENT_LABEL,
 } from '@/lib/invoices/annotations';
 import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
@@ -475,7 +477,10 @@ function drawLineItems(
       name: line.name,
       qty: decimal4(line.quantity),
       unit: line.unit,
-      price: decimal4(line.unitPriceNet),
+      // Import z cenami brutto: nie drukujemy ceny netto, której plik nie ma (F12-E4).
+      price: line.unitPriceNetMissing
+        ? line.unitPriceGross !== undefined ? `${decimal4(line.unitPriceGross)} brutto` : ''
+        : decimal4(line.unitPriceNet),
       net: money(line.netAmount),
       vat: vatRateLabel(line.vatRate),
       gross: money(line.grossAmount),
@@ -635,9 +640,22 @@ function drawFooter(
   // każda pozycja „oo” albo „np_ii” (usługa z art. 100 ust. 1 pkt 4 dla firmy
   // z UE, AUD-70). W kolumnie stawki jest tylko skrót, a nabywca spoza KSeF
   // (np. zagraniczny) dostaje wyłącznie ten PDF.
-  if (hasReverseChargeLine(invoice.lines)) {
+  if (hasReverseChargeLine(invoice.lines) || invoice.annotations?.reverseCharge === 1) {
     doc.font('bold').fontSize(9).fillColor('#222222');
     doc.text(REVERSE_CHARGE_LABEL, left, doc.y, { width });
+    doc.y += 4;
+  }
+  // Art. 106e ust. 1 pkt 17 — samofakturowanie (P_17 = 1; tylko z importu KSeF).
+  if (invoice.annotations?.selfInvoicing === 1) {
+    doc.font('bold').fontSize(9).fillColor('#222222');
+    doc.text(SELF_INVOICING_LABEL, left, doc.y, { width });
+    doc.y += 4;
+  }
+  // Art. 106e ust. 1 pkt 21 i 24 — procedura marży (tylko z importu KSeF).
+  const marginScheme = invoice.annotations?.marginScheme;
+  if (marginScheme) {
+    doc.font('bold').fontSize(9).fillColor('#222222');
+    doc.text(MARGIN_SCHEME_LABELS[marginScheme], left, doc.y, { width });
     doc.y += 4;
   }
   // Art. 106e ust. 1 pkt 18a — obowiązkowe wyrazy przy MPP.

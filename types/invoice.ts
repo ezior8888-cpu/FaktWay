@@ -96,6 +96,13 @@ export interface InvoiceLineItem {
   quantity: number;
   /** Cena jednostkowa netto - do 4 miejsc po przecinku */
   unitPriceNet: number;
+  /**
+   * Import KSeF z cenami brutto (art. 106e ust. 7 i 8; P_9B bez P_9A): pliku nie ma ceny netto,
+   * więc `unitPriceNet` (0) nie jest ceną z faktury. Tylko dla PDF; generatory XML tego nie czytają.
+   */
+  unitPriceNetMissing?: true;
+  /** Cena jednostkowa brutto z pliku (P_9B), gdy `unitPriceNetMissing`. */
+  unitPriceGross?: number;
   /** Wartość netto pozycji (= quantity * unitPriceNet, zaokrąglone do 2 miejsc) */
   netAmount: number;
   /** Stawka VAT */

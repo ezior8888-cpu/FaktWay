@@ -105,6 +105,32 @@ describe('o czym przypominać', () => {
   });
 });
 
+describe('F11-B5: VAT 0 zł', () => {
+  const vat = (przyjete?: boolean) =>
+    niezaplacone({ grupy: ['vat'], rozliczenia: [], pozycje: [szkic('vat', 0)], profil: PROFIL, jpkPrzyjete: przyjete });
+
+  it('kwota 0 zł: przypomnienie o JPK_V7M, chyba że MF przyjął plik; kwota dodatnia jak dotąd', () => {
+    expect(vat()).toEqual([{ rodzaj: 'vat', kwotaGr: 0 }]);
+    expect(vat(true)).toEqual([]);
+    expect(niezaplacone({ grupy: ['vat'], rozliczenia: [], pozycje: [szkic('vat', 5_000)], profil: PROFIL, jpkPrzyjete: true })).toEqual([{ rodzaj: 'vat', kwotaGr: 5_000 }]);
+  });
+
+  it('inne grupy przy kwocie 0 zł dalej bez przypomnienia', () => {
+    expect(niezaplacone({ grupy: ['ryczalt'], rozliczenia: [], pozycje: [szkic('ryczalt', 0)], profil: PROFIL })).toEqual([]);
+  });
+
+  it('treść: fakty o VAT 0 zł i terminie JPK_V7M, razem z pozycjami do zapłaty', () => {
+    const [t] = terminyNaDzis('2026-11-20');
+    expect(trescTerminu({ miesiac: '2026-10', termin: t.termin, dni: 5, pozycje: [{ rodzaj: 'vat', kwotaGr: 0 }] }).tresc).toBe(
+      'Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.',
+    );
+    const razem = trescTerminu({ miesiac: '2026-10', termin: t.termin, dni: 1, pozycje: [{ rodzaj: 'zdrowotna', kwotaGr: 100 }, { rodzaj: 'vat', kwotaGr: 0 }] }).tresc;
+    expect(razem).toContain('Bez oznaczonej zapłaty: składka zdrowotna 1,00 zł.');
+    expect(razem).toContain('VAT do zapłaty za październik 2026: 0,00 zł');
+    expect(razem).not.toMatch(/[—–]|Zapłać|zalecamy|powinieneś/);
+  });
+});
+
 describe('treść', () => {
   const [termin] = terminyNaDzis('2026-11-15');
 
