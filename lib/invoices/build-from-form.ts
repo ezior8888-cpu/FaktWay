@@ -10,7 +10,11 @@
 
 import { buildInvoiceAnnotations } from '@/lib/invoices/annotations';
 import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
-import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
+import {
+  receiptBuyerKindOfForm,
+  receiptFromFormValues,
+  type InvoiceFormValues,
+} from '@/lib/schemas/invoice-form';
 import { calculateInvoiceTotals, calculateLineItem } from '@/lib/xml/invoice-calculator';
 import type {
   Address,
@@ -178,6 +182,12 @@ export function buildInvoiceFromForm(
       ? saleTrim
       : undefined;
 
+  // Faktura do paragonu (krok 1.2): ten sam kształt, który sprawdził schemat
+  // (`receiptFromFormValues`). Klucz tylko przy FP, zwykła faktura bez zmian.
+  const receipt = values.receiptInvoice === true
+    ? receiptFromFormValues(values, receiptBuyerKindOfForm(values))
+    : undefined;
+
   return {
     internalNumber: values.internalNumber,
     type: 'VAT',
@@ -197,6 +207,7 @@ export function buildInvoiceFromForm(
       cashMethod,
     }),
     notes: values.notes && values.notes.length ? values.notes : undefined,
+    ...(receipt ? { receipt } : {}),
   };
 }
 

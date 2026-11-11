@@ -69,7 +69,8 @@ describe('PDF: stopka z adresem strony', () => {
 
   it('nowa stopka unieważnia PDF-y w pamięci podręcznej', () => {
     const key = buildInvoicePdfKey('tenant', 'invoice', '2026-11-02', 'none');
-    expect(key).toContain('.v6.');
+    // Stopka weszła w v6; v7 (krok 1.4, tytuł przelewu z numerem KSeF) ją zawiera.
+    expect(key).toContain('.v7.');
   });
 });
 

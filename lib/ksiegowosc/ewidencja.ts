@@ -11,6 +11,9 @@
  * - Rozliczenie (ROZ) jest pomniejszone o rozliczone zaliczki, jak w KPiR
  *   (`kpirRevenueNet`), więc zaliczki się nie dublują.
  * - Faktura do paragonu (FP) nie jest przychodem: sprzedaż wchodzi z raportu kasy.
+ *   Do czasu reguły, która sprawdzi, że raport kasy obejmuje sprzedaż z FP
+ *   (następny PR kroku 1.2, złoty przypadek G30), FP daje brak: miesiąc bez
+ *   sum, bo FP nie może po cichu zniknąć ani być drugim przychodem.
  * - Waluta: kurs średni NBP z ostatniego dnia roboczego przed dniem przychodu.
  * - Stawka: z pozycji, a bez niej domyślna z wersji profilu na dzień przychodu
  *   (`stawkaRyczaltuPozycji`). Dzień ze skalą albo liniowym nie należy do
@@ -22,6 +25,7 @@
  */
 
 import { kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
+import { monthLabel } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlInt } from '@/lib/format/pl';
 import { NAZWY_FORM, stawkaRyczaltuPozycji, wersjaNa, type WersjaProfilu } from '@/lib/ksiegowosc/profil';
@@ -181,6 +185,23 @@ const NAZWY_RODZAJU: Record<Exclude<RodzajFaktury, 'zwykla'>, string> = {
 const PROFIL_TEKST = 'Ustawienia są w Księgowości, w zakładce „Ustawienia podatkowe”.';
 const POMOC_TEKST = 'Taki dokument rozdzielimy ręcznie po zgłoszeniu w Pomocy.';
 
+/**
+ * Brak przy fakturze do paragonu (krok 1.2 planu kompletnej aplikacji). Art.
+ * 109 ust. 3d ustawy o VAT i zasada 2 planu księgowości: sprzedaż z paragonu
+ * wchodzi z raportu kasy, a sama FP nie jest przychodem. FaktWay nie sprawdza
+ * jeszcze, czy raport kasy obejmuje tę sprzedaż (wpis ręczny może być innym
+ * dowodem), więc miesiąc nie ma sum: FP nie zniknie ani nie wejdzie drugi raz.
+ * Wyjście jak przy innych dokumentach, których ewidencja nie rozdzieli: Pomoc.
+ */
+export function brakFakturyDoParagonu(numer: string, dzien: string, gdzie: 'ewidencji' | 'księgi'): string {
+  return (
+    `Faktura ${numer} z ${formatIsoDatePl(dzien)} to faktura do paragonu: sprzedaż z paragonu wchodzi do ${gdzie} ` +
+    `z raportu kasy, a sama faktura nie jest przychodem. FaktWay nie sprawdza jeszcze, czy raport kasy za ` +
+    `${monthLabel(dzien.slice(0, 7))} obejmuje tę sprzedaż, więc tego miesiąca nie liczy, żeby sprzedaż nie zniknęła ` +
+    'ani nie weszła dwa razy. Miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.'
+  );
+}
+
 interface Czesc {
   stawkaPb: number;
   kwotaGr: number;
@@ -329,7 +350,7 @@ export function zbudujEwidencje(wejscie: WejscieEwidencji): Ewidencja {
     if (wersja.forma !== 'ryczalt') continue;
 
     if (f.fp) {
-      pominiete.push({ numer: f.numer, dzien, powod: 'Faktura do paragonu: sprzedaż wchodzi do ewidencji z raportu kasy.' });
+      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'ewidencji') });
       continue;
     }
 

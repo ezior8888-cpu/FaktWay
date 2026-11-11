@@ -771,10 +771,6 @@
     "myslniki": 1,
     "plakietki": 0
   },
-  "lib/validation/whitelist-client.ts": {
-    "myslniki": 1,
-    "plakietki": 0
-  },
   "lib/xml/fa3-annotations.ts": {
     "myslniki": 4,
     "plakietki": 0

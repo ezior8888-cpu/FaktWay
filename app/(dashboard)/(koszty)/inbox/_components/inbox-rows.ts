@@ -54,7 +54,14 @@ export type InboxRow = {
   status: InboxStatus | null;
   /** Faktura z historii KSeF (archiwum, bez kosztu) — decyzja Bartosza 22.10.2026. */
   fromKsefHistory: boolean;
+  /**
+   * Krok 1.3 (00175): faktura do paragonu a paragon z NIP w kosztach.
+   * `candidates`: możliwy podwójny koszt, decyzja na stronie wydatku.
+   */
+  receiptMatch: ReceiptMatchState | null;
 };
+
+export type ReceiptMatchState = 'candidates' | 'linked';
 
 export function sellerDisplay(row: Pick<InboxInvoiceRow, 'seller_data' | 'fa3_data' | 'seller_nip'>): { name: string; nip: string } {
   const sd = row.seller_data as { name?: string; nip?: string } | null;
@@ -69,6 +76,7 @@ export type ExpenseLink = { id: string; ksef_invoice_id: string | null; is_revie
 export function buildInboxRows(
   invoices: readonly InboxInvoiceRow[],
   expenses: readonly ExpenseLink[] | null,
+  receiptMatches: ReadonlyMap<string, ReceiptMatchState> | null = null,
 ): InboxRow[] {
   const byInvoice = new Map<string, ExpenseLink>();
   for (const expense of expenses ?? []) {
@@ -90,8 +98,39 @@ export function buildInboxRows(
       expenseId: expense?.id ?? null,
       status: expenses === null || !expense ? null : expense.is_reviewed ? 'reviewed' : 'new',
       fromKsefHistory: invoice.origin === 'ksef_import',
+      receiptMatch: expense ? receiptMatches?.get(expense.id) ?? null : null,
     };
   });
+}
+
+/**
+ * Stan połączenia z paragonem dla wydatków ze strony (krok 1.3, 00175).
+ * Błąd odczytu → `null`: tabela zostaje bez dopisku, ostrzeżenie widać
+ * dalej na stronie wydatku.
+ */
+export async function loadInboxReceiptMatches(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  expenseIds: readonly string[],
+): Promise<Map<string, ReceiptMatchState> | null> {
+  const out = new Map<string, ReceiptMatchState>();
+  for (let i = 0; i < expenseIds.length; i += ID_CHUNK) {
+    const { data, error } = await supabase
+      .from('expense_receipt_matches')
+      .select('invoice_expense_id, status')
+      .eq('tenant_id', tenantId)
+      .in('invoice_expense_id', expenseIds.slice(i, i + ID_CHUNK))
+      .in('status', ['linked', 'candidate']);
+    if (error) {
+      console.error('[inbox] odczyt połączeń faktur do paragonu', error);
+      return null;
+    }
+    for (const row of data ?? []) {
+      if (row.status === 'linked') out.set(row.invoice_expense_id, 'linked');
+      else if (!out.has(row.invoice_expense_id)) out.set(row.invoice_expense_id, 'candidates');
+    }
+  }
+  return out;
 }
 
 /** Kawałki listy id do filtra `in` — adres zapytania PostgREST-a ma limit długości. */

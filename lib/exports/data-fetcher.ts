@@ -6,12 +6,14 @@ import {
   assertKsefExpensesReadyForPln,
   type KsefExpenseForPlnReport,
 } from '@/lib/expenses/ksef-currency-review';
+import { isReceiptInvoiceFa3 } from '@/lib/invoices/receipt-invoice';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { costDocumentType } from '@/lib/expenses/vat-deduction-document';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
@@ -197,7 +199,13 @@ async function fetchExpensesForExport(
     id: String(row.id),
     issueDate: String(row.issue_date),
     documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
-    documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+    // Paragon z NIP ze zdjęcia jest zapisany jako `invoice`; rodzaj z odczytu OCR (krok 1.3).
+    documentType: costDocumentType({
+      document_type: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+      source: typeof row.source === 'string' ? row.source : null,
+      ksef_invoice_id: typeof row.ksef_invoice_id === 'string' ? row.ksef_invoice_id : null,
+      ocr_extracted_data: row.ocr_extracted_data,
+    }),
     sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
     sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
     sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
@@ -540,7 +548,11 @@ export function importedContentFlags(
   const strings = (v: unknown) => (Array.isArray(v) ? v.filter((p): p is string => typeof p === 'string') : []);
   const problems = strings(o.annotationProblems);
   const lineProblems = strings(o.lineAmountProblems);
-  const markers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  const fileMarkers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  // Krok 1.2: faktura do paragonu wystawiona w FaktWay (`fa3_data.receipt`) ma
+  // w pliku KSeF `Fa/FP` = 1 jak FP z importu. JPK nie zna jeszcze typu FP
+  // (art. 109 ust. 3d: bez zwiększenia sprzedaży), więc ta sama odmowa.
+  const markers = isReceiptInvoiceFa3(o) ? { ...fileMarkers, fp: true as const } : fileMarkers;
   const saleDates = isRecordJson(o.saleDates) ? o.saleDates : undefined;
   return {
     ...(origin === 'ksef_import' && !isRecordJson(o.annotations) ? { importedAnnotationsMissing: true } : {}),

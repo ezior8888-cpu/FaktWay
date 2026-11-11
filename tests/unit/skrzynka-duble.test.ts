@@ -54,6 +54,14 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: (cols: string) => { columns = cols; return q; },
         eq: () => q,
         limit: () => q,
+        // Krok 1.3 (00175): runner szuka paragonu z NIP do faktury (lista
+        // kosztów). Tu nie ma żadnego, więc lista jest pusta.
+        is: () => q,
+        neq: () => q,
+        gte: () => q,
+        lte: () => q,
+        order: () => q,
+        then: (ok: (v: { data: unknown[]; error: null }) => unknown) => Promise.resolve({ data: [], error: null }).then(ok),
         insert: (row: unknown) => { db.inserts.push({ table, row }); return q; },
         update: (p: unknown) => { patch = p; db.updates.push({ table, patch: p }); return q; },
         single: async () => {

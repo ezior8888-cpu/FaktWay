@@ -10,6 +10,7 @@ import { generateFA3Xml, InvoiceValidationError } from '@/lib/xml/fa3-generator'
 import { claimXmlGeneratedAt } from '@/lib/ksef/xml-generated-at';
 import { assertSpecialInvoiceData } from '@/lib/ksef/special-invoice-data';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
+import { RECEIPT_ONLY_REGULAR_MESSAGE } from '@/lib/invoices/receipt-invoice';
 import { assertSpecialIssueDateToday } from '@/lib/ksef/special-issue-date';
 import { InvoiceXmlSchemaError, validateInvoiceXml } from '@/lib/xml/validator';
 import { uploadInvoiceXml } from '@/lib/storage/r2';
@@ -81,6 +82,12 @@ export async function submitInvoiceFullFlow(
     finalAdvanceSettlementRows: finalPayload?.advanceSettlementRows,
   })) {
     throw new InvoiceValidationError([ROZ_SUBMISSION_HOLD_MESSAGE]);
+  }
+  // Krok 1.2: generatory korekty, zaliczki i rozliczenia nie piszą `FP`, więc
+  // paragon przy danych specjalnych zniknąłby z XML po cichu. Odmowa przed
+  // generowaniem XML, archiwum i wysyłką (zdarzenie z formularza tego nie ma).
+  if (invoice.receipt !== undefined && (correctionData != null || advanceData != null || finalPayload != null)) {
+    throw new InvoiceValidationError([RECEIPT_ONLY_REGULAR_MESSAGE]);
   }
 
   const configuredEnv = requireMatchingKsefEnvironment(env);

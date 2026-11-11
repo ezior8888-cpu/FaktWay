@@ -38,6 +38,8 @@
  * koncie, więc przyszłe zadanie per konto zawoła ją bez zmian.
  */
 
+import { RECEIPT_REVENUE_COLUMNS } from '@/lib/invoices/receipt-revenue-guard';
+import { isReceiptInvoice } from '@/lib/reminders/delivery-schema';
 import { unlimitedCap, type DailyCap } from '@/lib/flo/daily-cap';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import { isMuted } from '@/lib/flo/decisions';
@@ -123,7 +125,7 @@ async function readOverdueInvoices(
   const { data, error } = await createAdminClient()
     .from('invoices')
     .select(
-      'id, internal_number, buyer_data, gross_total, paid_amount, payment_due_date, reminders_paused, invoice_kind, payment_data',
+      `id, internal_number, buyer_data, gross_total, paid_amount, payment_due_date, reminders_paused, invoice_kind, payment_data, ${RECEIPT_REVENUE_COLUMNS}`,
     )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -139,7 +141,8 @@ async function readOverdueInvoices(
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).flatMap((row) =>
+  // Krok 1.2: faktura do paragonu jest zapłacona przy kasie, więc FLO nie pyta, czy klient zapłacił.
+  return (data ?? []).filter((row) => !isReceiptInvoice(row)).flatMap((row) =>
     row.payment_due_date
       ? [
           {

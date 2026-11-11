@@ -37,7 +37,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { ReceiptMatchAlert } from '@/components/expenses/receipt-match-alert';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
+import type { ReceiptMatchView } from '@/lib/expenses/receipt-invoice-match-view';
+import { costDocumentType, vatDeductionForDocument } from '@/lib/expenses/vat-deduction-document';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
 import { cn } from '@/lib/utils';
@@ -82,6 +85,10 @@ interface ExpenseEditFormProps {
   expense: ExpenseRow;
   photoUrl: string | null;
   ksefCurrency: string | null;
+  /** Krok 3.4: karta „Płatność” na końcu kolumny kart (decyzja D1: nowa sekcja, nic nie przestawione). */
+  paymentSection?: ReactNode;
+  /** Krok 1.3 (00175): połączenie faktury do paragonu z paragonem z NIP. */
+  receiptMatch?: ReceiptMatchView | null;
 }
 
 interface FormState {
@@ -114,7 +121,7 @@ function buildInitialForm(expense: ExpenseRow): FormState {
   };
 }
 
-export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEditFormProps) {
+export function ExpenseEditForm({ expense, photoUrl, ksefCurrency, paymentSection, receiptMatch = null }: ExpenseEditFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialForm(expense));
   const [confirmedForeignCurrency, setConfirmedForeignCurrency] = useState(false);
@@ -183,9 +190,24 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
     });
   };
 
+  // Krok 1.3: paragon z NIP z datą od 1.01.2027 nie daje odliczenia VAT. Data
+  // z formularza, bo klient może ją poprawić; bez VAT do odliczenia (np. firma
+  // zwolniona) nie ma czego tracić, więc informacji nie ma.
+  // Paragon zastąpiony fakturą do paragonu (00175): prośba o fakturę jest już
+  // zbędna, a powrót do KPiR tylko przez rozłączenie na stronie faktury.
+  const linkedReceipt = receiptMatch?.role === 'receipt' && receiptMatch.state === 'linked';
+  const vatRule = vatDeductionForDocument({
+    documentType: costDocumentType(expense),
+    issueDate: form.issue_date,
+    grossAmount: expense.gross_amount,
+  });
+  const receiptNotice =
+    !linkedReceipt && !vatRule.deductible && Number(expense.vat_deductible_amount ?? 0) !== 0 ? vatRule.notice : null;
+
   const reviewStatus = expense.is_reviewed ? 'reviewed' : 'unreviewed';
   const deductibleToggleDisabled =
-    (foreignKsef && !hasKsefRate && !form.is_deductible) || (ksefCurrencyUnknown && !form.is_deductible);
+    (foreignKsef && !hasKsefRate && !form.is_deductible) || (ksefCurrencyUnknown && !form.is_deductible)
+    || (linkedReceipt && !form.is_deductible);
 
   // Oprawa: karta szczegółów jak Finora `transaction-detail-sheet.tsx`
   // (kwota + status, sprzedawca z awatarem, wiersze etykieta → wartość),
@@ -248,6 +270,17 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
           </AlertDescription>
         </Alert>
       ) : null}
+
+      {receiptNotice ? (
+        <Alert className="border-amber-600/30">
+          <AlertTitle>{receiptNotice.title}</AlertTitle>
+          <AlertDescription>
+            <p>{receiptNotice.body}</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {receiptMatch ? <ReceiptMatchAlert match={receiptMatch} /> : null}
 
       {wasAutoClassified ? (
         <Alert
@@ -558,6 +591,8 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
               />
             </CardContent>
           </Card>
+
+          {paymentSection}
         </div>
       </div>
 
