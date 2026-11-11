@@ -32,6 +32,8 @@ const ACTION_LABELS: Record<string, string> = {
   'bank.operation_undone': 'Cofnięto potwierdzenie wpłaty z wyciągu',
   'bank.tax_payment_confirmed': 'Potwierdzono zapłatę ZUS albo podatku z wyciągu',
   'bank.tax_payment_undone': 'Cofnięto zapłatę ZUS albo podatku z wyciągu',
+  'bank.expense_payment_confirmed': 'Potwierdzono zapłatę kosztu z wyciągu',
+  'bank.expense_payment_undone': 'Cofnięto zapłatę kosztu z wyciągu',
   'accounting_note.draft_created': 'Utworzono szkic noty',
   'accounting_note.draft_updated': 'Zmieniono szkic noty',
   'accounting_note.draft_deleted': 'Usunięto szkic noty',

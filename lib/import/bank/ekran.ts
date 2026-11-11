@@ -63,7 +63,10 @@ export type ImportBankStatementResult =
       inserted: number;
       /** Wpływy wgrane wcześniej (ten sam klucz duplikatu). */
       duplicates: number;
-      /** Wypływy, których nie zapisujemy: wszystkie poza przelewami do ZUS i urzędu (dopasowanie wydatków przyjdzie później). */
+      /**
+       * Wypływy, których nie zapisujemy przy wgraniu: wszystkie poza przelewami do ZUS i urzędu. Przelew do dostawcy
+       * z listy „Do zapłaty” zapisuje się dopiero po decyzji klienta (`proposeBankExpensePaymentsAction`, 00196).
+       */
       debitsSkipped: number;
       /** Wpływy w innej walucie niż PLN: wpłaty zapisujemy dziś tylko w złotych. */
       otherCurrencySkipped: number;
@@ -107,7 +110,7 @@ export function importSummaryText(result: Extract<ImportBankStatementResult, { s
   }
   if (result.debitsSkipped > 0) {
     parts.push(
-      `${result.tax ? 'Pozostałych wypływów' : 'Wypływów'} (${result.debitsSkipped}) nie zapisujemy: dopasowanie wydatków do faktur kosztowych przyjdzie w kolejnym kroku.`,
+      `${result.tax ? 'Pozostałych wypływów' : 'Wypływów'} (${result.debitsSkipped}) nie zapisujemy przy wgraniu: przelew do dostawcy z listy „Do zapłaty” zapisuje się dopiero po potwierdzeniu go jako zapłaty kosztu.`,
     );
   }
   if (result.otherCurrencySkipped > 0) {

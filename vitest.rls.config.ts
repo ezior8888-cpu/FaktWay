@@ -137,6 +137,10 @@ export default defineConfig({
       // rezerwacja, przejęcie po 5 minutach, żeton i numery operacji, krok kodu, tylko właściciel,
       // izolacja firm, wyzwalacz przejść stanów.
       'tests/rls-uprawnienia-ksef.test.ts',
+      // 00196 (plan kompletnej aplikacji, krok 3.2, część 3): przelewy do dostawców z wyciągu jako zapłaty kosztów;
+      // zapis dopiero po decyzji klienta (CHECK także dla klucza serwisowego), „Pomiń” bez danych osób trzecich,
+      // rachunek z faktury, kwota równa sumie do zapłaty, raz, role, obca firma, cofnięcie przez undo_expense_paid.
+      'tests/rls-wyciag-koszty.test.ts',
       // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury;
       // prawdziwe RPC wpłat z sesji, runner kolejki przez PostgREST, odbiorcy, ponowienie bez dubla,
       // stan po wpłacie, wpłata cofnięta i usunięta, obca firma, CHECK rodzajów.
