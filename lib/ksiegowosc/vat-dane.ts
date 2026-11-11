@@ -19,8 +19,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { fetchInvoicesForExport, type FetchedInvoiceData } from '@/lib/exports/data-fetcher';
 import { exportScopeFor } from '@/lib/exports/export-scope';
+import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { monthLabel, monthRange, shiftMonth } from '@/lib/expenses/month';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { AcceptedInvoiceEnvironmentIncompleteError } from '@/lib/ksef/accounting-provenance';
 import type { createAdminClient } from '@/lib/supabase/admin';
 
 import { vatMiesiaca, type VatMiesiaca } from './vat';
@@ -50,6 +52,13 @@ export type DaneVat =
 
 export const BLAD_ODCZYTU_VAT =
   'Nie udało się odczytać faktur, kosztów albo rozliczeń miesiąca, więc nie pokazujemy kwot VAT. Strona spróbuje ponownie przy następnym otwarciu.';
+
+/** Stały stan, nie awaria: koszt z KSeF w walucie obcej czeka na przegląd kursu (jak w KPiR). */
+export const KOMUNIKAT_WALUTA_VAT =
+  'Część kosztów z KSeF jest w walucie obcej i czeka na przegląd kursu, więc kwot VAT teraz nie pokazujemy. Przegląd jest w Kosztach.';
+export const KOMUNIKAT_SRODOWISKO_VAT =
+  'Część przyjętych faktur z tego miesiąca nie ma zapisanego środowiska KSeF, więc kwot VAT nie liczymy, ' +
+  'żeby nie pomieszać faktur testowych z prawdziwymi. Sprawdzimy to po zgłoszeniu w Pomocy.';
 
 export async function czytajVat(
   client: SupabaseClient,
@@ -86,6 +95,8 @@ export async function czytajVat(
       czytajPrzychodyReczne(client, tenantId, from, to),
     ]);
   } catch (e) {
+    if (e instanceof KsefExpenseCurrencyNotSupportedError) return { ok: false, komunikat: KOMUNIKAT_WALUTA_VAT };
+    if (e instanceof AcceptedInvoiceEnvironmentIncompleteError) return { ok: false, komunikat: KOMUNIKAT_SRODOWISKO_VAT };
     Sentry.captureException(e, { tags: { area: 'ksiegowosc.vat' }, extra: { tenantId, miesiac } });
     return { ok: false, komunikat: BLAD_ODCZYTU_VAT };
   }
