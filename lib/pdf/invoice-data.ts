@@ -1,3 +1,4 @@
+import { MARGIN_SCHEME_LABELS } from '@/lib/invoices/annotations';
 import { isReceiptInvoiceColumns, receiptFromJson } from '@/lib/invoices/receipt-invoice';
 import type { CorrectedInvoiceRef } from '@/lib/pdf/invoice-renderer';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
@@ -88,6 +89,8 @@ interface InvoiceRow {
   annotations: unknown;
   /** `fa3_data->receipt`: faktura do paragonu z FaktWay (krok 1.2). */
   receipt?: unknown;
+  /** `fa3_data->ksefLineFields`: pola pozycji z pliku KSeF (import), m.in. cena brutto P_9B. */
+  ksef_line_fields?: unknown;
   /** `fa3_data->ksefMarkers->>fp`: FP z pliku KSeF (import, C5b). */
   ksef_fp?: string | null;
   updated_at: string | null;
@@ -108,6 +111,7 @@ const SELECT = `
   annotations:fa3_data->annotations,
   receipt:fa3_data->receipt,
   ksef_fp:fa3_data->ksefMarkers->>fp,
+  ksef_line_fields:fa3_data->ksefLineFields,
   invoice_line_items(
     ordinal, name, unit, quantity, unit_price_net,
     net_amount, vat_rate, vat_amount, gross_amount
@@ -124,8 +128,21 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<InvoiceType>([
   'KOR_ROZ',
 ]);
 
-function mapLine(row: LineItemRow): InvoiceLineItem {
+/** Cena brutto (P_9B) pozycji o numerze `ordinal` z `fa3_data.ksefLineFields`; brak = `undefined`. */
+function grossPriceFromFile(raw: unknown, ordinal: number | null): number | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const hit = raw.find((f) => f && typeof f === 'object' && (f as { ordinal?: unknown }).ordinal === ordinal);
+  const price = (hit as { P_9B?: unknown } | undefined)?.P_9B;
+  return typeof price === 'number' && Number.isFinite(price) ? price : undefined;
+}
+
+function mapLine(row: LineItemRow, fileFields?: unknown): InvoiceLineItem {
+  // Import z cenami brutto: baza ma NULL, a nie cenę 0 (F12-E4).
+  const netMissing = row.unit_price_net === null;
+  const gross = netMissing ? grossPriceFromFile(fileFields, row.ordinal) : undefined;
   return {
+    ...(netMissing ? { unitPriceNetMissing: true as const } : {}),
+    ...(gross !== undefined ? { unitPriceGross: gross } : {}),
     ordinal: row.ordinal ?? 0,
     name: row.name ?? '',
     unit: row.unit ?? 'szt',
@@ -140,7 +157,9 @@ function mapLine(row: LineItemRow): InvoiceLineItem {
 
 /**
  * Adnotacje FA(3) ze snapshotu: podstawa zwolnienia (P_19A), MPP (P_18A),
- * metoda kasowa (P_16). Odwrotne obciążenie (P_18) wynika z pozycji „oo”.
+ * metoda kasowa (P_16), samofakturowanie (P_17), odwrotne obciążenie (P_18; także
+ * z pozycji „oo”) i procedura marży. P_23 nie jest czytane: brzmienie wyrazów z art. 136
+ * nie wynika ze schematu FA(3).
  */
 function readAnnotations(raw: unknown): Invoice['annotations'] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
@@ -151,6 +170,12 @@ function readAnnotations(raw: unknown): Invoice['annotations'] {
   }
   if (o.splitPayment === 1) annotations.splitPayment = 1;
   if (o.cashMethod === 1) annotations.cashMethod = 1;
+  // Z importu KSeF (F12-E5): P_17, P_18 jawnie i procedura marży. Tylko „1” — „2” to „nie”.
+  if (o.selfInvoicing === 1) annotations.selfInvoicing = 1;
+  if (o.reverseCharge === 1) annotations.reverseCharge = 1;
+  if (typeof o.marginScheme === 'string' && Object.hasOwn(MARGIN_SCHEME_LABELS, o.marginScheme)) {
+    annotations.marginScheme = o.marginScheme as keyof typeof MARGIN_SCHEME_LABELS;
+  }
   return Object.keys(annotations).length > 0 ? annotations : undefined;
 }
 
@@ -192,7 +217,7 @@ export async function loadInvoiceForPdf(
   const row = res.data;
 
   const lines = (row.invoice_line_items ?? [])
-    .map(mapLine)
+    .map((l) => mapLine(l, row.ksef_line_fields))
     .sort((a, b) => a.ordinal - b.ordinal);
 
   const rawType = (row.invoice_type ?? 'VAT').toUpperCase();
