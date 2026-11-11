@@ -104,10 +104,11 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
  * trasa uwierzytelnia sama, kluczem API z nagłówka `Authorization: Bearer`
  * (`lib/api/v1/auth.ts`), a `/api/docs` to statyczna dokumentacja. Proxy nie
  * tworzy dla nich klienta Supabase: sesja z ciasteczek nie otwiera w API
- * niczego i nie jest tu odświeżana. Tylko te dwa prefiksy (dokładnie albo
- * z `/`); `/api/v10`, `/api/v1x` i `/api/docsy` zostają za bramką sesji.
+ * niczego i nie jest tu odświeżana. Łącze MCP (krok 7.2, `/api/mcp`) działa
+ * na tych samych kluczach. Tylko te prefiksy (dokładnie albo z `/`);
+ * `/api/v10`, `/api/v1x` i `/api/docsy` zostają za bramką sesji.
  */
-const API_KEY_PREFIXES = ['/api/v1', '/api/docs'] as const;
+const API_KEY_PREFIXES = ['/api/v1', '/api/docs', '/api/mcp'] as const;
 
 export function isPublicApiPath(pathname: string): boolean {
   return API_KEY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

@@ -166,6 +166,13 @@ describe('strona /api/docs i plik /api/docs/openapi.json', () => {
     }
     // Sekret tylko w zmiennej, nigdy jako przykładowa wartość.
     expect(html).not.toMatch(/fwws_[A-Za-z0-9_-]{4,}/);
+    // Łącze MCP (krok 7.2): sekcja, adres, narzędzia i konfiguracja ze zmienną zamiast klucza.
+    expect(html).toContain('id="mcp"');
+    for (const text of ['/api/mcp', 'Streamable HTTP', 'FAKTWAY_API_KEY', 'list_invoices', 'get_invoice', 'list_receivables', 'list_expenses', 'tylko do odczytu']) {
+      expect(html, text).toContain(text);
+    }
+    expect(html).not.toMatch(/fwk_[A-Za-z0-9_-]{4,}/);
+    expect(html).not.toMatch(/\bAI\b/);
     expect(html).not.toMatch(/[—–]/);
     expect(html).not.toMatch(/FaktFlow/);
     expect(html).not.toContain('<script');

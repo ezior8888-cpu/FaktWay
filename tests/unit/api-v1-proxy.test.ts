@@ -38,6 +38,7 @@ const API_PATHS = [
   '/api/v1/expenses',
   '/api/docs',
   '/api/docs/openapi.json',
+  '/api/mcp',
 ] as const;
 
 const GATED_PATHS = [
@@ -47,6 +48,8 @@ const GATED_PATHS = [
   '/api/v2/invoices',
   '/api/docsy',
   '/api/docs-old',
+  '/api/mcpx',
+  '/api/mcp-old',
   '/api/invoices',
   '/api/ksef/status',
   '/api',

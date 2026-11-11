@@ -28,7 +28,7 @@ import { checkRateLimit, type RateLimitResult } from '@/lib/rate-limit';
  *  4. limit na klucz (po skrócie, przed bazą: odmowa nie kosztuje zapytania);
  *  5. `api_key_session()` tokenem roli `api_key_client`: baza sprawdza klucz,
  *     zapisuje jego użycie w `audit_logs` i zwraca firmę i zakresy;
- *  6. zakres punktu.
+ *  6. zakres punktu (`scope: null` zostawia to punktowi, np. łączu MCP).
  *
  * Limity są fail-closed: bez Redisa (albo przy jego awarii, gdy limiter liczy
  * tylko w pamięci procesu) API odpowiada 503, bo limitu na klucz nie da się
@@ -121,7 +121,7 @@ export async function checkApiWriteLimit(
 
 export async function authenticateApiRequest(
   request: Request,
-  { scope }: { scope: ApiKeyScope },
+  { scope }: { scope: ApiKeyScope | null },
 ): Promise<ApiAuthResult> {
   const requestId = randomUUID();
   const base = { 'X-Request-Id': requestId };
@@ -200,7 +200,8 @@ export async function authenticateApiRequest(
       'WWW-Authenticate': `${REALM}, error="invalid_token"`,
     }));
   }
-  if (!key.scopes.includes(scope)) {
+  // `null`: punkt sprawdza zakresy sam (łącze MCP, krok 7.2: zakres zależy od narzędzia).
+  if (scope !== null && !key.scopes.includes(scope)) {
     return fail(apiError(403, 'insufficient_scope', `Ten klucz API nie ma uprawnienia ${scope}. Utwórz klucz z tym uprawnieniem w Ustawieniach FaktWay.`, {
       ...base,
       'WWW-Authenticate': `${REALM}, error="insufficient_scope", scope="${scope}"`,
