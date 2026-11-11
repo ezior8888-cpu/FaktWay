@@ -131,6 +131,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-noty.test.ts',
       // 00194 (plan kompletnej aplikacji, krok 3.7): kasa, dowody KP i KW i raport kasowy.
       'tests/rls-kasa.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF.
+      'tests/rls-uprawnienia-ksef.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

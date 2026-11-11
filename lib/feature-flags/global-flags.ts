@@ -32,6 +32,7 @@ export const GLOBAL_FLAGS: readonly GlobalFlag[] = [
   'requireMfaForSensitive',
   'killKsiegowosc',
   'publicApiEnabled',
+  'ksefPermissionsEnabled',
 ] as const;
 
 /** Kill-switch musi reagować szybko, ale nie kosztem zapytania na każdy request. */

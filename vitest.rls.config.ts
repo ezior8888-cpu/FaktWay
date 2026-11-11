@@ -123,6 +123,10 @@ export default defineConfig({
       // 00194 (plan kompletnej aplikacji, krok 3.7): kasa; numer KP i KW z bazy pod blokadą serii,
       // stan kasy nie poniżej zera, korekta (storno), wpłata do faktury przez 00176, RLS i niezmienność.
       'tests/rls-kasa.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF;
+      // rezerwacja, przejęcie po 5 minutach, żeton i numery operacji, krok kodu, tylko właściciel,
+      // izolacja firm, wyzwalacz przejść stanów.
+      'tests/rls-uprawnienia-ksef.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
