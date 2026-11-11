@@ -210,10 +210,13 @@ describe('CRON_JOBS', () => {
     // `cron.ksiegowosc-terminy` (codziennie o 08:00, 1 przebieg na dobę);
     // oba pracują tylko dla firm w pilotażu, a idempotencję trzyma
     // `tax_notifications` (00169).
+    // 31 → 32: `cron.document-archive-cleanup` (11.11.2026, plan kompletnej
+    // aplikacji, krok 6.4, część 2): raz na dobę o 04:30 (1 przebieg na dobę)
+    // usuwa z magazynu pliki paczek archiwum po wygaśnięciu linku (00190).
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(31);
+    expect(CRON_JOBS.length).toBe(32);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {
