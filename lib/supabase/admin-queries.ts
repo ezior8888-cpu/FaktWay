@@ -10,6 +10,11 @@ import type { Invoice } from '@/types/invoice';
  *
  * UWAGA: NIGDY nie importuj tego pliku w client components / Server Actions
  * związanych z UI użytkownika. Tylko joby.
+ *
+ * Wyjątek (krok 1.4 planu kompletnej aplikacji): `app/actions/identyfikator-zbiorczy.ts`
+ * woła `getTenantKsefCredentials` po sprawdzeniu roli owner/admin i po
+ * rezerwacji w bazie, bo identyfikator zbiorczy z KSeF klient dostaje od razu,
+ * a job przy ponowieniu wołałby nieidempotentne API jeszcze raz.
  */
 
 /**

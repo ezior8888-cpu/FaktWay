@@ -24,6 +24,8 @@ const ACTION_LABELS: Record<string, string> = {
   'expense.paid_undone': 'Cofnięto zapłatę kosztu',
   'expense.whitelist_checked': 'Sprawdzono rachunek w wykazie podatników VAT',
   'expense.transfer_file_created': 'Pobrano plik przelewów',
+  'expense.collective_identifier_created': 'Utworzono identyfikator zbiorczy KSeF',
+  'expense.collective_identifier_failed': 'Nie udało się utworzyć identyfikatora zbiorczego KSeF',
   'ksef.credentials_uploaded': 'Wgrano certyfikat KSeF',
   'ksef.credentials_removed': 'Usunięto certyfikat KSeF',
   'ksef.environment_changed': 'Zmiana środowiska KSeF',

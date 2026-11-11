@@ -79,6 +79,10 @@ export default defineConfig({
       // 00177 (plan kompletnej aplikacji, krok 3.4): koszty do zapłaty; RPC zapłaty i cofnięcia
       // (idempotencja, blokada wiersza, role, obca firma, audyt), wyzwalacz kolumn płatności, lista przez RLS.
       'tests/rls-koszty-do-zaplaty.test.ts',
+      // 00191 (plan kompletnej aplikacji, krok 1.4, część 2): identyfikatory zbiorcze KSeF; RPC rezerwacji,
+      // zapisu i porażki (jeden wiersz na zestaw faktur, próba w toku, przejęcie po 5 minutach), role owner/admin,
+      // izolacja firm, brak zapisu z sesji poza RPC, żeton próby poza odczytem, wyzwalacz niezmienności.
+      'tests/rls-identyfikator-zbiorczy.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

@@ -44,7 +44,7 @@ export function rachunekDoCzytania(numer: string): string {
 }
 
 /** Kwota do wklejenia w banku: bez spacji tysięcy, z przecinkiem („1230,00”). */
-function kwotaDoSchowka(kwota: number): string {
+export function kwotaDoSchowka(kwota: number): string {
   return kwota.toFixed(2).replace('.', ',');
 }
 
@@ -58,7 +58,8 @@ export function opisTerminu(koszt: Pick<KosztDoZaplaty, 'dniDoTerminu'>): string
   return `Za ${dni(koszt.dniDoTerminu)}`;
 }
 
-function KopiujWiersz({
+/** Wiersz z wartością i przyciskiem kopiowania (także w bloku identyfikatora zbiorczego, krok 1.4). */
+export function KopiujWiersz({
   etykieta,
   wartosc,
   doSchowka,

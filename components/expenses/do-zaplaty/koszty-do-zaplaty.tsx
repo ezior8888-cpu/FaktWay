@@ -11,11 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { ListaDoZaplaty } from '@/lib/expenses/do-zaplaty';
+import type { GrupaIdentyfikatora } from '@/lib/expenses/identyfikator-zbiorczy';
 import { formatPlMoney } from '@/lib/format/pl';
 import { shortenLegalForm } from '@/lib/format/legal-form';
 import { cn } from '@/lib/utils';
 
 import { DanePrzelewu, opisTerminu } from './dane-przelewu';
+import { IdentyfikatoryZbiorcze } from './identyfikator-zbiorczy';
 import { PlikPrzelewow } from './plik-przelewow';
 
 /**
@@ -27,6 +29,10 @@ import { PlikPrzelewow } from './plik-przelewow';
  * Część 2 (plik przelewów): kto może płacić, ten zaznacza koszty polem przy
  * nazwie sprzedawcy i pobiera plik Elixir-0 z bloku nad listą (decyzja D1:
  * nowy blok i pole wyboru, reszta karty bez zmian).
+ *
+ * Krok 1.4, część 2: nad listą blok identyfikatora zbiorczego dla grup
+ * faktur jednego dostawcy (`grupy` liczy strona, razem z zapisanymi
+ * identyfikatorami). Bez grup bloku nie ma; karty kosztów bez zmian.
  */
 
 function kosztowWalutach(n: number): string {
@@ -42,6 +48,8 @@ export function KosztyDoZaplaty({
   mozeOznaczac,
   obcieta = false,
   rachunekFirmy = null,
+  grupy = [],
+  mozeTworzycIdentyfikator = false,
 }: {
   lista: ListaDoZaplaty;
   dzis: string;
@@ -50,6 +58,10 @@ export function KosztyDoZaplaty({
   obcieta?: boolean;
   /** Rachunek firmy z Ustawień (26 cyfr): rachunek zleceniodawcy w pliku przelewów. */
   rachunekFirmy?: string | null;
+  /** Grupy do identyfikatora zbiorczego (`grupyDoIdentyfikatora`) z zapisanymi identyfikatorami. */
+  grupy?: readonly GrupaIdentyfikatora[];
+  /** Właściciel albo administrator: przycisk „Identyfikator zbiorczy”. */
+  mozeTworzycIdentyfikator?: boolean;
 }) {
   const { pozycje, suma, przeterminowane, pominiete } = lista;
   const [wybrane, setWybrane] = useState<Set<string>>(() => new Set());
@@ -103,6 +115,8 @@ export function KosztyDoZaplaty({
       {mozeOznaczac && pozycje.length > 0 ? (
         <PlikPrzelewow pozycje={pozycje} zaznaczone={zaznaczone} onZaznacz={setWybrane} rachunekFirmy={rachunekFirmy} />
       ) : null}
+
+      {pozycje.length > 0 ? <IdentyfikatoryZbiorcze grupy={grupy} mozeTworzyc={mozeTworzycIdentyfikator} /> : null}
 
       {pozycje.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-10 text-center">
