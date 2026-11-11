@@ -99,6 +99,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-kpir.test.ts',
       'tests/rls-ksiegowosc-spis.test.ts',
       'tests/rls-sesje-konta.test.ts',
+      // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia wpłat.
+      'tests/rls-wplaty-czesciowe.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

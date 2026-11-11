@@ -102,6 +102,11 @@ export type AuditAction =
   // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
   | 'invoice.marked_paid'
   | 'invoice.paid_undone'
+  // Wpłaty częściowe i historia wpłat (00176, plan kompletnej aplikacji 3.1): metadane niosą
+  // wpłatę, kwotę, dzień wpłaty, resztę, stan płatności i liczbę przypomnień. Zapisuje baza
+  // (RPC `record_invoice_payment` i `void_invoice_payment`) w transakcji z wpłatą, nie aplikacja.
+  | 'invoice.payment_recorded'
+  | 'invoice.payment_voided'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'

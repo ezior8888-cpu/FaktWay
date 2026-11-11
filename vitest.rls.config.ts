@@ -76,6 +76,9 @@ export default defineConfig({
       // 00174 (krok 8.5 planu kompletnej aplikacji): zalogowane urządzenia i historia logowań;
       // tylko własne sesje, anon bez dostępu, krok kodu przy 2FA, wylogowanie widziane przez GoTrue.
       'tests/rls-sesje-konta.test.ts',
+      // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia; suma niecofniętych
+      // wpłat = paid_amount, klucz idempotencji, obca firma, kwota, reszta, PLN, cofnięcie ze śladem.
+      'tests/rls-wplaty-czesciowe.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
