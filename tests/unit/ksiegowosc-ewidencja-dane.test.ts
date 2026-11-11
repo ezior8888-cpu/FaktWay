@@ -6,8 +6,9 @@ import { kwotaNaGrosze, wpisSchema } from '@/lib/ksiegowosc/wpisy-reczne';
 
 /**
  * Odczyt ewidencji (plan księgowości JDG, K3) na atrapie Supabase, która
- * zapisuje wywołania: te same filtry co KPiR (PLAN-FINORA §2.4), okno
- * wystawienia 60 dni za rokiem, FP, waluty i komunikaty fail-closed.
+ * zapisuje wywołania: te same filtry co KPiR (PLAN-FINORA §2.4), faktury
+ * wystawione w roku albo później za sprzedaż z roku (F11-C3), FP, waluty
+ * i komunikaty fail-closed.
  */
 
 type Wywolanie = { tabela: string; metoda: string; args: unknown[] };
@@ -87,7 +88,7 @@ function faktura(z: Record<string, unknown> = {}) {
 }
 
 describe('czytajEwidencje: zapytania jak w KPiR', () => {
-  it('faktury outgoing przyjęte w aktywnym środowisku, okno wystawienia do 60 dni za rokiem, stronami po id', async () => {
+  it('faktury outgoing przyjęte w aktywnym środowisku, wystawione w roku albo później za sprzedaż z roku, stronami po id', async () => {
     const { client, wywolania } = atrapa({ faktury: [faktura()], wersje: [PROFIL] });
     const wynik = await czytajEwidencje(client, 'firma-1', 2026, { kurs: vi.fn() });
     expect(wynik.ok).toBe(true);
@@ -99,7 +100,8 @@ describe('czytajEwidencje: zapytania jak w KPiR', () => {
       ['eq', 'ksef_status', 'accepted'],
       ['eq', 'ksef_environment', process.env.KSEF_ENV],
       ['gte', 'issue_date', '2026-01-01'],
-      ['lte', 'issue_date', '2027-03-01'],
+      // F11-C3 (11.11): bez okna 60 dni po roku; faktura z marca za grudzień to przychód roku sprzedaży.
+      ['or', 'issue_date.lte.2026-12-31,sale_date.lte.2026-12-31'],
       ['order', 'id', { ascending: true }],
       ['range', 0, 499],
     ]);
