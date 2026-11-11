@@ -103,6 +103,9 @@ export default defineConfig({
       // 00186 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu
       // jako zapłaty rozliczeń; rachunek firmy, wyłącznik modułu, zapis raz, role, różnica kwot, cofnięcie.
       'tests/rls-wyciag-podatki.test.ts',
+      // 00187 (krok 7.1, część 3): webhooki owner/admin z kodem przy dodaniu, szyfrogram sekretu
+      // bez odczytu, jedna dostawa na zdarzenie, ponowienia, wyłączenie po 20 porażkach, audyt.
+      'tests/rls-webhooki.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

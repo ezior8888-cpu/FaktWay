@@ -16,6 +16,7 @@ import '@/lib/jobs/handlers/package-a';
 import '@/lib/jobs/handlers/package-b';
 import '@/lib/jobs/handlers/package-c';
 import '@/lib/jobs/handlers/package-d';
+import '@/lib/jobs/handlers/webhooks';
 
 const registered = getRegisteredJobs();
 const queues = registered.map((j) => j.queue);
@@ -220,7 +221,25 @@ describe('rejestr jobów', () => {
     // 53: od kroku 8.5 część 2 — +1 `auth.login.completed` (mail o nowym urządzeniu).
     // 54: od 09.11.2026 (plan kompletnej aplikacji, krok 6.4) z kolejką
     // `archive.document.requested` (archiwum dokumentów, 00178). Worker: 57 kolejek.
-    expect(registered.length).toBe(54);
+    // 57: od webhooków (suma z 53-54: 52 + 2 + 3) publicznego API (krok 7.1, część 3, 00187) — +3:
+    // `webhooks.event.emitted` (zdarzenie → dostawy), `invoice.submit.succeeded.webhook`
+    // (trzecia kolejka zdarzenia „faktura przyjęta w KSeF”) i cron
+    // `cron.webhooks-deliver` (ponowienia, co minutę; przy wyłączonej fladze
+    // `publicApiEnabled` kończy się bez zapytań). Worker: 60 kolejek (57 + 3), „32/32 cronów”.
+    expect(registered.length).toBe(57);
+  });
+
+  it('paczka W: 3 joby webhooków publicznego API (krok 7.1, część 3)', () => {
+    const byQueue = new Map(registered.map((j) => [j.queue, j]));
+    for (const q of ['webhooks.event.emitted', 'invoice.submit.succeeded.webhook', 'cron.webhooks-deliver']) {
+      expect(queues, `brak ${q}`).toContain(q);
+    }
+    // Ponowienia dostaw prowadzi baza (harmonogram 1 min → 12 h, 00187), nie pg-boss:
+    // cron bez ponowień (następny przebieg za minutę), zdarzenie z dwiema próbami
+    // na chwilowy błąd bazy (dostawa ma UNIQUE, więc ponowienie od zera nie dubluje).
+    expect(byQueue.get('cron.webhooks-deliver')?.maxRetries).toBe(0);
+    expect(byQueue.get('webhooks.event.emitted')?.maxRetries).toBe(2);
+    expect(byQueue.get('invoice.submit.succeeded.webhook')?.maxRetries).toBe(2);
   });
 
   it('parytet limitów równoległości paczki C', () => {

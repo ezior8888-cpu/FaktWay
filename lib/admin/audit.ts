@@ -172,6 +172,11 @@ export const KNOWN_AUDIT_ACTIONS = [
   'api_key.created',
   'api_key.revoked',
   'api_key.used',
+  // Webhooki publicznego API (00187)
+  'webhook.created',
+  'webhook.deleted',
+  'webhook.enabled',
+  'webhook.auto_disabled',
   // Admin
   'admin.user.suspended',
   'admin.user.unsuspended',

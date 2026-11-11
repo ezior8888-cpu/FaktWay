@@ -4,7 +4,7 @@
     "title": "FaktWay API",
     "version": "1.0.0",
     "summary": "Odczyt faktur i kosztów firmy oraz wystawianie faktur z własnych programów.",
-    "description": "Publiczne API FaktWay do odczytu faktur (wystawionych i otrzymanych z KSeF) i kosztów jednej firmy oraz do wystawiania jej faktur. Klucz API tworzy właściciel albo administrator firmy w Ustawieniach FaktWay, w zakładce API. Klucz widać tylko raz, przy utworzeniu. Każde zapytanie wymaga nagłówka Authorization: Bearer <klucz>. Klucz ma zakresy: invoices:read (odczyt faktur), expenses:read (odczyt kosztów) i invoices:write (wystawianie faktur i wysyłka do KSeF). Kwoty są tekstem dziesiętnym z kropką i dwoma miejscami po przecinku (np. \"1230.50\"), w walucie podanej w polu currency; ilość i cena jednostkowa pozycji mają do czterech miejsc po przecinku. Daty to RRRR-MM-DD, czasy to ISO 8601 ze strefą. Listy mają strony: odpowiedź zawiera next_cursor, który podajesz w parametrze cursor, dopóki nie dostaniesz null. Limit: 60 zapytań na minutę na klucz i 600 na minutę z jednego adresu IP, a do tego 20 zapisów (POST) na minutę na klucz; po przekroczeniu odpowiedź 429 z nagłówkiem Retry-After. Każde użycie klucza trafia do dziennika zdarzeń firmy (bez treści odpowiedzi). Nowe wartości pól z listą wartości (np. ksef_status) mogą pojawić się w przyszłości: program powinien je przyjąć bez błędu."
+    "description": "Publiczne API FaktWay do odczytu faktur (wystawionych i otrzymanych z KSeF) i kosztów jednej firmy oraz do wystawiania jej faktur. Klucz API tworzy właściciel albo administrator firmy w Ustawieniach FaktWay, w zakładce API. Klucz widać tylko raz, przy utworzeniu. Każde zapytanie wymaga nagłówka Authorization: Bearer <klucz>. Klucz ma zakresy: invoices:read (odczyt faktur), expenses:read (odczyt kosztów) i invoices:write (wystawianie faktur i wysyłka do KSeF). Kwoty są tekstem dziesiętnym z kropką i dwoma miejscami po przecinku (np. \"1230.50\"), w walucie podanej w polu currency; ilość i cena jednostkowa pozycji mają do czterech miejsc po przecinku. Daty to RRRR-MM-DD, czasy to ISO 8601 ze strefą. Listy mają strony: odpowiedź zawiera next_cursor, który podajesz w parametrze cursor, dopóki nie dostaniesz null. Limit: 60 zapytań na minutę na klucz i 600 na minutę z jednego adresu IP, a do tego 20 zapisów (POST) na minutę na klucz; po przekroczeniu odpowiedź 429 z nagłówkiem Retry-After. Każde użycie klucza trafia do dziennika zdarzeń firmy (bez treści odpowiedzi). Nowe wartości pól z listą wartości (np. ksef_status) mogą pojawić się w przyszłości: program powinien je przyjąć bez błędu. Webhooki: na adres https podany w Ustawieniach (zakładka API) FaktWay wysyła zdarzenia: faktura przyjęta w KSeF, nowa faktura kosztowa ze skrzynki KSeF i wpłata zapisana. Każde zdarzenie ma podpis w nagłówku FaktWay-Signature (HMAC-SHA256 z czasem, sekretem webhooka) i stały identyfikator FaktWay-Event-Id. Nieudana próba (kod spoza 2xx, przekierowanie, brak odpowiedzi w 10 sekund) jest ponawiana po 1 min, 5 min, 30 min, 2 h i 12 h; po 20 nieudanych dostawach z rzędu webhook wyłącza się sam. Opis: sekcja webhooks i strona /api/docs."
   },
   "servers": [
     {
@@ -369,6 +369,188 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "invoice.ksef_accepted": {
+      "post": {
+        "summary": "Faktura przyjęta w KSeF",
+        "description": "FaktWay wysyła to zdarzenie, gdy faktura sprzedaży wysłana z FaktWay (z aplikacji albo przez POST /invoices) zostanie przyjęta w KSeF i dostanie numer KSeF. Dane faktury bez nazw i NIP-ów stron; pełną fakturę pobierzesz przez GET /invoices/{id} (klucz z invoices:read).",
+        "operationId": "webhook_invoice_ksef_accepted",
+        "security": [],
+        "parameters": [
+          {
+            "name": "FaktWay-Signature",
+            "in": "header",
+            "required": true,
+            "description": "Podpis zdarzenia: t=<czas wysyłki w sekundach od 1970-01-01 UTC>,v1=<HMAC-SHA256 hex napisu <t>.<treść żądania> sekretem webhooka>. Sprawdź go, zanim użyjesz danych, i odrzuć podpis starszy niż 5 minut.",
+            "schema": {
+              "type": "string",
+              "pattern": "^t=\\d+(,v1=[0-9a-f]{64})+$"
+            }
+          },
+          {
+            "name": "FaktWay-Event-Id",
+            "in": "header",
+            "required": true,
+            "description": "Identyfikator zdarzenia, ten sam co pole id w treści i przy każdej próbie. Zapisz go i odrzucaj powtórki.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "FaktWay-Event-Type",
+            "in": "header",
+            "required": true,
+            "description": "Typ zdarzenia, ten sam co pole type w treści.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "invoice.ksef_accepted"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookInvoiceKsefAccepted"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Zdarzenie przyjęte. Odpowiedz w ciągu 10 sekund; treść odpowiedzi nie ma znaczenia i nie jest zapisywana."
+          },
+          "default": {
+            "description": "Każdy inny kod (także przekierowanie 3xx, za którym FaktWay nie podąża), brak odpowiedzi w 10 sekund albo błąd połączenia to nieudana próba. FaktWay ponowi ją po 1 min, 5 min, 30 min, 2 h i 12 h, a potem uzna dostawę za nieudaną."
+          }
+        }
+      }
+    },
+    "expense.ksef_received": {
+      "post": {
+        "summary": "Nowa faktura kosztowa ze skrzynki KSeF",
+        "description": "FaktWay wysyła to zdarzenie, gdy z faktury otrzymanej w skrzynce KSeF powstanie koszt firmy. Dane kosztu bez nazwy i NIP-u dostawcy; fakturę otrzymaną pobierzesz przez GET /invoices/{id} (klucz z invoices:read), a koszty przez GET /expenses (klucz z expenses:read).",
+        "operationId": "webhook_expense_ksef_received",
+        "security": [],
+        "parameters": [
+          {
+            "name": "FaktWay-Signature",
+            "in": "header",
+            "required": true,
+            "description": "Podpis zdarzenia: t=<czas wysyłki w sekundach od 1970-01-01 UTC>,v1=<HMAC-SHA256 hex napisu <t>.<treść żądania> sekretem webhooka>. Sprawdź go, zanim użyjesz danych, i odrzuć podpis starszy niż 5 minut.",
+            "schema": {
+              "type": "string",
+              "pattern": "^t=\\d+(,v1=[0-9a-f]{64})+$"
+            }
+          },
+          {
+            "name": "FaktWay-Event-Id",
+            "in": "header",
+            "required": true,
+            "description": "Identyfikator zdarzenia, ten sam co pole id w treści i przy każdej próbie. Zapisz go i odrzucaj powtórki.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "FaktWay-Event-Type",
+            "in": "header",
+            "required": true,
+            "description": "Typ zdarzenia, ten sam co pole type w treści.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "expense.ksef_received"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookExpenseKsefReceived"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Zdarzenie przyjęte. Odpowiedz w ciągu 10 sekund; treść odpowiedzi nie ma znaczenia i nie jest zapisywana."
+          },
+          "default": {
+            "description": "Każdy inny kod (także przekierowanie 3xx, za którym FaktWay nie podąża), brak odpowiedzi w 10 sekund albo błąd połączenia to nieudana próba. FaktWay ponowi ją po 1 min, 5 min, 30 min, 2 h i 12 h, a potem uzna dostawę za nieudaną."
+          }
+        }
+      }
+    },
+    "payment.recorded": {
+      "post": {
+        "summary": "Wpłata zapisana",
+        "description": "FaktWay wysyła to zdarzenie, gdy przy fakturze sprzedaży zostanie zapisana wpłata (dziś: oznaczenie „Zapłacone” w aplikacji). Bez danych płatnika.",
+        "operationId": "webhook_payment_recorded",
+        "security": [],
+        "parameters": [
+          {
+            "name": "FaktWay-Signature",
+            "in": "header",
+            "required": true,
+            "description": "Podpis zdarzenia: t=<czas wysyłki w sekundach od 1970-01-01 UTC>,v1=<HMAC-SHA256 hex napisu <t>.<treść żądania> sekretem webhooka>. Sprawdź go, zanim użyjesz danych, i odrzuć podpis starszy niż 5 minut.",
+            "schema": {
+              "type": "string",
+              "pattern": "^t=\\d+(,v1=[0-9a-f]{64})+$"
+            }
+          },
+          {
+            "name": "FaktWay-Event-Id",
+            "in": "header",
+            "required": true,
+            "description": "Identyfikator zdarzenia, ten sam co pole id w treści i przy każdej próbie. Zapisz go i odrzucaj powtórki.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "FaktWay-Event-Type",
+            "in": "header",
+            "required": true,
+            "description": "Typ zdarzenia, ten sam co pole type w treści.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "payment.recorded"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookPaymentRecorded"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Zdarzenie przyjęte. Odpowiedz w ciągu 10 sekund; treść odpowiedzi nie ma znaczenia i nie jest zapisywana."
+          },
+          "default": {
+            "description": "Każdy inny kod (także przekierowanie 3xx, za którym FaktWay nie podąża), brak odpowiedzi w 10 sekund albo błąd połączenia to nieudana próba. FaktWay ponowi ją po 1 min, 5 min, 30 min, 2 h i 12 h, a potem uzna dostawę za nieudaną."
           }
         }
       }
@@ -1382,6 +1564,453 @@
             "$ref": "#/components/schemas/KsefSubmission"
           }
         }
+      },
+      "WebhookInvoice": {
+        "type": "object",
+        "description": "Faktura sprzedaży w zdarzeniu invoice.ksef_accepted (pola jak w GET /invoices/{id}, bez stron).",
+        "required": [
+          "id",
+          "number",
+          "direction",
+          "kind",
+          "issue_date",
+          "currency",
+          "net_total",
+          "vat_total",
+          "gross_total",
+          "ksef_status",
+          "ksef_number",
+          "ksef_accepted_at",
+          "ksef_environment"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator faktury w FaktWay (GET /invoices/{id})."
+          },
+          "number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Numer faktury nadany w FaktWay."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "outgoing"
+            ],
+            "description": "Zawsze outgoing: faktura sprzedaży."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Rodzaj faktury, jak w GET /invoices (np. regular)."
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Data wystawienia."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Waluta kwot, kod ISO 4217."
+          },
+          "net_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Suma netto."
+          },
+          "vat_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Suma VAT."
+          },
+          "gross_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Suma brutto."
+          },
+          "ksef_status": {
+            "type": "string",
+            "enum": [
+              "accepted"
+            ],
+            "description": "Zawsze accepted: faktura przyjęta w KSeF."
+          },
+          "ksef_number": {
+            "type": "string",
+            "description": "Numer KSeF faktury."
+          },
+          "ksef_accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Czas przyjęcia w KSeF."
+          },
+          "ksef_environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Środowisko KSeF: production albo test (próby)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookExpense": {
+        "type": "object",
+        "description": "Koszt w zdarzeniu expense.ksef_received (pola jak w GET /expenses, bez dostawcy).",
+        "required": [
+          "id",
+          "document_number",
+          "document_type",
+          "issue_date",
+          "currency",
+          "net_amount",
+          "vat_amount",
+          "gross_amount",
+          "review_status",
+          "source",
+          "invoice_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator kosztu w FaktWay."
+          },
+          "document_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Numer faktury dostawcy."
+          },
+          "document_type": {
+            "type": "string",
+            "description": "Rodzaj dokumentu, np. invoice."
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Data wystawienia faktury."
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Waluta kwot kosztu (jak w GET /expenses): PLN po przeliczeniu kursem NBP, waluta faktury bez kursu, null przy niepewnej walucie."
+          },
+          "net_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "gross_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "unreviewed",
+              "reviewed"
+            ],
+            "description": "Czy koszt przejrzano w FaktWay."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ksef_inbox"
+            ],
+            "description": "Zawsze ksef_inbox: koszt z faktury otrzymanej w KSeF."
+          },
+          "invoice_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Faktura otrzymana w FaktWay (GET /invoices/{id}, kierunek incoming)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookIncomingInvoice": {
+        "type": "object",
+        "description": "Faktura otrzymana ze skrzynki KSeF w zdarzeniu expense.ksef_received.",
+        "required": [
+          "id",
+          "ksef_number"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator faktury w FaktWay (GET /invoices/{id})."
+          },
+          "ksef_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Numer KSeF faktury."
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookPayment": {
+        "type": "object",
+        "description": "Wpłata w zdarzeniu payment.recorded.",
+        "required": [
+          "id",
+          "invoice_id",
+          "amount",
+          "currency",
+          "payment_date",
+          "method",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator wpłaty w FaktWay."
+          },
+          "invoice_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Faktura, której dotyczy wpłata (GET /invoices/{id})."
+          },
+          "amount": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Kwota wpłaty w walucie faktury."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Waluta faktury, kod ISO 4217."
+          },
+          "payment_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Dzień zapłaty."
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Forma zapłaty, np. bank_transfer albo other."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "bank_statement",
+              "other"
+            ],
+            "description": "Skąd wpłata: manual (oznaczona w FaktWay jako zapłacona), bank_statement (wyciąg), other. Mogą dojść nowe wartości."
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookPaymentInvoice": {
+        "type": "object",
+        "description": "Stan faktury po wpłacie w zdarzeniu payment.recorded.",
+        "required": [
+          "id",
+          "number",
+          "gross_total",
+          "paid_amount",
+          "payment_status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator faktury w FaktWay."
+          },
+          "number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Numer faktury."
+          },
+          "gross_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Suma brutto."
+          },
+          "paid_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "payment_status": {
+            "type": "string",
+            "description": "Stan płatności jak w GET /invoices (np. paid, partially_paid)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookInvoiceKsefAccepted": {
+        "type": "object",
+        "description": "Zdarzenie: faktura przyjęta w KSeF.",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator zdarzenia, ten sam co nagłówek FaktWay-Event-Id i przy każdej próbie."
+          },
+          "type": {
+            "type": "string",
+            "const": "invoice.ksef_accepted",
+            "description": "Typ zdarzenia."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Kiedy zdarzenie się stało (nie kiedy wysłano próbę)."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "invoice"
+            ],
+            "properties": {
+              "invoice": {
+                "$ref": "#/components/schemas/WebhookInvoice"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookExpenseKsefReceived": {
+        "type": "object",
+        "description": "Zdarzenie: nowa faktura kosztowa ze skrzynki KSeF.",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator zdarzenia, ten sam co nagłówek FaktWay-Event-Id i przy każdej próbie."
+          },
+          "type": {
+            "type": "string",
+            "const": "expense.ksef_received",
+            "description": "Typ zdarzenia."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Kiedy zdarzenie się stało (nie kiedy wysłano próbę)."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "expense",
+              "invoice"
+            ],
+            "properties": {
+              "expense": {
+                "$ref": "#/components/schemas/WebhookExpense"
+              },
+              "invoice": {
+                "$ref": "#/components/schemas/WebhookIncomingInvoice"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookPaymentRecorded": {
+        "type": "object",
+        "description": "Zdarzenie: wpłata zapisana.",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identyfikator zdarzenia, ten sam co nagłówek FaktWay-Event-Id i przy każdej próbie."
+          },
+          "type": {
+            "type": "string",
+            "const": "payment.recorded",
+            "description": "Typ zdarzenia."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Kiedy zdarzenie się stało (nie kiedy wysłano próbę)."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "payment",
+              "invoice"
+            ],
+            "properties": {
+              "payment": {
+                "$ref": "#/components/schemas/WebhookPayment"
+              },
+              "invoice": {
+                "$ref": "#/components/schemas/WebhookPaymentInvoice"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

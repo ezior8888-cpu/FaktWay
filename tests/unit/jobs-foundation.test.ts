@@ -168,12 +168,15 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
     expect(() => queuesForEvent('foo/bar')).toThrow(/Nieznany event/);
   });
 
-  it('fan-out: wynik wysyłki faktury trafia do DWÓCH kolejek', () => {
+  it('fan-out: wynik wysyłki faktury trafia do DWÓCH kolejek (przyjęcie: do TRZECH, z webhookiem)', () => {
     // Parytet z Inngest: powiadomienie użytkownika ORAZ obsługa Offline24
     // słuchają tego samego eventu. Pominięcie jednej = cicho martwy job.
+    // Krok 7.1, część 3 (00187): przyjęcie w KSeF to także zdarzenie webhooka
+    // `invoice.ksef_accepted` dla programów klienta (bez zmian w wysyłce).
     expect(queuesForEvent('invoice/submit.succeeded')).toEqual([
       'invoice.submit.succeeded.notify',
       'invoice.submit.succeeded.offline-queue',
+      'invoice.submit.succeeded.webhook',
     ]);
     expect(queuesForEvent('invoice/submit.failed')).toEqual([
       'invoice.submit.failed.notify',
@@ -210,10 +213,15 @@ describe('CRON_JOBS', () => {
     // `cron.ksiegowosc-terminy` (codziennie o 08:00, 1 przebieg na dobę);
     // oba pracują tylko dla firm w pilotażu, a idempotencję trzyma
     // `tax_notifications` (00169).
+    // 31 → 32: `cron.webhooks-deliver` (krok 7.1, część 3, 00187) co minutę:
+    // ponowienia dostaw webhooków (1 min, 5 min, 30 min, 2 h, 12 h). 1 440
+    // przebiegów na dobę; przy wyłączonej fladze `publicApiEnabled` kończy
+    // się na odczycie flagi z pamięci podręcznej, a przy włączonej to jedno
+    // zapytanie o należne dostawy (indeks częściowy na `pending`).
     // Ta liczba jest celowo wpisana na sztywno: cron dokłada się cicho,
     // a każdy nowy kosztuje przebiegi na produkcji. Zmiana tu ma być
     // świadoma, nie automatyczna.
-    expect(CRON_JOBS.length).toBe(31);
+    expect(CRON_JOBS.length).toBe(32);
     const queues = CRON_JOBS.map((c) => c.queue);
     expect(new Set(queues).size).toBe(queues.length);
     for (const c of CRON_JOBS) {

@@ -1,6 +1,7 @@
 import spec from '@/lib/api/v1/openapi.json';
 import { API_KEY_SCOPE_LABELS, API_KEY_SCOPES } from '@/lib/api/v1/scopes';
 import { PUBLIC_SITE_URL, SUPPORT_EMAIL } from '@/lib/site';
+import { MAX_WEBHOOKS, WEBHOOK_DISABLE_AFTER_FAILURES, WEBHOOK_EVENT_TYPES } from '@/lib/webhooks/types';
 
 /**
  * Statyczna strona `/api/docs` z opisu OpenAPI (`openapi.json`): punkty,
@@ -24,6 +25,8 @@ type Operation = { summary: string; description: string; parameters?: Parameter[
 
 const schemas = spec.components.schemas as unknown as Record<string, Schema>;
 const paths = spec.paths as unknown as Record<string, { get: Operation; post?: Operation }>;
+type WebhookOperation = Operation & { requestBody: { content: { 'application/json': { schema: { $ref: string } } } } };
+const webhooks = (spec as unknown as { webhooks: Record<string, { post: WebhookOperation }> }).webhooks;
 
 function escapeHtml(value: string): string {
   return value
@@ -166,6 +169,124 @@ function createSection(path: string, operation: Operation): string {
   ].join('\n');
 }
 
+/** Pola `data` każdego zdarzenia: obiekty z opisu OpenAPI (np. `invoice`, `payment`). */
+function webhookDataTables(eventSchema: string): string {
+  const data = schemas[eventSchema]?.properties?.data?.properties ?? {};
+  return Object.entries(data)
+    .map(([name, schema]) => `<p>Pole <code>data.${escapeHtml(name)}</code>:</p>${fieldsTable(refName(schema.$ref ?? ''))}`)
+    .join('\n');
+}
+
+/**
+ * Webhooki (krok 7.1, część 3): zdarzenia, format, podpis z przykładem
+ * weryfikacji i ponowienia. Sekret tylko jako zmienna `FAKTWAY_WEBHOOK_SECRET`,
+ * nigdy jako przykładowa wartość (skan sekretów, ten sam powód co klucz API).
+ */
+function webhooksSection(): string {
+  const events = WEBHOOK_EVENT_TYPES.map((type) => {
+    const operation = webhooks[type]!.post;
+    const schemaName = refName(operation.requestBody.content['application/json'].schema.$ref);
+    return [
+      `<section class="endpoint" id="webhook-${escapeHtml(type.replace(/[^a-z]/g, '-'))}">`,
+      `<h3><span class="method">ZDARZENIE</span> <code>${escapeHtml(type)}</code></h3>`,
+      `<p><strong>${escapeHtml(operation.summary)}.</strong> ${escapeHtml(operation.description)}</p>`,
+      webhookDataTables(schemaName),
+      '</section>',
+    ].join('\n');
+  }).join('\n');
+
+  const request = [
+    'POST /twoj-adres HTTP/1.1',
+    'Content-Type: application/json',
+    'User-Agent: FaktWay-Webhooks/1.0',
+    'FaktWay-Event-Id: 8a1c6f0e-2b7d-5c3e-9f4a-1d2e3f4a5b6c',
+    'FaktWay-Event-Type: invoice.ksef_accepted',
+    'FaktWay-Signature: t=1762853400,v1=<64 znaki hex>',
+    '',
+    JSON.stringify({
+      id: '8a1c6f0e-2b7d-5c3e-9f4a-1d2e3f4a5b6c',
+      type: 'invoice.ksef_accepted',
+      created_at: '2026-11-11T09:30:00.000Z',
+      data: {
+        invoice: {
+          id: '6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f', number: 'FV/1/11/2026', direction: 'outgoing', kind: 'regular',
+          issue_date: '2026-11-11', currency: 'PLN', net_total: '1000.00', vat_total: '230.00', gross_total: '1230.00',
+          ksef_status: 'accepted', ksef_number: '1234567890-20261111-0A1B2C3D4E5F-AB', ksef_accepted_at: '2026-11-11T09:30:00+00:00',
+          ksef_environment: 'production',
+        },
+      },
+    }, null, 2),
+  ].join('\n');
+
+  const verifyNode = [
+    "import { createHmac, timingSafeEqual } from 'node:crypto';",
+    '',
+    '// rawBody: treść żądania dokładnie tak, jak przyszła (przed JSON.parse).',
+    '// Sekret webhooka trzymasz na serwerze w zmiennej FAKTWAY_WEBHOOK_SECRET.',
+    'export function isFromFaktWay(rawBody, signatureHeader) {',
+    "  const fields = signatureHeader.split(',').map((part) => part.split('='));",
+    "  const t = Number(fields.find(([name]) => name === 't')?.[1]);",
+    "  const signatures = fields.filter(([name]) => name === 'v1').map(([, value]) => value);",
+    '  if (!Number.isInteger(t) || Math.abs(Date.now() / 1000 - t) > 300) return false;',
+    "  const expected = createHmac('sha256', process.env.FAKTWAY_WEBHOOK_SECRET)",
+    '    .update(`${t}.${rawBody}`)',
+    "    .digest('hex');",
+    '  return signatures.some((v1) => v1.length === expected.length',
+    '    && timingSafeEqual(Buffer.from(v1), Buffer.from(expected)));',
+    '}',
+  ].join('\n');
+
+  const verifyShell = [
+    '# T: wartość t z nagłówka FaktWay-Signature, BODY: treść żądania bez zmian',
+    'printf \'%s\' "$T.$BODY" | openssl dgst -sha256 -hmac "$FAKTWAY_WEBHOOK_SECRET"',
+    '# wynik porównaj z wartością v1 z nagłówka',
+  ].join('\n');
+
+  return `
+<h2 id="webhooki">Webhooki</h2>
+<p>Webhook to adres Twojego serwera, na który FaktWay sam wysyła zdarzenia z firmy, więc program nie musi co chwilę pytać API o zmiany. Zdarzenie zawiera identyfikatory, numery, daty, stany i kwoty, bez nazw i NIP-ów kontrahentów i bez danych płatnika; pełne dane pobierzesz kluczem API.</p>
+<ul>
+<li>Webhook dodaje właściciel albo administrator firmy w Ustawieniach FaktWay, w zakładce API (z kodem z aplikacji uwierzytelniającej, gdy konto ma logowanie dwuetapowe). Firma może mieć najwyżej ${MAX_WEBHOOKS} webhooków.</li>
+<li>Adres musi zaczynać się od <code>https://</code>, używać portu 443 i mieć publiczną nazwę domeny. Adres IP, nazwy lokalne i adresy prywatne albo zastrzeżone są odrzucane przy dodaniu i przy każdej wysyłce, po sprawdzeniu DNS.</li>
+<li>Przy dodaniu widać raz sekret podpisu (zaczyna się od <code>fwws_</code>). Zapisz go na serwerze, np. w zmiennej środowiskowej <code>FAKTWAY_WEBHOOK_SECRET</code>. Zgubiony sekret: usuń webhook i dodaj go ponownie.</li>
+</ul>
+
+<h3>Zdarzenia</h3>
+${events}
+
+<h3>Format żądania</h3>
+<p>Każde zdarzenie to żądanie <code>POST</code> z treścią JSON: <code>id</code> (identyfikator zdarzenia), <code>type</code> (typ), <code>created_at</code> (kiedy zdarzenie się stało) i <code>data</code> (dane zdarzenia, pola jak w tabelach wyżej). Nagłówki:</p>
+<ul>
+<li><code>FaktWay-Event-Id</code>: identyfikator zdarzenia, ten sam co <code>id</code> i ten sam przy każdej próbie. To samo zdarzenie może przyjść więcej niż raz (np. gdy odpowiedź zginęła po drodze), więc zapisuj identyfikatory i odrzucaj powtórki.</li>
+<li><code>FaktWay-Event-Type</code>: typ zdarzenia.</li>
+<li><code>FaktWay-Signature</code>: podpis w formacie <code>t=…,v1=…</code>.</li>
+</ul>
+<pre><code>${escapeHtml(request)}</code></pre>
+
+<h3>Podpis FaktWay-Signature</h3>
+<p>Wartość <code>t</code> to czas wysyłki w sekundach od 1970-01-01 (UTC), osobny przy każdej próbie. Wartość <code>v1</code> to HMAC-SHA256 (zapis szesnastkowy) napisu <code>&lt;t&gt;.&lt;treść żądania&gt;</code>, liczony sekretem webhooka. Twój serwer:</p>
+<ol>
+<li>bierze treść żądania dokładnie tak, jak przyszła, przed zamianą JSON na obiekt (inna kolejność pól albo spacje zmieniają podpis),</li>
+<li>liczy HMAC-SHA256 napisu <code>t</code>, kropka, treść, sekretem z <code>FAKTWAY_WEBHOOK_SECRET</code>,</li>
+<li>porównuje wynik z każdą wartością <code>v1</code> z nagłówka w stałym czasie (np. <code>timingSafeEqual</code>),</li>
+<li>odrzuca żądanie, gdy podpis się nie zgadza albo <code>t</code> różni się od bieżącego czasu o więcej niż 5 minut (ochrona przed powtórzeniem przechwyconego żądania).</li>
+</ol>
+<p>Przykład w Node.js:</p>
+<pre><code>${escapeHtml(verifyNode)}</code></pre>
+<p>Ten sam podpis w powłoce, np. do sprawdzenia ręcznego:</p>
+<pre><code>${escapeHtml(verifyShell)}</code></pre>
+
+<h3>Odpowiedź i ponowienia</h3>
+<ul>
+<li>Odpowiedz kodem 2xx w ciągu 10 s; treść odpowiedzi nie ma znaczenia. Dłuższą pracę zrób po odpowiedzi.</li>
+<li>Każdy inny kod, przekierowanie (FaktWay za nim nie podąża), brak odpowiedzi w 10 s albo błąd połączenia to nieudana próba. FaktWay ponawia ją po 1 min, 5 min, 30 min, 2 h i 12 h (6 prób w około 15 godzin), a potem uznaje dostawę za nieudaną.</li>
+<li>Po ${WEBHOOK_DISABLE_AFTER_FAILURES} nieudanych dostawach z rzędu webhook wyłącza się sam. Informację widać w Ustawieniach, w zakładce API; tam też włączysz go ponownie po naprawie serwera. Zdarzeń z czasu wyłączenia FaktWay nie wyśle: pobierz je przez API.</li>
+<li>Dziennik dostaw (stan, kod odpowiedzi, czas, liczba prób) widać w Ustawieniach przy każdym webhooku.</li>
+<li>Kolejność zdarzeń nie jest gwarantowana. Nowe typy zdarzeń i nowe pola mogą pojawić się w przyszłości; program powinien je przyjąć bez błędu.</li>
+</ul>
+`;
+}
+
 const ERROR_ROWS: [string, string, string][] = [
   ['400', 'invalid_parameter', 'Nieznany albo błędny parametr. Opis podaje jego nazwę.'],
   ['400', 'missing_idempotency_key', 'Zapis bez nagłówka Idempotency-Key.'],
@@ -221,7 +342,7 @@ export function renderApiDocsHtml(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FaktWay API</title>
-<meta name="description" content="Dokumentacja publicznego API FaktWay: odczyt faktur i kosztów firmy oraz wystawianie faktur kluczem API.">
+<meta name="description" content="Dokumentacja publicznego API FaktWay: odczyt faktur i kosztów firmy, wystawianie faktur kluczem API i webhooki.">
 <style>${STYLE}</style>
 </head>
 <body>
@@ -271,6 +392,7 @@ export function renderApiDocsHtml(): string {
 
 <h2>Punkty</h2>
 ${endpoints}
+${webhooksSection()}
 </main>
 </body>
 </html>

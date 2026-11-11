@@ -19,6 +19,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
 import { fa3Record, INBOX_PENDING_FLAG, markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 import type { Database, Json } from '@/types/database';
 
 import { inboxInvoiceReceivedAutoCategorize } from '../events';
@@ -248,6 +249,10 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
 
     // Koszt już jest, brakowało tylko XML: bez drugiego liczenia kategorii i bez AI.
     if (current.hasExpense) {
+      // Webhook (krok 7.1, część 3): ponowienie po awarii między zapisem kosztu
+      // a zleceniem przechodzi tędy. Druga emisja tego samego zdarzenia nie
+      // wysyła drugi raz (stały identyfikator, UNIQUE dostawy w 00187).
+      await emitWebhookEvent({ tenantId, type: 'expense.ksef_received', entityId: invoiceId });
       if (xml.archived || xml.reason === 'has-xml' || xml.reason === 'not-applicable') {
         await closeInboxInvoice({ supabase, tenantId, invoiceId, step, logger });
       }
@@ -461,6 +466,11 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
 
       return { skipped: false as const, expenseId: expense.id };
     });
+
+    // Webhook „nowa faktura kosztowa ze skrzynki” (krok 7.1, część 3). Fail-open:
+    // awaria kolejki nie cofa kosztu i nie ponawia joba; przy wyłączonej fladze
+    // `publicApiEnabled` nic się nie zleca.
+    await emitWebhookEvent({ tenantId, type: 'expense.ksef_received', entityId: invoiceId });
 
     // K2 (rewizja 03.10.2026): domknięcie przebiegu. Odbiór skrzynki zapala
     // `fa3_data._pendingFullFetch`; cron `inbox-backfill` emituje zdarzenie

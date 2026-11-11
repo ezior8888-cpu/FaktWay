@@ -37,6 +37,8 @@ import './handlers/package-c';
 import './handlers/package-d';
 import './handlers/flo-tick';
 import './handlers/ops-heartbeat';
+// Webhooki publicznego API (krok 7.1, część 3, 00187).
+import './handlers/webhooks';
 
 const log = createJobLogger('worker');
 

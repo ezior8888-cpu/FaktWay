@@ -53,6 +53,7 @@
 | `EMAIL_UNSUBSCRIBE_SECRET` | brak (generator) | `id=1`, `id=2` | nie | stare linki wypisu (zob. krok 2) |
 | `JWT_SECRET` → `ANON_KEY`, `SERVICE_ROLE_KEY` | brak (generator) | usługa Supabase, `id=1`, `id=2`, zmienna repo w GitHub | **tak, aplikacja** (anon jest zmienną builda) | tak: wylogowanie, kilka do kilkunastu minut |
 | `KSEF_CREDENTIALS_ENCRYPTION_KEY` | brak (generator) | `id=1`, `id=2` (`_PREVIOUS` na czas rotacji) | nie | brak |
+| `WEBHOOK_SECRETS_ENCRYPTION_KEY` (webhooki API, 00187) | brak (generator) | `id=1`, `id=2` (`_PREVIOUS`: odczyt sekretów zaszyfrowanych starym kluczem) | nie | brak, dopóki `_PREVIOUS` zostaje; skryptu przeszyfrowania jeszcze nie ma, więc bez niego klient musi dodać webhook od nowa |
 
 ## 0. Przygotowanie
 

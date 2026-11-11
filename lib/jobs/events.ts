@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 
+import { WEBHOOK_EVENT_TYPES } from '@/lib/webhooks/types';
 import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
@@ -341,3 +342,20 @@ export const ocrProcessPhotoRequested = zodEvent(
     tenantId: z.string().uuid('tenantId musi być UUID'),
   }),
 );
+
+/**
+ * Zdarzenie webhooka publicznego API (krok 7.1, część 3, 00187): w firmie
+ * stało się coś, o czym programy klienta mogą chcieć wiedzieć. Job sprawdza
+ * flagę i webhooki firmy, buduje treść bez danych osobowych, tworzy dostawy
+ * (UNIQUE na webhook i zdarzenie) i od razu próbuje je wysłać. Nadawcy:
+ * `emitWebhookEvent` (`lib/webhooks/emit.ts`); „faktura przyjęta w KSeF”
+ * przychodzi z trzeciej kolejki `invoice/submit.succeeded`.
+ */
+export const WebhookEventEmittedSchema = z.object({
+  tenantId: z.string().uuid('tenantId musi być UUID'),
+  type: z.enum(WEBHOOK_EVENT_TYPES),
+  /** Faktura przyjęta, faktura otrzymana ze skrzynki (jej koszt) albo wpłata. */
+  entityId: z.string().uuid('entityId musi być UUID'),
+});
+
+export const webhookEventEmitted = zodEvent('webhooks/event.emitted', WebhookEventEmittedSchema);

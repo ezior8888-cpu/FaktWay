@@ -45,10 +45,12 @@ export const EVENT_QUEUE_MAP = {
     'invoice.submit.failed.offline-queue',
   ],
   'invoice/submit.requested': ['invoice.submit.requested'],
-  // fan-out: powiadomienie + obsługa kolejki Offline24
+  // fan-out: powiadomienie + obsługa kolejki Offline24 + webhook „faktura
+  // przyjęta w KSeF” dla programów klienta (krok 7.1, część 3, 00187)
   'invoice/submit.succeeded': [
     'invoice.submit.succeeded.notify',
     'invoice.submit.succeeded.offline-queue',
+    'invoice.submit.succeeded.webhook',
   ],
   'invoice/upo.requested': ['invoice.upo.requested'],
   // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): fan-out z crona.
@@ -57,6 +59,8 @@ export const EVENT_QUEUE_MAP = {
   'reminders/send.requested': ['reminders.send.requested'],
   'user/registered': ['user.registered'],
   'validation/bulk-contractors.requested': ['validation.bulk-contractors.requested'],
+  // Webhooki publicznego API (krok 7.1, część 3, 00187).
+  'webhooks/event.emitted': ['webhooks.event.emitted'],
 } as const;
 
 export type KnownJobEvent = keyof typeof EVENT_QUEUE_MAP;
@@ -144,6 +148,10 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.trial-countdown-emails', cron: '0 9 * * *', tz: TZ },
   { queue: 'cron.upo-retry-stale', cron: '5 * * * *', tz: TZ },
   { queue: 'cron.verify-backup', cron: '0 3 * * 0', tz: TZ },
+  // Webhooki publicznego API (krok 7.1, część 3): ponowienia dostaw (1 min, 5 min,
+  // 30 min, 2 h, 12 h), stan w bazie (00187). Przy wyłączonej fladze
+  // `publicApiEnabled` przebieg kończy się na odczycie flagi.
+  { queue: 'cron.webhooks-deliver', cron: '* * * * *', tz: TZ },
   { queue: 'cron.weekly-business-review', cron: '0 9 * * 1', tz: TZ },
 ] as const;
 
