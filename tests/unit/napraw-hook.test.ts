@@ -10,7 +10,7 @@ const SKRYPT = path.resolve(__dirname, "../../scripts/dev/napraw-hook.sh");
 // prawdziwego repo i `git init` w katalogu tymczasowym zmieniłby tamto repo
 // (11.11.2026: core.bare=true, test `testy-git-izolacja.test.ts`).
 const env = {
-  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_"))),
+  ...(Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_"))) as NodeJS.ProcessEnv),
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_AUTHOR_NAME: "t",

@@ -24,7 +24,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'izolacja-git-'));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 /** Środowisko bez zmiennych gita wskazujących repo (ten test też nie może ich dziedziczyć). */
-const bezGit = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+const bezGit = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))) as NodeJS.ProcessEnv;
 
 describe('testy z repozytoriami tymczasowymi nie dotykają repo z GIT_DIR', () => {
   it.each(PLIKI)('$plik', ({ plik, konfiguracja }) => {
