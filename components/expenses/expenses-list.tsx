@@ -11,6 +11,7 @@ import {
   sourceLabel,
   sourceStyle,
 } from '@/components/expenses/finora/labels';
+import { amountUnit, expenseAmountsCurrency } from '@/lib/expenses/ocr-currency-review';
 import { formatPlMoney } from '@/lib/format/pl';
 import { shortenLegalForm } from '@/lib/format/legal-form';
 import { cn } from '@/lib/utils';
@@ -62,7 +63,9 @@ function dayHeading(date: string): string {
 /**
  * Karty wydatków pogrupowane po dniu. `dayTotals` to suma brutto dnia ze
  * WSZYSTKICH wierszy po filtrach (nie tylko z bieżącej strony), żeby suma
- * dnia nie zmieniała się przy przejściu na następną stronę.
+ * dnia nie zmieniała się przy przejściu na następną stronę. Suma jest
+ * w złotych: wiersze z kwotą w walucie bez kursu (`expenseAmountsCurrency`)
+ * do niej nie wchodzą, a w karcie mają kod waluty zamiast „zł” (E17b).
  */
 export function ExpenseDayCards({
   expenses,
@@ -121,7 +124,7 @@ function ExpenseCard({ expense }: { expense: ExpenseRow }) {
             {seller}
           </p>
           <p className="text-foreground shrink-0 text-sm font-medium tabular-nums">
-            {formatPlMoney(Number(expense.gross_amount))} zł
+            {formatPlMoney(Number(expense.gross_amount))} {amountUnit(expenseAmountsCurrency(expense))}
           </p>
         </div>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
