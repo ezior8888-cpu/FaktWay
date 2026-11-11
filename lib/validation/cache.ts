@@ -14,6 +14,7 @@
 import type { Database } from '@/types/database';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cached, cacheDel, cacheKeys, cacheSet, TTL_SECONDS } from '@/lib/cache';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
   checkNipInWhitelist,
   type WhitelistResponse,
@@ -228,7 +229,8 @@ function mapWhitelistToCacheResult(
   }
 
   let warning: string | undefined;
-  const today = new Date().toISOString().slice(0, 10);
+  // Dzień w Polsce (FZ-003): wykreślenie od dziś ostrzega także tuż po północy.
+  const today = todayInWarsaw();
 
   if (apiResult.removalDate && apiResult.removalDate <= today) {
     warning = `Wykreślony z VAT od ${apiResult.removalDate}`;
