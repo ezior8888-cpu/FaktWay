@@ -274,4 +274,16 @@ describe('voidInvoicePaymentAction', () => {
       error: 'Nie udało się cofnąć wpłaty. Sprawdź połączenie i spróbuj ponownie.',
     });
   });
+
+  // Kasa (krok 3.7, 00194): wpłata z aktywnym dowodem KP cofa się tylko korektą KP
+  // (wyzwalacz `a_guard_payment_cash_document` przerywa `void_invoice_payment`).
+  it('wpłata z dowodem KP: odmowa z numerem dowodu i drogą przez korektę w Kasie, bez odświeżania', async () => {
+    m.rpc.mockResolvedValue({ data: null, error: { code: 'P0001', message: 'cash_document_active', hint: 'KP/3/2026' } });
+
+    expect(await voidInvoicePaymentAction(PAYMENT)).toEqual({
+      success: false,
+      error: 'Ta wpłata ma dowód wpłaty KP/3/2026 w Kasie, więc nie cofa się jej tutaj. Wystaw korektę tego dowodu w Kasie: wpłata cofnie się razem z korektą.',
+    });
+    expect(m.invalidate).not.toHaveBeenCalled();
+  });
 });

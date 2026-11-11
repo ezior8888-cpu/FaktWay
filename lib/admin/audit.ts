@@ -154,6 +154,11 @@ export const KNOWN_AUDIT_ACTIONS = [
   'ksef.history.paused',
   'ksef.history.resumed',
   'ksef.history.operator',
+  // Kasa (00194)
+  'cash_register.opened',
+  'cash_register.opening_changed',
+  'cash_document.issued',
+  'cash_document.corrected',
   // Accountants
   'accountant.token_created',
   'accountant.token_revoked',

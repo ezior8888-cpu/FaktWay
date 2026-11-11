@@ -9,6 +9,7 @@ import {
   RiFileList3Line,
   RiMoreLine,
   RiReceiptLine,
+  RiSafe2Line,
   RiSettings3Line,
   RiUpload2Line,
   RiWallet3Line,
@@ -75,6 +76,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
       { href: "/expenses", label: "Koszty", icon: RiReceiptLine },
       { href: "/reports/kpir", label: "Księgowość", icon: RiBook2Line },
       { href: "/import-danych", label: "Import danych", icon: RiUpload2Line },
+      // Plan kompletnej aplikacji, krok 3.7: Kasa (dowody KP i KW, raport kasowy).
+      // Nowa pozycja na końcu sekcji; pozostałe pozycje bez zmian (decyzja D1).
+      { href: "/kasa", label: "Kasa", icon: RiSafe2Line },
     ],
   },
 ];

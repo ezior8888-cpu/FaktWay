@@ -97,6 +97,14 @@ export type AuditAction =
   // (RPC `record_invoice_payment` i `void_invoice_payment`) w transakcji z wpłatą, nie aplikacja.
   | 'invoice.payment_recorded'
   | 'invoice.payment_voided'
+  // Kasa (00194, plan kompletnej aplikacji 3.7): stan początkowy kasy, dowody KP i KW
+  // i ich korekty (storno). Metadane: numer, rodzaj, kwota, dzień operacji, faktura
+  // i wpłata. Zapisuje baza (RPC `open_cash_register`, `issue_cash_document`,
+  // `correct_cash_document`) w transakcji z dowodem, nie aplikacja.
+  | 'cash_register.opened'
+  | 'cash_register.opening_changed'
+  | 'cash_document.issued'
+  | 'cash_document.corrected'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'

@@ -76,6 +76,9 @@ export default defineConfig({
       // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia; suma niecofniętych
       // wpłat = paid_amount, klucz idempotencji, obca firma, kwota, reszta, PLN, cofnięcie ze śladem.
       'tests/rls-wplaty-czesciowe.test.ts',
+      // 00194 (plan kompletnej aplikacji, krok 3.7): kasa; numer KP i KW z bazy pod blokadą serii,
+      // stan kasy nie poniżej zera, korekta (storno), wpłata do faktury przez 00176, RLS i niezmienność.
+      'tests/rls-kasa.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

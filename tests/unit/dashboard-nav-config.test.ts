@@ -157,6 +157,10 @@ describe('struktura menu (plan Finora §4)', () => {
           ['Koszty', '/expenses'],
           ['Księgowość', '/reports/kpir'],
           ['Import danych', '/import-danych'],
+          // Świadoma zmiana (plan kompletnej aplikacji, krok 3.7, 11.11.2026): Kasa
+          // (dowody KP i KW, raport kasowy) jako nowa pozycja na końcu sekcji;
+          // pozostałe pozycje bez zmian (decyzja D1).
+          ['Kasa', '/kasa'],
         ],
       },
     ]);

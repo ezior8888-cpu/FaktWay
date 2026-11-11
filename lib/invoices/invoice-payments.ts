@@ -274,8 +274,12 @@ export type RecordPaymentRefusal =
   | 'over_remaining'
   | 'key_reused';
 
-/** Powód odmowy `void_invoice_payment` (00176). */
-export type VoidPaymentRefusal = 'not_found' | 'not_voidable' | 'manual_first';
+/**
+ * Powód odmowy `void_invoice_payment` (00176). `cash_document`: wpłata ma aktywny
+ * dowód KP w Kasie (00194, wyzwalacz `a_guard_payment_cash_document` przerywa
+ * cofnięcie), więc cofa się ją korektą tego dowodu.
+ */
+export type VoidPaymentRefusal = 'not_found' | 'not_voidable' | 'manual_first' | 'cash_document';
 
 const RECORD_REFUSALS: ReadonlySet<string> = new Set<RecordPaymentRefusal>([
   'not_found', 'not_sales', 'not_accepted', 'invoice_currency', 'payment_currency', 'invalid_amount',
@@ -355,9 +359,13 @@ export function recordPaymentRefusalText(
 
 export function voidPaymentRefusalText(
   code: VoidPaymentRefusal,
-  ctx: { number?: string | null; manualPaidOn?: string | null; manualAmount?: number | null } = {},
+  ctx: { number?: string | null; manualPaidOn?: string | null; manualAmount?: number | null; cashDocumentNumber?: string | null } = {},
 ): string {
   switch (code) {
+    case 'cash_document': {
+      const dowod = ctx.cashDocumentNumber ? `dowód wpłaty ${ctx.cashDocumentNumber}` : 'dowód wpłaty KP';
+      return `Ta wpłata ma ${dowod} w Kasie, więc nie cofa się jej tutaj. Wystaw korektę tego dowodu w Kasie: wpłata cofnie się razem z korektą.`;
+    }
     case 'not_found':
       return 'Nie znaleziono tej wpłaty w aktywnej firmie. Odśwież stronę albo przełącz firmę.';
     case 'not_voidable':
