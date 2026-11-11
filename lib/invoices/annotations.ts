@@ -30,6 +30,21 @@ export const SPLIT_PAYMENT_LABEL = 'mechanizm podzielonej płatności';
  */
 export const REVERSE_CHARGE_LABEL = 'odwrotne obciążenie';
 
+/** Obowiązkowe wyrazy przy samofakturowaniu (art. 106e ust. 1 pkt 17; P_17 = 1 w FA(3)). */
+export const SELF_INVOICING_LABEL = 'samofakturowanie';
+
+/**
+ * Obowiązkowe wyrazy przy procedurze marży (art. 106e ust. 1 pkt 21 i 24), dosłownie jak
+ * w opisach pól schematu FA(3) (`P_PMarzy_2`, `P_PMarzy_3_1`, `P_PMarzy_3_2`, `P_PMarzy_3_3`).
+ * Dotyczy faktur z importu KSeF; FaktWay procedury marży nie wystawia.
+ */
+export const MARGIN_SCHEME_LABELS = {
+  P_PMarzy_2: 'procedura marży dla biur podróży',
+  P_PMarzy_3_1: 'procedura marży - towary używane',
+  P_PMarzy_3_2: 'procedura marży - dzieła sztuki',
+  P_PMarzy_3_3: 'procedura marży - przedmioty kolekcjonerskie i antyki',
+} as const;
+
 /** Stawki, przy których podatek rozlicza nabywca — P_18 i wyrazy `REVERSE_CHARGE_LABEL`. */
 export const REVERSE_CHARGE_RATES: ReadonlySet<string> = new Set(['oo', 'np_ii']);
 
