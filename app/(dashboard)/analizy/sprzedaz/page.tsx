@@ -1,5 +1,6 @@
 import { AnalizyHeader } from '@/components/analizy/analizy-header';
 import { LimitKasy } from '@/components/analizy/limit-kasy';
+import { ProgOss } from '@/components/analizy/prog-oss';
 import { SprzedazGrid } from '@/components/analizy/sprzedaz-grid';
 import {
   ANALYTICS_MONTH_PARAM,
@@ -50,6 +51,7 @@ export default async function AnalizaSprzedazyPage({
       />
       <SprzedazGrid supabase={supabase} tenantId={tenantId} nowIso={now.toISOString()} month={month} tryb={tryb} kosztyKsefOd={kosztyKsefOd} />
       {!demo && <LimitKasy supabase={supabase} tenantId={tenantId} now={now} />}
+      {!demo && <ProgOss supabase={supabase} tenantId={tenantId} now={now} />}
     </div>
   );
 }
