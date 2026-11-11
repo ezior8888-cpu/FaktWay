@@ -78,6 +78,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-historia-ksef.test.ts',
       // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
       'tests/rls-sprzatanie-dziennikow.test.ts',
+      // Bez migracji (plan skalowania, sesja 3, FLO-01): sprzątanie pulsu FLO jednym
+      // zapisem z warunkiem, ponad 1000 kart przez PostgREST z `max_rows`.
+      'tests/rls-flo-sprzatanie.test.ts',
       'tests/rls-zaplacone.test.ts',
       'tests/rls-passkeys.test.ts',
       'tests/rls-skrzynka-harmonogram.test.ts',
@@ -131,10 +134,19 @@ describe('separate RLS test configuration', () => {
       'tests/rls-noty.test.ts',
       // 00194 (plan kompletnej aplikacji, krok 3.7): kasa, dowody KP i KW i raport kasowy.
       'tests/rls-kasa.test.ts',
+      'tests/rls-faktura-do-paragonu.test.ts',
+      'tests/rls-koszty-do-zaplaty.test.ts',
+      // 00191 (plan kompletnej aplikacji, krok 1.4, część 2): identyfikatory zbiorcze KSeF.
+      'tests/rls-identyfikator-zbiorczy.test.ts',
       // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF.
       'tests/rls-uprawnienia-ksef.test.ts',
+      // 00196 (plan kompletnej aplikacji, krok 3.2, część 3): przelewy do dostawców z wyciągu jako zapłaty kosztów.
+      'tests/rls-wyciag-koszty.test.ts',
       // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
       'tests/rls-dzwonek-wplaty.test.ts',
+      'tests/rls-indeksy-cronow-produkty.test.ts',
+      // Plan skalowania 3000, sesja 12: stronicowanie nocnej kopii JSON przez PostgREST.
+      'tests/rls-kopia-json-stronicowanie.test.ts',
       // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta, powiązanie z fakturą.
       'tests/rls-proformy.test.ts',
     ]);

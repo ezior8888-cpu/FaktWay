@@ -76,6 +76,21 @@ export async function logBackupStart(kind: BackupKind): Promise<string> {
   return ins.data.id;
 }
 
+/**
+ * Klucz pliku kopii, zapisany tuż przed wgraniem (plan skalowania, sesja 12).
+ * Sprzątanie (`cleanup-old-backups`) usuwa pliki tylko po `r2_key`, więc
+ * plik wgrany przez próbę, która potem padła, bez tego wpisu zostałby na
+ * zawsze. Weryfikacja bierze tylko wpisy `success`, więc klucz nieudanej
+ * próby niczego nie udaje.
+ */
+export async function logBackupKey(id: string, r2Key: string): Promise<void> {
+  const admin = createAdminClient() as unknown as BackupLogTable;
+  const upd = await admin.from('backup_log').update({ r2_key: r2Key }).eq('id', id);
+  if (upd.error) {
+    throw new Error(`backup_log_update_failed: ${upd.error.message}`);
+  }
+}
+
 export interface BackupSuccessPatch {
   r2_key: string;
   size_bytes: number;

@@ -41,6 +41,8 @@ interface PeriodInvoice {
   annotation_problems?: unknown;
   sale_dates?: unknown;
   ksef_markers?: unknown;
+  /** Krok 1.2: faktura do paragonu z FaktWay (`fa3_data.receipt`): ta sama odmowa co FP z importu. */
+  receipt?: unknown;
 }
 
 interface PeriodLine {
@@ -69,7 +71,7 @@ async function unsupportedDocumentReason(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await client
       .from('invoices')
-      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, vat_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers, line_amount_problems:fa3_data->lineAmountProblems, line_amount_totals_unknown:fa3_data->lineAmountTotalsUnknown, ksef_line_fields:fa3_data->ksefLineFields')
+      .select('id, internal_number, ksef_number, invoice_kind, invoice_type, origin, net_total, vat_total, annotations:fa3_data->annotations, annotation_problems:fa3_data->annotationProblems, sale_dates:fa3_data->saleDates, ksef_markers:fa3_data->ksefMarkers, receipt:fa3_data->receipt, line_amount_problems:fa3_data->lineAmountProblems, line_amount_totals_unknown:fa3_data->lineAmountTotalsUnknown, ksef_line_fields:fa3_data->ksefLineFields')
       .eq('tenant_id', params.tenantId)
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
@@ -93,7 +95,7 @@ async function unsupportedDocumentReason(
     }));
     const contentFlags = importedContentFlags(inv.origin, {
       annotations: inv.annotations, annotationProblems: inv.annotation_problems,
-      saleDates: inv.sale_dates, ksefMarkers: inv.ksef_markers,
+      saleDates: inv.sale_dates, ksefMarkers: inv.ksef_markers, receipt: inv.receipt,
       lineAmountProblems: inv.line_amount_problems, lineAmountTotalsUnknown: inv.line_amount_totals_unknown,
     });
     // C5c: pozycja bez pól z pliku KSeF — ta sama odmowa co eksport (`attachKsefLineFields`).

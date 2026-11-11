@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { invalidateTenantDashboard } from '@/lib/cache/invalidation';
+import type { ZapisanyIdentyfikator } from '@/lib/expenses/identyfikator-zbiorczy';
+import { EXPENSE_PAYMENT_ROLES } from '@/lib/expenses/zaplata-kosztu';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { parseBankFile, type BankOperation } from '@/lib/import/bank';
 import {
   BANK_ROLE_REFUSAL,
@@ -27,7 +30,23 @@ import {
   type ImportBankStatementResult,
 } from '@/lib/import/bank/ekran';
 import { operationKeys } from '@/lib/import/bank/klucz';
+import {
+  EXPENSE_BANK_ROLE_REFUSAL,
+  EXPENSE_MATCH_FAILED,
+  EXPENSE_NOT_CONFIRMED_TEXT,
+  EXPENSE_SKIPPED_TEXT,
+  RODZAJE_DOPASOWANIA_KOSZTU,
+  bankExpenseConfirmedText,
+  bankExpenseRefusalText,
+  bankExpenseUndoneText,
+  dopasujKoszty,
+  type KosztDoPrzelewu,
+  type PrzelewZPropozycja,
+  type ProposeBankExpensesResult,
+} from '@/lib/import/bank/koszty';
+import { czytajKosztyNaRachunki, czytajZapisaneDlaTytulow, czytajZnaneOperacje } from '@/lib/import/bank/koszty-dane';
 import { kwotaZGroszy } from '@/lib/import/bank/kwoty';
+import { BANK_FILE_FORMATS } from '@/lib/import/bank/typy';
 import type { MatchKind } from '@/lib/import/bank/dopasowanie';
 import {
   RODZAJE_DOPASOWANIA_PODATKU,
@@ -44,6 +63,7 @@ import {
 } from '@/lib/import/bank/podatki';
 import { czytajKontaPodatkowe, zaplatyZWyciaguWlaczone } from '@/lib/import/bank/podatki-dane';
 import { INVOICE_PAYMENT_ROLES } from '@/lib/invoices/manual-payment';
+import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { RODZAJE_ROZLICZEN, type RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
 import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabase/auth-context';
 
@@ -60,6 +80,13 @@ import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabas
  * składkowy z ustawień podatkowych) i na mikrorachunek z NIP firmy (krok 3.2,
  * część 2, 00189). Innych wypływów i innych walut nie zapisujemy (RODO:
  * przechowujemy tylko operacje potrzebne do dopasowania).
+ *
+ * Przelewy do dostawców (krok 3.2, część 3, 00196) nie wchodzą do bazy przy
+ * wgraniu: `proposeBankExpensePaymentsAction` liczy z tego samego pliku
+ * propozycje kosztów z listy „Do zapłaty” i oddaje je klientowi, a operacja
+ * zapisuje się dopiero przy „Potwierdź” albo wyborze kosztów
+ * (`confirm_bank_expense_payment`: `mark_expense_paid` z 00177 z dniem
+ * księgowania) albo jako znacznik bez danych osób trzecich przy „Pomiń”.
  *
  * Zapłata rozliczenia z wyciągu (`confirmBankTaxPaymentAction`) idzie tą samą
  * drogą co „Zapłacone” w „Ten miesiąc”: owner/admin, obszar `ten_miesiac`
@@ -87,6 +114,12 @@ interface BankRpc {
   rpc(fn: 'undo_bank_operation', args: { p_operation_id: string }): RpcResult;
   rpc(fn: 'confirm_bank_tax_payment', args: { p_operation_id: string; p_settlement_ids: string[]; p_match_kind: string }): RpcResult;
   rpc(fn: 'undo_bank_tax_payment', args: { p_operation_id: string }): RpcResult;
+  rpc(
+    fn: 'confirm_bank_expense_payment',
+    args: { p_file_format: string; p_operation: ExpenseOperationRow; p_expense_ids: string[]; p_match_kind: string },
+  ): RpcResult;
+  rpc(fn: 'skip_bank_expense_operation', args: { p_file_format: string; p_operation: SkippedExpenseOperationRow }): RpcResult;
+  rpc(fn: 'undo_bank_expense_payment', args: { p_operation_id: string }): RpcResult;
 }
 
 interface BankOperationRow {
@@ -445,4 +478,289 @@ export async function undoBankTaxPaymentAction(operationId: string): Promise<Ban
 
   revalidateTaxViews();
   return { success: true, status: 'undone', message: taxUndoneText(integer(result.reverted) ?? 0, integer(result.kept) ?? 0) };
+}
+
+// ─── Przelewy do dostawców jako zapłaty kosztów (00196) ──────────────────
+
+/** Operacja dla `confirm_bank_expense_payment`: dane z banku zostają przy zapłacie jako dowód. */
+interface ExpenseOperationRow {
+  key: string;
+  account: string;
+  booking_date: string;
+  /** Kwota w złotych jako napis z kropką i minusem, liczona z groszy. */
+  amount: string;
+  currency: 'PLN';
+  counterparty_name: string | null;
+  counterparty_account: string;
+  title: string | null;
+  reference: string | null;
+}
+
+/** Operacja dla `skip_bank_expense_operation`: bez tytułu, nazwy i referencji (RODO). */
+type SkippedExpenseOperationRow = Pick<ExpenseOperationRow, 'key' | 'account' | 'booking_date' | 'amount' | 'currency' | 'counterparty_account'>;
+
+/** Zapłatę kosztu oznacza owner, admin albo member, jak „Oznacz jako zapłacone” (00177); księgowa ma wgląd. */
+async function authorizedExpense(): Promise<{ ctx: AuthContext } | { error: string }> {
+  try {
+    return { ctx: await requireOrgRole([...EXPENSE_PAYMENT_ROLES]) };
+  } catch (e) {
+    if (e instanceof ActionAuthError) {
+      return { error: e.message === 'Niewystarczające uprawnienia' ? EXPENSE_BANK_ROLE_REFUSAL : e.message };
+    }
+    throw e;
+  }
+}
+
+const validDay = (value: string) => {
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+/** Wypływ odesłany przez ekran: te same granice co w 00196, sprawdzone przed RPC. */
+const expenseTransferSchema = z.object({
+  key: z.string().regex(/^v1:[0-9a-f]{64}$/),
+  account: z.string().regex(/^[A-Z]{2}[0-9]{2}[A-Z0-9]{8,30}$/),
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(validDay),
+  amountGrosze: z.number().int().negative(),
+  counterpartyName: z.string().max(500).nullable(),
+  counterpartyAccount: z.string().min(1).max(64),
+  title: z.string().max(1000).nullable(),
+  reference: z.string().max(100).nullable(),
+});
+type ExpenseTransfer = z.infer<typeof expenseTransferSchema>;
+
+const fileFormatSchema = z.enum(BANK_FILE_FORMATS);
+
+const expenseConfirmSchema = z.object({
+  fileFormat: fileFormatSchema,
+  przelew: expenseTransferSchema,
+  expenseIds: z
+    .array(uuid)
+    .min(1)
+    .max(500)
+    .refine((ids) => new Set(ids).size === ids.length),
+  matchKind: z.enum(RODZAJE_DOPASOWANIA_KOSZTU),
+});
+
+const expenseSkipSchema = z.object({ fileFormat: fileFormatSchema, przelew: expenseTransferSchema });
+
+function expenseOperationRow(p: ExpenseTransfer): ExpenseOperationRow {
+  return {
+    key: p.key,
+    account: p.account,
+    booking_date: p.bookingDate,
+    amount: kwotaZGroszy(p.amountGrosze),
+    currency: 'PLN',
+    counterparty_name: p.counterpartyName,
+    counterparty_account: p.counterpartyAccount,
+    title: p.title,
+    reference: p.reference,
+  };
+}
+
+/** Strony, na których widać zapłatę kosztu: „Bank”, Wydatki („Do zapłaty”) i karta kosztu. */
+function revalidateExpenseBankViews(expenseIds: readonly string[]): void {
+  revalidatePath('/bank');
+  revalidatePath('/expenses');
+  for (const id of expenseIds) revalidatePath(`/expenses/${id}`);
+}
+
+const uuidList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && uuid.safeParse(v).success) : [];
+
+/**
+ * Propozycje kosztów dla przelewów z wgranego wyciągu (krok 3.2, część 3). Nic
+ * nie zapisuje: wypływy wracają do klienta tylko wtedy, gdy rachunek odbiorcy
+ * jest rachunkiem z faktury kosztu z listy „Do zapłaty”; pozostałe (prywatne
+ * wydatki, wynagrodzenia, inne waluty) zostają w pliku. Przelewy rozstrzygnięte
+ * wcześniej (ten sam klucz duplikatu w bazie) nie wracają. Każdy błąd odczytu
+ * to brak propozycji z komunikatem, nie pusta lista (fail-closed).
+ */
+export async function proposeBankExpensePaymentsAction(formData: FormData): Promise<ProposeBankExpensesResult> {
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) return { success: false, error: FILE_EMPTY };
+  if (file.size > MAX_BANK_FILE_BYTES) return { success: false, error: FILE_TOO_BIG };
+
+  const auth = await authorizedExpense();
+  if ('error' in auth) return { success: false, error: auth.error };
+  const { supabase, tenantId } = auth.ctx;
+
+  const parsed = parseBankFile(new Uint8Array(await file.arrayBuffer()));
+  if (!parsed.ok) return { success: false, error: parseErrorText(parsed.code) };
+
+  // Klucz liczony po wszystkich wypływach w złotych z pliku, więc nie zależy od tego, które pasują do kosztów.
+  const debits = parsed.operations.filter((op) => op.amountGrosze < 0 && op.currency === 'PLN');
+  if (debits.length === 0) return { success: true, fileFormat: parsed.format, przelewy: [], koszty: [], znane: 0 };
+  const srodowisko = configuredKsefEnvironment();
+  if (!srodowisko) {
+    console.error('[bank-statement] koszty do przelewów: brak środowiska KSeF aplikacji');
+    return { success: false, error: EXPENSE_MATCH_FAILED };
+  }
+  const keys = operationKeys(debits);
+  const client = supabase as unknown as SupabaseClient;
+
+  let koszty: KosztDoPrzelewu[];
+  let zapisane: ZapisanyIdentyfikator[];
+  try {
+    koszty = await czytajKosztyNaRachunki(client, tenantId, srodowisko, debits.map((op) => op.counterpartyAccount), todayInWarsaw());
+    zapisane = koszty.length > 0 ? await czytajZapisaneDlaTytulow(client, tenantId, srodowisko, debits.map((op) => op.title)) : [];
+  } catch (error) {
+    console.error('[bank-statement] koszty do przelewów', error instanceof Error ? error.message : 'błąd');
+    return { success: false, error: EXPENSE_MATCH_FAILED };
+  }
+
+  const pasujace: PrzelewZPropozycja[] = [];
+  debits.forEach((op, i) => {
+    const dopasowanie = dopasujKoszty(op, koszty, zapisane);
+    if (!dopasowanie) return;
+    pasujace.push({
+      key: keys[i]!,
+      account: op.account,
+      bookingDate: op.bookingDate,
+      amountGrosze: op.amountGrosze,
+      counterpartyName: op.counterpartyName,
+      counterpartyAccount: op.counterpartyAccount,
+      title: op.title,
+      reference: op.bankReference,
+      ...dopasowanie,
+    });
+  });
+  if (pasujace.length === 0) return { success: true, fileFormat: parsed.format, przelewy: [], koszty: [], znane: 0 };
+
+  let znane: Map<string, string>;
+  try {
+    znane = await czytajZnaneOperacje(client, pasujace.map((p) => p.key));
+  } catch (error) {
+    console.error('[bank-statement] znane operacje', error instanceof Error ? error.message : 'błąd');
+    return { success: false, error: EXPENSE_MATCH_FAILED };
+  }
+  const przelewy = pasujace.filter((p) => !znane.has(p.key));
+  const uzyte = new Set(przelewy.flatMap((p) => p.kandydaci));
+  return {
+    success: true,
+    fileFormat: parsed.format,
+    przelewy,
+    koszty: koszty.filter((k) => uzyte.has(k.id)),
+    znane: pasujace.length - przelewy.length,
+  };
+}
+
+/**
+ * Potwierdzenie przelewu jako zapłaty kosztów (jedno kliknięcie przy pewnym
+ * dopasowaniu albo wybór klienta). RPC `confirm_bank_expense_payment` w jednej
+ * transakcji: blokada klucza operacji i kosztów, granice (rachunek z faktury,
+ * kwota równa sumie do zapłaty, złote, koszt niezapłacony), `mark_expense_paid`
+ * z dniem księgowania, operacja jako dowód zapłaty, audyt. Ponowienie z tym
+ * samym wyborem to `already_confirmed` bez zmian.
+ */
+export async function confirmBankExpensePaymentAction(input: {
+  fileFormat: string;
+  przelew: ExpenseTransfer;
+  expenseIds: string[];
+  matchKind: string;
+}): Promise<BankDecisionResult> {
+  const parsed = expenseConfirmSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: DECISION_FAILED };
+  const auth = await authorizedExpense();
+  if ('error' in auth) return { success: false, error: auth.error };
+
+  const { data, error } = await (auth.ctx.supabase as unknown as BankRpc).rpc('confirm_bank_expense_payment', {
+    p_file_format: parsed.data.fileFormat,
+    p_operation: expenseOperationRow(parsed.data.przelew),
+    p_expense_ids: parsed.data.expenseIds,
+    p_match_kind: parsed.data.matchKind,
+  });
+  if (error || typeof data !== 'object' || data === null) {
+    console.error('[bank-statement] confirm_bank_expense_payment', error?.code);
+    return { success: false, error: DECISION_FAILED };
+  }
+  const result = data as Record<string, unknown>;
+  if (result.status === 'refused') {
+    return {
+      success: false,
+      error: bankExpenseRefusalText(result.code, {
+        documentNumber: text(result.document_number),
+        dueGr: integer(result.due_gr),
+        amountGr: integer(result.amount_gr),
+      }),
+    };
+  }
+  if (result.status !== 'confirmed' && result.status !== 'already_confirmed') return { success: false, error: DECISION_FAILED };
+
+  revalidateExpenseBankViews(parsed.data.expenseIds);
+  const documents = Array.isArray(result.documents)
+    ? result.documents
+        .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
+        .map((d) => ({ numer: text(d.document_number), sprzedawca: text(d.seller_name) }))
+    : [];
+  return {
+    success: true,
+    status: result.status,
+    message: bankExpenseConfirmedText({ status: result.status, paidOn: text(result.paid_on), documents }),
+  };
+}
+
+/**
+ * „Pomiń” przy przelewie do dostawcy: w bazie zostaje znacznik bez danych osób
+ * trzecich (kwota, dzień, rachunek firmy, klucz), żeby przelew nie wrócił przy
+ * kolejnym wgraniu. Do RPC nie idą tytuł, nazwa ani referencja; rachunek
+ * odbiorcy tylko do sprawdzenia, że to rachunek z kosztów firmy (nie zapisuje się).
+ */
+export async function skipBankExpenseOperationAction(input: { fileFormat: string; przelew: ExpenseTransfer }): Promise<BankDecisionResult> {
+  const parsed = expenseSkipSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: DECISION_FAILED };
+  const auth = await authorizedExpense();
+  if ('error' in auth) return { success: false, error: auth.error };
+
+  const row = expenseOperationRow(parsed.data.przelew);
+  const { data, error } = await (auth.ctx.supabase as unknown as BankRpc).rpc('skip_bank_expense_operation', {
+    p_file_format: parsed.data.fileFormat,
+    p_operation: {
+      key: row.key,
+      account: row.account,
+      booking_date: row.booking_date,
+      amount: row.amount,
+      currency: row.currency,
+      counterparty_account: row.counterparty_account,
+    },
+  });
+  if (error || typeof data !== 'object' || data === null) {
+    console.error('[bank-statement] skip_bank_expense_operation', error?.code);
+    return { success: false, error: DECISION_FAILED };
+  }
+  const result = data as Record<string, unknown>;
+  if (result.status === 'refused') return { success: false, error: bankExpenseRefusalText(result.code) };
+  if (result.status !== 'skipped' && result.status !== 'already_skipped') return { success: false, error: DECISION_FAILED };
+  revalidatePath('/bank');
+  return { success: true, status: result.status, message: EXPENSE_SKIPPED_TEXT };
+}
+
+/**
+ * „Cofnij” zapłaty kosztów z przelewu: koszty, które to potwierdzenie oznaczyło
+ * i których nikt potem nie zmienił, wracają na listę „Do zapłaty” przez
+ * `undo_expense_paid` (00177); operacja znika z bazy (niepotwierdzony wypływ nie
+ * zostaje), więc przypisuje się ją od nowa po ponownym wgraniu wyciągu. Drugie
+ * cofnięcie nic nie zmienia.
+ */
+export async function undoBankExpensePaymentAction(operationId: string): Promise<BankDecisionResult> {
+  if (!uuid.safeParse(operationId).success) return { success: false, error: DECISION_FAILED };
+  const auth = await authorizedExpense();
+  if ('error' in auth) return { success: false, error: auth.error };
+
+  const { data, error } = await (auth.ctx.supabase as unknown as BankRpc).rpc('undo_bank_expense_payment', { p_operation_id: operationId });
+  if (error || typeof data !== 'object' || data === null) {
+    console.error('[bank-statement] undo_bank_expense_payment', error?.code);
+    return { success: false, error: DECISION_FAILED };
+  }
+  const result = data as Record<string, unknown>;
+  if (result.status === 'not_confirmed' || (result.status === 'refused' && result.code === 'operation_not_found')) {
+    revalidatePath('/bank');
+    return { success: true, status: 'not_confirmed', message: EXPENSE_NOT_CONFIRMED_TEXT };
+  }
+  if (result.status === 'refused') return { success: false, error: bankExpenseRefusalText(result.code) };
+  if (result.status !== 'undone') return { success: false, error: DECISION_FAILED };
+
+  revalidateExpenseBankViews(uuidList(result.expense_ids));
+  const kept = Array.isArray(result.kept_documents) ? result.kept_documents.filter((n): n is string => typeof n === 'string' && n !== '') : [];
+  return { success: true, status: 'undone', message: bankExpenseUndoneText(integer(result.reverted) ?? 0, kept) };
 }

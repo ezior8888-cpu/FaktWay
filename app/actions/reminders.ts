@@ -10,7 +10,7 @@ import { floDb } from '@/lib/flo/db-types';
 import { computeFingerprint } from '@/lib/flo/fingerprint';
 import { proposalApprovalVersion } from '@/lib/flo/approval-version';
 import { hasReminderDispatch } from '@/lib/reminders/delivery-consent';
-import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
+import { isReminderInvoiceChaseable, reminderRefusalMessage } from '@/lib/reminders/delivery-schema';
 import { buildReminderDelivery } from '@/lib/reminders/prepare-delivery';
 
 import {
@@ -128,8 +128,7 @@ export async function prepareReminderAction(input: {
     const { data: invoice, error } = await supabase.from('invoices').select('*')
       .eq('id', args.invoiceId).eq('tenant_id', tenantId).maybeSingle();
     if (error || !invoice) return { success: false, error: 'Faktura nie znaleziona.' };
-    if (!isReminderInvoiceChaseable(invoice)) return { success: false,
-      error: 'Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.' };
+    if (!isReminderInvoiceChaseable(invoice)) return { success: false, error: reminderRefusalMessage(invoice) };
     let stage = args.stage;
     if (!stage) {
       const buyer = invoice.buyer_data && typeof invoice.buyer_data === 'object' && !Array.isArray(invoice.buyer_data)

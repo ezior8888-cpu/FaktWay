@@ -139,6 +139,8 @@ const advanceRow: Row = {
   id: ADVANCE, internal_number: 'ZAL/1/09/2026', ksef_number: 'KSEF-TEST-ZAL-1', issue_date: '2026-09-20',
   advance_amount: 123, gross_total: 123, net_total: 100, vat_total: 23, invoice_kind: 'advance',
   fa3_data: { lines: [{ vatRate: '23' }] },
+  // Ten sam nabywca co w formularzu rozliczenia (F12-D4).
+  buyer_nip: TENANT_NIP, buyer_data: { nip: TENANT_NIP, name: 'Nabywca testowy' },
 };
 
 /**

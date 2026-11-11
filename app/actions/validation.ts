@@ -1,5 +1,6 @@
 'use server';
 
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
 import {
@@ -69,11 +70,18 @@ export async function validateNipLiveAction(
 // Validate bank account (czy jest na białej liście)
 // ============================================================================
 
+/**
+ * `success: true` znaczy „wykaz odpowiedział” (rachunek w nim jest albo go nie
+ * ma). Błąd API i rachunek, którego nie da się ocenić (rachunki wirtualne), to
+ * `success: false` z opisem: nigdy „poza wykazem” ani „w porządku” bez
+ * odpowiedzi wykazu (krok 3.4 planu kompletnej aplikacji, RP-BL-01). Dzień
+ * sprawdzenia to dzień w Polsce: wykaz liczy się na dzień zlecenia przelewu.
+ */
 export async function validateBankAccountAction(
   nip: string,
   bankAccount: string,
 ): Promise<
-  | { success: true; isOnWhitelist: boolean; warning?: string }
+  | { success: true; isOnWhitelist: boolean; warning?: string; checkedOn: string }
   | { success: false; error: string }
 > {
   const auth = await authorize();
@@ -88,11 +96,16 @@ export async function validateBankAccountAction(
   }
 
   try {
-    const result = await checkBankAccountInWhitelist(nip, cleanAccount);
+    const checkedOn = todayInWarsaw();
+    const result = await checkBankAccountInWhitelist(nip, cleanAccount, checkedOn);
+    if (result.status === 'unverified') {
+      return { success: false, error: result.warning ?? 'Nie udało się sprawdzić rachunku w wykazie podatników VAT' };
+    }
     return {
       success: true,
       isOnWhitelist: result.isOnWhitelist,
       warning: result.warning,
+      checkedOn,
     };
   } catch (e) {
     return {

@@ -112,11 +112,21 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 /** Znacznik logowania biometrią, liczony niezależnie od kodu aplikacji. */
-function passkeyMarker(): string {
-  const expiry = String(Math.floor(Date.now() / 1000) + 3600);
+function passkeyMarker(expiresAt = Math.floor(Date.now() / 1000) + 3600): string {
+  const expiry = String(expiresAt);
   const key = Buffer.from(hkdfSync('sha256', SERVICE_ROLE, Buffer.alloc(0), 'faktway/passkey-session-marker/v1', 32));
   const mac = createHmac('sha256', key).update(['v1', userId, SESSION_ID, expiry].join('\n')).digest('base64url');
   return ['v1', expiry, mac].join('.');
+}
+
+/**
+ * Zmienia pierwszy znak podpisu, zawsze na inny. Pierwszy, bo ostatni znak
+ * base64url niesie dwa bity dopełnienia, które `atob` pomija: przy podpisie
+ * kończącym się na „A” zamiana na „B” dawała te same bajty (1 na 16 przebiegów).
+ */
+function forged(value: string): string {
+  const at = value.lastIndexOf('.') + 1;
+  return value.slice(0, at) + (value[at] === 'A' ? 'B' : 'A') + value.slice(at + 1);
 }
 
 function request(path: string, opts: {
@@ -190,10 +200,15 @@ describe.each(['hs256', 'es256'] as const)('klucze %s', (mode) => {
       expect(userCalls).toBe(2);
     });
 
+    // Podpis zależy od czasu wygaśnięcia, więc sprawdzamy 64 różne podpisy:
+    // podróbka ma być odrzucona przy każdym, nie tylko przy tym z dzisiejszej godziny.
     it('podrobiony znacznik biometrii kończy się kodem', async () => {
-      const marker = passkeyMarker().replace(/.$/, (last) => (last === 'A' ? 'B' : 'A'));
-      const page = await updateSession(request('/invoices', { aal: 'aal1', marker }));
-      expect(page.headers.get('location')).toBe(challenge('/invoices'));
+      const start = Math.floor(Date.now() / 1000) + 3600;
+      for (let i = 0; i < 256; i += 1) {
+        const marker = forged(passkeyMarker(start + i));
+        const page = await updateSession(request('/invoices', { aal: 'aal1', marker }));
+        expect(page.headers.get('location'), `wygaśnięcie ${start + i}`).toBe(challenge('/invoices'));
+      }
     });
 
     it('token odrzucony przez GoTrue: strona → logowanie, API → 401, bez powtórek', async () => {

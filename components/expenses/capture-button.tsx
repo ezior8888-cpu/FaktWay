@@ -15,7 +15,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { MOBILE_MEDIA } from '@/hooks/use-mobile';
-import { ACTION_FILE_LIMIT_LABEL } from '@/lib/upload-limit';
+import { UPLOAD_FILE_LIMIT_LABEL } from '@/lib/upload-limit';
 import { cn } from '@/lib/utils';
 
 export function CaptureButton({
@@ -83,7 +83,7 @@ export function CaptureButton({
           </div>
           <SheetFooter>
             <p className="text-muted-foreground text-center text-xs">
-              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Zdjęcia zmniejszamy sami, PDF do {ACTION_FILE_LIMIT_LABEL}.
+              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Zdjęcia zmniejszamy sami, PDF do {UPLOAD_FILE_LIMIT_LABEL}.
             </p>
           </SheetFooter>
         </SheetContent>

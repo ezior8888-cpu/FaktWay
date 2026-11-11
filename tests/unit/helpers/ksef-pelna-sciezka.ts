@@ -29,6 +29,15 @@ export interface StoredInvoice {
   acquisitionDate?: string;
   originalSession?: string;
   originalKsef?: string;
+  /** Odrzucenie w statusie (kod 4xx): opis i szczegóły, które KSeF oddaje w `status`. */
+  rejection?: { description: string; details: string[] };
+}
+
+/** Odrzucenie faktury w statusie, jak odpowiada walidator KSeF (np. 450 ze szczegółami). */
+export interface StatusRejection {
+  code: number;
+  description: string;
+  details: string[];
 }
 
 export interface FakeKsef {
@@ -48,6 +57,8 @@ export interface FakeKsef {
   downloadFailure: { status: number; code?: number } | null;
   /** Zapytanie o metadane faktur kończy się błędem HTTP. */
   metadataFails: boolean;
+  /** KSeF przyjmuje plik, a potem odrzuca fakturę w statusie (bez numeru KSeF). */
+  statusRejection: StatusRejection | null;
 }
 
 export function freshKsef(): FakeKsef {
@@ -63,6 +74,7 @@ export function freshKsef(): FakeKsef {
     listFails: false,
     downloadFailure: null,
     metadataFails: false,
+    statusRejection: null,
   };
 }
 
@@ -99,7 +111,9 @@ function statusReply(inv: StoredInvoice) {
     status: inv.code === 440
       ? { code: 440, description: 'Duplikat faktury', details: ['Duplikat faktury'],
           extensions: { originalSessionReferenceNumber: inv.originalSession, originalKsefNumber: inv.originalKsef } }
-      : { code: inv.code, description: inv.code === 200 ? 'Sukces' : 'Status' },
+      : inv.rejection
+        ? { code: inv.code, description: inv.rejection.description, details: inv.rejection.details }
+        : { code: inv.code, description: inv.code === 200 ? 'Sukces' : 'Status' },
   };
 }
 
@@ -133,11 +147,15 @@ export function ksefClientModule(real: ClientModule, state: () => FakeKsef): Cli
       const earlier = [...k.sessions.entries()]
         .flatMap(([s, v]) => v.invoices.map((i) => ({ s, i })))
         .find(({ i }) => i.invoiceNumber === invoiceNumber && i.code === 200);
+      const rejection = k.statusRejection;
       const stored: StoredInvoice = earlier
         ? { referenceNumber: `I-${k.seq}`, invoiceNumber, invoiceHash: String(opts.body?.invoiceHash), code: 440,
             ksefNumber: null, xml, originalSession: earlier.s, originalKsef: earlier.i.ksefNumber ?? undefined }
-        : { referenceNumber: `I-${k.seq}`, invoiceNumber, invoiceHash: String(opts.body?.invoiceHash), code: 200,
-            ksefNumber: `K-${k.seq}`, xml };
+        : rejection
+          ? { referenceNumber: `I-${k.seq}`, invoiceNumber, invoiceHash: String(opts.body?.invoiceHash), code: rejection.code,
+              ksefNumber: null, xml, rejection: { description: rejection.description, details: rejection.details } }
+          : { referenceNumber: `I-${k.seq}`, invoiceNumber, invoiceHash: String(opts.body?.invoiceHash), code: 200,
+              ksefNumber: `K-${k.seq}`, xml };
       session.invoices.push(stored);
       if (k.loseInvoicePostResponse) throw new KsefApiError(408, 'Request timeout', 'timeout');
       return { referenceNumber: stored.referenceNumber };

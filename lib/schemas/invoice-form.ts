@@ -1,13 +1,22 @@
 import { z } from 'zod';
 import {
+  calculateInvoiceTotals,
+  calculateLineItem,
   issueDateRangeErrors,
   validateIban,
   validateNipChecksum,
   validatePeselChecksum,
 } from '@/lib/xml/invoice-calculator';
 
+import {
+  normalizeCashRegisterNumber,
+  receiptInvoiceIssues,
+  type ReceiptBuyerKind,
+  type ReceiptRuleField,
+} from '@/lib/invoices/receipt-invoice';
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
 import { addressCountryForKodUE, parseVatUe, type KodUE, isNpIiBuyerVat } from '@/lib/invoices/vat-ue';
+import type { ReceiptInvoiceData } from '@/types/invoice';
 
 /**
  * Kraje adresu nabywcy z UE (AUD-70) — polskie nazwy do formularza.
@@ -120,6 +129,49 @@ export const SALES_QUOTE_LINK_MESSAGE =
 export const MAX_INVOICE_AMOUNT = 9_999_999_999.99;
 const VAT_FACTOR: Record<string, number> = { '23': 1.23, '8': 1.08, '5': 1.05 };
 
+/** Pole formularza, przy którym pokazujemy błąd reguły faktury do paragonu. */
+const RECEIPT_FIELD_PATH: Record<ReceiptRuleField, string> = {
+  type: 'receiptInvoice',
+  receiptNumber: 'receiptNumber',
+  receiptDate: 'receiptDate',
+  cashRegisterNumber: 'cashRegisterNumber',
+  requestDate: 'receiptRequestDate',
+  saleDate: 'saleDate',
+  buyer: 'receiptInvoice',
+  buyerNipOnReceipt: 'buyerNipOnReceipt',
+  amount: 'receiptInvoice',
+};
+
+/** Pola formularza, z których powstaje paragon (bez odwołania do typu schematu niżej). */
+interface ReceiptFormFields {
+  issueDate: string;
+  receiptNumber?: string;
+  receiptDate?: string;
+  cashRegisterNumber?: string;
+  receiptRequestDate?: string;
+  buyerNipOnReceipt?: boolean;
+}
+
+/** Paragon z pól formularza, w kształcie zapisywanym w `fa3_data.receipt` (akcja serwera bierze ten sam). */
+export function receiptFromFormValues(d: ReceiptFormFields, buyerKind: ReceiptBuyerKind): ReceiptInvoiceData {
+  const requestDate = d.receiptRequestDate?.trim();
+  return {
+    receiptNumber: (d.receiptNumber ?? '').trim(),
+    receiptDate: (d.receiptDate ?? '').trim(),
+    cashRegisterNumber: normalizeCashRegisterNumber(d.cashRegisterNumber ?? ''),
+    // Dzień żądania równy dniowi wystawienia to wartość domyślna, nie zapisujemy go.
+    ...(requestDate && requestDate !== d.issueDate ? { requestDate } : {}),
+    ...(buyerKind === 'company' && d.buyerNipOnReceipt === true ? { buyerNipOnReceipt: true as const } : {}),
+  };
+}
+
+/** Rodzaj nabywcy z flag formularza, jak w `buildInvoiceFromForm` (firma z UE, osoba prywatna, firma z NIP). */
+export function receiptBuyerKindOfForm(d: { buyerIsEu?: boolean; buyerIsConsumer: boolean }): ReceiptBuyerKind {
+  if (d.buyerIsEu) return 'eu';
+  if (d.buyerIsConsumer) return 'consumer';
+  return 'company';
+}
+
 export const lineItemSchema = z.object({
   name: z
     .string()
@@ -213,6 +265,22 @@ export const invoiceFormSchema = z
       .string()
       .regex(RECURRING_PERIOD_FORMAT, 'Nieprawidłowy okres faktury cyklicznej — otwórz „Wystaw teraz” ponownie.')
       .optional(),
+    /**
+     * Faktura do paragonu (FP, krok 1.2). Pola opcjonalne, żeby stare
+     * wywołania (bez nich) znaczyły „faktura bez paragonu”. Reguły
+     * w `receiptInvoiceIssues`, ten sam kod sprawdza wysyłkę (`validateInvoice`).
+     */
+    receiptInvoice: z.boolean().optional(),
+    /** Numer dokumentu z paragonu (art. 106h ust. 1 pkt 1). */
+    receiptNumber: z.string().optional(),
+    /** Data z paragonu, RRRR-MM-DD; zarazem data sprzedaży. */
+    receiptDate: z.string().optional(),
+    /** Numer unikatowy kasy z paragonu; spacje i myślniki usuwa zapis. */
+    cashRegisterNumber: z.string().optional(),
+    /** Dzień żądania faktury, gdy wcześniejszy niż wystawienie (art. 106b ust. 3); pusty = dzień wystawienia. */
+    receiptRequestDate: z.string().optional(),
+    /** Firma: paragon ma NIP nabywcy (art. 106b ust. 5). */
+    buyerNipOnReceipt: z.boolean().optional(),
     /**
      * Proforma albo oferta (krok 2.4, 00198), z której otwarto formularz:
      * ukryte pola formularza z `?proforma=<id>`. Brak = zwykła faktura. Numer
@@ -351,6 +419,29 @@ export const invoiceFormSchema = z
         message: 'Nieprawidłowy numer rachunku — 26 cyfr (albo IBAN z kodem kraju); sprawdź, czy nie ma literówki',
         path: ['bankAccount'],
       });
+    }
+  })
+  // Faktura do paragonu (krok 1.2): te same reguły co `validateInvoice` przy
+  // wysyłce, z błędem przy właściwym polu. Bez zaznaczenia pola paragonu nie
+  // są sprawdzane (zostają w stanie formularza, ale zapis ich nie bierze).
+  .superRefine((d, ctx) => {
+    if (d.receiptInvoice !== true) return;
+    const buyerKind = receiptBuyerKindOfForm(d);
+    const lines = d.lines.map((l, i) => ({ ...l, ordinal: i + 1, ...calculateLineItem(l) }));
+    const reported = new Set<string>();
+    for (const issue of receiptInvoiceIssues({
+      receipt: receiptFromFormValues(d, buyerKind),
+      invoiceType: 'VAT',
+      issueDate: d.issueDate,
+      saleDate: d.saleDate,
+      buyerKind,
+      grossTotal: calculateInvoiceTotals(lines).grossTotal,
+    })) {
+      const path = RECEIPT_FIELD_PATH[issue.field];
+      // Jeden komunikat na pole: drugi przy tym samym polu przykryłby pierwszy w formularzu.
+      if (reported.has(path)) continue;
+      reported.add(path);
+      ctx.addIssue({ code: 'custom', message: issue.message, path: [path] });
     }
   });
 

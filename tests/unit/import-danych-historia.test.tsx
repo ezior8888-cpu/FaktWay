@@ -5,10 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-const actions = vi.hoisted(() => ({ startFileImportAction: vi.fn() }));
+// Wgranie pliku: trasa `/api/uploads/import` (plan skalowania, sesja 31).
+const upload = vi.hoisted(() => ({ postImportUpload: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('sonner', () => ({ toast }));
-vi.mock('@/app/actions/import-danych', () => actions);
+vi.mock('@/lib/uploads/client', () => upload);
 
 import { EMPTY_STEPS, ImportHistory } from '@/components/import-danych/import-history';
 import { MAX_POLL_TICKS, POLL_INTERVAL_MS, type ImportHistoryJob } from '@/components/import-danych/import-model';
@@ -231,7 +232,7 @@ describe('Karty źródeł — import z pliku', () => {
       await vi.runOnlyPendingTimersAsync();
     });
     expect(document.body.querySelector('input[type="file"]')).toBeNull();
-    expect(actions.startFileImportAction).not.toHaveBeenCalled();
+    expect(upload.postImportUpload).not.toHaveBeenCalled();
   });
 
   it('tylko cztery programy CSV — bez „Inny program (JPK_FA)”', async () => {

@@ -1,6 +1,7 @@
 // lib/validators/invoice-validators.ts
 // Walidatory Zod dla wszystkich typów faktur
 
+import { isSaleDateWithinLimit } from '@/lib/invoices/sale-date';
 import { z } from 'zod';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
@@ -319,6 +320,8 @@ export const advanceInvoiceSchema = z
     advanceAmount: z.number().positive('Zaliczka > 0'),
     totalContractAmount: z.number().positive('Wartość umowy > 0'),
     expectedDeliveryDate: dateSchema.optional(),
+    /** P_6: data otrzymania zaliczki, gdy inna niż data wystawienia (F12-D1). */
+    advanceReceivedDate: dateSchema.optional(),
     vatRate: z.enum(['23', '8', '5', '0']),
     description: z.string().min(5).max(1000),
     /**
@@ -335,6 +338,11 @@ export const advanceInvoiceSchema = z
   .refine((data) => data.advanceAmount <= data.totalContractAmount, {
     message: 'Zaliczka nie może być większa niż wartość umowy',
     path: ['advanceAmount'],
+  })
+  // Art. 106i ust. 7: fakturę wystawia się najwcześniej 60. dnia przed otrzymaniem zapłaty.
+  .refine((data) => !data.advanceReceivedDate || isSaleDateWithinLimit(data.issueDate, data.advanceReceivedDate), {
+    message: 'Data otrzymania zaliczki może być najwyżej 60 dni po dacie wystawienia (art. 106i ust. 7 ustawy o VAT).',
+    path: ['advanceReceivedDate'],
   })
   .refine((data) => !data.splitPayment ||
     (data.paymentMethod === 'transfer' && !!data.bankAccount?.trim()), {

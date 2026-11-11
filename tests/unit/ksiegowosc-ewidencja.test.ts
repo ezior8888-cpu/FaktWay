@@ -105,10 +105,16 @@ describe('pkt 1: przychód z faktur i wpisów ręcznych', () => {
 });
 
 describe('pkt 2: faktura do paragonu', () => {
-  it('FP nie jest drugim przychodem; ewidencja mówi, że sprzedaż wchodzi z raportu kasy', () => {
+  // Krok 1.2 planu kompletnej aplikacji (świadoma zmiana testu): FP dalej nie
+  // jest drugim przychodem, ale do reguły, która sprawdzi pokrycie raportem kasy
+  // (następny PR, G30), miesiąc z FP ma brak zamiast cichego pominięcia.
+  it('FP nie jest drugim przychodem; miesiąc z FP ma brak z nazwą faktury i wyjściem', () => {
     const e = ewidencja({ faktury: [faktura({ fp: true })], wpisy: [wpis()] });
     expect(e.wiersze.map((w) => w.dowod)).toEqual(['RK/03/2026']);
-    expect(e.pominiete).toEqual([{ numer: 'FV/1/2026', dzien: '2026-03-10', powod: expect.stringContaining('raportu kasy') }]);
+    expect(e.pominiete).toEqual([]);
+    expect(e.braki).toEqual([
+      { dzien: '2026-03-10', dokument: 'FV/1/2026', komunikat: expect.stringMatching(/faktura do paragonu.*raportu kasy.*Pomocy/) },
+    ]);
   });
 });
 

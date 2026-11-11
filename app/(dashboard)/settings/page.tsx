@@ -5,6 +5,7 @@ import { RiAddLine } from '@remixicon/react';
 import { BusinessStartForm } from '@/components/settings/business-start-form';
 import { CalendarFeedCard } from '@/components/settings/calendar-feed-card';
 import { CashMethodForm } from '@/components/settings/cash-method-form';
+import { CompanyBankAccountForm } from '@/components/settings/company-bank-account-form';
 import { CompanyProfileForm } from '@/components/settings/company-profile-form';
 import { DocumentArchiveForm } from '@/components/settings/document-archive-form';
 import {
@@ -17,6 +18,7 @@ import {
 import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { KOTWICA_RACHUNKU_FIRMY, readTenantBankAccount } from '@/lib/expenses/rachunek-firmy';
 import { readTenantBusinessStart } from '@/lib/invoices/business-start';
 import { readTenantCashMethod } from '@/lib/invoices/cash-method';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
@@ -29,14 +31,15 @@ export const dynamic = 'force-dynamic';
 /**
  * Zakładka „Firma” = General z Finory (plan P14): profil firmy, zwolnienie
  * z VAT, metoda kasowa, data rozpoczęcia działalności (#data-rozpoczecia —
- * link z Pulpitu). Z General wylatują język, waluta, strefa czasowa i rok
+ * link z Pulpitu), rachunek firmy (#rachunek-firmy, link z listy „Do zapłaty”;
+ * krok 3.4, część 2: nowa sekcja na końcu, decyzja D1). Z General wylatują język, waluta, strefa czasowa i rok
  * obrotowy (zawsze PL / PLN / Europe/Warsaw / rok kalendarzowy), a Profile
  * Finory nie ma odpowiednika. Usunięcie firmy jest tylko w „Konto i dane”.
  */
 export default async function SettingsPage() {
   const { supabase, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn, archiveOrders, calendarFeedActive] = await Promise.all([
+  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn, archiveOrders, calendarFeedActive, bankAccount] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
@@ -52,6 +55,8 @@ export default async function SettingsPage() {
     role === 'owner' || role === 'admin' ? readArchiveOrders(supabase, tenantId) : Promise.resolve([]),
     // Odpornie — przed migracją 00182 tabeli nie ma; wtedy karty adresu nie pokazujemy.
     readCalendarFeedActive(supabase, tenantId),
+    // Odpornie: przed migracją 00183 kolumny nie ma (brak rachunku).
+    readTenantBankAccount(supabase, tenantId),
   ]);
 
   // Edycja danych firmy (F-008): właściciel i administrator, jak ustawienia VAT.
@@ -152,6 +157,9 @@ export default async function SettingsPage() {
           <CalendarFeedCard initialActive={calendarFeedActive} />
         </>
       ) : null}
+      <div id={KOTWICA_RACHUNKU_FIRMY} className="scroll-mt-24">
+        <CompanyBankAccountForm initialAccount={bankAccount} canEdit={canEditCompany} />
+      </div>
     </FieldGroup>
   );
 }

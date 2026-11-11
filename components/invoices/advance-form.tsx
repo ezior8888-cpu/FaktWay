@@ -116,6 +116,7 @@ export function AdvanceInvoiceForm({
     advanceAmount: 100,
     totalContractAmount: 1000,
     expectedDeliveryDate: undefined,
+    advanceReceivedDate: undefined,
     vatRate: '23',
     description: 'Zaliczka na poczet przyszłej realizacji.',
   } satisfies Omit<AdvanceFormIn, 'splitPayment'>;
@@ -444,6 +445,16 @@ export function AdvanceInvoiceForm({
                   Planowana data realizacji
                 </Label>
                 <Input id="expected-delivery-date" type="date" {...form.register('expectedDeliveryDate')} />
+              </div>
+              <div>
+                <Label htmlFor="advance-received-date" className={labelClass}>
+                  Data otrzymania zaliczki (gdy inna niż data wystawienia)
+                </Label>
+                <Input
+                  id="advance-received-date"
+                  type="date"
+                  {...form.register('advanceReceivedDate', { setValueAs: (v: string) => (v ? v : undefined) })}
+                />
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="advance-description" className={labelClass}>

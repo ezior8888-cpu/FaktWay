@@ -116,6 +116,21 @@ describe('zaległość: strony, zawężanie, komplet okna', () => {
     }), T);
     expect(step).toMatchObject({ kind: 'issue', issue: 'internal' });
   });
+  it('isTruncated na ostatniej stronie (hasMore = false, HWM ≥ koniec okna) — zawężenie, okno się nie zamyka (E1-W10)', () => {
+    const step = applyBackfillPage(state({ backfill_page_offset: 39 }), page({
+      hasMore: false, isTruncated: true, hwm: '2026-10-22T09:00:00.000Z',
+      invoices: [{ permanentStorageDate: '2026-07-10T00:00:00.000Z' }, { permanentStorageDate: '2026-08-15T12:00:00.000Z' }],
+    }), T);
+    expect(step).toEqual({ kind: 'advance', next: {
+      backfill_window_end: '2026-10-01T00:00:00.000Z', backfill_cursor: '2026-08-15T12:00:00.000Z', backfill_page_offset: 0, backfill_completed_at: null,
+    } });
+  });
+  it('isTruncated na ostatniej stronie bez postępu — `internal`, kursor stoi (E1-W10)', () => {
+    const step = applyBackfillPage(state(), page({
+      hasMore: false, isTruncated: true, hwm: '2026-10-22T09:00:00.000Z', invoices: [{ permanentStorageDate: '2026-07-03T00:00:00.000Z' }],
+    }), T);
+    expect(step).toMatchObject({ kind: 'issue', issue: 'internal' });
+  });
   it('koniec stron z HWM ≥ koniec okna — następne okno wstecz od pierwotnego początku', () => {
     const step = applyBackfillPage(state({ backfill_cursor: '2026-08-15T12:00:00.000Z' }), page({ hwm: '2026-10-22T09:00:00.000Z' }), T);
     const end = iso(Date.parse('2026-10-01T00:00:00.000Z') - 90 * DAY);
@@ -225,6 +240,14 @@ describe('bieżąca sprzedaż (live)', () => {
     const hwm = '2026-10-22T10:30:00.000Z';
     expect(applyLivePage(live, w, page({ hwm }))).toEqual({ kind: 'advance', next: { live_hwm: nextInboxHwm(hwm, w), live_page_offset: 0 } });
     expect(applyLivePage(live, w, page({ hwm: null }))).toMatchObject({ kind: 'issue', issue: 'waiting_for_ksef' });
+  });
+  it('isTruncated przy hasMore = false — zawężenie zamiast skoku do HWM (E1-W10)', () => {
+    const w = liveWindow(live, T)!;
+    const hwm = '2026-10-22T10:30:00.000Z';
+    expect(applyLivePage(live, w, page({ isTruncated: true, hwm, invoices: [{ permanentStorageDate: '2026-10-22T10:00:00.000Z' }] })))
+      .toEqual({ kind: 'advance', next: { live_hwm: '2026-10-22T10:00:00.000Z', live_page_offset: 0 } });
+    expect(applyLivePage(live, w, page({ isTruncated: true, hwm, invoices: [{ permanentStorageDate: live.live_hwm }] })))
+      .toMatchObject({ kind: 'issue', issue: 'internal' });
   });
   it('granica S: zaległość < S i bieżące od S — bez dziury', () => {
     const s = initialOutgoingStream(T, KSEF_HISTORY_FLOOR);

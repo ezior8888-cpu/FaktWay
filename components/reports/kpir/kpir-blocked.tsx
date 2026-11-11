@@ -3,18 +3,14 @@ import { RiErrorWarningLine } from '@remixicon/react';
 
 import { buttonVariants } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { cn } from '@/lib/utils';
 
 const PREFIX = 'Raport wstrzymany: ';
 const MAX_INVOICE_LINKS = 3;
 /** Fragment komunikatu `KsefExpenseCurrencyNotSupportedError` (`lib/expenses/ksef-currency-review.ts`). */
 const KSEF_COST_CAUSE = /koszt ze skrzynki KSeF/i;
 
-// `cn()` (twMerge), nie samo `buttonVariants()`: baza cva ma `border-transparent`,
-// wariant `border-border` — bez scalenia w CSS wygrywał przezroczysty i linki
-// wyjścia w jasnym motywie wyglądały jak zwykły tekst.
-const OUTLINE_LINK = cn(buttonVariants({ variant: 'outline', size: 'sm' }));
-const PRIMARY_LINK = cn(buttonVariants({ size: 'sm' }));
+const OUTLINE_LINK = buttonVariants({ variant: 'outline', size: 'sm' });
+const PRIMARY_LINK = buttonVariants({ size: 'sm' });
 
 /** Powód z `lib` bez przedrostka (tytuł mówi już „Raport wstrzymany”), z wielkiej litery. */
 function reason(message: string): string {

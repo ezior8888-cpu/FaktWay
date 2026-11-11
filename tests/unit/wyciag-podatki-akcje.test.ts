@@ -22,7 +22,12 @@ const m = vi.hoisted(() => ({
 
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidate }));
 vi.mock('@/lib/cache/invalidation', () => ({ invalidateTenantDashboard: m.invalidate }));
-vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlag: m.globalStop }));
+// Globalny stop księgowości czyta się rozstrzygająco (F11-B6, #553):
+// `czyKsiegowoscWlaczona` woła `getGlobalFlagForExecution`, więc atrapa ma obie.
+vi.mock('@/lib/feature-flags/global-flags', () => ({
+  getGlobalFlag: m.globalStop,
+  getGlobalFlagForExecution: m.globalStop,
+}));
 vi.mock('@/lib/supabase/auth-context', () => {
   class ActionAuthError extends Error {}
   return { ActionAuthError, requireOrgRole: m.requireOrgRole };

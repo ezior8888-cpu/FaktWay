@@ -62,6 +62,22 @@ export type AuditAction =
   | 'expense.document_request_resolved'
   | 'expense.foreign_currency_reviewed'
   | 'expense.foreign_currency_excluded'
+  // Koszty do zapłaty (00177, plan kompletnej aplikacji 3.4): metadane niosą dzień zapłaty, kwotę
+  // i termin. Zapisuje baza (RPC `mark_expense_paid` i `undo_expense_paid`) w transakcji ze zmianą.
+  | 'expense.marked_paid'
+  | 'expense.paid_undone'
+  // Plik przelewów z listy „Do zapłaty” (krok 3.4, część 2). `whitelist_checked`: świeże sprawdzenie
+  // rachunku w wykazie podatników VAT (metoda check API MF) przy koszcie ponad 15 000 zł; metadane niosą
+  // NIP, rachunek, dzień, wynik TAK/NIE i `requestId` (dowód). `transfer_file_created`: koszty w pliku
+  // (kwota, data wykonania, MPP), pominięcia z kodem powodu i skrót SHA-256 pliku. Plik niczego nie oznacza.
+  | 'expense.whitelist_checked'
+  | 'expense.transfer_file_created'
+  // Identyfikator zbiorczy KSeF przy kilku fakturach jednego dostawcy (00191, krok 1.4, część 2).
+  // Zapisuje baza (RPC `complete_ksef_collective_identifier` i `fail_ksef_collective_identifier`)
+  // w transakcji ze zmianą: identyfikator, NIP sprzedawcy, numery KSeF faktur, środowisko, kod błędu.
+  // Aplikacja zapisuje `created` sama tylko wtedy, gdy KSeF nadał numer, a zapis w bazie się nie udał.
+  | 'expense.collective_identifier_created'
+  | 'expense.collective_identifier_failed'
   // Agent FLO — wykonanie propozycji zatwierdzonej kliknięciem człowieka.
   // Metadane niosą identyfikator żetonu zgody i tytuł, który klient widział
   // na karcie: to jest odpowiedź na reklamację „ja tego nie klikałem”.
@@ -146,6 +162,12 @@ export type AuditAction =
   // (RPC `confirm_bank_tax_payment`, `undo_bank_tax_payment`) razem z `tax_settlement.paid`/`unpaid`.
   | 'bank.tax_payment_confirmed'
   | 'bank.tax_payment_undone'
+  // Przelewy do dostawców jako zapłaty kosztów (00196, plan kompletnej aplikacji 3.2, część 3):
+  // metadane z kosztami, dniem zapłaty, kwotą w groszach i rodzajem dopasowania, bez danych
+  // drugiej strony. Zapisuje baza (RPC `confirm_bank_expense_payment`, `undo_bank_expense_payment`)
+  // razem z `expense.marked_paid` / `expense.paid_undone` z 00177.
+  | 'bank.expense_payment_confirmed'
+  | 'bank.expense_payment_undone'
   // Kasa (00194, plan kompletnej aplikacji 3.7): stan początkowy kasy, dowody KP i KW
   // i ich korekty (storno). Metadane: numer, rodzaj, kwota, dzień operacji, faktura
   // i wpłata. Zapisuje baza (RPC `open_cash_register`, `issue_cash_document`,
@@ -182,6 +204,8 @@ export type AuditAction =
   | 'ksef.upo.download'
   | 'ksef.inbox.poll'
   | 'ksef.auth.token'
+  // `POST /collective-identifiers` (krok 1.4, część 2): każde wywołanie, przez ksefFetch.
+  | 'ksef.collective_identifier.generate'
   // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): zapytanie
   // o metadane (każde, przez ksefFetch), jeden zbiorczy wiersz pobrań na
   // przebieg (liczba + do 10 numerów KSeF) i wyłącznik właściciela firmy.
@@ -325,6 +349,15 @@ export interface AuditLogEntry {
  * Nie rzuca — przy błędzie audytu główna operacja ma się i tak udać.
  */
 export async function logAudit(entry: AuditLogEntry): Promise<void> {
+  await logAuditWithResult(entry);
+}
+
+/**
+ * Jak `logAudit` (nie rzuca, ten sam zapis i ten sam komunikat w konsoli),
+ * ale mówi, czy wpis się zapisał. Tam, gdzie wpis jest dowodem (sprawdzenie
+ * białej listy przy pliku przelewów, krok 3.4), wywołujący bez zapisu odmawia.
+ */
+export async function logAuditWithResult(entry: AuditLogEntry): Promise<boolean> {
   try {
     const { ip, userAgent } = await readRequestClientHints();
 
@@ -342,8 +375,11 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
 
     if (error) {
       console.error('[audit] write_failed');
+      return false;
     }
+    return true;
   } catch {
     console.error('[audit] write_failed');
+    return false;
   }
 }

@@ -8,7 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const m = vi.hoisted(() => ({ globalStop: vi.fn(), rpc: vi.fn() }));
-vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlag: m.globalStop }));
+// Globalny stop księgowości czyta się rozstrzygająco (F11-B6, #553):
+// `czyKsiegowoscWlaczona` woła `getGlobalFlagForExecution`, więc atrapa ma obie.
+vi.mock('@/lib/feature-flags/global-flags', () => ({
+  getGlobalFlag: m.globalStop,
+  getGlobalFlagForExecution: m.globalStop,
+}));
 
 const { czytajPrzelewyPodatkowe } = await import('@/lib/import/bank/podatki-dane');
 

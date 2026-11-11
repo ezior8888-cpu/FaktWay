@@ -92,6 +92,7 @@ export function formatPlan(p) {
   const lines = [
     `<b>Do wdrożenia: <code>${sha8}</code></b>`,
     `Teraz: web ${p.webCommit?.slice(0, 8) ?? '?'} · worker ${p.workerCommit?.slice(0, 8) ?? '?'}`,
+    `Źródło: ${p.mode === 'obraz' ? 'obrazy z GHCR' : p.mode === 'repo' ? 'build z repo na app-1' : 'nieznane'}`,
     `CI: ${p.ci.passed}/${p.ci.total} zielonych`,
   ];
   if (p.commits?.length) {

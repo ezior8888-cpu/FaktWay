@@ -5,13 +5,9 @@ import { redirect } from 'next/navigation';
 
 import { mfaStepUpHref } from '@/lib/auth/mfa-step-up';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
-import { uploadImportFile } from '@/lib/import/file-storage';
-import { sendJobEvent } from '@/lib/jobs/enqueue';
-import { formatJobSendError } from '@/lib/jobs/error-message';
-import { importFileUploaded } from '@/lib/jobs/events';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { setKsefHistoryClientPause } from '@/lib/ksef/history-sync/client-pause';
-import { ActionAuthError, requireOwner, requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
+import { ActionAuthError, requireOwner } from '@/lib/supabase/auth-context';
 
 /**
  * Akcje ekranu Import danych i kroku onboardingu „Skąd przenosisz dane?”.
@@ -31,122 +27,9 @@ import { ActionAuthError, requireOwner, requireUserAndActiveOrg } from '@/lib/su
 // Import z pliku (CSV z czterech programów)
 // ============================================================================
 
-export type FileImportSource = 'fakturownia_csv' | 'infakt_csv' | 'wfirma_csv' | 'ifirma_csv';
-
-export type FileImportActionResult = { success: true; importJobId: string } | { success: false; error: string };
-
-/** Lista dozwolonych źródeł — decyzja Bartosza 22.10.2026: bez `jpk_fa`. */
-const FILE_SOURCES: readonly FileImportSource[] = ['fakturownia_csv', 'infakt_csv', 'wfirma_csv', 'ifirma_csv'];
-
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
-export async function startFileImportAction(formData: FormData): Promise<FileImportActionResult> {
-  let context;
-  try {
-    context = await requireUserAndActiveOrg();
-  } catch (error) {
-    if (error instanceof ActionAuthError) return { success: false, error: error.message };
-    throw error;
-  }
-  const { supabase, user, tenantId: activeOrg } = context;
-
-  const file = formData.get('file');
-  const sourceRaw = formData.get('source');
-  const tenantIdRaw = formData.get('tenantId');
-
-  if (!(file instanceof File) || !sourceRaw || !tenantIdRaw) {
-    return { success: false, error: 'Brakujące dane' };
-  }
-
-  const source = typeof sourceRaw === 'string' ? sourceRaw.trim() : String(sourceRaw);
-  const tenantId = typeof tenantIdRaw === 'string' ? tenantIdRaw.trim() : String(tenantIdRaw);
-
-  if (!FILE_SOURCES.includes(source as FileImportSource)) {
-    return { success: false, error: 'Nieobsługiwane źródło pliku.' };
-  }
-
-  if (file.size === 0) {
-    return { success: false, error: 'Plik jest pusty.' };
-  }
-
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return { success: false, error: 'Plik za duży (max 10 MB)' };
-  }
-
-  if (activeOrg !== tenantId) {
-    return { success: false, error: 'Brak uprawnień' };
-  }
-
-  const sourceTyped = source as FileImportSource;
-
-  const { data: job, error: jobError } = await supabase
-    .from('import_jobs')
-    .insert({
-      tenant_id: tenantId,
-      triggered_by: user.id,
-      source: sourceTyped,
-      status: 'pending',
-      source_filename: file.name,
-      source_file_size: file.size,
-      progress_message: 'Wgrywanie pliku...',
-    })
-    .select('id')
-    .single();
-
-  if (jobError || !job) {
-    return { success: false, error: jobError?.message ?? 'Błąd tworzenia jobu' };
-  }
-
-  const failJob = async (message: string) => {
-    await supabase
-      .from('import_jobs')
-      .update({
-        status: 'failed',
-        completed_at: new Date().toISOString(),
-        progress_percent: 100,
-        progress_message: message.slice(0, 900),
-      })
-      .eq('id', job.id);
-  };
-
-  let filePath: string;
-  try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    filePath = await uploadImportFile(tenantId, job.id, file.name, buffer, file.type?.trim() || 'application/octet-stream');
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Błąd zapisu pliku.';
-    await failJob(msg);
-    return { success: false, error: msg };
-  }
-
-  const { error: pathErr } = await supabase.from('import_jobs').update({ source_file_path: filePath }).eq('id', job.id);
-
-  if (pathErr) {
-    await failJob(pathErr.message);
-    return { success: false, error: pathErr.message };
-  }
-
-  try {
-    await sendJobEvent(
-      importFileUploaded.create({
-        importJobId: job.id,
-        tenantId,
-        filePath,
-        source: sourceTyped,
-      }),
-    );
-  } catch (e) {
-    const friendly = formatJobSendError(e);
-    await failJob(friendly);
-    return { success: false, error: friendly };
-  }
-
-  revalidatePath('/import-danych');
-  revalidatePath('/onboarding/import-source');
-  revalidatePath(`/onboarding/progress/${job.id}`);
-
-  return { success: true, importJobId: job.id };
-}
+// Import z pliku nie jest już Server Action (plan skalowania, sesja 31: plik
+// ponad 1 MB nie mieścił się w ciele akcji): trasa `app/api/uploads/import/route.ts`,
+// ciało `lib/import/start-file-import.ts`, źródła `lib/import/file-sources.ts`.
 
 // ============================================================================
 // „Pomiń” w onboardingu

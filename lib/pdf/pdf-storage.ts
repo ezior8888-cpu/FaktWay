@@ -24,7 +24,10 @@ import {
 // v5: identyfikator cache zależy od KODU I i podpisu pod nim. Uzupełnienie
 // hasha XML lub nadanie numeru KSeF nie może zwrócić starego PDF bez QR.
 // v6 (02.11): stopka z adresem strony, bez długiego myślnika.
-const PDF_RENDERER_VERSION = 6;
+// v7 (08.11): tytuł przelewu z numerem KSeF w sekcji płatności (plan
+// kompletnej aplikacji, krok 1.4). Bez podbicia przyjęte faktury z cache
+// zostałyby bez tego wiersza.
+const PDF_RENDERER_VERSION = 7;
 
 function parseYearMonth(issueDate: string): { year: string; month: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {

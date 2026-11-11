@@ -1,123 +1,215 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1111 # cudzysłowy „…” w komunikatach są celowe
 # ════════════════════════════════════════════════════════════════
 # Wdrożenie produkcji: worker (Coolify id=2), potem aplikacja (id=1)
 # ────────────────────────────────────────────────────────────────
-# Jedna linia, bez argumentów, z katalogu repo, PO scaleniu PR do `main`
-# i PO migracjach „przed wdrożeniem” (AGENTS.md → „Kolejność przy pełnym
-# wydaniu”):
+# Jedna linia, z katalogu repo, PO scaleniu PR do `main` i PO migracjach
+# „przed wdrożeniem” (docs/runbooks/wdrozenie-produkcji.md):
 #
-#   ./scripts/ops/wdroz-produkcje.sh
+#   ./scripts/ops/wdroz-produkcje.sh                  # build z repo na app-1
+#   ./scripts/ops/wdroz-produkcje.sh --obraz          # obraz z GHCR, SHA = origin/main
+#   ./scripts/ops/wdroz-produkcje.sh --obraz <sha>    # obraz z GHCR, ten SHA z main
 #
-# Repo nie ma webhooka, więc push do `main` niczego nie wdraża. Skrypt robi
-# to, co AGENTS.md → „Wdrożenie produkcji” opisuje ręcznie: kolejkuje
-# wdrożenie przez `tinker` na ops-1 (commit HEAD gałęzi produkcyjnej), czeka
-# na `finished` (build 12-18 min) i dopiero potem rusza następną aplikację —
-# oba buildy jadą na app-1 i razem nie mieszczą się w pamięci. Przy `failed`
-# przerywa: Coolify zostawia wtedy działającą starą wersję, a ostatnie linie
-# logu buildu są na ekranie. Na końcu uruchamia `kontrola-faktur-ksef.sh`.
+# Tryb musi pasować do źródła ustawionego w Coolify (`coolify-zrodlo.sh`);
+# przy rozjeździe skrypt nic nie wdraża i mówi, którą komendę wybrać.
 #
-# Skrypt sam ładuje `.agents/infra.env` (K, OPS i reszta) — przycisk „Run”
-# w aplikacji uruchamia każdy blok w świeżej powłoce.
+# Build z repo: kolejkuje wdrożenie przez `tinker` na ops-1 (commit HEAD
+# gałęzi produkcyjnej), czeka na `finished` (build 12-18 min) i dopiero
+# potem rusza następną aplikację — oba buildy jadą na app-1 i razem nie
+# mieszczą się w pamięci.
+#
+# Obraz z GHCR (`.github/workflows/obrazy.yml` buduje go po scaleniu):
+#   1. SHA musi być na origin/main (wdraża się tylko scalony kod);
+#   2. czeka (do 45 min), aż oba obrazy `<sha>` będą w GHCR z etykietą
+#      rewizji równą SHA;
+#   3. sprawdza wolne miejsce na app-1 (8.11.2026 build zapchał dysk);
+#   4. dla workera, potem aplikacji: tag obrazu w Coolify = SHA, wdrożenie
+#      z `commit: <sha>`, czekanie na `finished`, kontrola, że kontener
+#      działa na `<obraz>:<sha>`.
+#   Przy `failed` tag wraca na poprzedni (Coolify zostawia działający stary
+#   kontener). Ponowne uruchomienie po każdym kroku jest bezpieczne: ten sam
+#   tag i nowe wdrożenie tego samego obrazu.
+#
+# Na końcu obu trybów: `kontrola-faktur-ksef.sh`. Skrypt sam ładuje
+# `.agents/infra.env` (przycisk „Run” daje świeżą powłokę).
 
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-MAIN_ROOT=""
-if command -v git >/dev/null 2>&1; then
-  COMMON_DIR=$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null || true)
-  if [ -n "$COMMON_DIR" ]; then
-    case "$COMMON_DIR" in
-      /*) MAIN_ROOT=$(cd "$COMMON_DIR/.." && pwd) ;;
-      *)  MAIN_ROOT=$(cd "$ROOT/$COMMON_DIR/.." && pwd) ;;
-    esac
-  fi
+# shellcheck source=scripts/ops/coolify-wspolne.sh
+source "$ROOT/scripts/ops/coolify-wspolne.sh"
+
+uzycie() {
+  cat <<'TXT'
+Użycie:
+  ./scripts/ops/wdroz-produkcje.sh                  # build z repo na app-1
+  ./scripts/ops/wdroz-produkcje.sh --obraz          # obraz z GHCR, SHA = origin/main
+  ./scripts/ops/wdroz-produkcje.sh --obraz <sha>    # obraz z GHCR, ten SHA z main
+TXT
+}
+
+TRYB=repo
+SHA=""
+case "${1:-}" in
+  "") ;;
+  --obraz)
+    TRYB=obraz
+    SHA=${2:-}
+    [ "$#" -le 2 ] || { uzycie >&2; exit 2; }
+    ;;
+  -h|--help) uzycie; exit 0 ;;
+  *) uzycie >&2; exit 2 ;;
+esac
+[ "$TRYB" = obraz ] || [ "$#" -le 1 ] || { uzycie >&2; exit 2; }
+
+if [ "$TRYB" = obraz ]; then
+  zaladuj_infra_env K OPS APP APP_PREFIX WORKER_PREFIX
+else
+  zaladuj_infra_env K OPS
 fi
 
-ENV_FILE=""
-for candidate in "${FAKTFLOW_INFRA_ENV:-}" "$ROOT/.agents/infra.env" "${MAIN_ROOT:+$MAIN_ROOT/.agents/infra.env}"; do
-  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
-    ENV_FILE=$candidate
-    break
+# ── Źródło w Coolify musi pasować do trybu ──
+# Poprzednie tagi w POPRZEDNI_TAG_<id> (bash 3.2 z macOS nie ma tablic
+# asocjacyjnych).
+poprzedni_tag() {
+  local var="POPRZEDNI_TAG_$1"
+  echo "${!var:-}"
+}
+for id in "$WORKER_ID" "$WEB_ID"; do
+  zrodlo=$(zrodlo_aplikacji "$id")
+  [ -n "$zrodlo" ] || die "Nie odczytałem źródła aplikacji id=$id z Coolify (tinker na ops-1). Nic nie wdrożyłem."
+  IFS='|' read -r bp obraz tag _lokalizacja cel <<<"$zrodlo"
+  if [ "$TRYB" = repo ]; then
+    if [ "$bp" = dockerimage ]; then
+      die "$(nazwa_aplikacji "$id") (id=$id) jest przełączony na obraz z GHCR ($obraz:$tag). Wdrażaj: ./scripts/ops/wdroz-produkcje.sh --obraz <sha>; powrót do buildu z repo: ./scripts/ops/coolify-zrodlo.sh repo"
+    fi
+    if [ "$bp" != dockerfile ] || [ "$cel" != "$(cel_dockerfile "$id")" ]; then
+      die "$(nazwa_aplikacji "$id") (id=$id): build_pack=$bp, cel Dockerfile=„$cel”, oczekiwane dockerfile/$(cel_dockerfile "$id"). Pusty cel buduje ostatni etap (coolify-pulapki.md). Napraw: ./scripts/ops/coolify-zrodlo.sh repo"
+    fi
+  else
+    if [ "$bp" != dockerimage ] || [ "$obraz" != "$(obraz_ghcr "$id")" ]; then
+      die "$(nazwa_aplikacji "$id") (id=$id) nie jest na obrazie $(obraz_ghcr "$id") (build_pack=$bp, obraz=„$obraz”). Przełącz: ./scripts/ops/coolify-zrodlo.sh obraz <sha>; albo wdrażaj buildem z repo: ./scripts/ops/wdroz-produkcje.sh"
+    fi
+    printf -v "POPRZEDNI_TAG_$id" '%s' "$tag"
   fi
 done
-if [ -z "$ENV_FILE" ]; then
-  echo "Nie znalazłem .agents/infra.env (plik jest poza gitem — AGENTS.md → Infrastruktura)." >&2
-  exit 1
+
+# ── Tryb obrazu: SHA z main, obrazy w GHCR, miejsce na dysku ──
+if [ "$TRYB" = obraz ]; then
+  git -C "$ROOT" fetch --quiet origin main || die "git fetch origin main padł: nie sprawdzę, czy SHA jest na main."
+  if [ -z "$SHA" ]; then
+    SHA=$(git -C "$ROOT" rev-parse origin/main)
+  fi
+  jest_sha "$SHA" || die "SHA musi mieć 40 znaków 0-9a-f (pełny SHA z main), jest: „$SHA”."
+  git -C "$ROOT" merge-base --is-ancestor "$SHA" origin/main 2>/dev/null \
+    || die "$SHA nie jest na origin/main. Wdraża się tylko scalony kod (AGENTS.md, niezmienniki)."
+  echo "── Obrazy $SHA w GHCR"
+  czekaj_na_obrazy "$SHA" "${WDROZ_CZEKAJ_MIN:-45}" || exit 1
+  echo "   oba obrazy są, etykieta rewizji = $SHA"
+  sprawdz_miejsce_app1
 fi
-# shellcheck source=/dev/null
-source "$ENV_FILE"
-for v in K OPS; do
-  if [ -z "${!v:-}" ]; then
-    echo "Brak zmiennej $v w $ENV_FILE." >&2
-    exit 1
-  fi
-done
 
-# Kod PHP idzie na wejście tinkera (heredoc), nie przez --execute — AGENTS.md
-# wyjaśnia, czemu --execute gubi zmienne w dwóch powłokach. Znaczniki wyniku
-# składamy z dwóch kawałków ("WD_" . "UUID="), bo tinker odbija wpisane linie
-# i grep złapałby też samo polecenie.
-tinker() {
-  ssh -i "$K" -o BatchMode=yes root@"$OPS" 'docker exec -i coolify php artisan tinker'
-}
-
-queue_deployment() {
-  local app_id=$1
-  tinker <<PHP | grep -o 'WD_UUID=[A-Za-z0-9]*' | tail -n 1 | cut -d= -f2
-\$a = App\\Models\\Application::find($app_id);
-\$u = (string) new \\Visus\\Cuid2\\Cuid2();
-queue_application_deployment(application: \$a, deployment_uuid: \$u, force_rebuild: false, commit: 'HEAD', is_api: false);
-echo "WD_" . "UUID=" . \$u . "\n";
-PHP
-}
-
-deployment_status() {
-  local uuid=$1
-  tinker <<PHP | grep -o 'WD_STATUS=[a-z_]*' | tail -n 1 | cut -d= -f2
-echo "WD_" . "STATUS=" . App\\Models\\ApplicationDeploymentQueue::where('deployment_uuid', '$uuid')->value('status') . "\n";
-PHP
-}
-
-deployment_log_tail() {
-  local uuid=$1
-  tinker <<PHP
-\$d = App\\Models\\ApplicationDeploymentQueue::where('deployment_uuid', '$uuid')->first();
-\$logs = json_decode(\$d->logs ?? '[]', true) ?? [];
-foreach (array_slice(array_map(fn(\$l) => \$l['output'] ?? '', \$logs), -40) as \$line) { echo \$line . "\n"; }
-PHP
-}
-
-deploy() {
-  local app_id=$1 name=$2
-  echo "── $name (Coolify id=$app_id): kolejkuję wdrożenie"
-  local uuid
-  uuid=$(queue_deployment "$app_id")
-  if [ -z "$uuid" ]; then
-    echo "Nie udało się zakolejkować wdrożenia $name (brak identyfikatora z tinkera)." >&2
-    exit 1
-  fi
-  echo "   identyfikator: $uuid — build trwa 12-18 min, sprawdzam co minutę"
-  local status="" waited=0
-  while [ "$waited" -lt 40 ]; do
-    sleep 60
+# Czeka na koniec wdrożenia. Kod 0 = finished, 1 = failed/cancelled (log na
+# ekranie), 2 = stan nieznany (przekroczony czas albo brak odpowiedzi): przy 2
+# wdrożenie mogło się jeszcze udać, więc niczego nie cofamy.
+czekaj_na_wdrozenie() {
+  local uuid=$1 name=$2 odstep=$3 limit=$4
+  local status="" waited=0 puste=0
+  while [ "$waited" -lt "$limit" ]; do
+    sleep "$odstep"
     waited=$((waited + 1))
-    status=$(deployment_status "$uuid" || true)
+    status=$(deployment_status "$uuid")
     echo "   $(date +%H:%M) $name: ${status:-?}"
     case "$status" in
       finished) return 0 ;;
       failed|cancelled*)
         echo "Wdrożenie $name: $status. Coolify zostawił poprzednią wersję. Koniec logu:" >&2
         deployment_log_tail "$uuid" >&2 || true
-        exit 1
+        return 1
         ;;
+      "")
+        # Brak stanu pięć razy z rzędu: Coolify odrzucił wdrożenie albo SSH
+        # do ops-1 nie odpowiada (zdarza się przy wielu połączeniach). Stan
+        # nieznany, a nie porażka: wdrożenie może dalej trwać.
+        puste=$((puste + 1))
+        if [ "$puste" -ge 5 ]; then
+          echo "Wdrożenie $name ($uuid): pięć razy brak stanu z Coolify (tinker/SSH). Stan nieznany; sprawdź kolejkę w panelu." >&2
+          return 2
+        fi
+        ;;
+      *) puste=0 ;;
     esac
   done
-  echo "Wdrożenie $name nie skończyło się w 40 min (ostatni stan: ${status:-?}). Sprawdź kolejkę w Coolify." >&2
-  exit 1
+  echo "Wdrożenie $name nie skończyło się w czasie (ostatni stan: ${status:-?}). Sprawdź kolejkę w Coolify." >&2
+  return 2
 }
 
-deploy 2 "worker pg-boss"
-deploy 1 "aplikacja Next.js"
+deploy_repo() {
+  local app_id=$1 name
+  name=$(nazwa_aplikacji "$app_id")
+  echo "── $name (Coolify id=$app_id): kolejkuję build z repo"
+  local uuid
+  uuid=$(queue_deployment "$app_id" HEAD)
+  [ -n "$uuid" ] || die "Nie udało się zakolejkować wdrożenia $name (brak identyfikatora z tinkera)."
+  echo "   identyfikator: $uuid — build trwa 12-18 min, sprawdzam co minutę"
+  czekaj_na_wdrozenie "$uuid" "$name" 60 40 || exit 1
+}
+
+deploy_obraz() {
+  local app_id=$1 name obraz poprzedni n uuid rc=0 dziala
+  name=$(nazwa_aplikacji "$app_id")
+  obraz=$(obraz_ghcr "$app_id")
+  poprzedni=$(poprzedni_tag "$app_id")
+  echo "── $name (Coolify id=$app_id): $obraz:$SHA (było: ${poprzedni:-brak})"
+  n=$(ustaw_pola "$app_id" "['docker_registry_image_tag' => '$SHA']")
+  [ "$n" = 1 ] || die "Nie ustawiłem tagu obrazu dla $name (zmienione wiersze: ${n:-?}). Nic nie wdrożyłem."
+  uuid=$(queue_deployment "$app_id" "$SHA")
+  if [ -z "$uuid" ]; then
+    przywroc_tag "$app_id" "$poprzedni"
+    die "Nie udało się zakolejkować wdrożenia $name (brak identyfikatora z tinkera)."
+  fi
+  echo "   identyfikator: $uuid — pobranie obrazu i start trwają kilka minut, sprawdzam co 20 s"
+  czekaj_na_wdrozenie "$uuid" "$name" 20 45 || rc=$?
+  if [ "$rc" = 1 ]; then
+    przywroc_tag "$app_id" "$poprzedni"
+    exit 1
+  elif [ "$rc" != 0 ]; then
+    # Bez cofania tagu: wdrożenie może jeszcze skończyć się na nowym obrazie.
+    echo "Tag $name zostaje na $SHA. Po sprawdzeniu w panelu uruchom skrypt ponownie albo cofnij: ./scripts/ops/wdroz-produkcje.sh --obraz <poprzedni sha>" >&2
+    exit 1
+  fi
+  # Stary kontener może chwilę jeszcze być na liście: do minuty na jeden,
+  # nowy kontener.
+  local proba
+  for proba in 1 2 3 4 5 6; do
+    dziala=$(sha_dzialajacego "$app_id")
+    [ "$dziala" = "$SHA" ] && break
+    [ "$proba" = 6 ] || sleep 10
+  done
+  if [ "$dziala" != "$SHA" ]; then
+    die "$name: Coolify zgłosił finished, ale kontener na app-1 działa na „${dziala:-?}”, nie na $SHA. Sprawdź kontenery: ./scripts/ops/kontrola-faktur-ksef.sh"
+  fi
+  echo "   kontener działa na $obraz:$SHA"
+}
+
+przywroc_tag() {
+  local app_id=$1 tag=$2 wartosc
+  if [ -n "$tag" ]; then wartosc="'$tag'"; else wartosc=null; fi
+  echo "   przywracam tag obrazu na ${tag:-brak} (Coolify zostawia działający stary kontener)" >&2
+  ustaw_pola "$app_id" "['docker_registry_image_tag' => $wartosc]" >/dev/null || true
+}
+
+if [ "$TRYB" = repo ]; then
+  deploy_repo "$WORKER_ID"
+  deploy_repo "$WEB_ID"
+else
+  deploy_obraz "$WORKER_ID"
+  if ! (deploy_obraz "$WEB_ID"); then
+    cofnij=$(poprzedni_tag "$WORKER_ID")
+    echo "⚠️  Worker jest na $SHA, aplikacja na poprzedniej wersji (stan mieszany). Cofnięcie workera: ./scripts/ops/wdroz-produkcje.sh --obraz ${cofnij:-<poprzedni sha>}" >&2
+    exit 1
+  fi
+fi
 
 echo "── Oba wdrożenia: finished. Kontrola produkcji:"
 "$ROOT/scripts/ops/kontrola-faktur-ksef.sh"

@@ -23,7 +23,8 @@ import { OFERTA } from '@/lib/marketing/oferta';
  */
 
 const ROOT = join(__dirname, '..', '..');
-const SCANNED = ['app', 'components', 'lib', 'content', 'hooks', 'types', 'public', 'e2e'];
+// `mobile/src`: ekrany aplikacji mobilnej (Expo) też mówią tylko „FaktWay”.
+const SCANNED = ['app', 'components', 'lib', 'content', 'hooks', 'types', 'public', 'e2e', 'mobile/src'];
 const EXTENSIONS = /\.(tsx?|mjs|js|mdx?|json|webmanifest|css|txt)$/;
 
 // D4: pliki FLO zmienia ich właściciel (Masło, tor silnika) — nie ten test.
@@ -47,7 +48,7 @@ const OWNED_ELSEWHERE = [
 // a lustro w TS (`FAKTFLOW_SYSTEM_INFO_NEXT`) musi być identyczne. To nie tekst
 // dla klienta; zmienia się razem z migracją i decyzją o nowym SystemInfo generatora.
 const DB_BOUND = new Map<string, string[]>([
-  ['lib/ksef/duplicate-decision.ts', ['FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/']],
+  ['lib/ksef/duplicate-decision-jsonb.ts', ['FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/']],
 ]);
 
 function walk(dir: string): string[] {
