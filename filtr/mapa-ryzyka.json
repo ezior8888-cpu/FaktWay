@@ -197,6 +197,14 @@
       ]
     },
     {
+      "id": "bezpieczniki",
+      "poziom": "R1",
+      "opis": "Strażnicy w działającej aplikacji (F13, plan B4.10): ostatnia kontrola spójności kwot i terminów przed pokazaniem, zatwierdzeniem i przypomnieniem; pozycja z błędem to brak z komunikatem i alarm FILTR-RT dla operatora. Zły strażnik przepuszcza złą kwotę albo zabiera dobrą.",
+      "sciezki": [
+        "lib/bezpieczniki/**"
+      ]
+    },
+    {
       "id": "faktury.kwoty",
       "poziom": "R1",
       "opis": "Kwoty faktury: netto, VAT, brutto, zaokrąglenia, do zapłaty, zapis pozycji.",
