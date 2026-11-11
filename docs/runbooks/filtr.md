@@ -48,7 +48,8 @@ powód, kto, do kiedy.
 
 Strażnicy w działającej aplikacji (F13, plan B4.10, `lib/bezpieczniki/`)
 sprawdzają kwoty i terminy tuż przed pokazaniem, zatwierdzeniem
-i przypomnieniem, a plik JPK_V7M przed pobraniem i wysyłką. W module
+i przypomnieniem, plik JPK_V7M przed pobraniem i wysyłką, a pliki JPK_EWP
+i JPK_PKPIR przed pobraniem. W module
 księgowości blokują od razu (D-F7): pozycja, która nie przejdzie kontroli,
 staje się brakiem z komunikatem „Tej kwoty nie pokazujemy, bo kontrola
 spójności wykryła błąd po naszej stronie. Zgłosiliśmy go.”, plik nie wychodzi
@@ -98,8 +99,42 @@ to `jpk-v7m`, `rodzaj` to `vat`, `miesiac` to okres pliku.
 
 Poza tym strażnikiem: P_39 (kwota z poprzedniej deklaracji), P_52 (ulga na
 kasy rejestrujące), zwrot P_54 do P_61, kwoty wierszy wobec faktur i kosztów
-(pilnuje ich test filtra), plik z Centrum eksportu (`exports-generate.ts`)
-oraz JPK_EWP i JPK_PKPIR (kolejne części F13).
+(pilnuje ich test filtra) i plik z Centrum eksportu (`exports-generate.ts`,
+kolejna część F13).
+
+### JPK_EWP i JPK_PKPIR (`lib/bezpieczniki/jpk-ewp.ts`, `jpk-pkpir.ts`)
+
+Sprawdzają gotowy plik JPK_EWP(4) albo JPK_PKPIR(3) po kontroli XSD,
+w `pobierzJpkEwpAction` i `pobierzJpkPkpirAction`
+(`app/actions/ksiegowosc-ewidencja.ts`), jedynej drodze tych plików do
+klienta (pobranie na ekranie ewidencji). Wzory są z opisów pól w schematach
+MF (`lib/exports/schemas/jpk-ewp4/schemat.xsd`, `jpk-pkpir3/schemat.xsd`),
+cytowane w nagłówkach strażników; wspólny odczyt pliku i sum kontrolnych to
+`lib/bezpieczniki/jpk-ctrl.ts`. Plik z alarmem nie trafia do klienta i nie ma
+wpisu `jpk_ewp.downloaded` ani `jpk_pkpir.downloaded` w audycie. Klient widzi
+„Plik JPK_EWP wstrzymany: kontrola spójności wykryła błąd po naszej stronie
+(kod). Zgłosiliśmy go. Jeśli urząd wyznaczył termin, przygotuj plik
+z księgową.” (przy KPiR „Plik JPK_PKPIR wstrzymany: …”), z kodem pierwszego
+alarmu. Tag `straznik` to `jpk-ewp` albo `jpk-pkpir`, `rodzaj` to
+`ewidencja` albo `kpir`, a `miesiac` to miesiąc końca okresu pliku (plik
+zawsze zaczyna się 1 stycznia tego roku).
+
+| Kod | Co znaczy |
+|---|---|
+| `FILTR-RT-EWP-01` | `LiczbaWierszy` w `EWPCtrl` różni się od liczby wierszy `EWPWiersz` albo nie jest liczbą; także plik bez `EWPCtrl` |
+| `FILTR-RT-EWP-02` | `SumaPrzychodow` różni się od sumy K_8 z wierszy (korekty in minus ze znakiem), albo któraś z tych kwot nie jest kwotą |
+| `FILTR-RT-PKPIR-01` | `LiczbaWierszy` w `PKPIRCtrl` różni się od liczby wierszy `PKPIRWiersz` albo nie jest liczbą; także plik bez `PKPIRCtrl` |
+| `FILTR-RT-PKPIR-02` | `SumaPrzychodow` różni się od sumy K_9 z wierszy albo `SumaPrzychodow2` od sumy K_9A (pola nieobowiązkowego nie ma, to 0), albo któraś z tych kwot nie jest kwotą |
+| `FILTR-RT-PKPIR-03` | w co najmniej jednym wierszu K_9 różni się od K_7 plus K_8, albo któraś z tych kwot nie jest kwotą |
+| `FILTR-RT-PKPIR-04` | w co najmniej jednym wierszu K_14 różni się od K_12 plus K_13, albo któraś z tych kwot nie jest kwotą |
+
+Kolumna „razem” (PKPIR-03, PKPIR-04) daje jeden alarm na plik, nie na
+wiersz; który wiersz, pokaże plik odtworzony dla firmy i okresu. Poza tymi
+strażnikami: P_3 i P_4 w `PKPIRInfo` (opis pola odsyła do objaśnień do KPiR
+i nie podaje wzoru; program liczy je według RP-SPIS-01), wartości spisu
+z natury (P_1, P_2, P_5B), kolumny bez wzoru w opisie (K_10, K_11, K_15,
+K_16B) i kwoty wierszy wobec faktur, kosztów i wpisów (silniki ewidencji
+i KPiR, testy filtra).
 
 ### Co zrobić
 
@@ -112,23 +147,30 @@ oraz JPK_EWP i JPK_PKPIR (kolejne części F13).
 2. **`/admin/centrum` bez zmian.** Alarmy FILTR-RT jeszcze się tam nie
    pokazują (tak samo `critical-alerts-monitor`); to kolejna część F13.
    Panel nie ma też akcji dla tych alarmów: klient nie musi nic robić, bo zła
-   kwota do niego nie doszła. Wyjątek to JPK_V7M (punkt 4).
+   kwota do niego nie doszła. Wyjątek to pliki JPK (punkt 4).
 3. **Zakres.** Jedna firma czy wiele, jeden miesiąc czy kilka. Gdy błąd może
    dotyczyć liczb, których strażnik nie sprawdza (odliczenia w opisie pod
    kaflami, nadwyżka VAT na następny miesiąc), Bartosz decyduje
    o wyłączeniu: firma w `/admin/flags` (kolumna „Księgowość (pilotaż)”),
    cały moduł flagą `killKsiegowosc` w `global_feature_flags` (UPDATE jak
    `killFloAgent` w `flo-incident.md`).
-4. **Termin przy JPK_V7M.** Odmowa pliku nie przesuwa terminu złożenia
+4. **Termin przy plikach JPK.** Przy JPK_V7M odmowa pliku nie przesuwa terminu złożenia
    (25. dzień miesiąca po okresie, przesunięty na dzień roboczy). Klient wie
    z komunikatu, że może złożyć plik z księgową. Gdy naprawa nie zdąży przed
    terminem, Bartosz decyduje, czy uprzedzić firmy z tagu `tenantId`. Obejścia
    strażnika w aplikacji nie ma (pliku z alarmem nie da się pobrać ani
    wysłać), więc do naprawy wyjściem dla klienta jest plik od księgowej.
+   **Przy JPK_EWP i JPK_PKPIR** odmowa też nie przesuwa terminu: przy pliku
+   za rok to termin zeznania rocznego (RP-JPK-PIT-01), przy pliku na żądanie
+   (za część roku, RP-JPK-CEL-01) termin z żądania urzędu. Stąd w komunikacie
+   „Jeśli urząd wyznaczył termin, przygotuj plik z księgową”; reszta jak przy
+   JPK_V7M.
 5. **Naprawa według protokołu z `AGENTS.md`:** najpierw czerwony test z tym
    samym przypadkiem (dane firmy tylko do odczytu, w teście fikcyjny NIP
    `1234567890`), potem naprawa silnika albo generatora pliku (przy JPK_V7M
-   `lib/exports/jpk-v7m-generator.ts`) we wszystkich miejscach, osobny PR.
+   `lib/exports/jpk-v7m-generator.ts`, przy JPK_EWP i JPK_PKPIR
+   `lib/ksiegowosc/jpk-ewp.ts`, `jpk-pkpir.ts` i silniki `ewidencja.ts`,
+   `kpir.ts`) we wszystkich miejscach, osobny PR.
 6. **Fałszywy alarm** (wynik był dobry, myli się strażnik): poprawka
    strażnika osobnym PR z testem i wzorcem z `docs/koordynacja/ZRODLA-PRAWDY.md`,
    za zgodą Bartosza. Do tego czasu klient widzi brak zamiast dobrej kwoty
