@@ -157,7 +157,7 @@ const ROZBIEZNE_Z_KODEM: Regula[] = [
     co: 'ponawianie „przez dobę” z powiadomieniem o wyniku',
   },
   {
-    // load-accountant-portal: 100 najnowszych dokumentów; API: jpk_fa i kpir_excel;
+    // load-accountant-portal: dokumenty po 50 na stronie (krok 6.2); API: jpk_fa i kpir_excel;
     // XML tylko przy poziomie „Podgląd + pobieranie XML” (domyślny to „Tylko podgląd”).
     wzor: /w formacie jej programu|pobieranie w uniwersalnym CSV|faktury w PDF|listę faktur za wybrany okres|w wybranym formacie|Twoja księgowa pobiera dokumenty/i,
     co: 'portal księgowego: CSV, PDF, format programu i lista za okres',
@@ -323,7 +323,9 @@ describe('treści opisują to, co robi kod (recenzja #355)', () => {
   });
 
   it.each([
-    ['content/help/portal-ksiegowego.mdx', ['100 najnowszych', 'Tylko podgląd', 'Podgląd + pobieranie XML']],
+    // Krok 6.2: lista strona po stronie (`PORTAL_PAGE_SIZE` w lib/accountant/portal-access.ts)
+    // zamiast 100 najnowszych, i zakładka kosztów.
+    ['content/help/portal-ksiegowego.mdx', ['po 50 na stronie', 'zakładce Koszty', 'Tylko podgląd', 'Podgląd + pobieranie XML']],
     ['content/help/role-i-uprawnienia.mdx', ['Księgowy', 'tylko właściciel']],
     ['content/help/eksport-kpir-dla-ksiegowego.mdx', ['stały układ kolumn']],
     ['content/help/skanowanie-paragonow-ocr.mdx', ['od razu', 'Do opisania']],

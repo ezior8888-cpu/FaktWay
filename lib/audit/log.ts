@@ -181,6 +181,10 @@ export type AuditAction =
   | 'billing.refund.reconciliation_required'
   | 'billing.trial.will_end'
   | 'billing.vat_invoice.queued'
+  // Plik dokumentu kosztu w portalu księgowej (krok 6.2): metadane niosą `accessId`
+  // i rodzaj pliku (`photo` albo `xml`), bez treści dokumentu i bez ścieżki magazynu.
+  | 'accountant.expense_file_viewed'
+  | 'accountant.expense_file_downloaded'
   | 'accountant.token_created'
   | 'accountant.token_revoked'
   | 'accountant.access_used'

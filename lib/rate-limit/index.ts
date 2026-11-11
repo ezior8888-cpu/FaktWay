@@ -15,6 +15,8 @@ export type RateLimitBucket =
   | 'ai_classify'
   | 'invoice_email'
   | 'invitation'
+  // Portal księgowej: strony i pliki (`lib/rate-limit/accountant-portal.ts`, krok 6.2).
+  | 'accountant_portal'
   | 'batch_pdf'
   | 'ksef_certificate'
   | 'passkey_login_options'

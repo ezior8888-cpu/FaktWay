@@ -159,6 +159,8 @@ export const KNOWN_AUDIT_ACTIONS = [
   'ksef.history.resumed',
   'ksef.history.operator',
   // Accountants
+  'accountant.expense_file_viewed',
+  'accountant.expense_file_downloaded',
   'accountant.token_created',
   'accountant.token_revoked',
   'accountant.access_used',
