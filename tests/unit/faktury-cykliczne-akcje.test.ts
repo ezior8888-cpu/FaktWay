@@ -290,7 +290,7 @@ describe('updateRecurringInvoiceAction', () => {
 });
 
 describe('wstrzymanie i wznowienie', () => {
-  it('wstrzymanie zostawia datę; wznowienie po miesiącach zostawia ostatni czekający okres', async () => {
+  it('wstrzymanie zostawia datę; wznowienie po miesiącach zostawia pierwszy trwający okres', async () => {
     db.tables.recurring_invoices = [pozycja({ next_run_date: '2026-03-10' })];
     const p = await pauseRecurringInvoiceAction(POS);
     expect(p).toMatchObject({ success: true, recurringInvoice: { active: false, next_run_date: '2026-03-10' } });
@@ -299,6 +299,13 @@ describe('wstrzymanie i wznowienie', () => {
     const w = await resumeRecurringInvoiceAction(POS);
     expect(w).toMatchObject({ success: true, recurringInvoice: { active: true, next_run_date: '2026-10-10' } });
     expect(mocks.audit).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'recurring_invoice.resumed' }));
+  });
+
+  it('F12-G2: wznowienie 03.09 po pauzie od czerwca daje wrzesień, nie sierpień', async () => {
+    vi.setSystemTime(new Date('2026-09-03T08:00:00Z'));
+    db.tables.recurring_invoices = [pozycja({ active: false, next_run_date: '2026-06-10', day_of_month: 10 })];
+    const w = await resumeRecurringInvoiceAction(POS);
+    expect(w).toMatchObject({ success: true, recurringInvoice: { active: true, next_run_date: '2026-09-10' } });
   });
 
   it('wznowienie aktywnej — bez zmian i bez wpisu audytu', async () => {
