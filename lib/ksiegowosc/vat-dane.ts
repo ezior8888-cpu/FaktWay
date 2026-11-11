@@ -105,11 +105,7 @@ export async function czytajVat(
       ? { zl: zMf, zrodlo: 'mf' }
       : nadwyzkaKlienta !== null
         ? { zl: nadwyzkaKlienta, zrodlo: 'klient' }
-        : zatwierdzone.poprzedni !== null
-          ? { zl: zatwierdzone.poprzedni, zrodlo: 'zatwierdzone' }
-          : zatwierdzone.tenMiesiac !== null
-            ? { zl: zatwierdzone.tenMiesiac, zrodlo: 'ten_miesiac' }
-            : null;
+        : zZatwierdzonych(zatwierdzone);
 
   return {
     ok: true,
@@ -126,6 +122,28 @@ interface NadwyzkiZatwierdzone {
   poprzedni: number | null;
   /** P_39 zatwierdzonego rozliczenia VAT tego miesiąca (pełne złote). */
   tenMiesiac: number | null;
+  /** Czas zatwierdzenia (`zatwierdzone_o`) wersji, z której wzięto kwotę; brak = nieznany. */
+  poprzedniO?: string | null;
+  tenMiesiacO?: string | null;
+}
+
+const czas = (o: string | null | undefined) => (typeof o === 'string' ? Date.parse(o) : Number.NaN);
+
+/**
+ * F11-A6: z dwóch zatwierdzeń wygrywa nowsze. P_62 poprzedniego miesiąca
+ * zatwierdzonego później to zmiana danych tamtego miesiąca; P_39 wpisane
+ * przy późniejszym zatwierdzeniu tego miesiąca to nowsza wiedza klienta (np.
+ * korekta deklaracji poza FaktWay). Do 11.11 P_62 wygrywało zawsze. Bez czasów
+ * obu zatwierdzeń kolejność jak dotąd: najpierw poprzedni miesiąc.
+ * Przyjęte, do potwierdzenia przy scalaniu.
+ */
+function zZatwierdzonych(z: NadwyzkiZatwierdzone): { zl: number; zrodlo: ZrodloNadwyzki } | null {
+  if (z.poprzedni !== null && z.tenMiesiac !== null && czas(z.tenMiesiacO) > czas(z.poprzedniO)) {
+    return { zl: z.tenMiesiac, zrodlo: 'ten_miesiac' };
+  }
+  if (z.poprzedni !== null) return { zl: z.poprzedni, zrodlo: 'zatwierdzone' };
+  if (z.tenMiesiac !== null) return { zl: z.tenMiesiac, zrodlo: 'ten_miesiac' };
+  return null;
 }
 
 /** Grosze z migawki na pełne złote; kwota z groszami albo ujemna to brak (bez zgadywania). */
@@ -139,7 +157,7 @@ const pelneZlote = (gr: unknown) => (typeof gr === 'number' && Number.isInteger(
 async function nadwyzkiZatwierdzone(client: SupabaseClient, tenantId: string, poprzedni: string, miesiac: string): Promise<NadwyzkiZatwierdzone> {
   const { data, error } = await client
     .from('tax_settlements')
-    .select('okres, wersja, migawka')
+    .select('okres, wersja, migawka, zatwierdzone_o')
     .eq('tenant_id', tenantId)
     .eq('rodzaj', 'vat')
     .in('okres', [`${poprzedni}-01`, `${miesiac}-01`])
@@ -149,12 +167,20 @@ async function nadwyzkiZatwierdzone(client: SupabaseClient, tenantId: string, po
     if (error.code === '42P01' || error.code === 'PGRST205') return { poprzedni: null, tenMiesiac: null };
     throw new Error(`Nie można odczytać rozliczeń VAT: ${error.message}`);
   }
-  type Wiersz = { okres: string; migawka?: { wejscia?: { nadwyzkaNaNastepnyGr?: unknown; nadwyzkaPoprzedniaGr?: unknown } } | null };
+  type Wiersz = {
+    okres: string;
+    zatwierdzone_o?: string | null;
+    migawka?: { wejscia?: { nadwyzkaNaNastepnyGr?: unknown; nadwyzkaPoprzedniaGr?: unknown } } | null;
+  };
   const wiersze = (data ?? []) as Wiersz[];
-  const najnowsza = (okres: string) => wiersze.find((w) => w.okres === okres)?.migawka?.wejscia;
+  const najnowsza = (okres: string) => wiersze.find((w) => w.okres === okres);
+  const wPoprzednim = najnowsza(`${poprzedni}-01`);
+  const wTym = najnowsza(`${miesiac}-01`);
   return {
-    poprzedni: pelneZlote(najnowsza(`${poprzedni}-01`)?.nadwyzkaNaNastepnyGr),
-    tenMiesiac: pelneZlote(najnowsza(`${miesiac}-01`)?.nadwyzkaPoprzedniaGr),
+    poprzedni: pelneZlote(wPoprzednim?.migawka?.wejscia?.nadwyzkaNaNastepnyGr),
+    tenMiesiac: pelneZlote(wTym?.migawka?.wejscia?.nadwyzkaPoprzedniaGr),
+    poprzedniO: wPoprzednim?.zatwierdzone_o ?? null,
+    tenMiesiacO: wTym?.zatwierdzone_o ?? null,
   };
 }
 
