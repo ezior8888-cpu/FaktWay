@@ -18,12 +18,17 @@ const mocks = vi.hoisted(() => ({
   rozliczenia: [] as unknown[],
   bladRozliczen: null as { code: string; message: string } | null,
   filtry: [] as string[],
+  bladFaktur: null as Error | null,
+  sentry: { captureException: vi.fn() },
 }));
 
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
+vi.mock('@sentry/nextjs', () => mocks.sentry);
 vi.mock('@/lib/exports/data-fetcher', async (orig) => ({
   ...(await orig<typeof import('@/lib/exports/data-fetcher')>()),
-  fetchInvoicesForExport: async () => ({ issuedInvoices: [], receivedInvoices: [], expenses: [] }),
+  fetchInvoicesForExport: async () => {
+    if (mocks.bladFaktur) throw mocks.bladFaktur;
+    return { issuedInvoices: [], receivedInvoices: [], expenses: [] };
+  },
 }));
 vi.mock('@/lib/invoices/vat-exemption', async (orig) => ({
   ...(await orig<typeof import('@/lib/invoices/vat-exemption')>()),
@@ -44,6 +49,7 @@ vi.mock('@/lib/ksiegowosc/wpisy-reczne', async (orig) => ({
   czytajWpisyKpir: async () => [],
 }));
 
+const sentry = mocks.sentry;
 const { czytajVat, nadwyzkaZAdresu } = await import('@/lib/ksiegowosc/vat-dane');
 
 const client = {
@@ -87,6 +93,8 @@ beforeEach(() => {
   mocks.rozliczenia = [];
   mocks.bladRozliczen = null;
   mocks.filtry = [];
+  mocks.bladFaktur = null;
+  mocks.sentry.captureException.mockClear();
 });
 
 describe('nadwyżka z poprzedniej deklaracji (P_39)', () => {
@@ -148,5 +156,32 @@ describe('nadwyżka z poprzedniej deklaracji (P_39)', () => {
     expect(nadwyzkaZAdresu('12,50')).toBeNull();
     expect(nadwyzkaZAdresu('-5')).toBeNull();
     expect(nadwyzkaZAdresu(undefined)).toBeNull();
+  });
+});
+
+describe('F11-A4: stany trwałe z odczytu faktur to osobne komunikaty z wyjściem', () => {
+  it('koszt z KSeF w walucie obcej czeka na kurs: komunikat o przeglądzie w Kosztach, bez Sentry', async () => {
+    const { KsefExpenseCurrencyNotSupportedError } = await import('@/lib/expenses/ksef-currency-review');
+    const { BLAD_ODCZYTU_VAT } = await import('@/lib/ksiegowosc/vat-dane');
+    mocks.bladFaktur = new KsefExpenseCurrencyNotSupportedError();
+    const w = await czytajVat(client, 'firma-1', '2026-10', 0);
+    expect(w).toMatchObject({ ok: false, komunikat: expect.stringContaining('Przegląd jest w Kosztach') });
+    expect(w).not.toEqual({ ok: false, komunikat: BLAD_ODCZYTU_VAT });
+    expect(sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('przyjęte faktury bez środowiska KSeF: komunikat o zgłoszeniu w Pomocy, bez Sentry', async () => {
+    const { AcceptedInvoiceEnvironmentIncompleteError } = await import('@/lib/ksef/accounting-provenance');
+    mocks.bladFaktur = new AcceptedInvoiceEnvironmentIncompleteError();
+    const w = await czytajVat(client, 'firma-1', '2026-10', 0);
+    expect(w).toMatchObject({ ok: false, komunikat: expect.stringContaining('Pomocy') });
+    expect(sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('inny błąd (także niedostępna kontrola środowiska) zostaje błędem odczytu z Sentry', async () => {
+    const { BLAD_ODCZYTU_VAT } = await import('@/lib/ksiegowosc/vat-dane');
+    mocks.bladFaktur = new Error('KSeF environment reconciliation check is unavailable');
+    expect(await czytajVat(client, 'firma-1', '2026-10', 0)).toEqual({ ok: false, komunikat: BLAD_ODCZYTU_VAT });
+    expect(sentry.captureException).toHaveBeenCalledTimes(1);
   });
 });

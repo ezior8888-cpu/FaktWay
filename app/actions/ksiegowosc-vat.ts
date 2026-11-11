@@ -12,7 +12,7 @@ import { generateJpkV7m, JPK_V7M_FORM_CODE } from '@/lib/exports/jpk-v7m-generat
 import { validateJpkV7m } from '@/lib/exports/jpk-v7m-validator';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { brakNadwyzki, czytajVat, type ZrodloNadwyzki } from '@/lib/ksiegowosc/vat-dane';
+import { BLAD_ODCZYTU_VAT, brakNadwyzki, czytajVat, type ZrodloNadwyzki } from '@/lib/ksiegowosc/vat-dane';
 import { czyKsiegowoscWlaczona, type ObszarModulu } from '@/lib/ksiegowosc/wylacznik';
 import { certyfikatMf, srodowiskoMf, type SrodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
 import { daneAutoryzujaceSchema } from '@/lib/ksiegowosc/wysylka-jpk/dane-autoryzujace';
@@ -114,12 +114,24 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>, sro
   if (w.miesiac < '2026-02') return { ok: false, error: 'JPK_V7M(3) obowiązuje od rozliczenia za luty 2026 r.' };
   if (to >= todayInWarsaw()) return { ok: false, error: `Plik za ${monthLabel(w.miesiac)} powstaje po zakończeniu miesiąca.` };
 
-  const [dane, { data: firma }, kodUrzedu] = await Promise.all([
+  const [dane, { data: firma, error: bladFirmy }, urzad] = await Promise.all([
     czytajVat(client, ctx.tenantId, w.miesiac, w.nadwyzka),
     client.from('tenants').select('nip, name').eq('id', ctx.tenantId).maybeSingle(),
-    readTenantTaxOffice(client, ctx.tenantId).catch(() => null),
+    readTenantTaxOffice(client, ctx.tenantId).then(
+      (kod) => ({ kod }),
+      (e: unknown) => ({ blad: e }),
+    ),
   ]);
   if (!dane.ok) return { ok: false, error: dane.komunikat };
+  // F11-A4: błąd odczytu to nie brak NIP-u ani urzędu (klient nie ma czego poprawiać).
+  if (bladFirmy || 'blad' in urzad) {
+    Sentry.captureException(bladFirmy ?? ('blad' in urzad ? urzad.blad : null), {
+      tags: { area: 'ksiegowosc.vat' },
+      extra: { tenantId: ctx.tenantId, miesiac: w.miesiac, etap: 'dane_firmy_jpk_v7m' },
+    });
+    return { ok: false, error: BLAD_ODCZYTU_VAT };
+  }
+  const kodUrzedu = urzad.kod;
   if (!dane.nadwyzka || !dane.wynik) return { ok: false, error: brakNadwyzki(w.miesiac) };
   if (!dane.wynik.ok) return { ok: false, error: dane.wynik.brak };
 
@@ -149,7 +161,14 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>, sro
   });
   const kontrola = await validateJpkV7m(xml);
   if (!kontrola.valid) {
-    console.error('[jpk_v7m] niezgodny ze schematem', ctx.tenantId, kontrola.errors.slice(0, 20).map(redactXsdMessage));
+    const bledy = kontrola.errors.slice(0, 20).map(redactXsdMessage);
+    console.error('[jpk_v7m] niezgodny ze schematem', ctx.tenantId, bledy);
+    Sentry.captureMessage('JPK_V7M niezgodny ze schematem XSD', {
+      level: 'error',
+      tags: { area: 'ksiegowosc.vat' },
+      fingerprint: ['jpk_v7m_xsd', w.miesiac],
+      extra: { tenantId: ctx.tenantId, miesiac: w.miesiac, bledy: bledy.slice(0, 5) },
+    });
     return {
       ok: false,
       error:
