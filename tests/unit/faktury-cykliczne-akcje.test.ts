@@ -241,7 +241,7 @@ describe('updateRecurringInvoiceAction', () => {
 });
 
 describe('wstrzymanie i wznowienie', () => {
-  it('wstrzymanie zostawia datę; wznowienie po miesiącach zostawia ostatni czekający okres', async () => {
+  it('wstrzymanie zostawia datę; wznowienie po miesiącach zostawia pierwszy trwający okres', async () => {
     db.tables.recurring_invoices = [pozycja({ next_run_date: '2026-03-10' })];
     const p = await pauseRecurringInvoiceAction(POS);
     expect(p).toMatchObject({ success: true, recurringInvoice: { active: false, next_run_date: '2026-03-10' } });
