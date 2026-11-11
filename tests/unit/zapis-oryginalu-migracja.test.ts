@@ -778,7 +778,7 @@ describe('strażnik tekstu migracji 00156 (D-A4-1b-3 PR C, zapis oryginału z oz
 
   it('marka FaktWay (00151, zmiana nazwy 10.2026): literały w ciałach funkcji 00156 bez „FaktFlow” i adresu w dawnej domenie — poza kodem powodu faktflow-original i wzorcem SystemInfo', () => {
     // Identyfikatory, które zostają (docs/rebrand/FAKTWAY.md): kod powodu i przyszła postać SystemInfo
-    // (lustro TS: FAKTFLOW_SYSTEM_INFO_NEXT w lib/ksef/duplicate-decision.ts).
+    // (lustro TS: FAKTFLOW_SYSTEM_INFO_NEXT w lib/ksef/duplicate-decision-jsonb.ts).
     const allowed = new Set(["'faktflow-original'", "'^FaktFlow [0-9]'"]);
     const hits = [...functionBodies(read(M156))].flatMap(([fn, bodies]) => bodies.flatMap((body) => lex(body)
       .filter((p) => p.kind === 'literal' && /faktflow/i.test(p.text) && !allowed.has(p.text))
