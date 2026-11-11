@@ -39,9 +39,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install XML schema validator
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libxml2-utils
+        # Zapasowy serwer pakietów przy awarii mirrora Azure (11.11.2026, jak ci.yml).
+        run: bash scripts/ci/zainstaluj-xmllint.sh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Testy filtra (300 przypadków na własność)
