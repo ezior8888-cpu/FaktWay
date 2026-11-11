@@ -46,6 +46,10 @@ export type AuditAction =
   | 'tenant.user_role_changed'
   | 'tenant.ksef_verified'
   | 'tenant.ksef_nip_ownership_claimed'
+  // Wątek przy koszcie (00192): prośba o dokument i jej załatwienie; metadane niosą identyfikator
+  // wpisu i rolę, bez treści. Zapisuje baza (RPC `expense_comment_add`, `expense_document_request_resolve`).
+  | 'expense.document_requested'
+  | 'expense.document_request_resolved'
   | 'expense.foreign_currency_reviewed'
   | 'expense.foreign_currency_excluded'
   // Agent FLO — wykonanie propozycji zatwierdzonej kliknięciem człowieka.

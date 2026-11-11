@@ -25,9 +25,11 @@ import Link from 'next/link'
 // Third-party Imports
 import {
   RiCalendarEventLine,
+  RiChat3Line,
   RiCheckboxCircleLine,
   RiCheckDoubleLine,
   RiErrorWarningLine,
+  RiFileSearchLine,
   RiInboxArchiveLine,
   RiNotification3Line,
   RiRefreshLine,
@@ -62,7 +64,10 @@ const KIND_ICONS: Record<AppNotificationKind, typeof RiNotification3Line> = {
   inbox_new: RiInboxArchiveLine,
   invoice_accepted: RiCheckboxCircleLine,
   invoice_rejected: RiErrorWarningLine,
-  tax_deadline: RiCalendarEventLine
+  tax_deadline: RiCalendarEventLine,
+  // Wątek przy koszcie (krok 6.2, część 3, 00192).
+  expense_comment: RiChat3Line,
+  expense_document_request: RiFileSearchLine
 }
 
 /** „1 nowe”, „3 nowe”, „5 nowych”, „22 nowe” (polska odmiana liczebnika). */

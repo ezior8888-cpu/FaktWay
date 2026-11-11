@@ -199,6 +199,39 @@ describe('dzwonek: liczba, lista, oznaczanie', () => {
     expect(text()).toContain('Nie udało się wczytać powiadomień');
   });
 
+  it('komentarz i prośba o dokument przy koszcie (00192): własna ikona, treść i link do wątku kosztu', async () => {
+    const watek = [
+      {
+        id: 'n4',
+        kind: 'expense_comment',
+        title: 'Nowy komentarz do kosztu',
+        body: 'Olga Właścicielka (właściciel) przy koszcie FV 7/2026: Czy to koszt firmowy?',
+        link: '/expenses/e1#komentarze',
+        createdAt: '2026-11-11T08:00:00Z',
+        read: false,
+      },
+      {
+        id: 'n5',
+        kind: 'expense_document_request',
+        title: 'Prośba o dokument do kosztu',
+        body: 'Anna Księgowa (księgowy) przy koszcie FV 7/2026: Proszę o fakturę.',
+        link: '/expenses/e1#komentarze',
+        createdAt: '2026-11-11T09:00:00Z',
+        read: false,
+      },
+    ];
+    m.load.mockResolvedValue({ success: true, unread: 2, items: watek });
+    await render();
+    for (const item of watek) {
+      const link = [...document.body.querySelectorAll<HTMLAnchorElement>('a[role="menuitem"]')].find((a) =>
+        a.textContent?.includes(item.title),
+      );
+      expect(link?.getAttribute('href')).toBe('/expenses/e1#komentarze');
+      expect(link?.textContent).toContain(item.body);
+      expect(link?.querySelector('svg')).not.toBeNull();
+    }
+  });
+
   it('otwarcie dzwonka czyta powiadomienia ponownie', async () => {
     await render(false);
     expect(m.load).toHaveBeenCalledTimes(1);

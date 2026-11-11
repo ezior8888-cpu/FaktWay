@@ -77,6 +77,10 @@ export default defineConfig({
       // aktywnego członka firmy, UNIQUE bez dubli przy ponowieniu, odczyt tylko własnych wpisów aktywnej
       // firmy, bez zapisu kluczem użytkownika, oznaczanie tylko przez RPC, CHECK linku.
       'tests/rls-powiadomienia-w-aplikacji.test.ts',
+      // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie;
+      // odczyt tylko przy koszcie widocznym dla czytającego, zapis tylko przez funkcje, dzwonek bez autora,
+      // ponowienie z tym samym identyfikatorem bez dubla, załatwienie (kto i kiedy) z audytem, CHECK-i.
+      'tests/rls-komentarze-kosztow.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

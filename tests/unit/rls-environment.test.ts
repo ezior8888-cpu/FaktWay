@@ -100,6 +100,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-spis.test.ts',
       // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji.
       'tests/rls-powiadomienia-w-aplikacji.test.ts',
+      // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie.
+      'tests/rls-komentarze-kosztow.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
