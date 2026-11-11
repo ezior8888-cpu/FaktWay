@@ -210,7 +210,8 @@ export async function checkBankAccountInWhitelist(
     };
   }
 
-  const checkedOn = date ?? new Date().toISOString().slice(0, 10);
+  // Ten sam dzień co w zapytaniu do wykazu (FZ-003).
+  const checkedOn = date ?? todayInWarsaw();
   const cleanAccount = normalizeWhitelistAccount(bankAccount);
   const isOnWhitelist = result.bankAccounts.some((a) => normalizeWhitelistAccount(a) === cleanAccount);
 

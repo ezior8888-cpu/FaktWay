@@ -43,7 +43,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 import { validateNipCached } from '@/lib/validation/cache';
-import { checkNipInWhitelist } from '@/lib/validation/whitelist-client';
+import { checkBankAccountInWhitelist, checkNipInWhitelist } from '@/lib/validation/whitelist-client';
 
 const NIP = '1234567890';
 
@@ -92,6 +92,15 @@ describe('Biała Lista: dzisiaj to dzień w Polsce (FZ-003)', () => {
     state.subject = { name: 'Firma Testowa', nip: NIP, statusVat: 'Niezarejestrowany', removalDate: '2026-11-12', accountNumbers: [] };
     const wynik = await validateNipCached(NIP, 'PL');
     expect(wynik.warning).toBe('Wykreślony z VAT od 2026-11-12');
+  });
+
+  it('sprawdzenie rachunku bez daty zapisuje dzisiejszy dzień w Polsce', async () => {
+    vi.setSystemTime(new Date('2026-11-11T23:30:00Z'));
+    state.subject = { name: 'Firma Testowa', nip: NIP, statusVat: 'Czynny', accountNumbers: ['61109010140000071219812874'] };
+    const wynik = await checkBankAccountInWhitelist(NIP, 'PL61 1090 1014 0000 0712 1981 2874');
+    expect(wynik.status).toBe('in_list');
+    expect(new URL(state.urls[0]).searchParams.get('date')).toBe('2026-11-12');
+    expect(wynik.checkedOn).toBe('2026-11-12');
   });
 
   it('wykreślenie od jutra nie daje ostrzeżenia', async () => {
