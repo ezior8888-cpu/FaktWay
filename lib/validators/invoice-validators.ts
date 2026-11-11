@@ -3,6 +3,7 @@
 
 import { isSaleDateWithinLimit } from '@/lib/invoices/sale-date';
 import { z } from 'zod';
+import { numberingFormFields } from '@/lib/numeracja/pola';
 import { validateNipChecksum, validatePeselChecksum } from '@/lib/xml/invoice-calculator';
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
 import { isForeignEuVat, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
@@ -214,6 +215,8 @@ export const correctionInvoiceSchema = z
   .object({
     invoiceType: z.literal('correction'),
     internalNumber: invoiceNumberSchema,
+    /** Seria numeracji, podpowiedź z licznika i klucz zapisu (krok 2.5). */
+    ...numberingFormFields,
     issueDate: dateSchema,
     paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
     paymentDueDate: dateSchema,
@@ -300,6 +303,8 @@ export const advanceInvoiceSchema = z
   .object({
     invoiceType: z.literal('advance'),
     internalNumber: invoiceNumberSchema,
+    /** Seria numeracji, podpowiedź z licznika i klucz zapisu (krok 2.5). */
+    ...numberingFormFields,
     issueDate: dateSchema,
     paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
     paymentDueDate: dateSchema,
@@ -348,6 +353,8 @@ export const finalInvoiceSchema = z
   .object({
     invoiceType: z.literal('final'),
     internalNumber: invoiceNumberSchema,
+    /** Seria numeracji, podpowiedź z licznika i klucz zapisu (krok 2.5). */
+    ...numberingFormFields,
     issueDate: dateSchema,
     paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
     paymentDueDate: dateSchema,

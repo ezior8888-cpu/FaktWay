@@ -9,10 +9,11 @@ import { InvoiceForm } from '@/components/invoices/invoice-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { loadTenantSellerForForms } from '@/lib/invoices/load-tenant-seller';
-import { suggestNextInvoiceNumberForTenant } from '@/lib/invoices/next-number';
 import { getRecurringInvoice } from '@/lib/invoices/recurring/queries';
 import { recurringPeriodKey, recurringPeriodLabel } from '@/lib/invoices/recurring/schedule';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { loadInvoiceNumbering } from '@/lib/numeracja/baza';
+import { selectedNumberingOption } from '@/lib/numeracja/model';
 import { getPageContext, type PageContext } from '@/lib/supabase/page-context';
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -145,7 +146,9 @@ async function loadSource(
  * stawkę nowej pozycji od pierwszego renderu.
  *
  * I numer: podpowiedź kolejnego po ostatniej fakturze (F-015), żeby seria
- * nie zależała od pamięci użytkownika.
+ * nie zależała od pamięci użytkownika. Krok 2.5: serie numeracji firmy
+ * z serią domyślną zwykłej faktury i kolejnym numerem z jej licznika; firma
+ * bez serii dostaje tę samą podpowiedź co dotąd.
  *
  * Sprzedawca (P5) idzie wyłącznie do nagłówka dokumentu w układzie Finory.
  * Akcja zapisu i tak czyta go sama z profilu firmy; błąd odczytu tutaj nie
@@ -160,14 +163,15 @@ export default async function NewRegularInvoicePage({
   const ctx = await getPageContext();
   const { supabase, tenantId } = ctx;
   const params = (await searchParams) ?? {};
-  const [podpowiedz, vatExemptionBasis, suggestedNumber, loadedSeller, { source, notice }] = await Promise.all([
+  const [podpowiedz, vatExemptionBasis, numbering, loadedSeller, { source, notice }] = await Promise.all([
     prefillFromLastInvoiceAction(),
     readTenantVatExemption(supabase, tenantId),
-    suggestNextInvoiceNumberForTenant(supabase, tenantId, todayInWarsaw()),
+    loadInvoiceNumbering(supabase, tenantId, 'regular', todayInWarsaw()),
     loadTenantSellerForForms().catch(() => null),
     loadSource(ctx, params),
   ]);
   const seller = loadedSeller?.seller ?? null;
+  const suggestedNumber = selectedNumberingOption(numbering)?.preview ?? null;
 
   // UX-01: `tenantId` — firma tej strony; zapis odsyła ją i odmawia, gdy
   // w innej karcie przełączono firmę (nie wystawi faktury za inną firmę).
@@ -180,6 +184,7 @@ export default async function NewRegularInvoicePage({
       prefill={source ? null : podpowiedz}
       vatExempt={vatExemptionBasis !== null}
       suggestedNumber={suggestedNumber}
+      numbering={numbering}
       seller={seller}
       {...(source
         ? {

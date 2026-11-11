@@ -166,6 +166,15 @@ export type AuditAction =
   | 'cash_register.opening_changed'
   | 'cash_document.issued'
   | 'cash_document.corrected'
+  // Serie numeracji faktur (00199, plan kompletnej aplikacji 2.5): nowa seria (także
+  // seria podstawowa przy pierwszej zmianie, `metadata.automatic`), nazwa i rodzaje
+  // domyślne, ukrycie, przywrócenie, usunięcie serii bez faktur. Zapisuje baza (RPC
+  // `invoice_number_series_*`) w transakcji ze zmianą, nie aplikacja.
+  | 'invoice_number_series.created'
+  | 'invoice_number_series.updated'
+  | 'invoice_number_series.archived'
+  | 'invoice_number_series.restored'
+  | 'invoice_number_series.deleted'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'

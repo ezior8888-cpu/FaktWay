@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import type { Resolver } from 'react-hook-form';
-import { useEffect, useMemo, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
@@ -44,6 +44,8 @@ import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { BuyerB2B, SellerData } from '@/types/invoice-types';
 
 import { saveAdvanceAction, saveAndSendAdvanceAction } from './advance-actions';
+import { numberingDefaults, SeriesSelectRow, useSeriesNumber } from './numeracja/series-select-row';
+import type { InvoiceNumbering } from '@/lib/numeracja/model';
 
 type AdvanceFormIn = z.input<typeof advanceInvoiceSchema>;
 
@@ -63,6 +65,8 @@ export interface AdvanceInvoiceFormProps {
   initialSeller: SellerData;
   /** Firma, dla której wyrenderowano formularz i sprzedawcę — zapis odsyła ją jako `expectedTenantId` (UX-01). */
   tenantId: string;
+  /** Krok 2.5: serie numeracji z serią domyślną zaliczki i podpowiedzią numeru. */
+  numbering?: InvoiceNumbering | null;
 }
 
 // E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
@@ -77,7 +81,7 @@ const PAYMENT_METHOD_ITEMS = [
   { value: 'other', label: 'Inna' },
 ] as const
 
-export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFormProps) {
+export function AdvanceInvoiceForm({ initialSeller, tenantId, numbering = null }: AdvanceInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -89,9 +93,16 @@ export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFo
     return { today: todayPl, due: dueDateFrom(todayPl, 14) };
   }, []);
 
+  // Krok 2.5: seria domyślna zaliczki, jej podpowiedź i klucz zapisu (jeden na otwarcie formularza).
+  const numberDefaults = numberingDefaults(numbering);
+  const [numberRequestKey] = useState(() => crypto.randomUUID());
+
   const defaults = {
     invoiceType: 'advance',
-    internalNumber: '',
+    internalNumber: numberDefaults.preview ?? '',
+    numberSeriesId: numberDefaults.numberSeriesId,
+    numberPreview: numberDefaults.numberPreview,
+    numberRequestKey,
     issueDate: today,
     paymentMethod: 'transfer',
     paymentDueDate: due,
@@ -126,6 +137,19 @@ export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFo
   const vatWatch = useWatch({ control: form.control, name: 'vatRate' }) ?? '23';
   const paymentMethodWatch = useWatch({ control: form.control, name: 'paymentMethod' });
   const splitPaymentWatch = useWatch({ control: form.control, name: 'splitPayment' });
+  const issueDateWatch = useWatch({ control: form.control, name: 'issueDate' }) ?? today;
+
+  // Krok 2.5: zmiana serii albo daty podpowiada numer z serii, o ile w polu nie ma numeru wpisanego ręcznie.
+  const series = useSeriesNumber({
+    numbering,
+    issueDate: issueDateWatch,
+    read: () => ({ number: form.getValues('internalNumber') ?? '', preview: form.getValues('numberPreview') || undefined }),
+    write: ({ seriesId, preview, number }) => {
+      form.setValue('numberSeriesId', seriesId);
+      form.setValue('numberPreview', preview);
+      if (number !== undefined) form.setValue('internalNumber', number, { shouldValidate: form.formState.isSubmitted });
+    },
+  });
 
   const preview = calculateAdvanceTotals({
     advanceAmount: advanceAmt,
@@ -208,6 +232,7 @@ export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFo
         <InvoiceDocumentCard
           header={
             <InvoiceDocumentHeader seller={initialSeller}>
+              <SeriesSelectRow numbering={numbering} seriesId={series.seriesId} onSelect={series.selectSeries} disabled={busy} />
               <DocumentHeaderRow
                 label="Numer"
                 htmlFor="internalNumber"

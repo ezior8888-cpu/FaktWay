@@ -13,6 +13,14 @@ import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
 import { readTenantCashMethodForIssuance } from '@/lib/invoices/cash-method';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import {
+  numberConflictOf,
+  numberRefusalText,
+  numberRequestOf,
+  saveWithInvoiceNumber,
+  type NumberColumns,
+  type NumberedResult,
+} from '@/lib/numeracja/nadanie';
+import {
   buyerPartyFromBuyerData,
   sellerPartyFromSellerData,
 } from '@/lib/invoices/map-buyer-party';
@@ -176,15 +184,22 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
   };
 }
 
+/**
+ * `numberColumns` (krok 2.5, 00199): seria, okres, licznik i klucz zapisu;
+ * bez serii pusty obiekt (wiersz jak dotąd). Odmowę numeru przez bazę wynik
+ * niesie w `numberConflict` dla `saveWithInvoiceNumber`.
+ */
 async function insertAdvanceDraft(
   supabase: SupabaseClient,
   tenantId: string,
   ghost: Invoice,
   envelope: AdvanceInvoiceData,
-): Promise<ActionResult> {
+  numberColumns: NumberColumns = {},
+): Promise<NumberedResult<ActionResult>> {
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
     .insert({
+      ...numberColumns,
       tenant_id: tenantId,
       direction: 'outgoing',
       ksef_status: 'draft',
@@ -211,10 +226,12 @@ async function insertAdvanceDraft(
     .single();
 
   if (invErr || !inserted) {
+    const numberConflict = numberConflictOf(invErr);
     return {
       success: false,
       error: specialDataInsertError(invErr, `zaliczki ${ghost.internalNumber}`)
-        ?? invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej',
+        ?? numberRefusalText(invErr) ?? invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej',
+      ...(numberConflict ? { numberConflict } : {}),
     };
   }
 
@@ -256,17 +273,22 @@ export async function saveAdvanceAction(raw: unknown, expectedTenantId: string):
     const seller = requireTenantSeller(parsed.data.seller, tenant);
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
-    const ghost = ghostAdvanceInvoice(envelope);
 
-    const result = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
-    if (result.success) {
+    // Krok 2.5: numer z licznika serii albo z pola, ten sam w kolumnie, w kopercie i w fa3_data.
+    const saved = await saveWithInvoiceNumber(supabase, numberRequestOf(parsed.data), envelope.issueDate, async (assigned) => {
+      const numbered = { ...envelope, internalNumber: assigned.number };
+      const ghost = ghostAdvanceInvoice(numbered);
+      return { result: await insertAdvanceDraft(supabase, tenant.id, ghost, numbered, assigned.columns), built: ghost };
+    });
+    const result = saved.result;
+    if (result.success && saved.built) {
       await logAudit({
         action: 'invoice.draft_created',
         tenantId: tenant.id,
         userId,
         entityType: 'invoice',
         entityId: result.invoiceId,
-        metadata: { kind: 'advance', internalNumber: ghost.internalNumber },
+        metadata: { kind: 'advance', internalNumber: saved.built.internalNumber },
       });
       revalidatePath('/invoices');
     }
@@ -285,16 +307,24 @@ export async function saveAndSendAdvanceAction(raw: unknown, expectedTenantId: s
     const seller = requireTenantSeller(parsed.data.seller, tenant);
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
-    const ghost = ghostAdvanceInvoice(envelope);
 
     // Ta sama reguła co zwykła faktura (A1, W5): w KSeF tylko z dzisiejszą datą
     // wystawienia — odmowa przed zapisem, żeby nie zostawić szkicu zaliczki,
     // którego i tak nie da się później wysłać.
-    const notToday = issueDateNotTodayError(ghost.issueDate, 'special');
+    const notToday = issueDateNotTodayError(envelope.issueDate, 'special');
     if (notToday) return { success: false, error: notToday };
 
-    const saved = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
+    // Krok 2.5: numer z licznika serii albo z pola; kolejka KSeF dostaje
+    // kopertę i fakturę z numerem, który się zapisał.
+    const numbered = await saveWithInvoiceNumber(supabase, numberRequestOf(parsed.data), envelope.issueDate, async (assigned) => {
+      const env = { ...envelope, internalNumber: assigned.number };
+      const ghost = ghostAdvanceInvoice(env);
+      return { result: await insertAdvanceDraft(supabase, tenant.id, ghost, env, assigned.columns), built: { ghost, env } };
+    });
+    const saved = numbered.result;
     if (!saved.success) return saved;
+    if (!numbered.built) return { success: false, error: 'Brak danych zapisanej zaliczki', invoiceId: saved.invoiceId };
+    const { ghost, env: advanceData } = numbered.built;
 
     const invoiceId = saved.invoiceId;
 
@@ -305,7 +335,7 @@ export async function saveAndSendAdvanceAction(raw: unknown, expectedTenantId: s
       invoiceId,
       nip: tenant.nip,
       invoice: ghost,
-      advanceData: envelope,
+      advanceData,
       auditKind: 'advance',
       internalNumberForAudit: ghost.internalNumber,
     });

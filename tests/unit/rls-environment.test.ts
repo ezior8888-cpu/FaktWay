@@ -147,6 +147,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-indeksy-cronow-produkty.test.ts',
       // Plan skalowania 3000, sesja 12: stronicowanie nocnej kopii JSON przez PostgREST.
       'tests/rls-kopia-json-stronicowanie.test.ts',
+      // 00199 (krok 2.5): serie numeracji faktur, wyścig dwóch wystawień w jednej serii na prawdziwej bazie.
+      'tests/rls-numeracja.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

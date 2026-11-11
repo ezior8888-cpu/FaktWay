@@ -3,6 +3,7 @@ import { SellerProfileBlock } from '@/components/invoices/seller-profile-block';
 import { createClient } from '@/lib/supabase/server';
 import { loadTenantSellerForForms } from '@/lib/invoices/load-tenant-seller';
 import { findAdvancesAlreadySettled } from '@/lib/invoices/settled-advances';
+import { loadNumberingForForm } from '@/lib/numeracja/strona';
 
 export default async function NewFinalInvoicePage() {
   const loaded = await loadTenantSellerForForms();
@@ -36,7 +37,18 @@ export default async function NewFinalInvoicePage() {
     // celowo: patrz komentarz wyżej
   }
 
+  // Krok 2.5: seria domyślna faktury końcowej i podpowiedź numeru; błąd = formularz bez podpowiedzi.
+  const numbering = await loadNumberingForForm(supabase, tenantId, 'final');
+
   // P5: szerokość daje siatka Finory w formularzu (dokument + kolumna 18rem).
   // `key` montuje formularz od nowa po przełączeniu firmy w tej karcie (UX-01).
-  return <FinalInvoiceForm key={tenantId} initialSeller={seller} advanceInvoices={available} tenantId={tenantId} />;
+  return (
+    <FinalInvoiceForm
+      key={tenantId}
+      initialSeller={seller}
+      advanceInvoices={available}
+      tenantId={tenantId}
+      numbering={numbering}
+    />
+  );
 }
