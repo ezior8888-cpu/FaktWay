@@ -9,9 +9,11 @@ peerDependencyRules:
     '@xmldom/xmldom': '0.9.12'
 
 overrides:
-  # WebAuthn: parser i schematy (asn1-ecc) muszą być z tej samej kopii asn1-schema, inaczej każda
-  # asercja ES256 pada na „Cannot get schema for ECDSASigValue”. Pilnuje tests/unit/passkey-login-route.test.ts.
-  '@simplewebauthn/server>@peculiar/asn1-schema': '^2.11.1'
+  # Jedna kopia asn1-schema dla całego drzewa: parser i schematy muszą być z tej samej kopii, inaczej
+  # WebAuthn pada na „Cannot get schema for ECDSASigValue” (tests/unit/passkey-login-route.test.ts),
+  # a podpis XAdES dla KSeF na „Cannot get schema for 'PrivateKeyInfo'”, gdy webcrypto-core dostanie
+  # inną kopię niż @peculiar/webcrypto (Renovate #497, tests/unit/ksef-auth-key-types.test.ts).
+  '@peculiar/asn1-schema': '^2.11.1'
   '@grpc/proto-loader>protobufjs': '>=8.8.1'
   '@aws-sdk/xml-builder>fast-xml-parser': '>=5.12.0'
   'fast-xml-builder@<1.1.7': '>=1.3.1'

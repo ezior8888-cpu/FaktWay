@@ -288,13 +288,17 @@ export function isRedisConfigured(): boolean {
   return true;
 }
 
-function connection(): Pick<RedisConfigNodejs, 'url' | 'token'> {
+function connection(): Pick<RedisConfigNodejs, 'url' | 'token' | 'responseEncoding'> {
   if (!isRedisConfigured()) {
     throw new Error('Redis not configured (missing UPSTASH_REDIS_REST_URL/TOKEN)');
   }
   return {
     url: process.env.UPSTASH_REDIS_REST_URL!,
     token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    // `@upstash/redis` 1.41 zmienił domyślne kodowanie odpowiedzi z base64 na
+    // zwykły JSON. Zostajemy przy base64, czyli przy tym, co SRH na produkcji
+    // dostaje od początku (Renovate #497).
+    responseEncoding: 'base64',
   };
 }
 
