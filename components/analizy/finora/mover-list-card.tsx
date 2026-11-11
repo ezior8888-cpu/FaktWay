@@ -1,6 +1,6 @@
 'use client';
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 
 import { PulpitEmptyState } from '@/components/dashboard/pulpit/card-states';
 import { POSITIVE_TEXT_TONE } from '@/components/dashboard/pulpit/stat-tile';
@@ -14,7 +14,7 @@ import type { EmptyStateProps } from './empty';
 /**
  * Port Finory `investments/mover-list-card.tsx` („Top Gainers / Top
  * Losers”) → „Klienci: rośnie” / „Klienci: spada” (P11). `AnimatePresence`
- * i `motion` z `framer-motion` (to samo API co `motion/react` z Finory).
+ * i `motion` z `motion/react`, jak w Finorze.
  * Avatar bez logo (danych przykładowych Finory nie przenosimy) — inicjały
  * nazwy. Procent z jedną cyfrą po przecinku, minus typograficzny (§7.1).
  * Dopisany podpis okresu: bez niego procent nie mówi, do czego porównujemy.

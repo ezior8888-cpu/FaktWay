@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => ({
   // Dzwonek w aplikacji (krok 8.1 planu kompletnej aplikacji, część 2, 00188).
   dzwonek: [] as { fn: string; args: Record<string, unknown> }[],
   bladDzwonka: null as { message: string } | null,
+  // F11-B5: wysyłki JPK_V7M (jpk_submissions) w atrapie bazy; `bladJpk` = błąd odczytu.
+  wysylkiJpk: [] as Record<string, unknown>[],
+  bladJpk: null as { message: string } | null,
+  odczytyJpk: 0,
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
@@ -77,6 +81,13 @@ const baza = {
       const l: Record<string, unknown> = {};
       for (const m of ['select', 'eq', 'order', 'limit']) l[m] = () => l;
       l.maybeSingle = async () => ({ data: { user_id: 'u1' }, error: null });
+      return l;
+    }
+    if (tabela === 'jpk_submissions') {
+      mocks.odczytyJpk++;
+      const l: Record<string, unknown> = {};
+      for (const m of ['select', 'eq', 'in', 'order']) l[m] = () => l;
+      l.limit = async () => (mocks.bladJpk ? { data: null, error: mocks.bladJpk } : { data: mocks.wysylkiJpk, error: null });
       return l;
     }
     if (tabela !== 'tax_notifications') throw new Error(`nieoczekiwana tabela ${tabela}`);
@@ -145,6 +156,10 @@ beforeEach(() => {
   mocks.vatWKodzie = true;
   mocks.dzwonek = [];
   mocks.bladDzwonka = null;
+  mocks.wysylkiJpk = [];
+  mocks.bladJpk = null;
+  mocks.odczytyJpk = 0;
+  process.env.JPK_MF_ENV = 'test';
 });
 
 describe('F11-B1: składki społeczne po końcu ulgi na start', () => {
@@ -274,6 +289,69 @@ describe('cron.ksiegowosc-terminy', () => {
     mocks.vatWKodzie = false;
     await runKsiegowoscTerminy(ctx);
     expect(mocks.pushe).toEqual([]);
+  });
+
+  describe('F11-B5: JPK_V7M przy VAT 0 zł', () => {
+    const wysylka = (stan: string, srodowisko = 'test', okres = '2026-10-01') => ({
+      id: 'w1',
+      okres,
+      cel: 1,
+      srodowisko,
+      skrot_pliku: 'x',
+      deklaracja: { P_38: 0, P_48: 0, P_51: 0, P_62: 0 },
+      stan,
+      numer_referencyjny: null,
+      status_kod: null,
+      status_opis: null,
+      upo_sciezka: null,
+      blad: null,
+      utworzono_o: '2026-11-10T10:00:00Z',
+      wyslano_o: null,
+      zakonczono_o: '2026-11-10T10:05:00Z',
+    });
+    const zerowyVat = () => {
+      mocks.dzis = '2026-11-20';
+      mocks.dane = { ...POLICZONE, pozycje: [pozycja('vat', 0)] };
+    };
+
+    it('VAT 0 zł bez przyjętego JPK: przypomnienie o JPK_V7M z terminem, bez porady; raz mimo ponowienia', async () => {
+      zerowyVat();
+      expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
+      expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 0, duplikaty: 1 });
+      expect(mocks.pushe).toHaveLength(1);
+      expect(mocks.pushe[0].payload.body).toBe('Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.');
+      expect(mocks.maile[0].opcje).toMatchObject({ idempotencyKey: 'ksiegowosc/t1/2026-10/termin-5:2026-11-25' });
+      expect([...mocks.wpisy.keys()]).toEqual(['t1|2026-10|termin-5:2026-11-25']);
+    });
+
+    it('VAT 0 zł z przyjętym przez MF JPK za ten miesiąc i środowisko: bez przypomnienia', async () => {
+      zerowyVat();
+      mocks.wysylkiJpk = [wysylka('przyjeta')];
+      expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ pominiete: 1 });
+      expect([mocks.pushe, mocks.wpisy.size]).toEqual([[], 0]);
+    });
+
+    it('odrzucona albo przyjęta w innym środowisku: przypomnienie wychodzi', async () => {
+      zerowyVat();
+      mocks.wysylkiJpk = [wysylka('odrzucona'), wysylka('przyjeta', 'produkcja')];
+      expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
+    });
+
+    it('błąd odczytu wysyłek: przypomnienie i tak wychodzi', async () => {
+      zerowyVat();
+      mocks.bladJpk = { message: 'baza padła' };
+      expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
+      expect(mocks.pushe).toHaveLength(1);
+    });
+
+    it('VAT większy od zera: bez odczytu wysyłek, zachowanie jak dotąd', async () => {
+      mocks.dzis = '2026-11-20';
+      mocks.dane = { ...POLICZONE, pozycje: [pozycja('vat', 374_500)] };
+      mocks.wysylkiJpk = [wysylka('przyjeta')];
+      await runKsiegowoscTerminy(ctx);
+      expect(mocks.pushe[0].payload.body).toContain('Bez oznaczonej zapłaty: VAT 3745,00 zł.');
+      expect(mocks.odczytyJpk).toBe(0);
+    });
   });
 
   it('dzień bez terminu: zadanie kończy się bez odczytu firm', async () => {

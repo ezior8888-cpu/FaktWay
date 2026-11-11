@@ -47,6 +47,12 @@ import {
   resendPauseUnknownMessage,
 } from '@/lib/invoices/ksef-send-policy';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+import {
+  exemptTenantTaxedInvoiceMessage,
+  readTenantVatExemption,
+  TAXED_VAT_RATES,
+  taxedRateUnderSubjectiveExemption,
+} from '@/lib/invoices/vat-exemption';
 import type { Invoice } from '@/types/invoice';
 import type {
   AdvanceInvoiceData,
@@ -219,6 +225,21 @@ async function decideKsefSubmitEnqueue(
     isCorrectionSubmission({ invoiceType: invoice.type, auditKind, correctionData })
   ) {
     return { ok: false, refusal: 'KOR_HOLD', error: KOR_HOLD_MESSAGE };
+  }
+  // F12-G6b: firma zwolniona podmiotowo (art. 113) nie wysyła faktury ze
+  // stawką z podatkiem, bo podatek wykazany na fakturze trzeba zapłacić
+  // (art. 108 ust. 1). Jedno miejsce dla formularza, szkicu, zaliczki, strony
+  // faktury i API. Korekta poprawia fakturę pierwotną, a „Sprawdź ponownie”
+  // nic nie wysyła, więc obie zostają poza odmową. Ustawienia czytamy tylko
+  // przy stawce z podatkiem; błąd odczytu rzuca (wyżej ENQUEUE_ERROR, bez wysyłki).
+  if (!reconcileOnly && !isCorrectionSubmission({ invoiceType: invoice.type, auditKind, correctionData })) {
+    const rates = (invoice.lines ?? []).map((l) => l.vatRate);
+    if (rates.some((r) => TAXED_VAT_RATES.includes(r))) {
+      const taxed = taxedRateUnderSubjectiveExemption(await readTenantVatExemption(params.supabase, tenantId), rates);
+      if (taxed) {
+        return { ok: false, refusal: 'INVALID_DOCUMENT', error: exemptTenantTaxedInvoiceMessage(documentNumber, taxed) };
+      }
+    }
   }
   try {
     if (await isKsefSubmissionPaused()) {

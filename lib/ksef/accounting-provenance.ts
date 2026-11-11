@@ -1,6 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { KsefEnvironment } from '@/types/ksef';
 
+/** Stały stan (są przyjęte faktury bez środowiska), nie awaria odczytu: wołający pokazuje komunikat z wyjściem. */
+export class AcceptedInvoiceEnvironmentIncompleteError extends Error {
+  constructor() {
+    super('Accepted invoices require KSeF environment reconciliation');
+    this.name = 'AcceptedInvoiceEnvironmentIncompleteError';
+  }
+}
+
 /**
  * An environment filter alone could silently omit historical production
  * invoices whose provenance is NULL. Block a legal read until the whole
@@ -32,6 +40,6 @@ export async function assertAcceptedInvoiceEnvironmentComplete(
     throw new Error('KSeF environment reconciliation check is unavailable');
   }
   if (count > 0) {
-    throw new Error('Accepted invoices require KSeF environment reconciliation');
+    throw new AcceptedInvoiceEnvironmentIncompleteError();
   }
 }

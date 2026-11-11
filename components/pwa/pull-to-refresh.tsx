@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, type ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { ArrowDown, Loader2 } from 'lucide-react';
 
 import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
