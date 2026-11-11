@@ -113,7 +113,9 @@ function from(table: string) {
     if (table === 'invoices' && Array.isArray(record.filters.id)) {
       // Zaliczki wybrane do rozliczenia (ROZ).
       return { data: [{ id: advanceId, internal_number: 'ZAL/2026/9/1', ksef_number: 'KSEF-TEST-1',
-        issue_date: '2026-09-20', advance_amount: 123, gross_total: 123, invoice_kind: 'advance' }], error: null };
+        issue_date: '2026-09-20', advance_amount: 123, gross_total: 123, invoice_kind: 'advance',
+        // Ten sam nabywca co w rozliczeniu (F12-D4).
+        buyer_nip: sellerNip, buyer_data: { nip: sellerNip, name: 'Nabywca testowy' } }], error: null };
     }
     if (table === 'invoices') return { data: [], error: null };
     if (table === 'invoice_line_items' && record.operation === 'select') {
