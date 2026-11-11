@@ -18,6 +18,8 @@ export interface WhitelistResult {
   registeredAddress?: string;
   workingAddress?: string;
   bankAccounts: string[]; // IBAN-y zgłoszone do US
+  /** Firma ma w wykazie rachunki wirtualne (maski): rachunku spoza `bankAccounts` nie da się tu ocenić. */
+  hasVirtualAccounts?: boolean;
   representatives?: Array<{
     firstName: string;
     lastName: string;
@@ -133,6 +135,7 @@ export async function checkNipInWhitelist(
       registeredAddress: optionalString(subject.residenceAddress),
       workingAddress: optionalString(subject.workingAddress),
       bankAccounts: stringArray(subject.accountNumbers),
+      hasVirtualAccounts: subject.hasVirtualAccounts === true,
       representatives: subject.representatives,
       authorizedClerks: subject.authorizedClerks,
       partners: subject.partners,
@@ -165,36 +168,67 @@ export async function checkNipInWhitelist(
 // Sprawdzenie czy konkretny rachunek bankowy jest na Białej Liście
 // ============================================================================
 
+/**
+ * Wynik sprawdzenia rachunku. Trzy stany, bo „nie udało się sprawdzić” to
+ * nie „rachunku nie ma w wykazie” ani tym bardziej „rachunek w porządku”
+ * (krok 3.4 planu kompletnej aplikacji, RP-BL-01):
+ *  - `in_list`: rachunek jest w wykazie na `checkedOn`;
+ *  - `not_in_list`: wykaz odpowiedział, a rachunku w nim nie ma (także gdy
+ *    firmy w wykazie nie ma);
+ *  - `unverified`: błąd API (limit, awaria, brak odpowiedzi, zły NIP) albo
+ *    rachunek, który może być wirtualny (firma ma maski w wykazie).
+ */
+export type WhitelistAccountStatus = 'in_list' | 'not_in_list' | 'unverified';
+
+/** Rachunek do porównania z wykazem: bez spacji, wielkie litery, polski IBAN bez „PL” (wykaz podaje 26 cyfr). */
+export function normalizeWhitelistAccount(account: string): string {
+  const clean = account.replace(/\s/g, '').toUpperCase();
+  return /^PL\d{26}$/.test(clean) ? clean.slice(2) : clean;
+}
+
 export async function checkBankAccountInWhitelist(
   nip: string,
   bankAccount: string,
   date?: string
 ): Promise<{
+  status: WhitelistAccountStatus;
   isOnWhitelist: boolean;
   legalName?: string;
   warning?: string;
+  checkedOn?: string;
 }> {
   const result = await checkNipInWhitelist(nip, date);
 
   if (!result.success) {
     return {
+      status: 'unverified',
       isOnWhitelist: false,
       warning: result.error,
     };
   }
 
-  const cleanAccount = bankAccount.replace(/\s/g, '').toUpperCase();
-  const accountsNormalized = result.bankAccounts.map((a) =>
-    a.replace(/\s/g, '').toUpperCase()
-  );
+  const checkedOn = date ?? new Date().toISOString().slice(0, 10);
+  const cleanAccount = normalizeWhitelistAccount(bankAccount);
+  const isOnWhitelist = result.bankAccounts.some((a) => normalizeWhitelistAccount(a) === cleanAccount);
 
-  const isOnWhitelist = accountsNormalized.includes(cleanAccount);
+  if (!isOnWhitelist && result.hasVirtualAccounts) {
+    return {
+      status: 'unverified',
+      isOnWhitelist: false,
+      legalName: result.legalName,
+      checkedOn,
+      warning:
+        'Firma ma w wykazie rachunki wirtualne, a tego rachunku nie ma wśród zwykłych. Sprawdź go w wyszukiwarce wykazu podatników VAT na podatki.gov.pl.',
+    };
+  }
 
   return {
+    status: isOnWhitelist ? 'in_list' : 'not_in_list',
     isOnWhitelist,
     legalName: result.legalName,
+    checkedOn,
     warning: !isOnWhitelist
-      ? 'Rachunek bankowy nie jest zgłoszony do US — możesz stracić prawo do odliczenia VAT'
+      ? 'Rachunek bankowy nie jest zgłoszony do US: możesz stracić prawo do odliczenia VAT'
       : undefined,
   };
 }
@@ -210,6 +244,7 @@ type WhitelistSubjectShape = {
   residenceAddress?: unknown;
   workingAddress?: unknown;
   accountNumbers?: unknown;
+  hasVirtualAccounts?: unknown;
   representatives?: WhitelistResult['representatives'];
   authorizedClerks?: WhitelistResult['authorizedClerks'];
   partners?: WhitelistResult['partners'];

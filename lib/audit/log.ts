@@ -48,6 +48,10 @@ export type AuditAction =
   | 'tenant.ksef_nip_ownership_claimed'
   | 'expense.foreign_currency_reviewed'
   | 'expense.foreign_currency_excluded'
+  // Koszty do zapłaty (00177, plan kompletnej aplikacji 3.4): metadane niosą dzień zapłaty, kwotę
+  // i termin. Zapisuje baza (RPC `mark_expense_paid` i `undo_expense_paid`) w transakcji ze zmianą.
+  | 'expense.marked_paid'
+  | 'expense.paid_undone'
   // Agent FLO — wykonanie propozycji zatwierdzonej kliknięciem człowieka.
   // Metadane niosą identyfikator żetonu zgody i tytuł, który klient widział
   // na karcie: to jest odpowiedź na reklamację „ja tego nie klikałem”.

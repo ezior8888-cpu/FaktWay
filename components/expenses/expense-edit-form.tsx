@@ -82,6 +82,8 @@ interface ExpenseEditFormProps {
   expense: ExpenseRow;
   photoUrl: string | null;
   ksefCurrency: string | null;
+  /** Krok 3.4: karta „Płatność” na końcu kolumny kart (decyzja D1: nowa sekcja, nic nie przestawione). */
+  paymentSection?: ReactNode;
 }
 
 interface FormState {
@@ -114,7 +116,7 @@ function buildInitialForm(expense: ExpenseRow): FormState {
   };
 }
 
-export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEditFormProps) {
+export function ExpenseEditForm({ expense, photoUrl, ksefCurrency, paymentSection }: ExpenseEditFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialForm(expense));
   const [confirmedForeignCurrency, setConfirmedForeignCurrency] = useState(false);
@@ -558,6 +560,8 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
               />
             </CardContent>
           </Card>
+
+          {paymentSection}
         </div>
       </div>
 
