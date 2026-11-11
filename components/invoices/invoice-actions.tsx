@@ -7,6 +7,7 @@ import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiFileCopyLine, RiLoader4Li
 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { BuyerLinkButton } from './buyer-link-button';
 import { EmailInvoiceButton } from './email-invoice-button';
 import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
@@ -60,6 +61,11 @@ interface Props {
      * jest jedyna droga do duplikatu poza komputerem.
      */
     can_duplicate?: boolean;
+    /**
+     * Krok 2.10: „Link dla nabywcy” (faktura sprzedaży z FaktWay przyjęta w KSeF,
+     * rola z prawem do linku; liczy serwer predykatami z `lib/invoice-share/policy.ts`).
+     */
+    can_share_with_buyer?: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -286,6 +292,8 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
           Ustaw jako cykliczną
         </Link>
       )}
+      {/* D1: nowy przycisk na końcu listy, istniejące zostają na swoich miejscach. */}
+      {invoice.can_share_with_buyer && <BuyerLinkButton invoiceId={invoice.id} className={full} />}
     </>
   );
 

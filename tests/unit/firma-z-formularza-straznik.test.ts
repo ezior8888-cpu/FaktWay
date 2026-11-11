@@ -47,6 +47,9 @@ const EXEMPT: Record<string, string> = {
   emailInvoiceAction: ID_BOUND,
   sendDraftInvoiceAction: ID_BOUND,
   deleteDraftInvoiceAction: ID_BOUND,
+  getBuyerLinkAction: ID_BOUND,
+  createBuyerLinkAction: ID_BOUND,
+  revokeBuyerLinkAction: ID_BOUND,
 };
 
 /** Pliki akcji wystawiania — ich akcje sprawdzają testy niżej, akcja po akcji. */
@@ -60,6 +63,7 @@ const ISSUING_FILES = Object.keys(ISSUING).map((file) => `components/invoices/${
 const EXEMPT_FILES: Record<string, string> = {
   'components/invoices/actions-detail.ts': 'akcje na istniejącym dokumencie wskazanym id (ponowienie, reset, duplikat, e-mail, XML) — patrz EXEMPT',
   'components/invoices/draft-actions.ts': 'wysyłka i usunięcie istniejącego szkicu wskazanego id — patrz EXEMPT',
+  'components/invoices/buyer-link-actions.ts': 'link dla nabywcy na istniejącej fakturze (odczyt, tworzenie, cofnięcie po id); firma z sesji, zapis klientem sesji (RLS)',
   'lib/invoices/ksef-submit-enqueue.ts': 'definicja zlecenia wysyłki; firmę podaje wołający (akcja albo job)',
   'lib/ksef/offline-queue.ts': 'kolejka offline wysyłki (ksef_offline_queue); firmę podaje wołający',
   'lib/ksef/submission-log.ts': 'dziennik prób wysyłki (ksef_submissions); firmę podaje wołający',

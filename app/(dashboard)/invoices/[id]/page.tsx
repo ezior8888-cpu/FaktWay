@@ -12,6 +12,7 @@ import {
 import { canCorrectInvoice, canMarkInvoicePaid } from '@/lib/invoices/list-row-facts';
 import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
 import { canDuplicateInvoice, canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
+import { buyerLinkRefusal, canManageBuyerLinks } from '@/lib/invoice-share/policy';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -240,6 +241,24 @@ export default async function InvoiceDetailPage({
       origin: (invoice.origin as string | null) ?? null,
       invoice_kind: invoice.invoice_kind as string | null,
     }),
+    // Krok 2.10: „Link dla nabywcy” tym samym predykatem co akcja tworzenia; bez kodu QR
+    // (brak skrótu pliku XML) przycisku nie ma, bo PDF bez KODU I nie idzie do nabywcy.
+    can_share_with_buyer:
+      canManageBuyerLinks(membership?.role ?? null) &&
+      buyerLinkRefusal(
+        {
+          internal_number: internalNumber,
+          direction: (invoice.direction as string | null) ?? null,
+          origin: (invoice.origin as string | null) ?? null,
+          ksef_status: (invoice.ksef_status as string | null) ?? null,
+          invoice_kind: (invoice.invoice_kind as string | null) ?? null,
+          ksef_number: (invoice.ksef_number as string | null) ?? null,
+          ksef_environment: (invoice.ksef_environment as string | null) ?? null,
+          xml_storage_path: (invoice.xml_storage_path as string | null) ?? null,
+        },
+        env,
+        { xmlHash: qr !== null },
+      ) === null,
     qr,
     upo_status:
       upo?.status ??

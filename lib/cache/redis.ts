@@ -22,9 +22,10 @@
  *     włączanie 2FA, zmiana i reset hasła, ponowne uwierzytelnienie
  *     (`lib/auth/reauth.ts`: wyłączenie 2FA, usunięcie konta RODO i jego
  *     anulowanie hasłem; anulowanie linkiem z maila działa);
- *   - podgląd przypomnienia o płatności (`app/actions/reminders.ts`): jedyna
- *     akcja, która `fallback: true` z ogólnego limitera
- *     (`lib/rate-limit/index.ts` liczy wtedy w pamięci) traktuje jak odmowę.
+ *   - podgląd przypomnienia o płatności (`app/actions/reminders.ts`) i strona
+ *     faktury dla nabywcy `/faktura/<token>` z plikami PDF i XML
+ *     (`lib/invoice-share/buyer-invoice.ts`): `fallback: true` z ogólnego
+ *     limitera (`lib/rate-limit/index.ts` liczy wtedy w pamięci) to odmowa.
  * Skutek pośredni: kodu nie da się podać ani włączyć 2FA, więc to, co wymaga
  * potwierdzonego 2FA (`getVerifiedMfaState`), działa tylko w sesji już
  * potwierdzonej kodem: wgranie certyfikatu KSeF, wstrzymanie historii KSeF

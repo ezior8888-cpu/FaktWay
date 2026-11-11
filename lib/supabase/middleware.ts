@@ -4,6 +4,7 @@ import { getPanelMfaState } from '@/lib/auth/panel-mfa';
 import { PASSKEY_SESSION_COOKIE } from '@/lib/auth/passkey/session-marker';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
+import { BUYER_PAGE_HEADERS, isBuyerInvoicePath } from '@/lib/invoice-share/policy';
 import { isTelemetryTunnelPath } from '@/lib/telemetry-tunnel';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
@@ -123,6 +124,9 @@ export function isPublicPath(pathname: string): boolean {
   if (isNoSessionPath(pathname)) return true;
   if (isMarketingPath(pathname)) return true;
   if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
+  // Strona faktury dla nabywcy (krok 2.10): tylko `/faktura/<token>` i pliki
+  // pod nią; sam `/faktura` i podobne początki zostają za logowaniem.
+  if (isBuyerInvoicePath(pathname)) return true;
   if (pathname.startsWith('/api/')) {
     return PUBLIC_API_EXACT.some((p) => pathname === p) || PUBLIC_API_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
@@ -359,6 +363,12 @@ export async function updateSession(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
     });
     return res;
+  }
+
+  // Strona nabywcy niesie dane faktury, a token jest w adresie: bez cache,
+  // bez indeksowania i bez Referer. Ścieżka publiczna dochodzi tylko tutaj.
+  if (isBuyerInvoicePath(path)) {
+    for (const [name, value] of Object.entries(BUYER_PAGE_HEADERS)) supabaseResponse.headers.set(name, value);
   }
 
   return supabaseResponse;

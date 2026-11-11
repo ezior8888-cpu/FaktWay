@@ -97,6 +97,10 @@ export type AuditAction =
   // PR C: operator oddał decyzję klientowi (`operatorReleaseOriginalReviewAction`, notatka operatora, tylko nowe oddanie).
   | 'invoice.operator_original_release'
   | 'invoice.emailed'
+  // Link do faktury dla nabywcy (00179, krok 2.10): metadane niosą `linkId` (nigdy token),
+  // przy utworzeniu termin, przy cofnięciu powód (`manual` albo `replaced` przez nowy link).
+  | 'invoice.share_link_created'
+  | 'invoice.share_link_revoked'
   | 'invoice.resubmit_requested'
   // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
   // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
