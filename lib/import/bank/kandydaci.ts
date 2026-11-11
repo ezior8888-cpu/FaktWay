@@ -63,7 +63,7 @@ function buyerName(data: unknown): string | null {
 export function toBankInvoiceOption(row: InvoiceRow): BankInvoiceOption | null {
   if (row.currency !== null && row.currency.trim().toUpperCase() !== 'PLN') return null;
   if (typeof row.fa3_paid_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.fa3_paid_date)) return null;
-  // `outstandingOf` zwraca złote z groszami (`roundToCents`), więc mnożenie daje całe grosze.
+  // filtr-wyjatek: kwoty-bez-float `outstandingOf` zwraca złote z groszami (`roundToCents`), więc mnożenie daje całe grosze.
   const outstandingGrosze = Math.round(outstandingOf(row) * 100);
   if (!Number.isSafeInteger(outstandingGrosze) || outstandingGrosze <= 0) return null;
   return {

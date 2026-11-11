@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JPK xmlns="http://jpk.mf.gov.pl/wzor/2024/10/30/10301/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="JPK_EWP (4)" wersjaSchemy="1-0">JPK_EWP</KodFormularza>
+    <WariantFormularza>4</WariantFormularza>
+    <CelZlozenia>1</CelZlozenia>
+    <DataWytworzeniaJPK>2027-02-10T09:30:47Z</DataWytworzeniaJPK>
+    <DataOd>2026-01-01</DataOd>
+    <DataDo>2026-12-31</DataDo>
+    <KodUrzedu>1433</KodUrzedu>
+  </Naglowek>
+  <Podmiot1 rola="Podatnik">
+    <OsobaFizyczna>
+      <etd:NIP>1234567890</etd:NIP>
+      <etd:ImiePierwsze>Jan</etd:ImiePierwsze>
+      <etd:Nazwisko>Kowalski-Nowak</etd:Nazwisko>
+      <etd:DataUrodzenia>1985-04-12</etd:DataUrodzenia>
+    </OsobaFizyczna>
+  </Podmiot1>
+  <EWPWiersz>
+    <K_1>1</K_1>
+    <K_2>2026-03-16</K_2>
+    <K_3>2026-03-15</K_3>
+    <K_4>FV/1/03/2026</K_4>
+    <K_5>1234567890-20260315-0A1B2C-3D4E5F-6A</K_5>
+    <K_6>PL</K_6>
+    <K_7>1234567890</K_7>
+    <K_8>1234.56</K_8>
+    <K_9>12</K_9>
+  </EWPWiersz>
+  <EWPWiersz>
+    <K_1>2</K_1>
+    <K_2>2026-04-02</K_2>
+    <K_3>2026-04-02</K_3>
+    <K_4>KOR/1/04/2026</K_4>
+    <K_5>1234567890-20260315-0A1B2C-3D4E5F-6A</K_5>
+    <K_6>PL</K_6>
+    <K_7>1234567890</K_7>
+    <K_8>-200.00</K_8>
+    <K_9>12</K_9>
+    <K_10>Korekta (różnica)</K_10>
+  </EWPWiersz>
+  <EWPWiersz>
+    <K_1>3</K_1>
+    <K_2>2026-05-04</K_2>
+    <K_3>2026-04-30</K_3>
+    <K_4>Raport kasy 04/2026 &amp; &lt;zwroty&gt;</K_4>
+    <K_8>5000.00</K_8>
+    <K_9>8.5</K_9>
+    <K_10>Sprzedaż z kasy</K_10>
+  </EWPWiersz>
+  <EWPWiersz>
+    <K_1>4</K_1>
+    <K_2>2026-03-16</K_2>
+    <K_3>2026-03-15</K_3>
+    <K_4>FV/9/05/2026</K_4>
+    <K_5>1234567890-20260315-0A1B2C-3D4E5F-6A</K_5>
+    <K_6>DE</K_6>
+    <K_7>123456789</K_7>
+    <K_8>0.99</K_8>
+    <K_9>12.5</K_9>
+  </EWPWiersz>
+  <EWPCtrl>
+    <LiczbaWierszy>4</LiczbaWierszy>
+    <SumaPrzychodow>6035.55</SumaPrzychodow>
+  </EWPCtrl>
+</JPK>

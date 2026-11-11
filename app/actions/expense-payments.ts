@@ -38,6 +38,7 @@ interface ExpensePaymentRpc {
 const expenseIdSchema = z.string().uuid();
 const paidOnSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const parsed = new Date(`${value}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 });
 

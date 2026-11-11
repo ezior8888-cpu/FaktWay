@@ -1,0 +1,193 @@
+{
+  "wersja": 1,
+  "opis": "Czujka przepisów żelaznego filtra (krok F15, plan B9): akty obserwowane w ELI API Sejmu, słowa w tytułach, kalendarz ogłoszeń i wydania repozytorium MF. Zmiana pliku wymaga zgoda:zmiana-filtra (osłabienie: mniej aktów, słów albo terminów).",
+  "obserwowane": [
+    {
+      "eli": "DU/2004/535",
+      "nazwa": "ustawa o podatku od towarów i usług",
+      "obszary": [
+        "faktury.fa3",
+        "jpk.vat-fa",
+        "ksiegowosc.vat"
+      ]
+    },
+    {
+      "eli": "DU/1991/350",
+      "nazwa": "ustawa o podatku dochodowym od osób fizycznych",
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.kpir",
+        "waluty"
+      ]
+    },
+    {
+      "eli": "DU/1998/930",
+      "nazwa": "ustawa o zryczałtowanym podatku dochodowym",
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.ewidencja"
+      ]
+    },
+    {
+      "eli": "DU/1997/926",
+      "nazwa": "Ordynacja podatkowa",
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.kalendarz",
+        "ksiegowosc.mikrorachunek",
+        "jpk.vat-fa"
+      ]
+    },
+    {
+      "eli": "DU/1998/887",
+      "nazwa": "ustawa o systemie ubezpieczeń społecznych",
+      "obszary": [
+        "ksiegowosc.silniki"
+      ]
+    },
+    {
+      "eli": "DU/2004/2135",
+      "nazwa": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "podstawa_prawna": false,
+      "uwagi": "Rozporządzenia wykonawcze dotyczą świadczeń, nie składki; czujka patrzy tylko na zmiany ustawy."
+    },
+    {
+      "eli": "DU/1951/28",
+      "nazwa": "ustawa o dniach wolnych od pracy",
+      "obszary": [
+        "ksiegowosc.kalendarz",
+        "ksef.offline-upo"
+      ]
+    },
+    {
+      "eli": "DU/2002/1679",
+      "nazwa": "ustawa o minimalnym wynagrodzeniu za pracę",
+      "obszary": [
+        "ksiegowosc.parametry"
+      ]
+    },
+    {
+      "eli": "DU/2018/646",
+      "nazwa": "Prawo przedsiębiorców",
+      "obszary": [
+        "ksiegowosc.silniki"
+      ]
+    },
+    {
+      "eli": "DU/2013/403",
+      "nazwa": "ustawa o przeciwdziałaniu nadmiernym opóźnieniom w transakcjach handlowych",
+      "obszary": [
+        "windykacja"
+      ]
+    },
+    {
+      "eli": "DU/2025/1299",
+      "nazwa": "rozporządzenie w sprawie prowadzenia podatkowej księgi przychodów i rozchodów",
+      "obszary": [
+        "ksiegowosc.kpir",
+        "raporty.kpir"
+      ]
+    },
+    {
+      "eli": "DU/1996/475",
+      "nazwa": "ustawa o doradztwie podatkowym",
+      "obszary": [
+        "tresci"
+      ]
+    }
+  ],
+  "slowa_w_tytule": [
+    "przeciętn\\w* wynagrodzeni",
+    "minimaln\\w* wynagrodzeni",
+    "odsetek",
+    "składk\\w* na ubezpieczeni",
+    "ubezpieczenie zdrowotne",
+    "Krajow\\w* System\\w* e-Faktur",
+    "jednolit\\w* plik\\w* kontroln",
+    "struktur\\w* logiczn",
+    "podatkowej księgi przychodów",
+    "ewidencji przychodów",
+    "dni woln"
+  ],
+  "kalendarz": [
+    {
+      "id": "placa-minimalna",
+      "co": "rozporządzenie o minimalnym wynagrodzeniu na kolejny rok (Dz.U.); od niego preferencyjny ZUS i minimum zdrowotnej",
+      "kiedy": "09-15",
+      "parametry": [
+        "zus.placaMinimalna",
+        "zdrowotna.minimalna"
+      ]
+    },
+    {
+      "id": "kurs-euro-pazdziernik",
+      "co": "kurs średni euro NBP z pierwszego dnia roboczego października: limity ryczałtu na kolejny rok",
+      "kiedy": "10-01",
+      "parametry": [
+        "limity.ryczaltLimitPrzychodu",
+        "limity.ryczaltLimitKwartalny"
+      ]
+    },
+    {
+      "id": "limit-zdrowotnej-liniowy",
+      "co": "limit odliczenia składki zdrowotnej przy podatku liniowym na kolejny rok (komunikat MF)",
+      "kiedy": "12-15",
+      "parametry": [
+        "liniowy.limitOdliczeniaZdrowotnej"
+      ]
+    },
+    {
+      "id": "odsetki-styczen",
+      "co": "obwieszczenie MF o odsetkach za opóźnienie w transakcjach handlowych od 1 stycznia (M.P.)",
+      "kiedy": "01-01",
+      "parametry": []
+    },
+    {
+      "id": "prognozowane-wynagrodzenie",
+      "co": "prognozowane przeciętne wynagrodzenie (ustawa budżetowa, komunikat ZUS o podstawie składek)",
+      "kiedy": "01-15",
+      "parametry": [
+        "zus.prognozowanePrzecietneWynagrodzenie"
+      ]
+    },
+    {
+      "id": "przecietne-iv-kwartal",
+      "co": "przeciętne wynagrodzenie w IV kwartale (komunikat Prezesa GUS, M.P.): kwoty zdrowotnej ryczałtu od lutego",
+      "kiedy": "01-20",
+      "parametry": [
+        "zdrowotna.przecietneWynagrodzenieIvKw",
+        "zdrowotna.ryczaltDo60Tys",
+        "zdrowotna.ryczaltDo300Tys",
+        "zdrowotna.ryczaltPonad300Tys"
+      ]
+    },
+    {
+      "id": "stopa-wypadkowa",
+      "co": "stopa procentowa składki na ubezpieczenie wypadkowe od 1 kwietnia (ZUS)",
+      "kiedy": "04-01",
+      "parametry": [
+        "zus.stopaWypadkowaOdKwietnia"
+      ]
+    },
+    {
+      "id": "odsetki-lipiec",
+      "co": "obwieszczenie MF o odsetkach za opóźnienie w transakcjach handlowych od 1 lipca (M.P.)",
+      "kiedy": "07-01",
+      "parametry": []
+    }
+  ],
+  "okno_kalendarza_dni": {
+    "przed": 14,
+    "po": 30
+  },
+  "repozytoria": [
+    {
+      "repo": "CIRFMF/ksef-api",
+      "nazwa": "dokumentacja API KSeF (MF)",
+      "ostatnie_znane": "2.9.0"
+    }
+  ]
+}

@@ -513,6 +513,7 @@ async function authorizedExpense(): Promise<{ ctx: AuthContext } | { error: stri
 
 const validDay = (value: string) => {
   const parsed = new Date(`${value}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 

@@ -1,0 +1,239 @@
+{
+  "wersja": 1,
+  "obszar": "faktury FA(3)",
+  "opis": "Rejestr przepisów żelaznego filtra: faktury FA(3) (korekty, zaliczki, rozliczenia, daty, sumy). Plan: docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B4.1 i F10. Każda zmiana wymaga etykiety zgoda:wiedza-prawna i źródła w karcie PR.",
+  "przepisy": [
+    {
+      "id": "RP-FA-KOR-01",
+      "regula": "Faktura korygująca „przed/po” wykazuje w P_13_x i P_14_x różnicę między stanem po i przed korektą w każdej stawce, liczoną z pełnych stanów obu dokumentów; stawka bez różnicy nie jest wykazywana.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 106j ust. 2 pkt 5"
+        },
+        {
+          "akt": "schemat FA(3) Ministerstwa Finansów (lib/xml/schemas/fa3/schemat.xsd)",
+          "przepis": "opis pól P_13_1 i P_14_1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "faktury.korekty",
+        "faktury.fa3"
+      ],
+      "kod": [
+        "lib/ksef/fa3-correction-generator.ts#generateCorrectionInvoiceXml"
+      ],
+      "testy": [
+        "tests/unit/korekta-sumy-roznica.test.ts > przed/po: różnica, nie wartość po korekcie",
+        "tests/filtr/xsd/fa3-korekta.test.ts > „przed/po”: XSD"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "opis P_13_1 i P_14_1 w schemacie FA(3): dla faktur korygujących „kwota różnicy, o której mowa w art. 106j ust. 2 pkt 5 ustawy”",
+        "sprawdzono": "2026-11-09"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "F10 (wiedza dla funkcji działających dziś)",
+      "stan": "dziala",
+      "uwagi": "NZ-FA-01, NZ-FA-04 i NZ-FA-10 na losowych korektach sprawdza tests/filtr/xsd/fa3-korekta.test.ts. JPK_V7M ma wykazać tę samą różnicę: naprawa S-01 (#526, od main) z testem różnicowym JPK kontra XML."
+    },
+    {
+      "id": "RP-FA-ZAL-01",
+      "regula": "Faktura zaliczkowa: P_15 to otrzymana kwota, P_14_x kwota podatku ze wzoru KP = ZB × SP / (100 + SP) w stawce zaliczki, P_13_x = ZB minus KP; dane i wartość zamówienia w bloku Zamowienie.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 106f ust. 1 pkt 2, 3 i 4"
+        },
+        {
+          "akt": "schemat FA(3) Ministerstwa Finansów (lib/xml/schemas/fa3/schemat.xsd)",
+          "przepis": "opis pól P_14_1 i P_15"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "faktury.zaliczki",
+        "faktury.fa3"
+      ],
+      "kod": [
+        "lib/ksef/fa3-advance-generator.ts#generateAdvanceInvoiceXml"
+      ],
+      "testy": [
+        "tests/filtr/xsd/fa3-zaliczka.test.ts > XSD, P_15 = kwota zaliczki",
+        "tests/unit/zal-roz-partia15.test.ts > AUD-71: ZAL ma strukturę Zamowienie"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "opis P_14_1 w schemacie FA(3): dla faktur zaliczkowych kwota podatku według wzoru z art. 106f ust. 1 pkt 3; opis P_15: kwota zapłaty dokumentowana fakturą",
+        "sprawdzono": "2026-11-09"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "F10 (wiedza dla funkcji działających dziś)",
+      "stan": "dziala",
+      "uwagi": "Wzór liczy test sam, w groszach na liczbach całkowitych (tests/filtr/xsd/fa3-zaliczka.test.ts). Generator obsługuje jedną stawkę na zaliczkę."
+    },
+    {
+      "id": "RP-FA-ROZ-01",
+      "regula": "Faktura rozliczająca: pozycje (FaWiersz) pokazują pełne zamówienie, a P_13_x i P_14_x to wartość i podatek zamówienia w stawce pomniejszone o zaliczki w tej stawce (rozbicie z faktury zaliczkowej ma pierwszeństwo przed wzorem); P_15 to kwota pozostała do zapłaty.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 106f ust. 3"
+        },
+        {
+          "akt": "schemat FA(3) Ministerstwa Finansów (lib/xml/schemas/fa3/schemat.xsd)",
+          "przepis": "opis pola P_15"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "faktury.zaliczki",
+        "faktury.fa3"
+      ],
+      "kod": [
+        "lib/ksef/fa3-advance-generator.ts#generateFinalInvoiceXml",
+        "lib/ksef/fa3-advance-generator.ts#settlementVatSummaries"
+      ],
+      "testy": [
+        "tests/unit/fa3-roz-kwoty.test.ts > P_13_x/P_14_x: zamówienie minus zaliczki, każda w swojej stawce",
+        "tests/unit/fa3-roz-kwoty.test.ts > P_15: kwota pozostała do zapłaty",
+        "tests/filtr/xsd/fa3-rozliczenie.test.ts > XSD, P_15 = zamówienie minus zaliczki"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "opis P_15 w schemacie FA(3): dla faktur z art. 106f ust. 3 „kwota pozostała do zapłaty”; P_13_x i P_14_x po odjęciu zaliczek wynikają z komentarza w kodzie (broszura MF FA(3)), nie z opisu pól",
+        "sprawdzono": "2026-11-09"
+      },
+      "interpretacja": "P_13_x i P_14_x faktury rozliczającej po odjęciu zaliczek w tej samej stawce, pozycje pełne (zmiana z 28.09.2026; wcześniej zaliczki odejmowało Rozliczenie/Odliczenia i VAT zaliczek był na fakturze drugi raz).",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy na fakturze rozliczającej (art. 106f ust. 3) P_13_x i P_14_x to wartość i podatek zamówienia pomniejszone o zaliczki w tej samej stawce, przy pełnych pozycjach FaWiersz? Opis pól w schemacie potwierdza tylko P_15 (kwota pozostała do zapłaty).",
+        "przypadki": [
+          "zamówienie 10 000 zł netto 23%, zaliczka 2 460 zł brutto: P_13_1 = 8 000, P_14_1 = 1 840, P_15 = 9 840"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "F10 (wiedza dla funkcji działających dziś)",
+      "stan": "dziala",
+      "uwagi": "NZ-FA-01, NZ-FA-05 i NZ-FA-10 na losowych zamówieniach i zaliczkach sprawdza tests/filtr/xsd/fa3-rozliczenie.test.ts (VAT zaliczki bez rozbicia ze wzoru liczonego w teście)."
+    },
+    {
+      "id": "RP-FA-DATA-01",
+      "regula": "Fakturę można wystawić najwcześniej 60. dnia przed dostawą lub wykonaniem usługi: data sprzedaży może być najwyżej 60 dni po dacie wystawienia (dokładnie 60 dni jest dozwolone).",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 106i ust. 7"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "faktury.daty-numeracja"
+      ],
+      "kod": [
+        "lib/invoices/sale-date.ts#isSaleDateWithinLimit"
+      ],
+      "testy": [
+        "tests/unit/data-sprzedazy-60-dni.test.ts > 61 dni później — odrzucona z powołaniem na art. 106i ust. 7"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "F10 (wiedza dla funkcji działających dziś)",
+      "stan": "dziala",
+      "uwagi": "Termin z art. 106i ust. 1 (do 15. dnia miesiąca po dostawie) nie jest wymuszany: spóźniona faktura jest ważna i KSeF ją przyjmie; ostrzeżenie w formularzu to decyzja produktowa."
+    },
+    {
+      "id": "RP-FA-SUMY-01",
+      "regula": "Kwota należności ogółem P_15 faktury zwykłej to suma wartości netto P_13_x i podatku P_14_x ze wszystkich stawek, a suma P_13_x równa się sumie wartości netto pozycji P_11.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 106e ust. 1 pkt 13-15"
+        },
+        {
+          "akt": "schemat FA(3) Ministerstwa Finansów (lib/xml/schemas/fa3/schemat.xsd)",
+          "przepis": "opis pola P_15"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "faktury.kwoty",
+        "faktury.fa3"
+      ],
+      "kod": [
+        "lib/xml/fa3-generator.ts#generateFA3Xml"
+      ],
+      "testy": [
+        "tests/filtr/xsd/fa3.test.ts > przechodzą oficjalny XSD, a sumy w Fa zgadzają się z pozycjami"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "opis P_15 w schemacie FA(3): „Kwota należności ogółem”; złoty plik tests/filtr/zlote-pliki/fa3-zwykla.xml z sumami sprawdzonymi ręcznie",
+        "sprawdzono": "2026-11-09"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "F10 (wiedza dla funkcji działających dziś)",
+      "stan": "dziala",
+      "uwagi": "NZ-FA-01 i NZ-FA-10 na losowych fakturach sprawdza tests/filtr/xsd/fa3.test.ts."
+    }
+  ]
+}

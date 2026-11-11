@@ -120,6 +120,7 @@ export function vatDeductionForDocument(doc: CostDocument): VatDeduction {
   if (!Number.isFinite(gross)) {
     return { deductible: false, reason: 'missing_amount', notice: RECEIPT_WITH_NIP_NO_AMOUNT_NOTICE };
   }
+  // filtr-wyjatek: kwoty-bez-float złote z dwoma miejscami na całe grosze do porównania z limitem
   if (Math.round(gross * 100) > RECEIPT_WITH_NIP_LIMIT_GR) {
     return { deductible: false, reason: 'receipt_with_nip_over_limit', notice: RECEIPT_WITH_NIP_OVER_LIMIT_NOTICE };
   }

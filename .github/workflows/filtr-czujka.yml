@@ -1,0 +1,43 @@
+name: Filtr czujka przepisów
+
+# Żelazny filtr, krok F15 (docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B9).
+# Codziennie: nowe akty w Dz.U. i M.P. (ELI API Sejmu), które zmieniają akty
+# z rejestru przepisów, są wydane na ich podstawie albo mają w tytule słowo
+# z listy (filtr/czujka-przepisow.json); kalendarz ogłoszeń (płaca minimalna,
+# przeciętne wynagrodzenie, stopa wypadkowa, limity); wydania dokumentacji
+# KSeF MF. Każde trafienie to issue z etykietą `filtr` (bez powtórek).
+on:
+  schedule:
+    # 05:47 UTC (6:47 zimą, 7:47 latem w Warszawie), poza godziną pełną.
+    - cron: '47 5 * * *'
+  workflow_dispatch:
+    inputs:
+      od:
+        description: 'Od kiedy szukać aktów (RRRR-MM-DD); puste = 3 dni wstecz'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  czujka:
+    name: Czujka przepisów
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Czujka (ELI API, kalendarz, wydania MF)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OD: ${{ inputs.od }}
+        run: |
+          if [ -n "$OD" ]; then node scripts/filtr/czujka-przepisow.mjs --od "$OD"; else node scripts/filtr/czujka-przepisow.mjs; fi

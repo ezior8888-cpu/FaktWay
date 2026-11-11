@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JPK xmlns="http://crd.gov.pl/wzor/2025/12/19/14090/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="JPK_V7M (3)" wersjaSchemy="1-0E">JPK_VAT</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaJPK>2026-09-10T10:00:00.000Z</DataWytworzeniaJPK>
+    <NazwaSystemu>FaktWay</NazwaSystemu>
+    <CelZlozenia poz="P_7">1</CelZlozenia>
+    <KodUrzedu>1433</KodUrzedu>
+    <Rok>2026</Rok>
+    <Miesiac>8</Miesiac>
+  </Naglowek>
+  <Podmiot1 rola="Podatnik">
+    <OsobaFizyczna>
+      <etd:NIP>1234567890</etd:NIP>
+      <etd:ImiePierwsze>Jan</etd:ImiePierwsze>
+      <etd:Nazwisko>Kowalski-Nowak</etd:Nazwisko>
+      <etd:DataUrodzenia>1985-04-12</etd:DataUrodzenia>
+      <Email>biuro@example.test</Email>
+    </OsobaFizyczna>
+  </Podmiot1>
+  <Deklaracja>
+    <Naglowek>
+      <KodFormularzaDekl kodSystemowy="VAT-7 (23)" kodPodatku="VAT" rodzajZobowiazania="Z" wersjaSchemy="1-0E">VAT-7</KodFormularzaDekl>
+      <WariantFormularzaDekl>23</WariantFormularzaDekl>
+    </Naglowek>
+    <PozycjeSzczegolowe>
+      <P_10>1500</P_10>
+      <P_13>700</P_13>
+      <P_15>300</P_15>
+      <P_16>15</P_16>
+      <P_17>500</P_17>
+      <P_18>40</P_18>
+      <P_19>900</P_19>
+      <P_20>207</P_20>
+      <P_37>3900</P_37>
+      <P_38>262</P_38>
+      <P_39>100</P_39>
+      <P_42>1250</P_42>
+      <P_43>173</P_43>
+      <P_48>273</P_48>
+      <P_51>0</P_51>
+      <P_53>11</P_53>
+      <P_62>11</P_62>
+    </PozycjeSzczegolowe>
+    <Pouczenia>1</Pouczenia>
+  </Deklaracja>
+  <Ewidencja>
+    <SprzedazWiersz>
+      <LpSprzedazy>1</LpSprzedazy>
+      <NrKontrahenta>1234567890</NrKontrahenta>
+      <NazwaKontrahenta>Klient Sp. z o.o.</NazwaKontrahenta>
+      <DowodSprzedazy>FS/1/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <NrKSeF>1234567890-20260805-0100001AF629-AF</NrKSeF>
+      <K_19>1000.00</K_19>
+      <K_20>230.00</K_20>
+    </SprzedazWiersz>
+    <SprzedazWiersz>
+      <LpSprzedazy>2</LpSprzedazy>
+      <NrKontrahenta>1234567890</NrKontrahenta>
+      <NazwaKontrahenta>Klient Sp. z o.o.</NazwaKontrahenta>
+      <DowodSprzedazy>FS/2/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <DataSprzedazy>2026-07-31</DataSprzedazy>
+      <NrKSeF>1234567890-20260805-0100001AF629-AF</NrKSeF>
+      <K_17>500.00</K_17>
+      <K_18>40.00</K_18>
+    </SprzedazWiersz>
+    <SprzedazWiersz>
+      <LpSprzedazy>3</LpSprzedazy>
+      <NrKontrahenta>1234567890</NrKontrahenta>
+      <NazwaKontrahenta>Klient Sp. z o.o.</NazwaKontrahenta>
+      <DowodSprzedazy>FS/3/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <NrKSeF>1234567890-20260805-0100001AF629-AF</NrKSeF>
+      <K_15>300.00</K_15>
+      <K_16>15.00</K_16>
+    </SprzedazWiersz>
+    <SprzedazWiersz>
+      <LpSprzedazy>4</LpSprzedazy>
+      <NrKontrahenta>1234567890</NrKontrahenta>
+      <NazwaKontrahenta>Klient Sp. z o.o.</NazwaKontrahenta>
+      <DowodSprzedazy>FS/4/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <NrKSeF>1234567890-20260805-0100001AF629-AF</NrKSeF>
+      <K_13>700.00</K_13>
+    </SprzedazWiersz>
+    <SprzedazWiersz>
+      <LpSprzedazy>5</LpSprzedazy>
+      <NrKontrahenta>1234567890</NrKontrahenta>
+      <NazwaKontrahenta>Klient Sp. z o.o.</NazwaKontrahenta>
+      <DowodSprzedazy>FS/5/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <NrKSeF>1234567890-20260805-0100001AF629-AF</NrKSeF>
+      <K_10>1500.00</K_10>
+    </SprzedazWiersz>
+    <SprzedazWiersz>
+      <LpSprzedazy>6</LpSprzedazy>
+      <NrKontrahenta>BRAK</NrKontrahenta>
+      <NazwaKontrahenta>Jan Nowak</NazwaKontrahenta>
+      <DowodSprzedazy>FS/6/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <BFK>1</BFK>
+      <K_19>100.00</K_19>
+      <K_20>23.00</K_20>
+    </SprzedazWiersz>
+    <SprzedazWiersz>
+      <LpSprzedazy>7</LpSprzedazy>
+      <NrKontrahenta>1234567890</NrKontrahenta>
+      <NazwaKontrahenta>Klient Sp. z o.o.</NazwaKontrahenta>
+      <DowodSprzedazy>KOR/1/08/2026</DowodSprzedazy>
+      <DataWystawienia>2026-08-05</DataWystawienia>
+      <NrKSeF>1234567890-20260805-0100001AF629-AF</NrKSeF>
+      <K_19>-200.00</K_19>
+      <K_20>-46.00</K_20>
+    </SprzedazWiersz>
+    <SprzedazCtrl>
+      <LiczbaWierszySprzedazy>7</LiczbaWierszySprzedazy>
+      <PodatekNalezny>262.00</PodatekNalezny>
+    </SprzedazCtrl>
+    <ZakupWiersz>
+      <LpZakupu>1</LpZakupu>
+      <NrDostawcy>1234567890</NrDostawcy>
+      <NazwaDostawcy>Dostawca Sp. z o.o.</NazwaDostawcy>
+      <DowodZakupu>FZ/7/08/2026</DowodZakupu>
+      <DataZakupu>2026-08-06</DataZakupu>
+      <NrKSeF>1234567890-20260806-0100001AF629-B0</NrKSeF>
+      <K_42>200.00</K_42>
+      <K_43>46.00</K_43>
+    </ZakupWiersz>
+    <ZakupWiersz>
+      <LpZakupu>2</LpZakupu>
+      <NrDostawcy>1234567890</NrDostawcy>
+      <NazwaDostawcy>Dostawca Sp. z o.o.</NazwaDostawcy>
+      <DowodZakupu>PAP/1</DowodZakupu>
+      <DataZakupu>2026-08-06</DataZakupu>
+      <BFK>1</BFK>
+      <K_42>100.00</K_42>
+      <K_43>23.00</K_43>
+    </ZakupWiersz>
+    <ZakupWiersz>
+      <LpZakupu>3</LpZakupu>
+      <NrDostawcy>1234567890</NrDostawcy>
+      <NazwaDostawcy>Dostawca Sp. z o.o.</NazwaDostawcy>
+      <DowodZakupu>KOR/7/08</DowodZakupu>
+      <DataZakupu>2026-08-06</DataZakupu>
+      <NrKSeF>1234567890-20260806-0100001AF629-B0</NrKSeF>
+      <K_42>-50.00</K_42>
+      <K_43>-11.50</K_43>
+    </ZakupWiersz>
+    <ZakupWiersz>
+      <LpZakupu>4</LpZakupu>
+      <NrDostawcy>1234567890</NrDostawcy>
+      <NazwaDostawcy>Dostawca Sp. z o.o.</NazwaDostawcy>
+      <DowodZakupu>FZ/8/08/2026</DowodZakupu>
+      <DataZakupu>2026-08-06</DataZakupu>
+      <NrKSeF>1234567890-20260806-0100001AF629-B0</NrKSeF>
+      <K_42>1000.00</K_42>
+      <K_43>115.00</K_43>
+    </ZakupWiersz>
+    <ZakupCtrl>
+      <LiczbaWierszyZakupow>4</LiczbaWierszyZakupow>
+      <PodatekNaliczony>172.50</PodatekNaliczony>
+    </ZakupCtrl>
+  </Ewidencja>
+</JPK>

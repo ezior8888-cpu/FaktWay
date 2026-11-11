@@ -89,9 +89,12 @@ export async function runDailyDbSnapshot({ step }: JobContext) {
           text: `✅ ${kind === 'weekly' ? 'Weekly' : 'Daily'} DB snapshot zakończony.`,
           context: {
             kind,
+            // filtr-wyjatek: kwoty-bez-float rozmiar w MB do metryk, nie kwota
             size_mb: (result.sizeBytes / 1024 / 1024).toFixed(2),
             // Rozmiar JSON-a przed spakowaniem: to on zbliża się do progu.
+            // filtr-wyjatek: kwoty-bez-float rozmiar w MB do metryk, nie kwota
             json_mb: (result.jsonBytes / MIB).toFixed(1),
+            // filtr-wyjatek: kwoty-bez-float czas w sekundach do metryk, nie kwota
             duration_s: (result.durationMs / 1000).toFixed(1),
             tables: Object.keys(result.rowCounts).length,
           },
@@ -154,6 +157,7 @@ async function alertIncompleteOncePerDay(
   const key = `alerts:backup:json-incomplete:${now.toISOString().slice(0, 10)}`;
   if (await cacheGet<string>(key)) return 'already_sent';
 
+  // filtr-wyjatek: kwoty-bez-float próg w MB do alertu, nie kwota
   const limitMb = Math.round(result.limitBytes / MIB);
   try {
     await alertCritical(
@@ -163,6 +167,7 @@ async function alertIncompleteOncePerDay(
       {
         fields: [
           { label: 'kind', value: kind },
+          // filtr-wyjatek: kwoty-bez-float rozmiar w MB do alertu, nie kwota
           { label: 'json_mb', value: (result.jsonBytes / MIB).toFixed(1) },
           { label: 'limit_mb', value: String(limitMb) },
           { label: 'tables_done', value: `${result.tablesDone}/${result.tablesTotal}` },

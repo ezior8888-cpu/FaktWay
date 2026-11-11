@@ -1,0 +1,62 @@
+name: Filtr testy prawne
+
+# Żelazny filtr, krok F5 (docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B5.4).
+# Testy filtra (mapa, straż, hooki, rejestr przepisów, niezmienniki na
+# losowych danych) w dwóch strefach czasowych. Vitest wywołany WPROST w tym
+# pliku, nie przez skrypt z package.json, żeby zmiana skryptu w PR nie
+# osłabiła joba (ten plik chroni straż etykietą zgoda:zmiana-filtra).
+# Bez sekretów i bez dostępu do bazy.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: filtr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  strefa:
+    name: Filtr (TZ ${{ matrix.tz }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [Europe/Warsaw, UTC]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install XML schema validator
+        # Zapasowy serwer pakietów przy awarii mirrora Azure (11.11.2026, jak ci.yml).
+        run: bash scripts/ci/zainstaluj-xmllint.sh
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Testy filtra (300 przypadków na własność)
+        run: node_modules/.bin/vitest run --config vitest.filtr.config.ts
+        env:
+          TZ: ${{ matrix.tz }}
+          FILTR_PRZYPADKI: '300'
+
+  wynik:
+    name: 'Filtr: testy prawne'
+    if: always()
+    needs: [strefa]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Wynik obu stref
+        run: |
+          echo "Strefy: ${{ needs.strefa.result }}"
+          [ "${{ needs.strefa.result }}" = "success" ]

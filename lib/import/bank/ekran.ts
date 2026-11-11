@@ -220,6 +220,7 @@ const count = (value: unknown): number | null => (typeof value === 'number' && N
 export function groszeZBazy(value: unknown): number | null {
   const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
   if (!Number.isFinite(n)) return null;
+  // filtr-wyjatek: kwoty-bez-float złote z dwoma miejscami na całe grosze (dwa miejsca sprawdzone linię niżej)
   const grosze = Math.round(n * 100);
   return Number.isSafeInteger(grosze) && Math.abs(grosze - n * 100) < 1e-6 ? grosze : null;
 }

@@ -27,6 +27,8 @@ import {
 import { generateComarchOptimaXml } from '@/lib/exports/comarch-optima-generator';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { EDI_REFUSAL_PREFIX, generateEdiPlusPlus } from '@/lib/exports/edi-plus-plus-generator';
+import { zglosAlarmy } from '@/lib/bezpieczniki/alarm';
+import { ODMOWA_JPK_V7M_PREFIX, OdmowaJpkV7mError, sprawdzJpkV7m } from '@/lib/bezpieczniki/jpk-v7m';
 import { RECEIPT_REVENUE_REFUSAL_PREFIX } from '@/lib/invoices/receipt-revenue-guard';
 import {
   CSV_REFUSAL_PREFIX,
@@ -108,6 +110,13 @@ async function generateExportFile(
         expenses: data.expenses,
       });
       await assertJpkMatchesSchema('JPK_V7M', xml);
+      // Żelazny filtr F13 (część 2b): ten sam strażnik pliku co w module księgowości.
+      // Plik z alarmem nie wychodzi z Centrum eksportu; operator dostaje alarm w Sentry.
+      const alarmy = sprawdzJpkV7m(xml, job.period_start.slice(0, 7));
+      if (alarmy.length > 0) {
+        zglosAlarmy(alarmy, { tenantId: job.tenant_id, straznik: 'jpk-v7m-eksport' });
+        throw new OdmowaJpkV7mError(alarmy[0].kod);
+      }
       return {
         buffer: Buffer.from(xml, 'utf8'),
         filename: `JPK_V7M_${nip}_${periodStr}.xml`,
@@ -263,6 +272,8 @@ export async function onExportsGenerateExhausted(
     failure.message.startsWith(RECEIPT_REVENUE_REFUSAL_PREFIX) ||
     // F12-E2b: odmowa CSV (FP, nieznane kwoty z importu, waluta) ma numer faktury.
     failure.message.startsWith(CSV_REFUSAL_PREFIX) ||
+    // F13 część 2b: odmowa strażnika pliku JPK_V7M ma w treści kod alarmu.
+    failure.message.startsWith(ODMOWA_JPK_V7M_PREFIX) ||
     Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
   const message = human
     ? failure.message
@@ -443,7 +454,8 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
             e instanceof JpkDocumentNotSupportedError ||
             e instanceof CsvForeignCurrencyNotSupportedError ||
             e instanceof OutgoingInvoiceCurrencyNotSupportedError ||
-            e instanceof JpkV7mReverseChargeNotSupportedError
+            e instanceof JpkV7mReverseChargeNotSupportedError ||
+            e instanceof OdmowaJpkV7mError
           ) {
             throw new NonRetriableError(e.message);
           }

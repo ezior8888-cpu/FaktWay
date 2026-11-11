@@ -73,6 +73,7 @@ function warsawDay(value: string): string | null {
 function realDay(iso: string | null): string | null {
   if (!iso) return null;
   const parsed = new Date(`${iso}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : null;
 }
 

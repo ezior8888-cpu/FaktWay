@@ -50,6 +50,7 @@ export interface ReceiptMatchWindow {
 export function firstDayMonthsBefore(day: string, months: number): string {
   const year = Number(day.slice(0, 4));
   const month = Number(day.slice(5, 7)) - 1;
+  // filtr-wyjatek: data-warszawa rachunek miesięcy w UTC na polach RRRR-MM-DD, nie dzisiejsza data
   return new Date(Date.UTC(year, month - months, 1)).toISOString().slice(0, 10);
 }
 
@@ -68,6 +69,7 @@ export function nip10(raw: string | null | undefined): string | null {
 
 function amountGr(raw: unknown): number | null {
   const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN;
+  // filtr-wyjatek: kwoty-bez-float złote z dwoma miejscami na całe grosze (NUMERIC z bazy)
   return Number.isFinite(value) ? Math.round(value * 100) : null;
 }
 

@@ -1,9 +1,12 @@
 /**
  * Odczyt „Ten miesiąc” (plan księgowości JDG, K4): parametry sprawdzone przez
  * księgową (D7), ewidencja roku (K3), zatwierdzone rozliczenia i zapłaty
- * (`tax_settlements`, 00168), potem `tenMiesiac`. Każde policzone rozliczenie
- * dostaje skrót kwoty i jej bezpośrednich wejść: zatwierdzenie zapisuje go,
- * a inny skrót po zmianie danych oznacza nową wersję (D6).
+ * (`tax_settlements`, 00168), potem `tenMiesiac`. Wynik po bramce D7 przechodzi
+ * przez strażnika (żelazny filtr F13, `lib/bezpieczniki/ten-miesiac.ts`):
+ * pozycja z błędem spójności staje się brakiem, a operator dostaje alarm.
+ * Każde policzone rozliczenie dostaje skrót kwoty i jej bezpośrednich wejść:
+ * zatwierdzenie zapisuje go, a inny skrót po zmianie danych oznacza nową
+ * wersję (D6).
  */
 
 import { createHash } from 'node:crypto';
@@ -11,6 +14,8 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { zglosAlarmy } from '@/lib/bezpieczniki/alarm';
+import { sprawdzTenMiesiac } from '@/lib/bezpieczniki/ten-miesiac';
 import { monthRange } from '@/lib/expenses/month';
 import { czytajEwidencje } from '@/lib/ksiegowosc/ewidencja-dane';
 import { czytajKpir } from '@/lib/ksiegowosc/kpir-dane';
@@ -240,25 +245,39 @@ export async function czytajTenMiesiac(client: SupabaseClient, tenantId: string,
     const brak = d7.get(poz.rodzaj);
     return brak ? { ok: false, rodzaj: poz.rodzaj, termin: poz.termin, brak } : poz;
   });
-  const pozycje: PozycjaZeSkrotem[] = maskowane.map((poz) => (poz.ok ? { ...poz, wejsciaHash: skrotPozycji(miesiac, poz) } : poz));
-  // Kwoty z sekcji niepotwierdzonej nie idą dalej, także do opisu odliczeń.
-  const w = wynik.wynik;
-  const bezD7: WynikMiesiaca = {
-    ...w,
-    ryczalt: d7.has('ryczalt') ? null : w.ryczalt,
-    pit: d7.has('pit') ? null : w.pit,
-    skladki: d7.has('zus_spoleczne') ? null : w.skladki,
-    zdrowotna: d7.has('zdrowotna') ? null : w.zdrowotna,
-    zdrowotnaOdDochodu: d7.has('zdrowotna') ? null : w.zdrowotnaOdDochodu,
-    pozycje: maskowane,
-  };
+  const bezD7 = bezKwot(wynik.wynik, new Set(d7.keys()), maskowane);
+  // Strażnik (żelazny filtr F13, D-F7): ostatnia kontrola przed stroną, zatwierdzeniem,
+  // cronami i „Odłóż na podatek”. Pozycja z błędem spójności to brak z komunikatem, a operator dostaje alarm.
+  const kontrola = sprawdzTenMiesiac(bezD7);
+  zglosAlarmy(kontrola.alarmy, { tenantId, straznik: 'ten-miesiac' });
+  const sprawdzony = bezKwot(bezD7, new Set(kontrola.alarmy.map((a) => a.rodzaj)), kontrola.pozycje);
+  const pozycje: PozycjaZeSkrotem[] = kontrola.pozycje.map((poz) => (poz.ok ? { ...poz, wejsciaHash: skrotPozycji(miesiac, poz) } : poz));
 
   const p = parametryRoku(rok);
   const pz = parametryRoku(rokSkladkowy);
   const podatek = forma === 'ryczalt' ? { ryczalt: wartosci(p?.ryczalt) } : { [forma]: wartosci(p?.[forma]) };
   const parametryWersja = skrot(stabilnyJson({ ...podatek, zus: wartosci(p?.zus), zdrowotna: wartosci(pz?.zdrowotna) })).slice(0, 16);
 
-  return { ok: true, wynik: bezD7, pozycje, parametryWersja, rozliczenia: tegoMiesiaca, zaplatyReczne };
+  return { ok: true, wynik: sprawdzony, pozycje, parametryWersja, rozliczenia: tegoMiesiaca, zaplatyReczne };
+}
+
+/**
+ * Wynik bez kwot pozycji z `bez`: sekcja bez podpisu księgowej (D7) albo
+ * pozycja zatrzymana przez strażnika (F13). Ich kwoty nie idą dalej, także do
+ * opisu odliczeń pod kaflami. VAT jak brak z innego powodu niż nadwyżka: bez
+ * kwot deklaracji i bez pola nadwyżki, bo wpisana nadwyżka niczego tu nie zmieni.
+ */
+function bezKwot(w: WynikMiesiaca, bez: ReadonlySet<RodzajRozliczenia>, pozycje: PozycjaMiesiaca[]): WynikMiesiaca {
+  return {
+    ...w,
+    ryczalt: bez.has('ryczalt') ? null : w.ryczalt,
+    pit: bez.has('pit') ? null : w.pit,
+    skladki: bez.has('zus_spoleczne') ? null : w.skladki,
+    zdrowotna: bez.has('zdrowotna') ? null : w.zdrowotna,
+    zdrowotnaOdDochodu: bez.has('zdrowotna') ? null : w.zdrowotnaOdDochodu,
+    vat: w.vat && bez.has('vat') ? { wynik: null, nadwyzka: null, nadwyzkaNieznana: false } : w.vat,
+    pozycje,
+  };
 }
 
 /**
