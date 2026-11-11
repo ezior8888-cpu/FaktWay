@@ -142,16 +142,20 @@ describe('nocny backup czyta każdą tabelę', () => {
  * Plan skalowania 3000, sesja 12 (QAL-01): kopia czyta każdą tabelę stronami
  * po kluczu (`order` + „większy niż ostatni klucz”). Klucz musi być unikalny,
  * inaczej wiersze o tym samym kluczu na granicy strony przepadają po cichu.
+ * Tak samo wiersze z NULL w kluczu (Postgres sortuje je na koniec, a warunek
+ * „większy niż” ich nie przepuszcza), więc klucz musi być też NOT NULL.
  * Domyślny klucz to `id`; tabela bez unikalnego `id` musi mieć w
  * `SNAPSHOT_KEYS` swój klucz główny, kolumna w kolumnę.
  *
- * Strażnik odtwarza z migracji kolumny, klucze główne i unikalne `id`.
+ * Strażnik odtwarza z migracji kolumny, NOT NULL, klucze główne i unikalne `id`.
  * Pomija treść funkcji i bloków `DO` (jak strażnik wyżej), więc klucz
  * założony w bloku `DO` trzeba dopisać ręcznie albo zmienić migrację.
  */
 
 interface KluczeTabeli {
   kolumny: Set<string>;
+  /** Kolumny z NOT NULL (także z klucza głównego, Postgres ustawia im je sam). */
+  niepuste: Set<string>;
   pk: string[] | null;
   pkNazwa: string | null;
   unikalne: Array<{ nazwa: string; kolumny: string[] }>;
@@ -213,6 +217,7 @@ function listaKolumn(srodek: string): string[] | null {
 
 function dodajKolumne(s: KluczeTabeli, tabela: string, kolumna: string, definicja: string): void {
   s.kolumny.add(kolumna);
+  if (/\bNOT NULL\b|\bPRIMARY KEY\b/i.test(definicja)) s.niepuste.add(kolumna);
   if (/\bPRIMARY KEY\b/i.test(definicja)) {
     s.pk = [kolumna];
     s.pkNazwa = nazwaKolumny(/CONSTRAINT ("[^"]+"|\w+) PRIMARY KEY/i.exec(definicja)?.[1] ?? `${tabela}_pkey`);
@@ -233,6 +238,7 @@ function ograniczenie(s: KluczeTabeli, tabela: string, tekst: string, indeksy: M
   if (rodzaj!.toUpperCase() === 'PRIMARY KEY') {
     s.pk = kolumny;
     s.pkNazwa = nazwa ? nazwaKolumny(nazwa) : `${tabela}_pkey`;
+    for (const k of kolumny) s.niepuste.add(k);
   } else {
     s.unikalne.push({ nazwa: nazwa ? nazwaKolumny(nazwa) : `${tabela}_${kolumny.join('_')}_key`, kolumny });
   }
@@ -241,6 +247,7 @@ function ograniczenie(s: KluczeTabeli, tabela: string, tekst: string, indeksy: M
 
 function usunKolumne(s: KluczeTabeli, kolumna: string): void {
   s.kolumny.delete(kolumna);
+  s.niepuste.delete(kolumna);
   if (s.pk?.includes(kolumna)) s.pk = null;
   s.unikalne = s.unikalne.filter((u) => !u.kolumny.includes(kolumna));
 }
@@ -252,6 +259,12 @@ function akcjaAlter(s: KluczeTabeli, tabela: string, akcja: string, indeksy: Map
     if (ograniczenie(s, tabela, tekst, indeksy)) return;
     const kol = new RegExp(String.raw`^${NAZWA}(?: (.*))?$`).exec(tekst);
     if (kol) dodajKolumne(s, tabela, nazwaKolumny(kol[1]!), kol[2] ?? '');
+    return;
+  }
+  if ((m = new RegExp(String.raw`^ALTER (?:COLUMN )?${NAZWA} (SET|DROP) NOT NULL$`, 'i').exec(akcja))) {
+    const kolumna = nazwaKolumny(m[1]!);
+    if (m[2]!.toUpperCase() === 'SET') s.niepuste.add(kolumna);
+    else s.niepuste.delete(kolumna);
     return;
   }
   if ((m = new RegExp(String.raw`^DROP CONSTRAINT (?:IF EXISTS )?${NAZWA}`, 'i').exec(akcja))) {
@@ -274,24 +287,24 @@ function akcjaAlter(s: KluczeTabeli, tabela: string, akcja: string, indeksy: Map
     const [stara, nowa] = [nazwaKolumny(m[1]!), nazwaKolumny(m[2]!)];
     const zamien = (k: string) => (k === stara ? nowa : k);
     if (s.kolumny.delete(stara)) s.kolumny.add(nowa);
+    if (s.niepuste.delete(stara)) s.niepuste.add(nowa);
     if (s.pk) s.pk = s.pk.map(zamien);
     for (const u of s.unikalne) u.kolumny = u.kolumny.map(zamien);
   }
 }
 
-/** Stan końcowy z migracji: tabela → kolumny, klucz główny, unikalne kolumny. */
-function kluczeZMigracji(): Map<string, KluczeTabeli> {
+/** Stan końcowy po migracjach (w podanej kolejności): tabela → kolumny, klucz główny, unikalne kolumny. */
+function kluczeZSql(migracje: string[]): Map<string, KluczeTabeli> {
   const stan = new Map<string, KluczeTabeli>();
   const indeksy = new Map<string, string[]>();
-  const pliki = readdirSync(KATALOG).filter((f) => f.endsWith('.sql')).sort();
 
-  for (const plik of pliki) {
-    for (const p of poleceniaDDL(readFileSync(join(KATALOG, plik), 'utf8'))) {
+  for (const sql of migracje) {
+    for (const p of poleceniaDDL(sql)) {
       let m: RegExpExecArray | null;
       if ((m = /^CREATE (?:UNLOGGED )?TABLE (?:IF NOT EXISTS )?([\w."]+) ?\(/i.exec(p))) {
         const t = tabelaPublic(m[1]!);
         if (!t || stan.has(t)) continue;
-        const s: KluczeTabeli = { kolumny: new Set(), pk: null, pkNazwa: null, unikalne: [] };
+        const s: KluczeTabeli = { kolumny: new Set(), niepuste: new Set(), pk: null, pkNazwa: null, unikalne: [] };
         stan.set(t, s);
         for (const element of podziel(nawias(p, m[0].length - 1)?.srodek ?? '')) {
           if (ograniczenie(s, t, element, indeksy)) continue;
@@ -350,10 +363,20 @@ function kluczeZMigracji(): Map<string, KluczeTabeli> {
   return stan;
 }
 
-function maUnikalneId(s: KluczeTabeli): boolean {
+function kluczeZMigracji(): Map<string, KluczeTabeli> {
+  const pliki = readdirSync(KATALOG).filter((f) => f.endsWith('.sql')).sort();
+  return kluczeZSql(pliki.map((plik) => readFileSync(join(KATALOG, plik), 'utf8')));
+}
+
+function idUnikalne(s: KluczeTabeli): boolean {
   if (!s.kolumny.has('id')) return false;
   if (s.pk?.length === 1 && s.pk[0] === 'id') return true;
   return s.unikalne.some((u) => u.kolumny.length === 1 && u.kolumny[0] === 'id');
+}
+
+/** `id` unikalne i bez NULL: tylko wtedy kopia może czytać tabelę po `id`. */
+function maUnikalneId(s: KluczeTabeli): boolean {
+  return idUnikalne(s) && s.niepuste.has('id');
 }
 
 function bledyKluczy(stan: Map<string, KluczeTabeli>): string[] {
@@ -365,6 +388,8 @@ function bledyKluczy(stan: Map<string, KluczeTabeli>): string[] {
       if (s.pk?.join(',') !== klucz.join(',')) {
         bledy.push(`${t}: SNAPSHOT_KEYS = [${klucz.join(', ')}], a klucz główny = [${s.pk?.join(', ') ?? 'brak'}]`);
       }
+    } else if (idUnikalne(s) && !maUnikalneId(s)) {
+      bledy.push(`${t}: id jest unikalne, ale może być NULL (takie wiersze wypadłyby z kopii), potrzebne NOT NULL na id`);
     } else if (!maUnikalneId(s)) {
       bledy.push(`${t}: brak unikalnej kolumny id, dopisz do SNAPSHOT_KEYS klucz główny [${s.pk?.join(', ') ?? 'brak'}]`);
     }
@@ -398,5 +423,23 @@ describe('nocny backup czyta każdą tabelę po unikalnym kluczu', () => {
     expect(stan.get('invoices')?.pk).toEqual(['id']);
     expect(stan.get('flo_decisions')?.pk).toEqual(['tenant_id', 'kind']);
     expect(snapshotKeyFor('invoices')).toEqual(['id']);
+  });
+
+  it('unikalne id, które może być NULL, nie wystarcza: takie wiersze wypadłyby z kopii po cichu', () => {
+    // Postgres sortuje NULL na koniec, a warunek „większy niż ostatni klucz”
+    // NULL-a nie przepuszcza. W tabeli dłuższej niż strona wiersze z NULL
+    // w id nie trafiłyby do kopii, a liczniki by się zgadzały.
+    const proba = kluczeZSql([
+      'CREATE TABLE public.a (id uuid UNIQUE, x text);',
+      'CREATE TABLE public.b (id uuid NOT NULL UNIQUE, x text);',
+      'CREATE TABLE public.c (id uuid, x text); CREATE UNIQUE INDEX c_id ON public.c (id);',
+      'ALTER TABLE public.c ALTER COLUMN id SET NOT NULL;',
+      'CREATE TABLE public.d (id uuid NOT NULL, CONSTRAINT d_id_key UNIQUE (id));',
+      'ALTER TABLE public.d ALTER COLUMN id DROP NOT NULL;',
+      'CREATE TABLE public.e (id uuid PRIMARY KEY);',
+      'CREATE TABLE public.f (uid uuid NOT NULL UNIQUE); ALTER TABLE public.f RENAME COLUMN uid TO id;',
+    ]);
+    const zUnikalnymId = ['a', 'b', 'c', 'd', 'e', 'f'].filter((t) => maUnikalneId(proba.get(t)!));
+    expect(zUnikalnymId).toEqual(['b', 'c', 'e', 'f']);
   });
 });
