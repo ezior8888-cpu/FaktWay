@@ -29,6 +29,7 @@ const AMOUNT_INPUT = /^\d{1,3}(?:[  ]?\d{3})*(?:[.,]\d{1,2})?$/;
 function isRealDay(value: string): boolean {
   if (!ISO_DAY.test(value)) return false;
   const parsed = new Date(`${value}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
@@ -47,6 +48,7 @@ export function parsePaymentAmount(text: string): number | null {
 }
 
 function toCents(value: number): number {
+  // filtr-wyjatek: kwoty-bez-float złote z dwoma miejscami na całe grosze
   return Math.round(value * 100);
 }
 

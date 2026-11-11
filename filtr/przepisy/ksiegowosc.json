@@ -1,0 +1,2908 @@
+{
+  "wersja": 1,
+  "obszar": "księgowość JDG (PLAN-KSIEGOWOSC-JDG, sekcje 4, 5 i 13)",
+  "opis": "Rejestr przepisów żelaznego filtra: księgowość JDG (PLAN-KSIEGOWOSC-JDG, sekcje 4, 5 i 13). Plan: docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B4.1. Każda zmiana wymaga etykiety zgoda:wiedza-prawna i źródła w karcie PR.",
+  "przepisy": [
+    {
+      "id": "RP-PRZYCH-01",
+      "regula": "Przychód z działalności to kwoty należne z faktur sprzedaży przyjętych w aktywnym środowisku KSeF firmy (kierunek outgoing) i z wpisów ręcznych; faktura z innego środowiska albo bez środowiska nie wchodzi do ksiąg.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1"
+        },
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 6 ust. 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir",
+        "ksef.srodowisko"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja-dane.ts#czytajFakturyRoku",
+        "lib/ksiegowosc/ewidencja-dane.ts#czytajEwidencje",
+        "lib/ksef/accounting-provenance.ts#assertAcceptedInvoiceEnvironmentComplete"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja-dane.test.ts > faktury outgoing przyjęte w aktywnym środowisku",
+        "tests/unit/ksiegowosc-ewidencja-dane.test.ts > przyjęte faktury bez środowiska KSeF albo błąd odczytu"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": "Program bierze tylko faktury z KSeF i wpisy ręczne; sprzedaż spoza nich klient wpisuje ręcznie (np. raport kasy).",
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 1",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-DATA-01",
+      "regula": "Dzień przychodu to dzień wydania rzeczy albo wykonania usługi, nie później niż dzień wystawienia faktury albo zapłaty; ewidencja i KPiR liczą go tą samą funkcją.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1c"
+        },
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 6 ust. 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#dzienPrzychodu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > dzień przychodu: sprzedaż wcześniejsza niż wystawienie",
+        "tests/unit/ksiegowosc-ewidencja.test.ts > sprzedaż z grudnia zafakturowana w styczniu należy do roku sprzedaży"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": "Program zna datę sprzedaży i wystawienia; zapłaty przed wystawieniem (poza zaliczką) nie bierze pod uwagę.",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy pominięcie zapłaty otrzymanej przed wystawieniem faktury (bez faktury zaliczkowej) jest bezpieczne dla JDG w pilotażu?",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 1",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-KOR-01",
+      "regula": "Korekta przychodu wchodzi różnicą (także ujemną) w okresie wystawienia faktury korygującej, chyba że wynika z błędu rachunkowego albo oczywistej omyłki (wtedy okres pierwotny).",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1m"
+        },
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 6 ust. 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir",
+        "faktury.korekty"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje",
+        "lib/ksiegowosc/kpir.ts#zbudujKpir"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > korekta wchodzi różnicą (także ujemną) w dniu swojego wystawienia",
+        "tests/unit/ksiegowosc-kpir.test.ts > korekta w dniu wystawienia"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": "Program nie rozpozna korekty z powodu błędu rachunkowego: każdą korektę ujmuje w dniu jej wystawienia.",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Korekta z powodu błędu rachunkowego albo oczywistej omyłki zmienia okres pierwotny; program tego nie rozpozna. Czy wystarczy komunikat dla klienta, czy potrzebny jest znacznik przy korekcie?",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 1, §5 „Ewidencja: korekty”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-KOR-02",
+      "regula": "Korekta większa niż przychód okresu zmniejsza przychód tej samej stawki w kolejnych okresach roku; ujemna reszta po grudniu zostaje do zeznania rocznego.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1n"
+        },
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 6 ust. 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ryczalt.ts#ryczaltMiesiaca"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > ujemny przychód stawki przechodzi na kolejny miesiąc",
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > ujemny przychód 12 % w lipcu przechodzi na sierpień",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-RYCZ-09"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy przeniesienie ujemnej reszty korekty w obrębie tej samej stawki ryczałtu jest zgodne z praktyką (G12)?",
+        "przypadki": [
+          "G12"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Korekta większa niż przychód (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZAL-01",
+      "regula": "Zaliczka nie jest liczona dwa razy: faktura zaliczkowa wchodzi w miesiącu zaliczki, a faktura rozliczająca pomniejszona o rozliczone zaliczki (tak samo w ewidencji i KPiR).",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1c i ust. 3 pkt 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir",
+        "faktury.zaliczki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje",
+        "lib/invoices/settled-advances.ts#fetchSettledAdvancesNet"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > zaliczka się nie dubluje",
+        "tests/unit/kpir-roz-zaliczki.test.tsx > zaliczk"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "niska",
+      "wzorzec": null,
+      "interpretacja": "Zaliczka wchodzi do przychodu w miesiącu jej otrzymania (faktury zaliczkowej).",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Art. 14 ust. 3 pkt 1 ustawy o PIT: zaliczka na dostawę wykonaną w następnym okresie nie jest przychodem. Czy zaliczka ma wchodzić w miesiącu zaliczki, czy dopiero w miesiącu wykonania? Zmiana dotyczy też KPiR.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 1, §5 „Ewidencja: zaliczki”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-FP-01",
+      "regula": "Faktura do paragonu (FP) nie jest drugim przychodem, jeśli sprzedaż weszła już z raportu kasy fiskalnej.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1"
+        },
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 2"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje",
+        "lib/ksiegowosc/kpir.ts#zbudujKpir"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > FP nie jest drugim przychodem",
+        "tests/unit/ksiegowosc-kpir.test.ts > faktura do paragonu poza przychodem z brakiem"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 2",
+      "stan": "dziala",
+      "uwagi": "Od kroku 1.2 planu kompletnej aplikacji (#509) FP daje brak miesiąca w ewidencji i KPiR (brakFakturyDoParagonu), dopóki FaktWay nie sprawdza, czy raport kasy obejmuje tę sprzedaż."
+    },
+    {
+      "id": "RP-WAL-01",
+      "regula": "Przychód i koszt w walucie obcej przelicza się po kursie średnim NBP z ostatniego dnia roboczego przed dniem przychodu albo kosztu; bez kursu jest brak, a kwot w różnych walutach się nie sumuje.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 11a ust. 1 i 2"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir",
+        "waluty"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#przeliczNaPln",
+        "lib/ksiegowosc/ewidencja.ts#kluczKursu",
+        "lib/nbp/client.ts#fetchNbpTablesBefore"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > kwota w EUR przeliczona do grosza",
+        "tests/unit/ksiegowosc-ewidencja.test.ts > bez kursu: brak z nazwą faktury",
+        "tests/unit/ksiegowosc-kpir-dane.test.ts > koszt z KSeF w EUR bez przeglądu kursu",
+        "tests/filtr/roznicowe/kurs-dzien.test.ts > każdy dzień 2026-2060: kurs z ostatniego dnia roboczego przed zdarzeniem"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "kursy z tabeli A NBP (api.nbp.pl)",
+        "sprawdzono": "2026-11-09"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 3",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ODCZYT-01",
+      "regula": "Sumy po wielu wierszach czyta się stronami do końca (PostgREST ucina wynik po 1000 wierszach); niepełny odczyt to błąd, nie mniejsza suma.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 4"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.kpir",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/accounting/read-complete-pages.ts#readCompletePages",
+        "lib/accounting/read-complete-pages.ts#readCompletePagesByKey"
+      ],
+      "testy": [
+        "tests/unit/accounting-complete-pages-by-key.test.ts > "
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 4, §13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-MIES-01",
+      "regula": "Miesiąc i „dzisiaj” liczy się w strefie Europe/Warsaw, nie w UTC.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 5"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.rozliczenia",
+        "pomocnicze"
+      ],
+      "kod": [
+        "lib/format/warsaw-date.ts#todayInWarsaw",
+        "lib/ksiegowosc/miesiac-strony.ts#miesiacZParametrow"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac-dane.test.ts > czyta wersje miesiąca"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 5",
+      "stan": "dziala",
+      "uwagi": "Sygnał S-08 (plan filtra B7.1): część kodu poza modułem liczy „dzisiaj” w UTC."
+    },
+    {
+      "id": "RP-ZAOKR-01",
+      "regula": "Podstawę opodatkowania i podatek zaokrągla się do pełnych złotych: końcówki poniżej 50 gr pomija się, 50 gr i więcej podwyższa do pełnego złotego.",
+      "podstawa": [
+        {
+          "akt": "Ordynacja podatkowa",
+          "przepis": "art. 63 § 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ryczalt.ts#doPelnychZlotych",
+        "lib/ksiegowosc/pit.ts#doZlotych"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > podstawa i ryczałt w pełnych złotych",
+        "tests/unit/ksiegowosc-pit.test.ts > podstawa w pełnych złotych: od 50 gr w górę",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-ZAOKR-01",
+        "NZ-ZAOKR-04",
+        "NZ-ZAOKR-05"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "tekst art. 63 § 1 Ordynacji podatkowej",
+        "sprawdzono": "2026-11-09"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 6",
+      "stan": "dziala",
+      "uwagi": "doPelnychZlotych (ryczalt.ts) i doZlotych (pit.ts) dają różne wyniki dla kwot ujemnych; docelowo jedna funkcja (NZ-ZAOKR-04, przegląd wsteczny F11)."
+    },
+    {
+      "id": "RP-ZAOKR-02",
+      "regula": "Składki na ubezpieczenia społeczne, Fundusz Pracy i składkę zdrowotną liczy się w groszach (każdą składkę osobno), bez zaokrąglania do złotych.",
+      "podstawa": [
+        {
+          "akt": "ustawa o systemie ubezpieczeń społecznych",
+          "przepis": "art. 18 i art. 18a"
+        },
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 79 i art. 81"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zus.ts#procentGr",
+        "lib/ksiegowosc/zus.ts#skladkiSpoleczne",
+        "lib/ksiegowosc/zdrowotna.ts#zdrowotnaRyczaltu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > pełny ZUS: 1 926,76 zł",
+        "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-ZAOKR-02"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "tabela składek ZUS na 2026 r. (zus.pl, 2.02.2026)",
+        "sprawdzono": "2026-11-05"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 6",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZAOKR-03",
+      "regula": "Kwoty w części deklaracyjnej JPK_V7M podaje się w pełnych złotych; część ewidencyjna w groszach.",
+      "podstawa": [
+        {
+          "akt": "Ordynacja podatkowa",
+          "przepis": "art. 63 § 1"
+        },
+        {
+          "akt": "objaśnienia MF do JPK_V7M(3)",
+          "przepis": "część deklaracyjna"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "jpk.vat-fa",
+        "ksiegowosc.vat"
+      ],
+      "kod": [
+        "lib/exports/jpk-v7m-generator.ts#wholeZloty",
+        "lib/ksiegowosc/vat.ts#vatMiesiaca"
+      ],
+      "testy": [
+        "tests/unit/jpk-v7m3.test.ts > ",
+        "tests/filtr/roznicowe/vat.test.ts > pola P_10-P_62 w pliku i rozliczenie w module VAT"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 6",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZAOKR-04",
+      "regula": "Ewidencje (ewidencja przychodów, KPiR, JPK_EWP, JPK_PKPIR) prowadzi się w groszach; przeliczenie z waluty zaokrągla połówkę od zera.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 6"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.jpk-pit"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#przeliczNaPln",
+        "lib/ksiegowosc/ewidencja.ts#kwotaTekst",
+        "lib/ksiegowosc/jpk-ewp.ts#kwotaJpk"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > przeliczenie zaokrągla połówkę od zera",
+        "tests/unit/ksiegowosc-jpk-ewp.test.ts > kwoty z groszy bez float"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 6",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-PARAM-01",
+      "regula": "Stawki, progi, limity i kwoty składek pochodzą tylko z parametrów roku (lib/ksiegowosc/parametry), każda liczba ze źródłem, datą odczytu i pewnością; żadnych stawek na sztywno w kodzie.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 7"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry",
+        "ksiegowosc.modul"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/index.ts#parametryNa",
+        "lib/ksiegowosc/parametry/index.ts#parametryRoku",
+        "lib/ksiegowosc/parametry/liczba.ts#liczba"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > każdy rok ma wszystkie sekcje",
+        "tests/unit/ksiegowosc-parametry.test.ts > rok bez pliku nie dostaje parametrów z innego roku"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 7",
+      "stan": "dziala",
+      "uwagi": "Stawka 19 % na sztywno poza modułem (lib/dashboard/tax-estimate.ts, D13) to znany wyjątek do K8."
+    },
+    {
+      "id": "RP-BRAK-01",
+      "regula": "Brak profilu, brak roku parametrów albo brak liczby daje brak kwoty z komunikatem (nazwa braku, co dalej) i ścieżką operatora; nigdy zero zamiast braku.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 8"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry",
+        "ksiegowosc.profil",
+        "ksiegowosc.rozliczenia",
+        "ksiegowosc.modul"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/index.ts#brakujace",
+        "lib/ksiegowosc/parametry/index.ts#brakNastepnegoRoku",
+        "lib/ksiegowosc/profil.ts#komunikatBrakuProfilu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > brak roku daje komunikat z nazwą braku i ścieżkę operatora",
+        "tests/unit/ksiegowosc-profil.test.ts > komunikat bez profilu"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-WSP-03"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 8",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-D7-01",
+      "regula": "Dopóki księgowa nie potwierdzi sekcji parametrów (pole sprawdzila), kwoty z tej sekcji nie są pokazywane klientom; zamiast nich jest brak.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG D7"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/index.ts#brakujace"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > niesprawdzona sekcja zatrzymuje liczenie",
+        "tests/unit/ksiegowosc-ten-miesiac-dane.test.ts > niesprawdzona sekcja zdrowotnej daje brak samej zdrowotnej"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 8, §13, D7",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-D8-01",
+      "regula": "Teksty modułu nie doradzają: nie zalecają, nie porównują form opodatkowania i nie mówią „zapłać”; podają, ile wychodzi z danych klienta i jaki jest termin z przepisów.",
+      "podstawa": [
+        {
+          "akt": "ustawa o doradztwie podatkowym",
+          "przepis": "art. 2 i art. 3"
+        },
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG D8"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ekrany",
+        "ksiegowosc.przypomnienia",
+        "tresci"
+      ],
+      "kod": [
+        "lib/ksiegowosc/przypomnienia.ts#trescTerminu",
+        "lib/ksiegowosc/przypomnienia.ts#trescWyliczenia"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-przypomnienia.test.ts > teksty bez trybu rozkazującego",
+        "tests/unit/ksiegowosc-parametry.test.ts > komunikaty dla klienta bez trybu rozkazującego"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "prawnik",
+        "pytanie": "Gdzie przebiega granica między informacją o wyniku obliczeń a czynnością doradztwa podatkowego (art. 2 ustawy o doradztwie podatkowym) dla programu bez doradcy?",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 9, D8",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-WERSJE-01",
+      "regula": "Zatwierdzone rozliczenie jest niezmienne: zmiana danych daje nową wersję (inny skrót wejść), kwoty starej wersji nie zmieni ani klient, ani klucz serwisowy.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG D6"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ten-miesiac.ts#wersjaMiesiaca",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#skrot",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#skrotPozycji"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac-dane.test.ts > poprawka opisu albo potwierdzenia w parametrach nie zmienia skrótu",
+        "tests/rls-ksiegowosc-rozliczenia.test.ts > kwoty nie zmieni klucz użytkownika"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 10, §13, D6",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-AUDYT-01",
+      "regula": "Każda zmiana profilu podatkowego, zatwierdzenie rozliczenia i oznaczenie zapłaty trafia do audit_logs; tabele modułu mają RLS.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 11"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.profil",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/audit/log.ts#logAudit"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac-akcje.test.ts > pierwsze zatwierdzenie: trzy rozliczenia w wersji 1, w jednym zapisie, z migawką i audytem"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 11",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-IDEMP-01",
+      "regula": "Ponowienie zadania w tle zaczyna od zera, więc mail, push i wysyłka JPK mają klucz idempotencji: to samo przypomnienie wychodzi raz.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §4 pkt 12"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.przypomnienia",
+        "ksiegowosc.wysylka-jpk"
+      ],
+      "kod": [
+        "lib/ksiegowosc/powiadomienia.ts#zajmij",
+        "lib/ksiegowosc/powiadomienia.ts#zamknij"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-powiadomienia.test.ts > push o wyliczonym październiku raz",
+        "tests/unit/ksiegowosc-powiadomienia.test.ts > ponowienie przejmuje wpis i wysyła raz"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§4 pkt 12",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-FORMA-01",
+      "regula": "Forma opodatkowania zmienia się tylko od początku roku; w trakcie roku można zmienić inne ustawienia (np. etap ZUS).",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 9a ust. 2"
+        },
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 9 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.profil"
+      ],
+      "kod": [
+        "lib/ksiegowosc/profil.ts#sprawdzZmianeFormy",
+        "lib/ksiegowosc/profil.ts#wersjaNa"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-profil.test.ts > zmiana formy w trakcie roku odrzucona",
+        "tests/unit/ksiegowosc-profil.test.ts > ta sama forma od dowolnego miesiąca"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": "Termin wyboru formy (do 20 lutego) i forma dla firmy zakładanej w trakcie roku: poza v1.",
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Skala”, „Liniowy”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-RYCZ-STAWKI-01",
+      "regula": "Stawki ryczałtu: 17, 15, 14, 12, 10, 8,5, 5,5 i 3 %; stawkę wybiera klient według rodzaju działalności (zwykle PKWiU), program jej nie zgaduje.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 12 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.profil",
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/profil.ts#STAWKI_RYCZALTU",
+        "lib/ksiegowosc/profil.ts#STAWKI_RYCZALTU_ZRODLO",
+        "lib/ksiegowosc/ryczalt.ts#KLUCZE_STAWEK",
+        "lib/ksiegowosc/ryczalt.ts#ryczaltMiesiaca"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-profil.test.ts > stawki do wyboru: osiem grup z opisem",
+        "tests/unit/ksiegowosc-silniki.test.ts > jedna stawka bez odliczeń"
+      ],
+      "parametry": [
+        "ryczalt.stawka17",
+        "ryczalt.stawka15",
+        "ryczalt.stawka14",
+        "ryczalt.stawka12",
+        "ryczalt.stawka10",
+        "ryczalt.stawka8_5",
+        "ryczalt.stawka5_5",
+        "ryczalt.stawka3"
+      ],
+      "niezmienniki": [
+        "NZ-RYCZ-01",
+        "NZ-RYCZ-02"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "podatki.gov.pl, stawki ryczałtu",
+        "sprawdzono": "2026-11-04"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ryczałt: stawki”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-RYCZ-STAWKI-02",
+      "regula": "Przy kilku stawkach odliczenia dzieli się proporcjonalnie do przychodu z każdej stawki (co do grosza); podstawę każdej stawki i ryczałt z sumy zaokrągla się do pełnych złotych.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 11 ust. 1 i 1a, art. 12"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ryczalt.ts#rozdzielProporcjonalnie",
+        "lib/ksiegowosc/ryczalt.ts#ryczaltMiesiaca"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > dwie stawki: odliczenia proporcjonalnie do przychodu",
+        "tests/unit/ksiegowosc-silniki.test.ts > podział co do grosza",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > remis reszt przy podziale odliczeń",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-RYCZ-05"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy podział składek społecznych proporcjonalnie do przychodu z każdej stawki jest akceptowany (G4)?",
+        "przypadki": [
+          "G4"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ryczałt: kilka stawek (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-RYCZ-ODL-01",
+      "regula": "Od przychodu odlicza się zapłacone składki społeczne (bez Funduszu Pracy) i 50 % zapłaconej składki zdrowotnej; niewykorzystane odliczenie przechodzi na kolejne miesiące roku; zapłacone to oznaczone w FaktWay „Zapłacone” z datą.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 11 ust. 1 i 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ryczalt.ts#ryczaltMiesiaca",
+        "lib/ksiegowosc/ten-miesiac.ts#przyrostyZaplat"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > odliczenia: społeczne bez FP i połowa zdrowotnej",
+        "tests/unit/ksiegowosc-silniki.test.ts > odliczenia większe niż przychód przechodzą",
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > nadwyżka odliczeń ze stycznia przechodzi na luty",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
+      ],
+      "parametry": [
+        "ryczalt.odliczenieZdrowotnej"
+      ],
+      "niezmienniki": [
+        "NZ-RYCZ-03",
+        "NZ-RYCZ-06"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ryczałt: odliczenia”, „Odliczenia ryczałtu (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-RYCZ-ODL-02",
+      "regula": "Kolejna zapłacona wersja rozliczenia liczy się do odliczeń tylko dopłatą ponad najwyższą zapłaconą wersję okresu, w miesiącu tej zapłaty.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 11 ust. 1"
+        },
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG D6"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ten-miesiac.ts#przyrostyZaplat"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > kolejna zapłacona wersja liczy się tylko dopłatą",
+        "tests/unit/ksiegowosc-ten-miesiac-dane.test.ts > zaległe składki za listopad zapłacone w styczniu"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Odliczenia ryczałtu (K4)”, §13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-RYCZ-LIM-01",
+      "regula": "Limit przychodu dla ryczałtu 2 mln euro i limit wpłat kwartalnych 200 tys. euro przelicza się po kursie NBP z pierwszego dnia roboczego października roku poprzedniego.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 6 ust. 4 i art. 21 ust. 1a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/2026.ts#PARAMETRY_2026"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > każdy rok ma wszystkie sekcje"
+      ],
+      "parametry": [
+        "limity.ryczaltLimitPrzychodu",
+        "limity.ryczaltLimitKwartalny"
+      ],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ryczałt: limity”",
+      "stan": "poza-v1",
+      "uwagi": "Liczby są w parametrach; sprawdzenie limitu i rozliczenie kwartalne to krok K9."
+    },
+    {
+      "id": "RP-NAJEM-01",
+      "regula": "Przychód z najmu do 100 tys. zł w roku: 8,5 %, nadwyżka 12,5 %; wiersz przekraczający próg dzieli się, a korekta in minus po przekroczeniu progu najpierw zmniejsza nadwyżkę 12,5 %.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 12 ust. 1 pkt 3 lit. a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje",
+        "lib/ksiegowosc/ewidencja-dane.ts#progNajmuZParametrow"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > wiersz przekraczający próg dzieli się",
+        "tests/unit/ksiegowosc-ewidencja.test.ts > korekta in minus po przekroczeniu progu najpierw zmniejsza nadwyżkę"
+      ],
+      "parametry": [
+        "ryczalt.progStawki8_5",
+        "ryczalt.stawkaPonadProg8_5"
+      ],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Korekta najmu po progu: czy kolejność (najpierw nadwyżka 12,5 %) jest właściwa (G3)?",
+        "przypadki": [
+          "G3"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ryczałt: stawki”, „Najem: korekta po progu (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-EWID-STAWKA-01",
+      "regula": "Stawka ryczałtu z pozycji faktury wygrywa, bez niej obowiązuje domyślna z profilu; korekta albo zaliczka z kilkoma stawkami na pozycjach to brak, nie zgadywanie.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 12"
+        },
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §13"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja",
+        "ksiegowosc.profil"
+      ],
+      "kod": [
+        "lib/ksiegowosc/profil.ts#stawkaRyczaltuPozycji",
+        "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-profil.test.ts > stawka z pozycji wygrywa",
+        "tests/unit/ksiegowosc-ewidencja.test.ts > korekta z różnymi stawkami"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-SKALA-01",
+      "regula": "Skala podatkowa: 12 % dochodu do 120 000 zł minus kwota zmniejszająca 3 600 zł; ponad 120 000 zł: 10 800 zł plus 32 % nadwyżki.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 27 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/pit.ts#zaliczkiPit",
+        "lib/ksiegowosc/pit.ts#procent"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-pit.test.ts > kwota zmniejszająca 3 600 zł",
+        "tests/unit/ksiegowosc-pit.test.ts > ponad próg 120 000 zł",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
+      ],
+      "parametry": [
+        "skala.stawkaDoProgu",
+        "skala.stawkaPonadProg",
+        "skala.prog",
+        "skala.kwotaZmniejszajaca"
+      ],
+      "niezmienniki": [
+        "NZ-PIT-04"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "podatki.gov.pl, stawki i limity PIT",
+        "sprawdzono": "2026-11-04"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Skala”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZALICZKA-PIT-01",
+      "regula": "Zaliczka na PIT (skala i liniowy): dochód od początku roku z KPiR minus zapłacone w roku składki społeczne (bez FP, najwyżej do dochodu); podstawa do pełnych złotych; zaliczka to podatek od początku roku minus zaliczki należne za wcześniejsze miesiące, nie mniej niż zero.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 44 ust. 1a, 3f i 6"
+        },
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 26 ust. 1 pkt 2"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.kpir"
+      ],
+      "kod": [
+        "lib/ksiegowosc/pit.ts#zaliczkiPit"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-pit.test.ts > strata w miesiącu: zaliczka zero",
+        "tests/unit/ksiegowosc-kpir.test.ts > marzec: zaliczka narastająco od stycznia",
+        "tests/unit/ksiegowosc-kpir.test.ts > brak w KPiR od stycznia zabiera zaliczkę",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-PIT-01",
+        "NZ-PIT-02",
+        "NZ-PIT-03",
+        "NZ-PIT-06",
+        "NZ-PIT-07"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić zaliczki skali i liniowego na przypadkach G8-G11 (strata miesiąca, składki do wysokości dochodu).",
+        "przypadki": [
+          "G8",
+          "G9",
+          "G10",
+          "G11"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Skala”, „Skala i liniowy: zaliczka (K7)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-LIN-01",
+      "regula": "Podatek liniowy 19 % dochodu; zapłaconą składkę zdrowotną odlicza się od dochodu do limitu rocznego (2026: 14 100 zł); bez ogłoszonego limitu roku zaliczka liniowa to brak.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 30c ust. 1 i 2"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/pit.ts#zaliczkiPit"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-pit.test.ts > 19 % od dochodu po społecznych i zapłaconej zdrowotnej",
+        "tests/unit/ksiegowosc-pit.test.ts > zdrowotna odliczana do limitu rocznego 14 100 zł",
+        "tests/filtr/roznicowe/pit.test.ts > każdy miesiąc roku: zaliczka, podstawa i podatek od początku roku"
+      ],
+      "parametry": [
+        "liniowy.stawka",
+        "liniowy.limitOdliczeniaZdrowotnej"
+      ],
+      "niezmienniki": [
+        "NZ-PIT-05"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Liniowy”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZDR-RYCZ-01",
+      "regula": "Składka zdrowotna przy ryczałcie: 9 % od 60, 100 albo 180 % przeciętnego wynagrodzenia z IV kwartału roku poprzedniego, według przychodu od początku roku do 60 tys., do 300 tys. i ponad 300 tys. zł.",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 79 ust. 1 i art. 81 ust. 2h"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zdrowotna.ts#zdrowotnaRyczaltu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > progi 60 i 300 tys. zł włącznie",
+        "tests/unit/ksiegowosc-parametry.test.ts > zdrowotna na ryczałcie: 9 % z 60, 100 i 180 %",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt: kwota według progu przychodu"
+      ],
+      "parametry": [
+        "zdrowotna.stawka",
+        "zdrowotna.przecietneWynagrodzenieIvKw",
+        "zdrowotna.ryczaltDo60Tys",
+        "zdrowotna.ryczaltDo300Tys",
+        "zdrowotna.ryczaltPonad300Tys",
+        "zdrowotna.progRyczaltu60Tys",
+        "zdrowotna.progRyczaltu300Tys"
+      ],
+      "niezmienniki": [
+        "NZ-ZDR-01",
+        "NZ-ZDR-02"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić kwoty zdrowotnej ryczałtu 2026 (498,35 / 830,58 / 1 495,04 zł) z komunikatu ZUS; źródło w planie było branżowe.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Zdrowotna, ryczałt”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZDR-PROG-01",
+      "regula": "Próg zdrowotnej przy ryczałcie liczy się z przychodu od początku roku pomniejszonego o zapłacone składki społeczne bez FP; wyższa składka obowiązuje od miesiąca przekroczenia, bez korekty wcześniejszych miesięcy.",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 81 ust. 2h"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zdrowotna.ts#zdrowotnaRyczaltu",
+        "lib/ksiegowosc/ten-miesiac.ts#tenMiesiac"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > próg zdrowotnej: wyższa składka od miesiąca przekroczenia 60 tys. zł"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy pomniejszenie o składki społeczne dotyczy testu progu (źródła nie mówią wprost)?",
+        "przypadki": [
+          "G1",
+          "G5"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Zdrowotna, ryczałt: próg (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZDR-STYCZEN-01",
+      "regula": "Styczeń należy do roku składkowego luty-styczeń; program liczy próg zdrowotnej za styczeń z przychodu stycznia.",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 81 ust. 2h"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zdrowotna.ts#zdrowotnaRyczaltu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > styczeń 2026: bez parametrów roku składkowego 2025/2026"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "niska",
+      "wzorzec": null,
+      "interpretacja": "Kwot przed podpisem parametrów i tak nie widać (D7).",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "ZUS może wymagać progu za styczeń z przychodu całego poprzedniego roku. Która reguła jest właściwa?",
+        "przypadki": [
+          "G5"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Zdrowotna: styczeń przy kontynuacji ryczałtu (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZDR-DOCHOD-01",
+      "regula": "Składka zdrowotna przy skali 9 %, przy liniowym 4,9 % dochodu z poprzedniego miesiąca (przychód minus koszty z KPiR minus składki społeczne zapłacone w tamtym miesiącu); za styczeń dochód z grudnia; nie mniej niż minimum roku składkowego (9 % płacy minimalnej).",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 79 ust. 1 i 1a, art. 81 ust. 2 i 2b"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.kpir"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zdrowotna.ts#zdrowotnaOdDochodu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-pit.test.ts > skala 9 % dochodu z poprzedniego miesiąca",
+        "tests/unit/ksiegowosc-pit.test.ts > liniowy 4,9 % dochodu",
+        "tests/unit/ksiegowosc-kpir.test.ts > styczeń bierze dochód z grudnia",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > od dochodu, nie mniej niż 9"
+      ],
+      "parametry": [
+        "zdrowotna.stawkaLiniowy",
+        "zdrowotna.minimalna"
+      ],
+      "niezmienniki": [
+        "NZ-ZDR-03",
+        "NZ-ZDR-05"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić zdrowotną od dochodu przy stracie i za styczeń (dochód z grudnia).",
+        "przypadki": [
+          "G8",
+          "G9"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Zdrowotna, skala”, „Zdrowotna, liniowy”, „Zdrowotna od dochodu (K7)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZDR-ROK-01",
+      "regula": "Rok składkowy zdrowotnej trwa od lutego do stycznia: kwoty i minimum ogłoszone na rok obowiązują od 1 lutego, styczeń należy do roku poprzedniego.",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 81 ust. 2h"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/index.ts#rokSkladkowyZdrowotnej",
+        "lib/ksiegowosc/parametry/index.ts#zdrowotnaNa"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > styczeń należy do roku poprzedniego",
+        "tests/unit/ksiegowosc-parametry.test.ts > minimalna składka za styczeń 2027 z roku 2026"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić, że kwoty i minimum zdrowotnej obowiązują od lutego, a styczeń należy do roku poprzedniego (komunikat ZUS).",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Zdrowotna, ryczałt”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZDR-REFORMA-01",
+      "regula": "Reforma składki zdrowotnej z 2025 r. nie weszła (weto); projekt UD428 nieuchwalony; do zmiany ustawy obowiązują zasady z art. 79-81.",
+      "podstawa": [
+        {
+          "akt": "ustawa o świadczeniach opieki zdrowotnej finansowanych ze środków publicznych",
+          "przepis": "art. 79-81"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry"
+      ],
+      "kod": [],
+      "testy": [],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "niska",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "prawnik",
+        "pytanie": "Sprawdzić w styczniu 2027, czy weszła zmiana zasad składki zdrowotnej.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Reforma zdrowotnej”",
+      "stan": "obserwacja",
+      "uwagi": null
+    },
+    {
+      "id": "RP-PLACA-01",
+      "regula": "Minimalne wynagrodzenie: 4 806 zł w 2026 r., 4 950 zł w 2027 r.; od niego zależy podstawa preferencyjnego ZUS i minimum składki zdrowotnej.",
+      "podstawa": [
+        {
+          "akt": "rozporządzenie Rady Ministrów w sprawie wysokości minimalnego wynagrodzenia za pracę w 2027 r.",
+          "przepis": "Dz.U. 2026 poz. 1213",
+          "url": "https://isap.sejm.gov.pl/isap.nsf/download.xsp/WDU20260001213/O/D20261213.pdf"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/2027.ts#PARAMETRY_2027",
+        "lib/ksiegowosc/parametry/2026.ts#PARAMETRY_2026"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > minimalna zdrowotna to 9 % minimalnego wynagrodzenia"
+      ],
+      "parametry": [
+        "zus.placaMinimalna"
+      ],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "Dz.U. 2026 poz. 1213 (ISAP)",
+        "sprawdzono": "2026-11-04"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Płaca minimalna”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZUS-PELNY-01",
+      "regula": "Pełne składki społeczne: podstawa 60 % prognozowanego przeciętnego wynagrodzenia; emerytalna 19,52 %, rentowa 8 %, chorobowa 2,45 % (dobrowolna), wypadkowa według stopy (zmiana od 1 kwietnia), Fundusz Pracy 2,45 % osobno.",
+      "podstawa": [
+        {
+          "akt": "ustawa o systemie ubezpieczeń społecznych",
+          "przepis": "art. 18 ust. 8, art. 22"
+        },
+        {
+          "akt": "ustawa o promocji zatrudnienia i instytucjach rynku pracy",
+          "przepis": "Fundusz Pracy"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.parametry"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zus.ts#skladkiSpoleczne",
+        "lib/ksiegowosc/zus.ts#PROPORCJA"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > pełne z chorobową: 1926,76 zł",
+        "tests/unit/ksiegowosc-silniki.test.ts > stopa wypadkowa zmienia się od kwietnia",
+        "tests/unit/ksiegowosc-parametry.test.ts > pełny ZUS: 1 926,76 zł",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
+      ],
+      "parametry": [
+        "zus.prognozowanePrzecietneWynagrodzenie",
+        "zus.podstawaPelnaProc",
+        "zus.stopaEmerytalna",
+        "zus.stopaRentowa",
+        "zus.stopaChorobowa",
+        "zus.stopaWypadkowaDoMarca",
+        "zus.stopaWypadkowaOdKwietnia",
+        "zus.stopaFunduszPracy"
+      ],
+      "niezmienniki": [
+        "NZ-ZUS-01",
+        "NZ-ZUS-04",
+        "NZ-ZUS-05",
+        "NZ-ZUS-06"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "tabela składek ZUS 2026 (zus.pl)",
+        "sprawdzono": "2026-11-05"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Kwoty 2027 zależą od ustawy budżetowej i komunikatu ZUS; porównać w e-Płatniku przed styczniem (protokół ręczny F14).",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Prognozowane przeciętne wynagrodzenie”, „ZUS pełny”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZUS-PREF-01",
+      "regula": "Preferencyjne składki przez 24 miesiące: podstawa 30 % minimalnego wynagrodzenia, bez Funduszu Pracy.",
+      "podstawa": [
+        {
+          "akt": "ustawa o systemie ubezpieczeń społecznych",
+          "przepis": "art. 18a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zus.ts#skladkiSpoleczne",
+        "lib/ksiegowosc/zus.ts#dodajMiesiace"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > preferencyjne z chorobową: 456,18 zł",
+        "tests/unit/ksiegowosc-parametry.test.ts > preferencyjny ZUS: 456,18 zł",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
+      ],
+      "parametry": [
+        "zus.podstawaPreferencyjnaProc",
+        "zus.preferencyjnyMiesiecy"
+      ],
+      "niezmienniki": [
+        "NZ-ZUS-01",
+        "NZ-ZUS-05"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić preferencyjne składki 2026 (456,18 zł z chorobową) i liczenie 24 miesięcy od dnia startu etapu.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „ZUS preferencyjny”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZUS-ULGA-01",
+      "regula": "Ulga na start: przez 6 miesięcy bez składek społecznych, składka zdrowotna płatna.",
+      "podstawa": [
+        {
+          "akt": "Prawo przedsiębiorców",
+          "przepis": "art. 18 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zus.ts#skladkiSpoleczne"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > ulga na start: zero przez 6 miesięcy",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > każda składka co do grosza"
+      ],
+      "parametry": [
+        "zus.ulgaNaStartMiesiecy"
+      ],
+      "niezmienniki": [
+        "NZ-ZUS-02"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić 6 miesięcy ulgi na start liczone od dnia rozpoczęcia działalności, także w trakcie miesiąca.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Ulga na start”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZUS-ETAP-01",
+      "regula": "Etap ZUS, który zaczyna się albo kończy w trakcie miesiąca (poza startem ulgi), daje brak samych składek społecznych z wyjściem (PUE ZUS, księgowa); ryczałt i zdrowotna liczą się dalej; zdrowotna za miesiąc startu w pełnej kwocie.",
+      "podstawa": [
+        {
+          "akt": "ustawa o systemie ubezpieczeń społecznych",
+          "przepis": "art. 18 ust. 8 (podstawa za niepełny miesiąc)"
+        },
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §5 K4"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.silniki",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zus.ts#skladkiSpoleczne",
+        "lib/ksiegowosc/ten-miesiac.ts#tenMiesiac"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-silniki.test.ts > pełne od połowy miesiąca: brak",
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > pełny ZUS od 15.03",
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > ulga na start od 15.03"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-ZUS-03",
+        "NZ-ZUS-07"
+      ],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": "Podstawa proporcjonalna do dni nie jest liczona: zamiast zgadywania jest brak.",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy pełna zdrowotna za miesiąc rozpoczęcia działalności jest właściwa (G13)?",
+        "przypadki": [
+          "G13"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Składki: miesiąc niepełny (K4)”, „Start w trakcie miesiąca (K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ZUS-ZAPLATA-01",
+      "regula": "Składki za miesiąc, którego FaktWay nie liczy, klient wpisuje ręcznie z kwotą z PUE ZUS; są zwykłą wersją rozliczenia, więc późniejsze wyliczenie tego samego okresu dolicza tylko różnicę.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 11 ust. 1"
+        },
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG D15-D21"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/zaplata-reczna.ts#zaplataRecznaSchema",
+        "lib/ksiegowosc/zaplata-reczna.ts#wejsciaZaplatyRecznej",
+        "lib/ksiegowosc/zaplata-reczna.ts#bladDatyZaplatyRecznej"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > ręczna wersja przed wyliczoną"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Zapłata spoza wyliczenia (po K4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-VAT-01",
+      "regula": "Czynny podatnik VAT składa JPK_V7M(3) i płaci VAT do 25. dnia następnego miesiąca; nadwyżkę z poprzedniego miesiąca (P_39) bierze się z deklaracji przyjętej przez MF, potem z wpisu klienta, potem z zatwierdzonego rozliczenia; bez źródła jest brak.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 99 ust. 1, art. 103 ust. 1, art. 87 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.vat",
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/vat.ts#vatMiesiaca",
+        "lib/ksiegowosc/vat-dane.ts#czytajVat",
+        "lib/ksiegowosc/vat-dane.ts#brakNadwyzki",
+        "lib/ksiegowosc/vat-dane.ts#nadwyzkaZAdresu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > czynny VAT: pozycja z P_51 i terminem 25.",
+        "tests/unit/ksiegowosc-vat-dane.test.ts > wpis klienta wygrywa z zatwierdzonym rozliczeniem",
+        "tests/unit/ksiegowosc-vat-dane.test.ts > bez żadnego źródła kwot nie ma",
+        "tests/filtr/roznicowe/vat.test.ts > pola P_10-P_62 w pliku i rozliczenie w module VAT"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „VAT”, §13",
+      "stan": "dziala",
+      "uwagi": "Sygnał S-01 (plan filtra B7.1): korekta przed/po w JPK_V7M liczona pełną kwotą; zamaskowane wstrzymaniem eksportu."
+    },
+    {
+      "id": "RP-VAT-LIM-01",
+      "regula": "Limit zwolnienia podmiotowego z VAT: 240 000 zł sprzedaży w roku.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 113 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.parametry",
+        "szacunki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/parametry/index.ts#limitZwolnieniaVat"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-parametry.test.ts > limitZwolnieniaVat"
+      ],
+      "parametry": [
+        "vat.limitZwolnienia"
+      ],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Potwierdzić limit 240 000 zł na 2026 i 2027 r. oraz proporcję limitu dla firmy zakładanej w trakcie roku (art. 113 ust. 9).",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „VAT”",
+      "stan": "dziala",
+      "uwagi": "Kwota 240 000 zł jest też na sztywno w lib/invoices/vat-exemption.ts (duplikat z mapy filtra B2, pkt 10)."
+    },
+    {
+      "id": "RP-VAT-MF-TEST-01",
+      "regula": "Deklaracja przyjęta na środowisku testowym MF nie zasila nadwyżki (P_39) produkcji; wynik testu nie mówi nic o danych klienta.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §13"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.wysylka-jpk",
+        "ksiegowosc.vat"
+      ],
+      "kod": [
+        "lib/ksiegowosc/wysylka-jpk/zapis.ts#nadwyzkaPrzyjetej",
+        "lib/ksiegowosc/wysylka-jpk/certyfikaty.ts#srodowiskoMf"
+      ],
+      "testy": [
+        "tests/rls-ksiegowosc-jpk.test.ts > "
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-JPK-WYS-01",
+      "regula": "Jedna wysyłka JPK w toku na miesiąc; wysyłkę „wysyłanie” starszą niż 15 minut zamyka następna; numer referencyjny po FinishUpload, dane autoryzujące tylko w wysyłce.",
+      "podstawa": [
+        {
+          "akt": "specyfikacja interfejsów usług JPK",
+          "przepis": "wersja 5.6.0"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.wysylka-jpk"
+      ],
+      "kod": [
+        "lib/ksiegowosc/wysylka-jpk/zapis.ts#zamknijPrzerwane",
+        "lib/ksiegowosc/wysylka-jpk/zapis.ts#zalozWysylke",
+        "lib/ksiegowosc/wysylka-jpk/wyslij.ts#wyslijJpk",
+        "lib/ksiegowosc/wysylka-jpk/statusy.ts#ocenStatus"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-vat-akcje.test.ts > wysyłka za ten miesiąc już trwa",
+        "tests/unit/ksiegowosc-wysylka-jpk.test.ts > 120 w toku, 200 z UPO"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 1,
+        "opis": "bramka testowa MF przyjęła JPK_V7M(3) z FaktWay (UPO z próby K6.0)",
+        "sprawdzono": "2026-11-07"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§10, §13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-KSIEGI-01",
+      "regula": "Od 1.01.2026 podatnicy składający JPK_V7M, a od 1.01.2027 pozostali podatnicy PIT prowadzą KPiR i ewidencję przychodów przy użyciu programu, według wzoru KPiR 2026 (numer KSeF, identyfikator kontrahenta).",
+      "podstawa": [
+        {
+          "akt": "rozporządzenie MF w sprawie prowadzenia podatkowej księgi przychodów i rozchodów",
+          "przepis": "Dz.U. 2025 poz. 1299"
+        },
+        {
+          "akt": "komunikat KAS",
+          "przepis": "elektroniczna dokumentacja księgowa od 2026 r.",
+          "url": "https://www.gov.pl/web/kas/elektroniczna-dokumentacja-ksiegowa-dla-przedsiebiorcow-placacych-pit-obowiazkowa-od-2026-r"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kpir",
+        "ksiegowosc.ewidencja"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kpir.ts#zbudujKpir",
+        "lib/ksiegowosc/kpir.ts#KOLUMNY_KPIR",
+        "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kpir.test.ts > sprzedaż w K_7 z kontrahentem"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "prawnik",
+        "pytanie": "Wskazać przepis ustawy (PIT i ustawa o ryczałcie), który nakłada obowiązek prowadzenia ewidencji w programie i przesyłania JPK_PD, z datami dla obu grup.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Księgi w programie”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-KPIR-KOL-01",
+      "regula": "KPiR według wzoru 2026: sprzedaż w kolumnie 7, inny przychód w 8, koszty w 10-13 według kolumny ustawionej przy koszcie (B+R w 13 z opisem w 16); koszt bez kolumny albo z kolumną przychodu to brak z wyjściem; kolumny 9 i 14 liczy program.",
+      "podstawa": [
+        {
+          "akt": "rozporządzenie MF w sprawie prowadzenia podatkowej księgi przychodów i rozchodów",
+          "przepis": "Dz.U. 2025 poz. 1299, załącznik (wzór i objaśnienia)"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kpir"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kpir.ts#zbudujKpir",
+        "lib/ksiegowosc/kpir.ts#KOLUMNY_KPIR",
+        "lib/ksiegowosc/kpir.ts#NAZWY_KOLUMN",
+        "lib/ksiegowosc/kpir.ts#wierszeKpirOkresu",
+        "lib/ksiegowosc/kpir.ts#sumyKpir",
+        "lib/ksiegowosc/kpir.ts#brakiKpirOkresu"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kpir.test.ts > koszt B+R w K_13 i K_16",
+        "tests/unit/ksiegowosc-kpir.test.ts > wpis ręczny w swojej kolumnie"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „KPiR: kolumny (K7)”",
+      "stan": "dziala",
+      "uwagi": "Sygnał S-05: XLSX raportu KPiR (poza modułem) liczy koszt bez kolumny w kolumnie 13."
+    },
+    {
+      "id": "RP-KPIR-BRAK-01",
+      "regula": "Nazwa i adres kontrahenta są w JPK_PKPIR obowiązkowe; bez danych program wpisuje „BRAK” jak w JPK_V7M.",
+      "podstawa": [
+        {
+          "akt": "broszura informacyjna MF",
+          "przepis": "JPK_PKPIR(3)"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kpir",
+        "ksiegowosc.jpk-pit"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kpir.ts#BRAK_DANYCH"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kpir.test.ts > sprzedaż w K_7 z kontrahentem"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "niska",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Broszura JPK_PKPIR nie opisuje braku danych kontrahenta. Czy „BRAK” jest akceptowany?",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „KPiR: kolumny (K7)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-KPIR-FP-01",
+      "regula": "Fundusz Pracy i Fundusz Solidarnościowy z zapłaconych składek to przy skali i liniowym koszt w kolumnie 13 w dniu zapłaty (z przyrostów zapłaconych wersji); składki społeczne (przy liniowym także zdrowotna) odlicza się od dochodu, nie wpisuje do KPiR.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 22 ust. 1, art. 26 ust. 1 pkt 2, art. 30c ust. 2"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kpir"
+      ],
+      "kod": [
+        "lib/ksiegowosc/kpir.ts#zaplatyFunduszuPracy"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-kpir.test.ts > FP z przyrostów zapłaconych wersji",
+        "tests/unit/ksiegowosc-kpir.test.ts > wiersz kolumny 13 w dniu zapłaty",
+        "tests/unit/ksiegowosc-kpir-dane.test.ts > Fundusz Pracy (K7.3)"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „KPiR: Fundusz Pracy i składki (K7, K7.3)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-SPIS-01",
+      "regula": "JPK_PKPIR: P_1 to spis z 31 grudnia poprzedniego roku albo z 1 stycznia, P_2 spis z 31 grudnia (tylko w pliku za cały rok), pozostałe spisy z okresu w PKPIRSpis; P_3 to wydatki plus P_1 minus P_2, P_4 przychód minus P_3; zaliczki miesięczne spisu nie biorą.",
+      "podstawa": [
+        {
+          "akt": "broszura informacyjna MF",
+          "przepis": "JPK_PKPIR(3), objaśnienia do KPiR"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kpir",
+        "ksiegowosc.jpk-pit"
+      ],
+      "kod": [
+        "lib/ksiegowosc/jpk-pkpir.ts#generujJpkPkpir",
+        "lib/ksiegowosc/spis-z-natury.ts#spisyPliku",
+        "lib/ksiegowosc/spis-z-natury.ts#spisSchema"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-jpk-pkpir.test.ts > pola pliku: P_1 z 31 grudnia poprzedniego roku",
+        "tests/unit/ksiegowosc-jpk-pkpir.test.ts > PKPIRInfo: P_3 to wydatki plus spis na początek"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "srednia",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Przy starcie w trakcie roku spis z dnia startu trafia do PKPIRSpis, nie do P_1. Czy tak?",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „KPiR: spis z natury (K7, K7.4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-JPK-PIT-01",
+      "regula": "JPK_EWP(4) i JPK_PKPIR(3) przesyła się w terminie zeznania rocznego; jeden wiersz JPK_EWP to jeden przychód z jedną stawką ze słownika K_9; plik musi przejść oficjalny schemat XSD.",
+      "podstawa": [
+        {
+          "akt": "struktury JPK w podatkach dochodowych (MF)",
+          "przepis": "JPK_EWP(4) 2024/10/30/10301, JPK_PKPIR(3) 2024/10/30/10302"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.jpk-pit"
+      ],
+      "kod": [
+        "lib/ksiegowosc/jpk-ewp.ts#generujJpkEwp",
+        "lib/ksiegowosc/jpk-ewp.ts#stawkaJpk",
+        "lib/ksiegowosc/jpk-ewp.ts#nazwaPlikuJpkEwp",
+        "lib/ksiegowosc/jpk-pkpir.ts#nazwaPlikuJpkPkpir",
+        "lib/ksiegowosc/jpk-ewp-walidator.ts#validateJpkEwp",
+        "lib/ksiegowosc/jpk-ewp-walidator.ts#validateJpkPkpir"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-jpk-ewp.test.ts > pełny rok z korektą",
+        "tests/unit/ksiegowosc-jpk-ewp.test.ts > stawki ze słownika K_9",
+        "tests/unit/ksiegowosc-jpk-pkpir.test.ts > plik z KPiR przechodzi XSD"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "oficjalne XSD MF w lib/exports/schemas/",
+        "sprawdzono": "2026-11-05"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „JPK_PKPIR / JPK_EWP”, „JPK_EWP(4)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-JPK-CEL-01",
+      "regula": "CelZlozenia 1 (pierwsze złożenie obowiązkowego pliku) tylko za pełny zamknięty rok; za część roku 0 (plik na żądanie urzędu); korekt (2) moduł jeszcze nie wydaje.",
+      "podstawa": [
+        {
+          "akt": "broszura informacyjna MF",
+          "przepis": "JPK_EWP(4), JPK_PKPIR(3)"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.jpk-pit"
+      ],
+      "kod": [
+        "lib/ksiegowosc/jpk-ewp.ts#celZlozenia"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-jpk-ewp.test.ts > cel złożenia: 1 tylko dla całego zamkniętego roku"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-PIT-ROCZNE-01",
+      "regula": "Zeznania PIT-28, PIT-36 i PIT-36L składa się od 15 lutego do 30 kwietnia roku następnego.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 45 ust. 1"
+        },
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 21 ust. 1 pkt 2"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.kalendarz"
+      ],
+      "kod": [],
+      "testy": [],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „PIT roczne”",
+      "stan": "poza-v1",
+      "uwagi": "Zeznanie roczne to krok K9."
+    },
+    {
+      "id": "RP-KASOWY-01",
+      "regula": "Metoda kasowa w PIT jest poza v1: profil jej nie ma, znacznik Kasowy_PIT w JPK_EWP jest pomijany.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku dochodowym od osób fizycznych",
+          "przepis": "art. 14 ust. 1e-1g"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.jpk-pit"
+      ],
+      "kod": [],
+      "testy": [],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Metoda kasowa PIT (K4)”",
+      "stan": "poza-v1",
+      "uwagi": null
+    },
+    {
+      "id": "RP-ODLOZYC-01",
+      "regula": "„Odłóż na podatek” to szacunek: suma ryczałtu albo zaliczki, składek i zdrowotnej za bieżący miesiąc z modułu; pozycja z brakiem podaje powód zamiast kwoty.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §13, D13"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.odlozyc",
+        "szacunki"
+      ],
+      "kod": [
+        "lib/ksiegowosc/odlozyc.ts#ileOdlozyc",
+        "lib/ksiegowosc/odlozyc.ts#czytajOdlozyc"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-odlozyc.test.ts > suma ryczałtu, składek i zdrowotnej za bieżący miesiąc",
+        "tests/unit/ksiegowosc-odlozyc.test.ts > pozycja z brakiem"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§13",
+      "stan": "dziala",
+      "uwagi": "Firmy poza pilotażem widzą szacunek z LINEAR_PIT_RATE (19 %) do K8."
+    },
+    {
+      "id": "RP-PRZYP-01",
+      "regula": "Przypomnienie o terminie wychodzi 5 i 1 dzień przed terminem faktycznym (po przesunięciu); grupy według formy z profilu; błąd odczytu rozliczeń to ponowienie zadania, nigdy przypomnienie „bez zapłaty”.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §13"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.przypomnienia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/przypomnienia.ts#terminyNaDzis",
+        "lib/ksiegowosc/przypomnienia.ts#DNI_PRZED_TERMINEM",
+        "lib/ksiegowosc/przypomnienia.ts#grupyFormy",
+        "lib/ksiegowosc/przypomnienia.ts#niezaplacone",
+        "lib/ksiegowosc/przypomnienia.ts#RODZAJE_GRUPY",
+        "lib/ksiegowosc/powiadomienia.ts#firmyWPilotazu",
+        "lib/ksiegowosc/powiadomienia.ts#wlasciciel"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-przypomnienia.test.ts > termin 20.11.2026 za październik",
+        "tests/unit/ksiegowosc-przypomnienia.test.ts > termin przesunięty z soboty",
+        "tests/unit/ksiegowosc-powiadomienia.test.ts > błąd odczytu rozliczeń: bez przypomnienia"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-WYL-01",
+      "regula": "Moduł działa tylko dla firm w pilotażu i obszarów puszczonych w kodzie; globalny stop wygrywa ze wszystkim; wysyłka JPK do MF czeka na prawnika (D9); „nie wiem” to nie „nie” (błąd odczytu rzuca).",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §11, D7, D9"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.wylacznik"
+      ],
+      "kod": [
+        "lib/ksiegowosc/wylacznik.ts#statusObszaru",
+        "lib/ksiegowosc/wylacznik.ts#rozstrzygnij",
+        "lib/ksiegowosc/wylacznik.ts#czytajFlageFirmy",
+        "lib/ksiegowosc/wylacznik.ts#czyKsiegowoscWlaczona",
+        "lib/ksiegowosc/odeslanie.ts#odeslanieDoKsiegi"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-wylacznik.test.ts > globalny stop wygrywa ze wszystkim",
+        "tests/unit/ksiegowosc-wylacznik.test.ts > wpis firmy NIE odwraca blokady w kodzie",
+        "tests/unit/ksiegowosc-wylacznik.test.ts > wysyłka JPK czeka na prawnika"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§11, D7, D9",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-PROFIL-01",
+      "regula": "Profil podatkowy ma wersje od dnia obowiązywania (od 2026 r.); ryczałt wymaga stawki z listy, ulga na start i preferencyjny ZUS wymagają daty; rachunek ZUS musi mieć poprawną sumę kontrolną NRB.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §6"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.profil"
+      ],
+      "kod": [
+        "lib/ksiegowosc/profil.ts#profilSchema",
+        "lib/ksiegowosc/profil.ts#domyslnyPoczatek",
+        "lib/ksiegowosc/profil.ts#czytajWersjeProfilu",
+        "lib/ksiegowosc/mikrorachunek.ts#czyRachunekNrb"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-profil.test.ts > przyjmuje pełny profil ryczałtu",
+        "tests/unit/ksiegowosc-profil.test.ts > rachunek ZUS: spacje znikają",
+        "tests/unit/ksiegowosc-profil.test.ts > wersja obowiązująca w dniu"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§6, §13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-MIKRO-01",
+      "regula": "Mikrorachunek podatkowy (PIT, ryczałt, VAT): 26 cyfr, 2 cyfry kontrolne (mod 97 jak NRB), stała 10100071, 222, cyfra typu identyfikatora (2 = NIP), NIP, dwa zera.",
+      "podstawa": [
+        {
+          "akt": "Ordynacja podatkowa",
+          "przepis": "art. 61b"
+        },
+        {
+          "akt": "podatki.gov.pl",
+          "przepis": "generator mikrorachunku",
+          "url": "https://www.podatki.gov.pl/mikrorachunek-podatkowy"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.mikrorachunek"
+      ],
+      "kod": [
+        "lib/ksiegowosc/mikrorachunek.ts#mikrorachunekZNip",
+        "lib/ksiegowosc/mikrorachunek.ts#czyMikrorachunekZNip",
+        "lib/ksiegowosc/mikrorachunek.ts#normalizujNip",
+        "lib/ksiegowosc/mikrorachunek.ts#formatujRachunek",
+        "lib/ksiegowosc/mikrorachunek.ts#STALA_NBP"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-mikrorachunek.test.ts > wektor z oficjalnego generatora MF",
+        "tests/unit/ksiegowosc-mikrorachunek.test.ts > niepoprawny NIP nie daje numeru"
+      ],
+      "parametry": [],
+      "niezmienniki": [
+        "NZ-MIKRO-01",
+        "NZ-MIKRO-02"
+      ],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 1,
+        "opis": "generator mikrorachunku na podatki.gov.pl (wektor NIP 1234563218)",
+        "sprawdzono": "2026-11-05"
+      },
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Mikrorachunek”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-NRS-01",
+      "regula": "Rachunek składkowy ZUS (NRS) jest indywidualny z PUE ZUS; klient wpisuje go sam, program sprawdza tylko sumę kontrolną.",
+      "podstawa": [
+        {
+          "akt": "ustawa o systemie ubezpieczeń społecznych",
+          "przepis": "art. 47a"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.profil"
+      ],
+      "kod": [
+        "lib/ksiegowosc/mikrorachunek.ts#czyRachunekNrb"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-profil.test.ts > rachunek ZUS: spacje znikają, numer musi mieć poprawną sumę kontrolną"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "niska",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Kiedy dla JDG płacącej tylko za siebie DRA jest obowiązkowa? Potwierdzić na zus.pl.",
+        "przypadki": []
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§5 „Rachunek ZUS (NRS)”",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-TEN-MIESIAC-01",
+      "regula": "„Ten miesiąc” łączy pozycje do zapłaty (ryczałt albo zaliczka PIT, składki społeczne, zdrowotna, VAT) z kwotami i terminami; każda pozycja ma własny wynik albo brak, a brak w jednej nie zabiera pozostałych.",
+      "podstawa": [
+        {
+          "akt": "zasada programu",
+          "przepis": "PLAN-KSIEGOWOSC-JDG §7"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.rozliczenia"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ten-miesiac.ts#tenMiesiac",
+        "lib/ksiegowosc/ten-miesiac.ts#RODZAJE_ROZLICZEN",
+        "lib/ksiegowosc/ten-miesiac.ts#NAZWY_ROZLICZEN",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#czytajTenMiesiac",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#czytajRozliczenia",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#doZatwierdzenia",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#zaplacono",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#miesiacZakonczony",
+        "lib/ksiegowosc/ten-miesiac-dane.ts#aktualne"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ten-miesiac.test.ts > luty: odliczenia ze składek za styczeń zapłaconych w lutym",
+        "tests/unit/ksiegowosc-ten-miesiac-dane.test.ts > liczba bez wartości w sekcji"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§7, §13",
+      "stan": "dziala",
+      "uwagi": null
+    },
+    {
+      "id": "RP-EWID-01",
+      "regula": "Ewidencja przychodów: wiersze i sumy okresu po dniu przychodu, Lp. od 1 w okresie; dzień bez profilu to brak z drogą do ustawień; dzień ze skalą nie należy do ewidencji.",
+      "podstawa": [
+        {
+          "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
+          "przepis": "art. 15 ust. 1"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-01-01",
+        "do": null
+      },
+      "obszary": [
+        "ksiegowosc.ewidencja"
+      ],
+      "kod": [
+        "lib/ksiegowosc/ewidencja.ts#wierszeOkresu",
+        "lib/ksiegowosc/ewidencja.ts#brakiOkresu",
+        "lib/ksiegowosc/ewidencja.ts#sumyOkresu",
+        "lib/ksiegowosc/ewidencja.ts#etykietaStawki",
+        "lib/ksiegowosc/ewidencja.ts#STAWKI_JPK_EWP_PB",
+        "lib/ksiegowosc/ewidencja-dane.ts#rodzajFaktury",
+        "lib/ksiegowosc/ewidencja-dane.ts#kontrahentJpk",
+        "lib/ksiegowosc/ewidencja-dane.ts#nazwaIAdres",
+        "lib/ksiegowosc/ewidencja-dane.ts#kursy"
+      ],
+      "testy": [
+        "tests/unit/ksiegowosc-ewidencja.test.ts > wiersze i sumy miesiąca liczą się po dniu przychodu",
+        "tests/unit/ksiegowosc-ewidencja.test.ts > dzień bez profilu: brak"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": null,
+      "interpretacja": null,
+      "do_rozstrzygniecia": null,
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-09",
+      "zrodlo_planu": "§7",
+      "stan": "dziala",
+      "uwagi": null
+    }
+  ]
+}

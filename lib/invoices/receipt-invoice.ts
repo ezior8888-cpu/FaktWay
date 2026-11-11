@@ -120,6 +120,7 @@ export function receiptRequestDeadline(receiptDate: string): string {
   const m = ISO_DAY.exec(receiptDate);
   if (!m) throw new Error(`receiptRequestDeadline: niepoprawna data "${receiptDate}"`);
   // Dzień 0 miesiąca m+4 (0-indeksowo) to ostatni dzień miesiąca m+3.
+  // filtr-wyjatek: data-warszawa rachunek miesięcy w UTC na polach RRRR-MM-DD, nie dzisiejsza data
   return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1 + 4, 0)).toISOString().slice(0, 10);
 }
 
@@ -208,6 +209,7 @@ export function receiptInvoiceIssues(input: ReceiptRuleInput): ReceiptRuleIssue[
   if (
     input.buyerKind === 'company' &&
     receiptDate <= SIMPLIFIED_RECEIPT_LAST_DAY &&
+    // filtr-wyjatek: kwoty-bez-float złote z dwoma miejscami na całe grosze do porównania z limitem
     Math.round(input.grossTotal * 100) <= SIMPLIFIED_INVOICE_LIMIT_GROSS_PLN * 100
   ) {
     add('amount', SIMPLIFIED_RECEIPT_MESSAGE);

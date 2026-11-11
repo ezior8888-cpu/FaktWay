@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { logAudit } from '@/lib/audit/log';
+import { zglosAlarmy } from '@/lib/bezpieczniki/alarm';
+import { odmowaJpkEwp, sprawdzJpkEwp } from '@/lib/bezpieczniki/jpk-ewp';
+import { odmowaJpkPkpir, sprawdzJpkPkpir } from '@/lib/bezpieczniki/jpk-pkpir';
 import { redactXsdMessage } from '@/lib/exports/jpk-schema-check';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
@@ -246,6 +249,13 @@ export async function pobierzJpkEwpAction(wejscie: z.input<typeof pobranieSchema
         'Szczegóły są w naszych logach i sprawdzimy dane z tego okresu.',
     };
   }
+  // Strażnik (żelazny filtr F13): sumy kontrolne pliku po XSD. Plik z alarmem
+  // nie trafia do klienta i nie ma audytu pobrania; operator dostaje alarm.
+  const alarmy = sprawdzJpkEwp(xml, doDnia.slice(0, 7));
+  if (alarmy.length > 0) {
+    zglosAlarmy(alarmy, { tenantId: ctx.tenantId, straznik: 'jpk-ewp' });
+    return { success: false, error: odmowaJpkEwp(alarmy[0].kod) };
+  }
 
   const sumy = sumyOkresu(wiersze);
   await logAudit({
@@ -369,6 +379,13 @@ export async function pobierzJpkPkpirAction(wejscie: z.input<typeof pobranieSche
         'Plik JPK_PKPIR nie przeszedł kontroli schematu Ministerstwa Finansów, więc go nie wydajemy. ' +
         'Szczegóły są w naszych logach i sprawdzimy dane z tego okresu.',
     };
+  }
+  // Strażnik (żelazny filtr F13): sumy kontrolne i kolumny „razem” pliku po XSD.
+  // Plik z alarmem nie trafia do klienta i nie ma audytu pobrania; operator dostaje alarm.
+  const alarmy = sprawdzJpkPkpir(xml, doDnia.slice(0, 7));
+  if (alarmy.length > 0) {
+    zglosAlarmy(alarmy, { tenantId: ctx.tenantId, straznik: 'jpk-pkpir' });
+    return { success: false, error: odmowaJpkPkpir(alarmy[0].kod) };
   }
   const sumy = sumyKpir(wiersze);
   await logAudit({

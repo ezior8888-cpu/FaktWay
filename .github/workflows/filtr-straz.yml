@@ -1,0 +1,43 @@
+name: Filtr straż
+
+# Żelazny filtr, krok F2 (docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B5.4).
+# Każdy PR: poziom ryzyka prawnego z mapy, pliki z sygnałem poza mapą, zmiany
+# chronione (maszyneria filtra, wiedza prawna, wyjątki) z etykietami zgody od
+# osób z filtr/zgody.json i karta zmiany prawnej dla PR R1 i R2.
+#
+# pull_request_target: workflow, skrypt i mapa pochodzą z gałęzi domyślnej,
+# więc PR nie osłabi kontroli, która go ocenia. Kod z PR NIE jest tu
+# pobierany ani uruchamiany: skrypt czyta przez API tylko dane (lista plików
+# z fragmentami zmian, JSON mapy i rejestru, opis, etykiety). Bez sekretów.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: filtr-straz-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  straz:
+    name: 'Filtr: straż'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # zdjęcie etykiet zgody po nowym pushu
+      issues: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          # Domyślnie gałąź bazowa z gałęzi domyślnej: świadomie NIE ref z PR.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Straż filtra (mapa, zmiany chronione, zgody, karta)
+        run: node scripts/filtr/straz.mjs --github
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

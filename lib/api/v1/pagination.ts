@@ -20,6 +20,7 @@ export interface PageCursor {
 export function isCalendarDate(value: string): boolean {
   if (!DATE.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 

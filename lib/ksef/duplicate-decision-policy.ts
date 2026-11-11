@@ -116,8 +116,10 @@ function comparisonOf(inv: DuplicateDecisionInvoiceRow, summary: Record<string, 
   // kwot. Kwota albo waluta nieznana — „bez porównania” (null); „Rozumiem skutki” i tak wymagane (`grossSame !== true`).
   const grossSame = ksefGross === null || oursGross === null || ksefCurrency === null || oursCurrency === null
     ? null
+    // filtr-wyjatek: kwoty-bez-float porównanie dwóch kwot z dwoma miejscami przez zapis tekstowy, bez rachunku
     : ksefCurrency === oursCurrency && ksefGross.toFixed(2) === oursGross.toFixed(2);
   const money = (value: number | null, currency: string | null): string | null =>
+    // filtr-wyjatek: kwoty-bez-float zapis kwoty w komunikacie, bez rachunku
     value === null ? null : currency ? `${value.toFixed(2)} ${currency}` : value.toFixed(2);
 
   const rows: ComparisonRow[] = [

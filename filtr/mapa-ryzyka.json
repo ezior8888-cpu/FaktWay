@@ -1,0 +1,1131 @@
+{
+  "wersja": 1,
+  "opis": "Mapa ryzyka prawnego FaktWay (żelazny filtr, krok F1). Każdy plik kodu dostaje poziom: R1 krytyczny, R2 wprowadza w błąd, R3 pomocniczy, R0 bez ryzyka. Zasady: docs/koordynacja/PLAN-ZELAZNY-FILTR.md, B2 i B3. Klasyfikator: scripts/filtr/mapa.mjs. Dopisanie pliku do obszaru wolno bez zgody; usunięcie obszaru, niższy poziom, usunięta ścieżka, nowe wyłączenie i mniej sygnałów wymagają etykiety zgoda:zmiana-filtra.",
+  "poziomy": {
+    "R1": "krytyczny: zły wynik zmienia kwotę podatku albo składki, termin, dokument dla urzędu albo kontrahenta (faktura, JPK, KSeF) albo przechowywanie danych",
+    "R2": "wprowadza w błąd: nie jest dokumentem, ale może skłonić klienta do złej decyzji o pieniądzach (szacunki, pulpit, przypomnienia, teksty o podatkach, regulamin)",
+    "R3": "pomocniczy: kod, z którego korzystają R1 i R2 (daty, strefa Warszawy, formatowanie kwot, odczyt stronami, schemat bazy)",
+    "R0": "bez ryzyka prawnego: wygląd, logowanie, analityka produktowa; plik R0 z sygnałem musi być w wyłączeniach z powodem"
+  },
+  "kod": {
+    "katalogi": [
+      "lib/",
+      "app/",
+      "components/",
+      "hooks/",
+      "types/",
+      "scripts/",
+      "supabase/migrations/",
+      "content/",
+      "proxy.ts",
+      "instrumentation.ts",
+      "instrumentation-client.ts",
+      "mdx-components.tsx",
+      "next.config.ts"
+    ],
+    "rozszerzenia": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".sql",
+      ".md",
+      ".mdx",
+      ".sh",
+      ".xsd",
+      ".json"
+    ],
+    "pomijane": [
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/*.test.mjs",
+      "**/.gitkeep"
+    ]
+  },
+  "obszary": [
+    {
+      "id": "ksiegowosc.parametry",
+      "poziom": "R1",
+      "opis": "Parametry roku: stawki, progi, limity, kwoty ZUS i zdrowotnej, każda liczba ze źródłem.",
+      "sciezki": [
+        "lib/ksiegowosc/parametry/**"
+      ]
+    },
+    {
+      "id": "ksiegowosc.kalendarz",
+      "poziom": "R1",
+      "opis": "Terminy podatkowe i składkowe, święta, przesunięcie na dzień roboczy (art. 12 § 5 Ordynacji podatkowej).",
+      "sciezki": [
+        "lib/ksiegowosc/kalendarz.ts",
+        "lib/ksiegowosc/parametry/terminy.ts",
+        "app/api/kalendarz/[plik]/route.ts",
+        "lib/kalendarz/**",
+        "components/settings/calendar-feed-actions.ts"
+      ]
+    },
+    {
+      "id": "ksiegowosc.mikrorachunek",
+      "poziom": "R1",
+      "opis": "Numer mikrorachunku podatkowego i dane do przelewu.",
+      "sciezki": [
+        "lib/ksiegowosc/mikrorachunek.ts"
+      ]
+    },
+    {
+      "id": "ksiegowosc.profil",
+      "poziom": "R1",
+      "opis": "Profil podatkowy firmy: forma opodatkowania, VAT, ZUS; od niego zależą wszystkie silniki.",
+      "sciezki": [
+        "lib/ksiegowosc/profil.ts",
+        "app/actions/ksiegowosc-profil.ts",
+        "components/ksiegowosc/ustawienia-podatkowe-form.tsx",
+        "supabase/migrations/00166_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.wylacznik",
+      "poziom": "R1",
+      "opis": "Wyłącznik modułu księgowości i odesłanie do księgowej; bez niego moduł pokazałby kwoty bez podpisu (D7).",
+      "sciezki": [
+        "lib/ksiegowosc/wylacznik.ts",
+        "lib/ksiegowosc/odeslanie.ts",
+        "supabase/migrations/00165_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.ewidencja",
+      "poziom": "R1",
+      "opis": "Ewidencja przychodów (ryczałt): wpisy z faktur i wpisy ręczne.",
+      "sciezki": [
+        "lib/ksiegowosc/{ewidencja,ewidencja-dane,wpisy-reczne}.ts",
+        "app/actions/ksiegowosc-ewidencja.ts",
+        "components/ksiegowosc/wpis-reczny-form.tsx",
+        "supabase/migrations/00167_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.silniki",
+      "poziom": "R1",
+      "opis": "Silniki obliczeń: ryczałt, ZUS, składka zdrowotna, zaliczki PIT.",
+      "sciezki": [
+        "lib/ksiegowosc/{ryczalt,zus,zdrowotna,pit}.ts"
+      ]
+    },
+    {
+      "id": "ksiegowosc.kpir",
+      "poziom": "R1",
+      "opis": "Księga przychodów i rozchodów w module, spis z natury.",
+      "sciezki": [
+        "lib/ksiegowosc/{kpir,kpir-dane,spis-z-natury}.ts",
+        "components/ksiegowosc/spis-z-natury-form.tsx",
+        "supabase/migrations/{00171,00173}_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.vat",
+      "poziom": "R1",
+      "opis": "VAT do zapłaty za miesiąc w module księgowości.",
+      "sciezki": [
+        "lib/ksiegowosc/{vat,vat-dane}.ts",
+        "app/actions/ksiegowosc-vat.ts"
+      ]
+    },
+    {
+      "id": "ksiegowosc.rozliczenia",
+      "poziom": "R1",
+      "opis": "Rozliczenie miesiąca: zatwierdzenie, wersje, zapłaty, ekran „Ten miesiąc”.",
+      "sciezki": [
+        "lib/ksiegowosc/{ten-miesiac,ten-miesiac-dane,miesiac-strony,zaplata-reczna}.ts",
+        "app/actions/ksiegowosc-ten-miesiac.ts",
+        "components/ksiegowosc/ten-miesiac-akcje.tsx",
+        "supabase/migrations/{00168,00172}_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.jpk-pit",
+      "poziom": "R1",
+      "opis": "Pliki JPK_EWP i JPK_PKPIR oraz ich schematy.",
+      "sciezki": [
+        "lib/ksiegowosc/{jpk-ewp,jpk-ewp-walidator,jpk-pkpir}.ts",
+        "lib/exports/schemas/jpk-ewp4/**",
+        "lib/exports/schemas/jpk-pkpir3/**"
+      ]
+    },
+    {
+      "id": "ksiegowosc.wysylka-jpk",
+      "poziom": "R1",
+      "opis": "Wysyłka JPK do bramki MF, statusy, UPO.",
+      "sciezki": [
+        "lib/ksiegowosc/wysylka-jpk/**",
+        "supabase/migrations/00170_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.przypomnienia",
+      "poziom": "R1",
+      "opis": "Przypomnienia o terminach i kwotach podatków (termin i kwota w treści).",
+      "sciezki": [
+        "lib/ksiegowosc/{powiadomienia,przypomnienia}.ts",
+        "lib/jobs/runners/{ksiegowosc-miesiac,ksiegowosc-terminy}.ts",
+        "supabase/migrations/00169_*.sql"
+      ]
+    },
+    {
+      "id": "ksiegowosc.modul",
+      "poziom": "R1",
+      "opis": "Każdy inny plik modułu księgowości; nowy plik w lib/ksiegowosc dziedziczy R1.",
+      "sciezki": [
+        "lib/ksiegowosc/**"
+      ]
+    },
+    {
+      "id": "ksiegowosc.odlozyc",
+      "poziom": "R2",
+      "opis": "„Odłóż na podatek”: szacunek, nie dokument.",
+      "sciezki": [
+        "lib/ksiegowosc/odlozyc.ts",
+        "components/przeplywy/finora-1do1/adaptery.ts",
+        "components/przeplywy/finora-1do1/sloty.tsx"
+      ]
+    },
+    {
+      "id": "ksiegowosc.ekrany",
+      "poziom": "R2",
+      "opis": "Ekrany modułu księgowości: treści o podatkach (D8) i prezentacja kwot.",
+      "sciezki": [
+        "app/(dashboard)/reports/{ten-miesiac,ewidencja,vat,ustawienia-podatkowe}/**",
+        "components/reports/ksiegowosc-tabs.tsx",
+        "components/ksiegowosc/**"
+      ]
+    },
+    {
+      "id": "bezpieczniki",
+      "poziom": "R1",
+      "opis": "Strażnicy w działającej aplikacji (F13, plan B4.10): ostatnia kontrola spójności kwot i terminów przed pokazaniem, zatwierdzeniem i przypomnieniem; pozycja z błędem to brak z komunikatem i alarm FILTR-RT dla operatora. Zły strażnik przepuszcza złą kwotę albo zabiera dobrą.",
+      "sciezki": [
+        "lib/bezpieczniki/**"
+      ]
+    },
+    {
+      "id": "faktury.kwoty",
+      "poziom": "R1",
+      "opis": "Kwoty faktury: netto, VAT, brutto, zaokrąglenia, do zapłaty, zapis pozycji.",
+      "sciezki": [
+        "lib/xml/invoice-calculator.ts",
+        "lib/invoices/{calculator,vat-summary,amount-due}.ts",
+        "components/invoices/actions.ts",
+        "components/invoices/invoice-form-parts/calculations.ts",
+        "components/invoices/invoice-totals.tsx",
+        "lib/schemas/invoice-form.ts",
+        "lib/validators/invoice-validators.ts",
+        "lib/email/invoice-email-amount.ts"
+      ]
+    },
+    {
+      "id": "faktury.wystawianie",
+      "poziom": "R1",
+      "opis": "Zapis, wystawienie i wysłanie faktury z ekranu: akcje serwera i stałe formularza (lista stawek VAT).",
+      "sciezki": [
+        "app/(dashboard)/invoices/new/actions.ts",
+        "components/invoices/{actions-detail,advance-actions,draft-actions}.ts",
+        "components/invoices/invoice-form-parts/constants.ts",
+        "lib/invoices/build-from-form.ts",
+        "app/actions/noty.ts",
+        "lib/noty/**",
+        "lib/api/v1/invoice-create.ts",
+        "app/api/v1/invoices/route.ts",
+        "app/api/noty/**",
+        "app/actions/proformy.ts",
+        "lib/proformy/**",
+        "app/api/proformy/**"
+      ]
+    },
+    {
+      "id": "faktury.fa3",
+      "poziom": "R1",
+      "opis": "Generator FA(3), adnotacje (MPP, zw, np, oo), walidacja XSD, dane sprzedawcy i nabywcy.",
+      "sciezki": [
+        "lib/xml/{fa3-generator,fa3-annotations,fa3-p12,validator}.ts",
+        "lib/xml/schemas/fa3/**",
+        "lib/invoices/{annotations,vat-exemption,vat-ue,cash-method,special-data,map-buyer-party,tenant-seller,load-tenant-seller}.ts",
+        "lib/ksef/special-invoice-data.ts",
+        "lib/ksef/xml-generated-at.ts",
+        "lib/invoices/receipt-invoice.ts"
+      ]
+    },
+    {
+      "id": "faktury.daty-numeracja",
+      "poziom": "R1",
+      "opis": "Data wystawienia i sprzedaży, numeracja faktur.",
+      "sciezki": [
+        "lib/invoices/{issue-date,sale-date,display-date,next-number}.ts",
+        "lib/ksef/special-issue-date.ts"
+      ]
+    },
+    {
+      "id": "faktury.korekty",
+      "poziom": "R1",
+      "opis": "Faktury korygujące: kwota korekty, faktury pierwotne, adnotacje.",
+      "sciezki": [
+        "lib/ksef/fa3-correction-generator.ts",
+        "lib/invoices/correction-{amount-change,parents,annotations,picker}.ts",
+        "components/invoices/correction-actions.ts",
+        "components/invoices/correction-form.tsx",
+        "supabase/migrations/{00133,00135}_*.sql"
+      ]
+    },
+    {
+      "id": "faktury.zaliczki",
+      "poziom": "R1",
+      "opis": "Faktury zaliczkowe i rozliczające (ZAL, ROZ).",
+      "sciezki": [
+        "lib/ksef/fa3-advance-generator.ts",
+        "lib/invoices/{settled-advances,advance-settlement}.ts",
+        "components/invoices/final-actions.ts"
+      ]
+    },
+    {
+      "id": "faktury.cykliczne",
+      "poziom": "R1",
+      "opis": "Faktury cykliczne: aplikacja wystawia je sama.",
+      "sciezki": [
+        "lib/invoices/recurring/**",
+        "app/actions/recurring-invoice*.ts",
+        "app/(dashboard)/(faktury)/invoices/recurring/**"
+      ]
+    },
+    {
+      "id": "faktury.platnosci",
+      "poziom": "R1",
+      "opis": "Zapłaty faktur; metoda kasowa VAT zależy od daty zapłaty.",
+      "sciezki": [
+        "lib/invoices/{manual-payment,paid-labels}.ts",
+        "app/actions/invoice-payments.ts",
+        "supabase/migrations/00158_*.sql",
+        "app/actions/bank-statement.ts",
+        "lib/import/bank/**",
+        "lib/invoices/{identyfikator-zbiorczy,tytul-przelewu}.ts",
+        "app/actions/identyfikator-zbiorczy.ts",
+        "lib/ksef/identyfikator-zbiorczy.ts",
+        "app/actions/kasa.ts",
+        "lib/kasa/**",
+        "lib/invoices/invoice-payments.ts",
+        "app/api/kasa/**"
+      ]
+    },
+    {
+      "id": "faktury.listy",
+      "poziom": "R3",
+      "opis": "Lista faktur: zapytania i fakty wiersza (status, termin, zapłata) do wyświetlenia; kwoty pochodzą z obszaru faktury.kwoty.",
+      "sciezki": [
+        "lib/invoices/{list-query,list-row-facts}.ts"
+      ]
+    },
+    {
+      "id": "faktury.pdf",
+      "poziom": "R1",
+      "opis": "PDF faktury, kody QR weryfikacji, PDF UPO.",
+      "sciezki": [
+        "lib/pdf/**",
+        "lib/ksef/{qr-codes,qr-verification,upo-pdf-generator}.ts",
+        "app/api/invoices/**",
+        "app/accountant/[token]/download/**",
+        "app/faktura/[token]/**",
+        "components/invoices/buyer-link-actions.ts",
+        "lib/invoice-share/**"
+      ]
+    },
+    {
+      "id": "ksef.wysylka",
+      "poziom": "R1",
+      "opis": "Wysyłka faktur do KSeF: kolejka, blokady, dziennik prób, uzgodnienie z KSeF.",
+      "sciezki": [
+        "lib/ksef/{submit,submit-invoice-full,submission-log,submission-holds,submit-reference-boundary,submit-reconciliation,send-attempt-ledger,send-error-classes,send-error-codes,idempotency,kind-holds,roz-submission-hold}.ts",
+        "lib/invoices/ksef-{send-policy,send-step,submit-enqueue,requeue-event}.ts",
+        "lib/jobs/runners/submit-invoice{.ts,/**}",
+        "supabase/migrations/00131_*.sql",
+        "lib/ksef/normalize-status-code.ts",
+        "lib/jobs/runners/ksef-lifecycle-reconcile.ts",
+        "app/admin/ksef/actions.ts",
+        "lib/admin/ksef-operator-policy.ts",
+        "scripts/ops/zwolnij-utknieta-wysylke.{sh,sql}",
+        "lib/ksef/rate-limit-pause.ts",
+        "scripts/ops/ksef-pauza.sh"
+      ]
+    },
+    {
+      "id": "ksef.duplikaty",
+      "poziom": "R1",
+      "opis": "Wykrywanie duplikatów: ta sama faktura nie może trafić do KSeF dwa razy.",
+      "sciezki": [
+        "lib/ksef/duplicate-*.ts"
+      ]
+    },
+    {
+      "id": "ksef.offline-upo",
+      "poziom": "R1",
+      "opis": "Tryb offline, termin ponownej wysyłki (dni robocze), UPO jako dowód wysyłki.",
+      "sciezki": [
+        "lib/ksef/offline*.ts",
+        "lib/ksef/{idempotency,upo-client,upo-storage,upo-pdf-generator}.ts",
+        "lib/jobs/runners/{download-upo,upo-retry-stale,upo-identity,process-offline-queue}.ts",
+        "app/(dashboard)/invoices/[id]/upo-actions.ts"
+      ]
+    },
+    {
+      "id": "ksef.srodowisko",
+      "poziom": "R1",
+      "opis": "Księgi tylko ze środowiska KSeF firmy (test a produkcja).",
+      "sciezki": [
+        "lib/ksef/accounting-provenance.ts",
+        "lib/expenses/ksef-environment.ts",
+        "lib/ksef/claim-environment.ts"
+      ]
+    },
+    {
+      "id": "ksef.uprawnienia",
+      "poziom": "R1",
+      "opis": "Uprawnienia biura rachunkowego w KSeF nadawane i odbierane z FaktWay: kto w KSeF widzi i wystawia faktury firmy.",
+      "sciezki": [
+        "app/actions/uprawnienia-ksef.ts",
+        "lib/ksef/uprawnienia.ts"
+      ]
+    },
+    {
+      "id": "ksef.skrzynka-import",
+      "poziom": "R1",
+      "opis": "Faktury z KSeF i import z innych programów: kwoty trafiają do ksiąg.",
+      "sciezki": [
+        "lib/ksef/inbox*.ts",
+        "lib/ksef/history-sync/**",
+        "lib/jobs/runners/{inbox-polling,ksef-history-sync}.ts",
+        "lib/import/*.ts",
+        "lib/ksef/{hwm,history-fetcher}.ts",
+        "lib/jobs/runners/{inbox-backfill,bulk-import}.ts",
+        "app/actions/import-danych.ts",
+        "app/api/uploads/import/route.ts"
+      ]
+    },
+    {
+      "id": "operator.dane-faktur",
+      "poziom": "R1",
+      "opis": "Skrypty operatora, które zmieniają dane faktur w bazie produkcji (dane specjalne, data nadania numeru KSeF).",
+      "sciezki": [
+        "scripts/ops/{dopisz-dane-specjalne.sh,oryginal-ksef-data-nadania.sh,oryginal-ksef-data-nadania.sql}"
+      ]
+    },
+    {
+      "id": "import.csv",
+      "poziom": "R3",
+      "opis": "Parsery CSV z Fakturowni, wFirmy, inFaktu i iFirmy: tworzą szkice, które klient sprawdza przed zapisem.",
+      "sciezki": [
+        "lib/import/csv-parsers/**"
+      ]
+    },
+    {
+      "id": "ksef.transport",
+      "poziom": "R3",
+      "opis": "Klient KSeF, sesje, szyfrowanie, limity, stan usług: bez obliczeń prawnych (bezpieczeństwo pilnuje CODEOWNERS).",
+      "sciezki": [
+        "lib/ksef/{client,session-cache,encryption,credentials-crypto,rate-limiter,latarnia}.ts",
+        "lib/ksef/health-*.ts",
+        "lib/ksef/{application-url,auth-errors,auth-refresh,auth-token,auth,certificate-files,connect-credentials,owner-claim,reencrypt-credentials,poll-audit,mock-fixtures}.ts",
+        "lib/auth/ksef-verification-guard.ts",
+        "components/settings/actions.ts",
+        "app/(dashboard)/settings/ksef/**",
+        "app/actions/ksef-inbox.ts",
+        "scripts/reencrypt-ksef-credentials.ts"
+      ]
+    },
+    {
+      "id": "ksef.komunikaty",
+      "poziom": "R2",
+      "opis": "Komunikaty dla klienta o błędach KSeF i podłączenia: co się stało i co ma zrobić.",
+      "sciezki": [
+        "lib/ksef/{connect-messages,error-translator}.ts"
+      ]
+    },
+    {
+      "id": "waluty",
+      "poziom": "R1",
+      "opis": "Kursy NBP i reguła dnia kursu (art. 31a ustawy o VAT, art. 11a ustawy o PIT).",
+      "sciezki": [
+        "lib/nbp/client.ts",
+        "lib/flo/nbp.ts",
+        "lib/ocr/currency.ts",
+        "lib/expenses/ksef-currency-review.ts",
+        "lib/exports/currency-guard.ts"
+      ]
+    },
+    {
+      "id": "jpk.vat-fa",
+      "poziom": "R1",
+      "opis": "JPK_V7M i JPK_FA: generatory, walidatory, dane, schematy.",
+      "sciezki": [
+        "lib/exports/{jpk-v7m-generator,jpk-v7m-validator,jpk-fa-generator,jpk-fa-validator,jpk-fa-readiness,jpk-schema-check,suspended-formats,taxpayer-email,tax-office,tax-offices,issuer-address,export-scope,data-fetcher}.ts",
+        "lib/exports/schemas/{jpk-v7m3,jpk-fa4}/**"
+      ]
+    },
+    {
+      "id": "eksporty.zakres",
+      "poziom": "R1",
+      "opis": "Okres i zakres eksportu (miesiąc, kwartał, od-do), formaty i poprawki przed eksportem: zły okres to JPK albo KPiR za inny miesiąc.",
+      "sciezki": [
+        "components/exports/{export-period,export-formats,export-fixes}.ts",
+        "app/actions/exports.ts"
+      ]
+    },
+    {
+      "id": "raporty.kpir",
+      "poziom": "R1",
+      "opis": "Raport KPiR dla firm bez modułu i plik XLSX dla księgowej.",
+      "sciezki": [
+        "lib/reports/{kpir-data,kpir-totals}.ts",
+        "components/reports/kpir/kpir-model.ts",
+        "lib/exports/kpir-generator.ts",
+        "lib/categorization/{kpir-revenue,kpir-cost}.ts",
+        "app/(dashboard)/reports/kpir/**",
+        "lib/invoices/receipt-revenue-guard.ts"
+      ]
+    },
+    {
+      "id": "eksporty.inne",
+      "poziom": "R2",
+      "opis": "Pliki dla księgowej (CSV, Optima, paczki ZIP).",
+      "sciezki": [
+        "lib/exports/{comarch-optima-generator,csv-generators,zip-packager,form-defaults}.ts",
+        "lib/jobs/runners/{exports-generate,co-pilot-monthly}.ts",
+        "app/api/portal/exports/generate/**",
+        "lib/api/v1/{invoices,expenses}.ts",
+        "app/api/v1/invoices/[id]/route.ts",
+        "lib/api/mcp/**",
+        "lib/webhooks/{deliver,payloads}.ts",
+        "lib/jobs/runners/webhooks.ts",
+        "components/settings/webhooks-actions.ts",
+        "lib/exports/edi-plus-plus-generator.ts"
+      ]
+    },
+    {
+      "id": "koszty",
+      "poziom": "R1",
+      "opis": "Koszty: kolumna KPiR, odliczenie VAT, OCR paragonów; model językowy tylko proponuje kategorię.",
+      "sciezki": [
+        "lib/categorization/**",
+        "lib/expenses/**",
+        "lib/ocr/**",
+        "app/actions/expenses.ts",
+        "lib/jobs/runners/{auto-categorize-inbox,process-ocr}.ts",
+        "app/actions/{expense-payments,plik-przelewow,receipt-invoice-match}.ts",
+        "app/api/uploads/expense/route.ts",
+        "app/actions/expense-thread.ts"
+      ]
+    },
+    {
+      "id": "kontrahent",
+      "poziom": "R1",
+      "opis": "Walidacja kontrahenta: suma kontrolna NIP, biała lista (prawo do kosztu), VIES (stawka 0 % WDT).",
+      "sciezki": [
+        "lib/validators/invoice-validators.ts",
+        "lib/validation/{vies-client,whitelist-client,cache,contractor-update}.ts",
+        "app/actions/validation.ts",
+        "lib/jobs/runners/{nightly-validation-recheck,bulk-validate-contractors}.ts"
+      ]
+    },
+    {
+      "id": "kontrahent.gus",
+      "poziom": "R3",
+      "opis": "Dane z GUS do podpowiedzi danych kontrahenta.",
+      "sciezki": [
+        "lib/gus/**"
+      ]
+    },
+    {
+      "id": "kontrahent.dane",
+      "poziom": "R3",
+      "opis": "Dane kontrahentów: edycja, podgląd, sprawdzanie NIP w formularzu (sama walidacja jest w obszarze kontrahent).",
+      "sciezki": [
+        "lib/contractors/**",
+        "hooks/use-nip-validation.ts",
+        "app/actions/contractors.ts"
+      ]
+    },
+    {
+      "id": "windykacja",
+      "poziom": "R1",
+      "opis": "Wezwania do zapłaty z odsetkami i rekompensatą, harmonogram przypomnień.",
+      "sciezki": [
+        "lib/reminders/{pdf-demand-letter,templates,scheduler,prepare-delivery,reconciliation-guard}.ts",
+        "lib/flo/interest.ts",
+        "lib/overdue/**",
+        "lib/flo/functions/payment-chase*.ts",
+        "lib/jobs/runners/{reminder-scheduler,send-reminder,cancel-reminders-on-payment}.ts",
+        "lib/reminders/**",
+        "app/actions/reminders.ts"
+      ]
+    },
+    {
+      "id": "abonament",
+      "poziom": "R1",
+      "opis": "Faktury FaktWay za abonament, ceny, płatności i zwroty.",
+      "sciezki": [
+        "lib/billing/{self-invoice,pricing,operator-config,trial-payment,payment-failure}.ts",
+        "lib/jobs/runners/self-invoice-payment.ts",
+        "lib/stripe/**",
+        "lib/billing/**",
+        "app/(dashboard)/settings/billing/**",
+        "app/admin/users/[userId]/billing-actions.ts",
+        "lib/admin/refunds.ts",
+        "app/api/stripe/**",
+        "lib/jobs/runners/dunning-payment-failed.ts"
+      ]
+    },
+    {
+      "id": "retencja",
+      "poziom": "R1",
+      "opis": "Przechowywanie i usuwanie danych: faktury, UPO, kopie, RODO.",
+      "sciezki": [
+        "lib/retention/**",
+        "lib/gdpr/**",
+        "lib/backup/**",
+        "lib/storage/**",
+        "lib/jobs/runners/{archive-old-invoices,retention-delete,cleanup-audit-logs,cleanup-old-backups,gdpr-process-deletions,support-chat-retention}.ts",
+        "app/(auth)/gdpr/**",
+        "app/(dashboard)/settings/account/**",
+        "app/admin/users/actions.ts",
+        "app/api/gdpr/**",
+        "lib/support/retention.ts",
+        "lib/jobs/runners/{daily-db-snapshot,verify-backup}.ts",
+        "scripts/hetzner/db-backup.sh",
+        "lib/uploads/server.ts",
+        "app/actions/archiwum.ts",
+        "lib/archiwum/**",
+        "lib/jobs/runners/{document-archive,document-archive-cleanup}.ts"
+      ]
+    },
+    {
+      "id": "ustawienia.firma",
+      "poziom": "R1",
+      "opis": "Dane firmy i ustawienia podatkowe, które trafiają na faktury i do JPK: NIP, adres, urząd skarbowy, metoda kasowa, zwolnienie z VAT, data rozpoczęcia działalności, usunięcie firmy.",
+      "sciezki": [
+        "app/actions/{company-profile,organizations,tax-office,cash-method,vat-exemption,business-start}.ts",
+        "lib/invoices/business-start.ts",
+        "components/settings/{cash-method-form,tax-office-form,vat-exemption-form,business-start-form,complete-nip-form,company-deletion}.tsx",
+        "app/actions/company-bank-account.ts"
+      ]
+    },
+    {
+      "id": "szacunki",
+      "poziom": "R2",
+      "opis": "Szacunki i pulpit: podatek do odłożenia, limit zwolnienia z VAT, przepływy pieniędzy.",
+      "sciezki": [
+        "lib/dashboard/{tax-estimate,vat-limit,costs,monthly-figures,cash-flow,cash-movements,inflows,inflow-terms,sales-history,rankings}.ts",
+        "lib/dashboard/receivables*.ts",
+        "lib/flo/functions/{tax-setaside,tax-deadline,tax-relief,vat-limit,rate-raise,month-close}.ts",
+        "lib/flo/{tax-params,tax-profile,metrics,money}.ts",
+        "lib/analytics-finance/**",
+        "lib/dashboard/**",
+        "lib/invoices/list-stats.ts",
+        "lib/contractors/overview.ts",
+        "components/dashboard/finora/adaptery.ts",
+        "components/dashboard/pulpit/**",
+        "components/analizy/**",
+        "app/(dashboard)/analizy/**",
+        "components/przeplywy/**",
+        "app/(dashboard)/przeplywy/**",
+        "app/(dashboard)/flo/wrapped/**",
+        "lib/jobs/runners/{weekly-business-review,daily-summary-email}.ts",
+        "lib/kasa-fiskalna/**",
+        "lib/oss/**"
+      ]
+    },
+    {
+      "id": "flo.agent",
+      "poziom": "R2",
+      "opis": "Agent FLO: propozycje, treści kart, rozmowa, harmonogram; klient zatwierdza każdą czynność (R1 tam, gdzie FLO wpisuje do ksiąg).",
+      "sciezki": [
+        "lib/flo/**",
+        "components/flo/**",
+        "types/flo.ts",
+        "app/actions/flo.ts",
+        "app/(dashboard)/flo/**",
+        "app/(dashboard)/settings/flo/**"
+      ]
+    },
+    {
+      "id": "flo.aktywne",
+      "poziom": "R2",
+      "opis": "Agent FLO, funkcje aktywne: ponaglenia i przegląd kosztów (proponuje, klient decyduje).",
+      "sciezki": [
+        "lib/flo/functions/{expense-review,expense-inbox}.ts",
+        "lib/flo/copy.ts"
+      ]
+    },
+    {
+      "id": "flo.aktywne-ksiegi",
+      "poziom": "R1",
+      "opis": "Agent FLO, funkcje, które ustawiają kolumnę KPiR albo oznaczają zapłatę.",
+      "sciezki": [
+        "lib/flo/functions/{expense-rules,payment-confirm,payment-confirm-producer}.ts",
+        "lib/flo/{execute,undo}.ts"
+      ]
+    },
+    {
+      "id": "tresci",
+      "poziom": "R2",
+      "opis": "Treści o podatkach: FLO, czat pomocy, pomoc, blog, strona, maile (D8: bez porad podatkowych).",
+      "sciezki": [
+        "lib/flo/{tax-topic,llm}.ts",
+        "lib/support/chat.ts",
+        "lib/help/articles.ts",
+        "content/flo/**",
+        "content/help/**",
+        "content/blog/**",
+        "components/marketing/**",
+        "lib/marketing/**",
+        "app/(marketing)/**",
+        "app/(home)/**",
+        "lib/email/templates/**",
+        "lib/support/**",
+        "components/support/**",
+        "lib/jobs/runners/{email-sequence,trial-countdown-emails,cert-expiry-alert}.ts",
+        "app/api/support/**",
+        "lib/api/v1/{docs-page.ts,openapi.json}"
+      ]
+    },
+    {
+      "id": "prawne",
+      "poziom": "R2",
+      "opis": "Regulamin, polityka prywatności, umowa powierzenia, wersje i akceptacje.",
+      "sciezki": [
+        "lib/legal/**",
+        "components/legal/**",
+        "app/actions/{analytics-consent,newsletter}.ts",
+        "lib/email/{preferences,unsubscribe-token}.ts",
+        "app/(dashboard)/settings/notifications/email-actions.ts",
+        "lib/analytics/privacy.ts",
+        "app/api/email/unsubscribe/**",
+        "app/(auth)/register/actions.ts",
+        "app/onboarding/zgody/**"
+      ]
+    },
+    {
+      "id": "powiadomienia",
+      "poziom": "R2",
+      "opis": "Wysyłka powiadomień do klienta (e-mail, push): o odrzuconej fakturze, duplikacie, błędzie; treść decyduje, czy klient zareaguje na czas.",
+      "sciezki": [
+        "lib/jobs/runners/notify-user.ts",
+        "lib/push/sender.ts",
+        "lib/email/send.ts",
+        "lib/app-notifications/**",
+        "lib/jobs/runners/{app-notifications,new-login-mail}.ts",
+        "supabase/migrations/{00187,00188,00197}_*.sql"
+      ]
+    },
+    {
+      "id": "portal.ksiegowej",
+      "poziom": "R2",
+      "opis": "Portal księgowej: lista faktur i pliki, które dostaje księgowa klienta.",
+      "sciezki": [
+        "lib/accountant/**",
+        "components/accountant/**",
+        "app/(dashboard)/settings/accountant/**",
+        "app/accountant/**",
+        "components/settings/accountant-actions.ts",
+        "supabase/migrations/00192_*.sql"
+      ]
+    },
+    {
+      "id": "dane-przykladowe",
+      "poziom": "R2",
+      "opis": "Dane przykładowe (tryb demo): klient nie może wziąć ich za swoje; granicę przykład-prawda pilnuje tests/unit/dane-granica.test.ts.",
+      "sciezki": [
+        "lib/demo/**"
+      ]
+    },
+    {
+      "id": "pomocnicze",
+      "poziom": "R3",
+      "opis": "Daty i strefa Warszawy, formatowanie kwot, odczyt stronami, schematy formularzy, typy, dziennik audytowy, przełączniki funkcji.",
+      "sciezki": [
+        "lib/format/**",
+        "lib/accounting/read-complete-pages.ts",
+        "lib/pagination/**",
+        "lib/schemas/**",
+        "types/invoice*.ts",
+        "types/**",
+        "lib/i18n/**",
+        "lib/audit/**",
+        "lib/feature-flags/**",
+        "lib/api/v1/{auth,pagination,scopes,token}.ts",
+        "lib/webhooks/{secret-box,signature,types}.ts"
+      ]
+    },
+    {
+      "id": "jobs.infrastruktura",
+      "poziom": "R3",
+      "opis": "Kolejki, ponowienia i rejestracja jobów pg-boss oraz joby kontrolne; ciała jobów R1 mają własne obszary (ponowienie od zera: protokół, pkt 5).",
+      "sciezki": [
+        "lib/jobs/*.ts",
+        "lib/jobs/handlers/**",
+        "lib/jobs/runners/{jobs-watchdog,critical-alerts-monitor,ksef-health-check,ksef-lifecycle-report,tenant-boundary,daily-analytics-digest}.ts"
+      ]
+    },
+    {
+      "id": "admin.podglad",
+      "poziom": "R3",
+      "opis": "Panel operatora: podgląd błędów wysyłki, kopii, użytkowników, flag; decyzje operatora zmieniające dokumenty są w obszarach R1.",
+      "sciezki": [
+        "app/admin/**",
+        "lib/admin/**",
+        "lib/supabase/admin-queries.ts"
+      ]
+    },
+    {
+      "id": "ui.ekrany",
+      "poziom": "R3",
+      "opis": "Wszystkie ekrany i komponenty (.tsx): pokazują i zbierają dane; obliczenia, zapis i treści o podatkach są w obszarach R1 i R2, które wygrywają (wyższy poziom). Logika obliczeń w .tsx to uwaga w przeglądzie.",
+      "sciezki": [
+        "app/**/*.tsx",
+        "components/**/*.tsx"
+      ]
+    },
+    {
+      "id": "ui.modele",
+      "poziom": "R3",
+      "opis": "Modele i formatowanie dla ekranów (.ts obok komponentów): etykiety, typy wierszy, kroki kreatorów.",
+      "sciezki": [
+        "components/expenses/finora/labels.ts",
+        "components/import-danych/{import-model,ksef-history-model}.ts",
+        "components/invoices/invoice-form-parts/validation-message.ts",
+        "components/invoices/invoice-row-types.ts",
+        "components/settings/finora/format-date.ts",
+        "app/(dashboard)/(koszty)/inbox/_components/inbox-rows.ts",
+        "components/onboarding/actions.ts",
+        "app/share-target/route.ts",
+        "components/invoices/invoice-form-parts/use-lines-desktop-layout.ts"
+      ]
+    },
+    {
+      "id": "weryfikacja",
+      "poziom": "R3",
+      "opis": "Skrypty weryfikacji i kontroli tylko do odczytu (FA(3) wszystkich rodzajów, JPK w bramce testowej MF, KSeF TEST, kontrola faktur na produkcji): ich wynik jest dowodem w karcie zmiany.",
+      "sciezki": [
+        "scripts/{verify-fa3-all-types,test-fa3-generation,test-jpk-mf,test-ksef-wysylka,test-submit-full,seed-test-invoice}.ts",
+        "scripts/verify-migration-00200.sh",
+        "scripts/ops/{kontrola-faktur-ksef,ksef-historia,pojemnosc-db,faktway-inwentarz}.sh"
+      ]
+    },
+    {
+      "id": "sql.platnosci",
+      "poziom": "R1",
+      "opis": "SQL: status zapłaty, kwota zapłacona, należności po terminie (update_invoice_payment_status, recalculate_invoice_paid_amount, invoices_overdue, mark_invoice_paid).",
+      "sciezki": [
+        "supabase/migrations/{00012,00014,00023,00068,00073,00082,00126,00145,00158,00176,00180,00183,00189,00191,00194,00200}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.abonament",
+      "poziom": "R1",
+      "opis": "SQL: faktura FaktWay za abonament (create_billing_vat_invoice) i jej strażnicy.",
+      "sciezki": [
+        "supabase/migrations/{00079,00080,00110,00152,00162}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.integralnosc",
+      "poziom": "R1",
+      "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja).",
+      "sciezki": [
+        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.wysylka",
+      "poziom": "R1",
+      "opis": "SQL: cykl wysyłki do KSeF i decyzje o duplikatach.",
+      "sciezki": [
+        "supabase/migrations/{00124,00131,00141,00142,00143,00147,00148,00151,00156}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.koszty",
+      "poziom": "R1",
+      "opis": "SQL: pochodzenie kosztów i prawo do odliczenia (expenses.is_deductible).",
+      "sciezki": [
+        "supabase/migrations/{00034,00123,00127,00128,00175,00177,00196}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.ustawienia-podatkowe",
+      "poziom": "R1",
+      "opis": "SQL: ustawienia podatkowe firmy.",
+      "sciezki": [
+        "supabase/migrations/{00091,00092,00094,00153}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.retencja",
+      "poziom": "R1",
+      "opis": "SQL: retencja i usuwanie danych.",
+      "sciezki": [
+        "supabase/migrations/{00009,00022,00044,00051,00052,00069,00070,00071,00072,00104,00109,00113,00157,00178,00190}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.dostep",
+      "poziom": "R1",
+      "opis": "SQL: dostęp do danych firmy spoza zwykłej sesji: klucze API, link do faktury dla nabywcy, adres kalendarza, sesje kont, podsumowanie firm księgowej i uprawnienia biura w KSeF (funkcje SECURITY DEFINER z tokenem albo rolą).",
+      "sciezki": [
+        "supabase/migrations/{00174,00179,00181,00182,00185,00195}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.schemat",
+      "poziom": "R3",
+      "opis": "Pozostałe istniejące migracje (00001-00173 i 00200): schemat i uprawnienia, z których korzysta kod R1. Nowa migracja nie jest tu objęta: z sygnałem musi trafić do obszaru sql.* świadomie.",
+      "sciezki": [
+        "supabase/migrations/000??_*.sql",
+        "supabase/migrations/001{0,1,2,3,4,5,6}?_*.sql",
+        "supabase/migrations/0017{0,1,2,3}_*.sql",
+        "supabase/migrations/00200_*.sql"
+      ]
+    }
+  ],
+  "wylaczenia": [
+    {
+      "sciezki": [
+        "scripts/filtr/**",
+        "scripts/ci/**"
+      ],
+      "powod": "Maszyneria filtra i CI: zawiera słowa sygnałów z definicji, a zmiany w niej chroni straż etykietą zgoda:zmiana-filtra (plan B5.4), nie mapa."
+    },
+    {
+      "sciezki": [
+        "lib/auth/**",
+        "lib/rate-limit/**",
+        "lib/cache/**",
+        "lib/supabase/**",
+        "app/api/auth/**",
+        "app/(dashboard)/settings/security/**"
+      ],
+      "powod": "Logowanie, MFA, klucze dostępu, sesje, limity prób, pamięć podręczna i klienty Supabase: bezpieczeństwo kont i izolacja najemców (pilnują ich testy RLS i CODEOWNERS), bez obliczeń prawnych. Sygnały to słowo KSeF w nazwach uprawnień, usuwanie kluczy i liczby w limitach czasu."
+    },
+    {
+      "sciezki": [
+        "lib/observability/**",
+        "lib/analytics/**",
+        "lib/alerts/**",
+        "app/api/{health,status}/**",
+        "app/api/ksef/health/**",
+        "app/api/email/resend-webhook/**"
+      ],
+      "powod": "Metryki, telemetria, analityka produktowa, alarmy dla operatora i stan usług: nie trafiają do dokumentów ani nie podają klientowi kwot. Zgody na analitykę są w obszarze prawne."
+    },
+    {
+      "sciezki": [
+        "app/manifest.ts",
+        "next.config.ts",
+        "lib/{site,test-mode,upload-limit,command-palette,dashboard-nav-config,dashboard-shell-data}.ts",
+        "lib/utils/sun.ts",
+        "app/actions/command-search.ts",
+        "components/settings/finora/settings-tabs.ts",
+        "components/dashboard/finora/use-pagination.ts",
+        "hooks/{use-inactivity-timeout,use-pagination}.ts"
+      ],
+      "powod": "Powłoka aplikacji: manifest, konfiguracja Next.js, nawigacja, wyszukiwarka poleceń, stronicowanie, limity wielkości plików; sygnały to nazwy modułów i zaokrąglenia liczby stron, nie kwot."
+    },
+    {
+      "sciezki": [
+        "scripts/security/**",
+        "scripts/ops/{rotacja-generuj,rotacja-kluczy,wdroz-produkcje,wgraj-migracje}.sh",
+        "scripts/ops/rotacja-kluczy-sonda.mjs",
+        "scripts/{seed-tenant,check-env,test-r2,test-ksef-auth,test-ksef-token,test-ksef-kreator}.ts"
+      ],
+      "powod": "Narzędzia operatora i audyty bezpieczeństwa: wdrożenie, migracje (kolejność pilnuje AGENTS.md), rotacja kluczy, kontrola zmiennych, próby połączeń; nie liczą i nie zmieniają danych faktur."
+    }
+  ],
+  "sygnaly": {
+    "tresc": [
+      {
+        "id": "vat",
+        "wzorzec": "(?<![A-Za-z])(?:VAT|[Vv]at)|(?<=[a-z])Vat"
+      },
+      {
+        "id": "zus",
+        "wzorzec": "(?<![A-Za-z])(?:ZUS|[Zz]us)|(?<=[a-z])Zus"
+      },
+      {
+        "id": "pit",
+        "wzorzec": "(?<![A-Za-z])(?:PIT|[Pp]it)(?![a-z])|(?<=[a-z])Pit(?![a-z])"
+      },
+      {
+        "id": "ryczalt",
+        "wzorzec": "rycza[łl]t",
+        "flagi": "i"
+      },
+      {
+        "id": "skladka",
+        "wzorzec": "sk[łl]adk",
+        "flagi": "i"
+      },
+      {
+        "id": "podatek",
+        "wzorzec": "podat",
+        "flagi": "i"
+      },
+      {
+        "id": "jpk",
+        "wzorzec": "jpk",
+        "flagi": "i"
+      },
+      {
+        "id": "ksef",
+        "wzorzec": "ksef",
+        "flagi": "i"
+      },
+      {
+        "id": "fa3",
+        "wzorzec": "FA ?\\(3\\)|(?<![A-Za-z0-9])[Ff]a3|(?<=[a-z])Fa3"
+      },
+      {
+        "id": "kurs",
+        "wzorzec": "(?<![A-Za-z])[Kk]urs(?!or)"
+      },
+      {
+        "id": "nbp",
+        "wzorzec": "(?<![A-Za-z])(?:NBP|[Nn]bp)"
+      },
+      {
+        "id": "zaokraglenie",
+        "wzorzec": "zaokr[ąa]gl",
+        "flagi": "i"
+      },
+      {
+        "id": "grosz",
+        "wzorzec": "grosz",
+        "flagi": "i"
+      },
+      {
+        "id": "stawka",
+        "wzorzec": "stawk",
+        "flagi": "i"
+      },
+      {
+        "id": "termin",
+        "wzorzec": "(?<![A-Za-z])[Tt]ermin(?!al|at)"
+      },
+      {
+        "id": "odsetki",
+        "wzorzec": "odsetk",
+        "flagi": "i"
+      },
+      {
+        "id": "mikrorachunek",
+        "wzorzec": "mikrorachun",
+        "flagi": "i"
+      },
+      {
+        "id": "korekta",
+        "wzorzec": "korekt",
+        "flagi": "i"
+      },
+      {
+        "id": "zaliczka",
+        "wzorzec": "zaliczk",
+        "flagi": "i"
+      },
+      {
+        "id": "retencja",
+        "wzorzec": "retencj",
+        "flagi": "i"
+      },
+      {
+        "id": "przedawnienie",
+        "wzorzec": "przedawn",
+        "flagi": "i"
+      },
+      {
+        "id": "kpir",
+        "wzorzec": "kpir",
+        "flagi": "i"
+      },
+      {
+        "id": "ewidencja",
+        "wzorzec": "ewidencj",
+        "flagi": "i"
+      },
+      {
+        "id": "pole-fa3-jpk",
+        "wzorzec": "\\bP_\\d+|\\bK_\\d+"
+      },
+      {
+        "id": "przepis",
+        "wzorzec": "(?<![A-Za-z])[Aa]rt\\. ?\\d+|Dz\\. ?U\\."
+      },
+      {
+        "id": "tabela-prawna",
+        "wzorzec": "\\.from\\(\\s*['\"](?:invoices|invoice_line_items|expenses|payments|audit_logs|(?:tax|ledger|jpk|ksef)_[a-z_]+)['\"]|(?:FROM|JOIN|UPDATE|INTO|TABLE|ON)\\s+(?:public\\.)?(?:invoices|invoice_line_items|expenses|payments|audit_logs|(?:tax|ledger|jpk|ksef)_\\w+)\\b"
+      },
+      {
+        "id": "kwoty",
+        "wzorzec": "roundToCents|toFixed\\(|Math\\.(?:round|floor|ceil|trunc)\\("
+      },
+      {
+        "id": "stawki",
+        "wzorzec": "['\"]23['\"]|(?<![\\d.])1\\.23(?!\\d)|['\"](?:zw|oo|np_i|np_ii)['\"]"
+      },
+      {
+        "id": "daty",
+        "wzorzec": "Europe/Warsaw|CURRENT_DATE|toISOString\\(\\)\\.slice\\(0, ?10\\)"
+      },
+      {
+        "id": "usuwanie",
+        "wzorzec": "\\.delete\\(\\s*[){]|\\.remove\\(\\s*\\[|DELETE\\s+FROM|delete\\s+from|TRUNCATE|scheduled_deletion_at|interval\\s+'\\d+\\s+(?:years?|months?|days?)'"
+      },
+      {
+        "id": "sql-logika",
+        "wzorzec": "CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:FUNCTION|TRIGGER|VIEW)|create\\s+(?:or\\s+replace\\s+)?(?:function|trigger|view)"
+      },
+      {
+        "id": "tresci-prawne",
+        "wzorzec": "doradztw|nieważn|usuwan|(?<![A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż])[Kk]ar(?:a|y|ę|ą|om|ami|ach)(?![A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż])",
+        "flagi": "i"
+      }
+    ],
+    "nazwy": [
+      {
+        "id": "podatki",
+        "wzorzec": "(?:^|-)(?:vat|jpk|kpir|tax|podat|zus|ryczalt)|(?:^|-)pit(?:-|$)"
+      },
+      {
+        "id": "kwoty",
+        "wzorzec": "(?:^|-)(?:calculator|amount|round|nbp|currency|walut)"
+      },
+      {
+        "id": "dokumenty",
+        "wzorzec": "(?:^|-)(?:fa3|correction|korekt|advance|zalicz|settle|exemption)|(?:^|-)(?:self-invoice|issue-date|sale-date|cash-method)(?:-|$)"
+      },
+      {
+        "id": "abonament",
+        "wzorzec": "(?:^|-)(?:billing|pricing)"
+      },
+      {
+        "id": "windykacja",
+        "wzorzec": "(?:^|-)(?:interest|odsetk|reminder|wezwan|demand)"
+      },
+      {
+        "id": "usuwanie",
+        "wzorzec": "(?:^|-)(?:retention|retencj|gdpr|rodo|delet|purge|cleanup|prune|archive)"
+      },
+      {
+        "id": "terminy",
+        "wzorzec": "(?:^|-)(?:deadline|termin(?!al|at)|kalendarz|offline)"
+      },
+      {
+        "id": "kontrahent",
+        "wzorzec": "(?:^|-)(?:whitelist|vies)"
+      }
+    ]
+  }
+}

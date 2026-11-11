@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { logAudit } from '@/lib/audit/log';
+import { zglosAlarmy } from '@/lib/bezpieczniki/alarm';
+import { odmowaJpkV7m, sprawdzJpkV7m } from '@/lib/bezpieczniki/jpk-v7m';
 import { monthLabel, monthRange } from '@/lib/expenses/month';
 import { redactXsdMessage } from '@/lib/exports/jpk-schema-check';
 import { generateJpkV7m, JPK_V7M_FORM_CODE } from '@/lib/exports/jpk-v7m-generator';
@@ -104,7 +106,8 @@ type Plik =
   | { ok: false; error: string };
 
 /**
- * Plik JPK_V7M(3) za miesiąc z danych firmy: ta sama droga dla pobrania i wysyłki.
+ * Plik JPK_V7M(3) za miesiąc z danych firmy: ta sama droga dla pobrania i wysyłki,
+ * więc obie przechodzą przez XSD i strażnika pliku (`sprawdzJpkV7m`, filtr F13).
  * Po deklaracji przyjętej przez MF (w tym środowisku; bez środowiska: na produkcji)
  * kolejny plik za ten miesiąc to korekta (CelZlozenia 2).
  */
@@ -175,6 +178,13 @@ async function plikMiesiaca(ctx: AuthContext, w: z.infer<typeof plikSchema>, sro
         'Plik JPK_V7M nie przeszedł kontroli schematu Ministerstwa Finansów, więc go nie wydajemy. ' +
         'Szczegóły są w naszych logach i sprawdzimy dane z tego miesiąca.',
     };
+  }
+  // Strażnik (żelazny filtr F13): sumy kontrolne i deklaracja pliku po XSD. Plik
+  // z alarmem nie trafia ani do klienta, ani do bramki MF; operator dostaje alarm.
+  const alarmy = sprawdzJpkV7m(xml, w.miesiac);
+  if (alarmy.length > 0) {
+    zglosAlarmy(alarmy, { tenantId: ctx.tenantId, straznik: 'jpk-v7m' });
+    return { ok: false, error: odmowaJpkV7m(alarmy[0].kod) };
   }
   const r = dane.wynik;
   const deklaracja: DeklaracjaVat = {

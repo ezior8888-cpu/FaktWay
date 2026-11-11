@@ -130,6 +130,7 @@ export function noteToDraftInput(note: AccountingNote): NoteDraftInput {
     contractorId: note.contractorId ?? '',
     issueDate: note.issueDate,
     title: note.title,
+    // filtr-wyjatek: kwoty-bez-float zapis kwoty z dwoma miejscami do pola formularza, bez rachunku
     items: note.items.map((item) => ({ description: item.description, amount: item.amount.toFixed(2).replace('.', ',') })),
     currency: note.currency,
     relatedDocument: note.relatedDocument ?? '',

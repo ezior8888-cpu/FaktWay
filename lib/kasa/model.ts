@@ -155,6 +155,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 export function isRealDay(value: unknown): value is string {
   if (typeof value !== 'string' || !ISO_DAY.test(value)) return false;
   const parsed = new Date(`${value}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
@@ -372,6 +373,7 @@ export function buildCashReport(input: {
 }
 
 function daysBetween(from: string, to: string): number {
+  // filtr-wyjatek: kwoty-bez-float liczba dni między datami, nie kwota
   return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 }
 

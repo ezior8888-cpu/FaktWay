@@ -58,6 +58,13 @@ hook_msg="$(bash "$root/scripts/dev/napraw-hook.sh")"
 if [ -n "$hook_msg" ]; then
   done_items+=("$hook_msg")
 fi
+# Żelazny filtr (F3): hook przed pushem musi wskazywać katalog .githooks
+# (ten albo głównego katalogu), inaczej krok filtra nie działa.
+hooks_path="$(git config --get core.hooksPath)"
+case "$hooks_path" in
+  .githooks|*/.githooks) ;;
+  *) [ -d .githooks ] && problems+=("core.hooksPath = ${hooks_path:-brak}, hook filtra przed pushem nie działa (git config core.hooksPath .githooks)") ;;
+esac
 
 if [ ${#done_items[@]} -gt 0 ]; then
   (IFS=','; echo "Przygotowanie worktree:${done_items[*]/#/ }.")

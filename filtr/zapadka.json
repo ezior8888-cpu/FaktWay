@@ -1,0 +1,77 @@
+{
+  "wersja": 1,
+  "opis": "Naruszenia reguł statycznych filtra w kodzie sprzed filtra (B4.8). Liczba może tylko maleć; wzrost wymaga zgoda:zmiana-filtra. Odświeżenie po poprawkach: node scripts/filtr/reguly.mjs --zapisz.",
+  "reguly": {
+    "bez-porad": {
+      "app/(marketing)/kalkulator-oszczednosci/page.tsx": 3
+    },
+    "data-warszawa": {
+      "app/actions/expenses.ts": 1,
+      "app/actions/invoice-payments.ts": 1,
+      "app/actions/ksiegowosc-ewidencja.ts": 1,
+      "components/dashboard/footer.tsx": 1,
+      "components/expenses/kpir-view.tsx": 1,
+      "components/exports/accountant-export-buttons.tsx": 6,
+      "components/exports/co-pilot-settings-form.tsx": 4,
+      "lib/flo/functions/payment-confirm-producer.ts": 1,
+      "lib/flo/interest.ts": 1,
+      "lib/format/warsaw-date.ts": 1,
+      "lib/invoices/list-query.ts": 1,
+      "lib/jobs/runners/archive-old-invoices.ts": 3,
+      "lib/jobs/runners/inbox-polling.ts": 1,
+      "lib/ksef/idempotency.ts": 1,
+      "lib/ksef/offline-queue.ts": 1,
+      "lib/ksiegowosc/kalendarz.ts": 1,
+      "lib/ksiegowosc/wysylka-jpk/dane-autoryzujace.ts": 1,
+      "lib/ksiegowosc/zus.ts": 2,
+      "lib/nbp/client.ts": 1,
+      "lib/ocr/engine.ts": 1,
+      "lib/reminders/delivery-safety.ts": 2,
+      "lib/reminders/prepare-delivery.ts": 2,
+      "lib/reminders/scheduler.ts": 1,
+      "lib/reports/kpir-data.ts": 1,
+      "lib/storage/expenses.ts": 2,
+      "lib/stripe/financial-gap-audit.ts": 1
+    },
+    "kwoty-bez-float": {
+      "components/exports/export-formats.ts": 1,
+      "components/invoices/actions.ts": 1,
+      "components/invoices/correction-form.tsx": 4,
+      "components/reports/kpir/kpir-model.ts": 2,
+      "lib/billing/pricing.ts": 1,
+      "lib/expenses/photo-upload.ts": 2,
+      "lib/exports/jpk-fa-generator.ts": 2,
+      "lib/exports/jpk-v7m-generator.ts": 2,
+      "lib/flo/functions/payment-confirm.ts": 1,
+      "lib/flo/nbp.ts": 1,
+      "lib/import/fa3-line-amounts.ts": 2,
+      "lib/import/fa3-parser.ts": 2,
+      "lib/import/jpk-fa-parser.ts": 1,
+      "lib/invoices/calculator.ts": 1,
+      "lib/jobs/runners/inbox-polling.ts": 2,
+      "lib/ksef/duplicate-original-gate.ts": 1,
+      "lib/ksef/duplicate-original-projection.ts": 1,
+      "lib/ksef/fa3-advance-generator.ts": 1,
+      "lib/ksef/fa3-correction-generator.ts": 1,
+      "lib/ksef/history-sync/status.ts": 1,
+      "lib/ksef/inbox-schedule.ts": 1,
+      "lib/ksiegowosc/ewidencja-dane.ts": 1,
+      "lib/ksiegowosc/ewidencja.ts": 1,
+      "lib/ksiegowosc/kpir-dane.ts": 1,
+      "lib/ksiegowosc/profil.ts": 1,
+      "lib/ksiegowosc/zdrowotna.ts": 1,
+      "lib/reminders/scheduler.ts": 1,
+      "lib/schemas/invoice-form.ts": 1,
+      "lib/xml/fa3-generator.ts": 1,
+      "lib/xml/invoice-calculator.ts": 2
+    },
+    "liczby-z-rejestru": {
+      "lib/dashboard/tax-estimate.ts": 1
+    },
+    "testy-bez-pomijania": {
+      "tests/filtr/mapa.test.ts": 2,
+      "tests/filtr/niezmienniki/ryczalt.test.ts": 2,
+      "tests/filtr/rejestr.test.ts": 1
+    }
+  }
+}

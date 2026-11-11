@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JPK xmlns="http://jpk.mf.gov.pl/wzor/2024/10/30/10302/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="JPK_PKPIR (3)" wersjaSchemy="1-0">JPK_PKPIR</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <CelZlozenia>1</CelZlozenia>
+    <DataWytworzeniaJPK>2027-01-15T10:00:00Z</DataWytworzeniaJPK>
+    <DataOd>2026-01-01</DataOd>
+    <DataDo>2026-12-31</DataDo>
+    <KodUrzedu>1433</KodUrzedu>
+  </Naglowek>
+  <Podmiot1 rola="Podatnik">
+    <OsobaFizyczna>
+      <etd:NIP>1234567890</etd:NIP>
+      <etd:ImiePierwsze>Jan</etd:ImiePierwsze>
+      <etd:Nazwisko>Testowy</etd:Nazwisko>
+      <etd:DataUrodzenia>1985-04-12</etd:DataUrodzenia>
+    </OsobaFizyczna>
+  </Podmiot1>
+  <PKPIRInfo>
+    <P_1>0.00</P_1>
+    <P_2>0.00</P_2>
+    <P_3>2800.00</P_3>
+    <P_4>7175.00</P_4>
+  </PKPIRInfo>
+  <PKPIRWiersz>
+    <K_1>1</K_1>
+    <K_2>2026-02-10</K_2>
+    <K_3A>FV/2026-02-10</K_3A>
+    <K_3B>1234567890-20260210-0100001AF629-AF</K_3B>
+    <K_4A>PL</K_4A>
+    <K_4B>5252241585</K_4B>
+    <K_5A>Klient Sp. z o.o.</K_5A>
+    <K_5B>ul. Prosta 1, 00-001 Warszawa</K_5B>
+    <K_6>Sprzedaż towarów i usług</K_6>
+    <K_7>10000.00</K_7>
+    <K_9>10000.00</K_9>
+  </PKPIRWiersz>
+  <PKPIRWiersz>
+    <K_1>2</K_1>
+    <K_2>2026-02-11</K_2>
+    <K_3A>FZ/2026-02-11</K_3A>
+    <K_4A>PL</K_4A>
+    <K_4B>5260001246</K_4B>
+    <K_5A>Dostawca</K_5A>
+    <K_5B>ul. Krzywa 2, Kraków</K_5B>
+    <K_6>Usługi</K_6>
+    <K_13>2000.00</K_13>
+    <K_14>2000.00</K_14>
+  </PKPIRWiersz>
+  <PKPIRWiersz>
+    <K_1>3</K_1>
+    <K_2>2026-02-12</K_2>
+    <K_3A>FZ/2026-02-12</K_3A>
+    <K_4A>PL</K_4A>
+    <K_4B>5260001246</K_4B>
+    <K_5A>Dostawca</K_5A>
+    <K_5B>ul. Krzywa 2, Kraków</K_5B>
+    <K_6>Prace B+R</K_6>
+    <K_13>500.00</K_13>
+    <K_14>500.00</K_14>
+    <K_16A>Prace B+R</K_16A>
+    <K_16B>500.00</K_16B>
+  </PKPIRWiersz>
+  <PKPIRWiersz>
+    <K_1>4</K_1>
+    <K_2>2026-02-13</K_2>
+    <K_3A>FZ/2026-02-13</K_3A>
+    <K_4A>PL</K_4A>
+    <K_4B>5260001246</K_4B>
+    <K_5A>Dostawca</K_5A>
+    <K_5B>ul. Krzywa 2, Kraków</K_5B>
+    <K_6>Usługi</K_6>
+    <K_10>300.00</K_10>
+  </PKPIRWiersz>
+  <PKPIRWiersz>
+    <K_1>5</K_1>
+    <K_2>2026-03-15</K_2>
+    <K_3A>KOR/1</K_3A>
+    <K_5A>Jan Kowalski</K_5A>
+    <K_5B>BRAK</K_5B>
+    <K_6>Korekta sprzedaży</K_6>
+    <K_7>-100.00</K_7>
+    <K_9>-100.00</K_9>
+    <K_17>Korekta (różnica)</K_17>
+  </PKPIRWiersz>
+  <PKPIRWiersz>
+    <K_1>6</K_1>
+    <K_2>2026-03-31</K_2>
+    <K_3A>NOTA/1</K_3A>
+    <K_5A>BRAK</K_5A>
+    <K_5B>BRAK</K_5B>
+    <K_6>Odsetki</K_6>
+    <K_8>75.00</K_8>
+    <K_9>75.00</K_9>
+  </PKPIRWiersz>
+  <PKPIRCtrl>
+    <LiczbaWierszy>6</LiczbaWierszy>
+    <SumaPrzychodow>9975.00</SumaPrzychodow>
+  </PKPIRCtrl>
+</JPK>
