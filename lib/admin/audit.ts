@@ -147,6 +147,13 @@ export const KNOWN_AUDIT_ACTIONS = [
   'accounting_note.draft_deleted',
   'accounting_note.issued',
   'accounting_note.emailed',
+  // Proforma i oferta (00198)
+  'sales_quote.draft_created',
+  'sales_quote.draft_updated',
+  'sales_quote.draft_deleted',
+  'sales_quote.issued',
+  'sales_quote.emailed',
+  'sales_quote.converted',
   // KSeF integration
   'ksef.credentials_uploaded',
   'ksef.credentials_removed',

@@ -131,6 +131,10 @@ export default defineConfig({
       // prawdziwe RPC wpłat z sesji, runner kolejki przez PostgREST, odbiorcy, ponowienie bez dubla,
       // stan po wpłacie, wpłata cofnięta i usunięta, obca firma, CHECK rodzajów.
       'tests/rls-dzwonek-wplaty.test.ts',
+      // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta; izolacja firm, rola jak przy
+      // fakturach, numer z bazy bez dubli naraz, wystawionego nie zmienia nikt, kwoty w CHECK-ach,
+      // historia wysyłek, powiązanie z fakturą w INSERT (jedna faktura na numer zamiany), poza przychodem.
+      'tests/rls-proformy.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

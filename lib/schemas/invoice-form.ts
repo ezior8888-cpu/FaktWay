@@ -113,6 +113,10 @@ const RECURRING_PERIOD_FORMAT = /^[0-9]{4}(-(0[1-9]|1[0-2])|-Q[1-4])?$/;
 export const RECURRING_PERIOD_MISSING_MESSAGE =
   'Brakuje okresu faktury cyklicznej — otwórz „Wystaw teraz” ponownie.';
 
+/** Powiązanie z proformą albo ofertą (krok 2.4) niekompletne albo uszkodzone w formularzu. */
+export const SALES_QUOTE_LINK_MESSAGE =
+  'Brakuje danych proformy albo oferty, z której otwarto formularz. Otwórz dokument i wybierz zamianę w fakturę jeszcze raz.';
+
 export const MAX_INVOICE_AMOUNT = 9_999_999_999.99;
 const VAT_FACTOR: Record<string, number> = { '23': 1.23, '8': 1.08, '5': 1.05 };
 
@@ -209,10 +213,22 @@ export const invoiceFormSchema = z
       .string()
       .regex(RECURRING_PERIOD_FORMAT, 'Nieprawidłowy okres faktury cyklicznej — otwórz „Wystaw teraz” ponownie.')
       .optional(),
+    /**
+     * Proforma albo oferta (krok 2.4, 00198), z której otwarto formularz:
+     * ukryte pola formularza z `?proforma=<id>`. Brak = zwykła faktura. Numer
+     * kolejnej zamiany jest wymagany razem z dokumentem: zapis odmawia, gdy
+     * zajęła go już inna faktura (druga faktura tylko po potwierdzeniu).
+     */
+    salesQuoteId: z.string().uuid(SALES_QUOTE_LINK_MESSAGE).optional(),
+    salesQuoteSeq: z.string().regex(/^[1-9]\d{0,3}$/, SALES_QUOTE_LINK_MESSAGE).optional(),
   })
   .refine((d) => !d.recurringInvoiceId || !!d.recurringPeriod, {
     message: RECURRING_PERIOD_MISSING_MESSAGE,
     path: ['recurringPeriod'],
+  })
+  .refine((d) => !d.salesQuoteId === !d.salesQuoteSeq, {
+    message: SALES_QUOTE_LINK_MESSAGE,
+    path: ['salesQuoteId'],
   })
   .refine(
     (d) =>

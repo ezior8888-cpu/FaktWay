@@ -36,6 +36,13 @@ import {
   type RecurringIssueLink,
 } from '@/lib/invoices/recurring/issue';
 import { suggestNextInvoiceNumberForTenant } from '@/lib/invoices/next-number';
+import {
+  salesQuoteConflictMessage,
+  salesQuoteConvertedAudit,
+  salesQuoteLinkForSave,
+  withSalesQuoteColumns,
+  type SalesQuoteIssueLink,
+} from '@/lib/proformy/powiazanie';
 import { addDaysToIsoDate, dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
   EU_BUYER_COUNTRIES,
@@ -237,15 +244,19 @@ async function insertInvoiceAndLines(
   invoice: Invoice,
   formValues?: InvoiceFormValues,
   recurringIssue?: { link: RecurringIssueLink; userId: string },
+  salesQuoteIssue?: { link: SalesQuoteIssueLink; userId: string },
 ): Promise<InvoiceActionResult> {
   const recurring = recurringIssue?.link;
   const recurringUserId = recurringIssue?.userId ?? null;
+  // Krok 2.4: faktura z proformy albo oferty niesie powiązanie w tym samym INSERT
+  // (`uq_invoices_sales_quote_seq`, 00198); zwykła faktura ma wiersz bez zmian.
+  const salesQuote = salesQuoteIssue?.link;
 
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
     // N1: tylko faktura z pozycji cyklicznej niesie dwie nowe kolumny —
     // zwykła faktura ma wiersz bez zmian (bez tych kluczy, nie z NULL-ami).
-    .insert(withRecurringColumns(draftInvoiceRow(tenantId, invoice, formValues), recurring))
+    .insert(withSalesQuoteColumns(withRecurringColumns(draftInvoiceRow(tenantId, invoice, formValues), recurring), salesQuote))
     .select('id')
     .single();
 
@@ -284,6 +295,13 @@ async function insertInvoiceAndLines(
           error: 'Faktura za ten okres jest już wystawiona. Sprawdź listę faktur.',
         };
       }
+    }
+    // Krok 2.4: numer zamiany dokumentu zajęła inna faktura (dwa zapisy naraz albo
+    // ponowienie). Sprawdzamy przy każdym 23505, jak przy okresie faktury cyklicznej:
+    // Postgres zgłasza jeden z indeksów, a klient ma dostać numer tamtej faktury.
+    if (salesQuote) {
+      const taken = await salesQuoteConflictMessage(supabase, tenantId, salesQuote, invErr);
+      if (taken) return { success: false, error: taken };
     }
     // Postgres 23505 = unique_violation. Po migracji 00028 to oznacza duplikat
     // `internal_number` w obrębie tego tenanta — najczęściej double-click "Wystaw
@@ -334,6 +352,16 @@ async function insertInvoiceAndLines(
         nextRunDateAdvanced: advanced,
       },
     });
+  }
+
+  if (salesQuote) {
+    await logAudit(
+      salesQuoteConvertedAudit(salesQuote, tenantId, salesQuoteIssue?.userId ?? null, {
+        invoiceId: inserted.id as string,
+        internalNumber: invoice.internalNumber,
+        invoiceKind: 'regular',
+      }),
+    );
   }
 
   return { success: true, invoiceId: inserted.id as string };
@@ -395,8 +423,18 @@ export async function saveDraftAction(
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
 
+    // Krok 2.4: dokument (proforma, oferta) z formularza sprawdzony przed zapisem.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, values.salesQuoteId, values.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
     // Zwykły szkic — bez pozycji cyklicznej (odmowa wyżej).
-    const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
+    const result = await insertInvoiceAndLines(
+      supabase,
+      tenant.id,
+      invoice,
+      values,
+      undefined,
+      salesQuote.link ? { link: salesQuote.link, userId } : undefined,
+    );
     if (result.success && result.invoiceId) {
       await logAudit({
         action: 'invoice.draft_created',
@@ -451,6 +489,9 @@ export async function saveAndSendInvoiceAction(
     // N1: pozycja wstrzymana, usunięta albo obca — odmowa przed zapisem.
     const recurring = await recurringLinkForForm(supabase, tenant.id, values);
     if (!recurring.ok) return { success: false, error: recurring.error };
+    // Krok 2.4: proforma albo oferta z formularza: wystawiona, tej firmy, numer zamiany wolny.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, values.salesQuoteId, values.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
     const saved = await insertInvoiceAndLines(
       supabase,
@@ -458,6 +499,7 @@ export async function saveAndSendInvoiceAction(
       invoice,
       values,
       recurring.link ? { link: recurring.link, userId } : undefined,
+      salesQuote.link ? { link: salesQuote.link, userId } : undefined,
     );
     if (!saved.success) return saved;
 

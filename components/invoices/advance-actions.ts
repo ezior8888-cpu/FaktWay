@@ -16,6 +16,13 @@ import {
   sellerPartyFromSellerData,
 } from '@/lib/invoices/map-buyer-party';
 import {
+  salesQuoteConflictMessage,
+  salesQuoteConvertedAudit,
+  salesQuoteLinkForSave,
+  withSalesQuoteColumns,
+  type SalesQuoteIssueLink,
+} from '@/lib/proformy/powiazanie';
+import {
   advanceInvoiceSchema,
   type AdvanceInvoiceSchemaIn,
 } from '@/lib/validators/invoice-validators';
@@ -172,15 +179,21 @@ function ghostAdvanceInvoice(envelope: AdvanceInvoiceData): Invoice {
   };
 }
 
+/**
+ * `salesQuote` (krok 2.4): zaliczka z proformy albo oferty. Powiązanie idzie
+ * w TYM SAMYM INSERT (`uq_invoices_sales_quote_seq`, 00198); bez dokumentu
+ * wiersz jest taki jak dotąd.
+ */
 async function insertAdvanceDraft(
   supabase: SupabaseClient,
   tenantId: string,
   ghost: Invoice,
   envelope: AdvanceInvoiceData,
+  salesQuote?: { link: SalesQuoteIssueLink; userId: string },
 ): Promise<ActionResult> {
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
-    .insert({
+    .insert(withSalesQuoteColumns({
       tenant_id: tenantId,
       direction: 'outgoing',
       ksef_status: 'draft',
@@ -201,11 +214,16 @@ async function insertAdvanceDraft(
       advance_amount: envelope.advanceAmount,
       notes: envelope.notes ?? null,
       fa3_data: ghost,
-    })
+    }, salesQuote?.link))
     .select('id')
     .single();
 
   if (invErr || !inserted) {
+    // Krok 2.4: numer zamiany dokumentu zajęła inna faktura (dwa zapisy naraz).
+    if (salesQuote) {
+      const taken = await salesQuoteConflictMessage(supabase, tenantId, salesQuote.link, invErr);
+      if (taken) return { success: false, error: taken };
+    }
     return { success: false, error: invErr?.message ?? 'Nie udało się zapisać faktury zaliczkowej' };
   }
 
@@ -231,6 +249,16 @@ async function insertAdvanceDraft(
     return { success: false, error: `Błąd zapisu pozycji: ${lineErr.message}` };
   }
 
+  if (salesQuote) {
+    await logAudit(
+      salesQuoteConvertedAudit(salesQuote.link, tenantId, salesQuote.userId, {
+        invoiceId,
+        internalNumber: ghost.internalNumber,
+        invoiceKind: 'advance',
+      }),
+    );
+  }
+
   return { success: true, invoiceId };
 }
 
@@ -249,7 +277,17 @@ export async function saveAdvanceAction(raw: unknown, expectedTenantId: string):
     const envelope = buildAdvanceEnvelope({ ...parsed.data, seller }, cashMethod);
     const ghost = ghostAdvanceInvoice(envelope);
 
-    const result = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
+    // Krok 2.4: dokument (proforma, oferta) z formularza sprawdzony przed zapisem.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, parsed.data.salesQuoteId, parsed.data.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
+
+    const result = await insertAdvanceDraft(
+      supabase,
+      tenant.id,
+      ghost,
+      envelope,
+      salesQuote.link ? { link: salesQuote.link, userId } : undefined,
+    );
     if (result.success) {
       await logAudit({
         action: 'invoice.draft_created',
@@ -284,7 +322,17 @@ export async function saveAndSendAdvanceAction(raw: unknown, expectedTenantId: s
     const notToday = issueDateNotTodayError(ghost.issueDate, 'special');
     if (notToday) return { success: false, error: notToday };
 
-    const saved = await insertAdvanceDraft(supabase, tenant.id, ghost, envelope);
+    // Krok 2.4: dokument z formularza: wystawiony, tej firmy, numer zamiany wolny.
+    const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, parsed.data.salesQuoteId, parsed.data.salesQuoteSeq);
+    if (!salesQuote.ok) return { success: false, error: salesQuote.error };
+
+    const saved = await insertAdvanceDraft(
+      supabase,
+      tenant.id,
+      ghost,
+      envelope,
+      salesQuote.link ? { link: salesQuote.link, userId } : undefined,
+    );
     if (!saved.success) return saved;
 
     const invoiceId = saved.invoiceId;

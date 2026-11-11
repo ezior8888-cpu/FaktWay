@@ -114,6 +114,17 @@ export type AuditAction =
   | 'accounting_note.draft_deleted'
   | 'accounting_note.issued'
   | 'accounting_note.emailed'
+  // Proforma i oferta (00198, krok 2.4): szkic zapisuje aplikacja (metadane: rodzaj, kwota
+  // brutto, liczba pozycji); wystawienie (numer) i wysyłkę mailem (adres, id wiadomości)
+  // zapisuje baza (RPC `issue_sales_quote`, `record_sales_quote_email`) w tej samej transakcji.
+  // Zamianę w fakturę zapisuje akcja zapisu faktury po INSERT z powiązaniem (metadane:
+  // faktura, jej numer i rodzaj, numer zamiany, numer dokumentu).
+  | 'sales_quote.draft_created'
+  | 'sales_quote.draft_updated'
+  | 'sales_quote.draft_deleted'
+  | 'sales_quote.issued'
+  | 'sales_quote.emailed'
+  | 'sales_quote.converted'
   // „Zapłacone” jednym dotknięciem (00158): metadane niosą kwotę, dzień zapłaty i liczbę przypomnień.
   // Zapisuje baza (RPC `mark_invoice_paid` i `undo_invoice_paid`) w transakcji z wpłatą, nie aplikacja.
   | 'invoice.marked_paid'

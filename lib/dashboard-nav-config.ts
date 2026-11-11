@@ -5,6 +5,7 @@ import {
   RiBook2Line,
   RiContactsBook3Line,
   RiDashboardLine,
+  RiDraftLine,
   RiExchangeFundsLine,
   RiFileAddLine,
   RiFileList3Line,
@@ -78,6 +79,10 @@ export const dashboardNavSections: DashboardNavSection[] = [
       // pozycja na końcu sekcji, a nie zakładka „Rodzaje faktur”, bo nota nie jest
       // fakturą; pozostałe pozycje bez zmian (decyzja D1).
       { href: "/noty", label: "Noty", icon: RiFileTextLine },
+      // Plan kompletnej aplikacji, krok 2.4: proforma i oferta (wycena). Osobna pozycja
+      // na końcu sekcji, nie rodzaj faktury: dokumenty poza KSeF i poza przychodem;
+      // pozostałe pozycje bez zmian (decyzja D1).
+      { href: "/proformy", label: "Proformy i oferty", icon: RiDraftLine },
     ],
   },
   {
