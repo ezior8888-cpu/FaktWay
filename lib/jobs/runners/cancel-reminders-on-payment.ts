@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import { formatPlMoney } from '@/lib/format/pl';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Runner joba (worker pg-boss).
@@ -24,7 +25,7 @@ export async function runCancelRemindersOnPayment(data: Parameters<typeof invoic
     const invoice = await step.run('check-invoice', async () => {
       const { data, error } = await supabase
         .from('invoices')
-        .select('paid_amount, gross_total, tenant_id, internal_number, invoice_kind, payment_data, buyer_data')
+        .select('paid_amount, gross_total, tenant_id, internal_number, invoice_kind, payment_data, buyer_data, currency')
         .eq('id', invoiceId)
         .maybeSingle();
 
@@ -73,21 +74,24 @@ export async function runCancelRemindersOnPayment(data: Parameters<typeof invoic
       const label = invoice.internal_number?.trim()
         ? invoice.internal_number
         : invoiceId.slice(0, 8);
-      const amount = `${formatPlMoney(Number(payment.amount))} zł`;
+      // Waluta faktury: „zł” tylko przy PLN, inaczej kod waluty (jak w dzwonku).
+      const code = invoice.currency?.trim() || 'PLN';
+      const money = (n: number) => `${formatPlMoney(n)} ${code === 'PLN' ? 'zł' : code}`;
+      const amount = money(Number(payment.amount));
       const buyer = buyerNameOf(invoice.buyer_data);
       const tag = `payment-${paymentId}`;
       if (isFullyPaid) {
         return sendPushToTenant(invoice.tenant_id, 'payment_received', {
           title: 'Otrzymana płatność',
           body: `Otrzymana płatność: ${amount} za ${label}${buyer ? ` od ${buyer}` : ''}`,
-          url: '/payments',
+          url: `/invoices/${invoiceId}`,
           tag,
         });
       }
       return sendPushToTenant(invoice.tenant_id, 'payment_received', {
         title: 'Wpłata częściowa',
-        body: `Wpłata częściowa: ${amount} za ${label}, zostało ${formatPlMoney(Math.max(due - paid, 0))} zł`,
-        url: '/payments',
+        body: `Wpłata częściowa: ${amount} za ${label}, zostało ${money(Math.max(roundToCents(due - paid), 0))}`,
+        url: `/invoices/${invoiceId}`,
         tag,
       });
     });

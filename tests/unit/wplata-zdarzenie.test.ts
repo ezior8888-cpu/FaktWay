@@ -169,6 +169,25 @@ describe('runner po wpłacie', () => {
     expect(m.push.mock.calls.map((c) => c[2].tag)).toEqual([`payment-${PAYMENT}`, `payment-${PAYMENT}`]);
   });
 
+  it('push prowadzi do strony faktury, nie do nieistniejącego /payments (pełna i częściowa)', async () => {
+    await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
+    m.invoice = { ...m.invoice, paid_amount: 1230 };
+    await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
+    expect(m.push.mock.calls.map((c) => c[2].url)).toEqual([`/invoices/${INVOICE}`, `/invoices/${INVOICE}`]);
+  });
+
+  it('faktura w EUR: kwoty z kodem waluty, bez „zł” (częściowa i pełna)', async () => {
+    m.invoice = { ...m.invoice, currency: 'EUR' };
+    await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
+    expect(plain(m.push.mock.calls[0]![2].body)).toBe('Wpłata częściowa: 300,00 EUR za FV/1/2026, zostało 230,00 EUR');
+    m.invoice = { ...m.invoice, paid_amount: 1230 };
+    m.payment = { amount: 1230, voided_at: null };
+    await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
+    const body = plain(m.push.mock.calls[1]![2].body);
+    expect(body).toBe('Otrzymana płatność: 1230,00 EUR za FV/1/2026 od Acme Sp. z o.o.');
+    expect(body).not.toContain('zł');
+  });
+
   it('wpłata cofnięta, zanim job ruszył: bez pusha', async () => {
     m.payment = { amount: 300, voided_at: '2026-11-09T10:00:00Z' };
     const result = await runCancelRemindersOnPayment({ invoiceId: INVOICE, paymentId: PAYMENT }, context);
