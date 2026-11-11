@@ -287,7 +287,9 @@ describe('bez pasującego paragonu: jak dziś', () => {
     expect(fpExpense()).toMatchObject({ gross_amount: 123, vat_deductible_amount: 23, is_reviewed: true });
     expect(matches()).toEqual([]);
     expect(expense('par-1')).toMatchObject({ is_deductible: true });
-    expect(http.downloads).toEqual([]);
+    // Po scaleniu z krokiem 3.4 jeden odczyt pliku zostaje: warunki płatności
+    // (`read-payment-terms`). Odczytu pod kątem FP (drugiego) nie ma.
+    expect(http.downloads).toHaveLength(1);
   });
 
   it('korekta FP (kwota ujemna): jak dziś, bez szukania paragonu', async () => {

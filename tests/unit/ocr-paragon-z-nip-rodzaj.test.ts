@@ -137,7 +137,7 @@ describe('OCR: rodzaj zapisanego dokumentu', () => {
       ocr_extracted_data: row.ocr_extracted_data,
     });
     expect(rodzaj).toBe('simplified_invoice');
-    expect(vatDeductionForDocument({ documentType: rodzaj, issueDate: row.issue_date as string }).deductible).toBe(true);
+    expect(vatDeductionForDocument({ documentType: rodzaj, issueDate: row.issue_date as string, grossAmount: row.gross_amount as number }).deductible).toBe(true);
     expect(
       kpirCostAmount({
         net_amount: 100,
