@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 /**
- * Uruchomienie PRAWDZIWEGO `scripts/ops/kontrola-faktur-ksef.sh` bez serwerów.
+ * Uruchomienie PRAWDZIWEGO skryptu kontroli z `scripts/ops/` bez serwerów
+ * (domyślnie `kontrola-faktur-ksef.sh`; inny skrypt drugim argumentem
+ * `createScriptHarness`, np. `kontrola-go-live-ksef.sh`).
  *
  * Atrapa `ssh` pomija opcje i host, a komendę zdalną wykonuje `bash -c` —
  * tak jak sshd po stronie serwera, więc SQL przechodzi przez obie powłoki jak
@@ -37,11 +39,12 @@ export interface ScriptRun {
 export interface ScriptHarness {
   /** Katalog roboczy atrap (`FAKE_DIR` w atrapach). */
   dir: string;
-  run(env?: Record<string, string>): ScriptRun;
+  /** `args` — argumenty skryptu (np. `--sprawdz`). */
+  run(env?: Record<string, string>, args?: string[]): ScriptRun;
   cleanup(): void;
 }
 
-export function createScriptHarness(fakeDocker: string): ScriptHarness {
+export function createScriptHarness(fakeDocker: string, script: string = KONTROLA_SCRIPT): ScriptHarness {
   const dir = mkdtempSync(join(tmpdir(), 'kontrola-'));
   mkdirSync(join(dir, 'bin'));
   writeFileSync(join(dir, 'bin', 'ssh'), FAKE_SSH);
@@ -63,8 +66,8 @@ export function createScriptHarness(fakeDocker: string): ScriptHarness {
 
   return {
     dir,
-    run(env = {}) {
-      const result = spawnSync('bash', [KONTROLA_SCRIPT], {
+    run(env = {}, args = []) {
+      const result = spawnSync('bash', [script, ...args], {
         encoding: 'utf8',
         timeout: 120_000,
         env: {
