@@ -105,7 +105,8 @@ describe('nadwyżka z poprzedniej deklaracji (P_39)', () => {
     expect(dane.nadwyzka).toEqual({ zl: 1200, zrodlo: 'zatwierdzone' });
     expect(dane.wynik).toMatchObject({ ok: true, nadwyzkaPoprzedniaGr: 120_000 });
     // Najwyższa wersja rozliczeń VAT tej firmy za wrzesień i październik, jednym zapytaniem.
-    expect(mocks.filtry).toEqual(['select:okres, wersja, migawka', 'eq:tenant_id,t1', 'eq:rodzaj,vat', 'in:okres,2026-09-01,2026-10-01', 'order:wersja']);
+    // F11-A6 (11.11): także czas zatwierdzenia, bo z dwóch zatwierdzeń wygrywa nowsze.
+    expect(mocks.filtry).toEqual(['select:okres, wersja, migawka, zatwierdzone_o', 'eq:tenant_id,t1', 'eq:rodzaj,vat', 'in:okres,2026-09-01,2026-10-01', 'order:wersja']);
   });
 
   it('wpis klienta wygrywa z zatwierdzonym rozliczeniem, a deklaracja przyjęta przez MF z obydwoma', async () => {
