@@ -119,7 +119,10 @@ describe('czytajEwidencje: zapytania jak w KPiR', () => {
     const wynik = await czytajEwidencje(client, 'firma-1', 2026, { kurs });
     if (!wynik.ok) throw new Error(wynik.komunikat);
     expect(kurs).toHaveBeenCalledWith('EUR', '2026-03-10');
-    expect(wynik.ewidencja.pominiete.map((p) => p.numer)).toEqual(['FV/FP']);
+    // Krok 1.2 planu kompletnej aplikacji (świadoma zmiana testu): FP daje brak
+    // zamiast pominięcia, do reguły pokrycia raportem kasy (następny PR, G30).
+    expect(wynik.ewidencja.pominiete).toEqual([]);
+    expect(wynik.ewidencja.braki.map((b) => b.dokument)).toEqual(['FV/FP']);
     expect(wynik.ewidencja.wiersze.map((w) => [w.dowod, w.kwotaGr, w.krajKontrahenta, w.idKontrahenta])).toEqual([['FV/EUR', 425_00, 'GR', '123456789']]);
   });
 

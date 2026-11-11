@@ -15,6 +15,7 @@
  * - dane TEST są współdzielone między integratorami, więc nie wysyłaj tu prawdziwych danych.
  *
  * Numery scenariuszy jak w sekcji 6 planu. Wynik: tabela w logu i podsumowanie joba.
+ * Scenariusz 14 (faktura do paragonu z FP) dopisał krok 1.2 planu kompletnej aplikacji.
  */
 
 import { randomInt, randomUUID } from 'node:crypto';
@@ -116,6 +117,30 @@ function buildInvoice(sellerNip: string, number: string, issueDate: string): Inv
       dueDate: warsawDay(14),
       method: 'transfer',
       bankAccount: 'PL61109010140000071219812874',
+    },
+  };
+}
+
+/**
+ * Faktura do paragonu (krok 1.2 planu kompletnej aplikacji): `Fa/FP` = 1 i dane
+ * paragonu w `DodatkowyOpis`. Paragon z wczoraj z NIP nabywcy, ponad 450 zł
+ * brutto (do 450 zł paragon z NIP z 2026 r. jest fakturą uproszczoną).
+ */
+function buildReceiptInvoice(sellerNip: string, number: string, issueDate: string, receiptDate: string): Invoice {
+  const base = buildInvoice(sellerNip, number, issueDate);
+  return {
+    ...base,
+    saleDate: receiptDate,
+    lines: [{ ...base.lines[0]!, unitPriceNet: 1000, netAmount: 1000, vatAmount: 230, grossAmount: 1230 }],
+    netTotal: 1000,
+    vatTotal: 230,
+    grossTotal: 1230,
+    payment: { ...base.payment, amountDue: 1230, method: 'cash', bankAccount: undefined, dueDate: issueDate },
+    receipt: {
+      receiptNumber: `PAR/${number}`,
+      receiptDate,
+      cashRegisterNumber: 'ABC1234567890',
+      buyerNipOnReceipt: true,
     },
   };
 }
@@ -265,6 +290,23 @@ async function main(): Promise<number> {
     title: 'P_1 = 5 dni temu, bez offlineMode',
     passed: overdue.accepted && overdue.raw?.invoicingMode === 'Offline',
     facts: describeSent(overdue),
+  });
+
+  // 14. Faktura do paragonu (krok 1.2): KSeF przyjmuje FA(3) z FP = 1 i DodatkowyOpis.
+  const receiptXml = generateFA3Xml(
+    buildReceiptInvoice(nip, `H1A/${runId}/14`, warsawDay(0), warsawDay(-1)),
+    { generatedAt },
+  );
+  const receipt = await send(auth, receiptXml);
+  rows.push({
+    id: '14',
+    title: 'Faktura do paragonu (FP = 1, dane paragonu w DodatkowyOpis)',
+    passed:
+      receiptXml.includes('<FP>1</FP>') &&
+      receipt.accepted &&
+      Boolean(receipt.raw?.ksefNumber) &&
+      receipt.raw?.invoicingMode === 'Online',
+    facts: describeSent(receipt),
   });
 
   const report = [

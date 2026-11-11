@@ -1,3 +1,4 @@
+import { isReceiptInvoiceColumns, receiptFromJson } from '@/lib/invoices/receipt-invoice';
 import type { CorrectedInvoiceRef } from '@/lib/pdf/invoice-renderer';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -42,6 +43,11 @@ export interface InvoicePdfData {
   xmlSha256Hex: string | null;
   /** Korekta: faktura, której dotyczy (art. 106j ust. 2); inne faktury — `null`. */
   correctedInvoice: CorrectedInvoiceRef | null;
+  /**
+   * Faktura do paragonu bez czytelnych danych paragonu (FP z importu KSeF
+   * albo niepełny zapis): PDF ma samo oznaczenie. Z danymi: `invoice.receipt`.
+   */
+  receiptInvoiceMarker: boolean;
   /** Cache: PDF jest ważny gdy pdf_generated_at >= updated_at. */
   updatedAt: string | null;
   pdfStoragePath: string | null;
@@ -80,6 +86,10 @@ interface InvoiceRow {
   correction_reason: string | null;
   /** `fa3_data->annotations` — sama gałąź, nie cały snapshot. */
   annotations: unknown;
+  /** `fa3_data->receipt`: faktura do paragonu z FaktWay (krok 1.2). */
+  receipt?: unknown;
+  /** `fa3_data->ksefMarkers->>fp`: FP z pliku KSeF (import, C5b). */
+  ksef_fp?: string | null;
   updated_at: string | null;
   pdf_storage_path: string | null;
   pdf_generated_at: string | null;
@@ -96,6 +106,8 @@ const SELECT = `
   parent_invoice_id, correction_reason,
   pdf_storage_path, pdf_generated_at, seller_data, buyer_data, payment_data,
   annotations:fa3_data->annotations,
+  receipt:fa3_data->receipt,
+  ksef_fp:fa3_data->ksefMarkers->>fp,
   invoice_line_items(
     ordinal, name, unit, quantity, unit_price_net,
     net_amount, vat_rate, vat_amount, gross_amount
@@ -188,6 +200,10 @@ export async function loadInvoiceForPdf(
     ? (rawType as InvoiceType)
     : 'VAT';
 
+  // Krok 1.2: paragon tylko w pełnym kształcie; każde inne oznaczenie FP daje samo „Faktura do paragonu”.
+  const receipt = receiptFromJson(row.receipt);
+  const receiptInvoice = isReceiptInvoiceColumns(row.receipt, row.ksef_fp);
+
   const invoice: Invoice = {
     internalNumber: row.internal_number ?? row.id.slice(0, 8),
     type,
@@ -202,6 +218,7 @@ export async function loadInvoiceForPdf(
     payment: row.payment_data as PaymentInfo,
     notes: row.notes ?? undefined,
     annotations: readAnnotations(row.annotations),
+    ...(receipt ? { receipt } : {}),
   };
 
   return {
@@ -216,6 +233,7 @@ export async function loadInvoiceForPdf(
     sellerNip: row.seller_nip ?? (invoice.seller as { nip?: string } | null)?.nip ?? null,
     xmlSha256Hex: await readXmlHash(admin, row),
     correctedInvoice: await readCorrectedInvoice(admin, row),
+    receiptInvoiceMarker: receiptInvoice && !receipt,
     updatedAt: row.updated_at,
     pdfStoragePath: row.pdf_storage_path,
     pdfGeneratedAt: row.pdf_generated_at,

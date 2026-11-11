@@ -10,6 +10,8 @@ import {
   REVERSE_CHARGE_LABEL,
   SPLIT_PAYMENT_LABEL,
 } from '@/lib/invoices/annotations';
+import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
+import { RECEIPT_INVOICE_LABEL, receiptDetailsLine } from '@/lib/invoices/receipt-invoice';
 import { PUBLIC_SITE_DOMAIN, PUBLIC_SITE_URL } from '@/lib/site';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -29,7 +31,10 @@ const FONT_DIR = path.join(process.cwd(), 'lib/pdf/fonts');
 const PAGE_MARGIN = 42;
 
 export interface RenderInvoiceOptions {
-  /** Numer KSeF — drukowany w stopce gdy faktura zaakceptowana. */
+  /**
+   * Numer KSeF: drukowany w stopce, gdy faktura zaakceptowana; poprawny
+   * numer trafia też do tytułu przelewu w sekcji płatności (krok 1.4).
+   */
   ksefNumber?: string | null;
   /**
    * Link KOD I do zakodowania w QR (`lib/ksef/qr-verification.ts`) — nie sam
@@ -47,6 +52,21 @@ export interface RenderInvoiceOptions {
   previewNotice?: string | null;
   /** Faktura korygowana — tylko dla korekt (`lib/pdf/invoice-data.ts`). */
   correctedInvoice?: CorrectedInvoiceRef | null;
+  /**
+   * Faktura do paragonu bez czytelnych danych paragonu (FP z importu KSeF):
+   * samo oznaczenie. FP z danymi niesie `invoice.receipt`.
+   */
+  receiptInvoiceMarker?: boolean;
+}
+
+/**
+ * Oznaczenie faktury do paragonu (krok 1.2) i dane paragonu z art. 106h ust. 1
+ * ustawy o VAT (numer dokumentu, numer unikatowy kasy) z datą paragonu.
+ * W XML to `Fa/FP` = 1 i `Fa/DodatkowyOpis`; nabywca spoza KSeF ma tylko PDF.
+ */
+export function receiptInvoiceLines(invoice: Invoice, marker = false): string[] {
+  if (invoice.receipt) return [RECEIPT_INVOICE_LABEL, receiptDetailsLine(invoice.receipt, fmtDate)];
+  return marker ? [RECEIPT_INVOICE_LABEL] : [];
 }
 
 /** Dane faktury, której dotyczy korekta (w XML: `DaneFaKorygowanej`). */
@@ -169,10 +189,11 @@ export async function renderInvoicePdf(
     drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, left, pageWidth);
     drawPreviewNotice(doc, opts.previewNotice, left, pageWidth);
     drawCorrectedInvoice(doc, opts.correctedInvoice, left, pageWidth);
+    drawReceiptInvoice(doc, receiptInvoiceLines(invoice, opts.receiptInvoiceMarker === true), left, pageWidth);
     drawParties(doc, invoice, left, pageWidth);
     drawLineItems(doc, invoice, left, pageWidth);
     drawVatSummary(doc, invoice, left, pageWidth);
-    drawPayment(doc, invoice, left, pageWidth);
+    drawPayment(doc, invoice, transferTitleOnPdf(invoice, opts.ksefNumber), left, pageWidth);
     drawFooter(doc, invoice, opts, left, pageWidth);
 
     if (opts.testWatermark) {
@@ -208,6 +229,21 @@ export function amountDueOnPdf(invoice: Invoice): number {
     if (Number.isFinite(due) && due >= 0 && due <= invoice.grossTotal + 0.005) return due;
   }
   return invoice.grossTotal;
+}
+
+/**
+ * Tytuł przelewu w sekcji płatności (krok 1.4, RP-PLAT-01): numer KSeF, potem
+ * numer faktury; przy MPP sam numer KSeF. Tylko przy przelewie, z kwotą „Do
+ * zapłaty” i poprawnym numerem KSeF; inaczej `null` i sekcja jak dotąd. Mail
+ * z fakturą bierze ten sam tytuł (`emailInvoiceAction`), więc mail i PDF
+ * w załączniku się zgadzają.
+ */
+export function transferTitleOnPdf(invoice: Invoice, ksefNumber: string | null | undefined): string | null {
+  return tytulPrzelewuNaDokumencie(invoice.internalNumber, ksefNumber, {
+    metoda: invoice.payment?.method,
+    doZaplaty: amountDueOnPdf(invoice),
+    mpp: invoice.annotations?.splitPayment === 1,
+  });
 }
 
 /**
@@ -294,6 +330,19 @@ function drawCorrectedInvoice(
   for (const line of lines.slice(1)) {
     doc.text(line, left, doc.y + 2, { width });
   }
+  doc.y += 12;
+}
+
+/** Blok „Faktura do paragonu” pod nagłówkiem, jak blok faktury korygowanej. */
+function drawReceiptInvoice(doc: Doc, lines: string[], left: number, width: number): void {
+  if (lines.length === 0) return;
+  doc.font('bold').fontSize(10).fillColor('#111111');
+  doc.text(lines[0]!, left, doc.y, { width });
+  doc.font('body').fontSize(8.5).fillColor('#444444');
+  for (const line of lines.slice(1)) {
+    doc.text(line, left, doc.y + 2, { width });
+  }
+  doc.fillColor('#222222');
   doc.y += 12;
 }
 
@@ -524,11 +573,13 @@ function drawVatSummary(
 function drawPayment(
   doc: Doc,
   invoice: Invoice,
+  transferTitle: string | null,
   left: number,
   width: number,
 ): void {
   const p = invoice.payment;
-  ensureSpace(doc, 50);
+  // Wiersz z tytułem przelewu to jeszcze jedna linia w tym samym bloku.
+  ensureSpace(doc, transferTitle ? 62 : 50);
   doc.font('bold').fontSize(8).fillColor('#888888');
   doc.text('PŁATNOŚĆ', left, doc.y);
   doc.font('body').fontSize(9).fillColor('#444444');
@@ -545,6 +596,9 @@ function drawPayment(
       doc.y,
       { width },
     );
+  }
+  if (transferTitle) {
+    doc.text(`Tytuł przelewu: ${transferTitle}`, left, doc.y, { width });
   }
   doc.y += 14;
 }

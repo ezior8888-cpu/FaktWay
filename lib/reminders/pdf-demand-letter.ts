@@ -30,6 +30,11 @@ export interface DemandLetterData {
 
   // Faktura
   invoiceNumber: string;
+  /**
+   * Tytuł przelewu z `tytulPrzelewu` (krok 1.4): numer KSeF, potem numer
+   * faktury; bez numeru KSeF sam numer faktury. Ten sam co w mailu.
+   */
+  transferTitle: string;
   issueDate: string; // ISO
   dueDate: string;
   grossAmount: number;
@@ -228,7 +233,7 @@ export async function generateDemandLetterPdf(
 
       doc.font('Helvetica').fontSize(10).fillColor('#666');
       doc.moveDown(0.3);
-      doc.text(`Tytuł przelewu: ${data.invoiceNumber}`, { align: 'center' });
+      doc.text(`Tytuł przelewu: ${data.transferTitle}`, { align: 'center' });
 
       // ============== KONSEKWENCJE ==============
       doc.moveDown(2);

@@ -123,6 +123,16 @@ export default defineConfig({
       // 00194 (plan kompletnej aplikacji, krok 3.7): kasa; numer KP i KW z bazy pod blokadą serii,
       // stan kasy nie poniżej zera, korekta (storno), wpłata do faktury przez 00176, RLS i niezmienność.
       'tests/rls-kasa.test.ts',
+      // 00175 (plan kompletnej aplikacji, krok 1.3): faktura do paragonu ze skrzynki KSeF i paragon
+      // z NIP; połączenie, ostrzeżenie, ponowienie bez zmian, decyzja klienta, wyzwalacz KPiR, izolacja.
+      'tests/rls-faktura-do-paragonu.test.ts',
+      // 00177 (plan kompletnej aplikacji, krok 3.4): koszty do zapłaty; RPC zapłaty i cofnięcia
+      // (idempotencja, blokada wiersza, role, obca firma, audyt), wyzwalacz kolumn płatności, lista przez RLS.
+      'tests/rls-koszty-do-zaplaty.test.ts',
+      // 00191 (plan kompletnej aplikacji, krok 1.4, część 2): identyfikatory zbiorcze KSeF; RPC rezerwacji,
+      // zapisu i porażki (jeden wiersz na zestaw faktur, próba w toku, przejęcie po 5 minutach), role owner/admin,
+      // izolacja firm, brak zapisu z sesji poza RPC, żeton próby poza odczytem, wyzwalacz niezmienności.
+      'tests/rls-identyfikator-zbiorczy.test.ts',
       // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF;
       // rezerwacja, przejęcie po 5 minutach, żeton i numery operacji, krok kodu, tylko właściciel,
       // izolacja firm, wyzwalacz przejść stanów.

@@ -22,8 +22,10 @@ import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { formatInvoiceDate } from '@/lib/invoices/display-date';
+import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
+import type { ReceiptInvoiceView } from '@/lib/invoices/receipt-invoice';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
 import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
@@ -142,6 +144,8 @@ export interface InvoiceDetailInitial {
    * Brak pola = `null`.
    */
   ksef_imported_original?: ImportedOriginalProvenance | null;
+  /** Krok 1.2: faktura do paragonu, oznaczenie i dane paragonu liczone na serwerze. Brak pola = `null`. */
+  receipt_invoice?: ReceiptInvoiceView | null;
 }
 
 interface PaymentSnapshot {
@@ -338,6 +342,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
   const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
+  // Krok 1.4: tytuł przelewu jak na PDF (numer KSeF, potem numer faktury; przy
+  // MPP sam numer KSeF); bez numeru KSeF, przy innej zapłacie niż przelew albo
+  // bez kwoty wiersza nie ma.
+  const transferTitle = tytulPrzelewuNaDokumencie(inv.internal_number ?? '', inv.ksef_number, {
+    metoda: payment?.method,
+    doZaplaty: inv.amount_due,
+    mpp: inv.split_payment,
+  });
   const lines = inv.lines;
   // Panel „W KSeF jest już faktura o tym numerze” (decyzja albo nota z danymi oryginału).
   // Obok niego bez karty błędu: tekst runnera jest dla operatora, klient ma panel.
@@ -522,6 +534,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               <div className="text-muted-foreground space-y-1 text-sm">
                 <p>Data wystawienia: {formatInvoiceDate(inv.issue_date)}</p>
                 {inv.sale_date && <p>Data sprzedaży: {formatInvoiceDate(inv.sale_date)}</p>}
+                {inv.receipt_invoice && (
+                  <>
+                    <p data-testid="faktura-do-paragonu" className="text-foreground font-medium">
+                      {inv.receipt_invoice.label}
+                    </p>
+                    {inv.receipt_invoice.details && <p>{inv.receipt_invoice.details}</p>}
+                  </>
+                )}
                 {payment?.dueDate && <p>Termin płatności: {formatInvoiceDate(payment.dueDate)}</p>}
               </div>
             </div>
@@ -576,6 +596,12 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                     <>
                       <dt className="text-foreground">MPP:</dt>
                       <dd>Mechanizm podzielonej płatności</dd>
+                    </>
+                  )}
+                  {transferTitle && (
+                    <>
+                      <dt className="text-foreground">Tytuł przelewu:</dt>
+                      <dd className="break-all">{transferTitle}</dd>
                     </>
                   )}
                 </dl>
