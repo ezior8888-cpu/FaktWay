@@ -193,6 +193,10 @@ describe('correction parent boundary', () => {
   });
 
   it('assigns a negative 8% amount change to 8%, not 23%', async () => {
+    // F12-D2: stawka korekty kwotowej musi być na fakturze (art. 106j ust. 2 pkt 5),
+    // więc faktura ma tu pozycję w 8% (dotąd była tylko w 23%).
+    lines = [{ ...lines[0], vat_rate: '8' }];
+    Object.assign(parent, { net_total: 100, vat_total: 8, gross_total: 108 });
     const result = await saveCorrectionDraftAction({
       ...basePayload,
       amountChange: {

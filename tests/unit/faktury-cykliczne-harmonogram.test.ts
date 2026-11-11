@@ -136,11 +136,23 @@ describe('rescheduleRunDate i catchUpRunDate', () => {
     expect(rescheduleRunDate('2026-11-10', 28)).toBe('2026-11-28');
   });
 
-  it('wznowienie po kilku miesiącach: zostaje ostatni okres, którego dzień nadszedł', () => {
+  it('wznowienie po kilku miesiącach: zostaje pierwszy okres, który jeszcze trwa', () => {
     expect(catchUpRunDate('2026-03-10', 'monthly', 10, '2026-10-20')).toBe('2026-10-10');
-    expect(catchUpRunDate('2026-03-10', 'monthly', 25, '2026-10-20')).toBe('2026-09-25');
+    // F12-G2: wrzesień minął w całości w pauzie (było 2026-09-25, „za wrzesień”,
+    // a 25.10 dochodził październik: dwie faktury w pierwszym miesiącu).
+    expect(catchUpRunDate('2026-03-10', 'monthly', 25, '2026-10-20')).toBe('2026-10-25');
     expect(catchUpRunDate('2025-01-10', 'quarterly', 10, '2026-10-20')).toBe('2026-10-10');
     expect(catchUpRunDate('2023-05-10', 'yearly', 10, '2026-10-20')).toBe('2026-05-10');
+  });
+
+  it('F12-G2: okres, który w całości minął w pauzie, nie wraca „Do wystawienia”', () => {
+    // sierpień minął w pauzie, wrzesień trwa
+    expect(catchUpRunDate('2026-06-10', 'monthly', 10, '2026-09-03')).toBe('2026-09-10');
+    // III kwartał cały w pauzie
+    expect(catchUpRunDate('2026-01-25', 'quarterly', 25, '2026-10-20')).toBe('2026-10-25');
+    // sierpień jeszcze trwa (ostatni dzień okresu liczy się do okresu)
+    expect(catchUpRunDate('2026-06-10', 'monthly', 10, '2026-08-31')).toBe('2026-08-10');
+    expect(catchUpRunDate('2026-06-10', 'monthly', 10, '2026-09-01')).toBe('2026-09-10');
   });
 
   it('wznowienie tego samego dnia nie pomija czekającego okresu', () => {

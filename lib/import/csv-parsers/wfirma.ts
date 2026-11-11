@@ -75,15 +75,9 @@ export function parseWfirmaCsv(content: string): CsvParseResult {
       fieldLabel: `wFirma ${invoiceNumber}: data`,
     });
 
-    const netTotal = parseAmount(
-      cell(row, ['Razem netto', 'Suma netto', 'Netto', 'Kwota netto']),
-    );
-    const vatTotal = parseAmount(
-      cell(row, ['Razem VAT', 'Suma VAT', 'VAT', 'Podatek VAT']),
-    );
-    const grossTotal = parseAmount(
-      cell(row, ['Razem brutto', 'Suma brutto', 'Brutto', 'Kwota brutto']),
-    );
+    const netTotal = parseAmount(cell(row, ['Razem netto', 'Suma netto', 'Netto', 'Kwota netto']), { warnings: invWarnings, fieldLabel: 'wFirma: kwota netto' });
+    const vatTotal = parseAmount(cell(row, ['Razem VAT', 'Suma VAT', 'VAT', 'Podatek VAT']), { warnings: invWarnings, fieldLabel: 'wFirma: kwota VAT' });
+    const grossTotal = parseAmount(cell(row, ['Razem brutto', 'Suma brutto', 'Brutto', 'Kwota brutto']), { warnings: invWarnings, fieldLabel: 'wFirma: kwota brutto' });
 
     const vatRate = warnTotalsConsistency(
       netTotal,

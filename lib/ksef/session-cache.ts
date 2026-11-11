@@ -6,6 +6,7 @@ import { isRefreshRejected, refreshKsefSession } from './auth-refresh';
 import type { KsefEnvironment } from '@/types/ksef';
 import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 import { requireMatchingKsefEnvironment } from './claim-environment';
+import { runWithKsefNip } from './rate-limit-pause';
 
 /**
  * In-memory cache sesji KSeF per (environment, NIP, fingerprint poświadczeń).
@@ -116,7 +117,11 @@ class SessionCache {
       return existingLock.promise;
     }
 
-    const authPromise = this.refreshOrAuth(cacheKey, auth, refreshable, env);
+    // L1a: logowanie i odświeżenie w kontekście NIP-u firmy — każde żądanie
+    // `/auth/*` przechodzi przez pauzę po 429, także gdy wołający jest poza
+    // kolejką firmy (otwarcie sesji historii, sesja UPO, skrypty).
+    // Wspólna obietnica logowania (`locks`) jest wtedy zawsze objęta bramką.
+    const authPromise = runWithKsefNip(auth.nip, () => this.refreshOrAuth(cacheKey, auth, refreshable, env));
     const pending: PendingAuth = { fingerprint, promise: authPromise };
     this.locks.set(cacheKey, pending);
 

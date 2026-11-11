@@ -19,6 +19,9 @@ const eslintConfig = defineConfig([
     // Importują moduły `k6/*` i `https://jslib.k6.io/...`, których ESLint
     // projektu nie rozwiązuje. Lintowanie ich tu nie ma sensu.
     "load-tests/**",
+    // Aplikacja mobilna (Expo) ma własny eslint i tsconfig: `mobile/`,
+    // docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md, sekcja 4.4.
+    "mobile/**",
   ]),
   {
     // Reguły React Compiler / React 19 — `set-state-in-effect`, `refs`,

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { inspect } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
@@ -11,9 +12,12 @@ import {
   FAKTFLOW_SYSTEM_INFO,
   hexHashToBase64,
   knownNumberVerdictMessage,
+  numberTakenLogMessage,
   numberTakenMessage,
+  operatorVerdictLogMessage,
   summarizeInvoiceXml,
 } from '@/lib/ksef/duplicate-verdict';
+import { classifySendError, KsefSendVerdictError, sendVerdictIn } from '@/lib/ksef/send-error-codes';
 
 /**
  * D-A4-1: werdykt przy cudzym 440 — czysty moduł. Kierunek bezpieczny prawnie:
@@ -131,6 +135,41 @@ describe('dane oryginału i komunikat „numer zajęty”', () => {
     expect(own).not.toContain('na karcie faktury');
     for (const text of [forClient, own]) expect(text).not.toMatch(/operator/i);
     expect(knownNumberVerdictMessage('K-ZNANA', { id: 'inna', internalNumber: null }, false)).toContain('ma dokument bez numeru');
+  });
+
+  it('F-093-440: teksty operatora — rodzaj werdyktu i numer KSeF, bez danych oryginału', () => {
+    const original = xml({ systemInfo: 'Inny Program', gross: '999.99' });
+    const summary = summarizeInvoiceXml(original);
+    const base = { matchedHash: null, summary };
+    const cases = [
+      numberTakenLogMessage('K-OBCA'),
+      operatorVerdictLogMessage('K-OBCA', { ...base, verdict: 'operator', reason: 'same-content-other-program', sameContentExceptHeader: true }),
+      operatorVerdictLogMessage('K-OBCA', { ...base, verdict: 'operator', reason: 'faktflow-original', sameContentExceptHeader: true }),
+      operatorVerdictLogMessage('K-OBCA', { ...base, verdict: 'operator', reason: 'faktflow-original', sameContentExceptHeader: false }),
+    ];
+    expect(cases).toEqual([
+      'KSeF ma już fakturę o tym numerze (numer KSeF K-OBCA) spoza FaktWay, o innej treści: numer zajęty.',
+      'KSeF ma już fakturę o tym numerze (numer KSeF K-OBCA) spoza FaktWay, z tą samą treścią: ta sama sprzedaż, do uzgodnienia przez operatora.',
+      'KSeF ma już fakturę o tym numerze (numer KSeF K-OBCA) z oznaczeniem FaktWay, z inną datą wytworzenia (treść zgodna): do uzgodnienia przez operatora.',
+      'KSeF ma już fakturę o tym numerze (numer KSeF K-OBCA) z oznaczeniem FaktWay, o innej treści: do uzgodnienia przez operatora.',
+    ]);
+    for (const text of cases) {
+      for (const value of ['Klient', '5252241585', '2026-10-01', '999.99', 'Inny Program']) expect(text).not.toContain(value);
+    }
+  });
+
+  it('F-093-440: nośnik werdyktu — tekst klienta w polu prywatnym (bez JSON, inspect), kod i tekst operatora jak dotąd', () => {
+    const carrier = new KsefSendVerdictError('KSEF_NUMBER_TAKEN', 'tekst operatora', 'Klient, NIP 5252241585');
+    const wrapped = new Error('[KSEF_NUMBER_TAKEN] tekst operatora', { cause: new Error('pośredni', { cause: carrier }) });
+
+    expect(carrier.message).toBe('tekst operatora');
+    expect(carrier.customerMessage).toBe('Klient, NIP 5252241585');
+    expect(`${inspect(wrapped, { depth: 8 })}${JSON.stringify(wrapped)}${JSON.stringify(carrier)}`).not.toMatch(/Klient|5252241585/);
+    expect(sendVerdictIn(wrapped)).toBe(carrier);
+    expect(sendVerdictIn(new Error('bez werdyktu'))).toBeNull();
+    expect(classifySendError(wrapped).code).toBe('KSEF_NUMBER_TAKEN');
+    // Werdykt bez osobnego tekstu klienta: oba teksty te same.
+    expect(new KsefSendVerdictError('KSEF_DUPLICATE_RECONCILE', 'wspólny').customerMessage).toBe('wspólny');
   });
 
   it('hexHashToBase64: tylko 64 znaki hex', () => {

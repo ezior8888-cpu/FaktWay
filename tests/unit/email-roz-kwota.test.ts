@@ -83,3 +83,25 @@ describe('kwota w mailu z fakturą', () => {
     expect(plain(payload.amountLabel)).toBe('9840,00 PLN');
   });
 });
+
+/**
+ * Krok 1.4 planu kompletnej aplikacji (RP-PLAT-01): mail podaje ten sam tytuł
+ * przelewu co PDF w załączniku (numer KSeF, potem numer faktury). Bez numeru
+ * KSeF mail wygląda jak dotąd.
+ */
+describe('tytuł przelewu w mailu z fakturą', () => {
+  const KSEF = '1234567890-20270105-0A1B2C3D4E5F-7A';
+  const przelew = { dueDate: '2026-10-15', amountDue: 12_300, method: 'transfer', bankAccount: '61109010140000071219812874' } as Invoice['payment'];
+
+  it('akcja wysyłki przekazuje do maila tytuł z numerem KSeF, ten sam co na PDF', async () => {
+    mocks.loadInvoice.mockResolvedValue({ tenantId: TENANT, ksefNumber: KSEF, invoice: faktura({ payment: przelew }) });
+    expect(await emailInvoiceAction('11111111-1111-4111-8111-111111111111', 'nabywca@example.test')).toEqual({ success: true });
+    expect(mocks.sendEmail.mock.calls[0]![0].transferTitle).toBe(`${KSEF} FV/1/10`);
+  });
+
+  it('bez numeru KSeF: mail bez tytułu przelewu, jak dotąd', async () => {
+    mocks.loadInvoice.mockResolvedValue({ tenantId: TENANT, ksefNumber: null, invoice: faktura({ payment: przelew }) });
+    expect(await emailInvoiceAction('11111111-1111-4111-8111-111111111111', 'nabywca@example.test')).toEqual({ success: true });
+    expect(mocks.sendEmail.mock.calls[0]![0].transferTitle ?? null).toBeNull();
+  });
+});

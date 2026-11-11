@@ -45,7 +45,6 @@ vi.mock('sonner', () => ({ toast }));
 vi.mock('@/app/actions/expenses', () => ({
   deleteExpenseAction: vi.fn(),
   reviewExpenseAction: vi.fn(),
-  uploadExpensePhotoAction: vi.fn(),
   getOcrJobStatusAction: vi.fn(),
 }));
 
@@ -83,6 +82,11 @@ function expense(id: string, fields: Partial<ExpenseRow> = {}): ExpenseRow {
   return {
     id,
     tenant_id: TENANT,
+    paid_at: null,
+    payment_account: null,
+    payment_due_date: null,
+    payment_split: null,
+    payment_terms: null,
     categorization_confidence: null,
     categorization_method: null,
     category_label: 'Telekomunikacja',

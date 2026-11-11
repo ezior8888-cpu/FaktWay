@@ -28,6 +28,14 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: () => q,
         eq: () => q,
         limit: () => q,
+        // Krok 1.3 (00175): po zapisie kosztu runner szuka paragonu z NIP do
+        // faktury (lista kosztów). Tu nie ma żadnego, więc lista jest pusta.
+        is: () => q,
+        neq: () => q,
+        gte: () => q,
+        lte: () => q,
+        order: () => q,
+        then: (ok: (v: { data: Row[]; error: null }) => unknown) => Promise.resolve({ data: [], error: null }).then(ok),
         insert: (r: Row) => {
           insertRow = r;
           db.inserts.push(r);

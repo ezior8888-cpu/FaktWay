@@ -26,7 +26,7 @@ export default async function GdprCancelPage({ searchParams }: {
       panelText='Dopóki usuwanie konta się nie rozpoczęło, możesz je zachować jednym przyciskiem z linku w mailu.'
     >
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Anulowanie usunięcia konta</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Anulowanie usunięcia konta</h1>
       </div>
       {cleanToken ? <GdprCancelForm token={cleanToken} /> : (
         <AuthMessage tone='error'>Otwórz pełny link z maila albo zaloguj się i anuluj żądanie w ustawieniach konta.</AuthMessage>

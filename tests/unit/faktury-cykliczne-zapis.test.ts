@@ -36,6 +36,7 @@ const state = {
   tablesTouched: [] as string[],
   failRecurringUpdate: false,
   failLines: false,
+  failTemplateLines: false,
   nextId: 1,
 };
 
@@ -119,6 +120,13 @@ function fakeSupabase() {
           rows().splice(0, rows().length, ...keep);
           // DELETE … RETURNING (`.select(...)` po `.delete()`), jak PostgREST.
           return { data: hit.map((r) => ({ ...r })), error: null };
+        }
+        if (name === 'invoice_line_items' && state.failTemplateLines) {
+          return { data: null, error: { code: '08006', message: 'połączenie zerwane' } };
+        }
+        // Faktura-wzór pozycji (poza `state.invoices`, żeby nie mieszać z fakturami z zapisu).
+        if (name === 'invoices' && filters.some(([k, v]) => k === 'id' && v === 'tpl-1')) {
+          return { data: filters.some(([k, v]) => k === 'tenant_id' && v === TENANT) ? [{ id: 'tpl-1' }] : [], error: null };
         }
         return { data: rows().filter(matches), error: null };
       };
@@ -205,11 +213,12 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   state.invoices = [];
-  state.invoice_line_items = [];
   state.invoiceInserts = [];
   state.tablesTouched = [];
   state.failRecurringUpdate = false;
   state.failLines = false;
+  state.failTemplateLines = false;
+  state.invoice_line_items = [{ invoice_id: 'tpl-1', tenant_id: TENANT, vat_rate: '23' }];
   state.ksef_submissions = [];
   state.tenants = [{
     id: TENANT, nip: '5260001246', name: 'Moja Firma',
@@ -513,6 +522,53 @@ describe('pozycja wstrzymana, usunięta albo z innej firmy — odmowa przed zapi
       error: 'Nie znaleziono tej faktury cyklicznej — mogła zostać usunięta. Wystaw zwykłą fakturę.',
     });
     expect(state.invoiceInserts).toEqual([]);
+  });
+});
+
+describe('F12-G6: firma zwolniona z art. 113 a stawka VAT z wzoru', () => {
+  const wzorZRata = (vat_rate: string) => {
+    state.invoice_line_items = [{ invoice_id: 'tpl-1', tenant_id: TENANT, vat_rate }];
+  };
+  const ART_113 = 'art. 113 ust. 1 ustawy o VAT';
+
+  it('art. 113 i 23 % → odmowa z nazwą pozycji, bez faktury i kolejki', async () => {
+    state.tenants[0]!.vat_exemption_basis = ART_113;
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r).toEqual({
+      success: false,
+      error:
+        'Pozycja cykliczna „Abonament Klient” ma we wzorze stawkę VAT 23 %, a firma korzysta ze zwolnienia z VAT (art. 113). Na takiej fakturze VAT trzeba by zapłacić. Zmień wzór pozycji na fakturę ze stawką „zw” (Edytuj pozycję) albo status VAT w ustawieniach firmy.',
+    });
+    expect(state.invoiceInserts).toEqual([]);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(pozycja().next_run_date).toBe('2026-11-10');
+  });
+
+  it('art. 113 i stawka „zw” → przechodzi', async () => {
+    state.tenants[0]!.vat_exemption_basis = ART_113;
+    wzorZRata('zw');
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r.success).toBe(true);
+    expect(fakturyOkresu('2026-11')).toHaveLength(1);
+  });
+
+  it('art. 113, błąd odczytu wierszy wzoru → odmowa z komunikatem odczytu, bez faktury', async () => {
+    state.tenants[0]!.vat_exemption_basis = ART_113;
+    state.failTemplateLines = true;
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r).toEqual({ success: false, error: 'Nie udało się odczytać faktury cyklicznej. Spróbuj ponownie za chwilę.' });
+    expect(state.invoiceInserts).toEqual([]);
+  });
+
+  it('firma bez zwolnienia i 23 % → przechodzi', async () => {
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r.success).toBe(true);
+  });
+
+  it('zwolnienie przedmiotowe (art. 43) i 23 % → przechodzi', async () => {
+    state.tenants[0]!.vat_exemption_basis = 'art. 43 ust. 1 pkt 37 ustawy o VAT';
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r.success).toBe(true);
   });
 });
 

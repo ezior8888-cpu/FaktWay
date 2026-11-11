@@ -8,9 +8,8 @@ const ctx = vi.hoisted(() => ({ get: vi.fn(), read: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: ctx.get }));
 vi.mock('@/lib/ksef/history-sync/status', () => ({ readKsefHistorySyncStatus: ctx.read }));
-// Akcje serwera (import pliku, wstrzymanie) — tu tylko render, bez kolejki i bazy.
+// Akcje serwera (wstrzymanie, „Pomiń”) — tu tylko render, bez kolejki i bazy.
 vi.mock('@/app/actions/import-danych', () => ({
-  startFileImportAction: vi.fn(),
   skipImportStepAction: vi.fn(),
   setKsefHistoryPausedAction: vi.fn(),
 }));

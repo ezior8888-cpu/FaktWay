@@ -12,6 +12,8 @@
  * mają jeszcze bliźniaki z okresu przejściowego, nowe już nie.
  */
 
+import * as Sentry from '@sentry/nextjs';
+
 import { logAuditSystem } from '@/lib/audit/log-system';
 import {
   createDailyCap,
@@ -69,10 +71,28 @@ export interface FloRuleRun extends FloSweepResult {
   kind: FloProposalKind;
 }
 
+/**
+ * Kroki sprzątania na początku pulsu: wygaszanie kart po terminie
+ * i podnoszenie kart porzuconych w „wykonuję”.
+ */
+export type FloCleanupStep = 'expire' | 'release';
+
+/** Jak awaria kroku sprzątania wygląda w linii operatora. */
+const CLEANUP_FAILED: Record<FloCleanupStep, string> = {
+  expire: 'wygaszanie padło',
+  release: 'podnoszenie padło',
+};
+
 export interface FloTickResult {
   /** Sprzątanie — nie należy do żadnej reguły z osobna. */
   expired: number;
   released: number;
+  /**
+   * Kroki sprzątania, które w tym przebiegu padły (FLO-01). Liczba kroku,
+   * który padł, jest wtedy zerem z braku wiedzy, a nie z braku kart — stąd
+   * osobne pole zamiast samego zera.
+   */
+  failedCleanup: FloCleanupStep[];
   /**
    * Jedna pozycja na regułę, w kolejności przebiegu.
    *
@@ -194,9 +214,30 @@ export async function runFloTick(
   db: FloDbClient = floDb(),
   sources: FloTickSources = productionTickSources(),
 ): Promise<FloTickResult> {
-  const expired = await expireStale(now, db);
-  const released = await releaseStuck(now, db);
+  // Sprzątanie: każdy krok osobno (FLO-01). Wcześniej wyjątek z wygaszania
+  // zatrzymywał cały puls — wszystkie reguły na wszystkich kontach — choć
+  // żadna reguła nie potrzebuje wyniku sprzątania. Karta, której dziś nie
+  // wygaszono, czeka do jutra — wykonawca i tak odmawia karty po terminie
+  // (`execute.ts`) — a porzucona zostaje w „wykonuję” do następnego pulsu.
+  const failedCleanup: FloCleanupStep[] = [];
+  const expired = await cleanupStep(
+    'expire',
+    () => expireStale(now, db),
+    failedCleanup,
+    ctx?.logger,
+  );
+  const released = await cleanupStep(
+    'release',
+    () => releaseStuck(now, db),
+    failedCleanup,
+    ctx?.logger,
+  );
 
+  // Lista kont i dzisiejsze liczniki kart NIE są izolowane: to dane
+  // wejściowe reguł, a nie osobne kroki. Bez listy kont reguły nie mają po
+  // czym chodzić, a bez liczników ponowny puls tego samego dnia dałby drugą
+  // porcję kart (K1.4) — więc ich błąd ma zatrzymać przebieg.
+  //
   // Jedna lista kont dla wszystkich reguł. Audyt miał kiedyś własne
   // `limit(200)` bez sortowania — konta ponad dwusetne mogły go nie dostać
   // nigdy.
@@ -227,6 +268,7 @@ export async function runFloTick(
   const result: FloTickResult = {
     expired,
     released,
+    failedCleanup,
     rules,
     withheld: cap.withheld,
     failedTenants: rules.reduce((sum, rule) => sum + rule.failed, 0),
@@ -259,10 +301,17 @@ export function ruleRun(
  *
  * Reguły, które nic nie zrobiły, są pomijane: linia ma być do przeczytania
  * jednym rzutem oka, a nie listą dwunastu zer. Sprzątanie zostaje zawsze —
- * jest dowodem, że puls w ogóle się odbył.
+ * jest dowodem, że puls w ogóle się odbył. Krok sprzątania, który padł,
+ * pokazuje awarię zamiast zera, bo zero wyglądałoby jak spokojna noc.
  */
 export function summarizeTick(result: FloTickResult): string {
-  const parts = [`wygasłe ${result.expired}`, `podniesione ${result.released}`];
+  const failed = new Set(result.failedCleanup);
+  const parts = [
+    failed.has('expire') ? CLEANUP_FAILED.expire : `wygasłe ${result.expired}`,
+    failed.has('release')
+      ? CLEANUP_FAILED.release
+      : `podniesione ${result.released}`,
+  ];
 
   for (const rule of result.rules) {
     if (rule.asked === 0 && rule.closed === 0 && rule.failed === 0) continue;
@@ -322,32 +371,26 @@ async function readActiveTenantIds(): Promise<string[]> {
  * Żeton zgody jest w tym momencie zużyty, więc realne wykonanie i tak
  * wymaga ponownego kliknięcia — i dobrze, bo nie wiemy, jak daleko zaszła
  * przerwana próba.
+ *
+ * JEDEN UPDATE Z WARUNKIEM W ZAPYTANIU (FLO-01) zamiast odczytu listy id
+ * i odsyłania jej w adresie. Warunek AUD-111 („nadal wykonuję”) sprawdza
+ * się w chwili zapisu, a baza odsyła dokładnie karty podniesione: zakończona
+ * w trakcie przebiegu nie wraca do zatwierdzenia i nie dostaje wpisu
+ * w audycie. PostgREST (od wersji 10) nie ucina wierszy zwracanych przez
+ * zapis — limit 1000 dotyczy odczytu — więc wpis dostaje każda podniesiona
+ * (1200 kart na prawdziwym PostgREST: `tests/rls-flo-sprzatanie.test.ts`).
  */
 async function releaseStuck(now: Date, db: FloDbClient): Promise<number> {
   const cutoff = new Date(now.getTime() - STUCK_AFTER_MS).toISOString();
 
-  const stuck = await db
-    .from('flo_proposals')
-    .select('id, tenant_id, kind, approved_at')
-    .eq('status', 'executing')
-    .lt('approved_at', cutoff);
-
-  if (stuck.error) throw new Error(stuck.error.message);
-  const rows = stuck.data ?? [];
-  if (rows.length === 0) return 0;
-
-  // AUD-111: tylko karty, które NADAL są w „wykonuję” — zakończona w trakcie
-  // tego przebiegu nie może wrócić do zatwierdzenia.
-  const { error } = await db
+  const { data, error } = await db
     .from('flo_proposals')
     .update({ status: 'approved' })
-    .in(
-      'id',
-      rows.map((r) => r.id),
-    )
     .eq('status', 'executing')
-    .lt('approved_at', cutoff);
+    .lt('approved_at', cutoff)
+    .select('id, tenant_id, kind');
   if (error) throw new Error(error.message);
+  const rows = data ?? [];
 
   for (const row of rows) {
     // Operator ma o tym wiedzieć: pojedynczy przypadek to restart kontenera,
@@ -367,6 +410,28 @@ async function releaseStuck(now: Date, db: FloDbClient): Promise<number> {
   }
 
   return rows.length;
+}
+
+/**
+ * Jeden krok sprzątania z izolacją awarii — ten sam wzór co `runSweep`:
+ * Sentry, log workera, wpis w wyniku i puls idzie dalej. Krok, który padł,
+ * zwraca zero; że to zero znaczy „nie wiadomo”, mówi `failedCleanup`.
+ */
+async function cleanupStep(
+  step: FloCleanupStep,
+  run: () => Promise<number>,
+  failed: FloCleanupStep[],
+  logger?: Pick<JobLogger, 'error'>,
+): Promise<number> {
+  try {
+    return await run();
+  } catch (e) {
+    failed.push(step);
+    Sentry.captureException(e, { tags: { job: 'flo-tick', step } });
+    const message = e instanceof Error ? e.message : 'nieznany błąd';
+    (logger ?? console).error(`[flo.tick] ${CLEANUP_FAILED[step]}: ${message}`);
+    return 0;
+  }
 }
 
 /**

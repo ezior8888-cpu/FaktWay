@@ -120,7 +120,7 @@ export function recentCosts(entries: readonly CostEntry[], monthKey: string, lim
 export interface CostVatSummary {
   /** VAT naliczony z dokumentów miesiąca (`vat_amount`). */
   vat: number;
-  /** VAT do odliczenia — reguła `VAT_DEDUCTIBLE_DOCUMENTS` (§2.4 pkt 12). */
+  /** VAT do odliczenia z `getCosts`: reguła `documentAllowsVatDeduction` (§2.4 pkt 12, krok 1.3). */
   vatDeductible: number;
   /** Wydatki miesiąca do opisania (`is_reviewed = false`); faktura z KSeF bez wydatku się nie liczy. */
   toReview: number;

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import PQueue from 'p-queue';
 
+import { attachmentDisposition } from '@/lib/http/content-disposition';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { packageZip, type PackagedFile } from '@/lib/exports/zip-packager';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -212,7 +213,7 @@ async function buildBatch(req: Request, tenantId: string): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${zipFilename(selection, files.length)}"`,
+        'Content-Disposition': attachmentDisposition(zipFilename(selection, files.length)),
         'Cache-Control': 'private, no-store',
       },
     });

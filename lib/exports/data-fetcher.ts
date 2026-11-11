@@ -6,12 +6,14 @@ import {
   assertKsefExpensesReadyForPln,
   type KsefExpenseForPlnReport,
 } from '@/lib/expenses/ksef-currency-review';
+import { isReceiptInvoiceFa3 } from '@/lib/invoices/receipt-invoice';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { costDocumentType } from '@/lib/expenses/vat-deduction-document';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
@@ -19,6 +21,8 @@ import type { Database, Json } from '@/types/database';
 import type { JpkFaInputData, JpkInvoice, JpkInvoiceLine } from './jpk-fa-generator';
 import { jpkAnnotationsFromJson, type Fa3Markers } from '@/lib/xml/fa3-annotations';
 import type { KsefLineFields } from '@/lib/import/fa3-line-amounts';
+import { calculateLineItem } from '@/lib/xml/invoice-calculator';
+import type { VatRate } from '@/types/invoice';
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type LineItemRow = Database['public']['Tables']['invoice_line_items']['Row'];
@@ -197,7 +201,13 @@ async function fetchExpensesForExport(
     id: String(row.id),
     issueDate: String(row.issue_date),
     documentNumber: typeof row.document_number === 'string' ? row.document_number : '',
-    documentType: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+    // Paragon z NIP ze zdjęcia jest zapisany jako `invoice`; rodzaj z odczytu OCR (krok 1.3).
+    documentType: costDocumentType({
+      document_type: typeof row.document_type === 'string' ? row.document_type : 'invoice',
+      source: typeof row.source === 'string' ? row.source : null,
+      ksef_invoice_id: typeof row.ksef_invoice_id === 'string' ? row.ksef_invoice_id : null,
+      ocr_extracted_data: row.ocr_extracted_data,
+    }),
     sellerName: typeof row.seller_name === 'string' ? row.seller_name : '',
     sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim() ? row.seller_nip.trim() : null,
     sellerAddress: typeof row.seller_address === 'string' ? row.seller_address : null,
@@ -510,11 +520,55 @@ function mapInvoiceRow(
 
     correctedInvoiceNumber: correctedNumber,
     correctionReason: row.correction_reason ?? undefined,
+    ...correctionStatesFields(row),
     ksefNumber: row.ksef_number ?? undefined,
     annotations: annotationsFromFa3(row.fa3_data),
     ...contentFlags,
     ...(lineProblems.length ? { importedLineAmountProblems: lineProblems } : {}),
   };
+}
+
+/**
+ * S-01: korekta „przed/po” ma na wierszu pozycje w stanie PO (tak zapisuje je
+ * `createCorrectionInvoiceAction`), a oba stany leżą w kopercie
+ * `special_data.correctionData` (A4b). JPK liczy z nich różnicę stawek, tak
+ * jak faktura korygująca w KSeF. Brak kopert: odmowa w `amountsOf`, nie stan po.
+ */
+function correctionStatesFields(row: InvoiceRow): Pick<JpkInvoice, 'correctionStates' | 'correctionStatesMissing'> {
+  if (row.invoice_kind !== 'correction' || row.correction_type !== 'before_after') return {};
+  const data = row.special_data && typeof row.special_data === 'object' && !Array.isArray(row.special_data)
+    ? (row.special_data as Record<string, unknown>).correctionData
+    : undefined;
+  const envelope = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : undefined;
+  const before = correctionStateLines(envelope?.linesBefore);
+  const after = correctionStateLines(envelope?.linesAfter);
+  return before && after ? { correctionStates: { before, after } } : { correctionStatesMissing: true };
+}
+
+/** Pozycje stanu korekty z koperty: kwoty z kalkulatora faktury, jak w generatorze FA(3) KOR. */
+function correctionStateLines(raw: unknown): JpkInvoiceLine[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const lines: JpkInvoiceLine[] = [];
+  for (const [i, item] of raw.entries()) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const o = item as Record<string, unknown>;
+    const quantity = Number(o.quantity);
+    const unitPriceNet = Number(o.unitPriceNet);
+    const vatRate = String(o.vatRate ?? '');
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitPriceNet) || !vatRate) return null;
+    const { netAmount, vatAmount } = calculateLineItem({ quantity, unitPriceNet, vatRate: vatRate as VatRate });
+    lines.push({
+      position: typeof o.ordinal === 'number' ? o.ordinal : i + 1,
+      name: typeof o.name === 'string' ? o.name : '',
+      unit: typeof o.unit === 'string' ? o.unit : 'szt.',
+      quantity,
+      unitPriceNet,
+      netAmount,
+      vatRate,
+      vatAmount,
+    });
+  }
+  return lines;
 }
 
 /** Adnotacje z `fa3_data.annotations` (#60, #75, #79; C5b: import KSeF) — JPK_FA: P_16–P_19C. */
@@ -540,7 +594,11 @@ export function importedContentFlags(
   const strings = (v: unknown) => (Array.isArray(v) ? v.filter((p): p is string => typeof p === 'string') : []);
   const problems = strings(o.annotationProblems);
   const lineProblems = strings(o.lineAmountProblems);
-  const markers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  const fileMarkers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
+  // Krok 1.2: faktura do paragonu wystawiona w FaktWay (`fa3_data.receipt`) ma
+  // w pliku KSeF `Fa/FP` = 1 jak FP z importu. JPK nie zna jeszcze typu FP
+  // (art. 109 ust. 3d: bez zwiększenia sprzedaży), więc ta sama odmowa.
+  const markers = isReceiptInvoiceFa3(o) ? { ...fileMarkers, fp: true as const } : fileMarkers;
   const saleDates = isRecordJson(o.saleDates) ? o.saleDates : undefined;
   return {
     ...(origin === 'ksef_import' && !isRecordJson(o.annotations) ? { importedAnnotationsMissing: true } : {}),

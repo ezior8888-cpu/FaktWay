@@ -1,6 +1,7 @@
 import { kpirCostAmount, type KpirCostInput } from '@/lib/categorization/kpir-cost';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { assertNoReceiptInvoicesInRevenue, receiptRevenueRow } from '@/lib/invoices/receipt-revenue-guard';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
@@ -26,6 +27,10 @@ export interface TaxEstimateInvoice {
   net_total: number | string | null;
   invoice_kind: string | null;
   settled_advances_net?: number | null;
+  /** Znaczniki FP (`RECEIPT_REVENUE_COLUMNS`); FP w roku odmawia szacunku. */
+  internal_number?: string | null;
+  receipt?: unknown;
+  ksef_fp?: unknown;
 }
 
 /**
@@ -64,6 +69,9 @@ export function estimateIncomeTaxThisYear(
   const yearStart = `${year}-01-01`;
   const fullYear = dataFrom <= yearStart;
   const inRange = (date: string) => date >= dataFrom && date.startsWith(`${year}-`);
+
+  // Krok 1.2: FP liczona jak zwykła sprzedaż podwoiłaby przychód, więc bez szacunku.
+  assertNoReceiptInvoicesInRevenue(invoices.filter((i) => inRange(i.issue_date)).map(receiptRevenueRow));
 
   const revenue = invoices
     .filter((i) => inRange(i.issue_date))

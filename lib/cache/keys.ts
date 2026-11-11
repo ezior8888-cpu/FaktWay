@@ -70,6 +70,15 @@ export const cacheKeys = {
   submitRateLimit: (nip: string, minuteBucket: number): string =>
     k(['rl', 'submit', nip, String(minuteBucket)]),
 
+  /**
+   * Pauza firmy po 429 z KSeF (L1a): koniec pauzy w ms, TTL = `Retry-After`.
+   * `lib/ksef/rate-limit-pause.ts`. Operator: `GET`/`DEL` tego klucza.
+   */
+  ksefRateLimitPause: (env: string, nip: string): string => k(['ksef', 'pause', env, nip]),
+
+  /** Firmy (NIP) z 429 z KSeF w ostatnich 10 min — sorted set hamulca wysyłki (L1a). */
+  ksefRateLimitedFirms: (env: string): string => k(['ksef', 'rl429', env]),
+
   /** Snapshot zdrowia KSeF API. Aktualizowany przez cron co 30s. */
   ksefHealthStatus: (env: string): string => k(['ksef', 'health', env]),
 

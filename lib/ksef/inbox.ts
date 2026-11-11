@@ -46,9 +46,18 @@ export interface ReceivedInvoicesResult {
  *     wszystkich stron zapytania,
  *   - strony przez `pageOffset` (indeks strony) i `pageSize`, dopóki `hasMore`,
  *   - `isTruncated` (limit 10 000 rekordów) → nowe `from` od daty ostatniego
- *     rekordu i `pageOffset = 0`.
+ *     rekordu i `pageOffset = 0`, NIEZALEŻNIE od `hasMore` (E1-W10).
  * Wcześniejsza wersja czekała na `continuationToken`, którego ten endpoint
  * nie zwraca, więc kończyła na pierwszej stronie (domyślnie 10 faktur).
+ *
+ * E1-W10: skrócony scenariusz MF opisuje `hasMore = false` jako koniec, a
+ * zawężenie tylko przy `hasMore = true`. Nie mówi, co znaczy `isTruncated`
+ * przy `hasMore = false` — tak może wyglądać ostatnia strona obciętego wyniku
+ * (ta z 10 000. rekordem). Koniec w tym miejscu gubił resztę okna, a HWM
+ * z odpowiedzi przesuwał się ponad nią na zawsze. Dla `hasMore = true` (obie
+ * wartości `isTruncated`) i dla `hasMore = false` bez `isTruncated` zachowanie
+ * jest bez zmian; reguła MF „`hasMore = false` → koniec” dostaje jeden wyjątek:
+ * `isTruncated`.
  */
 async function queryReceivedInvoicesOnce(
   auth: KsefAuth,
@@ -111,17 +120,19 @@ async function queryReceivedInvoicesOnce(
       for (const inv of page) byNumber.set(inv.ksefNumber, inv);
       hwm = response.permanentStorageHwmDate ?? null;
 
-      if (!response.hasMore) break;
-      const last = page[page.length - 1];
+      // `isTruncated` przed `hasMore` (E1-W10, opis wyżej). Brak postępu rzuca:
+      // HWM stoi, a alarm zaległości skrzynki pokaże problem.
       if (response.isTruncated) {
+        const last = page[page.length - 1];
         if (!last?.permanentStorageDate || Date.parse(last.permanentStorageDate) <= Date.parse(from)) {
           throw new Error('KSeF: wynik skrzynki ucięty, a okna nie da się zawęzić');
         }
         from = last.permanentStorageDate;
         pageOffset = 0;
-      } else {
-        pageOffset += 1;
+        continue;
       }
+      if (!response.hasMore) break;
+      pageOffset += 1;
     }
 
     return { invoices: [...byNumber.values()], hwm, requests };

@@ -3,6 +3,7 @@ import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { RECEIPT_REVENUE_COLUMNS, ReceiptInvoiceRevenueError, receiptInvoiceNumbers, receiptRevenueRow } from '@/lib/invoices/receipt-revenue-guard';
 import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -119,7 +120,7 @@ export async function getKpirData(
   const invoices = await readCompletePages('invoices', (from, to) => supabase
     .from('invoices')
     .select(
-      'id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids, currency',
+      `id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids, currency, ${RECEIPT_REVENUE_COLUMNS}`,
       { count: 'exact' },
     )
     .eq('tenant_id', tenantId)
@@ -139,7 +140,12 @@ export async function getKpirData(
   } catch (error) {
     outgoingCurrencyError = error instanceof Error ? error.message : 'Nie można potwierdzić walut sprzedaży';
   }
-  const currencyBlocked = currencyError ?? outgoingCurrencyError;
+  // Krok 1.2 (ustalenie 1 z #509): FP nie jest sprzedażą do policzenia, bo sprzedaż
+  // z paragonu weszła raportem z kasy. Miesiąc z FP: raport wstrzymany z numerem
+  // faktury (strona pokazuje link do niej), bez kwot.
+  const receiptNumbers = receiptInvoiceNumbers(invoices.map(receiptRevenueRow));
+  const receiptError = receiptNumbers.length > 0 ? new ReceiptInvoiceRevenueError(receiptNumbers).message : null;
+  const currencyBlocked = currencyError ?? outgoingCurrencyError ?? receiptError;
 
   // ROZ niesie pełną wartość zamówienia — przychód liczy tylko resztę ponad
   // zaliczki, które KPiR już ma (`kpirRevenueNet`). Bez tej sumy przychód

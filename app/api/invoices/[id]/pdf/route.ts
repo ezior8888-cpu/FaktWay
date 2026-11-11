@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
+import { attachmentDisposition } from '@/lib/http/content-disposition';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { resolveApiUserAndActiveOrg } from '@/lib/supabase/auth-context';
 
@@ -52,7 +53,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${result.filename}"`,
+        'Content-Disposition': attachmentDisposition(result.filename),
         // PDF faktury to dane wrażliwe — nie cache'ujemy w przeglądarce.
         'Cache-Control': 'private, no-store',
       },

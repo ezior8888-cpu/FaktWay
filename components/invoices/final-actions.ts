@@ -205,17 +205,34 @@ function ghostFinalInvoice(envelope: FinalInvoiceData): Invoice {
   };
 }
 
+/**
+ * Nabywca do porównania zaliczki z fakturą rozliczającą (F12-D4): NIP (same
+ * cyfry), bez niego numer VAT-UE, bez niego nazwa. Faktura rozliczająca
+ * (art. 106f ust. 3 ustawy o VAT) obejmuje zaliczki tego samego nabywcy.
+ */
+function kluczNabywcy(nip: unknown, dane: unknown): string {
+  const n = typeof nip === 'string' ? nip.replace(/\D/g, '') : '';
+  if (n) return `nip:${n}`;
+  const o = dane && typeof dane === 'object' && !Array.isArray(dane) ? (dane as Record<string, unknown>) : {};
+  const vatUe = typeof o.vatUeNumber === 'string' ? o.vatUeNumber.replace(/\s/g, '').toUpperCase() : '';
+  if (vatUe) return `ue:${vatUe}`;
+  const nazwa = typeof o.name === 'string' ? o.name.replace(/\s+/g, ' ').trim().toLowerCase() : '';
+  return `nazwa:${nazwa}`;
+}
+
 async function fetchSettlementRows(
   supabase: SupabaseClient,
   tenantId: string,
   ids: string[],
+  /** `kluczNabywcy` nabywcy faktury rozliczającej. */
+  nabywca: string,
 ): Promise<AdvanceInvoiceSettlementRow[] | { error: string }> {
   if (!ids.length) return { error: 'Brak zaliczek do rozliczenia.' };
 
   const { data, error } = await supabase
     .from('invoices')
     .select(
-      'id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data, invoice_kind',
+      'id, internal_number, ksef_number, issue_date, advance_amount, gross_total, net_total, vat_total, fa3_data, invoice_kind, buyer_nip, buyer_data',
     )
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -234,6 +251,11 @@ async function fetchSettlementRows(
     if (row.invoice_kind !== 'advance') {
       return {
         error: `Dokument ${row.internal_number ?? row.id.slice(0, 8)} nie jest fakturą zaliczkową.`,
+      };
+    }
+    if (kluczNabywcy(row.buyer_nip, row.buyer_data) !== nabywca) {
+      return {
+        error: `Zaliczkę ${row.internal_number ?? row.id.slice(0, 8)} wystawiono dla innego nabywcy, a faktura rozliczająca obejmuje tylko zaliczki tego samego nabywcy (art. 106f ust. 3 ustawy o VAT). Wybierz zaliczki tego nabywcy albo zmień nabywcę.`,
       };
     }
   }
@@ -329,7 +351,7 @@ async function resolveFinalPayload(
   tenantId: string,
   parsed: FinalInvoiceSchemaIn,
 ): Promise<{ envelope: FinalInvoiceData; settlement: AdvanceInvoiceSettlementRow[] } | { error: string }> {
-  const settlement = await fetchSettlementRows(supabase, tenantId, parsed.advanceInvoiceIds);
+  const settlement = await fetchSettlementRows(supabase, tenantId, parsed.advanceInvoiceIds, kluczNabywcy('nip' in parsed.buyer ? parsed.buyer.nip : null, parsed.buyer));
   if ('error' in settlement) return settlement;
 
   // AUD-67: zaliczka rozliczona już inną ROZ zaniżyłaby przychód drugi raz.
