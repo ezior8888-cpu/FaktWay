@@ -19,6 +19,8 @@ const st = vi.hoisted(() => ({
   inserted: [] as Row[],
   corrections: [] as Row[],
   linesByInvoice: {} as Record<string, Row[]>,
+  /** Sumy faktury pierwotnej; domyślnie 10 × 100 zł w 23%. */
+  sumyRodzica: { net_total: 1000, vat_total: 230, gross_total: 1230 } as Row,
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -41,7 +43,7 @@ vi.mock('@/lib/supabase/server', () => ({
       const filters: Record<string, unknown> = {};
       const parent = {
         id: PARENT, tenant_id: TENANT, issue_date: '2026-09-30', internal_number: 'FV 1/09/2026', ksef_number: 'KSEF-TEST-1',
-        net_total: 1000, vat_total: 230, gross_total: 1230, fa3_data: null,
+        ...st.sumyRodzica, fa3_data: null,
         seller_data: { nip: '1234567890', name: 'Firma testowa', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' } },
         buyer_data: { nip: '1234567890', name: 'Nabywca testowy', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 2', addressLine2: '00-002 Warszawa' } },
       };
@@ -110,6 +112,7 @@ const kor1 = (o: Row = {}): Row => ({
 beforeEach(() => {
   st.inserted = [];
   st.corrections = [];
+  st.sumyRodzica = { net_total: 1000, vat_total: 230, gross_total: 1230 };
   st.linesByInvoice = { [PARENT]: [dbLine(10)], [KOR1]: [dbLine(8)] };
 });
 
@@ -184,5 +187,35 @@ describe('łańcuch korekt (K4)', () => {
       { parent_invoice_id: 'c', ksef_status: 'rejected' },
     ]);
     expect(out.map((p) => p.id)).toEqual(['a', 'c']);
+  });
+
+  // F12-D2: korekta kwotowa ma różnicę według stawek faktury korygowanej
+  // (art. 106j ust. 2 pkt 5 ustawy o VAT) i nie może zejść poniżej zera.
+  it('F12-D2: korekta kwotowa w stawce, której nie ma na fakturze (faktura w 8%, kwoty jak 23%): odmowa', async () => {
+    st.sumyRodzica = { net_total: 1000, vat_total: 80, gross_total: 1080 };
+    st.linesByInvoice = { [PARENT]: [{ ...dbLine(10), vat_rate: '8' }] };
+    const r = await saveCorrectionDraftAction(payload({
+      correctionType: 'amount_change',
+      amountChange: { netDelta: -100, vatDelta: -23, grossDelta: -123, description: 'Rabat' },
+    }), TENANT);
+    expect(r).toMatchObject({ success: false, error: expect.stringContaining('23%') });
+    expect(st.inserted).toHaveLength(0);
+  });
+
+  it('F12-D2: korekta kwotowa większa niż faktura (1 000 zł netto, korekta −1 500): odmowa', async () => {
+    const r = await saveCorrectionDraftAction(payload({
+      correctionType: 'amount_change',
+      amountChange: { netDelta: -1500, vatDelta: -345, grossDelta: -1845, description: 'Rabat' },
+    }), TENANT);
+    expect(r).toMatchObject({ success: false, error: expect.stringContaining('poniżej zera') });
+    expect(st.inserted).toHaveLength(0);
+  });
+
+  it('F12-D2: korekta kwotowa do zera w stawce faktury przechodzi', async () => {
+    const r = await saveCorrectionDraftAction(payload({
+      correctionType: 'amount_change',
+      amountChange: { netDelta: -1000, vatDelta: -230, grossDelta: -1230, description: 'Zwrot całości' },
+    }), TENANT);
+    expect(r).toMatchObject({ success: true });
   });
 });
