@@ -290,9 +290,12 @@ describe('odświeżona sesja w proxy', () => {
 
   // Uszkodzone ciasteczko: biblioteka kasuje je bez wywołania GoTrue
   // (SIGNED_OUT) — także u anonimowego gościa na stronie publicznej.
+  // Ciasteczko to poprawny JSON, ale nie sesja: od auth-js 2.119 wartość,
+  // która nie jest JSON-em, liczy się jako brak sesji i nie jest kasowana
+  // (nie ma wtedy żadnego `Set-Cookie`, więc nie ma czego chronić).
   it('uszkodzone ciasteczko sesji na stronie publicznej: skasowanie też bez wspólnego cache', async () => {
     const response = await updateSession(new NextRequest('https://app.example.test/pricing', {
-      headers: { cookie: `${COOKIE_NAME}=uszkodzone` },
+      headers: { cookie: `${COOKIE_NAME}=base64-${b64url(JSON.stringify({ uszkodzone: true }))}` },
     }));
 
     expect(response.headers.get('x-middleware-next')).toBe('1');

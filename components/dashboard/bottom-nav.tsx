@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { MotionConfig, motion } from "framer-motion";
+import { MotionConfig, motion } from "motion/react";
 
 import {
   RiLogoutBoxRLine,

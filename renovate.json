@@ -63,6 +63,13 @@
       "matchPackageNames": ["brace-expansion", "@hono/node-server"],
       "matchUpdateTypes": ["major"],
       "enabled": false
+    },
+    {
+      "description": "posthog-js osobno: 1.447 to ok. +59 kB gzip w First Load JS każdej trasy panelu (budżet 750 kB, #497). Podbicie razem z leniwym ładowaniem analityki",
+      "matchPackageNames": ["posthog-js"],
+      "matchUpdateTypes": ["minor", "major"],
+      "groupName": "posthog-js",
+      "automerge": false
     }
   ],
   "vulnerabilityAlerts": {
