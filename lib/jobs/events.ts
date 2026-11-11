@@ -307,6 +307,16 @@ export const emailTrialDay8 = zodEvent('email/trial-day-8', TrialOnboardingEmail
 export const emailTrialDay12 = zodEvent('email/trial-day-12', TrialOnboardingEmailPayloadSchema);
 export const emailTrialDay14 = zodEvent('email/trial-day-14', TrialOnboardingEmailPayloadSchema);
 
+/**
+ * Zapisano logowanie (`auth.login`) albo rejestrację z otwartą sesją. Worker
+ * sprawdza, czy to nowe urządzenie, i wtedy wysyła mail bezpieczeństwa
+ * (krok 8.5, część 2). Klucz zlecenia: `new-login/<sessionId>`.
+ */
+export const authLoginCompleted = zodEvent(
+  'auth/login.completed',
+  z.object({ userId: z.string().uuid(), sessionId: z.string().uuid() }),
+);
+
 /** OCR zdjęcia wydatku — worker aktualizuje `ocr_jobs` i tworzy `expenses`. */
 export const ocrProcessPhotoRequested = zodEvent(
   'ocr/process-photo',

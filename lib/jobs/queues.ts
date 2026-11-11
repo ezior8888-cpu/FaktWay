@@ -20,6 +20,7 @@
  * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1.
  */
 export const EVENT_QUEUE_MAP = {
+  'auth/login.completed': ['auth.login.completed'],
   'billing/payment.failed': ['billing.payment.failed'],
   'billing/payment.succeeded': ['billing.payment.succeeded'],
   'email/trial-day-1': ['email.trial-day-1'],

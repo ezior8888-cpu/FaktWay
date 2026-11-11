@@ -23,6 +23,7 @@ import InvoiceAccepted from './templates/InvoiceAccepted';
 import InvoiceDuplicateDecision, { duplicateDecisionSubject } from './templates/InvoiceDuplicateDecision';
 import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
+import NewLogin from './templates/NewLogin';
 import PaymentFailed from './templates/PaymentFailed';
 import RefundIssued from './templates/RefundIssued';
 import SupportEscalation, { type SupportEscalationProps } from './templates/SupportEscalation';
@@ -588,6 +589,40 @@ export async function sendGdprDeletionScheduledEmail(
     subject: 'Żądanie usunięcia konta FaktWay — możesz cofnąć (RODO)',
     html,
     category: 'transactional',
+  });
+}
+
+/**
+ * Mail o logowaniu z nowego urządzenia (krok 8.5, część 2). Mail bezpieczeństwa:
+ * kategoria transactional, bez wyłącznika. `idempotencyKey` = `new-login/<sessionId>`.
+ */
+export async function sendNewLoginEmail(payload: {
+  to: string;
+  userId: string;
+  occurredAt: string;
+  device: string;
+  ip: string | null;
+  idempotencyKey: string;
+}): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendNewLoginEmail → ${payload.to}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(
+    NewLogin({
+      occurredAt: payload.occurredAt,
+      device: payload.device,
+      ip: payload.ip,
+      securityUrl: `${APP_URL}/settings/security`,
+    }),
+  );
+  return sendViaResend({
+    to: payload.to,
+    subject: 'Nowe logowanie do FaktWay',
+    html,
+    category: 'transactional',
+    userId: payload.userId,
+    idempotencyKey: payload.idempotencyKey,
   });
 }
 

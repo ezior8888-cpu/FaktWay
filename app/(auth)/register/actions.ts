@@ -9,6 +9,7 @@ import { recordSignupCompleted } from '@/lib/analytics/funnel';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
 import { readAccessTokenFacts, sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
+import { requestNewLoginCheck } from '@/lib/auth/sessions/new-login-check';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
@@ -143,6 +144,9 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
       userId: uid,
       metadata: { flow: 'session_immediate', ...sessionAuditMetadata(sessionId) },
     });
+    // Pierwsze logowanie konta: runner nie wysyła maila (brak wcześniejszych wpisów),
+    // ale kolejne logowania porównują się z tym wpisem.
+    await requestNewLoginCheck({ userId: uid, sessionId });
   }
 
   revalidatePath('/', 'layout');
