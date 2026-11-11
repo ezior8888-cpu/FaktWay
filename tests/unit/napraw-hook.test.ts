@@ -6,8 +6,11 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SKRYPT = path.resolve(__dirname, "../../scripts/dev/napraw-hook.sh");
+// Bez zmiennych gita z otoczenia: w hooku przed pushem git przekazuje GIT_DIR
+// prawdziwego repo i `git init` w katalogu tymczasowym zmieniłby tamto repo
+// (11.11.2026: core.bare=true, test `testy-git-izolacja.test.ts`).
 const env = {
-  ...process.env,
+  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_"))),
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_AUTHOR_NAME: "t",
