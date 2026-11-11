@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoicePaymentPanel, type InvoicePaymentPanelData } from '@/components/invoices/invoice-payment-panel';
+import { InvoicePaymentsSection } from '@/components/invoices/invoice-payments-section';
+import type { InvoicePaymentsData } from '@/lib/invoices/invoice-payments';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
 import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
@@ -85,6 +87,8 @@ export interface InvoiceDetailInitial {
   payment_status?: string | null;
   /** Panel „Zapłacone” (00158): liczy serwer; brak = faktura bez płatności do oznaczenia (szkic, zakup). */
   payment_panel?: InvoicePaymentPanelData | null;
+  /** Sekcja „Wpłaty” (krok 3.1, 00176): historia, zapłacono i reszta; liczy serwer; brak = bez sekcji. */
+  payment_history?: InvoicePaymentsData | null;
   lines: InvoiceDetailLine[];
   /** E3 / P4: waluta faktury (kod ISO; brak w wierszu = PLN) — podpis kwot zamiast „PLN” na sztywno. */
   currency: string;
@@ -102,6 +106,8 @@ export interface InvoiceDetailInitial {
   can_set_recurring?: boolean;
   /** „Duplikuj” w karcie „Dokument”: zwykła faktura z FaktWay (ten sam predykat co menu „⋯” listy). */
   can_duplicate?: boolean;
+  /** Krok 2.10: „Link dla nabywcy” w karcie „Dokument” (liczy serwer; brak pola = bez przycisku). */
+  can_share_with_buyer?: boolean;
   /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
   qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
@@ -365,6 +371,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     can_correct: inv.can_correct,
     can_set_recurring: inv.can_set_recurring ?? false,
     can_duplicate: inv.can_duplicate ?? false,
+    can_share_with_buyer: inv.can_share_with_buyer ?? false,
   };
 
   return (
@@ -412,6 +419,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               <InvoicePaymentPanel
                 invoice={{ id: inv.id, number: inv.internal_number }}
                 data={inv.payment_panel}
+              />
+            )}
+
+            {/* Krok 3.1: historia wpłat i „Zapisz wpłatę” obok panelu „Zapłacone” (D1: nowa sekcja, bez przestawiania). */}
+            {inv.payment_history && (
+              <InvoicePaymentsSection
+                invoice={{ id: inv.id, number: inv.internal_number }}
+                data={inv.payment_history}
               />
             )}
 

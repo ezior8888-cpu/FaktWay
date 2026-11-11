@@ -14,6 +14,7 @@
  */
 
 import { runCancelRemindersOnPayment } from '../runners/cancel-reminders-on-payment';
+import { runNewLoginMail } from '../runners/new-login-mail';
 import { runCriticalAlertsMonitor } from '../runners/critical-alerts-monitor';
 import { runDailyAnalyticsDigest } from '../runners/daily-analytics-digest';
 import { runDailySummaryEmail } from '../runners/daily-summary-email';
@@ -109,6 +110,11 @@ eventJob('billing.payment.failed', runDunningPaymentFailed, {
 });
 eventJob('reminders.send.requested', runSendReminder, { maxRetries: 3 });
 eventJob('invoice.payment.received', runCancelRemindersOnPayment);
+
+// ── Mail bezpieczeństwa o logowaniu z nowego urządzenia (krok 8.5, część 2).
+//    Ponowienie od zera jest bezpieczne: Resend dostaje ten sam klucz
+//    `new-login/<sessionId>`, więc jedna sesja to najwyżej jeden mail ──
+eventJob('auth.login.completed', runNewLoginMail, { maxRetries: 3 });
 
 // ── Sekwencja onboardingowa (14 dni, łańcuch przez scheduleAfter) ──
 eventJob('user.registered', runEmailWelcome, { maxRetries: 2 });

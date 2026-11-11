@@ -12,6 +12,7 @@
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |
 > | „Kontynuuj plan księgowość JDG” | [`PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md), tylko krok z „Następny krok”, dziennik w sekcji 15, potem raport i STOP |
 > | „Kontynuuj plan usprawnień” | [`PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md), dziennik w sekcji 7 |
+> | „Kontynuuj plan kompletnej aplikacji” | [`PLAN-KOMPLETNA-APLIKACJA.md`](docs/koordynacja/PLAN-KOMPLETNA-APLIKACJA.md), tylko krok z „Następny krok”, dziennik w sekcji 12, potem raport i STOP |
 >
 > Sesje „sesja N” robią TYLKO wskazaną sesję, według „Protokołu naprawy błędu” niżej.
 
@@ -218,9 +219,11 @@ idzie więc tak:
    Blokada bez wyjścia to nowy błąd, nie zabezpieczenie.
 5. **Ponowienie od zera.** Worker pg-boss wykonuje cały handler ponownie, bez
    memoizacji kroków. Każdy krok z efektem zewnętrznym (mail, wysyłka,
-   zapis, zdarzenie) jest idempotentny albo ma klucz (`idempotencyKey`,
-   `singletonKey`, warunek w UPDATE). W opisie PR piszesz, co się stanie przy
-   ponowieniu po każdym kroku.
+   zapis, zdarzenie) jest idempotentny albo ma klucz: `idempotencyKey` u
+   dostawcy, unikalny indeks albo warunek w UPDATE. `singletonKey` w pg-boss na
+   kolejkach FaktWay (polityka `standard`) nie deduplikuje zadań, więc nie jest
+   ochroną (`lib/jobs/enqueue.ts:22-30`). W opisie PR piszesz, co się stanie
+   przy ponowieniu po każdym kroku.
 6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
    `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
    wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,

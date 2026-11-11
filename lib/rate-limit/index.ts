@@ -14,13 +14,24 @@ export type RateLimitBucket =
   | 'ai_ocr'
   | 'ai_classify'
   | 'invoice_email'
+  // Noty obciążeniowe i uznaniowe mailem (00193, krok 2.9): limit na firmę jak przy fakturach.
+  | 'accounting_note_email'
   | 'invitation'
+  // Portal księgowej: strony i pliki (`lib/rate-limit/accountant-portal.ts`, krok 6.2).
+  | 'accountant_portal'
   | 'batch_pdf'
   | 'ksef_certificate'
   | 'passkey_login_options'
   | 'passkey_login_verify'
   | 'passkey_manage'
-  | 'ksef_inbox_check';
+  | 'ksef_inbox_check'
+  | 'invoice_share_view'
+  | 'calendar_feed'
+  /** Publiczne API (`lib/api/v1/auth.ts`): każde żądanie z adresu i każde z klucza. */
+  | 'api_v1_ip'
+  | 'api_v1_key'
+  /** Publiczne API: zapis (POST) kluczem, osobno od zapytań (krok 7.1, część 2). */
+  | 'api_v1_write';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

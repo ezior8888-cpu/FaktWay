@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 
+import { WEBHOOK_EVENT_TYPES } from '@/lib/webhooks/types';
 import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
@@ -245,6 +246,12 @@ export const remindersSendRequested = jobEvent<{
  */
 export const invoicePaymentReceived = jobEvent<{
     invoiceId: string;
+    /**
+     * Wpłata z księgi `payments` (RPC `record_invoice_payment` / `mark_invoice_paid`).
+     * Wysyłana tylko po „zapisano”, z kluczem `payment:<paymentId>`. Zdarzenia sprzed
+     * kroku 8.1 jej nie mają: runner tylko anuluje przypomnienia, bez pusha.
+     */
+    paymentId?: string;
   }>('invoice/payment.received');
 
 /**
@@ -281,6 +288,16 @@ export const exportsGenerateRequested = jobEvent<{
     exportJobId: string;
   }>('exports/generate.requested');
 
+/**
+ * Archiwum dokumentów firmy albo paczka na kontrolę (plan kompletnej
+ * aplikacji, krok 6.4, migracja 00178): zadanie składa ZIP dla zlecenia
+ * z `document_archives`.
+ */
+export const documentArchiveRequested = zodEvent(
+  'archive/document.requested',
+  z.object({ archiveId: z.string().uuid('archiveId musi być UUID') }),
+);
+
 /** Paczka dla księgowego — generowanie ZIP / e‑mail Co‑Pilot. */
 export const exportsCoPilotSendPackage = jobEvent<{
       tenantId: string;
@@ -307,6 +324,16 @@ export const emailTrialDay8 = zodEvent('email/trial-day-8', TrialOnboardingEmail
 export const emailTrialDay12 = zodEvent('email/trial-day-12', TrialOnboardingEmailPayloadSchema);
 export const emailTrialDay14 = zodEvent('email/trial-day-14', TrialOnboardingEmailPayloadSchema);
 
+/**
+ * Zapisano logowanie (`auth.login`) albo rejestrację z otwartą sesją. Worker
+ * sprawdza, czy to nowe urządzenie, i wtedy wysyła mail bezpieczeństwa
+ * (krok 8.5, część 2). Klucz zlecenia: `new-login/<sessionId>`.
+ */
+export const authLoginCompleted = zodEvent(
+  'auth/login.completed',
+  z.object({ userId: z.string().uuid(), sessionId: z.string().uuid() }),
+);
+
 /** OCR zdjęcia wydatku — worker aktualizuje `ocr_jobs` i tworzy `expenses`. */
 export const ocrProcessPhotoRequested = zodEvent(
   'ocr/process-photo',
@@ -315,3 +342,20 @@ export const ocrProcessPhotoRequested = zodEvent(
     tenantId: z.string().uuid('tenantId musi być UUID'),
   }),
 );
+
+/**
+ * Zdarzenie webhooka publicznego API (krok 7.1, część 3, 00187): w firmie
+ * stało się coś, o czym programy klienta mogą chcieć wiedzieć. Job sprawdza
+ * flagę i webhooki firmy, buduje treść bez danych osobowych, tworzy dostawy
+ * (UNIQUE na webhook i zdarzenie) i od razu próbuje je wysłać. Nadawcy:
+ * `emitWebhookEvent` (`lib/webhooks/emit.ts`); „faktura przyjęta w KSeF”
+ * przychodzi z trzeciej kolejki `invoice/submit.succeeded`.
+ */
+export const WebhookEventEmittedSchema = z.object({
+  tenantId: z.string().uuid('tenantId musi być UUID'),
+  type: z.enum(WEBHOOK_EVENT_TYPES),
+  /** Faktura przyjęta, faktura otrzymana ze skrzynki (jej koszt) albo wpłata. */
+  entityId: z.string().uuid('entityId musi być UUID'),
+});
+
+export const webhookEventEmitted = zodEvent('webhooks/event.emitted', WebhookEventEmittedSchema);

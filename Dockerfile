@@ -102,7 +102,11 @@ ENV NEXT_OUTPUT=standalone \
 # build padał przy 3584 MB nawet bez `widenClientFileUpload`; przy 4096 MB
 # przechodzi (lokalnie szczyt RSS ~6.7 GB). Swap app-1 22.10: 8 GB, w spoczynku
 # zajęte ~0.8 GB. Gdy build zginie z exit 137 — dołóż swap (pułapki w AGENTS.md).
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+# 11.11.2026: 4096 → 5120 MB. Gałąź zbiorcza z 30 PR przekracza 4096 MB
+# (CI: exit 134, „heap out of memory”, 3592 z 4094 MB po ok. 130 s). Na app-1
+# build zużyje więcej swapu: przed wdrożeniem `swapon --show` (co najmniej 10 GB)
+# albo budowa drogą GitHub Actions (runbook wdrozenie-produkcji.md).
+ENV NODE_OPTIONS="--max-old-space-size=5120"
 RUN pnpm build
 
 # ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──

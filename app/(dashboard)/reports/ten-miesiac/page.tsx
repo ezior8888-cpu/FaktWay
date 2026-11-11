@@ -224,8 +224,8 @@ function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
   );
 }
 
-/** Symbol formularza na przelewie podatku: PPE przy ryczałcie, PIT-36 przy skali, PIT-36L przy liniowym (VAT: VAT-7). */
-const SYMBOL: Readonly<Record<'ryczalt' | 'skala' | 'liniowy', string>> = { ryczalt: 'PPE', skala: 'PIT-36', liniowy: 'PIT-36L' };
+/** Symbol na przelewie na mikrorachunek według wykazu MF (Dz.U. 2025 poz. 1305, część II i III): PPE przy ryczałcie, PIT (zaliczka miesięczna) przy skali, PPL (stawka 19 %) przy liniowym, JPK-V7M przy VAT. PIT-36 i PIT-36L to zeznania roczne. */
+const SYMBOL: Readonly<Record<'ryczalt' | 'skala' | 'liniowy', string>> = { ryczalt: 'PPE', skala: 'PIT', liniowy: 'PPL' };
 
 function daneDoPrzelewu(
   rodzaj: RodzajRozliczenia,
@@ -238,7 +238,7 @@ function daneDoPrzelewu(
   if (rodzaj === 'ryczalt' || rodzaj === 'pit' || rodzaj === 'vat') {
     if (nip === null) return 'Nie udało się odczytać NIP firmy, więc mikrorachunku teraz nie pokazujemy; strona spróbuje ponownie przy następnym otwarciu.';
     if (!mikro) return 'Mikrorachunek podatkowy wylicza się z NIP firmy, a NIP jest w Ustawieniach, w danych firmy.';
-    const symbol = rodzaj === 'vat' ? 'VAT-7' : SYMBOL[forma];
+    const symbol = rodzaj === 'vat' ? 'JPK-V7M' : SYMBOL[forma];
     return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza ${symbol}, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
   }
   if (!nrs) return 'Numer rachunku składkowego jest w PUE ZUS; można go zapisać w zakładce „Ustawienia podatkowe”.';

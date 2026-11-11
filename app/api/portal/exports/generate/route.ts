@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
 
 import { hashToken } from '@/lib/accountant/tokens';
+import { trustedClientIp } from '@/lib/auth/client-ip';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import { exportScopeFor } from '@/lib/exports/export-scope';
@@ -102,9 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Brak uprawnień' }, { status: 403 });
     }
 
-    const fwd = req.headers.get('x-forwarded-for');
-    const clientIp =
-      fwd?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? null;
+    const clientIp = trustedClientIp(req.headers);
     const userAgent = req.headers.get('user-agent') ?? '';
 
     // Portal pobiera pełny zakres formatu — reguła ta sama co w runnerze (FIR-01).

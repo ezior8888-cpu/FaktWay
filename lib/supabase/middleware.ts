@@ -4,6 +4,7 @@ import { getPanelMfaState } from '@/lib/auth/panel-mfa';
 import { PASSKEY_SESSION_COOKIE } from '@/lib/auth/passkey/session-marker';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
+import { BUYER_PAGE_HEADERS, isBuyerInvoicePath } from '@/lib/invoice-share/policy';
 import { isTelemetryTunnelPath } from '@/lib/telemetry-tunnel';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
@@ -83,6 +84,10 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   // stan wdrożenia dla workflowu `obrazy.yml`; trasa sama sprawdza token
   // (plan usprawnień 3.1)
   { path: '/api/ops/deploy-state', match: 'exact' },
+  // Adres kalendarza klienta (krok 7.3): iCal pod niezgadywalnym tokenem
+  // w ścieżce, więc `prefix`. Odpowiedź zależy od tokenu, nie od sesji; trasa
+  // sama ustawia `Cache-Control: private` i nie dostaje ciasteczek z proxy.
+  { path: '/api/kalendarz', match: 'prefix' },
   // Pliki techniczne (plan skalowania, sesja 2). Przeglądarka sprawdza `/sw.js`
   // przy pełnych nawigacjach w zasięgu workera i pobiera manifest, a roboty
   // wyszukiwarek pobierają `robots.txt` i `sitemap.xml`. Żaden nie zależy od
@@ -94,12 +99,29 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   { path: '/sitemap.xml', match: 'exact' },
 ];
 
+/**
+ * Publiczne API (plan kompletnej aplikacji, krok 7.1): `/api/v1/…` każda
+ * trasa uwierzytelnia sama, kluczem API z nagłówka `Authorization: Bearer`
+ * (`lib/api/v1/auth.ts`), a `/api/docs` to statyczna dokumentacja. Proxy nie
+ * tworzy dla nich klienta Supabase: sesja z ciasteczek nie otwiera w API
+ * niczego i nie jest tu odświeżana. Łącze MCP (krok 7.2, `/api/mcp`) działa
+ * na tych samych kluczach. Tylko te prefiksy (dokładnie albo z `/`);
+ * `/api/v10`, `/api/v1x` i `/api/docsy` zostają za bramką sesji.
+ */
+const API_KEY_PREFIXES = ['/api/v1', '/api/docs', '/api/mcp'] as const;
+
+export function isPublicApiPath(pathname: string): boolean {
+  return API_KEY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 export function isNoSessionPath(pathname: string): boolean {
   // Tunele PostHog i Sentry mają własny mechanizm (`lib/telemetry-tunnel.ts`,
   // wołany w `proxy.ts` przed `updateSession`: zdejmuje też ciasteczka).
   // Delegacja zamiast drugiego wpisu — jedna lista, żeby obie ścieżki nie
   // rozjechały się przy następnej zmianie przepisań w `next.config.ts`.
   if (isTelemetryTunnelPath(pathname)) return true;
+  // Publiczne API ma własne uwierzytelnienie kluczem (`isPublicApiPath`).
+  if (isPublicApiPath(pathname)) return true;
   return NO_SESSION_PATHS.some(({ path, match }) =>
     pathname === path || (match === 'prefix' && pathname.startsWith(`${path}/`)),
   );
@@ -123,6 +145,9 @@ export function isPublicPath(pathname: string): boolean {
   if (isNoSessionPath(pathname)) return true;
   if (isMarketingPath(pathname)) return true;
   if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
+  // Strona faktury dla nabywcy (krok 2.10): tylko `/faktura/<token>` i pliki
+  // pod nią; sam `/faktura` i podobne początki zostają za logowaniem.
+  if (isBuyerInvoicePath(pathname)) return true;
   if (pathname.startsWith('/api/')) {
     return PUBLIC_API_EXACT.some((p) => pathname === p) || PUBLIC_API_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
@@ -359,6 +384,12 @@ export async function updateSession(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
     });
     return res;
+  }
+
+  // Strona nabywcy niesie dane faktury, a token jest w adresie: bez cache,
+  // bez indeksowania i bez Referer. Ścieżka publiczna dochodzi tylko tutaj.
+  if (isBuyerInvoicePath(path)) {
+    for (const [name, value] of Object.entries(BUYER_PAGE_HEADERS)) supabaseResponse.headers.set(name, value);
   }
 
   return supabaseResponse;

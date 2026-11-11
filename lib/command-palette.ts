@@ -1,6 +1,7 @@
 import {
   RiAddLine,
   RiAlarmWarningLine,
+  RiBankLine,
   RiBook2Line,
   RiDownload2Line,
   RiFileAddLine,
@@ -136,6 +137,15 @@ export function buildPaletteNavEntries(): PaletteEntry[] {
       href: '/expenses',
       icon: RiAddLine,
       keywords: ['Dodaj wydatek', 'koszt', 'paragon', 'zdjęcie'],
+    },
+    {
+      // Plan Finora N4: „Importuj wyciąg” wchodzi razem z importem wyciągu (krok 3.2).
+      group: PALETTE_ACTIONS_GROUP,
+      label: 'Importuj wyciąg',
+      value: `${PALETTE_ACTIONS_GROUP}:Importuj wyciąg`,
+      href: '/bank',
+      icon: RiBankLine,
+      keywords: ['Importuj wyciąg', 'bank', 'wyciąg', 'MT940', 'wpłaty'],
     },
   ];
   return [...nav, ...actions];

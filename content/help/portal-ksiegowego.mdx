@@ -3,10 +3,10 @@ title: "Portal księgowego"
 category: "zespol"
 order: 3
 summary: "Jak dać biuru rachunkowemu dostęp do danych bez zakładania pełnego konta."
-updated: "2026-11-02"
+updated: "2026-11-09"
 ---
 
-Portal księgowego to dostęp z linku, bez zakładania konta w FaktWay. Księgowa niczego nie zmienia w Twoich danych: ogląda faktury i, jeśli na to pozwolisz, pobiera dokumenty.
+Portal księgowego to dostęp z linku, bez zakładania konta w FaktWay. Księgowa niczego nie zmienia w Twoich danych: ogląda faktury i koszty, a jeśli na to pozwolisz, pobiera dokumenty.
 
 ## Po co osobny portal
 
@@ -18,15 +18,19 @@ W **Ustawienia → Księgowa** tworzysz link do portalu, wybierasz poziom dostę
 
 ## Poziomy dostępu
 
-- **Tylko podgląd**: poziom domyślny. Księgowa widzi listę faktur, ale niczego nie pobiera.
-- **Podgląd + pobieranie XML**: księgowa może też pobrać XML faktury oraz za wybrany miesiąc JPK_FA(4) i KPiR w Excelu.
+- **Tylko podgląd**: poziom domyślny. Księgowa widzi listę faktur i listę kosztów i może otworzyć w przeglądarce zdjęcie albo XML dokumentu kosztu. Przycisków pobierania nie ma.
+- **Podgląd + pobieranie XML**: księgowa może też pobrać XML faktury, zdjęcie albo XML dokumentu kosztu oraz za wybrany miesiąc JPK_FA(4) i KPiR w Excelu.
 
 Chcesz, żeby księgowa pobierała dokumenty? Wybierz drugi poziom przy tworzeniu linku.
 
 ## Co widzi księgowa
 
-- listę 100 najnowszych faktur (starszych w portalu nie ma),
-- przy dostępie z pobieraniem: XML faktury oraz JPK_FA(4) i KPiR (Excel) za wybrany miesiąc.
+- wszystkie faktury z KSeF (sprzedaż i zakupy), od najnowszych, po 50 na stronie,
+- w zakładce Koszty: koszty z wybranego miesiąca z datą, dostawcą, numerem, numerem KSeF, kwotami netto, VAT i brutto, kolumną KPiR i informacją, czy koszt jest już opisany,
+- przy koszcie: zdjęcie dokumentu albo XML faktury zakupu z KSeF, jeśli FaktWay go ma,
+- przy dostępie z pobieraniem: XML faktury, pliki kosztów oraz JPK_FA(4) i KPiR (Excel) za wybrany miesiąc.
+
+Plik kosztu otwiera się przez adres ważny około minuty, więc skopiowany link do samego pliku szybko przestaje działać. Gdy z jednego adresu internetowego przyjdzie bardzo dużo otwarć w krótkim czasie, portal prosi o kilka minut przerwy.
 
 W portalu nie ma uniwersalnego CSV ani PDF-ów faktur. Plik CSV wygenerujesz Ty w sekcji raportów i prześlesz go księgowej. Eksporty do Comarch Optima i Subiekta są w przygotowaniu, a Symfonia i WAPRO wczytują JPK_FA.
 

@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getExpensePhotoUrl } from '@/lib/storage/expenses';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 
+import { ExpenseThread } from './_components/expense-thread';
+
 export const dynamic = 'force-dynamic';
 
 export default async function ExpenseDetailPage({
@@ -43,5 +45,10 @@ export default async function ExpenseDetailPage({
     photoUrl = await getExpensePhotoUrl(expense.source_file_path, expense.tenant_id);
   }
 
-  return <ExpenseEditForm expense={expense} photoUrl={photoUrl} ksefCurrency={ksefCurrency} />;
+  return (
+    <>
+      <ExpenseEditForm expense={expense} photoUrl={photoUrl} ksefCurrency={ksefCurrency} />
+      <ExpenseThread expenseId={expense.id} />
+    </>
+  );
 }

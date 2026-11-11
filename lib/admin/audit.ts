@@ -120,6 +120,8 @@ export const KNOWN_AUDIT_ACTIONS = [
   'auth.password_reset_requested',
   'auth.passkey_added',
   'auth.passkey_removed',
+  'auth.session_revoked',
+  'auth.other_sessions_revoked',
   // Tenants
   'tenant.created',
   'tenant.updated',
@@ -136,7 +138,15 @@ export const KNOWN_AUDIT_ACTIONS = [
   'invoice.submit_failed',
   'invoice.upo_downloaded',
   'invoice.xml_downloaded',
+  'invoice.share_link_created',
+  'invoice.share_link_revoked',
   'invoice.resubmit_requested',
+  // Noty obciążeniowe i uznaniowe (00193)
+  'accounting_note.draft_created',
+  'accounting_note.draft_updated',
+  'accounting_note.draft_deleted',
+  'accounting_note.issued',
+  'accounting_note.emailed',
   // KSeF integration
   'ksef.credentials_uploaded',
   'ksef.credentials_removed',
@@ -154,10 +164,30 @@ export const KNOWN_AUDIT_ACTIONS = [
   'ksef.history.paused',
   'ksef.history.resumed',
   'ksef.history.operator',
+  // Adres kalendarza (krok 7.3)
+  'calendar_feed.created',
+  'calendar_feed.regenerated',
+  'calendar_feed.deleted',
+  // Kasa (00194)
+  'cash_register.opened',
+  'cash_register.opening_changed',
+  'cash_document.issued',
+  'cash_document.corrected',
   // Accountants
+  'accountant.expense_file_viewed',
+  'accountant.expense_file_downloaded',
   'accountant.token_created',
   'accountant.token_revoked',
   'accountant.access_used',
+  // Publiczne API (00181)
+  'api_key.created',
+  'api_key.revoked',
+  'api_key.used',
+  // Webhooki publicznego API (00187)
+  'webhook.created',
+  'webhook.deleted',
+  'webhook.enabled',
+  'webhook.auto_disabled',
   // Admin
   'admin.user.suspended',
   'admin.user.unsuspended',
