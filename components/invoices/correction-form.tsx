@@ -500,18 +500,14 @@ export function CorrectionInvoiceForm({
                   <tr
                     key={inv.id}
                     className="cursor-pointer border-b border-white/55 transition-colors last:border-0 hover:bg-foreground/[0.02] dark:border-white/[0.07]"
-                    role="button"
-                    tabIndex={0}
+                    // Klik myszą w cały wiersz zostaje; dla klawiatury i czytnika
+                    // wybór robi przycisk w pierwszej komórce (WCAG 4.1.2, A-13).
                     onClick={() => void handleSelectParentRow(inv)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        void handleSelectParentRow(inv);
-                      }
-                    }}
                   >
                     <td className="px-6 py-4 font-mono text-sm">
-                      {inv.internal_number ?? inv.id.slice(0, 8)}
+                      <button type="button" className="font-mono">
+                        {inv.internal_number ?? inv.id.slice(0, 8)}
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">{inv.issue_date}</td>
                     <td className="px-6 py-4">
