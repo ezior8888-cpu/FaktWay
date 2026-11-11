@@ -54,7 +54,7 @@ import { emitWebhookEvent } from '@/lib/webhooks/emit';
  * Funkcje z 00158. `types/database.ts` generujemy z produkcji dopiero po wgraniu
  * migracji (AGENTS.md, „Typy bazy”), do tego czasu klient widzi je przez ten kształt.
  */
-type RpcResult = PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>;
+type RpcResult = PromiseLike<{ data: unknown; error: { code?: string; message: string; hint?: string | null } | null }>;
 interface ManualPaymentRpc {
   rpc(fn: 'mark_invoice_paid', args: { p_invoice_id: string; p_paid_on: string | null }): RpcResult;
   rpc(fn: 'undo_invoice_paid', args: { p_invoice_id: string }): RpcResult;
@@ -323,6 +323,11 @@ export async function voidInvoicePaymentAction(paymentId: string): Promise<VoidI
   const { data, error } = await (supabase as unknown as PaymentEntryRpc).rpc('void_invoice_payment', {
     p_payment_id: paymentId,
   });
+  // Kasa (krok 3.7, 00194): wpłata z aktywnym dowodem KP. Wyzwalacz przerywa cofnięcie
+  // komunikatem `cash_document_active` z numerem dowodu w HINT; cofa się ją korektą KP.
+  if (error?.message === 'cash_document_active') {
+    return { success: false, error: voidPaymentRefusalText('cash_document', { cashDocumentNumber: error.hint ?? null }) };
+  }
   if (error || typeof data !== 'object' || data === null) {
     console.error('[invoice-payments] void_invoice_payment', error?.code);
     return { success: false, error: VOID_PAYMENT_FAILED };

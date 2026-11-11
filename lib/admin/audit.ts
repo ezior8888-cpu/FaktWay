@@ -168,6 +168,11 @@ export const KNOWN_AUDIT_ACTIONS = [
   'calendar_feed.created',
   'calendar_feed.regenerated',
   'calendar_feed.deleted',
+  // Kasa (00194)
+  'cash_register.opened',
+  'cash_register.opening_changed',
+  'cash_document.issued',
+  'cash_document.corrected',
   // Accountants
   'accountant.expense_file_viewed',
   'accountant.expense_file_downloaded',

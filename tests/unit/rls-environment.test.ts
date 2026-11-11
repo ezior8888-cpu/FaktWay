@@ -129,6 +129,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-komentarze-kosztow.test.ts',
       // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe.
       'tests/rls-noty.test.ts',
+      // 00194 (plan kompletnej aplikacji, krok 3.7): kasa, dowody KP i KW i raport kasowy.
+      'tests/rls-kasa.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

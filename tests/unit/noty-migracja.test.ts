@@ -104,9 +104,10 @@ describe('migracja 00193: noty obciążeniowe i uznaniowe', () => {
     expect(outsideBodies).toMatch(/CREATE TRIGGER \w+\s+BEFORE UPDATE ON public\.accounting_notes/);
   });
 
-  it('rejestr numerów: 00193 zajęte w tym PR, „następny wolny” 00194', () => {
+  it('rejestr numerów: 00193 zajęte w tym PR, „następny wolny” 00195 (00194 zajmuje kasa #613)', () => {
     const registry = readFileSync('docs/koordynacja/CLAUDE-DO-CODEXA.md', 'utf8');
     expect(registry).toMatch(/^\| 00193 \| Claude \(plan kompletnej aplikacji, krok 2\.9/m);
-    expect(registry).toMatch(/^\| \*\*00194\*\* \| — \| następny wolny/m);
+    expect(registry).toMatch(/^\| 00194 \| Claude \(plan kompletnej aplikacji, krok 3\.7/m);
+    expect(registry).toMatch(/^\| \*\*00195\*\* \| — \| następny wolny/m);
   });
 });

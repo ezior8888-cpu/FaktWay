@@ -120,6 +120,9 @@ export default defineConfig({
       // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe; izolacja firm,
       // rola jak przy fakturach, numer z bazy bez dubli naraz, wystawionej nie zmienia nikt, historia wysyłek.
       'tests/rls-noty.test.ts',
+      // 00194 (plan kompletnej aplikacji, krok 3.7): kasa; numer KP i KW z bazy pod blokadą serii,
+      // stan kasy nie poniżej zera, korekta (storno), wpłata do faktury przez 00176, RLS i niezmienność.
+      'tests/rls-kasa.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
