@@ -6,6 +6,7 @@ import { listaDoZaplaty, type WierszKosztuDoZaplaty } from '@/lib/expenses/do-za
 import { canChangeExpensePayment } from '@/lib/expenses/zaplata-kosztu';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { loadReceiptMatchView } from '@/lib/expenses/receipt-invoice-match-view';
 import { createClient } from '@/lib/supabase/server';
 import { getExpensePhotoUrl } from '@/lib/storage/expenses';
 import { isTenantStoragePath } from '@/lib/storage/tenant-path';
@@ -41,6 +42,9 @@ export default async function ExpenseDetailPage({
     ksefInvoice = invoice ?? null;
   }
 
+  // Krok 1.3 (00175): faktura do paragonu i paragon z NIP (ostrzeżenie albo połączenie).
+  const receiptMatch = await loadReceiptMatchView(supabase, expense.tenant_id, expense.id);
+
   let photoUrl: string | null = null;
   if (
     expense.source === 'ocr_photo' &&
@@ -55,6 +59,7 @@ export default async function ExpenseDetailPage({
       expense={expense}
       photoUrl={photoUrl}
       ksefCurrency={ksefCurrency}
+      receiptMatch={receiptMatch}
       paymentSection={await paymentSection(expense, ksefInvoice)}
     />
   );
