@@ -64,6 +64,7 @@ export default async function InvoiceDetailPage({
       vat_total,
       gross_total,
       currency,
+      recurring_invoice_id,
       ksef_environment,
       paid_amount,
       paid_at,
@@ -224,6 +225,7 @@ export default async function InvoiceDetailPage({
       invoice_type: invoice.invoice_type as string | null,
       ksef_status: invoice.ksef_status as string | null,
       currency: invoice.currency as string | null,
+      recurring_invoice_id: (invoice.recurring_invoice_id as string | null) ?? null,
     }),
     // Telefon nie ma menu „⋯” tabeli, więc „Duplikuj” stoi też w karcie „Dokument”.
     can_duplicate: canDuplicateInvoice({
