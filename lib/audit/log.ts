@@ -58,6 +58,12 @@ export type AuditAction =
   // (kwota, data wykonania, MPP), pominięcia z kodem powodu i skrót SHA-256 pliku. Plik niczego nie oznacza.
   | 'expense.whitelist_checked'
   | 'expense.transfer_file_created'
+  // Identyfikator zbiorczy KSeF przy kilku fakturach jednego dostawcy (00191, krok 1.4, część 2).
+  // Zapisuje baza (RPC `complete_ksef_collective_identifier` i `fail_ksef_collective_identifier`)
+  // w transakcji ze zmianą: identyfikator, NIP sprzedawcy, numery KSeF faktur, środowisko, kod błędu.
+  // Aplikacja zapisuje `created` sama tylko wtedy, gdy KSeF nadał numer, a zapis w bazie się nie udał.
+  | 'expense.collective_identifier_created'
+  | 'expense.collective_identifier_failed'
   // Agent FLO — wykonanie propozycji zatwierdzonej kliknięciem człowieka.
   // Metadane niosą identyfikator żetonu zgody i tytuł, który klient widział
   // na karcie: to jest odpowiedź na reklamację „ja tego nie klikałem”.
@@ -130,6 +136,8 @@ export type AuditAction =
   | 'ksef.upo.download'
   | 'ksef.inbox.poll'
   | 'ksef.auth.token'
+  // `POST /collective-identifiers` (krok 1.4, część 2): każde wywołanie, przez ksefFetch.
+  | 'ksef.collective_identifier.generate'
   // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): zapytanie
   // o metadane (każde, przez ksefFetch), jeden zbiorczy wiersz pobrań na
   // przebieg (liczba + do 10 numerów KSeF) i wyłącznik właściciela firmy.

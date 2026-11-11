@@ -8,6 +8,8 @@ import { Alert, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
 import { listaDoZaplaty } from '@/lib/expenses/do-zaplaty';
 import { wczytajKosztyDoZaplaty } from '@/lib/expenses/do-zaplaty-dane';
+import { grupyDoIdentyfikatora, mozeTworzycIdentyfikator } from '@/lib/expenses/identyfikator-zbiorczy';
+import { wczytajZapisaneIdentyfikatory } from '@/lib/expenses/identyfikator-zbiorczy-dane';
 import { readTenantBankAccount } from '@/lib/expenses/rachunek-firmy';
 import { monthRange, parseExpenseMonth } from '@/lib/expenses/month';
 import { canChangeExpensePayment } from '@/lib/expenses/zaplata-kosztu';
@@ -58,27 +60,36 @@ export default async function ExpensesPage({
         : Promise.resolve({ blad: 'nie ustawiono środowiska KSeF aplikacji' } as const),
       readTenantBankAccount(supabase, tenantId).catch(() => null),
     ]);
+    const odczyt = 'blad' in dane ? dane : { lista: listaDoZaplaty(dane.wiersze, dzis), obcieta: dane.obcieta };
+    // Krok 1.4, część 2: grupy faktur jednego dostawcy i zapisane dla nich
+    // identyfikatory zbiorcze (00191). Błąd odczytu to brak zapisanych: przycisk
+    // i tak nie utworzy drugiego identyfikatora (rezerwacja w bazie go odda).
+    const nipyGrup = 'lista' in odczyt ? [...new Set(grupyDoIdentyfikatora(odczyt.lista.pozycje).map((g) => g.nip))] : [];
+    const zapisane =
+      srodowisko && nipyGrup.length > 0 ? await wczytajZapisaneIdentyfikatory(supabase, tenantId, srodowisko, nipyGrup) : [];
     return (
       <div className="ff-tab-panel flex w-full flex-1 flex-col pt-2">
         <h1 className="sr-only">Wydatki do zapłaty</h1>
         <div className="flex flex-wrap items-center gap-2 px-4 pb-2">
           {expensesViewNav('do-zaplaty')}
         </div>
-        {'blad' in dane ? (
+        {'blad' in odczyt ? (
           <div className="px-4 pt-2">
             <Alert variant="destructive">
               <AlertTitle>
-                Nie udało się pobrać kosztów do zapłaty: {dane.blad}. Odśwież stronę, a jeśli to nie pomoże, napisz do pomocy FaktWay.
+                Nie udało się pobrać kosztów do zapłaty: {odczyt.blad}. Odśwież stronę, a jeśli to nie pomoże, napisz do pomocy FaktWay.
               </AlertTitle>
             </Alert>
           </div>
         ) : (
           <KosztyDoZaplaty
-            lista={listaDoZaplaty(dane.wiersze, dzis)}
+            lista={odczyt.lista}
             dzis={dzis}
             mozeOznaczac={canChangeExpensePayment(role)}
-            obcieta={dane.obcieta}
+            obcieta={odczyt.obcieta}
             rachunekFirmy={rachunekFirmy}
+            grupy={grupyDoIdentyfikatora(odczyt.lista.pozycje, zapisane)}
+            mozeTworzycIdentyfikator={mozeTworzycIdentyfikator(role)}
           />
         )}
       </div>
