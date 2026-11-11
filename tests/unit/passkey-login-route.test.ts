@@ -14,8 +14,9 @@ const h = vi.hoisted(() => ({
   createClient: vi.fn(), createAdminClient: vi.fn(), cookies: vi.fn(), headers: vi.fn(),
   audit: vi.fn(), track: vi.fn(),
   getUserById: vi.fn(), generateLink: vi.fn(),
-  verifyOtp: vi.fn(), getClaims: vi.fn(), signOut: vi.fn(),
+  verifyOtp: vi.fn(), getClaims: vi.fn(), signOut: vi.fn(), sendJob: vi.fn(),
 }));
+vi.mock('@/lib/jobs/enqueue', () => ({ sendJobEvent: h.sendJob }));
 vi.mock('next/headers', () => ({ cookies: h.cookies, headers: h.headers }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: h.createClient, createAdminClient: h.createAdminClient }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: h.audit }));
@@ -192,13 +193,20 @@ describe('POST /api/auth/passkey/login/verify', () => {
     // Logowanie passkey liczy się jak „zapamiętaj mnie”.
     expect(cookieWrites.get('ksef.remember_me')?.options).toMatchObject({ httpOnly: true, maxAge: 90 * 24 * 60 * 60 });
 
+    // Krok 8.5: identyfikator sesji ze zweryfikowanych claimów łączy wpis z listą urządzeń (00174).
     expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'auth.login', userId: USER_ID, tenantId: 'tenant-1',
-      metadata: expect.objectContaining({ method: 'passkey' }),
+      metadata: { method: 'passkey', passkey_id: 'passkey-1', session_id: SESSION_ID },
     }));
     expect(h.track).toHaveBeenCalledWith(expect.objectContaining({
       userId: USER_ID, event: 'login_completed', properties: { method: 'passkey' },
     }));
+    // Krok 8.5, część 2: sprawdzenie nowego urządzenia z kluczem równym sesji.
+    expect(h.sendJob).toHaveBeenCalledExactlyOnceWith({
+      name: 'auth/login.completed',
+      data: { userId: USER_ID, sessionId: SESSION_ID },
+      singletonKey: `new-login/${SESSION_ID}`,
+    });
 
     // Licznik i ostatnie użycie.
     expect(db.tables.user_passkeys![0]).toMatchObject({ counter: 1, backed_up: true });

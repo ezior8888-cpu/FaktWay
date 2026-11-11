@@ -25,8 +25,11 @@
   (`$LOCAL_SUPABASE_REF`) wygasł; nie wracaj do niego i nie celuj devem w db-1.
 - **Build padający z `exit code 137` to zabójca OOM, nie błąd kodu.** `pnpm build`
   na `app-1` potrzebuje więcej pamięci, niż maszyna ma fizycznie: pułap sterty
-  w `Dockerfile` to 3072 MB, a realnie wolne jest ~2.2 GB (sam `dockerd` bierze
+  w `Dockerfile` to 5120 MB (od 11.11.2026; wcześniej 4096), a realnie wolne jest ~2.2 GB (sam `dockerd` bierze
   ~775 MB). Build jedzie na swapie i przy udanym przebiegu zjada go **4.5 GB**.
+  Przy 5120 MB build na `app-1` zużyje więcej swapu, więc przed wdrożeniem trzeba
+  sprawdzić `swapon --show` (zalecane co najmniej 10 GB) albo budować drogą
+  GitHub Actions.
   **`app-1` musi mieć ≥ 8 GB swapu** — przy 4 GB wdrożenie ginie. Sprawdzenie:
 
   ```bash

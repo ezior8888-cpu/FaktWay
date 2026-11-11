@@ -23,6 +23,7 @@ import {
   requireKsefVerification,
 } from '@/lib/auth/ksef-verification-guard';
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
+import { getGlobalFlagForExecution } from '@/lib/feature-flags/global-flags';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
@@ -59,10 +60,15 @@ export type KsefSubmitEnqueueResult =
   | { ok: false; error: string; code?: 'KSEF_NOT_VERIFIED' | 'MFA_REQUIRED' };
 
 export interface EnqueueKsefSubmitParams {
-  /** Klient sesji — tylko do odczytów wołającego; status faktury zmienia RPC serwera. */
+  /**
+   * Klient sesji — tylko do odczytów wołającego; status faktury zmienia RPC serwera.
+   * Przy kluczu API (`companyKey`) klient z tokenem klucza: z niego czytamy
+   * weryfikację KSeF firmy (RLS, 00184).
+   */
   supabase: SupabaseClient;
   tenantId: string;
-  userId: string;
+  /** Konto, które zleca wysyłkę; `null` tylko przy kluczu API (`companyKey`). */
+  userId: string | null;
   invoiceId: string;
   /** NIP tenanta (jak w dotychczasowych eventach Inngest). */
   nip: string;
@@ -75,6 +81,43 @@ export interface EnqueueKsefSubmitParams {
   internalNumberForAudit?: string;
   /** Domyślnie pierwsza wysyłka szkicu; `requeue` = ponowna wysyłka z `failed` (K3). */
   mode?: KsefSendMode;
+  /**
+   * Klucz API firmy zamiast konta (krok 7.1, część 2): wysyłka bez sesji
+   * użytkownika. Audyt ma `user_id` NULL i identyfikator klucza, a 2FA
+   * (`requireMfaForSensitive`) klucz nie przejdzie, więc wtedy odmowa.
+   */
+  companyKey?: CompanyKeySendActor;
+}
+
+/** Klucz API, którym program klienta zleca wysyłkę (`POST /api/v1/invoices`). */
+export interface CompanyKeySendActor {
+  id: string;
+  prefix: string;
+  /** `X-Request-Id` żądania API: łączy wpis z `api_key.used` i `invoice.draft_created`. */
+  requestId: string;
+}
+
+/** Odmowa wysyłki kluczem API, gdy FaktWay wymaga 2FA przy wysyłce (AUD-65, flaga `requireMfaForSensitive`). */
+export const COMPANY_KEY_MFA_REFUSAL_MESSAGE =
+  'FaktWay wymaga teraz weryfikacji dwuetapowej przy wysyłce do KSeF, a klucz API jej nie przejdzie. Szkic jest zapisany: wyślij go w aplikacji FaktWay.';
+
+/** Metadane audytu zlecenia kluczem API (puste przy koncie). */
+function companyKeyAudit(companyKey: CompanyKeySendActor | undefined): Record<string, unknown> {
+  return companyKey
+    ? { source: 'api_v1', api_key_id: companyKey.id, key_prefix: companyKey.prefix, request_id: companyKey.requestId }
+    : {};
+}
+
+/**
+ * Czy klucz API ma odmówić wysyłki z powodu 2FA. Ta sama flaga i ta sama reguła
+ * błędu odczytu co `assertSensitiveMfa`: to dodatkowa warstwa, nie wyłącznik.
+ */
+async function companyKeyNeedsMfa(): Promise<boolean> {
+  try {
+    return await getGlobalFlagForExecution('requireMfaForSensitive');
+  } catch {
+    return false;
+  }
 }
 
 function credentialsBuffer(raw: unknown): Buffer {
@@ -201,19 +244,28 @@ async function decideKsefSubmitEnqueue(
   }
 
   // AAL2 właściciela/admina, gdy flaga `requireMfaForSensitive` jest włączona (AUD-65).
-  try {
-    await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit');
-  } catch (e) {
-    if (e instanceof SensitiveMfaRequiredError) {
-      return { ok: false, code: 'MFA_REQUIRED', refusal: 'MFA_REQUIRED', error: e.message };
+  // Klucz API nie ma sesji ani kodu: przy włączonej fladze odmawia (szkic zostaje).
+  if (params.companyKey) {
+    if (await companyKeyNeedsMfa()) {
+      return { ok: false, code: 'MFA_REQUIRED', refusal: 'MFA_REQUIRED', error: COMPANY_KEY_MFA_REFUSAL_MESSAGE };
     }
-    throw e;
+  } else {
+    if (!userId) throw new Error('Wysyłka do KSeF bez konta i bez klucza API');
+    try {
+      await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit');
+    } catch (e) {
+      if (e instanceof SensitiveMfaRequiredError) {
+        return { ok: false, code: 'MFA_REQUIRED', refusal: 'MFA_REQUIRED', error: e.message };
+      }
+      throw e;
+    }
   }
 
   const nipNorm = nip.replace(/\s+/g, '');
 
   try {
-    await requireKsefVerification(tenantId);
+    // Klucz API: znacznik czyta token klucza (tylko jego firma, 00184), nie sesja z ciasteczek.
+    await requireKsefVerification(tenantId, params.companyKey ? params.supabase : undefined);
   } catch (e) {
     if (e instanceof KsefNotVerifiedError) {
       return {
@@ -323,6 +375,7 @@ async function decideKsefSubmitEnqueue(
         kind: auditKind,
         mode: 'offline_queued',
         internalNumber: internalNumberForAudit ?? invoice.internalNumber,
+        ...companyKeyAudit(params.companyKey),
       },
     });
 
@@ -381,6 +434,7 @@ async function decideKsefSubmitEnqueue(
       send: mode.kind,
       sendAttemptId,
       internalNumber: internalNumberForAudit ?? invoice.internalNumber,
+      ...companyKeyAudit(params.companyKey),
     },
   });
 

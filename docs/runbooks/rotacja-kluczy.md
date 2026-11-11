@@ -53,6 +53,7 @@
 | `EMAIL_UNSUBSCRIBE_SECRET` | brak (generator) | `id=1`, `id=2` | nie | stare linki wypisu (zob. krok 2) |
 | `JWT_SECRET` → `ANON_KEY`, `SERVICE_ROLE_KEY` | brak (generator) | usługa Supabase, `id=1`, `id=2`, zmienna repo w GitHub | **tak, aplikacja** (anon jest zmienną builda) | tak: wylogowanie, kilka do kilkunastu minut |
 | `KSEF_CREDENTIALS_ENCRYPTION_KEY` | brak (generator) | `id=1`, `id=2` (`_PREVIOUS` na czas rotacji) | nie | brak |
+| `WEBHOOK_SECRETS_ENCRYPTION_KEY` (webhooki API, 00187) | brak (generator) | `id=1`, `id=2` (`_PREVIOUS`: odczyt sekretów zaszyfrowanych starym kluczem) | nie | brak, dopóki `_PREVIOUS` zostaje; skryptu przeszyfrowania jeszcze nie ma, więc bez niego klient musi dodać webhook od nowa |
 
 ## 0. Przygotowanie
 
@@ -300,7 +301,11 @@ przebudowa aplikacji nie wnosi nowego kodu.
      (`.github/workflows/obrazy.yml` buduje z niej obraz);
    - Coolify `id=1`: `NEXT_PUBLIC_SUPABASE_ANON_KEY` (zmienna builda)
      i `SUPABASE_SERVICE_ROLE_KEY`; `id=2`: `SUPABASE_SERVICE_ROLE_KEY`
-     (i `NEXT_PUBLIC_SUPABASE_ANON_KEY`, jeśli tam jest).
+     (i `NEXT_PUBLIC_SUPABASE_ANON_KEY`, jeśli tam jest);
+   - Coolify `id=1`: `SUPABASE_JWT_SECRET` = `JWT_SECRET`, jeśli jest
+     ustawiona (publiczne API `/api/v1` podpisuje nim token roli
+     `api_key_client`, 00181). Ze starym sekretem API odpowiada 503, nic
+     więcej się nie psuje.
    Kroki 2–4 rób bez przerw: gdyby aplikacja w tym czasie sama się
    zrestartowała, wstanie z nowym kluczem do starej bazy.
 3. **Usługa Supabase** (Coolify, `db-1`) → Environment Variables: sekret JWT

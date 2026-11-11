@@ -26,9 +26,9 @@ import {
 } from '@/lib/jobs/events';
 import { generateComarchOptimaXml } from '@/lib/exports/comarch-optima-generator';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
+import { EDI_REFUSAL_PREFIX, generateEdiPlusPlus } from '@/lib/exports/edi-plus-plus-generator';
 import {
   CsvForeignCurrencyNotSupportedError,
-  generateInsertSubiektCsv,
   generateSymfoniaCsv,
   generateUniversalCsv,
   generateWaproCsv,
@@ -157,7 +157,9 @@ async function generateExportFile(
       };
     }
     case 'insert_subiekt': {
-      const buffer = generateInsertSubiektCsv({
+      // EDI++ (.epp) dla Subiekta GT i Rewizora GT. Format jest wstrzymany
+      // (`suspended-formats.ts`) do próbnego importu — runner tu nie dochodzi.
+      const buffer = generateEdiPlusPlus({
         issuer: data.issuer,
         periodStart: job.period_start,
         periodEnd: job.period_end,
@@ -166,8 +168,8 @@ async function generateExportFile(
       });
       return {
         buffer,
-        filename: `Subiekt_${nip}_${periodStr}.csv`,
-        mimeType: 'text/csv; charset=Windows-1250',
+        filename: `Subiekt_${nip}_${periodStr}.epp`,
+        mimeType: 'application/octet-stream',
       };
     }
     case 'symfonia': {
@@ -254,6 +256,7 @@ export async function onExportsGenerateExhausted(
     HUMAN_EXPORT_ERRORS.includes(failure.message) ||
     // W9: odmowa dokumentu ma w treści jego numer — rozpoznawana po początku.
     failure.message.startsWith(JPK_DOCUMENT_REFUSAL_PREFIX) ||
+    failure.message.startsWith(EDI_REFUSAL_PREFIX) ||
     Object.values(SUSPENDED_EXPORT_FORMATS).includes(failure.message);
   const message = human
     ? failure.message

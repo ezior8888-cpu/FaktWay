@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { logAudit } from '@/lib/audit/log';
+import { trustedClientIp } from '@/lib/auth/client-ip';
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
@@ -49,8 +50,7 @@ export async function requestGdprDeletionAction(formData: FormData): Promise<Gdp
   try {
     const created = await createGdprRequest({
       userId: user.id, userEmail: user.email,
-      ipAddress: requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim()
-        ?? requestHeaders.get('x-real-ip') ?? undefined,
+      ipAddress: trustedClientIp(requestHeaders) ?? undefined,
       userAgent: requestHeaders.get('user-agent') ?? undefined,
     });
     const scheduledFor = created.scheduledFor.toLocaleDateString('pl-PL', {

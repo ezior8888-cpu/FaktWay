@@ -1,5 +1,4 @@
-import Link from 'next/link';
-
+import { currencySymbol } from '@/components/invoices/invoice-row-types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,8 +33,10 @@ function directionLabel(direction: string | null): string {
   return '—';
 }
 
-function amountLabel(gross: InvoiceRow['gross_total']): string {
-  return gross != null ? `${formatPlMoney(Number(gross))} zł` : '—';
+// Jednostka jak na liście faktur w aplikacji (`currencySymbol`): faktura zakupu
+// z KSeF bywa w walucie obcej, a jej kwota to nie złote (krok 6.2).
+function amountLabel(gross: InvoiceRow['gross_total'], currency: InvoiceRow['currency']): string {
+  return gross != null ? `${formatPlMoney(Number(gross))} ${currencySymbol(currency)}` : '—';
 }
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -47,20 +48,28 @@ function StatusBadge({ status }: { status: string | null }) {
 }
 
 interface Props {
+  /** Dokumenty bieżącej strony listy. */
   invoices: InvoiceRow[];
+  /** Liczba wszystkich dokumentów (wszystkie strony). */
+  total: number;
   canDownload: boolean;
   token: string;
+  /** Strony listy pod tabelą (krok 6.2). */
+  footer?: React.ReactNode;
 }
 
 /**
  * Lista dokumentów w portalu księgowej — Card + Table Finory (od `lg`)
  * i karty poniżej (plan §7.2). Logika (statusy, rodzaj, „Pobierz XML” tylko
- * przy dokumencie z plikiem) bez zmian.
+ * przy dokumencie z plikiem) bez zmian. Od kroku 6.2 lista ma strony,
+ * a opis liczy wszystkie dokumenty.
  */
 export function AccountantInvoiceList({
   invoices,
+  total,
   canDownload,
   token,
+  footer,
 }: Props) {
   const tokenSeg = encodeURIComponent(token);
 
@@ -72,14 +81,17 @@ export function AccountantInvoiceList({
     );
   }
 
+  // Zwykłe `<a>`, nie `next/link`: trasa XML zapisuje wpis w audycie i liczy
+  // się do limitu prób, więc nie może jej wywołać wstępne pobieranie linku.
   const downloadCell = (inv: InvoiceRow) =>
     inv.xml_storage_path ? (
-      <Link
+      <a
         href={`/accountant/${tokenSeg}/download/${inv.id}`}
+        rel="noreferrer"
         className="text-primary text-xs font-medium hover:underline"
       >
         Pobierz XML
-      </Link>
+      </a>
     ) : (
       <span className="text-muted-foreground text-xs">brak XML</span>
     );
@@ -89,7 +101,7 @@ export function AccountantInvoiceList({
       <CardHeader className="border-b py-4">
         <CardTitle className="text-sm font-medium">Dokumenty</CardTitle>
         <CardDescription>
-          {`${formatPlInt(invoices.length)} ${plural(invoices.length, ['pozycja', 'pozycje', 'pozycji'])} · najnowsze na górze`}
+          {`${formatPlInt(total)} ${plural(total, ['pozycja', 'pozycje', 'pozycji'])} · najnowsze na górze`}
         </CardDescription>
       </CardHeader>
 
@@ -111,7 +123,7 @@ export function AccountantInvoiceList({
                 <TableCell className="h-14 pl-4 font-mono">{inv.internal_number ?? '—'}</TableCell>
                 <TableCell>{directionLabel(inv.direction)}</TableCell>
                 <TableCell className="text-muted-foreground tabular-nums">{formatIsoDatePl(inv.issue_date)}</TableCell>
-                <TableCell className="text-right tabular-nums">{amountLabel(inv.gross_total)}</TableCell>
+                <TableCell className="text-right tabular-nums">{amountLabel(inv.gross_total, inv.currency)}</TableCell>
                 <TableCell>
                   <StatusBadge status={inv.ksef_status} />
                 </TableCell>
@@ -132,7 +144,7 @@ export function AccountantInvoiceList({
                   {directionLabel(inv.direction)} · {formatIsoDatePl(inv.issue_date)}
                 </p>
               </div>
-              <p className="shrink-0 text-sm font-medium tabular-nums">{amountLabel(inv.gross_total)}</p>
+              <p className="shrink-0 text-sm font-medium tabular-nums">{amountLabel(inv.gross_total, inv.currency)}</p>
             </div>
             <div className="mt-2 flex items-center justify-between gap-3">
               <StatusBadge status={inv.ksef_status} />
@@ -141,6 +153,8 @@ export function AccountantInvoiceList({
           </div>
         ))}
       </div>
+
+      {footer}
     </Card>
   );
 }

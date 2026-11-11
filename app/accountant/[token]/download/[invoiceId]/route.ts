@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { checkPortalLimit, portalLimitedResponse } from '@/lib/accountant/portal-access';
 import { hashToken } from '@/lib/accountant/tokens';
 import { logAuditSystem } from '@/lib/audit/log-system';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -10,6 +11,10 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ token: string; invoiceId: string }> }
 ) {
+  // Limit prób portalu (krok 6.2), przed odczytem tokenu z bazy.
+  const limit = await checkPortalLimit();
+  if (!limit.allowed) return portalLimitedResponse(limit.retryAfter);
+
   const { token, invoiceId } = await context.params;
   const trimmed = token.trim();
   if (!trimmed) {

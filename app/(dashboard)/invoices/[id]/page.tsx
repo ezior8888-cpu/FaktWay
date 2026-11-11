@@ -1,11 +1,18 @@
 import { notFound } from 'next/navigation';
 
 import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
-import { amountDueOf } from '@/lib/invoices/amount-due';
+import { amountDueOf, outstandingOf } from '@/lib/invoices/amount-due';
 import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
+import {
+  parseInvoicePaymentsRpc,
+  paymentsMatchInvoice,
+  type InvoicePaymentEntry,
+  type InvoicePaymentsData,
+} from '@/lib/invoices/invoice-payments';
 import { canCorrectInvoice, canMarkInvoicePaid } from '@/lib/invoices/list-row-facts';
 import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
 import { canDuplicateInvoice, canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
+import { buyerLinkRefusal, canManageBuyerLinks } from '@/lib/invoice-share/policy';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -185,6 +192,7 @@ export default async function InvoiceDetailPage({
   });
   const canCorrect = await loadCanCorrect(supabase, invoice, env);
   const paymentPanel = await loadPaymentPanel(supabase, invoice, env, membership?.role ?? null);
+  const paymentHistory = await loadPaymentHistory(supabase, invoice, env, membership?.role ?? null, paymentPanel);
   const qr = await loadQr(supabase, invoice);
 
   const initial: InvoiceDetailInitial = {
@@ -211,6 +219,8 @@ export default async function InvoiceDetailPage({
     payment_data: invoice.payment_data ?? null,
     payment_status: (invoice.payment_status as string | null) ?? null,
     payment_panel: paymentPanel,
+    // Krok 3.1 (00176): historia wpłat, zapłacono i reszta; liczy serwer.
+    payment_history: paymentHistory,
     lines,
     currency,
     split_payment: splitPayment,
@@ -231,6 +241,24 @@ export default async function InvoiceDetailPage({
       origin: (invoice.origin as string | null) ?? null,
       invoice_kind: invoice.invoice_kind as string | null,
     }),
+    // Krok 2.10: „Link dla nabywcy” tym samym predykatem co akcja tworzenia; bez kodu QR
+    // (brak skrótu pliku XML) przycisku nie ma, bo PDF bez KODU I nie idzie do nabywcy.
+    can_share_with_buyer:
+      canManageBuyerLinks(membership?.role ?? null) &&
+      buyerLinkRefusal(
+        {
+          internal_number: internalNumber,
+          direction: (invoice.direction as string | null) ?? null,
+          origin: (invoice.origin as string | null) ?? null,
+          ksef_status: (invoice.ksef_status as string | null) ?? null,
+          invoice_kind: (invoice.invoice_kind as string | null) ?? null,
+          ksef_number: (invoice.ksef_number as string | null) ?? null,
+          ksef_environment: (invoice.ksef_environment as string | null) ?? null,
+          xml_storage_path: (invoice.xml_storage_path as string | null) ?? null,
+        },
+        env,
+        { xmlHash: qr !== null },
+      ) === null,
     qr,
     upo_status:
       upo?.status ??
@@ -400,6 +428,74 @@ interface ManualPaymentRead {
     data: unknown;
     error: { message: string } | null;
   }>;
+}
+
+/** Funkcja z 00176 (historia wpłat), do czasu typów z produkcji przez ten kształt. */
+interface PaymentHistoryRead {
+  rpc(fn: 'invoice_payments', args: { p_invoice_id: string }): PromiseLike<{
+    data: unknown;
+    error: { message: string } | null;
+  }>;
+}
+
+/**
+ * Sekcja „Wpłaty” (plan kompletnej aplikacji, krok 3.1, 00176): ta sama faktura co
+ * panel „Zapłacone” (sprzedaż przyjęta w KSeF w bieżącym środowisku). Historię czyta
+ * sesja przez RPC `invoice_payments` (`payments` jest zamknięta dla sesji, 00074),
+ * a zapłacono, resztę i stan bierze z wiersza faktury. „Zapisz wpłatę”: te same
+ * warunki co „Zapłacone” (`canMark`, w tym rola i korekta do zera) i faktura w PLN.
+ *
+ * Fail-closed z komunikatem: błąd odczytu historii albo suma niecofniętych wpłat
+ * różna od `paid_amount` (niezmiennik z planu) zdejmują zapis i mówią, co zrobić;
+ * podglądu faktury to nie wywraca. Bez wpłat i bez prawa zapisu sekcji nie ma
+ * (np. faktura z datą zapłaty z FA(3) albo księgowa przy otwartej fakturze).
+ */
+async function loadPaymentHistory(
+  supabase: SessionClient,
+  invoice: Record<string, unknown>,
+  env: ReturnType<typeof configuredKsefEnvironment>,
+  role: string | null,
+  panel: InvoiceDetailInitial['payment_panel'],
+): Promise<InvoicePaymentsData | null> {
+  if (!env || invoice.direction !== 'outgoing' || invoice.ksef_status !== 'accepted' || invoice.ksef_environment !== env) {
+    return null;
+  }
+  const amounts = {
+    invoice_kind: invoice.invoice_kind,
+    gross_total: invoice.gross_total,
+    payment_data: invoice.payment_data,
+    paid_amount: invoice.paid_amount,
+  };
+  const paid = Number(invoice.paid_amount) || 0;
+  const currency = (invoice.currency as string | null)?.trim().toUpperCase() || 'PLN';
+
+  let entries: InvoicePaymentEntry[] | null;
+  try {
+    const { data, error } = await (supabase as unknown as PaymentHistoryRead)
+      .rpc('invoice_payments', { p_invoice_id: invoice.id as string });
+    entries = error ? null : parseInvoicePaymentsRpc(data);
+  } catch {
+    entries = null;
+  }
+  const loadError = entries === null;
+  const list = entries ?? [];
+  const mismatch = !loadError && !paymentsMatchInvoice(list, paid);
+  const canRecord = panel?.canMark === true && currency === 'PLN' && !loadError && !mismatch;
+  if (!loadError && list.length === 0 && !canRecord) return null;
+
+  return {
+    entries: list,
+    status: (invoice.payment_status as string | null) ?? null,
+    due: amountDueOf(amounts),
+    paid,
+    remaining: outstandingOf(amounts),
+    currency,
+    canRecord,
+    canVoid: canChangeInvoicePayment(role),
+    today: todayInWarsaw(),
+    loadError,
+    mismatch,
+  };
 }
 
 /**

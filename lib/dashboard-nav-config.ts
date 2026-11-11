@@ -1,13 +1,16 @@
 import {
   RiAddLine,
+  RiBankLine,
   RiBarChart2Line,
   RiBook2Line,
   RiContactsBook3Line,
   RiDashboardLine,
   RiExchangeFundsLine,
   RiFileList3Line,
+  RiFileTextLine,
   RiMoreLine,
   RiReceiptLine,
+  RiSafe2Line,
   RiSettings3Line,
   RiUpload2Line,
   RiWallet3Line,
@@ -31,7 +34,7 @@ export interface DashboardNavSection {
 
 /**
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
- * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
+ * z kolejnych etapów dochodzą razem ze stronami (bank: krok 3.2); analizy doszły
  * w E7 (od 21.10.2026 jedna pozycja „Analizy” z przełącznikiem „Sprzedaż |
  * Koszty”). Faktury cykliczne (E9) i przypomnienia są od 21.10.2026 zakładkami
  * ekranu „Faktury” (`INVOICES_TABS`), Wydatki i Skrzynka KSeF — zakładkami
@@ -58,6 +61,10 @@ export const dashboardNavSections: DashboardNavSection[] = [
         icon: RiBarChart2Line,
         prefetch: false,
       },
+      // Plan kompletnej aplikacji 3.2 (ekran P12 Finory): wyciąg z banku i wpłaty do
+      // potwierdzenia. Na końcu sekcji, żeby nic w menu się nie przesunęło (decyzja D1);
+      // bez prefetchu, bo strona czyta operacje i niezapłacone faktury (plan Finora §4).
+      { href: "/bank", label: "Bank", icon: RiBankLine, prefetch: false },
     ],
   },
   {
@@ -67,6 +74,10 @@ export const dashboardNavSections: DashboardNavSection[] = [
       // „Nowa faktura” pod logo (`dashboardNewInvoiceAction`).
       { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
       { href: "/contractors", label: "Kontrahenci", icon: RiContactsBook3Line },
+      // Plan kompletnej aplikacji, krok 2.9: noty obciążeniowe i uznaniowe. Osobna
+      // pozycja na końcu sekcji, a nie zakładka „Rodzaje faktur”, bo nota nie jest
+      // fakturą; pozostałe pozycje bez zmian (decyzja D1).
+      { href: "/noty", label: "Noty", icon: RiFileTextLine },
     ],
   },
   {
@@ -75,6 +86,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
       { href: "/expenses", label: "Koszty", icon: RiReceiptLine },
       { href: "/reports/kpir", label: "Księgowość", icon: RiBook2Line },
       { href: "/import-danych", label: "Import danych", icon: RiUpload2Line },
+      // Plan kompletnej aplikacji, krok 3.7: Kasa (dowody KP i KW, raport kasowy).
+      // Nowa pozycja na końcu sekcji; pozostałe pozycje bez zmian (decyzja D1).
+      { href: "/kasa", label: "Kasa", icon: RiSafe2Line },
     ],
   },
 ];

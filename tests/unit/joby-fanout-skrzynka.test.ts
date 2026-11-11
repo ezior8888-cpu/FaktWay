@@ -34,11 +34,18 @@ describe('fan-out do kilku kolejek', () => {
   it('wysyła do wszystkich kolejek zdarzenia w jednej transakcji', async () => {
     const result = await sendJobEvent({ name: 'invoice/submit.succeeded', data: { invoiceId: 'x' } });
     expect(mocks.withTransaction).toHaveBeenCalledOnce();
-    expect(mocks.send).toHaveBeenCalledTimes(2);
+    // 2 → 4: przyjęcie w KSeF to webhook `invoice.ksef_accepted` (krok 7.1, część 3, 00187)
+    // i wpis w dzwonku (krok 8.1 planu kompletnej aplikacji, część 2, 00188).
+    expect(mocks.send).toHaveBeenCalledTimes(4);
     for (const call of mocks.send.mock.calls) {
       expect(call[2]).toEqual(expect.objectContaining({ db: mocks.txDb }));
     }
-    expect(result.ids).toEqual(['job-invoice.submit.succeeded.notify', 'job-invoice.submit.succeeded.offline-queue']);
+    expect(result.ids).toEqual([
+      'job-invoice.submit.succeeded.notify',
+      'job-invoice.submit.succeeded.offline-queue',
+      'job-invoice.submit.succeeded.webhook',
+      'job-invoice.submit.succeeded.bell',
+    ]);
   });
 
   it('błąd drugiej kolejki wycofuje całość (błąd idzie do nadawcy)', async () => {
@@ -50,6 +57,19 @@ describe('fan-out do kilku kolejek', () => {
     });
     await expect(sendJobEvent({ name: 'invoice/submit.failed', data: { invoiceId: 'x' } })).rejects.toThrow('fixture queue down');
     expect(mocks.withTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('wpłata do faktury: push i dzwonek w jednej transakcji, z tym samym kluczem', async () => {
+    // 1 → 2 kolejki: dzwonek przy wpłacie (krok 8.1 planu kompletnej aplikacji, część 3, 00197).
+    // Obie albo żadna: błąd przy drugiej nie zostawia samego pusha, ponowienie akcji nie dubluje.
+    const data = { invoiceId: 'x', paymentId: 'p' };
+    const result = await sendJobEvent({ name: 'invoice/payment.received', data, singletonKey: 'payment:p' });
+    expect(mocks.withTransaction).toHaveBeenCalledOnce();
+    expect(mocks.send.mock.calls).toEqual([
+      ['invoice.payment.received', data, { singletonKey: 'payment:p', db: mocks.txDb }],
+      ['invoice.payment.received.bell', data, { singletonKey: 'payment:p', db: mocks.txDb }],
+    ]);
+    expect(result.ids).toEqual(['job-invoice.payment.received', 'job-invoice.payment.received.bell']);
   });
 
   it('zdarzenie z jedną kolejką idzie bez transakcji', async () => {

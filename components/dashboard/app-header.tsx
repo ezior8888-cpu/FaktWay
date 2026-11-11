@@ -2,7 +2,7 @@
 
 // Poprawka Bartosza 21.10.2026: pasek górny 1:1 z `src/components/layout/Header.tsx`
 // Finory. Lewa strona: zwijanie paska · separator · wyszukiwarka (⌘K). Prawa:
-// dzwonek (komunikat „wkrótce FLO”) · motyw · zębatka (/settings) · profil.
+// dzwonek (powiadomienia, krok 8.1 planu kompletnej aplikacji) · motyw · zębatka (/settings) · profil.
 // Bez panelu personalizacji szablonu (paleta kolorów) — mamy jeden preset.
 // Tytuł strony, przełącznik firmy i wordmark z dawnego paska wylatują: firma
 // jest w menu profilu („Moje firmy”), tytuły stron są w treści.
