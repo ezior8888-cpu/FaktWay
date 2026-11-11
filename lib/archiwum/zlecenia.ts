@@ -24,10 +24,12 @@ export interface ArchiveOrderRow {
   files_count: number | null;
   missing_count: number | null;
   error_message: string | null;
+  /** Plik paczki usunięty z magazynu po wygaśnięciu linku (00190); wiersz zostaje jako historia. */
+  file_deleted_at: string | null;
 }
 
 const COLUMNS =
-  'id, kind, period_start, period_end, status, created_at, finished_at, expires_at, size_bytes, files_count, missing_count, error_message';
+  'id, kind, period_start, period_end, status, created_at, finished_at, expires_at, size_bytes, files_count, missing_count, error_message, file_deleted_at';
 
 export const ARCHIVE_FORBIDDEN_MESSAGE = 'Archiwum może zlecić właściciel albo administrator firmy.';
 export const ARCHIVE_ACTIVE_MESSAGE = 'Paczka za ten okres jest już w przygotowaniu. Wyślemy e-mail, gdy będzie gotowa.';
@@ -94,6 +96,7 @@ export interface ArchiveDownloadRow {
   status: ArchiveStatus;
   file_key: string | null;
   expires_at: string | null;
+  file_deleted_at: string | null;
   kind: ArchiveKind;
   period_start: string;
   period_end: string;
@@ -103,7 +106,7 @@ export interface ArchiveDownloadRow {
 export async function readArchiveOrder(client: SupabaseClient, tenantId: string, id: string): Promise<ArchiveDownloadRow | null> {
   const { data, error } = await client
     .from('document_archives')
-    .select('id, status, file_key, expires_at, kind, period_start, period_end')
+    .select('id, status, file_key, expires_at, file_deleted_at, kind, period_start, period_end')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle();

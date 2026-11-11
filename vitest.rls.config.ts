@@ -76,6 +76,9 @@ export default defineConfig({
       // 00178 (plan kompletnej aplikacji, krok 6.4): zlecenia archiwum dokumentów; owner/admin, izolacja firm,
       // limit 10 minut i zamykanie utkniętych (wyzwalacz), jedno aktywne na okres, CHECK-i pliku i okresu.
       'tests/rls-archiwum-dokumentow.test.ts',
+      // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania
+      // (service_role), w jednej transakcji z audit_logs; CHECK znacznika; runner sprzątania przez PostgREST.
+      'tests/rls-archiwum-sprzatanie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

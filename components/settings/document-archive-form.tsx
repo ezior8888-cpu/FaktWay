@@ -50,6 +50,8 @@ function describe(order: ArchiveOrderRow, now: number): string {
   }
   if (order.status === 'failed') return `Nie powstała. ${order.error_message ?? 'Zleć ją ponownie.'}`;
   const until = order.expires_at ? archivePlDate(warsawDay(order.expires_at)) : '';
+  // Plik usunięty z magazynu po wygaśnięciu linku (00190); wiersz zostaje jako historia.
+  if (order.file_deleted_at) return `Link wygasł ${until}, a plik paczki usunęliśmy. Zleć paczkę ponownie.`;
   if (!order.expires_at || new Date(order.expires_at).getTime() <= now) {
     return `Link wygasł ${until}. Zleć paczkę ponownie.`;
   }
@@ -58,7 +60,12 @@ function describe(order: ArchiveOrderRow, now: number): string {
 }
 
 function isReady(order: ArchiveOrderRow, now: number): boolean {
-  return order.status === 'completed' && Boolean(order.expires_at) && new Date(order.expires_at!).getTime() > now;
+  return (
+    order.status === 'completed' &&
+    !order.file_deleted_at &&
+    Boolean(order.expires_at) &&
+    new Date(order.expires_at!).getTime() > now
+  );
 }
 
 export function DocumentArchiveForm({
@@ -154,8 +161,8 @@ export function DocumentArchiveForm({
           <FieldDescription id="archive-help">
             Paczka ZIP za wybrany okres: faktury sprzedaży i zakupu (plik XML z KSeF, PDF, UPO), lista faktur w CSV
             i zdjęcia kosztów. Paczka na kontrolę ma dodatkowo JPK_FA za ten okres. Przygotowanie trwa kilka minut;
-            wyślemy e-mail, gdy paczka będzie gotowa, a link do pobrania działa {ARCHIVE_LINK_DAYS} dni. Brakujące
-            pliki opisuje spis w paczce.
+            wyślemy e-mail, gdy paczka będzie gotowa, a link do pobrania działa {ARCHIVE_LINK_DAYS} dni. Potem usuwamy
+            plik paczki, a dokumenty zostają w FaktWay. Brakujące pliki opisuje spis w paczce.
           </FieldDescription>
         </FieldContent>
         <div className="flex w-full flex-col gap-2 sm:w-64">
