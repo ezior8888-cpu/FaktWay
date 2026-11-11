@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { BankView } from '@/components/bank/bank-view';
+import { canChangeExpensePayment } from '@/lib/expenses/zaplata-kosztu';
 import { matchInvoice, type MatchResult } from '@/lib/import/bank/dopasowanie';
 import { parseBankOperationsRpc } from '@/lib/import/bank/ekran';
 import { loadOpenSalesInvoices, type BankInvoiceOption } from '@/lib/import/bank/kandydaci';
+import { EXPENSE_LOAD_FAILED, type ZaplatyKosztowEkranu } from '@/lib/import/bank/koszty';
+import { czytajZaplatyKosztow } from '@/lib/import/bank/koszty-dane';
 import { TAX_LOAD_FAILED, type PrzelewyPodatkoweEkranu } from '@/lib/import/bank/podatki';
 import { czytajPrzelewyPodatkowe } from '@/lib/import/bank/podatki-dane';
 import { canChangeInvoicePayment } from '@/lib/invoices/manual-payment';
@@ -33,6 +36,10 @@ interface BankReadRpc {
  * Krok 3.2, część 2: przy włączonym module księgowości (obszar `ten_miesiac`)
  * sekcja „Zapłaty do ZUS i urzędu skarbowego” z propozycją rozliczenia dla
  * przelewów podatkowych (`czytajPrzelewyPodatkowe`); bez modułu jej nie ma.
+ *
+ * Krok 3.2, część 3: sekcja „Zapłaty kosztów z wyciągu” z ostatnimi decyzjami
+ * (`bank_expense_operations`, 00196). Propozycje dla przelewów do dostawców nie
+ * są w bazie: liczy je akcja przy wgraniu pliku i trzyma ekran do decyzji.
  */
 export default async function BankPage() {
   const { supabase, tenantId, role } = await getPageContext();
@@ -44,6 +51,10 @@ export default async function BankPage() {
       return { ok: false as const, error: TAX_LOAD_FAILED };
     },
   );
+  const expensesRead: Promise<ZaplatyKosztowEkranu> = czytajZaplatyKosztow(supabase as unknown as SupabaseClient).catch((error: unknown) => {
+    console.error('[bank] zapłaty kosztów', error instanceof Error ? error.message : 'błąd');
+    return { ok: false as const, error: EXPENSE_LOAD_FAILED };
+  });
   const rpc = await (supabase as unknown as BankReadRpc).rpc('bank_operations');
   if (rpc.error) console.error('[bank] bank_operations', rpc.error.code);
   const data = rpc.error ? null : parseBankOperationsRpc(rpc.data);
@@ -69,6 +80,8 @@ export default async function BankPage() {
       canWrite={canChangeInvoicePayment(role)}
       tax={await taxRead}
       canWriteTax={role === 'owner' || role === 'admin'}
+      expenses={await expensesRead}
+      canWriteExpenses={canChangeExpensePayment(role)}
     />
   );
 }

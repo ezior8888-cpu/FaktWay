@@ -151,6 +151,12 @@ export type AuditAction =
   // (RPC `confirm_bank_tax_payment`, `undo_bank_tax_payment`) razem z `tax_settlement.paid`/`unpaid`.
   | 'bank.tax_payment_confirmed'
   | 'bank.tax_payment_undone'
+  // Przelewy do dostawców jako zapłaty kosztów (00196, plan kompletnej aplikacji 3.2, część 3):
+  // metadane z kosztami, dniem zapłaty, kwotą w groszach i rodzajem dopasowania, bez danych
+  // drugiej strony. Zapisuje baza (RPC `confirm_bank_expense_payment`, `undo_bank_expense_payment`)
+  // razem z `expense.marked_paid` / `expense.paid_undone` z 00177.
+  | 'bank.expense_payment_confirmed'
+  | 'bank.expense_payment_undone'
   // Kasa (00194, plan kompletnej aplikacji 3.7): stan początkowy kasy, dowody KP i KW
   // i ich korekty (storno). Metadane: numer, rodzaj, kwota, dzień operacji, faktura
   // i wpłata. Zapisuje baza (RPC `open_cash_register`, `issue_cash_document`,

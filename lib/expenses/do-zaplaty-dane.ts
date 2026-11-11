@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 
 import type { WierszKosztuDoZaplaty } from './do-zaplaty';
@@ -42,6 +43,36 @@ export async function wczytajKosztyDoZaplaty(
     (w) => !w.faktura || w.faktura.ksef_environment === srodowisko,
   );
   return { wiersze, obcieta: (data ?? []).length >= LIMIT_DO_ZAPLATY };
+}
+
+/**
+ * Koszty z listy „Do zapłaty” na rachunki z wyciągu (krok 3.2, część 3): te
+ * same kolumny i warunki co lista, tylko z `payment_account` z podanych
+ * wariantów (z „PL” i bez). Odczyt w całości albo błąd (`readCompletePages`):
+ * niepełna lista dałaby fałszywe „brak propozycji” albo złą propozycję przy
+ * kilku kosztach na tę samą kwotę. Koszty z innego środowiska KSeF odpadają.
+ */
+export async function wczytajKosztyNaRachunki(
+  supabase: unknown,
+  tenantId: string,
+  srodowisko: KsefEnvironment,
+  rachunki: readonly string[],
+): Promise<WierszKosztuDoZaplaty[]> {
+  if (rachunki.length === 0) return [];
+  const client = supabase as SupabaseClient;
+  const wiersze = await readCompletePages<Wiersz>('Koszty do zapłaty na rachunki z wyciągu', async (from, to) => {
+    const wynik = await client
+      .from('expenses')
+      .select(KOLUMNY, { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .is('paid_at', null)
+      .not('payment_due_date', 'is', null)
+      .in('payment_account', [...rachunki])
+      .order('id', { ascending: true })
+      .range(from, to);
+    return { data: wynik.data as unknown as Wiersz[] | null, count: wynik.count, error: wynik.error };
+  });
+  return wiersze.filter((w) => !w.faktura || w.faktura.ksef_environment === srodowisko);
 }
 
 /**
