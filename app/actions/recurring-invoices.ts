@@ -298,8 +298,8 @@ export async function pauseRecurringInvoiceAction(id: string): Promise<Recurring
 
 /**
  * Wznowienie: okresy, które w całości minęły w czasie wstrzymania, pomijamy;
- * ostatni okres, którego dzień już nadszedł, zostaje „Do wystawienia”
- * (`catchUpRunDate`).
+ * zostaje pierwszy okres, który jeszcze trwa (jego dzień może już minąć:
+ * „Do wystawienia”) — `catchUpRunDate`.
  */
 export async function resumeRecurringInvoiceAction(id: string): Promise<RecurringInvoiceActionResult> {
   return setActive(id, true);
