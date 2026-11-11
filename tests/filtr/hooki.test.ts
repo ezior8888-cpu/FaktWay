@@ -10,6 +10,12 @@ import { KATALOG_REPO, przygotujMape } from '@/scripts/filtr/mapa.mjs';
 import { poEdycji } from '@/scripts/filtr/po-edycji.mjs';
 import { ocenPolecenie } from '@/scripts/filtr/polecenia.mjs';
 
+// Git przekazuje hookowi przed pushem GIT_DIR prawdziwego repo, a ten plik
+// uruchamia gita (także przez `wlaczHooki`) w repozytoriach tymczasowych. Bez
+// tych zmiennych `git init` i `git config` nie trafią do prawdziwego repo
+// (11.11.2026 przez GIT_DIR: core.bare=true; `tests/unit/testy-git-izolacja.test.ts`).
+for (const klucz of Object.keys(process.env)) if (klucz.startsWith('GIT_')) delete process.env[klucz];
+
 /**
  * Warstwy lokalne żelaznego filtra (F3, plan B5.2 i B5.3): hook przed
  * poleceniem, hook po edycji, `prepare` z włączeniem hooka przed pushem
