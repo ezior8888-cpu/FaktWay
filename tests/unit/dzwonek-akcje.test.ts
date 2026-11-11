@@ -115,6 +115,18 @@ describe('loadAppNotificationsAction', () => {
     ]);
   });
 
+  it('komentarz i prośba o dokument przy koszcie (00192) trafiają do dzwonka z linkiem do wątku', async () => {
+    st.rows = [
+      { id: N1, kind: 'expense_comment', title: 'Nowy komentarz do kosztu', body: 'A', link: '/expenses/e1#komentarze', created_at: '2026-11-11T08:00:00Z', read_at: null },
+      { id: N2, kind: 'expense_document_request', title: 'Prośba o dokument do kosztu', body: 'B', link: '/expenses/e1#komentarze', created_at: '2026-11-11T07:00:00Z', read_at: null },
+    ];
+    const wynik = await loadAppNotificationsAction();
+    expect(wynik.success && wynik.items.map((i) => [i.kind, i.link])).toEqual([
+      ['expense_comment', '/expenses/e1#komentarze'],
+      ['expense_document_request', '/expenses/e1#komentarze'],
+    ]);
+  });
+
   it('bez sesji albo firmy: komunikat, bez zapytań', async () => {
     st.auth.mockRejectedValue(new ActionAuthError('Brak aktywnej organizacji'));
     await expect(loadAppNotificationsAction()).resolves.toEqual({ success: false, error: 'Brak aktywnej organizacji' });

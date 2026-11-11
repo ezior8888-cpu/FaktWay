@@ -6,8 +6,19 @@
  * i do komponentu klienckiego dzwonka.
  */
 
-/** Rodzaje wpisów; ta sama lista jest w CHECK `app_notifications_kind_check`. */
-export const APP_NOTIFICATION_KINDS = ['inbox_new', 'invoice_accepted', 'invoice_rejected', 'tax_deadline'] as const;
+/**
+ * Rodzaje wpisów; ta sama lista jest w CHECK `app_notifications_kind_check`
+ * (ostatnia definicja: 00192, komentarz i prośba o dokument przy koszcie,
+ * zapisywane przez funkcję bazy `expense_comment_add`).
+ */
+export const APP_NOTIFICATION_KINDS = [
+  'inbox_new',
+  'invoice_accepted',
+  'invoice_rejected',
+  'tax_deadline',
+  'expense_comment',
+  'expense_document_request',
+] as const;
 
 export type AppNotificationKind = (typeof APP_NOTIFICATION_KINDS)[number];
 

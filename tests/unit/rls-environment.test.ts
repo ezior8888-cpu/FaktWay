@@ -125,6 +125,8 @@ describe('separate RLS test configuration', () => {
       // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania,
       // z wpisem audit_logs; CHECK znacznika; runner sprzątania przez prawdziwy PostgREST.
       'tests/rls-archiwum-sprzatanie.test.ts',
+      // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie.
+      'tests/rls-komentarze-kosztow.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

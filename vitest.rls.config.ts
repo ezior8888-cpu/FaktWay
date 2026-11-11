@@ -113,6 +113,10 @@ export default defineConfig({
       // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania
       // (service_role), w jednej transakcji z audit_logs; CHECK znacznika; runner sprzątania przez PostgREST.
       'tests/rls-archiwum-sprzatanie.test.ts',
+      // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie;
+      // odczyt tylko przy koszcie widocznym dla czytającego, zapis tylko przez funkcje, dzwonek bez autora,
+      // ponowienie z tym samym identyfikatorem bez dubla, załatwienie (kto i kiedy) z audytem, CHECK-i.
+      'tests/rls-komentarze-kosztow.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
