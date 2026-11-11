@@ -59,6 +59,19 @@ describe('fan-out do kilku kolejek', () => {
     expect(mocks.withTransaction).toHaveBeenCalledOnce();
   });
 
+  it('wpłata do faktury: push i dzwonek w jednej transakcji, z tym samym kluczem', async () => {
+    // 1 → 2 kolejki: dzwonek przy wpłacie (krok 8.1 planu kompletnej aplikacji, część 3, 00197).
+    // Obie albo żadna: błąd przy drugiej nie zostawia samego pusha, ponowienie akcji nie dubluje.
+    const data = { invoiceId: 'x', paymentId: 'p' };
+    const result = await sendJobEvent({ name: 'invoice/payment.received', data, singletonKey: 'payment:p' });
+    expect(mocks.withTransaction).toHaveBeenCalledOnce();
+    expect(mocks.send.mock.calls).toEqual([
+      ['invoice.payment.received', data, { singletonKey: 'payment:p', db: mocks.txDb }],
+      ['invoice.payment.received.bell', data, { singletonKey: 'payment:p', db: mocks.txDb }],
+    ]);
+    expect(result.ids).toEqual(['job-invoice.payment.received', 'job-invoice.payment.received.bell']);
+  });
+
   it('zdarzenie z jedną kolejką idzie bez transakcji', async () => {
     await sendJobEvent({ name: 'invoice/submit.requested', data: { invoiceId: 'x' } }, { groupId: 't1' });
     expect(mocks.withTransaction).not.toHaveBeenCalled();

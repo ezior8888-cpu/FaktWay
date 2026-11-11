@@ -17,7 +17,8 @@
  * samego eventu (fan-out), a w pg-boss jedna kolejka = jeden handler.
  * Dwa takie eventy: `invoice/submit.succeeded` i `invoice/submit.failed`
  * (powiadomienie użytkownika ORAZ obsługa kolejki Offline24) — nadawca
- * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1.
+ * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1. Od kroku 8.1
+ * (00197) także `invoice/payment.received` (push i dzwonek).
  */
 export const EVENT_QUEUE_MAP = {
   'auth/login.completed': ['auth.login.completed'],
@@ -38,7 +39,9 @@ export const EVENT_QUEUE_MAP = {
   // wysyłka nic nie publikuje (pg-boss rzuca na kolejce bez `createQueue`).
   'inbox/invoice.received': [],
   'inbox/poll.tenant': ['inbox.poll.tenant'],
-  'invoice/payment.received': ['invoice.payment.received'],
+  // fan-out: push „Otrzymana płatność” + dzwonek w aplikacji (krok 8.1 planu
+  // kompletnej aplikacji, część 3, 00197)
+  'invoice/payment.received': ['invoice.payment.received', 'invoice.payment.received.bell'],
   // fan-out: powiadomienie + obsługa kolejki Offline24 + dzwonek w aplikacji
   // („faktura odrzucona w KSeF”, krok 8.1 planu kompletnej aplikacji, 00188)
   'invoice/submit.failed': [
