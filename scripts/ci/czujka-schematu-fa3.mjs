@@ -10,7 +10,7 @@
 //    Porównanie po skrócie SHA-256 treści po normalizacji (końce linii,
 //    `schemaLocation` z pełnym adresem MF → sama nazwa pliku, jak w repo).
 //    Łapie poprawki MF wprowadzone w miejscu.
-// 2. Repo dokumentacji KSeF MF na GitHubie (`CIRFMF/ksef-docs`, katalog
+// 2. Repo dokumentacji KSeF MF na GitHubie (`CIRFMF/ksef-api`, dawniej `ksef-docs`, katalog
 //    `faktury/schemy/FA`): nowa wersja schematu dostaje nowy plik i nowy adres
 //    w crd.gov.pl, więc punkt 1 by jej nie zobaczył. Tu liczy się lista plików
 //    i skróty blobów gita (format plików różni się od crd.gov.pl).
@@ -35,9 +35,10 @@ export const PLIKI_CRD = [
   { url: `${CRD_ETD}KodyKrajow_v10-0E.xsd`, repo: ['KodyKrajow_v10-0E.xsd'] },
 ];
 
-export const DOCS_REPO = 'CIRFMF/ksef-docs';
+// MF przemianowało `CIRFMF/ksef-docs` na `CIRFMF/ksef-api` (S-16, 8.11.2026); stara nazwa działa tylko przez przekierowanie.
+export const DOCS_REPO = 'CIRFMF/ksef-api';
 export const DOCS_KATALOGI = ['faktury/schemy/FA', 'faktury/schemy/FA/bazowe'];
-/** Pliki w `ksef-docs` na 07.11.2026 → skrót bloba gita. Po aktualizacji schematu w repo dopisz nowe. */
+/** Pliki w `ksef-api` (dawniej `ksef-docs`) na 07.11.2026 → skrót bloba gita. Po aktualizacji schematu w repo dopisz nowe. */
 export const ZNANE_W_DOCS = {
   'faktury/schemy/FA/schemat_FA(2)_v1-0E.xsd': '0df84399b1bf01a52ddf8ccf5770fbf916a2c301',
   'faktury/schemy/FA/schemat_FA(3)_v1-0E.xsd': 'f55341fca047617271fc939ca44e5f6bd30ea344',
@@ -45,9 +46,9 @@ export const ZNANE_W_DOCS = {
   'faktury/schemy/FA/bazowe/KodyKrajow_v10-0E.xsd': 'ad60b2571b94d5a417510ffccde92b99c859d227',
   'faktury/schemy/FA/bazowe/StrukturyDanych_v10-0E.xsd': '6325080bb713e463dbf8d50bf1b2832cd4527686',
 };
-/** FA(2) obowiązywała do 31.01.2026; jej zmiany w `ksef-docs` nas nie dotyczą. */
+/** FA(2) obowiązywała do 31.01.2026; jej zmiany w `ksef-api` nas nie dotyczą. */
 const POMIJANE_W_DOCS = /\/schemat_FA\(2\)_/;
-/** Plik z `ksef-docs`, którego nazwy porównujemy z repo, gdy się zmieni albo pojawi nowy. */
+/** Plik z `ksef-api`, którego nazwy porównujemy z repo, gdy się zmieni albo pojawi nowy. */
 const odpowiednikWRepo = (sciezka) => {
   const nazwa = sciezka.split('/').pop();
   const wersja = /^schemat_FA\((\d+)\)/i.exec(nazwa);
@@ -216,7 +217,7 @@ const ETYKIETY_NAZW = { elementy: 'Elementy', typy: 'Typy', wartosci: 'Wartości
 
 /** @param {{ zmiany: Zmiana[], niedostepne: string[], fp: string, repo: string, runUrl: string }} p */
 export function trescIssue({ zmiany, niedostepne, fp, repo, runUrl }) {
-  // Ścieżka i adres z listy `ksef-docs` też są danymi z zewnątrz.
+  // Ścieżka i adres z listy `ksef-api` też są danymi z zewnątrz.
   const sciezka = (t) => (/^[\p{L}\p{N}_.()\-/ ]{1,200}$/u.test(t) ? `\`${t}\`` : '(nazwa pominięta)');
   const adres = (u) => (/^https:\/\/[\w.\-/()%]+$/.test(u) ? `[źródło](${u})` : '');
   const wiersze = zmiany.map(
