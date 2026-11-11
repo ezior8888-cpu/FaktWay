@@ -31,7 +31,7 @@ export default async function ResetPasswordPage() {
       panelText='Wybierz nowe hasło. Po zapisie wylogujemy pozostałe urządzenia, a Ty zalogujesz się nowym hasłem.'
     >
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Ustaw nowe hasło</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Ustaw nowe hasło</h1>
         <p className='text-muted-foreground'>Wybierz hasło, którego nie używasz w innym serwisie.</p>
       </div>
       {state?.status === 'verified' ? <ResetPasswordForm /> : (

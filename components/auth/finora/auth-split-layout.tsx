@@ -52,7 +52,7 @@ export function AuthSplitLayout({
           drzewie, więc dziedziczą skalę i motyw `.ff-dashboard` — jak w panelu. */}
       <PortalContainerProvider>
         <div className='min-h-dvh lg:grid lg:grid-cols-2'>
-          <div className='flex min-h-dvh items-center justify-center sm:px-6 md:px-8'>
+          <main className='flex min-h-dvh items-center justify-center sm:px-6 md:px-8'>
             <Reveal onLoad className='flex w-full flex-col gap-6 p-6 sm:max-w-lg'>
               <Link href='/' className='w-fit'>
                 <AuthLogo className='gap-3' />
@@ -64,14 +64,16 @@ export function AuthSplitLayout({
 
               {children}
             </Reveal>
-          </div>
+          </main>
 
-          <div className='max-lg:hidden lg:sticky lg:top-0 lg:h-dvh lg:p-3'>
+          {/* Panel dekoracyjny: bez nagłówka i poza drzewem dostępności (A-07),
+              bo powtarza hasło widoczne nad formularzem na telefonie. */}
+          <div aria-hidden='true' className='max-lg:hidden lg:sticky lg:top-0 lg:h-dvh lg:p-3'>
             <div className='relative flex h-full flex-col justify-between gap-10 overflow-hidden rounded-3xl bg-primary p-10 text-primary-foreground xl:p-14'>
               <BandGlow />
 
               <Reveal onLoad delay={0.1} className='relative'>
-                <h2 className='text-4xl font-semibold tracking-tight text-balance xl:text-5xl'>{panelTitle}</h2>
+                <p className='text-4xl font-semibold tracking-tight text-balance xl:text-5xl'>{panelTitle}</p>
                 <p className='mt-5 max-w-lg text-lg text-pretty text-primary-foreground'>{panelText}</p>
               </Reveal>
 

@@ -35,6 +35,10 @@ function database(rejectNegativeGross = false) {
         select: () => query,
         eq: () => query,
         in: () => query,
+        // Odczyty duplikatów stronami po `id` (sesja 32 planu skalowania); odczyty tu i tak zwracają [].
+        gt: () => query,
+        order: () => query,
+        limit: () => query,
         insert: (row: Record<string, unknown>) => {
           operation = 'insert';
           inserted = row;

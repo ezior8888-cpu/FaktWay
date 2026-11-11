@@ -105,10 +105,14 @@ function database(stored: Row | null = null) {
       let columns = '';
       const filters: Array<[string, unknown]> = [];
       let patch: Row = {};
+      // Odczyty duplikatów idą stronami po `id` (sesja 32 planu skalowania): strona po `gt('id')` jest pusta.
+      let afterId: unknown = null;
       const result = () => {
         if (table === 'invoices' && op === 'insert') return { data: { id: 'new-invoice' }, error: null };
         if (table === 'invoices' && op === 'update') return { data: { id: stored?.id }, error: null };
-        if (table === 'invoices' && columns.includes('ksef_number') && stored) return { data: [stored], error: null };
+        if (table === 'invoices' && columns.includes('ksef_number') && stored) {
+          return { data: afterId !== null && String(stored.id) <= String(afterId) ? [] : [stored], error: null };
+        }
         if (table === 'invoice_line_items' && op === 'select') return { data: null, count: 0, error: null };
         return { data: [], error: null };
       };
@@ -117,6 +121,9 @@ function database(stored: Row | null = null) {
         eq: (k: string, v: unknown) => { filters.push([k, v]); return query; },
         is: (k: string, v: unknown) => { filters.push([`${k} IS`, v]); return query; },
         in: () => query,
+        gt: (_k: string, v: unknown) => { afterId = v; return query; },
+        order: () => query,
+        limit: () => query,
         insert: (row: Row) => { op = 'insert'; if (table === 'invoices') inserts.push(row); return query; },
         update: (row: Row) => { op = 'update'; patch = row; updates.push({ patch, filters }); return query; },
         single: async () => result(),

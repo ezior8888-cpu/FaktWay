@@ -12,7 +12,13 @@
 
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
-/** Dokumenty, z których czynny podatnik odlicza VAT (to samo co JPK_V7M). */
+/**
+ * Rodzaje dokumentów, z których czynny podatnik odlicza VAT. JPK_V7M i kafle
+ * liczą odliczenie regułą `documentAllowsVatDeduction` (rodzaj i data: paragon
+ * z NIP tylko do 31.12.2026). Koszt w PIT (`nonDeductedVat`) celowo bierze sam
+ * rodzaj, więc paragon z NIP z 2027 r. zostaje kosztem netto jak dotąd, do
+ * odpowiedzi księgowej (krok 1.3 planu kompletnej aplikacji).
+ */
 export const VAT_DEDUCTIBLE_DOCUMENTS: ReadonlySet<string> = new Set(['invoice', 'simplified_invoice']);
 
 export interface KpirCostInput {

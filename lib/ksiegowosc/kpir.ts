@@ -11,9 +11,9 @@
  *
  * Przychód z faktur jak ewidencja ryczałtu (K3, `ewidencja.ts`): dzień
  * sprzedaży nie później niż wystawienie, korekta różnicą w dniu wystawienia,
- * rozliczenie pomniejszone o zaliczki, faktura do paragonu poza księgą,
- * waluta po kursie NBP. Koszty z listy kosztów uznanych za koszt, w kwocie
- * jak KPiR w aplikacji (`kpirCostAmount`: netto i VAT bez odliczenia),
+ * rozliczenie pomniejszone o zaliczki, faktura do paragonu nie jest przychodem
+ * (do reguły pokrycia raportem kasy daje brak, krok 1.2), waluta po kursie
+ * NBP. Koszty z listy kosztów uznanych za koszt, w kwocie jak KPiR w aplikacji (`kpirCostAmount`: netto i VAT bez odliczenia),
  * w kolumnie z kategorii kosztu. Koszt B+R (w aplikacji `col_15`) idzie do
  * K_13 i dodatkowo do K_16 (kolumna 16 to zapis kosztów B+R już ujętych
  * w kosztach). Do księgi należą dni ze skalą albo liniowym; dzień
@@ -30,6 +30,7 @@
 import { monthLabel } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import {
+  brakFakturyDoParagonu,
   dzienPrzychodu,
   kluczKursu,
   kwotaTekst,
@@ -246,7 +247,8 @@ export function zbudujKpir(wejscie: WejscieKpir): Kpir {
       continue;
     }
     if (f.fp) {
-      pominiete.push({ numer: f.numer, dzien, powod: 'Faktura do paragonu: sprzedaż wchodzi do księgi z raportu kasy.' });
+      // Krok 1.2: jak ewidencja, FP daje brak do reguły pokrycia raportem kasy (następny PR).
+      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'księgi') });
       continue;
     }
     let kwotaGr = f.rodzaj === 'rozliczenie' ? f.nettoGr - f.rozliczoneZaliczkiGr : f.nettoGr;

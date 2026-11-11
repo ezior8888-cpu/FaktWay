@@ -1,35 +1,49 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Sesja 4 planu skalowania (HOR-V1, LIM-08): import CSV idzie przez Server
- * Action, która przyjmuje najwyżej 1 MiB (domyślny limit Next). Okno obiecywało
- * „max 10 MB”, więc plik 1–10 MB przechodził kontrolę w przeglądarce i padał
- * na serwerze angielskim komunikatem Next. Teraz okno zatrzymuje go przed
- * wysłaniem, po polsku i z radą, co zrobić. Właściwa naprawa (własny limit
- * importu) to decyzja Bartosza — opis w PR.
+ * Sesja 4 planu skalowania (HOR-V1, LIM-08): import CSV szedł przez Server
+ * Action, która przyjmuje najwyżej 1 MiB (domyślny limit Next), więc okno
+ * zatrzymywało plik ponad 1 MB przed wysłaniem.
+ *
+ * Sesja 31 (decyzja Bartosza 03.11, wariant b): plik idzie trasą
+ * `/api/uploads/import` z własnym limitem 10 MB, bez globalnego
+ * `bodySizeLimit`. Okno sprawdza ten sam limit przed wysłaniem, po polsku,
+ * a odmowa trasy (limit wgrań, sesja) wraca jako jej komunikat.
  */
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-const actions = vi.hoisted(() => ({ startFileImportAction: vi.fn() }));
+const server = vi.hoisted(() => ({
+  respond: vi.fn<(form: FormData) => Promise<Response>>(),
+  requests: [] as Array<{ url: string; init: RequestInit }>,
+}));
 vi.mock('sonner', () => ({ toast }));
-vi.mock('@/app/actions/import-danych', () => actions);
 
 import { FileImportDialog } from '@/components/onboarding/file-import-dialog';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const MB = 1024 * 1024;
+const JOB_ID = '22222222-2222-4222-8222-222222222222';
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
+const assign = vi.fn();
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  server.requests = [];
+  server.respond.mockResolvedValue(Response.json({ success: true, importJobId: JOB_ID }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init: RequestInit) => {
+      server.requests.push({ url, init });
+      return server.respond(init.body as FormData);
+    }),
+  );
+  Object.defineProperty(window, 'location', { value: { ...window.location, assign }, configurable: true });
 });
 
 afterEach(() => {
@@ -37,6 +51,7 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -72,47 +87,82 @@ function onlyToast(): string {
   return String(toast.error.mock.calls[0]![0]);
 }
 
-describe('FileImportDialog — limit wgrywania pliku', () => {
-  it('CSV 1,5 MB → komunikat o limicie 1 MB, akcja niewołana', async () => {
-    await chooseAndStart(csv(1.5 * MB));
+function sentForm(): FormData {
+  expect(server.requests).toHaveLength(1);
+  expect(server.requests[0]).toMatchObject({ url: '/api/uploads/import', init: { method: 'POST' } });
+  return server.requests[0]!.init.body as FormData;
+}
 
-    expect(actions.startFileImportAction).not.toHaveBeenCalled();
-    const message = onlyToast();
-    expect(message).toContain('Plik ma 1,6 MB');
-    expect(message).toContain('najwyżej 1 MB');
-    // Wybrany plik pokazany w tych samych jednostkach co komunikat.
-    expect(document.body.textContent).toContain('1,6 MB');
+describe('FileImportDialog — limit wgrywania pliku', () => {
+  it('CSV 3 MB idzie trasą wgrywania z polami źródła i firmy, potem strona postępu', async () => {
+    const file = csv(3_000_000);
+    await chooseAndStart(file);
+
+    const form = sentForm();
+    expect(form.get('file')).toBe(file);
+    expect(form.get('source')).toBe('fakturownia_csv');
+    expect(form.get('tenantId')).toBe('org-1');
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith('Import rozpoczęty');
+    expect(assign).toHaveBeenCalledWith(`/onboarding/progress/${JOB_ID}`);
   });
 
-  it('podpis pola obiecuje 1 MB, nie 10 MB', async () => {
+  it('CSV 10,5 MB → komunikat o limicie 10 MB, bez wysyłki', async () => {
+    await chooseAndStart(csv(10_500_000));
+
+    expect(server.requests).toEqual([]);
+    const message = onlyToast();
+    expect(message).toContain('Plik ma 10,5 MB');
+    expect(message).toContain('najwyżej 10 MB');
+    // Wybrany plik pokazany w tych samych jednostkach co komunikat.
+    expect(document.body.textContent).toContain('10,5 MB');
+  });
+
+  it('CSV dokładnie 10 MB idzie', async () => {
+    await chooseAndStart(csv(10_000_000));
+
+    expect(sentForm().get('file')).toBeInstanceOf(File);
+  });
+
+  it('podpis pola podaje limit trasy: max 10 MB', async () => {
     await open();
     const text = document.body.textContent ?? '';
     expect(text).toContain('Kliknij aby wybrać plik');
-    expect(text).toContain('max 1 MB');
-    expect(text).not.toContain('10 MB');
+    expect(text).toContain('max 10 MB');
+    expect(text).not.toContain('max 1 MB');
   });
 
-  it('CSV 300 KB → akcja wołana', async () => {
-    actions.startFileImportAction.mockResolvedValue({ success: false, error: 'Plik nie wygląda na eksport z Fakturowni.' });
+  it('odmowa trasy z komunikatem → ten komunikat, bez przejścia', async () => {
+    server.respond.mockResolvedValue(Response.json({ success: false, error: 'Plik nie wygląda na eksport z Fakturowni.' }, { status: 400 }));
     await chooseAndStart(csv(300 * 1024));
 
-    expect(actions.startFileImportAction).toHaveBeenCalledOnce();
-    expect(toast.error).toHaveBeenCalledWith('Plik nie wygląda na eksport z Fakturowni.');
+    expect(onlyToast()).toBe('Plik nie wygląda na eksport z Fakturowni.');
+    expect(assign).not.toHaveBeenCalled();
   });
 
-  it('odrzucona obietnica akcji (413, sieć) → polski komunikat zamiast tekstu Next', async () => {
-    actions.startFileImportAction.mockRejectedValue(new Error('Body exceeded 1 MB limit.'));
+  it('sieć zawodzi → polski komunikat zamiast tekstu przeglądarki', async () => {
+    server.respond.mockRejectedValue(new TypeError('Failed to fetch'));
     await chooseAndStart(csv(300 * 1024));
 
     const message = onlyToast();
-    expect(message).not.toContain('Body exceeded');
+    expect(message).not.toContain('Failed to fetch');
     expect(message).toMatch(/Nie udało się wysłać/);
   });
 
-  it('strona sprzed wdrożenia (nieznana akcja) → prośba o odświeżenie strony', async () => {
-    actions.startFileImportAction.mockRejectedValue(new UnrecognizedActionError('Server Action "abc" was not found on the server.'));
+  it('odpowiedź bez JSON (np. 502 bramki) → polski komunikat', async () => {
+    server.respond.mockResolvedValue(new Response('Bad Gateway', { status: 502 }));
     await chooseAndStart(csv(300 * 1024));
 
-    expect(onlyToast()).toMatch(/Odśwież stronę/);
+    const message = onlyToast();
+    expect(message).toMatch(/Nie udało się wysłać/);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('sukces bez identyfikatora zadania → błąd zamiast przejścia na /onboarding/progress/undefined', async () => {
+    server.respond.mockResolvedValue(Response.json({ success: true }));
+    await chooseAndStart(csv(300 * 1024));
+
+    expect(onlyToast()).toMatch(/Nie udało się wysłać/);
+    expect(assign).not.toHaveBeenCalled();
   });
 });

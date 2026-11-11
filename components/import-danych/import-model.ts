@@ -1,4 +1,4 @@
-import type { FileImportSource } from '@/app/actions/import-danych';
+import type { FileImportSource } from '@/lib/import/file-sources';
 import { countLabel } from '@/lib/i18n/plural';
 import type { Database } from '@/types/database';
 

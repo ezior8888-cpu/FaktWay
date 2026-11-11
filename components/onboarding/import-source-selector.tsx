@@ -23,7 +23,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-import { skipImportStepAction, type FileImportSource } from '@/app/actions/import-danych';
+import { skipImportStepAction } from '@/app/actions/import-danych';
+import type { FileImportSource } from '@/lib/import/file-sources';
 import { FileImportDialog } from './file-import-dialog';
 
 interface Props {

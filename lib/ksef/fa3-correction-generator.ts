@@ -11,6 +11,7 @@ import type { InvoiceLineItem, VatRate } from '@/types/invoice';
 import {
   calculateInvoiceTotals,
   calculateLineItem,
+  differenceSummaries,
   roundToCents,
   summarizeVatPerRate,
 } from '@/lib/xml/invoice-calculator';
@@ -167,31 +168,6 @@ function beforeAfterRows(before: InvoiceLine[], after: InvoiceLine[]): Correctio
     if (!usedAfter.has(ai)) rows.push(toPreparedLineItems([a])[0]!);
   });
   return rows.map((row, idx) => ({ ...row, ordinal: idx + 1 }));
-}
-
-type VatSummary = ReturnType<typeof summarizeVatPerRate>[number];
-
-/**
- * P_13_x / P_14_x faktury korygującej = różnica między stanem po i przed
- * korektą (XSD: „kwota różnicy, o której mowa w art. 106j ust. 2 pkt 5”).
- * Liczona z PEŁNYCH stanów obu dokumentów, żeby zaokrąglenia VAT były te same
- * co na fakturze pierwotnej i na fakturze po korekcie. Stawki bez różnicy
- * nie są wykazywane.
- */
-function differenceSummaries(before: InvoiceLineItem[], after: InvoiceLineItem[]): VatSummary[] {
-  const byRate = new Map<VatRate, VatSummary>();
-  for (const s of summarizeVatPerRate(after)) byRate.set(s.rate, { ...s });
-  for (const s of summarizeVatPerRate(before)) {
-    const cur = byRate.get(s.rate);
-    byRate.set(s.rate, {
-      rate: s.rate,
-      netSum: (cur?.netSum ?? 0) - s.netSum,
-      vatSum: (cur?.vatSum ?? 0) - s.vatSum,
-    });
-  }
-  return [...byRate.values()]
-    .map((s) => ({ rate: s.rate, netSum: roundToCents(s.netSum), vatSum: roundToCents(s.vatSum) }))
-    .filter((s) => s.netSum !== 0 || s.vatSum !== 0);
 }
 
 function toPreparedLineItems(lines: InvoiceLine[]): InvoiceLineItem[] {
@@ -423,7 +399,7 @@ function buildPlatnosc(
 function correctionAmounts(
   data: CorrectionInvoiceData,
   domainLines: InvoiceLine[],
-): { preparedLines: CorrectionRow[]; summaries: VatSummary[]; grossTotal: number } {
+): { preparedLines: CorrectionRow[]; summaries: ReturnType<typeof summarizeVatPerRate>; grossTotal: number } {
   if (data.correctionType === 'before_after') {
     const before = toPreparedLineItems(data.linesBefore ?? []);
     const after = toPreparedLineItems(data.linesAfter ?? []);

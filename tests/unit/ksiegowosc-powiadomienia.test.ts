@@ -147,6 +147,29 @@ beforeEach(() => {
   mocks.bladDzwonka = null;
 });
 
+describe('F11-B1: składki społeczne po końcu ulgi na start', () => {
+  // Profil bez nowej wersji: „ulga na start” od 1.01.2026 trwa 6 miesięcy
+  // (art. 18 ust. 1 Prawa przedsiębiorców), więc za lipiec silnik daje brak
+  // składek społecznych. Przypomnienie nie może ich wtedy pominąć po cichu.
+  const brak = { ok: false, rodzaj: 'zus_spoleczne', brak: 'Etap „Ulga na start” trwał do 30.06.2026. Dodaj nową wersję ustawień ZUS.' };
+
+  it('lipiec po uldze: przypomnienie wymienia składki społeczne (bez kwoty), a nie tylko ryczałt i zdrowotną', async () => {
+    mocks.dzis = '2026-08-15';
+    mocks.profil = [{ ...PROFIL, zusEtap: 'ulga_na_start', zusOd: '2026-01-01' }];
+    mocks.dane = { ...POLICZONE, pozycje: [pozycja('ryczalt', 120_000), brak, pozycja('zdrowotna', 49_835)] };
+    expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ terminy: 1, wyslane: 1 });
+    expect(mocks.pushe[0].payload.body).toContain('składki społeczne');
+  });
+
+  it('w trakcie ulgi silnik liczy 0 zł: bez przypomnienia o składkach społecznych (jak dotąd)', async () => {
+    mocks.dzis = '2026-03-15';
+    mocks.profil = [{ ...PROFIL, zusEtap: 'ulga_na_start', zusOd: '2026-01-01' }];
+    mocks.dane = { ...POLICZONE, pozycje: [pozycja('ryczalt', 120_000), pozycja('zus_spoleczne', 0), pozycja('zdrowotna', 49_835)] };
+    expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
+    expect(mocks.pushe[0].payload.body).not.toContain('składki społeczne');
+  });
+});
+
 describe('cron.ksiegowosc-miesiac', () => {
   it('push o wyliczonym październiku raz, mimo trzech dni uruchomień', async () => {
     expect(await runKsiegowoscMiesiac(ctx)).toMatchObject({ miesiac: '2026-10', wyslane: 1 });

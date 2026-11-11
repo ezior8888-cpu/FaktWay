@@ -39,7 +39,6 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/app/actions/expenses', () => ({
   deleteExpenseAction: vi.fn(),
   reviewExpenseAction: vi.fn(),
-  uploadExpensePhotoAction: vi.fn(),
   getOcrJobStatusAction: vi.fn(),
 }));
 

@@ -84,7 +84,7 @@ export default async function RegisterPage({
     return (
       <AuthSplitLayout panelTitle={PANEL_TITLE} panelText={PANEL_TEXT}>
         <div>
-          <h2 className='mb-2 text-2xl font-semibold'>Utwórz konto</h2>
+          <h1 className='mb-2 text-2xl font-semibold'>Utwórz konto</h1>
         </div>
         <AuthMessage tone='error'>{SIGNUPS_CLOSED_MESSAGE}</AuthMessage>
         <LoginLink />
@@ -97,7 +97,7 @@ export default async function RegisterPage({
   return (
     <AuthSplitLayout panelTitle={PANEL_TITLE} panelText={PANEL_TEXT}>
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Utwórz konto</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Utwórz konto</h1>
         <p className='text-muted-foreground'>Pierwsza faktura w 5 minut</p>
       </div>
 

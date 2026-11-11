@@ -11,7 +11,8 @@ import {
   profilSchema,
   sprawdzZmianeFormy,
   zWiersza,
-  type ProfilWejscie,
+  ZAKRES_V1_ODMOWA,
+  type ZapisProfiluWejscie,
   type WersjaProfilu,
 } from '@/lib/ksiegowosc/profil';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
@@ -36,7 +37,7 @@ const BLAD_ZAPISU = 'Nie udało się zapisać ustawień podatkowych i nic się n
  * sam wiersz; wpis audytu przy ponowieniu powtarza się z tym samym „przed
  * i po”, co jest prawdą o dwóch kliknięciach.
  */
-export async function zapiszProfilPodatkowyAction(wejscie: ProfilWejscie): Promise<ZapisProfiluWynik> {
+export async function zapiszProfilPodatkowyAction(wejscie: ZapisProfiluWejscie): Promise<ZapisProfiluWynik> {
   let ctx;
   try {
     ctx = await requireOrgRole(['owner', 'admin']);
@@ -44,6 +45,10 @@ export async function zapiszProfilPodatkowyAction(wejscie: ProfilWejscie): Promi
     if (e instanceof ActionAuthError) return { success: false, error: e.message };
     throw e;
   }
+
+  // Poza zakresem v1 (plan, D1) moduł dałby błędne kwoty po cichu, więc zapis
+  // wymaga potwierdzenia; bez profilu moduł nie liczy.
+  if (wejscie.zakresV1 !== true) return { success: false, error: ZAKRES_V1_ODMOWA, pole: 'zakresV1' };
 
   const parsed = profilSchema.safeParse(wejscie);
   if (!parsed.success) {
@@ -97,7 +102,7 @@ export async function zapiszProfilPodatkowyAction(wejscie: ProfilWejscie): Promi
     userId: ctx.user.id,
     entityType: 'tax_profile',
     entityId: wersja.id,
-    metadata: { validFrom: wersja.validFrom, przed, po: wersja },
+    metadata: { validFrom: wersja.validFrom, zakresV1: true, przed, po: wersja },
   });
 
   revalidatePath('/reports/ustawienia-podatkowe');

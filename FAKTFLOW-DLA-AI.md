@@ -49,7 +49,7 @@ Cloud — DOCELOWO migracja na self-hosted Hetzner (redukcja kosztów przy skali
 ## 3. CYKL ŻYCIA ŻĄDANIA I BRAMKOWANIE
 Wejście HTTP idzie przez `proxy.ts` → `lib/supabase/middleware.ts::updateSession()`:
 odświeża cookie sesji Supabase; klasyfikuje ścieżkę (MARKETING_PATHS,
-AUTH_PUBLIC_PREFIXES, PUBLIC_API_PREFIXES, STATIC_PUBLIC_EXACT); przekierowuje
+AUTH_PUBLIC_PREFIXES, PUBLIC_API_PREFIXES, NO_SESSION_PATHS); przekierowuje
 niezalogowanych na `/login?redirect=…`; bootstrapuje cookie aktywnej
 organizacji (`ksef.active_org`) i propaguje ją jako nagłówek HTTP `x-active-org`;
 egzekwuje 2FA (sesja AAL1 przy aktywnym MFA → redirect `/login/two-factor`).

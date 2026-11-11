@@ -7,6 +7,7 @@ import { RiFileZipLine, RiLoader4Line } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { saveBlob } from '@/lib/download';
+import { filenameFromDisposition } from '@/lib/http/content-disposition';
 
 /** Komunikat dla klienta z kodu błędu endpointu `/api/invoices/batch-pdf`. */
 export function batchPdfErrorMessage(code: string | undefined): string {
@@ -118,8 +119,7 @@ export function SelectedPdfDownload({ ids }: { ids: readonly string[] }) {
           toast.error(batchPdfErrorMessage(body.error));
           return;
         }
-        const cd = res.headers.get('Content-Disposition') ?? '';
-        const filename = cd.match(/filename="(.+?)"/)?.[1] ?? 'Faktury_zaznaczone.zip';
+        const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), 'Faktury_zaznaczone.zip');
         saveBlob(await res.blob(), filename);
       } catch {
         toast.error('Błąd połączenia przy pobieraniu paczki.');

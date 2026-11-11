@@ -129,6 +129,20 @@ describe('pulpit — miesiąc w Europe/Warsaw, nie w strefie serwera (§2.4 pkt 
     expect(figures.daysToVatDue).toBe(55);
   });
 
+  it('S-06: termin VAT w niedzielę przesuwa się na poniedziałek (art. 12 § 5 Ordynacji podatkowej)', async () => {
+    // 25.10.2026 i 25.04.2027 to niedziele; JPK_V7M i VAT do 26. (kalendarz 2027 w planie księgowości, sekcja 5).
+    const pazdziernik = await getMonthlyFigures(database(), TENANT, new Date('2026-09-15T10:00:00Z'));
+    expect(pazdziernik.vatDueLabel).toBe('26.10.2026');
+    expect(pazdziernik.daysToVatDue).toBe(41);
+    const kwiecien = await getMonthlyFigures(database(), TENANT, new Date('2027-03-10T10:00:00Z'));
+    expect(kwiecien.vatDueLabel).toBe('26.04.2027');
+    // Listopad 2026: 25.12 to Boże Narodzenie, 26.12 drugi dzień świąt (sobota), 27.12 niedziela.
+    const listopad = await getMonthlyFigures(database(), TENANT, new Date('2026-11-09T10:00:00Z'));
+    expect(listopad.vatDueLabel).toBe('28.12.2026');
+    // Dzień roboczy zostaje bez zmian.
+    expect((await getMonthlyFigures(database(), TENANT, PIERWSZY_PAZDZIERNIKA_0030)).vatDueLabel).toBe('25.11.2026');
+  });
+
   it('wykres sprzedaży kończy się na polskim bieżącym miesiącu', async () => {
     const series = await getSalesSeries(database(), TENANT, PIERWSZY_PAZDZIERNIKA_0030);
 
@@ -172,8 +186,9 @@ describe('pulpit — miesiąc w Europe/Warsaw, nie w strefie serwera (§2.4 pkt 
     expect(figures.monthName).toBe('wrzesień 2026');
     expect(figures.acceptedCount).toBe(1);
     expect(figures.totalGross).toBe(1230);
-    expect(figures.vatDueLabel).toBe('25.10.2026');
-    expect(figures.daysToVatDue).toBe(25);
+    // 25.10.2026 to niedziela: termin przesuwa się na 26.10 (S-06; wcześniej test zapisał niedzielę).
+    expect(figures.vatDueLabel).toBe('26.10.2026');
+    expect(figures.daysToVatDue).toBe(26);
     expect(series.currentMonthKey).toBe('2026-09');
   });
 

@@ -24,8 +24,9 @@ vi.mock('next/link', () => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/app/actions/expenses', () => ({
   getOcrJobStatusAction: mocks.status,
-  uploadExpensePhotoAction: mocks.upload,
 }));
+// Wgranie: trasa `/api/uploads/expense` (plan skalowania, sesja 31).
+vi.mock('@/lib/uploads/client', () => ({ postExpenseUpload: mocks.upload }));
 
 const { InvoiceTypeSelector } = await import('@/components/invoices/invoice-type-selector');
 

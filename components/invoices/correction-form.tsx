@@ -744,8 +744,8 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Label className={labelClass}>Numer korekty</Label>
-            <Input placeholder="KOR/2026/04/001" {...form.register('internalNumber')} />
+            <Label htmlFor="kor-numer" className={labelClass}>Numer korekty</Label>
+            <Input id="kor-numer" placeholder="KOR/2026/04/001" {...form.register('internalNumber')} />
             {form.formState.errors.internalNumber && (
               <p className="mt-1 text-xs text-red-600">
                 {form.formState.errors.internalNumber.message}
@@ -753,13 +753,13 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
             )}
           </div>
           <div>
-            <Label className={labelClass}>Data korekty</Label>
-            <Input type="date" {...form.register('issueDate')} />
+            <Label htmlFor="kor-data" className={labelClass}>Data korekty</Label>
+            <Input id="kor-data" type="date" {...form.register('issueDate')} />
           </div>
         </div>
 
         <div>
-          <Label className={labelClass}>Typ korekty</Label>
+          <Label htmlFor="kor-typ" className={labelClass}>Typ korekty</Label>
           <Select
             value={correctionType}
             items={CORRECTION_TYPE_ITEMS}
@@ -768,7 +768,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
               handleCorrectionTypeChange(v as CorrectionFormParsed['correctionType'])
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="kor-typ">
               <SelectValue placeholder="Typ" />
             </SelectTrigger>
             <SelectContent>
@@ -787,7 +787,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
         </div>
 
         <div>
-          <Label className={labelClass}>Typ KSeF (skutek w czasie)</Label>
+          <Label htmlFor="kor-typ-ksef" className={labelClass}>Typ KSeF (skutek w czasie)</Label>
           <Select
             value={typKorekty}
             items={TYPOLOGY_KOREKTY_ITEMS}
@@ -800,7 +800,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
               )
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="kor-typ-ksef">
               <SelectValue placeholder="Typ" />
             </SelectTrigger>
             <SelectContent>
@@ -819,8 +819,9 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
         </div>
 
         <div>
-          <Label className={labelClass}>Przyczyna korekty (obowiązkowe)</Label>
+          <Label htmlFor="kor-przyczyna" className={labelClass}>Przyczyna korekty (obowiązkowe)</Label>
           <Textarea
+            id="kor-przyczyna"
             rows={2}
             placeholder="Np. błąd w nazwie nabywcy, zwrot towaru, rabat post-fakturowy…"
             {...form.register('correctionReason')}
@@ -851,7 +852,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Label className={labelClass}>Metoda płatności</Label>
+            <Label htmlFor="kor-metoda" className={labelClass}>Metoda płatności</Label>
             <Select
               value={paymentMethod}
               items={PAYMENT_METHOD_ITEMS}
@@ -864,7 +865,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
                 )
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger id="kor-metoda">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -877,8 +878,8 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
             </Select>
           </div>
           <div>
-            <Label className={labelClass}>Termin płatności</Label>
-            <Input type="date" {...form.register('paymentDueDate')} />
+            <Label htmlFor="kor-termin" className={labelClass}>Termin płatności</Label>
+            <Input id="kor-termin" type="date" {...form.register('paymentDueDate')} />
             {form.formState.errors.paymentDueDate && (
               <p className="mt-1 text-xs text-red-600">
                 {form.formState.errors.paymentDueDate.message}
@@ -886,8 +887,9 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
             )}
           </div>
           <div className="sm:col-span-2">
-            <Label className={labelClass}>Numer rachunku (dla przelewu, 26 cyfr)</Label>
+            <Label htmlFor="kor-rachunek" className={labelClass}>Numer rachunku (dla przelewu, 26 cyfr)</Label>
             <Input
+              id="kor-rachunek"
               {...form.register('bankAccount')}
               placeholder="Opcjonalnie — tylko cyfry bez spacji"
             />
@@ -902,8 +904,8 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
 
       {/* Uwagi */}
       <section className="rounded-3xl border border-white/55 bg-white/45 p-7 shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] backdrop-blur-xl dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)] lg:p-8">
-        <Label className={labelClass}>Uwagi</Label>
-        <Textarea rows={3} {...form.register('notes')} />
+        <Label htmlFor="kor-uwagi" className={labelClass}>Uwagi</Label>
+        <Textarea id="kor-uwagi" rows={3} {...form.register('notes')} />
       </section>
 
       <CorrectionTotalsPreview form={form} />
@@ -1017,15 +1019,16 @@ function CorrectionLinesTable(props: {
                 <tr key={field.id} className={c.tdRow}>
                   <td className="py-3 text-muted-foreground">{index + 1}</td>
                   <td className="py-3 pr-2">
-                    <Input className="h-9 min-w-[8rem]" {...form.register(`${name}.${index}.name`)} />
+                    <Input className="h-9 min-w-[8rem]" aria-label={`Nazwa pozycji ${index + 1} (${title})`} {...form.register(`${name}.${index}.name`)} />
                   </td>
                   <td className="py-3 pr-2">
-                    <Input className="h-9 w-20" {...form.register(`${name}.${index}.unit`)} />
+                    <Input className="h-9 w-20" aria-label={`Jednostka pozycji ${index + 1} (${title})`} {...form.register(`${name}.${index}.unit`)} />
                   </td>
                   <td className="py-3 pr-2">
                     <Input
                       type="number"
                       step="0.0001"
+                      aria-label={`Ilość pozycji ${index + 1} (${title})`}
                       className="h-9 w-24 tabular-nums"
                       {...form.register(`${name}.${index}.quantity`, { valueAsNumber: true })}
                     />
@@ -1034,6 +1037,7 @@ function CorrectionLinesTable(props: {
                     <Input
                       type="number"
                       step="0.01"
+                      aria-label={`Cena netto pozycji ${index + 1} (${title})`}
                       className="h-9 w-28 tabular-nums"
                       {...form.register(`${name}.${index}.unitPriceNet`, { valueAsNumber: true })}
                     />
@@ -1069,6 +1073,7 @@ function CorrectionLinesTable(props: {
                       variant="ghost"
                       size="icon"
                       disabled={fields.length === 1}
+                      aria-label={`Usuń pozycję ${index + 1} (${title})`}
                       className="h-9 w-9 rounded-lg transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
                       onClick={() => remove(index)}
                     >

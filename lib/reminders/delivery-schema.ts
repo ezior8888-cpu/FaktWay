@@ -1,11 +1,45 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { isReceiptInvoiceColumns, isReceiptInvoiceFa3 } from '@/lib/invoices/receipt-invoice';
 import type { ReminderDelivery, ReminderInvoiceSource } from '@/types/reminder-delivery';
 
 export const MAX_REMINDER_PDF_BYTES = 512 * 1024;
 export const REMINDER_DELIVERY_TTL_MS = 30 * 60 * 1000;
 export const REMINDER_INVOICE_SELECT = 'id,tenant_id,gross_total,paid_amount,currency,payment_status,direction,ksef_status,origin,invoice_kind,invoice_type,payment_due_date,issue_date,internal_number,ksef_number,buyer_data,buyer_nip,payment_data,seller_data,reminders_paused';
+
+/** Wiersz faktury z całym `fa3_data` (`select('*')`) albo z aliasami `receipt` i `ksef_fp`. */
+export interface ReminderChaseCandidate {
+  origin?: unknown;
+  invoice_kind?: unknown;
+  invoice_type?: unknown;
+  internal_number?: unknown;
+  fa3_data?: unknown;
+  /** `fa3_data->receipt` */
+  receipt?: unknown;
+  /** `fa3_data->ksefMarkers->>fp` */
+  ksef_fp?: unknown;
+}
+
+/** Faktura do paragonu (FaktWay albo import KSeF), rozpoznana funkcją z `lib/invoices/receipt-invoice.ts`. */
+export function isReceiptInvoice(invoice: ReminderChaseCandidate): boolean {
+  return isReceiptInvoiceFa3(invoice.fa3_data) || isReceiptInvoiceColumns(invoice.receipt, invoice.ksef_fp);
+}
+
+const NOT_CHASEABLE_MESSAGE =
+  'Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.';
+
+/**
+ * Komunikat odmowy przypomnienia dla faktury, której `isReminderInvoiceChaseable` nie przepuszcza.
+ * FP: z numerem dokumentu i tym, co zrobić (wyjście: Pomoc, gdy klient jednak nie zapłacił).
+ */
+export function reminderRefusalMessage(invoice: ReminderChaseCandidate): string {
+  if (!isReceiptInvoice(invoice)) return NOT_CHASEABLE_MESSAGE;
+  const number = typeof invoice.internal_number === 'string' && invoice.internal_number.trim()
+    ? ` ${invoice.internal_number.trim()}` : '';
+  return `Faktura do paragonu${number} jest zapłacona przy kasie, więc FaktWay nie wysyła do niej przypomnień o płatności. ` +
+    'Jeśli klient jednak nie zapłacił, napisz do nas przez Pomoc.';
+}
 
 /** Imported corrections can have invoice_kind=regular, so both stored classifications must be safe.
  * Final/ROZ była wykluczona, dopóki do zapłaty liczyło się od gross_total
@@ -13,7 +47,10 @@ export const REMINDER_INVOICE_SELECT = 'id,tenant_id,gross_total,paid_amount,cur
  * i widok zaległości liczą ROZ od `payment_data.amountDue`, więc jest
  * ścigalna jak każda inna faktura.
  */
-export function isReminderInvoiceChaseable(invoice: { origin?: unknown; invoice_kind?: unknown; invoice_type?: unknown }): boolean {
+export function isReminderInvoiceChaseable(invoice: ReminderChaseCandidate): boolean {
+  // Krok 1.2: sprzedaż z paragonu jest zapłacona przy kasie, a FP dostaje termin płatności
+  // z formularza. Status płatności zostaje, ale FP nie jest zaległością ani celem przypomnienia.
+  if (isReceiptInvoice(invoice)) return false;
   // Imported history has no trustworthy payment reconciliation.
   return invoice.origin === 'app' && (
     (invoice.invoice_kind === 'regular' && (invoice.invoice_type === 'VAT' || invoice.invoice_type === 'UPR')) ||

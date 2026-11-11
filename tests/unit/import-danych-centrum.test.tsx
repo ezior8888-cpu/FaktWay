@@ -6,7 +6,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: ctx.get }));
 vi.mock('@/lib/ksef/history-sync/status', () => ({ readKsefHistorySyncStatus: ctx.read }));
 // Okno importu z pliku i wstrzymanie historii wołają akcje serwera — tu tylko render.
-vi.mock('@/app/actions/import-danych', () => ({ startFileImportAction: vi.fn(), setKsefHistoryPausedAction: vi.fn() }));
+vi.mock('@/app/actions/import-danych', () => ({ setKsefHistoryPausedAction: vi.fn() }));
 
 import ImportDanychPage from '@/app/(dashboard)/import-danych/page';
 import { ImportCenter } from '@/components/import-danych/import-center';

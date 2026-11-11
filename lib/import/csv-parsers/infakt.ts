@@ -67,9 +67,9 @@ export function parseInfaktCsv(content: string): CsvParseResult {
       },
     );
 
-    const netTotal = parseAmount(row.net_total ?? row['Net total']);
-    const vatTotal = parseAmount(row.vat_total ?? row['VAT total']);
-    const grossTotal = parseAmount(row.gross_total ?? row['Gross total']);
+    const netTotal = parseAmount(row.net_total ?? row['Net total'], { warnings: invWarnings, fieldLabel: 'inFakt: kwota netto' });
+    const vatTotal = parseAmount(row.vat_total ?? row['VAT total'], { warnings: invWarnings, fieldLabel: 'inFakt: kwota VAT' });
+    const grossTotal = parseAmount(row.gross_total ?? row['Gross total'], { warnings: invWarnings, fieldLabel: 'inFakt: kwota brutto' });
 
     const vatRate = warnTotalsConsistency(
       netTotal,

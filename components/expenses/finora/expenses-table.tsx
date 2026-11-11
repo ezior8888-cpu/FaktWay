@@ -8,6 +8,7 @@ import { CaptureButton } from '@/components/expenses/capture-button'
 import { ExpenseDayCards, ExpensesEmptyState, type ExpenseRow } from '@/components/expenses/expenses-list'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { amountUnit, expenseAmountsCurrency } from '@/lib/expenses/ocr-currency-review'
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form'
 import { formatPlMoney } from '@/lib/format/pl'
 import { roundToCents } from '@/lib/xml/invoice-calculator'
@@ -117,7 +118,9 @@ export const expenseColumns: ColumnDef<ExpenseRow>[] = [
     id: 'gross',
     accessorFn: row => Number(row.gross_amount),
     cell: ({ row }) => (
-      <span className='font-medium tabular-nums'>{formatPlMoney(Number(row.original.gross_amount))} zł</span>
+      <span className='font-medium tabular-nums'>
+        {formatPlMoney(Number(row.original.gross_amount))} {amountUnit(expenseAmountsCurrency(row.original))}
+      </span>
     ),
     size: 130
   },
@@ -190,6 +193,8 @@ export function ExpensesTable({
       renderCards={(pageRows, filteredRows) => {
         const dayTotals = new Map<string, number>()
         for (const row of filteredRows) {
+          // Suma dnia w złotych: kwota w walucie bez kursu to nie złote (E17b).
+          if (expenseAmountsCurrency(row.original) !== 'PLN') continue
           const date = row.original.issue_date
           dayTotals.set(date, roundToCents((dayTotals.get(date) ?? 0) + Number(row.original.gross_amount)))
         }
