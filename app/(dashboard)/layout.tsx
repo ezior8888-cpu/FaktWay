@@ -111,9 +111,15 @@ export default async function DashboardLayout({
         className="ff-dashboard ff-app-shell relative h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]"
       >
         <PortalContainerProvider>
+          <a
+            href="#tresc"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:bg-background focus:px-3 focus:py-2 focus:text-sm"
+          >
+            Przejdź do treści
+          </a>
           <AppSidebar />
 
-          <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+          <SidebarInset id="tresc" className="min-h-0 min-w-0 overflow-hidden">
             <AppHeader
               profile={
                 user?.email ? (
