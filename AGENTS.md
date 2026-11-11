@@ -7,6 +7,7 @@
 > | Hasło | Plan |
 > |---|---|
 > | „Kontynuuj plan z agentem” (sesje Igora z Claude) | [`PLAN-AGENTA-CLAUDE.md`](docs/koordynacja/PLAN-AGENTA-CLAUDE.md) |
+> | „Kontynuuj plan aplikacji mobilnej” | [`PLAN-APLIKACJA-MOBILNA.md`](docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md), tylko etap z „Następny krok”, dziennik w sekcji 9, zasady wyglądu w [`docs/mobile/ZASADY-DESIGNU.md`](docs/mobile/ZASADY-DESIGNU.md), potem raport i STOP |
 > | „Kontynuuj plan zero zgubionych faktur, sesja N” | [`PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md), tylko sesja N, dziennik w `PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md` |
 > | „Kontynuuj plan Finora” | [`PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md), dziennik w sekcji 12 |
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |

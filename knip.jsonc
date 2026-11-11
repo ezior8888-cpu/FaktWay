@@ -28,7 +28,7 @@
   ],
   // Osobno wdrażane pakiety z własnym package.json i testami:
   // ops/bramka (bot Telegrama), ops/poczta (Cloudflare Email Worker).
-  "ignore": ["ops/**"],
+  "ignore": ["ops/**", "mobile/**"],
   // Programy systemowe wołane w testach i skryptach, nie paczki npm.
   "ignoreBinaries": ["xmllint", "openssl", "psql", "lighthouse"],
   // Moduły `k6/*` dostarcza binarka k6, nie npm.
