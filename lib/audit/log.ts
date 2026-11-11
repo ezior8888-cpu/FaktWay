@@ -129,6 +129,11 @@ export type AuditAction =
   | 'ksef.history.resumed'
   // Zapis operatora skryptem `scripts/ops/ksef-historia.sh` (odblokuj, wznow, wstrzymaj-wszystko) — SQL, nie aplikacja.
   | 'ksef.history.operator'
+  // Uprawnienia w KSeF (00195, krok 6.2, część 4): każde wywołanie przez ksefFetch, z aplikacji.
+  | 'ksef.permissions.grant'
+  | 'ksef.permissions.revoke'
+  | 'ksef.permissions.operation'
+  | 'ksef.permissions.query'
   // Faza 24 — admin panel actions.
   | 'admin.user.suspended'
   | 'admin.user.unsuspended'
@@ -159,6 +164,17 @@ export type AuditAction =
   | 'accountant.token_revoked'
   | 'accountant.access_used'
   | 'accountant.portal_export'
+  // Uprawnienie biura rachunkowego w KSeF (00195, krok 6.2, część 4): metadane niosą NIP i nazwę
+  // biura, zakres, `canDelegate`, środowisko, numery operacji KSeF, kod i opis statusu, kod błędu.
+  // Zapisuje baza (RPC `finish_ksef_permission_attempt`, `record_ksef_permission_check`) w transakcji
+  // ze zmianą; aplikacja zapisuje `grant_sent`/`revoke_sent` sama tylko wtedy, gdy KSeF przyjął
+  // operację, a zapis w bazie się nie udał (`zapisany: false`).
+  | 'accountant.ksef_permission_grant_sent'
+  | 'accountant.ksef_permission_granted'
+  | 'accountant.ksef_permission_grant_failed'
+  | 'accountant.ksef_permission_revoke_sent'
+  | 'accountant.ksef_permission_revoked'
+  | 'accountant.ksef_permission_revoke_failed'
   // Kontrahenci — poprawka danych i usunięcie z bazy (audyt bloku 1, F-011).
   | 'contractor.updated'
   | 'contractor.deleted'

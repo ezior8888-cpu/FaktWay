@@ -98,6 +98,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-jpk.test.ts',
       'tests/rls-ksiegowosc-kpir.test.ts',
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF.
+      'tests/rls-uprawnienia-ksef.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
