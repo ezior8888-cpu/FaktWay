@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { KsefEnvironment } from '@/types/ksef';
 
 import type { WierszKosztuDoZaplaty } from './do-zaplaty';
+import type { WierszKosztuDoPliku } from './plik-przelewow';
 
 export const LIMIT_DO_ZAPLATY = 500;
 
@@ -41,4 +42,27 @@ export async function wczytajKosztyDoZaplaty(
     (w) => !w.faktura || w.faktura.ksef_environment === srodowisko,
   );
   return { wiersze, obcieta: (data ?? []).length >= LIMIT_DO_ZAPLATY };
+}
+
+/**
+ * Zaznaczone koszty do pliku przelewów (krok 3.4, część 2): te same kolumny
+ * co lista i adres sprzedawcy, także koszty już zapłacone (plik mówi wtedy,
+ * dlaczego ich pominął). Koszty z innego środowiska KSeF odpadają jak na liście.
+ */
+export async function wczytajKosztyDoPliku(
+  supabase: unknown,
+  tenantId: string,
+  srodowisko: KsefEnvironment,
+  ids: readonly string[],
+): Promise<{ wiersze: WierszKosztuDoPliku[] } | { blad: string }> {
+  const { data, error } = await (supabase as SupabaseClient)
+    .from('expenses')
+    .select(`${KOLUMNY}, seller_address`)
+    .eq('tenant_id', tenantId)
+    .in('id', [...ids]);
+  if (error) return { blad: error.message };
+  const wiersze = ((data ?? []) as unknown as Array<Wiersz & { seller_address: string | null }>).filter(
+    (w) => !w.faktura || w.faktura.ksef_environment === srodowisko,
+  );
+  return { wiersze };
 }

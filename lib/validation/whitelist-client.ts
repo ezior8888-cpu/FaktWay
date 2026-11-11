@@ -271,3 +271,74 @@ function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((x): x is string => typeof x === 'string');
 }
+
+// ============================================================================
+// Metoda „check”: czy rachunek jest przypisany do NIP (plik przelewów)
+// ============================================================================
+
+/**
+ * Wynik metody `check` API MF (krok 3.4, część 2, RP-BL-01): `assigned`
+ * („TAK”) albo `not_assigned` („NIE”) zawsze z identyfikatorem zapytania
+ * (`requestId`), który jest dowodem sprawdzenia. Każdy błąd, także odpowiedź
+ * bez `requestId` albo z inną wartością niż TAK i NIE, to `error`: nigdy
+ * „rachunek w porządku”.
+ */
+export type WhitelistAssignmentResult =
+  | { status: 'assigned' | 'not_assigned'; requestId: string; requestDateTime: string | null }
+  | { status: 'error'; error: string; errorCode: 'INVALID_INPUT' | 'API_ERROR' | 'TIMEOUT' | 'RATE_LIMIT' | 'BAD_RESPONSE' };
+
+/**
+ * `GET /api/check/nip/{nip}/bank-account/{rachunek}?date=RRRR-MM-DD`
+ * (https://wl-api.mf.gov.pl/, EntityCheckResponse: `result.accountAssigned`,
+ * `result.requestId`, `result.requestDateTime`; błąd 400: `{ code, message }`).
+ * W odróżnieniu od `search/nip` odpowiada też dla rachunków wirtualnych.
+ */
+export async function checkBankAccountAssignment(
+  nip: string,
+  bankAccount: string,
+  date: string,
+): Promise<WhitelistAssignmentResult> {
+  const cleanNip = nip.replace(/[\s-]/g, '');
+  const cleanAccount = normalizeWhitelistAccount(bankAccount);
+  if (!/^\d{10}$/.test(cleanNip) || !/^\d{26}$/.test(cleanAccount) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { status: 'error', error: 'NIP, rachunek albo data w złym formacie', errorCode: 'INVALID_INPUT' };
+  }
+
+  const url = `${WHITELIST_API}/check/nip/${cleanNip}/bank-account/${cleanAccount}?date=${encodeURIComponent(date)}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'KSeF-SaaS/1.0' },
+    });
+    if (response.status === 429) {
+      return { status: 'error', error: 'limit zapytań do wykazu przekroczony', errorCode: 'RATE_LIMIT' };
+    }
+    const data: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const code = isRecord(data) && typeof data.code === 'string' ? ` ${data.code}` : '';
+      const message = isRecord(data) && typeof data.message === 'string' ? `: ${data.message}` : '';
+      return { status: 'error', error: `wykaz odpowiedział błędem ${response.status}${code}${message}`, errorCode: 'API_ERROR' };
+    }
+    const result = isRecord(data) && isRecord(data.result) ? data.result : null;
+    const assigned = result?.accountAssigned;
+    const requestId = typeof result?.requestId === 'string' ? result.requestId.trim() : '';
+    if ((assigned !== 'TAK' && assigned !== 'NIE') || !requestId) {
+      return { status: 'error', error: 'odpowiedź wykazu bez wyniku albo bez numeru zapytania', errorCode: 'BAD_RESPONSE' };
+    }
+    return {
+      status: assigned === 'TAK' ? 'assigned' : 'not_assigned',
+      requestId,
+      requestDateTime: optionalString(result?.requestDateTime) ?? null,
+    };
+  } catch (error) {
+    if (error instanceof Error && (error.name === 'AbortError' || /abort|timeout/i.test(error.message))) {
+      return { status: 'error', error: 'wykaz nie odpowiada', errorCode: 'TIMEOUT' };
+    }
+    return { status: 'error', error: 'brak połączenia z wykazem', errorCode: 'API_ERROR' };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}

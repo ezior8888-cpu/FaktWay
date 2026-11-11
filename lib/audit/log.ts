@@ -52,6 +52,12 @@ export type AuditAction =
   // i termin. Zapisuje baza (RPC `mark_expense_paid` i `undo_expense_paid`) w transakcji ze zmianą.
   | 'expense.marked_paid'
   | 'expense.paid_undone'
+  // Plik przelewów z listy „Do zapłaty” (krok 3.4, część 2). `whitelist_checked`: świeże sprawdzenie
+  // rachunku w wykazie podatników VAT (metoda check API MF) przy koszcie ponad 15 000 zł; metadane niosą
+  // NIP, rachunek, dzień, wynik TAK/NIE i `requestId` (dowód). `transfer_file_created`: koszty w pliku
+  // (kwota, data wykonania, MPP), pominięcia z kodem powodu i skrót SHA-256 pliku. Plik niczego nie oznacza.
+  | 'expense.whitelist_checked'
+  | 'expense.transfer_file_created'
   // Agent FLO — wykonanie propozycji zatwierdzonej kliknięciem człowieka.
   // Metadane niosą identyfikator żetonu zgody i tytuł, który klient widział
   // na karcie: to jest odpowiedź na reklamację „ja tego nie klikałem”.
@@ -223,6 +229,15 @@ export interface AuditLogEntry {
  * Nie rzuca — przy błędzie audytu główna operacja ma się i tak udać.
  */
 export async function logAudit(entry: AuditLogEntry): Promise<void> {
+  await logAuditWithResult(entry);
+}
+
+/**
+ * Jak `logAudit` (nie rzuca, ten sam zapis i ten sam komunikat w konsoli),
+ * ale mówi, czy wpis się zapisał. Tam, gdzie wpis jest dowodem (sprawdzenie
+ * białej listy przy pliku przelewów, krok 3.4), wywołujący bez zapisu odmawia.
+ */
+export async function logAuditWithResult(entry: AuditLogEntry): Promise<boolean> {
   try {
     const { ip, userAgent } = await readRequestClientHints();
 
@@ -240,8 +255,11 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
 
     if (error) {
       console.error('[audit] write_failed');
+      return false;
     }
+    return true;
   } catch {
     console.error('[audit] write_failed');
+    return false;
   }
 }
