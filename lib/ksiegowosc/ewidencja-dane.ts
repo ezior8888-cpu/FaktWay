@@ -27,6 +27,7 @@ import {
   zbudujEwidencje,
   type Ewidencja,
   type FakturaEwidencji,
+  type NiepewnyImport,
   type KursPrzychodu,
   type ProgNajmu,
   type RodzajFaktury,
@@ -59,9 +60,12 @@ export const KOMUNIKAT_ODCZYT =
   'Nie udało się odczytać danych ewidencji, więc nie pokazujemy niepełnych kwot. Strona spróbuje ponownie przy następnym otwarciu.';
 
 // FP z importu KSeF (`ksefMarkers.fp`) i FP wystawiona w FaktWay (`receipt`, krok 1.2).
+// F11-C4: pochodzenie i flagi treści z pliku KSeF, jak `importedContentFlags` w eksporcie.
 const KOLUMNY_FAKTURY =
   'id, internal_number, issue_date, sale_date, net_total, invoice_kind, invoice_type, advance_invoice_ids, ' +
-  'currency, ksef_number, buyer_data, fp:fa3_data->ksefMarkers->>fp, fp_paragon:fa3_data->receipt';
+  'currency, ksef_number, buyer_data, fp:fa3_data->ksefMarkers->>fp, fp_paragon:fa3_data->receipt, origin, ' +
+  'import_adnotacje:fa3_data->annotations, import_daty_niejasne:fa3_data->saleDates->>unclear, ' +
+  'import_sumy_nieznane:fa3_data->>lineAmountTotalsUnknown';
 const KAWALEK = 100;
 
 interface WierszFaktury {
@@ -79,6 +83,24 @@ interface WierszFaktury {
   fp: string | boolean | null;
   /** `fa3_data.receipt`: każdy zapis paragonu (także niepełny) to FP. */
   fp_paragon?: unknown;
+  origin?: string | null;
+  /** `fa3_data.annotations`: brak obiektu przy imporcie z KSeF = import sprzed odczytu treści (C5b). */
+  import_adnotacje?: unknown;
+  import_daty_niejasne?: string | boolean | null;
+  import_sumy_nieznane?: string | boolean | null;
+}
+
+const prawda = (v: unknown) => v === true || v === 'true';
+
+/** F11-C4: te same powody co odmowa JPK (`importedContentFlags` w `lib/exports/data-fetcher.ts`). */
+function niepewnyImport(w: WierszFaktury): NiepewnyImport | null {
+  const adnotacje = w.import_adnotacje;
+  if (w.origin === 'ksef_import' && (adnotacje === null || adnotacje === undefined || typeof adnotacje !== 'object' || Array.isArray(adnotacje))) {
+    return 'przed_odczytem';
+  }
+  if (prawda(w.import_daty_niejasne)) return 'daty_sprzedazy';
+  if (prawda(w.import_sumy_nieznane)) return 'sumy';
+  return null;
 }
 
 interface WierszPozycji {
@@ -228,6 +250,7 @@ function zWierszaFaktury(
     waluta: (w.currency ?? 'PLN').trim().toUpperCase() || 'PLN',
     numerKsef: w.ksef_number,
     fp: isReceiptInvoiceColumns(w.fp_paragon, w.fp),
+    niepewnyImport: niepewnyImport(w),
     kontrahent: { ...kontrahentJpk(w.buyer_data), ...nazwaIAdres(w.buyer_data) },
     rozliczoneZaliczkiGr: doGroszy(rozliczone.get(w.id)),
     pozycje: zeStawkami.get(w.id) ?? null,
