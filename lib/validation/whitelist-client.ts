@@ -2,6 +2,8 @@
 // Endpoint: https://wl-api.mf.gov.pl/api/search/nip/{nip}?date={YYYY-MM-DD}
 // Dokumentacja: https://www.podatki.gov.pl/wykaz-podatnikow-vat-api/
 
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
+
 const WHITELIST_API = 'https://wl-api.mf.gov.pl/api';
 const TIMEOUT_MS = 8000;
 
@@ -57,7 +59,8 @@ export async function checkNipInWhitelist(
     };
   }
 
-  const checkDate = date ?? new Date().toISOString().slice(0, 10);
+  // Dzień w Polsce (FZ-003): w UTC między 0:00 a 1:00/2:00 byłby wczorajszy.
+  const checkDate = date ?? todayInWarsaw();
   const url = `${WHITELIST_API}/search/nip/${cleanNip}?date=${encodeURIComponent(checkDate)}`;
 
   try {
