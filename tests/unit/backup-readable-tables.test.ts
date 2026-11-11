@@ -215,9 +215,19 @@ function listaKolumn(srodek: string): string[] | null {
   return kolumny.map(nazwaKolumny);
 }
 
+/** Definicja kolumny bez treści `CHECK (…)`: `IS NOT NULL` w warunku nie czyni kolumny NOT NULL. */
+function bezCheck(definicja: string): string {
+  let wynik = definicja;
+  for (let m = /\bCHECK\s*\(/i.exec(wynik); m; m = /\bCHECK\s*\(/i.exec(wynik)) {
+    const reszta = nawias(wynik, m.index)?.reszta ?? '';
+    wynik = `${wynik.slice(0, m.index)}${reszta}`;
+  }
+  return wynik;
+}
+
 function dodajKolumne(s: KluczeTabeli, tabela: string, kolumna: string, definicja: string): void {
   s.kolumny.add(kolumna);
-  if (/\bNOT NULL\b|\bPRIMARY KEY\b/i.test(definicja)) s.niepuste.add(kolumna);
+  if (/\bNOT NULL\b|\bPRIMARY KEY\b/i.test(bezCheck(definicja))) s.niepuste.add(kolumna);
   if (/\bPRIMARY KEY\b/i.test(definicja)) {
     s.pk = [kolumna];
     s.pkNazwa = nazwaKolumny(/CONSTRAINT ("[^"]+"|\w+) PRIMARY KEY/i.exec(definicja)?.[1] ?? `${tabela}_pkey`);
@@ -438,8 +448,11 @@ describe('nocny backup czyta każdą tabelę po unikalnym kluczu', () => {
       'ALTER TABLE public.d ALTER COLUMN id DROP NOT NULL;',
       'CREATE TABLE public.e (id uuid PRIMARY KEY);',
       'CREATE TABLE public.f (uid uuid NOT NULL UNIQUE); ALTER TABLE public.f RENAME COLUMN uid TO id;',
+      // NOT NULL w treści CHECK dotyczy innej kolumny, `id` dalej może być NULL.
+      'CREATE TABLE public.g (id uuid UNIQUE CHECK (inna IS NOT NULL), inna text);',
+      'CREATE TABLE public.h (id uuid UNIQUE CHECK (id::text <> \'\') NOT NULL);',
     ]);
-    const zUnikalnymId = ['a', 'b', 'c', 'd', 'e', 'f'].filter((t) => maUnikalneId(proba.get(t)!));
-    expect(zUnikalnymId).toEqual(['b', 'c', 'e', 'f']);
+    const zUnikalnymId = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].filter((t) => maUnikalneId(proba.get(t)!));
+    expect(zUnikalnymId).toEqual(['b', 'c', 'e', 'f', 'h']);
   });
 });

@@ -169,4 +169,27 @@ describe('kopia JSON czyta tabele stronami po kluczu', () => {
     ).rejects.toThrow('dump_table_failed: invoices: odpowiedź bez danych i bez błędu');
     expect(przeczytane).toHaveLength(2);
   });
+
+  it('klucz liczbowy poza dokładnością liczb JS (bigint > 2^53) przerywa kopię, zamiast przesunąć kursor o przybliżenie', async () => {
+    // JSON z PostgREST niesie bigint jako liczbę; powyżej 2^53 JS ją zaokrągla,
+    // więc kursor „większy niż” wskazałby inny wiersz niż ostatni przeczytany.
+    const strony = [{ data: [{ id: 2 ** 53 + 2 }], error: null }, { data: [], error: null }];
+    let nr = 0;
+    const zapytanie = {
+      order: () => zapytanie,
+      gt: () => zapytanie,
+      gte: () => zapytanie,
+      or: () => zapytanie,
+      limit: () => zapytanie,
+      then: (ok: (v: unknown) => unknown, blad: (e: unknown) => unknown) =>
+        Promise.resolve(strony[nr++]).then(ok, blad),
+    };
+    const klient = { from: () => ({ select: () => zapytanie }) } as unknown as SnapshotReadClient;
+
+    await expect(
+      (async () => {
+        for await (const strona of readTablePages(klient, 'ksef_counters', ['id'], 2)) void strona;
+      })(),
+    ).rejects.toThrow('dump_table_failed: ksef_counters: kolumna klucza kopii id ma liczbę poza dokładnością');
+  });
 });

@@ -16,6 +16,13 @@ import { MAX_SNAPSHOT_JSON_BYTES, SKIP_TABLES, snapshotKeyFor } from './snapshot
 export const SNAPSHOT_PAGE_SIZE = 500;
 
 /**
+ * Górna granica paczki JSON-a przekazywanej do gzip (bez dzielenia wiersza).
+ * W pamięci jest wtedy najwyżej tyle napisu i tyle jego kopii w buforze,
+ * niezależnie od szerokości wierszy w stronie.
+ */
+export const SNAPSHOT_WRITE_CHUNK_BYTES = 1024 * 1024;
+
+/**
  * Układ pliku: poprawny JSON (ten sam kształt co dawniej), ale jedna linia na
  * wiersz tabeli, żeby weryfikacja mogła czytać plik strumieniem
  * (`lib/backup/verify.ts`):
@@ -135,14 +142,18 @@ export async function createDbSnapshot(opts: {
   let closed = false;
   let jsonBytes = 0;
   let pending = '';
+  let pendingBytes = 0;
   const add = (line: string) => {
+    const bytes = Buffer.byteLength(line, 'utf8');
     pending += line;
-    jsonBytes += Buffer.byteLength(line, 'utf8');
+    pendingBytes += bytes;
+    jsonBytes += bytes;
   };
   const flush = async () => {
     if (pending.length === 0) return;
     await out.write(pending);
     pending = '';
+    pendingBytes = 0;
   };
 
   try {
@@ -169,6 +180,8 @@ export async function createDbSnapshot(opts: {
               durationMs: Date.now() - start,
             };
           }
+          // Szerokie wiersze: paczka nie rośnie do rozmiaru całej strony.
+          if (pendingBytes >= SNAPSHOT_WRITE_CHUNK_BYTES) await flush();
         }
         await flush();
       }
@@ -288,7 +301,14 @@ function keyValues(table: string, key: readonly string[], row: Row): string[] {
   return key.map((column) => {
     const value = row[column];
     if (typeof value === 'string') return value;
-    if (typeof value === 'number') return String(value);
+    if (typeof value === 'number') {
+      // bigint przychodzi w JSON-ie jako liczba; powyżej 2^53 JS ją zaokrągla
+      // i kursor wskazałby inny wiersz niż ostatni przeczytany.
+      if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+        throw new Error(`dump_table_failed: ${table}: kolumna klucza kopii ${column} ma liczbę poza dokładnością JS (powyżej 2^53)`);
+      }
+      return String(value);
+    }
     // Bez wartości w treści błędu: trafia do backup_log i na Slacka.
     throw new Error(
       `dump_table_failed: ${table}: kolumna klucza kopii ${column} ma ${value === null || value === undefined ? 'pustą wartość' : `typ ${typeof value}`}`,
