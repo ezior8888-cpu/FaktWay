@@ -1,3 +1,5 @@
+import { isIpAddress } from '@/lib/auth/sessions/ip-prefix';
+
 /**
  * Adres klienta z nagłówków żądania: jedna kolejność zaufania dla limitów prób
  * (`getClientIp`, AUD-62) i dla audytu (`logAudit`, krok 8.5).
@@ -13,4 +15,13 @@ export function clientIpFromHeaders(headers: Pick<Headers, 'get'>): string | nul
   const forwarded = headers.get('x-forwarded-for');
   if (!forwarded) return null;
   return forwarded.split(',').map((part) => part.trim()).filter(Boolean).pop() ?? null;
+}
+
+/**
+ * Zaufany adres klienta do zapisu w bazie (kolumny INET, audyt): kolejność z
+ * `clientIpFromHeaders`, a wartość, która nie jest adresem, to `null`.
+ */
+export function trustedClientIp(headers: Pick<Headers, 'get'>): string | null {
+  const candidate = clientIpFromHeaders(headers);
+  return candidate && isIpAddress(candidate) ? candidate : null;
 }
