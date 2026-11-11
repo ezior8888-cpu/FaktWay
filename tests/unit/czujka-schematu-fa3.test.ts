@@ -56,6 +56,15 @@ function atrapa(nadpisz: Record<string, Odpowiedz> = {}) {
   return { fetchImpl: fetchImpl as unknown as typeof fetch, wywolania };
 }
 
+// S-16 (plan żelaznego filtra, B7.1): MF przemianowało repozytorium
+// dokumentacji KSeF z CIRFMF/ksef-docs na CIRFMF/ksef-api (API GitHub,
+// 8.11.2026). Stara nazwa działa tylko dzięki przekierowaniu GitHuba.
+describe('czujka FA(3): repozytorium dokumentacji KSeF', () => {
+  it('pyta CIRFMF/ksef-api, nie starą nazwę z przekierowaniem', () => {
+    expect(DOCS_REPO).toBe('CIRFMF/ksef-api');
+  });
+});
+
 describe('czujka schematu FA(3): porównanie', () => {
   it('normalizacja zrównuje plik MF z kopią w repo (adres w schemaLocation, CRLF)', () => {
     expect(normalizuj(jakWMF('StrukturyDanych_v10-0E.xsd'))).toBe(normalizuj(repoPlik('StrukturyDanych_v10-0E.xsd')));

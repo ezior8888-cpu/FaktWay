@@ -90,9 +90,9 @@ function parseFakturowniaRow(
     lines = linesFromPositionsJson(pozycjeRaw.trim(), warnings);
   }
 
-  const netTotal = parseAmount(row.Netto);
-  const vatTotal = parseAmount(row.VAT);
-  const grossTotal = parseAmount(row.Brutto);
+  const netTotal = parseAmount(row.Netto, { warnings, fieldLabel: 'Fakturownia: kwota netto' });
+  const vatTotal = parseAmount(row.VAT, { warnings, fieldLabel: 'Fakturownia: kwota VAT' });
+  const grossTotal = parseAmount(row.Brutto, { warnings, fieldLabel: 'Fakturownia: kwota brutto' });
   const defaultVat = normalizeCsvVat(row['Stawka VAT']);
 
   if (lines.length === 0) {
@@ -233,7 +233,8 @@ function parseNumLike(...vals: unknown[]): number {
   for (const v of vals) {
     if (v === undefined || v === null) continue;
     if (typeof v === 'number' && Number.isFinite(v)) return v;
-    const n = parseAmount(String(v));
+    // Ilość i cena z pozycji: kropka to część dziesiętna (S-10).
+    const n = parseAmount(String(v), { kropkaTysiecy: false });
     if (n !== 0 || String(v).trim() === '0') return n;
   }
   return 0;

@@ -7,11 +7,18 @@
 
 import { PgBoss } from 'pg-boss';
 
+import { listActiveJobs } from './active-jobs';
 import { getJobsDatabaseUrl, getJobsSchema } from './config';
+import { createJobLogger } from './logger';
+
+const log = createJobLogger('boss');
 
 let cached: PgBoss | null = null;
 let started = false;
 let workerRole = false;
+/** Trwające zamykanie (drugi sygnał dostaje to samo) i koniec życia singletonu po nim. */
+let stopping: Promise<void> | null = null;
+let closed = false;
 
 /**
  * Proces workera prowadzi harmonogram cronów i nadzór pg-boss (wygaszanie,
@@ -24,6 +31,11 @@ export function enableWorkerRole(): void {
 }
 
 export function getBoss(): PgBoss {
+  if (closed) {
+    // Handler oblany przez failWip biegnie dalej do process.exit; nowa instancja
+    // w umierającym procesie wysłałaby drugie ponowienie joba (G1).
+    throw new Error('pg-boss zatrzymany: worker się zamyka, zadania przejmie następny proces');
+  }
   if (!cached) {
     cached = new PgBoss({
       connectionString: getJobsDatabaseUrl(),
@@ -47,12 +59,86 @@ export async function startBoss(): Promise<PgBoss> {
   return boss;
 }
 
-export async function stopBoss(): Promise<void> {
-  if (cached && started) {
-    // graceful: dokończ aktywne joby (timeout wewnętrzny pg-boss).
-    await cached.stop({ graceful: true, close: true });
+/**
+ * Ile czasu ma zamknięcie workera po SIGTERM (G1, ryzyko M9).
+ *
+ * Po czasie łaski kontener dostaje SIGKILL. Gdy trafi w środek jobu, job
+ * zostaje w pg-boss `active`, aż nadzór nowego workera wykryje brak heartbeatu
+ * (`QUEUE_POLICY.heartbeatSeconds`, razem ok. 3–4 min), a w logu nie ma śladu,
+ * co przerwano. Dlatego zamykamy się sami przed czasem łaski:
+ *
+ * - `drainMs`: tyle pg-boss czeka na aktywne joby; potem oznacza je jako
+ *   nieudane (`failWip`: stan `retry`, start po `retryDelay`) i zamyka pulę.
+ *   Sprawdza co 500 ms, a `failWip` i `db.close` idą już po limicie, stąd zapas.
+ * - `hardStopMs`: twardy limit całego `stop()`. Kroki pg-boss przed i po
+ *   czekaniu (`failWip` czeka na połączenie do 10 s) nie mają własnego limitu.
+ * - `sentryFlushMs`: `flushWorkerSentry()` po `stopBoss()` w `worker.ts`
+ *   (domyślny argument w `sentry.ts`).
+ *
+ * `containerGraceMs` = 10 s to domyślny `docker stop` i liczba z karty G1;
+ * repo nie zapisuje, ile daje Coolify. Zmieniaj świadomie, po potwierdzeniu
+ * (pilnuje `tests/unit/stopboss-czas-laski.test.ts`).
+ */
+export const WORKER_SHUTDOWN_BUDGET = {
+  containerGraceMs: 10_000,
+  sentryFlushMs: 2_000,
+  hardStopMs: 7_000,
+  drainMs: 5_000,
+} as const;
+
+/** Zamyka pg-boss w budżecie `WORKER_SHUTDOWN_BUDGET`; drugi sygnał dostaje to samo zamykanie. */
+export function stopBoss(): Promise<void> {
+  if (!stopping) {
+    stopping = doStopBoss().finally(() => {
+      stopping = null;
+    });
+  }
+  return stopping;
+}
+
+async function doStopBoss(): Promise<void> {
+  const boss = cached;
+  if (!boss || !started) return;
+  const { drainMs, hardStopMs } = WORKER_SHUTDOWN_BUDGET;
+
+  const active = listActiveJobs();
+  if (active.length > 0) {
+    log.info(`zamykanie: czekam do ${drainMs / 1000} s na aktywne joby (${active.length})`);
+  }
+
+  const stopped = boss.stop({ graceful: true, close: true, timeout: drainMs }).then(
+    () => ({ error: null }),
+    (error: unknown) => ({ error }),
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'deadline'>((resolve) => {
+    timer = setTimeout(() => resolve('deadline'), hardStopMs);
+  });
+
+  try {
+    const outcome = await Promise.race([stopped, deadline]);
+    const left = listActiveJobs();
+    if (outcome === 'deadline') {
+      log.error(
+        `pg-boss nie zamknął się w ${hardStopMs / 1000} s, wychodzimy bez niego: ` +
+          'joby, których failWip nie zdążył oblać, zostają active do wykrycia przez heartbeat nowego workera',
+        { przerwane: left },
+      );
+      return;
+    }
+    if (left.length > 0) {
+      log.warn(
+        `przerwane przy zamykaniu (${left.length}): pg-boss oznaczył je jako nieudane, ` +
+          `wrócą do kolejki po ${QUEUE_POLICY.retryDelay} s, jeśli zostały próby`,
+        { przerwane: left },
+      );
+    }
+    if (outcome.error) throw outcome.error;
+  } finally {
+    clearTimeout(timer);
     started = false;
     cached = null;
+    closed = true;
   }
 }
 

@@ -4,7 +4,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { requestInboxPollOnVisit } from '@/lib/ksef/inbox-activity';
 import { getPageContext } from '@/lib/supabase/page-context';
 
-import { buildInboxRows, INBOX_COLUMNS, loadInboxExpenseLinks, type InboxInvoiceRow } from './_components/inbox-rows';
+import {
+  buildInboxRows,
+  INBOX_COLUMNS,
+  loadInboxExpenseLinks,
+  loadInboxReceiptMatches,
+  type InboxInvoiceRow,
+} from './_components/inbox-rows';
 import { InboxTable } from './_components/inbox-table';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +57,10 @@ export default async function InboxPage() {
     !error && invoiceRows.length > 0
       ? await loadInboxExpenseLinks(supabase, tenantId, invoiceRows.map((row) => row.id))
       : [];
-  const rows = buildInboxRows(invoiceRows, links);
+  const expenseIds = (links ?? []).map((link) => link.id);
+  const receiptMatches =
+    expenseIds.length > 0 ? await loadInboxReceiptMatches(supabase, tenantId, expenseIds) : null;
+  const rows = buildInboxRows(invoiceRows, links, receiptMatches);
 
   // Zawartość karty sekcji Kosztów: kafle, kartę i rząd zakładek daje
   // `(koszty)/layout.tsx` (poprawka Bartosza 25.10.2026 — przełączenie

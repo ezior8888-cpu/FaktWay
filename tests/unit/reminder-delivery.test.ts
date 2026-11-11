@@ -1,3 +1,4 @@
+import PDFDocument from 'pdfkit';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReminderInvoiceSource } from '@/types/reminder-delivery';
 const mocks = vi.hoisted(() => ({ client: vi.fn(), pdf: vi.fn() }));
@@ -301,6 +302,10 @@ describe('strict immutable envelope and source fingerprint', () => {
   it('escapes all HTML metacharacters and only supplies safe line breaks', () => {
     expect(deliveryHtml('&<>"\'\nnext')).toBe('<p>&amp;&lt;&gt;&quot;&#39;<br>next</p>');
   });
+  it('a KSeF number that arrives after the preview invalidates consent (the transfer title depends on it)', () => {
+    expect(reminderInvoiceFingerprint({ ...invoiceFixture, ksef_number: '1234567890-20260820-0A1B2C3D4E5F-7A' }))
+      .not.toBe(reminderInvoiceFingerprint(invoiceFixture));
+  });
   it('ignores nested JSON key order but binds finance, recipient, bank account and invoice identity', () => {
     const original = reminderInvoiceFingerprint(invoiceFixture);
     expect(reminderInvoiceFingerprint({ ...invoiceFixture, buyer_data: { email: 'buyer@example.test', address: { addressLine2: '00-001 Miasto', addressLine1: 'Test 1' }, name: 'Fixture buyer' } })).toBe(original);
@@ -310,5 +315,77 @@ describe('strict immutable envelope and source fingerprint', () => {
       { invoice_kind: 'correction' }, { invoice_type: 'KOR' }, { origin: 'ksef_import' }] as const) {
       expect(reminderInvoiceFingerprint({ ...invoiceFixture, ...patch })).not.toBe(original);
     }
+  });
+});
+
+// Krok 1.4 planu kompletnej aplikacji (RP-PLAT-01, RP-PLAT-03): od 1.01.2027
+// płacący za fakturę z KSeF podaje w tytule przelewu jej numer KSeF.
+// Przypomnienie i wezwanie podsuwają gotowy tytuł: numer KSeF, potem numer
+// faktury. Prawdziwy generator wezwania, atrapa tylko dla bazy.
+describe('tytuł przelewu z numerem KSeF (krok 1.4)', () => {
+  const KSEF = '1234567890-20260820-0A1B2C3D4E5F-7A';
+  const TYTUL = `Tytuł przelewu: ${KSEF} FV/1/2026`;
+
+  async function prepareWithRealLetter(stage: 'stage_3' | 'stage_4') {
+    const actual = await vi.importActual<typeof import('@/lib/reminders/pdf-demand-letter')>('@/lib/reminders/pdf-demand-letter');
+    mocks.pdf.mockImplementation(actual.generateDemandLetterPdf);
+    const text = vi.spyOn(PDFDocument.prototype, 'text');
+    try {
+      const delivery = await buildReminderDelivery(tenantId, invoiceId, stage);
+      return { delivery, letterTexts: text.mock.calls.map((call) => String(call[0])) };
+    } finally {
+      text.mockRestore();
+    }
+  }
+
+  it.each(['stage_1', 'stage_2', 'stage_3'] as const)('%s: the email gives the KSeF number first, then the invoice number, KSeF once', async (stage) => {
+    patchInvoice({ ksef_number: KSEF });
+    const delivery = await buildReminderDelivery(tenantId, invoiceId, stage);
+    expect(delivery.text).toContain(TYTUL);
+    expect(delivery.text.split(KSEF)).toHaveLength(2);
+  });
+
+  it.each(['stage_3', 'stage_4'] as const)('%s: the demand letter PDF prints the same title as the email', async (stage) => {
+    patchInvoice({ ksef_number: KSEF });
+    const { letterTexts } = await prepareWithRealLetter(stage);
+    expect(mocks.pdf).toHaveBeenCalledWith(expect.objectContaining({ transferTitle: `${KSEF} FV/1/2026` }));
+    expect(letterTexts).toContain(TYTUL);
+    expect(letterTexts).not.toContain('Tytuł przelewu: FV/1/2026');
+  });
+
+  it('without a KSeF number the title stays the invoice number, as before (email and letter)', async () => {
+    const { delivery, letterTexts } = await prepareWithRealLetter('stage_3');
+    expect(delivery.text).toContain('Tytuł przelewu: FV/1/2026');
+    expect(letterTexts).toContain('Tytuł przelewu: FV/1/2026');
+  });
+
+  it('a KSeF number outside the TNumerKSeF pattern never reaches the title', async () => {
+    patchInvoice({ ksef_number: 'KSEF-1' });
+    const { delivery, letterTexts } = await prepareWithRealLetter('stage_3');
+    expect(delivery.text).toContain('Tytuł przelewu: FV/1/2026');
+    expect(delivery.text).not.toContain('KSEF-1');
+    expect(letterTexts.join('\n')).not.toContain('KSEF-1');
+  });
+
+  it('an invoice without its own number uses the KSeF number once, not twice', async () => {
+    patchInvoice({ internal_number: null, ksef_number: KSEF });
+    const delivery = await buildReminderDelivery(tenantId, invoiceId, 'stage_3');
+    expect(delivery.text).toContain(`Tytuł przelewu: ${KSEF}\n`);
+    expect(delivery.text).not.toContain(`${KSEF} ${KSEF}`);
+  });
+
+  it('without its own number, a KSeF number outside the pattern stays out of the title (the label still names the invoice)', async () => {
+    patchInvoice({ internal_number: null, ksef_number: 'KSEF-1' });
+    const { delivery, letterTexts } = await prepareWithRealLetter('stage_3');
+    expect(delivery.text).toContain('Tytuł przelewu: bez numeru\n');
+    expect(delivery.text).not.toContain('Tytuł przelewu: KSEF-1');
+    expect(letterTexts).toContain('Tytuł przelewu: bez numeru');
+  });
+
+  it.each(['stage_1', 'stage_3'] as const)('%s: a split-payment (MPP) invoice gets the KSeF number alone, which fits the 35-character invoice field of the MPP message', async (stage) => {
+    patchInvoice({ ksef_number: KSEF, fa3_data: { annotations: { splitPayment: 1 } } });
+    const delivery = await buildReminderDelivery(tenantId, invoiceId, stage);
+    expect(delivery.text).toContain(`Tytuł przelewu: ${KSEF}\n`);
+    expect(delivery.text).not.toContain(TYTUL);
   });
 });

@@ -18,9 +18,10 @@ import { findOpenKsefSubmission, markKsefSubmission } from '@/lib/ksef/submissio
 import { invoiceXmlKey } from '@/lib/storage/r2';
 import { SEND_ERROR_CODES } from '@/lib/ksef/send-error-codes';
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
-import { getKsefRetryDelay } from '../../retry-schedule';
+import { getKsefRetryDelay, ksefRetryDelayMs, ksefRetryDelayMsFor } from '../../retry-schedule';
 import { resolveDuplicate } from './duplicate';
 import { isStaleSubmission, KSEF_SUBMISSION_STALE_CODE, type SubmitOutcome, type SubmitRunContext } from './shared';
+import { isKsefRateLimit, rateLimitPause } from './rate-limit';
 
 // A2b: „tylko uzgodnij” bez otwartej wysyłki. Bez dowodu kontaktu z KSeF
 // (00131/00136: numer KSeF albo wpis intent/sent/accepted/duplicate)
@@ -84,7 +85,7 @@ export async function reconcilePreviousSubmission(ctx: SubmitRunContext): Promis
       // S22: oczekiwanie na wynik KSeF nie zużywa próby.
       throw new RetryAfterError(
         'KSeF nadal przetwarza wcześniejszą wysyłkę tej faktury — czekam zamiast wysyłać ponownie',
-        getKsefRetryDelay(attempt),
+        ksefRetryDelayMs(attempt, invoiceId),
         { countsAsAttempt: false },
       );
     }
@@ -117,6 +118,11 @@ export async function reconcilePreviousSubmission(ctx: SubmitRunContext): Promis
     }
     if (error instanceof KsefApiError && error.status === 401) {
       ksefSessionCache.invalidate(credentials.nip, env);
+    }
+    // L1a: 429 — pauza firmy na pełny `Retry-After` (nie stały harmonogram),
+    // przejęcie zwolnione; po pauzie dalej UZGADNIAMY, nigdy nie wysyłamy.
+    if (isKsefRateLimit(error)) {
+      throw await rateLimitPause(ctx, error, credentials.nip, 'Pauza firmy po 429 z KSeF: uzgodnienie wcześniejszej wysyłki po jej końcu');
     }
     // Okno 48 h (I5): KSeF odpowiada błędem klienta o wysyłce sprzed dwóch
     // dób — wpis nie zostanie rozstrzygnięty. Zamykamy go jako STALE
@@ -157,9 +163,10 @@ export async function reconcilePreviousSubmission(ctx: SubmitRunContext): Promis
       return null;
     }
     // Awaria łącza albo KSeF: ponawiamy UZGADNIANIE, nigdy wysyłkę.
+    // Retry-After odpowiedzi albo harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
     throw new RetryAfterError(
       `Uzgadnianie wcześniejszej wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
-      getKsefRetryDelay(attempt),
+      ksefRetryDelayMsFor(error, attempt, invoiceId),
       { cause: error instanceof Error ? error : undefined },
     );
   }

@@ -73,6 +73,32 @@ async function itemUsingTemplate(
   return (data ?? []).find((r) => r.id !== exceptId) ?? null;
 }
 
+function generatedByOtherItemMessage(name: string): string {
+  return `Ta faktura powstała z pozycji cyklicznej „${name}”. Nowa pozycja z tym wzorem wystawiałaby drugą fakturę w każdym okresie. Zmień ustawienia istniejącej pozycji na liście faktur cyklicznych.`;
+}
+
+/**
+ * F12-G1: nazwa pozycji (innej niż `exceptId`), z której wystawiono fakturę
+ * (`invoices.recurring_invoice_id`). Model pozycji ma tylko `active`: wstrzymana
+ * może wrócić, więc blokuje tak samo jak aktywna; usunięta wyzeruje wskaźnik
+ * (SET NULL) i nie blokuje. `undefined` — błąd odczytu (fail-closed w wywołaniu).
+ */
+async function itemThatIssuedInvoice(
+  ctx: AuthContext,
+  recurringInvoiceId: string | null,
+  exceptId?: string,
+): Promise<{ name: string } | null | undefined> {
+  if (!recurringInvoiceId || recurringInvoiceId === exceptId) return null;
+  const { data, error } = await recurringDb(ctx.supabase)
+    .from('recurring_invoices')
+    .select('id, name')
+    .eq('tenant_id', ctx.tenantId)
+    .eq('id', recurringInvoiceId)
+    .maybeSingle();
+  if (error) return undefined;
+  return data ? { name: data.name } : null;
+}
+
 /** Brak tabeli albo kolumny z 00154 (przed wgraniem migracji). */
 function isSchemaPending(code: string | undefined): boolean {
   return code === '42P01' || code === 'PGRST205' || code === '42703' || code === 'PGRST204';
@@ -98,17 +124,24 @@ async function context(): Promise<{ ok: true; ctx: AuthContext } | { ok: false; 
 async function checkTemplate(
   ctx: AuthContext,
   templateInvoiceId: string,
+  exceptItemId?: string,
 ): Promise<{ ok: true; issueDate: string | null } | { ok: false; error: string }> {
   const { data, error } = await recurringDb(ctx.supabase)
     .from('invoices')
-    .select('id, direction, origin, invoice_kind, invoice_type, ksef_status, currency, issue_date')
+    .select('id, direction, origin, invoice_kind, invoice_type, ksef_status, currency, issue_date, recurring_invoice_id')
     .eq('id', templateInvoiceId)
     .eq('tenant_id', ctx.tenantId)
     .maybeSingle();
   if (error) return { ok: false, error: 'Nie udało się sprawdzić faktury-wzoru. Spróbuj ponownie za chwilę.' };
   if (!data) return { ok: false, error: 'Nie znaleziono faktury-wzoru w tej firmie.' };
   const rejected = templateRejection(data);
-  return rejected ? { ok: false, error: rejected } : { ok: true, issueDate: data.issue_date ?? null };
+  if (rejected) return { ok: false, error: rejected };
+  const issuer = await itemThatIssuedInvoice(ctx, data.recurring_invoice_id ?? null, exceptItemId);
+  if (issuer === undefined) {
+    return { ok: false, error: 'Nie udało się sprawdzić faktury-wzoru. Spróbuj ponownie za chwilę.' };
+  }
+  if (issuer) return { ok: false, error: generatedByOtherItemMessage(issuer.name) };
+  return { ok: true, issueDate: data.issue_date ?? null };
 }
 
 function revalidate(): void {
@@ -216,7 +249,7 @@ export async function updateRecurringInvoiceAction(
 
   const templateChanged = values.templateInvoiceId !== current.template_invoice_id;
   if (templateChanged) {
-    const template = await checkTemplate(ctx, values.templateInvoiceId);
+    const template = await checkTemplate(ctx, values.templateInvoiceId, current.id);
     if (!template.ok) return { success: false, error: template.error };
     const existing = await itemUsingTemplate(ctx, values.templateInvoiceId, current.id);
     if (existing) return { success: false, error: templateInUseMessage(existing.name) };
@@ -298,8 +331,8 @@ export async function pauseRecurringInvoiceAction(id: string): Promise<Recurring
 
 /**
  * Wznowienie: okresy, które w całości minęły w czasie wstrzymania, pomijamy;
- * ostatni okres, którego dzień już nadszedł, zostaje „Do wystawienia”
- * (`catchUpRunDate`).
+ * zostaje pierwszy okres, który jeszcze trwa (jego dzień może już minąć:
+ * „Do wystawienia”) — `catchUpRunDate`.
  */
 export async function resumeRecurringInvoiceAction(id: string): Promise<RecurringInvoiceActionResult> {
   return setActive(id, true);

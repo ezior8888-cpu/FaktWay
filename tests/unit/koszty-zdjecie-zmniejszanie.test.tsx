@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { act, Component, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -15,6 +14,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * akcji (413, sieć, strona sprzed wdrożenia) kończy się toastem, nie granicą
  * błędu strony.
  *
+ * Sesja 31: plik idzie trasą `/api/uploads/expense` z własnym limitem zamiast
+ * Server Action. PDF do 10 MB, zdjęcie do 7 MB (próg odczytu OCR: 10 MB po
+ * zakodowaniu base64). Zmniejszanie zostaje (miejsce w magazynie, decyzja
+ * z #346): zdjęcie do 1 MB idzie bez ponownego kodowania, większe kodujemy
+ * do ok. 1 MB, a plik w przedziale 1–7 MB, którego nie da się zmniejszyć,
+ * idzie jako oryginał zamiast komunikatu.
+ *
  * jsdom nie ma płótna ani dekodera obrazów, więc `createImageBitmap`,
  * `getContext` i `toBlob` to atrapy. Atrapa kontekstu pamięta `fillStyle`
  * i oddaje piksele z `fillRect` 1×1 (sonda płótna). Atrapa `toBlob` liczy
@@ -24,7 +30,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getStatus: vi.fn(),
+  /** Serwer trasy wgrywania: dostaje wysłany formularz, oddaje wynik jako JSON. */
   upload: vi.fn(),
+  requests: [] as Array<{ url: string; init: RequestInit }>,
   router: { push: vi.fn(), refresh: vi.fn() },
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -36,7 +44,6 @@ vi.mock('next/navigation', async (importOriginal) => ({
 vi.mock('sonner', () => ({ toast: mocks.toast }));
 vi.mock('@/app/actions/expenses', () => ({
   getOcrJobStatusAction: mocks.getStatus,
-  uploadExpensePhotoAction: mocks.upload,
 }));
 
 import { CaptureButton } from '@/components/expenses/capture-button';
@@ -44,8 +51,14 @@ import { CaptureButton } from '@/components/expenses/capture-button';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
-/** Limit pliku w przeglądarce (1 MB dziesiętnie, `lib/upload-limit.ts`). */
+/**
+ * Zdjęcie do tej wielkości idzie bez ponownego kodowania, większe kodujemy do
+ * niej (1 MB dziesiętnie, `PHOTO_KEEP_MAX_BYTES` w `lib/expenses/photo-upload.ts`).
+ */
 const FILE_LIMIT = 1_000_000;
+/** Limity trasy wgrywania (`lib/upload-limit.ts`): zdjęcie 7 MB, PDF 10 MB. */
+const IMAGE_LIMIT = 7_000_000;
+const PDF_LIMIT = 10_000_000;
 const MB = 1024 * 1024;
 
 /** Atrapa kodera JPEG: rozmiar z pikseli płótna i jakości. */
@@ -155,6 +168,15 @@ beforeEach(() => {
   // Wgranie się udaje, odczyt czeka — test kończy się przed odpytywaniem.
   mocks.upload.mockResolvedValue({ success: true, ocrJobId: JOB_ID });
   mocks.getStatus.mockReturnValue(new Promise(() => {}));
+  mocks.requests = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init: RequestInit) => {
+      mocks.requests.push({ url, init });
+      const result: unknown = await mocks.upload(init.body);
+      return result instanceof Response ? result : Response.json(result);
+    }),
+  );
 
   drawn = [];
   toBlobCalls = [];
@@ -223,6 +245,9 @@ async function choose(file: File, field: 'camera' | 'gallery' = 'gallery') {
 
 function sentFile(): File {
   expect(mocks.upload).toHaveBeenCalledOnce();
+  // Trasa wgrywania z własnym limitem, nie Server Action (sesja 31).
+  expect(mocks.requests).toHaveLength(1);
+  expect(mocks.requests[0]).toMatchObject({ url: '/api/uploads/expense', init: { method: 'POST' } });
   const form = mocks.upload.mock.calls[0]![0] as FormData;
   const photo = form.get('photo');
   expect(photo).toBeInstanceOf(File);
@@ -351,17 +376,27 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     expect(revoke).toHaveBeenCalledWith('blob:zdjecie');
   });
 
-  it('przeglądarka podmienia piksele płótna (Firefox z ochroną przed fingerprintingiem) → bez płótna, komunikat', async () => {
+  it('przeglądarka podmienia piksele płótna (Firefox z ochroną przed fingerprintingiem) → bez płótna, oryginał w limicie idzie', async () => {
     // Firefox oddaje wtedy losowy wzór albo biel zamiast narysowanych pikseli.
     readback = (w, h) => new Uint8ClampedArray(w * h * 4).fill(255);
-    await choose(photo(3 * MB));
+    const original = photo(3 * MB);
+    await choose(original);
 
     expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
     expect(toBlobCalls).toEqual([]);
+    expect(sentFile()).toBe(original);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+  });
+
+  it('zablokowane płótno i zdjęcie ponad próg odczytu → komunikat, bez wysyłki', async () => {
+    readback = (w, h) => new Uint8ClampedArray(w * h * 4).fill(255);
+    await choose(photo(8 * MB));
+
     expect(mocks.upload).not.toHaveBeenCalled();
     const message = onlyToast();
     expect(message).toContain('blokuje zmniejszanie');
-    expect(message).toContain('3,2 MB');
+    expect(message).toContain('8,4 MB');
+    expect(message).toContain('najwyżej 7 MB');
   });
 
   it('drobny szum odczytu (Brave, Safari) nie wyłącza zmniejszania', async () => {
@@ -386,82 +421,106 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     expect(sent.type).toBe('image/jpeg');
   });
 
-  it('JPEG większy od oryginału PNG ponad limitem → zostaje oryginał i komunikat', async () => {
+  it('JPEG większy od oryginału PNG ponad 1 MB → idzie oryginał (mieści się w limicie zdjęcia)', async () => {
     bitmap = { width: 2000, height: 1500, close: vi.fn() };
     bytesPerPixel = () => 0.5;
-    await choose(photo(1_100_000, 'wykres.png', 'image/png'));
+    const png = photo(1_100_000, 'wykres.png', 'image/png');
+    await choose(png);
+
+    expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
+    expect(sentFile()).toBe(png);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+  });
+
+  it('zdjęcie zmniejszone, ale nadal ponad próg odczytu → komunikat z rozmiarem wybranego pliku', async () => {
+    bytesPerPixel = () => 2.5;
+    await choose(photo(8 * MB));
 
     expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
     expect(mocks.upload).not.toHaveBeenCalled();
     const message = onlyToast();
-    expect(message).toContain('Zdjęcie (1,1 MB) nawet po zmniejszeniu');
+    expect(message).toContain('Zdjęcie (8,4 MB) nawet po zmniejszeniu');
+    expect(message).toContain('7 MB');
     expect(message).not.toContain('przeglądark');
   });
 
-  it('zdjęcie zmniejszone, ale nadal ponad limitem → komunikat z rozmiarem wybranego pliku', async () => {
-    bytesPerPixel = () => 0.45;
-    await choose(photo(6 * MB));
+  it('PDF 3 MB idzie bez zmian trasą wgrywania (sesja 31)', async () => {
+    const pdf = photo(3_000_000, 'skan.pdf', 'application/pdf');
+    await choose(pdf);
 
-    expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
-    expect(mocks.upload).not.toHaveBeenCalled();
-    const message = onlyToast();
-    expect(message).toContain('Zdjęcie (6,3 MB) nawet po zmniejszeniu');
-    expect(message).not.toContain('przeglądark');
+    expect(sentFile()).toBe(pdf);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
   });
 
-  it('PDF 2 MB → komunikat o limicie, akcja niewołana, przycisk wolny', async () => {
-    await choose(photo(2 * MB, 'skan.pdf', 'application/pdf'));
+  it('PDF 10,5 MB → komunikat o limicie 10 MB, bez wysyłki, przycisk wolny', async () => {
+    await choose(photo(10_500_000, 'skan.pdf', 'application/pdf'));
 
     expect(mocks.upload).not.toHaveBeenCalled();
     const message = onlyToast();
-    expect(message).toContain('PDF ma 2,1 MB');
-    expect(message).toContain('najwyżej 1 MB');
+    expect(message).toContain('PDF ma 10,5 MB');
+    expect(message).toContain('najwyżej 10 MB');
     expect(host!.querySelector('button')!.textContent).toContain('Dodaj wydatek');
   });
 
   it('PDF tuż ponad limitem → rozmiar w komunikacie nie wygląda na mieszczący się', async () => {
-    await choose(photo(FILE_LIMIT + 1, 'skan.pdf', 'application/pdf'));
+    await choose(photo(PDF_LIMIT + 1, 'skan.pdf', 'application/pdf'));
 
     expect(mocks.upload).not.toHaveBeenCalled();
-    expect(onlyToast()).toContain('PDF ma 1,1 MB');
+    expect(onlyToast()).toContain('PDF ma 10,1 MB');
   });
 
-  it('zdjęcie, którego nie da się odkodować, ponad limit → „zapisz jako JPG”, akcja niewołana', async () => {
+  it('PDF dokładnie na limicie idzie', async () => {
+    const pdf = photo(PDF_LIMIT, 'skan.pdf', 'application/pdf');
+    await choose(pdf);
+
+    expect(sentFile()).toBe(pdf);
+  });
+
+  it('zdjęcie, którego nie da się odkodować, ponad próg odczytu → „zapisz jako JPG”, bez wysyłki', async () => {
     vi.mocked(globalThis.createImageBitmap).mockRejectedValue(new DOMException('decode', 'InvalidStateError'));
     imgFallback({ ok: false });
-    await choose(photo(3 * MB, 'IMG_0002.HEIC', 'image/heic'));
+    await choose(photo(IMAGE_LIMIT + 1, 'IMG_0002.HEIC', 'image/heic'));
 
     expect(mocks.upload).not.toHaveBeenCalled();
     expect(onlyToast()).toContain('JPG');
   });
 
-  it('akcja odrzuca obietnicę (413 od Next) → toast, nie granica błędu strony', async () => {
-    mocks.upload.mockRejectedValue(new Error('Body exceeded 1 MB limit.'));
+  it('sieć zawodzi (fetch odrzuca obietnicę) → toast, nie granica błędu strony', async () => {
+    mocks.upload.mockRejectedValue(new TypeError('Failed to fetch'));
     await choose(photo(4 * MB));
 
     expect(boundaryShown()).toBe(false);
     const message = onlyToast();
-    expect(message).not.toContain('Body exceeded');
+    expect(message).not.toContain('Failed to fetch');
     expect(message).toMatch(/Nie udało się wysłać/);
     expect(host!.querySelector('button')!.textContent).toContain('Dodaj wydatek');
     expect(unhandled).toEqual([]);
   });
 
-  it('strona sprzed wdrożenia (nieznana akcja) → prośba o odświeżenie strony', async () => {
-    mocks.upload.mockRejectedValue(new UnrecognizedActionError('Server Action "abc" was not found on the server.'));
+  it('odpowiedź bez JSON (np. 502 bramki) → polski komunikat zamiast treści strony błędu', async () => {
+    mocks.upload.mockResolvedValue(new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }));
     await choose(photo(300 * 1000, 'paragon.jpg'));
 
     expect(boundaryShown()).toBe(false);
-    expect(onlyToast()).toMatch(/Odśwież stronę/);
+    const message = onlyToast();
+    expect(message).toMatch(/Nie udało się wysłać/);
+    expect(message).not.toContain('Bad Gateway');
   });
 
-  it('arkusz nie obiecuje już 10 MB', async () => {
+  it('odmowa trasy z komunikatem (np. limit wgrań) → ten komunikat w toaście', async () => {
+    mocks.upload.mockResolvedValue(Response.json({ success: false, error: 'Za dużo plików naraz.' }, { status: 429 }));
+    await choose(photo(300 * 1000, 'paragon.jpg'));
+
+    expect(onlyToast()).toBe('Za dużo plików naraz.');
+  });
+
+  it('arkusz podaje limit PDF trasy (10 MB), nie dawne 1 MB', async () => {
     const el = await render();
     await act(async () => {
       el.querySelector('button')!.click();
     });
     expect(document.body.textContent).toContain('Zrób zdjęcie');
-    expect(document.body.textContent).toContain('PDF do 1 MB');
-    expect(document.body.textContent).not.toContain('10 MB');
+    expect(document.body.textContent).toContain('PDF do 10 MB');
+    expect(document.body.textContent).not.toContain('do 1 MB');
   });
 });

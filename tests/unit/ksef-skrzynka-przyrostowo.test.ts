@@ -10,7 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 // Adres API sprawdzany dla każdego środowiska (#64).
-vi.mock('@/lib/ksef/client', () => ({ ksefFetch: mocks.fetch, getKsefBaseUrl: () => 'https://api-test.ksef.mf.gov.pl/v2' }));
+vi.mock('@/lib/ksef/client', () => ({
+  ksefFetch: mocks.fetch,
+  getKsefBaseUrl: () => 'https://api-test.ksef.mf.gov.pl/v2',
+  // `queryReceivedInvoices` sprawdza `instanceof KsefApiError` przy każdym błędzie (ponowienie po 401).
+  KsefApiError: class KsefApiError extends Error {},
+}));
 vi.mock('@/lib/ksef/session-cache', () => ({
   ksefSessionCache: { getSession: async () => ({ accessToken: 'fixture-token' }) },
 }));
@@ -76,6 +81,26 @@ describe('queryReceivedInvoices — kontrakt MF', () => {
     expect(query(1).get('pageOffset')).toBe('0');
     expect(result.invoices.map((i) => i.ksefNumber)).toEqual([inv(1, '').ksefNumber, inv(2, '').ksefNumber, inv(3, '').ksefNumber]);
     expect(result.hwm).toBe('2026-10-01T23:59:00Z');
+  });
+
+  it('isTruncated przy hasMore = false (ostatnia strona obciętego wyniku) — też zawęża, nie kończy okna (E1-W10)', async () => {
+    mocks.fetch
+      .mockResolvedValueOnce({ invoices: [inv(1, '2026-09-21T10:00:00Z'), inv(2, '2026-09-25T08:00:00Z')], hasMore: false, isTruncated: true, permanentStorageHwmDate: '2026-10-01T23:58:00Z' })
+      .mockResolvedValueOnce({ invoices: [inv(2, '2026-09-25T08:00:00Z'), inv(3, '2026-09-26T08:00:00Z')], hasMore: false, isTruncated: false, permanentStorageHwmDate: '2026-10-01T23:59:00Z' });
+    const result = await queryReceivedInvoices(auth, FROM, TO, 'test');
+    expect(calls()).toHaveLength(2);
+    expect(calls()[1]![1].body.dateRange.from).toBe('2026-09-25T08:00:00Z');
+    expect(query(1).get('pageOffset')).toBe('0');
+    expect(result.invoices.map((i) => i.ksefNumber)).toEqual([inv(1, '').ksefNumber, inv(2, '').ksefNumber, inv(3, '').ksefNumber]);
+    expect(result.hwm).toBe('2026-10-01T23:59:00Z');
+  });
+
+  it('isTruncated bez postępu (ostatni rekord ≤ from), także przy hasMore = false — błąd zamiast cichego końca okna', async () => {
+    for (const hasMore of [true, false]) {
+      mocks.fetch.mockReset();
+      mocks.fetch.mockResolvedValueOnce({ invoices: [inv(1, FROM.toISOString())], hasMore, isTruncated: true, permanentStorageHwmDate: '2026-10-01T23:58:00Z' });
+      await expect(queryReceivedInvoices(auth, FROM, TO, 'test')).rejects.toThrow('nie da się zawęzić');
+    }
   });
 
   it('brak HWM w odpowiedzi = null (okno nie może się przesunąć)', async () => {

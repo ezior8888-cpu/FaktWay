@@ -83,6 +83,10 @@ const PRICE_LIST_FORBIDDEN = [
   "'Tryb Offline24'", "'Korekty, zaliczki i faktury rozliczające'",
   "'Magiczny Import",
   ...SUSPENDED_PRODUCT_NAMES.map((n) => `'${n}'`),
+  // Formularza kosztu bez zdjęcia nie ma (plan kompletnej aplikacji, 2.6; wróci
+  // z krokiem 3.8): po wyczerpaniu limitu odczytu dokument wgrywa się ponownie
+  // (tests/unit/koszt-bez-wpisu-recznego.test.ts).
+  'wpisujesz ręcznie',
 ];
 
 describe('marketing bez fikcyjnych dowodów i obietnic', () => {

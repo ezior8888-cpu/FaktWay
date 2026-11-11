@@ -37,7 +37,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { ReceiptMatchAlert } from '@/components/expenses/receipt-match-alert';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
+import type { ReceiptMatchView } from '@/lib/expenses/receipt-invoice-match-view';
+import { costDocumentType, vatDeductionForDocument } from '@/lib/expenses/vat-deduction-document';
+import { ocrAmountsAwaitingPln, ocrDocumentGross } from '@/lib/expenses/ocr-currency-review';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
 import { cn } from '@/lib/utils';
@@ -82,6 +86,10 @@ interface ExpenseEditFormProps {
   expense: ExpenseRow;
   photoUrl: string | null;
   ksefCurrency: string | null;
+  /** Krok 3.4: karta „Płatność” na końcu kolumny kart (decyzja D1: nowa sekcja, nic nie przestawione). */
+  paymentSection?: ReactNode;
+  /** Krok 1.3 (00175): połączenie faktury do paragonu z paragonem z NIP. */
+  receiptMatch?: ReceiptMatchView | null;
 }
 
 interface FormState {
@@ -114,10 +122,11 @@ function buildInitialForm(expense: ExpenseRow): FormState {
   };
 }
 
-export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEditFormProps) {
+export function ExpenseEditForm({ expense, photoUrl, ksefCurrency, paymentSection, receiptMatch = null }: ExpenseEditFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialForm(expense));
   const [confirmedForeignCurrency, setConfirmedForeignCurrency] = useState(false);
+  const [confirmedPln, setConfirmedPln] = useState(false);
   const [isSaving, startSave] = useTransition();
   const [isDeleting, startDelete] = useTransition();
 
@@ -129,14 +138,30 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
     currency ?? '',
     form.issue_date,
   );
+  // E17b: koszt OCR w walucie bez kursu NBP ma kwoty w walucie dokumentu,
+  // dopóki klient nie wpisze złotych i tego nie potwierdzi (serwer pilnuje
+  // tego samego w `reviewExpenseAction`).
+  const isKsefExpense = expense.source === 'ksef_inbox' || expense.ksef_invoice_id !== null;
+  const ocrCurrency = isKsefExpense ? null : ocrAmountsAwaitingPln(expense.ocr_extracted_data);
+  const amountsUnit = ocrCurrency !== null && !confirmedPln ? ocrCurrency : 'zł';
+  const documentGross = ocrCurrency !== null ? ocrDocumentGross(expense.ocr_extracted_data) : null;
+  const grossSameAsDocument =
+    confirmedPln && documentGross !== null && documentGross !== 0 && form.gross_amount === documentGross;
+  // Wiersze sprzed E17b: koszt już w KPiR (stary checkbox) albo z kwotami
+  // poprawionymi ręcznie. Kwoty mogą być w złotych, ale nikt tego nie
+  // potwierdził, więc tekst nie twierdzi ani jednego, ani drugiego.
+  const ocrInKpir = ocrCurrency !== null && expense.is_deductible;
+  const ocrAmountsEdited =
+    ocrCurrency !== null && documentGross !== null && Number(expense.gross_amount) !== documentGross;
+
   // Jednostka kwoty w karcie szczegółów: bez potwierdzonego kursu w kolumnie
-  // zostaje kwota w walucie faktury KSeF (runner kategoryzacji), więc „zł”
-  // tylko dla PLN albo po przeliczeniu kursem.
+  // zostaje kwota w walucie faktury KSeF (runner kategoryzacji) albo
+  // dokumentu OCR, więc „zł” tylko dla PLN albo po przeliczeniu.
   const grossUnit = ksefCurrencyUnknown
     ? '(waluta do wyjaśnienia)'
     : foreignKsef && !hasKsefRate
       ? currency
-      : 'zł';
+      : ocrCurrency ?? 'zł';
 
   const confidence = Number(expense.categorization_confidence ?? 0);
   const method = expense.categorization_method;
@@ -158,6 +183,8 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
         category_label: form.category_label,
         is_deductible: form.is_deductible,
         confirmForeignCurrencyReview: foreignKsef && confirmedForeignCurrency,
+        // Tylko dla kosztu OCR bez kursu: ścisły schemat KSeF odrzuca to pole.
+        ...(ocrCurrency !== null ? { confirmPlnAmounts: confirmedPln } : {}),
         notes: form.notes.trim() ? form.notes.trim() : undefined,
       });
 
@@ -183,9 +210,29 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
     });
   };
 
+  // Krok 1.3: paragon z NIP z datą od 1.01.2027 nie daje odliczenia VAT. Data
+  // z formularza, bo klient może ją poprawić; bez VAT do odliczenia (np. firma
+  // zwolniona) nie ma czego tracić, więc informacji nie ma.
+  // Paragon zastąpiony fakturą do paragonu (00175): prośba o fakturę jest już
+  // zbędna, a powrót do KPiR tylko przez rozłączenie na stronie faktury.
+  const linkedReceipt = receiptMatch?.role === 'receipt' && receiptMatch.state === 'linked';
+  const vatRule = vatDeductionForDocument({
+    documentType: costDocumentType(expense),
+    issueDate: form.issue_date,
+    grossAmount: expense.gross_amount,
+  });
+  const receiptNotice =
+    !linkedReceipt && !vatRule.deductible && Number(expense.vat_deductible_amount ?? 0) !== 0 ? vatRule.notice : null;
+
   const reviewStatus = expense.is_reviewed ? 'reviewed' : 'unreviewed';
   const deductibleToggleDisabled =
-    (foreignKsef && !hasKsefRate && !form.is_deductible) || (ksefCurrencyUnknown && !form.is_deductible);
+    (foreignKsef && !hasKsefRate && !form.is_deductible) ||
+    (ksefCurrencyUnknown && !form.is_deductible) ||
+    (linkedReceipt && !form.is_deductible) ||
+    (ocrCurrency !== null && !confirmedPln && !form.is_deductible);
+  const savesOutsideKpir =
+    ((foreignKsef || ksefCurrencyUnknown) && !form.is_deductible && !confirmedForeignCurrency) ||
+    (ocrCurrency !== null && !confirmedPln && !form.is_deductible);
 
   // Oprawa: karta szczegółów jak Finora `transaction-detail-sheet.tsx`
   // (kwota + status, sprzedawca z awatarem, wiersze etykieta → wartość),
@@ -248,6 +295,44 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
           </AlertDescription>
         </Alert>
       ) : null}
+
+      {receiptNotice ? (
+        <Alert className="border-amber-600/30">
+          <AlertTitle>{receiptNotice.title}</AlertTitle>
+          <AlertDescription>
+            <p>{receiptNotice.body}</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {ocrCurrency !== null ? (
+        <Alert role="alert" className="border-amber-600/30">
+          <AlertTitle>
+            {ocrInKpir
+              ? `Wydatek jest w KPiR, a kwoty mogą być w ${ocrCurrency}.`
+              : ocrAmountsEdited
+                ? `Kwoty mogą być w ${ocrCurrency}, nie w złotych.`
+                : `Kwoty z dokumentu są w ${ocrCurrency}, nie w złotych.`}
+          </AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>
+              {ocrInKpir
+                ? `Przy tym wydatku nie ma kursu NBP ani potwierdzenia, że kwoty są w złotych, a KPiR liczy je jak złote. Jeśli są już w złotych, zaznacz to w sekcji Kwoty. Jeśli nie, przelicz je albo wyłącz wydatek z KPiR.`
+                : ocrAmountsEdited
+                  ? `Kwoty zmieniono ręcznie, ale nikt nie potwierdził, że są w złotych. Jeśli są, zaznacz to w sekcji Kwoty. Do tego czasu wydatek jest poza KPiR.`
+                  : `Nie było kursu NBP dla ${ocrCurrency}, więc FaktWay nie przeliczył kwot i wydatek jest poza KPiR.`}
+            </p>
+            <p>
+              Przelicz netto, VAT i brutto po kursie średnim NBP z ostatniego dnia roboczego przed datą
+              dokumentu, wpisz je w sekcji Kwoty i zaznacz, że są w złotych. Wtedy wydatek wejdzie do KPiR.
+              Zapis poza KPiR bez tego potwierdzenia zostawia wydatek do opisania. VAT z dokumentu
+              w walucie obcej nie jest odliczany automatycznie.
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {receiptMatch ? <ReceiptMatchAlert match={receiptMatch} /> : null}
 
       {wasAutoClassified ? (
         <Alert
@@ -417,7 +502,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
               <CardTitle>Kwoty</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label="Netto" htmlFor="expense-net">
+              <Field label={ocrCurrency !== null ? `Netto (${amountsUnit})` : 'Netto'} htmlFor="expense-net">
                 <Input
                   id="expense-net"
                   type="number"
@@ -433,7 +518,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
                   className="text-right tabular-nums"
                 />
               </Field>
-              <Field label="VAT" htmlFor="expense-vat">
+              <Field label={ocrCurrency !== null ? `VAT (${amountsUnit})` : 'VAT'} htmlFor="expense-vat">
                 <Input
                   id="expense-vat"
                   type="number"
@@ -449,7 +534,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
                   className="text-right tabular-nums"
                 />
               </Field>
-              <Field label="Brutto" htmlFor="expense-gross">
+              <Field label={ocrCurrency !== null ? `Brutto (${amountsUnit})` : 'Brutto'} htmlFor="expense-gross">
                 <Input
                   id="expense-gross"
                   type="number"
@@ -465,6 +550,29 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
                   className="text-right font-medium tabular-nums"
                 />
               </Field>
+              {ocrCurrency !== null ? (
+                <div className="space-y-2 sm:col-span-3">
+                  <label className="text-foreground flex cursor-pointer items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={confirmedPln}
+                      onCheckedChange={(checked) => {
+                        const on = checked === true;
+                        setConfirmedPln(on);
+                        // Potwierdzone złote włączają koszt do KPiR (klient może
+                        // go potem odznaczyć); bez potwierdzenia KPiR jest zamknięta.
+                        setForm((current) => ({ ...current, is_deductible: on }));
+                      }}
+                      className="mt-0.5"
+                    />
+                    <span>Kwoty netto, VAT i brutto są w złotych.</span>
+                  </label>
+                  {grossSameAsDocument ? (
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      Kwota brutto jest taka sama jak na dokumencie w {ocrCurrency}. Sprawdź, czy to na pewno złote.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -558,6 +666,8 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
               />
             </CardContent>
           </Card>
+
+          {paymentSection}
         </div>
       </div>
 
@@ -579,17 +689,29 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
               <span className="hidden sm:inline">Usuń</span>
             </Button>
           ) : <span />}
+          {ocrCurrency !== null && form.is_deductible && !confirmedPln ? (
+            // Powód zablokowanego zapisu tuż przy przycisku (stary koszt w KPiR).
+            <p className="text-muted-foreground self-center text-right text-sm">
+              Zaznacz, że kwoty są w złotych, albo wyłącz wydatek z KPiR.
+            </p>
+          ) : null}
           <Button
             size="lg"
             onClick={handleSave}
-            disabled={isSaving || isDeleting || (ksefCurrencyUnknown && form.is_deductible) || (foreignKsef && form.is_deductible && (!hasKsefRate || !confirmedForeignCurrency))}
+            disabled={
+              isSaving ||
+              isDeleting ||
+              (ksefCurrencyUnknown && form.is_deductible) ||
+              (foreignKsef && form.is_deductible && (!hasKsefRate || !confirmedForeignCurrency)) ||
+              (ocrCurrency !== null && form.is_deductible && !confirmedPln)
+            }
           >
             {isSaving ? (
               <RiLoader4Line className="animate-spin" />
             ) : (
               <RiSave3Line />
             )}
-            {(foreignKsef || ksefCurrencyUnknown) && !form.is_deductible && !confirmedForeignCurrency
+            {savesOutsideKpir
               ? 'Zapisz poza KPiR'
               : !expense.is_reviewed ? 'Zaakceptuj' : 'Zapisz zmiany'}
           </Button>

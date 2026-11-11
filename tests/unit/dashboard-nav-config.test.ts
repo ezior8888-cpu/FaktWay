@@ -141,6 +141,8 @@ describe('struktura menu (plan Finora §4)', () => {
           ['Pulpit', '/dashboard'],
           ['Przepływy', '/przeplywy'],
           ['Analizy', '/analizy/sprzedaz'],
+          // Świadoma zmiana (plan kompletnej aplikacji 3.2): ekran Bank na końcu sekcji.
+          ['Bank', '/bank'],
         ],
       },
       {
@@ -149,6 +151,10 @@ describe('struktura menu (plan Finora §4)', () => {
           ['Faktury', '/invoices'],
           ['Wystaw fakturę', '/invoices/new'],
           ['Kontrahenci', '/contractors'],
+          // Świadoma zmiana (plan kompletnej aplikacji, krok 2.9, 11.11.2026): noty
+          // obciążeniowe i uznaniowe jako osobna pozycja na końcu sekcji, nie zakładka
+          // „Rodzaje faktur”, bo nota nie jest fakturą. Pozostałe pozycje bez zmian (D1).
+          ['Noty', '/noty'],
         ],
       },
       {
@@ -157,6 +163,10 @@ describe('struktura menu (plan Finora §4)', () => {
           ['Koszty', '/expenses'],
           ['Księgowość', '/reports/kpir'],
           ['Import danych', '/import-danych'],
+          // Świadoma zmiana (plan kompletnej aplikacji, krok 3.7, 11.11.2026): Kasa
+          // (dowody KP i KW, raport kasowy) jako nowa pozycja na końcu sekcji;
+          // pozostałe pozycje bez zmian (decyzja D1).
+          ['Kasa', '/kasa'],
         ],
       },
     ]);
@@ -203,10 +213,11 @@ describe('struktura menu (plan Finora §4)', () => {
       if (tab.href) expect(hrefs).not.toContain(tab.href);
     }
     expect(more.every((s) => s.items.length > 0)).toBe(true);
-    // „Pulpit” traci z „Więcej” Pulpit i Przepływy (dolny pasek), zostają Analizy.
+    // „Pulpit” traci z „Więcej” Pulpit i Przepływy (dolny pasek), zostają Analizy i Bank
+    // (świadoma zmiana, krok 3.2: Bank jest w telefonie tylko w „Więcej”).
     expect(more.map((s) => s.title)).toEqual(['Pulpit', 'Sprzedaż', 'Koszty i księgowość']);
-    expect(more[0].items.map((i) => i.href)).toEqual(['/analizy/sprzedaz']);
-    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors']);
+    expect(more[0].items.map((i) => i.href)).toEqual(['/analizy/sprzedaz', '/bank']);
+    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors', '/noty']);
   });
 
   it('getDashboardPrefetchHrefs pomija pozycje z prefetch: false', () => {

@@ -190,8 +190,9 @@ describe('app/error.tsx — awaria layoutu panelu', () => {
       linki[0]!.dispatchEvent(klik);
     });
     expect(klik.defaultPrevented).toBe(false);
-    // Przez `cn`: sam `buttonVariants` zostawia `border-transparent` obok `border-border`
-    // i w jasnym motywie przycisk nie ma ramki (zdjęcie z prawdziwego buildu, PR).
+    // Klasy bez scalenia zostawiały `border-transparent` obok `border-border` i w jasnym
+    // motywie przycisk nie miał ramki (zdjęcie z prawdziwego buildu, PR #414; całą
+    // macierz pilnuje `przycisk-link-ramka`).
     expect(linki[0]!.className).toContain('border-border');
     expect(linki[0]!.className).not.toContain('border-transparent');
     expect(sentry.captureException).toHaveBeenCalledTimes(1);

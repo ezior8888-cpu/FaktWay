@@ -19,8 +19,9 @@ import {
   promoteKsefSubmissionIntent,
   type KsefSubmissionIntent,
 } from '@/lib/ksef/submission-log';
-import { getKsefRetryDelay } from '../../retry-schedule';
+import { ksefRetryDelayMsFor } from '../../retry-schedule';
 import { isStaleSubmission, KSEF_INTENT_NOT_IN_SESSION_CODE, KSEF_SUBMISSION_STALE_CODE, type SubmitRunContext } from './shared';
+import { isKsefRateLimit, rateLimitPause } from './rate-limit';
 
 /**
  * Plik tej próby wśród faktur sesji KSeF: ten sam skrót treści albo ten sam
@@ -61,6 +62,11 @@ export async function resolveSubmissionIntents(ctx: SubmitRunContext): Promise<v
       if (error instanceof KsefApiError && error.status === 401) {
         ksefSessionCache.invalidate(credentials.nip, env);
       }
+      // L1a: 429 — pauza firmy na pełny `Retry-After` (nie stały
+      // harmonogram), przejęcie zwolnione; zamiar rozstrzygamy po pauzie.
+      if (isKsefRateLimit(error)) {
+        throw await rateLimitPause(ctx, error, credentials.nip, 'Pauza firmy po 429 z KSeF: rozstrzygnięcie zamiaru wysyłki po jej końcu');
+      }
       // KSeF nie zna sesji sprzed ponad 48 h — jak STALE dla wpisu `sent`:
       // ślad zostaje, wysyłka idzie od nowa, a gdyby KSeF jednak miał plik,
       // 440 wskaże tę sesję z historii (własny duplikat).
@@ -76,9 +82,10 @@ export async function resolveSubmissionIntents(ctx: SubmitRunContext): Promise<v
         });
         continue;
       }
+      // Retry-After odpowiedzi albo harmonogram z rozrzutem (L1a): faktury, które padły razem, nie wracają razem.
       throw new RetryAfterError(
         `Uzgadnianie zamiaru wysyłki KSeF nieudane: ${error instanceof Error ? error.message : 'nieznany błąd'}`,
-        getKsefRetryDelay(attempt),
+        ksefRetryDelayMsFor(error, attempt, invoiceId),
         { cause: error instanceof Error ? error : undefined },
       );
     }

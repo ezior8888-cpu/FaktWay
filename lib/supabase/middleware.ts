@@ -4,6 +4,7 @@ import { getPanelMfaState } from '@/lib/auth/panel-mfa';
 import { PASSKEY_SESSION_COOKIE } from '@/lib/auth/passkey/session-marker';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { isMaintenanceMode, MAINTENANCE_PATH } from '@/lib/feature-flags/maintenance';
+import { BUYER_PAGE_HEADERS, isBuyerInvoicePath } from '@/lib/invoice-share/policy';
 import { isTelemetryTunnelPath } from '@/lib/telemetry-tunnel';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
@@ -35,6 +36,10 @@ const AUTH_PUBLIC_PREFIXES = [
   '/onboarding',
   '/invite',
   '/accountant',
+  // Od sesji 31 planu skalowania `/share-target` jest poza matcherem proxy
+  // (`proxy.ts`) i sam sprawdza sesję. Wpis zostaje jako zabezpieczenie:
+  // gdyby trasa wróciła pod proxy, POST bez sesji nie może skończyć się
+  // przekierowaniem, które gubi ciało.
   '/share-target',
   '/gdpr',
 ] as const;
@@ -56,24 +61,12 @@ const PUBLIC_API_PREFIXES = [
 const PUBLIC_API_EXACT = ['/api/stripe/webhook'] as const;
 
 /**
- * Publiczne, ale z sesją: proxy dalej tworzy klienta i odświeża ciasteczka.
- * Pliki techniczne (`/sw.js`, manifest, robots, sitemap) są w
- * `NO_SESSION_PATHS`, a tunele telemetrii w `lib/telemetry-tunnel.ts`.
- */
-const STATIC_PUBLIC_EXACT = [
-  // Podgląd linku; do 1.10.2026 kończył się przekierowaniem na /login. Zostaje
-  // z sesją, bo pobierają go roboty bez ciasteczek, a bez ciasteczek klient
-  // nie woła GoTrue.
-  '/opengraph-image',
-  MAINTENANCE_PATH, // tu kieruje bramka przerwy technicznej — musi być osiągalna
-] as const;
-
-/**
  * Ścieżki obsługiwane BEZ klienta Supabase: proxy nie czyta sesji, nie
  * odświeża ciasteczek i nie woła GoTrue (przy kluczu HS256 każde sprawdzenie
  * sesji to wywołanie sieciowe). Tylko trasy, które nie zależą od tego, kto
  * pyta, i nie zwracają danych firmy. Odpowiedź nie niesie `Set-Cookie`, więc
- * trasa może ją oznaczyć jako cache'owalną.
+ * trasa może ją oznaczyć jako cache'owalną. Wszystkie są publiczne
+ * (`isPublicPath`).
  * `exact` — tylko `path`; `prefix` — `path` albo `path/…`. Trasy API dawaj
  * jako `exact`: sąsiednie trasy (`/api/ksef/...`) zostają za bramką.
  */
@@ -83,6 +76,10 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   // stan wdrożenia dla workflowu `obrazy.yml`; trasa sama sprawdza token
   // (plan usprawnień 3.1)
   { path: '/api/ops/deploy-state', match: 'exact' },
+  // Adres kalendarza klienta (krok 7.3): iCal pod niezgadywalnym tokenem
+  // w ścieżce, więc `prefix`. Odpowiedź zależy od tokenu, nie od sesji; trasa
+  // sama ustawia `Cache-Control: private` i nie dostaje ciasteczek z proxy.
+  { path: '/api/kalendarz', match: 'prefix' },
   // Pliki techniczne (plan skalowania, sesja 2). Przeglądarka sprawdza `/sw.js`
   // przy pełnych nawigacjach w zasięgu workera i pobiera manifest, a roboty
   // wyszukiwarek pobierają `robots.txt` i `sitemap.xml`. Żaden nie zależy od
@@ -92,7 +89,28 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   { path: '/manifest.webmanifest', match: 'exact' },
   { path: '/robots.txt', match: 'exact' },
   { path: '/sitemap.xml', match: 'exact' },
+  // Podgląd linku: obrazek statyczny, ten sam dla każdego. Do 1.10.2026
+  // kończył się przekierowaniem na /login.
+  { path: '/opengraph-image', match: 'exact' },
+  // Tu kieruje bramka przerwy technicznej, więc musi być osiągalna. Strona jest
+  // statyczna i nie czyta sesji, a powrót do panelu znów przechodzi bramkę.
+  { path: MAINTENANCE_PATH, match: 'exact' },
 ];
+
+/**
+ * Publiczne API (plan kompletnej aplikacji, krok 7.1): `/api/v1/…` każda
+ * trasa uwierzytelnia sama, kluczem API z nagłówka `Authorization: Bearer`
+ * (`lib/api/v1/auth.ts`), a `/api/docs` to statyczna dokumentacja. Proxy nie
+ * tworzy dla nich klienta Supabase: sesja z ciasteczek nie otwiera w API
+ * niczego i nie jest tu odświeżana. Łącze MCP (krok 7.2, `/api/mcp`) działa
+ * na tych samych kluczach. Tylko te prefiksy (dokładnie albo z `/`);
+ * `/api/v10`, `/api/v1x` i `/api/docsy` zostają za bramką sesji.
+ */
+const API_KEY_PREFIXES = ['/api/v1', '/api/docs', '/api/mcp'] as const;
+
+export function isPublicApiPath(pathname: string): boolean {
+  return API_KEY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 export function isNoSessionPath(pathname: string): boolean {
   // Tunele PostHog i Sentry mają własny mechanizm (`lib/telemetry-tunnel.ts`,
@@ -100,6 +118,8 @@ export function isNoSessionPath(pathname: string): boolean {
   // Delegacja zamiast drugiego wpisu — jedna lista, żeby obie ścieżki nie
   // rozjechały się przy następnej zmianie przepisań w `next.config.ts`.
   if (isTelemetryTunnelPath(pathname)) return true;
+  // Publiczne API ma własne uwierzytelnienie kluczem (`isPublicApiPath`).
+  if (isPublicApiPath(pathname)) return true;
   return NO_SESSION_PATHS.some(({ path, match }) =>
     pathname === path || (match === 'prefix' && pathname.startsWith(`${path}/`)),
   );
@@ -112,17 +132,19 @@ export function isMarketingPath(pathname: string): boolean {
 }
 
 /**
- * Trasy dostępne bez sesji (marketing + auth + wybrane API + statyczne).
+ * Trasy dostępne bez sesji (techniczne + marketing + auth + wybrane API).
  * Całość `/api/*` NIE jest publiczna — tylko jawne prefiksy (bezpieczeństwo).
  */
 export function isPublicPath(pathname: string): boolean {
-  // Obejmuje pliki techniczne i tunele telemetrii (PostHog musi być
+  // Obejmuje `NO_SESSION_PATHS` i tunele telemetrii (PostHog musi być
   // publiczny: skrypt ładuje się przed logowaniem). `startsWith('/ingest')`
   // robiło publicznymi też `/ingestion` i `/ingest-raport`, których Next
   // nie przepisuje do PostHog.
   if (isNoSessionPath(pathname)) return true;
   if (isMarketingPath(pathname)) return true;
-  if (STATIC_PUBLIC_EXACT.some((p) => pathname === p)) return true;
+  // Strona faktury dla nabywcy (krok 2.10): tylko `/faktura/<token>` i pliki
+  // pod nią; sam `/faktura` i podobne początki zostają za logowaniem.
+  if (isBuyerInvoicePath(pathname)) return true;
   if (pathname.startsWith('/api/')) {
     return PUBLIC_API_EXACT.some((p) => pathname === p) || PUBLIC_API_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
@@ -359,6 +381,12 @@ export async function updateSession(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
     });
     return res;
+  }
+
+  // Strona nabywcy niesie dane faktury, a token jest w adresie: bez cache,
+  // bez indeksowania i bez Referer. Ścieżka publiczna dochodzi tylko tutaj.
+  if (isBuyerInvoicePath(path)) {
+    for (const [name, value] of Object.entries(BUYER_PAGE_HEADERS)) supabaseResponse.headers.set(name, value);
   }
 
   return supabaseResponse;

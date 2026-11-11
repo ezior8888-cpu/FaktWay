@@ -10,6 +10,16 @@
 - **Pusty `dockerfile_target_build` w Coolify** buduje OSTATNI etap pliku.
   Dopisanie etapu na końcu `Dockerfile` raz wyłączyło produkcję na 15 godzin.
   Aplikacja ma jawnie `runner`, worker `worker`.
+- **Zmiana „Build Pack” w Coolify (panel, `$a->save()`) z `dockerfile` na inny
+  czyści `dockerfile_location`, `dockerfile_target_build` i
+  `custom_healthcheck_found`** (model `Application`, Coolify 4.6). Powrót
+  z obrazu na repo zbudowałby wtedy ostatni etap, a aplikacja (healthcheck
+  Coolify wyłączony, liczy się HEALTHCHECK z obrazu) zostałaby uznana za
+  zdrową bez sprawdzenia. Przełączaj tylko `scripts/ops/coolify-zrodlo.sh`
+  (zapytanie bez zdarzeń modelu, jawny cel przy powrocie).
+- **`dockerfile` z ustawioną nazwą obrazu pcha build do rejestru.** Coolify
+  taguje zbudowany obraz `docker_registry_image_name:tag` i robi `docker push`.
+  Przy powrocie na repo nazwa i tag obrazu muszą być puste.
 - **Healthcheck Coolify wymaga `curl` w obrazie.** Bez niego deploy kończy się
   statusem „unhealthy" i wycofaniem, mimo poprawnie działającego procesu.
 - **Zmienne środowiskowe mają bliźniaki `is_preview`.** Wyglądają jak duplikaty,
@@ -25,8 +35,11 @@
   (`$LOCAL_SUPABASE_REF`) wygasł; nie wracaj do niego i nie celuj devem w db-1.
 - **Build padający z `exit code 137` to zabójca OOM, nie błąd kodu.** `pnpm build`
   na `app-1` potrzebuje więcej pamięci, niż maszyna ma fizycznie: pułap sterty
-  w `Dockerfile` to 3072 MB, a realnie wolne jest ~2.2 GB (sam `dockerd` bierze
+  w `Dockerfile` to 5120 MB (od 11.11.2026; wcześniej 4096), a realnie wolne jest ~2.2 GB (sam `dockerd` bierze
   ~775 MB). Build jedzie na swapie i przy udanym przebiegu zjada go **4.5 GB**.
+  Przy 5120 MB build na `app-1` zużyje więcej swapu, więc przed wdrożeniem trzeba
+  sprawdzić `swapon --show` (zalecane co najmniej 10 GB) albo budować drogą
+  GitHub Actions.
   **`app-1` musi mieć ≥ 8 GB swapu** — przy 4 GB wdrożenie ginie. Sprawdzenie:
 
   ```bash

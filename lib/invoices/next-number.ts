@@ -85,6 +85,25 @@ export function suggestNextInvoiceNumber(
 /** Ile kolejnych zajętych numerów przeskakujemy, zanim zrezygnujemy z podpowiedzi. */
 const MAX_TAKEN_SKIPS = 5;
 
+/**
+ * Kolejne numery, które sprawdza podpowiedź (`suggestNextInvoiceNumberForTenant`):
+ * pierwszy po ostatniej fakturze, potem po każdym zajętym, najwyżej
+ * `MAX_TAKEN_SKIPS`. Pierwszy wolny z listy to podpowiedź. Publiczne API
+ * (krok 7.1) pyta bazę o zajęte numery jednym zapytaniem, bez odczytu faktur.
+ */
+export function nextInvoiceNumberCandidates(
+  last: { number: string; issueDate: string },
+  todayIso: string,
+): string[] {
+  const candidates: string[] = [];
+  let candidate = suggestNextInvoiceNumber(last, todayIso);
+  for (let i = 0; candidate && i < MAX_TAKEN_SKIPS; i++) {
+    candidates.push(candidate);
+    candidate = suggestNextInvoiceNumber({ number: candidate, issueDate: todayIso }, todayIso);
+  }
+  return candidates;
+}
+
 /** Ostatnia zwykła faktura sprzedażowa firmy (opcjonalnie tylko wystawiona w FaktWay). */
 async function lastRegularOutgoing(
   supabase: SupabaseClient,

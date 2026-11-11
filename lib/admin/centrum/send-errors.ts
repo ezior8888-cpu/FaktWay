@@ -65,6 +65,8 @@ export const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
 export const STAGE_LABELS: Record<string, string> = {
   start: 'zdarzenie',
   guard: 'stan i hamulce',
+  // L1a: czekanie przed przejęciem na koniec pauzy firmy po 429 z KSeF (albo hamulec 429).
+  pause: 'pauza 429',
   offline: 'Offline24',
   credentials: 'poświadczenia',
   health: 'sonda KSeF',

@@ -23,6 +23,7 @@ import InvoiceAccepted from './templates/InvoiceAccepted';
 import InvoiceDuplicateDecision, { duplicateDecisionSubject } from './templates/InvoiceDuplicateDecision';
 import InvoiceFailed from './templates/InvoiceFailed';
 import MagicImportCompleted from './templates/MagicImportCompleted';
+import NewLogin from './templates/NewLogin';
 import PaymentFailed from './templates/PaymentFailed';
 import RefundIssued from './templates/RefundIssued';
 import SupportEscalation, { type SupportEscalationProps } from './templates/SupportEscalation';
@@ -591,6 +592,40 @@ export async function sendGdprDeletionScheduledEmail(
   });
 }
 
+/**
+ * Mail o logowaniu z nowego urządzenia (krok 8.5, część 2). Mail bezpieczeństwa:
+ * kategoria transactional, bez wyłącznika. `idempotencyKey` = `new-login/<sessionId>`.
+ */
+export async function sendNewLoginEmail(payload: {
+  to: string;
+  userId: string;
+  occurredAt: string;
+  device: string;
+  ip: string | null;
+  idempotencyKey: string;
+}): Promise<EmailStubResult> {
+  if (!isResendConfigured()) {
+    logger.debug(`[email:stub] sendNewLoginEmail → ${payload.to}`);
+    return { sent: false, reason: 'not-configured' };
+  }
+  const html = await render(
+    NewLogin({
+      occurredAt: payload.occurredAt,
+      device: payload.device,
+      ip: payload.ip,
+      securityUrl: `${APP_URL}/settings/security`,
+    }),
+  );
+  return sendViaResend({
+    to: payload.to,
+    subject: 'Nowe logowanie do FaktWay',
+    html,
+    category: 'transactional',
+    userId: payload.userId,
+    idempotencyKey: payload.idempotencyKey,
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Faza 33 — wysyłka faktury z PDF w załączniku
 // ═══════════════════════════════════════════════════════════════
@@ -604,6 +639,11 @@ export interface InvoiceEmailPayload {
   /** Kwota z walutą, ta sama co „Do zapłaty” na PDF (`amountDueOnPdf`). */
   amountLabel: string;
   dueDate: string;
+  /**
+   * Tytuł przelewu z numerem KSeF, ten sam co na PDF (`transferTitleOnPdf`,
+   * krok 1.4). Brak: mail bez tego wiersza, jak dotąd.
+   */
+  transferTitle?: string | null;
   pdf: Buffer;
   pdfFilename: string;
 }
@@ -643,6 +683,7 @@ export async function sendInvoiceEmail(
       <table style="margin:16px 0;font-size:14px">
         <tr><td style="color:#6b7280;padding-right:16px">${escapeHtml(payload.amountCaption)}</td><td><strong>${escapeHtml(payload.amountLabel)}</strong></td></tr>
         <tr><td style="color:#6b7280;padding-right:16px">Termin płatności</td><td>${escapeHtml(payload.dueDate)}</td></tr>
+        ${payload.transferTitle ? `<tr><td style="color:#6b7280;padding-right:16px">Tytuł przelewu</td><td>${escapeHtml(payload.transferTitle)}</td></tr>` : ''}
       </table>
       <p style="color:#9ca3af;font-size:12px">${invoiceEmailFooter(payload.sellerName)}</p>
     </div>

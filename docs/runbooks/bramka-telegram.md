@@ -33,6 +33,34 @@ API Coolify wdraża zawsze HEAD gałęzi, nie wskazany commit. Bramka:
 
 Postęp przychodzi wiadomościami. Druga osoba dostaje powiadomienie o starcie.
 
+### Obrazy z GHCR (Coolify `dockerimage`)
+
+Po przełączeniu Coolify na gotowe obrazy (`./scripts/ops/coolify-zrodlo.sh obraz`,
+`docs/runbooks/wdrozenie-produkcji.md`) bramka sama rozpoznaje źródło
+z konfiguracji aplikacji i pisze je w `/wdroz` („Źródło: obrazy z GHCR”).
+Zasady 1–7 zostają, a dochodzi:
+
+- obie aplikacje muszą mieć to samo źródło i nasze obrazy
+  (`ghcr.io/ezior8888-cpu/faktway-runner` i `…-worker`); stan mieszany albo
+  obcy obraz blokuje z odesłaniem do `coolify-zrodlo.sh stan`;
+- oba obrazy `<HEAD>` muszą być w GHCR z etykietą rewizji równą HEAD.
+  Workflow `obrazy.yml` buduje je po każdym scaleniu, kilkanaście minut:
+  do tego czasu `/wdroz` pokazuje blokadę „Obrazu … jeszcze nie ma w GHCR”;
+- wdrożenie idzie przez `POST /applications/<uuid>/rollback` z
+  `commit: <SHA>`: Coolify pobiera `<obraz>:<SHA>`, a w kolejce i w
+  `SOURCE_COMMIT` kontenera jest SHA (kontrola z punktu 4 działa bez zmian).
+  Pobranie obrazu workera trwa ok. 5 min, aplikacji poniżej minuty.
+
+**Dlaczego „rollback”, a nie zmiana tagu.** Endpoint wymaga tylko uprawnienia
+`deploy`. Zmiana `docker_registry_image_tag` przez API wymagałaby `write`,
+a token z `write` w bocie mógłby zmienić zmienne albo nazwę obrazu. Koszt:
+tag zapisany w konfiguracji aplikacji zostaje na ostatnim SHA ustawionym
+skryptem. **Po `/wdroz` z obrazu nie klikaj „Redeploy” ani „Restart”
+w panelu Coolify**: wdrożyłyby tamten, starszy obraz. Zmiana zmiennej
+wymaga restartu? Wdróż `./scripts/ops/wdroz-produkcje.sh --obraz <SHA>`
+(ustawia tag i wdraża) albo `/wdroz` ponownie. `coolify-zrodlo.sh stan`
+pokazuje tag z konfiguracji obok SHA działającego kontenera.
+
 ## 3. Konfiguracja jednorazowa (Bartosz)
 
 Kolejność ma znaczenie.
@@ -111,6 +139,7 @@ Kolejność ma znaczenie.
    | `COOLIFY_API_TOKEN` | token z kroku 4 |
    | `COOLIFY_APP_WEB`, `COOLIFY_APP_WORKER` | UUID aplikacji id=1 i id=2 (koniec adresu strony aplikacji w Coolify) |
    | `GITHUB_TOKEN` | opcjonalnie: fine-grained, tylko odczyt repo (bez niego limit 60 zapytań/h) |
+   | `GHCR_PREFIX` | opcjonalnie, domyślnie `ghcr.io/ezior8888-cpu/faktway` (obrazy `-runner` i `-worker`; pakiety publiczne, bez tokenu) |
 
    - *Deploy*. W logach: `start: 1 operator(ów)`, w Telegramie „🟢 Bramka uruchomiona”.
 8. **Kto może pisać do bramki (`BRAMKA_USERS`).** Bramka odpowiada tylko

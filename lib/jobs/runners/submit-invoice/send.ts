@@ -22,7 +22,7 @@ import { ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
 import { InvoiceValidationError } from '@/lib/xml/fa3-generator';
 import { KsefSendVerdictError, SEND_ERROR_CODES } from '@/lib/ksef/send-error-codes';
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
-import { getKsefRetryDelay, ksefRetryDelayFor, KSEF_MAX_RETRIES } from '../../retry-schedule';
+import { getKsefRetryDelay, ksefRetryDelayMsFor, KSEF_MAX_RETRIES } from '../../retry-schedule';
 import { resolveDuplicate } from './duplicate';
 import {
   assertSubmissionNotHeld,
@@ -31,6 +31,7 @@ import {
   type SubmitOutcome,
   type SubmitRunContext,
 } from './shared';
+import { isKsefRateLimit, rateLimitPause } from './rate-limit';
 
 /**
  * S1: rozstrzygnięcie w statusie (odrzucenie, duplikat) zamyka otwarty wpis
@@ -180,6 +181,14 @@ export async function submitToKsef(ctx: SubmitRunContext): Promise<SubmitOutcome
         { cause: error },
       );
     }
+    // L1a: 429 (odpowiedź MF albo lokalna pauza firmy) — pauza firmy na
+    // pełny `Retry-After`, bez zużycia próby, z przejęciem zwolnionym.
+    // Bezpieczne przy ponowieniu: plik, który zdążył dotrzeć do KSeF, ma
+    // zamiar albo wpis `sent` (A2), więc po pauzie idzie uzgodnienie, nie
+    // druga wysyłka; po przyjęciu pliku czeka tylko odpytywanie.
+    if (isKsefRateLimit(error)) {
+      throw await rateLimitPause(ctx, error, credentials.nip, 'Pauza firmy po 429 z KSeF: wysyłka po jej końcu');
+    }
     if (error instanceof KsefApiError && !error.isRetryable) {
       Sentry.captureException(error, {
         tags: { job: 'submit-invoice', kind: 'ksef-rejection' },
@@ -214,14 +223,14 @@ export async function submitToKsef(ctx: SubmitRunContext): Promise<SubmitOutcome
       });
       throw new NonRetriableError(error.message, { cause: error });
     }
-    // Retry-owalne — 5xx, 429, timeout, ECONNRESET. Zamiast pozwolić
-    // Inngestowi użyć defaultowego exponential backoff (10s/30s/1m/5m/15m),
-    // rzucamy `RetryAfterError` z naszym custom schedule:
+    // Retry-owalne — 5xx, timeout, ECONNRESET (429 obsłużony wyżej jako
+    // pauza firmy). `RetryAfterError` z naszym harmonogramem:
     // 30s → 2min → 5min → 15min → 1h (Faza 23 sekcja 2).
     //
-    // KsefApiError 429 może mieć `Retry-After` header — jeśli MF mówi
-    // nam konkretnie ile czekać, słuchamy (AUD-92). Inaczej harmonogram.
-    const customDelay = ksefRetryDelayFor(error, attempt);
+    // Odpowiedź z `Retry-After` (np. 503) — jeśli MF mówi nam konkretnie,
+    // ile czekać, słuchamy (AUD-92), najwyżej godzinę (faktura jest w
+    // `sending`). Inaczej harmonogram z rozrzutem (L1a).
+    const customDelay = ksefRetryDelayMsFor(error, attempt, invoiceId);
     const isKsefApi = error instanceof KsefApiError;
     const errorLabel = isKsefApi
       ? `KSeF HTTP ${error.status}: ${error.message}`

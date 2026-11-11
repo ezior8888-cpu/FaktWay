@@ -1,3 +1,4 @@
+import { najblizszyDzienRoboczy } from '@/lib/ksiegowosc/kalendarz';
 import {
   fetchSettledAdvancesTotals,
   type SettledAdvanceTotals,
@@ -311,9 +312,11 @@ export function buildMonthlyFigures(
   const zmiana = (teraz: number, przedtem: number): number | null =>
     przedtem > 0 ? Math.round(((teraz - przedtem) / przedtem) * 100) : null;
 
-  // Termin VAT: 25. dzień miesiąca po polskim „dziś”. Dni po dobach
+  // Termin VAT: 25. dzień miesiąca po polskim „dziś”, przesunięty z soboty,
+  // niedzieli i święta na najbliższy dzień roboczy (art. 12 § 5 Ordynacji
+  // podatkowej; ten sam kalendarz co moduł księgowości, S-06). Dni po dobach
   // kalendarzowych od polskiej daty, nie po milisekundach od `now`.
-  const vatDueIso = `${nextMonthStartIso.slice(0, 8)}25`;
+  const vatDueIso = najblizszyDzienRoboczy(new Date(`${nextMonthStartIso.slice(0, 8)}25T00:00:00Z`)).toISOString().slice(0, 10);
   const daysToVatDue = Math.max(0, daysBetweenIsoDates(today, vatDueIso));
 
   return {

@@ -10,6 +10,11 @@ import type { Invoice } from '@/types/invoice';
  *
  * UWAGA: NIGDY nie importuj tego pliku w client components / Server Actions
  * związanych z UI użytkownika. Tylko joby.
+ *
+ * Wyjątek (krok 1.4 planu kompletnej aplikacji): `app/actions/identyfikator-zbiorczy.ts`
+ * woła `getTenantKsefCredentials` po sprawdzeniu roli owner/admin i po
+ * rezerwacji w bazie, bo identyfikator zbiorczy z KSeF klient dostaje od razu,
+ * a job przy ponowieniu wołałby nieidempotentne API jeszcze raz.
  */
 
 /**
@@ -64,6 +69,13 @@ export class KsefCredentialsError extends Error {
   }
 }
 
+/**
+ * Wyjątek od „tylko joby” z nagłówka (krok 6.2, część 4 planu kompletnej
+ * aplikacji): `app/actions/uprawnienia-ksef.ts` woła tę funkcję po sprawdzeniu
+ * roli właściciela, kroku kodu i rezerwacji w bazie (00195), bo nadanie
+ * i odebranie uprawnienia w KSeF nie są idempotentne, a job pg-boss przy
+ * ponowieniu wysłałby prośbę drugi raz.
+ */
 export async function getTenantKsefCredentials(
   tenantId: string,
 ): Promise<KsefAuth> {

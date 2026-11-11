@@ -31,6 +31,9 @@ export default defineConfig({
       'tests/rls-historia-ksef.test.ts',
       // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
       'tests/rls-sprzatanie-dziennikow.test.ts',
+      // Bez migracji (plan skalowania, sesja 3, FLO-01): sprzątanie pulsu FLO jednym zapisem
+      // z warunkiem; ponad 1000 kart przez PostgREST z `max_rows`, licznik i RETURNING bez ucięcia.
+      'tests/rls-flo-sprzatanie.test.ts',
       // 00158 („Zapłacone” jednym dotknięciem, FaktWay 1.0 §3 pkt 3): RPC razem
       // z wyzwalaczami paid_amount, paid_at i payment_status, role, obca firma, przypomnienia.
       'tests/rls-zaplacone.test.ts',
@@ -73,6 +76,84 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00174 (krok 8.5 planu kompletnej aplikacji): zalogowane urządzenia i historia logowań;
+      // tylko własne sesje, anon bez dostępu, krok kodu przy 2FA, wylogowanie widziane przez GoTrue.
+      'tests/rls-sesje-konta.test.ts',
+      // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia; suma niecofniętych
+      // wpłat = paid_amount, klucz idempotencji, obca firma, kwota, reszta, PLN, cofnięcie ze śladem.
+      'tests/rls-wplaty-czesciowe.test.ts',
+      // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu; duplikaty po kluczu, wpłata
+      // dopiero po potwierdzeniu i raz, maskowanie po „Pomiń”, cofnięcie ze śladem, obca firma i role.
+      'tests/rls-wyciag-bankowy.test.ts',
+      // 00178 (plan kompletnej aplikacji, krok 6.4): zlecenia archiwum dokumentów; owner/admin, izolacja firm,
+      // limit 10 minut i zamykanie utkniętych (wyzwalacz), jedno aktywne na okres, CHECK-i pliku i okresu.
+      'tests/rls-archiwum-dokumentow.test.ts',
+      // 00179 (plan kompletnej aplikacji, krok 2.10): link do faktury dla nabywcy; polityki, granty kolumnowe,
+      // cofnięcie jednokierunkowe i funkcja odczytu publicznego (ważny, wygasły, cofnięty, cudzy token).
+      'tests/rls-link-dla-nabywcy.test.ts',
+      // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
+      // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
+      'tests/rls-kalendarz.test.ts',
+      // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
+      // z aktywnym członkostwem zalogowanego, bez względu na nagłówek aktywnej firmy; z cudzej nic.
+      'tests/rls-moi-klienci.test.ts',
+      // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API firmy (owner/admin, skrót, odwołanie
+      // nieodwracalne, audyt wyzwalaczem) i rola `api_key_client`: tylko firma i zakres klucza, bez zapisu.
+      'tests/rls-api-klucze.test.ts',
+      // 00184 (krok 7.1, część 2): wystawianie faktur kluczem z `invoices:write` przez
+      // `api_create_invoice()`, idempotencja w transakcji z fakturą, izolacja firm.
+      'tests/rls-api-wystawianie.test.ts',
+      // 00189 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu
+      // jako zapłaty rozliczeń; rachunek firmy, wyłącznik modułu, zapis raz, role, różnica kwot, cofnięcie.
+      'tests/rls-wyciag-podatki.test.ts',
+      // 00187 (krok 7.1, część 3): webhooki owner/admin z kodem przy dodaniu, szyfrogram sekretu
+      // bez odczytu, jedna dostawa na zdarzenie, ponowienia, wyłączenie po 20 porażkach, audyt.
+      'tests/rls-webhooki.test.ts',
+      // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji; wpis dla każdego
+      // aktywnego członka firmy, UNIQUE bez dubli przy ponowieniu, odczyt tylko własnych wpisów aktywnej
+      // firmy, bez zapisu kluczem użytkownika, oznaczanie tylko przez RPC, CHECK linku.
+      'tests/rls-powiadomienia-w-aplikacji.test.ts',
+      // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania
+      // (service_role), w jednej transakcji z audit_logs; CHECK znacznika; runner sprzątania przez PostgREST.
+      'tests/rls-archiwum-sprzatanie.test.ts',
+      // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie;
+      // odczyt tylko przy koszcie widocznym dla czytającego, zapis tylko przez funkcje, dzwonek bez autora,
+      // ponowienie z tym samym identyfikatorem bez dubla, załatwienie (kto i kiedy) z audytem, CHECK-i.
+      'tests/rls-komentarze-kosztow.test.ts',
+      // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe; izolacja firm,
+      // rola jak przy fakturach, numer z bazy bez dubli naraz, wystawionej nie zmienia nikt, historia wysyłek.
+      'tests/rls-noty.test.ts',
+      // 00194 (plan kompletnej aplikacji, krok 3.7): kasa; numer KP i KW z bazy pod blokadą serii,
+      // stan kasy nie poniżej zera, korekta (storno), wpłata do faktury przez 00176, RLS i niezmienność.
+      'tests/rls-kasa.test.ts',
+      // 00175 (plan kompletnej aplikacji, krok 1.3): faktura do paragonu ze skrzynki KSeF i paragon
+      // z NIP; połączenie, ostrzeżenie, ponowienie bez zmian, decyzja klienta, wyzwalacz KPiR, izolacja.
+      'tests/rls-faktura-do-paragonu.test.ts',
+      // 00177 (plan kompletnej aplikacji, krok 3.4): koszty do zapłaty; RPC zapłaty i cofnięcia
+      // (idempotencja, blokada wiersza, role, obca firma, audyt), wyzwalacz kolumn płatności, lista przez RLS.
+      'tests/rls-koszty-do-zaplaty.test.ts',
+      // 00191 (plan kompletnej aplikacji, krok 1.4, część 2): identyfikatory zbiorcze KSeF; RPC rezerwacji,
+      // zapisu i porażki (jeden wiersz na zestaw faktur, próba w toku, przejęcie po 5 minutach), role owner/admin,
+      // izolacja firm, brak zapisu z sesji poza RPC, żeton próby poza odczytem, wyzwalacz niezmienności.
+      'tests/rls-identyfikator-zbiorczy.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF;
+      // rezerwacja, przejęcie po 5 minutach, żeton i numery operacji, krok kodu, tylko właściciel,
+      // izolacja firm, wyzwalacz przejść stanów.
+      'tests/rls-uprawnienia-ksef.test.ts',
+      // 00196 (plan kompletnej aplikacji, krok 3.2, część 3): przelewy do dostawców z wyciągu jako zapłaty kosztów;
+      // zapis dopiero po decyzji klienta (CHECK także dla klucza serwisowego), „Pomiń” bez danych osób trzecich,
+      // rachunek z faktury, kwota równa sumie do zapłaty, raz, role, obca firma, cofnięcie przez undo_expense_paid.
+      'tests/rls-wyciag-koszty.test.ts',
+      // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury;
+      // prawdziwe RPC wpłat z sesji, runner kolejki przez PostgREST, odbiorcy, ponowienie bez dubla,
+      // stan po wpłacie, wpłata cofnięta i usunięta, obca firma, CHECK rodzajów.
+      'tests/rls-dzwonek-wplaty.test.ts',
+      // 00186 (plan skalowania 3000, sesja 21): wynik strażnika cyklu życia przed i po, lekka funkcja bez I3,
+      // wklejanie ksef_upo_expected, indeksy cronów w planach, UNIQUE katalogu produktów i kontrola dubli.
+      'tests/rls-indeksy-cronow-produkty.test.ts',
+      // Plan skalowania 3000, sesja 12 (QAL-01, bez migracji): nocna kopia JSON czyta
+      // tabele stronami po kluczu; filtry kursora (też klucz złożony) przez prawdziwy PostgREST.
+      'tests/rls-kopia-json-stronicowanie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

@@ -1,10 +1,10 @@
 'use client';
 
 // Plan Finora P15 (E10b): okno importu z pliku na `Dialog` Finory (było
-// własne okno na rozmytym szkle). Logika bez zmian:
-// `startFileImportAction`, przejście na stronę postępu. Limit pliku to limit
-// Server Action (1 MB, `lib/upload-limit.ts`) — akcja obiecuje 10 MB, ale
-// większe żądanie Next odrzuca, zanim akcja ruszy (plan skalowania, sesja 4).
+// własne okno na rozmytym szkle). Plik idzie trasą `/api/uploads/import`
+// (`postImportUpload`), potem przejście na stronę postępu. Limit 10 MB
+// (`lib/upload-limit.ts`) — do sesji 31 planu skalowania plik szedł Server
+// Action i przechodził najwyżej 1 MB.
 // Decyzja Bartosza 22.10.2026: tylko CSV z czterech programów — bez JPK_FA.
 // Okno jest montowane przez rodzica tylko na czas wyboru, więc stoi otwarte;
 // zamknięcie (X, Esc, klik w tło, „Anuluj”) woła `onClose`, a w trakcie
@@ -23,13 +23,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { startFileImportAction, type FileImportSource } from '@/app/actions/import-danych';
-import {
-  ACTION_FILE_LIMIT_BYTES,
-  ACTION_FILE_LIMIT_LABEL,
-  formatUploadSize,
-  uploadRejectedMessage,
-} from '@/lib/upload-limit';
+import type { FileImportSource } from '@/lib/import/file-sources';
+import { formatUploadSize, UPLOAD_FILE_LIMIT_BYTES, UPLOAD_FILE_LIMIT_LABEL } from '@/lib/upload-limit';
+import { postImportUpload } from '@/lib/uploads/client';
 
 interface Props {
   source: FileImportSource;
@@ -58,35 +54,29 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
   const handleUpload = () => {
     if (!file) return;
 
-    if (file.size > ACTION_FILE_LIMIT_BYTES) {
+    if (file.size > UPLOAD_FILE_LIMIT_BYTES) {
       toast.error(
-        `Plik ma ${formatUploadSize(file.size)}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Wyeksportuj krótszy okres (np. kwartał) i wgraj pliki po kolei.`,
+        `Plik ma ${formatUploadSize(file.size)}, a można wgrać najwyżej ${UPLOAD_FILE_LIMIT_LABEL}. Wyeksportuj krótszy okres (np. kwartał) i wgraj pliki po kolei.`,
       );
       return;
     }
 
     startUpload(async () => {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('source', source);
-        formData.append('tenantId', tenantId);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('source', source);
+      formData.append('tenantId', tenantId);
 
-        const result = await startFileImportAction(formData);
+      // Nie odrzuca obietnicy: sieć i odpowiedź bez JSON wracają jako polski
+      // komunikat (`lib/uploads/client.ts`).
+      const result = await postImportUpload(formData);
 
-        if (result.success) {
-          toast.success('Import rozpoczęty');
-          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- pełne przeładowanie po imporcie, zachowanie od fazy 12; zamiana na router.push to osobna decyzja
-          window.location.assign(`/onboarding/progress/${result.importJobId}`);
-        } else {
-          toast.error(result.error);
-        }
-      } catch (e) {
-        // Odrzucona obietnica akcji (413 od Next, sieć, restart serwera, strona
-        // sprzed wdrożenia) niesie angielski tekst Next albo zredagowany błąd —
-        // klient dostaje polski.
-        console.error('[import] wgranie pliku odrzucone', e);
-        toast.error(uploadRejectedMessage(e));
+      if (result.success) {
+        toast.success('Import rozpoczęty');
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- pełne przeładowanie po imporcie, zachowanie od fazy 12; zamiana na router.push to osobna decyzja
+        window.location.assign(`/onboarding/progress/${result.importJobId}`);
+      } else {
+        toast.error(result.error);
       }
     });
   };
@@ -127,7 +117,7 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
               <>
                 <p className="text-sm font-medium">Kliknij aby wybrać plik</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {FILE_ACCEPT[source]} • max {ACTION_FILE_LIMIT_LABEL}
+                  {FILE_ACCEPT[source]} • max {UPLOAD_FILE_LIMIT_LABEL}
                 </p>
               </>
             )}

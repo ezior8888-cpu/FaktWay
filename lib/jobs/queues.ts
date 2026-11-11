@@ -17,9 +17,13 @@
  * samego eventu (fan-out), a w pg-boss jedna kolejka = jeden handler.
  * Dwa takie eventy: `invoice/submit.succeeded` i `invoice/submit.failed`
  * (powiadomienie użytkownika ORAZ obsługa kolejki Offline24) — nadawca
- * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1.
+ * publikuje do obu kolejek, co odtwarza semantykę Inngest 1:1. Od kroku 8.1
+ * (00197) także `invoice/payment.received` (push i dzwonek).
  */
 export const EVENT_QUEUE_MAP = {
+  'auth/login.completed': ['auth.login.completed'],
+  // Archiwum dokumentów i paczka na kontrolę (krok 6.4 planu kompletnej aplikacji, 00178).
+  'archive/document.requested': ['archive.document.requested'],
   'billing/payment.failed': ['billing.payment.failed'],
   'billing/payment.succeeded': ['billing.payment.succeeded'],
   'email/trial-day-1': ['email.trial-day-1'],
@@ -35,17 +39,25 @@ export const EVENT_QUEUE_MAP = {
   // wysyłka nic nie publikuje (pg-boss rzuca na kolejce bez `createQueue`).
   'inbox/invoice.received': [],
   'inbox/poll.tenant': ['inbox.poll.tenant'],
-  'invoice/payment.received': ['invoice.payment.received'],
-  // fan-out: powiadomienie + obsługa kolejki Offline24
+  // fan-out: push „Otrzymana płatność” + dzwonek w aplikacji (krok 8.1 planu
+  // kompletnej aplikacji, część 3, 00197)
+  'invoice/payment.received': ['invoice.payment.received', 'invoice.payment.received.bell'],
+  // fan-out: powiadomienie + obsługa kolejki Offline24 + dzwonek w aplikacji
+  // („faktura odrzucona w KSeF”, krok 8.1 planu kompletnej aplikacji, 00188)
   'invoice/submit.failed': [
     'invoice.submit.failed.notify',
     'invoice.submit.failed.offline-queue',
+    'invoice.submit.failed.bell',
   ],
   'invoice/submit.requested': ['invoice.submit.requested'],
-  // fan-out: powiadomienie + obsługa kolejki Offline24
+  // fan-out: powiadomienie + obsługa kolejki Offline24 + webhook „faktura
+  // przyjęta w KSeF” dla programów klienta (krok 7.1, część 3, 00187) + dzwonek
+  // w aplikacji (krok 8.1 planu kompletnej aplikacji, część 2, 00188)
   'invoice/submit.succeeded': [
     'invoice.submit.succeeded.notify',
     'invoice.submit.succeeded.offline-queue',
+    'invoice.submit.succeeded.webhook',
+    'invoice.submit.succeeded.bell',
   ],
   'invoice/upo.requested': ['invoice.upo.requested'],
   // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): fan-out z crona.
@@ -54,6 +66,8 @@ export const EVENT_QUEUE_MAP = {
   'reminders/send.requested': ['reminders.send.requested'],
   'user/registered': ['user.registered'],
   'validation/bulk-contractors.requested': ['validation.bulk-contractors.requested'],
+  // Webhooki publicznego API (krok 7.1, część 3, 00187).
+  'webhooks/event.emitted': ['webhooks.event.emitted'],
 } as const;
 
 export type KnownJobEvent = keyof typeof EVENT_QUEUE_MAP;
@@ -85,7 +99,7 @@ export interface CronJobDef {
 
 const TZ = 'Europe/Warsaw';
 
-/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF, księgowość (K5). */
+/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF, księgowość (K5), pliki paczek archiwum (6.4). */
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
@@ -98,6 +112,10 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.daily-analytics-digest', cron: '0 6 * * *', tz: TZ },
   { queue: 'cron.daily-db-snapshot', cron: '0 2 * * *', tz: TZ },
   { queue: 'cron.daily-summary-email', cron: '0 6 * * *', tz: TZ },
+  // Pliki wygasłych paczek archiwum (krok 6.4, część 2, 00190): raz na dobę o 04:30,
+  // po retencji faktur i kopii (04:00). Jeden przebieg na dobę; plik znika najpóźniej
+  // ok. doby po wygaśnięciu linku (7 dni od gotowości) i godzinie zapasu.
+  { queue: 'cron.document-archive-cleanup', cron: '30 4 * * *', tz: TZ },
   // Puls agenta FLO: sprząta po sobie i (od bloku 3) tworzy propozycje.
   // 07:30, czyli po ciszy nocnej, a przed tym, jak ktokolwiek otworzy apkę.
   { queue: 'cron.flo-tick', cron: '30 7 * * *', tz: TZ },
@@ -141,6 +159,10 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.trial-countdown-emails', cron: '0 9 * * *', tz: TZ },
   { queue: 'cron.upo-retry-stale', cron: '5 * * * *', tz: TZ },
   { queue: 'cron.verify-backup', cron: '0 3 * * 0', tz: TZ },
+  // Webhooki publicznego API (krok 7.1, część 3): ponowienia dostaw (1 min, 5 min,
+  // 30 min, 2 h, 12 h), stan w bazie (00187). Przy wyłączonej fladze
+  // `publicApiEnabled` przebieg kończy się na odczycie flagi.
+  { queue: 'cron.webhooks-deliver', cron: '* * * * *', tz: TZ },
   { queue: 'cron.weekly-business-review', cron: '0 9 * * 1', tz: TZ },
 ] as const;
 

@@ -11,7 +11,6 @@ import { buttonVariants } from '@/components/ui/button';
 import { parseExpenseMonth } from '@/lib/expenses/month';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { getPageContext, type PageContext } from '@/lib/supabase/page-context';
-import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +36,7 @@ async function RecentExportsSection({ supabase, tenantId }: Pick<PageContext, 's
         <Alert variant="destructive">
           <AlertTitle>Nie udało się wczytać historii</AlertTitle>
           <AlertAction>
-            {/* `cn` (tailwind-merge) usuwa bazowe `border-transparent` — bez tego wygrywało z
-                `border-border` (późniejsze w CSS) i w jasnym motywie „Odśwież” było gołym tekstem
-                (poprawka Bartosza 21.10.2026: przeprojektowanie Księgowości). */}
-            <Link href="/reports/exports" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+            <Link href="/reports/exports" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               Odśwież
             </Link>
           </AlertAction>

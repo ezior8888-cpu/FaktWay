@@ -92,7 +92,13 @@ pierwsze. Tempo na ekranie jest **mierzone** (ostatnie 6 h),
 termin końca tylko po przeszukaniu całej historii.
 
 **429:** pauza firmy na pełny `Retry-After` (60 s – 24 h, domyślnie 15 min),
-bez zużywania prób. ≥ 3 firmy z 429 w godzinie = globalny bezpiecznik
+bez zużywania prób. Od L1a (09.11.2026) 429 z historii zatrzymuje też całą
+firmę we wspólnej pauzie (`lib/ksef/rate-limit-pause.ts`, `hamulce-ksef.md`):
+wysyłka, UPO i skrzynka tej firmy czekają razem z historią, a 429 z nich
+pauzuje historię (lokalny 429, log z `localPause: true`). Taka lokalna pauza
+też zapisuje `rate_limited_at` i `rate_limit_hits`, więc wlicza się do
+globalnego bezpiecznika (≥ 3 firmy w godzinie) i do alarmu długiej pauzy —
+świadomie: firma naprawdę ma 429, tylko z innej ścieżki. ≥ 3 firmy z 429 w godzinie = globalny bezpiecznik
 (cron nie robi fan-outu) + alarm.
 
 ## 3. Problemy kursorów i błędy firmy
@@ -254,8 +260,11 @@ faktura w księgach wróci do `already_present` bez wywołania KSeF.
 2. **`ksef_history_blocked`** — pozycje z powodem operatorskim i strumienie
    przy limicie (raz na dobę). → `pozycje <firma> blocked`, potem `odblokuj`.
 3. **`ksef_history_rate_limited`** — ≥ 3 firmy z 429 w godzinie (ten sam
-   warunek co bezpiecznik). Wysyłka i skrzynka działają. → `stan`;
-   w razie potrzeby `wstrzymaj-wszystko <h> --tak`.
+   warunek co bezpiecznik). Od L1a (08.11.2026) 429 zatrzymuje całą firmę:
+   jej wysyłka, UPO, skrzynka i historia czekają do końca pauzy z
+   `Retry-After` (`lib/ksef/rate-limit-pause.ts`) i ruszają same. Pozostałe
+   firmy działają, a przy 429 u wielu firm naraz wysyłka zwalnia (hamulec).
+   → `stan`; w razie potrzeby `wstrzymaj-wszystko <h> --tak`.
 
 ## 6. Wyłącznik klienta
 

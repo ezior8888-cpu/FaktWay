@@ -21,7 +21,9 @@ import {
   faktflowOriginalVerdictMessage,
   hexHashToBase64,
   knownNumberVerdictMessage,
+  numberTakenLogMessage,
   numberTakenMessage,
+  operatorVerdictLogMessage,
   operatorVerdictMessage,
   summarizeInvoiceXml,
 } from '@/lib/ksef/duplicate-verdict';
@@ -49,8 +51,9 @@ import {
 } from '@/lib/ksef/submission-log';
 import { downloadInvoiceXml, invoiceXmlKey, invoiceXmlKeyFor, uploadInvoiceXml } from '@/lib/storage/r2';
 import { KsefSendVerdictError, SEND_ERROR_CODES, type SendErrorCode } from '@/lib/ksef/send-error-codes';
-import { getKsefRetryDelay, ksefRetryDelayFor } from '../../retry-schedule';
+import { getKsefRetryDelay, ksefRetryDelayMsFor } from '../../retry-schedule';
 import type { SubmitOutcome, SubmitRunContext } from './shared';
+import { isKsefRateLimit, rateLimitPause } from './rate-limit';
 
   // D-A4-1: odpowiedź 440 „duplikat” — jedna ścieżka dla nowej wysyłki
   // i dla uzgadniania po referencji (także zamiaru z A2). KSeF ma już fakturę
@@ -73,11 +76,22 @@ export async function resolveDuplicate(ctx: SubmitRunContext, error: KsefInvoice
   const original = error.originalKsefNumber;
   const originalSession = error.originalSessionReferenceNumber;
   const ourSession = error.ourSessionReferenceNumber;
-  const verdict = (code: SendErrorCode, message: string) =>
-    new NonRetriableError(`[${code}] ${message}`, { cause: new KsefSendVerdictError(code, message) });
-  const pending = (message: string, delay: number | string) =>
+  // F-093-440: komunikat błędu to tekst operatora (`operatorText`, domyślnie ten
+  // sam); tekst klienta jedzie w nośniku i wraca w `onSubmitInvoiceExhausted`.
+  const verdict = (code: SendErrorCode, customerText: string, operatorText: string = customerText) =>
+    new NonRetriableError(`[${code}] ${operatorText}`, {
+      cause: new KsefSendVerdictError(code, operatorText, customerText),
+    });
+  // `cause` (L1a): błąd KSeF, z którego wynika oczekiwanie — dziennik prób
+  // pokaże jego status HTTP; kod werdyktu dalej wygrywa w klasyfikacji.
+  const pending = (message: string, delay: number | string, cause?: unknown) =>
     new RetryAfterError(message, delay, {
-      cause: new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, message),
+      cause: new KsefSendVerdictError(
+        SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
+        message,
+        message,
+        cause !== undefined ? { cause } : undefined,
+      ),
     });
   const alertOperator = (kind: string, extra: Record<string, unknown> = {}) =>
     Sentry.captureMessage('KSeF: duplikat 440 do uzgodnienia przez operatora', {
@@ -88,9 +102,14 @@ export async function resolveDuplicate(ctx: SubmitRunContext, error: KsefInvoice
   // Data nadania numeru oryginałowi (art. 106na: wystawienie i otrzymanie).
   // Własna sesja — status po referencji (bez uprawnienia InvoiceRead);
   // inaczej metadane po numerze KSeF. Brak daty nie cofa werdyktu — alarm.
+  // L1a: 429 to nie „brak daty”, tylko chwilowa blokada MF — pauza firmy
+  // (wyżej, przed przyjęciem numeru albo zapisem werdyktu), żeby data
+  // nadania nie przepadła przez limit. Inne błędy jak dotąd: bez daty.
   const originalAcquisition = async (ownInvoiceReference: string | null): Promise<string | undefined> => {
+    let authNip: string | null = null;
     try {
       const credentials = await getTenantKsefCredentials(tenantId);
+      authNip = credentials.nip;
       if (originalSession && ownInvoiceReference) {
         const status = await checkInvoiceStatusByReference(
           { sessionReferenceNumber: originalSession, invoiceReferenceNumber: ownInvoiceReference },
@@ -102,6 +121,9 @@ export async function resolveDuplicate(ctx: SubmitRunContext, error: KsefInvoice
       }
       return (await fetchKsefAcquisitionDate(original!, credentials, env, { tenantId, invoiceId })) ?? undefined;
     } catch (e) {
+      if (isKsefRateLimit(e)) {
+        throw await rateLimitPause(ctx, e, authNip, `Pauza firmy po 429 z KSeF: data nadania numeru ${original} po jej końcu`);
+      }
       logger.warn('Nie ustalono daty przyjęcia oryginału duplikatu', {
         invoiceId,
         ksefNumber: original,
@@ -236,7 +258,14 @@ export async function resolveDuplicate(ctx: SubmitRunContext, error: KsefInvoice
       httpStatus: api?.status ?? null,
       knownInvoice: known,
     });
-    if (transient) throw pending(unverified, ksefRetryDelayFor(downloadError, attempt));
+    // L1a: 429 — pauza firmy i zwolnione przejęcie. Przyczyna: werdykt „do
+    // uzgodnienia” (klasyfikacja bez zmian), a pod nim błąd HTTP pobrania,
+    // więc dziennik prób pokaże 429 (dawniej `pending()` go gubił).
+    if (isKsefRateLimit(downloadError)) {
+      throw await rateLimitPause(ctx, downloadError, credentials.nip, unverified,
+        new KsefSendVerdictError(SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE, unverified, unverified, { cause: downloadError }));
+    }
+    if (transient) throw pending(unverified, ksefRetryDelayMsFor(downloadError, attempt, invoiceId), downloadError);
     // 403 (token bez InvoiceRead) i inne 4xx: operator. Wpis zostaje otwarty
     // ze znacznikiem 440 — „Tylko uzgodnij” i cron I5 powtórzą weryfikację.
     alertOperator('download-refused', { status: api?.status, otherInvoice: known?.internalNumber ?? null });
@@ -379,6 +408,9 @@ export async function resolveDuplicate(ctx: SubmitRunContext, error: KsefInvoice
           : cmp.verdict === 'operator'
             ? operatorVerdictMessage(original, cmp)
             : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
+      // F-093-440: tekst werdyktu „operator” opisuje oryginał (nabywca, NIP, data,
+      // kwota, program); operator i telemetria dostają sam rodzaj i numer KSeF.
+      !known && !importGate && cmp.verdict === 'operator' ? operatorVerdictLogMessage(original, cmp) : undefined,
     );
   }
   // Oryginał z innego programu o innej treści: numer zajęty. Wszystkie wpisy
@@ -387,5 +419,6 @@ export async function resolveDuplicate(ctx: SubmitRunContext, error: KsefInvoice
   throw verdict(
     SEND_ERROR_CODES.KSEF_NUMBER_TAKEN,
     numberTakenMessage(invoice.internalNumber ?? '', original, cmp.summary),
+    numberTakenLogMessage(original),
   );
 }

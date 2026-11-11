@@ -24,11 +24,13 @@ import {
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
 import { issueDateNotTodayError } from '@/lib/invoices/issue-date';
+import { isReceiptInvoiceColumns, receiptCorrectionRefusal } from '@/lib/invoices/receipt-invoice';
 import {
   resolveAmountChangeVatRate,
   zeroVatRateFromParentLines,
 } from '@/lib/invoices/correction-amount-change';
 import { isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import { formatPlMoney } from '@/lib/format/pl';
 import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
 import type {
@@ -112,7 +114,7 @@ function normalizeBankAccount(raw: string | undefined): string | undefined {
  * Zwykła faktura zapisuje kody aplikacji (`np`, `np_ii` — AUD-70); import z KSeF od W9 też (`lib/xml/fa3-p12.ts`),
  * a wcześniejsze wiersze importu mogą mieć surowe P_12 z XML (`np I`, `np II`).
  */
-function vatRateFromDbForCorrectionLine(raw: unknown): CorrectionLineSchema['vatRate'] {
+function vatRateFromDbForCorrectionLine(raw: unknown, label: string): CorrectionLineSchema['vatRate'] {
   const s = typeof raw === 'string' ? raw.trim() : '';
   switch (s) {
     case '23':
@@ -128,8 +130,16 @@ function vatRateFromDbForCorrectionLine(raw: unknown): CorrectionLineSchema['vat
     case 'np II':
       return 'np_ii';
     default:
-      throw new Error('Faktura pierwotna ma stawkę VAT nieobsługiwaną w korekcie. Wymagane ręczne uzgodnienie.');
+      throw new Error(`Faktura ${label} ma stawkę VAT, której korekta w aplikacji nie obsługuje. ${CORRECTION_HELP_STEP}`);
   }
+}
+
+/** Następny krok, gdy klient nie ma jak sam rozwiązać odmowy korekty (F12-D6). */
+const CORRECTION_HELP_STEP = 'Napisz do nas, a przygotujemy korektę z Tobą.';
+
+/** Numer faktury do komunikatów: numer wewnętrzny, a gdy go brak, 8 znaków id. */
+function parentLabelOf(parent: { id: string; internal_number: string | null }): string {
+  return parent.internal_number?.trim() || parent.id.slice(0, 8);
 }
 
 /** Stawki bez VAT, których z samych kwot (VAT 0) nie da się odróżnić od „0 KR”. */
@@ -140,7 +150,7 @@ const ZERO_VAT_RATES: ReadonlySet<string> = new Set<ZeroVatAmountChangeRate>(['n
  * (AUD-70 — `buyer_data` z `vatUeNumber`, bez NIP). Numer VAT-UE w postaci
  * kanonicznej, jak zapisuje go zwykła faktura. Niespójne dane — błąd, nie zgadujemy.
  */
-function buyerDataFromParty(bp: BuyerParty): BuyerB2B | BuyerEU {
+function buyerDataFromParty(bp: BuyerParty, label: string): BuyerB2B | BuyerEU {
   if (bp.nip) {
     const b: BuyerB2B = {
       type: 'b2b',
@@ -159,14 +169,14 @@ function buyerDataFromParty(bp: BuyerParty): BuyerB2B | BuyerEU {
   if (bp.vatUeNumber?.trim()) {
     const vat = parseVatUe(bp.vatUeNumber);
     if (!vat) {
-      throw new Error('Faktura pierwotna ma nieprawidłowy numer VAT-UE nabywcy. Wymagane ręczne uzgodnienie.');
+      throw new Error(`Na fakturze ${label} numer VAT-UE nabywcy jest nieprawidłowy, więc korekty nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
     }
     if (vat.kodUE === 'PL') {
-      throw new Error('Faktura pierwotna ma polski numer VAT-UE (PL) nabywcy zamiast NIP. Wymagane ręczne uzgodnienie.');
+      throw new Error(`Na fakturze ${label} nabywca ma polski numer VAT-UE (PL) zamiast NIP, więc korekty nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
     }
     const countryCode = bp.address?.countryCode?.trim() ?? '';
     if (!/^[A-Z]{2}$/.test(countryCode) || countryCode === 'PL') {
-      throw new Error('Nabywca z UE na fakturze pierwotnej nie ma w adresie kraju spoza Polski. Wymagane ręczne uzgodnienie.');
+      throw new Error(`Na fakturze ${label} nabywca z UE nie ma w adresie kraju spoza Polski, więc korekty nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
     }
     const addressLine2 = bp.address.addressLine2?.trim() ? bp.address.addressLine2 : undefined;
     return {
@@ -181,7 +191,7 @@ function buyerDataFromParty(bp: BuyerParty): BuyerB2B | BuyerEU {
       email: bp.email,
     };
   }
-  throw new Error('Korekta: brak NIP ani numeru VAT-UE nabywcy na fakturze pierwotnej (korekta obsługuje firmy z Polski i z UE).');
+  throw new Error(`Na fakturze ${label} nabywca nie ma NIP ani numeru VAT-UE, a korekta w aplikacji obsługuje firmy z Polski i z UE. ${CORRECTION_HELP_STEP}`);
 }
 
 /** Nabywca korekty z formularza = nabywca faktury pierwotnej, bez zmiany typu (NIP ↔ VAT-UE). */
@@ -221,6 +231,7 @@ function sellerDataFromParty(sp: SellerParty): SellerData {
 async function fetchParentInvoiceLines(
   supabase: SupabaseClient,
   invoiceId: string,
+  label: string,
 ): Promise<CorrectionLineSchema[]> {
   const { data, error } = await supabase
     .from('invoice_line_items')
@@ -229,14 +240,14 @@ async function fetchParentInvoiceLines(
     .order('ordinal', { ascending: true });
 
   if (error || !data?.length) {
-    throw new Error('Brak pozycji na fakturze pierwotnej lub błąd odczytu.');
+    throw new Error(`Faktura ${label} nie ma odczytanych pozycji, więc korekty nie przygotujemy w aplikacji. Spróbuj ponownie za chwilę. ${CORRECTION_HELP_STEP}`);
   }
 
   return data.map((row) => {
     if (row.quantity == null || row.unit_price_net == null ||
         !Number.isFinite(Number(row.quantity)) ||
         !Number.isFinite(Number(row.unit_price_net))) {
-      throw new Error('Niepełne kwoty pozycji faktury pierwotnej; wymagane ręczne uzgodnienie.');
+      throw new Error(`Faktura ${label} ma pozycję bez pełnej ilości lub ceny, więc korekty nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
     }
     // Schemat korekty — dopuszcza pozycje np. II faktury dla firmy z UE (AUD-70).
     const parsed = correctionLineSchema.safeParse({
@@ -244,10 +255,10 @@ async function fetchParentInvoiceLines(
       unit: row.unit,
       quantity: Number(row.quantity),
       unitPriceNet: Number(row.unit_price_net),
-      vatRate: vatRateFromDbForCorrectionLine(row.vat_rate),
+      vatRate: vatRateFromDbForCorrectionLine(row.vat_rate, label),
     });
     if (!parsed.success) {
-      throw new Error('Niepoprawne pozycje faktury pierwotnej; wymagane ręczne uzgodnienie.');
+      throw new Error(`Faktura ${label} ma pozycję, której korekta w aplikacji nie przyjmie (np. pusta nazwa lub jednostka). ${CORRECTION_HELP_STEP}`);
     }
     return parsed.data;
   });
@@ -542,7 +553,8 @@ async function readAcceptedCorrectionParent(
   const environment = requireConfiguredKsefEnvironment();
   const { data: row, error } = await supabase
     .from('invoices')
-    .select('id, tenant_id, issue_date, internal_number, ksef_number, net_total, vat_total, gross_total, seller_data, buyer_data')
+    // Krok 1.2: FP z FaktWay (`receipt`) i FP z importu KSeF (`ksefMarkers.fp`), tylko te dwie gałęzie fa3_data.
+    .select('id, tenant_id, issue_date, internal_number, ksef_number, net_total, vat_total, gross_total, seller_data, buyer_data, fp_paragon:fa3_data->receipt, fp_ksef:fa3_data->ksefMarkers->>fp')
     .eq('id', parentId)
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
@@ -553,6 +565,11 @@ async function readAcceptedCorrectionParent(
 
   if (error || !row?.id || !row.ksef_number?.trim()) {
     throw new Error('Faktura pierwotna nie ma potwierdzonego numeru KSeF w bieżącym środowisku tej firmy.');
+  }
+  // Generator korekty nie pisze FP, a korekty są na produkcji wstrzymane (KOR_HOLD):
+  // korekta faktury do paragonu zostaje na później (krok 1.2, plan kompletnej aplikacji).
+  if (isReceiptInvoiceColumns(row.fp_paragon, row.fp_ksef)) {
+    throw new Error(receiptCorrectionRefusal(row.internal_number as string | null));
   }
   // K4 — łańcuch korekt: kolejna korekta liczy różnicę od stanu PO
   // poprzednich przyjętych korektach, a druga korekta w toku jest
@@ -617,7 +634,8 @@ async function correctionBaseline(
   parent: { id: string; internal_number: string | null; net_total: unknown; vat_total: unknown; gross_total: unknown },
   corrections: CorrectionRow[],
 ): Promise<CorrectionBaseline> {
-  const original = await fetchParentInvoiceLines(supabase, parent.id);
+  const label = parentLabelOf(parent);
+  const original = await fetchParentInvoiceLines(supabase, parent.id, label);
   const storedRaw = [parent.net_total, parent.vat_total, parent.gross_total];
   const stored = storedRaw.map(Number);
   const originalTotals = linesTotals(original);
@@ -626,7 +644,7 @@ async function correctionBaseline(
       roundToCents(stored[0]!) !== originalTotals.netTotal ||
       roundToCents(stored[1]!) !== originalTotals.vatTotal ||
       roundToCents(stored[2]!) !== originalTotals.grossTotal) {
-    throw new Error('Pozycje faktury pierwotnej nie zgadzają się z zaakceptowaną kwotą; wymagane ręczne uzgodnienie.');
+    throw new Error(`Pozycje faktury ${label} nie zgadzają się z jej zaakceptowaną kwotą, więc korekty nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
   }
 
   const accepted = corrections
@@ -638,7 +656,7 @@ async function correctionBaseline(
   for (const c of accepted) {
     const deltas = [c.net_total, c.vat_total, c.gross_total].map(Number);
     if (deltas.some((d) => !Number.isFinite(d))) {
-      throw new Error(`Przyjęta korekta ${c.internal_number ?? ''} nie ma zapisanych kwot różnicy; wymagane ręczne uzgodnienie.`);
+      throw new Error(`Przyjęta korekta ${c.internal_number ?? c.id.slice(0, 8)} do faktury ${label} nie ma zapisanych kwot różnicy, więc kolejnej nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
     }
     net = roundToCents(net + deltas[0]!);
     vat = roundToCents(vat + deltas[1]!);
@@ -651,10 +669,10 @@ async function correctionBaseline(
   if (last.correction_type === 'cancellation') return { lines: [], totals, latest, allowed: 'none' };
   if (last.correction_type !== 'before_after') return { lines: original, totals, latest, allowed: 'amount_change_only' };
 
-  const after = await fetchParentInvoiceLines(supabase, last.id);
+  const after = await fetchParentInvoiceLines(supabase, last.id, label);
   const afterTotals = linesTotals(after);
   if (afterTotals.netTotal !== totals.net || afterTotals.vatTotal !== totals.vat || afterTotals.grossTotal !== totals.gross) {
-    throw new Error(`Stan po korekcie ${last.internal_number ?? ''} nie zgadza się z sumami faktury i jej korekt; wymagane ręczne uzgodnienie.`);
+    throw new Error(`Stan po korekcie ${last.internal_number ?? last.id.slice(0, 8)} do faktury ${label} nie zgadza się z sumami faktury i jej korekt, więc kolejnej nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}`);
   }
   return { lines: after, totals, latest, allowed: 'all' };
 }
@@ -695,7 +713,7 @@ async function normalizePayload(
   }
   let authoritativeBuyer: BuyerB2B | BuyerEU;
   try {
-    authoritativeBuyer = buyerDataFromParty(originalBuyer);
+    authoritativeBuyer = buyerDataFromParty(originalBuyer, parentLabelOf(parent));
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Korekta wymaga zweryfikowanego nabywcy faktury pierwotnej.' };
   }
@@ -759,6 +777,19 @@ async function normalizePayload(
         error: 'Korekta kwotowa bez VAT faktury z różnymi stawkami (w tym np., np. II lub oo) jest niejednoznaczna — skoryguj pozycje („przed / po”).',
       };
     }
+    // F12-D2: różnica według stawek faktury korygowanej (art. 106j ust. 2 pkt 5).
+    if (!original.some((line) => line.vatRate === rate)) {
+      const stawka = /^\d+$/.test(rate) ? `${rate}%` : `„${rate}”`;
+      return {
+        error: `Kwoty korekty wskazują stawkę ${stawka}, a faktura nie ma pozycji w tej stawce. Korekta wykazuje różnicę według stawek faktury korygowanej (art. 106j ust. 2 pkt 5 ustawy o VAT): sprawdź kwoty netto i VAT albo skoryguj pozycje („przed / po”).`,
+      };
+    }
+    // F12-D2: korekta nie schodzi poniżej zera (stan bieżący: faktura i przyjęte korekty).
+    if (roundToCents(baseline.totals.net + amounts.netDelta) < 0 || roundToCents(baseline.totals.gross + amounts.grossDelta) < 0) {
+      return {
+        error: `Korekta obniżyłaby wartość faktury poniżej zera: dziś to ${formatPlMoney(baseline.totals.net)} zł netto i ${formatPlMoney(baseline.totals.gross)} zł brutto. Zwrot całej kwoty to anulowanie faktury.`,
+      };
+    }
   }
 
   const normalized: CorrectionInvoiceSchemaIn = {
@@ -812,9 +843,9 @@ export async function getCorrectionParentContextAction(parentId: string): Promis
     const sellerRow = row.seller_data as SellerParty | null;
     const buyerRow = row.buyer_data as BuyerParty | null;
     if (!sellerRow || !buyerRow)
-      return { success: false, error: 'Niepełne dane pierwotnej (sprzedawca / nabywca).' };
+      return { success: false, error: `Faktura ${parentLabelOf(row)} nie ma pełnych danych sprzedawcy lub nabywcy, więc korekty nie przygotujemy w aplikacji. ${CORRECTION_HELP_STEP}` };
 
-    const buyer = buyerDataFromParty(buyerRow);
+    const buyer = buyerDataFromParty(buyerRow, parentLabelOf(row));
     // K4: stan PO poprzednich przyjętych korektach — to od niego liczy się różnicę.
     const linesRaw = baseline.lines;
     // Pozycje np. II dla nabywcy, który ich mieć nie może (np. XI) — każda

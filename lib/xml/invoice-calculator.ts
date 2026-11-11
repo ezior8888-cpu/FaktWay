@@ -7,6 +7,7 @@ import type {
   PaymentInfo,
   InvoiceType,
 } from '@/types/invoice';
+import { receiptBuyerKind, receiptInvoiceIssues } from '@/lib/invoices/receipt-invoice';
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
 import { addressCountryForKodUE, isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
 
@@ -111,6 +112,29 @@ export function summarizeVatPerRate(lines: InvoiceLineItem[]): VatSummaryPerRate
 }
 
 /**
+ * Kwoty faktury korygującej według stawek = różnica między stanem po i przed
+ * korektą (XSD FA(3): „kwota różnicy, o której mowa w art. 106j ust. 2 pkt 5”).
+ * Liczona z PEŁNYCH stanów obu dokumentów, żeby zaokrąglenia VAT były te same
+ * co na fakturze pierwotnej i na fakturze po korekcie. Stawki bez różnicy nie
+ * są wykazywane. Jedna funkcja dla P_13/P_14 korekty w KSeF i dla JPK (S-01).
+ */
+export function differenceSummaries(before: InvoiceLineItem[], after: InvoiceLineItem[]): VatSummaryPerRate[] {
+  const byRate = new Map<VatRate, VatSummaryPerRate>();
+  for (const s of summarizeVatPerRate(after)) byRate.set(s.rate, { ...s });
+  for (const s of summarizeVatPerRate(before)) {
+    const cur = byRate.get(s.rate);
+    byRate.set(s.rate, {
+      rate: s.rate,
+      netSum: (cur?.netSum ?? 0) - s.netSum,
+      vatSum: (cur?.vatSum ?? 0) - s.vatSum,
+    });
+  }
+  return [...byRate.values()]
+    .map((s) => ({ rate: s.rate, netSum: roundToCents(s.netSum), vatSum: roundToCents(s.vatSum) }))
+    .filter((s) => s.netSum !== 0 || s.vatSum !== 0);
+}
+
+/**
  * Totale całej faktury - sumy wszystkich pozycji.
  */
 export interface InvoiceTotals {
@@ -152,6 +176,8 @@ export interface InvoiceInput {
   lines: InvoiceLineItemInput[];
   payment: Omit<PaymentInfo, 'amountDue'>;
   notes?: string;
+  /** Faktura do paragonu (FP): tylko zwykła faktura VAT. */
+  receipt?: Invoice['receipt'];
 }
 
 /**
@@ -194,6 +220,8 @@ export function finalizeInvoice(input: InvoiceInput): Invoice {
       amountDue: grossTotal,
     },
     notes: input.notes,
+    // Klucz tylko przy FP: zwykła faktura ma kształt jak przed krokiem 1.2.
+    ...(input.receipt ? { receipt: input.receipt } : {}),
   };
 }
 
@@ -448,6 +476,22 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
   // FA(3): stawka 'zw' wymaga P_19 + podstawy prawnej (P_19A).
   if (invoice.lines.some((l) => l.vatRate === 'zw') && !invoice.annotations?.vatExemptionBasis?.trim()) {
     errors.push(ZW_WITHOUT_BASIS_MESSAGE);
+  }
+
+  // ── Faktura do paragonu (FP, krok 1.2) ─────────────────────
+  // Te same reguły co formularz (`lib/invoices/receipt-invoice.ts`): szkic,
+  // job wysyłki i ponowienie z kopii nie wyślą FP, której formularz by nie przyjął.
+  if (invoice.receipt !== undefined) {
+    for (const issue of receiptInvoiceIssues({
+      receipt: invoice.receipt,
+      invoiceType: invoice.type,
+      issueDate: invoice.issueDate,
+      saleDate: invoice.saleDate,
+      buyerKind: receiptBuyerKind(invoice.buyer),
+      grossTotal: invoice.grossTotal,
+    })) {
+      errors.push(issue.message);
+    }
   }
 
   return errors;

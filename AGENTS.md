@@ -7,11 +7,13 @@
 > | Hasło | Plan |
 > |---|---|
 > | „Kontynuuj plan z agentem” (sesje Igora z Claude) | [`PLAN-AGENTA-CLAUDE.md`](docs/koordynacja/PLAN-AGENTA-CLAUDE.md) |
+> | „Kontynuuj plan aplikacji mobilnej” | [`PLAN-APLIKACJA-MOBILNA.md`](docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md), tylko etap z „Następny krok”, dziennik w sekcji 9, zasady wyglądu w [`docs/mobile/ZASADY-DESIGNU.md`](docs/mobile/ZASADY-DESIGNU.md), potem raport i STOP |
 > | „Kontynuuj plan zero zgubionych faktur, sesja N” | [`PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md), tylko sesja N, dziennik w `PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md` |
 > | „Kontynuuj plan Finora” | [`PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md), dziennik w sekcji 12 |
 > | „Kontynuuj plan skalowania 3000, sesja N” | [`PLAN-SKALOWANIE-3000.md`](docs/koordynacja/PLAN-SKALOWANIE-3000.md), tylko sesja N, dziennik w sekcji 6 |
 > | „Kontynuuj plan księgowość JDG” | [`PLAN-KSIEGOWOSC-JDG.md`](docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md), tylko krok z „Następny krok”, dziennik w sekcji 15, potem raport i STOP |
 > | „Kontynuuj plan usprawnień” | [`PLAN-USPRAWNIENIA-PRACY.md`](docs/koordynacja/PLAN-USPRAWNIENIA-PRACY.md), dziennik w sekcji 7 |
+> | „Kontynuuj plan kompletnej aplikacji” | [`PLAN-KOMPLETNA-APLIKACJA.md`](docs/koordynacja/PLAN-KOMPLETNA-APLIKACJA.md), tylko krok z „Następny krok”, dziennik w sekcji 12, potem raport i STOP |
 >
 > Sesje „sesja N” robią TYLKO wskazaną sesję, według „Protokołu naprawy błędu” niżej.
 
@@ -150,6 +152,9 @@ Dostęp: `ssh -i $K root@$DB` (i analogicznie `$APP`, `$OPS`).
    w Colimie), nigdy w `db-1`.
 7. **`proxy.ts` przepuszcza tylko wymienione rozszerzenia plików;** reszta
    leci przez bramkę logowania i kończy przekierowaniem na `/login`.
+   Wyjątek: trasy wgrywania (`/api/uploads/…`, `/share-target`) są poza
+   proxy, bo proxy buforuje ciało do 10 MiB, i same pilnują sesji, 2FA
+   i rozmiaru przez `lib/uploads/server.ts`.
 
 ### Procedury (runbooki)
 
@@ -160,7 +165,7 @@ Dawne sekcje tego pliku przeniesione są dosłownie; odnośniki typu
 |---|---|---|
 | scalić PR, kilka PR, stos | [`scalanie-pr.md`](docs/runbooks/scalanie-pr.md) („Scalanie PR”) | `gh pr merge N --merge`; kilka: `./scripts/ops/zloz-scalenie.sh A B` |
 | wgrać migrację, wygenerować typy bazy | [`wgrywanie-migracji.md`](docs/runbooks/wgrywanie-migracji.md) („Wgrywanie migracji”, „Typy bazy”) | `./scripts/ops/wgraj-migracje.sh 00157` |
-| wdrożyć, zdiagnozować nieudane wdrożenie, sprawdzić po wdrożeniu | [`wdrozenie-produkcji.md`](docs/runbooks/wdrozenie-produkcji.md) („Kolejność przy pełnym wydaniu”, „Wdrożenie produkcji”, „Kiedy wdrożenie padnie”, „Weryfikacja po wdrożeniu”) | `./scripts/ops/wdroz-produkcje.sh`, `./scripts/ops/kontrola-faktur-ksef.sh` |
+| wdrożyć, zdiagnozować nieudane wdrożenie, sprawdzić po wdrożeniu | [`wdrozenie-produkcji.md`](docs/runbooks/wdrozenie-produkcji.md) („Kolejność przy pełnym wydaniu”, „Wdrożenie produkcji”, „Kiedy wdrożenie padnie”, „Weryfikacja po wdrożeniu”) | `./scripts/ops/wdroz-produkcje.sh` (po przełączeniu na GHCR: `--obraz <sha>`; stan: `./scripts/ops/coolify-zrodlo.sh stan`), `./scripts/ops/kontrola-faktur-ksef.sh` |
 | zmienić `Dockerfile`, Coolify, zmienne, serwer; wejść w panel | [`coolify-pulapki.md`](docs/runbooks/coolify-pulapki.md) („Pułapki”) | tunel: `ssh -i $K -N -L 8000:localhost:8000 root@$OPS` |
 | zrotować klucz albo sekret produkcyjny | [`rotacja-kluczy.md`](docs/runbooks/rotacja-kluczy.md) | kontrola po każdym kroku: `./scripts/ops/rotacja-kluczy.sh` |
 | zobaczyć błędy wysyłki do KSeF | [`centrum-bledy-wysylki.md`](docs/runbooks/centrum-bledy-wysylki.md) | `/admin/centrum/bledy` (konto z `ADMIN_EMAILS` + 2FA) |
@@ -218,9 +223,11 @@ idzie więc tak:
    Blokada bez wyjścia to nowy błąd, nie zabezpieczenie.
 5. **Ponowienie od zera.** Worker pg-boss wykonuje cały handler ponownie, bez
    memoizacji kroków. Każdy krok z efektem zewnętrznym (mail, wysyłka,
-   zapis, zdarzenie) jest idempotentny albo ma klucz (`idempotencyKey`,
-   `singletonKey`, warunek w UPDATE). W opisie PR piszesz, co się stanie przy
-   ponowieniu po każdym kroku.
+   zapis, zdarzenie) jest idempotentny albo ma klucz: `idempotencyKey` u
+   dostawcy, unikalny indeks albo warunek w UPDATE. `singletonKey` w pg-boss na
+   kolejkach FaktWay (polityka `standard`) nie deduplikuje zadań, więc nie jest
+   ochroną (`lib/jobs/enqueue.ts:22-30`). W opisie PR piszesz, co się stanie
+   przy ponowieniu po każdym kroku.
 6. **Przed PR:** `pnpm typecheck`, `eslint` na zmienionych plikach, pełny
    `pnpm vitest run`, a przy zmianach w `app/` także `pnpm build`. Liczby
    wpisane w testach na sztywno (crony, paczki jobów) zmieniasz świadomie,

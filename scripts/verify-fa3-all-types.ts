@@ -230,6 +230,26 @@ async function main(): Promise<void> {
     payment: { currency: 'PLN', dueDate: '2026-05-03', method: 'other' },
   }));
 
+  // ── FAKTURA DO PARAGONU (FP, krok 1.2) ──────────────────────
+  // Fa/FP = 1 po RodzajFaktury, dane paragonu (art. 106h ust. 1) w DodatkowyOpis.
+  // Firma: paragon z NIP, ponad 450 zł brutto (do 450 zł paragon z 2026 r. jest fakturą uproszczoną).
+  await verifyRegular('Zwykła · faktura do paragonu (FP), firma z NIP', baseInput({
+    saleDate: '2026-04-10',
+    lines: [{ ordinal: 1, name: 'Rower miejski', unit: 'szt.', quantity: 1, unitPriceNet: 1000, vatRate: '23' }],
+    payment: { currency: 'PLN', dueDate: '2026-04-19', method: 'cash' },
+    receipt: { receiptNumber: '000123', receiptDate: '2026-04-10', cashRegisterNumber: 'ABC1234567890', buyerNipOnReceipt: true },
+  }));
+
+  await verifyRegular('Zwykła · faktura do paragonu (FP), konsument bez ID, stara kasa (3 litery i 8 cyfr)', baseInput({
+    saleDate: '2026-03-31',
+    buyer: {
+      noIdMarker: true, name: 'Konsument',
+      address: { countryCode: 'PL', addressLine1: 'ul. Anonimowa 1', addressLine2: '00-003 Warszawa' },
+    },
+    payment: { currency: 'PLN', dueDate: '2026-04-19', method: 'card' },
+    receipt: { receiptNumber: 'PAR/2026/03/77', receiptDate: '2026-03-31', cashRegisterNumber: 'BEA12345678', requestDate: '2026-04-15' },
+  }));
+
   // ── FAKTURA KORYGUJĄCA ──────────────────────────────────────
   const correction: CorrectionInvoiceData = {
     invoiceType: 'correction',

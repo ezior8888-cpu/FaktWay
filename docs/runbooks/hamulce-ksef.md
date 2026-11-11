@@ -18,6 +18,10 @@ Zatrzymana faktura dostaje status `failed` z kodem w `last_error_code`
 — to stan „do uzgodnienia”, nie „odrzucona przez KSeF”. Mail o odrzuceniu
 nie wychodzi.
 
+Automatyczna pauza firmy po 429 z KSeF to nie hamulec operatora: nie ma
+flagi, nie zapisuje kodu w fakturze i zdejmuje się sama — sekcja
+[„Pauza firmy po 429 (L1a)”](#pauza-firmy-po-429-l1a).
+
 ## Wyłącznik wszystkich wysyłek
 
 Kiedy: KSeF przyjmuje faktury z błędem po naszej stronie, podejrzenie
@@ -119,6 +123,138 @@ pg-boss. Nieobsługiwana wartość (literówka, dawne `inngest`):
 - worker nie startuje.
 
 Lokalnie: `DATABASE_URL` do bazy z kolejką i `pnpm worker:dev`.
+
+## Pauza firmy po 429 (L1a)
+
+**Co to.** MF liczy limity API na parę (NIP, adres IP), a cała platforma
+wysyła z jednego adresu (`app-1`). Po 429 MF blokuje kolejne żądania na czas
+z `Retry-After`; powtórki wydłużają blokadę, a przy powtarzających się
+naruszeniach MF może zablokować podmiot albo zakres adresów IP, czyli
+wszystkie firmy naraz (`ksef-docs/limity/limity-api.md`). Dlatego po każdej
+odpowiedzi 429 czeka cała firma (środowisko + NIP): wysyłka, uzgodnienie,
+UPO, skrzynka i historia. Bramka w `ksefFetch` (`lib/ksef/client.ts`) nie
+wysyła wtedy żadnego żądania tej firmy i od razu zwraca lokalny 429
+(`KsefRateLimitPausedError`). Kod: `lib/ksef/rate-limit-pause.ts`. W logach
+kod `KSEF_RATE_LIMIT_PAUSE`; `KSEF_PAUSED` to wyłącznik operatora z sekcji
+wyżej, nie ta pauza.
+
+**Pomiar na KSeF TEST (10.11.2026, scenariusz 17, przebieg 98822DEB).** Po
+429 na otwarciu sesji (`onlineSession`, `Retry-After` 58 s) MF blokował tylko
+tę grupę: `GET /rate-limits` (`other`) i status faktury (`invoiceStatus`)
+odpowiadały 200, a inna firma wysłała bez czekania. Pauza całej firmy jest
+więc ostrożniejsza niż MF; zostaje świadomie (eskalacja blokady do podmiotu
+albo zakresu IP). Zawężenie pauzy do grupy to osobna decyzja.
+
+**Gdzie jest stan.** Redis na `app-1` (bez migracji, stan ulotny):
+
+| Klucz | Co trzyma | Wygasa |
+|---|---|---|
+| `ff:ksef:pause:<środowisko>:<nip>` | koniec pauzy w ms od 1970 | z końcem pauzy (`px` = długość pauzy) |
+| `ff:ksef:rl429:<środowisko>` | zbiór NIP-ów z czasem ostatniego prawdziwego 429 (okno hamulca) | 10 min po ostatnim wpisie |
+
+Proces, który dostał 429 (zwykle worker), trzyma kopię pauzy w pamięci.
+Awaria albo brak Redisa nie zatrzymuje wysyłki: odczyt ma limit 1 s, potem
+liczy się sama pamięć procesu (fail-open). Inny proces (worker po restarcie)
+widzi pauzę z Redisa z opóźnieniem do 5 s.
+
+**Czego pauza NIE obejmuje (stan 10.11.2026).**
+
+- Logowania w kreatorze połączenia KSeF w aplikacji web
+  (`components/settings/actions.ts`): idzie bez kontekstu NIP, więc nie czeka
+  na pauzę, a jego 429 jej nie zapisuje. Ruch mały (ręczne logowanie, limit
+  prób), do dopięcia osobno.
+- Sondy zdrowia KSeF i Latarni (bez uwierzytelnienia, bez NIP-u).
+- Wyniku prawdziwego 429 na samym żądaniu UPO: pauza firmy jest zapisana,
+  ale ten jeden wpis UPO dalej kończy się jak dotąd (`HTTP_429`, `failed`,
+  powrót przez `upo-retry-stale` po 24 h). Zmianę klasyfikacji robi sesja D1
+  planu „zero zgubionych faktur”. Pozostałe żądania UPO tej firmy czekają na
+  pauzę.
+- Skrzynki i historii jako harmonogramu: mają własne terminy (`next_poll_at`,
+  `paused_until`) liczone z pozostałego czasu pauzy, więc nigdy nie ruszą
+  przed jej końcem. Przy 429 bez `Retry-After` skrzynka i historia czekają
+  po swojemu 15 min, a wspólna pauza firmy tylko 60 s.
+
+**Ile trwa.**
+
+- Pełny `Retry-After` z odpowiedzi, bez dawnego obcięcia do godziny; bez
+  nagłówka 60 s; najwyżej doba (bezpiecznik na absurdalny nagłówek). Kolejny
+  429 tylko wydłuża pauzę, nigdy jej nie skraca.
+- Job wysyłki w pauzie czeka do jej końca z rozrzutem w górę (20%, od 5 s do
+  5 min), żeby faktury, które padły razem, nie wróciły w tej samej sekundzie.
+  Nie zużywa ani próby, ani odczekań (`MAX_WAIT_RETRIES`).
+- Budżet łańcucha pauz jednej wysyłki: doba od pierwszej pauzy
+  (`MAX_PAUSE_CHAIN_MS`, `lib/jobs/retry.ts`). Potem każda pauza liczy się
+  jak zwykła próba, a po wyczerpaniu prób faktura dostaje `failed
+  KSEF_RATE_LIMIT` (TRANSIENT): cron I6 ponawia ją co 60 min przez 24 h,
+  potem `TRANSIENT_EXHAUSTED` i alarm (`cykl-zycia-faktury-ksef.md`, I6).
+- Dokument specjalny (KOR, ZAL, ROZ), który przez pauzę dojdzie do wysyłki po
+  północy, kończy się `ISSUE_DATE_PASSED` (00147), jak każde ponowienie po
+  dacie wystawienia.
+
+**Co widzi klient.** Faktura „W kolejce” (`queued`) do końca pauzy, bez
+osobnego komunikatu o limicie. Pauza zastana przed przejęciem wysyłki czeka
+w `queued`. 429 w trakcie wysyłki zwalnia przejęcie (`sending` → `queued`,
+`cykl-zycia-faktury-ksef.md`, sekcja 4), więc pauza nie trzyma faktury
+w `sending` i nie włącza alarmu I2. Po pauzie job najpierw uzgadnia
+poprzednią próbę (zamiar albo wpis `sent`), więc nie wyśle faktury drugi
+raz. UPO w pauzie czeka na ponowienie zamiast kończyć się błędem (poza
+prawdziwym 429 na samym żądaniu UPO, sekcja wyżej). Skrzynka
+przesuwa przebieg firmy na koniec pauzy (`skrzynka-ksef-pojemnosc.md`).
+
+**Skąd widać pauzę.**
+
+- log workera: `code: KSEF_RATE_LIMIT_PAUSE` z `remainingMs`;
+- `ksef_send_attempts`: wiersz `waiting` z etapem `pause` (pauza przed
+  przejęciem) albo `ksef_http_status = 429` (prawdziwa odpowiedź MF; lokalna
+  pauza nie ma statusu HTTP, bo żądanie nie wyszło);
+- stan klucza: skrypt niżej.
+
+**Co robi operator.** Jedna linia, skrypt sam ładuje `.agents/infra.env`:
+
+```bash
+./scripts/ops/ksef-pauza.sh stan <środowisko> <nip>
+./scripts/ops/ksef-pauza.sh zdejmij <środowisko> <nip> --tak
+```
+
+1. Zwykle nic: pauza kończy się sama, a faktury wychodzą po niej bez
+   udziału klienta.
+2. `stan` pokazuje koniec pauzy, ile zostało (`PTTL`) i ile firm ma 429
+   w ostatnich 10 minutach. Tylko odczyt.
+3. `zdejmij` usuwa klucz pauzy (`DEL`); bez `--tak` tylko pokazuje stan.
+   Zdejmuj **tylko**, gdy masz pewność, że blokada MF już minęła (błędny
+   nagłówek, potwierdzenie MF). Pierwsze żądanie przed końcem blokady dostaje
+   znów 429, a powtórki wydłużają blokadę, przy kolejnych naruszeniach także
+   dla zakresu IP, czyli wszystkich firm.
+   `DEL` działa w każdym procesie najpóźniej po 5 s (odświeżenie odczytu
+   z Redisa), także w workerze, który pauzę zapisał. Wyjątek: pauza zapisana
+   w chwili awarii Redisa żyje tylko w pamięci procesu i kończy się sama
+   (najwyżej po dobie); restart workera to wdrożenie, czyli zgoda Bartosza
+   (AGENTS.md), a nie sposób na pauzę.
+   `DEL` NIE przyspiesza zadań, które już czekają: każde ma w pg-boss termin
+   startu (`start_after`) z chwili zapisu pauzy i ruszy dopiero wtedy. Od razu
+   ruszają nowe zlecenia i żądania (np. „Wyślij ponownie”, nowa faktura).
+   Skrzynka i historia trzymają też własny termin (`next_poll_at`,
+   `paused_until` w bazie, `ksef-historia.sh wznow`).
+4. Skrypt nie był jeszcze uruchomiony na serwerze (stan 09.11.2026). Pierwsze
+   użycie zacznij od `stan`. Założenia w nagłówku skryptu: kontener z obrazem
+   `redis:7…` na `app-1` (nie nakładka SRH; przy kilku pasujących podaj
+   `REDISC=<nazwa>`), hasło w zmiennej `REDIS_PASSWORD` kontenera.
+
+**Hamulec 429 (wiele firm naraz).** Co najmniej 5 różnych firm z prawdziwym
+429 (z dowolnego żądania firmy: wysyłka, UPO, skrzynka, historia)
+w ostatnich 10 minutach to już nie limit jednej firmy, tylko sygnał, że MF
+ogranicza nasz adres. Wtedy każde zadanie wysyłki przechodzi z szansą ok. 1/4
+na minutę (wybór z id faktury i minuty, co minutę od nowa), a reszta czeka
+minutę z rozrzutem, bez zużycia próby. Hamulec gaśnie sam po 10 minutach bez nowego 429. Alarm Sentry
+`ksef-rate-limit-brake` (ostrzeżenie, najwyżej raz na 10 minut). Gdy trwa:
+sprawdź, czy to nie nasz rytm (wdrożenie, fala ponowień po awarii KSeF) i czy
+MF nie obniżył limitów. Skrzynka ma własny hamulec, który liczy też firmy we
+wspólnej pauzie (`skrzynka-ksef-pojemnosc.md`).
+W odróżnieniu od hamulca skrzynki ten nie ma warunku udziału (20% aktywnych
+firm), bo proces nie liczy firm, które w oknie wysyłały: przy dużym ruchu
+5 firm z 429 też go włącza. Świadomie ostrożnie: hamulec tylko spowalnia
+(1/4 zadań na minutę), niczego nie zatrzymuje na stałe. Licznik na żądanie
+i na adres IP to karta L1b.
 
 ## Faktura utknęła w wysyłce (I1/I2)
 

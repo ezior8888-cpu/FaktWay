@@ -76,7 +76,7 @@ export default async function LoginPage({
       panelText='Zaloguj się, żeby wystawić fakturę, sprawdzić płatności i odebrać faktury kosztowe z KSeF.'
     >
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Zaloguj się</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Zaloguj się</h1>
         <p className='text-muted-foreground'>
           {googleEnabled ? 'Witaj ponownie! Wybierz, jak chcesz się zalogować:' : 'Witaj ponownie! Wpisz e‑mail i hasło:'}
         </p>

@@ -7,11 +7,13 @@ import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiFileCopyLine, RiLoader4Li
 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { BuyerLinkButton } from './buyer-link-button';
 import { EmailInvoiceButton } from './email-invoice-button';
 import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
+import { filenameFromDisposition } from '@/lib/http/content-disposition';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { duplicateInvoiceHref, setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
@@ -60,6 +62,11 @@ interface Props {
      * jest jedyna droga do duplikatu poza komputerem.
      */
     can_duplicate?: boolean;
+    /**
+     * Krok 2.10: „Link dla nabywcy” (faktura sprzedaży z FaktWay przyjęta w KSeF,
+     * rola z prawem do linku; liczy serwer predykatami z `lib/invoice-share/policy.ts`).
+     */
+    can_share_with_buyer?: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -131,9 +138,10 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
           toastPdfFailure(await pdfFailure(res));
           return;
         }
-        const cd = res.headers.get('Content-Disposition') ?? '';
-        const filename =
-          cd.match(/filename="(.+?)"/)?.[1] ?? `Faktura_${invoice.id}.pdf`;
+        const filename = filenameFromDisposition(
+          res.headers.get('Content-Disposition'),
+          `Faktura_${invoice.id}.pdf`,
+        );
         saveBlob(await res.blob(), filename);
       } catch {
         toast.error('Błąd połączenia przy pobieraniu PDF.');
@@ -286,6 +294,8 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
           Ustaw jako cykliczną
         </Link>
       )}
+      {/* D1: nowy przycisk na końcu listy, istniejące zostają na swoich miejscach. */}
+      {invoice.can_share_with_buyer && <BuyerLinkButton invoiceId={invoice.id} className={full} />}
     </>
   );
 

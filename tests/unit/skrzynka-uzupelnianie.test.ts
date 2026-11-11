@@ -21,6 +21,8 @@ const db = vi.hoisted(() => ({
   filters: [] as Array<[string, string, unknown]>,
   sentry: vi.fn(),
   waitingSql: vi.fn(),
+  /** NIP-y firm do sprawdzenia pauzy po 429 (L1a); pauzy tu nie ma — przypadki pauzy: ksef-pauza-429-skrzynka.test.ts. */
+  tenants: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', nip: '1234567890' }] as Row[],
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureMessage: db.sentry, captureException: vi.fn() }));
@@ -29,7 +31,7 @@ vi.mock('@/lib/jobs/boss', () => ({
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
-    from: () => {
+    from: (table: string) => {
       const eqs: Array<[string, unknown]> = [];
       let patch: Row | null = null;
       let head = false;
@@ -40,12 +42,15 @@ vi.mock('@/lib/supabase/admin', () => ({
         filter: (column: string, op: string, value: unknown) => { db.filters.push([op, column, value]); return q; },
         or: (expr: string) => { db.filters.push(['or', expr, null]); return q; },
         lt: (column: string, value: unknown) => { db.filters.push(['lt', column, value]); return q; },
+        in: (column: string, values: unknown) => { db.filters.push(['in', column, values]); return q; },
         order: () => q,
         limit: () => q,
         update: (p: Row) => { patch = p; return q; },
         then: (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) => {
           let result: unknown;
-          if (patch) {
+          if (table === 'tenants') {
+            result = { data: db.tenants, error: null };
+          } else if (patch) {
             db.updates.push({ patch, filters: eqs });
             result = { data: null, error: null };
           } else if (head) {
@@ -110,7 +115,7 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
     db.pending = [pendingRow('inv-1'), pendingRow('inv-2', 2)];
     const { ctx, sendEvent } = context();
 
-    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 2, emitted: 2, exhausted: 0 });
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 2, emitted: 2, paused: 0, exhausted: 0 });
 
     const events = sendEvent.mock.calls[0]![1] as Array<{ name: string; data: Row; singletonKey?: string }>;
     expect(events.map((e) => e.name)).toEqual(['inbox/invoice-received', 'inbox/invoice-received']);
@@ -145,7 +150,7 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
 
   it('bez zaległości nic nie emituje', async () => {
     const { ctx, sendEvent } = context();
-    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 0, emitted: 0, exhausted: 0 });
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 0, emitted: 0, paused: 0, exhausted: 0 });
     expect(sendEvent).not.toHaveBeenCalled();
   });
 
@@ -157,7 +162,7 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
     db.waitingSql.mockResolvedValue({ rows: [{ value: 'inv-2' }] });
     const { ctx, sendEvent } = context();
 
-    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 3, emitted: 2, exhausted: 0 });
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 3, emitted: 2, paused: 0, exhausted: 0 });
 
     const events = sendEvent.mock.calls[0]![1] as Array<{ data: Row }>;
     expect(events.map((e) => e.data.invoiceId)).toEqual(['inv-1', 'inv-3']);
@@ -171,7 +176,7 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
     db.pending = [pendingRow('inv-1')];
     db.waitingSql.mockResolvedValue({ rows: [{ value: 'inv-1' }] });
     const { ctx, sendEvent } = context();
-    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 1, emitted: 0, exhausted: 0 });
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 1, emitted: 0, paused: 0, exhausted: 0 });
     expect(sendEvent).not.toHaveBeenCalled();
     expect(db.updates).toEqual([]);
   });
@@ -180,7 +185,7 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
     db.pending = [pendingRow('inv-1')];
     db.waitingSql.mockRejectedValue(new Error('kolejka niedostępna'));
     const { ctx, sendEvent } = context();
-    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 1, emitted: 1, exhausted: 0 });
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 1, emitted: 1, paused: 0, exhausted: 0 });
     expect(sendEvent).toHaveBeenCalledOnce();
     expect(ctx.logger.warn).toHaveBeenCalled();
   });
@@ -189,7 +194,7 @@ describe('cron uzupełniający skrzynkę (K2, W11)', () => {
     db.exhaustedCount = 3;
     const { ctx } = context();
 
-    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 0, emitted: 0, exhausted: 3 });
+    await expect(runInboxBackfill(ctx)).resolves.toEqual({ scanned: 0, emitted: 0, paused: 0, exhausted: 3 });
     expect(db.sentry).toHaveBeenCalledOnce();
     expect(ctx.logger.error).toHaveBeenCalled();
   });

@@ -16,6 +16,7 @@
 
 import { createServer } from 'node:http';
 
+import { trackActiveJobs } from './active-jobs';
 import { ensureQueue, startBoss, stopBoss, enableWorkerRole } from './boss';
 import { assertPgBossWorkerBackend, getWorkerCronAllowlist, getWorkerHealthPort } from './config';
 import { createJobLogger } from './logger';
@@ -37,6 +38,10 @@ import './handlers/package-c';
 import './handlers/package-d';
 import './handlers/flo-tick';
 import './handlers/ops-heartbeat';
+// Webhooki publicznego API (krok 7.1, część 3, 00187).
+import './handlers/webhooks';
+// Dzwonek w aplikacji (plan kompletnej aplikacji, krok 8.1, część 2, 00188).
+import './handlers/app-notifications';
 
 const log = createJobLogger('worker');
 
@@ -71,7 +76,8 @@ async function main(): Promise<void> {
 
   for (const def of defs) {
     await ensureQueue(def.queue);
-    await boss.work(def.queue, workOptionsFor(def), wrapHandler(def));
+    // trackActiveJobs: lista do logu przerwanych jobów przy zamykaniu (G1, stopBoss).
+    await boss.work(def.queue, workOptionsFor(def), trackActiveJobs(def.queue, wrapHandler(def)));
     log.info(`kolejka aktywna: ${def.queue}`);
   }
 

@@ -47,6 +47,9 @@ const EXEMPT: Record<string, string> = {
   emailInvoiceAction: ID_BOUND,
   sendDraftInvoiceAction: ID_BOUND,
   deleteDraftInvoiceAction: ID_BOUND,
+  getBuyerLinkAction: ID_BOUND,
+  createBuyerLinkAction: ID_BOUND,
+  revokeBuyerLinkAction: ID_BOUND,
 };
 
 /** Pliki akcji wystawiania — ich akcje sprawdzają testy niżej, akcja po akcji. */
@@ -60,6 +63,7 @@ const ISSUING_FILES = Object.keys(ISSUING).map((file) => `components/invoices/${
 const EXEMPT_FILES: Record<string, string> = {
   'components/invoices/actions-detail.ts': 'akcje na istniejącym dokumencie wskazanym id (ponowienie, reset, duplikat, e-mail, XML) — patrz EXEMPT',
   'components/invoices/draft-actions.ts': 'wysyłka i usunięcie istniejącego szkicu wskazanego id — patrz EXEMPT',
+  'components/invoices/buyer-link-actions.ts': 'link dla nabywcy na istniejącej fakturze (odczyt, tworzenie, cofnięcie po id); firma z sesji, zapis klientem sesji (RLS)',
   'lib/invoices/ksef-submit-enqueue.ts': 'definicja zlecenia wysyłki; firmę podaje wołający (akcja albo job)',
   'lib/ksef/offline-queue.ts': 'kolejka offline wysyłki (ksef_offline_queue); firmę podaje wołający',
   'lib/ksef/submission-log.ts': 'dziennik prób wysyłki (ksef_submissions); firmę podaje wołający',
@@ -69,7 +73,6 @@ const EXEMPT_FILES: Record<string, string> = {
   'lib/flo/functions/payment-confirm.ts': 'potwierdzenie wpłaty (payments); firma z zapisanej propozycji',
   'app/actions/recurring-invoices.ts': 'harmonogram faktur cyklicznych (recurring_invoices); z invoices tylko odczyt szablonu',
   'app/actions/reminders.ts': 'przypomnienie o płatności (flo_proposals); z invoices tylko odczyt',
-  'app/actions/expenses.ts': 'koszt ze zdjęcia (ocr_jobs, expenses); z invoices tylko odczyt waluty',
   'lib/billing/self-invoice.ts': 'faktura za abonament (RPC create_billing_vat_invoice); firma klienta z płatności Stripe, sprzedawca z konfiguracji operatora',
   'lib/jobs/runners/self-invoice-payment.ts': 'job: wysyłka faktury za abonament; firma z danych płatności',
   'lib/ksef/duplicate-decision-rpc.ts': 'decyzja o duplikacie istniejącego dokumentu wskazanego id (RPC decide_ksef_duplicate*); firmę podaje wołający — decideKsefDuplicateAction albo operator',
@@ -78,6 +81,7 @@ const EXEMPT_FILES: Record<string, string> = {
   'app/admin/ksef/actions.ts': 'operator w /admin: ponowienie wysyłki i decyzja o duplikacie istniejącego dokumentu; firma z wiersza faktury',
   'lib/jobs/runners/bulk-import.ts': 'job: import z pliku (silnik importu); firma z danych joba',
   'lib/jobs/runners/ksef-history-sync.ts': 'job: pobranie historii z KSeF (silnik importu); firma z danych joba',
+  'lib/api/v1/invoice-create.ts': 'publiczne API (POST /api/v1/invoices, krok 7.1): bez sesji i ciasteczka firmy; firmę ustala baza ze skrótu klucza w tokenie (api_create_invoice, 00184), a wysyłka dostaje firmę klucza z api_key_session',
 };
 
 const MIGRATIONS = join(process.cwd(), 'supabase', 'migrations');

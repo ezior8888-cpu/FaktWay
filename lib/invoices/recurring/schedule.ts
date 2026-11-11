@@ -257,11 +257,24 @@ export function editedRunDate(input: {
     : current.next_run_date;
 }
 
+/** Ostatni dzień okresu faktury (`recurringPeriodKey`): koniec miesiąca, kwartału albo roku daty wystawienia. */
+function periodLastDay(runDate: string, frequency: RecurringFrequency): string {
+  const first = periodLastMonthDate(recurringPeriodKey(runDate, frequency));
+  if (!first) throw new Error(`Nieznany okres dla daty ${runDate}`);
+  const { year, month } = parseIsoDate(first);
+  const day = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 /**
- * Data po wznowieniu wstrzymanej pozycji: okresy, które w całości minęły
- * w czasie wstrzymania, pomijamy (wstrzymanie = „nie fakturuj w tym czasie”),
- * ale ostatni okres, którego dzień już nadszedł, zostaje „Do wystawienia”.
- * Wstrzymana 10.03 i wznowiona 20.10 (co miesiąc, dzień 10) → 10.10.
+ * Data po wznowieniu wstrzymanej pozycji: wstrzymanie = „nie fakturuj w tym
+ * czasie”, więc okres (miesiąc, kwartał albo rok daty wystawienia, tak jak
+ * opisuje fakturę `recurringPeriodKey`), który w całości minął w czasie
+ * wstrzymania, pomijamy. Wynik to pierwsza data, której okres trwa jeszcze
+ * dziś albo jest w przyszłości. Może być przeszła (okres trwa, a jego dzień
+ * już minął: „Do wystawienia”) albo przyszła.
+ * Co miesiąc, dzień 10, termin 10.06, wznowienie 03.09 → 10.09 (sierpień
+ * minął w pauzie). Wstrzymana 10.03 i wznowiona 20.10 → 10.10.
  * Data z przyszłości zostaje bez zmian.
  */
 export function catchUpRunDate(
@@ -273,8 +286,8 @@ export function catchUpRunDate(
   parseIsoDate(todayWarsaw);
   let run = rescheduleRunDate(currentRunDate, dayOfMonth);
   // Najwyżej kilkaset kroków (co miesiąc przez dziesięciolecia) — pętla bez ryzyka.
-  for (let next = nextRunDate(run, frequency, dayOfMonth); next <= todayWarsaw; next = nextRunDate(run, frequency, dayOfMonth)) {
-    run = next;
+  while (periodLastDay(run, frequency) < todayWarsaw) {
+    run = nextRunDate(run, frequency, dayOfMonth);
   }
   return run;
 }

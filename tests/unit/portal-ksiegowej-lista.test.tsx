@@ -9,14 +9,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 type Call = [string, unknown[]];
-const st = vi.hoisted(() => ({ calls: [] as Call[], invoices: [] as unknown[] }));
+const st = vi.hoisted(() => ({ calls: [] as Call[], invoices: [] as unknown[], count: 0 }));
 
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
       const chain: Record<string, unknown> = {};
-      for (const m of ['select', 'eq', 'in', 'order', 'limit', 'update']) {
+      for (const m of ['select', 'eq', 'in', 'order', 'limit', 'range', 'update']) {
         chain[m] = (...args: unknown[]) => { st.calls.push([`${table}.${m}`, args]); return chain; };
       }
       chain.maybeSingle = async () => {
@@ -33,7 +33,7 @@ vi.mock('@/lib/supabase/server', () => ({
         return { data: null, error: null };
       };
       chain.then = (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) =>
-        Promise.resolve({ data: table === 'invoices' ? st.invoices : null, error: null }).then(ok, fail);
+        Promise.resolve({ data: table === 'invoices' ? st.invoices : null, error: null, count: st.count }).then(ok, fail);
       return chain;
     },
   }),
@@ -45,6 +45,7 @@ import { ACCOUNTANT_PORTAL_STATUSES, loadAccountantPortal } from '@/lib/accounta
 beforeEach(() => {
   st.calls = [];
   st.invoices = [];
+  st.count = 0;
 });
 
 describe('portal księgowej — dane (F-063)', () => {
@@ -52,15 +53,38 @@ describe('portal księgowej — dane (F-063)', () => {
     st.invoices = [
       { id: 'i1', internal_number: 'FV/1', issue_date: '2026-09-10', gross_total: 123, ksef_status: 'accepted', direction: 'outgoing', xml_storage_path: 'x/1.xml' },
     ];
+    st.count = 1;
     const data = await loadAccountantPortal('token-1');
-    const inCall = st.calls.find(([name]) => name === 'invoices.in');
-    expect(inCall).toEqual(['invoices.in', ['ksef_status', [...ACCOUNTANT_PORTAL_STATUSES]]]);
+    // Zapytanie o liczbę i o wiersze strony: oba z tymi samymi statusami.
+    const inCalls = st.calls.filter(([name]) => name === 'invoices.in');
+    expect(inCalls.length).toBeGreaterThan(0);
+    for (const call of inCalls) expect(call).toEqual(['invoices.in', ['ksef_status', [...ACCOUNTANT_PORTAL_STATUSES]]]);
     expect(ACCOUNTANT_PORTAL_STATUSES).not.toContain('draft');
     expect(ACCOUNTANT_PORTAL_STATUSES).not.toContain('rejected');
-    const select = st.calls.find(([name]) => name === 'invoices.select')![1][0] as string;
+    const select = st.calls
+      .filter(([name]) => name === 'invoices.select')
+      .map(([, args]) => args[0] as string)
+      .find((cols) => cols.includes('internal_number'))!;
     expect(select).toContain('direction');
     expect(select).toContain('xml_storage_path');
     expect(data?.invoices[0]).toMatchObject({ direction: 'outgoing', xml_storage_path: 'x/1.xml' });
+  });
+
+  it('strony po 50 zamiast twardego limitu 100 (krok 6.2): zakres z numeru strony, liczba wszystkich pozycji', async () => {
+    st.count = 160;
+    const first = await loadAccountantPortal('token-1');
+    expect(st.calls.filter(([name]) => name === 'invoices.limit')).toEqual([]);
+    expect(st.calls.filter(([name]) => name === 'invoices.range')).toEqual([['invoices.range', [0, 49]]]);
+    expect(first?.invoicesPage).toEqual({ page: 1, pages: 4, total: 160, pageSize: 50 });
+
+    st.calls = [];
+    const third = await loadAccountantPortal('token-1', { page: 3 });
+    expect(st.calls.filter(([name]) => name === 'invoices.range')).toEqual([['invoices.range', [100, 149]]]);
+    expect(third?.invoicesPage).toMatchObject({ page: 3, pages: 4 });
+    // Tylko firma z tokenu.
+    const tenantFilters = st.calls.filter(([name, args]) => name === 'invoices.eq' && args[0] === 'tenant_id');
+    expect(tenantFilters.length).toBeGreaterThan(0);
+    for (const [, args] of tenantFilters) expect(args[1]).toBe('ten-1');
   });
 });
 
@@ -70,7 +94,7 @@ describe('portal księgowej — lista (F-063)', () => {
     { id: 'i2', internal_number: 'ZAK/7', issue_date: '2026-09-11', gross_total: 50, ksef_status: 'accepted', direction: 'incoming', xml_storage_path: null },
     { id: 'i3', internal_number: 'FV/2', issue_date: '2026-09-12', gross_total: 10, ksef_status: 'offline_queued', direction: 'outgoing', xml_storage_path: null },
   ];
-  const html = renderToStaticMarkup(<AccountantInvoiceList invoices={rows} canDownload token="t" />);
+  const html = renderToStaticMarkup(<AccountantInvoiceList invoices={rows} total={rows.length} canDownload token="t" />);
 
   it('rodzaj dokumentu i statusy po polsku', () => {
     expect(html).toContain('Sprzedaż');
@@ -78,6 +102,23 @@ describe('portal księgowej — lista (F-063)', () => {
     expect(html).toContain('Przyjęta w KSeF');
     expect(html).toContain('Offline — czeka na KSeF');
     expect(html).not.toContain('>accepted<');
+  });
+
+  it('kwota faktury zakupu w walucie obcej z kodem waluty, nie „zł” (krok 6.2, jak lista faktur w aplikacji)', () => {
+    const foreign = [{ ...rows[1]!, id: 'i9', gross_total: 50, currency: 'EUR' }];
+    const out = renderToStaticMarkup(<AccountantInvoiceList invoices={foreign} total={1} canDownload={false} token="t" />);
+    expect(out).toContain('50,00 EUR');
+    expect(out).not.toContain('50,00 zł');
+  });
+
+  it('ładowarka czyta walutę faktury', async () => {
+    st.count = 1;
+    await loadAccountantPortal('token-1');
+    const select = st.calls
+      .filter(([name]) => name === 'invoices.select')
+      .map(([, args]) => args[0] as string)
+      .find((cols) => cols.includes('internal_number'))!;
+    expect(select).toContain('currency');
   });
 
   it('„Pobierz XML” tylko przy dokumencie z plikiem', () => {

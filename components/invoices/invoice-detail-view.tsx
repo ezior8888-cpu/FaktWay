@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatusBadge } from '@/components/invoices/status-badge';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { InvoicePaymentPanel, type InvoicePaymentPanelData } from '@/components/invoices/invoice-payment-panel';
+import { InvoicePaymentsSection } from '@/components/invoices/invoice-payments-section';
+import type { InvoicePaymentsData } from '@/lib/invoices/invoice-payments';
 import { InvoiceErrorDisplay } from '@/components/invoices/error-display';
 import { InvoiceQr, type InvoiceQrData } from '@/components/invoices/invoice-qr';
 import { ImportedOriginalNote } from '@/components/invoices/imported-original-note';
@@ -20,8 +22,10 @@ import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { formatInvoiceDate } from '@/lib/invoices/display-date';
+import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
+import type { ReceiptInvoiceView } from '@/lib/invoices/receipt-invoice';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
 import type { DuplicateOriginalView } from '@/lib/ksef/duplicate-check';
 import type { DuplicateDecisionView, ImportedOriginalProvenance, RetiredDraftView } from '@/lib/ksef/duplicate-decision';
@@ -85,6 +89,8 @@ export interface InvoiceDetailInitial {
   payment_status?: string | null;
   /** Panel „Zapłacone” (00158): liczy serwer; brak = faktura bez płatności do oznaczenia (szkic, zakup). */
   payment_panel?: InvoicePaymentPanelData | null;
+  /** Sekcja „Wpłaty” (krok 3.1, 00176): historia, zapłacono i reszta; liczy serwer; brak = bez sekcji. */
+  payment_history?: InvoicePaymentsData | null;
   lines: InvoiceDetailLine[];
   /** E3 / P4: waluta faktury (kod ISO; brak w wierszu = PLN) — podpis kwot zamiast „PLN” na sztywno. */
   currency: string;
@@ -102,6 +108,8 @@ export interface InvoiceDetailInitial {
   can_set_recurring?: boolean;
   /** „Duplikuj” w karcie „Dokument”: zwykła faktura z FaktWay (ten sam predykat co menu „⋯” listy). */
   can_duplicate?: boolean;
+  /** Krok 2.10: „Link dla nabywcy” w karcie „Dokument” (liczy serwer; brak pola = bez przycisku). */
+  can_share_with_buyer?: boolean;
   /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
   qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
@@ -136,6 +144,8 @@ export interface InvoiceDetailInitial {
    * Brak pola = `null`.
    */
   ksef_imported_original?: ImportedOriginalProvenance | null;
+  /** Krok 1.2: faktura do paragonu, oznaczenie i dane paragonu liczone na serwerze. Brak pola = `null`. */
+  receipt_invoice?: ReceiptInvoiceView | null;
 }
 
 interface PaymentSnapshot {
@@ -332,6 +342,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;
   const payment = (inv.payment_data ?? null) as PaymentSnapshot | null;
+  // Krok 1.4: tytuł przelewu jak na PDF (numer KSeF, potem numer faktury; przy
+  // MPP sam numer KSeF); bez numeru KSeF, przy innej zapłacie niż przelew albo
+  // bez kwoty wiersza nie ma.
+  const transferTitle = tytulPrzelewuNaDokumencie(inv.internal_number ?? '', inv.ksef_number, {
+    metoda: payment?.method,
+    doZaplaty: inv.amount_due,
+    mpp: inv.split_payment,
+  });
   const lines = inv.lines;
   // Panel „W KSeF jest już faktura o tym numerze” (decyzja albo nota z danymi oryginału).
   // Obok niego bez karty błędu: tekst runnera jest dla operatora, klient ma panel.
@@ -365,6 +383,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     can_correct: inv.can_correct,
     can_set_recurring: inv.can_set_recurring ?? false,
     can_duplicate: inv.can_duplicate ?? false,
+    can_share_with_buyer: inv.can_share_with_buyer ?? false,
   };
 
   return (
@@ -412,6 +431,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               <InvoicePaymentPanel
                 invoice={{ id: inv.id, number: inv.internal_number }}
                 data={inv.payment_panel}
+              />
+            )}
+
+            {/* Krok 3.1: historia wpłat i „Zapisz wpłatę” obok panelu „Zapłacone” (D1: nowa sekcja, bez przestawiania). */}
+            {inv.payment_history && (
+              <InvoicePaymentsSection
+                invoice={{ id: inv.id, number: inv.internal_number }}
+                data={inv.payment_history}
               />
             )}
 
@@ -507,6 +534,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               <div className="text-muted-foreground space-y-1 text-sm">
                 <p>Data wystawienia: {formatInvoiceDate(inv.issue_date)}</p>
                 {inv.sale_date && <p>Data sprzedaży: {formatInvoiceDate(inv.sale_date)}</p>}
+                {inv.receipt_invoice && (
+                  <>
+                    <p data-testid="faktura-do-paragonu" className="text-foreground font-medium">
+                      {inv.receipt_invoice.label}
+                    </p>
+                    {inv.receipt_invoice.details && <p>{inv.receipt_invoice.details}</p>}
+                  </>
+                )}
                 {payment?.dueDate && <p>Termin płatności: {formatInvoiceDate(payment.dueDate)}</p>}
               </div>
             </div>
@@ -561,6 +596,12 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                     <>
                       <dt className="text-foreground">MPP:</dt>
                       <dd>Mechanizm podzielonej płatności</dd>
+                    </>
+                  )}
+                  {transferTitle && (
+                    <>
+                      <dt className="text-foreground">Tytuł przelewu:</dt>
+                      <dd className="break-all">{transferTitle}</dd>
                     </>
                   )}
                 </dl>

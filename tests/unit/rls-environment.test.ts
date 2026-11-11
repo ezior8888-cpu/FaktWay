@@ -78,6 +78,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-historia-ksef.test.ts',
       // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
       'tests/rls-sprzatanie-dziennikow.test.ts',
+      // Bez migracji (plan skalowania, sesja 3, FLO-01): sprzątanie pulsu FLO jednym
+      // zapisem z warunkiem, ponad 1000 kart przez PostgREST z `max_rows`.
+      'tests/rls-flo-sprzatanie.test.ts',
       'tests/rls-zaplacone.test.ts',
       'tests/rls-passkeys.test.ts',
       'tests/rls-skrzynka-harmonogram.test.ts',
@@ -98,6 +101,52 @@ describe('separate RLS test configuration', () => {
       'tests/rls-ksiegowosc-jpk.test.ts',
       'tests/rls-ksiegowosc-kpir.test.ts',
       'tests/rls-ksiegowosc-spis.test.ts',
+      'tests/rls-sesje-konta.test.ts',
+      // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia wpłat.
+      'tests/rls-wplaty-czesciowe.test.ts',
+      // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu bankowego.
+      'tests/rls-wyciag-bankowy.test.ts',
+      'tests/rls-archiwum-dokumentow.test.ts',
+      // 00179 (plan kompletnej aplikacji, krok 2.10): link do faktury dla nabywcy.
+      'tests/rls-link-dla-nabywcy.test.ts',
+      // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
+      // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
+      'tests/rls-kalendarz.test.ts',
+      // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
+      // z członkostwem zalogowanego, z cudzej firmy nic.
+      'tests/rls-moi-klienci.test.ts',
+      // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API i rola `api_key_client`.
+      'tests/rls-api-klucze.test.ts',
+      // 00184 (krok 7.1, część 2): wystawianie faktur kluczem API.
+      'tests/rls-api-wystawianie.test.ts',
+      // 00189 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu.
+      'tests/rls-wyciag-podatki.test.ts',
+      // 00187 (krok 7.1, część 3): webhooki i dziennik dostaw.
+      'tests/rls-webhooki.test.ts',
+      // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji.
+      'tests/rls-powiadomienia-w-aplikacji.test.ts',
+      // 00190 (krok 6.4, część 2): znacznik usunięcia pliku paczki tylko przez funkcję zadania,
+      // z wpisem audit_logs; CHECK znacznika; runner sprzątania przez prawdziwy PostgREST.
+      'tests/rls-archiwum-sprzatanie.test.ts',
+      // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie.
+      'tests/rls-komentarze-kosztow.test.ts',
+      // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe.
+      'tests/rls-noty.test.ts',
+      // 00194 (plan kompletnej aplikacji, krok 3.7): kasa, dowody KP i KW i raport kasowy.
+      'tests/rls-kasa.test.ts',
+      'tests/rls-faktura-do-paragonu.test.ts',
+      'tests/rls-koszty-do-zaplaty.test.ts',
+      // 00191 (plan kompletnej aplikacji, krok 1.4, część 2): identyfikatory zbiorcze KSeF.
+      'tests/rls-identyfikator-zbiorczy.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF.
+      'tests/rls-uprawnienia-ksef.test.ts',
+      // 00196 (plan kompletnej aplikacji, krok 3.2, część 3): przelewy do dostawców z wyciągu jako zapłaty kosztów.
+      'tests/rls-wyciag-koszty.test.ts',
+      // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
+      'tests/rls-dzwonek-wplaty.test.ts',
+      'tests/rls-indeksy-cronow-produkty.test.ts',
+      // Plan skalowania 3000, sesja 12: stronicowanie nocnej kopii JSON przez PostgREST.
+      'tests/rls-kopia-json-stronicowanie.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

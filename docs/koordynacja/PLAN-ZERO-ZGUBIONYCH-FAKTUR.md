@@ -1,6 +1,6 @@
 # Plan „zero zgubionych faktur” (wersja 2)
 
-Stan na 05.11.2026, `main` f4fdd6c9. Właściciel: Bartosz. Obowiązuje „Protokół naprawy błędu” z `AGENTS.md`: ten plan mówi *co* i *w jakiej kolejności*, protokół mówi *jak*.
+Stan na 05.11.2026, `main` f4fdd6c9; sekcja 0 oraz karty L1a i L1b na 08.11.2026, `main` 1faa3fc3. Właściciel: Bartosz. Obowiązuje „Protokół naprawy błędu” z `AGENTS.md`: ten plan mówi *co* i *w jakiej kolejności*, protokół mówi *jak*.
 
 Historia: `PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md` (dziennik sesji), `PLAN-ZERO-ZGUBIONYCH-FAKTUR-ARCHIWUM.md` (wersja 1 dosłownie, w tym blok A i decyzje D-A4-1b-3).
 
@@ -16,20 +16,21 @@ Historia: `PLAN-ZERO-ZGUBIONYCH-FAKTUR-DZIENNIK.md` (dziennik sesji), `PLAN-ZERO
 
 **Ustalenia z 05.11.2026 (Igor):** data przejścia na KSeF PROD nie jest potwierdzona. Plan nie czeka na prawnika: pracujemy na założeniach z karty B1, opartych na źródłach pierwotnych (sekcja 1), a całość pokazujemy prawnikowi na końcu (sekcja 9).
 
-**Następny krok:**
-1. Do decyzji Bartosza: scalenie #409 (ten plan), #336 (A4-D), #411 (H1a), #412 (B3) oraz #189 (F-093). Niezależne od siebie, w dowolnej kolejności.
-2. Sesja **B2a**: nie wymaga żadnego z nich. Karta ma już listę miejsc do zmiany.
+**Następny krok (08.11.2026):**
+1. #409, #336, #411, #412 i #189 scalone 08.11 w #460 (na `main` przez #472). Workflow „KSeF TEST (wysyłka)” (#411) nie zależy od wdrożenia: pierwszy przebieg z harmonogramu w poniedziałek 09.11 o 06:17 UTC, ręcznie można go uruchomić od razu.
+2. Sesja **B2a**: karta ma listę miejsc do zmiany. Numery linii przesunęły się po 05.11, szukaj po nazwie funkcji.
+3. Do akceptacji Bartosza: nowe karty **L1a** (pauza firmy po 429, w bramce) i **L1b** (budżet na żądanie, po bramce, warunkowo), propozycja Igora z 08.11. Liczba slotów wysyłki zostaje przy sesji 15 planu skalowania (po pomiarze, kolejność Bartosza z 03.11).
 
-Stan sprawdzony w kodzie 05.11.2026. „Nieustalone” znaczy, że sprawdzenie nie dało pewnego wyniku.
+Stan sprawdzony w kodzie 05.11.2026, wiersze A4-D, B3, G2, H1a, L1a i L1b 08.11.2026 (także F-093 w sekcji 8). „Nieustalone” znaczy, że sprawdzenie nie dało pewnego wyniku. Wdrożenia #460 ta sesja nie sprawdzała.
 
 | Sesja | Stan | Dowód albo uwaga |
 |---|---|---|
 | A1–A3, A4a, A4b, A5 | zrobione | #219–#263, dziennik |
 | D-A4-1b-3: A0, A, PR B, PR C | zrobione | #229, #230, #245, #248 |
-| A4-D (D-A4-1b-3 PR D) | PR do scalenia | #336: dogonił `main`, 05.11.2026 |
+| A4-D (D-A4-1b-3 PR D) | scalone | #336, w #460 08.11.2026 |
 | B1 | założenia robocze | `cykl-zycia-faktury-ksef.md` §9 (D7–D9); prawnik na końcu (sekcja 9) |
 | B2a, B2b | częściowo | `ISSUE_DATE_PASSED` tylko dla KOR, ZAL, ROZ (#242); zwykła faktura nie ma bezpiecznika |
-| B3 | PR do scalenia | #412: stan MF z Latarni w cronie i na banerze |
+| B3 | scalone | #412, w #460 08.11.2026: stan MF z Latarni w cronie i na banerze |
 | C1 | nie | brak wspólnego modułu granic |
 | C2 | nie | sprzedawca korekty z przeglądarki (`correction-actions.ts:259`); generator bez `PrefiksPodatnika`; S7, S8 częściowo |
 | C3 | nie | generator korekt odmawia `zw` (`fa3-correction-generator.ts:285`) |
@@ -38,14 +39,15 @@ Stan sprawdzony w kodzie 05.11.2026. „Nieustalone” znaczy, że sprawdzenie n
 | C6 (nowa) | nie | okres JPK po `issue_date` (`data-fetcher.ts:286`) |
 | D1 | nie | bez limitu prób na wpis, przycisku operatora i podziału I3 |
 | D2 | częściowo | skrót z `xml_storage_path` faktury (`lib/pdf/invoice-data.ts:252`) |
-| E1 | nie | `break` przy `hasMore` przed `isTruncated` (`inbox.ts:114`); wiersz bez środowiska rzuca błąd (`inbox-polling.ts:142`) |
+| E1 | częściowo | W10 w PR #574 (skrzynka i historia KSeF, 10.11.2026); S12 (wiersz bez środowiska rzuca błąd, `inbox-polling.ts:142`) i S9 otwarte; z przeglądu nowe W10-b (okno ponad ok. 16 stron nie mieści się w limicie MF) i W10-c w sekcji 8 |
 | E2 | skreślona | decyzja Bartosza 22.10: Magiczny import znika |
 | F1 | nie | brak runbooka przełączenia |
 | F2 | częściowo | pulpit i analizy mają kontrolę środowiska, `kpir-data.ts` i portal księgowej nie |
-| G1 | nie | `stopBoss()` bez limitu czasu (`boss.ts:50`) |
-| G2 | częściowo | wysyłka ma `localConcurrency: 5` (`package-d.ts:67`), reszta `batchSize` |
+| G1 | częściowo | stopBoss w PR #577, idempotencja jobów zostaje (przypomnienia po #519, #521, #550); czas łaski Coolify do potwierdzenia (G1-LASKA) |
+| G2 | częściowo | wysyłka ma `localConcurrency: 5` (`package-d.ts:67`), reszta `batchSize`; kolejność worker przed web w `/wdroz` zrobiona (#449, w #460) |
+| L1a, L1b (nowe 08.11) | nie | propozycja do akceptacji Bartosza; sesja KSeF na każdą fakturę, limiter nie liczy pojedynczych żądań, 429 nie zatrzymuje firmy (karta L1a) |
 | G3 | nieustalone | runnery `retention-delete.ts`, `archive-old-invoices.ts` istnieją, warunków z karty nie sprawdzono |
-| H1a | PR do scalenia | #411: wynik na prawdziwym KSeF TEST w karcie B1 |
+| H1a | scalone, bez przebiegu | #411, w #460 08.11.2026: wynik na prawdziwym KSeF TEST w karcie B1; pierwszy przebieg z harmonogramu 09.11 albo ręcznie |
 | H1b, H2 | nie | `e2e-staging.yml` nie dotyka KSeF |
 | I1 | częściowo | narzędzie jest, brak śladu wykonanej rotacji |
 | I2 | częściowo | tabela kod → wyjście jest (#224), brak ćwiczenia |
@@ -139,6 +141,7 @@ Plan nie obiecuje zera błędów. Obiecuje, że błąd w wysyłce nie zostaje ni
 | M5 | Brak UPO lub XML | Ryzyko dowodowe, nie kara: art. 106ni ust. 1 tego nie wymienia. MF: KSeF archiwizuje faktury 10 lat | D1, D2 |
 | M7 | Nieodebrane faktury zakupu | Odliczenie VAT i koszty, nie kara | E1 |
 | M9, M10 | Zabity worker, operator nie wie | Operacyjne | G1, B3, I2 |
+| M11 | Przekroczenie limitów KSeF (429) | Pośredni: blokada firmy opóźnia jej faktury (M1). MF liczy limity na parę (NIP, adres IP), a powtórki wydłużają blokadę; w skrajnym przypadku MF może zablokować zakres adresów IP, czyli wszystkie firmy naraz, bo platforma wysyła z jednego adresu | L1a, L1b |
 
 ---
 
@@ -151,12 +154,13 @@ B2a ─► B2b (po B3; na założeniach z B1) ───────────�
 B3 (#412) ─────────────────────────────────────────┤
 C1 ─► C2 ─► C3 ─► C4 ──────────────────────────────┼─► bramka, na końcu prawnik (sekcja 9)
 C6, D1, E1, F1, F2 (niezależne) ───────────────────┤
+L1a (L1b po bramce) ────────────────────────────────┤
 G1 ─► H2 ──────────────────────────────────────────┤
 I1, I3 (operacje, w dowolnym momencie) ────────────┘
-Po bramce: PR E, reszta C5, D2, G2, G3, I2, blok J.
+Po bramce: PR E, reszta C5, D2, G2, G3, I2, blok J, L1b (warunkowo), L2–L5.
 ```
 
-Równolegle tylko bez wspólnych plików, np. C1 z E1 albo D1 z F1. B2a, B2b i H1b prowadzi jedna linia sesji. Otwarte PR z sekcji 8 rozstrzyga sesja, do której są przypisane.
+Równolegle tylko bez wspólnych plików, np. C1 z E1, D1 z F1. L1a i L1b dotykają runnera (czekanie przed przejęciem wysyłki), więc idą po B2a albo na zmianę z nią, nie równolegle. B2a, B2b i H1b prowadzi jedna linia sesji. Otwarte PR z sekcji 8 rozstrzyga sesja, do której są przypisane.
 
 ---
 
@@ -292,6 +296,7 @@ Założenia:
 - Czerwony test: 60 wpisów UPO: 50 trwale 4xx, 10 świeżych — świeże
   pobrane w jednym przebiegu.
 - Stan: `upo-retry-stale.ts:129` bierze najstarsze wpisy, a `download_attempts` jest tylko odczytywane (limit 100 na przebieg, nie na wpis). Obejmuje -UPO.
+- Z rejestru: UPO-429. 429 nie jest trwałym 4xx: ponowienie po `Retry-After` (pauza firmy z L1a), bez zużycia limitu `download_attempts`. W czerwonym teście 429 nie należy do 50 trwałych.
 
 ### D2. Dowód treści: skrót XML w każdym PDF i w portalu
 - PDF z KOD I liczy skrót z pliku próby (D5); dla faktur sprzed D5 — z pliku
@@ -348,7 +353,58 @@ Założenia:
   po restarcie uzgodnienie, nie drugi POST.
 
 ### G2. Równoległość (S3, S16)
-- Stan: wysyłka ma `localConcurrency: 5` i limit na firmę (`package-d.ts:65-67`); sloty wysyłki należą do sesji 15 planu skalowania. Zostają inne kolejki z `batchSize` (`package-c.ts`) i sprawdzenie, czy `/wdroz` wdraża worker przed webem.
+- Stan: wysyłka ma `localConcurrency: 5` i limit na firmę 100 (`package-d.ts:65-67`), więc w praktyce limitu na firmę nie ma. Liczba slotów wysyłki należy do sesji 15 planu skalowania (po pomiarze), limit na firmę do karty L1a. Kolejność worker przed web w `/wdroz` zrobiona (#449, scalone 08.11 w #460). Zostają inne kolejki z `batchSize` (`package-c.ts`).
+
+### L1a. Limity KSeF: pauza firmy po 429 (propozycja 08.11.2026, do akceptacji Bartosza)
+- Problem: MF liczy limity na parę (NIP, adres IP), a cała platforma wysyła z jednego adresu. Limity z `ksef-docs/limity/limity-api.md` i `open-api.json` (API 2.9.0), odczyt 08.11.2026, na sekundę / minutę / godzinę:
+
+  | Żądanie (grupa MF) | Limit | Kto u nas zużywa |
+  |---|---|---|
+  | otwarcie sesji online (`onlineSession`) | 10 / 30 / 120 | każda wysyłka i każde jej ponowienie (sesja na fakturę) |
+  | wysyłka faktury w sesji (`invoiceSend`) | 10 / 30 / 180 | wysyłka |
+  | zamknięcie sesji (`onlineSessionClose`) | 20 / 60 / 240 | wysyłka, rozstrzygnięcie zamiaru (A2) |
+  | status faktury (`invoiceStatus`) | 30 / 120 / 1200 | odpytywanie po wysyłce, uzgodnienie po referencji, I5, „Tylko uzgodnij” |
+  | lista faktur sesji (`sessionInvoiceList`) | 10 / 20 / 200 | rozstrzygnięcie zamiaru (A2) |
+  | pozostałe `GET /sessions/*` (`sessionMisc`) | 10 / 120 / 1200 | UPO i `upo-retry-stale` |
+  | metadane faktur (`invoiceMetadata`) | 8 / 16 / 20 | skrzynka (do 16 na godzinę, `skrzynka-ksef-pojemnosc.md`), historia, data oryginału przy 440 (`submit.ts:444`) |
+  | faktura po numerze KSeF (`invoiceDownload`) | 8 / 16 / 64 | XML skrzynki, historia, oryginał przy 440 (`submit.ts:402`) |
+  | `/auth/*` | 60 / s (OpenAPI); tylko dla `/auth/challenge` MF pisze wprost, że na jeden adres IP | pełne logowanie po restarcie workera (tokeny są tylko w pamięci) i po odrzuceniu refresh tokenu |
+
+  Okna są przesuwne (ostatnia sekunda, minuta, godzina) i działają jednocześnie. Po przekroczeniu MF odpowiada 429 z `Retry-After` i tymczasowo blokuje kolejne żądania; dokument nie mówi, czy samej grupy, czy całego kontekstu. Przy powtarzających się naruszeniach MF może zablokować podmiot albo zakres adresów IP. Limity są wstępne i MF może je czasowo obniżyć. Według zmian API 2.8.0 MF przygotował grupę `global` na przyszły limit na sam adres IP, dla dostawców obsługujących wiele podmiotów, czyli dla nas; na razie jest wyłączona. Faktyczne limity kontekstu podaje `GET /rate-limits`, którego kod dziś nie woła.
+- Stan w kodzie, sprawdzony 08.11.2026:
+  - Każda faktura otwiera własną sesję (`lib/ksef/submit.ts:134`), więc sufit to 120 wysyłek na godzinę na firmę, razem z ponowieniami.
+  - `ksefRateLimiter` (`lib/ksef/rate-limiter.ts:24-27`: 50 na sekundę, 10 naraz) liczy zadania, nie żądania. Wywołania wysyłki, uzgodnienia, skrzynki i historii idą przez niego jako zadania, a `submitInvoice` to jedno zadanie z logowaniem (gdy trzeba), otwarciem, wysyłką, do 30 zapytań o status i zamknięciem (`submit.ts:113-245`). Poza limiterem idą samo żądanie UPO (`upo-client.ts:146`) i logowanie przy otwarciu sesji historii (`ksef-history-sync.ts:627`). Komentarz o „limicie 100/s” nie ma źródła, a komentarze o limiterze w kliencie i „60 wysyłek/min” (`package-d.ts:21`, `submit-invoice.ts:155-159`) opisują stan z Inngest. Limiter żyje w pamięci workera. Aplikacja go nie używa, a jej jedyne wywołanie KSeF to logowanie w kreatorze połączenia (`components/settings/actions.ts:174`). Oba procesy działają dziś na `app-1`, więc liczą się do tej samej pary (NIP, IP).
+  - Jedna firma może zająć wszystkie sloty: `localConcurrency: 5` i `groupConcurrency: 100` (`package-d.ts:65-67`), a pg-boss pobiera zadania po kolei, bez podziału między firmy.
+  - Odpytywanie co 2 s, najwyżej 30 razy, w slocie (`submit.ts:529-530`): 5 równoległych wysyłek jednej firmy to ok. 150 zapytań o status na minutę przy limicie 120.
+  - 429 nie zatrzymuje firmy. Ponawiana jest tylko ta faktura i zużywa zwykłą próbę (`KSEF_MAX_RETRIES = 5`), a kolejne zadania tej firmy dalej uderzają w limit. `Retry-After` (obcięty do 3600 s) honorują krok wysyłki i pobranie oryginału przy 440 (`submit-invoice.ts:1444`). Uzgodnienie po referencji i rozstrzygnięcie zamiaru biorą stały harmonogram 30 s / 2 min / 5 min / 15 min / 1 h, bez rozrzutu, więc faktury, które padły razem, wracają razem. Faktura nie ginie (po wyczerpaniu `failed`, cron I6 najpierw uzgadnia), ale seria 429 wydłuża blokadę.
+  - 429 przy pobraniu UPO jest traktowane jak błąd ostateczny; UPO wraca dopiero z `upo-retry-stale` po 24 h (`upo-client.ts:180-186`).
+  - Cron cyklu życia (co 15 min) wznawia do `LIFECYCLE_BATCH = 100` faktur na każde zapytanie (I6 i I7, osobno zwykłe i specjalne, do tego I5), bez limitu na firmę i bez rozłożenia w czasie. Po awarii KSeF zaległość jednej firmy trafia do kolejki w jednej chwili.
+  - Kolejka wysyłki grupuje po firmie w aplikacji (`groupId = tenantId`), a limity MF liczą się po NIP. Kilka firm w aplikacji z tym samym NIP dzieli jeden budżet MF.
+  - Gdzie widać 429: `ksef_send_attempts.ksef_http_status` (job wysyłki, także I5 i „Tylko uzgodnij”, bo idą tym samym jobem); przy pobraniu oryginału po 440 już nie, bo `pending()` podmienia przyczynę (`submit-invoice.ts:1283-1286`). 429 przy UPO i w skrzynce trafia do `audit_logs` (`ksef.upo.download`, `inbox.poll`).
+- Zakres (jeden PR; jeśli się nie mieści, stop i pytanie do Bartosza, zasada 12):
+  1. Pauza firmy po 429: pełny `Retry-After`, bez obcięcia do 3600 s, zapisany dla (środowisko, NIP). W czasie pauzy czekają wszystkie żądania KSeF tej firmy: wysyłka, UPO, skrzynka i historia. Węższa pauza, na samą grupę, dopiero gdy scenariusz 17 na TEST pokaże, że MF blokuje tylko grupę. Skrzynka czyta i zapisuje tę samą pauzę zamiast osobnego stanu w `nextInboxPollAfterError`.
+  2. Zadanie w pauzie czeka z rozrzutem do jej końca i nie zużywa ani próby, ani budżetu odczekań `MAX_WAIT_RETRIES` (24 × 5 min, wspólny z czekaniem na dzierżawę): pauza ma własny licznik albo nie ma limitu. Po każdym powrocie zadanie najpierw sprawdza pauzę. Czekanie wypada przed przejęciem wysyłki (`claim_ksef_send`).
+  3. Hamulec wysyłki przy 429 z wielu firm naraz, jak `inboxRateLimitBrake` (`inbox-schedule.ts:283`), bo to sygnał zbliżania się do blokady zakresu IP (M11).
+  4. `Retry-After` także w uzgodnieniu i rozstrzygnięciu zamiaru; rozrzut w harmonogramie ponowień.
+  5. Limit na firmę: `groupConcurrency` 2–3 zamiast 100 (`KSEF_TENANT_CONCURRENCY_LIMIT`). Liczba slotów razem bez zmian (5); podnosi ją sesja 15 planu skalowania po pomiarze, w kolejności Bartosza z 03.11 (na CX23 6–8).
+  6. 429 przy pobraniu oryginału po 440 w dzienniku prób: `pending()` przenosi `KsefApiError` jako przyczynę. Komentarze w `rate-limiter.ts`, `package-d.ts` i `submit-invoice.ts` zgodne z dokumentacją MF i stanem po Inngest.
+- Czerwony test (atrapa KSeF, sztuczny zegar): atrapa odpowiada 429 z `Retry-After: 30`, przez 30 s nie idzie żadne żądanie tej firmy (wysyłka, UPO, skrzynka), a faktura drugiej firmy wychodzi bez czekania na serię pierwszej. 30 kolejnych pauz nie kończy faktury w `failed`. Pauza nie zostawia faktury w `sending` (strażnik bez I1 i I2).
+- Ponowienie od zera: czekanie wypada przed przejęciem wysyłki albo po jego zwolnieniu, nigdy z fakturą w `sending`, bo pauza trwa tyle, ile podał MF, a dzierżawa `KSEF_SEND_LEASE_SECONDS` to 15 min. Kolejność A2 (zamiar przed plikiem) bez zmian. Po przyjęciu pliku czeka tylko odpytywanie, więc pauza nie może wywołać drugiej wysyłki.
+- Scenariusz 17 lokalnie i na TEST z limitami ustawionymi przez `POST /testdata/rate-limits` (zasada 10). Źródła MF są sprzeczne co do domyślnych limitów TEST (`limity-api.md`: 10 razy wyższe, zmiany API 2.5.0: równe PROD), więc bez ustawienia limitów przebieg na TEST nic nie dowodzi.
+- DoD: scenariusz 17 zielony lokalnie, dopisany do `scripts/test-ksef-wysylka.ts` i zielony na TEST; przebieg zapisuje, czy po 429 MF blokuje samą grupę, czy cały kontekst.
+- Dlaczego w bramce: celem planu jest brak kary, a długa, eskalowana blokada firmy (albo zakresu IP) zatrzymałaby faktury po terminie. Przed nią chroni pauza; sam budżet na żądanie (L1b) to już wydajność.
+
+### L1b. Limity KSeF: budżet na żądanie (po bramce, warunkowo)
+- Warunek startu: pierwszy 429 w `ksef_send_attempts` po L1a albo firma z ponad 30 fakturami w godzinie. Do tego czasu wystarcza L1a. Tabela limitów i stan w kodzie: karta L1a.
+- Zakres (jeden PR):
+  1. Budżet dla każdej grupy z tabeli, klucz (środowisko, NIP), liczony przy każdym żądaniu (`ksefFetch` i surowe żądanie UPO), a nie na zadanie. Także `invoiceMetadata` i `invoiceDownload`: jeden licznik dla skrzynki, historii i ścieżki 440; skrzynka zostawia zapas na 440. Odpytywanie statusu w budżecie grupy `invoiceStatus`, częstotliwość bez zmian (L3).
+  2. Przed `claim_ksef_send` runner rezerwuje w budżecie całą wysyłkę: otwarcie, plik, zamknięcie i pierwsze zapytania o status. Brak budżetu daje czekanie z L1a przed przejęciem. W `sending` czeka tylko odpytywanie, najwyżej kilka sekund; dłużej oznacza koniec próby i uzgodnienie po referencji, a nie zamiar bez pliku.
+  3. Licznik w Redisie (`lib/cache/redis.ts`; jest limiter z oknem przesuwnym i zapasem w pamięci, `lib/rate-limit/index.ts`, oraz nieużywany klucz `submitRateLimit` w `lib/cache/keys.ts:69-71`), żeby przetrwał restart workera (okno godzinowe). Bez Redisa albo przy odpowiedzi dłuższej niż ok. 1 s budżet w pamięci procesu, a nie blokada wysyłki: limit i tak egzekwuje MF, a blokada bez wyjścia to nowy błąd (zasada 4 protokołu). Drugiego workera plan skalowania nie przewiduje. Po przeniesieniu workera na osobną maszynę (etap 3 planu skalowania) kreator w aplikacji i worker mają różne adresy IP, więc MF liczy je osobno.
+  4. `/auth/*`: ostrożnie jeden budżet na adres IP dla wszystkich firm, żeby masowe logowanie po restarcie workera nie przekroczyło limitu. Ten sam licznik IP przyda się, gdy MF włączy grupę `global`.
+  5. Limity z `GET /rate-limits` na kontekst i środowisko (żądanie z grupy domyślnej 10 / 30 / 120, więc z pamięcią podręczną), a tabela jako wartość domyślna.
+- Czerwony test (atrapa z limitami PROD): 60 faktur jednej firmy w kolejce, wszystkie przyjęte bez żadnego 429, w każdej minucie najwyżej 30 otwarć sesji i 120 zapytań o status; brak budżetu nie zostawia zamiaru bez pliku. Scenariusz 16 lokalnie i na TEST z `POST /testdata/rate-limits/production`.
+- Ponowienie od zera: rezerwacja przed przejęciem nie zmienia kolejności A2; zwrot niewykorzystanej rezerwacji nie może wywołać wysyłki.
+- Poza zakresem (sekcja 8, po bramce): **L2** czasy każdego kroku w `scripts/test-ksef-wysylka.ts` (pomiar przed L3 i L4); **L3** odpytywanie adaptacyjne (pierwsze zapytanie po ok. 0,5 s, potem rzadziej) i krótszy sen w slocie, dalej istniejącą ścieżką uzgodnienia; **L4** kilka faktur jednej firmy w jednej sesji (do 10 000 faktur, 12 h), co podnosi sufit ze 120 do 180 na godzinę (dopasowanie zamiaru po skrócie pliku już na to pozwala, `submit-invoice.ts:187`, ale rozstrzygnięcie zamiaru zamyka sesję, `submit.ts:490`); **L5** sesja wsadowa, którą MF zaleca dla większej liczby faktur, dopiero gdy pojawi się wysyłka hurtowa.
 
 ### G3. Retencja bez półśrodków (W13)
 - Referencje (FK) sprawdzane przed kasowaniem plików; DELETE per faktura;
@@ -361,7 +417,7 @@ Założenia:
 
 ### H1b. Pełna lista scenariuszy
 - Pełny runner: baza lokalna jak „RLS isolation”, worker w procesie, reszta sekcji 6 oraz: reset → poprawa → ponowna wysyłka (nowy klucz XML), „tylko uzgodnij”, uzgodnienie po referencji, skrót oryginału = `invoiceHash` i UPO z sesji spoza FaktWay (D-A4-1a).
-- Warunek: rozstrzygnąć #189 (F-093), inaczej `ksef_code` jest pusty dla `problem+json`.
+- Warunek spełniony w kodzie: #189 (F-093) scalony 08.11.2026 w #460, kod błędu KSeF czytany także z odpowiedzi `problem+json`. Na produkcji dopiero po wdrożeniu #460.
 - Numer faktury z identyfikatorem przebiegu, bo KSeF pilnuje unikalności przez 10 lat. Dane TEST są współdzielone między integratorami, więc testy nie zakładają pustego konta (`-TESTENV`).
 - DoD: każdy scenariusz zielony w 3 kolejnych tygodniach przed wydaniem.
 
@@ -425,6 +481,8 @@ Dokumentacja KSeF nie opisuje symulowania awarii na TEST, więc awarie idą prze
 | 13b | P_1 = 5 dni temu | KSeF przyjmuje z trybem `Offline`, więc termin pilnuje aplikacja (B2a) | log CI | TEST |
 | 14 | Nabywca bez NIP | `accepted`, PDF z KOD I | PDF | TEST |
 | 15 | Wysyłka tuż po północy, P_1 = dziś w Warszawie | przyjęta; dokumentacja nie podaje strefy porównania dat, wynik krytyczny dla A1 | log CI | TEST, ręcznie |
+| 16 | Seria 60 faktur jednej firmy (L1b, po bramce) | wszystkie `accepted` bez 429, w każdej minucie najwyżej 30 otwarć sesji | test L1b, dziennik prób bez HTTP 429 | lokalnie, atrapa z limitami PROD; TEST z `POST /testdata/rate-limits/production` |
+| 17 | KSeF odpowiada 429 z `Retry-After`, w tym czasie faktura drugiej firmy | pauza całej tej firmy (wysyłka, UPO, skrzynka), potem `accepted`; faktura nie przechodzi w `failed`; druga firma bez opóźnienia | test L1a; zapis, czy MF zablokował grupę, czy kontekst | lokalnie, atrapa; TEST z `POST /testdata/rate-limits` |
 
 ---
 
@@ -432,8 +490,8 @@ Dokumentacja KSeF nie opisuje symulowania awarii na TEST, więc awarie idą prze
 
 Wydanie na KSeF PROD dla płacących klientów, gdy wszystkie punkty mają datę i numer PR albo raportu. `GOTOWOSC-DO-WYDANIA.md` opisuje niższy próg Closed Alpha (7 dni) i obowiązuje dalej; jego G3 („wyłączony KSeF TEST”) czytaj jak scenariusz 6.
 
-- [ ] Sesje A4-D, B2a, B2b, B3, C1–C4, C6, D1, E1, F1, F2, G1, H1a, H1b, H2 scalone i wdrożone.
-- [ ] Scenariusze z sekcji 6 zielone w 3 kolejnych tygodniowych przebiegach, każdy w swoim miejscu.
+- [ ] Sesje A4-D, B2a, B2b, B3, C1–C4, C6, D1, E1, F1, F2, G1, H1a, H1b, H2, L1a scalone i wdrożone.
+- [ ] Scenariusze z sekcji 6 zielone w 3 kolejnych tygodniowych przebiegach, każdy w swoim miejscu (bez 16, który należy do L1b po bramce).
 - [ ] Strażnik bez I5D = 0 przez 14 dni (I5D-env = 0); raport dzienny bez `exhausted` i `i1Lost` niewyjaśnionych.
 - [ ] Każdy kod błędu, także `OFFLINE_*`, ma wiersz w runbooku z wyjściem i testem.
 - [ ] Game day (H2): każda z 5 awarii → sygnał ≤ 15 min → wyjście.
@@ -445,7 +503,7 @@ Wydanie na KSeF PROD dla płacących klientów, gdy wszystkie punkty mają datę
 - [ ] Sekcja 8: pozycje BRAMKA zamknięte.
 - [ ] Na końcu: prawnik przejrzał pakiet z sekcji 9, poprawki po przeglądzie wdrożone. TEST bez blokady.
 
-Po bramce: tygodniowy przegląd (raport dzienny, strażnik, Sentry) przez pierwszy kwartał.
+Po bramce: tygodniowy przegląd (raport dzienny, strażnik, Sentry) przez pierwszy kwartał, w nim `ksef_send_attempts.ksef_http_status` bez 429 (warunek startu L1b).
 
 ---
 
@@ -464,7 +522,7 @@ Dotąd leżały w kolumnie „co zostało” dziennika, bez właściciela. Przyd
 | ZAP-01-f | KPiR bez `assertAcceptedEnvironmentKnown`: przyjęte bez środowiska znikają po cichu | F2 | sprawdzone: otwarte |
 | S10 | portal księgowej bez filtra środowiska | F2 | sprawdzone: brak filtra |
 | D-A4-2 | `ksef_submissions` bez środowiska, I5 uzgadnia dokument z TEST w bieżącym środowisku | F2 | do sprawdzenia |
-| F-093 | `ksef_code` pusty dla `problem+json` | H1b | #189 otwarty od 03.10 |
+| F-093 | `ksef_code` pusty dla `problem+json` | H1b | zamknięte: #189 scalony 08.11.2026 (#460) |
 | F-005 | korekta faktury spoza 50 najnowszych | C4 | #283 otwarty od 17.10 |
 | C5b-e | KOR faktury z importu z procedurami wpisuje 2/N | C4 | do sprawdzenia |
 | D-A4-1b-3-KORB2C | brak korekty dla nabywcy bez NIP i VAT-UE | C4 | do sprawdzenia |
@@ -472,8 +530,16 @@ Dotąd leżały w kolumnie „co zostało” dziennika, bez właściciela. Przyd
 | C-09, C-10, C-16 | ROZ z bazy i środowiska | C4 albo pierwsze wydanie bez ROZ | #195 konflikt od 03.10 |
 | C-12, C-20 | niezmienny dowód XML | D2 | #369, #190 (szkice) |
 | C5c-c | `P_14_x` z sumy VAT pozycji | sekcja 9 | pytanie do doradcy |
+| UPO-429 | 429 przy pobraniu UPO = błąd ostateczny, UPO wraca dopiero po 24 h (`upo-client.ts:180-186`) | D1 | sprawdzone 08.11: otwarte |
+| W10-b | skrzynka: okno ponad ok. 16 stron (ok. 4 000 faktur, np. po przerwie certyfikatu) nie mieści się w limicie MF 16/min i 20/h; przebieg idzie od HWM bez tempa i bez częściowego postępu, 429 w pętli, HWM stoi, nowe faktury firmy też; wyjścia brak (`lib/ksef/inbox.ts:77`, `inbox-polling.ts:250`; runbook pojemności liczy 1 zapytanie na przebieg) | E1 (propozycja: budżet zapytań na przebieg, częściowy HWM = data ostatniego rekordu po zawężeniu) | sprawdzone 10.11.2026: otwarte (z przeglądu W10) |
+| W10-c | zawężenie po `isTruncated` zakłada, że `dateRange.from` jest włączne (rekord graniczny w tej samej chwili); przy wyłącznym rekord tuż za limitem ginie | H1b (sprawdzić na KSeF TEST) | do sprawdzenia |
+| G1-LASKA | czas łaski kontenera workera w Coolify nie jest zapisany w repo; budżet `WORKER_SHUTDOWN_BUDGET` (`boss.ts`) zakłada 10 s (domyślny `docker stop`) | G1 | pytanie do Bartosza w #577 |
+| G1-START | SIGTERM w trakcie startu workera przepada: node jako PID 1 nie ma handlera do końca `main()` (`worker.ts:163`), więc zatrzymanie przy starcie kończy się SIGKILL | G1 | sprawdzone 10.11: otwarte |
+| G1-PACZKA | `failWip` oblewa całą paczkę (`batchSize` > 1: offline-queue 25, `inbox.invoice-received` 10, OCR, import, eksporty 5), więc już przerobione joby wykonają się ponownie | G1 (idempotencja) | sprawdzone 10.11: otwarte |
+| G1-LIMIT | trzecie przerwanie tego samego joba (`retryLimit: 2`) daje `failed` bez `onExhausted`; wysyłka zostaje w `sending`, widać ją tylko w I2 i alarmie po 15 min | G1, po #561 (`run-job.ts`) | sprawdzone 10.11: otwarte |
+| G1-POAKCEPT | śmierć po zapisie akceptacji (`submit-invoice/save-accepted.ts:14`, krok z `submit-invoice.ts:542`) kończy ponowienie na strażniku (`submit-invoice.ts:172-186`): ginie wiersz `xml_documents`, emit-success, audit-success | D2 | sprawdzone 10.11: otwarte |
 
-**Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT, zapis stanu KSeF do bazy bez Redisa (z B3), typy bazy z produkcji (`types/database.ts` kończy się na 00154), limity 5 s w `ksef-connect-credentials*` pod obciążeniem (zasada 5) oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
+**Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT, zapis stanu KSeF do bazy bez Redisa (z B3), typy bazy z produkcji (`types/database.ts` kończy się na 00154), limity 5 s w `ksef-connect-credentials*` pod obciążeniem (zasada 5), L1b (warunkowo) i L2–L5 (wydajność wysyłki, karty L1a i L1b), z przeglądu W10 (10.11.2026): W10-d (historia: zawężenie z kursorem równym końcowi okna pyta o `[end, end]`, `windows.ts:249`), W10-e (decyzja „zawęź / koniec / następna strona” w trzech kopiach: `inbox.ts`, `applyBackfillPage`, `applyLivePage`), W10-f (`FAKTFLOW-DLA-AI.md:153` opisuje nieistniejący `continuationToken`) oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
 
 ---
 

@@ -32,10 +32,19 @@ Po błędzie:
 | zły certyfikat, brak uprawnienia | 1 h, 2 h, 4 h … do 24 h; naprawia klient, nowy certyfikat zeruje licznik |
 | KSeF 5xx, timeout, sieć, nasz błąd | 5, 10, 20 … min, gorąca najdalej 15 min, reszta najdalej godzina |
 | KSeF 429 | tyle, ile każe `Retry-After`; bez nagłówka 15 min |
+| firma w pauzie po 429 (L1a) | przebieg nie wysyła żądania (lokalny 429 z bramki w `ksefFetch`); termin = koniec pauzy, najmniej 1 min, z rozrzutem |
+
+Pauza firmy po 429 jest wspólna dla wszystkich żądań KSeF tej firmy (`lib/ksef/rate-limit-pause.ts`,
+runbook `hamulce-ksef.md`, „Pauza firmy po 429 (L1a)”): zapisuje ją każdy prawdziwy 429, także
+z wysyłki, UPO i historii, a skrzynka w tym czasie nie pyta KSeF. Pauzę wysyłki albo UPO skrzynka
+widzi więc przy najbliższym terminie firmy.
 
 Hamulec: co najmniej 5 firm z 429 w 10 minut i co najmniej 20% odpytanych zmniejsza pojemność
-rozsyłki czterokrotnie. Dokumentacja MF: powtarzane przekroczenia wydłużają blokadę, także dla
-zakresu adresów.
+rozsyłki czterokrotnie. Liczy się ostatni błąd przebiegu klasy 429 (`last_error_class =
+'rate_limit'`), więc `rateLimitedRecent` i hamulec liczą też firmy we wspólnej pauzie: przebieg
+firmy w pauzie kończy się lokalnym 429 i wlicza się jak 429 z KSeF. Osobny hamulec wysyłki
+(`hamulce-ksef.md`) liczy tylko prawdziwe odpowiedzi 429. Dokumentacja MF: powtarzane przekroczenia
+wydłużają blokadę, także dla zakresu adresów.
 
 ## Limity KSeF, które przyjęto
 
@@ -71,6 +80,7 @@ Jedna linia na takt w logu workera:
 | `oldestLagSeconds` | opóźnienie najstarszej należnej firmy | rośnie z taktu na takt, ponad 300 s poza godziną po wdrożeniu |
 | `due` vs `sent` | należne vs wysłane w tym takcie | `due` stale wyższe od `sent` |
 | `inFlight` | zlecenia czekające i trwające | równe `limit + inFlight` przez wiele taktów: sloty nie przerabiają |
+| `rateLimitedRecent` | firmy z 429 w ostatnich 10 minutach, także we wspólnej pauzie po 429 (L1a) | co najmniej 5 i 20% odpytanych: hamulec |
 | `braking` | hamulec 429 | `true` dłużej niż kilka minut |
 
 Opóźnienie po fakcie, z kolejki (przez `scripts/ops/kontrola-faktur-ksef.sh` albo psql na `db-1`):

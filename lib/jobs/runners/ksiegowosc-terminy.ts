@@ -3,7 +3,7 @@
  * o 08:00 przypomina firmom w pilotażu o terminach ryczałtu albo zaliczki
  * PIT i składek ZUS,
  * 5 i 1 dzień przed terminem, jeśli rozliczenie nie ma oznaczonej zapłaty.
- * Push do członków firmy i mail do właściciela.
+ * Push do członków firmy, mail do właściciela i wpis w dzwonku (00188).
  *
  * Idempotencja: `tax_notifications` (etap `termin-N:RRRR-MM-DD`), wpis przed
  * wysyłką; mail ma klucz idempotencji Resend z tym samym etapem. Ponowienie
@@ -20,6 +20,8 @@
 import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { publishAppNotification } from '@/lib/app-notifications/publish';
+import { taxDeadlineNotification } from '@/lib/app-notifications/texts';
 import { sendTerminRozliczeniaEmail } from '@/lib/email/send';
 import { monthRange } from '@/lib/expenses/month';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -81,6 +83,15 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
     await zamknij(admin, tenantId, t.miesiac, t.etap, { status: 'failed', blad: e instanceof Error ? e.message : String(e) }).catch(() => undefined);
     throw e;
   }
+  // Dzwonek (plan kompletnej aplikacji, krok 8.1, część 2, 00188): to samo
+  // przypomnienie w aplikacji, po udanej wysyłce. Fail-open: błąd zapisu idzie
+  // do logu i Sentry, przypomnienie zostaje „sent” i nie jest ponawiane.
+  // Ponowienie od zera kończy się wyżej jako duplikat (`zajmij`), a ten sam
+  // klucz (rozliczenie i etap) i tak nie doda drugiego wpisu (UNIQUE).
+  await publishAppNotification(
+    taxDeadlineNotification({ tenantId, miesiac: t.miesiac, etap: t.etap, tytul: tresc.tytul, tresc: tresc.tresc, adres: tresc.adres }),
+    { db: admin },
+  );
   return 'wyslane';
 }
 

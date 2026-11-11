@@ -203,6 +203,9 @@ describe('zakładka Firma (Finora General)', () => {
     }
     expect(html).toContain('id="data-rozpoczecia"');
     expect(html).toContain('value="Firma Testowa"');
+    // Krok 6.4 (D1): archiwum dokumentów jako nowa sekcja na końcu, z kotwicą z e-maila.
+    expect(html).toContain('id="archiwum"');
+    expect(html).toContain('Pobierz archiwum');
     // Usunięcie firmy tylko w „Konto i dane”; z General wylatują język, waluta, strefa, rok obrotowy.
     for (const text of ['Niebezpieczna strefa', 'Usuń konto', 'Język', 'Waluta', 'Strefa czasowa', 'Rok obrotowy', 'Language']) {
       expect(html).not.toContain(text);
@@ -217,6 +220,9 @@ describe('zakładka Firma (Finora General)', () => {
     expect(html).toContain('Firma Testowa');
     expect(html).not.toContain('Zapisz dane firmy');
     expect(html).toContain('Zmienić to może właściciel albo administrator firmy.');
+    // Archiwum zleca i pobiera tylko owner/admin: członek widzi samą informację.
+    expect(html).toContain('zleci i pobierze właściciel albo administrator firmy');
+    expect(html).not.toContain('Pobierz archiwum');
   });
 });
 

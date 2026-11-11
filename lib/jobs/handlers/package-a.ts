@@ -1,5 +1,6 @@
 /**
- * Paczka A (Etap 7.3): 14 cronów utrzymaniowych — rejestracje pg-boss.
+ * Paczka A (Etap 7.3): 15 cronów utrzymaniowych — rejestracje pg-boss
+ * (14 → 15 w kroku 6.4, część 2: pliki wygasłych paczek archiwum).
  *
  * Runnery żyją w lib/jobs/runners/*. Kolejki cron.* planuje worker wg
  * CRON_JOBS z lib/jobs/queues.ts (harmonogramy przeniesione 1:1 z dawnych
@@ -14,6 +15,7 @@ import { runCertExpiryAlert } from '../runners/cert-expiry-alert';
 import { runCleanupAuditLogs } from '../runners/cleanup-audit-logs';
 import { runCleanupOldBackups } from '../runners/cleanup-old-backups';
 import { runDailyDbSnapshot } from '../runners/daily-db-snapshot';
+import { runDocumentArchiveCleanup } from '../runners/document-archive-cleanup';
 import { runGdprProcessDeletions } from '../runners/gdpr-process-deletions';
 import { runJobsWatchdog } from '../runners/jobs-watchdog';
 import { runKsefHealthCheck } from '../runners/ksef-health-check';
@@ -47,6 +49,10 @@ cronJob('cron.cert-expiry-alert', runCertExpiryAlert);
 cronJob('cron.cleanup-audit-logs', runCleanupAuditLogs, 1);
 cronJob('cron.cleanup-old-backups', runCleanupOldBackups);
 cronJob('cron.daily-db-snapshot', runDailyDbSnapshot);
+// Pliki wygasłych paczek archiwum (krok 6.4, część 2, 00190): przebieg idempotentny
+// (usunięcie obiektu i znacznik z warunkiem w funkcji bazy), więc domyślne 4 ponowienia
+// po błędzie magazynu biorą tylko pliki bez znacznika.
+cronJob('cron.document-archive-cleanup', runDocumentArchiveCleanup);
 cronJob('cron.gdpr-process-deletions', runGdprProcessDeletions);
 cronJob('cron.jobs-watchdog', runJobsWatchdog);
 cronJob('cron.ksef-health-check', runKsefHealthCheck);

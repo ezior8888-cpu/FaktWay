@@ -17,8 +17,10 @@ import {
   classifySendError,
   isContentRejection,
   SEND_ERROR_CODES,
+  sendVerdictIn,
   type SendErrorCode,
 } from '@/lib/ksef/send-error-codes';
+import { KsefInvoiceRejectedError } from '@/lib/ksef/submit';
 import { KSEF_MAX_RETRIES } from '../../retry-schedule';
 import {
   currentSubmissionState,
@@ -29,6 +31,21 @@ import {
 
 /** Znacznik `[KOD] ` na początku treści błędu — do zdjęcia przed zapisem `last_error`. */
 const HOLD_MARKER = /^\[[A-Z_]+\] /;
+
+/**
+ * F-093-STATUS: odrzucenie w statusie (kod 400–499 poza 440) w łańcuchu
+ * przyczyn błędu joba. Jego `customerMessage` z opisem i szczegółami KSeF
+ * idzie do kanałów klienta (`last_error`, zdarzenie dla e-maila), nie do logu
+ * ani audytu. 440 ma własne werdykty runnera.
+ */
+function statusRejectionIn(error: Error): KsefInvoiceRejectedError | null {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 8; depth += 1) {
+    if (current instanceof KsefInvoiceRejectedError) return current.isDuplicate ? null : current;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return null;
+}
 
 const ROZ_RECONCILIATION_MESSAGE =
   'Wysyłka faktur rozliczeniowych do KSeF jest tymczasowo wstrzymana — po zdjęciu blokady tej faktury sami nie wyślemy (co dalej — na dole strony).';
@@ -255,6 +272,20 @@ export async function onSubmitInvoiceExhausted(
         : HOLD_MARKER.test(error.message)
           ? error.message.replace(HOLD_MARKER, '')
           : `${error.name}: ${error.message}`;
+      // F-093-STATUS: przy odrzuceniu w statusie komunikat błędu to sam status
+      // (log, audyt). Klient dostaje na fakturę i w mailu opis i szczegóły
+      // z KSeF jak dotąd: to jego faktura i jedyna wskazówka, co poprawić.
+      // F-093-440: przy werdykcie 440 komunikat błędu to tekst operatora (log,
+      // audyt). Klient dostaje na fakturę i w mailu tekst werdyktu jak dotąd,
+      // z danymi pobranego oryginału: na nich decyduje, czy to ta sama sprzedaż.
+      // Ten sam tekst = ten sam klucz idempotencji maila.
+      const statusRejection = heldRoz ? null : statusRejectionIn(error);
+      const verdictCarrier = heldRoz ? null : sendVerdictIn(error);
+      const customerFailureMessage = statusRejection
+        ? `${error.name}: ${statusRejection.customerMessage}`
+        : verdictCarrier && failureMessage === verdictCarrier.message
+          ? verdictCarrier.customerMessage
+          : failureMessage;
 
       logger.error('Job wysyłki padł — klasyfikacja błędu', {
         tenantId,
@@ -337,7 +368,7 @@ export async function onSubmitInvoiceExhausted(
               invoiceId,
               tenantId,
               'failed',
-              `${failureMessage} (Offline24 ${offlineResult.reason})`,
+              `${customerFailureMessage} (Offline24 ${offlineResult.reason})`,
               code,
             ));
         }
@@ -359,7 +390,7 @@ export async function onSubmitInvoiceExhausted(
             invoiceId,
             tenantId,
             isBusinessRejection ? 'rejected' : 'failed',
-            failureMessage,
+            customerFailureMessage,
             code,
           ));
       }
@@ -408,7 +439,9 @@ export async function onSubmitInvoiceExhausted(
         data: {
           invoiceId,
           tenantId,
-          error: failureMessage,
+          // Kanały klienta: e-mail i powiadomienie „odrzucona”, karta FLO
+          // (F-093-STATUS i F-093-440: tu tekst klienta, jak w `last_error`).
+          error: customerFailureMessage,
           errorCode: code,
           environment: parsed.data.environment,
           fromOfflineQueue: data.fromOfflineQueue,
