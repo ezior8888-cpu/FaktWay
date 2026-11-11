@@ -127,6 +127,16 @@ describe('loadAppNotificationsAction', () => {
     ]);
   });
 
+  it('wpłata do faktury (00197) trafia do dzwonka z linkiem do faktury', async () => {
+    st.rows = [
+      { id: N1, kind: 'payment_received', title: 'Wpłata częściowa', body: '300,00 zł za FV/1/2026, pozostało do zapłaty 930,00 zł', link: '/invoices/i1', created_at: '2026-11-11T08:00:00Z', read_at: null },
+    ];
+    const wynik = await loadAppNotificationsAction();
+    expect(wynik.success && wynik.items.map((i) => [i.kind, i.title, i.link])).toEqual([
+      ['payment_received', 'Wpłata częściowa', '/invoices/i1'],
+    ]);
+  });
+
   it('bez sesji albo firmy: komunikat, bez zapytań', async () => {
     st.auth.mockRejectedValue(new ActionAuthError('Brak aktywnej organizacji'));
     await expect(loadAppNotificationsAction()).resolves.toEqual({ success: false, error: 'Brak aktywnej organizacji' });

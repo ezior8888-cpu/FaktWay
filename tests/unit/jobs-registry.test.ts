@@ -211,7 +211,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 60 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów + 2 kolejki dzwonka + sprzątanie plików archiwum)', () => {
+  it('KOMPLET: 61 jobów (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów + 3 kolejki dzwonka + sprzątanie plików archiwum)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -240,7 +240,10 @@ describe('rejestr jobów', () => {
     // z #595). Worker: 62 kolejek (60 + 2), cronów bez zmian („32/32 cronów”).
     // 60: od 11.11.2026 (krok 6.4, część 2) +1 job `document-archive-cleanup` (00190,
     // cron `cron.document-archive-cleanup` raz na dobę o 04:30). Worker: 63 kolejki, „33/33 cronów”.
-    expect(registered.length).toBe(60);
+    // 61: od 11.11.2026 (krok 8.1, część 3, 00197) +1 kolejka dzwonka
+    // `invoice.payment.received.bell`: drugi odbiorca zdarzenia „wpłata zapisana” (obok
+    // pusha), po jednym jobie na zapisaną wpłatę, bez cronów. Worker: 64 kolejki, „33/33 cronów”.
+    expect(registered.length).toBe(61);
   });
 
   it('paczka W: 3 joby webhooków publicznego API (krok 7.1, część 3)', () => {
@@ -256,9 +259,10 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('invoice.submit.succeeded.webhook')?.maxRetries).toBe(2);
   });
 
-  it('dzwonek: 2 kolejki wyniku wysyłki do KSeF (krok 8.1, część 2), ponowienia tylko na błąd bazy', () => {
+  it('dzwonek: 2 kolejki wyniku wysyłki do KSeF (krok 8.1, część 2) i kolejka wpłaty (część 3), ponowienia tylko na błąd bazy', () => {
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
-    for (const q of ['invoice.submit.succeeded.bell', 'invoice.submit.failed.bell']) {
+    // 2 → 3: wpłata do faktury (00197) to trzecia kolejka dzwonka.
+    for (const q of ['invoice.submit.succeeded.bell', 'invoice.submit.failed.bell', 'invoice.payment.received.bell']) {
       expect(queues, `brak ${q}`).toContain(q);
       // Wpis ma UNIQUE (00188), więc ponowienie od zera nie dubluje powiadomienia.
       expect(byQueue.get(q)?.maxRetries).toBe(2);

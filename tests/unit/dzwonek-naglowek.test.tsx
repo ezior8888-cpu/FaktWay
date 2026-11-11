@@ -232,6 +232,39 @@ describe('dzwonek: liczba, lista, oznaczanie', () => {
     }
   });
 
+  it('wpłata do faktury (00197): własna ikona, treść z kwotą i link do faktury', async () => {
+    const wplaty = [
+      {
+        id: 'n6',
+        kind: 'payment_received',
+        title: 'Otrzymana płatność',
+        body: '230,00 zł za FV/1/2026 od Acme Sp. z o.o., faktura opłacona w całości',
+        link: '/invoices/i1',
+        createdAt: '2026-11-11T10:00:00Z',
+        read: false,
+      },
+      {
+        id: 'n7',
+        kind: 'payment_received',
+        title: 'Wpłata częściowa',
+        body: '300,00 zł za FV/2/2026, pozostało do zapłaty 930,00 zł',
+        link: '/invoices/i2',
+        createdAt: '2026-11-11T09:00:00Z',
+        read: false,
+      },
+    ];
+    m.load.mockResolvedValue({ success: true, unread: 2, items: wplaty });
+    await render();
+    for (const item of wplaty) {
+      const link = [...document.body.querySelectorAll<HTMLAnchorElement>('a[role="menuitem"]')].find((a) =>
+        a.textContent?.includes(item.title),
+      );
+      expect(link?.getAttribute('href')).toBe(item.link);
+      expect(link?.textContent).toContain(item.body);
+      expect(link?.querySelector('svg')).not.toBeNull();
+    }
+  });
+
   it('otwarcie dzwonka czyta powiadomienia ponownie', async () => {
     await render(false);
     expect(m.load).toHaveBeenCalledTimes(1);
