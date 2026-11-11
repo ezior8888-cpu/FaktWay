@@ -11,6 +11,7 @@ import {
   SPLIT_PAYMENT_LABEL,
 } from '@/lib/invoices/annotations';
 import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
+import { RECEIPT_INVOICE_LABEL, receiptDetailsLine } from '@/lib/invoices/receipt-invoice';
 import { PUBLIC_SITE_DOMAIN, PUBLIC_SITE_URL } from '@/lib/site';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -51,6 +52,21 @@ export interface RenderInvoiceOptions {
   previewNotice?: string | null;
   /** Faktura korygowana — tylko dla korekt (`lib/pdf/invoice-data.ts`). */
   correctedInvoice?: CorrectedInvoiceRef | null;
+  /**
+   * Faktura do paragonu bez czytelnych danych paragonu (FP z importu KSeF):
+   * samo oznaczenie. FP z danymi niesie `invoice.receipt`.
+   */
+  receiptInvoiceMarker?: boolean;
+}
+
+/**
+ * Oznaczenie faktury do paragonu (krok 1.2) i dane paragonu z art. 106h ust. 1
+ * ustawy o VAT (numer dokumentu, numer unikatowy kasy) z datą paragonu.
+ * W XML to `Fa/FP` = 1 i `Fa/DodatkowyOpis`; nabywca spoza KSeF ma tylko PDF.
+ */
+export function receiptInvoiceLines(invoice: Invoice, marker = false): string[] {
+  if (invoice.receipt) return [RECEIPT_INVOICE_LABEL, receiptDetailsLine(invoice.receipt, fmtDate)];
+  return marker ? [RECEIPT_INVOICE_LABEL] : [];
 }
 
 /** Dane faktury, której dotyczy korekta (w XML: `DaneFaKorygowanej`). */
@@ -173,6 +189,7 @@ export async function renderInvoicePdf(
     drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, left, pageWidth);
     drawPreviewNotice(doc, opts.previewNotice, left, pageWidth);
     drawCorrectedInvoice(doc, opts.correctedInvoice, left, pageWidth);
+    drawReceiptInvoice(doc, receiptInvoiceLines(invoice, opts.receiptInvoiceMarker === true), left, pageWidth);
     drawParties(doc, invoice, left, pageWidth);
     drawLineItems(doc, invoice, left, pageWidth);
     drawVatSummary(doc, invoice, left, pageWidth);
@@ -313,6 +330,19 @@ function drawCorrectedInvoice(
   for (const line of lines.slice(1)) {
     doc.text(line, left, doc.y + 2, { width });
   }
+  doc.y += 12;
+}
+
+/** Blok „Faktura do paragonu” pod nagłówkiem, jak blok faktury korygowanej. */
+function drawReceiptInvoice(doc: Doc, lines: string[], left: number, width: number): void {
+  if (lines.length === 0) return;
+  doc.font('bold').fontSize(10).fillColor('#111111');
+  doc.text(lines[0]!, left, doc.y, { width });
+  doc.font('body').fontSize(8.5).fillColor('#444444');
+  for (const line of lines.slice(1)) {
+    doc.text(line, left, doc.y + 2, { width });
+  }
+  doc.fillColor('#222222');
   doc.y += 12;
 }
 
