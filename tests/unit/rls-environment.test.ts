@@ -137,6 +137,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-identyfikator-zbiorczy.test.ts',
       // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF.
       'tests/rls-uprawnienia-ksef.test.ts',
+      // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
+      'tests/rls-dzwonek-wplaty.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

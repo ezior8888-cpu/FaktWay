@@ -137,6 +137,10 @@ export default defineConfig({
       // rezerwacja, przejęcie po 5 minutach, żeton i numery operacji, krok kodu, tylko właściciel,
       // izolacja firm, wyzwalacz przejść stanów.
       'tests/rls-uprawnienia-ksef.test.ts',
+      // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury;
+      // prawdziwe RPC wpłat z sesji, runner kolejki przez PostgREST, odbiorcy, ponowienie bez dubla,
+      // stan po wpłacie, wpłata cofnięta i usunięta, obca firma, CHECK rodzajów.
+      'tests/rls-dzwonek-wplaty.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

@@ -187,6 +187,15 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
       'invoice.submit.failed.bell',
     ]);
   });
+
+  it('fan-out: wpłata do faktury trafia do DWÓCH kolejek (push i dzwonek)', () => {
+    // 1 → 2: wpis w dzwonku przy wpłacie (krok 8.1 planu kompletnej aplikacji,
+    // część 3, 00197) to osobny odbiorca tego samego zdarzenia; push bez zmian.
+    expect(queuesForEvent('invoice/payment.received')).toEqual([
+      'invoice.payment.received',
+      'invoice.payment.received.bell',
+    ]);
+  });
 });
 
 describe('CRON_JOBS', () => {

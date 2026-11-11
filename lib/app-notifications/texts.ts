@@ -100,6 +100,43 @@ export function invoiceRejectedNotification(input: {
 }
 
 /**
+ * Wpłata zapisana przy fakturze sprzedaży (krok 8.1, część 3, 00197). Tytuł
+ * mówi o stanie faktury PO tej wpłacie: „Otrzymana płatność”, gdy nic nie
+ * zostało do zapłaty, inaczej „Wpłata częściowa” z pozostałą sumą. Klucz to
+ * wpłata: jedna wpłata ma najwyżej jeden wpis, nawet gdy ponowienie zadania
+ * policzy stan inaczej (np. po cofnięciu innej wpłaty w międzyczasie).
+ *
+ * Kwoty w walucie faktury: wpłaty z „Zapisz wpłatę” są tylko w PLN (00176),
+ * ale „Zapłacone” (00158) oznacza też fakturę walutową na całą resztę.
+ */
+export function paymentReceivedNotification(input: {
+  tenantId: string;
+  invoiceId: string;
+  paymentId: string;
+  invoiceNumber: string | null;
+  buyerName: string | null;
+  amount: number;
+  /** Do zapłaty po tej wpłacie, już zaokrąglone do groszy (`outstandingOf`); 0 = opłacona. */
+  remaining: number;
+  currency: string;
+}): AppNotificationInput {
+  const number = input.invoiceNumber?.trim();
+  const buyer = input.buyerName?.trim();
+  const paid = `${money(input.amount, input.currency)} za ${number || 'fakturę bez numeru'}${buyer ? ` od ${buyer}` : ''}`;
+  const fullyPaid = input.remaining <= 0;
+  return {
+    tenantId: input.tenantId,
+    kind: 'payment_received',
+    objectKey: input.paymentId,
+    title: fullyPaid ? 'Otrzymana płatność' : 'Wpłata częściowa',
+    body: fullyPaid
+      ? `${paid}, faktura opłacona w całości`
+      : `${paid}, pozostało do zapłaty ${money(input.remaining, input.currency)}`,
+    link: `/invoices/${input.invoiceId}`,
+  };
+}
+
+/**
  * Termin podatku albo składek z kalendarza modułu księgowości: tytuł, treść
  * i link przypomnienia (`trescTerminu`), klucz jak w `tax_notifications`
  * (rozliczenie i etap, np. `2026-10:termin-5:2026-11-20`).
