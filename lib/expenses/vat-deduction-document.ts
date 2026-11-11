@@ -139,8 +139,8 @@ export interface CostDocumentRow {
 
 /**
  * Rodzaj dokumentu kosztu z wiersza `expenses`. OCR zapisuje paragon z NIP
- * (fakturę uproszczoną) jako `invoice` (`process-ocr.ts`), a rozpoznany
- * rodzaj zostaje w `ocr_extracted_data.document_type`. Koszt z KSeF to
+ * jako `simplified_invoice`; wiersze sprzed tej zmiany mają `invoice`, a
+ * rozpoznany rodzaj zostaje w `ocr_extracted_data.document_type`. Koszt z KSeF to
  * faktura z KSeF, więc liczy się zapisany rodzaj.
  */
 export function costDocumentType(row: CostDocumentRow): string {

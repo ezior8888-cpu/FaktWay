@@ -505,8 +505,9 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
         if (existing) return { fresh: false, expense: existing };
 
         const data = extractedData;
-        const docType =
-          data.document_type === 'simplified_invoice' ? 'invoice' : data.document_type;
+        // Rodzaj zgodny z rozpoznaniem; paragon z NIP zostaje `simplified_invoice`
+        // (kolumna bez CHECK; `VAT_DEDUCTIBLE_DOCUMENTS` traktuje go jak fakturę).
+        const docType = data.document_type;
         // Firma zwolniona z VAT (#60) nie odlicza VAT-u: koszt w KPiR wychodzi
         // wtedy brutto (#65), a JPK nic nie odlicza. Odczyt odporny przed 00091.
         // Tylko zwolnienie podmiotowe (art. 113) odbiera odliczenie — I2, AUD-68.
