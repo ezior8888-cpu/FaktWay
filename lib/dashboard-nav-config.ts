@@ -7,7 +7,6 @@ import {
   RiDashboardLine,
   RiDraftLine,
   RiExchangeFundsLine,
-  RiFileAddLine,
   RiFileList3Line,
   RiFileTextLine,
   RiMoreLine,
@@ -72,8 +71,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
   {
     title: "Sprzedaż",
     items: [
+      // Kreator nie ma tu pozycji: od 11.11.2026 prowadzi do niego przycisk
+      // „Nowa faktura” pod logo (`dashboardNewInvoiceAction`).
       { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
-      { href: "/invoices/new", label: "Wystaw fakturę", icon: RiFileAddLine },
       { href: "/contractors", label: "Kontrahenci", icon: RiContactsBook3Line },
       // Plan kompletnej aplikacji, krok 2.9: noty obciążeniowe i uznaniowe. Osobna
       // pozycja na końcu sekcji, a nie zakładka „Rodzaje faktur”, bo nota nie jest
@@ -97,6 +97,17 @@ export const dashboardNavSections: DashboardNavSection[] = [
     ],
   },
 ];
+
+/**
+ * Przycisk „Nowa faktura” pod logo paska bocznego (poprawka Bartosza
+ * 11.11.2026, zastąpił pozycję „Wystaw fakturę”). To akcja, nie miejsce:
+ * nie świeci jak pozycja menu; na kreatorze ma tylko `aria-current`.
+ */
+export const dashboardNewInvoiceAction: DashboardNavItem = {
+  href: "/invoices/new",
+  label: "Nowa faktura",
+  icon: RiAddLine,
+};
 
 /** Ustawienia — stopka sidebara, arkusz „Więcej" i ⌘K (poza sekcjami). */
 export const dashboardSettingsNavItem: DashboardNavItem = {
@@ -175,7 +186,8 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
   }
   // „Faktury" to lista, podgląd faktury i zakładki ekranu Faktur: cykliczne
   // (/invoices/recurring*) i po terminie (/payments/overdue*). Kreator
-  // (/invoices/new*) ma własną pozycję „Wystaw fakturę”.
+  // (/invoices/new*) nie: tam prowadzi przycisk „Nowa faktura” w pasku
+  // bocznym i plus dolnego paska, a ten świeciłby razem z „Faktury”.
   if (href === "/invoices") {
     if (pathname === "/invoices/new" || pathname.startsWith("/invoices/new/")) {
       return false;

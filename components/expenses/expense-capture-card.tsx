@@ -1,37 +1,32 @@
 'use client';
 
-import { RiCameraLine, RiImageLine, RiLoader4Line, RiReceiptLine } from '@remixicon/react';
+import { RiCameraLine, RiImageLine, RiLoader4Line } from '@remixicon/react';
 
 import { useExpenseCapture } from '@/components/expenses/use-expense-capture';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 
 /**
- * Kafel „Wydatek” na ekranie wyboru dokumentu (`/invoices/new`), w układzie
- * kart rodzajów faktur (poprawka Bartosza 25.10.2026: plus dolnego paska
- * prowadzi tutaj, a na telefonie ludzie głównie wrzucają koszty).
+ * Pas „Wydatek” na ekranie wyboru dokumentu (`/invoices/new`). Plus dolnego
+ * paska telefonu prowadzi tutaj, a na telefonie ludzie głównie wrzucają koszty
+ * (poprawka Bartosza 25.10.2026), więc pas stoi tam na górze.
+ *
+ * Od 11.11.2026 to niski pas pod kartami faktur, nie szósty kafel: tekst po
+ * lewej, przyciski po prawej (na telefonie pod tekstem, na całą szerokość).
  *
  * Wgranie, odczyt i przejście do rozpoznanego wydatku robi ten sam hak co
  * „+ Dodaj wydatek” na Kosztach (`useExpenseCapture`). Przyciski wołają
- * `click()` pola pliku wprost w obsłudze dotknięcia — inaczej iOS nie otworzy
+ * `click()` pola pliku wprost w obsłudze dotknięcia, inaczej iOS nie otworzy
  * aparatu.
  */
 export function ExpenseCaptureCard() {
   const { state, busy, openCamera, openGallery, inputs } = useExpenseCapture();
 
   return (
-    <Card className="h-full shadow-none">
-      <CardHeader>
-        <Avatar className="size-9.5 after:border-0">
-          <AvatarFallback className="bg-primary/10 text-primary size-9.5 shrink-0 [&>svg]:size-4.75">
-            <RiReceiptLine />
-          </AvatarFallback>
-        </Avatar>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-1">
-        <h2 className="text-lg font-semibold">Wydatek</h2>
-        <p className="text-muted-foreground text-sm">
+    <Card className="flex-col gap-4 px-5 py-5 shadow-none sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="min-w-0 space-y-1">
+        <h2 className="text-base font-semibold tracking-tight">Wydatek</h2>
+        <p className="text-muted-foreground text-sm leading-relaxed">
           Zdjęcie paragonu albo faktury kosztowej. Dane odczytamy sami.
         </p>
         {state.kind === 'failed' ? (
@@ -39,9 +34,9 @@ export function ExpenseCaptureCard() {
             {state.error}
           </p>
         ) : null}
-      </CardContent>
-      <CardFooter className="flex-wrap gap-2">
-        <Button onClick={openCamera} disabled={busy}>
+      </div>
+      <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
+        <Button size="lg" onClick={openCamera} disabled={busy}>
           {busy ? (
             <>
               <RiLoader4Line aria-hidden className="animate-spin" />
@@ -54,11 +49,11 @@ export function ExpenseCaptureCard() {
             </>
           )}
         </Button>
-        <Button variant="outline" onClick={openGallery} disabled={busy}>
+        <Button size="lg" variant="outline" onClick={openGallery} disabled={busy}>
           <RiImageLine aria-hidden />
           Wybierz plik
         </Button>
-      </CardFooter>
+      </div>
       {inputs}
     </Card>
   );
