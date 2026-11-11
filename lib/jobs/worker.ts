@@ -37,6 +37,8 @@ import './handlers/package-c';
 import './handlers/package-d';
 import './handlers/flo-tick';
 import './handlers/ops-heartbeat';
+// Dzwonek w aplikacji (plan kompletnej aplikacji, krok 8.1, część 2, 00188).
+import './handlers/app-notifications';
 
 const log = createJobLogger('worker');
 

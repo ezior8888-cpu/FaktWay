@@ -73,6 +73,10 @@ export default defineConfig({
       // 00173 (plan księgowości JDG, K7.4): spis z natury; jeden na dzień, data od 31.12.2025, bez UPDATE,
       // role i izolacja jak w 00167.
       'tests/rls-ksiegowosc-spis.test.ts',
+      // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji; wpis dla każdego
+      // aktywnego członka firmy, UNIQUE bez dubli przy ponowieniu, odczyt tylko własnych wpisów aktywnej
+      // firmy, bez zapisu kluczem użytkownika, oznaczanie tylko przez RPC, CHECK linku.
+      'tests/rls-powiadomienia-w-aplikacji.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

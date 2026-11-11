@@ -19,6 +19,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { archiveInboxInvoiceXml } from '@/lib/ksef/inbox-xml';
 import { fa3Record, INBOX_PENDING_FLAG, markInboxInvoiceProcessed } from '@/lib/ksef/inbox-pending';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { publishAppNotification } from '@/lib/app-notifications/publish';
+import { inboxNewNotification } from '@/lib/app-notifications/texts';
 import type { Database, Json } from '@/types/database';
 
 import { inboxInvoiceReceivedAutoCategorize } from '../events';
@@ -328,7 +330,7 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
       return categorizeExpense(tenantId, unsignedForCategorization(amountsForCategory));
     });
 
-    await step.run('create-expense', async () => {
+    const created = await step.run('create-expense', async () => {
       // fetch-invoice may have been memoized before a deployment switched the
       // KSeF environment. Recheck the actual invoice before the financial write.
       if (environment !== requireConfiguredKsefEnvironment()) {
@@ -461,6 +463,26 @@ export async function runAutoCategorizeInbox(data: Parameters<typeof inboxInvoic
 
       return { skipped: false as const, expenseId: expense.id };
     });
+
+    // Dzwonek (plan kompletnej aplikacji, krok 8.1, część 2, 00188): „Nowa
+    // faktura zakupu” z linkiem do kosztu, tylko gdy ten przebieg go utworzył.
+    // Fail-open: błąd zapisu idzie do logu i Sentry, koszt i domknięcie
+    // skrzynki bez zmian. Ponowienie od zera widzi koszt (`hasExpense`) i tu nie
+    // dochodzi; ten sam klucz (faktura) i tak nie doda drugiego wpisu (UNIQUE).
+    if (!created.skipped) {
+      await publishAppNotification(
+        inboxNewNotification({
+          tenantId,
+          invoiceId,
+          expenseId: String(created.expenseId),
+          documentNumber: extracted.document_number,
+          sellerName: extracted.seller_name,
+          grossAmount: extracted.gross_amount,
+          currency,
+        }),
+        { db: supabase, logger },
+      );
+    }
 
     // K2 (rewizja 03.10.2026): domknięcie przebiegu. Odbiór skrzynki zapala
     // `fa3_data._pendingFullFetch`; cron `inbox-backfill` emituje zdarzenie

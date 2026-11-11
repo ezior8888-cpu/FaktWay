@@ -16,6 +16,7 @@ import '@/lib/jobs/handlers/package-a';
 import '@/lib/jobs/handlers/package-b';
 import '@/lib/jobs/handlers/package-c';
 import '@/lib/jobs/handlers/package-d';
+import '@/lib/jobs/handlers/app-notifications';
 
 const registered = getRegisteredJobs();
 const queues = registered.map((j) => j.queue);
@@ -196,7 +197,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 52 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości)', () => {
+  it('KOMPLET: 54 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + 2 kolejki dzwonka)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -210,7 +211,21 @@ describe('rejestr jobów', () => {
     // 52: od K5 księgowości (07.11.2026) — +2 crony `cron.ksiegowosc-miesiac`
     // i `cron.ksiegowosc-terminy` (pętla po firmach pilotażu, bez kolejki
     // fan-out; plan, sekcja 9). Worker: 56 kolejek, „31/31 cronów”.
-    expect(registered.length).toBe(52);
+    // 54: od dzwonka w aplikacji (plan kompletnej aplikacji, krok 8.1, część 2,
+    // 00188) — +2 kolejki zdarzeń wyniku wysyłki do KSeF:
+    // `invoice.submit.succeeded.bell` i `invoice.submit.failed.bell` (po jednym
+    // jobie na wysłaną fakturę, bez cronów; wzór trzeciej kolejki webhooków
+    // z #595). Worker: 58 kolejek, cronów bez zmian („31/31 cronów”).
+    expect(registered.length).toBe(54);
+  });
+
+  it('dzwonek: 2 kolejki wyniku wysyłki do KSeF (krok 8.1, część 2), ponowienia tylko na błąd bazy', () => {
+    const byQueue = new Map(registered.map((j) => [j.queue, j]));
+    for (const q of ['invoice.submit.succeeded.bell', 'invoice.submit.failed.bell']) {
+      expect(queues, `brak ${q}`).toContain(q);
+      // Wpis ma UNIQUE (00188), więc ponowienie od zera nie dubluje powiadomienia.
+      expect(byQueue.get(q)?.maxRetries).toBe(2);
+    }
   });
 
   it('parytet limitów równoległości paczki C', () => {

@@ -155,10 +155,6 @@
     "myslniki": 2,
     "plakietki": 0
   },
-  "components/dashboard/notification-dropdown.tsx": {
-    "myslniki": 1,
-    "plakietki": 0
-  },
   "components/dashboard/pulpit/recent-invoices-card.tsx": {
     "myslniki": 3,
     "plakietki": 0

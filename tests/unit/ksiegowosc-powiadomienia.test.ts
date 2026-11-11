@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   odczytyFirm: 0,
   zwolnienie: null as string | null,
   vatWKodzie: true,
+  // Dzwonek w aplikacji (krok 8.1 planu kompletnej aplikacji, część 2, 00188).
+  dzwonek: [] as { fn: string; args: Record<string, unknown> }[],
+  bladDzwonka: null as { message: string } | null,
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
@@ -103,6 +106,11 @@ const baza = {
     };
   },
   auth: { admin: { getUserById: async () => ({ data: { user: { email: 'wlasciciel@faktway.test' } }, error: null }) } },
+  // Zapis w dzwonku (00188): UNIQUE i ON CONFLICT sprawdza test na bazie, tu tylko wywołanie.
+  rpc: async (fn: string, args: Record<string, unknown>) => {
+    mocks.dzwonek.push({ fn, args });
+    return mocks.bladDzwonka ? { data: null, error: mocks.bladDzwonka } : { data: 1, error: null };
+  },
 };
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => baza }));
 
@@ -135,6 +143,8 @@ beforeEach(() => {
   mocks.odczytyFirm = 0;
   mocks.zwolnienie = null;
   mocks.vatWKodzie = true;
+  mocks.dzwonek = [];
+  mocks.bladDzwonka = null;
 });
 
 describe('cron.ksiegowosc-miesiac', () => {
@@ -275,5 +285,46 @@ describe('cron.ksiegowosc-terminy', () => {
     expect(mocks.pushe[0].payload.body).toBe(
       'Jutro, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt, składki społeczne, składka zdrowotna.',
     );
+  });
+});
+
+describe('dzwonek w aplikacji: termin podatku (krok 8.1 planu kompletnej aplikacji, część 2, 00188)', () => {
+  it('po wysłanym przypomnieniu: ten sam tekst w dzwonku firmy, klucz = rozliczenie i etap; drugi przebieg bez zapisu', async () => {
+    mocks.dzis = '2026-11-15';
+    await runKsiegowoscTerminy(ctx);
+    await runKsiegowoscTerminy(ctx);
+    expect(mocks.dzwonek).toEqual([
+      {
+        fn: 'app_notification_publish',
+        args: {
+          p_tenant_id: 't1',
+          p_kind: 'tax_deadline',
+          p_object_key: '2026-10:termin-5:2026-11-20',
+          p_title: 'Termin 20.11.2026: rozliczenie za październik 2026',
+          p_body: 'Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składki społeczne 1926,76 zł, składka zdrowotna 830,58 zł.',
+          p_link: '/reports/ten-miesiac?month=10&year=2026',
+        },
+      },
+    ]);
+  });
+
+  it('błąd zapisu w dzwonku nie przerywa przypomnienia: push i mail wyszły, wpis „sent”, bez ponowienia', async () => {
+    mocks.dzis = '2026-11-15';
+    mocks.bladDzwonka = { message: 'relation "app_notifications" does not exist' };
+    await expect(runKsiegowoscTerminy(ctx)).resolves.toMatchObject({ wyslane: 1 });
+    expect(mocks.dzwonek).toHaveLength(1);
+    expect(mocks.pushe).toHaveLength(1);
+    expect(mocks.wpisy.get('t1|2026-10|termin-5:2026-11-20')).toMatchObject({ status: 'sent' });
+  });
+
+  it('moduł wyłączony: bez wpisu; rozliczenie „wyliczone” (cron miesiąca) nie trafia do dzwonka', async () => {
+    mocks.dzis = '2026-11-15';
+    mocks.wlaczony = false;
+    await runKsiegowoscTerminy(ctx);
+    mocks.wlaczony = true;
+    mocks.dzis = '2026-11-02';
+    await runKsiegowoscMiesiac(ctx);
+    expect(mocks.pushe).toHaveLength(1);
+    expect(mocks.dzwonek).toEqual([]);
   });
 });
