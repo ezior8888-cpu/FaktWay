@@ -116,7 +116,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-api-klucze.test.ts',
       // 00184 (krok 7.1, część 2): wystawianie faktur kluczem API.
       'tests/rls-api-wystawianie.test.ts',
-      // 00186 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu.
+      // 00189 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu.
       'tests/rls-wyciag-podatki.test.ts',
       // 00187 (krok 7.1, część 3): webhooki i dziennik dostaw.
       'tests/rls-webhooki.test.ts',

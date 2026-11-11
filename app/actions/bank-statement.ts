@@ -58,7 +58,7 @@ import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabas
  * `lib/import/bank/`), do bazy idą wpływy w złotych z kluczem duplikatu,
  * a przy włączonym module księgowości także przelewy do ZUS (rachunek
  * składkowy z ustawień podatkowych) i na mikrorachunek z NIP firmy (krok 3.2,
- * część 2, 00186). Innych wypływów i innych walut nie zapisujemy (RODO:
+ * część 2, 00189). Innych wypływów i innych walut nie zapisujemy (RODO:
  * przechowujemy tylko operacje potrzebne do dopasowania).
  *
  * Zapłata rozliczenia z wyciągu (`confirmBankTaxPaymentAction`) idzie tą samą
@@ -79,7 +79,7 @@ import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabas
  */
 
 type RpcResult = PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>;
-/** Funkcje z 00180 i 00186; do czasu typów z produkcji (`types/database.ts`) przez ten kształt. */
+/** Funkcje z 00180 i 00189; do czasu typów z produkcji (`types/database.ts`) przez ten kształt. */
 interface BankRpc {
   rpc(fn: 'import_bank_operations', args: { p_file_format: string; p_operations: BankOperationRow[] }): RpcResult;
   rpc(fn: 'confirm_bank_operation', args: { p_operation_id: string; p_invoice_id: string; p_match_kind: MatchKind }): RpcResult;
@@ -100,7 +100,7 @@ interface BankOperationRow {
   counterparty_account: string | null;
   title: string | null;
   reference: string | null;
-  /** Tylko przy przelewie do ZUS albo urzędu (00186); wpływ nie ma tego pola. */
+  /** Tylko przy przelewie do ZUS albo urzędu (00189); wpływ nie ma tego pola. */
   tax_kind?: RodzajPrzelewu;
 }
 
@@ -330,7 +330,7 @@ export async function undoBankOperationAction(operationId: string): Promise<Bank
   return { success: true, status: 'undone', message: undoneText(money(result.amount)) };
 }
 
-// ─── Przelewy do ZUS i urzędu jako zapłaty rozliczeń (00186) ─────────────
+// ─── Przelewy do ZUS i urzędu jako zapłaty rozliczeń (00189) ─────────────
 
 /** Zapłaty rozliczeń oznacza owner/admin, jak „Zapłacone” w „Ten miesiąc” (polityka UPDATE z 00168). */
 async function authorizedTax(): Promise<{ ctx: AuthContext } | { error: string }> {

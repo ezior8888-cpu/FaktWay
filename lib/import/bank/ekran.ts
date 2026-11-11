@@ -67,7 +67,7 @@ export type ImportBankStatementResult =
       debitsSkipped: number;
       /** Wpływy w innej walucie niż PLN: wpłaty zapisujemy dziś tylko w złotych. */
       otherCurrencySkipped: number;
-      /** Przelewy do ZUS i na mikrorachunek (moduł księgowości włączony, 00186): nowe i wgrane wcześniej. */
+      /** Przelewy do ZUS i na mikrorachunek (moduł księgowości włączony, 00189): nowe i wgrane wcześniej. */
       tax?: { inserted: number; duplicates: number };
       /** Moduł włączony, ale rachunków firmy nie udało się odczytać: przelewów podatkowych nie rozpoznaliśmy. */
       taxUnavailable?: true;
@@ -265,7 +265,7 @@ export function parseBankOperationsRpc(data: unknown): BankOperationsData | null
     if (typeof row.id !== 'string' || !isDay(row.booking_date) || amountGrosze === null || (row.state !== 'confirmed' && row.state !== 'skipped')) {
       return null;
     }
-    // Pominięty przelew do ZUS albo urzędu (00186) ma własną listę w zapłatach rozliczeń, nie przy wpłatach do faktur.
+    // Pominięty przelew do ZUS albo urzędu (00189) ma własną listę w zapłatach rozliczeń, nie przy wpłatach do faktur.
     if (amountGrosze < 0) continue;
     decided.push({
       id: row.id,

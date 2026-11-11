@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- 00186: przelewy do ZUS i urzędu skarbowego z wyciągu jako zapłaty rozliczeń
+-- 00189: przelewy do ZUS i urzędu skarbowego z wyciągu jako zapłaty rozliczeń
 -- modułu księgowości (plan kompletnej aplikacji, krok 3.2, część 2; po 00180).
 --
 -- Wypływ z pliku z banku trafia do `payment_imports` tylko jako przelew na
@@ -48,11 +48,11 @@ ALTER TABLE public.payment_imports
   ADD COLUMN IF NOT EXISTS tax_marked_ids uuid[];
 
 COMMENT ON COLUMN public.payment_imports.tax_kind IS
-  'Przelew z wyciągu do ZUS (zus) albo na mikrorachunek podatkowy (us), 00186; wpływ ma NULL. Niezmienny.';
+  'Przelew z wyciągu do ZUS (zus) albo na mikrorachunek podatkowy (us), 00189; wpływ ma NULL. Niezmienny.';
 COMMENT ON COLUMN public.payment_imports.tax_settlement_ids IS
-  'Rozliczenia (tax_settlements) zapłacone tym przelewem po „Potwierdź” (00186), rosnąco; NULL przed potwierdzeniem i po cofnięciu.';
+  'Rozliczenia (tax_settlements) zapłacone tym przelewem po „Potwierdź” (00189), rosnąco; NULL przed potwierdzeniem i po cofnięciu.';
 COMMENT ON COLUMN public.payment_imports.tax_marked_ids IS
-  'Rozliczenia, które potwierdzenie oznaczyło jako zapłacone (wcześniej zatwierdzone); cofnięcie oddaje im stan (00186).';
+  'Rozliczenia, które potwierdzenie oznaczyło jako zapłacone (wcześniej zatwierdzone); cofnięcie oddaje im stan (00189).';
 
 -- DROP CONSTRAINT IF EXISTS tylko dla CHECK-ów z tej migracji, żeby dało się ją powtórzyć.
 ALTER TABLE public.payment_imports DROP CONSTRAINT IF EXISTS payment_imports_tax_kind_check;
@@ -251,7 +251,7 @@ $$;
 COMMENT ON FUNCTION public.import_bank_operations(text, jsonb) IS
   'Wgrywa z pliku z banku wpływy w złotych i (przy włączonym module księgowości) przelewy na rachunek składkowy ZUS '
   'i mikrorachunek firmy do payment_imports aktywnej firmy: najpierw sprawdza całą paczkę, duplikaty po kluczu pomija, '
-  'audyt bez danych osób trzecich (00180, 00186).';
+  'audyt bez danych osób trzecich (00180, 00189).';
 
 -- 4. Pominięcie: jak w 00180, ale potwierdzona zapłata rozliczenia najpierw wymaga „Cofnij”.
 CREATE OR REPLACE FUNCTION public.skip_bank_operation(p_operation_id uuid)
@@ -326,7 +326,7 @@ $$;
 
 COMMENT ON FUNCTION public.skip_bank_operation(uuid) IS
   'Pomija operację z wyciągu i usuwa dane osób trzecich (tytuł, nazwa, rachunek, NIP, referencja); potwierdzona wpłata '
-  'albo zapłata rozliczenia najpierw wymaga cofnięcia; audyt bez tych danych (00180, 00186).';
+  'albo zapłata rozliczenia najpierw wymaga cofnięcia; audyt bez tych danych (00180, 00189).';
 
 -- 5. Lista przelewów podatkowych dla ekranu „Bank”: do sprawdzenia (najwyżej 300), ostatnie
 --    decyzje (50) i wszystkie potwierdzone zapłaty (jedno rozliczenie, jeden przelew). Czytają
@@ -402,7 +402,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.bank_tax_operations() IS
-  'Przelewy do ZUS i urzędu z wyciągów aktywnej firmy: do sprawdzenia, ostatnie decyzje i potwierdzone zapłaty rozliczeń (00186).';
+  'Przelewy do ZUS i urzędu z wyciągów aktywnej firmy: do sprawdzenia, ostatnie decyzje i potwierdzone zapłaty rozliczeń (00189).';
 
 -- 6. Potwierdzenie przelewu jako zapłaty rozliczenia. Wynik: `confirmed`, `already_confirmed`
 --    albo `refused` z `code`. Kolejność blokad: operacja, potem rozliczenia po id.
@@ -577,7 +577,7 @@ $$;
 COMMENT ON FUNCTION public.confirm_bank_tax_payment(uuid, uuid[], text) IS
   'Potwierdza przelew z wyciągu do ZUS albo urzędu jako zapłatę rozliczeń (najnowsze wersje, jeden okres): status zapłacone '
   'z dniem księgowania dla niezapłaconych, połączenie z operacją, audyt tax_settlement.paid i bank.tax_payment_confirmed, '
-  'jedna transakcja (00186).';
+  'jedna transakcja (00189).';
 
 -- 7. Cofnięcie potwierdzenia: rozliczenia oznaczone przez to potwierdzenie i niezmienione
 --    od tego czasu wracają do „zatwierdzone”; zmienione zostają; operacja wraca do sprawdzenia.
@@ -667,7 +667,7 @@ $$;
 
 COMMENT ON FUNCTION public.undo_bank_tax_payment(uuid) IS
   'Cofa potwierdzenie zapłaty rozliczenia z wyciągu: oznaczone nim i niezmienione rozliczenia wracają do zatwierdzone, '
-  'operacja do sprawdzenia; audyt tax_settlement.unpaid i bank.tax_payment_undone (00186).';
+  'operacja do sprawdzenia; audyt tax_settlement.unpaid i bank.tax_payment_undone (00189).';
 
 -- 8. Uprawnienia. Supabase nadaje EXECUTE rolom anon i authenticated jawnie, samo
 --    FROM PUBLIC nic nie odbiera (AUD-30). Zastąpione funkcje dostają te same uprawnienia co w 00180.

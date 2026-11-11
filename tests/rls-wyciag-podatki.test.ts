@@ -8,7 +8,7 @@ import { getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
  * Przelewy do ZUS i urzędu skarbowego z wyciągu jako zapłaty rozliczeń modułu
- * księgowości (plan kompletnej aplikacji, krok 3.2, część 2, migracja 00186)
+ * księgowości (plan kompletnej aplikacji, krok 3.2, część 2, migracja 00189)
  * na prawdziwym Postgresie i PostgREST: `import_bank_operations` z przelewami
  * podatkowymi, `bank_tax_operations`, `confirm_bank_tax_payment`,
  * `undo_bank_tax_payment` i `skip_bank_operation` razem z wyzwalaczem
@@ -35,8 +35,8 @@ const admin: SupabaseClient = environment
   ? createClient(environment.url, environment.serviceRoleKey)
   : (null as unknown as SupabaseClient);
 
-const ORG_A = '00186186-0000-4000-8000-00000000000a';
-const ORG_B = '00186186-0000-4000-8000-00000000000b';
+const ORG_A = '00189186-0000-4000-8000-00000000000a';
+const ORG_B = '00189186-0000-4000-8000-00000000000b';
 const EMAILS = {
   owner: 'rls-podatki-owner@ksef-saas.test',
   member: 'rls-podatki-member@ksef-saas.test',
@@ -93,7 +93,7 @@ async function signedIn(who: keyof typeof EMAILS, activeOrg: string = ORG_A): Pr
 /** Zatwierdzone rozliczenie za wrzesień 2026 (wszystkie kolumny NOT NULL). */
 async function rozliczenie(fields: Record<string, unknown>): Promise<string> {
   counter += 1;
-  const id = `00186186-2222-4000-8000-${String(counter).padStart(12, '0')}`;
+  const id = `00189186-2222-4000-8000-${String(counter).padStart(12, '0')}`;
   const { error } = await admin.from('tax_settlements').insert({
     id,
     tenant_id: ORG_A,
@@ -103,7 +103,7 @@ async function rozliczenie(fields: Record<string, unknown>): Promise<string> {
     kwota_gr: 120000,
     termin: '2026-10-20',
     migawka: { wejscia: { test: true }, spoleczneBezFpGr: 0 },
-    parametry_wersja: 'test00186',
+    parametry_wersja: 'test00189',
     wejscia_hash: 'a'.repeat(64),
     ...fields,
   });
@@ -193,7 +193,7 @@ async function cleanup() {
   }
 }
 
-describe.skipIf(!hasDatabase)('Przelewy do ZUS i urzędu z wyciągu (00186)', () => {
+describe.skipIf(!hasDatabase)('Przelewy do ZUS i urzędu z wyciągu (00189)', () => {
   beforeAll(async () => {
     for (const who of Object.keys(EMAILS) as Array<keyof typeof EMAILS>) {
       users[who] = await userId(EMAILS[who]);

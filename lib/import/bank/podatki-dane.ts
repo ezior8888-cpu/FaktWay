@@ -3,7 +3,7 @@
  * kompletnej aplikacji, krok 3.2, część 2): wyłącznik modułu, rachunki firmy
  * do rozpoznania przelewu, rozliczenia z „Ten miesiąc” i dane ekranu „Bank”.
  * Klient z sesji (RLS); `payment_imports` czytamy tylko przez RPC
- * `bank_tax_operations` (00186), bo tabela jest zamknięta dla sesji (00074).
+ * `bank_tax_operations` (00189), bo tabela jest zamknięta dla sesji (00074).
  *
  * Moduł księgowości tylko czytamy: rachunki liczą jego funkcje
  * (`czytajWersjeProfilu`, `mikrorachunekZNip`), a wyłącznik to ten sam obszar,
@@ -91,7 +91,7 @@ export async function czytajRozliczeniaZaplat(client: SupabaseClient, tenantId: 
 }
 
 type RpcResult = PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>;
-/** `bank_tax_operations` z 00186; do czasu typów z produkcji przez ten kształt. */
+/** `bank_tax_operations` z 00189; do czasu typów z produkcji przez ten kształt. */
 interface TaxReadRpc {
   rpc(fn: 'bank_tax_operations'): RpcResult;
 }
