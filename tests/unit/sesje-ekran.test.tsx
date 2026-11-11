@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -38,11 +40,11 @@ const OTHER = '6c8f3e2d-4a5b-4c7d-9e0f-1a2b3c4d5e6f';
 
 const current: AccountSessionView = {
   id: CURRENT, isCurrent: true, kind: 'computer', device: 'Mac (Chrome)', ip: '83.21.104.x',
-  method: 'hasło', signedInAt: '08.11.2026, 14:05', lastActiveAt: '08.11.2026, 15:40',
+  method: 'hasło', signedInAt: '08.11.2026, 14:05', lastActiveAt: '08.11.2026, 15:40', inactiveOver30Days: false,
 };
 const other: AccountSessionView = {
   id: OTHER, isCurrent: false, kind: 'phone', device: 'iPhone (Safari)', ip: null,
-  method: null, signedInAt: '01.11.2026, 09:00', lastActiveAt: '07.11.2026, 20:15',
+  method: null, signedInAt: '01.11.2026, 09:00', lastActiveAt: '07.11.2026, 20:15', inactiveOver30Days: false,
 };
 const login: AccountLoginView = {
   key: '0:2026-11-08T13:05:00+00:00', when: '08.11.2026, 14:05', kind: 'computer', device: 'Mac (Chrome)',
@@ -72,6 +74,21 @@ describe('SessionsCard', () => {
     expect(markup.match(/data-testid="account-session"/g)).toHaveLength(2);
     expect(markup.indexOf('Wyloguj wszystkie inne urządzenia')).toBeGreaterThan(markup.lastIndexOf('data-testid="account-session"'));
     expect(plain).toContain('Wylogowane urządzenie traci dostęp przy następnym działaniu w FaktWay.');
+  });
+
+  it('urządzenie nieaktywne ponad 30 dni: informacja o wygaśnięciu przy następnej próbie użycia', () => {
+    const stale: AccountSessionView = { ...other, inactiveOver30Days: true };
+    const plain = text(renderToStaticMarkup(<SessionsCard initialSessions={[current, stale]} state="ok" />));
+    expect(plain.match(/Wygaśnie przy następnej próbie użycia/g)).toHaveLength(1);
+    expect(plain).toContain('po 30 dniach bez aktywności');
+    expect(text(renderToStaticMarkup(<SessionsCard initialSessions={[current, other]} state="ok" />))).not.toContain('Wygaśnie przy następnej próbie użycia');
+  });
+
+  it('supabase/config.toml: wylogowanie po 30 dniach bezczynności', () => {
+    const toml = readFileSync('supabase/config.toml', 'utf8');
+    expect(toml).toMatch(/^\[auth\.sessions\]\s*$/m);
+    expect(toml).toMatch(/^inactivity_timeout = "720h"\s*$/m);
+    expect(toml).not.toMatch(/^timebox\s*=/m);
   });
 
   it('tylko to urządzenie: bez wylogowania pozostałych', () => {

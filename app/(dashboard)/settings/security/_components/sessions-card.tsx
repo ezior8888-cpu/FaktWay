@@ -164,6 +164,11 @@ export function SessionsCard({ initialSessions, state, stepUpShownAbove = false 
                     <span className="text-sm font-medium break-words">{session.device}</span>
                     <span className="text-muted-foreground text-xs break-words">{whereLine(session)}</span>
                     <span className="text-muted-foreground text-xs break-words">{whenLine(session)}</span>
+                    {session.inactiveOver30Days && (
+                      <span className="text-muted-foreground text-xs break-words">
+                        Wygaśnie przy następnej próbie użycia: sesje wygasają po 30 dniach bez aktywności.
+                      </span>
+                    )}
                   </div>
                 </div>
                 {!session.isCurrent && (

@@ -156,7 +156,16 @@ describe('wiersz listy urządzeń (list_account_sessions)', () => {
       method: 'hasło',
       signedInAt: '08.11.2026, 14:05',
       lastActiveAt: '08.11.2026, 16:40',
+      inactiveOver30Days: false,
     });
+  });
+
+  it('limit sesji (krok 8.5): ponad 30 dni od ostatniej aktywności to nieaktywne, równo 30 jeszcze nie', () => {
+    const now = new Date('2026-11-10T12:00:00Z');
+    expect(toAccountSessionView({ ...base, last_active_at: '2026-10-10T11:59:00+00:00' }, undefined, now).inactiveOver30Days).toBe(true);
+    expect(toAccountSessionView({ ...base, last_active_at: '2026-10-11T12:00:00+00:00' }, undefined, now).inactiveOver30Days).toBe(false);
+    expect(toAccountSessionView({ ...base, last_active_at: null }, undefined, now).inactiveOver30Days).toBe(false);
+    expect(toAccountSessionView({ ...base, is_current: true, last_active_at: '2026-01-01T00:00:00+00:00' }, undefined, now).inactiveOver30Days).toBe(false);
   });
 
   it('sesja bez wpisu logowania, zapisana przez serwer aplikacji: bez urządzenia i bez adresu serwera', () => {
