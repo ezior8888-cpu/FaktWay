@@ -110,12 +110,23 @@ const POLA_DEKLARACJI = [
   ]),
 ];
 
+/** Początek odmowy: po nim Centrum eksportu pokazuje ją klientowi (F13 część 2b). */
+export const ODMOWA_JPK_V7M_PREFIX = 'Plik JPK_V7M wstrzymany:';
+
 /** Dla klienta zamiast pliku, który nie przeszedł kontroli; kod pierwszego alarmu. */
 export function odmowaJpkV7m(kod: KodJpkV7m): string {
   return (
-    `Plik JPK_V7M wstrzymany: kontrola spójności wykryła błąd po naszej stronie (${kod}). Zgłosiliśmy go. ` +
+    `${ODMOWA_JPK_V7M_PREFIX} kontrola spójności wykryła błąd po naszej stronie (${kod}). Zgłosiliśmy go. ` +
     'Termin złożenia się nie przesuwa, więc w razie potrzeby złóż plik z księgową.'
   );
+}
+
+/** Odmowa strażnika w jobie eksportu: bez ponawiania (ten sam plik dałby ten sam alarm). */
+export class OdmowaJpkV7mError extends Error {
+  constructor(kod: KodJpkV7m) {
+    super(odmowaJpkV7m(kod));
+    this.name = 'OdmowaJpkV7mError';
+  }
 }
 
 type Wezel = Record<string, unknown>;

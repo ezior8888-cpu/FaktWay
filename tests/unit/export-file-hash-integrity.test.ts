@@ -33,6 +33,12 @@ vi.mock('@/lib/exports/jpk-v7m-generator', async (original) => ({
     return `<JPK_V7M generated="${++state.generation}"/>`;
   },
 }));
+// Atrapa wyżej nie jest prawdziwym plikiem JPK_V7M, więc strażnik pliku (F13 część 2b,
+// własne testy w bezpieczniki-jpk-v7m-eksport.test.ts) słusznie by go odrzucił; tu liczy się skrót bajtów.
+vi.mock('@/lib/bezpieczniki/jpk-v7m', async (original) => ({
+  ...(await original<typeof import('@/lib/bezpieczniki/jpk-v7m')>()),
+  sprawdzJpkV7m: () => [],
+}));
 vi.mock('@/lib/exports/kpir-generator', () => ({
   generateKpirXlsx: async () => {
     state.generationCount++;
