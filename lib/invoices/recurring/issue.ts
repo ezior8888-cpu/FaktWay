@@ -29,7 +29,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
+import { isSubjectiveVatExemption, readTenantVatExemption, TAXED_VAT_RATES } from '@/lib/invoices/vat-exemption';
 import type { Database } from '@/types/database';
 import type { RecurringFrequency } from '@/types/recurring-invoice';
 
@@ -56,8 +56,6 @@ export const RECURRING_DRAFT_REFUSED_MESSAGE =
 export const RECURRING_DRAFT_LEFT_NOTE =
   'Szkic zajmuje okres faktury cyklicznej — wyślij go do KSeF dziś albo usuń, a okres wróci do „Do wystawienia”.';
 
-/** F12-G6: stawki, od których powstaje podatek do zapłaty (art. 108 ust. 1 ustawy o VAT). */
-const TAXED_RATES = ['23', '8', '5'];
 
 export function exemptTenantTaxedRateMessage(name: string, rate: string): string {
   return `Pozycja cykliczna „${name}” ma we wzorze stawkę VAT ${rate} %, a firma korzysta ze zwolnienia z VAT (art. 113). Na takiej fakturze VAT trzeba by zapłacić. Zmień wzór pozycji na fakturę ze stawką „zw” (Edytuj pozycję) albo status VAT w ustawieniach firmy.`;
@@ -126,7 +124,7 @@ export async function loadRecurringIssueLink(
     if (linesError || !lines) return { ok: false, error: RECURRING_READ_ERROR_MESSAGE };
     rates = lines.map((l) => String(l.vat_rate));
   }
-  const taxed = rates.find((r) => TAXED_RATES.includes(r));
+  const taxed = rates.find((r) => TAXED_VAT_RATES.includes(r));
   if (taxed) {
     let basis: string | null;
     try {

@@ -53,6 +53,34 @@ export function isSubjectiveVatExemption(basis: string | null | undefined): bool
   return typeof basis === 'string' && /\bart\.?\s*113\b/i.test(basis);
 }
 
+/**
+ * Stawki, od których na fakturze powstaje podatek do zapłaty (art. 108 ust. 1
+ * ustawy o VAT): 23, 8 i 5 %. Bez 0 %, „zw”, „np” i odwrotnego obciążenia.
+ */
+export const TAXED_VAT_RATES: readonly string[] = ['23', '8', '5'];
+
+/**
+ * Pierwsza stawka z podatkiem na fakturze firmy zwolnionej PODMIOTOWO
+ * (art. 113); `null` dla czynnego podatnika, zwolnienia przedmiotowego
+ * (art. 43) i faktury bez takiej stawki (F12-G6 i G6b).
+ */
+export function taxedRateUnderSubjectiveExemption(
+  basis: string | null | undefined,
+  rates: readonly string[],
+): string | null {
+  if (!isSubjectiveVatExemption(basis)) return null;
+  return rates.find((r) => TAXED_VAT_RATES.includes(r)) ?? null;
+}
+
+/** Odmowa wysyłki (F12-G6b): faktura ze stawką z podatkiem od firmy zwolnionej z art. 113. */
+export function exemptTenantTaxedInvoiceMessage(documentNumber: string, rate: string): string {
+  return (
+    `Faktura ${documentNumber} ma stawkę VAT ${rate} %, a firma korzysta ze zwolnienia z VAT (art. 113). ` +
+    'Na takiej fakturze VAT trzeba by zapłacić (art. 108 ust. 1 ustawy o VAT). Zmień stawkę na „zw” ' +
+    'albo, jeśli zwolnienie już nie obowiązuje, status VAT w ustawieniach firmy.'
+  );
+}
+
 /** Kod PostgREST/Postgres „nie ma takiej kolumny” — przed wgraniem 00091. */
 const UNDEFINED_COLUMN = '42703';
 
