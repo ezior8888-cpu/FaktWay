@@ -31,6 +31,8 @@ export const API_ERROR_CODES = [
   'unsupported_buyer',
   'number_required',
   'number_taken',
+  // POST /api/mcp (krok 7.2): żądanie z nagłówkiem Origin spoza FaktWay.
+  'forbidden_origin',
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

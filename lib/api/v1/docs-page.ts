@@ -1,5 +1,6 @@
 import spec from '@/lib/api/v1/openapi.json';
 import { API_KEY_SCOPE_LABELS, API_KEY_SCOPES } from '@/lib/api/v1/scopes';
+import { MCP_DEFAULT_LIMIT, MCP_MAX_LIMIT, MCP_TOOLS } from '@/lib/api/mcp/tools';
 import { PUBLIC_SITE_URL, SUPPORT_EMAIL } from '@/lib/site';
 import { MAX_WEBHOOKS, WEBHOOK_DISABLE_AFTER_FAILURES, WEBHOOK_EVENT_TYPES } from '@/lib/webhooks/types';
 
@@ -287,6 +288,39 @@ ${events}
 `;
 }
 
+function mcpSection(): string {
+  const tools = MCP_TOOLS
+    .map((tool) => `<tr><td><code>${tool.name}</code></td><td>${escapeHtml(tool.title)}</td><td><code>${tool.scope}</code></td><td>${escapeHtml(tool.description)}</td></tr>`)
+    .join('');
+  return `
+<h2 id="mcp">Łącze dla asystentów (MCP)</h2>
+<p>Możesz podłączyć FaktWay do własnego asystenta, który obsługuje protokół MCP (Model Context Protocol), np. Claude albo ChatGPT. Asystent zobaczy faktury, należności i koszty Twojej firmy i odpowie na pytania typu „kto jeszcze mi nie zapłacił”. Łącze jest tylko do odczytu: nie wystawia faktur, niczego nie wysyła i niczego nie zmienia.</p>
+<ul>
+<li>Adres: <code>${escapeHtml(PUBLIC_SITE_URL)}/api/mcp</code> (transport Streamable HTTP, odpowiedzi w formacie JSON, bez sesji).</li>
+<li>Uwierzytelnianie tym samym kluczem co API: <code>Authorization: Bearer $FAKTWAY_API_KEY</code>. Dla asystenta utwórz osobny klucz tylko z uprawnieniami do odczytu (<code>invoices:read</code>, <code>expenses:read</code>); asystent zobaczy wtedy tylko te narzędzia, na które pozwala klucz. Klucz z samym <code>invoices:write</code> nie działa w łączu.</li>
+<li>Limity jak w API: 60 zapytań na minutę na klucz (wspólnie z <code>/api/v1</code>). Każde użycie klucza widać w dzienniku zdarzeń firmy.</li>
+<li>Kwoty to liczby, a waluta jest w polu <code>currency</code>. Sumy należności są liczone osobno dla każdej waluty. Jedno wywołanie zwraca najwyżej ${MCP_MAX_LIMIT} wyników (domyślnie ${MCP_DEFAULT_LIMIT}); kolejne strony pobierasz kursorem <code>next_cursor</code>.</li>
+<li>Asystent przekazuje dane firmy swojemu dostawcy modelu. Podłączaj tylko asystenta, któremu ufasz, i odwołaj klucz, gdy przestanie być potrzebny.</li>
+</ul>
+<p>Przykład konfiguracji klienta, który czyta nagłówki z zmiennej środowiskowej (klucz zostaje w zmiennej <code>FAKTWAY_API_KEY</code>, nie w pliku):</p>
+<pre><code>{
+  "mcpServers": {
+    "faktway": {
+      "type": "http",
+      "url": "${escapeHtml(PUBLIC_SITE_URL)}/api/mcp",
+      "headers": { "Authorization": "Bearer \${FAKTWAY_API_KEY}" }
+    }
+  }
+}</code></pre>
+<p>Ta sama konfiguracja w wierszu poleceń Claude Code:</p>
+<pre><code>claude mcp add --transport http faktway ${escapeHtml(PUBLIC_SITE_URL)}/api/mcp \\
+  --header "Authorization: Bearer $FAKTWAY_API_KEY"</code></pre>
+<p>Narzędzia:</p>
+<div class="table"><table><thead><tr><th>Nazwa</th><th>Do czego</th><th>Uprawnienie</th><th>Opis</th></tr></thead><tbody>${tools}</tbody></table></div>
+<p>Błędy dostępu (brak klucza, zły klucz, limit, wyłączone API) mają te same kody HTTP i to samo ciało co w API. Błędy protokołu to błędy JSON-RPC, a błędne dane wejściowe narzędzia wracają jako wynik z <code>isError</code>, żeby asystent mógł poprawić wywołanie.</p>
+`;
+}
+
 const ERROR_ROWS: [string, string, string][] = [
   ['400', 'invalid_parameter', 'Nieznany albo błędny parametr. Opis podaje jego nazwę.'],
   ['400', 'missing_idempotency_key', 'Zapis bez nagłówka Idempotency-Key.'],
@@ -295,6 +329,7 @@ const ERROR_ROWS: [string, string, string][] = [
   ['401', 'missing_api_key', 'Brak nagłówka Authorization: Bearer.'],
   ['401', 'invalid_api_key', 'Klucz nieprawidłowy albo odwołany.'],
   ['403', 'insufficient_scope', 'Klucz nie ma zakresu potrzebnego temu punktowi.'],
+  ['403', 'forbidden_origin', 'Łącze MCP: żądanie z nagłówkiem Origin spoza FaktWay (przeglądarka).'],
   ['404', 'not_found', 'Nie ma takiej faktury w firmie klucza.'],
   ['409', 'idempotency_conflict', 'Klucz idempotencji użyty wcześniej z inną treścią (albo jego faktura została usunięta).'],
   ['409', 'number_taken', 'Numer faktury jest już zajęty w firmie.'],
@@ -393,6 +428,7 @@ export function renderApiDocsHtml(): string {
 <h2>Punkty</h2>
 ${endpoints}
 ${webhooksSection()}
+${mcpSection()}
 </main>
 </body>
 </html>

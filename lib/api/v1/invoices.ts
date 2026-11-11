@@ -36,6 +36,9 @@ export interface InvoiceListQuery {
   issueDateTo: string | null;
   limit: number;
   cursor: PageCursor | null;
+  /** Tylko łącze MCP (krok 7.2): stany płatności i granica terminu (termin przed datą). `/api/v1` ich nie ustawia. */
+  paymentStatuses?: readonly string[];
+  dueBefore?: string;
 }
 
 export interface ApiParty {
@@ -211,6 +214,8 @@ export async function listInvoices(db: SupabaseClient, tenantId: string, query: 
   if (query.ksefStatus) request = request.eq('ksef_status', query.ksefStatus);
   if (query.issueDateFrom) request = request.gte('issue_date', query.issueDateFrom);
   if (query.issueDateTo) request = request.lte('issue_date', query.issueDateTo);
+  if (query.paymentStatuses && query.paymentStatuses.length > 0) request = request.in('payment_status', [...query.paymentStatuses]);
+  if (query.dueBefore) request = request.lt('payment_due_date', query.dueBefore);
   if (query.cursor) request = request.or(afterCursorFilter(query.cursor));
   const { data, error } = await request
     .order('issue_date', { ascending: false })

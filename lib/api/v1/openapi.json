@@ -1254,7 +1254,8 @@
                   "unsupported_currency",
                   "unsupported_buyer",
                   "number_required",
-                  "number_taken"
+                  "number_taken",
+                  "forbidden_origin"
                 ]
               },
               "message": {
