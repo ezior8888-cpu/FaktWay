@@ -49,6 +49,9 @@ const TRUDNE = [
   'nawias (1)',
   'or(a.eq.1,b.eq.2)',
   'cytat "w środku"',
+  // Zwykły filtr `gt` bierze wartość dosłownie, także cudzysłów na początku.
+  '"w cudzysłowie"',
+  'gwiazdka * procent % plus +',
   'ukośnik \\ wsteczny',
   'ukośnik na końcu \\',
   'nowa\nlinia',

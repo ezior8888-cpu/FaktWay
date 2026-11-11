@@ -220,6 +220,12 @@ async function listPublicTables(admin: AdminRpc): Promise<string[]> {
  * a dopisany w trakcie trafia, gdy jego klucz jest za kursorem. Klucz musi być
  * unikalny (strażnik `SNAPSHOT_KEYS` w testach). Kopia nie jest migawką
  * z jednej chwili: tabele i strony czytane są po kolei.
+ *
+ * Nie `forEachPageById` (`lib/pagination/keyset.ts`): tamten zna tylko `id`
+ * typu uuid i sprawdza kolejność porównaniem napisów w JS. Tu klucze bywają
+ * złożone, liczbowe i tekstowe z kolacją bazy (`stripe_webhook_events.id`),
+ * więc pętla pilnuje tylko, że kursor się przesuwa. Reszta zasad ta sama:
+ * błąd strony albo `data: null` to wyjątek, koniec tylko na pustej stronie.
  */
 export async function* readTablePages(
   client: SnapshotReadClient,
@@ -234,7 +240,12 @@ export async function* readTablePages(
     if (cursor) query = afterCursor(query, key, cursor);
     const { data, error } = await query.limit(pageSize);
     if (error) throw new Error(readErrorMessage(table, key, error));
-    if (!data || data.length === 0) return;
+    // `data: null` bez błędu (np. odpowiedź 200 z pustą treścią od pośrednika)
+    // to nie pusta strona: nie wiadomo, czy tabela się skończyła.
+    if (!Array.isArray(data)) {
+      throw new Error(`dump_table_failed: ${table}: odpowiedź bez danych i bez błędu, nie wiadomo, czy to koniec tabeli`);
+    }
+    if (data.length === 0) return;
 
     let previous: string[] | null = cursor;
     for (const [i, row] of data.entries()) {
@@ -313,6 +324,8 @@ class GzipCollector {
   }
 
   async write(text: string): Promise<void> {
+    // Po błędzie strumienia `drain` już nie przyjdzie, a `error` już był.
+    if (this.gzip.errored) throw this.gzip.errored;
     if (!this.gzip.write(Buffer.from(text, 'utf8'))) await once(this.gzip, 'drain');
   }
 

@@ -29,7 +29,7 @@ vi.mock('@/lib/backup/r2-backup-client', () => ({
   },
 }));
 
-import { createDbSnapshot } from '@/lib/backup/db-snapshot';
+import { createDbSnapshot, readTablePages, type SnapshotReadClient } from '@/lib/backup/db-snapshot';
 
 /** Stałe „tasowanie”: kolejność fizyczna inna niż kolejność kluczy. */
 function potasuj<T>(wiersze: T[]): T[] {
@@ -140,5 +140,33 @@ describe('kopia JSON czyta tabele stronami po kluczu', () => {
       },
     });
     bezZgubIDubli(tabele.flo_decisions!, przed, ['tenant_id', 'kind']);
+  });
+
+  it('strona bez danych i bez błędu (np. pusta treść od pośrednika) przerywa kopię, a nie kończy tabeli', async () => {
+    // supabase-js przy odpowiedzi 200 z pustą treścią oddaje `data: null`, `error: null`.
+    const strony: Array<{ data: Wiersz[] | null; error: null }> = [
+      { data: [{ id: uuidNr(1) }, { id: uuidNr(2) }], error: null },
+      { data: null, error: null },
+      { data: [], error: null },
+    ];
+    let nr = 0;
+    const zapytanie = {
+      order: () => zapytanie,
+      gt: () => zapytanie,
+      gte: () => zapytanie,
+      or: () => zapytanie,
+      limit: () => zapytanie,
+      then: (ok: (v: unknown) => unknown, blad: (e: unknown) => unknown) =>
+        Promise.resolve(strony[nr++]).then(ok, blad),
+    };
+    const klient = { from: () => ({ select: () => zapytanie }) } as unknown as SnapshotReadClient;
+
+    const przeczytane: Wiersz[] = [];
+    await expect(
+      (async () => {
+        for await (const strona of readTablePages(klient, 'invoices', ['id'], 2)) przeczytane.push(...strona);
+      })(),
+    ).rejects.toThrow('dump_table_failed: invoices: odpowiedź bez danych i bez błędu');
+    expect(przeczytane).toHaveLength(2);
   });
 });
