@@ -109,7 +109,7 @@ beforeEach(() => {
   mocks.maintenance.mockResolvedValue(false);
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
 });
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 /** Znacznik logowania biometrią, liczony niezależnie od kodu aplikacji. */
 function passkeyMarker(): string {
@@ -117,6 +117,30 @@ function passkeyMarker(): string {
   const key = Buffer.from(hkdfSync('sha256', SERVICE_ROLE, Buffer.alloc(0), 'faktway/passkey-session-marker/v1', 32));
   const mac = createHmac('sha256', key).update(['v1', userId, SESSION_ID, expiry].join('\n')).digest('base64url');
   return ['v1', expiry, mac].join('.');
+}
+
+/**
+ * Ustawia zegar na pierwszą sekundę od 10.11.2026 12:00 UTC, w której podpis
+ * znacznika kończy się na „A” (co ok. 16. sekunda), i zwraca ten znacznik.
+ * Na takim podpisie dawne psucie ostatniego znaku („A” → „B”) zostawiało te same
+ * bajty, więc test był czerwony raz na kilkanaście przebiegów (CI PR #577).
+ */
+function passkeyMarkerEndingWithA(): string {
+  for (let at = Date.UTC(2026, 10, 10, 12); ; at += 1000) {
+    vi.setSystemTime(at);
+    const marker = passkeyMarker();
+    if (marker.endsWith('A')) return marker;
+  }
+}
+
+/**
+ * Zmienia pierwszy znak podpisu, zawsze na inny. Nie ostatni: 32 bajty HMAC to
+ * 43 znaki base64url, a ostatni niesie dwa bity dopełnienia, które dekoder pomija.
+ * To samo psucie co w `tests/unit/passkey-session-marker.test.ts`.
+ */
+function forged(marker: string): string {
+  const at = marker.lastIndexOf('.') + 1;
+  return marker.slice(0, at) + (marker[at] === 'A' ? 'B' : 'A') + marker.slice(at + 1);
 }
 
 function request(path: string, opts: {
@@ -191,7 +215,7 @@ describe.each(['hs256', 'es256'] as const)('klucze %s', (mode) => {
     });
 
     it('podrobiony znacznik biometrii kończy się kodem', async () => {
-      const marker = passkeyMarker().replace(/.$/, (last) => (last === 'A' ? 'B' : 'A'));
+      const marker = forged(passkeyMarkerEndingWithA());
       const page = await updateSession(request('/invoices', { aal: 'aal1', marker }));
       expect(page.headers.get('location')).toBe(challenge('/invoices'));
     });
