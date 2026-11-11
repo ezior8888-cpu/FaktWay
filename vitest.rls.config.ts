@@ -79,6 +79,9 @@ export default defineConfig({
       // 00176 (plan kompletnej aplikacji, krok 3.1): wpłaty częściowe i historia; suma niecofniętych
       // wpłat = paid_amount, klucz idempotencji, obca firma, kwota, reszta, PLN, cofnięcie ze śladem.
       'tests/rls-wplaty-czesciowe.test.ts',
+      // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu; duplikaty po kluczu, wpłata
+      // dopiero po potwierdzeniu i raz, maskowanie po „Pomiń”, cofnięcie ze śladem, obca firma i role.
+      'tests/rls-wyciag-bankowy.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

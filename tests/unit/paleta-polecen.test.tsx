@@ -60,6 +60,8 @@ describe('buildPaletteNavEntries', () => {
     expect(actions.map((a) => [a.label, a.href])).toEqual([
       ['Wystaw fakturę', '/invoices/new'],
       ['Dodaj wydatek', '/expenses'],
+      // Świadoma zmiana (plan Finora N4, krok 3.2): akcja „Importuj wyciąg” z ekranem Bank.
+      ['Importuj wyciąg', '/bank'],
     ]);
   });
 });
