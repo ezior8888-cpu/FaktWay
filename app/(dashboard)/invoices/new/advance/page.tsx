@@ -30,7 +30,7 @@ function param(params: SearchParams, key: string): string | null {
  */
 export default async function NewAdvanceInvoicePage({
   searchParams,
-}: { searchParams?: Promise<SearchParams> } = {}) {
+}: { searchParams?: Promise<SearchParams> }) {
   const loaded = await loadTenantSellerForForms();
   if (!loaded) return <SellerProfileBlock />;
 

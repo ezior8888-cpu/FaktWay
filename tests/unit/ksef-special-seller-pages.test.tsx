@@ -35,8 +35,8 @@ import { createClient } from '@/lib/supabase/server';
 
 describe('special invoice pages with an incomplete company profile', () => {
   it.each([
-    ['ZAL', NewAdvanceInvoicePage],
-    ['ROZ', NewFinalInvoicePage],
+    ['ZAL', () => NewAdvanceInvoicePage({})],
+    ['ROZ', () => NewFinalInvoicePage()],
   ])('blocks %s issuance and points to the existing company profile', async (_kind, page) => {
     const html = renderToStaticMarkup(await page());
     expect(html).toContain('Wystawianie faktury jest wstrzymane');
@@ -57,7 +57,7 @@ describe('ZAL page passes the company it rendered the seller for (UX-01)', () =>
     });
     pageMocks.advanceFormProps.length = 0;
 
-    renderToStaticMarkup(await NewAdvanceInvoicePage());
+    renderToStaticMarkup(await NewAdvanceInvoicePage({}));
 
     expect(pageMocks.advanceFormProps.at(-1)?.tenantId).toBe('22222222-2222-4222-8222-222222222222');
   });
