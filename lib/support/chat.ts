@@ -2,6 +2,7 @@ import { getAnthropic } from '@/lib/anthropic/client';
 import { SUPPORT_EMAIL } from '@/lib/site';
 import { buildKnowledgeBaseContext } from './knowledge-base';
 import { META_LINE_PREFIX, UNCERTAIN_PREFIX } from './meta';
+import { czyPytanieOPorade, ODPOWIEDZ_PORADA } from './porada-podatkowa';
 
 /**
  * Rdzeń AI support chatu (Faza 30 Krok 5).
@@ -80,6 +81,12 @@ function buildSystemBlocks() {
 export async function* streamSupportReply(
   history: SupportTurn[],
 ): AsyncGenerator<string> {
+  // S-12: pytanie o poradę podatkową nie trafia do modelu; stała odpowiedź z META.
+  const ostatnie = [...history].reverse().find((t) => t.role === 'user');
+  if (ostatnie && czyPytanieOPorade(ostatnie.content)) {
+    yield `${ODPOWIEDZ_PORADA}\n${META_LINE_PREFIX} uncertain=false articles= category=other`;
+    return;
+  }
   const anthropic = getAnthropic();
   const stream = anthropic.messages.stream({
     model: SUPPORT_MODEL,
