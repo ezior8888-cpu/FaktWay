@@ -185,6 +185,10 @@ export type AuditAction =
   // i rodzaj pliku (`photo` albo `xml`), bez treści dokumentu i bez ścieżki magazynu.
   | 'accountant.expense_file_viewed'
   | 'accountant.expense_file_downloaded'
+  // Adres kalendarza (00182, krok 7.3 planu kompletnej aplikacji): bez tokenu i jego skrótu w metadanych.
+  | 'calendar_feed.created'
+  | 'calendar_feed.regenerated'
+  | 'calendar_feed.deleted'
   | 'accountant.token_created'
   | 'accountant.token_revoked'
   | 'accountant.access_used'

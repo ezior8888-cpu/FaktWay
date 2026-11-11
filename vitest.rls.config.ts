@@ -88,6 +88,9 @@ export default defineConfig({
       // 00179 (plan kompletnej aplikacji, krok 2.10): link do faktury dla nabywcy; polityki, granty kolumnowe,
       // cofnięcie jednokierunkowe i funkcja odczytu publicznego (ważny, wygasły, cofnięty, cudzy token).
       'tests/rls-link-dla-nabywcy.test.ts',
+      // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
+      // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
+      'tests/rls-kalendarz.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

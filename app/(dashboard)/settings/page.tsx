@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { RiAddLine } from '@remixicon/react';
 
 import { BusinessStartForm } from '@/components/settings/business-start-form';
+import { CalendarFeedCard } from '@/components/settings/calendar-feed-card';
 import { CashMethodForm } from '@/components/settings/cash-method-form';
 import { CompanyProfileForm } from '@/components/settings/company-profile-form';
 import { DocumentArchiveForm } from '@/components/settings/document-archive-form';
@@ -34,7 +36,7 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const { supabase, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn, archiveOrders] = await Promise.all([
+  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn, archiveOrders, calendarFeedActive] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
@@ -48,6 +50,8 @@ export default async function SettingsPage() {
     readTenantBusinessStart(supabase, tenantId),
     // Archiwum dokumentów (krok 6.4, 00178): zlecenia widzi tylko owner/admin (RLS); błąd to pusta lista.
     role === 'owner' || role === 'admin' ? readArchiveOrders(supabase, tenantId) : Promise.resolve([]),
+    // Odpornie — przed migracją 00182 tabeli nie ma; wtedy karty adresu nie pokazujemy.
+    readCalendarFeedActive(supabase, tenantId),
   ]);
 
   // Edycja danych firmy (F-008): właściciel i administrator, jak ustawienia VAT.
@@ -141,6 +145,26 @@ export default async function SettingsPage() {
       <div id="archiwum" className="flex scroll-mt-24 flex-col gap-5">
         <DocumentArchiveForm canRequest={canEditCompany} orders={archiveOrders} today={todayInWarsaw()} />
       </div>
+
+      {canEditCompany && calendarFeedActive !== null ? (
+        <>
+          <Separator />
+          <CalendarFeedCard initialActive={calendarFeedActive} />
+        </>
+      ) : null}
     </FieldGroup>
   );
+}
+
+/** Czy firma ma adres kalendarza; `null`, gdy tabeli jeszcze nie ma albo odczyt się nie udał. */
+async function readCalendarFeedActive(
+  supabase: Awaited<ReturnType<typeof getPageContext>>['supabase'],
+  tenantId: string,
+): Promise<boolean | null> {
+  const { data, error } = await (supabase as unknown as SupabaseClient)
+    .from('calendar_feed_tokens')
+    .select('tenant_id')
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  return error ? null : data !== null;
 }

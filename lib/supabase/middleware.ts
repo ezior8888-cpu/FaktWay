@@ -84,6 +84,10 @@ const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] =
   // stan wdrożenia dla workflowu `obrazy.yml`; trasa sama sprawdza token
   // (plan usprawnień 3.1)
   { path: '/api/ops/deploy-state', match: 'exact' },
+  // Adres kalendarza klienta (krok 7.3): iCal pod niezgadywalnym tokenem
+  // w ścieżce, więc `prefix`. Odpowiedź zależy od tokenu, nie od sesji; trasa
+  // sama ustawia `Cache-Control: private` i nie dostaje ciasteczek z proxy.
+  { path: '/api/kalendarz', match: 'prefix' },
   // Pliki techniczne (plan skalowania, sesja 2). Przeglądarka sprawdza `/sw.js`
   // przy pełnych nawigacjach w zasięgu workera i pobiera manifest, a roboty
   // wyszukiwarek pobierają `robots.txt` i `sitemap.xml`. Żaden nie zależy od

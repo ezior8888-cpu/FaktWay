@@ -106,6 +106,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-archiwum-dokumentow.test.ts',
       // 00179 (plan kompletnej aplikacji, krok 2.10): link do faktury dla nabywcy.
       'tests/rls-link-dla-nabywcy.test.ts',
+      // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
+      // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
+      'tests/rls-kalendarz.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
