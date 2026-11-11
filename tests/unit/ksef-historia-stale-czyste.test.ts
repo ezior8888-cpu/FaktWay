@@ -60,6 +60,8 @@ const SEND_PATH = [
   /^lib\/ksef\/submit-invoice-full\.ts$/,
   /^lib\/ksef\/send-attempt-ledger\.ts$/,
   /^lib\/jobs\/runners\/submit-invoice\.ts$/,
+  // 3.7a: kroki runnera wysyłki w osobnych modułach.
+  /^lib\/jobs\/runners\/submit-invoice\//,
   /^lib\/jobs\/runners\/process-offline-queue\.ts$/,
   /^lib\/jobs\/runners\/self-invoice-payment\.ts$/,
 ];

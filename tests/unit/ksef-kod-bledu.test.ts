@@ -38,7 +38,7 @@ const PROBLEM_21184 = {
 
 /**
  * Odpowiedzi spoza schematu MF. Parser daje wtedy „brak kodu”, nigdy wyjątku:
- * `submit-invoice.ts` czyta `error.ksefCode` tuż przed `NonRetriableError`,
+ * `submit-invoice/send.ts` czyta `error.ksefCode` tuż przed `NonRetriableError`,
  * a `submit.ts` woła parser przy każdym HTTP 400 na wysyłkę pliku, więc
  * TypeError zamieniłby ostateczną odmowę w ponawianie.
  */
