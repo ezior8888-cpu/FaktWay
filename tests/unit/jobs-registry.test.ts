@@ -17,6 +17,7 @@ import '@/lib/jobs/handlers/package-b';
 import '@/lib/jobs/handlers/package-c';
 import '@/lib/jobs/handlers/package-d';
 import '@/lib/jobs/handlers/webhooks';
+import '@/lib/jobs/handlers/app-notifications';
 
 const registered = getRegisteredJobs();
 const queues = registered.map((j) => j.queue);
@@ -204,7 +205,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 54 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów)', () => {
+  it('KOMPLET: 59 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów + 2 kolejki dzwonka)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -226,7 +227,12 @@ describe('rejestr jobów', () => {
     // (trzecia kolejka zdarzenia „faktura przyjęta w KSeF”) i cron
     // `cron.webhooks-deliver` (ponowienia, co minutę; przy wyłączonej fladze
     // `publicApiEnabled` kończy się bez zapytań). Worker: 60 kolejek (57 + 3), „32/32 cronów”.
-    expect(registered.length).toBe(57);
+    // 59: od dzwonka w aplikacji (plan kompletnej aplikacji, krok 8.1, część 2,
+    // 00188) — +2 kolejki zdarzeń wyniku wysyłki do KSeF:
+    // `invoice.submit.succeeded.bell` i `invoice.submit.failed.bell` (po jednym
+    // jobie na wysłaną fakturę, bez cronów; wzór trzeciej kolejki webhooków
+    // z #595). Worker: 62 kolejek (60 + 2), cronów bez zmian („32/32 cronów”).
+    expect(registered.length).toBe(59);
   });
 
   it('paczka W: 3 joby webhooków publicznego API (krok 7.1, część 3)', () => {
@@ -240,6 +246,15 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('cron.webhooks-deliver')?.maxRetries).toBe(0);
     expect(byQueue.get('webhooks.event.emitted')?.maxRetries).toBe(2);
     expect(byQueue.get('invoice.submit.succeeded.webhook')?.maxRetries).toBe(2);
+  });
+
+  it('dzwonek: 2 kolejki wyniku wysyłki do KSeF (krok 8.1, część 2), ponowienia tylko na błąd bazy', () => {
+    const byQueue = new Map(registered.map((j) => [j.queue, j]));
+    for (const q of ['invoice.submit.succeeded.bell', 'invoice.submit.failed.bell']) {
+      expect(queues, `brak ${q}`).toContain(q);
+      // Wpis ma UNIQUE (00188), więc ponowienie od zera nie dubluje powiadomienia.
+      expect(byQueue.get(q)?.maxRetries).toBe(2);
+    }
   });
 
   it('parytet limitów równoległości paczki C', () => {

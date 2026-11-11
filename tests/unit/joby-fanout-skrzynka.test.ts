@@ -34,8 +34,9 @@ describe('fan-out do kilku kolejek', () => {
   it('wysyła do wszystkich kolejek zdarzenia w jednej transakcji', async () => {
     const result = await sendJobEvent({ name: 'invoice/submit.succeeded', data: { invoiceId: 'x' } });
     expect(mocks.withTransaction).toHaveBeenCalledOnce();
-    // 2 → 3: przyjęcie w KSeF to także webhook `invoice.ksef_accepted` (krok 7.1, część 3, 00187).
-    expect(mocks.send).toHaveBeenCalledTimes(3);
+    // 2 → 4: przyjęcie w KSeF to webhook `invoice.ksef_accepted` (krok 7.1, część 3, 00187)
+    // i wpis w dzwonku (krok 8.1 planu kompletnej aplikacji, część 2, 00188).
+    expect(mocks.send).toHaveBeenCalledTimes(4);
     for (const call of mocks.send.mock.calls) {
       expect(call[2]).toEqual(expect.objectContaining({ db: mocks.txDb }));
     }
@@ -43,6 +44,7 @@ describe('fan-out do kilku kolejek', () => {
       'job-invoice.submit.succeeded.notify',
       'job-invoice.submit.succeeded.offline-queue',
       'job-invoice.submit.succeeded.webhook',
+      'job-invoice.submit.succeeded.bell',
     ]);
   });
 

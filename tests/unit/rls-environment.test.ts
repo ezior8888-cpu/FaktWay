@@ -120,6 +120,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-wyciag-podatki.test.ts',
       // 00187 (krok 7.1, część 3): webhooki i dziennik dostaw.
       'tests/rls-webhooki.test.ts',
+      // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji.
+      'tests/rls-powiadomienia-w-aplikacji.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

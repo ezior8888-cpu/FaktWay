@@ -9,11 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Poprawka Bartosza 21.10.2026: górny pasek 1:1 z `src/components/layout/Header.tsx`
- * Finory — zwijanie paska, wyszukiwarka | dzwonek (komunikat „wkrótce FLO”),
- * motyw (księżyc), ustawienia (zębatka), profil (szary ludzik zamiast zdjęcia;
- * w menu e‑mail, firma i analiza). Bez panelu personalizacji (paleta kolorów),
- * bez tytułu strony, przełącznika firmy i wordmarku z naszego dawnego paska.
+ * Finory — zwijanie paska, wyszukiwarka | dzwonek, motyw (księżyc), ustawienia
+ * (zębatka), profil (szary ludzik zamiast zdjęcia; w menu e‑mail, firma
+ * i analiza). Bez panelu personalizacji (paleta kolorów), bez tytułu strony,
+ * przełącznika firmy i wordmarku z naszego dawnego paska.
  * Do tego: znika baner „Organizacja niezweryfikowana” (klient dowie się inaczej).
+ *
+ * Krok 8.1 planu kompletnej aplikacji, część 2 (00188): w dzwonku prawdziwe
+ * powiadomienia zamiast komunikatu „wkrótce FLO”, a czerwona kropka tylko przy
+ * nieprzeczytanych. Liczba, lista i oznaczanie: `dzwonek-naglowek.test.tsx`.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -41,9 +45,14 @@ vi.mock('@/components/dashboard/command-menu', () => ({
   CommandMenu: () => <button type="button">Szukaj lub przejdź…</button>,
   CommandMenuPhoneTrigger: () => <button type="button" aria-label="Szukaj" />,
 }));
+// Dzwonek czyta powiadomienia akcją serwera (00188); tu bez wpisów.
+vi.mock('@/app/actions/app-notifications', () => ({
+  loadAppNotificationsAction: vi.fn(async () => ({ success: true, unread: 0, items: [] })),
+  markAppNotificationsReadAction: vi.fn(async () => ({ success: true, updated: 0 })),
+}));
 
 const { AppHeader } = await import('@/components/dashboard/app-header');
-const { NotificationDropdown } = await import('@/components/dashboard/notification-dropdown');
+const { NotificationBellButton, NotificationDropdown } = await import('@/components/dashboard/notification-dropdown');
 const { ProfileMenu } = await import('@/components/dashboard/profile-menu');
 const { SidebarProvider } = await import('@/components/ui/sidebar');
 const { TooltipProvider } = await import('@/components/ui/tooltip');
@@ -80,7 +89,7 @@ describe('AppHeader — pasek górny 1:1 z Finory', () => {
     expect(html.replace(phoneLogo, '')).not.toMatch(/FaktWay|Fakt<\/span>/);
   });
 
-  it('prawa strona w kolejności Finory: dzwonek z kropką, motyw, zębatka do ustawień, profil', () => {
+  it('prawa strona w kolejności Finory: dzwonek, motyw, zębatka do ustawień, profil', () => {
     const html = header();
     const bell = html.indexOf('aria-label="Powiadomienia"');
     const gear = html.indexOf('aria-label="Ustawienia"');
@@ -95,9 +104,9 @@ describe('AppHeader — pasek górny 1:1 z Finory', () => {
     expect(html.match(/<a[^>]*aria-label="Ustawienia"[^>]*>/)?.[0]).toContain('max-sm:hidden');
     // Dzwonek i profil są prawdziwymi wyzwalaczami menu (props wyzwalacza dochodzą do przycisku).
     expect(html).toMatch(/<button[^>]*aria-haspopup="menu"[^>]*aria-label="Powiadomienia"|<button[^>]*aria-label="Powiadomienia"[^>]*aria-haspopup="menu"/);
-    // Czerwona kropka na dzwonku. Finora: `top-1.75 right-2` wobec 32-pikselowego przycisku;
-    // u nas wobec ikony (przycisk na dotyku ma 44 px), to samo miejsce przy 32 px.
-    expect(html).toContain('bg-destructive absolute -top-px right-0 size-1.5 rounded-full');
+    // Czerwona kropka tylko przy nieprzeczytanych (krok 8.1, część 2): pasek z serwera
+    // jeszcze ich nie zna, więc bez kropki. Miejsce kropki: test „kropki są przypięte do ikony”.
+    expect(html).not.toContain('bg-destructive');
     // Zębatka to link do /settings; panelu personalizacji (paleta) nie ma.
     expect(html).toMatch(/<a[^>]*href="\/settings"[^>]*aria-label="Ustawienia"|<a[^>]*aria-label="Ustawienia"[^>]*href="\/settings"/);
     expect(html).not.toMatch(/Personaliz|Customizer|paleta/i);
@@ -125,14 +134,14 @@ describe('menu w DOM', () => {
     host.remove();
   });
 
-  it('dzwonek: nagłówek „Powiadomienia” i komunikat, że wkrótce będzie tu FLO', () => {
-    act(() => {
+  it('dzwonek: nagłówek „Powiadomienia” i ikona ustawień; bez komunikatu „wkrótce FLO” (krok 8.1, część 2)', async () => {
+    await act(async () => {
       root.render(<NotificationDropdown defaultOpen />);
     });
     const text = document.body.textContent ?? '';
     expect(text).toMatch(/Powiadomienia/i);
-    expect(text).toContain('FLO');
-    expect(text).toMatch(/wkrótce|niedługo/i);
+    expect(text).not.toContain('FLO');
+    expect(text).not.toMatch(/wkrótce/i);
     // Ikona ustawień w nagłówku dzwonka prowadzi do ustawień powiadomień.
     expect(document.body.querySelector('a[href="/settings/notifications"]')).not.toBeNull();
   });
@@ -174,9 +183,13 @@ describe('po przeglądzie: kropki, pełne wartości, stan przełączania', () =>
     const html = header(
       <ProfileMenu email="jan.kowalski@example.test" company="Firma Testowa sp. z o.o." memberships={memberships} />,
     );
-    // Czerwona kropka dzwonka i zielona kropka profilu siedzą w `relative` razem z ikoną.
-    expect(html).toMatch(/<span class="relative[^"]*"><svg[^>]*>.*?<\/svg><span class="bg-destructive absolute/);
+    // Zielona kropka profilu siedzi w `relative` razem z ikoną.
     expect(html).toMatch(/<span class="relative block"><span[^>]*data-slot="avatar"[\s\S]*?<\/span><span class="ring-card absolute/);
+    // Czerwona kropka dzwonka (przy nieprzeczytanych) też. Finora: `top-1.75 right-2` wobec
+    // 32-pikselowego przycisku; u nas wobec ikony (przycisk na dotyku ma 44 px), to samo miejsce przy 32 px.
+    const bell = renderToStaticMarkup(<NotificationBellButton unread={1} />);
+    expect(bell).toMatch(/<span class="relative[^"]*"><svg[^>]*>.*?<\/svg><span class="bg-destructive absolute -top-px right-0 size-1.5 rounded-full"/);
+    expect(renderToStaticMarkup(<NotificationBellButton unread={0} />)).not.toContain('bg-destructive');
   });
 
   it('ucięty e‑mail i nazwa firmy mają pełną wartość w title', () => {

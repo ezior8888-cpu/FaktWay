@@ -168,19 +168,23 @@ describe('EVENT_QUEUE_MAP — alarm dryfu względem lib/jobs/events.ts', () => {
     expect(() => queuesForEvent('foo/bar')).toThrow(/Nieznany event/);
   });
 
-  it('fan-out: wynik wysyłki faktury trafia do DWÓCH kolejek (przyjęcie: do TRZECH, z webhookiem)', () => {
+  it('fan-out: wynik wysyłki faktury trafia do CZTERECH kolejek (przyjęcie: webhook i dzwonek)', () => {
     // Parytet z Inngest: powiadomienie użytkownika ORAZ obsługa Offline24
     // słuchają tego samego eventu. Pominięcie jednej = cicho martwy job.
     // Krok 7.1, część 3 (00187): przyjęcie w KSeF to także zdarzenie webhooka
     // `invoice.ksef_accepted` dla programów klienta (bez zmian w wysyłce).
+    // 2 → 4: dzwonek w aplikacji (krok 8.1 planu kompletnej aplikacji, część 2,
+    // 00188) to osobny odbiorca tych samych zdarzeń; wysyłka bez zmian.
     expect(queuesForEvent('invoice/submit.succeeded')).toEqual([
       'invoice.submit.succeeded.notify',
       'invoice.submit.succeeded.offline-queue',
       'invoice.submit.succeeded.webhook',
+      'invoice.submit.succeeded.bell',
     ]);
     expect(queuesForEvent('invoice/submit.failed')).toEqual([
       'invoice.submit.failed.notify',
       'invoice.submit.failed.offline-queue',
+      'invoice.submit.failed.bell',
     ]);
   });
 });

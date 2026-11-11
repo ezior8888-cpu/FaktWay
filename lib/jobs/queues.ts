@@ -39,18 +39,22 @@ export const EVENT_QUEUE_MAP = {
   'inbox/invoice.received': [],
   'inbox/poll.tenant': ['inbox.poll.tenant'],
   'invoice/payment.received': ['invoice.payment.received'],
-  // fan-out: powiadomienie + obsługa kolejki Offline24
+  // fan-out: powiadomienie + obsługa kolejki Offline24 + dzwonek w aplikacji
+  // („faktura odrzucona w KSeF”, krok 8.1 planu kompletnej aplikacji, 00188)
   'invoice/submit.failed': [
     'invoice.submit.failed.notify',
     'invoice.submit.failed.offline-queue',
+    'invoice.submit.failed.bell',
   ],
   'invoice/submit.requested': ['invoice.submit.requested'],
   // fan-out: powiadomienie + obsługa kolejki Offline24 + webhook „faktura
-  // przyjęta w KSeF” dla programów klienta (krok 7.1, część 3, 00187)
+  // przyjęta w KSeF” dla programów klienta (krok 7.1, część 3, 00187) + dzwonek
+  // w aplikacji (krok 8.1 planu kompletnej aplikacji, część 2, 00188)
   'invoice/submit.succeeded': [
     'invoice.submit.succeeded.notify',
     'invoice.submit.succeeded.offline-queue',
     'invoice.submit.succeeded.webhook',
+    'invoice.submit.succeeded.bell',
   ],
   'invoice/upo.requested': ['invoice.upo.requested'],
   // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): fan-out z crona.

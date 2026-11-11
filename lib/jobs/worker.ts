@@ -39,6 +39,8 @@ import './handlers/flo-tick';
 import './handlers/ops-heartbeat';
 // Webhooki publicznego API (krok 7.1, część 3, 00187).
 import './handlers/webhooks';
+// Dzwonek w aplikacji (plan kompletnej aplikacji, krok 8.1, część 2, 00188).
+import './handlers/app-notifications';
 
 const log = createJobLogger('worker');
 

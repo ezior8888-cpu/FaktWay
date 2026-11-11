@@ -106,6 +106,10 @@ export default defineConfig({
       // 00187 (krok 7.1, część 3): webhooki owner/admin z kodem przy dodaniu, szyfrogram sekretu
       // bez odczytu, jedna dostawa na zdarzenie, ponowienia, wyłączenie po 20 porażkach, audyt.
       'tests/rls-webhooki.test.ts',
+      // 00188 (plan kompletnej aplikacji, krok 8.1, część 2): dzwonek w aplikacji; wpis dla każdego
+      // aktywnego członka firmy, UNIQUE bez dubli przy ponowieniu, odczyt tylko własnych wpisów aktywnej
+      // firmy, bez zapisu kluczem użytkownika, oznaczanie tylko przez RPC, CHECK linku.
+      'tests/rls-powiadomienia-w-aplikacji.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
