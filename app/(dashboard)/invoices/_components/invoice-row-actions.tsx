@@ -61,7 +61,7 @@ export type RowMenuEntry = 'correction' | 'duplicate' | 'recurring' | 'xml' | 'd
 export function rowMenuEntries(
   invoice: Pick<
     InvoiceRow,
-    'ksef_status' | 'xml_storage_path' | 'invoice_kind' | 'origin' | 'invoice_type' | 'currency'
+    'ksef_status' | 'xml_storage_path' | 'invoice_kind' | 'origin' | 'invoice_type' | 'currency' | 'recurring_invoice_id'
   >,
   facts: Pick<InvoiceListRowFacts, 'canCorrect'> | undefined,
 ): RowMenuEntry[] {
