@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { DISCLAIMER } from '@/lib/flo/functions/payment-chase';
 import { generateDemandLetterPdf } from './pdf-demand-letter';
 import { DEFAULT_TEMPLATES, formatDatePl, formatPln } from './templates';
-import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint, isReminderInvoiceChaseable } from './delivery-schema';
+import { MAX_REMINDER_PDF_BYTES, REMINDER_DELIVERY_TTL_MS, reminderDeliverySchema, reminderInvoiceFingerprint, isReminderInvoiceChaseable, reminderRefusalMessage } from './delivery-schema';
 import { assertNoRelatedInvoice } from './reconciliation-guard';
 import { outstandingOf } from '@/lib/invoices/amount-due';
 import { tytulPrzelewu } from '@/lib/invoices/tytul-przelewu';
@@ -53,7 +53,7 @@ export async function buildReminderDelivery(
   const invoiceResult = await client.from('invoices').select('*').eq('id', invoiceId).eq('tenant_id', tenantId).maybeSingle();
   const invoice = invoiceResult.data;
   if (invoiceResult.error || !invoice || invoice.id !== invoiceId || invoice.tenant_id !== tenantId) throw new Error('Nie udało się odczytać faktury tej organizacji.');
-  if (!isReminderInvoiceChaseable(invoice)) throw new Error('Korekta, faktura rozliczeniowa lub faktura o niepotwierdzonym rodzaju nie może otrzymać przypomnienia.');
+  if (!isReminderInvoiceChaseable(invoice)) throw new Error(reminderRefusalMessage(invoice));
   const gross = Number(invoice.gross_total); const paid = Number(invoice.paid_amount);
   // ROZ: zaległość liczymy od `payment_data.amountDue` (reszta po
   // zaliczkach), nie od `gross_total` — inaczej ponaglenie żądałoby całego

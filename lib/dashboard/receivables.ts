@@ -3,6 +3,7 @@ import { outstandingOf } from '@/lib/invoices/amount-due';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { PaymentFilterOp } from '@/lib/invoices/list-query';
+import { RECEIPT_REVENUE_COLUMNS } from '@/lib/invoices/receipt-revenue-guard';
 import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -52,7 +53,7 @@ const DAY_MS = 86_400_000;
 
 /** Kolumny potrzebne predykatowi `isReceivableBase` i kwocie `outstandingOf`. */
 export const RECEIVABLE_BASE_COLUMNS =
-  'id, direction, origin, ksef_status, ksef_environment, invoice_kind, invoice_type, currency, gross_total, paid_amount, payment_data, payment_due_date, payment_status';
+  `id, direction, origin, ksef_status, ksef_environment, invoice_kind, invoice_type, currency, gross_total, paid_amount, payment_data, payment_due_date, payment_status, ${RECEIPT_REVENUE_COLUMNS}`;
 
 const RECEIVABLE_COLUMNS = `${RECEIVABLE_BASE_COLUMNS}, internal_number, buyer_data, buyer_nip` as const;
 
@@ -71,6 +72,9 @@ export interface ReceivableBaseRow {
   payment_data: unknown;
   payment_due_date: string | null;
   payment_status: string | null;
+  /** Znaczniki FP (`RECEIPT_REVENUE_COLUMNS`): FP nie jest należnością (zapłacona przy kasie). */
+  receipt?: unknown;
+  ksef_fp?: unknown;
 }
 
 export interface ReceivableContext {
