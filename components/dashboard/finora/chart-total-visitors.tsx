@@ -55,16 +55,15 @@ const TotalVisitorsCard = ({ title, total, totalTitle, badge, note, detailsHref,
             {note ? <span className='sr-only'>{note}</span> : null}
           </div>
           {/*
-            E7 pkt 2: przycisk bez celu → link, ten sam wygląd. `cn()` jak w `Button`:
-            sam `buttonVariants` zostawia obok siebie `border-transparent` (baza) i `border-border`
-            (outline), a w arkuszu wygrywa przezroczysta — link tracił obramowanie (zrzuty 24.10.2026).
+            E7 pkt 2: przycisk bez celu → link, ten sam wygląd (klasy `buttonVariants`
+            są już scalone jak w `Button`; zrzuty 24.10.2026: bez tego link tracił obramowanie).
           */}
           <Link
             href={detailsHref}
             data-slot='button'
             data-variant='outline'
             data-size='xs'
-            className={cn(buttonVariants({ variant: 'outline', size: 'xs' }))}
+            className={buttonVariants({ variant: 'outline', size: 'xs' })}
           >
             Szczegóły
           </Link>
