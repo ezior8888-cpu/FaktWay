@@ -54,8 +54,11 @@ import {
   type PendingOperation,
 } from '@/lib/import/bank/ekran';
 import type { BankInvoiceOption } from '@/lib/import/bank/kandydaci';
+import type { PrzelewyPodatkoweEkranu } from '@/lib/import/bank/podatki';
 import { formatPaymentMoney } from '@/lib/invoices/invoice-payments';
 import { cn } from '@/lib/utils';
+
+import { BankTaxSection } from './bank-tax-section';
 
 /**
  * Ekran „Bank” (plan kompletnej aplikacji, krok 3.2, część 1; układ P12 z
@@ -71,6 +74,9 @@ const TOUCH = 'max-lg:min-h-[44px] max-lg:min-w-[44px]';
 const READ_ONLY = 'Wyciąg wgrywa i wpłaty potwierdza właściciel, administrator albo członek firmy. Księgowa ma tu wgląd.';
 const PRIVACY_NOTE =
   'Zapisujemy tylko wpływy w złotych potrzebne do dopasowania. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek nadawcy, a zostają kwota, dzień i znacznik, że ta operacja już była.';
+/** Przy włączonym module księgowości zapisujemy też przelewy do ZUS i urzędu (00186). */
+const PRIVACY_NOTE_TAX =
+  'Zapisujemy tylko wpływy w złotych potrzebne do dopasowania oraz przelewy do ZUS i urzędu skarbowego; innych wypływów nie zapisujemy. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek drugiej strony, a zostają kwota, dzień i znacznik, że ta operacja już była.';
 
 const money = (grosze: number) => formatPaymentMoney(grosze / 100);
 
@@ -81,6 +87,10 @@ interface BankViewProps {
   invoices: BankInvoiceOption[] | null;
   proposals: Record<string, MatchResult>;
   canWrite: boolean;
+  /** Przelewy do ZUS i urzędu (krok 3.2, część 2); `null` albo brak: moduł księgowości wyłączony dla firmy. */
+  tax?: PrzelewyPodatkoweEkranu | null;
+  /** Zapłaty rozliczeń potwierdza owner/admin. */
+  canWriteTax?: boolean;
 }
 
 async function safely<T extends { success: boolean }>(run: () => Promise<T>, fallback: string): Promise<T | { success: false; error: string }> {
@@ -91,7 +101,7 @@ async function safely<T extends { success: boolean }>(run: () => Promise<T>, fal
   }
 }
 
-export function BankView({ data, invoices, proposals, canWrite }: BankViewProps) {
+export function BankView({ data, invoices, proposals, canWrite, tax = null, canWriteTax = false }: BankViewProps) {
   const byId = useMemo(() => new Map((invoices ?? []).map((invoice) => [invoice.id, invoice])), [invoices]);
   const withProposal = data ? data.pending.filter((op) => isConfirmable(proposals[op.id])).length : 0;
 
@@ -176,7 +186,9 @@ export function BankView({ data, invoices, proposals, canWrite }: BankViewProps)
         </>
       ) : null}
 
-      <p className="text-muted-foreground text-xs">{PRIVACY_NOTE}</p>
+      {tax ? <BankTaxSection data={tax} canWrite={canWriteTax} /> : null}
+
+      <p className="text-muted-foreground text-xs">{tax ? PRIVACY_NOTE_TAX : PRIVACY_NOTE}</p>
     </div>
   );
 }

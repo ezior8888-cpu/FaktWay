@@ -104,6 +104,11 @@ export type AuditAction =
   | 'bank.operation_confirmed'
   | 'bank.operation_skipped'
   | 'bank.operation_undone'
+  // Przelewy do ZUS i urzędu jako zapłaty rozliczeń (00186, plan kompletnej aplikacji 3.2, część 2):
+  // metadane z rozliczeniami, dniem zapłaty, kwotą z banku, wyliczoną i różnicą. Zapisuje baza
+  // (RPC `confirm_bank_tax_payment`, `undo_bank_tax_payment`) razem z `tax_settlement.paid`/`unpaid`.
+  | 'bank.tax_payment_confirmed'
+  | 'bank.tax_payment_undone'
   // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
   // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
   | 'recurring_invoice.created'
