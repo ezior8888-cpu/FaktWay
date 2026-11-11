@@ -144,6 +144,22 @@ export const profilSchema = z
 export type ProfilWejscie = z.input<typeof profilSchema>;
 export type Profil = z.output<typeof profilSchema>;
 
+/** Wejście akcji zapisu: profil plus potwierdzenie zakresu v1 (plan, D1 i „Poza v1”). */
+export type ZapisProfiluWejscie = ProfilWejscie & { zakresV1?: boolean };
+
+export const ZAKRES_V1_WSTEP = 'Moduł księgowości FaktWay liczy na razie tylko jednoosobową działalność, która:';
+export const ZAKRES_V1_WARUNKI = [
+  'nie zgłasza do ZUS innych osób (pracowników, zleceniobiorców ani osób współpracujących),',
+  'nie płaci składek z Małego ZUS Plus,',
+  'płaci zaliczki na podatek dochodowy albo ryczałt co miesiąc,',
+  'jeśli jest czynnym podatnikiem VAT, rozlicza VAT co miesiąc (JPK_V7M).',
+];
+export const ZAKRES_V1_SKUTEK =
+  'Jeśli Twoja firma nie spełnia któregoś z tych warunków, kwoty z modułu byłyby błędne. Nie zapisuj wtedy ustawień i rozlicz się z księgową. Pozostałe funkcje FaktWay (faktury, KSeF, eksporty) działają bez zmian.';
+export const ZAKRES_V1_ETYKIETA = 'Moje rozliczenie mieści się w zakresie modułu';
+export const ZAKRES_V1_ODMOWA =
+  'Potwierdź, że Twoje rozliczenie mieści się w zakresie modułu. Jeśli nie, rozlicz się z księgową: moduł policzyłby błędne kwoty.';
+
 export interface WersjaProfilu extends Profil {
   id: string;
 }
