@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
+import { sprawdzJpkV7m, WZORY_JPK_V7M, type Wzor } from '@/lib/bezpieczniki/jpk-v7m';
 import type { ExportExpense } from '@/lib/exports/data-fetcher';
 import { amountsOf, type JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 import { generateJpkV7m, vatPurchases } from '@/lib/exports/jpk-v7m-generator';
@@ -11,7 +12,11 @@ import { PRZYPADKI, ZIARNO } from '../generatory/ustawienia';
 /**
  * JPK_V7M(3) na losowych danych (żelazny filtr F9, plan B4.6). Wzory sum
  * pochodzą z opisów pól w oficjalnym schemacie MF
- * (`lib/exports/schemas/jpk-v7m3/schemat.xsd`), nie z kodu aplikacji:
+ * (`lib/exports/schemas/jpk-v7m3/schemat.xsd`), nie z kodu aplikacji. Listy
+ * pól są w strażniku pliku (`WZORY_JPK_V7M` w `lib/bezpieczniki/jpk-v7m.ts`,
+ * F13), jedno źródło dla testu i aplikacji; test czyta plik własnymi
+ * wzorcami, niezależnie od parsera strażnika, a strażnik nie może zgłosić
+ * alarmu:
  *
  * - PodatekNalezny = Σ K_16, K_18, K_20, K_24, K_26, K_28, K_30, K_32, K_33,
  *   K_34 minus K_35, K_36, K_360;
@@ -115,7 +120,8 @@ const kwota = (tekst: string) => Math.round(Number(tekst) * 100);
 function pola(xml: string, nazwa: string): number[] {
   return [...xml.matchAll(new RegExp(`<(?:\\w+:)?${nazwa}>(-?[\\d.]+)</(?:\\w+:)?${nazwa}>`, 'g'))].map((m) => kwota(m[1]));
 }
-const suma = (xml: string, nazwy: string[]) => nazwy.reduce((a, n) => a + pola(xml, n).reduce((x, y) => x + y, 0), 0);
+const suma = (xml: string, nazwy: readonly string[]) => nazwy.reduce((a, n) => a + pola(xml, n).reduce((x, y) => x + y, 0), 0);
+const wzor = (xml: string, w: Wzor) => suma(xml, w.plus) - suma(xml, w.minus);
 const bloki = (xml: string, nazwa: string) => [...xml.matchAll(new RegExp(`<(?:\\w+:)?${nazwa}>([\\s\\S]*?)</(?:\\w+:)?${nazwa}>`, 'g'))].map((m) => m[1]);
 const jedno = (xml: string, nazwa: string) => {
   const w = pola(xml, nazwa);
@@ -140,6 +146,9 @@ describe('JPK_V7M(3): losowe okresy', () => {
         });
         const wynik = await validateJpkV7m(xml);
         expect(wynik.errors).toEqual([]);
+        expect(sprawdzJpkV7m(xml, '2026-08')).toEqual([]);
+        // Generator nie oznacza faktur FP, więc PodatekNalezny liczy wszystkie wiersze.
+        expect(xml).not.toContain('<TypDokumentu>');
 
         // Bez tego sumy mogłyby przechodzić pusto (0 = 0), gdyby wzorce nic nie znalazły.
         expect(bloki(xml, 'SprzedazWiersz')).toHaveLength(issuedInvoices.length);
@@ -150,19 +159,15 @@ describe('JPK_V7M(3): losowe okresy', () => {
 
         const sprzedazWiersze = bloki(xml, 'SprzedazWiersz').join('\n');
         const zakupWiersze = bloki(xml, 'ZakupWiersz').join('\n');
-        const nalezny = suma(sprzedazWiersze, ['K_16', 'K_18', 'K_20', 'K_24', 'K_26', 'K_28', 'K_30', 'K_32', 'K_33', 'K_34']) -
-          suma(sprzedazWiersze, ['K_35', 'K_36', 'K_360']);
-        expect(jedno(xml, 'PodatekNalezny')).toBe(nalezny);
-        expect(jedno(xml, 'PodatekNaliczony')).toBe(suma(zakupWiersze, ['K_41', 'K_43', 'K_44', 'K_45', 'K_46', 'K_47']));
+        expect(jedno(xml, 'PodatekNalezny')).toBe(wzor(sprzedazWiersze, WZORY_JPK_V7M.podatekNalezny));
+        expect(jedno(xml, 'PodatekNaliczony')).toBe(wzor(zakupWiersze, WZORY_JPK_V7M.podatekNaliczony));
         expect(jedno(xml, 'LiczbaWierszySprzedazy')).toBe(bloki(xml, 'SprzedazWiersz').length * 100);
         expect(jedno(xml, 'LiczbaWierszyZakupow')).toBe(bloki(xml, 'ZakupWiersz').length * 100);
 
         const p38 = jedno(xml, 'P_38');
-        expect(p38).toBe(
-          suma(xml, ['P_16', 'P_18', 'P_20', 'P_24', 'P_26', 'P_28', 'P_30', 'P_32', 'P_33', 'P_34']) - suma(xml, ['P_35', 'P_36', 'P_360']),
-        );
+        expect(p38).toBe(wzor(xml, WZORY_JPK_V7M.P_38));
         const p48 = jedno(xml, 'P_48');
-        expect(p48).toBe(suma(xml, ['P_39', 'P_41', 'P_43', 'P_44', 'P_45', 'P_46', 'P_47']));
+        expect(p48).toBe(wzor(xml, WZORY_JPK_V7M.P_48));
         expect(pola(xml, 'P_49').concat(pola(xml, 'P_50')).every((v) => v === 0)).toBe(true);
         const p51 = jedno(xml, 'P_51');
         const p53 = jedno(xml, 'P_53');
