@@ -20,6 +20,7 @@ import { useFormStatus } from 'react-dom'
 // Third-party Imports
 import {
   RiAddLine,
+  RiBriefcase4Line,
   RiBuilding2Line,
   RiCheckLine,
   RiLogoutBoxLine,
@@ -149,6 +150,7 @@ export function ProfileMenu({
   name,
   company,
   memberships,
+  clientsLink,
   defaultOpen
 }: {
   email: string
@@ -156,6 +158,8 @@ export function ProfileMenu({
   /** Nazwa aktywnej firmy; `null` — jeszcze się wczytuje (szkielet w `Suspense`). */
   company: string | null
   memberships: DashboardOrgMembershipPreview[]
+  /** „Moi klienci” (krok 6.2): tylko dla księgowej w co najmniej dwóch firmach (`pokazMoichKlientow`). */
+  clientsLink?: boolean
   defaultOpen?: boolean
 }) {
   const router = useRouter()
@@ -229,6 +233,13 @@ export function ProfileMenu({
             <RiPieChartLine aria-hidden />
             <span>Analiza sprzedaży</span>
           </DropdownMenuItem>
+          {/* D1: dopisane na końcu grupy tym samym komponentem; pozycje wyżej się nie przesuwają. */}
+          {clientsLink ? (
+            <DropdownMenuItem render={<Link href='/moi-klienci' />}>
+              <RiBriefcase4Line aria-hidden />
+              <span>Moi klienci</span>
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />

@@ -91,6 +91,9 @@ export default defineConfig({
       // 00182 (plan kompletnej aplikacji, krok 7.3): adres kalendarza; skrót tokenu tylko do zapisu,
       // odczyt publiczny przez `calendar_feed_tenant` wyłącznie dla service_role.
       'tests/rls-kalendarz.test.ts',
+      // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
+      // z aktywnym członkostwem zalogowanego, bez względu na nagłówek aktywnej firmy; z cudzej nic.
+      'tests/rls-moi-klienci.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
