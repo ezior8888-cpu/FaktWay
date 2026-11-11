@@ -1,6 +1,6 @@
 // Wygenerowane 11.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00197
-// (m.in. 00174-00197 planu kompletnej aplikacji i 00186 planu skalowania). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00198
+// (m.in. 00174-00198 planu kompletnej aplikacji i 00186 planu skalowania). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -3081,6 +3081,8 @@ export type Database = {
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
+          sales_quote_id: string | null
+          sales_quote_seq: number | null
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
@@ -3154,6 +3156,8 @@ export type Database = {
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
+          sales_quote_id?: string | null
+          sales_quote_seq?: number | null
           scheduled_deletion_at?: string | null
           seller_data?: Json | null
           seller_nip?: string | null
@@ -3227,6 +3231,8 @@ export type Database = {
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
+          sales_quote_id?: string | null
+          sales_quote_seq?: number | null
           scheduled_deletion_at?: string | null
           seller_data?: Json | null
           seller_nip?: string | null
@@ -3261,6 +3267,13 @@ export type Database = {
             columns: ["tenant_id", "recurring_invoice_id"]
             isOneToOne: false
             referencedRelation: "recurring_invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "invoices_sales_quote_same_tenant_fk"
+            columns: ["tenant_id", "sales_quote_id"]
+            isOneToOne: false
+            referencedRelation: "sales_quotes"
             referencedColumns: ["tenant_id", "id"]
           },
           {
@@ -5908,6 +5921,219 @@ export type Database = {
           },
         ]
       }
+      sales_quote_emails: {
+        Row: {
+          id: string
+          idempotency_key: string
+          provider_message_id: string | null
+          quote_id: string
+          recipient: string
+          sent_at: string
+          sent_by: string | null
+          tenant_id: string
+        }
+        Insert: {
+          id?: string
+          idempotency_key: string
+          provider_message_id?: string | null
+          quote_id: string
+          recipient: string
+          sent_at?: string
+          sent_by?: string | null
+          tenant_id: string
+        }
+        Update: {
+          id?: string
+          idempotency_key?: string
+          provider_message_id?: string | null
+          quote_id?: string
+          recipient?: string
+          sent_at?: string
+          sent_by?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_quote_emails_quote_fk"
+            columns: ["tenant_id", "quote_id"]
+            isOneToOne: false
+            referencedRelation: "sales_quotes"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_quote_emails_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quote_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quote_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sales_quote_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quote_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_quotes: {
+        Row: {
+          bank_account: string | null
+          contractor_id: string | null
+          counterparty: Json
+          created_at: string
+          created_by: string | null
+          currency: string
+          gross_total: number
+          id: string
+          issue_date: string
+          issued_at: string | null
+          issued_by: string | null
+          issuer: Json | null
+          items: Json
+          kind: string
+          net_total: number
+          notes: string | null
+          number: string | null
+          number_seq: number | null
+          number_year: number | null
+          payment_due_date: string | null
+          payment_method: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          valid_until: string | null
+          vat_total: number
+        }
+        Insert: {
+          bank_account?: string | null
+          contractor_id?: string | null
+          counterparty: Json
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          gross_total: number
+          id?: string
+          issue_date: string
+          issued_at?: string | null
+          issued_by?: string | null
+          issuer?: Json | null
+          items: Json
+          kind: string
+          net_total: number
+          notes?: string | null
+          number?: string | null
+          number_seq?: number | null
+          number_year?: number | null
+          payment_due_date?: string | null
+          payment_method?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          valid_until?: string | null
+          vat_total: number
+        }
+        Update: {
+          bank_account?: string | null
+          contractor_id?: string | null
+          counterparty?: Json
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          gross_total?: number
+          id?: string
+          issue_date?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          issuer?: Json | null
+          items?: Json
+          kind?: string
+          net_total?: number
+          notes?: string | null
+          number?: string | null
+          number_seq?: number | null
+          number_year?: number | null
+          payment_due_date?: string | null
+          payment_method?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          valid_until?: string | null
+          vat_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_quotes_contractor_same_tenant_fk"
+            columns: ["tenant_id", "contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_quotes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quotes_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quotes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quotes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "sales_quotes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_quotes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stripe_checkout_attempts: {
         Row: {
           created_at: string
@@ -8451,6 +8677,8 @@ export type Database = {
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
+          sales_quote_id: string | null
+          sales_quote_seq: number | null
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
@@ -8631,6 +8859,7 @@ export type Database = {
         }
         Returns: Json
       }
+      issue_sales_quote: { Args: { p_quote_id: string }; Returns: Json }
       ksef_duplicate_check_allows: {
         Args: { p_check: Json; p_choice: string }
         Returns: boolean
@@ -8914,6 +9143,15 @@ export type Database = {
         }
         Returns: Json
       }
+      record_sales_quote_email: {
+        Args: {
+          p_idempotency_key: string
+          p_provider_message_id?: string
+          p_quote_id: string
+          p_recipient: string
+        }
+        Returns: Json
+      }
       record_stripe_checkout_session: {
         Args: {
           p_attempt_id: string
@@ -9047,6 +9285,8 @@ export type Database = {
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
+          sales_quote_id: string | null
+          sales_quote_seq: number | null
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
@@ -9133,6 +9373,8 @@ export type Database = {
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
+          sales_quote_id: string | null
+          sales_quote_seq: number | null
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
@@ -9194,6 +9436,12 @@ export type Database = {
         Returns: undefined
       }
       revoke_other_account_sessions: { Args: never; Returns: number }
+      sales_quote_items_sum: {
+        Args: { p_items: Json; p_key: string }
+        Returns: number
+      }
+      sales_quote_items_valid: { Args: { p_items: Json }; Returns: boolean }
+      sales_quote_party_valid: { Args: { p_party: Json }; Returns: boolean }
       session_may_grant_access: { Args: never; Returns: boolean }
       session_may_manage_passkeys: { Args: never; Returns: boolean }
       set_invoice_reminders_paused: {
