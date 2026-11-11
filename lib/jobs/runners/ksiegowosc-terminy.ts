@@ -10,6 +10,9 @@
  * od zera pomija przypomnienia „sent”; błąd jednej firmy nie zatrzymuje
  * pozostałych, a zadanie kończy się błędem, żeby kolejka je ponowiła.
  *
+ * VAT 0 zł: przypomnienie o JPK_V7M tym samym etapem i kluczem co reszta
+ * (jedno `tax_notifications` na dzień terminu), więc ponowienie go nie dubluje.
+ *
  * O ryczałcie przypomina się firmie na ryczałcie (K4), o zaliczce PIT firmie
  * na skali albo liniowym (K7); o składkach ZUS każdej; o VAT (25., K7.1)
  * płatnikowi VAT, gdy obszar `vat` jest puszczony w kodzie.
@@ -31,11 +34,30 @@ import { czytajWersjeProfilu, wersjaNa } from '@/lib/ksiegowosc/profil';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { grupyFormy, niezaplacone, terminyNaDzis, trescTerminu, type TerminNaDzis } from '@/lib/ksiegowosc/przypomnienia';
 import { BLAD_ODCZYTU_ROZLICZEN, czytajTenMiesiac } from '@/lib/ksiegowosc/ten-miesiac-dane';
+import { srodowiskoMf } from '@/lib/ksiegowosc/wysylka-jpk/certyfikaty';
+import { czytajWysylki, nadwyzkaPrzyjetej } from '@/lib/ksiegowosc/wysylka-jpk/zapis';
 import { czyKsiegowoscWlaczona, statusObszaru } from '@/lib/ksiegowosc/wylacznik';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 import type { WynikFirmy } from './ksiegowosc-miesiac';
+
+/**
+ * F11-B5: czy MF przyjął JPK_V7M za miesiąc, wysłany z FaktWay w tym
+ * środowisku. Fail-closed po stronie przypomnienia: błąd odczytu = „nie”
+ * (lepiej przypomnienie za dużo niż pominięty plik), z wpisem w Sentry.
+ */
+async function jpkPrzyjete(admin: SupabaseClient, tenantId: string, miesiac: string): Promise<boolean> {
+  const srodowisko = srodowiskoMf();
+  if (!srodowisko) return false;
+  try {
+    const wysylki = await czytajWysylki(admin, tenantId, [`${miesiac}-01`]);
+    return nadwyzkaPrzyjetej(wysylki, `${miesiac}-01`, srodowisko) !== null;
+  } catch (e) {
+    Sentry.captureException(e, { tags: { area: 'ksiegowosc.terminy' }, extra: { tenantId, miesiac, krok: 'jpk-przyjete' } });
+    return false;
+  }
+}
 
 export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: string, t: TerminNaDzis): Promise<WynikFirmy> {
   if (!(await czyKsiegowoscWlaczona(admin, tenantId, 'terminy')).wlaczony) return 'pominiete';
@@ -53,7 +75,13 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
   const dane = await czytajTenMiesiac(admin, tenantId, t.miesiac);
   // Bez odczytu zapłat nie wiadomo, co jest zapłacone: ponowienie zamiast przypomnienia „bez zapłaty”.
   if (!dane.ok && dane.braki.includes(BLAD_ODCZYTU_ROZLICZEN)) throw new Error(`Nie udało się odczytać rozliczeń firmy ${tenantId} za ${t.miesiac}`);
-  const pozycje = niezaplacone({ grupy, rozliczenia: dane.rozliczenia, pozycje: dane.ok ? dane.pozycje : null, profil });
+  const wejscie = { grupy, rozliczenia: dane.rozliczenia, pozycje: dane.ok ? dane.pozycje : null, profil };
+  let pozycje = niezaplacone(wejscie);
+  // F11-B5: VAT 0 zł przypomina o JPK_V7M, o ile MF nie przyjął już pliku z FaktWay za ten miesiąc.
+  // Wysyłki czytamy tylko wtedy, gdy jest taka pozycja.
+  if (pozycje.some((p) => p.rodzaj === 'vat' && p.kwotaGr === 0) && (await jpkPrzyjete(admin, tenantId, t.miesiac))) {
+    pozycje = niezaplacone({ ...wejscie, jpkPrzyjete: true });
+  }
   if (pozycje.length === 0) return 'pominiete';
 
   if ((await zajmij(admin, tenantId, t.miesiac, t.etap)) === 'duplikat') return 'duplikaty';

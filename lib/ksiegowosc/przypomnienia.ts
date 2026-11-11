@@ -9,6 +9,9 @@
  *   zmieniły się po zatwierdzeniu (inny skrót wejść), ze szkicu, jak dopłata
  *   na stronie (F11-B2); bez kwoty, gdy moduł jej nie liczy (D7), samo
  *   przypomnienie o terminie.
+ * - VAT: płatnik VAT składa JPK_V7M co miesiąc także przy VAT 0 zł (termin
+ *   ten sam, 25.), więc kwota zero daje przypomnienie o pliku (F11-B5), chyba
+ *   że MF przyjął już plik wysłany z FaktWay za ten miesiąc (`jpkPrzyjete`).
  * - Teksty bez trybu rozkazującego i bez porad (D8).
  */
 
@@ -109,6 +112,8 @@ export function niezaplacone(w: {
   /** Szkic z „Ten miesiąc”, gdy moduł liczy kwoty (`null`, gdy nie liczy). */
   pozycje: readonly PozycjaZeSkrotem[] | null;
   profil: WersjaProfilu;
+  /** Czy MF przyjął już JPK_V7M za ten miesiąc wysłany z FaktWay (tego środowiska); tylko VAT 0 zł. */
+  jpkPrzyjete?: boolean;
 }): PozycjaPrzypomnienia[] {
   const wynik: PozycjaPrzypomnienia[] = [];
   const brakSkladek = w.pozycje?.some((p) => p.rodzaj === 'zus_spoleczne' && !p.ok) ?? false;
@@ -124,6 +129,11 @@ export function niezaplacone(w: {
     if (kwotaGr === null) {
       // Bez kwoty: przypomnienie tylko wtedy, gdy nic nie jest oznaczone jako zapłacone.
       if (zaplaconoGr === 0) wynik.push({ rodzaj, kwotaGr: null });
+      continue;
+    }
+    // F11-B5: VAT 0 zł nie ma zapłaty, ale JPK_V7M obowiązuje; kwota 0 zostaje w pozycji.
+    if (rodzaj === 'vat' && kwotaGr <= 0 && zaplaconoGr === 0) {
+      if (!w.jpkPrzyjete) wynik.push({ rodzaj, kwotaGr: 0 });
       continue;
     }
     if (kwotaGr - zaplaconoGr > 0) wynik.push({ rodzaj, kwotaGr: kwotaGr - zaplaconoGr });
@@ -152,12 +162,21 @@ export interface Tresc {
 
 const adres = (miesiac: string) => `/reports/ten-miesiac?month=${Number(miesiac.slice(5, 7))}&year=${miesiac.slice(0, 4)}`;
 
+/** VAT 0 zł (F11-B5): nie ma czego zapłacić, więc idzie osobnym zdaniem o JPK_V7M. */
+const jestVatZero = (p: PozycjaPrzypomnienia) => p.rodzaj === 'vat' && p.kwotaGr === 0;
+
 export function trescTerminu(w: { miesiac: string; termin: Termin; dni: DniPrzed; pozycje: readonly PozycjaPrzypomnienia[] }): Tresc {
   const data = formatIsoDatePl(w.termin.faktyczny);
   const kiedy = w.dni === 1 ? 'Jutro' : `Za ${w.dni} dni`;
+  const doZaplaty = w.pozycje.filter((p) => !jestVatZero(p));
+  const zdania = [`${kiedy}, ${data}, mija termin za ${monthLabel(w.miesiac)}.`];
+  if (doZaplaty.length > 0 || w.pozycje.length === 0) zdania.push(`Bez oznaczonej zapłaty: ${lista(doZaplaty)}.`);
+  if (doZaplaty.length < w.pozycje.length) {
+    zdania.push(`VAT za ${monthLabel(w.miesiac)} wynosi ${zl(0)}; JPK_V7M za ten miesiąc ma ten sam termin.`);
+  }
   return {
     tytul: `Termin ${data}: rozliczenie za ${monthLabel(w.miesiac)}`,
-    tresc: `${kiedy}, ${data}, mija termin za ${monthLabel(w.miesiac)}. Bez oznaczonej zapłaty: ${lista(w.pozycje)}.`,
+    tresc: zdania.join(' '),
     adres: adres(w.miesiac),
   };
 }
