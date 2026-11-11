@@ -82,6 +82,9 @@ export default defineConfig({
       // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu; duplikaty po kluczu, wpłata
       // dopiero po potwierdzeniu i raz, maskowanie po „Pomiń”, cofnięcie ze śladem, obca firma i role.
       'tests/rls-wyciag-bankowy.test.ts',
+      // 00178 (plan kompletnej aplikacji, krok 6.4): zlecenia archiwum dokumentów; owner/admin, izolacja firm,
+      // limit 10 minut i zamykanie utkniętych (wyzwalacz), jedno aktywne na okres, CHECK-i pliku i okresu.
+      'tests/rls-archiwum-dokumentow.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

@@ -115,7 +115,7 @@ describe('rejestr jobów', () => {
     expect(dunning?.groupConcurrency).toBe(1);
   });
 
-  it('paczka C: 7 jobów OCR/importy/eksporty (bez Magicznego importu — decyzja Bartosza 22.10.2026)', () => {
+  it('paczka C: 8 jobów OCR/importy/eksporty/archiwum (bez Magicznego importu — decyzja Bartosza 22.10.2026)', () => {
     const packageC = [
       'cron.co-pilot-monthly',
       'ocr.process-photo',
@@ -124,8 +124,11 @@ describe('rejestr jobów', () => {
       'validation.bulk-contractors.requested',
       'exports.generate.requested',
       'exports.co-pilot.send-package',
+      // 7 → 8 (09.11.2026, plan kompletnej aplikacji, krok 6.4): archiwum
+      // dokumentów firmy i paczka na kontrolę (00178), jedno naraz w procesie.
+      'archive.document.requested',
     ];
-    expect(packageC.length).toBe(7);
+    expect(packageC.length).toBe(8);
     for (const q of packageC) expect(queues, `brak ${q}`).toContain(q);
     // 8 → 7: Magiczny import wycofany — kolejka w RETIRED_QUEUES, bez workera.
     expect(queues).not.toContain('import.ksef-history.requested');
@@ -136,6 +139,8 @@ describe('rejestr jobów', () => {
     const withHandler = [
       'ocr.process-photo',
       'import.file.uploaded',
+      // Bez tego zlecenie archiwum wisiałoby „w przygotowaniu” po wyczerpaniu prób.
+      'archive.document.requested',
     ];
     const byQueue = new Map(registered.map((j) => [j.queue, j]));
     for (const q of withHandler) {
@@ -198,7 +203,7 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ksef.history-sync.tenant')?.localConcurrency).toBe(3);
   });
 
-  it('KOMPLET: 53 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości)', () => {
+  it('KOMPLET: 54 joby (45 z inwentaryzacji + skrzynka + 2 crony cyklu życia + retencja czatu + historia KSeF − Magiczny import + 2 crony księgowości + mail o nowym urządzeniu + archiwum dokumentów)', () => {
     // Alarm, gdyby któraś paczka wypadła z importów workera.
     // 45: od AUD-118 bez crona odświeżania widoków zmaterializowanych;
     // 46: od K2 (03.10.2026) z `cron.inbox-backfill`;
@@ -213,7 +218,9 @@ describe('rejestr jobów', () => {
     // i `cron.ksiegowosc-terminy` (pętla po firmach pilotażu, bez kolejki
     // fan-out; plan, sekcja 9). Worker: 56 kolejek, „31/31 cronów”.
     // 53: od kroku 8.5 część 2 — +1 `auth.login.completed` (mail o nowym urządzeniu).
-    expect(registered.length).toBe(53);
+    // 54: od 09.11.2026 (plan kompletnej aplikacji, krok 6.4) z kolejką
+    // `archive.document.requested` (archiwum dokumentów, 00178). Worker: 57 kolejek.
+    expect(registered.length).toBe(54);
   });
 
   it('parytet limitów równoległości paczki C', () => {
@@ -221,5 +228,8 @@ describe('rejestr jobów', () => {
     expect(byQueue.get('ocr.process-photo')?.batchSize).toBe(5);
     expect(byQueue.get('inbox.invoice-received')?.batchSize).toBe(10);
     expect(byQueue.get('validation.bulk-contractors.requested')?.batchSize).toBe(3);
+    // Paczka ZIP powstaje w pamięci workera (do 150 MB źródeł): jedna naraz.
+    expect(byQueue.get('archive.document.requested')?.batchSize).toBe(1);
+    expect(byQueue.get('archive.document.requested')?.localConcurrency ?? 1).toBe(1);
   });
 });

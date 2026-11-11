@@ -103,6 +103,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-wplaty-czesciowe.test.ts',
       // 00180 (plan kompletnej aplikacji, krok 3.2, część 1): import wyciągu bankowego.
       'tests/rls-wyciag-bankowy.test.ts',
+      'tests/rls-archiwum-dokumentow.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

@@ -323,6 +323,8 @@ export async function uploadToR2IfAbsent(
   key: string,
   body: Buffer,
   contentType: string,
+  /** Metadane obiektu (`x-amz-meta-*`), np. liczby ze spisu archiwum. */
+  metadata?: Record<string, string>,
 ): Promise<boolean> {
   const { bucketName } = getR2Config();
   const client = getR2Client();
@@ -335,6 +337,7 @@ export async function uploadToR2IfAbsent(
         Body: body,
         ContentType: contentType,
         IfNoneMatch: '*',
+        ...(metadata ? { Metadata: metadata } : {}),
       }),
     );
     return true;
@@ -439,6 +442,27 @@ export async function invoiceXmlExists(storagePath: string): Promise<boolean> {
  * "invoice xml" wprowadza w błąd.
  */
 export const r2ObjectExists = invoiceXmlExists;
+
+/**
+ * HEAD obiektu firmy: rozmiar i metadane zapisane przy `uploadToR2IfAbsent`.
+ * `null`, gdy obiektu nie ma; inny błąd rzuca (ponowienie zadania).
+ */
+export async function statR2Object(
+  key: string,
+  tenantId: string,
+): Promise<{ sizeBytes: number; metadata: Record<string, string> } | null> {
+  assertTenantStoragePath(key, tenantId);
+  const { bucketName } = getR2Config();
+  const client = getR2Client();
+  try {
+    const head = await client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+    return { sizeBytes: head.ContentLength ?? 0, metadata: head.Metadata ?? {} };
+  } catch (error) {
+    const name = (error as { name?: string }).name;
+    if (error instanceof NoSuchKey || name === 'NotFound') return null;
+    throw error;
+  }
+}
 
 /**
  * Wszystkie pliki prób wysyłki faktury (folder `invoiceXmlAttemptPrefix`) —

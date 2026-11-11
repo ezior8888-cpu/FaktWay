@@ -287,6 +287,16 @@ export const exportsGenerateRequested = jobEvent<{
     exportJobId: string;
   }>('exports/generate.requested');
 
+/**
+ * Archiwum dokumentów firmy albo paczka na kontrolę (plan kompletnej
+ * aplikacji, krok 6.4, migracja 00178): zadanie składa ZIP dla zlecenia
+ * z `document_archives`.
+ */
+export const documentArchiveRequested = zodEvent(
+  'archive/document.requested',
+  z.object({ archiveId: z.string().uuid('archiveId musi być UUID') }),
+);
+
 /** Paczka dla księgowego — generowanie ZIP / e‑mail Co‑Pilot. */
 export const exportsCoPilotSendPackage = jobEvent<{
       tenantId: string;
