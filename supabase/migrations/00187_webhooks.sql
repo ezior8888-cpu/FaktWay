@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS public.webhook_deliveries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   webhook_id UUID NOT NULL,
-  -- Stały identyfikator zdarzenia (UUID v5 z typu i obiektu, `lib/webhooks/event-id.ts`).
+  -- Stały identyfikator zdarzenia (UUID v8 ze skrótu SHA-256 typu i obiektu, `lib/webhooks/event-id.ts`).
   event_id UUID NOT NULL,
   event_type TEXT NOT NULL,
   occurred_at TIMESTAMPTZ NOT NULL,
