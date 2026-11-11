@@ -135,7 +135,7 @@ describe('strona „Ten miesiąc”', () => {
     expect(html).toContain(`data-skroty="${JSON.stringify({ ryczalt: H('a'), zus_spoleczne: H('b'), zdrowotna: H('c') }).replace(/"/g, '&quot;')}"`);
   });
 
-  it('skala i liniowy (K7): zaliczka PIT zamiast ryczałtu, koszty, zdrowotna od dochodu, symbol PIT-36 albo PIT-36L', async () => {
+  it('skala i liniowy (K7): zaliczka PIT zamiast ryczałtu, koszty, zdrowotna od dochodu, symbol PIT (skala) albo PPL (liniowy)', async () => {
     const pozycje = [
       { ok: true, rodzaj: 'pit', kwotaGr: 120_000, termin, wejscia: {}, wejsciaHash: H('d') },
       { ok: true, rodzaj: 'zus_spoleczne', kwotaGr: 192_676, termin, wejscia: {}, wejsciaHash: H('b') },
@@ -163,16 +163,16 @@ describe('strona „Ten miesiąc”', () => {
     expect(t).toContain('Zaliczka na podatek dochodowy, składki społeczne i składka zdrowotna z terminami i danymi do przelewu.');
     expect(html).toMatch(/3000,00 zł<\/h4><p[^>]*>Koszty w miesiącu/);
     expect(html).toMatch(/1200,00 zł<\/h4><p[^>]*>Zaliczka PIT/);
-    expect(html).toContain('symbol formularza PIT-36, okres 26M10, identyfikator NIP 1234563218');
+    expect(html).toContain('symbol formularza PIT, okres 26M10, identyfikator NIP 1234563218');
     expect(t).toContain('Zaliczka PIT od dochodu od początku roku 120 000,00 zł po odliczeniu zapłaconych składek społecznych 17 882,90 zł: podstawa 102 117,00 zł');
     expect(t).toContain('Składka zdrowotna od dochodu z poprzedniego miesiąca (10 000,00 zł po odliczeniu zapłaconych składek społecznych).');
     expect(t).not.toContain('Ryczałt, składki społeczne');
     expect(html).toContain(`data-skroty="${JSON.stringify({ pit: H('d'), zus_spoleczne: H('b'), zdrowotna: H('c') }).replace(/"/g, '&quot;')}"`);
     mocks.dane = skala('liniowy');
-    expect(await strona()).toContain('symbol formularza PIT-36L, okres 26M10');
+    expect(await strona()).toContain('symbol formularza PPL, okres 26M10');
   });
 
-  it('VAT (K7.1): pozycja z symbolem VAT-7 i terminem 25.; nadwyżka z adresu idzie do odczytu i do zatwierdzenia; nieznana: pole do wpisania', async () => {
+  it('VAT (K7.1): pozycja z symbolem JPK-V7M i terminem 25.; nadwyżka z adresu idzie do odczytu i do zatwierdzenia; nieznana: pole do wpisania', async () => {
     const vatTermin = { rodzaj: 'vatJpk', nominalny: '2026-11-25', faktyczny: '2026-11-25', przesuniety: false };
     const WYNIK_VAT = { naleznyGr: 690_000, nadwyzkaPoprzedniaGr: 120_000, naliczonyGr: 315_500, doZaplatyGr: 374_500, nadwyzkaNaNastepnyGr: 0, liczbaSprzedazy: 3, liczbaZakupow: 2 };
     const zVat = (pozycjaVat: unknown, vat: unknown) => {
@@ -188,7 +188,7 @@ describe('strona „Ten miesiąc”', () => {
     expect(html).toMatch(/3745,00 zł<\/h4><p[^>]*>VAT do zapłaty/);
     expect(html).toContain('Termin: 25.11.2026');
     expect(tekst(html)).toContain('Ryczałt, składki społeczne, składka zdrowotna i VAT z terminami i danymi do przelewu.');
-    expect(html).toContain('symbol formularza VAT-7, okres 26M10, identyfikator NIP 1234563218');
+    expect(html).toContain('symbol formularza JPK-V7M, okres 26M10, identyfikator NIP 1234563218');
     expect(html).toContain('data-nadwyzka-vat="1200"');
     // Wpisana kwota zostaje do poprawienia przy pozycji.
     expect(html).toContain('data-wartosc="1200"');

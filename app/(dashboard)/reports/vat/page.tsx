@@ -200,7 +200,7 @@ function daneDoPrzelewu(miesiac: string, nip: string | null): string {
   if (nip === null) return 'Nie udało się odczytać NIP firmy, więc mikrorachunku teraz nie pokazujemy; strona spróbuje ponownie przy następnym otwarciu.';
   const mikro = mikrorachunekZNip(nip);
   if (!mikro) return 'Mikrorachunek podatkowy wylicza się z NIP firmy, a NIP jest w Ustawieniach, w danych firmy.';
-  return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza VAT-7, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
+  return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza JPK-V7M, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
 }
 
 function Wysylki({
