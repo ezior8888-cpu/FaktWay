@@ -133,6 +133,10 @@ export default defineConfig({
       // zapisu i porażki (jeden wiersz na zestaw faktur, próba w toku, przejęcie po 5 minutach), role owner/admin,
       // izolacja firm, brak zapisu z sesji poza RPC, żeton próby poza odczytem, wyzwalacz niezmienności.
       'tests/rls-identyfikator-zbiorczy.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF;
+      // rezerwacja, przejęcie po 5 minutach, żeton i numery operacji, krok kodu, tylko właściciel,
+      // izolacja firm, wyzwalacz przejść stanów.
+      'tests/rls-uprawnienia-ksef.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

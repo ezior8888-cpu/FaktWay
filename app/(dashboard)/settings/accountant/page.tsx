@@ -5,7 +5,9 @@ import {
 import { CoPilotSettingsForm } from '@/components/exports/co-pilot-settings-form';
 import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { TaxOfficeForm } from '@/components/settings/tax-office-form';
+import { UprawnieniaKsefBiura } from '@/components/settings/uprawnienia-ksef';
 import { Separator } from '@/components/ui/separator';
+import { wczytajSekcjeUprawnien } from '@/lib/accountant/uprawnienia-ksef-dane';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';
 import { getPageContextWithRole } from '@/lib/supabase/page-context';
 
@@ -33,7 +35,7 @@ export default async function AccountantAccessPage() {
     '/settings',
   );
 
-  const [{ data: settings }, { data: recentJobs }, { data: raw }, taxOfficeCode] =
+  const [{ data: settings }, { data: recentJobs }, { data: raw }, taxOfficeCode, uprawnieniaKsef] =
     await Promise.all([
       supabase
         .from('accountant_settings')
@@ -58,6 +60,9 @@ export default async function AccountantAccessPage() {
         }),
       // Osobno i odpornie — przed migracją 00092 kolumny nie ma.
       readTenantTaxOffice(supabase, tenantId),
+      // Uprawnienie biura w KSeF (krok 6.2, część 4): `null`, gdy flaga
+      // `ksefPermissionsEnabled` jest wyłączona; brak tabeli 00195 ma własny komunikat.
+      wczytajSekcjeUprawnien(supabase, tenantId),
     ]);
 
   const accesses = toPublicAccesses(raw ?? []);
@@ -89,6 +94,13 @@ export default async function AccountantAccessPage() {
       <Separator />
 
       <AccountantAccessList accesses={accesses} />
+
+      {uprawnieniaKsef ? (
+        <>
+          <Separator />
+          <UprawnieniaKsefBiura firma={tenantId} sekcja={uprawnieniaKsef} />
+        </>
+      ) : null}
     </FieldGroup>
   );
 }

@@ -69,6 +69,13 @@ export class KsefCredentialsError extends Error {
   }
 }
 
+/**
+ * Wyjątek od „tylko joby” z nagłówka (krok 6.2, część 4 planu kompletnej
+ * aplikacji): `app/actions/uprawnienia-ksef.ts` woła tę funkcję po sprawdzeniu
+ * roli właściciela, kroku kodu i rezerwacji w bazie (00195), bo nadanie
+ * i odebranie uprawnienia w KSeF nie są idempotentne, a job pg-boss przy
+ * ponowieniu wysłałby prośbę drugi raz.
+ */
 export async function getTenantKsefCredentials(
   tenantId: string,
 ): Promise<KsefAuth> {
