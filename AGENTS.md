@@ -161,7 +161,7 @@ Dawne sekcje tego pliku przeniesione są dosłownie; odnośniki typu
 |---|---|---|
 | scalić PR, kilka PR, stos | [`scalanie-pr.md`](docs/runbooks/scalanie-pr.md) („Scalanie PR”) | `gh pr merge N --merge`; kilka: `./scripts/ops/zloz-scalenie.sh A B` |
 | wgrać migrację, wygenerować typy bazy | [`wgrywanie-migracji.md`](docs/runbooks/wgrywanie-migracji.md) („Wgrywanie migracji”, „Typy bazy”) | `./scripts/ops/wgraj-migracje.sh 00157` |
-| wdrożyć, zdiagnozować nieudane wdrożenie, sprawdzić po wdrożeniu | [`wdrozenie-produkcji.md`](docs/runbooks/wdrozenie-produkcji.md) („Kolejność przy pełnym wydaniu”, „Wdrożenie produkcji”, „Kiedy wdrożenie padnie”, „Weryfikacja po wdrożeniu”) | `./scripts/ops/wdroz-produkcje.sh`, `./scripts/ops/kontrola-faktur-ksef.sh` |
+| wdrożyć, zdiagnozować nieudane wdrożenie, sprawdzić po wdrożeniu | [`wdrozenie-produkcji.md`](docs/runbooks/wdrozenie-produkcji.md) („Kolejność przy pełnym wydaniu”, „Wdrożenie produkcji”, „Kiedy wdrożenie padnie”, „Weryfikacja po wdrożeniu”) | `./scripts/ops/wdroz-produkcje.sh` (po przełączeniu na GHCR: `--obraz <sha>`; stan: `./scripts/ops/coolify-zrodlo.sh stan`), `./scripts/ops/kontrola-faktur-ksef.sh` |
 | zmienić `Dockerfile`, Coolify, zmienne, serwer; wejść w panel | [`coolify-pulapki.md`](docs/runbooks/coolify-pulapki.md) („Pułapki”) | tunel: `ssh -i $K -N -L 8000:localhost:8000 root@$OPS` |
 | zrotować klucz albo sekret produkcyjny | [`rotacja-kluczy.md`](docs/runbooks/rotacja-kluczy.md) | kontrola po każdym kroku: `./scripts/ops/rotacja-kluczy.sh` |
 | zobaczyć błędy wysyłki do KSeF | [`centrum-bledy-wysylki.md`](docs/runbooks/centrum-bledy-wysylki.md) | `/admin/centrum/bledy` (konto z `ADMIN_EMAILS` + 2FA) |
