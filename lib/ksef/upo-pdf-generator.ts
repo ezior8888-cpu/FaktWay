@@ -3,6 +3,7 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
+import { registerPdfFonts } from '@/lib/pdf/fonts';
 import { PUBLIC_SITE_DOMAIN } from '@/lib/site';
 
 export interface UpoPdfData {
@@ -42,6 +43,8 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
     });
 
     const chunks: Buffer[] = [];
+    // S-09: wbudowane fonty pdfkit nie mają polskich znaków; fonty jak na fakturze.
+    registerPdfFonts(doc);
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
@@ -50,13 +53,13 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
       // ============== HEADER ==============
       doc
         .fontSize(20)
-        .font('Helvetica-Bold')
+        .font('bold')
         .text('Urzędowe Poświadczenie Odbioru', { align: 'center' });
 
       doc
         .moveDown(0.3)
         .fontSize(12)
-        .font('Helvetica')
+        .font('body')
         .fillColor('#666')
         .text('Krajowy System e-Faktur (KSeF)', { align: 'center' });
 
@@ -77,14 +80,14 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
 
       doc
         .fontSize(10)
-        .font('Helvetica')
+        .font('body')
         .fillColor('#666')
         .text('NUMER KSEF', 50, doc.y);
 
       doc
         .moveDown(0.2)
         .fontSize(16)
-        .font('Helvetica-Bold')
+        .font('bold')
         .fillColor('#000')
         .text(data.ksefNumber);
 
@@ -122,12 +125,12 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
 
       doc
         .fontSize(10)
-        .font('Helvetica-Bold')
+        .font('bold')
         .fillColor('#666')
         .text('SPRZEDAWCA', col1X, doc.y);
 
       doc.moveDown(0.3);
-      doc.font('Helvetica').fillColor('#000');
+      doc.font('body').fillColor('#000');
       drawTableRow(doc, col1X, col2X, doc.y, 'Nazwa:', data.sellerName || '—');
       drawTableRow(doc, col1X, col2X, doc.y, 'NIP:', data.sellerNip || '—');
 
@@ -135,12 +138,12 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
 
       doc
         .fontSize(10)
-        .font('Helvetica-Bold')
+        .font('bold')
         .fillColor('#666')
         .text('NABYWCA', col1X, doc.y);
 
       doc.moveDown(0.3);
-      doc.font('Helvetica').fillColor('#000');
+      doc.font('body').fillColor('#000');
       drawTableRow(doc, col1X, col2X, doc.y, 'Nazwa:', data.buyerName || '—');
       if (data.buyerNip) {
         drawTableRow(doc, col1X, col2X, doc.y, 'NIP:', data.buyerNip);
@@ -166,12 +169,12 @@ export async function generateUpoPdf(data: UpoPdfData): Promise<Buffer> {
 
       doc
         .fontSize(10)
-        .font('Helvetica-Bold')
+        .font('bold')
         .fillColor('#0a7d3f')
         .text('FAKTURA ZOSTAŁA PRZYJĘTA DO KSEF', col1X);
 
       doc.moveDown(0.3);
-      doc.font('Helvetica').fillColor('#000').fontSize(9);
+      doc.font('body').fillColor('#000').fontSize(9);
 
       drawTableRow(
         doc,
@@ -251,11 +254,11 @@ function drawTableRow(
 
   doc
     .fontSize(10)
-    .font('Helvetica-Bold')
+    .font('bold')
     .fillColor('#000')
     .text(value, col2X, y, { width: 150 });
 
-  doc.font('Helvetica').moveDown(0.3);
+  doc.font('body').moveDown(0.3);
 }
 
 function drawSeparator(doc: PdfKitDoc) {
