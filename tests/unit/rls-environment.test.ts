@@ -139,6 +139,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-uprawnienia-ksef.test.ts',
       // 00196 (plan kompletnej aplikacji, krok 3.2, część 3): przelewy do dostawców z wyciągu jako zapłaty kosztów.
       'tests/rls-wyciag-koszty.test.ts',
+      // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
+      'tests/rls-dzwonek-wplaty.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
