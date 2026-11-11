@@ -78,6 +78,9 @@ describe('separate RLS test configuration', () => {
       'tests/rls-historia-ksef.test.ts',
       // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
       'tests/rls-sprzatanie-dziennikow.test.ts',
+      // Bez migracji (plan skalowania, sesja 3, FLO-01): sprzątanie pulsu FLO jednym
+      // zapisem z warunkiem, ponad 1000 kart przez PostgREST z `max_rows`.
+      'tests/rls-flo-sprzatanie.test.ts',
       'tests/rls-zaplacone.test.ts',
       'tests/rls-passkeys.test.ts',
       'tests/rls-skrzynka-harmonogram.test.ts',
