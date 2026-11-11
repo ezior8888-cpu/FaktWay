@@ -59,16 +59,18 @@ describe('podpis FaktWay-Signature', () => {
 });
 
 describe('identyfikator zdarzenia (FaktWay-Event-Id)', () => {
-  it('UUID v5 z typu i obiektu: to samo zdarzenie ma zawsze ten sam identyfikator', () => {
-    // python3 -c "import uuid; print(uuid.uuid5(uuid.UUID('25ca5528-357d-450e-9f00-c2d4a0342601'), 'invoice.ksef_accepted:1111…'))"
-    expect(webhookEventId('invoice.ksef_accepted', '11111111-1111-4111-8111-111111111111')).toBe('b27c7ddc-abc6-55e7-9d18-25b3ced39fae');
-    expect(webhookEventId('payment.recorded', '11111111-1111-4111-8111-111111111111')).toBe('bd513cf4-e4ee-5539-8d93-4bc6f1dca77b');
+  it('UUID v8 z typu i obiektu: to samo zdarzenie ma zawsze ten sam identyfikator', () => {
+    // v8 z SHA-256 zamiast v5 (CodeQL js/weak-cryptographic-algorithm)
+    const I = '11111111-1111-4111-8111-111111111111';
+    expect(webhookEventId('invoice.ksef_accepted', I)).toBe('82b2d7b7-d95a-87a5-b956-d48099692a68');
+    expect(webhookEventId('payment.recorded', I)).toBe('601c7b22-c9e2-8631-b1b8-d98106f1ccf3');
+    expect(webhookEventId('payment.recorded', I)).toBe(webhookEventId('payment.recorded', I));
   });
 
   it('inny typ albo inny obiekt to inne zdarzenie', () => {
     const a = webhookEventId('expense.ksef_received', '11111111-1111-4111-8111-111111111111');
     expect(a).not.toBe(webhookEventId('expense.ksef_received', '22222222-2222-4222-8222-222222222222'));
     expect(a).not.toBe(webhookEventId('invoice.ksef_accepted', '11111111-1111-4111-8111-111111111111'));
-    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });
