@@ -54,7 +54,7 @@ export default async function ForgotPasswordPage({
       panelText='Podaj adres e‑mail konta, a wyślemy bezpieczny link do ustawienia nowego hasła. Jeśli maila nie ma w skrzynce, zajrzyj do folderu spam.'
     >
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Nie pamiętasz hasła?</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Nie pamiętasz hasła?</h1>
         <p className='text-muted-foreground'>Bez obaw, wyślemy Ci link do ustawienia nowego hasła.</p>
       </div>
 

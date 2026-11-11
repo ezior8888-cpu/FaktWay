@@ -31,7 +31,7 @@ export default async function AdminMfaSetupPage() {
       panelText='Wejście do panelu operatora wymaga drugiego składnika logowania: kodu z aplikacji uwierzytelniającej.'
     >
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Zabezpiecz dostęp administratora</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Zabezpiecz dostęp administratora</h1>
         <p className='text-muted-foreground'>
           Skonfiguruj aplikację uwierzytelniającą, aby wejść do panelu administracyjnego.
           Nie musisz w tym celu zakładać firmy.
