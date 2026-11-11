@@ -79,6 +79,9 @@ export default defineConfig({
       // 00184 (krok 7.1, część 2): wystawianie faktur kluczem z `invoices:write` przez
       // `api_create_invoice()`, idempotencja w transakcji z fakturą, izolacja firm.
       'tests/rls-api-wystawianie.test.ts',
+      // 00187 (krok 7.1, część 3): webhooki owner/admin z kodem przy dodaniu, szyfrogram sekretu
+      // bez odczytu, jedna dostawa na zdarzenie, ponowienia, wyłączenie po 20 porażkach, audyt.
+      'tests/rls-webhooki.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

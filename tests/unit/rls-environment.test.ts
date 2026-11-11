@@ -102,6 +102,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-api-klucze.test.ts',
       // 00184 (krok 7.1, część 2): wystawianie faktur kluczem API.
       'tests/rls-api-wystawianie.test.ts',
+      // 00187 (krok 7.1, część 3): webhooki i dziennik dostaw.
+      'tests/rls-webhooki.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

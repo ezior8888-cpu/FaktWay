@@ -165,6 +165,13 @@ export type AuditAction =
   | 'api_key.created'
   | 'api_key.revoked'
   | 'api_key.used'
+  // Webhooki publicznego API (00187, krok 7.1, część 3): zapisuje baza wyzwalaczem
+  // `audit_webhook_endpoint_change` (nazwa serwera i zdarzenia, bez ścieżki adresu i sekretu).
+  // `webhook.auto_disabled`: po 20 nieudanych dostawach z rzędu, bez autora (worker).
+  | 'webhook.created'
+  | 'webhook.deleted'
+  | 'webhook.enabled'
+  | 'webhook.auto_disabled'
   // Kontrahenci — poprawka danych i usunięcie z bazy (audyt bloku 1, F-011).
   | 'contractor.updated'
   | 'contractor.deleted'

@@ -16,6 +16,7 @@ import {
   type UndoInvoicePaidResult,
 } from '@/lib/invoices/manual-payment';
 import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabase/auth-context';
+import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 /**
  * „Zapłacone” jednym dotknięciem (FaktWay 1.0 §3 pkt 3): akcje na kliencie
@@ -112,6 +113,10 @@ export async function markInvoicePaidAction(invoiceId: string, paidOn?: string):
     event: ANALYTICS_EVENTS.invoiceMarkedPaid,
     properties: { source: 'manual', role },
   });
+  // Webhook „wpłata zapisana” (krok 7.1, część 3) dla nowej wpłaty z RPC. Fail-open:
+  // wpłata jest już zapisana; przy wyłączonej fladze `publicApiEnabled` nic się nie zleca.
+  const paymentId = text(result.payment_id);
+  if (paymentId) await emitWebhookEvent({ tenantId, type: 'payment.recorded', entityId: paymentId });
   return { success: true, status: 'marked', amount, paidOn: day, number };
 }
 

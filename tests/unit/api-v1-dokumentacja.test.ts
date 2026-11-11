@@ -15,6 +15,7 @@ import { INVOICE_LIST_PARAMS } from '@/lib/api/v1/invoices';
 import { API_KEY_SCOPES } from '@/lib/api/v1/keys';
 import { API_ERROR_CODES } from '@/lib/api/v1/responses';
 import { INVOICE_CREATE_FIELDS } from '@/lib/api/v1/invoice-create';
+import { WEBHOOK_EVENT_TYPES } from '@/lib/webhooks/types';
 
 type Operation = {
   security?: unknown[];
@@ -107,6 +108,33 @@ describe('opis OpenAPI 3.1', () => {
   });
 });
 
+describe('webhooki w opisie OpenAPI (krok 7.1, część 3)', () => {
+  type WebhookOperation = Operation & { requestBody?: { required?: boolean; content?: Record<string, { schema?: { $ref?: string } }> } };
+  const webhooks = (spec as unknown as { webhooks?: Record<string, { post?: WebhookOperation }> }).webhooks ?? {};
+  const schemas = spec.components.schemas as unknown as Record<string, SchemaObject & { properties?: Record<string, { const?: string; enum?: string[] }> }>;
+
+  it('każde zdarzenie z kodu ma opis i każdy opis ma zdarzenie', () => {
+    expect(Object.keys(webhooks).sort()).toEqual([...WEBHOOK_EVENT_TYPES].sort());
+  });
+
+  it('każde zdarzenie: POST z JSON, nagłówki podpisu i identyfikatora, odpowiedź 2xx', () => {
+    for (const [type, item] of Object.entries(webhooks)) {
+      const post = item.post;
+      expect(post, type).toBeDefined();
+      for (const header of ['FaktWay-Signature', 'FaktWay-Event-Id', 'FaktWay-Event-Type']) {
+        expect(post!.parameters, `${type} ${header}`).toContainEqual(expect.objectContaining({ name: header, in: 'header', required: true }));
+      }
+      expect(post!.requestBody?.required, type).toBe(true);
+      const ref = post!.requestBody?.content?.['application/json']?.schema?.$ref ?? '';
+      const schema = schemas[ref.split('/').at(-1) ?? ''];
+      expect(schema, `${type}: schemat treści`).toBeDefined();
+      expect(Object.keys(schema!.properties ?? {}).sort(), type).toEqual(['created_at', 'data', 'id', 'type']);
+      expect(schema!.properties!.type!.const, type).toBe(type);
+      expect(Object.keys(post!.responses), type).toContain('2XX');
+    }
+  });
+});
+
 describe('strona /api/docs i plik /api/docs/openapi.json', () => {
   it('strona: HTML z każdym punktem, bez sekretów, bez długich myślników', async () => {
     vi.stubEnv('SUPABASE_JWT_SECRET', 'dddddddddddddddddddddddddddddddd');
@@ -130,6 +158,14 @@ describe('strona /api/docs i plik /api/docs/openapi.json', () => {
     for (const code of ['idempotency_conflict', 'validation_failed', 'unsupported_invoice_kind', 'number_taken']) expect(html).toContain(code);
     for (const scope of API_KEY_SCOPES) expect(html).toContain(scope);
     expect(html).not.toContain('s'.repeat(40));
+    // Webhooki (krok 7.1, część 3): format, podpis z przykładem weryfikacji, ponowienia.
+    expect(html).toContain('id="webhooki"');
+    for (const type of WEBHOOK_EVENT_TYPES) expect(html).toContain(type);
+    for (const text of ['FaktWay-Signature', 'FaktWay-Event-Id', 't=', 'v1=', 'HMAC-SHA256', 'FAKTWAY_WEBHOOK_SECRET', '1 min', '5 min', '30 min', '2 h', '12 h', '10 s', '20 nieudanych']) {
+      expect(html, text).toContain(text);
+    }
+    // Sekret tylko w zmiennej, nigdy jako przykładowa wartość.
+    expect(html).not.toMatch(/fwws_[A-Za-z0-9_-]{4,}/);
     expect(html).not.toMatch(/[—–]/);
     expect(html).not.toMatch(/FaktFlow/);
     expect(html).not.toContain('<script');
