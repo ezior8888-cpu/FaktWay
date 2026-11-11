@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { saveBlob } from '@/lib/download';
+import { filenameFromDisposition } from '@/lib/http/content-disposition';
 import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
 import {
   canDuplicateInvoice,
@@ -88,8 +89,7 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
       );
       return;
     }
-    const cd = res.headers.get('Content-Disposition') ?? '';
-    const filename = cd.match(/filename="(.+?)"/)?.[1] ?? `Faktura_${invoiceId}.pdf`;
+    const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), `Faktura_${invoiceId}.pdf`);
     saveBlob(await res.blob(), filename);
   } catch {
     toast.error('Błąd połączenia przy pobieraniu PDF.');
