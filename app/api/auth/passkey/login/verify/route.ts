@@ -9,6 +9,7 @@ import { passkeyError, passkeyJson, passkeyRateLimited, readJsonBody } from '@/l
 import { finishPasskeyLogin } from '@/lib/auth/passkey/login';
 import { loginVerifyBody } from '@/lib/auth/passkey/schemas';
 import { safeRedirectPath } from '@/lib/auth/safe-redirect';
+import { sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
 import { checkPasskeyLoginVerifyRateLimit } from '@/lib/rate-limit/passkey';
 import { createClient } from '@/lib/supabase/server';
 
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
         : passkeyError('session_unavailable', 503);
     }
 
-    const { userId, passkeyId } = outcome;
+    const { userId, passkeyId, sessionId } = outcome;
     const supabase = await createClient();
     const { data: profile } = await supabase.from('users')
       .select('last_active_tenant_id')
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
       action: 'auth.login',
       tenantId: profile?.last_active_tenant_id ?? null,
       userId,
-      metadata: { method: 'passkey', passkey_id: passkeyId },
+      // `session_id` łączy wpis z sesją na liście urządzeń (00174).
+      metadata: { method: 'passkey', passkey_id: passkeyId, ...sessionAuditMetadata(sessionId) },
     });
     await trackServer({
       userId,

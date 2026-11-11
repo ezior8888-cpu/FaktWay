@@ -12,6 +12,8 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.password_reset_requested': 'Prośba o reset hasła',
   'auth.passkey_added': 'Dodano urządzenie do logowania biometrią',
   'auth.passkey_removed': 'Usunięto urządzenie do logowania biometrią',
+  'auth.session_revoked': 'Wylogowano urządzenie na odległość',
+  'auth.other_sessions_revoked': 'Wylogowano pozostałe urządzenia',
   'invoice.draft_created': 'Utworzono szkic faktury',
   'invoice.draft_updated': 'Zaktualizowano szkic faktury',
   'invoice.draft_deleted': 'Usunięto szkic faktury',

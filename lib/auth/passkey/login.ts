@@ -30,7 +30,8 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
  */
 
 export type PasskeyLoginOutcome =
-  | { ok: true; userId: string; passkeyId: string }
+  // `sessionId`: sesja GoTrue tego logowania, do wpisu `auth.login` (lista urządzeń, 00174).
+  | { ok: true; userId: string; passkeyId: string; sessionId: string }
   | { ok: false; reason: 'failed' | 'session_unavailable' };
 
 const FAILED = { ok: false, reason: 'failed' } as const;
@@ -178,10 +179,10 @@ async function issueSession(user: User & { email: string }, passkeyId: string): 
   }
   const { session, user: sessionUser } = verified.data;
 
-  const marker = session && sessionUser?.id === user.id
+  const marked = session && sessionUser?.id === user.id
     ? await markerForSession(supabase, session.access_token, user.id)
     : null;
-  if (!marker) {
+  if (!marked) {
     // Sesja bez znacznika albo cudza: lepiej nie zostawiać jej w ciasteczkach.
     logPasskeyFailure('login', 'session_marker');
     await supabase.auth.signOut({ scope: 'local' }).catch(() => null);
@@ -189,19 +190,21 @@ async function issueSession(user: User & { email: string }, passkeyId: string): 
   }
 
   const store = await cookies();
-  store.set(PASSKEY_SESSION_COOKIE, marker, passkeySessionCookieOptions());
+  store.set(PASSKEY_SESSION_COOKIE, marked.marker, passkeySessionCookieOptions());
   // Logowanie biometrią liczy się jak „Zapamiętaj mnie”: `IdleWatcher` nie wylogowuje.
   store.set(REMEMBER_ME_COOKIE, REMEMBER_ME_VALUE, rememberMeCookieOptions());
-  return { ok: true, userId: user.id, passkeyId };
+  return { ok: true, userId: user.id, passkeyId, sessionId: marked.sessionId };
 }
 
+/** Znacznik biometrii dla sesji ze zweryfikowanych claimów i jej identyfikator (lista urządzeń, 00174). */
 async function markerForSession(
   supabase: Awaited<ReturnType<typeof createClient>>,
   accessToken: string,
   userId: string,
-): Promise<string | null> {
+): Promise<{ marker: string; sessionId: string } | null> {
   const { data, error } = await supabase.auth.getClaims(accessToken);
   const sessionId = data?.claims.session_id;
   if (error || data?.claims.sub !== userId || typeof sessionId !== 'string') return null;
-  return createPasskeySessionMarker({ sub: userId, sessionId }).catch(() => null);
+  const marker = await createPasskeySessionMarker({ sub: userId, sessionId }).catch(() => null);
+  return marker ? { marker, sessionId } : null;
 }

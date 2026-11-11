@@ -18,6 +18,7 @@ import {
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
 import { isPhoneUserAgent } from '@/lib/auth/phone-user-agent';
+import { readAccessTokenFacts, sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
@@ -68,7 +69,7 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data: signInData, error } = await supabase.auth.signInWithPassword({
     email,
     password,
     ...(bot.captchaToken ? { options: { captchaToken: bot.captchaToken } } : {}),
@@ -93,11 +94,14 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
       .select('last_active_tenant_id')
       .eq('id', signedIn.id)
       .maybeSingle();
+    // `session_id` łączy ten wpis z sesją na liście urządzeń (00174): GoTrue zapisuje
+    // w `auth.sessions` nagłówki serwera, a przeglądarka i adres są w tym wpisie.
+    const { sessionId } = readAccessTokenFacts(signInData?.session?.access_token);
     await logAudit({
       action: 'auth.login',
       tenantId: row?.last_active_tenant_id ?? null,
       userId: signedIn.id,
-      metadata: { method: 'password' },
+      metadata: { method: 'password', ...sessionAuditMetadata(sessionId) },
     });
     await trackServer({
       userId: signedIn.id,

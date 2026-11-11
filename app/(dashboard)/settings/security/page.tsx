@@ -5,19 +5,33 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { listPasskeyDevices } from '@/lib/auth/passkey/devices';
 import type { PasskeyDevice } from '@/lib/auth/passkey/types';
+import {
+  loadAccountLogins,
+  loadAccountSessions,
+  readCurrentRequestDevice,
+  type AccountSecurityLoad,
+} from '@/lib/auth/sessions/load';
+import type { AccountLoginView, AccountSessionView } from '@/lib/auth/sessions/view';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { getDashboardSessionUser } from '@/lib/dashboard-shell-data';
 import { createClient } from '@/lib/supabase/server';
+import { LoginHistoryCard } from './_components/login-history-card';
 import { PasskeysCard } from './_components/passkeys-card';
 import { PasswordChangeCard } from './_components/password-change-card';
+import { SessionsCard } from './_components/sessions-card';
 import { TwoFactorCard } from './_components/two-factor-card';
 
 export const dynamic = 'force-dynamic';
 
+const LOGIN_HISTORY_LIMIT = 20;
+
 /**
  * Zakładka „Bezpieczeństwo” = Security z Finory (`views/settings/security`):
- * hasło, weryfikacja dwuetapowa i logowanie biometrią. Blokady aplikacji (PIN),
- * listy sesji i historii logowań z Finory nie mamy, więc ich tu nie ma.
+ * hasło, weryfikacja dwuetapowa, logowanie biometrią, a od kroku 8.5 planu
+ * kompletnej aplikacji także zalogowane urządzenia i historia logowań
+ * (`sessions-card.tsx`, `login-history-card.tsx` Finory; dane z funkcji 00174).
+ * Nowe sekcje są pod istniejącymi, które zostają bez zmian (decyzja D1).
+ * Blokady aplikacji (PIN) z Finory nie mamy, więc jej tu nie ma.
  */
 export default async function SecuritySettingsPage({
   searchParams,
@@ -49,6 +63,19 @@ export default async function SecuritySettingsPage({
     devicesLoadFailed = true;
   }
 
+  // Bez kodu baza i tak odmówi (`code_step_required`), więc sesja po biometrii od razu
+  // dostaje przejście do kodu zamiast dwóch zapytań skazanych na odmowę.
+  const codeRequired = { status: 'code_required' } as const;
+  const [accountSessions, accountLogins]: [
+    AccountSecurityLoad<AccountSessionView>,
+    AccountSecurityLoad<AccountLoginView>,
+  ] = stepUpRequired
+    ? [codeRequired, codeRequired]
+    : await Promise.all([
+      readCurrentRequestDevice().then((current) => loadAccountSessions(supabase, current)),
+      loadAccountLogins(supabase, LOGIN_HISTORY_LIMIT),
+    ]);
+
   return (
     <FieldGroup>
       {notice === 'admin_mfa_required' && (
@@ -75,6 +102,22 @@ export default async function SecuritySettingsPage({
       <Separator />
 
       <PasskeysCard initialDevices={devices} stepUpRequired={stepUpRequired} loadFailed={devicesLoadFailed} />
+
+      <Separator />
+
+      <SessionsCard
+        initialSessions={accountSessions.status === 'ok' ? accountSessions.items : []}
+        state={accountSessions.status}
+        stepUpShownAbove={stepUpRequired}
+      />
+
+      <Separator />
+
+      <LoginHistoryCard
+        entries={accountLogins.status === 'ok' ? accountLogins.items : []}
+        state={accountLogins.status}
+        limit={LOGIN_HISTORY_LIMIT}
+      />
     </FieldGroup>
   );
 }

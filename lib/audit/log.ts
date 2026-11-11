@@ -1,16 +1,23 @@
 import { headers } from 'next/headers';
+import { clientIpFromHeaders } from '@/lib/auth/client-ip';
+import { isIpAddress } from '@/lib/auth/sessions/ip-prefix';
 import { createAdminClient } from '@/lib/supabase/server';
 
+/**
+ * Adres w kolejności zaufania limitów prób (`X-Real-Ip` od Traefika, potem
+ * ostatni wpis `X-Forwarded-For`), nie pierwszy wpis, który podaje sam klient.
+ * Pokazuje go lista zalogowanych urządzeń (00174, krok 8.5), więc logujący się
+ * z cudzym hasłem nie może podpisać się adresem ofiary. Wartość, która nie jest
+ * adresem, to `null`: inaczej INSERT do kolumny INET pada i wpis znika.
+ */
 async function readRequestClientHints(): Promise<{
   ip: string | null;
   userAgent: string | null;
 }> {
   try {
     const hdrs = await headers();
-    const ip =
-      hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      hdrs.get('x-real-ip') ??
-      null;
+    const candidate = clientIpFromHeaders(hdrs);
+    const ip = candidate && isIpAddress(candidate) ? candidate : null;
     const userAgent = hdrs.get('user-agent') ?? null;
     return { ip, userAgent };
   } catch {
@@ -36,6 +43,11 @@ export type AuditAction =
   | 'auth.mfa_recovery_codes_regenerated'
   | 'auth.passkey_added'
   | 'auth.passkey_removed'
+  // Wylogowanie na odległość (00174, krok 8.5): jedno urządzenie (`metadata.session_id`)
+  // albo wszystkie poza bieżącym (`metadata.count`). Wpis `auth.login` niesie od
+  // tego kroku `metadata.session_id`, po którym lista urządzeń łączy sesję z przeglądarką.
+  | 'auth.session_revoked'
+  | 'auth.other_sessions_revoked'
   | 'gdpr.export_requested'
   | 'gdpr.deletion_requested'
   | 'gdpr.deletion_canceled'

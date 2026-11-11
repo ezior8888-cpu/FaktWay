@@ -227,7 +227,8 @@ async function atrapaFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   // Odczyt kluczem serwisowym (zgody e-mail w Powiadomieniach) — nie sprawdza sesji.
   if (url.pathname.startsWith('/auth/v1/admin/users/')) return json(h.uzytkownik);
 
-  // Żadna z renderowanych stron dziś nie woła RPC; licznik `rpc` pilnuje, że tak zostaje.
+  // Poza Bezpieczeństwem (00174: urządzenia i historia logowań) żadna z renderowanych
+  // stron nie woła RPC; licznik `rpc` pilnuje, że tak zostaje.
   const rpc = url.pathname.match(/^\/rest\/v1\/rpc\//u);
   if (rpc) return json(null);
 
@@ -427,7 +428,9 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
       </DashboardLayout>,
     );
     expect(out).toContain(`data-2fa="${wlaczone}"`);
-    expect(liczniki()).toEqual(RAZ_Z_MFA);
+    // Krok 8.5 (00174): zalogowane urządzenia i historia logowań to dwa RPC strony,
+    // bez dodatkowego sprawdzenia sesji w GoTrue (sesję i 2FA sprawdza sama baza).
+    expect(liczniki()).toEqual({ ...RAZ_Z_MFA, rpc: 2 });
   });
 
   // Zgody e-mail czyta `getEmailConsents` przez `auth.admin.getUserById`

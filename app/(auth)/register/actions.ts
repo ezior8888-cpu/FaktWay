@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit/log';
 import { recordSignupCompleted } from '@/lib/analytics/funnel';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
+import { readAccessTokenFacts, sessionAuditMetadata } from '@/lib/auth/sessions/access-token';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
@@ -134,11 +135,13 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
 
   const uid = data.user?.id;
   if (uid) {
+    // `session_id` łączy wpis z sesją na liście urządzeń (00174), jak przy logowaniu.
+    const { sessionId } = readAccessTokenFacts(data.session.access_token);
     await logAudit({
       action: 'auth.signup',
       tenantId: null,
       userId: uid,
-      metadata: { flow: 'session_immediate' },
+      metadata: { flow: 'session_immediate', ...sessionAuditMetadata(sessionId) },
     });
   }
 
