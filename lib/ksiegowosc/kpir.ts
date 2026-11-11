@@ -31,6 +31,7 @@ import { monthLabel } from '@/lib/expenses/month';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import {
   brakFakturyDoParagonu,
+  brakFakturyZImportu,
   dzienPrzychodu,
   kluczKursu,
   kwotaTekst,
@@ -244,6 +245,11 @@ export function zbudujKpir(wejscie: WejscieKpir): Kpir {
     const nalezy = dzienKsiegi(wersje, dzien, `Faktura ${f.numer}`);
     if (!nalezy.tak) {
       if (nalezy.brak) braki.push({ dzien, dokument: f.numer, komunikat: nalezy.brak });
+      continue;
+    }
+    if (f.niepewnyImport) {
+      // F11-C4: jak ewidencja, import z niepewnym dniem przychodu albo kwotą daje brak.
+      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyZImportu(f.numer, dzien, f.niepewnyImport, 'księgi') });
       continue;
     }
     if (f.fp) {
