@@ -188,9 +188,12 @@ describe('Symulacja: MF down 4h', () => {
       expect(getKsefRetryDelay(100)).toBe('1h');
     });
 
-    it('limity per-tenant zgodne ze speca (100 równoległych, 5 ponowień)', () => {
+    it('limity per-tenant (2 równoległe od L1a, 5 ponowień)', () => {
       expect(KSEF_MAX_RETRIES).toBe(5);
-      expect(KSEF_TENANT_CONCURRENCY_LIMIT).toBe(100);
+      // L1a (08.11.2026): MF liczy limity na parę (NIP, IP), a cała platforma
+      // wysyła z jednego adresu, więc firma ma najwyżej 2 wysyłki naraz zamiast
+      // 100 ze spec Fazy 23 (czyli bez limitu; jedna firma brała wszystkie sloty).
+      expect(KSEF_TENANT_CONCURRENCY_LIMIT).toBe(2);
     });
   });
 

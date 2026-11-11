@@ -366,7 +366,12 @@ export function overdueColumns(
         <div className="flex flex-col">
           <Link
             href={`/invoices/${row.original.id}`}
-            className={cn('h-auto justify-start px-0! font-mono', buttonVariants({ variant: 'link' }))}
+            // Wariant PIERWSZY: tailwind-merge zostawia późniejszą z dwóch sprzecznych klas. Dotyk: 28 px,
+            // nie 44 px z bazy, bo wiersz trzymają na 44 px przyciski „Akcje”, a niżej jest linia 16 px.
+            className={cn(
+              buttonVariants({ variant: 'link' }),
+              'h-auto justify-start px-0 font-mono [@media(pointer:coarse)]:min-h-7',
+            )}
           >
             {row.original.internal_number || '—'}
           </Link>

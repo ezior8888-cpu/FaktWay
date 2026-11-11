@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { zapiszProfilPodatkowyAction } from '@/app/actions/ksiegowosc-profil';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -22,6 +23,11 @@ import {
   profilSchema,
   STAWKI_RYCZALTU,
   STAWKI_RYCZALTU_ZRODLO,
+  ZAKRES_V1_ETYKIETA,
+  ZAKRES_V1_ODMOWA,
+  ZAKRES_V1_SKUTEK,
+  ZAKRES_V1_WARUNKI,
+  ZAKRES_V1_WSTEP,
   type EtapZus,
   type Forma,
   type WersjaProfilu,
@@ -55,6 +61,7 @@ export function UstawieniaPodatkoweForm({
   const [chorobowe, setChorobowe] = useState(poczatkowa?.chorobowe ?? false);
   const [najem, setNajem] = useState(poczatkowa?.najem ?? false);
   const [nrsZus, setNrsZus] = useState(poczatkowa?.nrsZus ?? '');
+  const [zakresV1, setZakresV1] = useState(false);
   const [bledy, setBledy] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
 
@@ -78,16 +85,20 @@ export function UstawieniaPodatkoweForm({
     chorobowe: zSkladkamiSpolecznymi ? chorobowe : false,
     najem: forma === 'ryczalt' ? najem : false,
     nrsZus: nrsZus.trim() === '' ? null : nrsZus,
+    zakresV1,
   });
 
   const zapisz = () => {
     const parsed = profilSchema.safeParse(wejscie());
-    if (!parsed.success) {
+    if (!parsed.success || !zakresV1) {
       const nowe: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const pole = String(issue.path[0] ?? 'formularz');
-        nowe[pole] ??= issue.message;
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          const pole = String(issue.path[0] ?? 'formularz');
+          nowe[pole] ??= issue.message;
+        }
       }
+      if (!zakresV1) nowe.zakresV1 = ZAKRES_V1_ODMOWA;
       setBledy(nowe);
       return;
     }
@@ -334,6 +345,38 @@ export function UstawieniaPodatkoweForm({
           />
         </div>
       </Field>
+
+      {canEdit ? (
+        <div className="flex flex-col gap-1">
+          <FieldDescription>{ZAKRES_V1_WSTEP}</FieldDescription>
+          <ul className="text-muted-foreground list-disc pl-5 text-sm">
+            {ZAKRES_V1_WARUNKI.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+          <FieldDescription>{ZAKRES_V1_SKUTEK}</FieldDescription>
+        </div>
+      ) : null}
+
+      {canEdit ? (
+        <Field orientation="horizontal">
+          <Checkbox
+            id="profil-zakres"
+            checked={zakresV1}
+            disabled={pending}
+            onCheckedChange={(v) => {
+              setZakresV1(Boolean(v));
+              wyczysc('zakresV1');
+            }}
+            aria-invalid={bledy.zakresV1 ? true : undefined}
+            aria-describedby={opisBledu('zakresV1')}
+          />
+          <FieldContent>
+            <FieldLabel htmlFor="profil-zakres">{ZAKRES_V1_ETYKIETA}</FieldLabel>
+            {blad('zakresV1')}
+          </FieldContent>
+        </Field>
+      ) : null}
 
       {canEdit ? (
         <div className="flex justify-end">

@@ -57,7 +57,9 @@ async function checkPasswordLimit(
     if (!['http:', 'https:'].includes(url.protocol) || !url.hostname ||
         url.username || url.password || url.search || url.hash) return unavailable;
 
-    const reply: unknown = await getRedis().eval(
+    // Limit 2 s: przerwanie nie cofa skryptu, a ten zużywa próbę albo jednorazowe
+    // potwierdzenie resetu (lib/cache/redis.ts).
+    const reply: unknown = await getRedis('failClosedLimiter').eval(
       PASSWORD_ATTEMPT_SCRIPT,
       [`rl:password:${kind}:account:${hashIdentifier(userId)}`],
       [limit, windowMs],

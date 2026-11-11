@@ -13,6 +13,8 @@
 //
 // Rate limit: max 100 retry per uruchomienie, żeby cron nie zatkał kolejki
 // Inngest gdy zaległości urosną do tysięcy (np. po długiej awarii MF).
+// Firmy w pauzie po 429 z KSeF (L1a, `lib/ksef/rate-limit-pause.ts`) cron
+// pomija do pierwszego przebiegu po końcu pauzy.
 
 import { NonRetriableError } from '../errors';
 import type { JobContext } from '@/lib/jobs/registry';
@@ -20,6 +22,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { ksefPausedUntil } from '@/lib/ksef/rate-limit-pause';
 import { assertJobIdentity } from './tenant-boundary';
 import { assertUpoIdentity, assertUpoReceipt, matchesUpoInvoice, requireAcceptedUpoInvoice, UpoIdentityMismatchError, UPO_IDENTITY_MISMATCH } from './upo-identity';
 
@@ -138,6 +141,21 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
     environment: 'test' | 'demo' | 'production';
   } }> = [];
   let quarantined = 0;
+  // L1a: firma w pauzie po 429 z KSeF. Nowy job tylko czekałby w runnerze na
+  // koniec pauzy, a cron co godzinę dokładałby kolejny dubel. Wpis firmy
+  // zostaje bez zmian do następnego przebiegu po pauzie. Jeden odczyt pauzy
+  // na NIP w przebiegu (pamięć tylko na ten przebieg).
+  const pausedByNip = new Map<string, boolean>();
+  let pausedSkipped = 0;
+  async function firmPaused(nip: string): Promise<boolean> {
+    let paused = pausedByNip.get(nip);
+    if (paused === undefined) {
+      paused = (await ksefPausedUntil(environment, nip)) !== null;
+      pausedByNip.set(nip, paused);
+    }
+    if (paused) pausedSkipped++;
+    return paused;
+  }
   for (const candidate of stale) {
     const identity = { invoiceId: candidate.invoice_id, tenantId: candidate.tenant_id, ksefNumber: candidate.ksef_number };
     // UUID columns cannot contain malformed IDs, but old/cached results are untrusted.
@@ -195,6 +213,7 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
       Sentry.captureMessage('UPO retry skipped — brak NIP-u dla invoice', { level: 'warning' });
       continue;
     }
+    if (await firmPaused(nip)) continue;
     // groupId = NIP: limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
     events.push({ name: 'invoice/upo.requested', groupId: nip, data: { ...identity, nip, environment } });
   }
@@ -253,6 +272,7 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
         missingNipRejected++;
         continue;
       }
+      if (await firmPaused(nip)) continue;
       // groupId = NIP: limit „3 naraz per NIP” w pg-boss działa tylko z grupą (AUD-92).
       events.push({ name: 'invoice/upo.requested', groupId: nip, data: { ...identity, nip, environment } });
     }
@@ -289,14 +309,26 @@ export async function runUpoRetryStale({ step, logger }: JobContext) {
   if (missingNipRejected) Sentry.captureMessage('UPO retry skipped — invoice seller NIP requires reconciliation', {
     level: 'warning', extra: { count: missingNipRejected },
   });
-  if (scanTruncated) Sentry.captureMessage('UPO retry missing scan truncated — manual reconciliation required', {
+  // L1a: strony pełne faktur firm w pauzie po 429 też „obcinają” skan, ale to
+  // nie wymaga operatora — następny przebieg po końcu pauzy je dokończy.
+  if (scanTruncated && pausedSkipped > 0) {
+    logger.info('UPO retry: skan brakujących UPO przerwany przez faktury firm w pauzie po 429 — dokończy następny przebieg', {
+      knownScanned: known.scanned, legacyScanned: legacy.scanned, pausedSkipped,
+    });
+  } else if (scanTruncated) Sentry.captureMessage('UPO retry missing scan truncated — manual reconciliation required', {
     level: 'warning', extra: { knownScanned: known.scanned, legacyScanned: legacy.scanned },
   });
+  if (pausedSkipped) {
+    logger.info('UPO retry: pominięte wpisy firm w pauzie po 429 z KSeF (KSEF_RATE_LIMIT_PAUSE)', {
+      count: pausedSkipped,
+      firms: [...pausedByNip.values()].filter(Boolean).length,
+    });
+  }
   if (events.length) await step.sendEvent('re-request-upo', events);
   Sentry.addBreadcrumb({ category: 'ksef.upo', level: 'info', message: 'UPO retry batch dispatched',
     data: { stale: stale.length, missing: missingCount, dispatched: events.length,
-      quarantined, missingNipRejected, scanTruncated } });
+      quarantined, missingNipRejected, pausedSkipped, scanTruncated } });
   return { processed: stale.length + missingCount, missing: missingCount,
-    dispatched: events.length, quarantined, missingNipRejected, scanTruncated, cutoffIso };
+    dispatched: events.length, quarantined, missingNipRejected, pausedSkipped, scanTruncated, cutoffIso };
 }
 

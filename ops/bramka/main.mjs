@@ -1,7 +1,7 @@
 // Bramka FaktWay — bot Telegrama dla operatorów (B-2, krok 9 planu automatyzacji).
 // Działa na ops-1 jako osobna aplikacja Coolify. Long polling: bez publicznego
 // endpointu i bez otwartych portów. Instrukcja: docs/runbooks/bramka-telegram.md.
-import { createCoolify, createGithub, createTelegram } from './src/clients.mjs';
+import { createCoolify, createGhcr, createGithub, createTelegram } from './src/clients.mjs';
 import { createBramka } from './src/commands.mjs';
 import { loadConfig } from './src/config.mjs';
 import { createDb } from './src/db.mjs';
@@ -21,7 +21,8 @@ const telegram = createTelegram({ token: config.telegramToken });
 const coolify = createCoolify(config.coolify);
 const github = createGithub(config.github);
 const db = createDb(config.databaseUrl);
-const deployer = createDeployer({ github, coolify, db, config });
+const ghcr = createGhcr();
+const deployer = createDeployer({ github, coolify, ghcr, db, config });
 const bramka = createBramka({
   users: config.users,
   telegram,

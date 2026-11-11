@@ -123,7 +123,7 @@ vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: m.
 
 import { NonRetriableError, RetryAfterError } from '@/lib/jobs/errors';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
-import { classifySendError } from '@/lib/ksef/send-error-codes';
+import { classifySendError, sendVerdictIn } from '@/lib/ksef/send-error-codes';
 import { invoiceXmlKeyFor } from '@/lib/storage/r2';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { finalizeInvoice } from '@/lib/xml/invoice-calculator';
@@ -193,7 +193,10 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
     expect(error).toBeInstanceOf(NonRetriableError);
     expect(classifySendError(error).code).toBe('KSEF_NUMBER_TAKEN');
     expect(error.message).toContain('K-OBCA');
-    expect(error.message).toContain('999.99');
+    // F-093-440: dane oryginału (kwota, program) tylko w tekście klienta, nie w komunikacie błędu joba.
+    expect(error.message).not.toContain('999.99');
+    expect(sendVerdictIn(error)?.customerMessage).toContain('K-OBCA');
+    expect(sendVerdictIn(error)?.customerMessage).toContain('999.99');
     expect(m.ksef.invoicePosts).toBe(1);
     expect(submissions().map((r) => r.status)).toEqual(['number_taken']);
     expect(evidence()).toBe(false);

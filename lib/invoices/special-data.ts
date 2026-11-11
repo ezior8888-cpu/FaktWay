@@ -49,7 +49,8 @@ export function finalSpecialData(
 const SHAPE_CONSTRAINT = 'invoices_special_data_shape';
 
 /**
- * Odmowa bazy na kształcie danych specjalnych to błąd programu, nie klienta —
+ * Zajęty numer (23505) to błąd klienta do poprawy; odmowa bazy na kształcie danych
+ * specjalnych to błąd programu, nie klienta —
  * komunikat z nazwą dokumentu i tym, co zrobić, zamiast treści Postgresa.
  * `null`, gdy błąd dotyczy czegoś innego (wołający zostawia swój komunikat).
  */
@@ -58,6 +59,12 @@ export function specialDataInsertError(
   /** Dopełniacz z numerem, np. „korekty FK/1/10/2026”. */
   documentLabel: string,
 ): string | null {
+  // 23505 = unique_violation: zajęty numer (podwójne kliknięcie, druga karta). Ten sam
+  // sens co przy zwykłej fakturze (components/invoices/actions.ts), z numerem dokumentu.
+  if (error?.code === '23505') {
+    return `Dokument ${documentLabel} już istnieje albo ten numer jest zajęty. ` +
+      'Sprawdź listę faktur (być może zapisał się przy poprzednim kliknięciu) lub wybierz inny numer.';
+  }
   if (!error || error.code !== '23514' || !error.message?.includes(SHAPE_CONSTRAINT)) return null;
   return `Nie zapisaliśmy ${documentLabel}: dane potrzebne do wysyłki do KSeF są niepełne. ` +
     'Nic nie zostało wysłane. Spróbuj zapisać jeszcze raz; jeśli błąd wróci, napisz do pomocy FaktWay.';

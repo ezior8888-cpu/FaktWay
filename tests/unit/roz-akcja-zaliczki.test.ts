@@ -85,6 +85,8 @@ function zaliczka(id: string, gross: number, net: number, vat: number, rate: str
     internal_number: `ZAL/${rate}`, ksef_number: null, issue_date: '2026-08-01',
     advance_amount: gross, gross_total: gross, net_total: net, vat_total: vat,
     fa3_data: { lines: [{ vatRate: rate, netAmount: net }] },
+    // Ten sam nabywca co w formularzu rozliczenia (F12-D4).
+    buyer_nip: '5252241585', buyer_data: { nip: '5252241585', name: 'Klient' },
   };
 }
 
@@ -174,6 +176,13 @@ describe('faktura rozliczeniowa — zaliczki ze stawką', () => {
     const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380), 'firma-a');
     expect(wynik).toMatchObject({ success: false, error: expect.stringContaining('FR/szkic') });
     expect(inserts).toEqual([]);
+  });
+
+  it('F12-D4: zaliczka wystawiona dla innego nabywcy nie wchodzi do rozliczenia (art. 106f ust. 3)', async () => {
+    tables.invoices = tables.invoices.map((r) => (r.id === ZAL_8 ? { ...r, buyer_nip: '1111111111', buyer_data: { nip: '1111111111', name: 'Inny Klient' } } : r));
+    const wynik = await saveFinalAction(formularz([ZAL_23, ZAL_8], 13380), 'firma-a');
+    expect(wynik).toMatchObject({ success: false });
+    expect(JSON.stringify(wynik)).toContain('ZAL/8');
   });
 
   it('zaliczka w stawce spoza zamówienia wraca do formularza — bez szkicu i bez wysyłki', async () => {

@@ -14,8 +14,7 @@ function kpirHref(period: string): string {
   return `/reports/kpir?month=${Number(month)}&year=${year}`;
 }
 
-// `cn()`, nie samo `buttonVariants()`: bez scalenia klas zostaje `border-transparent` z bazy cva.
-const ARROW = cn(buttonVariants({ variant: 'outline', size: 'icon' }));
+const ARROW = buttonVariants({ variant: 'outline', size: 'icon' });
 
 /**
  * Pasek nad kartami KPiR: wybór miesiąca (ten sam przełącznik co na Kosztach,
@@ -78,7 +77,7 @@ export function KpirToolbar({
         {monthTitle}
       </span>
       {exportHref ? (
-        <Link href={exportHref} className={cn(buttonVariants())}>
+        <Link href={exportHref} className={buttonVariants()}>
           <RiDownload2Line aria-hidden />
           Eksport KPiR
         </Link>

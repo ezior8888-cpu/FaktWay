@@ -30,15 +30,24 @@ export class RetryAfterError extends Error {
    * `failed` (S22 z rewizji 03.10.2026). Domyślnie `true`.
    */
   readonly countsAsAttempt: boolean;
+  /**
+   * PAUZA po 429 z KSeF (L1a): firma czeka na koniec blokady MF. Nie zużywa
+   * ani próby, ani budżetu odczekań (`__waits`); ma własny budżet czasu
+   * łańcucha pauz (`MAX_PAUSE_CHAIN_MS` w `retry.ts`), po którym liczy się
+   * jak zwykła próba — żeby trwała blokada MF miała wyjście (failed
+   * `KSEF_RATE_LIMIT` → I6). Domyślnie `false`.
+   */
+  readonly pause: boolean;
 
   constructor(
     message: string,
     retryAfter: string | number,
-    options?: { cause?: unknown; countsAsAttempt?: boolean },
+    options?: { cause?: unknown; countsAsAttempt?: boolean; pause?: boolean },
   ) {
     super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'RetryAfterError';
     this.retryAfterMs = parseDurationMs(retryAfter);
     this.countsAsAttempt = options?.countsAsAttempt ?? true;
+    this.pause = options?.pause ?? false;
   }
 }

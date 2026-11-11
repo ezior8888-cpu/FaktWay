@@ -5,7 +5,6 @@ import { useLayoutEffect } from 'react';
 import { SegmentErrorCard } from '@/components/segment-error-card';
 import { buttonVariants } from '@/components/ui/button';
 import { applyTheme, readStoredTheme } from '@/lib/theme/theme';
-import { cn } from '@/lib/utils';
 
 /**
  * Błąd poniżej głównego layoutu, na każdej grupie tras. Przede wszystkim awaria
@@ -53,7 +52,7 @@ export default function RootError({
             data-slot="button"
             data-variant="outline"
             data-size="lg"
-            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }))}
+            className={buttonVariants({ variant: 'outline', size: 'lg' })}
           >
             Strona główna
           </a>

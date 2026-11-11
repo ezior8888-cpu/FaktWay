@@ -215,8 +215,9 @@ export async function submitInvoice(
       );
 
       if (!invoiceStatus.ksefNumber) {
+        // F-093-OPIS: sam kod statusu, bez opisu z KSeF (komunikat idzie do logów i telemetrii).
         throw new Error(
-          `KSeF: faktura przetworzona bez numeru KSeF. Status: ${invoiceStatus.status.description}`
+          `KSeF: faktura przetworzona bez numeru KSeF (status ${ksefNumericStatusCode(invoiceStatus.status?.code)})`
         );
       }
 
@@ -272,6 +273,24 @@ export interface RejectedAttempt {
   invoiceReferenceNumber?: string | null;
 }
 
+/**
+ * F-093-STATUS: `message` to tekst operatora, sam status (np.
+ * `KSeF odrzucił fakturę (status 450)`). Idzie do historii wysyłki, logu
+ * workera, `inngest_run_log`, dziennika prób, audytu i Sentry. Walidator KSeF
+ * może w `status.details` powtarzać wartości z dokumentu (NIP i nazwę
+ * nabywcy), a reguła z `lib/ksef/history-sync/errors.ts` mówi: operator
+ * dostaje status i kody, nigdy treść odpowiedzi.
+ *
+ * Opis i szczegóły z KSeF są w polach prywatnych (`ksefDescription`,
+ * `ksefDetails`), których JSON, `inspect` ani Sentry nie serializują. Tekst
+ * dla klienta (jego faktura, jedyna wskazówka, co poprawić) daje
+ * `customerMessage`; do `invoices.last_error` i zdarzenia
+ * `invoice/submit.failed` (e-mail „odrzucona”) wkłada go tylko
+ * `onSubmitInvoiceExhausted`. `last_error` czytają też panele operatora
+ * (`/admin/ksef`, `/admin/support`): to osobne ustalenie, nie ten błąd.
+ * Przedrostek „KSeF odrzucił fakturę” zostaje, bo czyta go zapasowa reguła
+ * klasyfikatora (`send-error-codes.ts`).
+ */
 export class KsefInvoiceRejectedError extends Error {
   readonly code: number;
   readonly originalKsefNumber: string | null;
@@ -279,18 +298,18 @@ export class KsefInvoiceRejectedError extends Error {
   readonly ourInvoiceHash: string | null;
   readonly ourSessionReferenceNumber: string | null;
   readonly ourInvoiceReferenceNumber: string | null;
+  readonly #description: string;
+  readonly #details: readonly string[];
 
   constructor(code: number, status: InvoiceStatusResponse['status'], attempt: RejectedAttempt = {}) {
-    const details = status.details?.join('; ') ?? '';
     const original = status.extensions?.originalKsefNumber ?? null;
     const originalSession = status.extensions?.originalSessionReferenceNumber ?? null;
     super(
       code === KSEF_DUPLICATE_INVOICE
         ? `KSeF ma już fakturę o tym numerze${original ? ` — numer KSeF ${original}` : ''}` +
             `${originalSession ? ` (sesja ${originalSession})` : ''}. Najpewniej to ta sama ` +
-            'faktura z wcześniejszej próby: sprawdź ją w KSeF, zanim wystawisz ją ponownie. ' +
-            `Szczegóły: ${details}`
-        : `KSeF odrzucił fakturę: ${status.description}. Szczegóły: ${details}`,
+            'faktura z wcześniejszej próby: sprawdź ją w KSeF, zanim wystawisz ją ponownie.'
+        : `KSeF odrzucił fakturę (status ${code})`,
     );
     this.name = 'KsefInvoiceRejectedError';
     this.code = code;
@@ -299,10 +318,40 @@ export class KsefInvoiceRejectedError extends Error {
     this.ourInvoiceHash = attempt.invoiceHash ?? null;
     this.ourSessionReferenceNumber = attempt.sessionReferenceNumber ?? null;
     this.ourInvoiceReferenceNumber = attempt.invoiceReferenceNumber ?? null;
+    // Dane z zewnątrz: ani konstruktor, ani `customerMessage` nie mogą rzucić.
+    // Rzucający konstruktor zamieniał odrzucenie w zwykły błąd: ponowienia
+    // uzgadniania i na końcu „do uzgodnienia” (RESULT_UNCERTAIN) zamiast
+    // KSEF_REJECTED z powodem dla klienta. `customerMessage` czyta
+    // `onSubmitInvoiceExhausted` przed zapisem stanu faktury.
+    const details: unknown = status.details;
+    this.#description = typeof status.description === 'string' ? status.description : '';
+    this.#details = Array.isArray(details)
+      ? details.filter((d): d is string => typeof d === 'string')
+      : typeof details === 'string' ? [details] : [];
   }
 
   get isDuplicate(): boolean {
     return this.code === KSEF_DUPLICATE_INVOICE;
+  }
+
+  /** Opis statusu z KSeF. Tylko dla klienta, nigdy do logów i telemetrii. */
+  get ksefDescription(): string {
+    return this.#description;
+  }
+
+  /** Szczegóły statusu z KSeF (mogą powtarzać wartości z dokumentu). Tylko dla klienta. */
+  get ksefDetails(): readonly string[] {
+    return this.#details;
+  }
+
+  /**
+   * Tekst dla klienta: karta faktury i e-mail „odrzucona”, w tym samym
+   * kształcie co przed F-093-STATUS. Przy 440 runner pisze własne werdykty
+   * (`resolveDuplicate`), więc tu zostaje `message`.
+   */
+  get customerMessage(): string {
+    if (this.isDuplicate) return this.message;
+    return `KSeF odrzucił fakturę: ${this.#description}. Szczegóły: ${this.#details.join('; ')}`;
   }
 }
 
@@ -324,9 +373,9 @@ function settleInvoiceStatus(
     // „Przetwarzanie zostało przerwane z przyczyn wewnętrznych systemu.
     // Spróbuj ponownie.” (CIRFMF/ksef-docs, RC5.7). Zwykły Error = ponowienie;
     // ponowienie najpierw uzgadnia status po numerze referencyjnym.
-    throw new Error(
-      `KSeF przerwał przetwarzanie faktury (status ${code}): ${status.status.description}`,
-    );
+    // F-093-OPIS: bez opisu z KSeF; kod wystarcza, a opis potrafił zmienić
+    // klasyfikację w regułach tekstowych `send-error-codes.ts`.
+    throw new Error(`KSeF przerwał przetwarzanie faktury (status ${code})`);
   }
   if (Number.isFinite(code) && code >= INVOICE_STATUS.REJECTED) {
     throw new KsefInvoiceRejectedError(code, status.status, {

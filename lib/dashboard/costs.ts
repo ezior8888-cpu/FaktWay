@@ -1,11 +1,9 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import {
-  kpirCostAmount,
-  VAT_DEDUCTIBLE_DOCUMENTS,
-} from '@/lib/categorization/kpir-cost';
+import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
 import { KSEF_INVOICE_CATEGORY, KSEF_INVOICE_COST_SOURCE } from '@/lib/dashboard/ksef-invoice-cost';
 import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+import { costDocumentType, documentAllowsVatDeduction } from '@/lib/expenses/vat-deduction-document';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
@@ -45,8 +43,9 @@ export interface CostEntry {
   /** Wypływ pieniędzy: `gross_amount` z tego samego wiersza. */
   outflow: number;
   /**
-   * VAT do odliczenia: `vat_deductible_amount` tylko dla dokumentów
-   * z `VAT_DEDUCTIBLE_DOCUMENTS` (ta sama reguła co JPK_V7M), inaczej 0.
+   * VAT do odliczenia: `vat_deductible_amount` tylko dla dokumentów, które
+   * dają odliczenie (`documentAllowsVatDeduction`, ta sama reguła co
+   * JPK_V7M: rodzaj i data wystawienia), inaczej 0.
    */
   vatDeductible: number;
   /**
@@ -152,10 +151,11 @@ export async function getCosts(
     sellerName: typeof row.seller_name === 'string' && row.seller_name.trim()
       ? row.seller_name
       : null,
+    // PIT bez zmian do odpowiedzi księgowej (krok 1.3): paragon z NIP z 2027 r. dalej netto.
     cost: kpirCostAmount(row),
     outflow: Number(row.gross_amount ?? 0),
-    // Brak typu dokumentu = faktura, jak w `nonDeductedVat` i eksporcie JPK.
-    vatDeductible: VAT_DEDUCTIBLE_DOCUMENTS.has(row.document_type ?? 'invoice')
+    // Ta sama reguła co JPK_V7M: rodzaj (paragon z NIP ze zdjęcia z odczytu OCR) i data wystawienia.
+    vatDeductible: documentAllowsVatDeduction({ documentType: costDocumentType(row), issueDate: row.issue_date, grossAmount: row.gross_amount })
       ? Number(row.vat_deductible_amount ?? 0)
       : 0,
     categoryLabel: typeof row.category_label === 'string' && row.category_label.trim()

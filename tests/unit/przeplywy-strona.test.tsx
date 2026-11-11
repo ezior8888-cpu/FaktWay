@@ -36,6 +36,12 @@ vi.mock('next/navigation', () => ({
   redirect: (to: string) => { throw new Error(`redirect ${to}`); },
 }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: async () => state.ctx }));
+// Globalny stop księgowości (karta VAT) czyta się rozstrzygająco kluczem
+// serwisowym (F11-B6); w atrapie stop wyłączony, odczyt poza licznikiem T9.
+vi.mock('@/lib/feature-flags/global-flags', async (orig) => ({
+  ...(await orig<typeof import('@/lib/feature-flags/global-flags')>()),
+  getGlobalFlagForExecution: async () => false,
+}));
 vi.mock('@/lib/dashboard-shell-data', () => ({
   getTenantKsefProof: async () => state.proof,
   // Dawna siatka (`PrzeplywyGrid`) czyta jeszcze starą bramkę.

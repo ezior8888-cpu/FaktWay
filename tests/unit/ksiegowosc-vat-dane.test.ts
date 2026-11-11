@@ -37,6 +37,12 @@ vi.mock('@/lib/ksiegowosc/wysylka-jpk/certyfikaty', async (orig) => ({
   ...(await orig<typeof import('@/lib/ksiegowosc/wysylka-jpk/certyfikaty')>()),
   srodowiskoMf: () => mocks.srodowisko,
 }));
+// Wpisy ręczne przychodu blokują VAT (F11-A1, osobny test); tu ich nie ma.
+vi.mock('@/lib/ksiegowosc/wpisy-reczne', async (orig) => ({
+  ...(await orig<typeof import('@/lib/ksiegowosc/wpisy-reczne')>()),
+  czytajWpisyReczne: async () => [],
+  czytajWpisyKpir: async () => [],
+}));
 
 const { czytajVat, nadwyzkaZAdresu } = await import('@/lib/ksiegowosc/vat-dane');
 

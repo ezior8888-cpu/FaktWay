@@ -15,7 +15,16 @@ import type { Job, JobResult } from 'pg-boss';
 import { startBoss } from './boss';
 import { createJobLogger } from './logger';
 import { retryPolicyFor, type JobDefinition } from './registry';
-import { ATTEMPT_KEY, decideRetry, readAttempt, readWaits, WAITS_KEY } from './retry';
+import {
+  ATTEMPT_KEY,
+  decideRetry,
+  isPauseWithinBudget,
+  PAUSE_SINCE_KEY,
+  readAttempt,
+  readPauseSince,
+  readWaits,
+  WAITS_KEY,
+} from './retry';
 import { recordJobRun } from './run-log';
 import { reportExhaustedJob } from './sentry';
 import { createJobStep } from './step-shim';
@@ -39,6 +48,7 @@ async function runOne(
 ): Promise<JobResult> {
   const attempt = readAttempt(job.data);
   const waits = readWaits(job.data);
+  const pauseSince = readPauseSince(job.data);
   const jobLog = createJobLogger(`${def.queue}#${job.id.slice(0, 8)}`);
   const completed: JobResult = { id: job.id, status: 'completed' };
 
@@ -48,6 +58,7 @@ async function runOne(
     const cleaned = { ...(job.data as Record<string, unknown>) };
     delete cleaned[ATTEMPT_KEY];
     delete cleaned[WAITS_KEY];
+    delete cleaned[PAUSE_SINCE_KEY];
     const parsed = def.schema.safeParse(cleaned);
     if (!parsed.success) {
       jobLog.error('payload nie przeszedł walidacji — onExhausted', {
@@ -75,8 +86,15 @@ async function runOne(
     return completed;
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    await recordJobRun({ queue: def.queue, runId: job.id, status: 'failed', durationMs: Date.now() - startedAt, error });
-    const decision = decideRetry(error, attempt, policy, waits);
+    // L1a: pauza po 429 to zaplanowane czekanie, nie porażka joba — bez wiersza
+    // 'failed', który przy fali 429 włączałby alarm „≥10 porażek w 5 min”.
+    // Ślad pauzy zostaje w dzienniku prób wysyłki (`ksef_send_attempts`, 'waiting').
+    // Po budżecie łańcucha pauza zużywa próbę — wtedy to zwykła porażka ('failed').
+    const paused = isPauseWithinBudget(error, { sinceMs: pauseSince, nowMs: Date.now() });
+    await recordJobRun(paused
+      ? { queue: def.queue, runId: job.id, status: 'succeeded', durationMs: Date.now() - startedAt }
+      : { queue: def.queue, runId: job.id, status: 'failed', durationMs: Date.now() - startedAt, error });
+    const decision = decideRetry(error, attempt, policy, waits, { sinceMs: pauseSince, nowMs: Date.now() });
 
     if (decision.action === 'retry') {
       jobLog.warn(
@@ -87,13 +105,17 @@ async function runOne(
       );
       try {
         const boss = await startBoss();
+        const nextData: Record<string, unknown> = {
+          ...(job.data as object),
+          [ATTEMPT_KEY]: decision.nextAttempt,
+          [WAITS_KEY]: decision.nextWaits,
+        };
+        // Łańcuch pauz po 429 (L1a): początek niesiony do końca budżetu; inne ponowienie go zeruje.
+        if (decision.nextPauseSince !== undefined) nextData[PAUSE_SINCE_KEY] = decision.nextPauseSince;
+        else delete nextData[PAUSE_SINCE_KEY];
         await boss.send(
           def.queue,
-          {
-            ...(job.data as object),
-            [ATTEMPT_KEY]: decision.nextAttempt,
-            [WAITS_KEY]: decision.nextWaits,
-          },
+          nextData,
           {
             startAfter: Math.ceil(decision.delayMs / 1000),
             // Bez grupy ponowienie omijało limit per firma/NIP.

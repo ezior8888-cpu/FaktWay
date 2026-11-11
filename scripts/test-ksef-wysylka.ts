@@ -12,17 +12,32 @@
  * - przy każdym uruchomieniu losuje fikcyjny NIP z poprawną sumą kontrolną i tworzy
  *   certyfikat samopodpisany w pamięci (TEST je dopuszcza), nic nie zapisuje w repo,
  * - numer faktury ma identyfikator przebiegu, bo KSeF pilnuje unikalności numeru,
- * - dane TEST są współdzielone między integratorami, więc nie wysyłaj tu prawdziwych danych.
+ * - dane TEST są współdzielone między integratorami, więc nie wysyłaj tu prawdziwych danych,
+ * - scenariusz 17 (L1a) zmienia limity API tylko jednorazowej firmy A (`POST /testdata/rate-limits`,
+ *   wyłącznie TEST) i przywraca je po pauzie; opis kroków i zasad przy `rateLimitPauseScenario`.
  *
  * Numery scenariuszy jak w sekcji 6 planu. Wynik: tabela w logu i podsumowanie joba.
+ * Scenariusz 14 (faktura do paragonu z FP) dopisał krok 1.2 planu kompletnej aplikacji.
  */
 
 import { randomInt, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 
 import type { KsefAuth } from '../lib/ksef/auth';
-import { getKsefBaseUrl, ksefFetch } from '../lib/ksef/client';
+import {
+  getKsefBaseUrl,
+  isKsefLocalPause,
+  isKsefRateLimitResponse,
+  KsefApiError,
+  ksefFetch,
+} from '../lib/ksef/client';
 import { prepareKsefCredentials } from '../lib/ksef/connect-credentials';
+import {
+  currentKsefNip,
+  KSEF_PAUSE_DEFAULT_MS,
+  ksefPausedUntil,
+  runWithKsefNip,
+} from '../lib/ksef/rate-limit-pause';
 import { ksefSessionCache } from '../lib/ksef/session-cache';
 import { KsefInvoiceRejectedError, submitInvoice } from '../lib/ksef/submit';
 import { todayInWarsaw } from '../lib/format/warsaw-date';
@@ -35,6 +50,48 @@ import type { InvoiceStatusResponse } from '../types/ksef';
 const ENV = 'test' as const;
 const UPO_WAIT_MS = 120_000;
 const UPO_POLL_MS = 10_000;
+
+/**
+ * Scenariusz 17: najdłużej tyle czekamy na koniec blokady MF. Dłuższy
+ * `Retry-After` = wiersz BŁĄD bez czekania, żeby bieg zmieścił się
+ * w `timeout-minutes` workflow (25 min).
+ */
+const MAX_PAUSE_WAIT_MS = 5 * 60_000;
+/** Zapas po końcu blokady, zanim skrypt znów zapyta KSeF w kontekście firmy A. */
+const PAUSE_END_MARGIN_MS = 2_000;
+/** Dopuszczalna różnica końca pauzy w aplikacji i `Retry-After` od MF (czas od odpowiedzi do zapisu). */
+const PAUSE_UNTIL_TOLERANCE_MS = 2_000;
+
+/**
+ * Grupy, które przyjmuje `POST /testdata/rate-limits` (`SetRateLimitsRequest`
+ * w `open-api.json` MF, wszystkie wymagane). `GET /rate-limits` zwraca jeszcze
+ * `onlineSessionClose`, `batchSessionClose`, `anonymous` i `global`: tych POST
+ * nie przyjmuje, więc ich nie wysyłamy.
+ */
+const SETTABLE_LIMIT_GROUPS = [
+  'onlineSession',
+  'batchSession',
+  'invoiceSend',
+  'invoiceStatus',
+  'sessionList',
+  'sessionInvoiceList',
+  'sessionMisc',
+  'invoiceMetadata',
+  'invoiceExport',
+  'invoiceExportStatus',
+  'invoiceDownload',
+  'collectiveIdentifier',
+  'other',
+] as const;
+
+interface LimitValues {
+  perSecond: number;
+  perMinute: number;
+  perHour: number;
+}
+
+/** Odpowiedź `GET /rate-limits` (`EffectiveApiRateLimits`): grupy na wierzchu obiektu. */
+type RateLimits = Partial<Record<string, LimitValues>>;
 
 type RawStatus = InvoiceStatusResponse & {
   invoicingMode?: string;
@@ -69,6 +126,26 @@ function fictionalNip(): string {
     const control = digits.reduce((sum, digit, i) => sum + digit * weights[i]!, 0) % 11;
     if (control !== 10) return `${digits.join('')}${control}`;
   }
+}
+
+/** Świeża firma na TEST: losowy fikcyjny NIP i certyfikat samopodpisany w pamięci (TEST je dopuszcza). */
+function makeFirm(): { ok: true; auth: KsefAuth } | { ok: false; problem: string } {
+  const nip = fictionalNip();
+  const material = makeSelfSignedCertificate({ kind: 'rsa', nip, subject: 'seal' });
+  const prepared = prepareKsefCredentials({
+    certificate: Buffer.from(material.certPem),
+    privateKey: Buffer.from(material.keyPem),
+  });
+  if (!prepared.ok) return { ok: false, problem: prepared.problem };
+  return {
+    ok: true,
+    auth: {
+      type: 'xades',
+      nip,
+      certificatePem: prepared.certificatePem,
+      privateKeyPem: prepared.privateKeyPem,
+    },
+  };
 }
 
 /** Dzień kalendarzowy przesunięty względem dzisiejszego w Polsce, w formacie P_1. */
@@ -116,6 +193,30 @@ function buildInvoice(sellerNip: string, number: string, issueDate: string): Inv
       dueDate: warsawDay(14),
       method: 'transfer',
       bankAccount: 'PL61109010140000071219812874',
+    },
+  };
+}
+
+/**
+ * Faktura do paragonu (krok 1.2 planu kompletnej aplikacji): `Fa/FP` = 1 i dane
+ * paragonu w `DodatkowyOpis`. Paragon z wczoraj z NIP nabywcy, ponad 450 zł
+ * brutto (do 450 zł paragon z NIP z 2026 r. jest fakturą uproszczoną).
+ */
+function buildReceiptInvoice(sellerNip: string, number: string, issueDate: string, receiptDate: string): Invoice {
+  const base = buildInvoice(sellerNip, number, issueDate);
+  return {
+    ...base,
+    saleDate: receiptDate,
+    lines: [{ ...base.lines[0]!, unitPriceNet: 1000, netAmount: 1000, vatAmount: 230, grossAmount: 1230 }],
+    netTotal: 1000,
+    vatTotal: 230,
+    grossTotal: 1230,
+    payment: { ...base.payment, amountDue: 1230, method: 'cash', bankAccount: undefined, dueDate: issueDate },
+    receipt: {
+      receiptNumber: `PAR/${number}`,
+      receiptDate,
+      cashRegisterNumber: 'ABC1234567890',
+      buyerNipOnReceipt: true,
     },
   };
 }
@@ -187,6 +288,353 @@ async function waitForUpo(auth: KsefAuth, references: References): Promise<strin
   }
 }
 
+function formatLimit(limit: LimitValues | undefined): string {
+  return limit ? `${limit.perSecond}/${limit.perMinute}/${limit.perHour}` : 'brak';
+}
+
+function sameLimit(a: LimitValues | undefined, b: LimitValues | undefined): boolean {
+  if (!a || !b) return false;
+  return a.perSecond === b.perSecond && a.perMinute === b.perMinute && a.perHour === b.perHour;
+}
+
+function clock(ms: number | null): string {
+  return ms === null ? 'brak' : `${new Date(ms).toISOString().slice(11, 19)} UTC`;
+}
+
+function seconds(ms: number | null): string {
+  return ms === null ? 'brak' : `${Math.round(ms / 1000)} s`;
+}
+
+/** Limity bieżącego kontekstu (grupa `other`). Poza kolejką firmy, więc bez bramki L1a. */
+function readLimits(accessToken: string): Promise<RateLimits> {
+  return ksefFetch<RateLimits>('/rate-limits', { accessToken, env: ENV });
+}
+
+/** Treść 429 od MF: `status.details` (`application/json`) albo `detail` (`application/problem+json`). */
+function rateLimitDetails(body: unknown): string {
+  const clean = (text: string) => text.replace(/\s+/g, ' ').slice(0, 300);
+  if (body && typeof body === 'object') {
+    const shaped = body as { status?: { details?: unknown }; detail?: unknown };
+    const details = shaped.status?.details;
+    if (Array.isArray(details) && details.length > 0) return clean(details.map(String).join('; '));
+    if (typeof shaped.detail === 'string') return clean(shaped.detail);
+  }
+  return typeof body === 'string' && body ? clean(body) : 'brak';
+}
+
+function describeError(error: unknown): string {
+  if (isKsefLocalPause(error) && error instanceof KsefApiError) {
+    return `lokalna pauza (bez żądania do MF), zostało ${seconds(error.retryAfterMs)}`;
+  }
+  if (error instanceof KsefApiError) {
+    return [
+      `HTTP ${error.status}`,
+      error.retryAfterMs !== null ? `Retry-After ${seconds(error.retryAfterMs)}` : '',
+      error.status === 429 ? `treść: ${rateLimitDetails(error.body)}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+  }
+  return error instanceof Error ? error.message.slice(0, 200) : String(error);
+}
+
+/**
+ * Uruchamia `fn` i liczy żądania HTTP, które w tym czasie wychodzą z procesu
+ * (skrypt nie robi nic równolegle). `block`: żadne nie wychodzi, atrapa
+ * odrzuca je bez sieci, więc nawet zepsuta bramka L1a nie uderzy w KSeF
+ * drugi raz w czasie pauzy.
+ */
+async function withRequestCount<T>(
+  mode: 'forward' | 'block',
+  fn: () => Promise<T>,
+): Promise<{ requests: string[]; value?: T; error?: unknown }> {
+  const original = globalThis.fetch;
+  const requests: string[] = [];
+  const base = getKsefBaseUrl(ENV);
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    // Liczymy i blokujemy tylko żądania do KSeF. Ruch do Redisa (moduł pauzy,
+    // gdy w środowisku są UPSTASH_REDIS_REST_*) idzie dalej bez liczenia.
+    if (!url.startsWith(base)) return original(input, init);
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+    requests.push(`${method} ${url.replace(base, '')}`);
+    if (mode === 'block') throw new Error('skrypt: żądanie zatrzymane w kroku bramki L1a');
+    return original(input, init);
+  };
+  try {
+    return { requests, value: await fn() };
+  } catch (error) {
+    return { requests, error };
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+interface Probe {
+  group: string;
+  status: number | 'lokalna' | 'sieć';
+  retryAfterMs: number | null;
+  details: string;
+  at: number;
+}
+
+/**
+ * Jedna sonda poza kolejką firmy: surowy `ksefFetch` bez `runWithKsefNip`,
+ * więc bramka L1a jej nie zatrzymuje i nie zapisuje pauzy. Liczy się do grupy
+ * MF podanej w `group` (`x-rate-limits` operacji w `open-api.json`).
+ */
+async function probe(group: string, path: string, accessToken: string): Promise<Probe> {
+  try {
+    await ksefFetch(path, { accessToken, env: ENV });
+    return { group, status: 200, retryAfterMs: null, details: '', at: Date.now() };
+  } catch (error) {
+    const at = Date.now();
+    if (isKsefLocalPause(error)) return { group, status: 'lokalna', retryAfterMs: null, details: '', at };
+    if (error instanceof KsefApiError) {
+      return {
+        group,
+        status: error.status,
+        retryAfterMs: error.retryAfterMs,
+        details: error.status === 429 ? rateLimitDetails(error.body) : '',
+        at,
+      };
+    }
+    return { group, status: 'sieć', retryAfterMs: null, details: describeError(error), at };
+  }
+}
+
+function describeProbe(probe: Probe): string {
+  return [
+    `${probe.group}: ${typeof probe.status === 'number' ? `HTTP ${probe.status}` : probe.status}`,
+    probe.retryAfterMs !== null ? `Retry-After ${seconds(probe.retryAfterMs)}` : '',
+    probe.details ? `treść: ${probe.details}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+/** Obie sondy przeszły = MF zablokował samą grupę; obie 429 = cały kontekst (NIP). */
+function blockScope(probes: Probe[]): 'grupa' | 'kontekst' | 'mieszane' {
+  if (probes.every((p) => p.status === 200)) return 'grupa';
+  if (probes.every((p) => p.status === 429)) return 'kontekst';
+  return 'mieszane';
+}
+
+interface PauseScenarioState {
+  /** `GET /rate-limits` firmy A przed zmianą. */
+  defaults: RateLimits | null;
+  /** `POST /testdata/rate-limits` wysłany (także bez odpowiedzi): limity trzeba przywrócić. */
+  limitsChanged: boolean;
+  /** Najpóźniejszy znany koniec blokady MF firmy A (ms), 0 = brak. */
+  blockEnd: number;
+}
+
+/**
+ * Scenariusz 17 (L1a, plan „zero zgubionych faktur”): pauza firmy po 429 na
+ * KSeF TEST i pomiar, czy MF po 429 blokuje samą grupę żądań, czy cały
+ * kontekst (MF tego nie opisuje, `ksef-docs/limity/limity-api.md`).
+ *
+ *   1. Świeża firma A (`makeFirm`), logowanie, `GET /rate-limits`: domyślne
+ *      `onlineSession` i `invoiceStatus` idą do faktów, bo źródła MF są
+ *      sprzeczne co do domyślnych limitów TEST.
+ *   2. `POST /testdata/rate-limits` (tylko TEST, kontekst firmy A): 13 grup
+ *      z domyślnych, `onlineSession` 1/s i 1/min; `GET` potwierdza zmianę.
+ *   3. Faktura a1 firmy A (przyjęta). 4. Druga wysyłka A: prawdziwy 429 od MF
+ *      na otwarciu sesji, z `Retry-After`; jedno żądanie.
+ *   5. Bramka L1a: od razu trzecia wysyłka A kończy się lokalną pauzą bez
+ *      żądania (atrapa `fetch` blokuje każde), a koniec pauzy w aplikacji
+ *      to chwila 429 plus `Retry-After`.
+ *   6. Po jednej sondzie poza kolejką firmy na grupę: `other`
+ *      (`GET /rate-limits`) i `invoiceStatus` (status a1).
+ *   7. Firma B (firma skryptu) wysyła w trakcie pauzy A, bez czekania.
+ *   8. Czekanie na koniec blokady (najwyżej `MAX_PAUSE_WAIT_MS`), potem
+ *      `DELETE /testdata/rate-limits` i `GET` z powrotem do domyślnych
+ *      (`restoreRateLimits`, także po przerwaniu kroków 3–7).
+ *
+ * Zasady: dokładnie jeden wyzwolony 429, najwyżej jedna sonda na grupę, nigdy
+ * drugie uderzenie w `onlineSession` w czasie pauzy. Hamulca wysyłki (429
+ * z 5 firm w 10 minut) skrypt nie wywołuje: 429 dostaje tylko firma A.
+ * UPO w pauzie dowodzi test lokalny (`tests/unit/ksef-pauza-429.test.ts`),
+ * nie ten scenariusz.
+ */
+async function rateLimitPauseScenario(
+  firmB: KsefAuth,
+  xmlFor: (sellerNip: string, suffix: string) => string,
+): Promise<Row> {
+  const facts: string[] = [];
+  const state: PauseScenarioState = { defaults: null, limitsChanged: false, blockEnd: 0 };
+  let passed = false;
+  const firm = makeFirm();
+  if (!firm.ok) {
+    facts.push(`certyfikat firmy A odrzucony lokalnie: ${firm.problem}`);
+  } else {
+    try {
+      passed = await runRateLimitPause(firm.auth, firmB, xmlFor, state, facts);
+    } catch (error) {
+      facts.push(`przerwany: ${describeError(error)}`);
+      passed = false;
+    }
+    if (state.limitsChanged) passed = (await restoreRateLimits(firm.auth, state, facts)) && passed;
+  }
+  facts.push('UPO w pauzie: test lokalny tests/unit/ksef-pauza-429.test.ts, nie ten scenariusz');
+  return {
+    id: '17',
+    title: 'Pauza firmy po 429 (L1a) i zasięg blokady MF, bez UPO',
+    passed,
+    facts: facts.join('; '),
+  };
+}
+
+/** Kroki 1–7 scenariusza 17. Zwraca, czy wszystkie przeszły; fakty dopisuje do `facts`. */
+async function runRateLimitPause(
+  authA: KsefAuth,
+  firmB: KsefAuth,
+  xmlFor: (sellerNip: string, suffix: string) => string,
+  state: PauseScenarioState,
+  facts: string[],
+): Promise<boolean> {
+  const nipA = authA.nip;
+
+  // 1. Domyślne limity świeżej firmy.
+  const { accessToken } = await ksefSessionCache.getSession(authA, ENV);
+  const defaults = await readLimits(accessToken);
+  facts.push(
+    `firma A ${nipA}, domyślne limity TEST (s/min/h): onlineSession ${formatLimit(defaults.onlineSession)}, invoiceStatus ${formatLimit(defaults.invoiceStatus)}`,
+  );
+  const rateLimits: Record<string, LimitValues> = {};
+  const missing: string[] = [];
+  for (const group of SETTABLE_LIMIT_GROUPS) {
+    const limit = defaults[group];
+    if (limit) rateLimits[group] = { perSecond: limit.perSecond, perMinute: limit.perMinute, perHour: limit.perHour };
+    else missing.push(group);
+  }
+  if (missing.length > 0) {
+    facts.push(`GET /rate-limits bez grup: ${missing.join(', ')}`);
+    return false;
+  }
+  state.defaults = defaults;
+
+  // 2. Jedno otwarcie sesji na minutę; reszta grup bez zmian.
+  const onlineSession: LimitValues = { perSecond: 1, perMinute: 1, perHour: rateLimits.onlineSession.perHour };
+  rateLimits.onlineSession = onlineSession;
+  state.limitsChanged = true;
+  await ksefFetch('/testdata/rate-limits', { method: 'POST', accessToken, env: ENV, body: { rateLimits } });
+  const applied = await readLimits(accessToken);
+  facts.push(`po POST /testdata/rate-limits onlineSession ${formatLimit(applied.onlineSession)}`);
+  if (!sameLimit(applied.onlineSession, onlineSession)) return false;
+
+  // 3. Pierwsza faktura firmy A zużywa jedyne otwarcie sesji w minucie.
+  const firstStartedAt = Date.now();
+  const first = await send(authA, xmlFor(nipA, '17A-1'));
+  facts.push(`a1: ${describeSent(first)}`);
+  if (!first.accepted || !first.references) return false;
+  const a1 = first.references;
+
+  // 4. Druga wysyłka: prawdziwy 429 od MF (nie lokalna pauza) z `Retry-After`.
+  const second = await withRequestCount('forward', () => submitInvoice(xmlFor(nipA, '17A-2'), authA, ENV));
+  const rateLimitedAt = Date.now();
+  facts.push(
+    `druga wysyłka A (${seconds(rateLimitedAt - firstStartedAt)} od startu pierwszej): ${second.error === undefined ? 'przyjęta, bez 429' : describeError(second.error)}, żądań do MF: ${second.requests.length}`,
+  );
+  const rateLimited = isKsefRateLimitResponse(second.error) ? second.error : null;
+  if (!rateLimited) return false;
+  const retryAfterMs = rateLimited.retryAfterMs;
+  state.blockEnd = rateLimitedAt + (retryAfterMs ?? KSEF_PAUSE_DEFAULT_MS);
+  let passed = retryAfterMs !== null && second.requests.length === 1;
+
+  // 5. Bramka L1a: trzecia wysyłka nie wychodzi z aplikacji.
+  const third = await withRequestCount('block', () => submitInvoice(xmlFor(nipA, '17A-3'), authA, ENV));
+  const pausedUntil = await ksefPausedUntil(ENV, nipA);
+  const expectedUntil = retryAfterMs === null ? null : rateLimitedAt + retryAfterMs;
+  if (pausedUntil !== null) state.blockEnd = Math.max(state.blockEnd, pausedUntil);
+  const gateHeld = isKsefLocalPause(third.error) && third.requests.length === 0;
+  const untilMatches =
+    pausedUntil !== null && expectedUntil !== null && Math.abs(pausedUntil - expectedUntil) <= PAUSE_UNTIL_TOLERANCE_MS;
+  facts.push(
+    `bramka L1a, trzecia wysyłka A: ${third.error === undefined ? 'przeszła' : describeError(third.error)}, żądań do MF: ${third.requests.length}${third.requests.length > 0 ? ` (zatrzymane w skrypcie: ${third.requests.join(', ')})` : ''}, pauza w aplikacji do ${clock(pausedUntil)} (MF: ${clock(expectedUntil)})`,
+  );
+  passed = gateHeld && untilMatches && passed;
+
+  // 6. Zasięg blokady: po jednej sondzie na grupę, poza kolejką firmy.
+  if (currentKsefNip() !== null) {
+    facts.push('sondy pominięte: skrypt jest w kontekście firmy, bramka by je zatrzymała');
+    passed = false;
+  } else {
+    const probes = [
+      await probe('other', '/rate-limits', accessToken),
+      await probe(
+        'invoiceStatus',
+        `/sessions/${encodeURIComponent(a1.sessionReferenceNumber)}/invoices/${encodeURIComponent(a1.invoiceReferenceNumber)}`,
+        accessToken,
+      ),
+    ];
+    for (const result of probes) {
+      if (result.status === 429) {
+        state.blockEnd = Math.max(state.blockEnd, result.at + (result.retryAfterMs ?? KSEF_PAUSE_DEFAULT_MS));
+      }
+    }
+    facts.push(`zasięg blokady MF: ${blockScope(probes)} (${probes.map(describeProbe).join(', ')})`);
+    // Pomiar jest ważny tylko z odpowiedzią 200 albo 429 (inny kod nie mówi nic o blokadzie).
+    passed = probes.every((p) => p.status === 200 || p.status === 429) && passed;
+  }
+
+  // 7. Firma B w trakcie pauzy A: bez czekania.
+  const firmBStartedAt = Date.now();
+  const b = await send(firmB, xmlFor(firmB.nip, '17'));
+  const pauseLeftMs = pausedUntil === null ? 0 : pausedUntil - firmBStartedAt;
+  facts.push(
+    `firma B (${pauseLeftMs > 0 ? `${seconds(pauseLeftMs)} przed końcem pauzy A` : 'poza pauzą A'}): ${describeSent(b)}`,
+  );
+  return b.accepted && pauseLeftMs > 0 && passed;
+}
+
+/**
+ * Krok 8 scenariusza 17: czeka na koniec blokady MF firmy A (najwyżej
+ * `MAX_PAUSE_WAIT_MS`), przywraca domyślne limity i sprawdza je. Dłuższa
+ * blokada: bez czekania i bez `DELETE` (żądanie w blokadzie mogłoby ją
+ * wydłużyć); zmienione limity zostają wtedy na jednorazowym fikcyjnym NIP.
+ */
+async function restoreRateLimits(
+  authA: KsefAuth,
+  state: PauseScenarioState,
+  facts: string[],
+): Promise<boolean> {
+  const appPause = await ksefPausedUntil(ENV, authA.nip);
+  const blockEnd = Math.max(state.blockEnd, appPause ?? 0);
+  const waitMs = blockEnd > 0 ? blockEnd + PAUSE_END_MARGIN_MS - Date.now() : 0;
+  if (waitMs > MAX_PAUSE_WAIT_MS) {
+    facts.push(
+      `blokada do ${clock(blockEnd)}, dłużej niż ${MAX_PAUSE_WAIT_MS / 60_000} min: bez czekania i bez DELETE /testdata/rate-limits (zmienione limity zostają na jednorazowym NIP ${authA.nip})`,
+    );
+    return false;
+  }
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const stillPaused = await ksefPausedUntil(ENV, authA.nip);
+    facts.push(
+      `czekanie na koniec pauzy: ${seconds(waitMs)}, pauza w aplikacji ${stillPaused === null ? 'zakończona' : `do ${clock(stillPaused)}`}`,
+    );
+  }
+  try {
+    const { accessToken } = await ksefSessionCache.getSession(authA, ENV);
+    // W kontekście firmy A: po pauzie bramka L1a musi przepuścić.
+    const restored = await runWithKsefNip(authA.nip, async () => {
+      await ksefFetch('/testdata/rate-limits', { method: 'DELETE', accessToken, env: ENV });
+      return readLimits(accessToken);
+    });
+    const differs = SETTABLE_LIMIT_GROUPS.filter((group) => !sameLimit(restored[group], state.defaults?.[group]));
+    facts.push(
+      differs.length === 0
+        ? `po DELETE /testdata/rate-limits limity domyślne (onlineSession ${formatLimit(restored.onlineSession)})`
+        : `po DELETE /testdata/rate-limits inne niż domyślne: ${differs.map((group) => `${group} ${formatLimit(restored[group])}`).join(', ')}`,
+    );
+    return differs.length === 0;
+  } catch (error) {
+    facts.push(`przywrócenie limitów nieudane: ${describeError(error)}`);
+    return false;
+  }
+}
+
 async function main(): Promise<number> {
   if (process.env.KSEF_ENV === 'production') {
     console.error('Odmowa: ten skrypt działa wyłącznie na KSeF TEST.');
@@ -194,27 +642,19 @@ async function main(): Promise<number> {
   }
 
   const runId = randomUUID().slice(0, 8).toUpperCase();
-  const nip = fictionalNip();
-  const material = makeSelfSignedCertificate({ kind: 'rsa', nip, subject: 'seal' });
-  const prepared = prepareKsefCredentials({
-    certificate: Buffer.from(material.certPem),
-    privateKey: Buffer.from(material.keyPem),
-  });
-  if (!prepared.ok) {
-    console.error(`Certyfikat testowy odrzucony lokalnie: ${prepared.problem}`);
+  const firm = makeFirm();
+  if (!firm.ok) {
+    console.error(`Certyfikat testowy odrzucony lokalnie: ${firm.problem}`);
     return 2;
   }
-  const auth: KsefAuth = {
-    type: 'xades',
-    nip,
-    certificatePem: prepared.certificatePem,
-    privateKeyPem: prepared.privateKeyPem,
-  };
+  const auth = firm.auth;
+  const nip = auth.nip;
 
   console.log(`KSeF: ${getKsefBaseUrl(ENV)}, przebieg ${runId}, fikcyjny NIP ${nip}`);
   const generatedAt = new Date();
-  const xmlFor = (suffix: string, issueDate: string) =>
-    generateFA3Xml(buildInvoice(nip, `H1A/${runId}/${suffix}`, issueDate), { generatedAt });
+  const xmlForSeller = (sellerNip: string, suffix: string, issueDate: string) =>
+    generateFA3Xml(buildInvoice(sellerNip, `H1A/${runId}/${suffix}`, issueDate), { generatedAt });
+  const xmlFor = (suffix: string, issueDate: string) => xmlForSeller(nip, suffix, issueDate);
   const rows: Row[] = [];
 
   // 1. Zwykła faktura z dzisiejszą datą.
@@ -266,6 +706,26 @@ async function main(): Promise<number> {
     passed: overdue.accepted && overdue.raw?.invoicingMode === 'Offline',
     facts: describeSent(overdue),
   });
+
+  // 14. Faktura do paragonu (krok 1.2): KSeF przyjmuje FA(3) z FP = 1 i DodatkowyOpis.
+  const receiptXml = generateFA3Xml(
+    buildReceiptInvoice(nip, `H1A/${runId}/14`, warsawDay(0), warsawDay(-1)),
+    { generatedAt },
+  );
+  const receipt = await send(auth, receiptXml);
+  rows.push({
+    id: '14',
+    title: 'Faktura do paragonu (FP = 1, dane paragonu w DodatkowyOpis)',
+    passed:
+      receiptXml.includes('<FP>1</FP>') &&
+      receipt.accepted &&
+      Boolean(receipt.raw?.ksefNumber) &&
+      receipt.raw?.invoicingMode === 'Online',
+    facts: describeSent(receipt),
+  });
+
+  // 17. L1a: pauza firmy po 429 i zasięg blokady MF (firma A jednorazowa, firma B = ta wyżej).
+  rows.push(await rateLimitPauseScenario(auth, (sellerNip, suffix) => xmlForSeller(sellerNip, suffix, warsawDay(0))));
 
   const report = [
     `## KSeF TEST: wysyłka, przebieg ${runId}`,

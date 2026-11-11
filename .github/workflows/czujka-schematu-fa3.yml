@@ -1,7 +1,7 @@
 name: Czujka schematu FA(3)
 
 # Plan usprawnień 3.4: raz w tygodniu porównuje schemat FA(3) w MF (crd.gov.pl
-# i CIRFMF/ksef-docs) z `lib/xml/schemas/fa3/`. Różnica = issue z etykietą
+# i CIRFMF/ksef-api, dawniej ksef-docs) z `lib/xml/schemas/fa3/`. Różnica = issue z etykietą
 # `czujka-fa3` (jedno na wersję MF). MF niedostępny = ostrzeżenie, bez issue
 # i bez czerwieni. Bez pull_request: przerwa po stronie MF nie może blokować scalania.
 on:

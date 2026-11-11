@@ -37,7 +37,11 @@ vi.mock('@/lib/supabase/page-context', () => ({
   }),
 }));
 vi.mock('@/lib/dashboard-shell-data', () => ({ getTenantKsefProof: async () => state.proof }));
-vi.mock('@/lib/feature-flags/global-flags', () => ({ getGlobalFlag: async () => false }));
+// Globalny stop księgowości czyta się rozstrzygająco (F11-B6, `getGlobalFlagForExecution`).
+vi.mock('@/lib/feature-flags/global-flags', () => ({
+  getGlobalFlag: async () => false,
+  getGlobalFlagForExecution: async () => false,
+}));
 
 const { default: KpirPage } = await import('@/app/(dashboard)/reports/kpir/page');
 const { ZNACZNIKI_PRZYKLADU } = await import('@/lib/demo/znaczniki');

@@ -246,6 +246,8 @@ export interface FloShadowInsert {
 export interface FloResult<T> {
   data: T;
   error: { message: string } | null;
+  /** Liczba wierszy — tylko gdy zapytanie o nią poprosiło (`count: 'exact'`), inaczej `null`. */
+  count?: number | null;
 }
 
 /**
@@ -302,7 +304,14 @@ export interface FloTableClient<Row, Insert> {
     rows: Insert | Insert[],
     opts?: { onConflict?: string },
   ): FloMutation<Row>;
-  update(patch: Partial<Insert>): FloFilteredMutation<Row>;
+  /**
+   * `count: 'exact'` — baza odda w `count` liczbę zmienionych wierszy bez
+   * odsyłania ich samych. Tak liczy wygaszanie kart (FLO-01).
+   */
+  update(
+    patch: Partial<Insert>,
+    opts?: { count?: 'exact' },
+  ): FloFilteredMutation<Row>;
   delete(): FloFilteredMutation<Row>;
 }
 

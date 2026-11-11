@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import {
   confirmBankOperationAction,
   importBankStatementAction,
+  proposeBankExpensePaymentsAction,
   skipBankOperationAction,
   undoBankOperationAction,
 } from '@/app/actions/bank-statement';
@@ -54,10 +55,20 @@ import {
   type PendingOperation,
 } from '@/lib/import/bank/ekran';
 import type { BankInvoiceOption } from '@/lib/import/bank/kandydaci';
+import {
+  EXPENSE_MATCH_FAILED,
+  podsumowanieKosztow,
+  poRozstrzygnieciu,
+  scalPropozycje,
+  type PropozycjeKosztow,
+  type ProposeBankExpensesResult,
+  type ZaplatyKosztowEkranu,
+} from '@/lib/import/bank/koszty';
 import type { PrzelewyPodatkoweEkranu } from '@/lib/import/bank/podatki';
 import { formatPaymentMoney } from '@/lib/invoices/invoice-payments';
 import { cn } from '@/lib/utils';
 
+import { BankExpenseSection } from './bank-expense-section';
 import { BankTaxSection } from './bank-tax-section';
 
 /**
@@ -72,11 +83,14 @@ import { BankTaxSection } from './bank-tax-section';
 
 const TOUCH = 'max-lg:min-h-[44px] max-lg:min-w-[44px]';
 const READ_ONLY = 'Wyciąg wgrywa i wpłaty potwierdza właściciel, administrator albo członek firmy. Księgowa ma tu wgląd.';
+/** Przelew do dostawcy zapisuje się dopiero po decyzji klienta (00196). */
+const PRIVACY_NOTE_EXPENSES =
+  'Przelew do dostawcy zapisujemy dopiero wtedy, gdy potwierdzisz go jako zapłatę kosztu z listy „Do zapłaty”, a przy pominiętym nie zapisujemy tytułu ani danych odbiorcy.';
 const PRIVACY_NOTE =
-  'Zapisujemy tylko wpływy w złotych potrzebne do dopasowania. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek nadawcy, a zostają kwota, dzień i znacznik, że ta operacja już była.';
+  `Zapisujemy tylko wpływy w złotych potrzebne do dopasowania. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek nadawcy, a zostają kwota, dzień i znacznik, że ta operacja już była. ${PRIVACY_NOTE_EXPENSES}`;
 /** Przy włączonym module księgowości zapisujemy też przelewy do ZUS i urzędu (00189). */
 const PRIVACY_NOTE_TAX =
-  'Zapisujemy tylko wpływy w złotych potrzebne do dopasowania oraz przelewy do ZUS i urzędu skarbowego; innych wypływów nie zapisujemy. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek drugiej strony, a zostają kwota, dzień i znacznik, że ta operacja już była.';
+  `Zapisujemy tylko wpływy w złotych potrzebne do dopasowania oraz przelewy do ZUS i urzędu skarbowego; innych wypływów nie zapisujemy bez Twojej decyzji. Przy pominiętej operacji usuwamy tytuł przelewu, nazwę i rachunek drugiej strony, a zostają kwota, dzień i znacznik, że ta operacja już była. ${PRIVACY_NOTE_EXPENSES}`;
 
 const money = (grosze: number) => formatPaymentMoney(grosze / 100);
 
@@ -91,6 +105,10 @@ interface BankViewProps {
   tax?: PrzelewyPodatkoweEkranu | null;
   /** Zapłaty rozliczeń potwierdza owner/admin. */
   canWriteTax?: boolean;
+  /** Ostatnie zapłaty kosztów z wyciągu (krok 3.2, część 3); brak: strona ich nie czyta, sekcja pojawia się dopiero po wgraniu. */
+  expenses?: ZaplatyKosztowEkranu | null;
+  /** Zapłaty kosztów potwierdza owner, admin albo member (jak „Oznacz jako zapłacone”). */
+  canWriteExpenses?: boolean;
 }
 
 async function safely<T extends { success: boolean }>(run: () => Promise<T>, fallback: string): Promise<T | { success: false; error: string }> {
@@ -101,16 +119,19 @@ async function safely<T extends { success: boolean }>(run: () => Promise<T>, fal
   }
 }
 
-export function BankView({ data, invoices, proposals, canWrite, tax = null, canWriteTax = false }: BankViewProps) {
+export function BankView({ data, invoices, proposals, canWrite, tax = null, canWriteTax = false, expenses, canWriteExpenses = false }: BankViewProps) {
   const byId = useMemo(() => new Map((invoices ?? []).map((invoice) => [invoice.id, invoice])), [invoices]);
   const withProposal = data ? data.pending.filter((op) => isConfirmable(proposals[op.id])).length : 0;
+  // Przelewy do dostawców z wgranych plików: tylko w przeglądarce, do decyzji klienta (00196).
+  const [expenseProposals, setExpenseProposals] = useState<PropozycjeKosztow | null>(null);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Bank</h1>
         <p className="text-muted-foreground text-sm">
-          Wgraj wyciąg z banku, a FaktWay zaproponuje faktury do wpłat. Wpłata zapisuje się dopiero po Twoim potwierdzeniu.
+          Wgraj wyciąg z banku, a FaktWay zaproponuje faktury do wpłat i koszty do przelewów do dostawców. Wpłata i zapłata kosztu zapisują się dopiero
+          po Twoim potwierdzeniu.
         </p>
       </div>
 
@@ -132,7 +153,7 @@ export function BankView({ data, invoices, proposals, canWrite, tax = null, canW
       )}
 
       {canWrite ? (
-        <ImportCard />
+        <ImportCard onExpenseProposals={(wynik) => setExpenseProposals((prev) => scalPropozycje(prev, wynik))} />
       ) : (
         <Alert>
           <AlertDescription>{READ_ONLY}</AlertDescription>
@@ -188,6 +209,15 @@ export function BankView({ data, invoices, proposals, canWrite, tax = null, canW
 
       {tax ? <BankTaxSection data={tax} canWrite={canWriteTax} /> : null}
 
+      {expenses !== undefined || expenseProposals ? (
+        <BankExpenseSection
+          propozycje={expenseProposals}
+          decyzje={expenses ?? null}
+          canWrite={canWriteExpenses}
+          onResolved={(key, oplacone) => setExpenseProposals((prev) => (prev ? poRozstrzygnieciu(prev, key, oplacone) : prev))}
+        />
+      ) : null}
+
       <p className="text-muted-foreground text-xs">{tax ? PRIVACY_NOTE_TAX : PRIVACY_NOTE}</p>
     </div>
   );
@@ -197,7 +227,7 @@ function isConfirmable(proposal: MatchResult | undefined): proposal is Extract<M
   return proposal !== undefined && 'invoiceId' in proposal && proposal.amount !== 'over';
 }
 
-function ImportCard() {
+function ImportCard({ onExpenseProposals }: { onExpenseProposals: (wynik: ProposeBankExpensesResult) => void }) {
   const router = useRouter();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -222,7 +252,14 @@ function ImportCard() {
         setMessage({ ok: false, text: result.error });
         return;
       }
-      setMessage({ ok: true, text: importSummaryText(result) });
+      // Przelewy do dostawców z tego samego pliku: propozycje bez zapisu, decyzja w sekcji zapłat kosztów.
+      let koszty: string | null = null;
+      if (result.debitsSkipped > 0) {
+        const wynik: ProposeBankExpensesResult = await safely(() => proposeBankExpensePaymentsAction(form), EXPENSE_MATCH_FAILED);
+        onExpenseProposals(wynik);
+        koszty = wynik.success ? podsumowanieKosztow(wynik.przelewy.length, wynik.znane) : null;
+      }
+      setMessage({ ok: true, text: koszty ? `${importSummaryText(result)} ${koszty}` : importSummaryText(result) });
       if (input.current) input.current.value = '';
       router.refresh();
     });

@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs';
 import PQueue from 'p-queue';
 
 import { logAudit } from '@/lib/audit/log';
+import { attachmentDisposition } from '@/lib/http/content-disposition';
 import { generateInvoicePdf } from '@/lib/pdf/invoice-pdf';
 import { packageZip, type PackagedFile } from '@/lib/exports/zip-packager';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -227,7 +228,7 @@ async function buildBatch(req: Request, tenantId: string, userId: string): Promi
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${zipFilename(selection, files.length)}"`,
+        'Content-Disposition': attachmentDisposition(zipFilename(selection, files.length)),
         'Cache-Control': 'private, no-store',
       },
     });

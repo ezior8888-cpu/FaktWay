@@ -64,6 +64,46 @@ function identyfikator(nip: string | null): { kraj: string | null; identyfikator
   return cyfry.length === 10 ? { kraj: 'PL', identyfikator: cyfry } : { kraj: null, identyfikator: null };
 }
 
+/**
+ * Klucz dokumentu kosztu: NIP sprzedawcy (10 cyfr, bez kresek) i numer bez
+ * spacji, wielkimi literami. Numer faktury jest jednoznaczny u wystawcy
+ * (art. 106e ust. 1 pkt 2 ustawy o VAT). Bez NIP-u albo numeru: brak klucza.
+ */
+function kluczDokumentu(w: { seller_nip: string | null; document_number: string | null }): string | null {
+  const nip = (w.seller_nip ?? '').replace(/\D/g, '');
+  const numer = (w.document_number ?? '').replace(/\s+/g, '').toUpperCase();
+  return nip.length === 10 && numer ? `${nip}|${numer}` : null;
+}
+
+interface DubelKosztu {
+  numer: string;
+  sprzedawca: string;
+  ile: number;
+}
+
+/** Pierwszy dokument, który jest wśród kosztów więcej niż raz (F11-C1), np. zdjęcie i ta sama faktura ze Skrzynki. */
+function zdublowanyDokument(wiersze: readonly WierszKosztu[]): DubelKosztu | null {
+  const grupy = new Map<string, WierszKosztu[]>();
+  for (const w of wiersze) {
+    const klucz = kluczDokumentu(w);
+    if (klucz) grupy.set(klucz, [...(grupy.get(klucz) ?? []), w]);
+  }
+  for (const grupa of grupy.values()) {
+    if (grupa.length > 1) {
+      return { numer: (grupa[0].document_number ?? '').trim(), sprzedawca: grupa[0].seller_name?.trim() || 'sprzedawcy bez nazwy', ile: grupa.length };
+    }
+  }
+  return null;
+}
+
+/** Brak KPiR przy zdublowanym dokumencie kosztu: numer, sprzedawca i co zrobić. */
+export function komunikatDublaKosztu(d: DubelKosztu): string {
+  return (
+    `Dokument ${d.numer} od ${d.sprzedawca} jest w kosztach ${d.ile} razy (np. zdjęcie i ta sama faktura ze Skrzynki KSeF), więc KPiR teraz nie liczymy, żeby nie wpisać kosztu podwójnie. ` +
+    'W Kosztach zostaw w KPiR jeden koszt tego dokumentu (u pozostałych wyłącz „Uwzględnij w KPiR”). Jeśli to jeden dokument podzielony na kilka kosztów, napisz do nas.'
+  );
+}
+
 export const KOMUNIKAT_WALUTA_KOSZTU =
   'Część kosztów z KSeF jest w walucie obcej i czeka na przegląd kursu, więc KPiR teraz nie liczymy. Przegląd jest w Kosztach.';
 
@@ -82,7 +122,10 @@ async function koszty(client: SupabaseClient, tenantId: string, rok: number): Pr
       .range(from, to);
     return { data: wynik.data as WierszKosztu[] | null, count: wynik.count, error: wynik.error };
   });
-  const widoczne = await filterExpensesForKsefEnvironment(client, tenantId, srodowisko, wiersze);
+  // F11-C2: wydatki na reprezentację nie są kosztem (art. 23 ust. 1 pkt 23 ustawy o PIT).
+  const widoczne = (await filterExpensesForKsefEnvironment(client, tenantId, srodowisko, wiersze)).filter(
+    (w) => !czyReprezentacja(w.category_label),
+  );
   try {
     await assertKsefExpensesReadyForPln(widoczne, async (ids) => {
       const { data, error } = await client.from('invoices').select('id, currency').eq('tenant_id', tenantId).in('id', ids);
@@ -94,6 +137,9 @@ async function koszty(client: SupabaseClient, tenantId: string, rok: number): Pr
     if (e instanceof KsefExpenseCurrencyNotSupportedError) return { komunikat: KOMUNIKAT_WALUTA_KOSZTU };
     throw e;
   }
+  // F11-C1: KPiR ma jeden wiersz na dowód; ten sam dokument dwa razy to podwójny koszt.
+  const dubel = zdublowanyDokument(widoczne);
+  if (dubel) return { komunikat: komunikatDublaKosztu(dubel) };
 
   // Numer KSeF faktury, z której powstał koszt (K_3B), tą samą drogą co eksport.
   const zNumerem: ExportExpense[] = widoczne.map((w) => ({
@@ -193,3 +239,14 @@ export async function czytajKpir(client: SupabaseClient, tenantId: string, rok: 
   const zaplatyFp = zaplatyFunduszuPracy(skladki);
   return { ok: true, kpir: zbudujKpir({ rok, faktury: faktury.faktury, koszty: k, wpisy, zaplatyFp, wersje, kursy: faktury.kursy }), wpisy, wersje, spisy };
 }
+
+/**
+ * Kategoria „Reprezentacja” (także nadana przez Skrzynkę albo OCR, np. dla
+ * restauracji): wydatki na reprezentację, w tym usługi gastronomiczne, nie są
+ * kosztem uzyskania przychodu (art. 23 ust. 1 pkt 23 ustawy o PIT), więc nie
+ * wchodzą do KPiR ani JPK_PKPIR (F11-C2). Koszt zostaje w Kosztach.
+ */
+function czyReprezentacja(kategoria: string | null): boolean {
+  return /^\s*reprezentacj/i.test(kategoria ?? '');
+}
+

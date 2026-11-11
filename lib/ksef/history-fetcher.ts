@@ -6,17 +6,38 @@
  * Historię metadanych (`fetchInvoicesMetadata` Magicznego importu) usunięto
  * 22.10.2026 (decyzja Bartosza): historię pobiera automatycznie
  * `lib/ksef/history-sync/` — jedno zapytanie na wywołanie, z własnym budżetem.
+ *
+ * Sesja (logowanie, odświeżenie) tylko wewnątrz kolejki firmy (L1a): błędy
+ * KSeF wychodzą z rodzajem, więc 429 i lokalna pauza firmy po 429
+ * (`KsefRateLimitPausedError`) docierają do wołającego jako `KsefApiError` 429.
+ * Dawne `getValidSession` przed kolejką zamieniało każdy błąd (także 429)
+ * w „Brak aktywnej sesji KSeF”.
  */
 
 import type { KsefEnvironment } from '@/types/ksef';
+import { getTenantKsefCredentials } from '@/lib/supabase/admin-queries';
 
+import type { KsefAuth } from './auth';
 import { ksefFetch } from './client';
 import { requireMatchingKsefEnvironment } from './claim-environment';
 import { ksefRateLimiter } from './rate-limiter';
-import { getValidSession, ksefSessionCache } from './session-cache';
+import { ksefSessionCache } from './session-cache';
 
 function resolveEnv(env?: KsefEnvironment): KsefEnvironment {
   return requireMatchingKsefEnvironment(env);
+}
+
+/**
+ * Poświadczenia firmy. Brak albo błąd odczytu (brak certyfikatu, NIP
+ * niezweryfikowany, odszyfrowanie) daje jak dotąd „Brak aktywnej sesji KSeF”,
+ * z przyczyną w `cause`.
+ */
+async function tenantAuth(tenantId: string): Promise<KsefAuth> {
+  try {
+    return await getTenantKsefCredentials(tenantId);
+  } catch (e) {
+    throw new Error('Brak aktywnej sesji KSeF', { cause: e });
+  }
 }
 
 /**
@@ -28,15 +49,11 @@ export async function fetchInvoiceXmlBytes(
   ksefNumber: string,
   env?: KsefEnvironment,
 ): Promise<Buffer> {
-  const conn = await getValidSession(tenantId, resolveEnv(env));
-  if (!conn) {
-    throw new Error('Brak aktywnej sesji KSeF');
-  }
-
   const resolved = resolveEnv(env);
+  const auth = await tenantAuth(tenantId);
 
-  return ksefRateLimiter.enqueue(conn.auth.nip, async () => {
-    const session = await ksefSessionCache.getSession(conn.auth, resolved);
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const session = await ksefSessionCache.getSession(auth, resolved);
 
     const body = await ksefFetch<Buffer>(`/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
       accessToken: session.accessToken,
@@ -57,15 +74,11 @@ export async function fetchInvoiceXml(
   ksefNumber: string,
   env?: KsefEnvironment,
 ): Promise<string> {
-  const conn = await getValidSession(tenantId, resolveEnv(env));
-  if (!conn) {
-    throw new Error('Brak aktywnej sesji KSeF');
-  }
-
   const resolved = resolveEnv(env);
+  const auth = await tenantAuth(tenantId);
 
-  return ksefRateLimiter.enqueue(conn.auth.nip, async () => {
-    const session = await ksefSessionCache.getSession(conn.auth, resolved);
+  return ksefRateLimiter.enqueue(auth.nip, async () => {
+    const session = await ksefSessionCache.getSession(auth, resolved);
 
     return ksefFetch<string>(`/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
       accessToken: session.accessToken,

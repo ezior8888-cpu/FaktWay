@@ -16,6 +16,9 @@ export type KpirInvoiceRow = Pick<
 > & {
   /** ROZ: suma netto zaliczek, które KPiR już liczy (`fetchSettledAdvancesNet`). */
   settled_advances_net?: number | null;
+  /** `fa3_data->receipt` i `fa3_data->ksefMarkers->>fp`: znaczniki FP (krok 1.2, `receipt-revenue-guard`). */
+  receipt?: unknown;
+  ksef_fp?: unknown;
 };
 
 /** Przychód KPiR jednej faktury (ROZ: reszta ponad zaliczki). */
