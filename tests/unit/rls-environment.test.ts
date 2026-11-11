@@ -127,6 +127,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-archiwum-sprzatanie.test.ts',
       // 00192 (plan kompletnej aplikacji, krok 6.2, część 3): komentarze i prośby o dokument przy koszcie.
       'tests/rls-komentarze-kosztow.test.ts',
+      // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe.
+      'tests/rls-noty.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

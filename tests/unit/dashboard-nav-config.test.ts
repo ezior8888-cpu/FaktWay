@@ -151,6 +151,10 @@ describe('struktura menu (plan Finora §4)', () => {
           ['Faktury', '/invoices'],
           ['Wystaw fakturę', '/invoices/new'],
           ['Kontrahenci', '/contractors'],
+          // Świadoma zmiana (plan kompletnej aplikacji, krok 2.9, 11.11.2026): noty
+          // obciążeniowe i uznaniowe jako osobna pozycja na końcu sekcji, nie zakładka
+          // „Rodzaje faktur”, bo nota nie jest fakturą. Pozostałe pozycje bez zmian (D1).
+          ['Noty', '/noty'],
         ],
       },
       {
@@ -209,7 +213,7 @@ describe('struktura menu (plan Finora §4)', () => {
     // (świadoma zmiana, krok 3.2: Bank jest w telefonie tylko w „Więcej”).
     expect(more.map((s) => s.title)).toEqual(['Pulpit', 'Sprzedaż', 'Koszty i księgowość']);
     expect(more[0].items.map((i) => i.href)).toEqual(['/analizy/sprzedaz', '/bank']);
-    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors']);
+    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors', '/noty']);
   });
 
   it('getDashboardPrefetchHrefs pomija pozycje z prefetch: false', () => {

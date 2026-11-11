@@ -117,6 +117,9 @@ export default defineConfig({
       // odczyt tylko przy koszcie widocznym dla czytającego, zapis tylko przez funkcje, dzwonek bez autora,
       // ponowienie z tym samym identyfikatorem bez dubla, załatwienie (kto i kiedy) z audytem, CHECK-i.
       'tests/rls-komentarze-kosztow.test.ts',
+      // 00193 (plan kompletnej aplikacji, krok 2.9): noty obciążeniowe i uznaniowe; izolacja firm,
+      // rola jak przy fakturach, numer z bazy bez dubli naraz, wystawionej nie zmienia nikt, historia wysyłek.
+      'tests/rls-noty.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

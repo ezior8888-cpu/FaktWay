@@ -8,6 +8,7 @@ import {
   RiExchangeFundsLine,
   RiFileAddLine,
   RiFileList3Line,
+  RiFileTextLine,
   RiMoreLine,
   RiReceiptLine,
   RiSettings3Line,
@@ -72,6 +73,10 @@ export const dashboardNavSections: DashboardNavSection[] = [
       { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
       { href: "/invoices/new", label: "Wystaw fakturę", icon: RiFileAddLine },
       { href: "/contractors", label: "Kontrahenci", icon: RiContactsBook3Line },
+      // Plan kompletnej aplikacji, krok 2.9: noty obciążeniowe i uznaniowe. Osobna
+      // pozycja na końcu sekcji, a nie zakładka „Rodzaje faktur”, bo nota nie jest
+      // fakturą; pozostałe pozycje bez zmian (decyzja D1).
+      { href: "/noty", label: "Noty", icon: RiFileTextLine },
     ],
   },
   {
