@@ -29,6 +29,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import type { Database } from '@/types/database';
 import type { RecurringFrequency } from '@/types/recurring-invoice';
 
@@ -55,6 +56,13 @@ export const RECURRING_DRAFT_REFUSED_MESSAGE =
 export const RECURRING_DRAFT_LEFT_NOTE =
   'Szkic zajmuje okres faktury cyklicznej — wyślij go do KSeF dziś albo usuń, a okres wróci do „Do wystawienia”.';
 
+/** F12-G6: stawki, od których powstaje podatek do zapłaty (art. 108 ust. 1 ustawy o VAT). */
+const TAXED_RATES = ['23', '8', '5'];
+
+export function exemptTenantTaxedRateMessage(name: string, rate: string): string {
+  return `Pozycja cykliczna „${name}” ma we wzorze stawkę VAT ${rate} %, a firma korzysta ze zwolnienia z VAT (art. 113). Na takiej fakturze VAT trzeba by zapłacić. Zmień stawki we wzorze na „zw” albo status VAT w ustawieniach firmy.`;
+}
+
 /** Powiązanie zapisywanej faktury z okresem pozycji cyklicznej. */
 export interface RecurringIssueLink {
   recurringInvoiceId: string;
@@ -80,10 +88,12 @@ export async function loadRecurringIssueLink(
   supabase: AnyClient,
   tenantId: string,
   recurringInvoiceId: string,
+  /** Stawki VAT pozycji faktury, którą klient zapisuje (z formularza). */
+  lineRates?: readonly string[],
 ): Promise<RecurringIssueLinkResult> {
   const { data, error } = await recurringDb(supabase)
     .from('recurring_invoices')
-    .select('id, active, next_run_date, frequency, day_of_month')
+    .select('id, name, active, next_run_date, frequency, day_of_month')
     .eq('id', recurringInvoiceId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -91,6 +101,23 @@ export async function loadRecurringIssueLink(
   if (error) return { ok: false, error: RECURRING_READ_ERROR_MESSAGE };
   if (!data) return { ok: false, error: RECURRING_NOT_FOUND_MESSAGE };
   if (!data.active) return { ok: false, error: RECURRING_PAUSED_MESSAGE };
+
+  // F12-G6: zwolnienie podmiotowe (art. 113) + wzór z podatkiem = odmowa przed
+  // zapisem (podatek wykazany na fakturze trzeba zapłacić, art. 108 ust. 1).
+  // Zwolnienie przedmiotowe (art. 43) nie blokuje. Błąd odczytu ustawień
+  // firmy = odmowa z komunikatem odczytu (fail-closed, bez zgadywania).
+  const taxed = lineRates?.find((r) => TAXED_RATES.includes(r));
+  if (taxed) {
+    let basis: string | null;
+    try {
+      basis = await readTenantVatExemption(supabase as SupabaseClient, tenantId);
+    } catch {
+      return { ok: false, error: RECURRING_READ_ERROR_MESSAGE };
+    }
+    if (isSubjectiveVatExemption(basis)) {
+      return { ok: false, error: exemptTenantTaxedRateMessage(data.name, taxed) };
+    }
+  }
 
   const frequency = data.frequency as RecurringFrequency;
   return {

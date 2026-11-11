@@ -516,6 +516,45 @@ describe('pozycja wstrzymana, usunięta albo z innej firmy — odmowa przed zapi
   });
 });
 
+describe('F12-G6: firma zwolniona z art. 113 a stawka VAT z wzoru', () => {
+  const zw = [{ name: 'Abonament', unit: 'szt', quantity: 1, unitPriceNet: 100, vatRate: 'zw' as const }];
+  const ART_113 = 'art. 113 ust. 1 ustawy o VAT';
+
+  it('art. 113 i 23 % → odmowa z nazwą pozycji, bez faktury i kolejki', async () => {
+    state.tenants[0]!.vat_exemption_basis = ART_113;
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r).toEqual({
+      success: false,
+      error:
+        'Pozycja cykliczna „Abonament Klient” ma we wzorze stawkę VAT 23 %, a firma korzysta ze zwolnienia z VAT (art. 113). Na takiej fakturze VAT trzeba by zapłacić. Zmień stawki we wzorze na „zw” albo status VAT w ustawieniach firmy.',
+    });
+    expect(state.invoiceInserts).toEqual([]);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(pozycja().next_run_date).toBe('2026-11-10');
+  });
+
+  it('art. 113 i stawka „zw” → przechodzi', async () => {
+    state.tenants[0]!.vat_exemption_basis = ART_113;
+    const r = await saveAndSendInvoiceAction(
+      form('FV/1/11/2026', { recurringInvoiceId: RECURRING, recurringPeriod: '2026-11', lines: zw }),
+      TENANT,
+    );
+    expect(r.success).toBe(true);
+    expect(fakturyOkresu('2026-11')).toHaveLength(1);
+  });
+
+  it('firma bez zwolnienia i 23 % → przechodzi', async () => {
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r.success).toBe(true);
+  });
+
+  it('zwolnienie przedmiotowe (art. 43) i 23 % → przechodzi', async () => {
+    state.tenants[0]!.vat_exemption_basis = 'art. 43 ust. 1 pkt 37 ustawy o VAT';
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'), TENANT);
+    expect(r.success).toBe(true);
+  });
+});
+
 describe('zwykła faktura bez pozycji cyklicznej — zachowanie bez zmian', () => {
   it('INSERT bez kolumn cyklicznych, bez odczytu i zapisu recurring_invoices', async () => {
     await expect(saveAndSendInvoiceAction(form('FV/1/10/2026'), TENANT)).resolves.toMatchObject({ success: true });
