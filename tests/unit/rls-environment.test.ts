@@ -112,6 +112,8 @@ describe('separate RLS test configuration', () => {
       // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
       // z członkostwem zalogowanego, z cudzej firmy nic.
       'tests/rls-moi-klienci.test.ts',
+      // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API i rola `api_key_client`.
+      'tests/rls-api-klucze.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

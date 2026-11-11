@@ -1,0 +1,926 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FaktWay API",
+    "version": "1.0.0",
+    "summary": "Odczyt faktur i kosztów firmy z własnych programów.",
+    "description": "Publiczne API FaktWay do odczytu faktur (wystawionych i otrzymanych z KSeF) oraz kosztów jednej firmy. Klucz API tworzy właściciel albo administrator firmy w Ustawieniach FaktWay, w zakładce API. Klucz widać tylko raz, przy utworzeniu. Każde zapytanie wymaga nagłówka Authorization: Bearer <klucz>. Klucz ma zakresy: invoices:read (faktury) i expenses:read (koszty). Kwoty są tekstem dziesiętnym z kropką i dwoma miejscami po przecinku (np. \"1230.50\"), w walucie podanej w polu currency; ilość i cena jednostkowa pozycji mają do czterech miejsc po przecinku. Daty to RRRR-MM-DD, czasy to ISO 8601 ze strefą. Listy mają strony: odpowiedź zawiera next_cursor, który podajesz w parametrze cursor, dopóki nie dostaniesz null. Limit: 60 zapytań na minutę na klucz i 600 na minutę z jednego adresu IP; po przekroczeniu odpowiedź 429 z nagłówkiem Retry-After. Każde użycie klucza trafia do dziennika zdarzeń firmy (bez treści odpowiedzi). Nowe wartości pól z listą wartości (np. ksef_status) mogą pojawić się w przyszłości: program powinien je przyjąć bez błędu."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/invoices": {
+      "get": {
+        "operationId": "listInvoices",
+        "summary": "Lista faktur",
+        "description": "Faktury firmy klucza, od najnowszej daty wystawienia. Wymaga zakresu invoices:read.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "direction",
+            "in": "query",
+            "description": "outgoing: faktury wystawione; incoming: faktury otrzymane (skrzynka KSeF).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "outgoing",
+                "incoming"
+              ]
+            }
+          },
+          {
+            "name": "ksef_status",
+            "in": "query",
+            "description": "Status w KSeF.",
+            "schema": {
+              "$ref": "#/components/schemas/KsefStatus"
+            }
+          },
+          {
+            "name": "issue_date_from",
+            "in": "query",
+            "description": "Data wystawienia od (włącznie).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "issue_date_to",
+            "in": "query",
+            "description": "Data wystawienia do (włącznie).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Liczba wyników na stronie, od 1 do 100. Domyślnie 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Wartość next_cursor z poprzedniej strony.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona faktur.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParameter"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/InsufficientScope"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/invoices/{id}": {
+      "get": {
+        "operationId": "getInvoice",
+        "summary": "Faktura z pozycjami",
+        "description": "Jedna faktura firmy klucza z pozycjami, numerem i statusem KSeF. Faktura innej firmy odpowiada jak nieistniejąca (404). Wymaga zakresu invoices:read.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator faktury (pole id z listy).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Faktura.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/InvoiceDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParameter"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/InsufficientScope"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/expenses": {
+      "get": {
+        "operationId": "listExpenses",
+        "summary": "Lista kosztów",
+        "description": "Koszty firmy klucza (faktury kosztowe, paragony, koszty ze skrzynki KSeF) z kwotami i statusem przeglądu, od najnowszej daty wystawienia. Wymaga zakresu expenses:read.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "review_status",
+            "in": "query",
+            "description": "unreviewed: koszt czeka na sprawdzenie w FaktWay; reviewed: sprawdzony.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "unreviewed",
+                "reviewed"
+              ]
+            }
+          },
+          {
+            "name": "issue_date_from",
+            "in": "query",
+            "description": "Data wystawienia od (włącznie).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "issue_date_to",
+            "in": "query",
+            "description": "Data wystawienia do (włącznie).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Liczba wyników na stronie, od 1 do 100. Domyślnie 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Wartość next_cursor z poprzedniej strony.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona kosztów.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpensePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParameter"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/InsufficientScope"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Klucz API firmy (zaczyna się od fwk_) w nagłówku Authorization: Bearer <klucz>. Zakresy: invoices:read, expenses:read."
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Identyfikator żądania: podaj go nam przy zgłoszeniu problemu.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "RateLimitRemaining": {
+        "description": "Ile zapytań tym kluczem zostało w bieżącej minucie.",
+        "schema": {
+          "type": "integer"
+        }
+      }
+    },
+    "responses": {
+      "InvalidParameter": {
+        "description": "Nieznany albo błędny parametr (kod invalid_parameter). Opis błędu podaje nazwę parametru.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Brak klucza (missing_api_key) albo klucz nieprawidłowy lub odwołany (invalid_api_key).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InsufficientScope": {
+        "description": "Klucz nie ma zakresu potrzebnego temu punktowi (insufficient_scope).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Nie ma takiej faktury w firmie klucza (not_found).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Przekroczony limit zapytań (rate_limited). Nagłówek Retry-After podaje, po ilu sekundach spróbować.",
+        "headers": {
+          "Retry-After": {
+            "description": "Sekundy do następnej próby.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "API niedostępne: jeszcze nieudostępnione (api_disabled), przerwa techniczna (maintenance) albo chwilowa awaria (service_unavailable). Spróbuj później.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Decimal": {
+        "type": "string",
+        "pattern": "^-?\\d+\\.\\d{2,4}$",
+        "description": "Kwota albo ilość jako tekst dziesiętny z kropką.",
+        "examples": [
+          "1230.50"
+        ]
+      },
+      "KsefStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "queued",
+          "sending",
+          "accepted",
+          "rejected",
+          "received",
+          "failed",
+          "offline_queued"
+        ],
+        "description": "draft: szkic; queued, sending, offline_queued: w drodze do KSeF; accepted: przyjęta w KSeF; rejected, failed: odrzucona albo błąd wysyłki; received: otrzymana z KSeF."
+      },
+      "Party": {
+        "type": "object",
+        "required": [
+          "name",
+          "nip"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "NIP albo numer VAT kontrahenta, jak na fakturze."
+          }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "required": [
+          "id",
+          "direction",
+          "number",
+          "kind",
+          "issue_date",
+          "sale_date",
+          "payment_due_date",
+          "currency",
+          "net_total",
+          "vat_total",
+          "gross_total",
+          "paid_amount",
+          "payment_status",
+          "seller",
+          "buyer",
+          "ksef_status",
+          "ksef_number",
+          "ksef_accepted_at",
+          "ksef_environment",
+          "corrected_invoice_id",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "outgoing",
+              "incoming"
+            ]
+          },
+          "number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Numer faktury."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "regular",
+              "correction",
+              "advance",
+              "final"
+            ],
+            "description": "Faktura VAT, korygująca, zaliczkowa albo końcowa."
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "sale_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "payment_due_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "currency": {
+            "type": "string",
+            "description": "Kod waluty ISO 4217, np. PLN."
+          },
+          "net_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vat_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_total": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paid_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "payment_status": {
+            "type": "string",
+            "enum": [
+              "unpaid",
+              "partial",
+              "paid",
+              "overdue"
+            ]
+          },
+          "seller": {
+            "$ref": "#/components/schemas/Party"
+          },
+          "buyer": {
+            "$ref": "#/components/schemas/Party"
+          },
+          "ksef_status": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/KsefStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ksef_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Numer KSeF, gdy faktura jest w KSeF."
+          },
+          "ksef_accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ksef_environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "test",
+              "production",
+              null
+            ],
+            "description": "Środowisko KSeF: test albo production."
+          },
+          "corrected_invoice_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Przy korekcie: faktura korygowana."
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "InvoiceItem": {
+        "type": "object",
+        "required": [
+          "position",
+          "name",
+          "quantity",
+          "unit",
+          "unit_price_net",
+          "net_amount",
+          "vat_rate",
+          "vat_amount",
+          "gross_amount"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit_price_net": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "net_amount": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vat_rate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stawka VAT jak na fakturze, np. 23, 8, zw, np."
+          },
+          "vat_amount": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_amount": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "InvoiceDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Invoice"
+          },
+          {
+            "type": "object",
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InvoiceItem"
+                },
+                "description": "Pozycje faktury. Faktura otrzymana z KSeF może nie mieć pozycji."
+              }
+            }
+          }
+        ]
+      },
+      "InvoicePage": {
+        "type": "object",
+        "required": [
+          "data",
+          "next_cursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invoice"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Expense": {
+        "type": "object",
+        "required": [
+          "id",
+          "document_number",
+          "document_type",
+          "issue_date",
+          "seller",
+          "currency",
+          "net_amount",
+          "vat_amount",
+          "gross_amount",
+          "vat_deductible_amount",
+          "vat_rate",
+          "deductible",
+          "review_status",
+          "category",
+          "kpir_column",
+          "source",
+          "invoice_id",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_type": {
+            "type": "string",
+            "description": "Rodzaj dokumentu, np. invoice albo receipt."
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "seller": {
+            "$ref": "#/components/schemas/Party"
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Waluta kwot: PLN, waluta faktury, gdy koszt ze skrzynki KSeF nie ma potwierdzonego kursu NBP, albo null, gdy waluty nie da się potwierdzić (sprawdź koszt w FaktWay)."
+          },
+          "net_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "gross_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_deductible_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_rate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deductible": {
+            "type": "boolean",
+            "description": "Czy koszt wchodzi do KPiR."
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "unreviewed",
+              "reviewed"
+            ]
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kpir_column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Kolumna KPiR, np. col_13."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ocr_photo",
+              "ksef_inbox",
+              "manual",
+              "import"
+            ]
+          },
+          "invoice_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Faktura otrzymana z KSeF, z której powstał koszt (punkt /invoices/{id} z zakresem invoices:read)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ExpensePage": {
+        "type": "object",
+        "required": [
+          "data",
+          "next_cursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Expense"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "missing_api_key",
+                  "invalid_api_key",
+                  "insufficient_scope",
+                  "invalid_parameter",
+                  "not_found",
+                  "rate_limited",
+                  "api_disabled",
+                  "maintenance",
+                  "service_unavailable",
+                  "internal_error"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "description": "Opis po polsku dla człowieka. Program rozpoznaje błąd po polu code."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

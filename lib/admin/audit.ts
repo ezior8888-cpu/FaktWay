@@ -168,6 +168,10 @@ export const KNOWN_AUDIT_ACTIONS = [
   'accountant.token_created',
   'accountant.token_revoked',
   'accountant.access_used',
+  // Publiczne API (00181)
+  'api_key.created',
+  'api_key.revoked',
+  'api_key.used',
   // Admin
   'admin.user.suspended',
   'admin.user.unsuspended',

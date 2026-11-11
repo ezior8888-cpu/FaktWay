@@ -94,6 +94,9 @@ export default defineConfig({
       // 00185 (krok 6.2 planu kompletnej aplikacji, „Moi klienci”): podsumowanie tylko firm
       // z aktywnym członkostwem zalogowanego, bez względu na nagłówek aktywnej firmy; z cudzej nic.
       'tests/rls-moi-klienci.test.ts',
+      // 00181 (plan kompletnej aplikacji, krok 7.1): klucze API firmy (owner/admin, skrót, odwołanie
+      // nieodwracalne, audyt wyzwalaczem) i rola `api_key_client`: tylko firma i zakres klucza, bez zapisu.
+      'tests/rls-api-klucze.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

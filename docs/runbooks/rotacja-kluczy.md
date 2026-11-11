@@ -300,7 +300,11 @@ przebudowa aplikacji nie wnosi nowego kodu.
      (`.github/workflows/obrazy.yml` buduje z niej obraz);
    - Coolify `id=1`: `NEXT_PUBLIC_SUPABASE_ANON_KEY` (zmienna builda)
      i `SUPABASE_SERVICE_ROLE_KEY`; `id=2`: `SUPABASE_SERVICE_ROLE_KEY`
-     (i `NEXT_PUBLIC_SUPABASE_ANON_KEY`, jeśli tam jest).
+     (i `NEXT_PUBLIC_SUPABASE_ANON_KEY`, jeśli tam jest);
+   - Coolify `id=1`: `SUPABASE_JWT_SECRET` = `JWT_SECRET`, jeśli jest
+     ustawiona (publiczne API `/api/v1` podpisuje nim token roli
+     `api_key_client`, 00181). Ze starym sekretem API odpowiada 503, nic
+     więcej się nie psuje.
    Kroki 2–4 rób bez przerw: gdyby aplikacja w tym czasie sama się
    zrestartowała, wstanie z nowym kluczem do starej bazy.
 3. **Usługa Supabase** (Coolify, `db-1`) → Environment Variables: sekret JWT

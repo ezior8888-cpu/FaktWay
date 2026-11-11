@@ -24,7 +24,10 @@ export type RateLimitBucket =
   | 'passkey_manage'
   | 'ksef_inbox_check'
   | 'invoice_share_view'
-  | 'calendar_feed';
+  | 'calendar_feed'
+  /** Publiczne API (`lib/api/v1/auth.ts`): każde żądanie z adresu i każde z klucza. */
+  | 'api_v1_ip'
+  | 'api_v1_key';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

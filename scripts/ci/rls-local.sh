@@ -33,6 +33,18 @@ export RLS_TEST_SUPABASE_URL="${API_URL}"
 export RLS_TEST_SUPABASE_ANON_KEY="${ANON_KEY:-${PUBLISHABLE_KEY:-}}"
 export RLS_TEST_SUPABASE_SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
 export RLS_TEST_ALLOW_DESTRUCTIVE="isolated-local-database"
+# Krok 7.1 (00181): test kluczy API podpisuje token roli `api_key_client` tym samym
+# sekretem, którym lokalny PostgREST sprawdza tokeny (`supabase status`). Lokalny sekret,
+# nie produkcyjny; bez niego tests/rls-api-klucze.test.ts kończy się błędem.
+export RLS_TEST_SUPABASE_JWT_SECRET="${JWT_SECRET:-}"
+if [ -z "${RLS_TEST_SUPABASE_JWT_SECRET}" ]; then
+  # Zapas na inną wersję CLI: ten sam sekret ma kontener PostgREST-a.
+  REST_CONTAINER="$(docker ps --format '{{.Names}}' | grep -m1 '^supabase_rest_' || true)"
+  if [ -n "${REST_CONTAINER}" ]; then
+    RLS_TEST_SUPABASE_JWT_SECRET="$(docker exec "${REST_CONTAINER}" printenv PGRST_JWT_SECRET 2>/dev/null || true)"
+    export RLS_TEST_SUPABASE_JWT_SECRET
+  fi
+fi
 # Testy kolejki pg-boss (PR 3 cyklu życia) łączą się z tą samą lokalną bazą po Postgresie.
 export RLS_TEST_DATABASE_URL="${DB_URL}"
 unset NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
