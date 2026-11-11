@@ -48,7 +48,7 @@ export default async function NewFinalInvoicePage() {
       initialSeller={seller}
       advanceInvoices={available}
       tenantId={tenantId}
-      numbering={numbering}
+      {...(numbering ? { numbering } : {})}
     />
   );
 }

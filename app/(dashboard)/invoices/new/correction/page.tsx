@@ -38,7 +38,7 @@ export default async function NewCorrectionPage({
         searchQuery={q}
         truncated={picker.truncated}
         tenantId={tenantId ?? ''}
-        numbering={numbering}
+        {...(numbering ? { numbering } : {})}
       />
     </CorrectionPageFrame>
   );

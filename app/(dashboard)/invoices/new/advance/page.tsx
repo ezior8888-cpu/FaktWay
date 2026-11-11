@@ -69,7 +69,7 @@ export default async function NewAdvanceInvoicePage({
       key={loaded.tenantId}
       initialSeller={loaded.seller}
       tenantId={loaded.tenantId}
-      numbering={numbering}
+      {...(numbering ? { numbering } : {})}
       {...(fromQuote
         ? { initialValues: fromQuote.initialValues, salesQuoteId: fromQuote.salesQuoteId, salesQuoteSeq: fromQuote.salesQuoteSeq }
         : {})}
