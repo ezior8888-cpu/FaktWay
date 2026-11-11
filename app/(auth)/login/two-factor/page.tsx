@@ -56,7 +56,7 @@ export default async function TwoFactorChallengePage({
       panelText='Kod z aplikacji uwierzytelniającej potwierdza, że to Ty. Nowy kod pojawia się w aplikacji co kilkadziesiąt sekund.'
     >
       <div>
-        <h2 className='mb-2 text-2xl font-semibold'>Weryfikacja dwuetapowa</h2>
+        <h1 className='mb-2 text-2xl font-semibold'>Weryfikacja dwuetapowa</h1>
         <p className='text-muted-foreground'>Wpisz 6-cyfrowy kod z aplikacji TOTP.</p>
       </div>
 
