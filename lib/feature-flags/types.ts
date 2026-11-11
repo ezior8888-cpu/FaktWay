@@ -19,4 +19,9 @@ export type GlobalFlag =
    * WŁĄCZNIK publicznego API `/api/v1` i kluczy API w Ustawieniach (00181, krok 7.1).
    * Odwrotnie niż `kill*`: brak wiersza albo błąd odczytu = API zamknięte.
    */
-  | 'publicApiEnabled';
+  | 'publicApiEnabled'
+  /**
+   * WŁĄCZNIK uprawnień biura rachunkowego w KSeF nadawanych z FaktWay (00195,
+   * krok 6.2, część 4). Odwrotnie niż `kill*`: brak wiersza albo błąd odczytu = wyłączone.
+   */
+  | 'ksefPermissionsEnabled';

@@ -135,6 +135,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-koszty-do-zaplaty.test.ts',
       // 00191 (plan kompletnej aplikacji, krok 1.4, część 2): identyfikatory zbiorcze KSeF.
       'tests/rls-identyfikator-zbiorczy.test.ts',
+      // 00195 (plan kompletnej aplikacji, krok 6.2, część 4): uprawnienia biura rachunkowego w KSeF.
+      'tests/rls-uprawnienia-ksef.test.ts',
       // 00196 (plan kompletnej aplikacji, krok 3.2, część 3): przelewy do dostawców z wyciągu jako zapłaty kosztów.
       'tests/rls-wyciag-koszty.test.ts',
     ]);
