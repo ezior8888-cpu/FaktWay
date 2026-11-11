@@ -31,6 +31,9 @@ export default defineConfig({
       'tests/rls-historia-ksef.test.ts',
       // 00157 (plan skalowania, sesja 20): sprzątanie dzienników paczkami.
       'tests/rls-sprzatanie-dziennikow.test.ts',
+      // Bez migracji (plan skalowania, sesja 3, FLO-01): sprzątanie pulsu FLO jednym zapisem
+      // z warunkiem; ponad 1000 kart przez PostgREST z `max_rows`, licznik i RETURNING bez ucięcia.
+      'tests/rls-flo-sprzatanie.test.ts',
       // 00158 („Zapłacone” jednym dotknięciem, FaktWay 1.0 §3 pkt 3): RPC razem
       // z wyzwalaczami paid_amount, paid_at i payment_status, role, obca firma, przypomnienia.
       'tests/rls-zaplacone.test.ts',

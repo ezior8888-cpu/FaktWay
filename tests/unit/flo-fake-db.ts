@@ -267,7 +267,9 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
               run().then(resolve, reject),
           };
         },
-        update: (patch: Row) => makeQuery(rows, [], 'update', patch),
+        // `count: 'exact'` jak w supabase-js: liczba zmienionych wierszy w `count`.
+        update: (patch: Row, opts?: { count?: 'exact' }) =>
+          makeQuery(rows, [], 'update', patch, { count: opts?.count }),
         delete: () => makeQuery(rows, [], 'delete'),
       };
     },
