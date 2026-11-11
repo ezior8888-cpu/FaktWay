@@ -1055,8 +1055,10 @@ WHERE invoice_id = '<uuid>'
 ORDER BY created_at;
 ```
 
-Pokazuje wszystkie próby: pierwsza, retry'e, finalna. Każda ma raw response
-z KSeF (`response_body`).
+Pokazuje wszystkie próby: pierwsza, retry'e, finalna. Treści odpowiedzi KSeF
+tu nie ma: `error_message` ma sam status i kod (F-093-STATUS). Opis
+i szczegóły odrzucenia w statusie (np. 450, nazwa pola do poprawy) są tylko
+w `invoices.last_error`, widocznym też w `/admin/ksef/<id>` i `/admin/support`.
 
 ### Krok 3 — Sprawdź czy KSeF w ogóle żył
 
