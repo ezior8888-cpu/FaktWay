@@ -332,7 +332,10 @@ class GzipCollector {
   async close(): Promise<{ body: Buffer; checksum: string }> {
     this.gzip.end();
     await this.ended;
-    return { body: Buffer.concat(this.chunks), checksum: this.hash.digest('hex') };
+    const body = Buffer.concat(this.chunks);
+    // Bez tego kawałki żyją obok `body` przez całe wgrywanie (dwie kopie pliku).
+    this.chunks.length = 0;
+    return { body, checksum: this.hash.digest('hex') };
   }
 
   abort(): void {

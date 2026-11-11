@@ -13,7 +13,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 
-import { sendSlackAlert } from '@/lib/alerts/slack';
+import { alertCritical, sendSlackAlert } from '@/lib/alerts/slack';
 import {
   logBackupFailure,
   logBackupKey,
@@ -61,7 +61,7 @@ export async function runDailyDbSnapshot({ step }: JobContext) {
         await step.run('log-incomplete', async () => {
           await logBackupFailure(logId, incompleteLogMessage(result), result.durationMs);
         });
-        const alerted = await step.run('alarm-incomplete', async () => {
+        const alarm = await step.run('alarm-incomplete', async () => {
           return await alertIncompleteOncePerDay(result, kind, now);
         });
         return {
@@ -69,7 +69,7 @@ export async function runDailyDbSnapshot({ step }: JobContext) {
           complete: false,
           json_bytes: result.jsonBytes,
           duration_ms: result.durationMs,
-          alerted,
+          alarm,
         };
       }
 
@@ -132,34 +132,47 @@ function incompleteLogMessage(result: SnapshotIncomplete): string {
   );
 }
 
+type IncompleteAlarm = 'sent' | 'already_sent' | 'not_delivered';
+
 /**
  * Jeden alarm „kopia niepełna” na dzień (UTC). Ponowne doręczenie joba tej
- * samej nocy albo ręczne uruchomienie go nie powtarza. Klucz zapisujemy
- * dopiero, gdy Slack potwierdzi przyjęcie, więc niedostarczony alarm wraca
- * przy następnej próbie. Bez Redisa klucz się nie zapisze i alarm przyjdzie
- * przy każdym przebiegu: raczej za dużo niż wcale.
+ * samej nocy albo ręczne uruchomienie go nie powtarza.
+ *
+ * Droga alarmów krytycznych (`alertCritical`): alarm jest dostarczony, gdy
+ * potwierdzi go Slack albo Telegram, i dopiero wtedy zapisujemy klucz dnia.
+ * Gdy nie potwierdzi żaden kanał: ślad w Sentry i koniec, bez ponowienia joba
+ * (kolejna kopia do progu nic by nie zmieniła). Alarm wraca przy ręcznym
+ * uruchomieniu albo następnej nocy, a wcześniej odezwie się alarm świeżości
+ * kopii (ostatnia udana starsza niż 26 h). Bez Redisa klucz się nie zapisze
+ * i alarm przyjdzie przy każdym przebiegu: raczej za dużo niż wcale.
  */
 async function alertIncompleteOncePerDay(
   result: SnapshotIncomplete,
   kind: BackupKind,
   now: Date,
-): Promise<boolean> {
+): Promise<IncompleteAlarm> {
   const key = `alerts:backup:json-incomplete:${now.toISOString().slice(0, 10)}`;
-  if (await cacheGet<string>(key)) return false;
+  if (await cacheGet<string>(key)) return 'already_sent';
 
-  const delivered = await sendSlackAlert({
-    channel: 'urgent',
-    text:
-      `⚠️ Kopia JSON bazy niepełna (${kind}): JSON przekroczył próg ${Math.round(result.limitBytes / MIB)} MB ` +
-      `przy tabeli ${result.stoppedAtTable}, plik nie został wgrany. Zrzut pg_dump (warstwa A) działa osobno. ` +
-      `Co zrobić: docs/runbooks/backup-restore.md § 6.`,
-    context: {
-      kind,
-      json_mb: (result.jsonBytes / MIB).toFixed(1),
-      limit_mb: Math.round(result.limitBytes / MIB),
-      tables_done: `${result.tablesDone}/${result.tablesTotal}`,
-    },
-  });
-  if (delivered) await cacheSet(key, now.toISOString(), INCOMPLETE_ALERT_TTL_SECONDS);
-  return delivered;
+  const limitMb = Math.round(result.limitBytes / MIB);
+  try {
+    await alertCritical(
+      `Kopia JSON bazy niepełna (${kind})`,
+      `JSON przekroczył próg ${limitMb} MB przy tabeli ${result.stoppedAtTable}, plik nie został wgrany. ` +
+        'Zrzut pg_dump (warstwa A) działa osobno. Co zrobić: docs/runbooks/backup-restore.md § 6.',
+      {
+        fields: [
+          { label: 'kind', value: kind },
+          { label: 'json_mb', value: (result.jsonBytes / MIB).toFixed(1) },
+          { label: 'limit_mb', value: String(limitMb) },
+          { label: 'tables_done', value: `${result.tablesDone}/${result.tablesTotal}` },
+        ],
+      },
+    );
+  } catch (err) {
+    Sentry.captureException(err, { tags: { job: 'daily-db-snapshot', kind, step: 'alarm-incomplete' } });
+    return 'not_delivered';
+  }
+  await cacheSet(key, now.toISOString(), INCOMPLETE_ALERT_TTL_SECONDS);
+  return 'sent';
 }

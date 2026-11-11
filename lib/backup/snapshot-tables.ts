@@ -59,9 +59,9 @@ export function snapshotKeyFor(table: string): readonly string[] {
  * Bezpiecznik rozmiaru (JOB-02): kopia liczy bajty JSON-a w trakcie zapisu
  * i po przekroczeniu progu kończy się alarmem „kopia niepełna”, bez wgrywania
  * pliku. Spakowany plik czeka w pamięci workera na wgranie (jedno PutObject),
- * więc próg ogranicza też pamięć: przy typowym stopniu kompresji JSON-a to
- * kilkadziesiąt MB. Stary zapis nie przeszedłby i tak przez limit długości
- * napisu w V8 (ok. 512 MB), tylko wywracał worker.
+ * więc próg ogranicza też pamięć: JSON z uuid-ami pakuje się ok. 3 do 6 razy,
+ * czyli przy progu to ok. 85–170 MB. Stary zapis nie przeszedłby i tak przez
+ * limit długości napisu w V8 (ok. 512 MB), tylko wywracał worker.
  */
 export const MAX_SNAPSHOT_JSON_BYTES = 512 * 1024 * 1024;
 

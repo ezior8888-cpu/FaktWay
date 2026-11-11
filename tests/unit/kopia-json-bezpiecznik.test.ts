@@ -16,6 +16,8 @@ import { utworzAtrape, uuidNr, type Wiersz } from '../helpers/kopia-json-atrapa'
  *
  * Job idzie przez prawdziwy wrapper workera (`wrapHandler`) z tą samą
  * definicją co w `lib/jobs/handlers/package-a.ts` (`cronJob`, 4 ponowienia).
+ * Alarmy idą przez prawdziwe `lib/alerts/slack.ts` i `telegram.ts`;
+ * podstawiony jest tylko `fetch` (webhook Slacka i API Telegrama).
  */
 
 const { PROG_TESTOWY } = vi.hoisted(() => ({ PROG_TESTOWY: 64 * 1024 }));
@@ -29,7 +31,7 @@ const state = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   start: vi.fn(),
-  sendSlackAlert: vi.fn(),
+  fetch: vi.fn(),
   uploadSnapshot: vi.fn(),
   logBackupStart: vi.fn(),
   logBackupSuccess: vi.fn(),
@@ -51,7 +53,6 @@ vi.mock('@/lib/jobs/config', () => ({ getJobsDatabaseUrl: () => 'postgres://fixt
 vi.mock('@/lib/jobs/run-log', () => ({ recordJobRun: vi.fn(async () => undefined) }));
 vi.mock('@/lib/jobs/sentry', () => ({ reportExhaustedJob: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException, addBreadcrumb: vi.fn() }));
-vi.mock('@/lib/alerts/slack', () => ({ sendSlackAlert: mocks.sendSlackAlert, alertCritical: vi.fn() }));
 vi.mock('@/lib/cache', () => ({
   cacheGet: async (key: string) => state.cache.get(key) ?? null,
   cacheSet: async (key: string, value: unknown) => {
@@ -127,10 +128,35 @@ async function nocnaKopia(tabele: Record<string, Wiersz[]>) {
   return wrapHandler(definicja as never)([job] as never);
 }
 
-const pilne = () =>
-  mocks.sendSlackAlert.mock.calls
-    .map(([m]) => m as { channel: string; text: string })
-    .filter((m) => m.channel === 'urgent');
+const SLACK_PILNY = 'https://hooks.slack.com/services/T000/B000/pilny';
+const SLACK_METRYKI = 'https://hooks.slack.com/services/T000/B000/metryki';
+const TELEGRAM = 'https://api.telegram.org/';
+
+/** Treści wysłane pod `adres` (webhook Slacka albo API Telegrama), w kolejności. */
+function wyslane(adres: (url: string) => boolean): string[] {
+  return mocks.fetch.mock.calls
+    .filter(([url]) => adres(String(url)))
+    .map(([, init]) => (JSON.parse(String((init as RequestInit).body)) as { text: string }).text);
+}
+const pilne = () => wyslane((url) => url === SLACK_PILNY);
+const telegram = () => wyslane((url) => url.startsWith(TELEGRAM));
+
+function wlaczTelegram() {
+  vi.stubEnv('TELEGRAM_BOT_TOKEN', '123:test');
+  vi.stubEnv('TELEGRAM_ALERT_CHAT_IDS', '1');
+}
+
+/** Slack pilny odpowiada `status`; reszta (metryki, Telegram) 200. */
+function slackPilnyOdpowiada(status: number, razy = Infinity) {
+  let zostalo = razy;
+  mocks.fetch.mockImplementation(async (url: string) => {
+    if (url === SLACK_PILNY && zostalo > 0) {
+      zostalo -= 1;
+      return new Response('', { status });
+    }
+    return new Response('ok', { status: 200 });
+  });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -139,9 +165,14 @@ beforeEach(() => {
   numerJoba = 0;
   state.cache.clear();
   state.kolejnosc = [];
+  vi.stubEnv('SLACK_WEBHOOK_URGENT', SLACK_PILNY);
+  vi.stubEnv('SLACK_WEBHOOK_METRICS', SLACK_METRYKI);
+  vi.stubEnv('TELEGRAM_BOT_TOKEN', '');
+  vi.stubEnv('TELEGRAM_ALERT_CHAT_IDS', '');
+  vi.stubGlobal('fetch', mocks.fetch);
+  mocks.fetch.mockImplementation(async () => new Response('ok', { status: 200 }));
   mocks.start.mockResolvedValue(undefined);
   mocks.send.mockResolvedValue('retry-job');
-  mocks.sendSlackAlert.mockResolvedValue(true);
   mocks.logBackupStart.mockImplementation(async () => `log-${numerJoba}`);
   mocks.logBackupKey.mockImplementation(async () => {
     state.kolejnosc.push('klucz');
@@ -160,6 +191,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe('bezpiecznik rozmiaru nocnej kopii JSON', () => {
@@ -171,9 +204,9 @@ describe('bezpiecznik rozmiaru nocnej kopii JSON', () => {
 
     const alarmy = pilne();
     expect(alarmy).toHaveLength(1);
-    expect(alarmy[0]!.text).toMatch(/niepełna/i);
+    expect(alarmy[0]).toMatch(/niepełna/i);
     // Fail-closed z wyjściem: alarm mówi, co zrobić, i wskazuje runbook.
-    expect(alarmy[0]!.text).toContain('docs/runbooks/backup-restore.md');
+    expect(alarmy[0]).toContain('docs/runbooks/backup-restore.md');
 
     expect(mocks.uploadSnapshot).not.toHaveBeenCalled();
     expect(mocks.logBackupSuccess).not.toHaveBeenCalled();
@@ -202,13 +235,33 @@ describe('bezpiecznik rozmiaru nocnej kopii JSON', () => {
     expect(pilne()).toHaveLength(2);
   });
 
-  it('alarm niedostarczony (Slack nie potwierdził) nie blokuje następnej próby', async () => {
-    mocks.sendSlackAlert.mockResolvedValueOnce(false);
-    await nocnaKopia(duzaBaza());
+  it('alarm niepotwierdzony przez żaden kanał: ślad w Sentry, job bez ponowienia, następny przebieg próbuje znowu', async () => {
+    slackPilnyOdpowiada(500, 1);
+    const wyniki = await nocnaKopia(duzaBaza());
+    expect(wyniki).toEqual([{ id: 'job-1-0000-0000', status: 'completed' }]);
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.captureException).toHaveBeenCalledTimes(1);
+    expect(mocks.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: expect.objectContaining({ job: 'daily-db-snapshot', step: 'alarm-incomplete' }) }),
+    );
+
     await nocnaKopia(duzaBaza());
     expect(pilne()).toHaveLength(2);
     await nocnaKopia(duzaBaza());
     expect(pilne()).toHaveLength(2);
+  });
+
+  it('Slack nie potwierdził, Telegram tak: alarm dotarł, drugi przebieg tej nocy już nic nie wysyła', async () => {
+    wlaczTelegram();
+    slackPilnyOdpowiada(500);
+    await nocnaKopia(duzaBaza());
+    expect(telegram()).toHaveLength(1);
+    expect(telegram()[0]).toMatch(/niepełna/i);
+    expect(mocks.captureException).not.toHaveBeenCalled();
+
+    await nocnaKopia(duzaBaza());
+    expect(telegram()).toHaveLength(1);
   });
 
   it('kopia pod progiem: klucz kopii trafia do backup_log przed wgraniem pliku, potem sukces, bez alarmu', async () => {
@@ -228,6 +281,6 @@ describe('bezpiecznik rozmiaru nocnej kopii JSON', () => {
     expect(mocks.send).toHaveBeenCalledTimes(1); // ponowienie zaplanowane
     expect(mocks.uploadSnapshot).not.toHaveBeenCalled();
     expect(pilne()).toHaveLength(1);
-    expect(pilne()[0]!.text).toContain('FAILED');
+    expect(pilne()[0]).toContain('FAILED');
   });
 });

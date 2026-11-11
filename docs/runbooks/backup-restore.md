@@ -295,10 +295,15 @@ w CI; ten błąd zobaczysz tylko dla tabeli założonej poza migracjami.
 Kopia przekroczyła `MAX_SNAPSHOT_JSON_BYTES` (512 MB JSON-a przed spakowaniem,
 `lib/backup/snapshot-tables.ts`). Wtedy przerywa czytanie, nie wgrywa pliku,
 zapisuje w `backup_log` status `failed` z komunikatem `kopia_niepelna: …`
-i kończy job bez ponowień. Alarm przychodzi raz na dzień (klucz w Redisie
-`alerts:backup:json-incomplete:<data UTC>`); po 26 h dołączy do niego alarm
-świeżości, bo nie ma nowej udanej kopii. Warstwa A (`pg_dump`) działa osobno
-i ten próg jej nie dotyczy.
+i kończy job bez ponowień. Alarm idzie drogą alarmów krytycznych (pilny
+kanał Slacka i Telegram), raz na dzień: klucz w Redisie
+`alerts:backup:json-incomplete:<data UTC>` zapisuje się dopiero, gdy alarm
+potwierdzi Slack albo Telegram. Gdy nie potwierdzi żaden kanał, zostaje ślad
+w Sentry (`job: daily-db-snapshot`, `step: alarm-incomplete`), a alarm wróci
+przy następnym przebiegu. Niezależnie od niego odezwie się alarm świeżości,
+gdy od ostatniej udanej kopii minie 26 h (po udanej poprzedniej nocy to ok.
+2 h po nieudanej), z przypomnieniem co 6 h. Warstwa A (`pg_dump`) działa
+osobno i ten próg jej nie dotyczy.
 
 Co zrobić, po kolei:
 
@@ -307,7 +312,7 @@ Co zrobić, po kolei:
 2. Rozmiar JSON-a w ostatnich udanych kopiach widać w alarmie „DB snapshot
    zakończony” na kanale metryk (`json_mb`).
 3. Wybierz jedno: podnieś próg (PR, potem wdrożenie workera; spakowany plik
-   to zwykle kilka do kilkunastu procent JSON-a, tyle dochodzi do pamięci
-   workera), przenieś duże tabele, które ma warstwa A, do `SKIP_TABLES`, albo
-   zamów zmianę na wgrywanie w częściach (multipart), żeby plik nie czekał
-   w pamięci.
+   to ok. 1/6 do 1/3 JSON-a, bliżej 1/3 przy tabelach pełnych uuid, i tyle
+   dochodzi do pamięci workera), przenieś duże tabele, które ma warstwa A,
+   do `SKIP_TABLES`, albo zamów zmianę na wgrywanie w częściach (multipart),
+   żeby plik nie czekał w pamięci.
