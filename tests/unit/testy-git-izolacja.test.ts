@@ -18,7 +18,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 const KATALOG = path.resolve(__dirname, '../..');
 const VITEST = path.join(KATALOG, 'node_modules/.bin/vitest');
-const PLIKI: ReadonlyArray<{ plik: string; konfiguracja?: string }> = [{ plik: 'tests/unit/napraw-hook.test.ts' }];
+// Test hooków żelaznego filtra jest na gałęzi filtra (#504); na `main` bez niego plik jest pomijany.
+const PLIKI: ReadonlyArray<{ plik: string; konfiguracja?: string }> = [
+  { plik: 'tests/unit/napraw-hook.test.ts' },
+  { plik: 'tests/filtr/hooki.test.ts', konfiguracja: 'vitest.filtr.config.ts' },
+].filter(({ plik }) => fs.existsSync(path.join(KATALOG, plik)));
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'izolacja-git-'));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
