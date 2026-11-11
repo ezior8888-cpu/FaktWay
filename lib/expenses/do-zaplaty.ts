@@ -77,6 +77,7 @@ const DATA = /^\d{4}-\d{2}-\d{2}$/;
 
 function dniMiedzy(od: string, do_: string): number {
   const ms = (iso: string) => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+  // filtr-wyjatek: kwoty-bez-float liczba dni między datami, nie kwota
   return Math.round((ms(do_) - ms(od)) / 86_400_000);
 }
 

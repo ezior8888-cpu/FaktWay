@@ -269,7 +269,7 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-ewidencja.test.ts > FP nie jest drugim przychodem",
-        "tests/unit/ksiegowosc-kpir.test.ts > faktura do paragonu poza księgą"
+        "tests/unit/ksiegowosc-kpir.test.ts > faktura do paragonu poza przychodem z brakiem"
       ],
       "parametry": [],
       "niezmienniki": [],
@@ -284,7 +284,7 @@
       "odczyt": "2026-11-09",
       "zrodlo_planu": "§4 pkt 2",
       "stan": "dziala",
-      "uwagi": null
+      "uwagi": "Od kroku 1.2 planu kompletnej aplikacji (#509) FP daje brak miesiąca w ewidencji i KPiR (brakFakturyDoParagonu), dopóki FaktWay nie sprawdza, czy raport kasy obejmuje tę sprzedaż."
     },
     {
       "id": "RP-WAL-01",

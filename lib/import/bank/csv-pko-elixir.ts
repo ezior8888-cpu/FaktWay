@@ -66,6 +66,7 @@ export function looksLikePkoElixir(text: string): boolean {
 function day(value: string): string | null {
   const iso = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
   const parsed = new Date(`${iso}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : null;
 }
 

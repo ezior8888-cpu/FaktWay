@@ -16,7 +16,6 @@
       "lib/flo/functions/payment-confirm-producer.ts": 1,
       "lib/flo/interest.ts": 1,
       "lib/format/warsaw-date.ts": 1,
-      "lib/import/csv-parsers/csv-helpers.ts": 3,
       "lib/invoices/list-query.ts": 1,
       "lib/jobs/runners/archive-old-invoices.ts": 3,
       "lib/jobs/runners/inbox-polling.ts": 1,
@@ -34,7 +33,7 @@
       "lib/storage/expenses.ts": 2,
       "lib/stripe/financial-gap-audit.ts": 1,
       "lib/validation/cache.ts": 1,
-      "lib/validation/whitelist-client.ts": 1
+      "lib/validation/whitelist-client.ts": 2
     },
     "kwoty-bez-float": {
       "components/exports/export-formats.ts": 1,
@@ -51,9 +50,7 @@
       "lib/import/fa3-parser.ts": 2,
       "lib/import/jpk-fa-parser.ts": 1,
       "lib/invoices/calculator.ts": 1,
-      "lib/jobs/runners/daily-db-snapshot.ts": 2,
       "lib/jobs/runners/inbox-polling.ts": 2,
-      "lib/ksef/duplicate-decision.ts": 3,
       "lib/ksef/duplicate-original-gate.ts": 1,
       "lib/ksef/duplicate-original-projection.ts": 1,
       "lib/ksef/fa3-advance-generator.ts": 1,

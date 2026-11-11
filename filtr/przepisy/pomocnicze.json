@@ -7,6 +7,10 @@
       "powod": "format kwoty do pliku; reguła groszy w RP-ZAOKR-04"
     },
     {
+      "symbol": "lib/ksiegowosc/ewidencja.ts#brakFakturyDoParagonu",
+      "powod": "komunikat braku przy fakturze do paragonu w ewidencji i KPiR (RP-FP-01)"
+    },
+    {
       "symbol": "lib/ksiegowosc/jpk-ewp.ts#JPK_EWP_NAMESPACE",
       "powod": "przestrzeń nazw schematu"
     },
@@ -67,12 +71,20 @@
       "powod": "komunikat kosztu w walucie (RP-WAL-01)"
     },
     {
+      "symbol": "lib/ksiegowosc/kpir-dane.ts#komunikatDublaKosztu",
+      "powod": "komunikat braku KPiR przy zdublowanym dokumencie kosztu (F11-C1)"
+    },
+    {
       "symbol": "lib/ksiegowosc/kpir-dane.ts#czytajKpir",
       "powod": "odczyt danych do zbudujKpir"
     },
     {
       "symbol": "lib/ksiegowosc/vat-dane.ts#BLAD_ODCZYTU_VAT",
       "powod": "komunikat błędu odczytu"
+    },
+    {
+      "symbol": "lib/ksiegowosc/vat-dane.ts#komunikatPrzychodowRecznych",
+      "powod": "komunikat braku VAT przy wpisach ręcznych przychodu (RP-VAT-01, F11-A1)"
     },
     {
       "symbol": "lib/ksiegowosc/profil.ts#FORMY",
@@ -109,6 +121,26 @@
     {
       "symbol": "lib/ksiegowosc/profil.ts#doWiersza",
       "powod": "mapowanie do bazy"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#ZAKRES_V1_WSTEP",
+      "powod": "tekst ekranu: potwierdzenie zakresu v1 (F11-B3)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#ZAKRES_V1_WARUNKI",
+      "powod": "tekst ekranu: warunki zakresu v1 (F11-B3)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#ZAKRES_V1_SKUTEK",
+      "powod": "tekst ekranu: skutek poza zakresem v1 (F11-B3)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#ZAKRES_V1_ETYKIETA",
+      "powod": "tekst ekranu: pole potwierdzenia zakresu v1 (F11-B3)"
+    },
+    {
+      "symbol": "lib/ksiegowosc/profil.ts#ZAKRES_V1_ODMOWA",
+      "powod": "komunikat odmowy zapisu profilu bez potwierdzenia zakresu v1 (F11-B3)"
     },
     {
       "symbol": "lib/ksiegowosc/wpisy-reczne.ts#RODZAJE_WPISU",

@@ -58,7 +58,10 @@
       "opis": "Terminy podatkowe i składkowe, święta, przesunięcie na dzień roboczy (art. 12 § 5 Ordynacji podatkowej).",
       "sciezki": [
         "lib/ksiegowosc/kalendarz.ts",
-        "lib/ksiegowosc/parametry/terminy.ts"
+        "lib/ksiegowosc/parametry/terminy.ts",
+        "app/api/kalendarz/[plik]/route.ts",
+        "lib/kalendarz/**",
+        "components/settings/calendar-feed-actions.ts"
       ]
     },
     {
@@ -226,7 +229,13 @@
       "sciezki": [
         "app/(dashboard)/invoices/new/actions.ts",
         "components/invoices/{actions-detail,advance-actions,draft-actions}.ts",
-        "components/invoices/invoice-form-parts/constants.ts"
+        "components/invoices/invoice-form-parts/constants.ts",
+        "lib/invoices/build-from-form.ts",
+        "app/actions/noty.ts",
+        "lib/noty/**",
+        "lib/api/v1/invoice-create.ts",
+        "app/api/v1/invoices/route.ts",
+        "app/api/noty/**"
       ]
     },
     {
@@ -238,7 +247,8 @@
         "lib/xml/schemas/fa3/**",
         "lib/invoices/{annotations,vat-exemption,vat-ue,cash-method,special-data,map-buyer-party,tenant-seller,load-tenant-seller}.ts",
         "lib/ksef/special-invoice-data.ts",
-        "lib/ksef/xml-generated-at.ts"
+        "lib/ksef/xml-generated-at.ts",
+        "lib/invoices/receipt-invoice.ts"
       ]
     },
     {
@@ -289,7 +299,16 @@
       "sciezki": [
         "lib/invoices/{manual-payment,paid-labels}.ts",
         "app/actions/invoice-payments.ts",
-        "supabase/migrations/00158_*.sql"
+        "supabase/migrations/00158_*.sql",
+        "app/actions/bank-statement.ts",
+        "lib/import/bank/**",
+        "lib/invoices/{identyfikator-zbiorczy,tytul-przelewu}.ts",
+        "app/actions/identyfikator-zbiorczy.ts",
+        "lib/ksef/identyfikator-zbiorczy.ts",
+        "app/actions/kasa.ts",
+        "lib/kasa/**",
+        "lib/invoices/invoice-payments.ts",
+        "app/api/kasa/**"
       ]
     },
     {
@@ -308,7 +327,10 @@
         "lib/pdf/**",
         "lib/ksef/{qr-codes,qr-verification,upo-pdf-generator}.ts",
         "app/api/invoices/**",
-        "app/accountant/[token]/download/**"
+        "app/accountant/[token]/download/**",
+        "app/faktura/[token]/**",
+        "components/invoices/buyer-link-actions.ts",
+        "lib/invoice-share/**"
       ]
     },
     {
@@ -324,7 +346,9 @@
         "lib/jobs/runners/ksef-lifecycle-reconcile.ts",
         "app/admin/ksef/actions.ts",
         "lib/admin/ksef-operator-policy.ts",
-        "scripts/ops/zwolnij-utknieta-wysylke.{sh,sql}"
+        "scripts/ops/zwolnij-utknieta-wysylke.{sh,sql}",
+        "lib/ksef/rate-limit-pause.ts",
+        "scripts/ops/ksef-pauza.sh"
       ]
     },
     {
@@ -357,6 +381,15 @@
       ]
     },
     {
+      "id": "ksef.uprawnienia",
+      "poziom": "R1",
+      "opis": "Uprawnienia biura rachunkowego w KSeF nadawane i odbierane z FaktWay: kto w KSeF widzi i wystawia faktury firmy.",
+      "sciezki": [
+        "app/actions/uprawnienia-ksef.ts",
+        "lib/ksef/uprawnienia.ts"
+      ]
+    },
+    {
       "id": "ksef.skrzynka-import",
       "poziom": "R1",
       "opis": "Faktury z KSeF i import z innych programów: kwoty trafiają do ksiąg.",
@@ -367,7 +400,8 @@
         "lib/import/*.ts",
         "lib/ksef/{hwm,history-fetcher}.ts",
         "lib/jobs/runners/{inbox-backfill,bulk-import}.ts",
-        "app/actions/import-danych.ts"
+        "app/actions/import-danych.ts",
+        "app/api/uploads/import/route.ts"
       ]
     },
     {
@@ -448,7 +482,8 @@
         "components/reports/kpir/kpir-model.ts",
         "lib/exports/kpir-generator.ts",
         "lib/categorization/{kpir-revenue,kpir-cost}.ts",
-        "app/(dashboard)/reports/kpir/**"
+        "app/(dashboard)/reports/kpir/**",
+        "lib/invoices/receipt-revenue-guard.ts"
       ]
     },
     {
@@ -458,7 +493,14 @@
       "sciezki": [
         "lib/exports/{comarch-optima-generator,csv-generators,zip-packager,form-defaults}.ts",
         "lib/jobs/runners/{exports-generate,co-pilot-monthly}.ts",
-        "app/api/portal/exports/generate/**"
+        "app/api/portal/exports/generate/**",
+        "lib/api/v1/{invoices,expenses}.ts",
+        "app/api/v1/invoices/[id]/route.ts",
+        "lib/api/mcp/**",
+        "lib/webhooks/{deliver,payloads}.ts",
+        "lib/jobs/runners/webhooks.ts",
+        "components/settings/webhooks-actions.ts",
+        "lib/exports/edi-plus-plus-generator.ts"
       ]
     },
     {
@@ -470,7 +512,10 @@
         "lib/expenses/**",
         "lib/ocr/**",
         "app/actions/expenses.ts",
-        "lib/jobs/runners/{auto-categorize-inbox,process-ocr}.ts"
+        "lib/jobs/runners/{auto-categorize-inbox,process-ocr}.ts",
+        "app/actions/{expense-payments,plik-przelewow,receipt-invoice-match}.ts",
+        "app/api/uploads/expense/route.ts",
+        "app/actions/expense-thread.ts"
       ]
     },
     {
@@ -548,7 +593,11 @@
         "app/api/gdpr/**",
         "lib/support/retention.ts",
         "lib/jobs/runners/{daily-db-snapshot,verify-backup}.ts",
-        "scripts/hetzner/db-backup.sh"
+        "scripts/hetzner/db-backup.sh",
+        "lib/uploads/server.ts",
+        "app/actions/archiwum.ts",
+        "lib/archiwum/**",
+        "lib/jobs/runners/{document-archive,document-archive-cleanup}.ts"
       ]
     },
     {
@@ -558,7 +607,8 @@
       "sciezki": [
         "app/actions/{company-profile,organizations,tax-office,cash-method,vat-exemption,business-start}.ts",
         "lib/invoices/business-start.ts",
-        "components/settings/{cash-method-form,tax-office-form,vat-exemption-form,business-start-form,complete-nip-form,company-deletion}.tsx"
+        "components/settings/{cash-method-form,tax-office-form,vat-exemption-form,business-start-form,complete-nip-form,company-deletion}.tsx",
+        "app/actions/company-bank-account.ts"
       ]
     },
     {
@@ -581,7 +631,9 @@
         "components/przeplywy/**",
         "app/(dashboard)/przeplywy/**",
         "app/(dashboard)/flo/wrapped/**",
-        "lib/jobs/runners/{weekly-business-review,daily-summary-email}.ts"
+        "lib/jobs/runners/{weekly-business-review,daily-summary-email}.ts",
+        "lib/kasa-fiskalna/**",
+        "lib/oss/**"
       ]
     },
     {
@@ -634,7 +686,8 @@
         "lib/support/**",
         "components/support/**",
         "lib/jobs/runners/{email-sequence,trial-countdown-emails,cert-expiry-alert}.ts",
-        "app/api/support/**"
+        "app/api/support/**",
+        "lib/api/v1/{docs-page.ts,openapi.json}"
       ]
     },
     {
@@ -660,7 +713,10 @@
       "sciezki": [
         "lib/jobs/runners/notify-user.ts",
         "lib/push/sender.ts",
-        "lib/email/send.ts"
+        "lib/email/send.ts",
+        "lib/app-notifications/**",
+        "lib/jobs/runners/{app-notifications,new-login-mail}.ts",
+        "supabase/migrations/{00187,00188,00197}_*.sql"
       ]
     },
     {
@@ -672,7 +728,8 @@
         "components/accountant/**",
         "app/(dashboard)/settings/accountant/**",
         "app/accountant/**",
-        "components/settings/accountant-actions.ts"
+        "components/settings/accountant-actions.ts",
+        "supabase/migrations/00192_*.sql"
       ]
     },
     {
@@ -696,7 +753,9 @@
         "types/**",
         "lib/i18n/**",
         "lib/audit/**",
-        "lib/feature-flags/**"
+        "lib/feature-flags/**",
+        "lib/api/v1/{auth,pagination,scopes,token}.ts",
+        "lib/webhooks/{secret-box,signature,types}.ts"
       ]
     },
     {
@@ -759,7 +818,7 @@
       "poziom": "R1",
       "opis": "SQL: status zapłaty, kwota zapłacona, należności po terminie (update_invoice_payment_status, recalculate_invoice_paid_amount, invoices_overdue, mark_invoice_paid).",
       "sciezki": [
-        "supabase/migrations/{00012,00014,00023,00068,00073,00082,00126,00145,00158,00200}_*.sql"
+        "supabase/migrations/{00012,00014,00023,00068,00073,00082,00126,00145,00158,00176,00180,00183,00189,00191,00194,00200}_*.sql"
       ]
     },
     {
@@ -775,7 +834,7 @@
       "poziom": "R1",
       "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja).",
       "sciezki": [
-        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164}_*.sql"
+        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193}_*.sql"
       ]
     },
     {
@@ -791,7 +850,7 @@
       "poziom": "R1",
       "opis": "SQL: pochodzenie kosztów i prawo do odliczenia (expenses.is_deductible).",
       "sciezki": [
-        "supabase/migrations/{00034,00123,00127,00128}_*.sql"
+        "supabase/migrations/{00034,00123,00127,00128,00175,00177,00196}_*.sql"
       ]
     },
     {
@@ -807,7 +866,15 @@
       "poziom": "R1",
       "opis": "SQL: retencja i usuwanie danych.",
       "sciezki": [
-        "supabase/migrations/{00009,00022,00044,00051,00052,00069,00070,00071,00072,00104,00109,00113,00157}_*.sql"
+        "supabase/migrations/{00009,00022,00044,00051,00052,00069,00070,00071,00072,00104,00109,00113,00157,00178,00190}_*.sql"
+      ]
+    },
+    {
+      "id": "sql.dostep",
+      "poziom": "R1",
+      "opis": "SQL: dostęp do danych firmy spoza zwykłej sesji: klucze API, link do faktury dla nabywcy, adres kalendarza, sesje kont, podsumowanie firm księgowej i uprawnienia biura w KSeF (funkcje SECURITY DEFINER z tokenem albo rolą).",
+      "sciezki": [
+        "supabase/migrations/{00174,00179,00181,00182,00185,00195}_*.sql"
       ]
     },
     {

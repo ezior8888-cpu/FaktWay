@@ -45,6 +45,7 @@ export function looksLikeMt940(text: string): boolean {
 function isoDay(year: number, month: number, day: number): string | null {
   const iso = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const parsed = new Date(`${iso}T12:00:00Z`);
+  // filtr-wyjatek: data-warszawa sprawdzenie dnia kalendarzowego na dacie w UTC, nie dzisiejsza data
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : null;
 }
 
