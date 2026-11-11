@@ -45,6 +45,8 @@ describe('PDF z polskimi znakami (S-09)', () => {
       buyerNip: '5260001246',
       buyerAddress: 'ul. Kościuszki 2, 50-001 Wrocław',
       invoiceNumber: 'FV 1/09/2026',
+      // Krok 1.4: tytuł przelewu bez numeru KSeF to sam numer faktury.
+      transferTitle: 'FV 1/09/2026',
       issueDate: '2026-09-01',
       dueDate: '2026-09-15',
       grossAmount: 1230,

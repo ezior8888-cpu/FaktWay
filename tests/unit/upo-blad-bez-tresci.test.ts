@@ -44,6 +44,7 @@ vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi
 
 import { NonRetriableError } from '@/lib/jobs/errors';
 import { runDownloadUpo } from '@/lib/jobs/runners/download-upo';
+import { resetKsefRateLimitPausesForTests } from '@/lib/ksef/rate-limit-pause';
 import { downloadUpoFromKsef } from '@/lib/ksef/upo-client';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -239,6 +240,10 @@ describe('F-093-UPO: decyzja o ponowieniu bez zmian', () => {
     if (result.success) throw new Error('KSeF odpowiedział błędem, wynik nie może być sukcesem');
     if (status === 401) expect(mocks.invalidate).toHaveBeenCalledWith('1234567890', 'test');
     mocks.invalidate.mockClear();
+    // L1a (#561): 429 z UPO zapisuje pauzę firmy, więc drugie żądanie w tym
+    // teście trafiłoby w pauzę zamiast w KSeF. Wynik TEGO 429 zostaje jak dotąd
+    // (`upo-client.ts`), a test porównuje go z runnerem, więc pauzę zdejmujemy.
+    if (status === 429) resetKsefRateLimitPausesForTests();
 
     // Ten sam wynik w runnerze: ten sam komunikat w błędzie joba i w last_error,
     // a bez ponowień kończy się tylko `NonRetriableError`.
