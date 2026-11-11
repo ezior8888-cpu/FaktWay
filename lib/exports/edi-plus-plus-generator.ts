@@ -188,7 +188,7 @@ function buildDocument(
 
   if (inv.invoiceType === 'advance' || inv.invoiceType === 'final') {
     throw refuse(
-      'jest zaliczkowa albo rozliczeniowa — jej tabela VAT wymaga wariantu formatu 1.05.1 (zaliczki), którego FaktWay jeszcze nie wykazuje.',
+      'jest zaliczkowa albo rozliczeniowa, a jej tabela VAT wymaga wariantu formatu 1.05.1 (zaliczki), którego FaktWay jeszcze nie wykazuje.',
     );
   }
   if (inv.lines.some((l) => l.vatRate.trim().toLowerCase() === 'np_ii')) {
@@ -196,7 +196,7 @@ function buildDocument(
   }
   const party = counterpartyOf(inv, direction);
   if (!party.nip?.trim() && party.vatUe?.trim()) {
-    throw refuse('ma kontrahenta z UE bez NIP-u — rodzaj transakcji (WDT/WNT) wymaga uzgodnienia z księgową.');
+    throw refuse('ma kontrahenta z UE bez NIP-u, a rodzaj transakcji (WDT/WNT) wymaga uzgodnienia z księgową.');
   }
 
   const fullNumber = `${docType} ${inv.invoiceNumber}`;
