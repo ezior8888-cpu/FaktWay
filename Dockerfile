@@ -12,7 +12,7 @@
 # są WYPIEKANE w bundlu JS podczas builda, nie czytane w runtime.
 # ═══════════════════════════════════════════════════════════════
 
-FROM node:22-slim AS base
+FROM node:22.23.4-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 # curl jest wymagany przez healthcheck Coolify: dla obrazów budowanych
@@ -143,7 +143,7 @@ CMD ["node", "--import", "./lib/jobs/server-only-hook.mjs", "--import", "tsx", "
 # MUSI zostać ostatnim etapem pliku: `docker build` bez `--target` buduje
 # etap ostatni, więc każdy build bez jawnego targetu ma dać aplikację webową,
 # a nie workera. (Odwrotna kolejność raz już wyłączyła produkcję.)
-FROM node:22-slim AS runner
+FROM node:22.23.4-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
