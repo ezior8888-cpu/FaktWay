@@ -140,7 +140,8 @@ describe('PDF proformy i oferty: to nie jest faktura', () => {
     expect(notice).toMatch(/Proforma nie jest fakturą VAT/);
     expect(notice).toMatch(/Do KSeF nie przesyła się faktur proforma/);
     expect(notice).toMatch(/Ministerstw/);
-    expect(notice).toMatch(/ksef\.podatki\.gov\.pl/);
+    // Zwykłe zawieranie tekstu zamiast wyrażenia z adresem (CodeQL js/regex/missing-regexp-anchor).
+    expect(notice).toContain('ksef.podatki.gov.pl');
     expect(notice).toMatch(/Zakres obowiązkowego KSeF/);
     expect(await wydruk(dokument())).toContain(notice);
   });
