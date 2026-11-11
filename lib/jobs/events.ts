@@ -245,6 +245,12 @@ export const remindersSendRequested = jobEvent<{
  */
 export const invoicePaymentReceived = jobEvent<{
     invoiceId: string;
+    /**
+     * Wpłata z księgi `payments` (RPC `record_invoice_payment` / `mark_invoice_paid`).
+     * Wysyłana tylko po „zapisano”, z kluczem `payment:<paymentId>`. Zdarzenia sprzed
+     * kroku 8.1 jej nie mają: runner tylko anuluje przypomnienia, bez pusha.
+     */
+    paymentId?: string;
   }>('invoice/payment.received');
 
 /**

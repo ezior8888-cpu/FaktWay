@@ -5,6 +5,8 @@ import { z } from 'zod';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
+import { sendJobEvent } from '@/lib/jobs/enqueue';
+import { invoicePaymentReceived } from '@/lib/jobs/events';
 import { invalidateTenantDashboard } from '@/lib/cache/invalidation';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
@@ -70,6 +72,23 @@ interface PaymentEntryRpc {
     },
   ): RpcResult;
   rpc(fn: 'void_invoice_payment', args: { p_payment_id: string }): RpcResult;
+}
+
+/**
+ * Zdarzenie „wpłata zapisana” (krok 8.1): anulowanie przypomnień przy pełnej zapłacie
+ * i push „Otrzymana płatność”. Wołane tylko po wyniku „zapisano”, nigdy po
+ * `already_*` ani odmowie. Wpłata jest już w bazie, więc błąd kolejki nie psuje
+ * akcji: logujemy i idziemy dalej (przypomnienia zdejmuje też RPC, a push to dodatek).
+ */
+async function emitPaymentReceived(invoiceId: string, paymentId: string): Promise<void> {
+  try {
+    await sendJobEvent({
+      ...invoicePaymentReceived.create({ invoiceId, paymentId }),
+      singletonKey: `payment:${paymentId}`,
+    });
+  } catch (e) {
+    console.error('[invoice-payments] invoice/payment.received', e instanceof Error ? e.message : e);
+  }
 }
 
 const invoiceIdSchema = z.string().uuid();
@@ -140,6 +159,8 @@ export async function markInvoicePaidAction(invoiceId: string, paidOn?: string):
   const day = String(result.paid_on);
   await invalidateTenantDashboard(tenantId);
   revalidatePaymentViews(invoiceId);
+  const markedPaymentId = text(result.payment_id);
+  if (markedPaymentId) await emitPaymentReceived(invoiceId, markedPaymentId);
   await trackServer({
     userId: user.id,
     tenantId,
@@ -266,6 +287,7 @@ export async function recordInvoicePaymentAction(input: RecordInvoicePaymentInpu
   const paidInFull = result.payment_status === 'paid';
   await invalidateTenantDashboard(tenantId);
   revalidatePaymentViews(input.invoiceId);
+  if (result.status === 'recorded') await emitPaymentReceived(input.invoiceId, paymentId);
   if (result.status === 'recorded' && paidInFull) {
     // Wpłata zamknęła fakturę: ten sam fakt co „Zapłacone”, z innym źródłem.
     await trackServer({
