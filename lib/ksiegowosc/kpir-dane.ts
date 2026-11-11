@@ -122,7 +122,10 @@ async function koszty(client: SupabaseClient, tenantId: string, rok: number): Pr
       .range(from, to);
     return { data: wynik.data as WierszKosztu[] | null, count: wynik.count, error: wynik.error };
   });
-  const widoczne = await filterExpensesForKsefEnvironment(client, tenantId, srodowisko, wiersze);
+  // F11-C2: wydatki na reprezentację nie są kosztem (art. 23 ust. 1 pkt 23 ustawy o PIT).
+  const widoczne = (await filterExpensesForKsefEnvironment(client, tenantId, srodowisko, wiersze)).filter(
+    (w) => !czyReprezentacja(w.category_label),
+  );
   try {
     await assertKsefExpensesReadyForPln(widoczne, async (ids) => {
       const { data, error } = await client.from('invoices').select('id, currency').eq('tenant_id', tenantId).in('id', ids);
@@ -236,3 +239,14 @@ export async function czytajKpir(client: SupabaseClient, tenantId: string, rok: 
   const zaplatyFp = zaplatyFunduszuPracy(skladki);
   return { ok: true, kpir: zbudujKpir({ rok, faktury: faktury.faktury, koszty: k, wpisy, zaplatyFp, wersje, kursy: faktury.kursy }), wpisy, wersje, spisy };
 }
+
+/**
+ * Kategoria „Reprezentacja” (także nadana przez Skrzynkę albo OCR, np. dla
+ * restauracji): wydatki na reprezentację, w tym usługi gastronomiczne, nie są
+ * kosztem uzyskania przychodu (art. 23 ust. 1 pkt 23 ustawy o PIT), więc nie
+ * wchodzą do KPiR ani JPK_PKPIR (F11-C2). Koszt zostaje w Kosztach.
+ */
+function czyReprezentacja(kategoria: string | null): boolean {
+  return /^\s*reprezentacj/i.test(kategoria ?? '');
+}
+
