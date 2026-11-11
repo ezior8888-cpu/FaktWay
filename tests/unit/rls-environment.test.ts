@@ -116,6 +116,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-api-klucze.test.ts',
       // 00184 (krok 7.1, część 2): wystawianie faktur kluczem API.
       'tests/rls-api-wystawianie.test.ts',
+      // 00186 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu.
+      'tests/rls-wyciag-podatki.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

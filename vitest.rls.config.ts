@@ -100,6 +100,9 @@ export default defineConfig({
       // 00184 (krok 7.1, część 2): wystawianie faktur kluczem z `invoices:write` przez
       // `api_create_invoice()`, idempotencja w transakcji z fakturą, izolacja firm.
       'tests/rls-api-wystawianie.test.ts',
+      // 00186 (plan kompletnej aplikacji, krok 3.2, część 2): przelewy do ZUS i urzędu z wyciągu
+      // jako zapłaty rozliczeń; rachunek firmy, wyłącznik modułu, zapis raz, role, różnica kwot, cofnięcie.
+      'tests/rls-wyciag-podatki.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

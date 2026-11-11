@@ -63,10 +63,14 @@ export type ImportBankStatementResult =
       inserted: number;
       /** Wpływy wgrane wcześniej (ten sam klucz duplikatu). */
       duplicates: number;
-      /** Wypływy: dopasowanie wydatków przyjdzie w kolejnym kroku, więc ich nie zapisujemy. */
+      /** Wypływy, których nie zapisujemy: wszystkie poza przelewami do ZUS i urzędu (dopasowanie wydatków przyjdzie później). */
       debitsSkipped: number;
       /** Wpływy w innej walucie niż PLN: wpłaty zapisujemy dziś tylko w złotych. */
       otherCurrencySkipped: number;
+      /** Przelewy do ZUS i na mikrorachunek (moduł księgowości włączony, 00186): nowe i wgrane wcześniej. */
+      tax?: { inserted: number; duplicates: number };
+      /** Moduł włączony, ale rachunków firmy nie udało się odczytać: przelewów podatkowych nie rozpoznaliśmy. */
+      taxUnavailable?: true;
     }
   | { success: false; error: string };
 
@@ -90,8 +94,21 @@ export function importSummaryText(result: Extract<ImportBankStatementResult, { s
       : `W pliku ${FORMAT_LABELS[result.format]} nie było nowych wpływów do sprawdzenia.`,
   );
   if (result.duplicates > 0) parts.push(`Pominęliśmy ${operacje(result.duplicates)} wgrane wcześniej.`);
+  if (result.tax) {
+    if (result.tax.inserted > 0) {
+      parts.push(`Przelewy do ZUS i urzędu skarbowego (${result.tax.inserted}) czekają na potwierdzenie jako zapłaty rozliczeń.`);
+    }
+    if (result.tax.duplicates > 0) parts.push(`Przelewów do ZUS i urzędu wgranych wcześniej (${result.tax.duplicates}) nie dodaliśmy drugi raz.`);
+  }
+  if (result.taxUnavailable) {
+    parts.push(
+      'Przelewów do ZUS i urzędu skarbowego tym razem nie rozpoznaliśmy, bo nie udało się odczytać ustawień podatkowych firmy. Ten sam plik można wgrać jeszcze raz: dojdą tylko brakujące operacje.',
+    );
+  }
   if (result.debitsSkipped > 0) {
-    parts.push(`Wypływów (${result.debitsSkipped}) nie zapisujemy: dopasowanie wydatków do faktur kosztowych przyjdzie w kolejnym kroku.`);
+    parts.push(
+      `${result.tax ? 'Pozostałych wypływów' : 'Wypływów'} (${result.debitsSkipped}) nie zapisujemy: dopasowanie wydatków do faktur kosztowych przyjdzie w kolejnym kroku.`,
+    );
   }
   if (result.otherCurrencySkipped > 0) {
     parts.push(`Wpływów w innej walucie niż PLN (${result.otherCurrencySkipped}) nie zapisujemy: wpłaty przyjmujemy na razie tylko w złotych.`);
@@ -100,7 +117,7 @@ export function importSummaryText(result: Extract<ImportBankStatementResult, { s
 }
 
 /** Odmowy samego importu i decyzji, które nie pochodzą z `record_invoice_payment`. */
-const BANK_REFUSALS = new Set(['operation_not_found', 'operation_skipped', 'operation_confirmed', 'not_credit', 'manual_first']);
+const BANK_REFUSALS = new Set(['operation_not_found', 'operation_skipped', 'operation_confirmed', 'not_credit', 'manual_first', 'tax_payment_confirmed']);
 
 export interface RefusalContext {
   number?: string | null;
@@ -131,6 +148,8 @@ export function bankRefusalText(code: unknown, ctx: RefusalContext = {}): string
       return `Ta operacja ma już zapisaną wpłatę${ctx.number ? ` do faktury ${ctx.number}` : ''}. Najpierw cofnij tę wpłatę przyciskiem „Cofnij”, potem zdecyduj jeszcze raz.`;
     case 'not_credit':
       return 'To nie jest wpływ na rachunek, więc nie zapiszemy go jako wpłaty do faktury sprzedaży.';
+    case 'tax_payment_confirmed':
+      return 'Ta operacja jest potwierdzona jako zapłata rozliczenia. Najpierw cofa się ją przyciskiem „Cofnij” w zapłatach do ZUS i urzędu skarbowego, potem można ją pominąć.';
     default:
       return voidPaymentRefusalText('manual_first', { number: ctx.number, manualPaidOn: ctx.manualPaidOn, manualAmount: ctx.manualAmount });
   }
@@ -246,6 +265,8 @@ export function parseBankOperationsRpc(data: unknown): BankOperationsData | null
     if (typeof row.id !== 'string' || !isDay(row.booking_date) || amountGrosze === null || (row.state !== 'confirmed' && row.state !== 'skipped')) {
       return null;
     }
+    // Pominięty przelew do ZUS albo urzędu (00186) ma własną listę w zapłatach rozliczeń, nie przy wpłatach do faktur.
+    if (amountGrosze < 0) continue;
     decided.push({
       id: row.id,
       bookingDate: row.booking_date,
