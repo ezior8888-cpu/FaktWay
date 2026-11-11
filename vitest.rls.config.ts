@@ -154,6 +154,10 @@ export default defineConfig({
       // Plan skalowania 3000, sesja 12 (QAL-01, bez migracji): nocna kopia JSON czyta
       // tabele stronami po kluczu; filtry kursora (też klucz złożony) przez prawdziwy PostgREST.
       'tests/rls-kopia-json-stronicowanie.test.ts',
+      // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta; izolacja firm, rola jak przy
+      // fakturach, numer z bazy bez dubli naraz, wystawionego nie zmienia nikt, kwoty w CHECK-ach,
+      // historia wysyłek, powiązanie z fakturą w INSERT (jedna faktura na numer zamiany), poza przychodem.
+      'tests/rls-proformy.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

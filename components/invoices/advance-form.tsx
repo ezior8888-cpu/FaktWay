@@ -63,6 +63,14 @@ export interface AdvanceInvoiceFormProps {
   initialSeller: SellerData;
   /** Firma, dla której wyrenderowano formularz i sprzedawcę — zapis odsyła ją jako `expectedTenantId` (UX-01). */
   tenantId: string;
+  /**
+   * Krok 2.4: dane z proformy albo oferty (`?proforma=`) wpisane od razu
+   * w formularz. Bez nich formularz jak dotąd.
+   */
+  initialValues?: Partial<AdvanceFormIn> | null;
+  /** Dokument i numer kolejnej zamiany: ukryte pola, zapis wpisuje powiązanie w tym samym INSERT. */
+  salesQuoteId?: string | null;
+  salesQuoteSeq?: string | null;
 }
 
 // E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
@@ -77,7 +85,13 @@ const PAYMENT_METHOD_ITEMS = [
   { value: 'other', label: 'Inna' },
 ] as const
 
-export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFormProps) {
+export function AdvanceInvoiceForm({
+  initialSeller,
+  tenantId,
+  initialValues = null,
+  salesQuoteId = null,
+  salesQuoteSeq = null,
+}: AdvanceInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -113,7 +127,11 @@ export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFo
       unknown,
       AdvanceInvoiceSchemaIn
     >,
-    defaultValues: defaults,
+    defaultValues: {
+      ...defaults,
+      ...initialValues,
+      ...(salesQuoteId && salesQuoteSeq ? { salesQuoteId, salesQuoteSeq } : {}),
+    },
   });
 
   useEffect(() => {
@@ -195,6 +213,8 @@ export function AdvanceInvoiceForm({ initialSeller, tenantId }: AdvanceInvoiceFo
 
   return (
     <form className="space-y-6 pb-32 lg:pb-10" onSubmit={(e) => e.preventDefault()}>
+      {salesQuoteId && salesQuoteSeq ? <input type="hidden" {...form.register('salesQuoteId')} /> : null}
+      {salesQuoteId && salesQuoteSeq ? <input type="hidden" {...form.register('salesQuoteSeq')} /> : null}
       <InvoiceCreatePageHeading
         title="Faktura zaliczkowa"
         description={
