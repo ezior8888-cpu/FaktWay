@@ -288,6 +288,10 @@ ${events}
 `;
 }
 
+// Adres łącza zbudowany osobno: test linków (internal-links) czyta tekst po `${…URL…}/…`
+// aż do cudzysłowu lub spacji, więc `/api/mcp</code>` z tagiem w tekście byłby błędnym linkiem.
+const MCP_URL = new URL('/api/mcp', PUBLIC_SITE_URL).href;
+
 function mcpSection(): string {
   const tools = MCP_TOOLS
     .map((tool) => `<tr><td><code>${tool.name}</code></td><td>${escapeHtml(tool.title)}</td><td><code>${tool.scope}</code></td><td>${escapeHtml(tool.description)}</td></tr>`)
@@ -296,7 +300,7 @@ function mcpSection(): string {
 <h2 id="mcp">Łącze dla asystentów (MCP)</h2>
 <p>Możesz podłączyć FaktWay do własnego asystenta, który obsługuje protokół MCP (Model Context Protocol), np. Claude albo ChatGPT. Asystent zobaczy faktury, należności i koszty Twojej firmy i odpowie na pytania typu „kto jeszcze mi nie zapłacił”. Łącze jest tylko do odczytu: nie wystawia faktur, niczego nie wysyła i niczego nie zmienia.</p>
 <ul>
-<li>Adres: <code>${escapeHtml(PUBLIC_SITE_URL)}/api/mcp</code> (transport Streamable HTTP, odpowiedzi w formacie JSON, bez sesji).</li>
+<li>Adres: <code>${escapeHtml(MCP_URL)}</code> (transport Streamable HTTP, odpowiedzi w formacie JSON, bez sesji).</li>
 <li>Uwierzytelnianie tym samym kluczem co API: <code>Authorization: Bearer $FAKTWAY_API_KEY</code>. Dla asystenta utwórz osobny klucz tylko z uprawnieniami do odczytu (<code>invoices:read</code>, <code>expenses:read</code>); asystent zobaczy wtedy tylko te narzędzia, na które pozwala klucz. Klucz z samym <code>invoices:write</code> nie działa w łączu.</li>
 <li>Limity jak w API: 60 zapytań na minutę na klucz (wspólnie z <code>/api/v1</code>). Każde użycie klucza widać w dzienniku zdarzeń firmy.</li>
 <li>Kwoty to liczby, a waluta jest w polu <code>currency</code>. Sumy należności są liczone osobno dla każdej waluty. Jedno wywołanie zwraca najwyżej ${MCP_MAX_LIMIT} wyników (domyślnie ${MCP_DEFAULT_LIMIT}); kolejne strony pobierasz kursorem <code>next_cursor</code>.</li>
