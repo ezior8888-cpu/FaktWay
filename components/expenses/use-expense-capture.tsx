@@ -4,11 +4,9 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from 'reac
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import {
-  getOcrJobStatusAction,
-  uploadExpensePhotoAction,
-} from '@/app/actions/expenses';
+import { getOcrJobStatusAction } from '@/app/actions/expenses';
 import { sendExpenseFile } from '@/lib/expenses/photo-upload';
+import { postExpenseUpload } from '@/lib/uploads/client';
 
 export type CaptureState =
   | { kind: 'idle' }
@@ -119,9 +117,10 @@ export function useExpenseCapture({
     setState({ kind: 'uploading' });
 
     startUpload(async () => {
-      // Zdjęcie zmniejszone, plik ponad limit akcji zatrzymany z komunikatem,
-      // odrzucona obietnica akcji jako błąd (plan skalowania, sesja 4).
-      const result = await sendExpenseFile(file, uploadExpensePhotoAction);
+      // Zdjęcie zmniejszone, plik ponad limit zatrzymany z komunikatem
+      // (sesja 4), wysyłka trasą `/api/uploads/expense` zamiast Server
+      // Action z limitem 1 MB (sesja 31).
+      const result = await sendExpenseFile(file, postExpenseUpload);
 
       if (!result.success) {
         setState({ kind: 'failed', error: result.error });

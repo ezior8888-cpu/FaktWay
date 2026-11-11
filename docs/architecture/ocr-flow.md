@@ -58,8 +58,9 @@ sequenceDiagram
 
 ## Powiązany kod
 
-- `app/share-target/route.ts` — przyjmuje multipart photo (jedyny realny POST route do mutacji)
-- `app/actions/expenses.ts` — `uploadExpensePhotoAction`, `getOcrJobStatusAction`, `reviewExpenseAction`, `deleteExpenseAction`
+- `app/share-target/route.ts` — udostępnienie z telefonu (multipart `photo`)
+- `app/api/uploads/expense/route.ts` — „Dodaj wydatek” w panelu (multipart `photo`); obie trasy poza proxy, bramka `lib/uploads/server.ts`, przyjęcie pliku `lib/expenses/accept-upload.ts` (plan skalowania, sesja 31: PDF do 10 MB, zdjęcie do 7 MB)
+- `app/actions/expenses.ts` — `getOcrJobStatusAction`, `reviewExpenseAction`, `deleteExpenseAction`
 - `lib/inngest/jobs/process-ocr.ts` — główny job (concurrency: 5, retries: 2)
 - `lib/inngest/jobs/auto-categorize-inbox.ts` — auto-kategoryzacja
 - Tabele: `ocr_jobs`, `expenses`, `kpir_entries`, `categorization_rules`, `kpir_global_rules`
@@ -69,5 +70,5 @@ sequenceDiagram
 | Tryb | Wejście | Endpoint |
 |---|---|---|
 | PWA Share Target | "Udostępnij" z galerii | `POST /share-target` |
-| Drag & drop / file picker | UI `/expenses` | `uploadExpensePhotoAction` (Server Action) |
+| Aparat / wybór pliku | „Dodaj wydatek” (Koszty, plus dolnego paska) | `POST /api/uploads/expense` |
 | Email forwarding | (planowane post-launch) | — |

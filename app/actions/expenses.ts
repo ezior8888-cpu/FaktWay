@@ -2,20 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { sendJobEvent } from '@/lib/jobs/enqueue';
 
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
-import { formatJobSendError } from '@/lib/jobs/error-message';
-import {
-  ocrProcessPhotoRequested,
-} from '@/lib/jobs/events';
 import { isUuid } from '@/lib/supabase/active-org';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { requireUserAndActiveOrg } from '@/lib/supabase/auth-context';
-import { deleteExpensePhoto, detectExpensePhotoType, uploadExpensePhoto } from '@/lib/storage/expenses';
 import type { Database } from '@/types/database';
 
 type ExpenseReviewUpdates = {
@@ -102,100 +96,6 @@ function buildExpenseUpdatePatch(
   }
 
   return patch;
-}
-
-/**
- * Upload zdjęcia + trigger OCR job.
- * Zwraca ocrJobId który można pollować.
- */
-export async function uploadExpensePhotoAction(formData: FormData) {
-  // Ten job zapisujemy admin clientem (omija RLS), więc tenant MUSI być
-  // zweryfikowany przez membership — nie samym formatem cookie. Inaczej
-  // spreparowane cookie z obcym org_id pozwoliłoby wstrzyknąć OCR job do
-  // cudzej organizacji.
-  let auth;
-  try {
-    auth = await requireUserAndActiveOrg();
-  } catch {
-    return { success: false as const, error: 'Brak autoryzacji' };
-  }
-  const { user, tenantId } = auth;
-
-  const file = formData.get('photo');
-  if (!(file instanceof File)) {
-    return { success: false as const, error: 'Brak pliku' };
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    return { success: false as const, error: 'Plik za duży (max 10 MB)' };
-  }
-
-  // Typ z zawartości, nie z nagłówka przeglądarki (AUD-105).
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const mimeType = detectExpensePhotoType(buffer);
-  if (!mimeType) {
-    return {
-      success: false as const,
-      error: 'Nieobsługiwany format pliku. Wgraj zdjęcie (JPG, PNG, WEBP, GIF) albo PDF.',
-    };
-  }
-
-  const admin = createAdminClient();
-  const { data: ocrJob, error: jobError } = await admin
-    .from('ocr_jobs')
-    .insert({
-      tenant_id: tenantId,
-      created_by: user.id,
-      status: 'pending',
-      source_file_path: 'pending',
-      source_file_mime: mimeType,
-      source_file_size_bytes: file.size,
-    })
-    .select('id')
-    .single();
-
-  if (jobError || !ocrJob) {
-    return { success: false as const, error: 'Błąd zapisu joba' };
-  }
-
-  let r2Key: string | null = null;
-
-  try {
-    r2Key = await uploadExpensePhoto(tenantId, ocrJob.id, buffer, mimeType);
-
-    const { error: pathErr } = await admin
-      .from('ocr_jobs')
-      .update({ source_file_path: r2Key })
-      .eq('id', ocrJob.id);
-
-    if (pathErr) {
-      await deleteExpensePhoto(r2Key);
-      await admin.from('ocr_jobs').delete().eq('id', ocrJob.id);
-      return { success: false as const, error: pathErr.message };
-    }
-
-    await sendJobEvent(
-      ocrProcessPhotoRequested.create({
-        ocrJobId: ocrJob.id,
-        tenantId,
-      }),
-    );
-  } catch (e) {
-    if (r2Key) {
-      try {
-        await deleteExpensePhoto(r2Key);
-      } catch {
-        // best-effort — nie blokuj zwrotki
-      }
-    }
-    await admin.from('ocr_jobs').delete().eq('id', ocrJob.id);
-    return {
-      success: false as const,
-      error: formatJobSendError(e),
-    };
-  }
-
-  revalidatePath('/expenses');
-  return { success: true as const, ocrJobId: ocrJob.id };
 }
 
 /**

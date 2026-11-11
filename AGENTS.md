@@ -152,6 +152,9 @@ Dostęp: `ssh -i $K root@$DB` (i analogicznie `$APP`, `$OPS`).
    w Colimie), nigdy w `db-1`.
 7. **`proxy.ts` przepuszcza tylko wymienione rozszerzenia plików;** reszta
    leci przez bramkę logowania i kończy przekierowaniem na `/login`.
+   Wyjątek: trasy wgrywania (`/api/uploads/…`, `/share-target`) są poza
+   proxy, bo proxy buforuje ciało do 10 MiB, i same pilnują sesji, 2FA
+   i rozmiaru przez `lib/uploads/server.ts`.
 
 ### Procedury (runbooki)
 

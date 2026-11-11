@@ -101,7 +101,8 @@ export async function checkMfaRateLimit(userId: string): Promise<MfaRateLimitRes
     }
 
     const key = `rl:mfa:account:${hashIdentifier(userId)}`;
-    const reply: unknown = await getRedis().eval(
+    // Limit 2 s: przerwanie nie cofa skryptu, a ten zużywa próbę (lib/cache/redis.ts).
+    const reply: unknown = await getRedis('failClosedLimiter').eval(
       MFA_ATTEMPT_SCRIPT,
       [key],
       [ATTEMPT_LIMIT, WINDOW_MS],

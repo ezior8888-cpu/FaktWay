@@ -33,7 +33,6 @@ vi.mock('@/app/(auth)/register/actions', () => ({ signupWithEmail: vi.fn() }));
 vi.mock('@/app/(auth)/forgot-password/actions', () => ({ requestPasswordReset: vi.fn() }));
 vi.mock('@/app/actions/import-danych', () => ({
   skipImportStepAction: vi.fn(),
-  startFileImportAction: vi.fn(),
 }));
 vi.mock('@/app/actions/organizations', () => ({
   acceptInvitationAction: vi.fn(),

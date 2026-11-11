@@ -45,7 +45,6 @@ vi.mock('sonner', () => ({ toast }));
 vi.mock('@/app/actions/expenses', () => ({
   deleteExpenseAction: vi.fn(),
   reviewExpenseAction: vi.fn(),
-  uploadExpensePhotoAction: vi.fn(),
   getOcrJobStatusAction: vi.fn(),
 }));
 

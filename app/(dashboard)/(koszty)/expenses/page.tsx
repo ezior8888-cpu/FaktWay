@@ -4,6 +4,7 @@ import { CaptureButton } from '@/components/expenses/capture-button';
 import { KosztyDoZaplaty } from '@/components/expenses/do-zaplaty/koszty-do-zaplaty';
 import { ExpensesTable } from '@/components/expenses/finora/expenses-table';
 import MonthSelector from '@/components/expenses/finora/month-selector';
+import { ShareTargetNoticeAlert } from '@/components/expenses/share-target-notice';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
 import { listaDoZaplaty } from '@/lib/expenses/do-zaplaty';
@@ -15,6 +16,7 @@ import { monthRange, parseExpenseMonth } from '@/lib/expenses/month';
 import { canChangeExpensePayment } from '@/lib/expenses/zaplata-kosztu';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { parseShareTargetNotice } from '@/lib/expenses/share-target-notice';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -34,17 +36,23 @@ export const dynamic = 'force-dynamic';
  * a ta strona to zawartość karty: przełączenie zakładki albo widoku zmienia
  * tylko tabelę. „Miesiąc / Do opisania” i wybór miesiąca filtrują tylko
  * tabelę, więc stoją w jej pasku (kafle sekcji liczą bieżący miesiąc).
+ *
+ * `?udostepnienie=…` — odmowa udostępnienia pliku z telefonu (`/share-target`,
+ * plan skalowania, sesja 31): komunikat nad tabelą, obok „Dodaj wydatek”.
  */
 export default async function ExpensesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; miesiac?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { filter, miesiac } = await searchParams;
+  const params = await searchParams;
+  const filter = typeof params.filter === 'string' ? params.filter : undefined;
+  const miesiac = typeof params.miesiac === 'string' ? params.miesiac : undefined;
   const unreviewedOnly = filter === 'unreviewed';
   // Krok 3.4 (koszty do zapłaty): trzeci widok w tym samym pasku (decyzja D1:
   // dodany link tym samym komponentem, dwa dotychczasowe stoją jak stały).
   const toPay = filter === 'do-zaplaty';
+  const shareNotice = parseShareTargetNotice(params);
 
   const { supabase, tenantId, role } = await getPageContext();
 
@@ -131,6 +139,12 @@ export default async function ExpensesPage({
           <MonthSelector month={month} currentMonth={currentMonth} basePath="/expenses" />
         ) : null}
       </div>
+
+      {shareNotice ? (
+        <div className="px-4 pb-2">
+          <ShareTargetNoticeAlert notice={shareNotice} />
+        </div>
+      ) : null}
 
       {error ? (
         // Błąd w karcie sekcji — rząd zakładek nad nim prowadzi do Skrzynki KSeF.
