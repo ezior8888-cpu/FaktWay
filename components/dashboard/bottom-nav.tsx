@@ -317,7 +317,9 @@ function MoreRow({
    * także przy dotknięciu. Domyślnie wiersz pobiera trasę przy dotknięciu,
    * najechaniu albo fokusie, nie przy otwarciu arkusza (plan skalowania 3000,
    * sesja 10). Na dotyku `pointerenter` przychodzi razem z dotknięciem, przed
-   * kliknięciem.
+   * kliknięciem. Otwarcie myszą albo klawiaturą stawia fokus na pierwszym
+   * wierszu (Base UI), więc ten pobrałby się już przy otwarciu: dziś to
+   * Analizy, bez pobrania, i pilnuje tego `tests/unit/prefetch-panelu.test.tsx`.
    */
   prefetch?: false;
   active: boolean;

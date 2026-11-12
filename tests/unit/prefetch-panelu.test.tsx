@@ -178,6 +178,12 @@ describe('Dolny pasek bez pełnego prefetchu', () => {
     const host = await wejdzNaPanel(<BottomNav />);
     const wiecej = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Więcej');
     act(() => wiecej!.click());
+    // Po otwarciu myszą albo klawiaturą Base UI stawia fokus na pierwszym wierszu, a wiersz
+    // pobiera się przy fokusie. Czekamy na ten fokus: dziś pierwszy jest wiersz Analiz, bez pobrania.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    expect(document.activeElement?.closest('[data-slot="sheet-content"] a')).not.toBeNull();
 
     const wiersz = (href: string) => document.querySelector(`[data-slot="sheet-content"] a[href="${href}"]`);
     const wiersze = [...document.querySelectorAll<HTMLAnchorElement>('[data-slot="sheet-content"] a[data-prefetch]')];
