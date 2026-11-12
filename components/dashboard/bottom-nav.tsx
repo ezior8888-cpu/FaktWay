@@ -52,6 +52,13 @@ const PLUS_SPRING = { type: "spring" as const, stiffness: 520, damping: 26 };
  * `LinkPendingMark` (`useLinkStatus`), czyli tylko trwająca nawigacja Nexta,
  * a pasek postępu u góry paska mówi, że strona jest w drodze
  * (`.ff-bottom-nav` w `globals.css`).
+ *
+ * PREFETCH BEZ PEŁNEGO RENDERU (plan skalowania 3000, sesja 10). Sloty miały
+ * pełny `prefetch`, więc samo wejście na panel renderowało na serwerze trzy
+ * strony z danymi (Faktury, Nowa, Miesiąc), a każde `router.refresh()` (np. po
+ * akcji serwerowej) robiło to od nowa. Teraz trasy slotów pobiera z góry
+ * `PrefetchDashboardRoutes`, tylko do stanu ładowania (`loading.tsx`): po
+ * dotknięciu od razu widać szkielet, a dane strony przychodzą za nim.
  */
 export function BottomNav() {
   const pathname = usePathname();
@@ -136,7 +143,7 @@ export function BottomNav() {
             <Link
               key={tab.label}
               href={tab.href}
-              prefetch
+              // Domyślny prefetch, nie pełny: „PREFETCH BEZ PEŁNEGO RENDERU” wyżej.
               aria-current={active ? "page" : undefined}
               className={cn(
                 SLOT_CLASS,
@@ -173,7 +180,7 @@ export function BottomNav() {
                     href={item.href}
                     label={item.label}
                     icon={item.icon}
-                    prefetch={item.prefetch !== false}
+                    prefetch={item.prefetch}
                     active={isActiveNavPath(pathname, item.href)}
                     onChoose={chooseFromMore}
                   />
@@ -263,7 +270,8 @@ function PlusSlot({
     <MotionConfig reducedMotion="user">
       <Link
         href={href}
-        prefetch
+        // Domyślny prefetch, nie pełny: „PREFETCH BEZ PEŁNEGO RENDERU”
+        // w opisie `BottomNav`.
         aria-current={active ? "page" : undefined}
         // `pb-[var(--ff-safe-b)]` jak w pozostałych slotach: bez niego na
         // iPhonie z paskiem domowym koło zjeżdżałoby w strefę paska.
@@ -294,14 +302,18 @@ function MoreRow({
   label,
   icon: Icon,
   active,
-  prefetch = true,
+  prefetch,
   onChoose,
 }: {
   href: string;
   label: string;
   icon: RemixiconComponentType;
-  /** `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). */
-  prefetch?: boolean;
+  /**
+   * `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). Domyślnie
+   * prefetch Nexta: pozycja pobiera się dopiero przy otwartym arkuszu (link na
+   * ekranie) i tylko do stanu ładowania (plan skalowania 3000, sesja 10).
+   */
+  prefetch?: false;
   active: boolean;
   /**
    * Wybór pozycji: arkusz zamyka się od razu. Dawniej czekał otwarty na
