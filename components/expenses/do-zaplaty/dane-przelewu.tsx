@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { skutkiRachunkuSpozaWykazu } from '@/lib/expenses/biala-lista-pit';
 import type { KosztDoZaplaty } from '@/lib/expenses/do-zaplaty';
 import {
   MARK_EXPENSE_PAID_FAILED,
@@ -113,8 +114,20 @@ const linkWyszukiwarki = (
   </a>
 );
 
-/** RP-BL-01: trzy stany odpowiedzi; błąd API to „nie udało się sprawdzić”, nigdy „w porządku”. */
-export function SprawdzenieBialejListy({ nip, rachunek }: { nip: string | null; rachunek: string | null }) {
+/**
+ * RP-BL-01: trzy stany odpowiedzi; błąd API to „nie udało się sprawdzić”, nigdy „w porządku”.
+ * `sankcjaPit`: skutek w PIT przy rachunku spoza wykazu według dnia wystawienia faktury
+ * (`KosztDoZaplaty.sankcjaPitBialejListy`); VAT i ZAW-NR zawsze.
+ */
+export function SprawdzenieBialejListy({
+  nip,
+  rachunek,
+  sankcjaPit,
+}: {
+  nip: string | null;
+  rachunek: string | null;
+  sankcjaPit: boolean;
+}) {
   const [stan, setStan] = useState<StanBialejListy>({ typ: 'przed' });
   const [pending, start] = useTransition();
   const nip10 = nip?.replace(/\D/g, '') ?? '';
@@ -166,11 +179,7 @@ export function SprawdzenieBialejListy({ nip, rachunek }: { nip: string | null; 
       <Alert variant="destructive">
         <AlertTitle>Tego rachunku nie ma w wykazie podatników VAT (stan na {plDate(stan.dzien)})</AlertTitle>
         <AlertDescription className="space-y-2">
-          <p>
-            Zapłata ponad 15 000 zł na rachunek spoza wykazu oznacza, że tej kwoty nie zaliczysz do kosztów w PIT
-            i odpowiadasz solidarnie za VAT niezapłacony przez sprzedawcę, chyba że w ciągu 7 dni od zlecenia
-            przelewu zawiadomisz naczelnika właściwego urzędu skarbowego (formularz ZAW-NR).
-          </p>
+          <p>{skutkiRachunkuSpozaWykazu(sankcjaPit)}</p>
           {przycisk}
         </AlertDescription>
       </Alert>
@@ -342,7 +351,9 @@ export function DanePrzelewu({
           ))}
         </ul>
       ) : null}
-      {koszt.wymagaBialejListy ? <SprawdzenieBialejListy nip={koszt.nip} rachunek={koszt.rachunek} /> : null}
+      {koszt.wymagaBialejListy ? (
+        <SprawdzenieBialejListy nip={koszt.nip} rachunek={koszt.rachunek} sankcjaPit={koszt.sankcjaPitBialejListy} />
+      ) : null}
       {mozeOznaczac ? <OznaczZaplacone expenseId={koszt.id} dzis={dzis} /> : null}
     </div>
   );

@@ -428,14 +428,14 @@ Zasady:
 
 #### RP-BL-01. Płatność na rachunek spoza wykazu
 
-- Reguła: Płatność ponad 15 000 zł na rachunek spoza wykazu: brak kosztu i solidarna odpowiedzialność, chyba że zawiadomienie urzędu w 7 dni. Starsza strona gov.pl mówi o 14 dniach.
-- Podstawa: biznes.gov.pl, https://www.biznes.gov.pl/pl/portal/00226
-- Obowiązuje: data wejścia do uzupełnienia (obowiązuje w dniu odczytu 2026-11-08), bez daty końca
+- Reguła: Płatność ponad 15 000 zł na rachunek spoza wykazu: solidarna odpowiedzialność za VAT sprzedawcy, chyba że zawiadomienie urzędu (ZAW-NR) w 7 dni; to zostaje bez zmian. Brak kosztu w PIT (art. 22p ustawy o PIT) zależy od dnia wystawienia faktury: przy fakturze wystawionej przed 1.01.2027 tak, także przy zapłacie w 2027 r. (art. 22p w brzmieniu dotychczasowym, art. 3 ustawy zmieniającej); przy fakturze od 1.01.2027 nie, bo koszt odbiera już tylko płatność ponad 15 000 zł bez rachunku płatniczego, np. gotówką (art. 22p w brzmieniu z art. 1 pkt 2). Starsza strona gov.pl mówi o 14 dniach na zawiadomienie.
+- Podstawa: biznes.gov.pl, https://www.biznes.gov.pl/pl/portal/00226 ; ustawa z 18.09.2026 r. o zmianie ustawy o podatku dochodowym od osób fizycznych oraz ustawy o podatku dochodowym od osób prawnych, Dz.U. 2026 poz. 1371 (ogłoszona 21.10.2026), art. 1 pkt 2, art. 3, art. 6: https://api.sejm.gov.pl/eli/acts/DU/2026/1371 (tekst tylko w PDF: https://api.sejm.gov.pl/eli/acts/DU/2026/1371/text.pdf)
+- Obowiązuje: VAT bez daty końca; PIT w dawnym brzmieniu dla faktur wystawionych do 2026-12-31, w nowym od 2027-01-01 (art. 1 pkt 2 i art. 3 wchodzą w życie 1.01.2027, reszta ustawy 5.11.2026)
 - Obszary mapy: `koszty.platnosci`, `vat.biala_lista`
-- Pewność: średnia
-- Wzorzec: poziom 4, strona biznes.gov.pl 00226
-- Do rozstrzygnięcia: księgowa albo prawnik: 7 czy 14 dni na zawiadomienie (źródła się różnią), do czasu rozstrzygnięcia program ostrzega z krótszym terminem
-- Odczyt: 2026-11-08
+- Pewność: średnia. Tytuł, daty i wejście w życie z metadanych aktu (strona API Sejmu). Brzmienie art. 1 pkt 2 i art. 3 tylko z indeksu tekstu PDF w wyszukiwarce: strony HTML aktu nie ma, ISAP pokazał weryfikację człowieka, PDF był dla narzędzia nieczytelny. Do potwierdzenia w PDF.
+- Wzorzec: poziom 4, strona biznes.gov.pl 00226; Dz.U. 2026 poz. 1371
+- Do rozstrzygnięcia: księgowa albo prawnik: 7 czy 14 dni na zawiadomienie (źródła się różnią), do czasu rozstrzygnięcia program ostrzega z krótszym terminem. Prawnik (pytanie 18): co jest „datą wystawienia” faktury z KSeF na przełomie roku, P_1 czy data przesłania do KSeF (art. 3 Dz.U. 2026 poz. 1371); do odpowiedzi program bierze P_1 z faktury, a bez niego datę dokumentu kosztu (dzień w Europe/Warsaw). P_1 nie jest późniejsze od przesłania, więc dawne ostrzeżenie obejmuje co najmniej te faktury, które obejmowałoby przy dniu przesłania.
+- Odczyt: 2026-11-08; zmiana PIT (Dz.U. 2026 poz. 1371): 2026-11-11
 - Kroki planu: 3.4
 
 
