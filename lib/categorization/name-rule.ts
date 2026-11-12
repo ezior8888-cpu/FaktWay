@@ -52,7 +52,9 @@ export async function classifyByExactName(
       if (afterId) query = query.gt('id', afterId);
       return query.order('id', { ascending: true }).limit(limit);
     });
-  } catch {
+  } catch (error) {
+    // Bez śladu w logu awaria bazy wyłączałaby reguły nazw po cichu.
+    console.warn('[categorization] reguły nazwy niedostępne:', error instanceof Error ? error.message : 'nieznany błąd');
     return null;
   }
 

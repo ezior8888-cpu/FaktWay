@@ -254,12 +254,13 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
 
   // Wiadomości tylko z rozmów tej osoby, paczkami identyfikatorów.
   const conversationIds = byName.support_conversations.map((c) => String(c.id));
-  const messageChunks: Rows[] = [];
+  const chunks: string[][] = [];
   for (let i = 0; i < conversationIds.length; i += CONVERSATIONS_PER_QUERY) {
-    const chunk = conversationIds.slice(i, i + CONVERSATIONS_PER_QUERY);
-    messageChunks.push(await readAllRows(supabase, 'support_messages', 'conversation_id, role, content, created_at',
-      (query) => query.in('conversation_id', chunk), chronological));
+    chunks.push(conversationIds.slice(i, i + CONVERSATIONS_PER_QUERY));
   }
+  const messageChunks = await Promise.all(chunks.map((chunk) =>
+    readAllRows(supabase, 'support_messages', 'conversation_id, role, content, created_at',
+      (query) => query.in('conversation_id', chunk), chronological)));
   const messages = messageChunks.flat();
   // Rozmowa jest w jednej paczce, więc jej wiadomości zostają po kolei.
   const messagesByConversation = new Map<unknown, Rows>();
