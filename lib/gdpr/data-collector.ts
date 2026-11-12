@@ -1,13 +1,8 @@
 import 'server-only';
 
 import { readCompletePagesByKey, type KeysetPageQuery } from '@/lib/accounting/read-complete-pages';
+import { inListChunks } from '@/lib/pagination/in-list';
 import { createAdminClient } from '@/lib/supabase/server';
-
-/**
- * Identyfikatory rozmów w jednym `in(...)`. Lista idzie w adresie zapytania
- * (36 znaków na uuid), więc paczki po 100 jak w innych odczytach (`LOOKUP_CHUNK`).
- */
-const CONVERSATIONS_PER_QUERY = 100;
 
 interface MembershipRecord {
   id: string;
@@ -151,11 +146,23 @@ interface PageQuery {
 const COUNT_UNCONFIRMED = 'nie można potwierdzić liczby rekordów';
 
 /**
+ * Tak kończą się komunikaty `readCompletePagesByKey`, gdy zbiór zmienił się
+ * między stronami: licznik kontrolny inny niż pierwszy albo strona krótsza
+ * lub dłuższa, niż brakuje do liczby z pierwszej strony.
+ */
+const CHANGED_DURING_READ = [COUNT_UNCONFIRMED, 'niepełna strona danych'] as const;
+
+const changedDuringRead = (error: unknown): boolean =>
+  error instanceof Error && CHANGED_DURING_READ.some((reason) => error.message.endsWith(reason));
+
+/**
  * Cała sekcja stronami po kluczu (sesja 29 planu skalowania). Do niej każda
  * sekcja szła jednym zapytaniem z `limit(1000)`, a PostgREST na produkcji
  * (`PGRST_DB_MAX_ROWS = 1000`) ucina odpowiedź bez błędu: osoba z 1500
- * wpisami audytu dostawała 1000. Teraz komplet albo błąd: błąd bazy,
- * niepełna strona albo zapis w trakcie odczytu kończą eksport odmową.
+ * wpisami audytu dostawała 1000. Teraz komplet albo błąd. Zbiór zmieniony
+ * między stronami (wiersz tej osoby dopisany albo usunięty w trakcie
+ * odczytu) daje jedną ponowną próbę sekcji od początku; drugi raz albo błąd
+ * bazy kończy eksport odmową.
  *
  * Strony idą zawsze po `id`; kolejność w pliku ustala `order`. Sekcja,
  * która nie eksportuje `id`, dostaje je tylko jako klucz stron, a do pliku
@@ -170,15 +177,21 @@ async function readAllRows<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const pageKeyOnly = !columns.split(',').map((column) => column.trim()).includes('id');
   const select = pageKeyOnly ? `id, ${columns}` : columns;
+  const readPages = () => readCompletePagesByKey<KeyedRow>(`account_export ${table}`, (page: KeysetPageQuery) => {
+    const base = (supabase.from(table as 'memberships') as unknown as {
+      select(columns: string, options?: { count: 'exact'; head: boolean }): PageQuery;
+    }).select(select, page.count ? { count: 'exact', head: page.head } : undefined);
+    let query = filter(base);
+    if (page.afterId !== null) query = query.gt('id', page.afterId);
+    return query.order('id', { ascending: true }).limit(page.limit);
+  });
   let rows: KeyedRow[];
   try {
-    rows = await readCompletePagesByKey<KeyedRow>(`account_export ${table}`, (page: KeysetPageQuery) => {
-      const base = (supabase.from(table as 'memberships') as unknown as {
-        select(columns: string, options?: { count: 'exact'; head: boolean }): PageQuery;
-      }).select(select, page.count ? { count: 'exact', head: page.head } : undefined);
-      let query = filter(base);
-      if (page.afterId !== null) query = query.gt('id', page.afterId);
-      return query.order('id', { ascending: true }).limit(page.limit);
+    // Druga karta, job albo czyszczenie starego audytu w trakcie odczytu:
+    // sekcja jeszcze raz. Błąd bazy bez ponownej próby, jak dotąd.
+    rows = await readPages().catch((error: unknown) => {
+      if (changedDuringRead(error)) return readPages();
+      throw error;
     });
   } catch (error) {
     // Stały komunikat bez przyczyny: błąd SDK może nieść cudze wiersze (zob. trasa eksportu).
@@ -252,15 +265,15 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
     (Object.keys(SECTIONS) as SectionName[]).map((name, i) => [name, sections[i]!]),
   ) as Record<SectionName, Rows>;
 
-  // Wiadomości tylko z rozmów tej osoby, paczkami identyfikatorów.
+  // Wiadomości tylko z rozmów tej osoby. Lista rozmów idzie w adresie
+  // zapytania, więc paczkami z `inListChunks`, po kolei jak
+  // `readAllByIdInList`: pula PostgREST jest mała, a zwykłe konto ma jedną paczkę.
   const conversationIds = byName.support_conversations.map((c) => String(c.id));
-  const chunks: string[][] = [];
-  for (let i = 0; i < conversationIds.length; i += CONVERSATIONS_PER_QUERY) {
-    chunks.push(conversationIds.slice(i, i + CONVERSATIONS_PER_QUERY));
+  const messageChunks: Rows[] = [];
+  for (const chunk of inListChunks(conversationIds)) {
+    messageChunks.push(await readAllRows(supabase, 'support_messages', 'conversation_id, role, content, created_at',
+      (query) => query.in('conversation_id', chunk), chronological));
   }
-  const messageChunks = await Promise.all(chunks.map((chunk) =>
-    readAllRows(supabase, 'support_messages', 'conversation_id, role, content, created_at',
-      (query) => query.in('conversation_id', chunk), chronological)));
   const messages = messageChunks.flat();
   // Rozmowa jest w jednej paczce, więc jej wiadomości zostają po kolei.
   const messagesByConversation = new Map<unknown, Rows>();

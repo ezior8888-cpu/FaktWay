@@ -21,8 +21,8 @@ const pg = vi.hoisted(() => {
     requests: [] as Array<{ table: string; inValues: number; head: boolean }>,
     /** n-te zapytanie (od 1) do tabeli kończy się błędem bazy. */
     failure: null as null | { table: string; nth: number },
-    /** Zapis w trakcie eksportu: po n-tym zapytaniu do tabeli dochodzi wiersz. */
-    insertAfter: null as null | { table: string; nth: number; row: R },
+    /** Zapisy w trakcie eksportu: po n-tym zapytaniu (od 1) do tabeli dochodzi wiersz. */
+    inserts: [] as Array<{ table: string; nth: number; row: R }>,
   };
   // Porządek bajtów jak w Postgresie (uuid, znaczniki czasu ISO), nie localeCompare.
   const cmp = (a: unknown, b: unknown) => {
@@ -55,9 +55,8 @@ const pg = vi.hoisted(() => {
       const total = hits.length;
       const page = hits.slice(0, limit ?? hits.length).slice(0, MAX_ROWS);
       const data = page.map((row) => Object.fromEntries(columns.filter((c) => c in row).map((c) => [c, row[c]])));
-      if (state.insertAfter?.table === table && state.insertAfter.nth === nth) {
-        state.tables[table]!.push(state.insertAfter.row);
-        state.insertAfter = null;
+      for (const insert of state.inserts) {
+        if (insert.table === table && insert.nth === nth) state.tables[table]!.push(insert.row);
       }
       return { data: head ? null : data, count: counted ? total : null, error: null };
     };
@@ -134,7 +133,7 @@ function ownAudit(count: number): Row[] {
 beforeEach(() => {
   pg.state.requests = [];
   pg.state.failure = null;
-  pg.state.insertAfter = null;
+  pg.state.inserts = [];
   pg.state.tables = {
     users: [{ id: USER, name: 'Jan Testowy', last_login: null, created_at: at(0) }],
     memberships: [], audit_logs: [], email_preferences: [], push_subscriptions: [], user_passkeys: [],
@@ -225,16 +224,38 @@ describe('eksport danych konta ponad limit wierszy PostgREST (sesja 29)', () => 
     pg.state.failure = { table: 'audit_logs', nth: 2 };
 
     await expect(collectUserData(USER)).rejects.toThrow(/^account_export_data_unavailable$/);
+    // Błąd bazy to nie zmiana danych: bez ponownej próby (dwie strony, koniec).
+    expect(pg.state.requests.filter((request) => request.table === 'audit_logs')).toHaveLength(2);
   });
 
-  it('wpis audytu dopisany w trakcie odczytu: odmowa zamiast pliku z niepotwierdzoną liczbą', async () => {
+  /** Nowy wpis audytu tej osoby (logowanie w drugiej karcie, job). */
+  const login = (n: number): Row => ({
+    id: uuid(n), user_id: USER, action: 'auth.login', entity_type: null, entity_id: null, metadata: null, created_at: at(9000 + n),
+  });
+
+  it('wpis audytu dopisany w trakcie odczytu: sekcja jeszcze raz od początku, plik z kompletem', async () => {
     pg.state.tables.audit_logs = ownAudit(1500);
-    pg.state.insertAfter = {
-      table: 'audit_logs', nth: 1,
-      row: { id: uuid(9999), user_id: USER, action: 'auth.login', entity_type: null, entity_id: null, metadata: null, created_at: at(9999) },
-    };
+    pg.state.inserts = [{ table: 'audit_logs', nth: 1, row: login(9999) }];
+
+    const data = await collectUserData(USER);
+
+    expect(data.audit_logs).toHaveLength(1501);
+    expect(data.audit_logs[0]?.id).toBe(uuid(9999));
+    expect(data.coverage.audit_logs).toEqual({ returned: 1501, total: 1501, truncated: false });
+    // Pierwszy odczyt: 3 strony i licznik kontrolny (1501 ≠ 1500); drugi: 4 strony i licznik.
+    expect(pg.state.requests.filter((request) => request.table === 'audit_logs')).toHaveLength(9);
+  });
+
+  it('wpisy dopisywane w trakcie obu odczytów: odmowa, bez trzeciej próby', async () => {
+    pg.state.tables.audit_logs = ownAudit(1500);
+    // Drugi wpis ma najmniejsze id: drugi odczyt nie widzi go na stronach, widzi go licznik kontrolny.
+    pg.state.inserts = [
+      { table: 'audit_logs', nth: 1, row: login(9999) },
+      { table: 'audit_logs', nth: 5, row: login(0) },
+    ];
 
     await expect(collectUserData(USER)).rejects.toThrow(/^account_export_count_unavailable$/);
+    expect(pg.state.requests.filter((request) => request.table === 'audit_logs')).toHaveLength(9);
   });
 
   it('zwykłe konto: każda tabela jednym zapytaniem, bez licznika kontrolnego', async () => {
