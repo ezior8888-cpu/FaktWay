@@ -179,6 +179,29 @@ const indexNames = (node: PlanNode): string[] => [
   ...(node.Plans ?? []).flatMap(indexNames),
 ];
 
+/** Zapytanie crona i indeks 00186, który ma je obsłużyć. */
+type PlanCase = { index: string; sql: string; param?: unknown };
+
+/** Indeksy w planie zapytania: plan na prawdziwej tabeli, po ANALYZE, bez skanu sekwencyjnego. */
+async function planIndexes(tx: SqlRunner, { sql, param }: PlanCase): Promise<string[]> {
+  await tx.executeSql('ANALYZE public.invoices, public.ksef_submissions, public.ksef_send_attempts, public.ocr_jobs, public.products');
+  await tx.executeSql('SET LOCAL ROLE service_role');
+  await tx.executeSql('SET LOCAL enable_seqscan = off');
+  await tx.executeSql('SET LOCAL plan_cache_mode = force_custom_plan');
+  let explained;
+  if (param === undefined) {
+    explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${sql}`);
+  } else {
+    // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
+    const name = `rls_00186_q_${Date.now()}`;
+    await tx.executeSql(`PREPARE ${name}(text) AS ${sql}`);
+    explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${name}('${String(param)}')`);
+    await tx.executeSql(`DEALLOCATE ${name}`);
+  }
+  const plan = explained.rows[0]!['QUERY PLAN'] as Array<{ Plan: PlanNode }>;
+  return indexNames(plan[0]!.Plan);
+}
+
 describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog produktów', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     boss = new PgBoss({ connectionString: getRlsTestDatabaseUrl(), schema: 'pgboss', schedule: false, supervise: false });
@@ -341,7 +364,7 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
     });
 
     const ID = '00186aaa-0000-4000-8000-ffffffffffff';
-    const CASES: ReadonlyArray<{ index: string; sql: string; param?: unknown }> = [
+    const CASES: ReadonlyArray<PlanCase> = [
       // ksef_lifecycle_violations I4 / I9
       { index: 'idx_invoices_ksef_status_in_flight', sql: "SELECT id FROM public.invoices WHERE direction = 'outgoing' AND ksef_status IN ('failed', 'rejected')" },
       // critical-alerts-monitor: sending bez znacznika przejęcia
@@ -363,28 +386,31 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
       { index: 'idx_products_tenant_id', sql: `SELECT id, name, unit, use_count FROM public.products WHERE tenant_id = '${ORG_P}' AND id > '${ID}' ORDER BY id LIMIT 1000` },
     ];
 
-    it.each(CASES)('$index: $sql', async ({ index, sql, param }) => {
-      const used = await rolledBack(async (tx) => {
-        await tx.executeSql('ANALYZE public.invoices, public.ksef_submissions, public.ksef_send_attempts, public.ocr_jobs, public.products');
-        await tx.executeSql('SET LOCAL ROLE service_role');
-        await tx.executeSql('SET LOCAL enable_seqscan = off');
-        await tx.executeSql('SET LOCAL plan_cache_mode = force_custom_plan');
-        let explained;
-        if (param === undefined) {
-          explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${sql}`);
-        } else {
-          // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
-          const name = `rls_00186_q_${Date.now()}`;
-          await tx.executeSql(`PREPARE ${name}(text) AS ${sql}`);
-          explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${name}('${String(param)}')`);
-          await tx.executeSql(`DEALLOCATE ${name}`);
-        }
-        const plan = explained.rows[0]!['QUERY PLAN'] as Array<{ Plan: PlanNode }>;
-        return indexNames(plan[0]!.Plan);
-      });
+    it.each(CASES)('$index: $sql', async (c) => {
+      const used = await rolledBack((tx) => planIndexes(tx, c));
 
-      expect(used).toContain(index);
+      expect(used).toContain(c.index);
     });
+
+    // 12.11.2026 (#655): na wspólnej bazie testowej planista wybrał dla tych zapytań stary
+    // `idx_invoices_tenant_payment_due` (00044, `WHERE direction = 'outgoing'`), choć indeks
+    // 00186 pasował; w #652 i #654 tego samego dnia wybrał 00186. Wybór zależy od statystyk
+    // tabeli, a te od danych innych plików testów. Rywal niżej robi to samo na pewno: pasuje
+    // do zapytania dokładniej, więc planista na prawdziwej tabeli zawsze woli jego.
+    it.each(CASES.filter((c) => c.index === 'idx_invoices_ksef_status_in_flight' && c.sql.includes("direction = 'outgoing'")))(
+      'inny pasujący indeks na tabeli nie zmienia werdyktu: $sql',
+      async (c) => {
+        const used = await rolledBack(async (tx) => {
+          await tx.executeSql(
+            `CREATE INDEX rls_00186_rywal ON public.invoices (ksef_status) INCLUDE (id)
+              WHERE direction = 'outgoing' AND ksef_status IN ('failed', 'rejected')`,
+          );
+          return planIndexes(tx, c);
+        });
+
+        expect(used).toContain(c.index);
+      },
+    );
   });
 
   describe('katalog produktów: UNIQUE na kluczu katalogu', () => {
