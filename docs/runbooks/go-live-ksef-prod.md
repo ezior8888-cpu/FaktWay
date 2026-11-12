@@ -6,7 +6,7 @@ część pracy. Ten plik sam niczego nie zmienia.
 
 - **Kontrola, tylko odczyt, jedna linia:** `./scripts/ops/kontrola-go-live-ksef.sh`
   (sam ładuje `.agents/infra.env`). Oczekiwane wartości są w etykietach wyniku.
-- **Dowody** `plik:linia` sprawdzone na `origin/main` z 11.11.2026 (`279e2b4c`).
+- **Dowody** `plik:linia` sprawdzone na `origin/main` z 12.11.2026 (`49d77443`).
   Gdy plik się zmieni, szukaj nazwy funkcji, nie numeru linii.
 - **Powiązane runbooki:** [hamulce-ksef.md](./hamulce-ksef.md) (wyłącznik
   i przerwa techniczna), [wdrozenie-produkcji.md](./wdrozenie-produkcji.md),
@@ -45,12 +45,12 @@ cron albo przycisk wyśle ponownie. Pilnuje tego bramka w kroku 5.
 |---|---|---|---|
 | D1 | Co z fakturami przyjętymi na TEST w bazie produkcyjnej: zostają, są oznaczone albo przeniesione (F2). Zmienić zapisane `ksef_environment` może tylko rola `postgres` (`supabase/migrations/00117_ksef_certificate_claim_guard.sql:152–157`) | KPiR, eksporty i Księgowość JDG odmawiają okresu, w którym jest przyjęta faktura z innego środowiska (§2.2) | firma z fakturami TEST nie wygeneruje KPiR ani eksportu za te okresy |
 | D2 | PDF faktur z TEST po przełączeniu (ustalenie F1-a) | PDF dostaje kod QR do weryfikacji PROD i traci znak wodny „WERSJA TESTOWA” | PDF faktury testowej wygląda jak prawdziwa faktura |
-| D3 | `SystemInfo` w XML: zostaje `KSeF SaaS v1.0` czy zmiana przed pierwszą wysyłką na PROD (punkt -SYS rejestru, opis w `ksef-error-codes.md`, „D-A4-1b-3-SYS”) | to jedyna podstawa powodu duplikatu `faktflow-original` (`lib/ksef/duplicate-verdict.ts:22`). Zmiana wymaga migracji i kodu. Zmiana po starcie PROD oznacza, że rozpoznawanie musi znać obie wartości; dziś zna `KSeF SaaS v1.0` i `FaktFlow <cyfra>` (`lib/ksef/duplicate-decision.ts:910`, `:915–916`) | PROD startuje z `KSeF SaaS v1.0` (`lib/xml/fa3-generator.ts:31`, `:192`) |
-| D4 | Korekty i faktury rozliczeniowe na PROD (C4) | KOR jest wstrzymana przy `KSEF_ENV=production` (`lib/ksef/kind-holds.ts:18–20`), ROZ zawsze (`lib/invoices/ksef-submit-enqueue.ts:162–169`) | po przełączeniu każda korekta i ROZ zostaje szkicem |
+| D3 | `SystemInfo` w XML: zostaje `KSeF SaaS v1.0` czy zmiana przed pierwszą wysyłką na PROD (punkt -SYS rejestru, opis w `ksef-error-codes.md`, „D-A4-1b-3-SYS”) | to jedyna podstawa powodu duplikatu `faktflow-original` (`lib/ksef/duplicate-verdict.ts:22`). Zmiana wymaga migracji i kodu. Zmiana po starcie PROD oznacza, że rozpoznawanie musi znać obie wartości; dziś zna `KSeF SaaS v1.0` i `FaktFlow <cyfra>` (`lib/ksef/duplicate-decision-jsonb.ts:64`, `:69–70`) | PROD startuje z `KSeF SaaS v1.0` (`lib/xml/fa3-generator.ts:32`, `:193`) |
+| D4 | Korekty i faktury rozliczeniowe na PROD (C4) | KOR jest wstrzymana przy `KSEF_ENV=production` (`lib/ksef/kind-holds.ts:18–20`), ROZ zawsze (`lib/invoices/ksef-submit-enqueue.ts:211–218`) | po przełączeniu każda korekta i ROZ zostaje szkicem |
 | D5 | Zakupy z PROD sprzed przełączenia | kursor skrzynki jest jeden na firmę, bez środowiska (§2.2, wiersz „Skrzynka”) | zakupy PROD starsze niż ostatni HWM skrzynki z TEST (mniej więcej chwila przełączenia) przyjdą tylko do archiwum historii, bez kosztów i KPiR |
 | D6 | Komunikat do klientów (treść niżej) | po przełączeniu firma widzi dane przykładowe, dopóki nie zweryfikuje się na PROD (§2.1, zasada 2) | klienci zobaczą zmienione liczby i odmowy bez wyjaśnienia |
 | D7 | Okno, `maintenanceMode` i pierwsza faktura na PROD (kto i jaka) | pierwsza wysyłka na PROD to prawdziwy dokument z prawdziwym NIP-em | — |
-| D8 | Zmienne sąsiednie: `GUS_API_KEY` (bez klucza JPK_FA na PROD odmawia, `lib/exports/issuer-address.ts:77–80`), `JPK_MF_ENV` (osobny przełącznik bramki JPK, `.env.example:80–83`), `KSEF_PROD_URL` nieustawione albo dokładnie `https://api.ksef.mf.gov.pl/v2`, bez ukośnika na końcu; puste `KSEF_PROD_URL=` też psuje środowisko (§2.3) | każda z nich zmienia się osobno od `KSEF_ENV` | bez klucza GUS JPK_FA na PROD nie powstanie; zły `KSEF_PROD_URL` to zły `KSEF_ENV` (§2.3) |
+| D8 | Zmienne sąsiednie: `GUS_API_KEY` (bez klucza JPK_FA na PROD odmawia, `lib/exports/issuer-address.ts:77–80`), `JPK_MF_ENV` (osobny przełącznik bramki JPK, `.env.example:94–97`), `KSEF_PROD_URL` nieustawione albo dokładnie `https://api.ksef.mf.gov.pl/v2`, bez ukośnika na końcu; puste `KSEF_PROD_URL=` też psuje środowisko (§2.3) | każda z nich zmienia się osobno od `KSEF_ENV` | bez klucza GUS JPK_FA na PROD nie powstanie; zły `KSEF_PROD_URL` to zły `KSEF_ENV` (§2.3) |
 
 **D6, co powiedzieć klientom** (do wyboru przez Bartosza, punkty z kodu):
 
@@ -64,39 +64,42 @@ cron albo przycisk wyśle ponownie. Pilnuje tego bramka w kroku 5.
 - Miesiące z fakturami TEST w KPiR i eksportach: zależnie od D1.
 - Zakupy z PROD sprzed przełączenia: zależnie od D5.
 
-## 2. Co zmienia przełączenie (stan kodu z 11.11.2026)
+## 2. Co zmienia przełączenie (stan kodu z 12.11.2026)
 
 ### 2.1 Trzy zasady
 
 1. **Środowisko faktury zapisuje się tylko przy przyjęciu:** wysyłka
-   (`lib/jobs/runners/submit-invoice.ts:1904`), skrzynka
+   (`lib/jobs/runners/submit-invoice/save-accepted.ts:17`), skrzynka
    (`lib/jobs/runners/inbox-polling.ts:432`). Statusu przyjętej faktury ani
    zapisanego środowiska nie zmieni nikt poza rolą `postgres`
    (`00117_ksef_certificate_claim_guard.sql:142–146`, `:152–157`).
 2. **Weryfikacja certyfikatu jest osobna dla każdego środowiska:**
    `ksef_verified_environment` musi równać się bieżącemu `KSEF_ENV`
-   (`lib/auth/ksef-verification-guard.ts:52–56`, w jobach `:114–118`). Po
+   (`lib/auth/ksef-verification-guard.ts:61–65`, w jobach `:123–127`). Po
    przełączeniu każda firma jest niezweryfikowana, dopóki nie zweryfikuje się
    na PROD. Pulpit i raporty pokazują wtedy dane przykładowe (stan H,
    `lib/demo/tryb-danych.ts:96`).
 3. **Ponowienie bierze bieżące środowisko:** przycisk klienta
-   (`lib/invoices/ksef-submit-enqueue.ts:263`, zdarzenie `:354`), panel
+   (`lib/invoices/ksef-submit-enqueue.ts:336`, zdarzenie `:428`), panel
    operatora (`app/admin/ksef/actions.ts:185`, `:220`), cron I5–I7
-   (`lib/jobs/runners/ksef-lifecycle-reconcile.ts:187`, `:532`, `:557`).
+   (`lib/jobs/runners/ksef-lifecycle-reconcile.ts:187`, `:539`, `:564`).
    Cron wybiera faktury `failed` bez filtra środowiska (`:269–275`).
 
 Skąd ryzyko: faktura z błędem z czasów TEST po przełączeniu pójdzie na PROD,
 jeśli wznowi ją cron (I6: kody przejściowe po co najmniej 1 h, najwyżej 24
-razy, `ksef-lifecycle-reconcile.ts:83`, `:85`, `:337–341`, kody w
-`lib/ksef/send-error-classes.ts:108–113`; I7: `KSEF_PAUSED`, `:396–403`)
+razy, `ksef-lifecycle-reconcile.ts:83`, `:85`, `:344–348`, kody w
+`lib/ksef/send-error-classes.ts:108–113`; I7: `KSEF_PAUSED`,
+`ksef-lifecycle-reconcile.ts:403–410`)
 albo kliknie ją klient lub operator. Klient może ponowić `failed` klasy
 transient i setup oraz `failed` bez kodu; nigdy `rejected` ani klas terminal,
 reconcile i hold, więc `KSEF_PAUSED` wznawia tylko I7 albo operator
 (`lib/invoices/ksef-send-policy.ts:262–266`, `:277–313`). Droga
-okrężna: faktura przejściowa z TEST po przełączeniu dostaje od crona
-`NOT_VERIFIED`, bo firma nie jest jeszcze zweryfikowana na PROD
-(`ksef-submit-enqueue.ts:215–227`). Po weryfikacji na PROD klient klika
-„Wyślij ponownie” i faktura idzie na PROD.
+okrężna: cron wznawia fakturę przejściową z TEST już ze zdarzeniem PROD,
+a job odmawia z `NOT_VERIFIED`, bo firma nie jest jeszcze zweryfikowana na
+PROD (`lib/jobs/runners/submit-invoice.ts:405–417`, kod
+`lib/ksef/send-error-codes.ts:192`). To klasa setup
+(`send-error-classes.ts:104`): cron jej więcej nie wznawia, klient może. Po
+weryfikacji na PROD klient klika „Wyślij ponownie” i faktura idzie na PROD.
 
 ### 2.2 Gdzie co widać
 
@@ -106,42 +109,43 @@ ma w bazie przyjęte faktury z TEST.
 
 | Miejsce | Przed weryfikacją | Po weryfikacji | Wyjście | Dowód |
 |---|---|---|---|---|
-| Wysyłka i „Wyślij ponownie” | odmowa: „Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.” | wysyłka idzie na PROD, także faktur sprzed przełączenia | bramka zero przed przełączeniem (kroki 3–5) | `ksef-submit-enqueue.ts:215–227`, `:354` |
-| Pulpit, przepływy, analizy | dane przykładowe (stan H) | faktury z TEST pominięte bez słowa; faktura bez środowiska kończy się wyjątkiem | D6; komunikaty zamiast wyjątków to osobna sesja F1 | `tryb-danych.ts:96`; `lib/dashboard/monthly-figures.ts:143`, `:149–151`, `:172`; podobnie `lib/dashboard/vat-limit.ts:329`, `lib/dashboard/receivables.ts:170`, `lib/analytics-finance/sales.ts:88`, `lib/contractors/overview.ts:133` |
-| KPiR (`/reports/kpir`) | dane przykładowe | miesiąc z przyjętą fakturą sprzedaży z TEST: „Nie udało się wczytać KPiR”; koszty z zakupów z TEST wypadają bez słowa | D1 | `app/(dashboard)/reports/kpir/page.tsx:51`; `lib/reports/kpir-data.ts:83–85`, `:96–98`; `lib/ksef/accounting-provenance.ts:25`, `:35`; `app/(dashboard)/reports/kpir/error.tsx:77–78`; `lib/expenses/ksef-environment.ts:58–60` |
-| Eksporty (JPK_FA, CSV) | okres z przyjętą fakturą z TEST: odmowa (eksport nie czeka na weryfikację); job ponawia ją dwa razy, potem „Nie udało się wygenerować pliku. Spróbuj ponownie albo napisz do nas.” | to samo | D1; ustalenie F1-e | `lib/exports/data-fetcher.ts:82`, `:91–98`; `lib/jobs/handlers/package-c.ts:83–87`; `lib/jobs/runners/exports-generate.ts:231–242`, `:253–260` |
-| Księgowość JDG (pilotaż, `ksiegowosc_enabled`) | odmowa od razu | ewidencja odmawia **całego roku** z komunikatem o braku zapisanego środowiska; VAT pokazuje ogólny błąd odczytu | D1; do tego czasu `killKsiegowosc` albo wyłączenie pilotażu u firm z TEST | `lib/ksiegowosc/ewidencja-dane.ts:54–56`, `:245–246`, `:249–262`; `lib/ksiegowosc/vat-dane.ts:50–51`, `:71`, `:85–88` |
-| Zaległości (`/payments/overdue`) | faktury z TEST znikają z listy | to samo; faktura bez środowiska: „Zaległe faktury wymagają uzgodnienia środowiska KSeF” | D6 | `app/(dashboard)/(faktury)/payments/overdue/page.tsx:103–112` |
-| Przypomnienia o płatności | wychodzą dalej do nabywców z faktur TEST: harmonogram nie patrzy na środowisko | to samo | D1 (np. wstrzymanie przypomnień faktur TEST); ustalenie F1-f | `lib/reminders/scheduler.ts:331–345`, `lib/reminders/prepare-delivery.ts:64–65` |
+| Wysyłka i „Wyślij ponownie” | odmowa: „Twoja organizacja musi najpierw zweryfikować certyfikat KSeF w Ustawieniach → KSeF.” | wysyłka idzie na PROD, także faktur sprzed przełączenia | bramka zero przed przełączeniem (kroki 3–5) | `ksef-submit-enqueue.ts:287–301`, `:428` |
+| Pulpit, przepływy, analizy | dane przykładowe (stan H) | faktury z TEST pominięte bez słowa; faktura bez środowiska kończy się wyjątkiem | D6; komunikaty zamiast wyjątków to osobna sesja F1 | `tryb-danych.ts:96`; `lib/dashboard/monthly-figures.ts:144`, `:150–152`, `:173`; podobnie `lib/dashboard/vat-limit.ts:329`, `lib/dashboard/receivables.ts:174`, `lib/analytics-finance/sales.ts:88`, `lib/contractors/overview.ts:133` |
+| KPiR (`/reports/kpir`) | dane przykładowe | miesiąc z przyjętą fakturą sprzedaży z TEST: „Nie udało się wczytać KPiR”; koszty z zakupów z TEST wypadają bez słowa | D1 | `app/(dashboard)/reports/kpir/page.tsx:51`; `lib/reports/kpir-data.ts:84–86`, `:97–99`; `lib/ksef/accounting-provenance.ts:33`, `:42–44`; `app/(dashboard)/reports/kpir/error.tsx:77–78`; `lib/expenses/ksef-environment.ts:58–60` |
+| Eksporty (JPK_FA, CSV) | okres z przyjętą fakturą z TEST: odmowa (eksport nie czeka na weryfikację); job ponawia ją dwa razy, potem „Nie udało się wygenerować pliku. Spróbuj ponownie albo napisz do nas.” | to samo | D1; ustalenie F1-e | `lib/exports/data-fetcher.ts:86`, `:95–102`; `lib/jobs/handlers/package-c.ts:87–91`; `lib/jobs/runners/exports-generate.ts:244–255`, `:266–280` |
+| Księgowość JDG (pilotaż, `ksiegowosc_enabled`) | odmowa od razu | ewidencja odmawia **całego roku** z przyjętą fakturą z TEST i każdego wcześniejszego, bo sprawdza faktury wystawione od początku roku do dziś; VAT odmawia miesiąca. Oba mówią o braku zapisanego środowiska, choć faktury mają zapisane `test` | D1; do tego czasu `killKsiegowosc` albo wyłączenie pilotażu u firm z TEST | `lib/ksiegowosc/ewidencja-dane.ts:58–60`, `:274–275`, `:280–281`, `:283–296`; `lib/ksiegowosc/vat-dane.ts:59–61`, `:82`, `:97–101` |
+| Zaległości (`/payments/overdue`, „Moi klienci”) | faktury z TEST znikają z listy i z liczby zaległych w „Moich klientach” | to samo; faktura bez środowiska: „Zaległe faktury wymagają uzgodnienia środowiska KSeF” | D6 | `app/(dashboard)/(faktury)/payments/overdue/page.tsx:104–113`; `lib/dashboard/moi-klienci.ts:246`; `supabase/migrations/00185_my_organizations_summary.sql:133` |
+| Przypomnienia o płatności | wychodzą dalej do nabywców z faktur TEST: harmonogram nie patrzy na środowisko | to samo | D1 (np. wstrzymanie przypomnień faktur TEST); ustalenie F1-f | `lib/reminders/scheduler.ts:333–347`, `lib/reminders/prepare-delivery.ts:65–66` |
 | Korekty | faktury z TEST nie da się wskazać jako korygowanej | to samo | D4 | `lib/invoices/correction-parents.ts:98–100`, `lib/invoices/correction-picker.ts:77` |
-| PDF | faktura z TEST: kod QR do weryfikacji PROD, bez znaku wodnego; stary plik z pamięci nie wraca, bo klucz zależy od treści QR | to samo | D2; ustalenie F1-a | `lib/pdf/invoice-pdf.ts:89–94`, `:236`; `lib/ksef/qr-verification.ts:27–29`; `lib/pdf/pdf-storage.ts:48–52` |
-| UPO | UPO faktur z TEST nie są już ponawiane ani wydawane klientowi | to samo | dociągnij zaległe UPO przed przełączeniem, jeśli są potrzebne | `lib/jobs/runners/upo-retry-stale.ts:126`, `:209`; `lib/jobs/runners/upo-identity.ts:26–29`; `app/(dashboard)/invoices/[id]/upo-actions.ts:67–70` |
+| PDF | faktura z TEST: kod QR do weryfikacji PROD, bez znaku wodnego; stary plik z pamięci nie wraca, bo klucz zależy od treści QR | to samo | D2; ustalenie F1-a | `lib/pdf/invoice-pdf.ts:89–94`, `:237`; `lib/ksef/qr-verification.ts:27–29`; `lib/pdf/pdf-storage.ts:51–55` |
+| UPO | UPO faktur z TEST nie są już ponawiane ani wydawane klientowi | to samo | dociągnij zaległe UPO przed przełączeniem, jeśli są potrzebne | `lib/jobs/runners/upo-retry-stale.ts:129`, `:228`; `lib/jobs/runners/upo-identity.ts:26–29`; `app/(dashboard)/invoices/[id]/upo-actions.ts:67–70` |
 | Skrzynka (zakupy bieżące) | firma nie jest odpytywana | pierwsze okno PROD zaczyna się od HWM z czasów TEST, bo kursor jest jeden na firmę | D5 | `inbox-polling.ts:167`, `:182`, `:345`, `:88–96`; `lib/flo/functions/inbox-cursor.ts:47–51`; `lib/ksef/inbox-schedule-db.ts:96–97`; `supabase/migrations/00160_ksef_inbox_schedule.sql:86–96`, `:123`; `supabase/migrations/00063_flo_inbox_and_rules.sql:18–19` |
-| Historia KSeF | firma nie jest obsługiwana | sprzedaż z PROD wraca z historii; zakupy z PROD do HWM skrzynki trafiają do archiwum bez kosztów | D5 | `lib/jobs/runners/ksef-history-sync.ts:254`, `:268–289`; `synchronizacja-historii-ksef.md`, „Jak to działa” |
+| Historia KSeF | firma nie jest obsługiwana | sprzedaż z PROD wraca z historii; zakupy z PROD do HWM skrzynki trafiają do archiwum bez kosztów | D5 | `lib/jobs/runners/ksef-history-sync.ts:255`, `:269–290`; `synchronizacja-historii-ksef.md`, „Jak to działa” |
 | Offline24 | wpisy z TEST w kolejce zostają; cron loguje je przy każdym przebiegu | to samo | kolejka pusta przed przełączeniem ([offline24-zalegle.md](./offline24-zalegle.md)) | `lib/jobs/runners/process-offline-queue.ts:43–56` |
-| „Tylko uzgodnij” i I5 | uzgadnia w **bieżącym** środowisku, więc wpisu sprzed przełączenia tak nie uzgadniaj | to samo | zero otwartych wpisów przed przełączeniem (krok 5) | `app/admin/ksef/actions.ts:185`, `:220`; `ksef-lifecycle-reconcile.ts:187`, `:497`, `:557` |
+| „Tylko uzgodnij” i I5 | uzgadnia w **bieżącym** środowisku, więc wpisu sprzed przełączenia tak nie uzgadniaj | to samo | zero otwartych wpisów przed przełączeniem (krok 5) | `app/admin/ksef/actions.ts:185`, `:220`; `ksef-lifecycle-reconcile.ts:187`, `:504`, `:564` |
 | Lejek (`first_invoice_accepted_at`) | data z TEST zostaje, więc pierwsza faktura PROD nie wyśle `first_invoice_sent` | to samo | krok 9 | `lib/analytics/funnel.ts:146–151`; `lejek-faktway.md`, „Przełączenie TEST → PROD” |
+| Identyfikatory zbiorcze, uprawnienia biura w KSeF | zapisane na TEST znikają: odczyt i zapis idą po bieżącym środowisku. Uprawnienia biura nadane na TEST nie działają na PROD, więc nadaje się je od nowa | to samo | D6; uprawnienia stoją za flagą `ksefPermissionsEnabled` (krok 6) | `lib/expenses/identyfikator-zbiorczy-dane.ts:35`; `app/actions/identyfikator-zbiorczy.ts:141`, `:155`; `lib/accountant/uprawnienia-ksef-dane.ts:32`, `:62`; `app/actions/uprawnienia-ksef.ts:392`, `:399` |
 
 ### 2.3 Zły `KSEF_ENV` (literówka, brak zmiennej, puste albo nieoficjalne `KSEF_PROD_URL`)
 
 `configuredKsefEnvironment()` zwraca wtedy `null`: `KSEF_ENV` spoza `test`,
 `demo`, `production` albo `production` z `KSEF_PROD_URL` innym niż oficjalny
 adres co do znaku (`lib/ksef/claim-environment.ts:14`, `:16`, `:18–20`;
-`lib/ksef/client.ts:31–33`). Puste `KSEF_PROD_URL=` też: `??` zastępuje
+`lib/ksef/client.ts:33–35`). Puste `KSEF_PROD_URL=` też: `??` zastępuje
 tylko brak zmiennej, a z pustego napisu nie powstaje adres
-(`lib/ksef/client.ts:16`, `:20–24`). Co kto widzi:
+(`lib/ksef/client.ts:18`, `:20–26`). Co kto widzi:
 
 | Kto | Co widzi | Dowód |
 |---|---|---|
-| Klient, faktura z błędem | bez przycisku ponowienia: „Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay — tej faktury teraz nie wyślemy…” | `app/(dashboard)/invoices/[id]/page.tsx:91`, `:242`; `ksef-send-policy.ts:53`, `:303–305` |
-| Klient, pierwsza wysyłka szkicu | „Twoja organizacja musi najpierw zweryfikować certyfikat KSeF…”, bo weryfikacja odmawia przy braku środowiska, zanim kod sprawdzi środowisko. Ustalenie F1-b | `ksef-verification-guard.ts:52–56`; `ksef-submit-enqueue.ts:215–227` przed `:263` |
-| Klient, KPiR i zaległości | wyjątek `KSeF environment is not safely configured`, ogólny błąd strony | `claim-environment.ts:33–37`; `kpir-data.ts:80`; `overdue/page.tsx:55` |
+| Klient, faktura z błędem | bez przycisku ponowienia: „Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay — tej faktury teraz nie wyślemy…” | `app/(dashboard)/invoices/[id]/page.tsx:99`, `:271`; `ksef-send-policy.ts:53`, `:303–305` |
+| Klient, pierwsza wysyłka szkicu | „Twoja organizacja musi najpierw zweryfikować certyfikat KSeF…”, bo weryfikacja odmawia przy braku środowiska, zanim kod sprawdzi środowisko. Ustalenie F1-b | `ksef-verification-guard.ts:61–65`; `ksef-submit-enqueue.ts:287–301` przed `:336` |
+| Klient, KPiR i zaległości | wyjątek `KSeF environment is not safely configured`, ogólny błąd strony | `claim-environment.ts:33–37`; `kpir-data.ts:81`; `overdue/page.tsx:56` |
 | Operator, `/admin/ksef/<id>` | „KSEF_ENV aplikacji: nieustawione”; przyciski odmawiają: „Środowisko KSeF nie jest poprawnie skonfigurowane (KSEF_ENV)…” | `app/admin/ksef/[id]/page.tsx:179`; `ksef-operator-policy.ts:86` |
-| Worker | crony cyklu życia, skrzynki, historii i UPO padają przy każdym przebiegu; job wysyłki odmawia zdarzenia | `ksef-lifecycle-reconcile.ts:187`; `inbox-polling.ts:167`; `ksef-history-sync.ts:208`; `upo-retry-stale.ts:121`; `submit-invoice.ts:822–825` |
+| Worker | crony cyklu życia, skrzynki, historii i UPO padają przy każdym przebiegu; job wysyłki odmawia zdarzenia | `ksef-lifecycle-reconcile.ts:187`; `inbox-polling.ts:167`; `ksef-history-sync.ts:209`; `upo-retry-stale.ts:124`; `submit-invoice.ts:127–130` |
 
 **Worker i aplikacja w różnych środowiskach** (`ENV_MISMATCH`): job odrzuca
-zdarzenie z innego środowiska (`submit-invoice.ts:822–825`), faktura kończy
-jako `failed ENV_MISMATCH` (`lib/ksef/send-error-codes.ts:157`, klasa
+zdarzenie z innego środowiska (`submit-invoice.ts:127–130`), faktura kończy
+jako `failed ENV_MISMATCH` (`lib/ksef/send-error-codes.ts:188`, klasa
 terminal, `send-error-classes.ts:97`). Klient
 widzi: „Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska
 KSeF… Wróć do szkicu i zdecyduj…” (`ksef-send-policy.ts:58`). Naprawa
@@ -180,7 +184,11 @@ wymagają klienta, załatw teraz, bo w oknie panel jest zamknięty:
 ([hamulce-ksef.md](./hamulce-ksef.md), „Rejestracja i przerwa techniczna”).
 Panel zalogowanego klienta i onboarding przekierowują na
 `/przerwa-techniczna`, prywatne API zwraca 503. Działają `/admin`, joby
-i strony publiczne (`lib/supabase/middleware.ts:262–268`). Włączenie dociera
+i strony publiczne (`lib/supabase/middleware.ts:288–294`). Publiczne API
+z kluczem (`/api/v1`, `/api/mcp`) też zwraca 503 (`lib/api/v1/auth.ts:132–137`;
+MCP przechodzi przez tę samą bramkę, `lib/api/mcp/server.ts:185`), a do
+udostępnienia API i tak zamyka flaga `publicApiEnabled`
+(`lib/api/v1/auth.ts:129–131`; `lib/api/v1/availability.ts:3–15`). Włączenie dociera
 do każdego procesu web w najwyżej 30 s (`lib/feature-flags/maintenance.ts:22`).
 Błąd odczytu flagi zostawia panel otwarty (`maintenance.ts:9–11`), więc po
 włączeniu sprawdź na koncie klienta, że przekierowanie działa.
@@ -197,9 +205,9 @@ wysyłki.
 
 | Stan | Co zrobić |
 |---|---|
-| `queued`, `sending` | czekać; utknięte (I1, I2): `./scripts/ops/zwolnij-utknieta-wysylke.sh <id-faktury>` ([hamulce-ksef.md](./hamulce-ksef.md), „Faktura utknęła w wysyłce”) |
-| `failed` przejściowe | I6 ponawia po 1 h (`ksef-lifecycle-reconcile.ts:83`, `:337–341`); szybciej: `/admin/ksef/<id>` → „Wyślij ponownie” |
-| `failed KSEF_PAUSED` | I7 wznawia po zdjęciu wyłącznika (`:396–403`), albo operator |
+| `queued`, `sending` | czekać; utknięte (I1, I2): `./scripts/ops/zwolnij-utknieta-wysylke.sh <id-faktury>` ([hamulce-ksef.md](./hamulce-ksef.md), „Faktura utknęła w wysyłce”). Po 429 z KSeF firma czeka w pauzie (L1a, w logu workera `KSEF_RATE_LIMIT_PAUSE`, `lib/jobs/runners/submit-invoice/rate-limit.ts:23`): faktura wraca do `queued` (`rate-limit.ts:52–69`), a zlecenie czeka w pg-boss jako zadanie z opóźnionym startem, bez zużywania prób (`lib/jobs/run-job.ts:116–124`; `lib/jobs/retry.ts:22–25`). Jedna pauza trwa najwyżej dobę (`lib/ksef/rate-limit-pause.ts:51`). Pauza jest zapisana osobno dla środowiska (`rate-limit-pause.ts:104–105`), więc nie przechodzi na PROD, ale bramka liczy taką fakturę i jej zlecenie: zaplanuj okno z zapasem albo poczekaj |
+| `failed` przejściowe | I6 ponawia po 1 h (`ksef-lifecycle-reconcile.ts:83`, `:344–348`); szybciej: `/admin/ksef/<id>` → „Wyślij ponownie” |
+| `failed KSEF_PAUSED` | I7 wznawia po zdjęciu wyłącznika (`ksef-lifecycle-reconcile.ts:403–410`), albo operator |
 | `failed` setup (`NOT_VERIFIED`, `NO_CERTIFICATE`) | krok 1; bez klienta: operator „Wróć do szkicu” |
 | `failed` hold (`KOR_HOLD`, `ROZ_HOLD_RECONCILE`) | cron i klient ich nie wysyłają (I7 tylko `KSEF_PAUSED`; `ksef-send-policy.ts:306–311`), ale bramka je liczy: po zdjęciu blokady (C4) ponowienie wysłałoby je już na PROD. Operator „Wróć do szkicu” (D6); korektę na TEST może też wysłać ponownie, jeśli panel na to pozwala (`lib/admin/ksef-operator-policy.ts:409–430`) |
 | `failed` reconcile, otwarty wpis | „Tylko uzgodnij” w `/admin/ksef/<id>` na TEST; I5 robi to sam po 48 h (`ksef-lifecycle-reconcile.ts:36`) |
@@ -216,12 +224,12 @@ Wtedy najpierw „Tylko uzgodnij”.
 
 `killAllKsefSubmissions` = `true` ([hamulce-ksef.md](./hamulce-ksef.md),
 „Wyłącznik wszystkich wysyłek”). Od tej chwili kolejkowanie odmawia, zanim
-sprawdzi weryfikację i środowisko (`ksef-submit-enqueue.ts:180–201`), a cron
+sprawdzi weryfikację i środowisko (`ksef-submit-enqueue.ts:244–265`), a cron
 pomija I5, I6 i I7. Pomija je także wtedy, gdy nie może odczytać flagi
-(`ksef-lifecycle-reconcile.ts:278–284`, `:330–334`).
+(`ksef-lifecycle-reconcile.ts:278–284`, `:337–341`).
 
 Pułapka: zlecenie, które było jeszcze w kolejce, kończy jako `failed
-KSEF_PAUSED` (`lib/jobs/runners/submit-invoice.ts:269–270`), a z włączonym
+KSEF_PAUSED` (`lib/jobs/runners/submit-invoice/shared.ts:134–135`), a z włączonym
 wyłącznikiem operator nie zleci ani ponownej wysyłki, ani „Tylko uzgodnij”
 (`app/admin/ksef/actions.ts:210–217`). Dlatego krok 3 idzie przed 4, a krok 5
 może odesłać z powrotem do 3.
@@ -249,7 +257,8 @@ Gdy coś nie jest zerem: zdejmij wyłącznik, wróć do kroku 3, potem 4 i znowu
 | `disableSignups` | bez zmian, chyba że D7 mówi inaczej | — | `types.ts:11` |
 | `killKsiegowosc` | rozważ (Księgowość JDG u firm z TEST, §2.2) | do D1 | `types.ts:17` |
 | `killFloAgent`, `requireMfaForSensitive` | bez zmian | — | `types.ts:13`, `:15` |
-| `WORKER_DISABLE_SCHEDULES` | **nie ustawiaj**: worker kasuje wtedy cały harmonogram, który trzeba potem odtworzyć | — | `lib/jobs/worker.ts:108–115`; `joby-pg-boss.md` |
+| `publicApiEnabled`, `ksefPermissionsEnabled` | bez zmian; to włączniki, brak wiersza albo błąd odczytu zamyka. Gdy `ksefPermissionsEnabled` jest włączona, uprzedź biura (§2.2) | — | `types.ts:18–22`, `:23–27` |
+| `WORKER_DISABLE_SCHEDULES` | **nie ustawiaj**: worker kasuje wtedy cały harmonogram, który trzeba potem odtworzyć | — | `lib/jobs/worker.ts:114–121`; `joby-pg-boss.md` |
 
 ### Krok 7. `KSEF_ENV` obu aplikacji
 
@@ -322,16 +331,16 @@ gdy w kolejce zostały zlecenia z TEST (kontrola, sekcja 3c):
 - skrzynka: `KSeF inbox event environment does not match configured environment`
   (`inbox-polling.ts:230–232`);
 - historia: `KSeF history sync event environment does not match configured environment`,
-  bez ponowień (`ksef-history-sync.ts:446–448`);
+  bez ponowień (`ksef-history-sync.ts:448–450`);
 - UPO: `KSeF UPO event environment requires reconciliation`, bez ponowień
-  (`lib/jobs/runners/download-upo.ts:37–38`).
+  (`lib/jobs/runners/download-upo.ts:54–55`).
 
 ## 4. Wycofanie
 
 Powrót do `KSEF_ENV=test` to ten sam krok 7 w drugą stronę (worker, potem
 aplikacja) przy włączonym wyłączniku. Bez decyzji Bartosza **tylko przed
 pierwszą fakturą przyjętą na PROD**. Później faktury PROD stają się „innym
-środowiskiem”: KPiR i eksporty odmówią ich okresów (`accounting-provenance.ts:25`),
+środowiskiem”: KPiR i eksporty odmówią ich okresów (`accounting-provenance.ts:33`),
 a firmy zweryfikowane na PROD znowu będą niezweryfikowane (§2.1, zasada 2).
 Lejek przelicz wtedy z `ksef_environment = 'test'`.
 
@@ -339,12 +348,12 @@ Lejek przelicz wtedy z `ksef_environment = 'test'`.
 
 | Kod | Co | Dowód | Kierunek |
 |---|---|---|---|
-| F1-a | PDF faktury z TEST po przełączeniu: kod QR do weryfikacji PROD i brak znaku wodnego, bo oba biorą bieżące `KSEF_ENV`, nie środowisko faktury | `invoice-pdf.ts:89–94`, `:236`; `qr-verification.ts:27–29` | QR i znak wodny ze środowiska faktury (`lib/pdf`) |
-| F1-b | Zły `KSEF_ENV`: pierwsza wysyłka mówi „zweryfikuj certyfikat”, a nie „nie możemy potwierdzić środowiska” | `ksef-verification-guard.ts:52–56`; `ksef-submit-enqueue.ts:215–227` | sprawdzenie środowiska przed weryfikacją |
-| F1-c | Księgowość JDG: komunikat „nie ma zapisanego środowiska KSeF” także dla faktur z TEST, blokada całego roku; VAT: „spróbuje ponownie”, choć ponowienie nic nie zmieni | `ewidencja-dane.ts:54–56`, `:249–262`; `vat-dane.ts:50–51` | komunikat z nazwą środowiska i tym, co zrobić |
+| F1-a | PDF faktury z TEST po przełączeniu: kod QR do weryfikacji PROD i brak znaku wodnego, bo oba biorą bieżące `KSEF_ENV`, nie środowisko faktury | `invoice-pdf.ts:89–94`, `:237`; `qr-verification.ts:27–29` | QR i znak wodny ze środowiska faktury (`lib/pdf`) |
+| F1-b | Zły `KSEF_ENV`: pierwsza wysyłka mówi „zweryfikuj certyfikat”, a nie „nie możemy potwierdzić środowiska” | `ksef-verification-guard.ts:61–65`; `ksef-submit-enqueue.ts:287–301` | sprawdzenie środowiska przed weryfikacją |
+| F1-c | Księgowość JDG: ewidencja (rok z fakturą z TEST i każdy wcześniejszy) i VAT (miesiąc) mówią „nie ma zapisanego środowiska KSeF” także dla faktur z zapisanym `test` | `ewidencja-dane.ts:58–60`, `:280–281`, `:283–296`; `vat-dane.ts:59–61`, `:99` | komunikat z nazwą środowiska i tym, co zrobić |
 | F1-d | Pulpit, analizy, zaległości i koszty w KPiR pomijają faktury z TEST bez słowa | §2.2 | komunikat zamiast ciszy (osobna sesja F1) |
-| F1-e | Eksport: blokada środowiska jest ponawiana i kończy ogólnym komunikatem | `package-c.ts:84`; `exports-generate.ts:231–242`, `:253–260` | blokada jako błąd bez ponowienia z komunikatem |
-| F1-f | Przypomnienia o płatności nie patrzą na środowisko: po przełączeniu faktura z TEST znika ze strony zaległości, a przypomnienia do jej nabywcy dalej wychodzą | `scheduler.ts:331–345`; `prepare-delivery.ts:64–65`; `overdue/page.tsx:110–112` | filtr środowiska w harmonogramie albo D1 |
+| F1-e | Eksport: blokada środowiska jest ponawiana i kończy ogólnym komunikatem | `package-c.ts:88`; `exports-generate.ts:244–255`, `:266–280` | blokada jako błąd bez ponowienia z komunikatem |
+| F1-f | Przypomnienia o płatności nie patrzą na środowisko: po przełączeniu faktura z TEST znika ze strony zaległości, a przypomnienia do jej nabywcy dalej wychodzą | `scheduler.ts:333–347`; `prepare-delivery.ts:65–66`; `overdue/page.tsx:111–113` | filtr środowiska w harmonogramie albo D1 |
 
 ## 6. Poza zakresem (osobne sesje karty F1)
 
