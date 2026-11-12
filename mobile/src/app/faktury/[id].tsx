@@ -5,9 +5,12 @@ import { bruttoPozycji, DZIS, NAZWA_RODZAJU, nettoPozycji, SPRZEDAWCA, vatPozycj
 import { KONTRAHENCI } from '@/dane-przykladowe/kontrahenci';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { NaglowekKwoty } from '@/komponenty/naglowek';
+import { OsStatusu, type Krok } from '@/komponenty/os-statusu';
+import { PotwierdzenieKsef } from '@/komponenty/potwierdzenie-ksef';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
+import { RzadAkcji, type Akcja } from '@/komponenty/rzad-akcji';
 import { StanPusty } from '@/komponenty/stan-pusty';
-import { dataPelna, kwota } from '@/lib/format';
+import { dataKrotka, dataPelna, kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
@@ -16,8 +19,8 @@ import { useKolory } from '@/wyglad/kolory';
 import { useTytulNaGradiencie } from '@/wyglad/naglowki';
 
 const NAZWA_STATUSU_KSEF: Record<StatusKsef, string> = {
-  przyjeta: 'Zaakceptowana',
-  wysylanie: 'Wysyłanie',
+  przyjeta: 'Przyjęta w KSeF',
+  wysylanie: 'Wysyłanie do KSeF',
   odrzucona: 'Odrzucona',
   robocza: 'Szkic',
 };
@@ -33,14 +36,17 @@ function wedlugStawek(f: Faktura) {
 }
 
 /**
- * Szczegół faktury: odpowiednik `invoices/[id]` (karta Status z UPO i zapłatą,
- * karta dokumentu, akcje: e-mail, PDF, XML, korekta, duplikat, cykliczna).
+ * Szczegół faktury: odpowiednik `invoices/[id]` w układzie Revolut Business
+ * (D14; WZORCE-MOBBIN.md 3.3 i 3.7): kwota, rząd akcji, historia jako oś,
+ * potem Nabywca, Pozycje i VAT, Płatność, Dokument, Sprzedawca. Po wysłaniu z
+ * formularza na górze karta „Wysyłamy do KSeF” → „Przyjęta w KSeF” (8.4).
+ * Rzadsze akcje (XML, korekta, duplikat, cykliczna) w menu „…”.
  */
 export default function EkranFaktury() {
   const kolory = useKolory();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { faktury, przelaczZaplate, wyslijDoKsef, wrocDoSzkicu, usunSzkic } = useStanFaktur();
+  const { faktury, przelaczZaplate, wyslijDoKsef, wrocDoSzkicu, usunSzkic, potwierdzenie, pokazPotwierdzenie } = useStanFaktur();
   // W podglądzie z przytrzymania wiersza ekran nie ustawia paska nawigacji.
   const podglad = useIsPreview();
   const { tytul, onScroll, scrollEventThrottle } = useTytulNaGradiencie();
@@ -73,6 +79,35 @@ export default function EkranFaktury() {
     ]);
 
   const edytuj = () => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj: f.rodzaj, edytuj: f.id, wprost: '1' } });
+
+  const stawki = wedlugStawek(f);
+
+  // Rząd akcji przyjętej faktury (WZORCE-MOBBIN.md 3.7); reszta w menu „…”.
+  const akcje: Akcja[] = [
+    ...(mozeZaplacic
+      ? [{ tytul: f.zaplacona ? 'Cofnij zapłatę' : 'Zapłacona', ikona: f.zaplacona ? ('arrow-go-back-line' as const) : ('check-line' as const), onPress: () => przelaczZaplate(f) }]
+      : []),
+    { tytul: 'E-mail', ikona: 'mail-line', onPress: () => router.push({ pathname: '/faktury/email', params: { id: f.id } }) },
+    { tytul: 'PDF', ikona: 'file-download-line', onPress: () => udostepnijFakture(f) },
+    ...(status.zalegla
+      ? [{ tytul: 'Przypomnij', ikona: 'notification3-line' as const, onPress: () => router.push({ pathname: '/faktury/przypomnienie', params: { id: f.id } }) }]
+      : []),
+  ];
+
+  // Historia: wystawienie, KSeF, zapłata. Jedna nazwa statusu: „Przyjęta w KSeF” (3.3).
+  const kroki: Krok[] = [
+    { tytul: f.statusKsef === 'robocza' ? 'Szkic' : 'Wystawiona', opis: dataPelna(f.dataWystawienia), stan: f.statusKsef === 'robocza' ? 'trwa' : 'zrobione' },
+    f.statusKsef === 'odrzucona'
+      ? { tytul: 'Odrzucona przez KSeF', opis: f.blad?.komunikat, stan: 'blad' }
+      : f.statusKsef === 'wysylanie'
+        ? { tytul: 'Wysyłanie do KSeF', opis: 'KSeF zwykle potwierdza w kilka sekund', stan: 'trwa' }
+        : f.statusKsef === 'przyjeta'
+          ? { tytul: 'Przyjęta w KSeF', opis: 'Nabywca widzi ją w KSeF, UPO zapisane', stan: 'zrobione' }
+          : { tytul: 'Przyjęcie w KSeF', opis: 'Po wysłaniu szkicu', stan: 'czeka' },
+    f.zaplacona
+      ? { tytul: 'Zapłacona', stan: 'zrobione' }
+      : { tytul: status.zalegla ? 'Po terminie' : 'Czeka na zapłatę', opis: `termin ${dataKrotka(f.terminPlatnosci)}`, stan: status.zalegla ? 'blad' : 'czeka' },
+  ];
 
   const pobierz = (co: string) => void Share.share({ message: `${co}: faktura ${f.numer} (${f.kontrahent}).` });
 
@@ -130,6 +165,15 @@ export default function EkranFaktury() {
       <EkranListy gradient onScroll={onScroll} scrollEventThrottle={scrollEventThrottle}>
         <NaglowekKwoty podpis={f.kontrahent} podpisWyrozniony wartosc={kwota(f.brutto)} status={status.tekst} statusKolor={status.kolor} />
 
+        {!podglad && potwierdzenie === f.id ? (
+          <PotwierdzenieKsef
+            faktura={f}
+            onEmail={() => router.push({ pathname: '/faktury/email', params: { id: f.id } })}
+            onUdostepnij={() => udostepnijFakture(f)}
+            onGotowe={() => pokazPotwierdzenie(undefined)}
+          />
+        ) : null}
+
         {!podglad && (f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona') ? (
           <View style={styles.akcja}>
             {f.statusKsef === 'robocza' ? (
@@ -146,16 +190,7 @@ export default function EkranFaktury() {
             )}
           </View>
         ) : null}
-        {!podglad && mozeZaplacic && przyjeta ? (
-          <View style={styles.akcja}>
-            <PrzyciskGlowny
-              tytul={f.zaplacona ? 'Cofnij zapłatę' : 'Zapłacone'}
-              ikona={f.zaplacona ? 'arrow-go-back-line' : 'check-line'}
-              wariant={f.zaplacona ? 'drugorzedny' : 'glowny'}
-              onPress={() => przelaczZaplate(f)}
-            />
-          </View>
-        ) : null}
+        {!podglad && przyjeta && potwierdzenie !== f.id ? <RzadAkcji akcje={akcje} /> : null}
 
         {f.blad ? (
           <Sekcja naglowek="Dlaczego KSeF odrzucił fakturę" stopka={f.blad.podpowiedz}>
@@ -165,36 +200,15 @@ export default function EkranFaktury() {
           </Sekcja>
         ) : null}
 
-        <Sekcja
-          naglowek="Status"
-          stopka={
-            f.statusKsef === 'wysylanie'
-              ? 'Status odświeży się sam, gdy KSeF potwierdzi przyjęcie.'
-              : f.statusKsef === 'robocza'
-                ? 'Szkic nie trafił jeszcze do KSeF.'
-                : undefined
-          }>
-          <Wiersz
-            tytul="KSeF"
-            wartosc={NAZWA_STATUSU_KSEF[f.statusKsef]}
-            wartoscKolor={f.statusKsef === 'odrzucona' ? 'blad' : f.statusKsef === 'przyjeta' ? 'sukces' : undefined}
-          />
-          {f.numerKsef ? <Wiersz tytul="Numer KSeF" podtytul={f.numerKsef} zaznaczalna /> : null}
-          {przyjeta ? (
-            <Wiersz tytul="Urzędowe Poświadczenie Odbioru" podtytul="UPO dostępne" ikona="verified-badge-line" ikonaKolor="sukces" strzalka onPress={() => pobierz('UPO (PDF)')} />
-          ) : null}
-          {f.zaplacona && przyjeta ? <Wiersz tytul="Płatność" wartosc="Zapłacona" wartoscKolor="sukces" /> : null}
+        <Sekcja naglowek="Historia" swobodna>
+          <OsStatusu kroki={kroki} />
         </Sekcja>
-
-        <Sekcja naglowek={`${NAZWA_RODZAJU[f.rodzaj]} nr ${f.numer}`}>
-          <Wiersz tytul="Data wystawienia" wartosc={dataPelna(f.dataWystawienia)} />
-          {f.rodzaj === 'vat' ? <Wiersz tytul="Data sprzedaży" wartosc={dataPelna(f.dataWystawienia)} /> : null}
-          <Wiersz tytul="Termin płatności" wartosc={dataPelna(f.terminPlatnosci)} />
-        </Sekcja>
-
-        <Sekcja naglowek="Sprzedawca">
-          <Wiersz tytul={SPRZEDAWCA.nazwa} podtytul={`${SPRZEDAWCA.adres}\nNIP: ${SPRZEDAWCA.nip}`} zaznaczalna />
-        </Sekcja>
+        {f.numerKsef || przyjeta ? (
+          <Sekcja>
+            {f.numerKsef ? <Wiersz tytul="Numer KSeF" podtytul={f.numerKsef} zaznaczalna /> : null}
+            {przyjeta ? <Wiersz tytul="Urzędowe Poświadczenie Odbioru" podtytul="UPO dostępne" strzalka onPress={() => pobierz('UPO (PDF)')} /> : null}
+          </Sekcja>
+        ) : null}
 
         <Sekcja naglowek="Nabywca">
           <Wiersz
@@ -205,33 +219,47 @@ export default function EkranFaktury() {
           {nabywca ? <Wiersz tytul="Karta kontrahenta" strzalka onPress={() => router.push({ pathname: '/wiecej/kontrahenci/[id]', params: { id: nabywca.id } })} /> : null}
         </Sekcja>
 
+        <Sekcja naglowek="Pozycje">
+          {f.pozycje.map((p, i) => (
+            <Wiersz
+              key={i}
+              tytul={p.nazwa}
+              podtytul={`${p.ilosc} ${p.jednostka} × ${kwota(p.cenaNetto)} netto · VAT ${p.stawkaVat}%`}
+              wartosc={kwota(bruttoPozycji(p))}
+              wartoscKolor="etykieta"
+            />
+          ))}
+          {stawki.length > 1
+            ? stawki.map(([stawka, w]) => (
+                <Wiersz key={`stawka-${stawka}`} tytul={`Stawka ${stawka}%`} podtytul={`Netto ${kwota(w.netto)}, VAT ${kwota(w.vat)}`} wartosc={kwota(w.brutto)} />
+              ))
+            : null}
+          <Wiersz tytul="Razem netto" wartosc={kwota(f.netto)} />
+          <Wiersz tytul="VAT" wartosc={kwota(vat)} />
+          <Wiersz tytul="Razem brutto" wartosc={kwota(f.brutto)} wartoscKolor="etykieta" />
+        </Sekcja>
+
         <Sekcja naglowek="Płatność">
           <Wiersz tytul="Do zapłaty" wartosc={f.zaplacona ? kwota(0) : kwota(f.brutto)} wartoscKolor="etykieta" />
+          <Wiersz tytul="Termin" wartosc={dataPelna(f.terminPlatnosci)} />
           <Wiersz tytul="Forma płatności" wartosc={f.metodaPlatnosci} />
           {f.rachunek ? <Wiersz tytul="Rachunek" podtytul={f.rachunek} zaznaczalna /> : null}
           {f.rachunek ? <Wiersz tytul="Bank" wartosc={SPRZEDAWCA.bank} /> : null}
           {f.mpp ? <Wiersz tytul="MPP" wartosc="Mechanizm podzielonej płatności" /> : null}
         </Sekcja>
 
-        <Sekcja naglowek="Pozycje">
-          {f.pozycje.map((p, i) => (
-            <Wiersz
-              key={i}
-              tytul={`${i + 1}. ${p.nazwa}`}
-              podtytul={`${p.ilosc} ${p.jednostka} × ${kwota(p.cenaNetto)} netto, VAT ${p.stawkaVat}%`}
-              wartosc={kwota(bruttoPozycji(p))}
-              wartoscKolor="etykieta"
-            />
-          ))}
+        <Sekcja naglowek={`${NAZWA_RODZAJU[f.rodzaj]} nr ${f.numer}`}>
+          <Wiersz tytul="Data wystawienia" wartosc={dataPelna(f.dataWystawienia)} />
+          {f.rodzaj === 'vat' ? <Wiersz tytul="Data sprzedaży" wartosc={dataPelna(f.dataWystawienia)} /> : null}
+          <Wiersz
+            tytul="Status KSeF"
+            wartosc={NAZWA_STATUSU_KSEF[f.statusKsef]}
+            wartoscKolor={f.statusKsef === 'odrzucona' ? 'blad' : f.statusKsef === 'przyjeta' ? 'sukces' : undefined}
+          />
         </Sekcja>
 
-        <Sekcja naglowek="Podsumowanie VAT">
-          {wedlugStawek(f).map(([stawka, w]) => (
-            <Wiersz key={stawka} tytul={`Stawka ${stawka}%`} podtytul={`Netto ${kwota(w.netto)}, VAT ${kwota(w.vat)}`} wartosc={kwota(w.brutto)} />
-          ))}
-          <Wiersz tytul="Razem netto" wartosc={kwota(f.netto)} />
-          <Wiersz tytul="VAT" wartosc={kwota(vat)} />
-          <Wiersz tytul="Razem brutto" wartosc={kwota(f.brutto)} wartoscKolor="etykieta" />
+        <Sekcja naglowek="Sprzedawca">
+          <Wiersz tytul={SPRZEDAWCA.nazwa} podtytul={`${SPRZEDAWCA.adres}\nNIP: ${SPRZEDAWCA.nip}`} zaznaczalna />
         </Sekcja>
 
         {f.uwagi ? (
@@ -245,5 +273,5 @@ export default function EkranFaktury() {
 }
 
 const styles = StyleSheet.create({
-  akcja: { marginHorizontal: MARGINES, marginTop: ODSTEP.l, gap: ODSTEP.s },
+  akcja: { marginHorizontal: MARGINES, marginTop: ODSTEP.m, gap: ODSTEP.s },
 });

@@ -20,6 +20,9 @@ type Stan = {
   dodajFakture: (f: Faktura, wyslij: boolean) => string;
   /** Zapisuje poprawiony szkic albo odrzuconą fakturę w miejscu starej; `wyslij` jak w `dodajFakture`. */
   zastapFakture: (id: string, f: Faktura, wyslij: boolean) => void;
+  /** Faktura właśnie wysłana z formularza: jej szczegół pokazuje kartę „Wysyłamy do KSeF” → „Przyjęta w KSeF”. */
+  potwierdzenie: string | undefined;
+  pokazPotwierdzenie: (id: string | undefined) => void;
   /** Wysyła szkic albo odrzuconą fakturę ponownie do KSeF. */
   wyslijDoKsef: (id: string) => void;
   /** Cofa odrzuconą fakturę do szkicu. */
@@ -51,6 +54,7 @@ export function StanFaktur({ children }: { children: ReactNode }) {
   const [cykliczne, setCykliczne] = useState<FakturaCykliczna[]>(CYKLICZNE);
   const [flagi, setFlagi] = useState<Record<string, boolean>>({});
   const [koszty, setKoszty] = useState<Koszt[]>(KOSZTY);
+  const [potwierdzenie, setPotwierdzenie] = useState<string>();
   const licznik = useRef(0);
 
   const wartosc = useMemo<Stan>(() => {
@@ -85,6 +89,8 @@ export function StanFaktur({ children }: { children: ReactNode }) {
         setFaktury((lista) => lista.map((x) => (x.id === id ? { ...f, id, statusKsef: wyslij ? 'wysylanie' : 'robocza', blad: undefined } : x)));
         if (wyslij) przyjmijPoChwili(id);
       },
+      potwierdzenie,
+      pokazPotwierdzenie: setPotwierdzenie,
       wyslijDoKsef: (id) => {
         zmien(id, { statusKsef: 'wysylanie', blad: undefined });
         przyjmijPoChwili(id);
@@ -105,7 +111,7 @@ export function StanFaktur({ children }: { children: ReactNode }) {
       flagi,
       ustawFlage: (klucz, v) => setFlagi((f) => ({ ...f, [klucz]: v })),
     };
-  }, [faktury, cykliczne, koszty, flagi]);
+  }, [faktury, cykliczne, koszty, flagi, potwierdzenie]);
 
   return <Kontekst value={wartosc}>{children}</Kontekst>;
 }
