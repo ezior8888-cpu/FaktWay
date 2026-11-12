@@ -29,12 +29,13 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 MAIN_ROOT=""
 if command -v git > /dev/null 2>&1; then
-  COMMON_DIR=$(git -C "$ROOT" rev-parse --git-common-dir 2> /dev/null || true)
-  case "$COMMON_DIR" in
-    "") ;;
-    /*) MAIN_ROOT=$(cd "$COMMON_DIR/.." && pwd) ;;
-    *) MAIN_ROOT=$(cd "$ROOT/$COMMON_DIR/.." && pwd) ;;
-  esac
+  # Ścieżka bezwzględna, bo w worktree Git Bash na Windowsie podaje `C:/…`,
+  # której nie da się dokleić do $ROOT. Gdy `cd` się nie uda, MAIN_ROOT
+  # zostaje pusty, a skrypt idzie dalej.
+  COMMON_DIR=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2> /dev/null || true)
+  if [ -n "$COMMON_DIR" ]; then
+    MAIN_ROOT=$(cd "$COMMON_DIR/.." 2> /dev/null && pwd) || MAIN_ROOT=""
+  fi
 fi
 ENV_FILE=""
 for candidate in "${FAKTFLOW_INFRA_ENV:-}" "$ROOT/.agents/infra.env" "${MAIN_ROOT:+$MAIN_ROOT/.agents/infra.env}"; do
