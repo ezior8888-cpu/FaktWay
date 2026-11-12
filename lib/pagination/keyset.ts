@@ -198,7 +198,7 @@ export async function readAllByKey<T>(
   for (;;) {
     const page = await fetchPage(afterKey, pageSize);
     if (page.error) throw new KeysetPageError(label, page.error.message);
-    if (!Array.isArray(page.data)) throw new KeysetPageError(label, 'odpowiedź bez danych i bez błędu — nie wiadomo, czy to koniec listy');
+    if (!Array.isArray(page.data)) throw new KeysetPageError(label, 'odpowiedź bez danych i bez błędu, więc nie wiadomo, czy to koniec listy');
     const data = page.data;
     if (data.length === 0) return all;
     if (data.length > pageSize) {
@@ -215,7 +215,7 @@ export async function readAllByKey<T>(
       last = key;
     }
     if (pages >= maxPages) {
-      throw new KeysetPageError(label, `ponad ${maxPages} stron po ${pageSize} wierszy — odczyt przerwany, lista niepełna`);
+      throw new KeysetPageError(label, `ponad ${maxPages} stron po ${pageSize} wierszy: odczyt przerwany, lista niepełna`);
     }
     pages += 1;
     all.push(...data);
