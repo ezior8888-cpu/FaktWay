@@ -589,8 +589,9 @@ async function pollTenantInbox(
         // skalowania). Sprzedawca rozpoznany raz wypada z listy, więc kolejne
         // strony pytają już tylko o jeszcze nierozpoznanych.
         //
-        // Błąd odczytu = znani tylko ci rozpoznani do tej pory, reszta jest
-        // nieznana: karta zapyta o więcej, zamiast przepuścić coś po cichu.
+        // Błąd odczytu paczki = znani tylko ci rozpoznani do tej pory, reszta
+        // tej paczki jest nieznana: karta zapyta o więcej, zamiast przepuścić
+        // coś po cichu. Następne paczki sprawdzamy dalej, każda osobno.
         const justInserted = new Set(insertedInvoices.map((row) => row.id as string));
         const batchSellers = [
           ...new Set(
@@ -600,9 +601,9 @@ async function pollTenantInbox(
           ),
         ];
         const known = new Set<string>();
-        try {
-          for (const chunk of inListChunks(batchSellers)) {
-            const pending = new Set(chunk);
+        for (const chunk of inListChunks(batchSellers)) {
+          const pending = new Set(chunk);
+          try {
             await forEachPageById<{ id: string; seller_nip: string | null }>(
               'znani sprzedawcy skrzynki',
               (afterId, limit) => {
@@ -625,12 +626,12 @@ async function pollTenantInbox(
                 }
               },
             );
+          } catch (e) {
+            logger.warn('Skrzynka: nie udało się sprawdzić wszystkich znanych sprzedawców paczki, reszta paczki liczy się jako nieznana', {
+              tenantId,
+              error: e instanceof Error ? e.message : String(e),
+            });
           }
-        } catch (e) {
-          logger.warn('Skrzynka: nie udało się sprawdzić wszystkich znanych sprzedawców — reszta liczy się jako nieznana', {
-            tenantId,
-            error: e instanceof Error ? e.message : String(e),
-          });
         }
 
         const byKsefNumber = new Map(

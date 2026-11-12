@@ -152,7 +152,7 @@ export async function bulkValidateContractorsAction(
     console.error('[validation] lista kontrahentów do walidacji zbiorczej', e instanceof Error ? e.message : 'błąd');
     return {
       success: false,
-      error: 'Nie udało się odczytać listy kontrahentów. Spróbuj ponownie za chwilę.',
+      error: 'Nie udało się odczytać listy kontrahentów, więc walidacja nie została zlecona.',
     };
   }
 

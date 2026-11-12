@@ -337,4 +337,28 @@ describe('skrzynka KSeF: sito nieznanego sprzedawcy', () => {
       expect.objectContaining({ tenantId: DATA.tenantId, error: expect.stringMatching(/statement timeout/) }),
     );
   });
+
+  it('błąd w jednej paczce NIP-ów nie przekreśla następnych paczek', async () => {
+    // 101 różnych sprzedawców = dwie paczki (100 + 1). Pierwsza pada od razu,
+    // druga ma się sprawdzić normalnie.
+    const nip = (n: number) => `3${String(n).padStart(9, '0')}`;
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({
+      invoices: Array.from({ length: 101 }, (_, n) => faktura(n + 1, nip(n))),
+      hwm: null,
+    } as never);
+    db.sellerRows = [
+      { id: 'old-0', seller_nip: nip(0) },
+      { id: 'old-100', seller_nip: nip(100) },
+    ];
+    db.sellerFailOnCall = 1;
+
+    await runInboxPollTenant(DATA, ctx);
+
+    expect(db.sellerLists[0]).toHaveLength(100);
+    expect([...db.classify.mock.calls[0]![1]]).toEqual([nip(100)]);
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/znanych sprzedawców/),
+      expect.objectContaining({ tenantId: DATA.tenantId, error: expect.stringMatching(/statement timeout/) }),
+    );
+  });
 });
