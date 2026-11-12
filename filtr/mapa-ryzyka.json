@@ -817,7 +817,8 @@
       "sciezki": [
         "scripts/{verify-fa3-all-types,test-fa3-generation,test-jpk-mf,test-ksef-wysylka,test-submit-full,seed-test-invoice}.ts",
         "scripts/verify-migration-00200.sh",
-        "scripts/ops/{kontrola-faktur-ksef,ksef-historia,pojemnosc-db,faktway-inwentarz}.sh"
+        "scripts/ops/{kontrola-faktur-ksef,ksef-historia,pojemnosc-db,faktway-inwentarz}.sh",
+        "scripts/ops/kontrola-go-live-ksef.sh"
       ]
     },
     {
