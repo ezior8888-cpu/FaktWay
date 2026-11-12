@@ -1,8 +1,13 @@
 import 'server-only';
 
+import { readCompletePagesByKey, type KeysetPageQuery } from '@/lib/accounting/read-complete-pages';
 import { createAdminClient } from '@/lib/supabase/server';
 
-const ROW_LIMIT = 1000;
+/**
+ * Identyfikatory rozmów w jednym `in(...)`. Lista idzie w adresie zapytania
+ * (36 znaków na uuid), więc paczki po 100 jak w innych odczytach (`LOOKUP_CHUNK`).
+ */
+const CONVERSATIONS_PER_QUERY = 100;
 
 interface MembershipRecord {
   id: string;
@@ -74,10 +79,13 @@ export interface UserDataExport {
   notes: string;
 }
 
-function coverage(returned: number, total: number | null): CollectionCoverage {
-  // Unknown totals must not be presented as a complete export.
-  if (total === null || total < returned) throw new Error('account_export_count_unavailable');
-  return { returned, total, truncated: returned < total };
+/**
+ * Sekcja czytana przez `readAllRows` jest kompletna (liczbę rekordów
+ * potwierdza baza), inaczej eksport kończy się błędem. Pola pokrycia
+ * zostają w formacie 3.
+ */
+function complete(rows: readonly unknown[]): CollectionCoverage {
+  return { returned: rows.length, total: rows.length, truncated: false };
 }
 
 /**
@@ -123,27 +131,83 @@ const SECTIONS = {
 
 type SectionName = keyof typeof SECTIONS;
 
+/** Wiersz strony: `id` (uuid) jest kluczem stron. */
+type KeyedRow = Record<string, unknown> & { id: string };
+
 /**
- * Odczyt sekcji z kolumnami i tabelą z `SECTIONS`. Typowany klient nie
+ * Zapytanie strony dla tabeli i kolumn z `SECTIONS`. Typowany klient nie
  * zawęża tabeli ani kolumn z mapy, więc zapytanie idzie przez wąski,
  * jawny interfejs — tylko metody, których tu używamy.
  */
-interface SectionQuery {
-  eq(column: string, value: string): SectionQuery;
-  in(column: string, values: string[]): SectionQuery;
-  order(column: string): SectionQuery;
-  limit(count: number): { returns<T>(): Promise<{ data: T | null; count: number | null; error: unknown }> };
+interface PageQuery {
+  eq(column: string, value: string): PageQuery;
+  in(column: string, values: readonly string[]): PageQuery;
+  gt(column: string, value: string): PageQuery;
+  order(column: string, options: { ascending: boolean }): PageQuery;
+  limit(count: number): PromiseLike<{ data: KeyedRow[] | null; count?: number | null; error: { message: string } | null }>;
 }
 
-function sectionQuery(
+/** Tak kończy się komunikat `readCompletePagesByKey`, gdy baza nie potwierdzi liczby rekordów. */
+const COUNT_UNCONFIRMED = 'nie można potwierdzić liczby rekordów';
+
+/**
+ * Cała sekcja stronami po kluczu (sesja 29 planu skalowania). Do niej każda
+ * sekcja szła jednym zapytaniem z `limit(1000)`, a PostgREST na produkcji
+ * (`PGRST_DB_MAX_ROWS = 1000`) ucina odpowiedź bez błędu: osoba z 1500
+ * wpisami audytu dostawała 1000. Teraz komplet albo błąd: błąd bazy,
+ * niepełna strona albo zapis w trakcie odczytu kończą eksport odmową.
+ *
+ * Strony idą zawsze po `id`; kolejność w pliku ustala `order`. Sekcja,
+ * która nie eksportuje `id`, dostaje je tylko jako klucz stron, a do pliku
+ * idzie bez niego.
+ */
+async function readAllRows<T = Record<string, unknown>>(
   supabase: ReturnType<typeof createAdminClient>,
   table: string,
   columns: string,
-): SectionQuery {
-  return (supabase.from(table as 'memberships') as unknown as {
-    select(columns: string, options: { count: 'exact' }): SectionQuery;
-  }).select(columns, { count: 'exact' });
+  filter: (query: PageQuery) => PageQuery,
+  order?: (a: KeyedRow, b: KeyedRow) => number,
+): Promise<T[]> {
+  const pageKeyOnly = !columns.split(',').map((column) => column.trim()).includes('id');
+  const select = pageKeyOnly ? `id, ${columns}` : columns;
+  let rows: KeyedRow[];
+  try {
+    rows = await readCompletePagesByKey<KeyedRow>(`account_export ${table}`, (page: KeysetPageQuery) => {
+      const base = (supabase.from(table as 'memberships') as unknown as {
+        select(columns: string, options?: { count: 'exact'; head: boolean }): PageQuery;
+      }).select(select, page.count ? { count: 'exact', head: page.head } : undefined);
+      let query = filter(base);
+      if (page.afterId !== null) query = query.gt('id', page.afterId);
+      return query.order('id', { ascending: true }).limit(page.limit);
+    });
+  } catch (error) {
+    // Stały komunikat bez przyczyny: błąd SDK może nieść cudze wiersze (zob. trasa eksportu).
+    const countUnconfirmed = error instanceof Error && error.message.endsWith(COUNT_UNCONFIRMED);
+    throw new Error(countUnconfirmed ? 'account_export_count_unavailable' : 'account_export_data_unavailable');
+  }
+  if (order) rows.sort(order);
+  const result = pageKeyOnly ? rows.map(({ id: _pageKey, ...row }) => row) : rows;
+  return result as unknown as T[];
 }
+
+/**
+ * Kolejność jak `ORDER BY created_at` w bazie. PostgREST oddaje stemple ISO
+ * z mikrosekundami: najpierw czas (do milisekundy), przy remisie napis
+ * (mikrosekundy w tym samym zapisie strefy).
+ */
+function byCreatedAt(a: KeyedRow, b: KeyedRow): number {
+  const x = String(a.created_at ?? '');
+  const y = String(b.created_at ?? '');
+  const byTime = Date.parse(x) - Date.parse(y);
+  if (byTime) return byTime; // 0 albo NaN (stempel nie do odczytania): rozstrzyga napis
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+const byId = (a: KeyedRow, b: KeyedRow): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+/** Audyt od najnowszego, remis po `id` (dawne `order('created_at', desc).order('id')`). */
+const newestFirst = (a: KeyedRow, b: KeyedRow): number => byCreatedAt(b, a) || byId(a, b);
+/** Wiadomości w rozmowie po kolei (dawne `order('created_at')`), remis po `id`. */
+const chronological = (a: KeyedRow, b: KeyedRow): number => byCreatedAt(a, b) || byId(a, b);
 
 /**
  * Snapshot of the verified account's personal data (art. 15/20 GDPR).
@@ -151,7 +215,9 @@ function sectionQuery(
  * Invoice rows belong to organizations; the schema has no "issued_by_user_id".
  * Company invoices use the separately authorized organization export.
  *
- * Do 02.10 plik miał tylko profil, członkostwa i audyt (AUD-76).
+ * Do 02.10 plik miał tylko profil, członkostwa i audyt (AUD-76). Do sesji 29
+ * planu skalowania każda sekcja kończyła się na 1000 wierszy; teraz idzie
+ * stronami w komplecie albo eksport kończy się błędem.
  */
 export async function collectUserData(userId: string): Promise<UserDataExport> {
   const supabase = createAdminClient();
@@ -162,52 +228,45 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
   }
   const email = authUser.email ?? null;
 
-  const readSection = async (name: SectionName): Promise<{ rows: Rows; coverage: CollectionCoverage }> => {
+  const readSection = async (name: SectionName): Promise<Rows> => {
     const section = SECTIONS[name];
     const value = section.by === 'email' ? email : userId;
-    if (!value) return { rows: [], coverage: { returned: 0, total: 0, truncated: false } };
-    const result = await sectionQuery(supabase, section.table, section.columns)
-      .eq(section.by, value)
-      .order(section.table === 'newsletter_subscribers' || section.table === 'email_bounces' ? 'email' : 'id')
-      .limit(ROW_LIMIT)
-      .returns<Rows>();
-    if (result.error || !result.data) throw new Error('account_export_data_unavailable');
-    return { rows: result.data, coverage: coverage(result.data.length, result.count) };
+    if (!value) return [];
+    return readAllRows(supabase, section.table, section.columns, (query) => query.eq(section.by, value));
   };
 
   const [memberships, audit, profile, ...sections] = await Promise.all([
-    supabase.from('memberships')
-      .select('id, user_id, organization_id, role, status, joined_at, revoked_at', { count: 'exact' })
-      .eq('user_id', userId).order('id').limit(ROW_LIMIT).returns<MembershipRecord[]>(),
-    supabase.from('audit_logs')
-      .select('id, action, entity_type, entity_id, metadata, created_at', { count: 'exact' })
-      .eq('user_id', userId).order('created_at', { ascending: false })
-      .order('id').limit(ROW_LIMIT).returns<AuditRecord[]>(),
+    readAllRows<MembershipRecord>(supabase, 'memberships', 'id, user_id, organization_id, role, status, joined_at, revoked_at',
+      (query) => query.eq('user_id', userId)),
+    readAllRows<AuditRecord>(supabase, 'audit_logs', 'id, action, entity_type, entity_id, metadata, created_at',
+      (query) => query.eq('user_id', userId), newestFirst),
     supabase.from('users')
       .select('id, name, last_login, created_at, analytics_consent, analytics_consent_at, signup_source', { count: 'exact' })
       .eq('id', userId).order('id').limit(1).returns<Rows>(),
     ...(Object.keys(SECTIONS) as SectionName[]).map((name) => readSection(name)),
   ]);
-  if (memberships.error || audit.error || !memberships.data || !audit.data || profile.error || !profile.data) {
+  if (profile.error || !profile.data) {
     throw new Error('account_export_data_unavailable');
   }
   const byName = Object.fromEntries(
     (Object.keys(SECTIONS) as SectionName[]).map((name, i) => [name, sections[i]!]),
-  ) as Record<SectionName, { rows: Rows; coverage: CollectionCoverage }>;
+  ) as Record<SectionName, Rows>;
 
-  // Wiadomości tylko z rozmów tej osoby.
-  const conversationIds = byName.support_conversations.rows.map((c) => String(c.id));
-  let messages: Rows = [];
-  let messagesCoverage: CollectionCoverage = { returned: 0, total: 0, truncated: false };
-  if (conversationIds.length > 0) {
-    const result = await sectionQuery(supabase, 'support_messages', 'conversation_id, role, content, created_at')
-      .in('conversation_id', conversationIds)
-      .order('created_at')
-      .limit(ROW_LIMIT)
-      .returns<Rows>();
-    if (result.error || !result.data) throw new Error('account_export_data_unavailable');
-    messages = result.data;
-    messagesCoverage = coverage(result.data.length, result.count);
+  // Wiadomości tylko z rozmów tej osoby, paczkami identyfikatorów.
+  const conversationIds = byName.support_conversations.map((c) => String(c.id));
+  const messageChunks: Rows[] = [];
+  for (let i = 0; i < conversationIds.length; i += CONVERSATIONS_PER_QUERY) {
+    const chunk = conversationIds.slice(i, i + CONVERSATIONS_PER_QUERY);
+    messageChunks.push(await readAllRows(supabase, 'support_messages', 'conversation_id, role, content, created_at',
+      (query) => query.in('conversation_id', chunk), chronological));
+  }
+  const messages = messageChunks.flat();
+  // Rozmowa jest w jednej paczce, więc jej wiadomości zostają po kolei.
+  const messagesByConversation = new Map<unknown, Rows>();
+  for (const message of messages) {
+    const list = messagesByConversation.get(message.conversation_id);
+    if (list) list.push(message);
+    else messagesByConversation.set(message.conversation_id, [message]);
   }
 
   return {
@@ -221,46 +280,46 @@ export async function collectUserData(userId: string): Promise<UserDataExport> {
       metadata: authUser.user_metadata,
     },
     profile: profile.data[0] ?? null,
-    memberships: memberships.data,
-    audit_logs: audit.data,
-    organizations_owned: memberships.data
+    memberships,
+    audit_logs: audit,
+    organizations_owned: memberships
       .filter((membership) => membership.status === 'active' && membership.role === 'owner')
       .map(({ organization_id, role }) => ({ organization_id, role })),
-    email_preferences: byName.email_preferences.rows,
-    push_devices: byName.push_devices.rows,
-    passkey_devices: byName.passkey_devices.rows,
-    support_conversations: byName.support_conversations.rows.map((conversation) => ({
+    email_preferences: byName.email_preferences,
+    push_devices: byName.push_devices,
+    passkey_devices: byName.passkey_devices,
+    support_conversations: byName.support_conversations.map((conversation) => ({
       ...conversation,
-      messages: messages.filter((m) => m.conversation_id === conversation.id),
+      messages: messagesByConversation.get(conversation.id) ?? [],
     })),
-    join_requests: byName.join_requests.rows,
-    invitations_received: byName.invitations_received.rows,
-    deletion_requests: byName.deletion_requests.rows,
-    newsletter: byName.newsletter.rows,
-    email_bounces: byName.email_bounces.rows,
+    join_requests: byName.join_requests,
+    invitations_received: byName.invitations_received,
+    deletion_requests: byName.deletion_requests,
+    newsletter: byName.newsletter,
+    email_bounces: byName.email_bounces,
     coverage: {
-      memberships: coverage(memberships.data.length, memberships.count),
-      audit_logs: coverage(audit.data.length, audit.count),
-      email_preferences: byName.email_preferences.coverage,
-      push_devices: byName.push_devices.coverage,
-      passkey_devices: byName.passkey_devices.coverage,
-      support_conversations: byName.support_conversations.coverage,
-      support_messages: messagesCoverage,
-      join_requests: byName.join_requests.coverage,
-      invitations_received: byName.invitations_received.coverage,
-      deletion_requests: byName.deletion_requests.coverage,
-      newsletter: byName.newsletter.coverage,
-      email_bounces: byName.email_bounces.coverage,
+      memberships: complete(memberships),
+      audit_logs: complete(audit),
+      email_preferences: complete(byName.email_preferences),
+      push_devices: complete(byName.push_devices),
+      passkey_devices: complete(byName.passkey_devices),
+      support_conversations: complete(byName.support_conversations),
+      support_messages: complete(messages),
+      join_requests: complete(byName.join_requests),
+      invitations_received: complete(byName.invitations_received),
+      deletion_requests: complete(byName.deletion_requests),
+      newsletter: complete(byName.newsletter),
+      email_bounces: complete(byName.email_bounces),
     },
     organization_invoices: {
       included: false,
       reason: 'Faktury należą do organizacji. Pobierz je przez eksport w panelu wybranej firmy.',
     },
-    notes: 'Zestawienie obejmuje profil konta, członkostwa, maksymalnie 1000 ostatnich wpisów audytu ' +
+    notes: 'Zestawienie obejmuje profil konta, członkostwa, wszystkie zachowane wpisy audytu ' +
       'oraz dane zapisane o Tobie w aplikacji: preferencje poczty, urządzenia z powiadomieniami, ' +
       'urządzenia do logowania biometrią, rozmowy z pomocą, prośby o dołączenie, otrzymane zaproszenia, żądania usunięcia konta, ' +
-      'zapis na newsletter i odbicia poczty (do 1000 pozycji w każdej sekcji). ' +
-      'Pola coverage podają liczbę zwróconych i dostępnych rekordów oraz informację o ograniczeniu wyników. ' +
+      'zapis na newsletter i odbicia poczty. ' +
+      'Pola coverage podają liczbę zwróconych i dostępnych rekordów. Plik powstaje tylko w komplecie. ' +
       'Klucze techniczne (np. klucze szyfrowania powiadomień, skróty tokenów) nie są danymi o Tobie i nie trafiają do pliku. ' +
       'Dane firm (faktury, kontrahenci, koszty) pobierzesz eksportem w panelu firmy.',
   };
