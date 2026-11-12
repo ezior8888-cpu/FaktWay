@@ -392,10 +392,14 @@ describe('plik przelewów: skutki rachunku spoza wykazu według dnia wystawienia
 
   it('dwie faktury w jednym pliku: każda ze swoim skutkiem', async () => {
     s.wiersze = [zFaktura(5, '2026-12-30'), zFaktura(6, '2027-01-02')];
-    fetchMock.mockResolvedValue(check('NIE', 'abc-2027'));
+    // Osobna odpowiedź na każde zapytanie: treść `Response` da się przeczytać tylko raz.
+    fetchMock.mockImplementation(async () => check('NIE', 'abc-2027'));
     const { pobierzPlikPrzelewowAction } = await import('@/app/actions/plik-przelewow');
     const wynik = await pobierzPlikPrzelewowAction([id(5), id(6)]);
-    const pominiete = (wynik as { podsumowanie: { pominiete: Array<{ id: string; powod: string }> } }).podsumowanie.pominiete;
-    expect(pominiete.map((p) => [p.id, /kosztów w PIT/.test(p.powod)])).toEqual([[id(5), true], [id(6), false]]);
+    const pominiete = (wynik as { podsumowanie: { pominiete: Array<{ id: string; kod: string; powod: string }> } }).podsumowanie.pominiete;
+    expect(pominiete.map((p) => [p.id, p.kod, /kosztów w PIT/.test(p.powod)])).toEqual([
+      [id(5), 'biala_lista_poza', true],
+      [id(6), 'biala_lista_poza', false],
+    ]);
   });
 });
