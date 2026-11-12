@@ -325,3 +325,77 @@ describe('plik przelewów: biała lista ponad 15 000 zł (metoda check API MF)',
     expect(wynik).toMatchObject({ plik: null, podsumowanie: { pominiete: [{ kod: 'biala_lista_dowod' }] } });
   });
 });
+
+/**
+ * RP-BL-01 po zmianie art. 22p ustawy o PIT (Dz.U. 2026 poz. 1371, art. 1 pkt 2
+ * i art. 3): powód „poza wykazem” mówi o koszcie w PIT tylko przy fakturze
+ * wystawionej przed 1.01.2027, także gdy plik powstaje w 2027 r. VAT i ZAW-NR
+ * zostają przy każdej fakturze. Dzień wystawienia: P_1 z faktury KSeF, a bez
+ * niego data dokumentu kosztu.
+ */
+describe('plik przelewów: skutki rachunku spoza wykazu według dnia wystawienia faktury', () => {
+  const zFaktura = (n: number, p1: string | null, pola: Record<string, unknown> = {}) =>
+    wiersz(n, {
+      gross_amount: 20000,
+      payment_due_date: '2027-01-20',
+      issue_date: p1,
+      faktura: { ksef_number: ksef(n), internal_number: `FV/${n}/12/2026`, currency: 'PLN', ksef_environment: 'test', issue_date: p1 },
+      ...pola,
+    });
+
+  async function powodPoza(w: Record<string, unknown>): Promise<string> {
+    s.wiersze = [w];
+    fetchMock.mockResolvedValue(check('NIE', 'abc-2027'));
+    const { pobierzPlikPrzelewowAction } = await import('@/app/actions/plik-przelewow');
+    const wynik = await pobierzPlikPrzelewowAction([String(w.id)]);
+    expect(wynik).toMatchObject({ success: true, plik: null, podsumowanie: { pominiete: [{ kod: 'biala_lista_poza' }] } });
+    const p = (wynik as { podsumowanie: { pominiete: Array<{ powod: string }> } }).podsumowanie.pominiete[0]!;
+    expect(p.powod).toContain('abc-2027');
+    expect(p.powod).toContain('stan na 15.01.2027');
+    expect(p.powod).not.toMatch(/[—–]/);
+    return p.powod;
+  }
+
+  beforeEach(() => {
+    // 23:30 UTC 14.01.2027 to już 15.01.2027 w Warszawie: plik i sprawdzenie w 2027 r.
+    vi.setSystemTime(new Date('2027-01-14T23:30:00Z'));
+  });
+
+  it('faktura z 31.12.2026, plik w 2027: dawne skutki (koszt w PIT, VAT, ZAW-NR)', async () => {
+    const powod = await powodPoza(zFaktura(1, '2026-12-31'));
+    expect(powod).toContain('tej kwoty nie zaliczysz do kosztów w PIT');
+    expect(powod).toContain('odpowiadasz solidarnie za VAT niezapłacony przez sprzedawcę');
+    expect(powod).toContain('(formularz ZAW-NR)');
+    expect(powod).toContain('Plik go nie zawiera: wyjaśnij rachunek ze sprzedawcą.');
+  });
+
+  it('faktura z 1.01.2027: bez zdania o PIT, VAT i ZAW-NR zostają, koszt dalej poza plikiem', async () => {
+    const powod = await powodPoza(zFaktura(2, '2027-01-01'));
+    expect(powod).not.toContain('PIT');
+    expect(powod).not.toContain('kosztów');
+    expect(powod).toContain('odpowiadasz solidarnie za VAT niezapłacony przez sprzedawcę');
+    expect(powod).toContain('w ciągu 7 dni od zlecenia przelewu');
+    expect(powod).toContain('(formularz ZAW-NR)');
+    expect(powod).toContain('Plik go nie zawiera: wyjaśnij rachunek ze sprzedawcą.');
+  });
+
+  it('P_1 z 31.12.2026, a data kosztu 2.01.2027: liczy się P_1 (dawne skutki)', async () => {
+    const powod = await powodPoza(zFaktura(3, '2026-12-31', { issue_date: '2027-01-02' }));
+    expect(powod).toContain('tej kwoty nie zaliczysz do kosztów w PIT');
+  });
+
+  it('faktura bez daty wystawienia: data dokumentu kosztu z 4.01.2027 (bez zdania o PIT)', async () => {
+    const powod = await powodPoza(zFaktura(4, null, { issue_date: '2027-01-04' }));
+    expect(powod).not.toContain('PIT');
+    expect(powod).toContain('(formularz ZAW-NR)');
+  });
+
+  it('dwie faktury w jednym pliku: każda ze swoim skutkiem', async () => {
+    s.wiersze = [zFaktura(5, '2026-12-30'), zFaktura(6, '2027-01-02')];
+    fetchMock.mockResolvedValue(check('NIE', 'abc-2027'));
+    const { pobierzPlikPrzelewowAction } = await import('@/app/actions/plik-przelewow');
+    const wynik = await pobierzPlikPrzelewowAction([id(5), id(6)]);
+    const pominiete = (wynik as { podsumowanie: { pominiete: Array<{ id: string; powod: string }> } }).podsumowanie.pominiete;
+    expect(pominiete.map((p) => [p.id, /kosztów w PIT/.test(p.powod)])).toEqual([[id(5), true], [id(6), false]]);
+  });
+});
