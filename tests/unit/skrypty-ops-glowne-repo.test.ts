@@ -246,8 +246,16 @@ const SKRYPTY_Z_INFRA_ENV = [
 ];
 const ZNACZNIK = 'ZALADOWANY_INFRA_ENV_GLOWNEGO_KATALOGU';
 
-/** Ścieżka z ukośnikami, jak w Git Bash (`C:/…`), żeby `dirname` w skrypcie dał to samo na każdym systemie. */
-const posix = (sciezka: string): string => sciezka.replace(/\\/g, '/');
+/**
+ * Katalogi repo względem `dir`. `bash` biegnie z `cwd: dir` i dostaje ścieżkę
+ * względną, tak jak `./scripts/ops/…` w runbookach. Skrypt liczy `ROOT`
+ * z `BASH_SOURCE` i `pwd`, więc dalej pracuje na ścieżce bezwzględnej. Ścieżka
+ * z `tmpdir()` nie trafia do argumentów powłoki (alert CodeQL
+ * `js/shell-command-injection-from-environment`), a test nie zależy od tego,
+ * jak dana powłoka czyta `C:\…`.
+ */
+const GLOWNY = 'glowny';
+const WORKTREE = 'glowny/.claude/worktrees/wt';
 
 let dir = '';
 let glowny = '';
@@ -293,8 +301,9 @@ function bash(args: string[]) {
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
+/** `katalog` to `GLOWNY` albo `WORKTREE`: ścieżka względem `dir`, z którego biegnie `bash`. */
 const uruchom = (katalog: string, nazwa: string, args: string[] = []) =>
-  bash([posix(join(katalog, 'scripts', 'ops', nazwa)), ...args]);
+  bash([`${katalog}/scripts/ops/${nazwa}`, ...args]);
 
 /** `infra.env` z testu: wypisał znacznik i zakończył powłokę z kodem 0, nic innego się nie wykonało. */
 function zaladowalGlowny(r: { status: number | null; stdout: string; stderr: string }): void {
@@ -305,8 +314,8 @@ function zaladowalGlowny(r: { status: number | null; stdout: string; stderr: str
 
 beforeAll(() => {
   dir = realpathSync(mkdtempSync(join(tmpdir(), 'glowne-repo-')));
-  glowny = join(dir, 'glowny');
-  worktree = join(glowny, '.claude', 'worktrees', 'wt');
+  glowny = join(dir, GLOWNY);
+  worktree = join(dir, WORKTREE);
   const bin = join(dir, 'bin');
   mkdirSync(glowny);
   mkdirSync(bin);
@@ -339,26 +348,28 @@ afterAll(() => {
  * Z głównego katalogu podaje względne `.git`, a skrypt działa z innego katalogu
  * bieżącego (`cwd: dir`), więc ten bieg łapie gałąź względną bez `$ROOT/`.
  */
-const MIEJSCA: Array<[string, () => string]> = [
-  ['z worktree', () => worktree],
-  ['z głównego katalogu', () => glowny],
+const MIEJSCA: Array<[string, string]> = [
+  ['z worktree', WORKTREE],
+  ['z głównego katalogu', GLOWNY],
 ];
 
 describe.each(MIEJSCA)('skrypty ops uruchomione %s ładują infra.env głównego katalogu', (_miejsce, katalog) => {
   it.each(SKRYPTY_Z_INFRA_ENV)('%s', (nazwa) => {
-    zaladowalGlowny(uruchom(katalog(), nazwa));
+    zaladowalGlowny(uruchom(katalog, nazwa));
   }, 60_000);
 
   it('coolify-wspolne.sh: zaladuj_infra_env', () => {
-    // Tak jak `wdroz-produkcje.sh` i `coolify-zrodlo.sh` przed pierwszym wywołaniem funkcji.
-    const skrypt = 'set -euo pipefail; ROOT=$1; source "$ROOT/scripts/ops/coolify-wspolne.sh"; zaladuj_infra_env';
-    zaladowalGlowny(bash(['-c', skrypt, 'coolify-wspolne', posix(katalog())]));
+    // Tak jak `wdroz-produkcje.sh` i `coolify-zrodlo.sh` przed pierwszym wywołaniem
+    // funkcji: bezwzględny `ROOT` z `cd … && pwd`.
+    const skrypt =
+      'set -euo pipefail; ROOT=$(cd "$1" && pwd); source "$ROOT/scripts/ops/coolify-wspolne.sh"; zaladuj_infra_env';
+    zaladowalGlowny(bash(['-c', skrypt, 'coolify-wspolne', katalog]));
   }, 60_000);
 });
 
 describe('rotacja-generuj.sh z worktree', () => {
   it('zapisuje plik w .agents głównego katalogu', () => {
-    const r = uruchom(worktree, 'rotacja-generuj.sh', ['hex', 'TEST_SCIEZKA_GLOWNA']);
+    const r = uruchom(WORKTREE, 'rotacja-generuj.sh', ['hex', 'TEST_SCIEZKA_GLOWNA']);
     expect(r.status, r.stderr).toBe(0);
     const pliki = readdirSync(join(glowny, '.agents', 'backup', 'rotacja-kluczy'));
     expect(pliki.some((plik) => plik.endsWith('-TEST_SCIEZKA_GLOWNA.env'))).toBe(true);
