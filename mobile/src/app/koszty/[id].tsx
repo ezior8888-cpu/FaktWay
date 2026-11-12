@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { KATEGORIE_KOSZTOW, NAZWA_KOLUMNY, NAZWA_ZRODLA, NOWY_WYDATEK, PUSTY_WYDATEK, type KolumnaKpir } from '@/dane-przykladowe';
 import { PoleDaty, PolePrzelacznik, PoleTekstowe, PoleWyboru } from '@/komponenty/formularz';
@@ -9,6 +9,7 @@ import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { doPola, groszeZPola as grosze, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 import { useTytulNaGradiencie } from '@/wyglad/naglowki';
@@ -131,17 +132,10 @@ export default function EkranWydatku() {
               tytul="Usuń wydatek"
               niszczacy
               onPress={() =>
-                Alert.alert('Usunąć ten wydatek?', 'Zniknie z listy i z KPiR.', [
-                  { text: 'Anuluj', style: 'cancel' },
-                  {
-                    text: 'Usuń wydatek',
-                    style: 'destructive',
-                    onPress: () => {
-                      usunKoszt(k.id);
-                      router.back();
-                    },
-                  },
-                ])
+                potwierdz({ tytul: 'Usunąć ten wydatek?', opis: 'Zniknie z listy i z KPiR.', potwierdz: 'Usuń wydatek' }, () => {
+                  usunKoszt(k.id);
+                  router.back();
+                })
               }
             />
           </Sekcja>

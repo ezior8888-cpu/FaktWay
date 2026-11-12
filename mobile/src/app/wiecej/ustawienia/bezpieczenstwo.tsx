@@ -1,10 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Alert } from 'react-native';
 
 import { KLUCZE_DOSTEPU } from '@/dane-przykladowe/ustawienia';
 import { PolePrzelacznik, PoleTekstowe } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna } from '@/lib/format';
 import { useFlaga } from '@/stan/faktury';
 
@@ -43,10 +43,7 @@ export default function EkranBezpieczenstwa() {
           onZmiana={(v) =>
             v
               ? setDwaEtapy(true)
-              : Alert.alert('Wyłączyć aplikację TOTP?', 'Bez drugiego kroku nie podłączysz KSeF.', [
-                  { text: 'Anuluj', style: 'cancel' },
-                  { text: 'Wyłącz', style: 'destructive', onPress: () => setDwaEtapy(false) },
-                ])
+              : potwierdz({ tytul: 'Wyłączyć aplikację TOTP?', opis: 'Bez drugiego kroku nie podłączysz KSeF.', potwierdz: 'Wyłącz' }, () => setDwaEtapy(false))
           }
         />
       </Sekcja>
@@ -60,10 +57,9 @@ export default function EkranBezpieczenstwa() {
             wartoscPodpis="Usuń"
             wartoscPodpisKolor="blad"
             onPress={() =>
-              Alert.alert(`Usunąć ${k.nazwa}?`, 'Na tym urządzeniu zalogujesz się znowu hasłem.', [
-                { text: 'Anuluj', style: 'cancel' },
-                { text: 'Tak, usuń', style: 'destructive', onPress: () => setKlucze((l) => l.filter((x) => x.id !== k.id)) },
-              ])
+              potwierdz({ tytul: `Usunąć ${k.nazwa}?`, opis: 'Na tym urządzeniu zalogujesz się znowu hasłem.', potwierdz: 'Usuń klucz' }, () =>
+                setKlucze((l) => l.filter((x) => x.id !== k.id)),
+              )
             }
           />
         ))}

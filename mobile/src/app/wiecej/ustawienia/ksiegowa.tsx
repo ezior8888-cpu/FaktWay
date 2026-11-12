@@ -1,10 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Alert, Share } from 'react-native';
+import { Share } from 'react-native';
 
 import { DOSTEPY_KSIEGOWEJ, FORMATY_KSIEGOWEJ, PACZKI_KSIEGOWEJ } from '@/dane-przykladowe/ustawienia';
 import { PolePrzelacznik, PoleTekstowe, PoleWyboru } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 
@@ -80,10 +81,9 @@ export default function EkranKsiegowej() {
             wartoscPodpis="Odbierz"
             wartoscPodpisKolor="blad"
             onPress={() =>
-              Alert.alert(`Odebrać dostęp: ${d.nazwa}?`, 'Link przestanie działać od razu.', [
-                { text: 'Anuluj', style: 'cancel' },
-                { text: 'Odbierz', style: 'destructive', onPress: () => setDostepy((l) => l.filter((x) => x.id !== d.id)) },
-              ])
+              potwierdz({ tytul: `Odebrać dostęp: ${d.nazwa}?`, opis: 'Link przestanie działać od razu.', potwierdz: 'Odbierz dostęp' }, () =>
+                setDostepy((l) => l.filter((x) => x.id !== d.id)),
+              )
             }
           />
         ))}

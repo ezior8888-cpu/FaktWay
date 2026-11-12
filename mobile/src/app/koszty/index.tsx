@@ -114,7 +114,15 @@ export default function EkranKosztow() {
         </Stack.Toolbar>
       ) : null}
 
-      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
+      <EkranListy
+        gradient={!szukaj}
+        keyboardShouldPersistTaps="handled"
+        onOdswiez={() =>
+          new Promise<void>((gotowe) => {
+            sprawdzTeraz();
+            setTimeout(gotowe, 1500);
+          })
+        }>
         {szukaj ? null : (
           <>
             <Karta style={styles.karta}>
@@ -161,7 +169,12 @@ export default function EkranKosztow() {
 
         {widok === 0 ? (
           widoczne.length === 0 ? (
-            <StanPusty ikona="inbox-archive-line" tytul="Brak wydatków" opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Dodaj wydatek ze zdjęcia albo poczekaj na faktury z KSeF.'} />
+            <StanPusty
+              ikona="inbox-archive-line"
+              tytul="Brak wydatków"
+              opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Dodaj wydatek ze zdjęcia albo poczekaj na faktury z KSeF.'}
+              akcja={szukaj ? undefined : { tytul: 'Dodaj wydatek', onPress: () => router.push('/koszty/dodaj') }}
+            />
           ) : (
             <Sekcja
               naglowek={tylkoDoOpisania ? 'Do opisania' : undefined}

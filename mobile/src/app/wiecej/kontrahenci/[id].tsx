@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { DZIS } from '@/dane-przykladowe';
 import { KONTRAHENCI } from '@/dane-przykladowe/kontrahenci';
@@ -11,6 +11,7 @@ import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { WierszFaktury } from '@/komponenty/wiersz-faktury';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { useFlaga, useStanFaktur } from '@/stan/faktury';
@@ -97,17 +98,10 @@ export default function EkranKontrahenta() {
             tytul="Usuń kontrahenta"
             niszczacy
             onPress={() =>
-              Alert.alert(`Usunąć kontrahenta ${k.nazwa}?`, 'Wystawione faktury się nie zmienią.', [
-                { text: 'Anuluj', style: 'cancel' },
-                {
-                  text: 'Usuń',
-                  style: 'destructive',
-                  onPress: () => {
-                    ustawFlage(`kontrahent-usuniety-${k.id}`, true);
-                    router.back();
-                  },
-                },
-              ])
+              potwierdz({ tytul: `Usunąć kontrahenta ${k.nazwa}?`, opis: 'Wystawione faktury się nie zmienią.', potwierdz: 'Usuń kontrahenta' }, () => {
+                ustawFlage(`kontrahent-usuniety-${k.id}`, true);
+                router.back();
+              })
             }
           />
         </Sekcja>

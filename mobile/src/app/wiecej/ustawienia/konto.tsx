@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, Share } from 'react-native';
+import { Share } from 'react-native';
 
 import { PolePrzelacznik, PoleTekstowe } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna } from '@/lib/format';
 import { useFlaga } from '@/stan/faktury';
 
@@ -39,18 +40,11 @@ export default function EkranKonta() {
             niszczacy
             onPress={() => {
               if (!haslo) return setBlad('Wpisz aktualne hasło, żeby potwierdzić.');
-              Alert.alert('Usunąć konto?', 'Konto zostanie usunięte za 14 dni. Do tego czasu możesz się wycofać.', [
-                { text: 'Wróć', style: 'cancel' },
-                {
-                  text: 'Potwierdź żądanie',
-                  style: 'destructive',
-                  onPress: () => {
-                    setZaplanowane(true);
-                    setHaslo('');
-                    setBlad(undefined);
-                  },
-                },
-              ]);
+              potwierdz({ tytul: 'Usunąć konto?', opis: 'Konto zostanie usunięte za 14 dni. Do tego czasu możesz się wycofać.', potwierdz: 'Potwierdź żądanie', anuluj: 'Wróć' }, () => {
+                setZaplanowane(true);
+                setHaslo('');
+                setBlad(undefined);
+              });
             }}
           />
         </Sekcja>

@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { NativeTabs } from 'expo-router/native-tabs';
-import { LogBox, useColorScheme } from 'react-native';
+import { LogBox, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { PasekCofnij } from '@/komponenty/pasek-cofnij';
 import { StanFaktur, useStanFaktur } from '@/stan/faktury';
 import { paleta, useKolory } from '@/wyglad/kolory';
 import { czcionka } from '@/wyglad/typografia';
@@ -30,7 +31,10 @@ export default function UkladGlowny() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={motyw}>
         <StanFaktur>
-          <Zakladki />
+          <View style={styles.ekran}>
+            <Zakladki />
+            <PasekCofnij />
+          </View>
         </StanFaktur>
       </ThemeProvider>
     </GestureHandlerRootView>
@@ -90,3 +94,7 @@ function Zakladki() {
     </NativeTabs>
   );
 }
+
+const styles = StyleSheet.create({
+  ekran: { flex: 1 },
+});
