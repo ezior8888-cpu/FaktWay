@@ -7,6 +7,7 @@
  * (`EkranListy gradient="pod-paskiem"`), a przewijana treść chowa się pod
  * paskiem.
  */
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
@@ -21,17 +22,19 @@ type Props = { inicjaly: string; etykietaAwatara: string; onAwatar: () => void }
 export function PasekMarki({ inicjaly, etykietaAwatara, onAwatar }: Props) {
   const kolory = useKolory();
   const { top } = useSafeAreaInsets();
+  // Wymiary mierzone wprost: SVG z rozmiarem w procentach źle się przeliczał po zmianie motywu (sprawdzone w symulatorze).
+  const [rozmiar, setRozmiar] = useState({ w: 0, h: 0 });
   return (
-    <View style={[styles.pasek, { paddingTop: top + ODSTEP.xs }]}>
+    <View style={[styles.pasek, { paddingTop: top + ODSTEP.xs, backgroundColor: kolory.gradientSrodek }]} onLayout={(e) => setRozmiar({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
       <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Svg width="100%" height="100%">
+        <Svg width={rozmiar.w} height={rozmiar.h}>
           <Defs>
             <LinearGradient id="gradient-paska" x1="0" y1="0" x2="0" y2="1">
               <Stop offset={0} stopColor={kolory.gradientGora} />
               <Stop offset={1} stopColor={kolory.gradientSrodek} />
             </LinearGradient>
           </Defs>
-          <Rect x={0} y={0} width="100%" height="100%" fill="url(#gradient-paska)" />
+          <Rect x={0} y={0} width={rozmiar.w} height={rozmiar.h} fill="url(#gradient-paska)" />
         </Svg>
       </View>
       <LogoFaktWay wysokosc={24} biale />

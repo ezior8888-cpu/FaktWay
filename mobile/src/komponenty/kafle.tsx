@@ -23,13 +23,17 @@ export type Kafel = {
   opis?: string;
   /** Ton plakietki; bez niego plakietka ma kolor marki. */
   opisKolor?: keyof Kolory;
+  /** Okrągła ikona: od D15 tylko w kolorze stanu (`ikonaKolor` sukces, ostrzeżenie, błąd), ozdobne nie rysują się. */
   ikona?: NazwaIkony;
-  /** Ton okrągłej ikony (np. wpływy zielone, wydatki czerwone); domyślnie marka. */
+  /** Ton okrągłej ikony (np. wpływy zielone, wydatki czerwone). */
   ikonaKolor?: keyof Kolory;
   /** Zmiana wobec poprzedniego okresu w procentach: w prawym górnym rogu ze strzałką. */
   zmiana?: number;
   onPress?: () => void;
 };
+
+/** Ikona w kaflu zostaje tylko wtedy, gdy mówi o stanie (D15). */
+const TONY_STANU: (keyof Kolory)[] = ['sukces', 'ostrzezenie', 'blad'];
 
 /** Opis dłuższy niż tyle znaków nie mieści się w plakietce połowy ekranu. */
 const DLUGOSC_PLAKIETKI = 24;
@@ -50,6 +54,7 @@ export function Kafle({ kafle }: { kafle: Kafel[] }) {
 function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
   const kolory = useKolory();
   const stylKarty = useStylKarty();
+  const ikona = k.ikonaKolor && TONY_STANU.includes(k.ikonaKolor) ? k.ikona : undefined;
   const zmianaKolor: keyof Kolory = k.zmiana === undefined || k.zmiana === 0 ? 'etykietaDrugorzedna' : k.zmiana > 0 ? 'sukces' : 'blad';
   const etykieta = [k.podpis, k.wartosc, k.zmiana !== undefined ? `${tekstZmiany(k.zmiana)} wobec poprzedniego okresu` : null, k.opis]
     .filter(Boolean)
@@ -62,9 +67,9 @@ function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
       accessibilityRole={k.onPress ? 'button' : undefined}
       accessibilityLabel={etykieta}
       style={[styles.kafel, szeroki && styles.kafelSzeroki, stylKarty]}>
-      {k.ikona || k.zmiana !== undefined ? (
+      {ikona || k.zmiana !== undefined ? (
         <View style={styles.gora}>
-          {k.ikona ? <KoloIkony nazwa={k.ikona} rozmiar={32} ton={k.ikonaKolor ? tonKoloru(k.ikonaKolor) : 'marka'} /> : <View />}
+          {ikona && k.ikonaKolor ? <KoloIkony nazwa={ikona} rozmiar={32} ton={tonKoloru(k.ikonaKolor)} /> : <View />}
           {k.zmiana !== undefined ? (
             <View style={styles.zmiana}>
               <Tekst styl="footnote" kolor={zmianaKolor} cyfry waga="medium">

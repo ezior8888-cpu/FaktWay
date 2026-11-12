@@ -48,7 +48,7 @@ Etapy (plan, sekcja 7, od 12.11.2026): **M4c** wykończenie Copilota w
 komponentach (D15), **M4d** układ Copilota na Pulpicie, Fakturach i Kosztach
 (pozycje 1 i 2), **M4e** wystawienie i szczegół według Revolut Business
 (pozycje 4 i 6), **M4f** Księgowość, Więcej i wspólne stany (pozycje 3, 5 i 8).
-Potem M5 według sekcji 7 tego pliku.
+M4c i M4d zrobione 12.11.2026 w jednym PR (#663). Potem M5 według sekcji 7 tego pliku.
 
 **Do decyzji Bartosza**
 - Kolejność: M4c do M4f przed logowaniem (M5) czy po nim (rekomendacja:

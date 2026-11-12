@@ -3,15 +3,15 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DZIS, type Faktura, type RodzajFaktury } from '@/dane-przykladowe';
-import { KONTRAHENCI } from '@/dane-przykladowe/kontrahenci';
 import { Segmenty } from '@/komponenty/formularz';
-import { Kafle } from '@/komponenty/kafle';
+import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
-import { NaglowekKwoty } from '@/komponenty/naglowek';
+import { KwotaZGroszami } from '@/komponenty/naglowek';
+import { Tekst } from '@/komponenty/tekst';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { WierszFaktury } from '@/komponenty/wiersz-faktury';
-import { dataKrotka, dniMiedzy, kwota, kwotaKrotka } from '@/lib/format';
+import { dataKrotka, dniMiedzy, kwota } from '@/lib/format';
 import { dni, doZaplaty, ileFaktur, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
@@ -72,7 +72,8 @@ function widokZParametru(parametr: string | undefined): number {
 
 /**
  * Faktury: odpowiednik sekcji strony `app/(dashboard)/(faktury)` (Wystawione,
- * Cykliczne, Po terminie) z kafelkami, filtrami i wyszukiwaniem.
+ * Cykliczne, Po terminie) z filtrami i wyszukiwaniem, w układzie Revolut
+ * Business (D14): karta „Do zapłaty”, pigułki, szkice na górze, miesiące z sumą.
  * D7: „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku.
  */
 export default function EkranFaktur() {
@@ -94,11 +95,6 @@ export default function EkranFaktur() {
 
   const otwarte = faktury.filter(doZaplaty);
   const zalegle = otwarte.filter((f) => statusFaktury(f, DZIS).zalegla);
-  const wTymMiesiacu = faktury.filter((f) => f.dataWystawienia.startsWith(DZIS.slice(0, 7)));
-  const przyjeteWMiesiacu = wTymMiesiacu.filter((f) => f.statusKsef === 'przyjeta');
-  const szkice = faktury.filter((f) => f.statusKsef === 'robocza');
-  const oplaconeWMiesiacu = wTymMiesiacu.filter((f) => f.zaplacona);
-  const cykliczneDoWystawienia = cykliczne.filter((c) => !c.wstrzymana && c.nastepna <= DZIS);
   const filtrowAktywnych = [statusKsef, platnosc, rodzaj].filter((x) => x !== 'Wszystkie').length;
 
   const widoczne = useMemo(() => {
@@ -110,6 +106,9 @@ export default function EkranFaktur() {
       .filter((f) => !wybranyRodzaj || f.rodzaj === wybranyRodzaj)
       .filter((f) => !fraza || f.kontrahent.toLocaleLowerCase('pl').includes(fraza) || f.numer.toLowerCase().includes(fraza));
   }, [faktury, statusKsef, platnosc, rodzaj, szukaj]);
+
+  // Szkice i odrzucone przez KSeF na górze listy, jak „Drafts” w Revolut Business (D14).
+  const doDokonczenia = widoczne.filter((f) => f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona');
 
   const poTerminie = zalegle
     .filter((f) => !szukaj || f.kontrahent.toLocaleLowerCase('pl').includes(szukaj.toLocaleLowerCase('pl')))
@@ -151,46 +150,21 @@ export default function EkranFaktur() {
       <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
           <>
-            <NaglowekKwoty
-              podpis="Do zapłaty"
-              wartosc={kwota(suma(otwarte))}
-              styl="title1"
-              status={zalegle.length > 0 ? `${ileFaktur(zalegle.length)} po terminie, ${kwota(suma(zalegle))}` : 'Nic po terminie'}
-              statusKolor={zalegle.length > 0 ? 'ostrzezenie' : 'etykietaDrugorzedna'}
-            />
+            <KartaDoZaplaty otwarte={suma(otwarte)} poTerminie={suma(zalegle)} ilePoTerminie={zalegle.length} />
             {/* D7 (Bartosz, 09.11.2026): „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku. */}
             <View style={styles.akcja}>
               <PrzyciskGlowny tytul="Nowa faktura" ikona="add-line" onPress={() => router.push('/faktury/nowa')} />
             </View>
-            <Kafle
-              kafle={[
-                {
-                  klucz: 'miesiac', ikona: 'file-list3-line',
-                  podpis: 'Faktury w tym miesiącu',
-                  wartosc: String(przyjeteWMiesiacu.length),
-                  opis: szkice.length > 0 ? `+ ${szkice.length} ${szkice.length === 1 ? 'szkic' : 'szkice'} poza KSeF` : 'Wszystkie w KSeF',
-                },
-                { klucz: 'oplacone', ikona: 'checkbox-circle-line', podpis: 'Opłacone w tym miesiącu', wartosc: kwotaKrotka(suma(oplaconeWMiesiacu)) },
-                {
-                  klucz: 'kontrahenci', ikona: 'contacts-book3-line',
-                  podpis: 'Kontrahenci',
-                  wartosc: String(KONTRAHENCI.length),
-                  onPress: () => router.push('/wiecej/kontrahenci'),
-                },
-                {
-                  klucz: 'cykliczne', ikona: 'repeat-line',
-                  podpis: 'Cykliczne',
-                  wartosc: String(cykliczne.length),
-                  opis: cykliczneDoWystawienia.length > 0 ? `${cykliczneDoWystawienia.length} czeka na wystawienie` : 'Nic nie czeka',
-                  opisKolor: cykliczneDoWystawienia.length > 0 ? 'ostrzezenie' : undefined,
-                  onPress: () => setWidok(1),
-                },
-              ]}
-            />
           </>
         )}
 
-        <Segmenty wartosci={[...WIDOKI]} wybrany={widok} onZmiana={setWidok} etykieta="Rodzaj listy faktur" />
+        <Segmenty
+          wartosci={[...WIDOKI]}
+          wybrany={widok}
+          onZmiana={setWidok}
+          etykieta="Rodzaj listy faktur"
+          liczniki={[undefined, cykliczne.length, zalegle.length > 0 ? zalegle.length : undefined]}
+        />
 
         {widok === 0 ? (
           widoczne.length === 0 ? (
@@ -200,13 +174,26 @@ export default function EkranFaktur() {
               opis={szukaj || filtrowAktywnych > 0 ? 'Zmień wyszukiwanie albo filtry w menu u góry.' : 'Wystaw pierwszą fakturę przyciskiem „Nowa faktura”.'}
             />
           ) : (
-            grupujPoMiesiacu(widoczne).map(([miesiac, lista]) => (
-              <Sekcja key={miesiac} naglowek={miesiac} stopka={filtrowAktywnych > 0 ? `Filtry: ${[statusKsef, platnosc, rodzaj].filter((x) => x !== 'Wszystkie').join(', ')}.` : undefined}>
-                {lista.map((f) => (
-                  <WierszFaktury key={f.id} faktura={f} />
-                ))}
-              </Sekcja>
-            ))
+            <>
+              {doDokonczenia.length > 0 ? (
+                <Sekcja naglowek="Do dokończenia" naglowekWartosc={String(doDokonczenia.length)}>
+                  {doDokonczenia.map((f) => (
+                    <WierszFaktury key={f.id} faktura={f} />
+                  ))}
+                </Sekcja>
+              ) : null}
+              {grupujPoMiesiacu(widoczne.filter((f) => !doDokonczenia.includes(f))).map(([miesiac, lista]) => (
+                <Sekcja
+                  key={miesiac}
+                  naglowek={miesiac}
+                  naglowekWartosc={kwota(suma(lista))}
+                  stopka={filtrowAktywnych > 0 ? `Filtry: ${[statusKsef, platnosc, rodzaj].filter((x) => x !== 'Wszystkie').join(', ')}.` : undefined}>
+                  {lista.map((f) => (
+                    <WierszFaktury key={f.id} faktura={f} />
+                  ))}
+                </Sekcja>
+              ))}
+            </>
           )
         ) : null}
 
@@ -224,21 +211,16 @@ export default function EkranFaktur() {
                 onPress={() => router.push({ pathname: '/faktury/cykliczna', params: { id: c.id } })}
               />
             ))}
-            <Wiersz tytul="Nowa faktura cykliczna" ikona="add-circle-fill" akcja onPress={() => router.push('/faktury/cykliczna')} />
+            <Wiersz tytul="Nowa faktura cykliczna" akcja onPress={() => router.push('/faktury/cykliczna')} />
           </Sekcja>
         ) : null}
 
         {widok === 2 ? (
           <>
-            <Kafle
-              kafle={[
-                { klucz: 'suma', ikona: 'alarm-warning-line', podpis: 'Po terminie', wartosc: kwotaKrotka(suma(zalegle)), opisKolor: 'ostrzezenie' },
-                { klucz: 'liczba', ikona: 'error-warning-line', podpis: 'Faktur po terminie', wartosc: String(zalegle.length) },
-                { klucz: 'wyslane', ikona: 'mail-line', podpis: 'Przypomnień w miesiącu', wartosc: String(wyslanePrzypomnienia) },
-                { klucz: 'wstrzymane', ikona: 'pause-line', podpis: 'Wstrzymanych', wartosc: String(wstrzymane) },
-              ]}
-            />
-            <Sekcja naglowek="Po terminie" stopka="Od najdłużej zaległej. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.">
+            <Sekcja
+              naglowek="Po terminie"
+              naglowekWartosc={kwota(suma(zalegle))}
+              stopka={`Od najdłużej zaległej. Przypomnień w tym miesiącu: ${wyslanePrzypomnienia}, wstrzymanych: ${wstrzymane}. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.`}>
               {poTerminie.length === 0
                 ? [<StanPusty key="pusto" ikona="checkbox-circle-line" tytul="Brak pozycji gotowych do przypomnienia" opis="Żadna faktura nie jest po terminie." />]
                 : poTerminie.map((f) => {
@@ -257,7 +239,7 @@ export default function EkranFaktur() {
                       />
                     );
                   })}
-              <Wiersz tytul="Ustawienia przypomnień" ikona="notification-badge-line" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />
+              <Wiersz tytul="Ustawienia przypomnień" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />
             </Sekcja>
           </>
         ) : null}
@@ -266,6 +248,43 @@ export default function EkranFaktur() {
   );
 }
 
+/** Karta „Do zapłaty” z paskiem: w terminie i po terminie (makieta z 12.11.2026). */
+function KartaDoZaplaty({ otwarte, poTerminie, ilePoTerminie }: { otwarte: number; poTerminie: number; ilePoTerminie: number }) {
+  const kolory = useKolory();
+  const wTerminie = otwarte - poTerminie;
+  return (
+    <Karta style={styles.karta}>
+      <View
+        style={styles.trescKarty}
+        accessible
+        accessibilityLabel={`Do zapłaty od klientów: ${kwota(otwarte)}. W terminie ${kwota(wTerminie)}. ${ilePoTerminie > 0 ? `${ileFaktur(ilePoTerminie)} po terminie, ${kwota(poTerminie)}` : 'Nic po terminie'}.`}>
+        <Tekst styl="subheadline" kolor="etykietaDrugorzedna">
+          Do zapłaty od klientów
+        </Tekst>
+        <KwotaZGroszami wartosc={kwota(otwarte)} styl="title1" />
+        <View style={styles.pasek}>
+          {wTerminie > 0 ? <View style={[styles.odcinek, { flex: wTerminie, backgroundColor: kolory.akcentWypelnienie }]} /> : null}
+          {poTerminie > 0 ? <View style={[styles.odcinek, { flex: poTerminie, backgroundColor: kolory.ostrzezenie }]} /> : null}
+          {otwarte === 0 ? <View style={[styles.odcinek, { flex: 1, backgroundColor: kolory.neutralneTlo }]} /> : null}
+        </View>
+        <View style={styles.legenda}>
+          <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+            w terminie <Tekst styl="footnote" cyfry>{kwota(wTerminie)}</Tekst>
+          </Tekst>
+          <Tekst styl="footnote" waga="semibold" kolor={ilePoTerminie > 0 ? 'ostrzezenie' : 'etykietaDrugorzedna'}>
+            {ilePoTerminie > 0 ? `${ilePoTerminie} po terminie ${kwota(poTerminie)}` : 'nic po terminie'}
+          </Tekst>
+        </View>
+      </View>
+    </Karta>
+  );
+}
+
 const styles = StyleSheet.create({
-  akcja: { marginHorizontal: MARGINES, marginTop: ODSTEP.l },
+  akcja: { marginHorizontal: MARGINES, marginTop: ODSTEP.m },
+  karta: { marginTop: ODSTEP.s },
+  trescKarty: { padding: MARGINES, gap: ODSTEP.xxs },
+  pasek: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2, marginTop: ODSTEP.xs },
+  odcinek: { height: 8 },
+  legenda: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: ODSTEP.s, rowGap: ODSTEP.linia, marginTop: ODSTEP.xxs },
 });

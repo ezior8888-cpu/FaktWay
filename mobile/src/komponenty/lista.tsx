@@ -48,6 +48,8 @@ type SekcjaProps = {
   opis?: string;
   /** Link po prawej stronie tytułu, np. „Wszystkie”. */
   naglowekAkcja?: { tytul: string; onPress: () => void };
+  /** Liczba albo suma po prawej stronie nagłówka (np. suma grupy faktur), gdy nie ma linku. */
+  naglowekWartosc?: string;
   /** Dopisek na dole karty: wyjaśnienie, źródło liczb, błąd. */
   stopka?: string;
   /** Treść bez wierszy (wykres, kalendarz): w karcie, z marginesem wewnętrznym. */
@@ -73,7 +75,7 @@ function splaszcz(children: ReactNode): ReactElement[] {
     .flatMap((el) => (el.type === Fragment ? splaszcz((el as ReactElement<{ children?: ReactNode }>).props.children) : [el]));
 }
 
-export function Sekcja({ naglowek, opis, naglowekAkcja, stopka, swobodna, bezKarty, linie, children }: SekcjaProps) {
+export function Sekcja({ naglowek, opis, naglowekAkcja, naglowekWartosc, stopka, swobodna, bezKarty, linie, children }: SekcjaProps) {
   const kolory = useKolory();
   const elementy = splaszcz(children);
   const zPolami = elementy.some(jestPolem);
@@ -81,7 +83,7 @@ export function Sekcja({ naglowek, opis, naglowekAkcja, stopka, swobodna, bezKar
   if (bezKarty) {
     return (
       <View style={naglowek ? styles.sekcjaZNaglowkiem : styles.sekcja}>
-        {naglowek ? <NaglowekSekcji tytul={naglowek} opis={opis} akcja={naglowekAkcja} /> : null}
+        {naglowek ? <NaglowekSekcji tytul={naglowek} opis={opis} akcja={naglowekAkcja} wartosc={naglowekWartosc} /> : null}
         {children}
         {stopka ? (
           <Tekst styl="footnote" kolor="etykietaDrugorzedna" style={styles.stopkaBezKarty}>
@@ -105,7 +107,7 @@ export function Sekcja({ naglowek, opis, naglowekAkcja, stopka, swobodna, bezKar
   const naglowekNad = naglowek && !zPolami;
   return (
     <View style={naglowekNad ? styles.sekcjaZNaglowkiem : styles.sekcja}>
-      {naglowekNad ? <NaglowekSekcji tytul={naglowek} opis={opis} akcja={naglowekAkcja} /> : null}
+      {naglowekNad ? <NaglowekSekcji tytul={naglowek} opis={opis} akcja={naglowekAkcja} wartosc={naglowekWartosc} /> : null}
       <Karta>
         {naglowek && zPolami ? <NaglowekSekcji tytul={naglowek} opis={opis} akcja={naglowekAkcja} wKarcie /> : null}
         {swobodna ? (
@@ -138,10 +140,10 @@ function Linia({ kolor }: { kolor: string }) {
   return <View style={[styles.linia, { backgroundColor: kolor }]} />;
 }
 
-type NaglowekSekcjiProps = { tytul: string; opis?: string; akcja?: { tytul: string; onPress: () => void }; wKarcie?: boolean };
+type NaglowekSekcjiProps = { tytul: string; opis?: string; akcja?: { tytul: string; onPress: () => void }; wartosc?: string; wKarcie?: boolean };
 
 /** Nagłówek sekcji wersalikami 12 pt (Copilot, D15), link ze strzałką po prawej. */
-function NaglowekSekcji({ tytul, opis, akcja, wKarcie }: NaglowekSekcjiProps) {
+function NaglowekSekcji({ tytul, opis, akcja, wartosc, wKarcie }: NaglowekSekcjiProps) {
   const kolory = useKolory();
   return (
     <View style={wKarcie ? styles.naglowekWKarcie : styles.naglowekNad}>
@@ -156,6 +158,10 @@ function NaglowekSekcji({ tytul, opis, akcja, wKarcie }: NaglowekSekcjiProps) {
             </Tekst>
             <Ikona nazwa="arrow-right-s-line" rozmiar={16} kolor={kolory.akcent} />
           </Pressable>
+        ) : wartosc ? (
+          <Tekst styl="subheadline" kolor="etykietaDrugorzedna" cyfry waga="medium">
+            {wartosc}
+          </Tekst>
         ) : null}
       </View>
       {opis ? (
@@ -180,9 +186,13 @@ type WierszProps = {
   wartoscKolor?: keyof Kolory;
   /** Dane do skopiowania (NIP, numer KSeF): tekst da się zaznaczyć. */
   zaznaczalna?: boolean;
-  /** Okrągła ikona Remix po lewej. */
+  /**
+   * Okrągła ikona Remix po lewej. Od D15 rysowana tylko w kolorze stanu
+   * (`ikonaKolor` błąd, ostrzeżenie, sukces), bo ozdobne ikony przy każdym
+   * wierszu zaśmiecały ekrany (Bartosz, 12.11.2026).
+   */
   ikona?: NazwaIkony;
-  /** Kolor okrągłej ikony (ton): domyślnie marka. */
+  /** Kolor okrągłej ikony (ton); ikona marki się nie rysuje. */
   ikonaKolor?: keyof Kolory;
   /** Strzałka w prawo: wiersz prowadzi do kolejnego ekranu. */
   strzalka?: boolean;
@@ -200,6 +210,8 @@ type WierszProps = {
 /** Wartość z cyframi (kwota, data, numer, procent) ma cyfry tabelaryczne, kolumny się nie rozjeżdżają. */
 const MA_CYFRY = /\d/;
 const TONY_PLAKIETKI: (keyof Kolory)[] = ['sukces', 'ostrzezenie', 'blad', 'info', 'fiolet'];
+/** Ikona w wierszu zostaje tylko wtedy, gdy mówi o stanie. */
+const TONY_STANU: (keyof Kolory)[] = ['sukces', 'ostrzezenie', 'blad'];
 
 export function Wiersz({
   tytul,
@@ -227,7 +239,7 @@ export function Wiersz({
   const pionowo = duzyTekst && Boolean(wartosc || wartoscPodpis);
   const tresc = (
     <>
-      {ikona ? <KoloIkony nazwa={ikona} ton={tonKoloru(ikonaKolor)} /> : null}
+      {ikona && TONY_STANU.includes(ikonaKolor) ? <KoloIkony nazwa={ikona} ton={tonKoloru(ikonaKolor)} /> : null}
       <View style={styles.lewa}>
         <Tekst
           styl="body"

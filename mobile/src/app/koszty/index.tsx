@@ -1,16 +1,17 @@
 import { Stack, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { DZIS, KATEGORIE_KOSZTOW, NAZWA_ZRODLA, type Koszt, type ZrodloKosztu } from '@/dane-przykladowe';
 import { Segmenty } from '@/komponenty/formularz';
-import { Kafle } from '@/komponenty/kafle';
+import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
-import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
+import { RzadLiczb } from '@/komponenty/rzad-liczb';
 import { StanPusty } from '@/komponenty/stan-pusty';
-import { dataKrotka, kwota } from '@/lib/format';
+import { Tekst } from '@/komponenty/tekst';
+import { dataKrotka, dzienTygodnia, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
@@ -26,7 +27,8 @@ const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
 
 /**
  * Koszty: odpowiednik sekcji strony `(koszty)` (Wydatki i Skrzynka KSeF)
- * z kafelkami miesiąca, filtrami i dodawaniem wydatku ze zdjęcia.
+ * w układzie Copilota (D14): karta z trzema liczbami miesiąca, lista po dniach
+ * z kolorowymi kategoriami i kropką „do opisania”, filtry, wydatek ze zdjęcia.
  */
 export default function EkranKosztow() {
   const kolory = useKolory();
@@ -43,6 +45,7 @@ export default function EkranKosztow() {
   const miesiac = koszty.filter((k) => k.data.startsWith(DZIS.slice(0, 7)));
   const wKpir = miesiac.filter((k) => k.wKpir);
   const doOpisania = koszty.filter((k) => k.doOpisania);
+  const nowychWSkrzynce = koszty.filter((k) => k.zrodlo === 'ksef' && k.doOpisania).length;
   const vatDoOdliczenia = miesiac.filter((k) => k.dokument !== 'Paragon').reduce((s, k) => s + (k.brutto - k.netto), 0);
 
   const widoczne = useMemo(() => {
@@ -70,11 +73,10 @@ export default function EkranKosztow() {
       key={k.id}
       tytul={k.dostawca}
       kategoria={k.kategoria}
-      podtytul={`${NAZWA_ZRODLA[k.zrodlo]} · ${dataKrotka(k.data)}`}
+      podtytul={NAZWA_ZRODLA[k.zrodlo]}
       wartosc={kwota(k.brutto)}
       wartoscKolor="etykieta"
-      wartoscPodpis={k.doOpisania ? 'Do opisania' : 'Opisany'}
-      wartoscPodpisKolor={k.doOpisania ? 'ostrzezenie' : 'sukces'}
+      prawaStrona={<View style={[styles.kropka, { backgroundColor: k.doOpisania ? kolory.akcent : 'transparent' }]} />}
       onPress={() => router.push({ pathname: '/koszty/[id]', params: { id: k.id } })}
       etykietaDostepnosci={`${k.dostawca}, ${k.kategoria}, ${kwota(k.brutto)}, ${k.doOpisania ? 'do opisania' : 'opisany'}`}
     />
@@ -115,51 +117,63 @@ export default function EkranKosztow() {
       <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
           <>
-            <NaglowekKwoty
-              podpis="Wydatki w tym miesiącu"
-              wartosc={kwota(wKpir.reduce((s, k) => s + k.brutto, 0))}
-              styl="title1"
-              status="Tylko koszty w KPiR"
-            />
+            <Karta style={styles.karta}>
+              <View style={styles.trescKarty}>
+                <RzadLiczb
+                  liczby={[
+                    { wartosc: kwota(wKpir.reduce((s, k) => s + k.brutto, 0)), podpis: 'wydatki w listopadzie' },
+                    { wartosc: kwota(vatDoOdliczenia), podpis: 'VAT do odliczenia' },
+                    {
+                      wartosc: String(doOpisania.length),
+                      podpis: 'do opisania',
+                      kolor: doOpisania.length > 0 ? 'akcent' : 'etykieta',
+                      onPress: () => {
+                        setWidok(0);
+                        setTylkoDoOpisania(true);
+                      },
+                    },
+                  ]}
+                />
+              </View>
+            </Karta>
+            <Pressable
+              onPress={sprawdzam ? undefined : sprawdzTeraz}
+              accessibilityRole="button"
+              accessibilityLabel={`Ostatnie pobranie z KSeF: ${pobranie}. Sprawdzamy co 15 minut. Sprawdź teraz.`}
+              hitSlop={ODSTEP.xs}
+              style={styles.ksef}>
+              <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+                {sprawdzam ? 'Sprawdzam KSeF…' : `KSeF sprawdzony ${pobranie}, co 15 minut. `}
+                {sprawdzam ? null : (
+                  <Tekst styl="footnote" kolor="akcent" waga="medium">
+                    Sprawdź teraz
+                  </Tekst>
+                )}
+              </Tekst>
+            </Pressable>
             <View style={styles.akcja}>
               <PrzyciskGlowny tytul="Dodaj wydatek" ikona="camera-line" onPress={() => router.push('/koszty/dodaj')} />
             </View>
-            <Kafle
-              kafle={[
-                { klucz: 'vat', ikona: 'percent-line', podpis: 'VAT do odliczenia', wartosc: kwota(vatDoOdliczenia), opis: 'Z faktur, jak w JPK_V7M' },
-                {
-                  klucz: 'opisanie',
-                  ikona: 'edit-box-line',
-                  podpis: 'Do opisania',
-                  wartosc: String(doOpisania.length),
-                  opis: doOpisania.length > 0 ? `${doOpisania.length} czeka na sprawdzenie` : 'Wszystko opisane',
-                  opisKolor: doOpisania.length > 0 ? 'ostrzezenie' : 'sukces',
-                  onPress: () => {
-                    setWidok(0);
-                    setTylkoDoOpisania(true);
-                  },
-                },
-                {
-                  klucz: 'ksef',
-                  podpis: 'Ostatnie pobranie z KSeF',
-                  wartosc: sprawdzam ? 'Sprawdzam…' : pobranie,
-                  opis: 'Sprawdzamy KSeF co 15 minut. Dotknij, żeby sprawdzić teraz.',
-                  ikona: 'refresh-line',
-                  onPress: sprawdzam ? undefined : sprawdzTeraz,
-                },
-              ]}
-            />
           </>
         )}
 
-        <Segmenty wartosci={['Wydatki', 'Skrzynka KSeF']} wybrany={widok} onZmiana={setWidok} etykieta="Rodzaje kosztów" />
+        <Segmenty wartosci={['Wydatki', 'Skrzynka KSeF']} wybrany={widok} onZmiana={setWidok} etykieta="Rodzaje kosztów" liczniki={[undefined, nowychWSkrzynce > 0 ? nowychWSkrzynce : undefined]} />
 
         {widok === 0 ? (
           widoczne.length === 0 ? (
             <StanPusty ikona="inbox-archive-line" tytul="Brak wydatków" opis={szukaj ? `Nic nie pasuje do „${szukaj}”.` : 'Dodaj wydatek ze zdjęcia albo poczekaj na faktury z KSeF.'} />
           ) : (
-            <Sekcja naglowek={tylkoDoOpisania ? 'Do opisania' : 'Listopad 2026'} stopka={zrodlo !== 'Wszystkie źródła' || kategoria !== 'Wszystkie kategorie' ? `Filtr: ${zrodlo}, ${kategoria}.` : undefined}>
-              {widoczne.map(wiersz)}
+            <Sekcja
+              naglowek={tylkoDoOpisania ? 'Do opisania' : undefined}
+              naglowekAkcja={tylkoDoOpisania ? { tytul: 'Pokaż wszystkie', onPress: () => setTylkoDoOpisania(false) } : undefined}
+              stopka={zrodlo !== 'Wszystkie źródła' || kategoria !== 'Wszystkie kategorie' ? `Filtr: ${zrodlo}, ${kategoria}.` : undefined}>
+              {/* Lista po dniach jak w Copilocie (D14): nagłówek dnia, pod nim wydatki. */}
+              {poDniach(widoczne).flatMap(([dzien, lista]) => [
+                <Tekst key={`dzien-${dzien}`} styl="caption1" waga="semibold" kolor="etykietaDrugorzedna" accessibilityRole="header" style={styles.dzien}>
+                  {dzienTygodnia(dzien)}
+                </Tekst>,
+                ...lista.map(wiersz),
+              ])}
             </Sekcja>
           )
         ) : skrzynka.length === 0 ? (
@@ -185,6 +199,20 @@ export default function EkranKosztow() {
   );
 }
 
+/** Wydatki pogrupowane po dniu, od najnowszego. */
+function poDniach(koszty: Koszt[]): [string, Koszt[]][] {
+  const dni = new Map<string, Koszt[]>();
+  for (const k of [...koszty].sort((a, b) => b.data.localeCompare(a.data))) {
+    dni.set(k.data, [...(dni.get(k.data) ?? []), k]);
+  }
+  return [...dni.entries()];
+}
+
 const styles = StyleSheet.create({
-  akcja: { marginHorizontal: MARGINES, marginTop: ODSTEP.l },
+  karta: { marginTop: ODSTEP.s },
+  trescKarty: { paddingVertical: ODSTEP.m, paddingHorizontal: ODSTEP.xs },
+  ksef: { marginHorizontal: MARGINES + ODSTEP.xxs, marginTop: ODSTEP.s },
+  akcja: { marginHorizontal: MARGINES, marginTop: ODSTEP.m },
+  dzien: { textTransform: 'uppercase', letterSpacing: 0.6, paddingHorizontal: MARGINES, paddingTop: ODSTEP.s, paddingBottom: ODSTEP.linia },
+  kropka: { width: 8, height: 8, borderRadius: 4 },
 });

@@ -259,10 +259,10 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** Bartosz ogląda M4c (wykończenie Copilota, D15) na swoim
-iPhonie: zrzuty `docs/mobile/zrzuty/m4c/` obok `m4b/`. Po „idź dalej” M4d:
-układ Copilota na Pulpicie, Fakturach i Kosztach (sekcja 7). Otwarte: M4d do
-M4f przed logowaniem (M5) czy po nim (rekomendacja: przed), D4, D6.
+**Następny krok:** Bartosz ogląda M4c i M4d (PR #663) na iPhonie albo w
+symulatorze: zrzuty `docs/mobile/zrzuty/m4c/`. Po „idź dalej” M4e: faktury
+jak Revolut Business (formularz z kart, potwierdzenie, szczegół z rzędem
+akcji). Otwarte: M4e i M4f przed logowaniem (M5) czy po nim, D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -274,3 +274,4 @@ M4f przed logowaniem (M5) czy po nim (rekomendacja: przed), D4, D6.
 | 10.11.2026 | M4b | wygląd FaktWay zamiast „produktu Apple” (D12): Outfit i IBM Plex Mono wbudowane w aplikację, paleta strony (jasna i ciemna), płaskie karty z obwódką i nagłówkiem w środku, ikony Remix ze strony (także w pasku zakładek i przyciskach paska), plakietki statusów jak na stronie, przyciski i pola jak na stronie z płynną animacją, zakładki sekcji z kreską, wykresy w SVG (słupki składane, linia z polem, pierścień, wiek należności) z animacją wejścia i dymkiem, Pulpit z logo FaktWay; bez Flo (D13): usunięte ekran Flo, ustawienia Flo, „Twój rok w liczbach” i podpowiedź w formularzu; `ZASADY-DESIGNU.md` w wersji 2; 7 uwag z przeglądu kodu (5 poprawionych); zrzuty `docs/mobile/zrzuty/m4b/` | #576 |
 | 12.11.2026 | wzorce | Mobbin Pro przez MCP: przegląd ekranów i lista 12 poprawek (`docs/mobile/WZORCE-MOBBIN.md`); porównanie pięciu wzorów całej aplikacji (Copilot, Revolut Business, Mercury, Rocket Money, Remote), wybór D14; makieta pięciu ekranów z przełącznikami zasad wyglądu, decyzja D15 („Wszystko jak Copilot”); `ZASADY-DESIGNU.md` w wersji 3; etapy M4c do M4f | (bez PR, dokumenty niezacommitowane) |
 | 12.11.2026 | M4c | wykończenie Copilota (D15) w komponentach: paleta w `paleta.ts` z testem kontrastu (`tests/unit/mobile-kontrast.test.ts`, 41 par), tło `#F2F4F7`, karty 18 pt bez obwódki z cieniem, nagłówki sekcji wersalikami nad kartą, wiersze bez linii (poza KPiR i ewidencją), gradient pod nagłówkiem z natywnym dużym tytułem w bieli (próba w symulatorze udana), pasek marki Pulpitu na gradiencie z białym logo, kwota z groszami w indeksie, kolorowe kategorie kosztów, przyciski 16 pt i wariant tonalny, Outfit z cyframi tabelarycznymi zamiast IBM Plex Mono (pliki usunięte); 2 uwagi z przeglądu kodu poprawione; zrzuty `docs/mobile/zrzuty/m4c/` | #663 |
+| 12.11.2026 | M4d | po uwadze Bartosza („za dużo ikon, strony za długie, miało być jak w makiecie”) układ z makiety w tym samym PR: Pulpit z kartą wyniku (wykres miesiąca wobec średniej, trzy liczby), „Do przejrzenia”, „Nadchodzące”, reszta kart na nowym ekranie Finanse; Faktury z kartą „Do zapłaty” i paskiem, pigułkami z licznikami, grupą „Do dokończenia”, sumami miesięcy, plakietką tylko przy wyjątkach; Koszty z kartą trzech liczb, listą po dniach i kropką „do opisania”; pigułki zamiast zakładek z kreską wszędzie; ikony w wierszach i kaflach tylko przy stanie; pasek marki Pulpitu poprawiony w trybie ciemnym | #663 |

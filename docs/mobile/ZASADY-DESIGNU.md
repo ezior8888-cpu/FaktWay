@@ -49,7 +49,7 @@ najlepszych aplikacji finansowych i płynności, którą daje system.
 | Wybór z kilku opcji | pole jak na stronie, lista w systemowym arkuszu akcji | własna rozwijana lista |
 | Potwierdzenie usunięcia | systemowy arkusz akcji z czerwoną opcją | własne okno „Czy na pewno?” |
 | Wyszukiwanie | pole wyszukiwania w pasku nawigacji listy | osobny ekran wyszukiwarki |
-| Podzakładki sekcji | zakładki jak na stronie (`section-tabs.tsx`): napisy w rzędzie, kreska pod aktywną przesuwa się na sprężynie | systemowy przełącznik segmentowy |
+| Podzakładki sekcji | pigułki (`Segmenty`, wzór Revolut Business, D14): wybrana w kolorze marki, pozostałe białe, liczba przy pigułce („Po terminie 2”) | systemowy przełącznik segmentowy, zakładki z kreską |
 
 Główna akcja sekcji ma jedno stałe miejsce: szeroki bloczek u góry listy, pod
 podsumowaniem (decyzja D7, 09.11.2026: „Nowa faktura” w bloczku, nie plus w pasku).
@@ -137,8 +137,10 @@ Kontrast tych par (4.5:1 w obu trybach) sprawdza test, zanim trafią do `kolory.
   Porównanie z innym okresem albo średnią rysujemy szarą linią przerywaną,
   wynik plakietką przy końcu linii („+18 285 zł ponad średnią”), jak w Copilocie.
 - **Ikony Remix**, te same co w menu i kartach strony (`komponenty/ikona.tsx`,
-  kształty z `@remixicon/react`, generuje je `scripts/ikony-remix.cjs`). W
-  wierszach i kaflach jako okrągła ikona na 10% tle (`KoloIkony`).
+  kształty z `@remixicon/react`, generuje je `scripts/ikony-remix.cjs`), w
+  pasku zakładek, przyciskach i pasku nawigacji. Okrągła ikona w wierszu albo
+  kaflu tylko wtedy, gdy mówi o stanie (błąd, ostrzeżenie, sukces); ozdobne
+  ikony przy każdym wierszu zaśmiecały ekrany (Bartosz, 12.11.2026).
 - **Tryb ciemny obowiązkowo** od pierwszego ekranu, z palety ciemnej.
 
 ## 5. Karty, listy i stany ekranu
@@ -153,8 +155,9 @@ Kontrast tych par (4.5:1 w obu trybach) sprawdza test, zanim trafią do `kolory.
   dokończenia”) albo czas („Ten tydzień”), z liczbą albo sumą po prawej. W
   formularzu nagłówek karty („Nabywca”, „Pozycje”) stoi w karcie.
 - **Zamiast kafli jedna karta wyniku:** liczba główna, pod nią wykres i rząd
-  trzech mniejszych liczb (Pulpit). Lista i zadania mają być widoczne bez
-  przewijania.
+  trzech mniejszych liczb (`KartaWyniku`, `RzadLiczb`). Lista i zadania mają
+  być widoczne bez przewijania; karty, które nie mieszczą się na ekranie
+  zakładki, idą na osobny ekran (np. Finanse z Pulpitu), nie znikają (D3).
 - **Wiersze w karcie bez linii**, oddziela je wysokość (44 pt w jednej
   linii, 66 pt z podtytułem); linia zostaje tylko w długich tabelach (KPiR,
   ewidencja). Wiersz faktury: okrągła ikona stanu 40 pt, kontrahent (Medium

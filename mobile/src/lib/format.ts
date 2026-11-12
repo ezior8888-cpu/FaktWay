@@ -13,6 +13,7 @@ const KWOTA = new Intl.NumberFormat('pl-PL', {
 
 const DATA_KROTKA = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short' });
 const DATA_PELNA = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
+const DZIEN_TYGODNIA = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: 'numeric', month: 'long' });
 
 /** Kwota w groszach jako „1 234,56 zł”. Grosze, bo tak liczy generator FA(3). */
 export function kwota(grosze: number): string {
@@ -27,6 +28,11 @@ export function dataKrotka(iso: string): string {
 /** „12 listopada 2026” dla ekranu szczegółu. */
 export function dataPelna(iso: string): string {
   return DATA_PELNA.format(new Date(`${iso}T12:00:00`));
+}
+
+/** „pt., 6 listopada” dla nagłówka dnia na liście kosztów (wzór Copilota, D14). */
+export function dzienTygodnia(iso: string): string {
+  return DZIEN_TYGODNIA.format(new Date(`${iso}T12:00:00`));
 }
 
 /** Liczba dni od `od` do `do` (obie daty RRRR-MM-DD). */
