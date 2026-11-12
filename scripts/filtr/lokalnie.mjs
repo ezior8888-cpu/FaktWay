@@ -13,9 +13,15 @@ import { spawnSync } from 'node:child_process';
 import { KATALOG_REPO } from './mapa.mjs';
 
 const baza = process.argv[2] ?? 'origin/main';
-const krok = (opis, polecenie, argumenty) => {
+const krok = (opis, polecenie, argumenty, { powloka = false } = {}) => {
   console.log(`\n[FILTR] ${opis}`);
-  return spawnSync(polecenie, argumenty, { cwd: KATALOG_REPO, stdio: 'inherit' }).status ?? 1;
+  const opcje = { cwd: KATALOG_REPO, stdio: 'inherit' };
+  // Przez powłokę jednym napisem: tablica argumentów z `shell: true` daje ostrzeżenie DEP0190.
+  const wynik = powloka
+    ? spawnSync([polecenie, ...argumenty].join(' '), { ...opcje, shell: true })
+    : spawnSync(polecenie, argumenty, opcje);
+  if (wynik.error) console.error(`[FILTR] Nie udało się uruchomić ${polecenie}: ${wynik.error.message}`);
+  return wynik.status ?? 1;
 };
 
 const mapa = spawnSync('node', ['scripts/filtr/mapa.mjs', '--diff', baza, '--json'], { cwd: KATALOG_REPO, encoding: 'utf8' });
@@ -28,7 +34,11 @@ if (mapa.stdout) {
   }
 }
 let kod = krok(`Klasyfikacja zmiany względem ${baza}`, 'node', ['scripts/filtr/mapa.mjs', '--diff', baza]);
-kod = krok('Testy filtra (vitest.filtr.config.ts)', 'pnpm', ['exec', 'vitest', 'run', '--config', 'vitest.filtr.config.ts']) || kod;
+// Na Windows pnpm to skrypt pnpm.cmd: spawn bez powłoki go nie znajduje (ENOENT),
+// a pliku .cmd bez powłoki Node nie uruchamia (EINVAL, CVE-2024-27980). Argumenty
+// są stałe, bez spacji i znaków powłoki, więc sklejenie ich w jeden napis jest bezpieczne.
+const testy = ['exec', 'vitest', 'run', '--config', 'vitest.filtr.config.ts'];
+kod = krok('Testy filtra (vitest.filtr.config.ts)', 'pnpm', testy, { powloka: process.platform === 'win32' }) || kod;
 if (poziom === 'R1' || poziom === 'R2') {
   console.log(
     `\n[FILTR] Zmiana ${poziom}: przed PR wypełnij kartę zmiany prawnej (szablon PR), ` +
