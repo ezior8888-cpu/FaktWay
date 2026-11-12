@@ -34,11 +34,16 @@ function uruchomZAtrapaPnpm() {
   const zapis = join(katalog, 'wywolanie');
   writeFileSync(atrapa, naWindows ? `@echo %* > "${zapis}"\r\n` : `#!/bin/sh\necho "$@" > "${zapis}"\n`);
   chmodSync(atrapa, 0o755);
+  // Na Windows zmienna nazywa się zwykle `Path`: bez usunięcia starego klucza w env byłyby
+  // dwa (Path i PATH) i to, który wygra, zależałoby od Node, a nie od testu.
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const klucz of Object.keys(env)) if (/^path$/i.test(klucz)) delete env[klucz];
+  env.PATH = `${katalog}${delimiter}${process.env.PATH ?? ''}`;
   const wynik = spawnSync(process.execPath, ['scripts/filtr/lokalnie.mjs', 'HEAD'], {
     cwd: KATALOG_REPO,
     encoding: 'utf8',
     timeout: 50_000,
-    env: { ...process.env, PATH: `${katalog}${delimiter}${process.env.PATH ?? ''}` },
+    env,
   });
   return { ...wynik, pnpm: existsSync(zapis) ? readFileSync(zapis, 'utf8').trim() : null };
 }
@@ -57,6 +62,7 @@ async function wywolaniaNaPlatformie(platforma: NodeJS.Platform) {
   if (!opisPlatformy) throw new Error('process.platform bez deskryptora');
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   const blad = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const poprzedniKod = process.exitCode;
   Object.defineProperty(process, 'platform', { ...opisPlatformy, value: platforma });
   try {
     vi.resetModules();
@@ -67,7 +73,7 @@ async function wywolaniaNaPlatformie(platforma: NodeJS.Platform) {
     blad.mockRestore();
     vi.doUnmock('node:child_process');
     vi.resetModules();
-    process.exitCode = undefined;
+    process.exitCode = poprzedniKod;
   }
   return wywolania;
 }
