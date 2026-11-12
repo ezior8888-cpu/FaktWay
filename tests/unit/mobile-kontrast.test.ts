@@ -4,17 +4,36 @@
  * i tła, której używają komponenty, ma co najmniej 4.5:1 (WCAG AA) w obu
  * trybach; duży tytuł na gradiencie co najmniej 3:1 (duży tekst).
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
+
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-import {
-  CIEMNE,
-  JASNE,
-  KATEGORIE_CIEMNE,
-  KATEGORIE_JASNE,
-  TON_KATEGORII,
-  type Kolory,
-  type TonKategorii,
-} from '../../mobile/src/wyglad/paleta';
+import type { Kolory, TonKategorii } from '../../mobile/src/wyglad/paleta';
+
+/**
+ * Paleta leży w aplikacji (`mobile/`, własny workspace). Zwykły import kazałby
+ * Vitestowi strony wczytać `mobile/tsconfig.json` z `expo/tsconfig.base`, którego
+ * w CI strony nie ma (paczki aplikacji się tam nie instalują). Plik jest czystymi
+ * danymi bez importów, więc test go transpiluje i uruchamia w osobnym kontekście.
+ */
+function wczytajPalete() {
+  const zrodlo = readFileSync(join(__dirname, '../../mobile/src/wyglad/paleta.ts'), 'utf8');
+  const js = ts.transpileModule(zrodlo, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const modul: { exports: Record<string, unknown> } = { exports: {} };
+  runInNewContext(js, { module: modul, exports: modul.exports });
+  return modul.exports as {
+    JASNE: Kolory;
+    CIEMNE: Kolory;
+    KATEGORIE_JASNE: Record<Exclude<TonKategorii, 'szary'>, { tekst: string; tlo: string }>;
+    KATEGORIE_CIEMNE: Record<Exclude<TonKategorii, 'szary'>, { tekst: string; tlo: string }>;
+    TON_KATEGORII: Record<string, string>;
+  };
+}
+
+const { CIEMNE, JASNE, KATEGORIE_CIEMNE, KATEGORIE_JASNE, TON_KATEGORII } = wczytajPalete();
 
 function kanal(c: number): number {
   const s = c / 255;
