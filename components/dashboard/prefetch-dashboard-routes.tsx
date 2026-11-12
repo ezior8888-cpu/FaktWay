@@ -17,9 +17,12 @@ function scheduleIdle(cb: () => void): void {
 
 /**
  * Prefetch RSC celów dolnego paska (`getDashboardPrefetchHrefs`) w czasie
- * bezczynności — nie blokuje kliknięć; krótka kolejka równoległości ogranicza
- * burst na słabszych urządzeniach. Resztę menu pobiera najechanie albo fokus
- * (plan skalowania 3000, sesja 10).
+ * bezczynności — nie blokuje kliknięć. Resztę menu pobiera najechanie,
+ * dotknięcie albo fokus (plan skalowania 3000, sesja 10).
+ *
+ * Kolejka `CONCURRENCY` niczego nie ogranicza: `router.prefetch` w Next 16
+ * zwraca `void`, więc `finally` biegnie od razu i trasy idą naraz. Przy
+ * czterech trasach to bez znaczenia.
  */
 export function PrefetchDashboardRoutes() {
   const router = useRouter();

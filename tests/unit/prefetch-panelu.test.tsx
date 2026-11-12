@@ -13,8 +13,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * (`proxy.ts` pyta GoTrue) i render layoutu panelu na serwerze, a pełne
  * (`prefetch={true}`) renderuje do tego całą stronę z danymi. Po wejściu na
  * panel z góry idą więc tylko cztery cele dolnego paska (najczęstsze
- * czynności, te same na każdej szerokości). Resztę menu pobiera najechanie
- * albo fokus, a dolny pasek nie zamawia pełnego renderu.
+ * czynności, te same na każdej szerokości). Resztę menu (pasek boczny,
+ * zębatka, wiersze arkusza „Więcej”) pobiera najechanie, dotknięcie albo
+ * fokus, a dolny pasek nie zamawia pełnego renderu.
  *
  * Link Nexta podstawiamy atrapą, która odkłada `prefetch` w `data-prefetch`:
  * prawdziwy pobiera dopiero w buildzie produkcyjnym, gdy jest na ekranie.
@@ -120,9 +121,10 @@ function trasyZGory(): string[] {
   return [...new Set([...zRoutera, ...zLinkow])].sort();
 }
 
-function najedz(element: Element): void {
+/** Najechanie myszą albo dotknięcie: na dotyku `pointerenter` przychodzi razem z dotknięciem, przed kliknięciem. */
+function najedz(element: Element, pointerType: 'mouse' | 'touch' = 'mouse'): void {
   act(() => {
-    element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+    element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType }));
   });
 }
 
@@ -170,6 +172,27 @@ describe('Dolny pasek bez pełnego prefetchu', () => {
     expect(linki.filter((a) => a.dataset.prefetch === 'true').map((a) => a.getAttribute('href'))).toEqual([]);
     // Ciężkie strony (plan Finora §4) dalej bez prefetchu.
     expect(document.querySelector('a[href="/analizy/sprzedaz"]')?.getAttribute('data-prefetch')).toBe('false');
+  });
+
+  it('otwarcie arkusza „Więcej” niczego nie pobiera, wiersz pobiera się przy dotknięciu albo fokusie', async () => {
+    const host = await wejdzNaPanel(<BottomNav />);
+    const wiecej = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Więcej');
+    act(() => wiecej!.click());
+
+    const wiersz = (href: string) => document.querySelector(`[data-slot="sheet-content"] a[href="${href}"]`);
+    const wiersze = [...document.querySelectorAll<HTMLAnchorElement>('[data-slot="sheet-content"] a[data-prefetch]')];
+    expect(wiersze.map((a) => a.getAttribute('href'))).toEqual(expect.arrayContaining(['/contractors', '/settings']));
+    // Otwarcie arkusza to jeszcze nie wybór trasy: przy otwarciu nic z niego nie idzie.
+    expect(wiersze.filter((a) => a.dataset.prefetch !== 'false').map((a) => a.getAttribute('href'))).toEqual([]);
+    expect(trasyZGory()).toEqual([...Z_GORY].sort());
+
+    najedz(wiersz('/contractors')!, 'touch');
+    expect(router.prefetch).toHaveBeenCalledWith('/contractors');
+    act(() => (wiersz('/settings') as HTMLElement).focus());
+    expect(router.prefetch).toHaveBeenCalledWith('/settings');
+    // Ciężkie strony (plan Finora §4): także przy dotknięciu nic.
+    najedz(wiersz('/analizy/sprzedaz')!, 'touch');
+    expect(router.prefetch).not.toHaveBeenCalledWith('/analizy/sprzedaz');
   });
 });
 

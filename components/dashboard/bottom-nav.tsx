@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
 
@@ -57,8 +57,12 @@ const PLUS_SPRING = { type: "spring" as const, stiffness: 520, damping: 26 };
  * pełny `prefetch`, więc samo wejście na panel renderowało na serwerze trzy
  * strony z danymi (Faktury, Nowa, Miesiąc), a każde `router.refresh()` (np. po
  * akcji serwerowej) robiło to od nowa. Teraz trasy slotów pobiera z góry
- * `PrefetchDashboardRoutes`, tylko do stanu ładowania (`loading.tsx`): po
- * dotknięciu od razu widać szkielet, a dane strony przychodzą za nim.
+ * `PrefetchDashboardRoutes`, tylko do stanu ładowania (najbliższy
+ * `loading.tsx`, dla Faktur i Nowej wspólny szkielet panelu): po dotknięciu
+ * od razu widać szkielet, a dane strony przychodzą za nim. Wiersze arkusza
+ * „Więcej” (dawniej też pełny prefetch) pobierają się dopiero przy dotknięciu,
+ * najechaniu albo fokusie wiersza: otwarcie arkusza to jeszcze nie wybór
+ * trasy, a pobierałoby naraz każdą stronę z arkusza.
  */
 export function BottomNav() {
   const pathname = usePathname();
@@ -309,9 +313,11 @@ function MoreRow({
   label: string;
   icon: RemixiconComponentType;
   /**
-   * `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). Domyślnie
-   * prefetch Nexta: pozycja pobiera się dopiero przy otwartym arkuszu (link na
-   * ekranie) i tylko do stanu ładowania (plan skalowania 3000, sesja 10).
+   * `false` dla ciężkich stron (`/analizy/*`, plan Finora §4): bez pobrania
+   * także przy dotknięciu. Domyślnie wiersz pobiera trasę przy dotknięciu,
+   * najechaniu albo fokusie, nie przy otwarciu arkusza (plan skalowania 3000,
+   * sesja 10). Na dotyku `pointerenter` przychodzi razem z dotknięciem, przed
+   * kliknięciem.
    */
   prefetch?: false;
   active: boolean;
@@ -322,10 +328,19 @@ function MoreRow({
    */
   onChoose: (href: string) => void;
 }) {
+  const router = useRouter();
+  const pobierz =
+    prefetch === false
+      ? undefined
+      : () => {
+          void router.prefetch(href);
+        };
   return (
     <Link
       href={href}
-      prefetch={prefetch}
+      prefetch={false}
+      onPointerEnter={pobierz}
+      onFocus={pobierz}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         onChoose(href);
