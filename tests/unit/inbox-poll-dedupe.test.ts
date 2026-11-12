@@ -11,6 +11,9 @@ const db = vi.hoisted(() => ({
   inserts: [] as Row[][],
   raceRows: null as Row[] | null,
   sellerRows: [] as Row[],
+  /** Listy NIP-ów z kolejnych zapytań o znanych sprzedawców i numer zapytania, które pada. */
+  sellerLists: [] as string[][],
+  sellerFailOnCall: null as number | null,
   classify: vi.fn((docs: unknown, known: ReadonlySet<string>) => {
     void docs;
     void known;
@@ -43,6 +46,9 @@ vi.mock('@/lib/supabase/server', () => ({
       let rows: Row[] = [];
       let inList: string[] | null = null;
       let sellerList: string[] | null = null;
+      let afterId: string | null = null;
+      let orderBy: string | null = null;
+      let limit: number | null = null;
       const filters = new Map<string, unknown>();
       const q = {
         select: () => q,
@@ -52,7 +58,18 @@ vi.mock('@/lib/supabase/server', () => ({
         },
         not: () => q,
         neq: () => q,
-        limit: () => q,
+        gt: (col: string, value: string) => {
+          if (col === 'id') afterId = value;
+          return q;
+        },
+        order: (col: string) => {
+          orderBy = col;
+          return q;
+        },
+        limit: (n: number) => {
+          limit = n;
+          return q;
+        },
         in: (col: string, list: string[]) => {
           if (col === 'ksef_number') inList = list;
           if (col === 'seller_nip') sellerList = list;
@@ -81,8 +98,20 @@ vi.mock('@/lib/supabase/server', () => ({
               result = { data: inserted.map((r) => ({ id: r.id, ksef_number: r.ksef_number })), error: null };
             }
           } else if (sellerList) {
+            // Jak PostgREST na produkcji: gt/order/limit po `id`, a każda
+            // odpowiedź ucięta do 1000 wierszy bez błędu (`PGRST_DB_MAX_ROWS`).
             const lista = sellerList;
-            result = { data: db.sellerRows.filter((r) => lista.includes(r.seller_nip as string)), error: null };
+            const cursor = afterId;
+            db.sellerLists.push(lista);
+            if (db.sellerFailOnCall === db.sellerLists.length) {
+              result = { data: null, error: { message: 'canceling statement due to statement timeout' } };
+            } else {
+              let hits = db.sellerRows.filter((r) =>
+                lista.includes(r.seller_nip as string) && (cursor === null || String(r.id) > cursor));
+              if (orderBy === 'id') hits = [...hits].sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+              if (limit !== null) hits = hits.slice(0, limit);
+              result = { data: hits.slice(0, 1000), error: null };
+            }
           } else if (inList) {
             const numbers = inList;
             db.filterChunks.push(numbers);
@@ -153,6 +182,8 @@ beforeEach(() => {
   db.inserts = [];
   db.raceRows = null;
   db.sellerRows = [];
+  db.sellerLists = [];
+  db.sellerFailOnCall = null;
   db.classify.mockClear();
 });
 
@@ -262,5 +293,48 @@ describe('skrzynka KSeF: sito nieznanego sprzedawcy', () => {
 
     const known = db.classify.mock.calls[0]![1];
     expect([...known]).toEqual(['1111111111']);
+  });
+
+  // Sesja 29 planu skalowania: dawne `limit(1000)` na paczkę 100 NIP-ów
+  // oddawało tysiąc faktur jednego dużego dostawcy, a reszta paczki
+  // wyglądała na nieznaną.
+  const duzyDostawca = (count: number): Row[] =>
+    Array.from({ length: count }, (_, i) => ({ id: `a-${String(i).padStart(5, '0')}`, seller_nip: '1111111111' }));
+
+  it('duży dostawca (1200 dawnych faktur) nie zasłania mniejszego z tej samej paczki', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(1, '1111111111'), faktura(2, '2222222222')], hwm: null } as never);
+    db.sellerRows = [...duzyDostawca(1200), { id: 'b-00001', seller_nip: '2222222222' }];
+
+    await runInboxPollTenant(DATA, ctx);
+
+    const known = db.classify.mock.calls[0]![1];
+    expect([...known].sort()).toEqual(['1111111111', '2222222222']);
+    expect(db.sellerLists.every((list) => list.length <= KSEF_NUMBERS_PER_QUERY)).toBe(true);
+  });
+
+  it('nowy sprzedawca za tysiącem cudzych faktur zostaje nieznany — właśnie zapisana faktura się nie liczy', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(1, '1111111111'), faktura(2, '2222222222')], hwm: null } as never);
+    // Atrapa nadaje wstawionym fakturom id-0 i id-1; id-1 to właśnie zapisana faktura nowego sprzedawcy.
+    db.sellerRows = [...duzyDostawca(1200), { id: 'id-1', seller_nip: '2222222222' }];
+
+    await runInboxPollTenant(DATA, ctx);
+
+    const known = db.classify.mock.calls[0]![1];
+    expect([...known]).toEqual(['1111111111']);
+  });
+
+  it('błąd na drugiej stronie: znani z pierwszej zostają, reszta nieznana, karta powstaje, błąd w logu', async () => {
+    vi.mocked(queryReceivedInvoices).mockResolvedValue({ invoices: [faktura(1, '1111111111'), faktura(2, '2222222222')], hwm: null } as never);
+    db.sellerRows = [...duzyDostawca(1200), { id: 'b-00001', seller_nip: '2222222222' }];
+    db.sellerFailOnCall = 2;
+
+    await runInboxPollTenant(DATA, ctx);
+
+    expect(db.classify).toHaveBeenCalledTimes(1);
+    expect([...db.classify.mock.calls[0]![1]]).toEqual(['1111111111']);
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/znanych sprzedawców/),
+      expect.objectContaining({ tenantId: DATA.tenantId, error: expect.stringMatching(/statement timeout/) }),
+    );
   });
 });

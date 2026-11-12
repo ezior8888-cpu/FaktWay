@@ -3,6 +3,7 @@
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { formatJobSendError } from '@/lib/jobs/error-message';
 import { sendJobEvent } from '@/lib/jobs/enqueue';
+import { readAllById } from '@/lib/pagination/keyset';
 import {
   ActionAuthError,
   requireUserAndActiveOrg,
@@ -129,13 +130,33 @@ export async function bulkValidateContractorsAction(
   if (!auth.ok) return { success: false, error: auth.error };
   const { supabase, user, tenantId } = auth.ctx;
 
-  const { data: contractors } = await supabase
-    .from('contractors')
-    .select('id, nip')
-    .eq('tenant_id', tenantId)
-    .not('nip', 'is', null);
+  // Wszyscy kontrahenci z NIP-em, stronami po `id`: produkcja ucina każdą
+  // odpowiedź PostgREST do 1000 wierszy bez błędu (`PGRST_DB_MAX_ROWS`), więc
+  // jedno zapytanie oddawało pierwszy tysiąc, a reszty nikt nie sprawdzał
+  // (sesja 29 planu skalowania). Błąd odczytu to błąd, nie „brak kontrahentów”.
+  let contractors: Array<{ id: string; nip: string | null }>;
+  try {
+    contractors = await readAllById<{ id: string; nip: string | null }>(
+      'kontrahenci do walidacji zbiorczej',
+      (afterId, limit) => {
+        let query = supabase
+          .from('contractors')
+          .select('id, nip')
+          .eq('tenant_id', tenantId)
+          .not('nip', 'is', null);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      },
+    );
+  } catch (e) {
+    console.error('[validation] lista kontrahentów do walidacji zbiorczej', e instanceof Error ? e.message : 'błąd');
+    return {
+      success: false,
+      error: 'Nie udało się odczytać listy kontrahentów. Spróbuj ponownie za chwilę.',
+    };
+  }
 
-  if (!contractors || contractors.length === 0) {
+  if (contractors.length === 0) {
     return { success: false, error: 'Brak kontrahentów do walidacji' };
   }
 

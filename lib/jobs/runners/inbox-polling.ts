@@ -36,6 +36,8 @@ import {
   classifyInboxDocuments,
 } from '@/lib/flo/functions/expense-inbox';
 import { readInboxHwm, saveInboxHwm } from '@/lib/flo/functions/inbox-cursor';
+import { inListChunks } from '@/lib/pagination/in-list';
+import { forEachPageById } from '@/lib/pagination/keyset';
 import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -578,8 +580,17 @@ async function pollTenantInbox(
         // bez wykluczenia właśnie wstawionych faktur każdy sprzedawca z paczki
         // wyglądał na znanego i sito nie działało nigdy (recenzja ChatGPT nr 2).
         // Pytamy tylko o sprzedawców z paczki — dawne `limit(500)` z całej
-        // historii gubiło znanych u większych firm. Błąd = nikt nieznany:
-        // karta zapyta o więcej, zamiast przepuścić coś po cichu.
+        // historii gubiło znanych u większych firm.
+        //
+        // Paczkami po 100 NIP-ów i stronami po `id`: produkcja ucina każdą
+        // odpowiedź do 1000 wierszy bez błędu (`PGRST_DB_MAX_ROWS`), a dawne
+        // `limit(1000)` na paczkę oddawało tysiąc faktur jednego dużego
+        // dostawcy, więc reszta paczki wyglądała na nieznaną (sesja 29 planu
+        // skalowania). Sprzedawca rozpoznany raz wypada z listy, więc kolejne
+        // strony pytają już tylko o jeszcze nierozpoznanych.
+        //
+        // Błąd odczytu = znani tylko ci rozpoznani do tej pory, reszta jest
+        // nieznana: karta zapyta o więcej, zamiast przepuścić coś po cichu.
         const justInserted = new Set(insertedInvoices.map((row) => row.id as string));
         const batchSellers = [
           ...new Set(
@@ -589,19 +600,37 @@ async function pollTenantInbox(
           ),
         ];
         const known = new Set<string>();
-        for (let i = 0; i < batchSellers.length; i += KSEF_NUMBERS_PER_QUERY) {
-          const { data: seen, error: seenErr } = await supabase
-            .from('invoices')
-            .select('id, seller_nip')
-            .eq('tenant_id', tenantId)
-            .eq('direction', 'incoming')
-            .in('seller_nip', batchSellers.slice(i, i + KSEF_NUMBERS_PER_QUERY))
-            .limit(1000);
-          if (seenErr) break;
-          for (const row of seen ?? []) {
-            const nip = (row as { seller_nip: string | null }).seller_nip;
-            if (nip && !justInserted.has(row.id as string)) known.add(nip);
+        try {
+          for (const chunk of inListChunks(batchSellers)) {
+            const pending = new Set(chunk);
+            await forEachPageById<{ id: string; seller_nip: string | null }>(
+              'znani sprzedawcy skrzynki',
+              (afterId, limit) => {
+                if (pending.size === 0) return Promise.resolve({ data: [], error: null });
+                let query = supabase
+                  .from('invoices')
+                  .select('id, seller_nip')
+                  .eq('tenant_id', tenantId)
+                  .eq('direction', 'incoming')
+                  .in('seller_nip', [...pending]);
+                if (afterId) query = query.gt('id', afterId);
+                return query.order('id', { ascending: true }).limit(limit);
+              },
+              (rows) => {
+                for (const row of rows) {
+                  if (row.seller_nip && !justInserted.has(row.id)) {
+                    known.add(row.seller_nip);
+                    pending.delete(row.seller_nip);
+                  }
+                }
+              },
+            );
           }
+        } catch (e) {
+          logger.warn('Skrzynka: nie udało się sprawdzić wszystkich znanych sprzedawców — reszta liczy się jako nieznana', {
+            tenantId,
+            error: e instanceof Error ? e.message : String(e),
+          });
         }
 
         const byKsefNumber = new Map(
