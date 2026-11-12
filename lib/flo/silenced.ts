@@ -56,12 +56,7 @@ export function buildSilencedList(input: {
   const now = input.now ?? new Date();
 
   return input.rows
-    .filter((row) =>
-      isMutedAt(
-        { accepted: row.accepted, dismissed: row.dismissed, mutedUntil: row.muted_until },
-        now,
-      ),
-    )
+    .filter((row) => isListed(row, now))
     .map((row) => {
       const kind = kindOfKey(row.kind);
       const wholeKind = row.kind === kind;
@@ -84,4 +79,23 @@ export function buildSilencedList(input: {
       if (a.wholeKind !== b.wholeKind) return a.wholeKind ? -1 : 1;
       return a.label.localeCompare(b.label, 'pl');
     });
+}
+
+/**
+ * Klucze spraw, które lista pokaże, czyli tylko te, którym potrzebny jest
+ * tytuł karty. Pamięć decyzji trzyma też sprawy bez trwającej ciszy (jedno
+ * „nie”, cisza wygasła, karta przyjęta), a tych bywa tysiące.
+ */
+export function silencedSubjectKeys(rows: readonly DecisionRow[], now: Date): string[] {
+  return rows
+    .filter((row) => row.kind !== kindOfKey(row.kind) && isListed(row, now))
+    .map((row) => row.kind);
+}
+
+/** Czy wiersz trafia na listę: cisza trwa w chwili `now`. Jedna reguła dla listy i dla tytułów. */
+function isListed(row: DecisionRow, now: Date): boolean {
+  return isMutedAt(
+    { accepted: row.accepted, dismissed: row.dismissed, mutedUntil: row.muted_until },
+    now,
+  );
 }
