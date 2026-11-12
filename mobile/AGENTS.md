@@ -4,7 +4,8 @@ Natywna aplikacja FaktWay na iPhone'a i Androida. Obowiązuje główny
 [`AGENTS.md`](../AGENTS.md) (scalanie, protokół naprawy, PR) oraz:
 
 - plan i etapy: [`docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md`](../docs/koordynacja/PLAN-APLIKACJA-MOBILNA.md),
-- wygląd: [`docs/mobile/ZASADY-DESIGNU.md`](../docs/mobile/ZASADY-DESIGNU.md), czytasz w całości przed każdym ekranem.
+- wygląd: [`docs/mobile/ZASADY-DESIGNU.md`](../docs/mobile/ZASADY-DESIGNU.md), czytasz w całości przed każdym ekranem,
+- wzorce z Mobbin i lista poprawek: [`docs/mobile/WZORCE-MOBBIN.md`](../docs/mobile/WZORCE-MOBBIN.md), sekcja ekranu, nad którym pracujesz.
 
 ## Polecenia (w tym katalogu)
 
@@ -24,10 +25,10 @@ uruchamiasz po kolei, nigdy razem.
 | Katalog | Co |
 |---|---|
 | `src/app/` | trasy Expo Router: `_layout.tsx` to zakładki systemowe, każdy folder zakładki ma własny `Stack` |
-| `src/komponenty/` | wygląd FaktWay (plan D12): `Tekst`, `EkranListy`, `Sekcja` (karta), `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny`, `Dotyk` (animacja wciśnięcia), `Ikona` i `KoloIkony` (Remix), `Znacznik` (plakietka statusu), `NaglowekKwoty`, `Kafle`, `Wykres` (SVG: słupki, linia, pierścień), `Kubelki`, `Kalendarz`, `LogoFaktWay`, `PasekMarki`, pola formularza (`formularz.tsx`); ekrany składasz tylko z nich i z komponentów systemowych |
+| `src/komponenty/` | wygląd FaktWay (plan D12, od 12.11 z wykończeniem Copilota, D15): `Tekst`, `EkranListy`, `Sekcja` (karta), `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny`, `Dotyk` (animacja wciśnięcia), `Ikona` i `KoloIkony` (Remix), `Znacznik` (plakietka statusu), `NaglowekKwoty`, `Kafle`, `Wykres` (SVG: słupki, linia, pierścień), `Kubelki`, `Kalendarz`, `LogoFaktWay` (też białe na niebieskim), `PasekMarki`, pola formularza (`formularz.tsx`); od M4c (D15) `Karta` (18 pt, cień), `GradientNaglowka`, `KwotaZGroszami`, `Kategoria`; ekrany składasz tylko z nich i z komponentów systemowych |
 | `src/stan/` | stan wspólny dla ekranów na danych przykładowych: faktury, cykliczne, wydatki, przełączniki ustawień |
-| `src/wyglad/` | paleta strony (jasna i ciemna), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
-| `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit i IBM Plex Mono (OFL, `LICENCJE.txt`); ikony Remix zakładek i paska jako obrazy szablonowe |
+| `src/wyglad/` | paleta (`paleta.ts`, bez React Native, kontrast sprawdza `tests/unit/mobile-kontrast.test.ts`; `kolory.ts` wybiera jasną albo ciemną), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
+| `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit (OFL, `LICENCJE.txt`; IBM Plex Mono usunięty w M4c, D15); ikony Remix zakładek i paska jako obrazy szablonowe |
 | `scripts/ikony-remix.cjs` | generuje `src/komponenty/ikony-remix.ts` z pakietu `@remixicon/react` strony; nową ikonę dopisz tam |
 | `src/lib/` | formatowanie i logika bez interfejsu |
 | `src/dane-przykladowe/` | dane do etapów M2 do M4 (zmyślone firmy, NIP testowy) |
@@ -88,3 +89,17 @@ uruchamiasz po kolei, nigdy razem.
   przerywane linie rysuj w SVG (`Line strokeDasharray`).
 - Linki z innej zakładki nie przejdą, gdy na wierzchu jest arkusz (np. „Nowa
   faktura”): przy obchodzie zamknij arkusz albo uruchom aplikację od nowa.
+- Gradient pod nagłówkiem leży w przewijanej treści (`EkranListy gradient`);
+  duży tytuł na nim biały (`useOpcjeGradientu`), mały tytuł szczegółu przez
+  `useTytulNaGradiencie`. Na gradiencie stoi tylko tytuł, logo i pierwsza
+  karta: nagłówek sekcji wyżej niż koniec gradientu traci kontrast.
+- Cień karty (`boxShadow`) ucina `overflow: 'hidden'` na tym samym widoku,
+  dlatego `Karta` ma dwa widoki: zewnętrzny z cieniem, wewnętrzny przycina.
+- Port 8081 i iPhone 18 Pro bywają zajęte przez inną sesję. Drugi symulator
+  bez przebudowy: zainstaluj gotowy `FaktWay.app` z DerivedData, uruchom
+  Metro na innym porcie (`pnpm exec expo start --port 8082`) i aplikację z
+  argumentem `xcrun simctl launch <udid> pl.faktway.app -RCT_jsLocation localhost:8082`
+  (wpis w ustawieniach aplikacja nadpisuje przy starcie).
+- Zmiana rozmiaru tekstu w ustawieniach przy działającej aplikacji nie
+  przelicza układu kafli (`fontScale`): przed zrzutem z dużym tekstem uruchom
+  aplikację od nowa.

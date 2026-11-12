@@ -148,7 +148,7 @@ export default function EkranFaktur() {
         </Stack.Toolbar>
       ) : null}
 
-      <EkranListy keyboardShouldPersistTaps="handled">
+      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
           <>
             <NaglowekKwoty

@@ -8,11 +8,12 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Dotyk } from '@/komponenty/dotyk';
 import { Ikona, KoloIkony, type NazwaIkony } from '@/komponenty/ikona';
+import { useStylKarty } from '@/komponenty/karta';
 import { Tekst } from '@/komponenty/tekst';
 import { Znacznik } from '@/komponenty/znacznik';
 import { zmiana as tekstZmiany } from '@/lib/format';
 import { tonKoloru, useKolory, type Kolory } from '@/wyglad/kolory';
-import { MARGINES, OBWODKA, ODSTEP, PROMIEN, SKALA_PIONOWA } from '@/wyglad/odstepy';
+import { MARGINES, ODSTEP, SKALA_PIONOWA } from '@/wyglad/odstepy';
 
 export type Kafel = {
   klucz: string;
@@ -48,6 +49,7 @@ export function Kafle({ kafle }: { kafle: Kafel[] }) {
 
 function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
   const kolory = useKolory();
+  const stylKarty = useStylKarty();
   const zmianaKolor: keyof Kolory = k.zmiana === undefined || k.zmiana === 0 ? 'etykietaDrugorzedna' : k.zmiana > 0 ? 'sukces' : 'blad';
   const etykieta = [k.podpis, k.wartosc, k.zmiana !== undefined ? `${tekstZmiany(k.zmiana)} wobec poprzedniego okresu` : null, k.opis]
     .filter(Boolean)
@@ -59,7 +61,7 @@ function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
       skala={0.98}
       accessibilityRole={k.onPress ? 'button' : undefined}
       accessibilityLabel={etykieta}
-      style={[styles.kafel, szeroki && styles.kafelSzeroki, { backgroundColor: kolory.tloKomorki, borderColor: kolory.obwodka }]}>
+      style={[styles.kafel, szeroki && styles.kafelSzeroki, stylKarty]}>
       {k.ikona || k.zmiana !== undefined ? (
         <View style={styles.gora}>
           {k.ikona ? <KoloIkony nazwa={k.ikona} rozmiar={32} ton={k.ikonaKolor ? tonKoloru(k.ikonaKolor) : 'marka'} /> : <View />}
@@ -74,7 +76,7 @@ function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
         </View>
       ) : null}
       <View style={styles.liczby}>
-        {/* Liczby i kwoty w IBM Plex Mono, nazwy (np. „Biuro”, „Kowalczyk Studio”) w Outfit. */}
+        {/* Liczby i kwoty cyframi tabelarycznymi, nazwy (np. „Biuro”, „Kowalczyk Studio”) zwykłymi. */}
         <Tekst styl="title2" cyfry={/\d/.test(k.wartosc)} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {k.wartosc}
         </Tekst>
@@ -103,8 +105,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: ODSTEP.m - 2,
     gap: ODSTEP.s,
-    borderRadius: PROMIEN,
-    borderWidth: OBWODKA,
   },
   kafelSzeroki: { flexBasis: '100%' },
   gora: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

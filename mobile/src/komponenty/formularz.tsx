@@ -15,7 +15,7 @@ import { Ikona } from '@/komponenty/ikona';
 import { Tekst } from '@/komponenty/tekst';
 import { dataPelna } from '@/lib/format';
 import { useKolory } from '@/wyglad/kolory';
-import { CEL_DOTYKU, MARGINES, OBWODKA, ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { CEL_DOTYKU, MARGINES, OBWODKA, ODSTEP, PROMIEN_POLA } from '@/wyglad/odstepy';
 import { stylTekstu } from '@/wyglad/typografia';
 
 const KLAWIATURY_LICZB: KeyboardTypeOptions[] = ['number-pad', 'decimal-pad', 'numeric', 'phone-pad', 'numbers-and-punctuation'];
@@ -31,7 +31,7 @@ type PoleTekstoweProps = {
   wielowierszowe?: boolean;
   /** Hasło: znaki ukryte, podpowiedź pęku kluczy iOS. */
   tajne?: boolean;
-  /** Numer (faktury, konta) w IBM Plex Mono także przy zwykłej klawiaturze. */
+  /** Numer (faktury, konta) cyframi tabelarycznymi także przy zwykłej klawiaturze. */
   cyfry?: boolean;
 };
 
@@ -265,7 +265,7 @@ function doIso(d: Date): string {
 }
 
 /**
- * Data: pole z datą w IBM Plex Mono; dotknięcie rozwija pod nim systemowy
+ * Data: pole z datą cyframi tabelarycznymi; dotknięcie rozwija pod nim systemowy
  * kalendarz (na Androidzie systemowe okno), wybór dnia go zwija.
  */
 export function PoleDaty({ etykieta, wartosc, onZmiana, najwczesniej }: PoleDatyProps) {
@@ -311,7 +311,7 @@ PoleDaty.pole = true;
 
 const styles = StyleSheet.create({
   pole: { paddingHorizontal: MARGINES, paddingVertical: ODSTEP.xs, gap: ODSTEP.xs - 2 },
-  ramka: { minHeight: CEL_DOTYKU, borderWidth: OBWODKA, borderRadius: PROMIEN, justifyContent: 'center' },
+  ramka: { minHeight: CEL_DOTYKU, borderWidth: OBWODKA, borderRadius: PROMIEN_POLA, justifyContent: 'center' },
   ramkaWiersz: { flexDirection: 'row', alignItems: 'center', gap: ODSTEP.xs, paddingHorizontal: ODSTEP.s },
   wejscie: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.s - 2 },
   wejscieWielo: { minHeight: CEL_DOTYKU * 2, textAlignVertical: 'top' },

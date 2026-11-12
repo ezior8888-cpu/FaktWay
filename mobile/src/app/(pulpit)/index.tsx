@@ -49,7 +49,7 @@ export default function EkranPulpitu() {
   return (
     <View style={[styles.ekran, { backgroundColor: kolory.tloGrupowane }]}>
       <PasekMarki inicjaly={inicjaly} etykietaAwatara={`${wlasciciel}: firma i ustawienia`} onAwatar={() => router.push('/wiecej')} />
-      <EkranListy>
+      <EkranListy gradient="pod-paskiem">
         <NaglowekKwoty
           podpis={zysk >= 0 ? 'Zysk w listopadzie' : 'Strata w listopadzie'}
           wartosc={kwota(zysk)}

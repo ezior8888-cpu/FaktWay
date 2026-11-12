@@ -1,8 +1,9 @@
 /**
  * Główna akcja ekranu w treści (D7: „Nowa faktura” to szeroki bloczek pod
- * sumą). Wygląd przycisku ze strony (`components/ui/button.tsx`): pełne tło
- * w kolorze marki albo obwódka, ostre rogi, średnia waga napisu. Na telefonie
- * wyższy (cel dotyku) i z animacją wciśnięcia na sprężynie.
+ * sumą). Wykończenie jak w Copilocie (D15): rogi 16 pt, pełne tło w kolorze
+ * marki; wariant drugorzędny jest tonalny (jasnoniebieskie tło, niebieski
+ * napis), np. cofnięcie akcji albo druga droga. Na telefonie wyższy (cel
+ * dotyku) i z animacją wciśnięcia na sprężynie.
  */
 import { StyleSheet, View } from 'react-native';
 
@@ -10,12 +11,12 @@ import { Dotyk } from '@/komponenty/dotyk';
 import { Ikona, type NazwaIkony } from '@/komponenty/ikona';
 import { Tekst } from '@/komponenty/tekst';
 import { useKolory } from '@/wyglad/kolory';
-import { CEL_DOTYKU, OBWODKA, ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { CEL_DOTYKU, ODSTEP, PROMIEN_PRZYCISKU } from '@/wyglad/odstepy';
 
 export type PrzyciskGlownyProps = {
   tytul: string;
   ikona?: NazwaIkony;
-  /** `glowny`: tło marki; `drugorzedny`: obwódka (wariant `outline` strony). */
+  /** `glowny`: tło marki; `drugorzedny`: tonalny, jasnoniebieskie tło i niebieski napis. */
   wariant?: 'glowny' | 'drugorzedny';
   onPress: () => void;
 };
@@ -23,7 +24,7 @@ export type PrzyciskGlownyProps = {
 export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', onPress }: PrzyciskGlownyProps) {
   const kolory = useKolory();
   const glowny = wariant === 'glowny';
-  const kolorTresci = glowny ? kolory.naAkcencie : kolory.etykieta;
+  const kolorTresci = glowny ? kolory.naAkcencie : kolory.akcentNaTle;
   return (
     <Dotyk
       onPress={onPress}
@@ -32,12 +33,10 @@ export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', onPress }: Pr
       accessibilityLabel={tytul}
       style={[
         styles.przycisk,
-        glowny
-          ? { backgroundColor: kolory.akcentWypelnienie, borderColor: kolory.akcentWypelnienie }
-          : { backgroundColor: kolory.tloKomorki, borderColor: kolory.obwodka },
+        { backgroundColor: glowny ? kolory.akcentWypelnienie : kolory.akcentTlo },
       ]}>
       <View style={styles.tresc}>
-        {ikona ? <Ikona nazwa={ikona} rozmiar={18} kolor={glowny ? kolorTresci : kolory.akcent} /> : null}
+        {ikona ? <Ikona nazwa={ikona} rozmiar={18} kolor={kolorTresci} /> : null}
         <Tekst styl="callout" waga="semibold" style={{ color: kolorTresci }} numberOfLines={2}>
           {tytul}
         </Tekst>
@@ -49,8 +48,7 @@ export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', onPress }: Pr
 const styles = StyleSheet.create({
   przycisk: {
     minHeight: CEL_DOTYKU + ODSTEP.xxs,
-    borderRadius: PROMIEN,
-    borderWidth: OBWODKA,
+    borderRadius: PROMIEN_PRZYCISKU,
     paddingHorizontal: ODSTEP.m,
     paddingVertical: ODSTEP.s - 2,
     justifyContent: 'center',

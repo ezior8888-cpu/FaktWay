@@ -40,7 +40,7 @@ export default function EkranKontrahenta() {
       <Stack.Toolbar placement="right">
         <Stack.Toolbar.Button onPress={() => setEdycja(!edycja)}>{edycja ? 'Gotowe' : 'Edytuj'}</Stack.Toolbar.Button>
       </Stack.Toolbar>
-      <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <EkranListy gradient keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <NaglowekKwoty
           podpis={nazwa}
           podpisWyrozniony

@@ -69,13 +69,14 @@ export default function EkranKosztow() {
     <Wiersz
       key={k.id}
       tytul={k.dostawca}
-      podtytul={`${k.kategoria} · ${NAZWA_ZRODLA[k.zrodlo]} · ${dataKrotka(k.data)}`}
+      kategoria={k.kategoria}
+      podtytul={`${NAZWA_ZRODLA[k.zrodlo]} · ${dataKrotka(k.data)}`}
       wartosc={kwota(k.brutto)}
       wartoscKolor="etykieta"
       wartoscPodpis={k.doOpisania ? 'Do opisania' : 'Opisany'}
       wartoscPodpisKolor={k.doOpisania ? 'ostrzezenie' : 'sukces'}
       onPress={() => router.push({ pathname: '/koszty/[id]', params: { id: k.id } })}
-      etykietaDostepnosci={`${k.dostawca}, ${kwota(k.brutto)}, ${k.doOpisania ? 'do opisania' : 'opisany'}`}
+      etykietaDostepnosci={`${k.dostawca}, ${k.kategoria}, ${kwota(k.brutto)}, ${k.doOpisania ? 'do opisania' : 'opisany'}`}
     />
   );
 
@@ -111,7 +112,7 @@ export default function EkranKosztow() {
         </Stack.Toolbar>
       ) : null}
 
-      <EkranListy keyboardShouldPersistTaps="handled">
+      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
           <>
             <NaglowekKwoty

@@ -10,8 +10,8 @@ export default function UkladPulpitu() {
   const opcje = useOpcjeStosu();
   return (
     <Stack screenOptions={opcje}>
-      {/* Pulpit ma własny pasek z logo FaktWay (komponenty/pasek-marki); tytuł zostaje dla przycisku wstecz. */}
-      <Stack.Screen name="index" options={{ title: 'Pulpit', headerShown: false }} />
+      {/* Pulpit ma własny pasek z logo FaktWay na gradiencie (komponenty/pasek-marki), więc jasny pasek stanu; tytuł zostaje dla przycisku wstecz. */}
+      <Stack.Screen name="index" options={{ title: 'Pulpit', headerShown: false, statusBarStyle: 'light' }} />
       <Stack.Screen name="przeplywy" options={{ title: 'Przepływy' }} />
       <Stack.Screen name="analizy" options={{ title: 'Analizy' }} />
     </Stack>

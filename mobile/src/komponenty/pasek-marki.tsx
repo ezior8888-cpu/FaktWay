@@ -1,10 +1,15 @@
 /**
  * Górny pasek Pulpitu: logo FaktWay po lewej i okrągły awatar firmy po
  * prawej, jak nagłówek menu bocznego strony (`app-sidebar.tsx`: logo u góry)
- * i awatar użytkownika. Stoi nad przewijaną treścią, pod paskiem stanu.
+ * i awatar użytkownika. Stoi nad przewijaną treścią, pod paskiem stanu, na
+ * niebieskim gradiencie (plan aplikacji, D15): logo w wersji białej, awatar
+ * biały na 20% bieli. Gradient przechodzi płynnie w ten pod treścią
+ * (`EkranListy gradient="pod-paskiem"`), a przewijana treść chowa się pod
+ * paskiem.
  */
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { LogoFaktWay } from '@/komponenty/logo';
 import { Tekst } from '@/komponenty/tekst';
@@ -17,11 +22,23 @@ export function PasekMarki({ inicjaly, etykietaAwatara, onAwatar }: Props) {
   const kolory = useKolory();
   const { top } = useSafeAreaInsets();
   return (
-    <View style={[styles.pasek, { paddingTop: top + ODSTEP.xs, backgroundColor: kolory.tloGrupowane }]}>
-      <LogoFaktWay wysokosc={24} />
+    <View style={[styles.pasek, { paddingTop: top + ODSTEP.xs }]}>
+      <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Svg width="100%" height="100%">
+          <Defs>
+            <LinearGradient id="gradient-paska" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset={0} stopColor={kolory.gradientGora} />
+              <Stop offset={1} stopColor={kolory.gradientSrodek} />
+            </LinearGradient>
+          </Defs>
+          <Rect x={0} y={0} width="100%" height="100%" fill="url(#gradient-paska)" />
+        </Svg>
+      </View>
+      <LogoFaktWay wysokosc={24} biale />
       <Pressable onPress={onAwatar} accessibilityRole="button" accessibilityLabel={etykietaAwatara} hitSlop={ODSTEP.xs} style={styles.dotyk}>
-        <View style={[styles.awatar, { backgroundColor: kolory.akcentTlo }]}>
-          <Tekst styl="footnote" waga="semibold" kolor="akcentNaTle">
+        <View style={[styles.awatar, { backgroundColor: kolory.naGradiencieTlo }]}>
+          {/* Kółko ma stałą średnicę: inicjały rosną z dużym tekstem tylko trochę, pełną nazwę czyta etykieta. */}
+          <Tekst styl="footnote" waga="semibold" kolor="naGradiencie" maxFontSizeMultiplier={1.3}>
             {inicjaly}
           </Tekst>
         </View>

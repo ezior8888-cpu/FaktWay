@@ -51,7 +51,7 @@ export default function EkranKsiegowosci() {
         </Stack.Toolbar.Menu>
       </Stack.Toolbar>
 
-      <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <EkranListy gradient keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <NaglowekKwoty
           podpis={`Rozliczenie za ${miesiac}`}
           wartosc={kwota(doZaplaty)}
