@@ -1,3 +1,17 @@
+# Końce linii: LF w repo i w kopii roboczej, na każdym systemie. Git for Windows
+# ma domyślnie core.autocrlf=true i bez tej reguły zapisuje pliki z CRLF. Wtedy
+# pada hak przed pushem (Vitest nie wczytuje skryptów z shebangiem) i testy, które
+# porównują tekst z "\n". text=auto: pliki binarne Git rozpoznaje sam i ich nie zmienia.
+* text=auto eol=lf
+
+# Pliki zapisane w repo z CRLF (urzędowe XSD) albo z mieszanymi końcami linii.
+# -text: żadnej zamiany końców linii ani przy zapisie, ani przy checkoucie, więc
+# ich bajty zostają takie, jak są w repo.
+lib/exports/schemas/jpk-ewp4/KodyKrajow_v10-0E.xsd -text
+lib/exports/schemas/jpk-ewp4/schemat.xsd -text
+lib/exports/schemas/jpk-pkpir3/schemat.xsd -text
+lib/xml/schemas/fa3/KodyKrajow_v10-0E.xsd -text
+mobile/assets/fonts/LICENCJE.txt -text
 
 # The reviewed CodeQL finding fingerprints these exact source bytes.
 lib/auth/breach-check.ts text eol=lf
