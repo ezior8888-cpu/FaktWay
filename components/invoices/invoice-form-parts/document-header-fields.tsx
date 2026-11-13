@@ -1,12 +1,11 @@
 import type { UseFormReturn } from 'react-hook-form';
-import { AlertCircle } from 'lucide-react';
 
 import { DocumentHeaderRow } from '@/components/invoices/finora/invoice-document';
 import { Input } from '@/components/ui/input';
 import { dueDateFrom } from '@/lib/format/warsaw-date';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 
-import { errorTextClass } from './constants';
+import { FieldErrorText, fieldErrorProps } from './field-error-text';
 
 /** Numer i daty w nagłówku dokumentu (obok sprzedawcy). */
 export function DocumentHeaderFields({ form }: { form: UseFormReturn<InvoiceFormValues> }) {
@@ -31,16 +30,16 @@ export function DocumentHeaderFields({ form }: { form: UseFormReturn<InvoiceForm
         htmlFor="internalNumber"
         error={
           form.formState.errors.internalNumber ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
+            <FieldErrorText fieldId="internalNumber">
               {form.formState.errors.internalNumber.message}
-            </p>
+            </FieldErrorText>
           ) : null
         }
       >
         <Input
           id="internalNumber"
           placeholder="FV/2026/04/001"
+          {...fieldErrorProps('internalNumber', !!form.formState.errors.internalNumber)}
           {...form.register('internalNumber')}
         />
       </DocumentHeaderRow>
@@ -53,14 +52,18 @@ export function DocumentHeaderFields({ form }: { form: UseFormReturn<InvoiceForm
         hint="Opcjonalnie, gdy jest inna od daty wystawienia (pole P_6 w KSeF); identyczna data nie jest duplikowana w XML."
         error={
           form.formState.errors.saleDate ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
+            <FieldErrorText fieldId="sale-date">
               {form.formState.errors.saleDate.message}
-            </p>
+            </FieldErrorText>
           ) : null
         }
       >
-        <Input id="sale-date" type="date" {...form.register('saleDate')} />
+        <Input
+          id="sale-date"
+          type="date"
+          {...fieldErrorProps('sale-date', !!form.formState.errors.saleDate)}
+          {...form.register('saleDate')}
+        />
       </DocumentHeaderRow>
       <DocumentHeaderRow
         label="Termin płatności"

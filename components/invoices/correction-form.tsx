@@ -741,9 +741,15 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="kor-numer" className={labelClass}>Numer korekty</Label>
-            <Input id="kor-numer" placeholder="KOR/2026/04/001" {...form.register('internalNumber')} />
+            <Input
+              id="kor-numer"
+              placeholder="KOR/2026/04/001"
+              aria-invalid={form.formState.errors.internalNumber ? true : undefined}
+              aria-describedby={form.formState.errors.internalNumber ? 'kor-numer-error' : undefined}
+              {...form.register('internalNumber')}
+            />
             {form.formState.errors.internalNumber && (
-              <p className="mt-1 text-xs text-red-600">
+              <p id="kor-numer-error" role="alert" className="mt-1 text-xs text-red-600">
                 {form.formState.errors.internalNumber.message}
               </p>
             )}
@@ -764,7 +770,11 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
               handleCorrectionTypeChange(v as CorrectionFormParsed['correctionType'])
             }}
           >
-            <SelectTrigger id="kor-typ">
+            <SelectTrigger
+              id="kor-typ"
+              aria-invalid={form.formState.errors.correctionType ? true : undefined}
+              aria-describedby={form.formState.errors.correctionType ? 'kor-typ-error' : undefined}
+            >
               <SelectValue placeholder="Typ" />
             </SelectTrigger>
             <SelectContent>
@@ -776,7 +786,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
             </SelectContent>
           </Select>
           {form.formState.errors.correctionType && (
-            <p className="mt-1 text-xs text-red-600">
+            <p id="kor-typ-error" role="alert" className="mt-1 text-xs text-red-600">
               {form.formState.errors.correctionType.message}
             </p>
           )}
@@ -796,7 +806,11 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
               )
             }}
           >
-            <SelectTrigger id="kor-typ-ksef">
+            <SelectTrigger
+              id="kor-typ-ksef"
+              aria-invalid={form.formState.errors.typKorekty ? true : undefined}
+              aria-describedby={form.formState.errors.typKorekty ? 'kor-typ-ksef-error' : undefined}
+            >
               <SelectValue placeholder="Typ" />
             </SelectTrigger>
             <SelectContent>
@@ -808,7 +822,7 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
             </SelectContent>
           </Select>
           {form.formState.errors.typKorekty ? (
-            <p className="mt-1 text-xs text-red-600">
+            <p id="kor-typ-ksef-error" role="alert" className="mt-1 text-xs text-red-600">
               {form.formState.errors.typKorekty.message}
             </p>
           ) : null}
@@ -819,12 +833,14 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
           <Textarea
             id="kor-przyczyna"
             rows={2}
+            aria-invalid={form.formState.errors.correctionReason ? true : undefined}
+              aria-describedby={form.formState.errors.correctionReason ? 'kor-przyczyna-error' : undefined}
             placeholder="Np. błąd w nazwie nabywcy, zwrot towaru, rabat post-fakturowy…"
             {...form.register('correctionReason')}
           />
           {form.formState.errors.correctionReason && (
-            <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-              <AlertCircle className="h-3 w-3" />
+            <p id="kor-przyczyna-error" role="alert" className="mt-1 flex items-center gap-1 text-xs text-red-600">
+              <AlertCircle aria-hidden="true" className="h-3 w-3" />
               {form.formState.errors.correctionReason.message}
             </p>
           )}
@@ -875,9 +891,15 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
           </div>
           <div>
             <Label htmlFor="kor-termin" className={labelClass}>Termin płatności</Label>
-            <Input id="kor-termin" type="date" {...form.register('paymentDueDate')} />
+            <Input
+              id="kor-termin"
+              type="date"
+              aria-invalid={form.formState.errors.paymentDueDate ? true : undefined}
+              aria-describedby={form.formState.errors.paymentDueDate ? 'kor-termin-error' : undefined}
+              {...form.register('paymentDueDate')}
+            />
             {form.formState.errors.paymentDueDate && (
-              <p className="mt-1 text-xs text-red-600">
+              <p id="kor-termin-error" role="alert" className="mt-1 text-xs text-red-600">
                 {form.formState.errors.paymentDueDate.message}
               </p>
             )}
@@ -886,11 +908,13 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
             <Label htmlFor="kor-rachunek" className={labelClass}>Numer rachunku (dla przelewu, 26 cyfr)</Label>
             <Input
               id="kor-rachunek"
+              aria-invalid={form.formState.errors.bankAccount ? true : undefined}
+              aria-describedby={form.formState.errors.bankAccount ? 'kor-rachunek-error' : undefined}
               {...form.register('bankAccount')}
               placeholder="Opcjonalnie — tylko cyfry bez spacji"
             />
             {form.formState.errors.bankAccount && (
-              <p className="mt-1 text-xs text-red-600">
+              <p id="kor-rachunek-error" role="alert" className="mt-1 text-xs text-red-600">
                 {String(form.formState.errors.bankAccount.message)}
               </p>
             )}
@@ -1098,7 +1122,7 @@ function CorrectionLinesTable(props: {
 
       {(name === 'linesBefore' && form.formState.errors.linesBefore) ||
       (name === 'linesAfter' && form.formState.errors.linesAfter) ?
-        <p className="text-xs text-red-600">
+        <p id={`${name}-error`} role="alert" className="text-xs text-red-600">
           {String(
             (name === 'linesBefore' ? form.formState.errors.linesBefore : form.formState.errors.linesAfter)?.message ??
               'Sprawdź pozycje',
@@ -1247,15 +1271,22 @@ function AmountChangeSection({
 
       <div>
         <Label htmlFor="amount-change-description" className={labelClass}>Opis pozycji korekty</Label>
-        <Input id="amount-change-description" {...form.register('amountChange.description')} />
+        <Input
+          id="amount-change-description"
+          aria-invalid={form.formState.errors.amountChange?.description ? true : undefined}
+          aria-describedby={
+            form.formState.errors.amountChange?.description ? 'amount-change-description-error' : undefined
+          }
+          {...form.register('amountChange.description')}
+        />
         {form.formState.errors.amountChange?.description ? (
-          <p className="mt-1 text-xs text-red-600">
+          <p id="amount-change-description-error" role="alert" className="mt-1 text-xs text-red-600">
             {form.formState.errors.amountChange.description.message}
           </p>
         ) : null}
       </div>
       {form.formState.errors.amountChange?.message ? (
-        <p className="text-xs text-red-600">{form.formState.errors.amountChange.message}</p>
+        <p role="alert" className="text-xs text-red-600">{form.formState.errors.amountChange.message}</p>
       ) : null}
     </section>
   );
