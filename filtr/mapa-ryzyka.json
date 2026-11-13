@@ -234,6 +234,10 @@
         "app/actions/noty.ts",
         "lib/noty/**",
         "lib/api/v1/invoice-create.ts",
+        "lib/invoices/{issue-regular,send-draft}.ts",
+        "lib/api/mobile/{faktury,schematy}.ts",
+        "app/api/mobile/v1/faktury/**",
+        "supabase/migrations/00201_*.sql",
         "app/api/v1/invoices/route.ts",
         "app/api/noty/**",
         "app/actions/proformy.ts",
@@ -758,7 +762,7 @@
         "lib/audit/**",
         "lib/feature-flags/**",
         "lib/api/v1/{auth,pagination,scopes,token}.ts",
-        "lib/api/mobile/{auth,sesja}.ts",
+        "lib/api/mobile/{auth,sesja,kontrakt}.ts",
         "lib/webhooks/{secret-box,signature,types}.ts"
       ]
     },

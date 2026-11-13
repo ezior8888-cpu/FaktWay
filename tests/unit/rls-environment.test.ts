@@ -153,6 +153,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-mobile-api.test.ts',
       // Plan aplikacji mobilnej, M6b (D16, bez migracji): logowanie hasłem przez API przy captchy w GoTrue.
       'tests/rls-mobile-logowanie.test.ts',
+      // 00201 (plan aplikacji mobilnej, M8): faktura z telefonu i klucze idempotencji.
+      'tests/rls-mobile-faktury.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

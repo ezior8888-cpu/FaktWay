@@ -5,13 +5,23 @@
  *
  * BEZ IMPORTÓW: ten plik czyta też aplikacja w `mobile/` (od M7, przez Metro),
  * więc nie może ciągnąć kodu serwera, Supabase ani Nexta. Pilnuje tego
- * `tests/unit/mobile-api-kontrakt.test.ts`. Schematy Zod treści żądań (od M8)
- * potrzebują importu `zod`, więc dostaną osobny plik obok; jak trafi do
- * aplikacji, rozstrzyga M8.
+ * `tests/unit/mobile-api-kontrakt.test.ts`. Schematy Zod treści żądań leżą
+ * obok, w `lib/api/mobile/schematy.ts` (import `zod`), i do aplikacji nie
+ * trafiają (rozstrzygnięcie M8): telefon dostaje stąd typy treści, a serwer
+ * sprawdza każde żądanie tym samym schematem formularza co strona i odsyła
+ * błąd z polem (`invoice_invalid`). Zgodność typów tu ze schematem pilnuje
+ * `tests/unit/mobile-api-faktury.test.ts`.
  */
 
 /** Firma, w której telefon działa, przy trasach z danymi firmy (jak ciasteczko aktywnej firmy na stronie, `ACTIVE_ORG_COOKIE`). */
 export const MOBILE_ACTIVE_ORG_HEADER = 'X-Active-Org';
+
+/**
+ * Zapis z telefonu (M8, `POST /faktury`): UUID wylosowany raz na wypełnienie
+ * formularza. Ponowienie z tym samym kluczem i tą samą treścią oddaje fakturę
+ * z pierwszego zapisu (bez drugiej faktury i drugiej wysyłki).
+ */
+export const MOBILE_IDEMPOTENCY_HEADER = 'Idempotency-Key';
 
 export const MOBILE_API_ERROR_CODES = [
   /** 401: brak nagłówka `Authorization: Bearer`. */
@@ -28,6 +38,18 @@ export const MOBILE_API_ERROR_CODES = [
   'missing_org',
   /** 403: `X-Active-Org` wskazuje firmę bez aktywnego członkostwa. Telefon odświeża listę firm. */
   'no_active_org',
+  /** 400: zapis bez nagłówka `Idempotency-Key` albo klucz nie jest UUID (M8). */
+  'missing_idempotency_key',
+  /** 409: ten klucz idempotencji był już użyty z inną treścią. Telefon losuje nowy klucz dopiero dla nowej faktury. */
+  'idempotency_conflict',
+  /** 422: dane faktury nie przeszły schematu formularza strony albo zasad wystawienia; `message` mówi co poprawić, `field` które pole. */
+  'invoice_invalid',
+  /** 404: faktury nie ma w tej firmie (albo nie należy do niej). */
+  'not_found',
+  /** 409: wysłać można tylko szkic; faktura jest w innym stanie (np. odrzucona: popraw ją na faktway.pl). */
+  'not_draft',
+  /** 422: kolejka KSeF odmówiła wysyłki szkicu (brak certyfikatu, pauza, 2FA); szkic zostaje, `message` mówi co zrobić. */
+  'ksef_send_refused',
   /** 429, z nagłówkiem `Retry-After`. */
   'rate_limited',
   /** 503, z nagłówkiem `Retry-After`. */
@@ -54,7 +76,92 @@ export type MobileApiErrorCode = (typeof MOBILE_API_ERROR_CODES)[number];
 
 /** Każda odmowa: stały kod po angielsku, po którym telefon wybiera swój tekst, i opis po polsku. */
 export interface MobileApiError {
-  error: { code: MobileApiErrorCode; message: string };
+  /** `field` tylko przy `invoice_invalid`: ścieżka pola formularza, np. `buyerName`, `lines.0.name`. */
+  error: { code: MobileApiErrorCode; message: string; field?: string };
+}
+
+// ─── Faktury (M8): wystawienie i wysyłka do KSeF ─────────────────────
+
+/** Stawki zwykłej faktury z telefonu (jak `vatRateEnum` strony, bez „np II”, które wymaga nabywcy z UE). */
+export type StawkaVatTelefonu = '23' | '8' | '5' | '0' | 'zw' | 'oo' | 'np';
+
+/** Pozycja jak w formularzu strony (`lineItemSchema`): ilość i cena netto w złotych, do 4 miejsc po przecinku. */
+export interface PozycjaFakturyTelefonu {
+  name: string;
+  unit: string;
+  quantity: number;
+  unitPriceNet: number;
+  vatRate: StawkaVatTelefonu;
+}
+
+/**
+ * Zwykła faktura VAT w złotych z telefonu: te same pola co formularz strony
+ * (`InvoiceFormValues`), bez faktury cyklicznej, proformy, paragonu i nabywcy
+ * z UE (te wystawia się na faktway.pl). Osoba prywatna: `buyerIsConsumer`
+ * i pusty `buyerNip`; serwer wpisuje „bez numeru identyfikacyjnego”.
+ */
+export interface FakturaTelefonu {
+  internalNumber: string;
+  /** RRRR-MM-DD; przy wysyłce do KSeF tylko dziś (czas polski). */
+  issueDate: string;
+  /** RRRR-MM-DD albo pusty tekst (= data wystawienia). */
+  saleDate: string;
+  buyerNip: string;
+  buyerName: string;
+  buyerAddressLine1: string;
+  buyerAddressLine2: string;
+  buyerEmail: string;
+  buyerIsConsumer: boolean;
+  lines: PozycjaFakturyTelefonu[];
+  paymentMethod: 'transfer' | 'cash' | 'card' | 'other';
+  paymentDueDate: string;
+  bankAccount: string;
+  notes: string;
+  splitPayment: boolean;
+}
+
+/** `POST /api/mobile/v1/faktury` (z nagłówkiem `Idempotency-Key`): `wyslij` to „Wyślij do KSeF”, inaczej szkic. */
+export interface WystawienieZadanie {
+  wyslij: boolean;
+  faktura: FakturaTelefonu;
+}
+
+/** Faktura po zapisie: `ksefStatus` jak kolumna `invoices.ksef_status` (`draft`, `queued`, `accepted` …). */
+export interface FakturaZapisana {
+  id: string;
+  numer: string;
+  ksefStatus: string;
+}
+
+/**
+ * `POST /api/mobile/v1/faktury`: 201 nowa faktura, 200 powtórzenie (`powtorzenie: true`,
+ * ten sam klucz i ta sama treść). `wysylka` tylko przy `wyslij: true`: `zlecona` to
+ * faktura w kolejce KSeF; odmowa kolejki zostawia szkic i daje `blad` (co zrobić).
+ */
+export interface WystawienieOdpowiedz {
+  faktura: FakturaZapisana;
+  powtorzenie: boolean;
+  wysylka: { zlecona: boolean; blad: string | null } | null;
+}
+
+/**
+ * `POST /api/mobile/v1/faktury/{id}/wysylka`: szkic do KSeF. 200 także wtedy, gdy
+ * faktura jest już w kolejce albo przyjęta (`juzZlecona: true`): ponowienie po
+ * zerwanym połączeniu niczego nie wysyła drugi raz.
+ */
+export interface WysylkaSzkicuOdpowiedz {
+  faktura: FakturaZapisana;
+  juzZlecona: boolean;
+}
+
+/** `GET /api/mobile/v1/faktury/podpowiedz`: to, czym strona wypełnia pusty formularz. */
+export interface PodpowiedzFakturyOdpowiedz {
+  /** Kolejny numer po ostatniej fakturze (jak `suggestNextInvoiceNumberForTenant`); `null`: firma bez faktur. */
+  numer: string | null;
+  /** Dziś w Polsce, RRRR-MM-DD: data wystawienia faktury wysyłanej do KSeF. */
+  dzis: string;
+  /** Firma zwolniona z VAT (art. 113): nowa pozycja startuje ze stawką „zw”. */
+  zwolnienieVat: boolean;
 }
 
 /** Jak `UserRole` strony (`lib/supabase/auth-context.ts`); zgodność sprawdza test kontraktu. */
