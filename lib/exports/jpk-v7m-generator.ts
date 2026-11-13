@@ -107,7 +107,7 @@ export class JpkV7mReceiptSaleInPeriodError extends JpkDocumentNotSupportedError
       `z ${formatIsoDatePl(saleDate)}, czyli do sprzedaży z kasy rejestrującej w miesiącu, którego dotyczy plik. Taką sprzedaż ` +
       'wykazuje się w JPK_V7M raportem z kasy (RO), a fakturę do paragonu osobno, z oznaczeniem FP i bez podatku należnego. ' +
       'Raportów z kasy FaktWay nie wykazuje w JPK_V7M, więc plik nie powstał, żeby nie zaniżyć podatku należnego. ' +
-      'JPK_V7M za ten miesiąc przygotuj poza FaktWay, np. z księgową.';
+      'JPK_V7M za ten miesiąc trzeba przygotować poza FaktWay, np. z księgową.';
     this.name = 'JpkV7mReceiptSaleInPeriodError';
   }
 }
