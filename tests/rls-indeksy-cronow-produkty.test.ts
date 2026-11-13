@@ -16,7 +16,8 @@ import { getRlsTestDatabaseUrl, getRlsTestEnvironment } from './helpers/rls-envi
  *    00186) i liczymy jeszcze raz;
  *  - `ksef_lifecycle_violations_without_i3()` = pełna funkcja bez wierszy I3;
  *  - planista wkleja `ksef_upo_expected` (w planie zostaje tylko funkcja
- *    pomocnicza) i używa nowych indeksów w zapytaniach cronów;
+ *    pomocnicza) i używa nowych indeksów w zapytaniach cronów na rozkładzie
+ *    danych jak na produkcji, także przy resztkach, na których padł #655;
  *  - równoległe importy tej samej nowej pozycji tworzą jeden produkt;
  *  - kontrola dubli w migracji przerywa ją przy dublach katalogu.
  *
@@ -395,12 +396,14 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
 
     /**
      * Stan z #655 (12.11.2026), odtworzony bez zależności od innych plików testów.
-     * Wspólna baza testów RLS ma w `invoices` przypadkowe resztki, a werdykt planisty
-     * zależy od nich: indeks w toku niesie wszystkie failed/rejected, także te, które
-     * zapytanie odrzuca dopiero po odczycie wiersza, a pełny skan starego indeksu
-     * częściowego `idx_invoices_tenant_payment_due` (tylko wychodzące) czyta mniej
-     * wierszy. Martwe wiersze (wstawione i usunięte w tej transakcji) rozdymają stertę
-     * jak resztki przed autovacuum, więc każdy zbędny odczyt wiersza kosztuje więcej.
+     * Wspólna baza testów RLS ma w `invoices` przypadkowe resztki, a na prawie pustej
+     * tabeli werdykt planisty zależy od nich: indeks w toku niesie wszystkie
+     * failed/rejected, także te, które zapytanie odrzuca dopiero po odczycie wiersza,
+     * a pełny skan starego indeksu częściowego `idx_invoices_tenant_payment_due`
+     * (tylko wychodzące) czyta mniej wierszy. Martwe wiersze (wstawione i usunięte
+     * w tej transakcji) rozdymają stertę jak resztki przed autovacuum, więc każdy
+     * zbędny odczyt wiersza kosztuje więcej. Bez `productionLikeRows` ten stan oblewa
+     * przypadki 1 i 3 tym samym komunikatem co #655.
      * Tryb replica: wyzwalacze 00119 blokują DELETE poza szkicem; transakcja i tak
      * jest cofana.
      */
@@ -429,6 +432,110 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
       await tx.executeSql('SET LOCAL session_replication_role = origin');
     }
 
+    /**
+     * Rozkład jak na produkcji (DB-02), wstawiany w każdym stanie przed ANALYZE.
+     * Plan zależy od liczb w tabelach, nie tylko od indeksów: na kilkudziesięciu
+     * wierszach koszty różnią się o ułamek procenta i zwycięzcę wybiera przypadek.
+     * Tu proporcje są jak w działających firmach, więc każdy indeks 00186 wygrywa
+     * wyraźnie, a asercja dalej wymaga dokładnie jego:
+     *  - sprzedaż trzech firm przez rok: 10 000 faktur, w toku tylko 50 (queued,
+     *    sending, failed, rejected), 1 400 szkiców, reszta przyjęta; rzadkie anomalie,
+     *    których szukają crony (numer KSeF bez accepted, ROZ_HOLD_RECONCILE);
+     *  - 2 000 faktur zakupu ze skrzynki KSeF, co setna czeka na pełne pobranie;
+     *  - wysyłka i próba wysyłki każdej wysłanej faktury, kilka otwartych od dni;
+     *  - katalog produktów: firma czytająca go stronami ma 1 500 pozycji
+     *    z jednego importu, dwie inne po 750.
+     * NIP-y fikcyjne. Tryb replica: bez wyzwalaczy i kluczy obcych; transakcja
+     * jest cofana.
+     */
+    async function productionLikeRows(tx: SqlRunner) {
+      const tenants = [ORG, ORG_B, ORG_P];
+      await tx.executeSql('SET LOCAL session_replication_role = replica');
+      await tx.executeSql(
+        `INSERT INTO public.invoices (
+           tenant_id, direction, origin, internal_number, invoice_type, issue_date, seller_nip, buyer_nip,
+           net_total, vat_total, gross_total, ksef_status, ksef_number, ksef_environment, ksef_accepted_at,
+           submitted_to_ksef_at, xml_storage_path, last_error_code, payment_status, payment_due_date,
+           fa3_data, seller_data, buyer_data, created_at)
+         SELECT (ARRAY[$1::uuid, $2::uuid, $3::uuid])[1 + g % 3], 'outgoing', 'app', 'FV/00186/P/' || g, 'VAT', d,
+                $4::text, '1234567890', 100, 23, 123, s,
+                CASE WHEN s = 'accepted' OR g IN (21, 22)
+                     THEN $4::text || '-' || to_char(d, 'YYYYMMDD') || '-' || lpad(g::text, 12, '0') || '-00' END,
+                CASE WHEN s = 'accepted' OR g IN (21, 22) THEN 'test' END,
+                CASE WHEN s = 'accepted' THEN (d + TIME '12:00')::timestamptz END,
+                CASE WHEN s = 'accepted' THEN (d + TIME '11:58')::timestamptz
+                     WHEN g BETWEEN 11 AND 15 THEN now() - interval '5 minutes' END,
+                CASE WHEN s = 'accepted' THEN 'p/' || g || '.xml' END,
+                CASE WHEN g IN (23, 24) THEN 'ROZ_HOLD_RECONCILE'
+                     WHEN s IN ('failed', 'rejected')
+                     THEN (ARRAY['INFRA', 'KSEF_UNAVAILABLE', 'RESULT_UNCERTAIN'])[1 + g % 3] END,
+                (CASE WHEN s = 'accepted' AND d < DATE '2026-09-01' THEN 'paid' ELSE 'unpaid' END)::public.payment_status_enum,
+                d + 14,
+                jsonb_build_object('internalNumber', 'FV/00186/P/' || g, 'type', 'VAT'),
+                jsonb_build_object('nip', $4::text), '{"nip": "1234567890"}'::jsonb,
+                (d + TIME '09:00')::timestamptz
+           FROM generate_series(1, 10000) AS g,
+                LATERAL (SELECT DATE '2025-11-01' + g % 365 AS d,
+                                CASE WHEN g <= 10 THEN 'queued' WHEN g <= 20 THEN 'sending'
+                                     WHEN g <= 40 THEN 'failed' WHEN g <= 50 THEN 'rejected'
+                                     WHEN g <= 1450 THEN 'draft' ELSE 'accepted' END AS s) AS v`,
+        [...tenants, NIP],
+      );
+      await tx.executeSql(
+        `INSERT INTO public.invoices (
+           tenant_id, direction, origin, invoice_type, issue_date, seller_nip, buyer_nip,
+           net_total, vat_total, gross_total, ksef_status, ksef_number, ksef_environment, ksef_accepted_at,
+           fa3_data, seller_data, buyer_data, created_at)
+         SELECT (ARRAY[$1::uuid, $2::uuid, $3::uuid])[1 + g % 3], 'incoming', 'ksef_inbox', 'VAT', d,
+                '1234567890', $4::text, 100, 23, 123, 'accepted',
+                '1234567890-' || to_char(d, 'YYYYMMDD') || '-' || lpad(g::text, 12, '0') || '-01', 'test',
+                (d + TIME '12:00')::timestamptz,
+                CASE WHEN g % 100 = 0 THEN '{"_pendingFullFetch": true}'::jsonb ELSE '{}'::jsonb END,
+                '{"nip": "1234567890"}'::jsonb, jsonb_build_object('nip', $4::text),
+                now() - make_interval(hours => g)
+           FROM generate_series(1, 2000) AS g,
+                LATERAL (SELECT DATE '2025-11-01' + g % 365 AS d) AS v`,
+        [...tenants, NIP],
+      );
+      // Wysyłka każdej wysłanej faktury; co piąta failed ma otwarty wpis sprzed dni (I5).
+      await tx.executeSql(
+        `INSERT INTO public.ksef_submissions (
+           tenant_id, invoice_id, submission_type, status, attempted_at,
+           session_reference_number, invoice_reference_number, response_ksef_number)
+         SELECT i.tenant_id, i.id, 'online',
+                CASE i.ksef_status WHEN 'accepted' THEN 'accepted' WHEN 'queued' THEN 'intent'
+                                   WHEN 'sending' THEN 'sent' WHEN 'rejected' THEN 'rejected'
+                                   ELSE CASE WHEN n % 5 = 0 THEN 'sent' ELSE 'abandoned' END END,
+                CASE WHEN i.ksef_status = 'accepted' THEN i.submitted_to_ksef_at
+                     WHEN i.ksef_status = 'failed' AND n % 5 = 0 THEN now() - interval '5 days'
+                     ELSE now() - interval '10 minutes' END,
+                'SES-00186-P-' || n, 'REF-00186-P-' || n,
+                CASE WHEN i.ksef_status = 'accepted' THEN i.ksef_number END
+           FROM public.invoices i,
+                LATERAL (SELECT split_part(i.internal_number, '/', 4)::int AS n) AS v
+          WHERE i.internal_number LIKE 'FV/00186/P/%' AND i.ksef_status <> 'draft'`,
+      );
+      await tx.executeSql(
+        `INSERT INTO public.ksef_send_attempts (tenant_id, invoice_id, status, ksef_environment, started_at, finished_at)
+         SELECT tenant_id, invoice_id,
+                CASE status WHEN 'accepted' THEN 'succeeded' WHEN 'intent' THEN 'waiting'
+                            WHEN 'sent' THEN 'started' ELSE 'failed' END,
+                'test', attempted_at,
+                CASE WHEN status IN ('accepted', 'rejected', 'abandoned') THEN attempted_at + interval '2 minutes' END
+           FROM public.ksef_submissions
+          WHERE session_reference_number LIKE 'SES-00186-P-%'`,
+      );
+      // Katalog firmy ORG_P z jednego importu: jej wiersze leżą obok siebie na stercie.
+      await tx.executeSql(
+        `INSERT INTO public.products (tenant_id, name, unit, use_count, last_used_at)
+         SELECT CASE WHEN g <= 750 THEN $1::uuid WHEN g <= 1500 THEN $2::uuid ELSE $3::uuid END,
+                'Produkt 00186 nr ' || g, 'szt.', g % 40, now() - make_interval(days => g % 365)
+           FROM generate_series(1, 3000) AS g`,
+        tenants,
+      );
+      await tx.executeSql('SET LOCAL session_replication_role = origin');
+    }
+
     const STATES: ReadonlyArray<{ name: string; prepare?: (tx: SqlRunner) => Promise<void> }> = [
       { name: 'tabela taka, jaka jest' },
       { name: 'resztki jak w #655', prepare: leftoversLike655 },
@@ -440,6 +547,7 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
       beforeAll(async () => {
         await rolledBack(async (tx) => {
           if (prepare) await prepare(tx);
+          await productionLikeRows(tx);
           await tx.executeSql(`ANALYZE ${TABLES}`);
           const { rows } = await tx.executeSql(
             `SELECT relpages, reltuples, pg_relation_size('public.invoices') / 8192 AS blocks
