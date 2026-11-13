@@ -16,6 +16,7 @@ import {
 } from '@/lib/invoices/receipt-invoice';
 import { isSaleDateWithinLimit, SALE_DATE_TOO_LATE_MESSAGE } from '@/lib/invoices/sale-date';
 import { addressCountryForKodUE, parseVatUe, type KodUE, isNpIiBuyerVat } from '@/lib/invoices/vat-ue';
+import { numberingFormFields } from '@/lib/numeracja/pola';
 import type { ReceiptInvoiceData } from '@/types/invoice';
 
 /**
@@ -289,6 +290,8 @@ export const invoiceFormSchema = z
      */
     salesQuoteId: z.string().uuid(SALES_QUOTE_LINK_MESSAGE).optional(),
     salesQuoteSeq: z.string().regex(/^[1-9]\d{0,3}$/, SALES_QUOTE_LINK_MESSAGE).optional(),
+    /** Seria numeracji, podpowiedź z licznika i klucz zapisu (krok 2.5). */
+    ...numberingFormFields,
   })
   .refine((d) => !d.recurringInvoiceId || !!d.recurringPeriod, {
     message: RECURRING_PERIOD_MISSING_MESSAGE,
