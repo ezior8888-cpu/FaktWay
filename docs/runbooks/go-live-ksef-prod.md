@@ -6,7 +6,7 @@ część pracy. Ten plik sam niczego nie zmienia.
 
 - **Kontrola, tylko odczyt, jedna linia:** `./scripts/ops/kontrola-go-live-ksef.sh`
   (sam ładuje `.agents/infra.env`). Oczekiwane wartości są w etykietach wyniku.
-- **Dowody** `plik:linia` sprawdzone na `origin/main` z 13.11.2026 (`f84bf6c2`).
+- **Dowody** `plik:linia` sprawdzone na `origin/main` z 13.11.2026 (`6d0ffd4f`).
   Gdy plik się zmieni, szukaj nazwy funkcji, nie numeru linii.
 - **Powiązane runbooki:** [hamulce-ksef.md](./hamulce-ksef.md) (wyłącznik
   i przerwa techniczna), [wdrozenie-produkcji.md](./wdrozenie-produkcji.md),
@@ -70,7 +70,7 @@ cron albo przycisk wyśle ponownie. Pilnuje tego bramka w kroku 5.
 
 1. **Środowisko faktury zapisuje się tylko przy przyjęciu:** wysyłka
    (`lib/jobs/runners/submit-invoice/save-accepted.ts:17`), skrzynka
-   (`lib/jobs/runners/inbox-polling.ts:432`). Statusu przyjętej faktury ani
+   (`lib/jobs/runners/inbox-polling.ts:434`). Statusu przyjętej faktury ani
    zapisanego środowiska nie zmieni nikt poza rolą `postgres`
    (`00117_ksef_certificate_claim_guard.sql:142–146`, `:152–157`).
 2. **Weryfikacja certyfikatu jest osobna dla każdego środowiska:**
@@ -119,7 +119,7 @@ ma w bazie przyjęte faktury z TEST.
 | Korekty | faktury z TEST nie da się wskazać jako korygowanej | to samo | D4 | `lib/invoices/correction-parents.ts:98–100`, `lib/invoices/correction-picker.ts:77` |
 | PDF | faktura z TEST: kod QR do weryfikacji PROD, bez znaku wodnego; stary plik z pamięci nie wraca, bo klucz zależy od treści QR | to samo | D2; ustalenie F1-a | `lib/pdf/invoice-pdf.ts:89–94`, `:237`; `lib/ksef/qr-verification.ts:27–29`; `lib/pdf/pdf-storage.ts:51–55` |
 | UPO | UPO faktur z TEST nie są już ponawiane ani wydawane klientowi | to samo | dociągnij zaległe UPO przed przełączeniem, jeśli są potrzebne | `lib/jobs/runners/upo-retry-stale.ts:129`, `:228`; `lib/jobs/runners/upo-identity.ts:26–29`; `app/(dashboard)/invoices/[id]/upo-actions.ts:67–70` |
-| Skrzynka (zakupy bieżące) | firma nie jest odpytywana | pierwsze okno PROD zaczyna się od HWM z czasów TEST, bo kursor jest jeden na firmę | D5 | `inbox-polling.ts:167`, `:182`, `:345`, `:88–96`; `lib/flo/functions/inbox-cursor.ts:47–51`; `lib/ksef/inbox-schedule-db.ts:96–97`; `supabase/migrations/00160_ksef_inbox_schedule.sql:86–96`, `:123`; `supabase/migrations/00063_flo_inbox_and_rules.sql:18–19` |
+| Skrzynka (zakupy bieżące) | firma nie jest odpytywana | pierwsze okno PROD zaczyna się od HWM z czasów TEST, bo kursor jest jeden na firmę | D5 | `inbox-polling.ts:169`, `:184`, `:347`, `:90–98`; `lib/flo/functions/inbox-cursor.ts:47–51`; `lib/ksef/inbox-schedule-db.ts:96–97`; `supabase/migrations/00160_ksef_inbox_schedule.sql:86–96`, `:123`; `supabase/migrations/00063_flo_inbox_and_rules.sql:18–19` |
 | Historia KSeF | firma nie jest obsługiwana | sprzedaż z PROD wraca z historii; zakupy z PROD do HWM skrzynki trafiają do archiwum bez kosztów | D5 | `lib/jobs/runners/ksef-history-sync.ts:255`, `:269–290`; `synchronizacja-historii-ksef.md`, „Jak to działa” |
 | Offline24 | wpisy z TEST w kolejce zostają; cron loguje je przy każdym przebiegu | to samo | kolejka pusta przed przełączeniem ([offline24-zalegle.md](./offline24-zalegle.md)) | `lib/jobs/runners/process-offline-queue.ts:43–56` |
 | „Tylko uzgodnij” i I5 | uzgadnia w **bieżącym** środowisku, więc wpisu sprzed przełączenia tak nie uzgadniaj | to samo | zero otwartych wpisów przed przełączeniem (krok 5) | `app/admin/ksef/actions.ts:185`, `:220`; `ksef-lifecycle-reconcile.ts:187`, `:504`, `:564` |
@@ -141,7 +141,7 @@ tylko brak zmiennej, a z pustego napisu nie powstaje adres
 | Klient, pierwsza wysyłka szkicu | „Twoja organizacja musi najpierw zweryfikować certyfikat KSeF…”, bo weryfikacja odmawia przy braku środowiska, zanim kod sprawdzi środowisko. Ustalenie F1-b | `ksef-verification-guard.ts:61–65`; `ksef-submit-enqueue.ts:287–301` przed `:336` |
 | Klient, KPiR i zaległości | wyjątek `KSeF environment is not safely configured`, ogólny błąd strony | `claim-environment.ts:33–37`; `kpir-data.ts:81`; `overdue/page.tsx:56` |
 | Operator, `/admin/ksef/<id>` | „KSEF_ENV aplikacji: nieustawione”; przyciski odmawiają: „Środowisko KSeF nie jest poprawnie skonfigurowane (KSEF_ENV)…” | `app/admin/ksef/[id]/page.tsx:179`; `ksef-operator-policy.ts:86` |
-| Worker | crony cyklu życia, skrzynki, historii i UPO padają przy każdym przebiegu; job wysyłki odmawia zdarzenia | `ksef-lifecycle-reconcile.ts:187`; `inbox-polling.ts:167`; `ksef-history-sync.ts:209`; `upo-retry-stale.ts:124`; `submit-invoice.ts:127–130` |
+| Worker | crony cyklu życia, skrzynki, historii i UPO padają przy każdym przebiegu; job wysyłki odmawia zdarzenia | `ksef-lifecycle-reconcile.ts:187`; `inbox-polling.ts:169`; `ksef-history-sync.ts:209`; `upo-retry-stale.ts:124`; `submit-invoice.ts:127–130` |
 
 **Worker i aplikacja w różnych środowiskach** (`ENV_MISMATCH`): job odrzuca
 zdarzenie z innego środowiska (`submit-invoice.ts:127–130`), faktura kończy
@@ -192,9 +192,11 @@ udostępnienia API i tak zamyka flaga `publicApiEnabled`
 na telefon (`/api/mobile`) proxy przepuszcza bez sesji z ciasteczek
 (`lib/supabase/middleware.ts:139`, `:195`), więc przerwę sprawdza jego własna
 bramka: 503 `maintenance`, zanim odczyta token (`lib/api/mobile/auth.ts:205–210`).
-Dziś są tam dwie trasy, konto i sesja, obie wołają tę bramkę na starcie
-(`app/api/mobile/v1/konto/route.ts:14`, `app/api/mobile/v1/sesja/route.ts:15`)
-i żadna nie tworzy ani nie wysyła faktur. Włączenie dociera
+Dziś są tam trzy trasy. Konto i sesja wołają tę bramkę na starcie
+(`app/api/mobile/v1/konto/route.ts:14`, `app/api/mobile/v1/sesja/route.ts:15`),
+a logowanie hasłem sprawdza przerwę samo, zanim zapyta GoTrue
+(`app/api/mobile/v1/logowanie/route.ts:11–12`; `lib/api/mobile/logowanie.ts:144–149`).
+Żadna nie tworzy ani nie wysyła faktur. Włączenie dociera
 do każdego procesu web w najwyżej 30 s (`lib/feature-flags/maintenance.ts:22`).
 Błąd odczytu flagi zostawia panel otwarty (`maintenance.ts:9–11`), więc po
 włączeniu sprawdź na koncie klienta, że przekierowanie działa.
@@ -335,7 +337,7 @@ alarm środowiska wysyłki z `ksef-error-codes.md` (D-A4-2). Szum oczekiwany,
 gdy w kolejce zostały zlecenia z TEST (kontrola, sekcja 3c):
 
 - skrzynka: `KSeF inbox event environment does not match configured environment`
-  (`inbox-polling.ts:230–232`);
+  (`inbox-polling.ts:232–234`);
 - historia: `KSeF history sync event environment does not match configured environment`,
   bez ponowień (`ksef-history-sync.ts:448–450`);
 - UPO: `KSeF UPO event environment requires reconciliation`, bez ponowień
