@@ -155,6 +155,13 @@ describe('hook przed pushem uruchamia strażnika tekstów', { timeout: 120_000 }
     expect(wynik.kod).toBe(1);
   });
 
+  it('plik z polskimi znakami w nazwie też uruchamia strażnika (git cytuje takie ścieżki)', () => {
+    const dir = repo();
+    zapisz(dir, 'content/blog/żółw.mdx', '# Żółw\n\nTekst — z myślnikiem.\n');
+    commit(dir);
+    expect(push(dir, true).wywolania).toEqual([WYWOLANIE_STRAZNIKA]);
+  });
+
   it('samo usunięcie pliku z zakresu uruchamia strażnika (zapisany stan może wtedy zawyżać liczby)', () => {
     const dir = repo();
     git(dir, 'rm', '-q', 'lib/stary.ts');
