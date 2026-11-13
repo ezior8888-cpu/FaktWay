@@ -21,7 +21,10 @@ export type ReadJobStatuses = (ids: string[]) => Promise<JobStatusesResult>;
  * i porównuje je ze statusami z ostatniego renderu. `router.refresh()` idzie
  * dopiero przy zmianie (inny status albo brak zadania w odpowiedzi). Jeśli
  * odświeżona strona nie dotrze przed następnym pytaniem, to pytanie odświeży
- * znowu. Nieudany odczyt (sieć, błąd bazy) niczego nie odświeża.
+ * znowu. Chwilowy błąd odczytu (sieć, błąd bazy) niczego nie odświeża.
+ * Odmowa (`retryable: false`: sesja wygasła, zła lista) kończy pytania
+ * i odświeża stronę raz: bramka logowania przeniesie na logowanie, a przy
+ * żywej sesji strona pokaże ręczne „Odśwież” jak po limicie.
  *
  * Nowe zadanie zlecone gdzie indziej (inna karta, druga osoba) pojawi się
  * przy najbliższej zmianie statusu albo po ręcznym odświeżeniu.
@@ -73,7 +76,7 @@ export function useStatusPoll({
     if (idsKey === '' || capped) return;
     const ids = idsKey.split(',');
     let active = true;
-    const stop = startPollLoop({
+    const stop: () => void = startPollLoop({
       schedule,
       poll: async () => {
         let result: JobStatusesResult | undefined;
@@ -82,7 +85,15 @@ export function useStatusPoll({
         } catch {
           return; // Sieć albo restart serwera: stan nieznany, pytamy dalej.
         }
-        if (!active || !result?.success) return;
+        if (!active || !result) return;
+        if (!result.success) {
+          if (result.retryable) return;
+          // Odmowa: dalsze pytania nic nie dadzą (archiwum nie ma limitu).
+          stop();
+          setCapped(true);
+          router.refresh();
+          return;
+        }
         const now = new Map(result.statuses.map((row) => [row.id, row.status]));
         const shown = shownRef.current;
         if (ids.every((id) => now.get(id) === shown.get(id))) return;

@@ -132,6 +132,17 @@ describe('Archiwum dokumentów — odpytywanie zlecenia w przygotowaniu', () => 
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('odmowa odczytu (sesja wygasła): jedno odświeżenie i koniec pytań, mimo braku limitu', async () => {
+    statusActions.getDocumentArchiveStatusesAction.mockResolvedValue({ success: false, retryable: false });
+    mount([order('generating')]);
+
+    await flush(DELAYS[0]!);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(60 * 60_000);
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('karta w tle nie pyta i nie odświeża (dawniej co 15 s także w tle)', async () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     try {

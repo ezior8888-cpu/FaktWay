@@ -110,6 +110,19 @@ describe('Akcje statusu — błąd bazy', () => {
     expect(logged).not.toContain('canceling statement');
   });
 
+  it.each([
+    ['42501', 'permission denied for table export_jobs'],
+    ['PGRST301', 'JWT expired'],
+  ])('brak dostępu (%s: sesja wygasła, rola anon) to nie chwilowy błąd', async (code, message) => {
+    mocks.in.mockResolvedValue({ data: null, error: { code, message } });
+
+    const result = await getExportJobStatusesAction([A]);
+
+    // Przeglądarka odświeży stronę raz (bramka logowania) i przestanie pytać.
+    expect(result).toEqual({ success: false, retryable: false });
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(message);
+  });
+
   it('odrzucone zapytanie (sieć do bazy) też jest chwilowe', async () => {
     mocks.in.mockRejectedValue(new Error('fetch failed: connect ECONNREFUSED 10.0.0.5:5432'));
 

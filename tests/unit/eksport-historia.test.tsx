@@ -198,6 +198,18 @@ describe('Historia — odpytywanie eksportów w toku (lekka akcja statusu)', () 
     expect(router.refresh).not.toHaveBeenCalled();
   });
 
+  it('odmowa odczytu (sesja wygasła): jedno router.refresh() i koniec pytań', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue({ success: false, retryable: false });
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(1));
+    // Pełne odświeżenie przechodzi przez bramkę logowania (dawniej robił to każdy takt).
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('jedno pytanie naraz: wolna odpowiedź nie nakłada się na następną', async () => {
     let resolve!: (value: unknown) => void;
     statusActions.getExportJobStatusesAction

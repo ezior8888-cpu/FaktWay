@@ -18,10 +18,17 @@ import { createClient } from '@/lib/supabase/server';
  *   `requireUserAndActiveOrg()`: to drugie dokłada zapytania o użytkownika
  *   i członkostwo na każdy takt, a RLS i tak odcina cudze wiersze.
  * - Zadanie spoza firmy albo usunięte po prostu nie wraca; przeglądarka
- *   uzna brak za zmianę i odświeży stronę (np. wylogowanie → logowanie).
+ *   uzna brak za zmianę i odświeży stronę.
+ * - Brak dostępu (sesja wygasła: rola `anon` nie ma praw do tych tabel,
+ *   00019, 00024, 00178; albo wygasły token) nie jest chwilowy
+ *   (`retryable: false`): przeglądarka odświeży stronę raz, przez bramkę
+ *   logowania, i przestanie pytać.
  * - Tylko `id` i `status`, bez komunikatów błędów i danych zadania.
- * - Błąd bazy jest chwilowy (`retryable`) i bez treści; do logu sam kod.
+ * - Inny błąd bazy jest chwilowy (`retryable`) i bez treści; do logu sam kod.
  */
+
+/** Kody PostgREST / Postgres dla braku dostępu: `permission denied`, wygasły token. */
+const NO_ACCESS_CODES: ReadonlySet<string> = new Set(['42501', 'PGRST301']);
 
 /** Najwięcej id w jednym pytaniu (historia eksportów pokazuje 20 zadań, archiwum 5). */
 export const STATUS_IDS_MAX = 100;
@@ -52,7 +59,7 @@ export async function readJobStatuses(table: JobStatusTable, ids: unknown): Prom
     const { data, error } = await supabase.from(table).select('id, status').in('id', list);
     if (error) {
       console.error('[job-statuses] odczyt statusów nieudany', { table, code: error.code });
-      return { success: false, retryable: true };
+      return { success: false, retryable: !NO_ACCESS_CODES.has(error.code) };
     }
     const rows = (data ?? []) as Array<{ id: unknown; status: unknown }>;
     return { success: true, statuses: rows.map((row) => ({ id: String(row.id), status: String(row.status) })) };
