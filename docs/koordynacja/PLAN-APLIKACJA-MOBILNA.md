@@ -340,11 +340,13 @@ idempotencji żądania (protokół naprawy, punkt 5). W aplikacji formularz z M4
 zamiast `EkranTylkoNaStronie` w `faktury/nowa/*` i `dodajFakture`/`wyslijDoKsef`
 w `stan/dane.tsx` przez API zamiast `naStronie`. „Stan po M7” w 4.3.
 **Stos nie jest w `main`:** M7 stoi na M6 (#668), M6 na scaleniu M4e do M5b
-(#669); kolejność scalania #669, #668, potem M7. **Decyzja Bartosza przed
-logowaniem z telefonu na produkcji** bez zmian: adres powrotu `faktway://**`
-w GoTrue (Google) i captcha w GoTrue (`docs/runbooks/captcha-w-gotrue.md`,
-krok 2) a logowanie hasłem z aplikacji (Turnstile w aplikacji albo trasa
-logowania w API). Z M7 zostaje: wybór firmy na telefonie nie zmienia
+(#669), a do `main` przenosi je #670; PR M7 (#671) ma bazę
+`claude/mobile-scalenie-m6`, po scaleniu #670 bazę trzeba przestawić na `main`.
+**Przed logowaniem z telefonu na produkcji:** adres powrotu `faktway://**` w
+GoTrue (Google); logowanie hasłem przez trasę w naszym API (`POST
+/api/mobile/v1/logowanie`, decyzja Bartosza z 13.11, do wpisania jako D16),
+bo GoTrue z captchą (`docs/runbooks/captcha-w-gotrue.md`, krok 2) odrzuci
+logowanie wprost z telefonu. Z M7 zostaje: wybór firmy na telefonie nie zmienia
 `last_active_tenant_id` (strona zaczyna od swojej firmy; trasa w M10, jeśli
 ma być wspólny), Pulpit, Wydatki, Księgowość i ustawienia na danych
 przykładowych do M9 i M10, „Sprawdź teraz” w skrzynce KSeF czeka na trasę
