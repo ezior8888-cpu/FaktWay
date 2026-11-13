@@ -6,7 +6,7 @@ część pracy. Ten plik sam niczego nie zmienia.
 
 - **Kontrola, tylko odczyt, jedna linia:** `./scripts/ops/kontrola-go-live-ksef.sh`
   (sam ładuje `.agents/infra.env`). Oczekiwane wartości są w etykietach wyniku.
-- **Dowody** `plik:linia` sprawdzone na `origin/main` z 12.11.2026 (`49d77443`).
+- **Dowody** `plik:linia` sprawdzone na `origin/main` z 13.11.2026 (`f84bf6c2`).
   Gdy plik się zmieni, szukaj nazwy funkcji, nie numeru linii.
 - **Powiązane runbooki:** [hamulce-ksef.md](./hamulce-ksef.md) (wyłącznik
   i przerwa techniczna), [wdrozenie-produkcji.md](./wdrozenie-produkcji.md),
@@ -184,11 +184,17 @@ wymagają klienta, załatw teraz, bo w oknie panel jest zamknięty:
 ([hamulce-ksef.md](./hamulce-ksef.md), „Rejestracja i przerwa techniczna”).
 Panel zalogowanego klienta i onboarding przekierowują na
 `/przerwa-techniczna`, prywatne API zwraca 503. Działają `/admin`, joby
-i strony publiczne (`lib/supabase/middleware.ts:288–294`). Publiczne API
+i strony publiczne (`lib/supabase/middleware.ts:305–311`). Publiczne API
 z kluczem (`/api/v1`, `/api/mcp`) też zwraca 503 (`lib/api/v1/auth.ts:132–137`;
 MCP przechodzi przez tę samą bramkę, `lib/api/mcp/server.ts:185`), a do
 udostępnienia API i tak zamyka flaga `publicApiEnabled`
-(`lib/api/v1/auth.ts:129–131`; `lib/api/v1/availability.ts:3–15`). Włączenie dociera
+(`lib/api/v1/auth.ts:129–131`; `lib/api/v1/availability.ts:3–15`). API aplikacji
+na telefon (`/api/mobile`) proxy przepuszcza bez sesji z ciasteczek
+(`lib/supabase/middleware.ts:139`, `:195`), więc przerwę sprawdza jego własna
+bramka: 503 `maintenance`, zanim odczyta token (`lib/api/mobile/auth.ts:205–210`).
+Dziś są tam dwie trasy, konto i sesja, obie wołają tę bramkę na starcie
+(`app/api/mobile/v1/konto/route.ts:14`, `app/api/mobile/v1/sesja/route.ts:15`)
+i żadna nie tworzy ani nie wysyła faktur. Włączenie dociera
 do każdego procesu web w najwyżej 30 s (`lib/feature-flags/maintenance.ts:22`).
 Błąd odczytu flagi zostawia panel otwarty (`maintenance.ts:9–11`), więc po
 włączeniu sprawdź na koncie klienta, że przekierowanie działa.
