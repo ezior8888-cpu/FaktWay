@@ -11,6 +11,7 @@ import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { doPola, groszeZPola as grosze, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
+import { useTytulNaGradiencie } from '@/wyglad/naglowki';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
 /**
@@ -21,6 +22,7 @@ export default function EkranWydatku() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { koszty, zapiszKoszt, usunKoszt } = useStanFaktur();
+  const { tytul, onScroll, scrollEventThrottle } = useTytulNaGradiencie();
   const k = id === NOWY_WYDATEK ? PUSTY_WYDATEK : koszty.find((x) => x.id === id);
   const [dostawca, setDostawca] = useState(k?.dostawca ?? '');
   const [nip, setNip] = useState(k?.nip ?? '');
@@ -64,8 +66,8 @@ export default function EkranWydatku() {
 
   return (
     <>
-      <Stack.Screen options={{ title: nowy ? 'Nowy wydatek' : k.doOpisania ? 'Zaakceptuj wydatek' : 'Edytuj wydatek' }} />
-      <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <Stack.Screen options={{ title: nowy ? 'Nowy wydatek' : k.doOpisania ? 'Zaakceptuj wydatek' : 'Edytuj wydatek', headerTitleStyle: tytul }} />
+      <EkranListy gradient onScroll={onScroll} scrollEventThrottle={scrollEventThrottle} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <NaglowekKwoty
           podpis={k.dostawca || 'Nowy wydatek'}
           podpisWyrozniony

@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import { useOpcjeStosu } from '@/wyglad/naglowki';
+import { useOpcjeGradientu, useOpcjeStosu } from '@/wyglad/naglowki';
 
 /** Lista zakładki zawsze leży pod spodem: arkusze i ekrany otwarte linkiem mają „wstecz” i prezentują się jako arkusze. */
 export const unstable_settings = { anchor: 'index' };
@@ -8,9 +8,10 @@ export const unstable_settings = { anchor: 'index' };
 /** Stos zakładki Księgowość: Ten miesiąc, KPiR, Ewidencja, VAT, Eksport, Ustawienia podatkowe. */
 export default function UkladKsiegowosci() {
   const opcje = useOpcjeStosu();
+  const gradient = useOpcjeGradientu();
   return (
     <Stack screenOptions={opcje}>
-      <Stack.Screen name="index" options={{ title: 'Księgowość', headerLargeTitle: true }} />
+      <Stack.Screen name="index" options={{ title: 'Księgowość', ...gradient }} />
       <Stack.Screen name="kpir" options={{ title: 'KPiR' }} />
       <Stack.Screen name="ewidencja" options={{ title: 'Ewidencja' }} />
       <Stack.Screen name="vat" options={{ title: 'VAT' }} />

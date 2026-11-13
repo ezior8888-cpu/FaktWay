@@ -105,7 +105,7 @@ export default function EkranKpir() {
         {wpisy.length === 0 ? (
           <StanPusty ikona="book2-line" tytul="Brak wpisów" opis="Brak przychodów i wydatków w tym widoku." />
         ) : (
-          <Sekcja naglowek={kolumna ? `Księga: kolumna ${kolumna}` : 'Księga'} stopka={kolumna ? 'Dotknij kolumny jeszcze raz, żeby wyłączyć filtr.' : undefined}>
+          <Sekcja linie naglowek={kolumna ? `Księga: kolumna ${kolumna}` : 'Księga'} stopka={kolumna ? 'Dotknij kolumny jeszcze raz, żeby wyłączyć filtr.' : undefined}>
             {wpisy.map((w) => (
               <Wiersz
                 key={w.lp}

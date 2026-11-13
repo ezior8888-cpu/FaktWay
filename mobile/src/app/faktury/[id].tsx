@@ -13,6 +13,7 @@ import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
 import { useKolory } from '@/wyglad/kolory';
+import { useTytulNaGradiencie } from '@/wyglad/naglowki';
 
 const NAZWA_STATUSU_KSEF: Record<StatusKsef, string> = {
   przyjeta: 'Zaakceptowana',
@@ -42,6 +43,7 @@ export default function EkranFaktury() {
   const { faktury, przelaczZaplate, wyslijDoKsef, wrocDoSzkicu, usunSzkic } = useStanFaktur();
   // W podglądzie z przytrzymania wiersza ekran nie ustawia paska nawigacji.
   const podglad = useIsPreview();
+  const { tytul, onScroll, scrollEventThrottle } = useTytulNaGradiencie();
   const f = faktury.find((x) => x.id === id);
 
   if (!f) {
@@ -78,7 +80,7 @@ export default function EkranFaktury() {
     <>
       {podglad ? null : (
         <>
-          <Stack.Screen options={{ title: f.numer }} />
+          <Stack.Screen options={{ title: f.numer, headerTitleStyle: tytul }} />
           <Stack.Toolbar placement="right">
             <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={kolory.etykieta} accessibilityLabel="Pobierz PDF i udostępnij" onPress={() => udostepnijFakture(f)} />
             <Stack.Toolbar.Menu icon={IKONY_PASKA.wiecej} iconRenderingMode="template" tintColor={kolory.etykieta} title="Akcje faktury">
@@ -125,7 +127,7 @@ export default function EkranFaktury() {
         </>
       )}
 
-      <EkranListy>
+      <EkranListy gradient onScroll={onScroll} scrollEventThrottle={scrollEventThrottle}>
         <NaglowekKwoty podpis={f.kontrahent} podpisWyrozniony wartosc={kwota(f.brutto)} status={status.tekst} statusKolor={status.kolor} />
 
         {!podglad && (f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona') ? (

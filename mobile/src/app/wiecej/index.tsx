@@ -29,7 +29,7 @@ const USTAWIENIA: Pozycja[] = [
 export default function EkranWiecej() {
   const router = useRouter();
   return (
-    <EkranListy>
+    <EkranListy gradient>
       <Sekcja>
         <Wiersz tytul={FIRMA.nazwa} podtytul={`NIP ${FIRMA.nip} · ${FIRMA.vat}`} ikona="building2-line" strzalka onPress={() => router.push('/wiecej/ustawienia/firma')} />
       </Sekcja>

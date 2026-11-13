@@ -26,7 +26,7 @@ export default function EkranKontrahentow() {
   return (
     <>
       <Stack.SearchBar placeholder="Nazwa albo NIP" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
-      <EkranListy keyboardShouldPersistTaps="handled">
+      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
           <Kafle
             kafle={[

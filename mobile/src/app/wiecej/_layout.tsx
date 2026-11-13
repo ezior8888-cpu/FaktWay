@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import { useOpcjeStosu } from '@/wyglad/naglowki';
+import { useOpcjeGradientu, useOpcjeStosu } from '@/wyglad/naglowki';
 
 /** Lista zakładki zawsze leży pod spodem: arkusze i ekrany otwarte linkiem mają „wstecz” i prezentują się jako arkusze. */
 export const unstable_settings = { anchor: 'index' };
@@ -8,10 +8,11 @@ export const unstable_settings = { anchor: 'index' };
 /** Stos zakładki Więcej: kontrahenci, import i wszystkie ustawienia ze strony (bez Flo, plan D13). */
 export default function UkladWiecej() {
   const opcje = useOpcjeStosu();
+  const gradient = useOpcjeGradientu();
   return (
     <Stack screenOptions={opcje}>
-      <Stack.Screen name="index" options={{ title: 'Więcej', headerLargeTitle: true }} />
-      <Stack.Screen name="kontrahenci/index" options={{ title: 'Kontrahenci', headerLargeTitle: true }} />
+      <Stack.Screen name="index" options={{ title: 'Więcej', ...gradient }} />
+      <Stack.Screen name="kontrahenci/index" options={{ title: 'Kontrahenci', ...gradient }} />
       <Stack.Screen name="kontrahenci/[id]" options={{ title: '' }} />
       <Stack.Screen name="import" options={{ title: 'Import danych' }} />
       <Stack.Screen name="ustawienia/firma" options={{ title: 'Firma' }} />

@@ -8,14 +8,15 @@
 import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { useEffect, useState } from 'react';
-import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions, type LayoutChangeEvent } from 'react-native';
-import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Ikona } from '@/komponenty/ikona';
+import { useStylKarty } from '@/komponenty/karta';
 import { Tekst } from '@/komponenty/tekst';
 import { dataPelna } from '@/lib/format';
 import { useKolory } from '@/wyglad/kolory';
-import { CEL_DOTYKU, MARGINES, OBWODKA, ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { CEL_DOTYKU, MARGINES, OBWODKA, ODSTEP, PROMIEN_PIGULKI, PROMIEN_POLA } from '@/wyglad/odstepy';
 import { stylTekstu } from '@/wyglad/typografia';
 
 const KLAWIATURY_LICZB: KeyboardTypeOptions[] = ['number-pad', 'decimal-pad', 'numeric', 'phone-pad', 'numbers-and-punctuation'];
@@ -31,7 +32,7 @@ type PoleTekstoweProps = {
   wielowierszowe?: boolean;
   /** Hasło: znaki ukryte, podpowiedź pęku kluczy iOS. */
   tajne?: boolean;
-  /** Numer (faktury, konta) w IBM Plex Mono także przy zwykłej klawiaturze. */
+  /** Numer (faktury, konta) cyframi tabelarycznymi także przy zwykłej klawiaturze. */
   cyfry?: boolean;
 };
 
@@ -193,55 +194,42 @@ type SegmentyProps = {
   wybrany: number;
   onZmiana: (indeks: number) => void;
   etykieta: string;
+  /** Liczba przy pigułce (np. „Po terminie 2”); pusta pozycja = bez liczby. */
+  liczniki?: (number | undefined)[];
 };
 
-const SPREZYNA_KRESKI = { damping: 22, stiffness: 260 };
-
 /**
- * Zakładki sekcji jak na stronie (`components/lists/section-tabs.tsx`): napisy
- * w rzędzie, linia pod spodem, aktywną zaznacza kreska, która płynnie
- * przesuwa się pod wybrany napis.
+ * Podzakładki sekcji jako pigułki (plan aplikacji, D14 i D15; wzór Revolut
+ * Business): wybrana w kolorze marki, pozostałe białe na tle ekranu. Przy
+ * dużym tekście zawijają się do kolejnej linii zamiast ucinać napisy.
  */
-export function Segmenty({ wartosci, wybrany, onZmiana, etykieta }: SegmentyProps) {
+export function Segmenty({ wartosci, wybrany, onZmiana, etykieta, liczniki }: SegmentyProps) {
   const kolory = useKolory();
-  const [uklad, setUklad] = useState<{ x: number; w: number }[]>([]);
-  const x = useSharedValue(0);
-  const szer = useSharedValue(0);
-  const cel = uklad[wybrany];
-  useEffect(() => {
-    if (!cel) return;
-    // Pierwsze ustawienie bez animacji: kreska ma stać pod zakładką od razu.
-    const pierwsze = szer.get() === 0;
-    x.set(pierwsze ? cel.x : withSpring(cel.x, SPREZYNA_KRESKI));
-    szer.set(pierwsze ? cel.w : withSpring(cel.w, SPREZYNA_KRESKI));
-  }, [cel, x, szer]);
-  const kreska = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: szer.value }));
-
-  const zapisz = (i: number) => (e: LayoutChangeEvent) => {
-    const { x: lx, width } = e.nativeEvent.layout;
-    setUklad((u) => {
-      const nowy = [...u];
-      nowy[i] = { x: lx, w: width };
-      return nowy;
-    });
-  };
-
+  const stylKarty = useStylKarty();
   return (
-    <View style={[styles.zakladki, { borderBottomColor: kolory.obwodka }]} accessibilityRole="tablist" accessibilityLabel={etykieta}>
-      {wartosci.map((nazwa, i) => (
-        <Pressable
-          key={nazwa}
-          onLayout={zapisz(i)}
-          onPress={() => onZmiana(i)}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: i === wybrany }}
-          style={styles.zakladka}>
-          <Tekst styl="callout" waga="medium" kolor={i === wybrany ? 'etykieta' : 'etykietaDrugorzedna'} numberOfLines={1}>
-            {nazwa}
-          </Tekst>
-        </Pressable>
-      ))}
-      <Animated.View style={[styles.kreska, { backgroundColor: kolory.etykieta }, kreska]} />
+    <View style={styles.pigulki} accessibilityRole="tablist" accessibilityLabel={etykieta}>
+      {wartosci.map((nazwa, i) => {
+        const wybrana = i === wybrany;
+        const licznik = liczniki?.[i];
+        return (
+          <Pressable
+            key={nazwa}
+            onPress={() => onZmiana(i)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: wybrana }}
+            accessibilityLabel={licznik === undefined ? nazwa : `${nazwa}, ${licznik}`}
+            style={[styles.pigulka, wybrana ? { backgroundColor: kolory.akcentWypelnienie } : [stylKarty, styles.pigulkaKsztalt]]}>
+            <Tekst styl="subheadline" waga="medium" style={{ color: wybrana ? kolory.naAkcencie : kolory.etykieta }} numberOfLines={1}>
+              {nazwa}
+            </Tekst>
+            {licznik !== undefined ? (
+              <Tekst styl="footnote" cyfry style={{ color: wybrana ? kolory.naAkcencie : kolory.etykietaDrugorzedna }}>
+                {licznik}
+              </Tekst>
+            ) : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -265,7 +253,7 @@ function doIso(d: Date): string {
 }
 
 /**
- * Data: pole z datą w IBM Plex Mono; dotknięcie rozwija pod nim systemowy
+ * Data: pole z datą cyframi tabelarycznymi; dotknięcie rozwija pod nim systemowy
  * kalendarz (na Androidzie systemowe okno), wybór dnia go zwija.
  */
 export function PoleDaty({ etykieta, wartosc, onZmiana, najwczesniej }: PoleDatyProps) {
@@ -311,7 +299,7 @@ PoleDaty.pole = true;
 
 const styles = StyleSheet.create({
   pole: { paddingHorizontal: MARGINES, paddingVertical: ODSTEP.xs, gap: ODSTEP.xs - 2 },
-  ramka: { minHeight: CEL_DOTYKU, borderWidth: OBWODKA, borderRadius: PROMIEN, justifyContent: 'center' },
+  ramka: { minHeight: CEL_DOTYKU, borderWidth: OBWODKA, borderRadius: PROMIEN_POLA, justifyContent: 'center' },
   ramkaWiersz: { flexDirection: 'row', alignItems: 'center', gap: ODSTEP.xs, paddingHorizontal: ODSTEP.s },
   wejscie: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.s - 2 },
   wejscieWielo: { minHeight: CEL_DOTYKU * 2, textAlignVertical: 'top' },
@@ -324,7 +312,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: ODSTEP.s,
   },
-  zakladki: { flexDirection: 'row', marginHorizontal: MARGINES, marginTop: ODSTEP.l, borderBottomWidth: OBWODKA },
-  zakladka: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.s - 2, minHeight: CEL_DOTYKU, justifyContent: 'center' },
-  kreska: { position: 'absolute', left: 0, bottom: -OBWODKA, height: 2 },
+  pigulki: { flexDirection: 'row', flexWrap: 'wrap', gap: ODSTEP.xs, marginHorizontal: MARGINES, marginTop: ODSTEP.l },
+  pigulka: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ODSTEP.xxs + 2,
+    minHeight: CEL_DOTYKU - ODSTEP.xxs,
+    paddingHorizontal: ODSTEP.m - 2,
+    borderRadius: PROMIEN_PIGULKI,
+  },
+  pigulkaKsztalt: { borderRadius: PROMIEN_PIGULKI },
 });

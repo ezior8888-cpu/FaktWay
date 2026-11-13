@@ -37,6 +37,8 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
   const status = statusFaktury(f, DZIS);
   const pionowo = fontScale >= SKALA_PIONOWA;
   const mozeZaplacic = doZaplaty(f) || f.zaplacona;
+  // Faktura w terminie: termin w podpisie, bez plakietki (wzór Revolut Business, D14); plakietka tylko przy wyjątkach.
+  const zwykla = status.ton === 'neutralny' && f.statusKsef !== 'robocza';
 
   const akcja = (postep: SharedValue<number>) => (
     <AkcjaPrzesuniecia
@@ -64,16 +66,18 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
               {f.kontrahent}
             </Tekst>
             <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry numberOfLines={pionowo ? 2 : 1}>
-              {f.numer} · {dataKrotka(f.dataWystawienia)}
+              {f.numer} · {zwykla ? `termin ${dataKrotka(f.terminPlatnosci)}` : dataKrotka(f.dataWystawienia)}
             </Tekst>
           </View>
           <View style={pionowo ? styles.prawaPionowa : styles.prawa}>
             <Tekst styl="callout" cyfry waga="medium" numberOfLines={1}>
               {kwota(f.brutto)}
             </Tekst>
-            <Znacznik ton={status.ton} trwa={status.trwa}>
-              {status.tekst}
-            </Znacznik>
+            {zwykla ? null : (
+              <Znacznik ton={status.ton} trwa={status.trwa}>
+                {status.tekst}
+              </Znacznik>
+            )}
           </View>
         </Pressable>
       </Link.Trigger>

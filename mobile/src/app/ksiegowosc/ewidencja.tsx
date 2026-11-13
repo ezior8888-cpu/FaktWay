@@ -38,7 +38,7 @@ export default function EkranEwidencji() {
 
   return (
     <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <Sekcja naglowek="KPiR, listopad 2026" stopka={`Dochód w miesiącu (przychód minus koszty): ${kwota(przychody - koszty)}.`}>
+      <Sekcja linie naglowek="KPiR, listopad 2026" stopka={`Dochód w miesiącu (przychód minus koszty): ${kwota(przychody - koszty)}.`}>
         {KPIR.map((w) => (
           <Wiersz
             key={w.lp}

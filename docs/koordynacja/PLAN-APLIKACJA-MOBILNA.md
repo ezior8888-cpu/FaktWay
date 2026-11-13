@@ -6,6 +6,7 @@
 > w dzienniku z numerem PR, aktualizuje „Następny krok”, składa raport i STOP.
 >
 > Zasady wyglądu: [`docs/mobile/ZASADY-DESIGNU.md`](../mobile/ZASADY-DESIGNU.md).
+> Wzorce z Mobbin i lista poprawek: [`docs/mobile/WZORCE-MOBBIN.md`](../mobile/WZORCE-MOBBIN.md).
 > Ten plik jest jedynym źródłem prawdy o aplikacji mobilnej.
 
 Przygotowanie: 08.11.2026, odczyt `origin/main` @ `279e2b4c` (po #480).
@@ -67,9 +68,11 @@ i poziom porządnych aplikacji fintech.
 | D8 | **Kolejność platform:** najpierw iOS do poziomu „wzorzec”, potem dopasowanie Androida z tego samego kodu przed betą Google Play | rekomendacja |
 | D9 | **Powiadomienia:** z workera pg-boss bezpośrednio do APNs i FCM albo przez usługę push Expo (nowy podmiot przetwarzający, serwery poza UE). W obu przypadkach treść bez kwot i danych kontrahenta | otwarta, rozstrzygnąć w M11 |
 | D10 | **Identyfikator aplikacji:** `pl.faktway.app` na iOS (bundle ID) i Androidzie (package). Po publikacji nie do zmiany | przyjęta 08.11.2026 |
-| D12 | **Wygląd: FaktWay, nie „produkt Apple”.** Treść ekranów mówi językiem wersji na komputer (plan Finora, D2): czcionka Outfit, liczby, numery i daty w IBM Plex Mono, kolory presetu Modern Minimal z `app/globals.css` (niebieski `#2463EF`), płaskie karty z cienką obwódką i nagłówkiem w środku, okrągłe ikony Remix na jasnoniebieskim tle, statusy jak `components/invoices/status-badge.tsx`, wykresy w odcieniach niebieskiego. Natywne zostaje to, co daje płynność: stos ekranów, pasek zakładek, arkusze, gesty, wibracje, menu i podgląd przy przytrzymaniu | przyjęta 10.11.2026 (Bartosz: „wygląda dosłownie jak produkt Apple, zrób bardziej pod FaktWay”) |
+| D12 | **Wygląd: FaktWay, nie „produkt Apple”.** Treść ekranów mówi językiem wersji na komputer (plan Finora, D2): czcionka Outfit, liczby, numery i daty w IBM Plex Mono, kolory presetu Modern Minimal z `app/globals.css` (niebieski `#2463EF`), płaskie karty z cienką obwódką i nagłówkiem w środku, okrągłe ikony Remix na jasnoniebieskim tle, statusy jak `components/invoices/status-badge.tsx`, wykresy w odcieniach niebieskiego. Natywne zostaje to, co daje płynność: stos ekranów, pasek zakładek, arkusze, gesty, wibracje, menu i podgląd przy przytrzymaniu | przyjęta 10.11.2026 (Bartosz: „wygląda dosłownie jak produkt Apple, zrób bardziej pod FaktWay”); karty, liczby i gradient zmienione 12.11.2026 przez D15 |
 | D13 | **Bez Flo.** Na telefonie nie ma ekranu Flo, ustawień Flo, „Twój rok w liczbach” (na stronie `flo/wrapped`) ani podpowiedzi „Mogę wypełnić to za Ciebie” | przyjęta 10.11.2026 (Bartosz: „na razie zrezygnowaliśmy”) |
 | D11 | **Zakładki (5):** Pulpit, Faktury, Koszty (wydatki i skrzynka KSeF), Księgowość (Ten miesiąc, KPiR, ewidencja, VAT, eksport), Więcej (kontrahenci, import, wszystkie ustawienia). Pięć to granica paska zakładek iOS; reszta strony siedzi w Więcej | zmieniona 09.11.2026 (M4, po zmianie D3) |
+| D14 | **Wzór układu: Copilot i Revolut Business** (przegląd Mobbin, [`WZORCE-MOBBIN.md`](../mobile/WZORCE-MOBBIN.md)). Szkielet całej aplikacji (Pulpit, listy po dniach, Koszty, Księgowość) według Copilota, moduł faktur (lista, kreator, szczegół, potwierdzenie) według Revolut Business, oba w jasnym motywie FaktWay; z Rocket Money kalendarz terminów. Bierzemy układ, hierarchię i przepływ. Zmiany zasad wyglądu, które ten wzór wymaga: D15 | przyjęta 12.11.2026 (Bartosz: „Copilot + Revolut”) |
+| D15 | **Wygląd jak Copilot** (zmienia D12 w pięciu punktach; czcionka Outfit, niebieski `#2463EF`, ikony Remix, statusy, natywne zachowanie i 5 zakładek zostają). (1) Miękki gradient w odcieniach niebieskiego pod nagłówkiem ekranów zakładek i szczegółów. (2) Karty zaokrąglone (18 pt) bez obwódki, z delikatnym cieniem, na chłodnoszarym tle. (3) Kolorowe plakietki kategorii kosztów. (4) Grosze w indeksie górnym w dużych kwotach. (5) Liczby, kwoty i numery w Outfit z cyframi tabelarycznymi zamiast IBM Plex Mono. Szczegóły w `ZASADY-DESIGNU.md` (wersja 3), makieta pięciu ekranów u Bartosza | przyjęta 12.11.2026 (Bartosz po makiecie: „Wszystko jak Copilot”) |
 
 ---
 
@@ -193,7 +196,7 @@ iPhone'a) do czasu płatnego konta; potem EAS Build w chmurze i EAS Submit.
 | iPhone Bartosza | ocena „w ręce”: płynność, wibracje, czytelność | bez płatnego konta: kablem z Xcode, darmowe Apple ID, instalacja ważna 7 dni |
 | Skille Expo | kopie z github.com/expo/skills (MIT) w `.claude/skills/expo-*`: `expo-native-ui`, `expo-router`, `expo-ui`, `expo-animation`, `expo-design-system` | zrobione w M2 |
 | Skill projektu | `.claude/skills/telefon-app/` odsyła do `ZASADY-DESIGNU.md` i checklisty; Codex czyta `mobile/AGENTS.md` i zasady z `docs/` | zrobione w M2 |
-| Wzorce | Mobbin i własne zrzuty w `.agents/mobile-wzorce/` (poza gitem) | czeka na Bartosza |
+| Wzorce | Mobbin Pro przez serwer MCP w Claude Code (`search_screens`, `search_flows`, kolekcje); przegląd i lista poprawek w [`WZORCE-MOBBIN.md`](../mobile/WZORCE-MOBBIN.md), sposób pracy w jego sekcji 9 | od 12.11.2026 |
 
 Zasada: żaden ekran nie idzie do PR bez zrzutów z checklisty i porównania
 ze wzorcem. Wibracji i płynności Claude nie oceni; ocenia Bartosz na telefonie.
@@ -205,7 +208,7 @@ ze wzorcem. Wibracji i płynności Claude nie oceni; ocenia Bartosz na telefonie
 | Sprawa | Po co | Kiedy |
 |---|---|---|
 | Zgoda na dostęp w panelu symulatora | Claude klika i robi zrzuty sam | zrobione 08.11.2026 |
-| Mobbin i 3 do 4 aplikacji wzorcowych (zrzuty do `.agents/mobile-wzorce/`) | wzorce dla ekranów | przed M3 |
+| Mobbin | wzorce dla ekranów | zrobione 12.11.2026 (Mobbin Pro, połączenie MCP) |
 | Decyzja D6 (D2 i D3 przyjęte 08.11.2026) | sposób pracy nad wyglądem | przed M3 |
 | Projektant iOS (jeśli D6 na tak) | system i ekrany kluczowe | najlepiej przed M3 |
 | Spółka, D-U-N-S, konta Apple i Google (D4) | TestFlight, push, logowanie Apple, sklep | przed M11 |
@@ -225,6 +228,10 @@ częścią „gotowe” od M3.
 | M3 | **Ekran wzorcowy** na danych przykładowych: lista faktur i szczegół, dopracowane do checklisty; warianty D7 | Bartosz na swoim iPhonie mówi „to jest to”. Bez tego nie ma kolejnych ekranów |
 | M4 | **Pełny zakres na danych przykładowych** (D3): wszystkie sekcje strony według mapy 3a, pięć zakładek (D11), bloczek „Nowa faktura” (D7) | każdy ekran z 3a otwiera się w symulatorze, jasny, ciemny i duży tekst bez ucięć; przegląd kodu |
 | M4b | **Wygląd FaktWay** (D12) i usunięcie Flo (D13) na tych samych ekranach | zrzuty jasne i ciemne obok wersji M4; duży tekst bez ucięć; przegląd kodu |
+| M4c | **Wykończenie Copilota w fundamencie** (D15): tokeny (tło `#F2F4F7`, karta 18 pt bez obwódki z cieniem, kolory kategorii z testem kontrastu), Outfit z cyframi tabelarycznymi zamiast IBM Plex Mono, komponenty gradientu pod nagłówkiem, kwoty z groszami w indeksie, plakietki kategorii, pigułki i przycisku tonalnego. Najpierw próba: duży tytuł natywnego paska na gradiencie (pułapka iOS 27 z `mobile/AGENTS.md`) | wszystkie ekrany M4b w nowym wykończeniu, układ bez zmian; zrzuty jasne i ciemne obok M4b; duży tekst bez ucięć; przegląd kodu |
+| M4d | **Układ Copilota na zakładkach** (D14): Pulpit (karta wyniku z wykresem, „Do przejrzenia”, „Nadchodzące”), Faktury („Do zapłaty”, pigułki, grupy), Koszty (lista po dniach z kategoriami); pozycje 1 i 2 z `WZORCE-MOBBIN.md` | treść nad zgięciem na trzech zakładkach; zgodność z makietą; Bartosz ocenia na iPhonie |
+| M4e | **Faktury jak Revolut Business** (D14): formularz z kart z przypiętymi „Podgląd” i „Wyślij do KSeF”, potwierdzenie „Przyjęta w KSeF”, szczegół z rzędem akcji i historią; pozycje 4 i 6 | przepływ od bloczka „Nowa faktura” do szczegółu na danych przykładowych, jasny, ciemny, duży tekst |
+| M4f | **Księgowość, Więcej i stany ekranu**: terminy na górze z kalendarzem (wzór Rocket Money), nagłówek konta w Więcej, wspólne stany (szkielet, błąd, pusty z akcją, „Cofnij”, potwierdzenia w arkuszu akcji); pozycje 3, 5 i 8 | cztery stany na każdej liście; przegląd kodu |
 | M5 | Logowanie: e-mail i hasło, Google, 2FA, Face ID | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
 | M6 | API `app/api/mobile/v1` (szkielet, token, limity, audyt) i pierwsze trasy | testy tras na brak i zły token, RLS na bazie |
 | M7 | Faktury i skrzynka KSeF na prawdziwych danych | lista i szczegół z bazy, odświeżanie, stany ekranu |
@@ -252,10 +259,10 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** Bartosz ogląda M4b (wygląd FaktWay, D12) na swoim iPhonie:
-zrzuty `docs/mobile/zrzuty/m4b/` obok `m4/`, build poleceniem z `mobile/AGENTS.md`.
-Uwagi do wyglądu albo „idź dalej”; potem M5: logowanie. Otwarte: D4 (konta
-jako firma), D6 (projektant).
+**Następny krok:** Bartosz ogląda M4c i M4d (PR #663) na iPhonie albo w
+symulatorze: zrzuty `docs/mobile/zrzuty/m4c/`. Po „idź dalej” M4e: faktury
+jak Revolut Business (formularz z kart, potwierdzenie, szczegół z rzędem
+akcji). Otwarte: M4e i M4f przed logowaniem (M5) czy po nim, D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -265,3 +272,6 @@ jako firma), D6 (projektant).
 | 09.11.2026 | M3 | ekran wzorcowy na danych przykładowych: podsumowanie „Do zapłaty”, natywny przełącznik Wszystkie/Do zapłaty, wiersz z podglądem i menu przy przytrzymaniu oraz przesunięciem „Zapłacona” (wibracje), szczegół z przyciskiem Liquid Glass, wspólny stan zapłaty, szczegół kosztu, warianty D7 A/B/C, bez atrap (alertów „w etapie”); Dynamic Type do AX5 (układ pionowy), iPhone 17e i 18 Pro Max, tryb ciemny; poprawki z porównania z Ustawieniami iOS 27; zrzuty `docs/mobile/zrzuty/m3/` | #502 |
 | 09.11.2026 | M4 | pełny zakres strony na telefonie (D3): 5 zakładek (Pulpit, Faktury, Koszty, Księgowość, Więcej), mapa 3a; Pulpit z wykresami (Swift Charts), przepływami, analizami i „Twój rok”; faktury: widoki Wystawione, Cykliczne, Po terminie, filtry, formularze zwykłej, korygującej, zaliczkowej i rozliczającej, edycja szkicu i poprawka odrzuconej, cykliczne, przypomnienia, e-mail; koszty: dodawanie (symulowany OCR), skrzynka KSeF, opis; księgowość: Ten miesiąc, KPiR, ewidencja, VAT i JPK, eksport, ustawienia podatkowe; Więcej: kontrahenci, import, Flo, 11 ekranów ustawień; D7 = bloczek pod sumą; formularze i kafle w układzie pionowym przy dużym tekście; 10 poprawek z przeglądu kodu; zrzuty `docs/mobile/zrzuty/m4/` | #534 |
 | 10.11.2026 | M4b | wygląd FaktWay zamiast „produktu Apple” (D12): Outfit i IBM Plex Mono wbudowane w aplikację, paleta strony (jasna i ciemna), płaskie karty z obwódką i nagłówkiem w środku, ikony Remix ze strony (także w pasku zakładek i przyciskach paska), plakietki statusów jak na stronie, przyciski i pola jak na stronie z płynną animacją, zakładki sekcji z kreską, wykresy w SVG (słupki składane, linia z polem, pierścień, wiek należności) z animacją wejścia i dymkiem, Pulpit z logo FaktWay; bez Flo (D13): usunięte ekran Flo, ustawienia Flo, „Twój rok w liczbach” i podpowiedź w formularzu; `ZASADY-DESIGNU.md` w wersji 2; 7 uwag z przeglądu kodu (5 poprawionych); zrzuty `docs/mobile/zrzuty/m4b/` | #576 |
+| 12.11.2026 | wzorce | Mobbin Pro przez MCP: przegląd ekranów i lista 12 poprawek (`docs/mobile/WZORCE-MOBBIN.md`); porównanie pięciu wzorów całej aplikacji (Copilot, Revolut Business, Mercury, Rocket Money, Remote), wybór D14; makieta pięciu ekranów z przełącznikami zasad wyglądu, decyzja D15 („Wszystko jak Copilot”); `ZASADY-DESIGNU.md` w wersji 3; etapy M4c do M4f | (bez PR, dokumenty niezacommitowane) |
+| 12.11.2026 | M4c | wykończenie Copilota (D15) w komponentach: paleta w `paleta.ts` z testem kontrastu (`tests/unit/mobile-kontrast.test.ts`, 41 par), tło `#F2F4F7`, karty 18 pt bez obwódki z cieniem, nagłówki sekcji wersalikami nad kartą, wiersze bez linii (poza KPiR i ewidencją), gradient pod nagłówkiem z natywnym dużym tytułem w bieli (próba w symulatorze udana), pasek marki Pulpitu na gradiencie z białym logo, kwota z groszami w indeksie, kolorowe kategorie kosztów, przyciski 16 pt i wariant tonalny, Outfit z cyframi tabelarycznymi zamiast IBM Plex Mono (pliki usunięte); 2 uwagi z przeglądu kodu poprawione; zrzuty `docs/mobile/zrzuty/m4c/` | #663 |
+| 12.11.2026 | M4d | po uwadze Bartosza („za dużo ikon, strony za długie, miało być jak w makiecie”) układ z makiety w tym samym PR: Pulpit z kartą wyniku (wykres miesiąca wobec średniej, trzy liczby), „Do przejrzenia”, „Nadchodzące”, reszta kart na nowym ekranie Finanse; Faktury z kartą „Do zapłaty” i paskiem, pigułkami z licznikami, grupą „Do dokończenia”, sumami miesięcy, plakietką tylko przy wyjątkach; Koszty z kartą trzech liczb, listą po dniach i kropką „do opisania”; pigułki zamiast zakładek z kreską wszędzie; ikony w wierszach i kaflach tylko przy stanie; pasek marki Pulpitu poprawiony w trybie ciemnym | #663 |
