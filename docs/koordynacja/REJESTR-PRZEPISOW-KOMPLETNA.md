@@ -432,10 +432,10 @@ Zasady:
 - Podstawa: biznes.gov.pl, https://www.biznes.gov.pl/pl/portal/00226 ; ustawa z 18.09.2026 r. o zmianie ustawy o podatku dochodowym od osób fizycznych oraz ustawy o podatku dochodowym od osób prawnych, Dz.U. 2026 poz. 1371 (ogłoszona 21.10.2026), art. 1 pkt 2, art. 3, art. 6: https://api.sejm.gov.pl/eli/acts/DU/2026/1371 (tekst tylko w PDF: https://api.sejm.gov.pl/eli/acts/DU/2026/1371/text.pdf)
 - Obowiązuje: VAT bez daty końca; PIT w dawnym brzmieniu dla faktur wystawionych do 2026-12-31, w nowym od 2027-01-01 (art. 1 pkt 2 i art. 3 wchodzą w życie 1.01.2027, reszta ustawy 5.11.2026)
 - Obszary mapy: `koszty.platnosci`, `vat.biala_lista`
-- Pewność: średnia. Tytuł, daty i wejście w życie z metadanych aktu (strona API Sejmu). Brzmienie art. 1 pkt 2 i art. 3 tylko z indeksu tekstu PDF w wyszukiwarce: strony HTML aktu nie ma, ISAP pokazał weryfikację człowieka, PDF był dla narzędzia nieczytelny. Do potwierdzenia w PDF.
+- Pewność: średnia, bo otwarte zostaje 7 czy 14 dni na zawiadomienie. Brzmienie zmiany PIT potwierdzone 13.11.2026 w tekście oficjalnego PDF aktu (3 strony): art. 1 pkt 2 lit. a nadaje art. 22p ust. 1 brzmienie, w którym koszt odbiera tylko płatność „dokonana bez pośrednictwa rachunku płatniczego”, lit. c uchyla ust. 4; art. 3 ust. 2: „Do płatności wynikającej z faktury wystawionej przed dniem 1 stycznia 2027 r.” stosuje się art. 22p w brzmieniu dotychczasowym; art. 6: art. 1 pkt 1 i 2 oraz art. 3 od 1.01.2027, reszta po 14 dniach od ogłoszenia.
 - Wzorzec: poziom 4, strona biznes.gov.pl 00226; Dz.U. 2026 poz. 1371
 - Do rozstrzygnięcia: księgowa albo prawnik: 7 czy 14 dni na zawiadomienie (źródła się różnią), do czasu rozstrzygnięcia program ostrzega z krótszym terminem. Prawnik (pytanie 18): co jest „datą wystawienia” faktury z KSeF na przełomie roku, P_1 czy data przesłania do KSeF (art. 3 Dz.U. 2026 poz. 1371); do odpowiedzi program bierze P_1 z faktury, a bez niego datę dokumentu kosztu (dzień w Europe/Warsaw). P_1 nie jest późniejsze od przesłania, więc dawne ostrzeżenie obejmuje co najmniej te faktury, które obejmowałoby przy dniu przesłania.
-- Odczyt: 2026-11-08; zmiana PIT (Dz.U. 2026 poz. 1371): 2026-11-11
+- Odczyt: 2026-11-08; zmiana PIT (Dz.U. 2026 poz. 1371): 2026-11-11, tekst PDF: 2026-11-13
 - Kroki planu: 3.4
 
 
