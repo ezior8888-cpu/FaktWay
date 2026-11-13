@@ -1,6 +1,7 @@
 
 
 import type { JobContext } from '@/lib/jobs/registry';
+import { granicaArchiwizacji, terminUsunieciaPoArchiwizacji } from '@/lib/retention/terminy';
 import { createAdminClient } from '@/lib/supabase/server';
 import { uploadToGlacier } from '@/lib/storage/glacier';
 import {
@@ -18,9 +19,12 @@ import {
  * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.archive-old-invoices).
  */
 export async function runArchiveOldInvoices({ step, logger }: JobContext) {
-    const twoYearsAgo = new Date();
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    const issueBefore = twoYearsAgo.toISOString().slice(0, 10);
+    // Granica i termin usunięcia z tej samej chwili, dni w Polsce
+    // (lib/retention/terminy.ts, NZ-RET-01: usunięcie po 10 latach od wystawienia).
+    // Oba liczone przed pierwszym zapisem: błąd daty zatrzymuje przebieg na starcie.
+    const teraz = new Date();
+    const issueBefore = granicaArchiwizacji(teraz);
+    const terminUsuniecia = terminUsunieciaPoArchiwizacji(teraz);
 
     const candidates = await step.run('find-candidates', async () => {
       const supabase = createAdminClient();
@@ -99,12 +103,9 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
 
     await step.run('schedule-deletion', async () => {
       const supabase = createAdminClient();
-      const deletionDate = new Date();
-      deletionDate.setFullYear(deletionDate.getFullYear() + 8);
-
       const { error } = await supabase
         .from('invoices')
-        .update({ scheduled_deletion_at: deletionDate.toISOString() })
+        .update({ scheduled_deletion_at: terminUsuniecia })
         .in('id', ids);
 
       if (error) throw new Error(`Schedule deletion failed: ${error.message}`);

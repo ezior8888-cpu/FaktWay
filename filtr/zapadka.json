@@ -17,7 +17,6 @@
       "lib/flo/interest.ts": 1,
       "lib/format/warsaw-date.ts": 1,
       "lib/invoices/list-query.ts": 1,
-      "lib/jobs/runners/archive-old-invoices.ts": 3,
       "lib/jobs/runners/inbox-polling.ts": 1,
       "lib/ksef/idempotency.ts": 1,
       "lib/ksef/offline-queue.ts": 1,
