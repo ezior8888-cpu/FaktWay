@@ -194,10 +194,16 @@ describe('kontrola-go-live-ksef.sh — kontrola przełączenia KSeF TEST → PRO
   });
 
   it('bramka zero (sekcja 3a): pięć warunków kroku 5, otwarte wpisy jak OPEN_SUBMISSION_STATUSES', () => {
-    const gate = declaredQueries().find((q) => q.includes("name='invoice.submit.requested'"));
+    const gate = declaredQueries().find((q) => q.includes('FROM pgboss.job WHERE name IN'));
     expect(gate, 'brak zapytania bramki').toBeDefined();
     expect(gate).toContain("direction='outgoing' AND ksef_status IN ('queued','sending','offline_queued')");
-    expect(gate).toContain("state IN ('created','retry','active')");
+    // Wysyłka i oba zadania Offline24 po niej: zdarzenie z TEST po przełączeniu
+    // rzuca przy każdej próbie (lib/jobs/runners/process-offline-queue.ts).
+    // Nazwy muszą istnieć w rejestracji, inaczej bramka po cichu liczy 0.
+    const sendQueues = ['invoice.submit.requested', 'invoice.submit.failed.offline-queue', 'invoice.submit.succeeded.offline-queue'];
+    const handlers = readFileSync(join(ROOT, 'lib/jobs/handlers/package-d.ts'), 'utf8');
+    for (const queue of sendQueues) expect(handlers, queue).toContain(`queue: '${queue}'`);
+    expect(gate).toContain(`FROM pgboss.job WHERE name IN ${sqlList(sendQueues)} AND state IN ('created','retry','active')`);
     expect(gate).toContain("FROM ksef_offline_queue WHERE status IN ('queued','sending')");
     expect(gate).toContain("i.ksef_status='failed' AND c.class IS DISTINCT FROM 'terminal'");
     const open = constList('lib/ksef/duplicate-recheck.ts', 'OPEN_SUBMISSION_STATUSES');

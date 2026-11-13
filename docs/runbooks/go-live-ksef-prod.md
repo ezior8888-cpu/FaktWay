@@ -247,7 +247,7 @@ Kontrola, sekcje 3–5. Wszystkie wiersze bramki muszą mieć 0:
 | Wiersz | Dlaczego zero |
 |---|---|
 | faktury `queued`, `sending`, `offline_queued` | są w drodze ze zdarzeniem TEST; po przełączeniu skończą jako `ENV_MISMATCH` albo zostaną bez wyjścia |
-| zlecenia pg-boss wysyłki (`created`, `retry`, `active`) | jak wyżej |
+| zlecenia pg-boss wysyłki i jej kolejek Offline24 (`invoice.submit.requested`, `invoice.submit.failed.offline-queue`, `invoice.submit.succeeded.offline-queue`; `created`, `retry`, `active`) | jak wyżej; zadanie Offline24 ze zdarzeniem TEST po przełączeniu rzuca przy każdej próbie (`lib/jobs/runners/process-offline-queue.ts:358–360`, `:396–398`) |
 | wpisy `ksef_offline_queue` `queued`, `sending` | [offline24-zalegle.md](./offline24-zalegle.md) |
 | `failed` poza klasą terminal (także bez kodu i z kodem spoza katalogu) | po przełączeniu wznowi je cron albo przycisk, już na PROD (§2.1); kody hold: krok 3 |
 | otwarte wpisy `ksef_submissions` (`sent`, `intent`) przy `failed`/`rejected` | po przełączeniu uzgodnienie pytałoby PROD o wysyłkę z TEST |
