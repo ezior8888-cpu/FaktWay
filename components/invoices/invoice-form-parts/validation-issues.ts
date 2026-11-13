@@ -15,6 +15,8 @@ export interface ValidationIssue {
 
 const POLA: Record<string, { label: string; id: string }> = {
   internalNumber: { label: 'Numer faktury', id: 'internalNumber' },
+  // Krok 2.5 (#643): lista wyboru serii (`SeriesSelect`, domyślne id).
+  numberSeriesId: { label: 'Seria numeracji', id: 'number-series' },
   issueDate: { label: 'Data wystawienia', id: 'issue-date' },
   saleDate: { label: 'Data sprzedaży', id: 'sale-date' },
   paymentDueDate: { label: 'Termin płatności', id: 'payment-due-date' },
