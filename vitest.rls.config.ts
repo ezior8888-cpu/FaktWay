@@ -170,6 +170,9 @@ export default defineConfig({
       // zwykła sesja klienta, odmowy, TOTP z kodem w telefonie, odświeżenie kluczem anon. Z
       // RLS_TEST_GOTRUE_CAPTCHA=on (stos z captchą w GoTrue, nie w CI) także odmowa klucza anon.
       'tests/rls-mobile-logowanie.test.ts',
+      // Plan aplikacji mobilnej, M6c (bez migracji): kod 2FA z telefonu przez API tokenem klienta;
+      // zły kod to odmowa, dobry daje AAL2 tej samej sesji GoTrue, zakończona sesja to nie awaria.
+      'tests/rls-mobile-kod.test.ts',
       // 00201 (plan aplikacji mobilnej, M8): szkic faktury z telefonu tą samą funkcją co strona, klientem
       // z tokenem; klucze idempotencji: własne konto i firma, UNIQUE, klucz złożony z firmą, bez UPDATE
       // i DELETE dla klienta, usunięcie szkicu usuwa klucz.
