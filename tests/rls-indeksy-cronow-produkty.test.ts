@@ -173,10 +173,22 @@ async function upoExpected(tx: SqlRunner): Promise<Array<{ id: string; expected:
   return rows as Array<{ id: string; expected: boolean }>;
 }
 
-type PlanNode = { 'Index Name'?: string; Plans?: PlanNode[] };
+type PlanNode = {
+  'Node Type'?: string;
+  'Index Name'?: string;
+  'Total Cost'?: number;
+  'Plan Rows'?: number;
+  Plans?: PlanNode[];
+};
 const indexNames = (node: PlanNode): string[] => [
   ...(node['Index Name'] ? [node['Index Name']] : []),
   ...(node.Plans ?? []).flatMap(indexNames),
+];
+/** Drzewo planu z kosztami: komunikat, gdy planista wybrał inny indeks (CI pokazuje, o ile przegrał). */
+const planOutline = (node: PlanNode, depth = 0): string[] => [
+  `${'  '.repeat(depth)}${node['Node Type'] ?? '?'}${node['Index Name'] ? ` ${node['Index Name']}` : ''}`
+    + ` (koszt ${String(node['Total Cost'])}, wiersze ${String(node['Plan Rows'])})`,
+  ...(node.Plans ?? []).flatMap((child) => planOutline(child, depth + 1)),
 ];
 
 describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog produktów', { timeout: 120_000 }, () => {
@@ -341,7 +353,8 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
     });
 
     const ID = '00186aaa-0000-4000-8000-ffffffffffff';
-    const CASES: ReadonlyArray<{ index: string; sql: string; param?: unknown }> = [
+    type Case = { index: string; sql: string; param?: string };
+    const CASES: ReadonlyArray<Case> = [
       // ksef_lifecycle_violations I4 / I9
       { index: 'idx_invoices_ksef_status_in_flight', sql: "SELECT id FROM public.invoices WHERE direction = 'outgoing' AND ksef_status IN ('failed', 'rejected')" },
       // critical-alerts-monitor: sending bez znacznika przejęcia
@@ -363,27 +376,97 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
       { index: 'idx_products_tenant_id', sql: `SELECT id, name, unit, use_count FROM public.products WHERE tenant_id = '${ORG_P}' AND id > '${ID}' ORDER BY id LIMIT 1000` },
     ];
 
-    it.each(CASES)('$index: $sql', async ({ index, sql, param }) => {
-      const used = await rolledBack(async (tx) => {
-        await tx.executeSql('ANALYZE public.invoices, public.ksef_submissions, public.ksef_send_attempts, public.ocr_jobs, public.products');
-        await tx.executeSql('SET LOCAL ROLE service_role');
-        await tx.executeSql('SET LOCAL enable_seqscan = off');
-        await tx.executeSql('SET LOCAL plan_cache_mode = force_custom_plan');
-        let explained;
-        if (param === undefined) {
-          explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${sql}`);
-        } else {
-          // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
-          const name = `rls_00186_q_${Date.now()}`;
-          await tx.executeSql(`PREPARE ${name}(text) AS ${sql}`);
-          explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${name}('${String(param)}')`);
-          await tx.executeSql(`DEALLOCATE ${name}`);
-        }
-        const plan = explained.rows[0]!['QUERY PLAN'] as Array<{ Plan: PlanNode }>;
-        return indexNames(plan[0]!.Plan);
-      });
+    const TABLES = 'public.invoices, public.ksef_submissions, public.ksef_send_attempts, public.ocr_jobs, public.products';
 
-      expect(used).toContain(index);
+    /** Plan zapytania cronu tak jak w produkcji: service_role, plan dla wartości parametru. */
+    async function explain(tx: SqlRunner, { sql, param }: Case): Promise<PlanNode> {
+      let explained;
+      if (param === undefined) {
+        explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${sql}`);
+      } else {
+        // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
+        const name = `rls_00186_q_${Date.now()}`;
+        await tx.executeSql(`PREPARE ${name}(text) AS ${sql}`);
+        explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${name}('${param}')`);
+        await tx.executeSql(`DEALLOCATE ${name}`);
+      }
+      return (explained.rows[0]!['QUERY PLAN'] as Array<{ Plan: PlanNode }>)[0]!.Plan;
+    }
+
+    /**
+     * Stan z #655 (12.11.2026), odtworzony bez zależności od innych plików testów.
+     * Wspólna baza testów RLS ma w `invoices` przypadkowe resztki, a werdykt planisty
+     * zależy od nich: indeks w toku niesie wszystkie failed/rejected, także te, które
+     * zapytanie odrzuca dopiero po odczycie wiersza, a pełny skan starego indeksu
+     * częściowego `idx_invoices_tenant_payment_due` (tylko wychodzące) czyta mniej
+     * wierszy. Martwe wiersze (wstawione i usunięte w tej transakcji) rozdymają stertę
+     * jak resztki przed autovacuum, więc każdy zbędny odczyt wiersza kosztuje więcej.
+     * Tryb replica: wyzwalacze 00119 blokują DELETE poza szkicem; transakcja i tak
+     * jest cofana.
+     */
+    async function leftoversLike655(tx: SqlRunner) {
+      await tx.executeSql('SET LOCAL session_replication_role = replica');
+      await tx.executeSql(
+        `INSERT INTO public.invoices (tenant_id, direction, origin, ksef_status, issue_date, fa3_data)
+         SELECT $1::uuid, 'incoming', 'file_import', 'received', DATE '2026-10-01', '{}'::jsonb
+           FROM generate_series(1, 4000)`,
+        [ORG],
+      );
+      await tx.executeSql('DELETE FROM public.invoices');
+      await tx.executeSql(
+        `INSERT INTO public.invoices (tenant_id, direction, origin, internal_number, ksef_status, issue_date, fa3_data)
+         SELECT $1::uuid, 'outgoing', 'app', 'FV/00186/R/' || n, s, DATE '2026-10-01', '{}'::jsonb
+           FROM unnest(ARRAY['accepted', 'failed', 'rejected']) WITH ORDINALITY AS t(s, n)`,
+        [ORG],
+      );
+      await tx.executeSql(
+        `INSERT INTO public.invoices (tenant_id, direction, origin, ksef_status, issue_date, fa3_data)
+         SELECT $1::uuid, 'incoming', 'file_import', CASE WHEN g % 2 = 0 THEN 'failed' ELSE 'rejected' END,
+                DATE '2026-10-01', '{}'::jsonb
+           FROM generate_series(1, 40) AS g`,
+        [ORG],
+      );
+      await tx.executeSql('SET LOCAL session_replication_role = origin');
+    }
+
+    const STATES: ReadonlyArray<{ name: string; prepare?: (tx: SqlRunner) => Promise<void> }> = [
+      { name: 'tabela taka, jaka jest' },
+      { name: 'resztki jak w #655', prepare: leftoversLike655 },
+    ];
+
+    describe.each(STATES)('stan: $name', ({ prepare }) => {
+      const plans = new Map<string, { used: string[]; outline: string }>();
+
+      beforeAll(async () => {
+        await rolledBack(async (tx) => {
+          if (prepare) await prepare(tx);
+          await tx.executeSql(`ANALYZE ${TABLES}`);
+          const { rows } = await tx.executeSql(
+            `SELECT relpages, reltuples, pg_relation_size('public.invoices') / 8192 AS blocks
+               FROM pg_class WHERE oid = 'public.invoices'::regclass`,
+          );
+          const stats = `invoices: relpages ${String(rows[0]!.relpages)}, reltuples ${String(rows[0]!.reltuples)}, bloki ${String(rows[0]!.blocks)}`;
+          await tx.executeSql('SET LOCAL ROLE service_role');
+          await tx.executeSql('SET LOCAL enable_seqscan = off');
+          await tx.executeSql('SET LOCAL plan_cache_mode = force_custom_plan');
+          for (const c of CASES) {
+            const plan = await explain(tx, c);
+            plans.set(c.sql, { used: indexNames(plan), outline: [...planOutline(plan), stats].join('\n') });
+          }
+        });
+      }, 120_000);
+
+      // ANALYZE w transakcji zapisuje liczby w pg_class w miejscu (cofnięcie ich nie zwraca),
+      // a cofnięte wstawienia zostają martwymi wierszami: kolejny stan i kolejne pliki
+      // dostają tabele policzone i bez martwych wierszy, jak przed tym blokiem.
+      afterAll(async () => {
+        await db().executeSql(`VACUUM (ANALYZE) ${TABLES}`);
+      }, 120_000);
+
+      it.each(CASES)('$index: $sql', ({ index, sql }) => {
+        const plan = plans.get(sql);
+        expect(plan?.used, plan?.outline).toContain(index);
+      });
     });
   });
 
