@@ -162,6 +162,9 @@ describe('struktura menu (plan Finora §4)', () => {
           // i oferta jako osobna pozycja na końcu sekcji (dokumenty poza KSeF, nie
           // rodzaj faktury). Pozostałe pozycje bez zmian (D1).
           ['Proformy i oferty', '/proformy'],
+          // Świadoma zmiana (plan kompletnej aplikacji, krok 2.6, 13.11.2026): katalog
+          // „Produkty i usługi” jako jedna nowa pozycja obok proform; reszta bez zmian (D1).
+          ['Produkty i usługi', '/produkty'],
         ],
       },
       {
@@ -233,7 +236,7 @@ describe('struktura menu (plan Finora §4)', () => {
     // (świadoma zmiana, krok 3.2: Bank jest w telefonie tylko w „Więcej”).
     expect(more.map((s) => s.title)).toEqual(['Pulpit', 'Sprzedaż', 'Koszty i księgowość']);
     expect(more[0].items.map((i) => i.href)).toEqual(['/analizy/sprzedaz', '/bank']);
-    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors', '/noty', '/proformy']);
+    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors', '/noty', '/proformy', '/produkty']);
   });
 
   it('getDashboardPrefetchHrefs pomija pozycje z prefetch: false', () => {
