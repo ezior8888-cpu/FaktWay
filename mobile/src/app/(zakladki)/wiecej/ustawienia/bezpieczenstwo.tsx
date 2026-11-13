@@ -76,7 +76,7 @@ export default function EkranBezpieczenstwa() {
         <Sekcja
           naglowek="Ta aplikacja"
           stopka={`Po włączeniu aplikacja poprosi o ${biometria.nazwa} przy otwarciu i po ${BLOKADA_PO_MS / 60000} minutach w tle. W przełączniku aplikacji kwoty są zawsze zasłonięte.`}>
-          <PolePrzelacznik etykieta={`Blokada ${biometria.nazwa}`} wartosc={blokada} onZmiana={ustawBlokade} />
+          <PolePrzelacznik etykieta={`Blokada ${biometria.nazwa}`} wartosc={blokada} onZmiana={(v) => void ustawBlokade(v)} />
         </Sekcja>
       ) : (
         <Sekcja naglowek="Ta aplikacja" stopka="Ten telefon nie ma Face ID ani czytnika odcisków palców, więc blokada aplikacji jest niedostępna. W przełączniku aplikacji kwoty są zawsze zasłonięte." />

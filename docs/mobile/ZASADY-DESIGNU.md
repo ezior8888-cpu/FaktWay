@@ -146,6 +146,9 @@ Kontrast tych par (4.5:1 w obu trybach) sprawdza test, zanim trafią do `kolory.
   ikony przy każdym wierszu zaśmiecały ekrany (Bartosz, 12.11.2026).
   Wyjątek: znak Face ID to systemowy symbol `faceid` (Remix go nie ma, a
   klient zna go z innych aplikacji); na Androidzie odcisk palca z Remix.
+  Drugi wyjątek: „Wklej” w polu kodu to systemowy przycisk wklejania
+  (`UIPasteControl`, czcionka systemu, kolory marki), bo tylko on czyta
+  schowek bez pytania klienta o zgodę.
 - **Logowanie i blokada** (M5a): ekrany logowania mają nagłówek w treści
   (białe logo, tytuł, jedno zdanie) na gradiencie i karty niżej, jak reszta
   aplikacji. Blokada i zasłona w przełączniku aplikacji leżą na pełnym

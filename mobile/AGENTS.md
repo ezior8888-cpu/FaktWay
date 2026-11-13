@@ -115,3 +115,28 @@ uruchamiasz po kolei, nigdy razem.
   pola, używaj go zamiast stanu.
 - Narzędzie symulatora robi zrzut przed narysowaniem ostatnich zmian po
   wpisaniu tekstu; przed oceną zrzutu odczekaj sekundę albo zrób drugi.
+- Systemowy przełącznik (`Switch`) na iOS 27 nie reaguje na samo dotknięcie
+  z narzędzia symulatora: przeciągnij go (`swipe` o 35 pt w bok).
+- `pod install` (też w `expo prebuild`) pada na kodowaniu bez UTF-8 w
+  powłoce: najpierw `export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`.
+
+## Logowanie na lokalnej bazie (od M5b)
+
+- Bez `mobile/.env.local` aplikacja loguje na danych przykładowych (M5a).
+  Z plikiem loguje się do Supabase:
+  `EXPO_PUBLIC_SUPABASE_URL` i `EXPO_PUBLIC_SUPABASE_ANON_KEY` z
+  `supabase status -o env` (`pnpm db:local` w katalogu głównym). Plik jest
+  poza gitem; tylko lokalna baza, nigdy `db-1`. Po zmianie pliku uruchom
+  Metro od nowa.
+- Konto testowe `dev@faktway.test` (bez 2FA) zakłada `scripts/dev/baza-lokalna.sh`.
+  Do kodu 2FA załóż drugie konto z TOTP przez API GoTrue (`auth.admin.createUser`,
+  potem `mfa.enroll` i `mfa.challengeAndVerify`); konta dev nie ruszaj, bo
+  używa go strona.
+- Face ID w symulatorze: zapis twarzy
+  `xcrun simctl spawn <udid> notifyutil -s com.apple.BiometricKit.enrollmentChanged 1`
+  i `... notifyutil -p com.apple.BiometricKit.enrollmentChanged`; rozpoznana
+  twarz `... notifyutil -p com.apple.BiometricKit_Sim.pearl.match`,
+  nierozpoznana `... pearl.nomatch`. Kod do schowka symulatora:
+  `xcrun simctl pbcopy <udid>`.
+- Pytanie systemu o Face ID robi aplikację „nieaktywną” jak przełącznik
+  aplikacji; zasłona (`Zaslona`) pomija je przez `pytanieSystemu` z sesji.

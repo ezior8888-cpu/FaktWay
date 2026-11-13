@@ -233,12 +233,12 @@ częścią „gotowe” od M3.
 | M4e | **Faktury jak Revolut Business** (D14): formularz z kart z przypiętymi „Podgląd” i „Wyślij do KSeF”, potwierdzenie „Przyjęta w KSeF”, szczegół z rzędem akcji i historią; pozycje 4 i 6 | przepływ od bloczka „Nowa faktura” do szczegółu na danych przykładowych, jasny, ciemny, duży tekst |
 | M4f | **Księgowość, Więcej i stany ekranu**: terminy na górze z kalendarzem (wzór Rocket Money), nagłówek konta w Więcej, wspólne stany (szkielet, błąd, pusty z akcją, „Cofnij”, potwierdzenia w arkuszu akcji); pozycje 3, 5 i 8 | cztery stany na każdej liście; przegląd kodu |
 | M5a | **Przepływ logowania na danych przykładowych** (`WZORCE-MOBBIN.md` 7): logowanie e-mailem i hasłem albo przez Google, kod 2FA, propozycja Face ID, blokada przy powrocie, zasłona w przełączniku aplikacji, „Wyloguj się”, usuwanie konta z Google; warstwa `stan/sesja.tsx` z interfejsem dla M5b | cały przepływ w symulatorze, jasny, ciemny i duży tekst; przegląd kodu |
-| M5b | **Logowanie na prawdziwym koncie:** `@supabase/supabase-js` z sesją w `expo-secure-store`, `mfa.verify`, Google przez `openAuthSessionAsync`, Face ID przez `expo-local-authentication`, „Wklej” kod (`expo-clipboard`), ekran startu z logo do odczytu sesji; nowy build w Xcode. Sprawdzić, czy GoTrue wymaga tokenu sprawdzenia bota (na stronie `bot_check_failed`). Z przeglądu M5a: wylogowanie czyści dane poprzedniego konta w pamięci, a usunięcie konta z Google bez 2FA potwierdza Face ID | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
+| M5b | **Logowanie na prawdziwym koncie:** `@supabase/supabase-js` z sesją w `expo-secure-store`, `mfa.verify`, Google przez `openAuthSessionAsync`, Face ID przez `expo-local-authentication`, „Wklej” kod (`expo-clipboard`), ekran startu z logo do odczytu sesji; nowy build w Xcode. Sprawdzić, czy GoTrue wymaga tokenu sprawdzenia bota (na stronie `bot_check_failed`). Z przeglądu M5a: usunięcie konta z Google bez 2FA potwierdza Face ID (zrobione); czyszczenie danych poprzedniego konta przy wylogowaniu przechodzi do M7, kiedy w pamięci będą prawdziwe dane | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
 | M6 | API `app/api/mobile/v1` (szkielet, token, limity, audyt) i pierwsze trasy | testy tras na brak i zły token, RLS na bazie |
-| M7 | Faktury i skrzynka KSeF na prawdziwych danych | lista i szczegół z bazy, odświeżanie, stany ekranu |
+| M7 | Faktury i skrzynka KSeF na prawdziwych danych; wylogowanie i „Zaloguj się na inne konto” czyszczą dane poprzedniego konta w pamięci; start bez internetu z wygasłym tokenem pokazuje dane z poprzedniego otwarcia zamiast logowania (przegląd M5b) | lista i szczegół z bazy, odświeżanie, stany ekranu |
 | M8 | Szybka faktura z wysyłką do KSeF (środowisko TEST) | faktura przyjęta przez KSeF TEST z telefonu |
 | M9 | Wydatek ze zdjęcia: skaner, OCR, sprawdzenie | wydatek zapisany ze skanu |
-| M10 | Pozostałe ekrany z 3a na prawdziwych danych (należności, przypomnienia, PDF, księgowość, ustawienia) | każdy ekran z 3a czyta i zapisuje bazę |
+| M10 | Pozostałe ekrany z 3a na prawdziwych danych (należności, przypomnienia, PDF, księgowość, ustawienia); usuwanie konta przez API, z 2FA i metodą logowania z serwera, nie z przełącznika przykładowego (przegląd M5b) | każdy ekran z 3a czyta i zapisuje bazę |
 | M11 | Powiadomienia push (D9), logowanie Apple; wymaga płatnego konta | powiadomienie o nowej fakturze na telefonie |
 | M12 | Android: dopasowanie konwencji (sekcja 10 zasad) | checklista na emulatorze Androida |
 | M13 | Sklep: ikona, zrzuty, opisy, polityka i etykiety prywatności, konto dla recenzenta, beta TestFlight i zamknięty test Google | aplikacja zgłoszona do przeglądu |
@@ -260,12 +260,16 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M5b, logowanie na prawdziwym koncie z lokalnej bazy
-(Bartosz 13.11: „idź dalej cały czas bez przerw”, etapy jeden po drugim,
-każdy z PR). Wymaga nowego buildu w Xcode i Supabase w Colimie, po kolei, nie
-razem (Mac 16 GB). Kolejność scalania: #663, #664, #665, M5a, potem M5b.
-Otwarte: 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie jednym
-dotknięciem (`expo-clipboard`, wchodzi z M5b), D4, D6.
+**Następny krok:** M6, API `app/api/mobile/v1` (Bartosz 13.11: „idź dalej
+cały czas bez przerw”, etapy jeden po drugim, każdy z PR). Kolejność
+scalania: #663, #664, #665, #666, #667. **Przed logowaniem z telefonu na
+produkcji** (decyzja Bartosza): GoTrue musi znać adres powrotu
+`faktway://**` (Google), a włączenie captchy w GoTrue
+(`docs/runbooks/captcha-w-gotrue.md`, krok 2) zablokuje logowanie z
+aplikacji, która nie ma tokenu Turnstile; do wyboru Turnstile w aplikacji
+albo logowanie przez trasę API z M6. Otwarte: 3.9 („Nowa faktura” jednym
+dotknięciem), kopiowanie jednym dotknięciem (5.2, `expo-clipboard` już w
+buildzie), D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -281,3 +285,4 @@ dotknięciem (`expo-clipboard`, wchodzi z M5b), D4, D6.
 | 13.11.2026 | M4e | faktury jak Revolut Business (D14; WZORCE-MOBBIN.md 3.2, 3.3, 3.5, 3.7, 8.4): formularz w kolejności Nabywca, Pozycje, Szczegóły, Płatność; znany kontrahent i wypełniona pozycja zwinięte do wiersza, numer i daty jako wiersze z wartościami; przypięte „Podgląd” (podgląd bez pól z „zmienisz tylko korektą”) i „Wyślij do KSeF” z kwotą; po wysłaniu szczegół z kartą „Wysyłamy do KSeF” → „Przyjęta w KSeF” (numer KSeF, e-mail, udostępnij, Gotowe); szczegół: rząd akcji (Zapłacona, E-mail, PDF, Przypomnij), historia jako oś, kolejność Nabywca, Pozycje i VAT, Płatność, Dokument, Sprzedawca; jedna nazwa „Przyjęta w KSeF”. Bez 3.6 (wybór kontrahenta z wyszukiwaniem) i 3.9 | #664 |
 | 13.11.2026 | M4f | Księgowość: terminy na górze pogrupowane po dniu („Zapłacono 1 z 4”), arkusz „Dane do przelewu” (zaznaczanie, Udostępnij, Oznacz jako zapłacone), zapłaty we wspólnym stanie, przychód i koszty w jednej karcie, formularz zapłat spoza wyliczenia po dotknięciu; Więcej: karta konta z plakietkami KSeF i planu, pięć małych grup ze stanem po prawej, wyszukiwarka po słowach kluczowych; stany: `StanPusty` z akcją, odświeżanie pociągnięciem (Faktury, Koszty), pasek „Cofnij” po zmianie zapłaty, `potwierdz()` na arkuszu akcji w 8 miejscach (WZORCE-MOBBIN.md 5.1, 5.2, 6.1, 8.2, 8.3, 8.5, 8.6). Bez szkieletu ładowania (8.1, przy M7) i kopiowania jednym dotknięciem (nowy build) | #665 |
 | 13.11.2026 | M5a | logowanie na danych przykładowych (WZORCE-MOBBIN.md 7, wzory Mercury, Kraken, Revolut Business): zakładki przeniesione do grupy `(zakladki)`, korzeń `Slot` z przekierowaniami w układach (stos w korzeniu psuł pasek stanu na gradiencie); ekran logowania (gradient, karta z e-mailem i hasłem z okiem i podpowiedziami pęku kluczy, „Nie pamiętasz hasła?”, Google, miejsce na Apple za flagą), kod 2FA w jednym polu z wysyłką po 6 cyfrach i błędami jak na stronie, propozycja Face ID raz po logowaniu, blokada nad całą aplikacją (`FullWindowOverlay`, powitanie, firma, „Odblokuj przez Face ID”, „Zaloguj się na inne konto”) przy starcie i po 3 minutach w tle, zasłona z logo w przełączniku aplikacji, „Wyloguj się” w Więcej, przełącznik blokady w Bezpieczeństwie ze wspólnej sesji, usuwanie konta z Google kodem 2FA; przycisk w wariantach `karta` i `naGradiencie` ze stanem „trwa”; zrzuty `docs/mobile/zrzuty/m5/` | #666 |
+| 13.11.2026 | M5b | logowanie na prawdziwym koncie: `@supabase/supabase-js` z sesją w pęku kluczy (`expo-secure-store`, zapis w kawałkach), zaplecze logowania w dwóch wersjach (`lib/logowanie/`: Supabase albo dane przykładowe, gdy brak `EXPO_PUBLIC_SUPABASE_URL`), kod 2FA przez `mfa.challengeAndVerify` (poziom `aal2` jak na stronie), Google przez `openAuthSessionAsync` i wymianę kodu (PKCE), Face ID przez `expo-local-authentication` (samo przy blokadzie, włączenie blokady potwierdza twarz), „Wklej” w kodzie jako systemowy `UIPasteControl` (bez pytania o schowek), ekran startowy trzymany do odczytu sesji, wylogowanie kończy sesję telefonu na serwerze, odmowa captchy GoTrue z komunikatem. Sprawdzone w symulatorze na lokalnej bazie: konto z TOTP (hasło, wklejony kod, Pulpit), sesja po ponownym uruchomieniu, blokada z systemowym Face ID (rozpoznana, nierozpoznana, anulowana), wylogowanie, konto bez 2FA z propozycją Face ID. Nowy build w Xcode | #667 |

@@ -7,6 +7,7 @@
  */
 import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
+import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState, type Ref } from 'react';
 import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions, type ReturnKeyTypeOptions, type TextInputInstance } from 'react-native';
 import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -147,21 +148,31 @@ type PoleKoduProps = {
   poleRef?: Ref<TextInputInstance>;
   /** Klawiatura od razu (ekran kodu przy logowaniu), nie w zwykłym formularzu. */
   autoFocus?: boolean;
+  /**
+   * „Wklej” w polu po prawej: dostaje tekst ze schowka. Na iOS to systemowy
+   * przycisk wklejania (`UIPasteControl`), który nie pyta o zgodę na odczyt
+   * schowka; gdzie go nie ma, zwykły przycisk z `getStringAsync`.
+   */
+  onWklej?: (tekst: string) => void;
 };
+
+const WKLEJ = { width: CEL_DOTYKU + ODSTEP.m, height: CEL_DOTYKU - ODSTEP.xs };
 
 /**
  * Kod z aplikacji TOTP: jedno pole z dużymi cyframi tabelarycznymi zamiast
  * sześciu kratek (WZORCE-MOBBIN.md 7, ekran 3): działa z autouzupełnianiem
  * kodów iOS i z dużym tekstem. Przyjmuje tylko cyfry, najwyżej 6.
  */
-export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, autoFocus }: PoleKoduProps) {
+export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, autoFocus, onWklej }: PoleKoduProps) {
   const kolory = useKolory();
   const [aktywne, setAktywne] = useState(false);
   const obwodka = useObwodka(aktywne, Boolean(blad));
   return (
     <View style={styles.pole}>
       <Etykieta tekst={etykieta} />
-      <Animated.View style={[styles.ramka, { backgroundColor: kolory.tlo }, obwodka]}>
+      <Animated.View style={[styles.ramka, onWklej ? styles.ramkaHasla : null, { backgroundColor: kolory.tlo }, obwodka]}>
+        {/* Odstęp po lewej tej samej szerokości co przycisk po prawej, żeby cyfry stały na środku. */}
+        {onWklej ? <View style={styles.akcjaPola} /> : null}
         <TextInput
           ref={poleRef}
           value={wartosc}
@@ -178,8 +189,33 @@ export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, aut
           selectionColor={kolory.akcent}
           accessibilityLabel={etykieta}
           accessibilityHint="Sześć cyfr"
-          style={[stylTekstu('title1', { cyfry: true }), styles.wejscieKodu, { color: kolory.etykieta }]}
+          style={[stylTekstu('title1', { cyfry: true }), styles.wejscieKodu, onWklej ? styles.rozciagniety : null, { color: kolory.etykieta }]}
         />
+        {onWklej && Clipboard.isPasteButtonAvailable ? (
+          <View style={styles.akcjaPola}>
+            <Clipboard.ClipboardPasteButton
+              acceptedContentTypes={['plain-text']}
+              displayMode="labelOnly"
+              cornerStyle="capsule"
+              backgroundColor={kolory.akcentTlo}
+              foregroundColor={kolory.akcentNaTle}
+              style={WKLEJ}
+              onPress={(dane) => {
+                if (dane.type === 'text') onWklej(dane.text);
+              }}
+            />
+          </View>
+        ) : onWklej ? (
+          <Pressable
+            onPress={() => void Clipboard.getStringAsync().then(onWklej)}
+            accessibilityRole="button"
+            accessibilityLabel="Wklej"
+            style={styles.akcjaPola}>
+            <Tekst styl="subheadline" waga="semibold" kolor="akcent" maxFontSizeMultiplier={1.4}>
+              Wklej
+            </Tekst>
+          </Pressable>
+        ) : null}
       </Animated.View>
       {blad ? (
         <Tekst styl="footnote" kolor="blad">
@@ -417,6 +453,7 @@ const styles = StyleSheet.create({
   rozciagniety: { flex: 1 },
   ramkaHasla: { flexDirection: 'row', alignItems: 'center' },
   oko: { minWidth: CEL_DOTYKU, minHeight: CEL_DOTYKU, alignItems: 'center', justifyContent: 'center' },
+  akcjaPola: { width: CEL_DOTYKU + ODSTEP.m, minHeight: CEL_DOTYKU, alignItems: 'center', justifyContent: 'center' },
   wejscieKodu: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.xs, letterSpacing: ODSTEP.xs, textAlign: 'center' },
   wierszPrzelacznika: {
     minHeight: CEL_DOTYKU + ODSTEP.xs,

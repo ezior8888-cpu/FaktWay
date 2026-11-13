@@ -1,42 +1,32 @@
 /**
- * Sesja i blokada aplikacji (plan aplikacji 4.2, etap M5; przepływ w
+ * Sesja i blokada aplikacji (plan aplikacji 4.2, etapy M5a i M5b; przepływ w
  * WZORCE-MOBBIN.md, sekcja 7).
  *
- * M5a: dane przykładowe, bez serwera. Interfejs (`useSesja`) jest ten sam,
- * który w M5b dostanie Supabase (`signInWithPassword`, `mfa.verify`, sesja w
- * `expo-secure-store`) i `expo-local-authentication`; ekrany się nie zmienią.
- * Zasady danych przykładowych: hasło od 8 znaków przechodzi, krótsze daje błąd
- * złych danych; kod 2FA to dowolne 6 cyfr poza „000000”.
- *
- * Stany: `brak` (ekran logowania), `kod` (hasło przyjęte, czeka kod TOTP),
+ * Stany: `wczytywanie` (start, ekran startowy systemu czeka na sesję z pęku
+ * kluczy), `brak` (logowanie), `kod` (pierwszy krok przyjęty, czeka kod TOTP),
  * `propozycja` (zalogowany, raz pytamy o Face ID), `aktywna` (zakładki).
  * Blokada to osobna flaga nad aktywną sesją: aplikacja startuje zablokowana,
  * gdy klient ją włączył, i blokuje się po `BLOKADA_PO_MS` w tle.
+ *
+ * Serwer i telefon obsługuje zaplecze (`lib/logowanie/`): Supabase, gdy
+ * aplikacja ma adres bazy, inaczej dane przykładowe z M5a. Ekrany widzą tylko
+ * `useSesja`.
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 
-import { CZLONKOWIE, FIRMA } from '@/dane-przykladowe/ustawienia';
+import { zapleczePrzykladowe } from '@/lib/logowanie/przykladowe';
+import { zapleczeSupabase } from '@/lib/logowanie/supabase';
+import { BLEDY_LOGOWANIA, type Biometria, type KodBledu, type Konto, type WynikKroku, type Zaplecze } from '@/lib/logowanie/typy';
+import { supabase } from '@/lib/supabase';
 import { useFlaga } from '@/stan/faktury';
 
-export type StanSesji = 'brak' | 'kod' | 'propozycja' | 'aktywna';
+export { BLEDY_LOGOWANIA, type Biometria, type KodBledu, type Konto };
 
-/** Teksty błędów jak na stronie (`app/(auth)/login/page.tsx`, `two-factor/page.tsx`). */
-export const BLEDY_LOGOWANIA = {
-  puste_pola: 'Wpisz e-mail i hasło.',
-  zle_dane: 'Nieprawidłowy e-mail lub hasło. Upewnij się, że e-mail jest potwierdzony.',
-  google: 'Nie udało się zalogować przez Google. Spróbuj ponownie.',
-  zly_kod: 'Kod nieprawidłowy. Sprawdź godzinę w telefonie i wpisz aktualny kod z aplikacji TOTP.',
-  za_duzo_prob: 'Zbyt wiele prób. Poczekaj chwilę i spróbuj ponownie.',
-  brak_polaczenia: 'Nie możemy się połączyć. Sprawdź internet i spróbuj ponownie.',
-} as const;
-export type KodBledu = keyof typeof BLEDY_LOGOWANIA;
+export type StanSesji = 'wczytywanie' | 'brak' | 'kod' | 'propozycja' | 'aktywna';
 
 /** Co ekran logowania robi po udanym kroku: kod 2FA, propozycja Face ID albo nic (zakładki pokazują się same). */
 export type Wynik = { ok: true; dalej: 'kod' | 'propozycja' | 'gotowe' } | { ok: false; blad: KodBledu };
-
-export type Biometria = { nazwa: string; twarz: boolean };
-export type Konto = { email: string; imie: string; firma: string; metoda: 'haslo' | 'google' };
 
 /** Po tylu minutach w tle aplikacja z włączoną blokadą prosi o Face ID. */
 export const BLOKADA_PO_MS = 3 * 60 * 1000;
@@ -53,15 +43,23 @@ type Kontekst = {
   biometria?: Biometria;
   /** Klient włączył blokadę Face ID (Więcej, Bezpieczeństwo). */
   blokada: boolean;
-  ustawBlokade: (wlacz: boolean) => void;
+  /** Włączenie najpierw pyta system o Face ID (zgoda systemu i próba); wyłączenie od razu. */
+  ustawBlokade: (wlacz: boolean) => Promise<void>;
   /** Aplikacja jest teraz zasłonięta ekranem blokady. */
   zablokowana: boolean;
+  /**
+   * Aplikacja sama pyta system o Face ID. Pytanie robi ją „nieaktywną” jak
+   * przełącznik aplikacji, ale wtedy zasłona nie może zakryć ekranu.
+   */
+  pytanieSystemu: boolean;
   zaloguj: (email: string, haslo: string) => Promise<Wynik>;
   zalogujGoogle: () => Promise<Wynik>;
   potwierdzKod: (kod: string) => Promise<Wynik>;
   /** Powrót z ekranu kodu: hasło trzeba będzie wpisać znowu. */
   anulujKod: () => void;
-  zakonczPropozycje: (wlacz: boolean) => void;
+  zakonczPropozycje: (wlacz: boolean) => Promise<void>;
+  /** Potwierdzenie tożsamości twarzą przed akcją wrażliwą (usunięcie konta z Google bez 2FA). */
+  potwierdzBiometria: () => Promise<boolean>;
   /** Systemowe pytanie o Face ID. `sama`: wywołane przy pokazaniu blokady, nie przyciskiem. */
   odblokuj: (opcje?: { sama?: boolean }) => Promise<boolean>;
   wyloguj: () => void;
@@ -69,36 +67,81 @@ type Kontekst = {
 
 const SesjaKontekst = createContext<Kontekst | null>(null);
 
-const BIOMETRIA_PRZYKLADOWA: Biometria = Platform.OS === 'ios' ? { nazwa: 'Face ID', twarz: true } : { nazwa: 'odcisk palca', twarz: false };
-
-function kontoPrzykladowe(email?: string, metoda: Konto['metoda'] = 'haslo'): Konto {
-  const ty = CZLONKOWIE.find((c) => c.ty) ?? CZLONKOWIE[0];
-  return { email: email ?? ty.email, imie: ty.imie, firma: FIRMA.nazwa, metoda };
-}
-
-/** Czas odpowiedzi serwera w danych przykładowych, żeby było widać stan „trwa logowanie”. */
-const czekaj = () => new Promise<void>((r) => setTimeout(r, 700));
+/** Klucze ustawień tego telefonu (pęk kluczy albo pamięć danych przykładowych). */
+const KLUCZ = { blokada: 'blokada', propozycja: 'propozycja-face-id', email: 'email' } as const;
 
 export function Sesja({ children }: { children: ReactNode }) {
-  const [dwaEtapy] = useFlaga('2fa', true);
-  // Start na danych przykładowych: klient wraca do aplikacji z włączonym Face ID.
-  const [stan, setStan] = useState<StanSesji>('aktywna');
-  const [konto, setKonto] = useState<Konto | undefined>(() => kontoPrzykladowe());
-  const [oczekujace, setOczekujace] = useState<Konto>();
-  const [zapamietanyEmail, setZapamietanyEmail] = useState(() => kontoPrzykladowe().email);
-  const [blokada, setBlokada] = useState(true);
-  const [propozycjaPokazana, setPropozycjaPokazana] = useState(true);
-  const [zablokowana, setZablokowana] = useState(true);
-  const biometria = BIOMETRIA_PRZYKLADOWA;
+  // Dane przykładowe: o kodzie 2FA decyduje przełącznik z Więcej, Bezpieczeństwo; na prawdziwym koncie serwer.
+  const [dwaEtapyPrzykladowe] = useFlaga('2fa', true);
+  const [zaplecze] = useState<Zaplecze>(() => (supabase ? zapleczeSupabase(supabase) : zapleczePrzykladowe()));
 
-  // Blokada po powrocie z tła; ref, żeby słuchacz AppState nie zależał od stanu.
+  const [stan, setStan] = useState<StanSesji>('wczytywanie');
+  const [konto, setKonto] = useState<Konto>();
+  const [oczekujace, setOczekujace] = useState<Konto>();
+  const [zapamietanyEmail, setZapamietanyEmail] = useState('');
+  const [biometria, setBiometria] = useState<Biometria>();
+  const [blokada, setBlokada] = useState(false);
+  const [propozycjaPokazana, setPropozycjaPokazana] = useState(false);
+  const [zablokowana, setZablokowana] = useState(false);
+  const [pytanieSystemu, setPytanieSystemu] = useState(false);
+
+  const zapytajSystem = async (sama: boolean) => {
+    setPytanieSystemu(true);
+    try {
+      return await zaplecze.odblokuj({ sama });
+    } finally {
+      setPytanieSystemu(false);
+    }
+  };
+
+  // Start: sesja i ustawienia z telefonu. Do końca widać ekran startowy systemu (`app/_layout.tsx`).
+  useEffect(() => {
+    let aktualne = true;
+    void (async () => {
+      const [k, bio, b, p, e] = await Promise.all([
+        zaplecze.start().catch(() => undefined),
+        zaplecze.biometria().catch(() => undefined),
+        zaplecze.wczytaj(KLUCZ.blokada).catch(() => null),
+        zaplecze.wczytaj(KLUCZ.propozycja).catch(() => null),
+        zaplecze.wczytaj(KLUCZ.email).catch(() => null),
+      ]);
+      if (!aktualne) return;
+      const zBlokada = b === '1' && bio !== undefined;
+      setBiometria(bio);
+      setBlokada(zBlokada);
+      setPropozycjaPokazana(p === '1');
+      setZapamietanyEmail(e ?? '');
+      setKonto(k);
+      setZablokowana(k !== undefined && zBlokada);
+      setStan(k ? 'aktywna' : 'brak');
+    })();
+    return () => {
+      aktualne = false;
+    };
+  }, [zaplecze]);
+
+  // Serwer zakończył sesję sam (odebrany dostęp, nieważny token): wracamy do logowania.
+  useEffect(
+    () =>
+      zaplecze.poWylogowaniu(() => {
+        setKonto(undefined);
+        setOczekujace(undefined);
+        setZablokowana(false);
+        setStan((s) => (s === 'wczytywanie' ? s : 'brak'));
+      }),
+    [zaplecze],
+  );
+
+  // Blokada po powrocie z tła i odświeżanie tokenu tylko na wierzchu; ref, żeby słuchacz nie zależał od stanu.
   const wTle = useRef<number | undefined>(undefined);
   const czyBlokowac = useRef(false);
   useEffect(() => {
     czyBlokowac.current = stan === 'aktywna' && blokada;
   }, [stan, blokada]);
   useEffect(() => {
+    zaplecze.naWierzchu(AppState.currentState === 'active');
     const sub = AppState.addEventListener('change', (s) => {
+      zaplecze.naWierzchu(s === 'active');
       if (s === 'background') wTle.current = Date.now();
       if (s !== 'active') return;
       const od = wTle.current;
@@ -106,7 +149,18 @@ export function Sesja({ children }: { children: ReactNode }) {
       if (od !== undefined && czyBlokowac.current && Date.now() - od >= BLOKADA_PO_MS) setZablokowana(true);
     });
     return () => sub.remove();
-  }, []);
+  }, [zaplecze]);
+
+  const zapiszBlokade = (wlacz: boolean) => {
+    setBlokada(wlacz);
+    void zaplecze.zapisz(KLUCZ.blokada, wlacz ? '1' : '0');
+  };
+
+  /** Blokadę włącza dopiero udane Face ID: system pyta wtedy o zgodę, a klient widzi, że działa. */
+  const wlaczBlokade = async (wlacz: boolean) => {
+    if (wlacz && !(await zapytajSystem(false))) return;
+    zapiszBlokade(wlacz);
+  };
 
   const zakoncz = (k: Konto): Wynik => {
     setKonto(k);
@@ -120,13 +174,16 @@ export function Sesja({ children }: { children: ReactNode }) {
     return { ok: true, dalej: 'gotowe' };
   };
 
-  const poHasle = (k: Konto): Wynik => {
-    if (dwaEtapy) {
-      setOczekujace(k);
+  const poPierwszymKroku = (w: WynikKroku, email: string): Wynik => {
+    if (!w.ok) return w;
+    setZapamietanyEmail(email);
+    void zaplecze.zapisz(KLUCZ.email, email);
+    if (w.wymagaKodu && (supabase !== null || dwaEtapyPrzykladowe)) {
+      setOczekujace(w.konto);
       setStan('kod');
       return { ok: true, dalej: 'kod' };
     }
-    return zakoncz(k);
+    return zakoncz(w.konto);
   };
 
   const wartosc: Kontekst = {
@@ -135,45 +192,42 @@ export function Sesja({ children }: { children: ReactNode }) {
     zapamietanyEmail,
     biometria,
     blokada,
-    ustawBlokade: setBlokada,
+    ustawBlokade: wlaczBlokade,
     zablokowana: zablokowana && stan === 'aktywna' && blokada,
+    pytanieSystemu,
     zaloguj: async (email, haslo) => {
       const e = email.trim();
       if (!e || !haslo) return { ok: false, blad: 'puste_pola' };
-      await czekaj();
-      if (haslo.length < 8) return { ok: false, blad: 'zle_dane' };
-      setZapamietanyEmail(e);
-      return poHasle(kontoPrzykladowe(e, 'haslo'));
+      return poPierwszymKroku(await zaplecze.zaloguj(e, haslo), e);
     },
     zalogujGoogle: async () => {
-      // M5b: `signInWithOAuth` i `WebBrowser.openAuthSessionAsync` z powrotem na `faktway://`.
-      await czekaj();
-      const k = kontoPrzykladowe(undefined, 'google');
-      setZapamietanyEmail(k.email);
-      return poHasle(k);
+      const w = await zaplecze.zalogujGoogle();
+      return poPierwszymKroku(w, w.ok ? w.konto.email : zapamietanyEmail);
     },
     potwierdzKod: async (kod) => {
       if (!/^\d{6}$/.test(kod)) return { ok: false, blad: 'zly_kod' };
-      await czekaj();
-      if (kod === '000000') return { ok: false, blad: 'zly_kod' };
-      return zakoncz(oczekujace ?? kontoPrzykladowe());
+      const w = await zaplecze.potwierdzKod(kod);
+      if (!w.ok) return w;
+      return zakoncz(oczekujace ?? w.konto);
     },
     anulujKod: () => {
       setOczekujace(undefined);
       setStan('brak');
+      void zaplecze.anulujKod();
     },
-    zakonczPropozycje: (wlacz) => {
+    zakonczPropozycje: async (wlacz) => {
+      // Anulowane Face ID zostawia klienta na propozycji: może spróbować znowu albo wybrać „Nie teraz”.
+      if (wlacz && !(await zapytajSystem(false))) return;
       setPropozycjaPokazana(true);
-      setBlokada(wlacz);
+      void zaplecze.zapisz(KLUCZ.propozycja, '1');
+      zapiszBlokade(wlacz);
       setStan('aktywna');
     },
+    potwierdzBiometria: () => zapytajSystem(false),
     odblokuj: async (opcje) => {
-      // M5b: `LocalAuthentication.authenticateAsync`. Bez niego samo pokazanie
-      // blokady zachowuje się jak anulowane pytanie systemu: zostaje ekran z
-      // przyciskiem „Odblokuj”, który w danych przykładowych zawsze przechodzi.
-      if (opcje?.sama) return false;
-      setZablokowana(false);
-      return true;
+      const ok = await zapytajSystem(Boolean(opcje?.sama));
+      if (ok) setZablokowana(false);
+      return ok;
     },
     wyloguj: () => {
       // Blokada należy do sesji na tym telefonie: po ponownym logowaniu
@@ -182,8 +236,10 @@ export function Sesja({ children }: { children: ReactNode }) {
       setKonto(undefined);
       setOczekujace(undefined);
       setZablokowana(false);
-      setBlokada(false);
+      zapiszBlokade(false);
       setPropozycjaPokazana(false);
+      void zaplecze.zapisz(KLUCZ.propozycja, '0');
+      void zaplecze.wyloguj();
     },
   };
 
