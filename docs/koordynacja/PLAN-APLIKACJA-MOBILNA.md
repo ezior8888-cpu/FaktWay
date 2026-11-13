@@ -73,6 +73,7 @@ i poziom porządnych aplikacji fintech.
 | D11 | **Zakładki (5):** Pulpit, Faktury, Koszty (wydatki i skrzynka KSeF), Księgowość (Ten miesiąc, KPiR, ewidencja, VAT, eksport), Więcej (kontrahenci, import, wszystkie ustawienia). Pięć to granica paska zakładek iOS; reszta strony siedzi w Więcej | zmieniona 09.11.2026 (M4, po zmianie D3) |
 | D14 | **Wzór układu: Copilot i Revolut Business** (przegląd Mobbin, [`WZORCE-MOBBIN.md`](../mobile/WZORCE-MOBBIN.md)). Szkielet całej aplikacji (Pulpit, listy po dniach, Koszty, Księgowość) według Copilota, moduł faktur (lista, kreator, szczegół, potwierdzenie) według Revolut Business, oba w jasnym motywie FaktWay; z Rocket Money kalendarz terminów. Bierzemy układ, hierarchię i przepływ. Zmiany zasad wyglądu, które ten wzór wymaga: D15 | przyjęta 12.11.2026 (Bartosz: „Copilot + Revolut”) |
 | D15 | **Wygląd jak Copilot** (zmienia D12 w pięciu punktach; czcionka Outfit, niebieski `#2463EF`, ikony Remix, statusy, natywne zachowanie i 5 zakładek zostają). (1) Miękki gradient w odcieniach niebieskiego pod nagłówkiem ekranów zakładek i szczegółów. (2) Karty zaokrąglone (18 pt) bez obwódki, z delikatnym cieniem, na chłodnoszarym tle. (3) Kolorowe plakietki kategorii kosztów. (4) Grosze w indeksie górnym w dużych kwotach. (5) Liczby, kwoty i numery w Outfit z cyframi tabelarycznymi zamiast IBM Plex Mono. Szczegóły w `ZASADY-DESIGNU.md` (wersja 3), makieta pięciu ekranów u Bartosza | przyjęta 12.11.2026 (Bartosz po makiecie: „Wszystko jak Copilot”) |
+| D16 | **Logowanie hasłem z telefonu przez nasze API**, nie wprost do GoTrue (M5b) i nie przez Turnstile w aplikacji. `POST /api/mobile/v1/logowanie` loguje w GoTrue kluczem serwisowym, który GoTrue z captchą przepuszcza bez tokenu (sprawdzone 13.11.2026 na lokalnym GoTrue z captchą, wynik w 4.2), za naszymi limitami prób (adres IP, e-mail i wspólny ze stroną; bez Redisa odmowa) i z wpisem w audycie. Kod 2FA, odświeżanie sesji i wylogowanie telefon robi dalej sam w GoTrue, bo captchy nie wymagają. Powód: krok 2 runbooka `docs/runbooks/captcha-w-gotrue.md` włącza captchę w GoTrue i wtedy `signInWithPassword` z aplikacji bez tokenu Turnstile zostaje odrzucone; natywny ekran bez okienka Cloudflare | przyjęta 13.11.2026 (Bartosz) |
 
 ---
 
@@ -157,6 +158,25 @@ przykładowy trzyma stawkę jako liczbę.
 - Odblokowanie Face ID albo odciskiem palca (`expo-local-authentication`).
 - Usuwanie konta dostępne w aplikacji (wymóg Apple); prowadzi do istniejącej
   ścieżki RODO z 14 dniami na rezygnację (`docs/adr/0006-gdpr-14d-cooling-off.md`).
+- **Hasło przez nasze API (D16, M6b).** Telefon wysyła e-mail i hasło na
+  `POST /api/mobile/v1/logowanie` (`lib/api/mobile/logowanie.ts`), dostaje
+  sesję GoTrue i `wymagaKodu`, a sesję wkłada do klienta przez
+  `supabase.auth.setSession`. Trasa loguje kluczem serwisowym, limity prób:
+  20 na adres IP i 10 na e-mail w 15 minut oraz limit strony (5 na adres i
+  e-mail, ten sam kubełek). Bez Redisa odmawia (503 `login_unavailable`,
+  „Zaloguj się na faktway.pl albo spróbuj za kilka minut”). Wpisy:
+  `auth.login` jak na stronie (zaraz po haśle) i `auth.login_failed` bez
+  konta i adresu e-mail. Google zostaje wprost w GoTrue (PKCE).
+- **Captcha w GoTrue, sprawdzenie 13.11.2026** (lokalny GoTrue v2.197.0,
+  `[auth.captcha]` z sekretem testowym Cloudflare „zawsze odrzuca”). Odmowa
+  bez tokenu: logowanie hasłem kluczem anon, `/recover`, `/signup`, `/otp`.
+  Przechodzą bez tokenu: logowanie hasłem z kluczem serwisowym w
+  `Authorization` (JWT albo `sb_secret_` w `apikey`; sesja wychodzi zwykła,
+  rola `authenticated`, AAL1), `refresh_token`, `pkce` (Google), `id_token`
+  (Apple), `/factors` (włączenie, `challenge`, `verify`) i `/logout`.
+  „Nie pamiętasz hasła?” w aplikacji otwiera stronę (tam jest Turnstile).
+  Na GoTrue z captchą test `tests/rls-mobile-logowanie.test.ts` uruchamia się
+  z `RLS_TEST_GOTRUE_CAPTCHA=on`; w CI GoTrue nie ma captchy.
 
 ### 4.3 Serwer: API dla aplikacji
 Logika siedzi dziś w akcjach serwera (`app/actions/*`, `components/invoices/*-actions.ts`),
@@ -306,6 +326,7 @@ częścią „gotowe” od M3.
 | M5a | **Przepływ logowania na danych przykładowych** (`WZORCE-MOBBIN.md` 7): logowanie e-mailem i hasłem albo przez Google, kod 2FA, propozycja Face ID, blokada przy powrocie, zasłona w przełączniku aplikacji, „Wyloguj się”, usuwanie konta z Google; warstwa `stan/sesja.tsx` z interfejsem dla M5b | cały przepływ w symulatorze, jasny, ciemny i duży tekst; przegląd kodu |
 | M5b | **Logowanie na prawdziwym koncie:** `@supabase/supabase-js` z sesją w `expo-secure-store`, `mfa.verify`, Google przez `openAuthSessionAsync`, Face ID przez `expo-local-authentication`, „Wklej” kod (`expo-clipboard`), ekran startu z logo do odczytu sesji; nowy build w Xcode. Sprawdzić, czy GoTrue wymaga tokenu sprawdzenia bota (na stronie `bot_check_failed`). Z przeglądu M5a: usunięcie konta z Google bez 2FA potwierdza Face ID (zrobione); czyszczenie danych poprzedniego konta przy wylogowaniu przechodzi do M7, kiedy w pamięci będą prawdziwe dane | logowanie na konto testowe z lokalnej bazy działa w symulatorze |
 | M6 | API `app/api/mobile/v1` (szkielet, token, limity, audyt) i pierwsze trasy | testy tras na brak i zły token, RLS na bazie |
+| M6b | **Logowanie hasłem przez API** (D16): trasa `POST /api/mobile/v1/logowanie` (limity, audyt, odmowa bez Redisa), w aplikacji `zaloguj` przez trasę i `setSession`; najpierw sprawdzenie na lokalnym GoTrue z captchą, czego captcha wymaga | test trasy na prawdziwym GoTrue z captchą; logowanie z symulatora na lokalnej bazie z captchą: hasło, kod 2FA, Pulpit |
 | M7 | Faktury i skrzynka KSeF na prawdziwych danych; wylogowanie i „Zaloguj się na inne konto” czyszczą dane poprzedniego konta w pamięci; start bez internetu z wygasłym tokenem pokazuje dane z poprzedniego otwarcia zamiast logowania (przegląd M5b) | lista i szczegół z bazy, odświeżanie, stany ekranu |
 | M8 | Szybka faktura z wysyłką do KSeF (środowisko TEST) | faktura przyjęta przez KSeF TEST z telefonu |
 | M9 | Wydatek ze zdjęcia: skaner, OCR, sprawdzenie | wydatek zapisany ze skanu |
