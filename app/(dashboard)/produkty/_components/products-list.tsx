@@ -103,11 +103,11 @@ export function ProductsList({ rows }: { rows: ProductListItem[] }) {
             </TableCell>
             <TableCell>{p.unit}</TableCell>
             <TableCell className='text-right tabular-nums'>
-              {p.defaultPriceNet === null ? '—' : formatPlMoney(p.defaultPriceNet)}
+              {p.defaultPriceNet === null ? 'brak' : formatPlMoney(p.defaultPriceNet)}
             </TableCell>
             <TableCell>{PRODUCT_VAT_RATE_LABELS[p.defaultVatRate as ProductVatRate] ?? p.defaultVatRate}</TableCell>
-            <TableCell>{p.pkwiuCode ?? '—'}</TableCell>
-            <TableCell>{p.gtuCode ?? '—'}</TableCell>
+            <TableCell>{p.pkwiuCode ?? 'brak'}</TableCell>
+            <TableCell>{p.gtuCode ?? 'brak'}</TableCell>
             <TableCell className='text-right tabular-nums'>{p.useCount}</TableCell>
             <TableCell>
               <RowActions product={p} />
