@@ -31,17 +31,31 @@ async function odswiez(): Promise<Odswiezenie> {
   return error && isAuthRetryableFetchError(error) ? 'polaczenie' : 'koniec';
 }
 
+/** Dłużej żądanie nie wisi (portal Wi-Fi, martwa sieć): przerwane daje „brak połączenia”, a nie kręciołek bez końca. */
+const LIMIT_ZADANIA_MS = 15000;
+
+/** `fetch` z przerwaniem po `LIMIT_ZADANIA_MS`; ten sam dla API i dla bazy (`global.fetch` klienta Supabase nie zmieniamy). */
+function zLimitem(adres: string, opcje: { method: string; headers: Record<string, string>; body?: string }) {
+  const przerwij = new AbortController();
+  const zegar = setTimeout(() => przerwij.abort(), LIMIT_ZADANIA_MS);
+  return fetch(adres, { ...opcje, signal: przerwij.signal }).finally(() => clearTimeout(zegar));
+}
+
 const zaleznosci = {
   adres: ADRES_API,
   token,
   odswiez,
-  pobierz: (adres: string, opcje: { method: string; headers: Record<string, string>; body?: string }) => fetch(adres, opcje),
+  pobierz: zLimitem,
 };
 
 /** `GET`/`POST` na `/api/mobile/v1/<sciezka>`. */
 export const zapytajApi = utworzKlienta(zaleznosci);
 
 /** Odczyt z bazy tokenem telefonu; `zapytanie` dostaje token do nagłówka `Authorization`. */
-export function czytajZBazy<T>(zapytanie: (token: string) => PromiseLike<OdpowiedzBazy<T>>): Promise<Wynik<T>> {
-  return zBazy(zaleznosci, zapytanie);
+export function czytajZBazy<T>(zapytanie: (token: string, sygnal: AbortSignal) => PromiseLike<OdpowiedzBazy<T>>): Promise<Wynik<T>> {
+  return zBazy(zaleznosci, (token) => {
+    const przerwij = new AbortController();
+    const zegar = setTimeout(() => przerwij.abort(), LIMIT_ZADANIA_MS);
+    return Promise.resolve(zapytanie(token, przerwij.signal)).finally(() => clearTimeout(zegar));
+  });
 }

@@ -35,7 +35,7 @@ export type WynikListy<T> = Wynik<{ lista: T[]; pelna: boolean }>;
 
 /** Najnowsze faktury wystawione (jak lista strony: od ostatnio utworzonej) z pozycjami. */
 export async function pobierzFaktury(firma: string): Promise<WynikListy<Faktura>> {
-  const wynik = await czytajZBazy<WierszFaktury[]>((token) =>
+  const wynik = await czytajZBazy<WierszFaktury[]>((token, sygnal) =>
     klient()
       .from('invoices')
       .select(KOLUMNY_FAKTURY)
@@ -46,6 +46,7 @@ export async function pobierzFaktury(firma: string): Promise<WynikListy<Faktura>
       .limit(LIMIT_LISTY)
       .setHeader('Authorization', `Bearer ${token}`)
       .setHeader(NAGLOWEK_FIRMY, firma)
+      .abortSignal(sygnal)
       .returns<WierszFaktury[]>(),
   );
   if (!wynik.ok) return wynik;
@@ -57,7 +58,7 @@ async function wydatkiSkrzynki(firma: string, idFaktur: string[]): Promise<Powia
   const wszystkie: PowiazanyWydatek[] = [];
   for (let i = 0; i < idFaktur.length; i += KAWALEK_ID) {
     const kawalek = idFaktur.slice(i, i + KAWALEK_ID);
-    const wynik = await czytajZBazy<PowiazanyWydatek[]>((token) =>
+    const wynik = await czytajZBazy<PowiazanyWydatek[]>((token, sygnal) =>
       klient()
         .from('expenses')
         .select('id, ksef_invoice_id, is_reviewed')
@@ -65,6 +66,7 @@ async function wydatkiSkrzynki(firma: string, idFaktur: string[]): Promise<Powia
         .in('ksef_invoice_id', kawalek)
         .setHeader('Authorization', `Bearer ${token}`)
         .setHeader(NAGLOWEK_FIRMY, firma)
+        .abortSignal(sygnal)
         .returns<PowiazanyWydatek[]>(),
     );
     if (!wynik.ok) return null;
@@ -75,7 +77,7 @@ async function wydatkiSkrzynki(firma: string, idFaktur: string[]): Promise<Powia
 
 /** Skrzynka KSeF: faktury kosztowe od najnowszej przyjętej w KSeF (jak strona). */
 export async function pobierzSkrzynke(firma: string): Promise<WynikListy<FakturaKosztowa>> {
-  const wynik = await czytajZBazy<WierszSkrzynki[]>((token) =>
+  const wynik = await czytajZBazy<WierszSkrzynki[]>((token, sygnal) =>
     klient()
       .from('invoices')
       .select(KOLUMNY_SKRZYNKI)
@@ -86,6 +88,7 @@ export async function pobierzSkrzynke(firma: string): Promise<WynikListy<Faktura
       .limit(LIMIT_LISTY)
       .setHeader('Authorization', `Bearer ${token}`)
       .setHeader(NAGLOWEK_FIRMY, firma)
+      .abortSignal(sygnal)
       .returns<WierszSkrzynki[]>(),
   );
   if (!wynik.ok) return wynik;

@@ -159,6 +159,8 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     const zapamietana = wybrana ?? (await ustawienia.wczytaj(kluczFirmy(u)).catch(() => null));
     if (!aktualne()) return;
     const firma = wybierzFirme(k.dane, zapamietana);
+    // Wybór z Więcej zostaje na telefonie dopiero, gdy serwer potwierdził firmę na liście konta.
+    if (wybrana && firma === wybrana) void ustawienia.zapisz(kluczFirmy(u), wybrana).catch(() => undefined);
     if (!firma) {
       firmaPokazana.current = null;
       ostatnioUdane.current = Date.now();
@@ -266,7 +268,6 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     firma: dane.konto?.firmy.find((f) => f.id === dane.firmaId),
     wybierzFirme: (id) => {
       if (!uzytkownik || id === dane.firmaId) return;
-      void ustawienia.zapisz(kluczFirmy(uzytkownik), id).catch(() => undefined);
       setDane((d) => ({ ...d, pobranie: { stan: 'ladowanie', bezSieci: false } }));
       void laduj(uzytkownik, id);
     },

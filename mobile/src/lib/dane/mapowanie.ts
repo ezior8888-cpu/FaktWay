@@ -152,7 +152,7 @@ function adres(a: Adres): string | undefined {
 export function stawkaZBazy(stawka: string | null | undefined): Pick<Pozycja, 'stawkaVat' | 'stawkaOpis'> {
   const t = tekst(stawka);
   if (/^\d+(\.\d+)?$/.test(t)) return { stawkaVat: Number(t) };
-  return { stawkaVat: 0, stawkaOpis: t || '–' };
+  return { stawkaVat: 0, stawkaOpis: t || 'brak' };
 }
 
 export function pozycjeZBazy(wiersze: WierszPozycji[] | null | undefined): Pozycja[] {
