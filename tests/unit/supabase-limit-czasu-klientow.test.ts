@@ -11,12 +11,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * gra serwer, który nie odpowiada (jak undici: kończy go tylko przerwanie
  * sygnałem). Sprawdzają limit odczytu i zapisu w żądaniu, dłuższe limity
  * workera, limit na czytanie treści i to, że przekroczenie nie kasuje sesji.
+ *
+ * Render RSC: Next 16 skleja w nim identyczne GET (memoizacja `fetch` na
+ * `cache()` z Reacta), ale nie, gdy żądanie ma `signal`. `cache()` dostaje tu
+ * pamięć jednego renderu (`renderScope.current`); poza renderem, jak w React,
+ * niczego nie pamięta. Sklejanie samo liczy `tests/unit/sesja-raz-na-render.test.tsx`.
  */
 
 const cookieStore = vi.hoisted(() => ({
   values: new Map<string, string>(),
   set: vi.fn(),
 }));
+
+/** Pamięć bieżącego renderu RSC (`null` = poza renderem). */
+const renderScope = vi.hoisted(() => ({ current: null as Map<unknown, unknown> | null }));
+vi.mock('react', async (original) => {
+  const real = await original<typeof import('react')>();
+  return {
+    ...real,
+    // Klucz to sama funkcja: w kodzie pod testem `cache()` dostaje tylko funkcje bez argumentów.
+    cache: <A extends unknown[], R>(fn: (...args: A) => R) =>
+      (...args: A): R => {
+        const scope = renderScope.current;
+        if (!scope) return fn(...args);
+        if (!scope.has(fn)) scope.set(fn, fn(...args));
+        return scope.get(fn) as R;
+      },
+  };
+});
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     getAll: () => [...cookieStore.values].map(([name, value]) => ({ name, value })),
@@ -111,6 +133,7 @@ beforeEach(async () => {
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'fixture-service-role-key-do-testow');
   cookieStore.values = new Map([[COOKIE_NAME, sessionCookie()]]);
   cookieStore.set.mockReset();
+  renderScope.current = null;
   hungSignals = [];
   fetchMock = vi.fn(neverAnswers);
   vi.stubGlobal('fetch', fetchMock);
@@ -228,6 +251,106 @@ describe('limity w żądaniu (RSC, akcje, trasy API)', () => {
     expect(write.error).toBeNull();
     expect(write.status).toBe(204);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('w renderze RSC: Next dalej skleja identyczne GET (sesja 9)', () => {
+  /** Odpowiedź z treścią, która przychodzi dopiero po `delayMs`; `cancelled` zbiera powody zamknięcia treści. */
+  function answersAfter(delayMs: number, cancelled: unknown[]) {
+    return () => new Promise<Response>((resolve) => {
+      setTimeout(() => resolve(new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('[]'));
+        },
+        cancel(reason) {
+          cancelled.push(reason);
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })), delayMs);
+    });
+  }
+
+  it('odczyt idzie bez sygnału, a wołający i tak dostaje błąd po 10 s', async () => {
+    renderScope.current = new Map();
+    const supabase = await server.createClient();
+    const admin = server.createAdminClient();
+
+    const user = await settlesAt(10_000, supabase.auth.getUser());
+    const rows = await settlesAt(10_000, admin.from('invoices').select('id'));
+
+    expect(user.error?.name).toBe('AuthRetryableFetchError');
+    expect(user.error?.message).toBe('Supabase nie odpowiedział w 10000 ms (GET /auth/v1/user)');
+    expectTimeoutResult(rows, 10_000, 'GET /rest/v1/invoices');
+    // Z `signal` memoizacja `fetch` w Next nie skleja (`dedupe-fetch`).
+    expect(hungSignals).toEqual([undefined, undefined]);
+    // PostgREST nie ponawia odczytu po błędzie limitu także bez sygnału (`code` ABORT_ERR).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(cookieStore.set).not.toHaveBeenCalled();
+  });
+
+  it('odpowiedź, która przyszła po limicie, jest zamykana (nieczytana nie trzyma połączenia)', async () => {
+    const cancelled: unknown[] = [];
+    fetchMock.mockImplementation(answersAfter(15_000, cancelled));
+    renderScope.current = new Map();
+    const supabase = await server.createClient();
+
+    expectTimeoutResult(await settlesAt(10_000, supabase.from('invoices').select('id')), 10_000, 'GET /rest/v1/invoices');
+    expect(cancelled).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(cancelled).toHaveLength(1);
+    expect(cancelled[0]).toBeInstanceOf(timeouts.SupabaseTimeoutError);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('serwer staje w połowie treści: limit przerywa czytanie i zamyka źródło', async () => {
+    const cancelled: unknown[] = [];
+    fetchMock.mockImplementation(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('[{"id":'));
+      },
+      cancel(reason) {
+        cancelled.push(reason);
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    renderScope.current = new Map();
+    const admin = server.createAdminClient();
+
+    expectTimeoutResult(await settlesAt(10_000, admin.from('invoices').select('id')), 10_000, 'GET /rest/v1/invoices');
+
+    expect(cancelled).toHaveLength(1);
+    expect(cancelled[0]).toBeInstanceOf(timeouts.SupabaseTimeoutError);
+  });
+
+  it('odpowiedź w limicie przechodzi bez zmian i nie zostawia zegara', async () => {
+    fetchMock.mockImplementation(async () => Response.json([{ id: 'a' }], { status: 200, headers: { 'content-range': '0-0/1' } }));
+    renderScope.current = new Map();
+    const admin = server.createAdminClient();
+
+    const read = await admin.from('invoices').select('id');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(read.error).toBeNull();
+    expect(read.data).toEqual([{ id: 'a' }]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('zapis i odczyt z sygnałem wołającego dalej mają sygnał (Next ich nie skleja)', async () => {
+    renderScope.current = new Map();
+    const supabase = await server.createClientForOrg(org);
+    const caller = new AbortController();
+
+    expectTimeoutResult(await settlesAt(30_000, supabase.rpc('fixture_zapis')), 30_000, 'POST /rest/v1/rpc/fixture_zapis');
+    const read = track(supabase.from('invoices').select('id').abortSignal(caller.signal));
+    // Najpierw odczyt musi dojść do sieci: sygnał przerwany wcześniej kończy go bez wywołania.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(hungSignals).toHaveLength(2);
+    expect(hungSignals[1]?.aborted).toBe(false);
+    caller.abort();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(hungSignals.every((signal) => signal?.aborted === true)).toBe(true);
+    expect(read.done).toBe(true);
+    expect(read.value?.error?.message).toMatch(/^AbortError/);
   });
 });
 

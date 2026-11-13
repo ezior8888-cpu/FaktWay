@@ -20,6 +20,8 @@
  * kasowania ciasteczek). W jobie to zwykły błąd, więc pg-boss ponawia handler.
  */
 
+import { cache } from 'react';
+
 /** Cała bramka w proxy: sesja, przerwa techniczna, 2FA i wybór firmy razem. */
 export const PROXY_GATE_TIMEOUT_MS = 5_000;
 /** Odczyt w żądaniu (RSC, akcja, trasa API). `authenticated` ma w bazie ok. 8 s. */
@@ -60,24 +62,39 @@ export function enableWorkerSupabaseTimeouts(): void {
  * `fetch` dla klienta Supabase (`global.fetch`). Limit liczy się od wysłania
  * żądania do przeczytania całej treści odpowiedzi. Sygnał wywołującego (np.
  * `.abortSignal()` w PostgREST) i `deadline` dalej działają.
+ *
+ * Wyjątek dla sklejania w Next: w renderze RSC Next 16 wysyła identyczne GET
+ * i HEAD do sieci raz na render (`dedupe-fetch`), ale tylko bez `signal`.
+ * Na tym stoi sesja 9 planu: powtórzone `getUser()` w layoutach i na stronie
+ * to jedno wywołanie GoTrue. Taki odczyt (w renderze, bez sygnału wołającego)
+ * idzie więc bez sygnału: limit zwalnia wołającego tak samo, a odpowiedź, która
+ * przyjdzie po limicie, jest zamykana. Poza renderem (proxy, akcje, trasy API,
+ * worker) Next niczego nie skleja i sygnał przerywa też samo połączenie.
  */
 export function createSupabaseFetch(options: { deadline?: AbortSignal } = {}): typeof fetch {
   return async (input, init) => {
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-    const limitMs = method === 'GET' || method === 'HEAD' ? processLimits.read : processLimits.write;
+    const isRead = method === 'GET' || method === 'HEAD';
+    const limitMs = isRead ? processLimits.read : processLimits.write;
     const own = new AbortController();
-    const signals = [own.signal];
-    const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    if (callerSignal) signals.push(callerSignal);
-    if (options.deadline) signals.push(options.deadline);
-    const signal = signals.length === 1 ? own.signal : AbortSignal.any(signals);
-    // Termin minął wcześniej (np. ponowienie auth-js po 503 z bramki): bez sieci.
-    if (signal.aborted) throw signal.reason;
+    const keepNextDedupe = isRead && !init?.signal && !options.deadline && insideRenderScope();
+    let signal: AbortSignal | undefined;
+    if (!keepNextDedupe) {
+      const signals = [own.signal];
+      const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      if (callerSignal) signals.push(callerSignal);
+      if (options.deadline) signals.push(options.deadline);
+      signal = signals.length === 1 ? own.signal : AbortSignal.any(signals);
+      // Termin minął wcześniej (np. ponowienie auth-js po 503 z bramki): bez sieci.
+      if (signal.aborted) throw signal.reason;
+    }
 
     const timer = setTimeout(() => own.abort(new SupabaseTimeoutError(limitMs, operationName(method, input))), limitMs);
     let response: Response;
     try {
-      response = await fetch(input, { ...init, signal });
+      response = signal
+        ? await fetch(input, { ...init, signal })
+        : await untilAborted(fetch(input, init), own.signal);
     } catch (error) {
       clearTimeout(timer);
       throw error;
@@ -87,15 +104,52 @@ export function createSupabaseFetch(options: { deadline?: AbortSignal } = {}): t
       return response;
     }
     // Treść płynie przez ten sam limit: serwer, który wysłał nagłówki i stanął,
-    // to też zawieszony serwer. Zegar gaśnie, gdy treść dojdzie do końca albo padnie.
+    // to też zawieszony serwer. Po limicie strumień pada błędem limitu, a źródło
+    // jest zamykane. Zegar gaśnie, gdy treść dojdzie do końca albo padnie.
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    response.body.pipeTo(writable).then(() => clearTimeout(timer), () => clearTimeout(timer));
+    response.body.pipeTo(writable, { signal: own.signal }).then(() => clearTimeout(timer), () => clearTimeout(timer));
     return new Response(readable, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
     });
   };
+}
+
+/**
+ * Ten sam obiekt w obrębie jednego renderu RSC, nowy poza nim (`cache()` bez
+ * renderu niczego nie pamięta). Na `cache()` z Reacta stoi też sklejanie
+ * `fetch` w Next, więc próbnik mówi, czy Next może tu skleić identyczne GET.
+ */
+const renderScopeProbe = cache((): object => ({}));
+
+function insideRenderScope(): boolean {
+  return renderScopeProbe() === renderScopeProbe();
+}
+
+/**
+ * Odpowiedź albo błąd limitu, gdy `signal` przerwie czekanie wcześniej. Samego
+ * żądania nie przerywa (bez sygnału Next może je skleić). Odpowiedź, która
+ * przyjdzie po limicie, zamyka, żeby nieczytana treść nie trzymała połączenia.
+ */
+function untilAborted(pending: Promise<Response>, signal: AbortSignal): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason);
+      pending.then((late) => late.body?.cancel(signal.reason).catch(() => {}), () => {});
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    pending.then(
+      (response) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(response);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 /** Sygnał, że termin bramki minął, zanim praca się skończyła. */
