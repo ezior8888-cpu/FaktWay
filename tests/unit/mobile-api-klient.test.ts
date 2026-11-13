@@ -82,6 +82,13 @@ describe('kody błędów kontraktu', () => {
     expect(bladApi(409, { error: { code: 'not_draft', message: 'x', field: 'buyerName' } }).pole).toBeUndefined();
   });
 
+  it('zdanie serwera bez długich myślników (ZASADY-DESIGNU.md, sekcja 8)', () => {
+    const b = bladApi(422, { error: { code: 'invoice_invalid', message: 'NIP firmy — 10 cyfr i suma kontrolna', field: 'buyerNip' } });
+    expect(b.komunikat).toBe('NIP firmy: 10 cyfr i suma kontrolna');
+    expect(bladApi(422, { error: { code: 'ksef_send_refused', message: 'Najpierw wgraj certyfikat KSeF w Ustawienia KSeF — bez niego wysyłka nie jest możliwa.' } }).komunikat)
+      .toBe('Najpierw wgraj certyfikat KSeF w Ustawienia KSeF: bez niego wysyłka nie jest możliwa.');
+  });
+
   it('awaria GoTrue (503) to „ponów”, nigdy koniec sesji', () => {
     const b = bladApi(503, { error: { code: 'session_verification_failed', message: 'x' } }, '5');
     expect(b).toMatchObject({ rodzaj: 'ponow', kod: 'session_verification_failed', status: 503, ponowZaSekund: 5 });

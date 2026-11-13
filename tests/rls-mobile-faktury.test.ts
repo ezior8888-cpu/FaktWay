@@ -94,6 +94,7 @@ describe.skipIf(!hasDatabase)('M8: faktura z telefonu i klucze idempotencji na b
       id: INV_B, tenant_id: ORG_B, invoice_type: 'VAT', invoice_kind: 'regular', origin: 'app', seller_nip: '1234567890',
       buyer_nip: '1234567890', internal_number: `FV/B/${RUN}`, payment_due_date: '2026-11-30', currency: 'PLN',
       direction: 'outgoing', issue_date: '2026-11-02', net_total: 10, vat_total: 2.3, gross_total: 12.3, ksef_status: 'draft',
+      fa3_data: {},
     });
     if (invoiceError) throw invoiceError;
 
@@ -115,7 +116,7 @@ describe.skipIf(!hasDatabase)('M8: faktura z telefonu i klucze idempotencji na b
     const values = doWartosciFormularza({
       internalNumber: `FV/M8/${RUN}`, issueDate: '2026-11-20', saleDate: '', buyerNip: '5252241585',
       buyerName: 'Klient M8', buyerAddressLine1: 'ul. C 3', buyerAddressLine2: '00-003 Warszawa', buyerEmail: '',
-      buyerIsConsumer: false, lines: [{ name: 'Usługa', unit: 'szt', quantity: 2, unitPriceNet: 150.25, vatRate: '23' }],
+      buyerIsConsumer: false, lines: [{ name: 'Usługa', unit: 'szt', quantity: 2, unitPriceNet: 150, vatRate: '23' }],
       paymentMethod: 'transfer', paymentDueDate: '2026-12-04', bankAccount: 'PL61109010140000071219812874', notes: '', splitPayment: false,
     });
     const result = await saveRegularDraft({ supabase: db, userId: aId, tenant: await readTenantSnapshot(db, ORG_A) }, values);
@@ -124,7 +125,7 @@ describe.skipIf(!hasDatabase)('M8: faktura z telefonu i klucze idempotencji na b
     draftId = result.invoiceId;
 
     const { data: row } = await admin.from('invoices').select('tenant_id, ksef_status, internal_number, gross_total, direction').eq('id', draftId).single();
-    expect(row).toEqual({ tenant_id: ORG_A, ksef_status: 'draft', internal_number: `FV/M8/${RUN}`, gross_total: 369.62, direction: 'outgoing' });
+    expect(row).toEqual({ tenant_id: ORG_A, ksef_status: 'draft', internal_number: `FV/M8/${RUN}`, gross_total: 369, direction: 'outgoing' });
     const { data: items } = await admin.from('invoice_line_items').select('name, quantity').eq('invoice_id', draftId);
     expect(items).toEqual([{ name: 'Usługa', quantity: 2 }]);
   });

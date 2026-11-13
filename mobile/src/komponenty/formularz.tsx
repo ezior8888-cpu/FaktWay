@@ -295,7 +295,8 @@ export function PoleWyboru<T extends string>({ etykieta, wartosc, opcje, onZmian
           styles.ramkaWiersz,
           { borderColor: kolory.obwodka, backgroundColor: pressed ? kolory.wypelnienie : kolory.tlo },
         ]}>
-        <Tekst styl="body" numberOfLines={1} style={styles.rozciagniety} kolor={wybrana ? 'etykieta' : 'etykietaTrzeciorzedna'}>
+        {/* Do trzech linii: przy największym tekście wartość się zawija zamiast ucinać (ZASADY-DESIGNU.md, sekcja 3). */}
+        <Tekst styl="body" numberOfLines={3} style={styles.rozciagniety} kolor={wybrana ? 'etykieta' : 'etykietaTrzeciorzedna'}>
           {wybrana?.etykieta ?? 'Wybierz'}
         </Tekst>
         <Ikona nazwa="arrow-down-s-line" rozmiar={20} kolor={kolory.etykietaDrugorzedna} />

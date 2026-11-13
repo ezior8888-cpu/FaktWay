@@ -27,7 +27,7 @@ import { AppState } from 'react-native';
 
 import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
 import { naStronie } from '@/komponenty/na-stronie';
-import type { BladApi } from '@/lib/api/bledy';
+import { bezDlugichMyslnikow, type BladApi } from '@/lib/api/bledy';
 import type {
   FirmaKonta,
   KontoOdpowiedz,
@@ -408,7 +408,7 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       });
       if (!w.ok) return bladZapisu(w.blad);
       pokazZapisana(f, w.dane.faktura);
-      return { ok: true, id: w.dane.faktura.id, ...(w.dane.wysylka?.blad ? { uwaga: w.dane.wysylka.blad } : {}) };
+      return { ok: true, id: w.dane.faktura.id, ...(w.dane.wysylka?.blad ? { uwaga: bezDlugichMyslnikow(w.dane.wysylka.blad) } : {}) };
     },
     zastapFakture: (id) => naStronie('edycja', id),
     wyslijDoKsef: async (id) => {

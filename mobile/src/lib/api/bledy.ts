@@ -99,6 +99,14 @@ export function sekundyPonowienia(naglowek: string | null | undefined, teraz = D
   return Number.isNaN(data) ? undefined : Math.max(0, Math.ceil((data - teraz) / 1000));
 }
 
+/**
+ * Zdania serwera bywają wspólne ze stroną i mają długie myślniki („NIP firmy — 10 cyfr”);
+ * w aplikacji ich nie piszemy (ZASADY-DESIGNU.md, sekcja 8), więc zamieniamy je na dwukropek.
+ */
+export function bezDlugichMyslnikow(tekst: string): string {
+  return tekst.replace(/\s+[—–]\s+/g, ': ').replace(/[—–]/g, '-');
+}
+
 /** Pole tekstowe z `{ error: { [klucz]: string } }`, gdy jest. */
 function poleBledu(cialo: unknown, klucz: 'message' | 'field'): string | undefined {
   const blad = typeof cialo === 'object' && cialo !== null ? (cialo as { error?: unknown }).error : undefined;
@@ -111,13 +119,14 @@ export function bladApi(status: number, cialo: unknown, retryAfter?: string | nu
   const rodzaj = rodzajBledu(status, kod);
   // Odmowa z powodu treści: tylko serwer wie, co poprawić (te same zdania co na stronie).
   const zSerwera = rodzaj === 'odmowa' ? poleBledu(cialo, 'message') : undefined;
+  const komunikatSerwera = zSerwera ? bezDlugichMyslnikow(zSerwera) : undefined;
   const pole = kod === 'invoice_invalid' ? poleBledu(cialo, 'field') : undefined;
   return {
     rodzaj,
     kod,
     status,
     ponowZaSekund: sekundyPonowienia(retryAfter),
-    komunikat: zSerwera ?? ((kod && KOMUNIKATY_KODOW[kod]) || KOMUNIKATY[rodzaj]),
+    komunikat: komunikatSerwera ?? ((kod && KOMUNIKATY_KODOW[kod]) || KOMUNIKATY[rodzaj]),
     ...(pole ? { pole } : {}),
   };
 }
