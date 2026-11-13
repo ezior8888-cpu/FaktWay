@@ -149,6 +149,10 @@ describe('separate RLS test configuration', () => {
       'tests/rls-kopia-json-stronicowanie.test.ts',
       // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta, powiązanie z fakturą.
       'tests/rls-proformy.test.ts',
+      // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu.
+      'tests/rls-mobile-api.test.ts',
+      // Plan aplikacji mobilnej, M6b (D16, bez migracji): logowanie hasłem przez API przy captchy w GoTrue.
+      'tests/rls-mobile-logowanie.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

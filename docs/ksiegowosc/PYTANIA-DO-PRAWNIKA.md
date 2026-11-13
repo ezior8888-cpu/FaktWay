@@ -7,13 +7,15 @@ znajomości kodu.
   udostępnienia modułu klientom (warunek B2 w planie
   `docs/koordynacja/PLAN-KSIEGOWOSC-JDG.md`, sekcja 11). Część 1 opisuje, co
   moduł robi i czego nie robi.
-- **Pytania 7-17** dotyczą kolejnych funkcji z planu
+- **Pytania 7-18** dotyczą kolejnych funkcji z planu
   `docs/koordynacja/PLAN-KOMPLETNA-APLIKACJA.md` (sekcja 7.1). Każde ma
   własny krótki opis funkcji, bo nie wszystkie dotyczą modułu księgowości.
-  Żadna z tych funkcji jeszcze nie działa: opinia rozstrzyga, czy i jak je
-  zbudować.
+  Funkcje z pytań 7-17 jeszcze nie działają: opinia rozstrzyga, czy i jak je
+  zbudować. Pytanie 18 dotyczy ostrzeżenia przy zapłacie kosztu, które
+  FaktWay liczy już według daty z faktury (P_1).
 
-Stan opisu: pytania 1-6 z 4.11.2026, pytania 7-17 z 9.11.2026. Moduł jest
+Stan opisu: pytania 1-6 z 4.11.2026, pytania 7-17 z 9.11.2026, pytanie 18
+z 12.11.2026. Moduł jest
 w budowie i jest wyłączony dla klientów.
 
 ## 1. Co robi moduł
@@ -337,6 +339,23 @@ polityka prywatności i treści o podatkach są po polsku.
 wiążące, czy wystarczy tłumaczenie pomocnicze z zastrzeżeniem, że wiąże
 wersja polska?
 
+### Pytanie 18. Data wystawienia faktury z KSeF na przełomie 2026 i 2027 r.
+
+Ustawa z 18 września 2026 r. (Dz.U. 2026 poz. 1371) od 1 stycznia 2027 r.
+zmienia art. 22p ustawy o PIT: zapłata ponad 15 000 zł na rachunek spoza
+wykazu podatników VAT nie odbiera już kosztu w PIT. Do płatności z faktury
+wystawionej przed 1 stycznia 2027 r. stosuje się art. 22p w dawnym brzmieniu
+(art. 3 tej ustawy), także gdy zapłata jest w 2027 r. FaktWay ostrzega przy
+zapłacie o koszcie w PIT według daty wystawienia z faktury (pole P_1),
+a bez niej według daty dokumentu kosztu. Faktura w KSeF ma też dzień
+przesłania do systemu, który bywa późniejszy niż P_1 (np. P_1 31.12.2026,
+przesłanie 2.01.2027).
+
+**Pytanie:** Co jest „datą wystawienia” faktury z KSeF w rozumieniu art. 3
+tej ustawy: data P_1 czy dzień przesłania do KSeF? Czy ostrzeżenie według
+P_1, które obejmuje co najmniej te faktury co według dnia przesłania, może
+zostać?
+
 ## 3. Czego potrzebujemy w odpowiedzi
 
 - Pisemnej opinii (może być jeden dokument) z odpowiedzią na każde pytanie.
@@ -353,6 +372,7 @@ wersja polska?
 - Przy pytaniu 13: sformułowań dozwolonych i niedozwolonych, jak przy
   pytaniu 1.
 - Przy pytaniach 15 i 17: wskazówek do regulaminu.
+- Przy pytaniu 18: którą datę przyjąć i czy ostrzeżenie według P_1 może zostać.
 
 ## 4. Materiały
 
