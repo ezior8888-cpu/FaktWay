@@ -11,6 +11,8 @@ export const BLEDY_LOGOWANIA = {
   google: 'Nie udało się zalogować przez Google. Spróbuj ponownie.',
   zly_kod: 'Kod nieprawidłowy. Sprawdź godzinę w telefonie i wpisz aktualny kod z aplikacji TOTP.',
   za_duzo_prob: 'Zbyt wiele prób. Poczekaj chwilę i spróbuj ponownie.',
+  /** Serwer nie może teraz sprawdzić kodu (bez Redisa nie ma limitu prób, GoTrue nie odpowiada; M6c), jak `verification_unavailable` strony. */
+  kod_niedostepny: 'Nie możemy teraz sprawdzić kodu. Spróbuj ponownie za chwilę.',
   brak_polaczenia: 'Nie możemy się połączyć. Sprawdź internet i spróbuj ponownie.',
   nieznany: 'Coś poszło nie tak. Spróbuj ponownie.',
   /**

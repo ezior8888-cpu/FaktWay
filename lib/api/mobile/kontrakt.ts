@@ -46,6 +46,13 @@ export const MOBILE_API_ERROR_CODES = [
    * Klient loguje się na faktway.pl albo próbuje za kilka minut.
    */
   'login_unavailable',
+  /** 400: `POST /kod` (M6c): zły kod 2FA albo nie sześć cyfr. Próba z limitu konta zużyta tylko przy sześciu cyfrach. */
+  'invalid_code',
+  /**
+   * 409: `POST /kod` (M6c) z sesją, która nie czeka na kod (konto bez 2FA albo sesja już po kodzie).
+   * Telefon zostaje na obecnej sesji.
+   */
+  'mfa_not_required',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -90,13 +97,29 @@ export interface LogowanieZadanie {
 }
 
 /**
- * `POST /api/mobile/v1/logowanie`, 200: sesja GoTrue dla `supabase.auth.setSession`. Odświeżanie,
- * kod 2FA i wylogowanie telefon robi dalej sam w GoTrue (bez captchy). `wymagaKodu`: konto ma
- * zweryfikowany TOTP, a sesja jest jeszcze na poziomie `aal1` (ta sama reguła co strona).
+ * `POST /api/mobile/v1/logowanie`, 200: sesja GoTrue dla `supabase.auth.setSession`. Kod 2FA idzie
+ * od M6c przez `POST /kod`; odświeżanie i wylogowanie telefon robi dalej sam w GoTrue (bez captchy).
+ * `wymagaKodu`: konto ma zweryfikowany TOTP, a sesja jest jeszcze na poziomie `aal1` (reguła strony).
  */
 export interface LogowanieOdpowiedz {
   sesja: { accessToken: string; refreshToken: string };
   wymagaKodu: boolean;
+}
+
+/**
+ * `POST /api/mobile/v1/kod` (M6c): kod 2FA z aplikacji TOTP. Token sesji AAL1 w `Authorization: Bearer`
+ * (tej z `POST /logowanie` albo z Google). Limit prób jak na stronie: 5 na 5 minut na konto, wspólny ze stroną.
+ */
+export interface KodZadanie {
+  kod: string;
+}
+
+/**
+ * `POST /api/mobile/v1/kod`, 200: nowa sesja GoTrue na poziomie `aal2` (ta sama sesja, nowy token
+ * i refresh token) dla `supabase.auth.setSession`.
+ */
+export interface KodOdpowiedz {
+  sesja: { accessToken: string; refreshToken: string };
 }
 
 /** `POST /api/mobile/v1/sesja`: 201 `{ zapisane: true }` przy pierwszym wywołaniu dla sesji, potem 200 `{ zapisane: false }`. */

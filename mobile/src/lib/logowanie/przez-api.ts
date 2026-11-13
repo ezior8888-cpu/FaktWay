@@ -7,14 +7,18 @@
  *
  * Odpowiedź serwera zamieniamy na te same kody komunikatów co w M5b
  * (`BLEDY_LOGOWANIA`). Sesję wkłada do klienta Supabase `lib/logowanie/supabase.ts`
- * (`setSession`); kod 2FA, odświeżanie i wylogowanie idą dalej wprost do GoTrue,
- * bo captchy nie wymagają.
+ * (`setSession`); odświeżanie i wylogowanie idą dalej wprost do GoTrue, bo
+ * captchy nie wymagają.
  *
- * Bez React Native: testy w `tests/unit/mobile-logowanie-api.test.ts`.
+ * Kod 2FA od M6c też przez API (`POST /api/mobile/v1/kod`, `potwierdzKodPrzezApi`):
+ * wprost w GoTrue omijał limit prób kodu i audyt strony.
+ *
+ * Bez React Native: testy w `tests/unit/mobile-logowanie-api.test.ts`
+ * i `tests/unit/mobile-kod-api.test.ts`.
  */
 import { kodBledu as kodBleduApi } from '../api/bledy';
-import type { LogowanieOdpowiedz, LogowanieZadanie, MobileApiErrorCode } from '../api/kontrakt';
-import { adresTrasy, type Zaleznosci } from '../api/rdzen';
+import type { KodOdpowiedz, KodZadanie, LogowanieOdpowiedz, LogowanieZadanie, MobileApiErrorCode } from '../api/kontrakt';
+import { adresTrasy, type OpcjeZapytania, type Wynik, type Zaleznosci } from '../api/rdzen';
 import type { KodBledu } from './typy';
 
 export type WynikLogowaniaApi = ({ ok: true } & LogowanieOdpowiedz) | { ok: false; blad: KodBledu };
@@ -62,4 +66,41 @@ export async function zalogujPrzezApi(
   }
   const kod = kodBleduApi(tresc);
   return { ok: false, blad: (kod && KOMUNIKAT_KODU[kod]) || (odp.status === 429 ? 'za_duzo_prob' : 'nieznany') };
+}
+
+/** Klient tras `/api/mobile/v1` z `utworzKlienta` (`lib/api/rdzen.ts`): token sesji, po 401 odświeżenie i jedno ponowienie. */
+type Zapytaj = <T>(sciezka: string, opcje?: OpcjeZapytania) => Promise<Wynik<T>>;
+
+/** `sesja: null`: sesja nie czekała na kod (409 `mfa_not_required`), telefon zostaje na obecnej. */
+export type WynikKoduApi = { ok: true; sesja: KodOdpowiedz['sesja'] | null } | { ok: false; blad: KodBledu };
+
+function sesjaKodu(cialo: unknown): KodOdpowiedz['sesja'] | undefined {
+  if (typeof cialo !== 'object' || cialo === null) return undefined;
+  const { sesja } = cialo as { sesja?: unknown };
+  if (typeof sesja !== 'object' || sesja === null) return undefined;
+  const { accessToken, refreshToken } = sesja as { accessToken?: unknown; refreshToken?: unknown };
+  if (typeof accessToken !== 'string' || !accessToken || typeof refreshToken !== 'string' || !refreshToken) return undefined;
+  return { accessToken, refreshToken };
+}
+
+/**
+ * `POST /api/mobile/v1/kod` (M6c) tokenem sesji AAL1. Odpowiedź serwera to kod
+ * komunikatu ekranu kodu; sesję AAL2 wkłada potem `lib/logowanie/supabase.ts`.
+ * Brak sieci nie ponawia (kod nie idzie drugi raz bez dotknięcia klienta).
+ */
+export async function potwierdzKodPrzezApi(zapytaj: Zapytaj, kod: string): Promise<WynikKoduApi> {
+  const cialo: KodZadanie = { kod };
+  const wynik = await zapytaj<unknown>('kod', { metoda: 'POST', cialo });
+  if (wynik.ok) {
+    const sesja = sesjaKodu(wynik.dane);
+    return sesja ? { ok: true, sesja } : { ok: false, blad: 'nieznany' };
+  }
+  const { kod: kodApi, rodzaj, status } = wynik.blad;
+  if (kodApi === 'mfa_not_required') return { ok: true, sesja: null };
+  if (kodApi === 'invalid_code') return { ok: false, blad: 'zly_kod' };
+  if (kodApi === 'rate_limited' || status === 429) return { ok: false, blad: 'za_duzo_prob' };
+  if (rodzaj === 'polaczenie') return { ok: false, blad: 'brak_polaczenia' };
+  // Bez Redisa (fail-closed), GoTrue niedostępny, przerwa techniczna: „spróbuj za chwilę”, nigdy wylogowanie.
+  if (rodzaj === 'ponow') return { ok: false, blad: 'kod_niedostepny' };
+  return { ok: false, blad: 'nieznany' };
 }
