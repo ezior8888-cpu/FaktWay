@@ -12,9 +12,11 @@ const positions = new Map<string, number>();
  */
 let popKey: string | null = null;
 /**
- * Ścieżka podzakładki, w którą właśnie kliknięto (`a[data-ff-keep-scroll]`,
- * `SectionTabs`). Zmiana tabeli w karcie sekcji nie wraca na górę ekranu
- * (poprawka Bartosza 25.10.2026: „nie chcę, żeby cała strona się zmieniała”).
+ * Ścieżka podzakładki (`a[data-ff-keep-scroll]`, `SectionTabs`), do której
+ * prowadzi ostatni link kliknięty w tej karcie. Zmiana tabeli w karcie sekcji
+ * nie wraca na górę ekranu (poprawka Bartosza 25.10.2026: „nie chcę, żeby
+ * cała strona się zmieniała”). Kasuje ją kliknięcie zwykłego linku i każde
+ * wejście na nową ścieżkę.
  */
 let keepScrollFor: string | null = null;
 
@@ -27,6 +29,22 @@ function urlKey(): string {
 
 function shellScroller(): HTMLElement | null {
   return document.querySelector<HTMLElement>('.ff-shell-scroll');
+}
+
+/**
+ * Link, którym to kliknięcie przenosi w tej karcie, albo `null`. Warunki jak
+ * w `linkClicked` z `next/link`: `<a href>` bez `target` innego niż `_self`
+ * i bez `download`, klik lewym przyciskiem bez Ctrl, Cmd, Shift i Alt. Resztę
+ * (link do nowej karty albo do pobrania, przycisk, puste miejsce) przeglądarka
+ * i Next obsługują bez przejścia w tej karcie.
+ */
+function linkNavigatingHere(e: MouseEvent): HTMLAnchorElement | null {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
+  const link = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>('a[href]') : null;
+  if (!link) return null;
+  const target = link.getAttribute('target');
+  if ((target && target !== '_self') || link.hasAttribute('download')) return null;
+  return link;
 }
 
 /**
@@ -67,10 +85,16 @@ export function ShellScrollMemory() {
     };
     // `scroll` to główne źródło, ale przeglądarka wysyła je dopiero przy
     // malowaniu klatki; kliknięcie linku zapisuje pozycję przed nawigacją.
+    // Zamiar podzakładki zmienia tylko link, który przenosi w tej karcie: Next
+    // porzuca przejście w toku, gdy zacznie się następne, więc wygrywa ostatni
+    // taki link. Inne kliknięcie, np. drugie dotknięcie obok zakładki, zanim
+    // jej strona przyjdzie z serwera, zamiaru nie rusza. Inaczej strona
+    // zakładki przyszłaby bez niego i panel skoczyłby na górę.
     const onClick = (e: MouseEvent) => {
       remember();
-      const link = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>('a[data-ff-keep-scroll]') : null;
-      keepScrollFor = link ? new URL(link.href, window.location.href).pathname : null;
+      const link = linkNavigatingHere(e);
+      if (!link) return;
+      keepScrollFor = link.hasAttribute('data-ff-keep-scroll') ? new URL(link.href, window.location.href).pathname : null;
     };
     scroller.addEventListener('scroll', remember, { passive: true });
     document.addEventListener('click', onClick, { capture: true });
