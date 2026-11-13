@@ -238,7 +238,9 @@
         "app/api/noty/**",
         "app/actions/proformy.ts",
         "lib/proformy/**",
-        "app/api/proformy/**"
+        "app/api/proformy/**",
+        "app/actions/produkty.ts",
+        "lib/produkty/**"
       ]
     },
     {
