@@ -265,18 +265,28 @@
       ],
       "kod": [
         "lib/ksiegowosc/ewidencja.ts#zbudujEwidencje",
-        "lib/ksiegowosc/kpir.ts#zbudujKpir"
+        "lib/ksiegowosc/kpir.ts#zbudujKpir",
+        "lib/ksiegowosc/ewidencja.ts#pokrycieFakturDoParagonu"
       ],
       "testy": [
         "tests/unit/ksiegowosc-ewidencja.test.ts > FP nie jest drugim przychodem",
-        "tests/unit/ksiegowosc-kpir.test.ts > faktura do paragonu poza przychodem z brakiem"
+        "tests/unit/ksiegowosc-kpir.test.ts > faktura do paragonu poza przychodem z brakiem",
+        "tests/unit/faktura-do-paragonu-pokrycie-kasy.test.ts > niezmiennik: FP nigdy nie jest wierszem przychodu i nigdy nie znika",
+        "tests/unit/faktura-do-paragonu-pokrycie-kasy.test.ts > raport kasy w kolumnie 7 za miesiąc paragonu: FP poza księgą",
+        "tests/unit/faktura-do-paragonu-pokrycie-kasy.test.ts > odczyt z bazy: rodzaj wpisu ręcznego i FP z fa3_data docierają do reguły"
       ],
       "parametry": [],
       "niezmienniki": [],
       "pewnosc": "wysoka",
       "wzorzec": null,
-      "interpretacja": null,
-      "do_rozstrzygniecia": null,
+      "interpretacja": "Raport kasy to wpis ręczny „Raport z kasy rejestrującej” (w KPiR w kolumnie 7). FP jest poza ewidencją i KPiR, gdy raporty kasy z miesiąca dnia przychodu FP (dnia paragonu) są nie niższe niż suma faktur do paragonów z tego miesiąca (netto w złotych); bez raportu kasy, przy niższej kwocie oraz przy FP w walucie, korekcie, zaliczce albo z kwotą nie większą niż 0 jest brak z wyjściem.",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy porównanie raportów kasy z miesiąca paragonu z sumą faktur do paragonów z tego miesiąca (kwoty netto) wystarcza, żeby uznać, że sprzedaż z FP weszła już do ewidencji i KPiR? Rodzaj wpisu „Raport z kasy rejestrującej” ma w formularzu wartość domyślną, więc o pokryciu decydują też kwoty.",
+        "przypadki": [
+          "G30"
+        ]
+      },
       "sprawdzil": {
         "ksiegowa": null,
         "prawnik": null
@@ -284,7 +294,67 @@
       "odczyt": "2026-11-09",
       "zrodlo_planu": "§4 pkt 2",
       "stan": "dziala",
-      "uwagi": "Od kroku 1.2 planu kompletnej aplikacji (#509) FP daje brak miesiąca w ewidencji i KPiR (brakFakturyDoParagonu), dopóki FaktWay nie sprawdza, czy raport kasy obejmuje tę sprzedaż."
+      "uwagi": "Krok 1.2 planu kompletnej aplikacji: od #509 FP dawała zawsze brak; od części 2 reguła pokrycia raportem kasy (miesiąc i kwoty), przyjęta według rekomendacji, do potwierdzenia przez księgową (G30)."
+    },
+    {
+      "id": "RP-FP-02",
+      "regula": "Faktura do paragonu (FP) w JPK_V7M: wiersz ewidencji sprzedaży z oznaczeniem TypDokumentu FP w okresie wystawienia, z pełnymi kwotami w polach K_; kwoty FP nie wchodzą do PodatekNalezny ani do części deklaracyjnej, bo sprzedaż z paragonu wykazuje raport z kasy (RO). FaktWay nie wykazuje raportów z kasy, więc FP z paragonem z miesiąca pliku daje odmowę.",
+      "podstawa": [
+        {
+          "akt": "ustawa o podatku od towarów i usług",
+          "przepis": "art. 109 ust. 3d"
+        },
+        {
+          "akt": "schemat JPK_V7M(3), CRWDE 2025/12/19/14090 (lib/exports/schemas/jpk-v7m3/schemat.xsd)",
+          "przepis": "TDowoduSprzedazy (RO, WEW, FP) według § 10 ust. 5 rozporządzenia MFiR z 15.10.2019 (Dz.U. 2019 poz. 1988); opis pola PodatekNalezny"
+        },
+        {
+          "akt": "MF, Pytania i odpowiedzi JPK_VAT z deklaracją",
+          "przepis": "oznaczenia dokumentów, pytania 15, 17, 18, 20, 22, 23",
+          "url": "https://www.podatki.gov.pl/podatki-firmowe/jednolity-plik-kontrolny/jpk_vat-z-deklaracja/pytania-i-odpowiedzi"
+        }
+      ],
+      "obowiazuje": {
+        "od": "2026-02-01",
+        "do": null
+      },
+      "obszary": [
+        "jpk.vat-fa",
+        "ksiegowosc.vat"
+      ],
+      "kod": [
+        "lib/exports/jpk-v7m-generator.ts#generateJpkV7m",
+        "lib/exports/jpk-v7m-generator.ts#summarizeJpkV7m"
+      ],
+      "testy": [
+        "tests/unit/faktura-do-paragonu-jpk-v7m.test.ts > niezmiennik: FP nie zmienia deklaracji ani PodatekNalezny",
+        "tests/unit/faktura-do-paragonu-jpk-v7m.test.ts > FP z paragonem z poprzedniego miesiąca: TypDokumentu FP po NrKSeF",
+        "tests/unit/faktura-do-paragonu-jpk-v7m.test.ts > paragon z miesiąca pliku"
+      ],
+      "parametry": [],
+      "niezmienniki": [],
+      "pewnosc": "wysoka",
+      "wzorzec": {
+        "poziom": 4,
+        "opis": "MF, pytania i odpowiedzi JPK_VAT z deklaracją: FP za okres wystawienia, poza sumami kontrolnymi, „w pełnych wartościach”, sprzedaż z kasy zapisem zbiorczym RO; opis PodatekNalezny w XSD JPK_V7M(3) i strażnik pliku (FILTR-RT-JPK-02, FILTR-RT-JPK-05)",
+        "sprawdzono": "2026-11-13"
+      },
+      "interpretacja": "Plik jest za miesiąc wystawienia, więc FP ze sprzedażą (paragonem) z tego samego miesiąca wymagałaby w pliku raportu z kasy z tą sprzedażą: odmowa z wyjściem (JpkV7mReceiptSaleInPeriodError). FP z paragonem z wcześniejszego miesiąca: wiersz FP bez podatku należnego. Korekta FP i FP z innym oznaczeniem z pliku KSeF (TP, GTU, procedury): odmowa jak dotąd.",
+      "do_rozstrzygniecia": {
+        "kto": "księgowa",
+        "pytanie": "Czy JPK_V7M za miesiąc wystawienia FP do paragonu z wcześniejszego miesiąca jest kompletny bez wierszy RO, gdy w tym miesiącu nie było sprzedaży z kasy, i czy wiersz FP ma pełne kwoty w polach K_10-K_36?",
+        "przypadki": [
+          "G30"
+        ]
+      },
+      "sprawdzil": {
+        "ksiegowa": null,
+        "prawnik": null
+      },
+      "odczyt": "2026-11-13",
+      "zrodlo_planu": "PLAN-KOMPLETNA-APLIKACJA 1.2",
+      "stan": "dziala",
+      "uwagi": "Szkic w docs/koordynacja/REJESTR-PRZEPISOW-KOMPLETNA.md. JPK_FA(4), CSV i EDI++ nie mają oznaczenia FP i dalej odmawiają; JPK_V7M za miesiąc paragonu nie widzi FP wystawionej później (osobne ustalenie kroku 1.2, część 2)."
     },
     {
       "id": "RP-WAL-01",

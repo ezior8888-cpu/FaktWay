@@ -77,15 +77,16 @@ Zasady:
 
 #### RP-FP-02. Typ dokumentu FP w JPK_V7
 
-- Reguła: Faktura do paragonu jest w JPK_V7 oznaczana typem dokumentu FP.
-- Podstawa: Broszura JPK_VAT z deklaracją od 1.02.2026, https://podatki.gov.pl/media/wgbkrejs/broszura-jpk_vat-z-deklaracj%C4%85-od-1-lutego-2026-r.pdf
+- Reguła: Faktura do paragonu jest w JPK_V7 oznaczana typem dokumentu FP, w okresie wystawienia, z pełnymi kwotami; kwoty FP nie wchodzą do PodatekNalezny ani do deklaracji, bo sprzedaż z kasy wykazuje zapis zbiorczy RO.
+- Podstawa: Broszura JPK_VAT z deklaracją od 1.02.2026, https://podatki.gov.pl/media/wgbkrejs/broszura-jpk_vat-z-deklaracj%C4%85-od-1-lutego-2026-r.pdf ; art. 109 ust. 3d ustawy o VAT; XSD JPK_V7M(3) w repo (TDowoduSprzedazy, opis PodatekNalezny); MF, „Pytania i odpowiedzi JPK_VAT z deklaracją”, oznaczenia dokumentów, pytania 15, 17, 18, 20, 22, 23: https://www.podatki.gov.pl/podatki-firmowe/jednolity-plik-kontrolny/jpk_vat-z-deklaracja/pytania-i-odpowiedzi
 - Obowiązuje: od 2026-02-01, bez daty końca
-- Obszary mapy: `jpk.v7`
-- Pewność: średnia
-- Wzorzec: poziom 4, broszura JPK_VAT 2026
-- Do rozstrzygnięcia: księgowa: jak FP wpływa na sumy deklaracji, żeby sprzedaż z paragonu nie była policzona dwa razy
-- Odczyt: 2026-11-08
+- Obszary mapy: `jpk.vat-fa`, `ksiegowosc.vat`
+- Pewność: wysoka (od odczytu pytań i odpowiedzi MF 13.11.2026)
+- Wzorzec: poziom 4, pytania i odpowiedzi MF i broszura JPK_VAT 2026; opis pola PodatekNalezny w XSD
+- Do rozstrzygnięcia: księgowa (G30): czy plik za miesiąc wystawienia FP do paragonu z wcześniejszego miesiąca jest kompletny bez wierszy RO, gdy w tym miesiącu nie było sprzedaży z kasy
+- Odczyt: 2026-11-13
 - Kroki planu: 1.2, 4.5
+- W rejestrze filtra: `filtr/przepisy/ksiegowosc.json`, RP-FP-02 (krok 1.2, część 2)
 
 
 ## PLAT: Płatności i numer KSeF
@@ -595,7 +596,7 @@ Zasady:
 | RP-KSEF-03 | Przechowywanie faktur w KSeF | wysoka | 6.4 |
 | RP-KSEF-04 | Paragon z NIP i kasy od 2027 r. (projekt) | niska | 1.3 |
 | RP-FP-01 | Faktura do paragonu tylko z NIP | wysoka | 1.2 |
-| RP-FP-02 | Typ dokumentu FP w JPK_V7 | średnia | 1.2, 4.5 |
+| RP-FP-02 | Typ dokumentu FP w JPK_V7 | wysoka | 1.2, 4.5 |
 | RP-PLAT-01 | Numer KSeF w tytule przelewu | wysoka | 1.4, 3.2 |
 | RP-PLAT-02 | Identyfikator zbiorczy | wysoka | 1.4 |
 | RP-PLAT-03 | Podstawa prawna obowiązku w tytule przelewu | średnia | 1.4 |
