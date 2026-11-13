@@ -100,6 +100,7 @@
     "recharts": "^3.10.1",
     "resend": "^6.37.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
     "sonner": "^2.0.8",
     "stripe": "^22.6.2",
     "tailwind-merge": "^3.7.0",

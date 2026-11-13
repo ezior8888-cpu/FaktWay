@@ -11,6 +11,7 @@ import type {
 import { getAnthropic, OCR_MODEL } from '@/lib/anthropic/client';
 import { isAnthropicMocked } from '@/lib/test-mode';
 
+import { fitImageForApi } from './image-for-api';
 import { claudeOutputInstructions, extractedInvoiceSchema } from './schema';
 import type { ExtractedInvoice } from './schema';
 
@@ -51,11 +52,11 @@ function normalizeImageMediaType(
   return null;
 }
 
-function buildUserContent(
+async function buildUserContent(
   imageBase64: string,
   mimeType: string,
   textPrompt: string
-): ContentBlockParam[] {
+): Promise<ContentBlockParam[]> {
   const lower = mimeType.toLowerCase();
   const textBlock: TextBlockParam = {
     type: 'text',
@@ -79,12 +80,15 @@ function buildUserContent(
     throw new Error(`Nieobsługiwany typ obrazu: ${mimeType}`);
   }
 
+  // Obraz ponad 8000 px API odrzuca: idzie kopia zmniejszona w pamięci,
+  // mniejszy bez zmian (plan skalowania, sesja 34).
+  const fitted = await fitImageForApi(imageBase64, media);
   const image: ImageBlockParam = {
     type: 'image',
     source: {
       type: 'base64',
-      media_type: media,
-      data: imageBase64,
+      media_type: fitted.mediaType,
+      data: fitted.data,
     },
   };
   return [image, textBlock];
@@ -143,7 +147,7 @@ export async function extractInvoiceFromImage(
 
   try {
     const textPrompt = `Rozpoznaj fakturę/paragon na tym zdjęciu i zwróć strukturyzowane dane.\n\n${claudeOutputInstructions}`;
-    const userContent = buildUserContent(imageBase64, mimeType, textPrompt);
+    const userContent = await buildUserContent(imageBase64, mimeType, textPrompt);
 
     const response = await getAnthropic().messages.create({
       model: OCR_MODEL,
