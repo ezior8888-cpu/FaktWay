@@ -30,6 +30,14 @@ import {
   zeroVatRateFromParentLines,
 } from '@/lib/invoices/correction-amount-change';
 import { isNpIiBuyerVat, parseVatUe } from '@/lib/invoices/vat-ue';
+import {
+  numberConflictOf,
+  numberRefusalText,
+  numberRequestOf,
+  saveWithInvoiceNumber,
+  type NumberColumns,
+  type NumberedResult,
+} from '@/lib/numeracja/nadanie';
 import { formatPlMoney } from '@/lib/format/pl';
 import { calculateLineItem, calculateInvoiceTotals, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { Invoice, InvoiceLineItem, BuyerParty, PaymentMethod, SellerParty } from '@/types/invoice';
@@ -470,18 +478,25 @@ function buyerColumnsForCorrection(buyer: CorrectionBuyer): {
   return { is_b2c: true, buyer_id_type: buyer.idType, buyer_nip: null };
 }
 
+/**
+ * `numberColumns` (krok 2.5, 00199): seria, okres, licznik i klucz zapisu;
+ * bez serii pusty obiekt (wiersz jak dotąd). Odmowę numeru przez bazę wynik
+ * niesie w `numberConflict` dla `saveWithInvoiceNumber`.
+ */
 async function insertCorrection(
   supabase: SupabaseClient,
   tenantId: string,
   correctionEnvelope: CorrectionInvoiceData,
   lines: InvoiceLineItem[],
-): Promise<CorrectionActionResult> {
+  numberColumns: NumberColumns = {},
+): Promise<NumberedResult<CorrectionActionResult>> {
   const ghost = ghostInvoice(correctionEnvelope, lines);
   const totals = calculateCorrectionTotals(correctionEnvelope);
 
   const { data: inserted, error } = await supabase
     .from('invoices')
     .insert({
+      ...numberColumns,
       tenant_id: tenantId,
       direction: 'outgoing',
       ksef_status: 'draft',
@@ -514,10 +529,12 @@ async function insertCorrection(
     .single();
 
   if (error || !inserted) {
+    const numberConflict = numberConflictOf(error);
     return {
       success: false,
       error: specialDataInsertError(error, `korekty ${ghost.internalNumber}`)
-        ?? error?.message ?? 'Nie udało się zapisać korekty',
+        ?? numberRefusalText(error) ?? error?.message ?? 'Nie udało się zapisać korekty',
+      ...(numberConflict ? { numberConflict } : {}),
     };
   }
 
@@ -895,15 +912,20 @@ export async function saveCorrectionDraftAction(
     envelope.annotations = await loadParentAnnotations(supabase, tenant.id, envelope.parentInvoiceId);
     const lines = linesToStoredItems(envelope);
 
-    const result = await insertCorrection(supabase, tenant.id, envelope, lines);
-    if (result.success) {
+    // Krok 2.5: numer z licznika serii albo z pola, ten sam w kolumnie, fa3_data i danych korekty.
+    const saved = await saveWithInvoiceNumber(supabase, numberRequestOf(normalized as CorrectionInvoiceSchemaIn), envelope.issueDate, async (assigned) => {
+      const numbered = { ...envelope, internalNumber: assigned.number };
+      return { result: await insertCorrection(supabase, tenant.id, numbered, lines, assigned.columns), built: numbered };
+    });
+    const result = saved.result;
+    if (result.success && saved.built) {
       await logAudit({
         action: 'invoice.draft_created',
         tenantId: tenant.id,
         userId,
         entityType: 'invoice',
         entityId: result.invoiceId,
-        metadata: { kind: 'correction', internalNumber: envelope.internalNumber },
+        metadata: { kind: 'correction', internalNumber: saved.built.internalNumber },
       });
       revalidatePath('/invoices');
     }
@@ -935,15 +957,22 @@ export async function saveAndSendCorrectionAction(
     // P_16/P_18A z faktury pierwotnej (AUD-23) — zapis i wysyłka mają te same.
     envelope.annotations = await loadParentAnnotations(supabase, tenant.id, envelope.parentInvoiceId);
     const lines = linesToStoredItems(envelope);
-    const ghost = ghostInvoice(envelope, lines);
 
     // Ta sama reguła co zwykła faktura (A1, W5): w KSeF tylko z dzisiejszą datą
     // wystawienia — odmowa przed zapisem i przed zleceniem wysyłki.
-    const notToday = issueDateNotTodayError(ghost.issueDate, 'special');
+    const notToday = issueDateNotTodayError(envelope.issueDate, 'special');
     if (notToday) return { success: false, error: notToday };
 
-    const saved = await insertCorrection(supabase, tenant.id, envelope, lines);
+    // Krok 2.5: numer z licznika serii albo z pola; kolejka KSeF dostaje
+    // korektę z numerem, który się zapisał.
+    const numbered = await saveWithInvoiceNumber(supabase, numberRequestOf(normalized as CorrectionInvoiceSchemaIn), envelope.issueDate, async (assigned) => {
+      const env = { ...envelope, internalNumber: assigned.number };
+      return { result: await insertCorrection(supabase, tenant.id, env, lines, assigned.columns), built: env };
+    });
+    const saved = numbered.result;
     if (!saved.success) return saved;
+    const correctionData = numbered.built ?? envelope;
+    const ghost = ghostInvoice(correctionData, lines);
 
     const invoiceId = saved.invoiceId;
 
@@ -954,9 +983,9 @@ export async function saveAndSendCorrectionAction(
       invoiceId,
       nip: tenant.nip,
       invoice: ghost,
-      correctionData: envelope,
+      correctionData,
       auditKind: 'correction',
-      internalNumberForAudit: envelope.internalNumber,
+      internalNumberForAudit: correctionData.internalNumber,
     });
 
     if (!enq.ok) {

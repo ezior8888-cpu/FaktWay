@@ -117,7 +117,9 @@ async function sprawdzBialaLista(
     return { wpuszczony: false, pominiecie: { kod: 'biala_lista_blad', powod: powodBleduWykazu(wynik.error) } };
   }
   if (wynik.status === 'not_assigned') {
-    return { wpuszczony: false, pominiecie: { kod: 'biala_lista_poza', powod: powodPozaWykazem(dzis, wynik.requestId) } };
+    // Skutek w PIT według dnia wystawienia faktury kosztowej (art. 3 Dz.U. 2026 poz. 1371), nie dnia pliku.
+    const powod = powodPozaWykazem(dzis, wynik.requestId, k.koszt.sankcjaPitBialejListy);
+    return { wpuszczony: false, pominiecie: { kod: 'biala_lista_poza', powod } };
   }
   if (zapisany !== true) {
     return { wpuszczony: false, pominiecie: { kod: 'biala_lista_dowod', powod: powodBrakuDowodu(wynik.requestId) } };

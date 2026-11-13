@@ -395,12 +395,14 @@ przez `lib/uploads/server.ts` (trasy wgrywania są poza proxy, AGENTS.md,
 niezmiennik 7); klucz idempotencji zapisu wydatku (wzór 00201,
 `mobile_idempotency_keys`: nowa wartość `endpoint` w CHECK); systemowy skaner
 dokumentów to nowa paczka natywna, więc nowy build w Xcode.
-**Przed scaleniem M8:** migracja 00201 (przed wdrożeniem); #643 (krok 2.5,
-numeracja) przerabia te same funkcje wystawienia i dodaje `number_request_key`
-w `invoices`: po scaleniu jednego z nich drugi trzeba przenieść na
-`lib/invoices/issue-regular.ts`, a telefon może wtedy podawać swój klucz zapisu
-także jako `numberRequestKey`. #711 (M6c) dopisuje kody do tego samego
-kontraktu i `bledy.ts`: konflikt do rozwiązania przy scaleniu drugiego.
+**Przed scaleniem M8:** migracja 00201 (przed wdrożeniem). Numeracja z #643
+(krok 2.5, w `main` przez #713) jest już przeniesiona do
+`lib/invoices/issue-regular.ts`; telefon wpisuje numer w pole, więc idzie
+ścieżką numeru ręcznego. Do rozważenia w M9 albo M10: podawać klucz zapisu
+telefonu także jako `numberRequestKey` (`invoices.number_request_key` z 00199),
+co zamknie przerwę między szkicem a kluczem w 00201. #711 (M6c) dopisuje kody
+do tego samego kontraktu i `bledy.ts`: konflikt do rozwiązania przy scaleniu
+drugiego.
 **Przed logowaniem z telefonu na produkcji (bez zmian od M6b):** adres
 powrotu `faktway://**` w GoTrue (Google); logowanie hasłem przez `POST
 /api/mobile/v1/logowanie` (D16) wymaga działającego Redisa. Z M6b zostaje:

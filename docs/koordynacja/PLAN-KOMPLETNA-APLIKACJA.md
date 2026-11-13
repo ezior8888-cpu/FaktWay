@@ -249,7 +249,7 @@ planu.
 | L11 | VAT kwartalny (JPK_V7K): mały podatnik do 2 mln euro sprzedaży z VAT, nie w pierwszych 12 miesiącach, zawiadomienie do 25. drugiego miesiąca kwartału; ewidencja co miesiąc, deklaracja za kwartał; metoda kasowa oznacza kwartał | stale | tylko JPK_V7M | 4.1 |
 | L12 | Zaliczki PIT kwartalne (mali podatnicy do 2 mln euro, czyli 8 517 000 zł w 2026 r., i rozpoczynający działalność) i ryczałt kwartalny (przychód do 200 000 euro, czyli 851 720 zł); termin 20. po kwartale | stale | tylko miesięcznie | 4.1 |
 | L13 | Kasowy PIT dla JDG (przychód do 2 mln zł według biznes.gov.pl, oświadczenie do 20 lutego): przychód w dniu zapłaty, koszt po zapłacie | od 2025 | brak | 4.2 |
-| L14 | Biała lista: zapłata powyżej 15 000 zł na rachunek spoza wykazu to brak kosztu i solidarna odpowiedzialność za VAT, chyba że w 7 dni zawiadomisz urząd (ZAW-NR) | stale | status NIP jest, sprawdzenie rachunku niepodpięte | 3.4 |
+| L14 | Biała lista: zapłata powyżej 15 000 zł na rachunek spoza wykazu to solidarna odpowiedzialność za VAT, chyba że w 7 dni zawiadomisz urząd (ZAW-NR). Zmiana z Dz.U. 2026 poz. 1371 (art. 1 pkt 2 i art. 3): brak kosztu w PIT tylko przy fakturze wystawionej przed 1.01.2027, także przy zapłacie w 2027 r.; od faktur z 1.01.2027 koszt w PIT odbiera tylko płatność ponad 15 000 zł bez rachunku płatniczego (np. gotówką) | stale; w PIT według dnia wystawienia faktury od 1.01.2027 | status NIP jest, sprawdzenie rachunku niepodpięte; uwaga 12.11.2026: ostrzeżenie o PIT według dnia wystawienia faktury (P_1) | 3.4 |
 | L15 | Ulga na złe długi w VAT (wierzyciel może skorygować po 90 dniach od terminu, dłużnik musi zmniejszyć odliczenie) i w PIT (dłużnik zwiększa dochód, wierzyciel może zmniejszyć) | stale | brak | 3.5 |
 | L16 | Ewidencja środków trwałych i wartości niematerialnych: powyżej 10 000 zł i dłużej niż rok, wpis najpóźniej w miesiącu przekazania do używania; JPK_ST obok JPK_PKPIR i JPK_EWP | stale; JPK_ST z księgami (2027 grupa V7M, potem wszyscy) | brak | 5.1 |
 | L17 | Samochód: VAT 100 % tylko z VAT-26 i ewidencją przebiegu, inaczej 50 %; w PIT bez ewidencji 75 % wydatków; limity amortyzacji i leasingu od 2026 r.: 150 000 zł (emisja poniżej 50 g CO2/km), 100 000 zł (50 g i więcej), 225 000 zł (elektryczne, wodór) | stale; limity od 1.01.2026 | brak | 4.7 |
@@ -639,15 +639,25 @@ u operatora płatności.
   zapłaty, ostrzeżenie, gdy rachunek jest spoza białej listy przy kwocie
   powyżej 15 000 zł (z przypomnieniem o zawiadomieniu ZAW-NR w 7 dni),
   informację o MPP i plik przelewów do wgrania w banku.
+- **Zmiana prawa (uwaga 12.11.2026):** ustawa z 18.09.2026 r. (Dz.U. 2026
+  poz. 1371, art. 1 pkt 2 i art. 3, w życie 1.01.2027) zmienia art. 22p
+  ustawy o PIT: rachunek spoza wykazu odbiera koszt w PIT tylko przy fakturze
+  wystawionej przed 1.01.2027 (także przy zapłacie w 2027 r.), a od faktur
+  z 1.01.2027 koszt odbiera tylko płatność ponad 15 000 zł bez rachunku
+  płatniczego. VAT i ZAW-NR bez zmian. Ostrzeżenie na liście, na karcie kosztu
+  i w powodzie pliku przelewów zależy od dnia wystawienia faktury: P_1
+  z faktury KSeF, a bez niego data dokumentu kosztu, dzień w Europe/Warsaw
+  (`lib/expenses/biala-lista-pit.ts`). Uwaga o gotówce ponad 15 000 zł tylko
+  przy formie płatności „gotówka” z faktury (`FormaPlatnosci` 1). RP-BL-01.
 - **Po co:** przepisy L2, L14; rynek.
 - **W aplikacji:** projekt N7 z `PLAN-FINORA.md` (termin z
   `Platnosc/TerminPlatnosci`); podpięcie gotowego sprawdzenia rachunku
   (`app/actions/validation.ts:72-91`, `components/validation/bank-account-input.tsx`);
   plik przelewów (format importu banków, np. Elixir-0 albo CSV).
 - **Praca:** M; zależy od 1.4.
-- **Ryzyko:** R1 (koszt w PIT zależy od białej listy).
+- **Ryzyko:** R1 (koszt w PIT zależy od białej listy przy fakturach wystawionych przed 1.01.2027).
 - **Sprawdzamy na:** API białej listy MF i VIES; specyfikacja pliku przelewów banku. **Brakuje:** testów na odpowiedziach API w każdym stanie (rachunek w wykazie, poza nim, podmiot wykreślony).
-- **Prawnik / księgowa:** nie.
+- **Prawnik / księgowa:** prawnik: pytanie 18 (co jest datą wystawienia faktury z KSeF na przełomie roku).
 
 #### 3.5 Złe długi
 - **Klient dostaje:** po 90 dniach od terminu informację, że może skorygować VAT
@@ -1226,7 +1236,8 @@ w dzienniku (sekcja 12).
 ### 7.1 Nowe pytania do prawnika
 
 Dopisane w kroku 0.1 do `docs/ksiegowosc/PYTANIA-DO-PRAWNIKA.md` jako
-pytania 7-17 (pytania 1-6 dotyczą modułu księgowości). Prawnik dostaje jeden
+pytania 7-17 (pytania 1-6 dotyczą modułu księgowości); pytanie 18 dopisane
+12.11.2026 przy zmianie art. 22p ustawy o PIT (krok 3.4). Prawnik dostaje jeden
 pakiet razem z pytaniami planu „zero zgubionych faktur” (jego sekcja 9).
 
 | # | Pytanie | Kroki |
@@ -1242,6 +1253,7 @@ pakiet razem z pytaniami planu „zero zgubionych faktur” (jego sekcja 9).
 | 15 | Publiczne API: regulamin, odpowiedzialność za integracje klientów | 7.1 |
 | 16 | Archiwum po rezygnacji i paczka na kontrolę: obowiązki po odejściu klienta | 6.4 |
 | 17 | Interfejs po angielsku i ukraińsku: czy tłumaczenie regulaminu i treści podatkowych wiąże, czy wystarczy tłumaczenie pomocnicze | 8.2 |
+| 18 | Co jest „datą wystawienia” faktury z KSeF na przełomie roku: P_1 czy data przesłania do KSeF (art. 3 Dz.U. 2026 poz. 1371)? Od tej daty zależy, czy rachunek spoza wykazu odbiera koszt w PIT | 3.4 |
 
 ### 7.2 Co sprawdza księgowa
 
@@ -1438,6 +1450,7 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 - Księgi w programie i struktury JPK w PIT: https://www.gov.pl/web/finanse/nowe-zasady-dokumentacji-ksiegowej-w-podatku-pit-od-2026-r-wazne-informacje (16.10.2025); JPK_PD: https://podatki.gov.pl/podatki-firmowe/jednolity-plik-kontrolny/jpk_pd/jpk_pd ; broszura JPK_ST(1): https://www.podatki.gov.pl/media/jikpuwwp/broszura_informacyjna_dot_jpk_st-1.pdf
 - Limity samochodów od 2026 r.: odpowiedź MF na interpelację nr 11803 z 24.09.2025: https://api.sejm.gov.pl/sejm/term10/interpellations/attachment/ATTDLZHXM/i11803-o1.pdf
 - Złe długi w PIT (ustawa o zatorach płatniczych, Dz.U. 2019 poz. 1649): https://isap.sejm.gov.pl/isap.nsf/download.xsp/WDU20190001649/T/D20191649L.pdf
+- Art. 22p PIT od 1.01.2027, biała lista bez skutku w PIT dla faktur od tego dnia (ustawa z 18.09.2026 r., Dz.U. 2026 poz. 1371, art. 1 pkt 2 i art. 3; odczyt 11.11.2026): metadane https://api.sejm.gov.pl/eli/acts/DU/2026/1371 , tekst tylko w PDF https://api.sejm.gov.pl/eli/acts/DU/2026/1371/text.pdf
 
 **ZUS**
 - DRA co miesiąc: https://www.biznes.gov.pl/pl/portal/00287
@@ -1509,5 +1522,6 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 11.11.2026 | 6.2, część 4 | #615 | gotowe do scalenia | uprawnienie biura rachunkowego w KSeF po NIP z FaktWay, za flagą `ksefPermissionsEnabled`; migracja 00195 przed wdrożeniem; próba na KSeF TEST po wdrożeniu |
 | 11.11.2026 | 3.2, część 3 | #616 | gotowe do scalenia po #614 (stos) | przelewy do dostawców z wyciągu jako zapłaty kosztów z listy „Do zapłaty”; propozycje tylko w przeglądarce (RODO); migracja 00196 przed wdrożeniem; przy scalaniu A i B osobno przestawić bazę na main |
 | 11.11.2026 | 8.1, część 3 | #617 | scalone do A (#587) | wpis w dzwonku przy wpłacie do faktury („Otrzymana płatność”, „Wpłata częściowa”); migracja 00197 przed wdrożeniem |
+| 11.11.2026 | 2.5 | #642 | gotowe do scalenia | serie numeracji faktur: własny wzór ({RRRR}, {MM}, {M}, {N}), seria domyślna każdego rodzaju, podpowiedź numeru dla zwykłej, zaliczkowej, końcowej i korekty; numer z licznika nadaje baza pod blokadą serii (dwa wystawienia naraz: dwa kolejne numery), numer zajęty w KSeF nie wraca z licznika; firma bez serii numeruje jak dotąd; migracja 00199 przed wdrożeniem; decyzje według rekomendacji do potwierdzenia przy scalaniu (opis PR); test RLS z wyścigiem w CI |
 
-**Następny krok:** decyzja Bartosza o scaleniu: #614 (A+B jednym ruchem) albo #587 (A, 34 PR) i potem #588 (B, 10 PR, D11); najpierw #482 (niestabilny test biometrii) i decyzja o #612 (pułap sterty buildu 5120 MB); #616 stoi na #614. Potem migracje przed wdrożeniem w kolejności numerów 00174-00185 i 00187-00197 (00186 należy do planu skalowania) i wdrożenie. Dalej w planie: 8.4 część 2 (poprawki dostępności po scaleniu), kroki formularza faktury (2.4, 2.5, 2.6, 2.8) po scaleniu #509, 1.2 część 2 (FP w JPK po S-01 filtra), 2.9 część 2 (nota odsetkowa, gdy stawki odsetek będą zweryfikowane), 6.2 część 5 (uprawnienia KSeF dla osób), 9.1 kadry na koniec (P3).
+**Następny krok:** decyzja Bartosza o scaleniu: #614 (A+B jednym ruchem) albo #587 (A, 34 PR) i potem #588 (B, 10 PR, D11); najpierw #482 (niestabilny test biometrii) i decyzja o #612 (pułap sterty buildu 5120 MB); #616 stoi na #614. Potem migracje przed wdrożeniem w kolejności numerów 00174-00185 i 00187-00197 (00186 należy do planu skalowania) i wdrożenie. Krok 2.5 (#642) czeka na decyzję o scaleniu, potem migracja 00199 przed wdrożeniem. Dalej w planie: 8.4 część 2 (poprawki dostępności po scaleniu), kroki formularza faktury (2.6, 2.8) po scaleniu #509, 1.2 część 2 (FP w JPK po S-01 filtra), 2.9 część 2 (nota odsetkowa, gdy stawki odsetek będą zweryfikowane), 6.2 część 5 (uprawnienia KSeF dla osób), 9.1 kadry na koniec (P3).

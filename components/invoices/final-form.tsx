@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import type { Resolver } from 'react-hook-form';
-import { useEffect, useMemo, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
@@ -49,6 +49,8 @@ import { calculateLineItem, roundToCents } from '@/lib/xml/invoice-calculator';
 import type { BuyerB2B, InvoiceLine, SellerData } from '@/types/invoice-types';
 
 import { saveFinalAction, saveAndSendFinalAction } from './final-actions';
+import { numberingDefaults, SeriesSelectRow, useSeriesNumber } from './numeracja/series-select-row';
+import type { InvoiceNumbering } from '@/lib/numeracja/model';
 
 type FinalFormIn = z.input<typeof finalInvoiceSchema>;
 
@@ -93,6 +95,8 @@ export interface FinalInvoiceFormProps {
   advanceInvoices: AdvanceOptionRow[];
   /** Firma, dla której wyrenderowano formularz, sprzedawcę i zaliczki — zapis odsyła ją jako `expectedTenantId` (UX-01). */
   tenantId: string;
+  /** Krok 2.5: serie numeracji z serią domyślną faktury końcowej i podpowiedzią numeru. */
+  numbering?: InvoiceNumbering | null;
 }
 
 // E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
@@ -109,7 +113,7 @@ function advanceLabel(row: AdvanceOptionRow): string {
   return num;
 }
 
-export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: FinalInvoiceFormProps) {
+export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId, numbering = null }: FinalInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
@@ -118,10 +122,17 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: F
   const today = todayInWarsaw();
   const due = dueDateFrom(today, 14);
 
+  // Krok 2.5: seria domyślna faktury końcowej, jej podpowiedź i klucz zapisu (jeden na otwarcie formularza).
+  const numberDefaults = numberingDefaults(numbering);
+  const [numberRequestKey] = useState(() => crypto.randomUUID());
+
   // Bez domyślnego MPP — użytkownik odpowiada świadomie (AUD-23).
   const defaults = {
     invoiceType: 'final',
-    internalNumber: '',
+    internalNumber: numberDefaults.preview ?? '',
+    numberSeriesId: numberDefaults.numberSeriesId,
+    numberPreview: numberDefaults.numberPreview,
+    numberRequestKey,
     issueDate: today,
     paymentMethod: 'transfer',
     paymentDueDate: due,
@@ -235,6 +246,19 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: F
   const nipDisplay = currentBuyer().nip.replace(/\D/g, '');
   const paymentMethodWatch = useWatch({ control: form.control, name: 'paymentMethod' });
   const splitPaymentWatch = useWatch({ control: form.control, name: 'splitPayment' });
+  const issueDateWatch = useWatch({ control: form.control, name: 'issueDate' }) ?? today;
+
+  // Krok 2.5: zmiana serii albo daty podpowiada numer z serii, o ile w polu nie ma numeru wpisanego ręcznie.
+  const series = useSeriesNumber({
+    numbering,
+    issueDate: issueDateWatch,
+    read: () => ({ number: form.getValues('internalNumber') ?? '', preview: form.getValues('numberPreview') || undefined }),
+    write: ({ seriesId, preview, number }) => {
+      form.setValue('numberSeriesId', seriesId);
+      form.setValue('numberPreview', preview);
+      if (number !== undefined) form.setValue('internalNumber', number, { shouldValidate: form.formState.isSubmitted });
+    },
+  });
 
   const onSave = form.handleSubmit(
     (data) =>
@@ -279,6 +303,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId }: F
         <InvoiceDocumentCard
           header={
             <InvoiceDocumentHeader seller={initialSeller}>
+              <SeriesSelectRow numbering={numbering} seriesId={series.seriesId} onSelect={series.selectSeries} disabled={busy} />
               <DocumentHeaderRow
                 label="Numer"
                 htmlFor="internalNumber"

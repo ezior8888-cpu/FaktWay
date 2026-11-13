@@ -137,7 +137,6 @@ vi.mock('@/components/dashboard/bottom-nav', () => ({ BottomNav: () => null }));
 vi.mock('@/components/dashboard/footer', () => ({ Footer: () => null }));
 vi.mock('@/components/dashboard/prefetch-dashboard-routes', () => ({ PrefetchDashboardRoutes: () => null }));
 vi.mock('@/components/dashboard/shell-scroll-memory', () => ({ ShellScrollMemory: () => null }));
-vi.mock('@/components/dashboard/exports-route-client', () => ({ PrefetchExportsRoute: () => null }));
 vi.mock('@/components/dashboard/welcome-modal', () => ({ WelcomeModal: () => null }));
 vi.mock('@/components/auth/idle-watcher', () => ({ IdleWatcher: () => null }));
 vi.mock('@/components/pwa/install-prompt-lazy', () => ({ InstallPrompt: () => null }));

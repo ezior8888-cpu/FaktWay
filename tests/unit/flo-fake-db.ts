@@ -14,12 +14,40 @@
  * Obsługuje tylko te operacje, których agent naprawdę używa. Świadomie nie
  * jest to symulator PostgREST-a — gdyby nim był, testowalibyśmy własną
  * imitację zamiast własnego kodu.
+ *
+ * `order()` sortuje naprawdę (od sesji 29 planu skalowania; wcześniej nic nie
+ * robił): odczyty stronami po kluczu (`gt` + `order` + `limit`) bez tego
+ * dostawałyby te same wiersze dwa razy. Napisy po jednostkach kodu, jak
+ * kolacja "C" — tak samo porównuje `gt` niżej.
  */
 
 import type { FloDbClient } from '@/lib/flo/db-types';
 
 type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
+type SortKey = { column: string; ascending: boolean };
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b);
+  const x = String(a);
+  const y = String(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** Jak ORDER BY w Postgresie: kolejne klucze, NULL na końcu przy rosnącym i na początku przy malejącym. */
+function compareRows(a: Row, b: Row, sort: readonly SortKey[]): number {
+  for (const { column, ascending } of sort) {
+    const x = columnValue(a, column) ?? null;
+    const y = columnValue(b, column) ?? null;
+    if (x === null && y === null) continue;
+    if (x === null) return ascending ? 1 : -1;
+    if (y === null) return ascending ? -1 : 1;
+    const result = compareValues(x, y);
+    if (result !== 0) return ascending ? result : -result;
+  }
+  return 0;
+}
 function columnValue(row: Row, column: string): unknown {
   if (!column.includes('->')) return row[column];
   const [root, ...keys] = column.split(/->>?/);
@@ -98,10 +126,12 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
   const state = { writes: 0 };
 
   function makeQuery(rows: Row[], filters: Filter[], mode: 'read' | 'update' | 'delete', patch?: Row,
-    /** `bounds` z `range()` — granice włączne, jak w PostgREST. */
-    options: { count?: 'exact'; limit?: number; bounds?: [number, number] } = {}) {
+    /** `bounds` z `range()` — granice włączne, jak w PostgREST; `sort` z kolejnych `order()`. */
+    options: { count?: 'exact'; limit?: number; bounds?: [number, number]; sort?: SortKey[] } = {}) {
     const apply = () => {
-      const matched = rows.filter((row) => filters.every((f) => f(row)));
+      let matched = rows.filter((row) => filters.every((f) => f(row)));
+      // Kopia tablicy, ale te same obiekty wierszy — update i delete niżej działają na nich.
+      if (options.sort?.length) matched = [...matched].sort((a, b) => compareRows(a, b, options.sort!));
       return options.bounds ? matched.slice(options.bounds[0], options.bounds[1] + 1) : matched;
     };
 
@@ -166,7 +196,11 @@ export function createFakeDb(seed: Partial<Tables> = {}, beforeUpdate?: () => vo
           return typeof value === 'string' && value >= cutoff;
         })], mode, patch, options);
       },
-      order: () => builder,
+      order: (column: string, opts?: { ascending?: boolean }) =>
+        makeQuery(rows, filters, mode, patch, {
+          ...options,
+          sort: [...(options.sort ?? []), { column, ascending: opts?.ascending ?? true }],
+        }),
       limit: (value: number) => makeQuery(rows, filters, mode, patch, { ...options, limit: value }),
       /** Stronicowanie — tnie PO filtrach, tak jak robi to PostgREST. */
       range: (from: number, to: number) =>
