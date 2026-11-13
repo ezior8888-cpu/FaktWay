@@ -34,8 +34,18 @@ export const MOBILE_API_ERROR_CODES = [
   'maintenance',
   /** 503: GoTrue nie odpowiedział albo odpowiedział błędem serwera. Ponów, nie wylogowuj. */
   'session_verification_failed',
-  /** 503: baza niedostępna. Ponów. */
+  /** 503: baza albo GoTrue niedostępne. Ponów. */
   'service_unavailable',
+  /** 400: treść żądania w złym kształcie (np. logowanie bez e-maila albo hasła). */
+  'invalid_request',
+  /** 400: `POST /logowanie`: zły e-mail albo hasło (także niepotwierdzony e-mail, jak na stronie). */
+  'invalid_credentials',
+  /**
+   * 503, z nagłówkiem `Retry-After`: `POST /logowanie` nie może teraz bezpiecznie zalogować
+   * (bez Redisa nie ma limitów prób, a trasa nie ma captchy; albo GoTrue odrzucił klucz serwera).
+   * Klient loguje się na faktway.pl albo próbuje za kilka minut.
+   */
+  'login_unavailable',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -68,6 +78,25 @@ export interface KontoOdpowiedz {
   wszystkie: boolean;
   /** Ostatnio używana na stronie, gdy nadal jest dostęp; inaczej pierwsza z listy; `null` bez firm. */
   aktywnaFirma: string | null;
+}
+
+/**
+ * `POST /api/mobile/v1/logowanie` (M6b, decyzja D16): treść żądania. Telefon loguje się hasłem
+ * przez API, a nie wprost do GoTrue, bo GoTrue z captchą odrzuca logowanie bez tokenu Turnstile.
+ */
+export interface LogowanieZadanie {
+  email: string;
+  haslo: string;
+}
+
+/**
+ * `POST /api/mobile/v1/logowanie`, 200: sesja GoTrue dla `supabase.auth.setSession`. Odświeżanie,
+ * kod 2FA i wylogowanie telefon robi dalej sam w GoTrue (bez captchy). `wymagaKodu`: konto ma
+ * zweryfikowany TOTP, a sesja jest jeszcze na poziomie `aal1` (ta sama reguła co strona).
+ */
+export interface LogowanieOdpowiedz {
+  sesja: { accessToken: string; refreshToken: string };
+  wymagaKodu: boolean;
 }
 
 /** `POST /api/mobile/v1/sesja`: 201 `{ zapisane: true }` przy pierwszym wywołaniu dla sesji, potem 200 `{ zapisane: false }`. */

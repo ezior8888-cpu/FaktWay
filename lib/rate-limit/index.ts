@@ -38,7 +38,10 @@ export type RateLimitBucket =
   | 'file_upload'
   /** API aplikacji na telefon (`lib/api/mobile/auth.ts`): każde żądanie z adresu i każde osoby. */
   | 'mobile_api_ip'
-  | 'mobile_api_user';
+  | 'mobile_api_user'
+  /** Logowanie hasłem z telefonu (`POST /api/mobile/v1/logowanie`, M6b): próby z adresu i na konto. */
+  | 'mobile_login_ip'
+  | 'mobile_login_email';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */
