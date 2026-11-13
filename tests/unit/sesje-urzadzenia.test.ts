@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MAX_DEVICE_LABEL_LENGTH } from '@/lib/auth/passkey/device-label';
 import { loginMethodFromAmr, readAccessTokenFacts } from '@/lib/auth/sessions/access-token';
@@ -146,7 +146,7 @@ describe('wiersz listy urządzeń (list_account_sessions)', () => {
     device_source: 'login' as const,
   };
   // Stały zegar dla całego bloku, bo widok liczy limit 30 dni od „teraz”. Z domyślnym
-  // `new Date()` wynik zależałby od dnia uruchomienia: od 8.12.2026 15:40 UTC, 30 dni
+  // `new Date()` wynik zależałby od dnia uruchomienia: po 8.12.2026 15:40 UTC, 30 dni
   // po `last_active_at`, pierwszy przypadek dostawałby `inactiveOver30Days: true`.
   const NOW = new Date('2026-11-10T12:00:00Z');
 
@@ -170,6 +170,18 @@ describe('wiersz listy urządzeń (list_account_sessions)', () => {
     expect(toAccountSessionView({ ...base, last_active_at: '2026-10-11T12:00:00+00:00' }, undefined, now).inactiveOver30Days).toBe(false);
     expect(toAccountSessionView({ ...base, last_active_at: null }, undefined, now).inactiveOver30Days).toBe(false);
     expect(toAccountSessionView({ ...base, is_current: true, last_active_at: '2026-01-01T00:00:00+00:00' }, undefined, now).inactiveOver30Days).toBe(false);
+  });
+
+  it('bez podanego zegara liczy od bieżącej chwili, jak przy wołaniu ze strony (lib/auth/sessions/load.ts)', () => {
+    // Zegar przypięty, żeby ten przypadek nie zależał od dnia uruchomienia.
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+    try {
+      expect(toAccountSessionView(base).inactiveOver30Days).toBe(false);
+      vi.setSystemTime(new Date('2026-12-08T15:41:00Z'));
+      expect(toAccountSessionView(base).inactiveOver30Days).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sesja bez wpisu logowania, zapisana przez serwer aplikacji: bez urządzenia i bez adresu serwera', () => {
