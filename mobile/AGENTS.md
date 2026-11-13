@@ -160,6 +160,13 @@ uruchamiasz po kolei, nigdy razem.
   `EXPO_PUBLIC_API_URL=http://localhost:3000`. Plik jest
   poza gitem; tylko lokalna baza, nigdy `db-1`. Po zmianie pliku uruchom
   Metro od nowa.
+- Logowanie hasłem idzie od M6b przez stronę (`POST /api/mobile/v1/logowanie`,
+  plan D16), więc wymaga działającego `pnpm dev` pod `EXPO_PUBLIC_API_URL`
+  i Redisa w `.env.local` strony (bez Redisa trasa odmawia: „Logowanie w
+  aplikacji jest chwilowo niedostępne”). Chmurowy Redis dev bywa wolniejszy
+  niż limit 500 ms; wtedy ta sama odmowa, ponów. Kod 2FA, Google i
+  odświeżanie idą wprost do GoTrue. Próba z captchą w GoTrue: osobny stos z
+  `[auth.captcha]` (plan 4.2) i `.env.local` strony wskazujący ten stos.
 - Konto testowe `dev@faktway.test` (bez 2FA) zakłada `scripts/dev/baza-lokalna.sh`.
   Do kodu 2FA załóż drugie konto z TOTP przez API GoTrue (`auth.admin.createUser`,
   potem `mfa.enroll` i `mfa.challengeAndVerify`); konta dev nie ruszaj, bo
