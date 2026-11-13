@@ -17,7 +17,9 @@ import { afterAll, describe, expect, it } from 'vitest';
  */
 
 const KATALOG = path.resolve(__dirname, '../..');
-const VITEST = path.join(KATALOG, 'node_modules/.bin/vitest');
+// Przez node, nie `node_modules/.bin/vitest`: tamten to skrypt sh, którego
+// Windows nie uruchomi (spawnSync: ENOENT), więc hook przed pushem był czerwony.
+const VITEST = path.join(KATALOG, 'node_modules/vitest/vitest.mjs');
 // Test hooków żelaznego filtra jest na gałęzi filtra (#504); na `main` bez niego plik jest pomijany.
 const PLIKI: ReadonlyArray<{ plik: string; konfiguracja?: string }> = [
   { plik: 'tests/unit/napraw-hook.test.ts' },
@@ -39,7 +41,7 @@ describe('testy z repozytoriami tymczasowymi nie dotykają repo z GIT_DIR', () =
     const config = path.join(zewnetrzne, '.git/config');
     const przed = fs.readFileSync(config, 'utf8');
 
-    const wynik = spawnSync(VITEST, ['run', ...(konfiguracja ? ['--config', konfiguracja] : []), plik], {
+    const wynik = spawnSync(process.execPath, [VITEST, 'run', ...(konfiguracja ? ['--config', konfiguracja] : []), plik], {
       cwd: KATALOG,
       env: { ...bezGit, GIT_DIR: path.join(zewnetrzne, '.git') },
       encoding: 'utf8',
