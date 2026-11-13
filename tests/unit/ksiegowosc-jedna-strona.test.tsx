@@ -13,7 +13,8 @@ import { describe, expect, it, vi } from 'vitest';
  */
 
 const nav = vi.hoisted(() => ({ pathname: '/reports/kpir' }));
-vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
+// `useRouter` dla linku zakładki (`SectionTabLink`), który pobiera stronę po najechaniu.
+vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname, useRouter: () => ({ prefetch: vi.fn() }) }));
 
 // Plan księgowości JDG (K2-K6): layout pyta wyłącznik o zakładki modułu.
 const wylacznik = vi.hoisted(() => ({ wlaczony: false, blad: false, obszary: {} as Record<string, boolean> }));

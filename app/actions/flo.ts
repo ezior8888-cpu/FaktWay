@@ -29,7 +29,7 @@ import { revalidatePath } from 'next/cache';
 import { approvedReminderDelivery } from '@/lib/reminders/delivery-consent';
 import { createApproval } from '@/lib/flo/approval';
 import { approvalOperationHash, isApprovalVersion, parseApprovalInput, proposalApprovalVersion } from '@/lib/flo/approval-version';
-import { floDb, type FloProposalRow } from '@/lib/flo/db-types';
+import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import {
   muteKind,
   muteSubject,
@@ -37,13 +37,15 @@ import {
   recordSubjectDismissal,
   unmuteKind,
 } from '@/lib/flo/decisions';
-import { buildSilencedList, type SilencedEntry } from '@/lib/flo/silenced';
+import { buildSilencedList, silencedSubjectKeys, type SilencedEntry } from '@/lib/flo/silenced';
 import { floKindLabel } from '@/components/flo/kind-labels';
 import { executeProposal } from '@/lib/flo/execute';
 // Skutek uboczny: rejestracja wykonawców propozycji. NIE USUWAĆ.
 import '@/lib/flo/functions';
 import { listOpen } from '@/lib/flo/proposals';
 import { undoAction as undoProposalAction } from '@/lib/flo/undo';
+import { inListChunks } from '@/lib/pagination/in-list';
+import { forEachPageById } from '@/lib/pagination/keyset';
 // UWAGA: plik z dyrektywą 'use server' może eksportować WYŁĄCZNIE funkcje
 // asynchroniczne. Klasy i funkcje synchroniczne (np. ActionAuthError,
 // toProposalView) importuje się bezpośrednio z ich modułów — próba
@@ -397,25 +399,8 @@ export async function listSilenced(): Promise<SilencedEntry[]> {
   const now = new Date();
 
   const rows = await readDecisionRows(tenantId, db);
-  const subjectKeys = rows
-    .filter((row) => row.kind.includes(':'))
-    .map((row) => row.kind);
-
-  const titles = new Map<string, string>();
-  if (subjectKeys.length > 0) {
-    const { data, error } = await db
-      .from('flo_proposals')
-      .select('topic_key, title, created_at')
-      .eq('tenant_id', tenantId)
-      .in('topic_key', subjectKeys)
-      .order('created_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
-    // Pierwszy wiersz każdego tematu to ten najnowszy — kolejność z bazy.
-    for (const row of data ?? []) {
-      if (!titles.has(row.topic_key)) titles.set(row.topic_key, row.title);
-    }
-  }
+  // Tytuły tylko dla spraw, które ekran pokaże (cisza trwa teraz).
+  const titles = await readLatestTitles(tenantId, silencedSubjectKeys(rows, now), db);
 
   return buildSilencedList({
     rows,
@@ -451,6 +436,66 @@ export async function restoreSilenced(key: string): Promise<void> {
 // ═══════════════════════════════════════════════════════════════
 // Pomocnicze
 // ═══════════════════════════════════════════════════════════════
+
+type CardTitleRow = Pick<FloProposalRow, 'id' | 'topic_key' | 'title' | 'created_at'>;
+
+/**
+ * Tytuł najnowszej karty każdej sprawy: klucz tematu → tytuł.
+ *
+ * Klucze idą paczkami (`inListChunks`: najwyżej 100 wartości i 4000 znaków
+ * w adresie), a każda paczka stronami po `id` (ustalenie 1 z PR #660). Jedno
+ * `.in()` ze wszystkimi kluczami od ok. 150 spraw przekraczało limit adresu
+ * bramki i ekran ustawień kończył się błędem. Do tego produkcja ucina
+ * odpowiedź do 1000 wierszy bez błędu (`PGRST_DB_MAX_ROWS`), więc przy kilku
+ * kartach na sprawę starsze sprawy traciły tytuł i stały na liście jako
+ * jednakowe „…: jedna sprawa”.
+ *
+ * Strony idą po `id`, nie po dacie, więc najnowszą kartę wybieramy tutaj,
+ * po `created_at`, i trzymamy po jednej na sprawę, nie wszystkie wiersze.
+ * Samo zapytanie nie odda jednej karty na temat: PostgREST nie ma DISTINCT ON,
+ * a widok albo funkcja w bazie to migracja.
+ *
+ * Błąd albo niepewna odpowiedź na dowolnej stronie to wyjątek
+ * (`KeysetPageError`), nigdy lista bez tytułów.
+ */
+async function readLatestTitles(
+  tenantId: string,
+  topicKeys: readonly string[],
+  db: FloDbClient,
+): Promise<Map<string, string>> {
+  const newest = new Map<string, CardTitleRow>();
+  for (const keys of inListChunks(topicKeys)) {
+    await forEachPageById<CardTitleRow>(
+      'Flo: tytuły wyciszonych spraw',
+      (afterId, limit) => {
+        // Filtr po organizacji na każdej stronie: klient administracyjny omija
+        // RLS, a klucz tematu bywa wspólny między kontami.
+        let query = db
+          .from('flo_proposals')
+          .select('id, topic_key, title, created_at')
+          .eq('tenant_id', tenantId)
+          .in('topic_key', keys);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      },
+      (page) => {
+        for (const card of page) {
+          const best = newest.get(card.topic_key);
+          if (!best || isNewerCard(card, best)) newest.set(card.topic_key, card);
+        }
+      },
+    );
+  }
+  return new Map(Array.from(newest, ([key, card]) => [key, card.title]));
+}
+
+/** Późniejsze `created_at` wygrywa. Remis rozstrzyga `id`, więc wynik nie zależy od kolejności stron. */
+function isNewerCard(card: CardTitleRow, than: CardTitleRow): boolean {
+  const at = Date.parse(card.created_at);
+  const thanAt = Date.parse(than.created_at);
+  if (at !== thanAt && !Number.isNaN(at) && !Number.isNaN(thanAt)) return at > thanAt;
+  return card.id > than.id;
+}
 
 /**
  * „dziś 11:42" — data w strefie klienta, nie serwera.

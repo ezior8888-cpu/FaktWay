@@ -8,6 +8,7 @@ import { CashMethodForm } from '@/components/settings/cash-method-form';
 import { CompanyBankAccountForm } from '@/components/settings/company-bank-account-form';
 import { CompanyProfileForm } from '@/components/settings/company-profile-form';
 import { DocumentArchiveForm } from '@/components/settings/document-archive-form';
+import { InvoiceNumberingForm } from '@/components/settings/invoice-numbering-form';
 import {
   Field,
   FieldContent,
@@ -23,6 +24,7 @@ import { readTenantBusinessStart } from '@/lib/invoices/business-start';
 import { readTenantCashMethod } from '@/lib/invoices/cash-method';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { readArchiveOrders } from '@/lib/archiwum/zlecenia';
+import { readInvoiceSeries } from '@/lib/numeracja/baza';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -32,14 +34,16 @@ export const dynamic = 'force-dynamic';
  * Zakładka „Firma” = General z Finory (plan P14): profil firmy, zwolnienie
  * z VAT, metoda kasowa, data rozpoczęcia działalności (#data-rozpoczecia —
  * link z Pulpitu), rachunek firmy (#rachunek-firmy, link z listy „Do zapłaty”;
- * krok 3.4, część 2: nowa sekcja na końcu, decyzja D1). Z General wylatują język, waluta, strefa czasowa i rok
+ * krok 3.4, część 2: nowa sekcja na końcu, decyzja D1), numeracja faktur
+ * (#numeracja, krok 2.5: serie numerów, też nowa sekcja na końcu). Z General wylatują język, waluta, strefa czasowa i rok
  * obrotowy (zawsze PL / PLN / Europe/Warsaw / rok kalendarzowy), a Profile
  * Finory nie ma odpowiednika. Usunięcie firmy jest tylko w „Konto i dane”.
  */
 export default async function SettingsPage() {
   const { supabase, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn, archiveOrders, calendarFeedActive, bankAccount] = await Promise.all([
+  const today = todayInWarsaw();
+  const [{ data: tenant }, vatExemptionBasis, vatCashMethod, businessStartedOn, archiveOrders, calendarFeedActive, bankAccount, invoiceSeries] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
@@ -57,6 +61,8 @@ export default async function SettingsPage() {
     readCalendarFeedActive(supabase, tenantId),
     // Odpornie: przed migracją 00183 kolumny nie ma (brak rachunku).
     readTenantBankAccount(supabase, tenantId),
+    // Serie numeracji (00199, krok 2.5); `null`, gdy odczyt się nie udał.
+    readInvoiceSeries(supabase as unknown as SupabaseClient, today),
   ]);
 
   // Edycja danych firmy (F-008): właściciel i administrator, jak ustawienia VAT.
@@ -159,6 +165,12 @@ export default async function SettingsPage() {
       ) : null}
       <div id={KOTWICA_RACHUNKU_FIRMY} className="scroll-mt-24">
         <CompanyBankAccountForm initialAccount={bankAccount} canEdit={canEditCompany} />
+      </div>
+
+      <Separator />
+
+      <div id="numeracja" className="scroll-mt-24">
+        <InvoiceNumberingForm initialSeries={invoiceSeries} canEdit={canEditCompany} today={today} />
       </div>
     </FieldGroup>
   );

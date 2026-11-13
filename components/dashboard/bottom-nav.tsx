@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
 
@@ -52,6 +52,17 @@ const PLUS_SPRING = { type: "spring" as const, stiffness: 520, damping: 26 };
  * `LinkPendingMark` (`useLinkStatus`), czyli tylko trwająca nawigacja Nexta,
  * a pasek postępu u góry paska mówi, że strona jest w drodze
  * (`.ff-bottom-nav` w `globals.css`).
+ *
+ * PREFETCH BEZ PEŁNEGO RENDERU (plan skalowania 3000, sesja 10). Sloty miały
+ * pełny `prefetch`, więc samo wejście na panel renderowało na serwerze trzy
+ * strony z danymi (Faktury, Nowa, Miesiąc), a każde `router.refresh()` (np. po
+ * akcji serwerowej) robiło to od nowa. Teraz trasy slotów pobiera z góry
+ * `PrefetchDashboardRoutes`, tylko do stanu ładowania (najbliższy
+ * `loading.tsx`, dla Faktur i Nowej wspólny szkielet panelu): po dotknięciu
+ * od razu widać szkielet, a dane strony przychodzą za nim. Wiersze arkusza
+ * „Więcej” (dawniej też pełny prefetch) pobierają się dopiero przy dotknięciu,
+ * najechaniu albo fokusie wiersza: otwarcie arkusza to jeszcze nie wybór
+ * trasy, a pobierałoby naraz każdą stronę z arkusza.
  */
 export function BottomNav() {
   const pathname = usePathname();
@@ -136,7 +147,7 @@ export function BottomNav() {
             <Link
               key={tab.label}
               href={tab.href}
-              prefetch
+              // Domyślny prefetch, nie pełny: „PREFETCH BEZ PEŁNEGO RENDERU” wyżej.
               aria-current={active ? "page" : undefined}
               className={cn(
                 SLOT_CLASS,
@@ -173,7 +184,7 @@ export function BottomNav() {
                     href={item.href}
                     label={item.label}
                     icon={item.icon}
-                    prefetch={item.prefetch !== false}
+                    prefetch={item.prefetch}
                     active={isActiveNavPath(pathname, item.href)}
                     onChoose={chooseFromMore}
                   />
@@ -263,7 +274,8 @@ function PlusSlot({
     <MotionConfig reducedMotion="user">
       <Link
         href={href}
-        prefetch
+        // Domyślny prefetch, nie pełny: „PREFETCH BEZ PEŁNEGO RENDERU”
+        // w opisie `BottomNav`.
         aria-current={active ? "page" : undefined}
         // `pb-[var(--ff-safe-b)]` jak w pozostałych slotach: bez niego na
         // iPhonie z paskiem domowym koło zjeżdżałoby w strefę paska.
@@ -294,14 +306,22 @@ function MoreRow({
   label,
   icon: Icon,
   active,
-  prefetch = true,
+  prefetch,
   onChoose,
 }: {
   href: string;
   label: string;
   icon: RemixiconComponentType;
-  /** `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). */
-  prefetch?: boolean;
+  /**
+   * `false` dla ciężkich stron (`/analizy/*`, plan Finora §4): bez pobrania
+   * także przy dotknięciu. Domyślnie wiersz pobiera trasę przy dotknięciu,
+   * najechaniu albo fokusie, nie przy otwarciu arkusza (plan skalowania 3000,
+   * sesja 10). Na dotyku `pointerenter` przychodzi razem z dotknięciem, przed
+   * kliknięciem. Otwarcie myszą albo klawiaturą stawia fokus na pierwszym
+   * wierszu (Base UI), więc ten pobrałby się już przy otwarciu: dziś to
+   * Analizy, bez pobrania, i pilnuje tego `tests/unit/prefetch-panelu.test.tsx`.
+   */
+  prefetch?: false;
   active: boolean;
   /**
    * Wybór pozycji: arkusz zamyka się od razu. Dawniej czekał otwarty na
@@ -310,10 +330,19 @@ function MoreRow({
    */
   onChoose: (href: string) => void;
 }) {
+  const router = useRouter();
+  const pobierz =
+    prefetch === false
+      ? undefined
+      : () => {
+          void router.prefetch(href);
+        };
   return (
     <Link
       href={href}
-      prefetch={prefetch}
+      prefetch={false}
+      onPointerEnter={pobierz}
+      onFocus={pobierz}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         onChoose(href);

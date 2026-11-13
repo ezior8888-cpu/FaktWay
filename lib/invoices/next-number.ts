@@ -104,19 +104,34 @@ export function nextInvoiceNumberCandidates(
   return candidates;
 }
 
-/** Ostatnia zwykła faktura sprzedażowa firmy (opcjonalnie tylko wystawiona w FaktWay). */
-async function lastRegularOutgoing(
+/** Rodzaj dokumentu (`invoices.invoice_kind`), dla którego liczymy podpowiedź. */
+export type SuggestionKind = 'regular' | 'advance' | 'final' | 'correction';
+
+/**
+ * Seria „jak dotąd” (krok 2.5, 00199): liczą się tylko faktury bez serii
+ * (sprzed serii, z KSeF) i wystawione w tej serii, więc numery innej serii jej
+ * nie przestawiają. `null`: firma bez serii, liczą się wszystkie (jak dotąd).
+ */
+export interface LegacySeriesScope {
+  seriesId: string;
+}
+
+/** Ostatnia faktura sprzedażowa firmy danego rodzaju (opcjonalnie tylko wystawiona w FaktWay). */
+async function lastOutgoing(
   supabase: SupabaseClient,
   tenantId: string,
+  kind: SuggestionKind,
   onlyApp: boolean,
+  scope: LegacySeriesScope | null,
 ): Promise<{ internal_number: string | null; issue_date: string | null } | null> {
   let query = supabase
     .from('invoices')
     .select('internal_number, issue_date')
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing')
-    .eq('invoice_kind', 'regular');
+    .eq('invoice_kind', kind);
   if (onlyApp) query = query.eq('origin', 'app');
+  if (scope) query = query.or(`number_series_id.is.null,number_series_id.eq.${scope.seriesId}`);
   const { data } = await query
     .not('internal_number', 'is', null)
     .order('issue_date', { ascending: false })
@@ -143,8 +158,24 @@ export async function suggestNextInvoiceNumberForTenant(
   tenantId: string,
   todayIso: string,
 ): Promise<string | null> {
-  const last = (await lastRegularOutgoing(supabase, tenantId, true))
-    ?? (await lastRegularOutgoing(supabase, tenantId, false));
+  return suggestNextInvoiceNumberForKind(supabase, tenantId, 'regular', todayIso, null);
+}
+
+/**
+ * Ta sama podpowiedź dla każdego rodzaju dokumentu (krok 2.5): kolejny numer
+ * po ostatnim dokumencie tego rodzaju (zaliczki, korekty i rozliczenia zwykle
+ * mają własne serie), w serii „jak dotąd” tylko z jej faktur i faktur bez
+ * serii. Zajęty numer (dowolna faktura firmy) przeskakujemy jak wyżej.
+ */
+export async function suggestNextInvoiceNumberForKind(
+  supabase: SupabaseClient,
+  tenantId: string,
+  kind: SuggestionKind,
+  todayIso: string,
+  scope: LegacySeriesScope | null,
+): Promise<string | null> {
+  const last = (await lastOutgoing(supabase, tenantId, kind, true, scope))
+    ?? (await lastOutgoing(supabase, tenantId, kind, false, scope));
   if (!last?.internal_number || !last.issue_date) return null;
 
   let candidate = suggestNextInvoiceNumber(

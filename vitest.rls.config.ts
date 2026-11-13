@@ -158,6 +158,10 @@ export default defineConfig({
       // fakturach, numer z bazy bez dubli naraz, wystawionego nie zmienia nikt, kwoty w CHECK-ach,
       // historia wysyłek, powiązanie z fakturą w INSERT (jedna faktura na numer zamiany), poza przychodem.
       'tests/rls-proformy.test.ts',
+      // 00199 (plan kompletnej aplikacji, krok 2.5): serie numeracji faktur; dwa i pięć wystawień naraz
+      // w jednej serii dają różne kolejne numery (blokada serii w wyzwalaczu), obca firma, role, wzór
+      // bez licznika, numer zajęty w KSeF nie wraca z licznika, istniejące numery bez zmian.
+      'tests/rls-numeracja.test.ts',
       // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu;
       // które tokeny GoTrue uznaje (anon, serwisowy, podrobiony, wylogowany: odmowa, nie awaria),
       // AAL1 i AAL2 z prawdziwym TOTP, lista firm i x-active-org przez RLS, filtr wpisu logowania.

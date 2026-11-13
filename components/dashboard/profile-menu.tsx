@@ -229,7 +229,8 @@ export function ProfileMenu({
             <RiSettings3Line aria-hidden />
             <span>Ustawienia</span>
           </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href='/analizy/sprzedaz' />}>
+          {/* Plan Finora §4: Analizy bez prefetchu (ciężkie agregaty), jak w `lib/dashboard-nav-config.ts`. */}
+          <DropdownMenuItem render={<Link href='/analizy/sprzedaz' prefetch={false} />}>
             <RiPieChartLine aria-hidden />
             <span>Analiza sprzedaży</span>
           </DropdownMenuItem>

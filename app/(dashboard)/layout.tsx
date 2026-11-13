@@ -12,7 +12,6 @@ import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { Footer } from '@/components/dashboard/footer';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
 import { ShellScrollMemory } from '@/components/dashboard/shell-scroll-memory';
-import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
 import { PasskeyEnrollOfferGate } from '@/components/auth/passkey-enroll-offer-gate';
@@ -154,7 +153,6 @@ export default async function DashboardLayout({
           <DashboardRouteFlags />
           <InstallPrompt />
           <PrefetchDashboardRoutes />
-          <PrefetchExportsRoute />
           {!rememberedDevice && <IdleWatcher />}
           <PasskeyEnrollOfferGate />
           {user && activeOrg && (
