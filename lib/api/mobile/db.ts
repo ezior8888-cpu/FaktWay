@@ -1,9 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-/** Adres i klucz anon bazy; domyślnie z konfiguracji aplikacji, w testach RLS jawnie. */
+/** Adres i klucze bazy; domyślnie z konfiguracji aplikacji, w testach RLS jawnie. */
 export interface MobileSupabaseTarget {
   url?: string;
   anonKey?: string;
+  /** Tylko logowanie hasłem (`createMobileLoginClient`). */
+  serviceRoleKey?: string;
 }
 
 function resolveTarget(target: MobileSupabaseTarget): { url: string; anonKey: string } {
@@ -45,4 +47,22 @@ export function createMobileDbClient(
       },
     },
   });
+}
+
+/**
+ * Klient GoTrue tylko do logowania hasłem z telefonu (`POST /api/mobile/v1/logowanie`,
+ * M6b, decyzja D16). Klucz serwisowy w nagłówku `Authorization` jest jedyną drogą
+ * logowania hasłem bez tokenu captchy, gdy GoTrue ją wymaga (`docs/runbooks/captcha-w-gotrue.md`):
+ * GoTrue przepuszcza żądania z rolą serwisową, a sesja, którą wydaje, jest zwykłą sesją
+ * klienta (rola `authenticated`, AAL1). Sprawdzone na GoTrue z captchą, `tests/rls-mobile-logowanie.test.ts`.
+ *
+ * Nowy klient na każde logowanie, bez zapisu sesji: po `signInWithPassword` ten klient
+ * niesie już token klienta, więc nie wolno go użyć do niczego innego. Danych bazy tym
+ * klientem nie czytamy (od tego jest `createMobileDbClient` z tokenem klienta).
+ */
+export function createMobileLoginClient(target: MobileSupabaseTarget = {}): SupabaseClient {
+  const { url } = resolveTarget(target);
+  const serviceRoleKey = target.serviceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) throw new Error('Brak klucza serwisowego Supabase');
+  return createClient(url, serviceRoleKey, { auth: NO_SESSION });
 }

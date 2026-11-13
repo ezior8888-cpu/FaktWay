@@ -29,6 +29,9 @@ async function readRequestClientHints(): Promise<{
  */
 export type AuditAction =
   | 'auth.login'
+  // Nieudane logowanie hasłem z telefonu (`POST /api/mobile/v1/logowanie`, M6b): bez konta
+  // (GoTrue nie mówi, czyje) i bez adresu e-mail; `metadata.email_hash` to skrót jak w limitach prób.
+  | 'auth.login_failed'
   | 'auth.logout'
   | 'auth.signup'
   | 'auth.password_reset_requested'
