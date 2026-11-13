@@ -18,10 +18,11 @@ import type { WierszKosztuDoPliku } from './plik-przelewow';
 
 export const LIMIT_DO_ZAPLATY = 500;
 
+// `issue_date` kosztu i faktury (P_1): od dnia wystawienia zależy skutek rachunku spoza wykazu w PIT (`biala-lista-pit.ts`).
 const KOLUMNY =
   'id, seller_name, seller_nip, document_number, gross_amount, vat_amount, payment_due_date, payment_account, ' +
-  'payment_split, payment_terms, paid_at, ' +
-  'faktura:invoices!expenses_ksef_invoice_id_fkey(ksef_number, internal_number, currency, ksef_environment)';
+  'payment_split, payment_terms, paid_at, issue_date, ' +
+  'faktura:invoices!expenses_ksef_invoice_id_fkey(ksef_number, internal_number, currency, ksef_environment, issue_date)';
 
 type Wiersz = WierszKosztuDoZaplaty & { faktura: (WierszKosztuDoZaplaty['faktura'] & { ksef_environment: string | null }) | null };
 

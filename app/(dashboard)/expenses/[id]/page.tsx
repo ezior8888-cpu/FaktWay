@@ -32,11 +32,12 @@ export default async function ExpenseDetailPage({
   if (error || !expense) notFound();
 
   let ksefCurrency: string | null = null;
-  let ksefInvoice: { ksef_number: string | null; internal_number: string | null; currency: string | null } | null = null;
+  let ksefInvoice: WierszKosztuDoZaplaty['faktura'] = null;
   if (expense.source === 'ksef_inbox' && expense.ksef_invoice_id) {
+    // `issue_date` (P_1): skutek rachunku spoza wykazu w PIT zależy od dnia wystawienia faktury.
     const { data: invoice } = await supabase
       .from('invoices')
-      .select('currency, ksef_number, internal_number')
+      .select('currency, ksef_number, internal_number, issue_date')
       .eq('id', expense.ksef_invoice_id)
       .eq('tenant_id', expense.tenant_id)
       .maybeSingle();

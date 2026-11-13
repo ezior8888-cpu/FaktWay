@@ -12,15 +12,23 @@
  *  - termin dziś nie jest „po terminie”, wczoraj już tak (dzień w Polsce).
  *
  * Biała lista (RP-BL-01): od kwoty brutto ponad 15 000 zł koszt wymaga
- * sprawdzenia rachunku w wykazie podatników VAT (`wymagaBialejListy`).
+ * sprawdzenia rachunku w wykazie podatników VAT (`wymagaBialejListy`). Czy
+ * rachunek spoza wykazu odbiera też koszt w PIT, zależy od dnia wystawienia
+ * faktury (`sankcjaPitBialejListy`, reguła w `biala-lista-pit.ts`).
  *
  * Moduł bez importów serwerowych: strona (serwer) liczy listę, ekran (przeglądarka)
- * ją pokazuje. Testy: `tests/unit/koszty-do-zaplaty.test.tsx`.
+ * ją pokazuje. Testy: `tests/unit/koszty-do-zaplaty.test.tsx`, `tests/unit/biala-lista-pit.test.ts`.
  */
 
 import { poprawnyNumerKsef, tytulPrzelewu } from '@/lib/invoices/tytul-przelewu';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
+import {
+  dzienWystawieniaKosztu,
+  platnoscGotowka,
+  rachunekSpozaWykazuOdbieraKosztPit,
+  UWAGA_GOTOWKA,
+} from './biala-lista-pit';
 import { uwagiPlatnosci } from './platnosc-kosztu';
 
 /** Próg z art. 19 Prawa przedsiębiorców, do którego odnosi się sankcja za rachunek spoza wykazu. */
@@ -39,7 +47,15 @@ export interface WierszKosztuDoZaplaty {
   payment_split: boolean | null;
   payment_terms: unknown;
   paid_at: string | null;
-  faktura: { ksef_number: string | null; internal_number: string | null; currency: string | null } | null;
+  /** Data dokumentu kosztu (RRRR-MM-DD); zapas, gdy faktura KSeF nie ma daty wystawienia. */
+  issue_date?: string | null;
+  /** Faktura KSeF kosztu; `issue_date` to data wystawienia z faktury (P_1). */
+  faktura: {
+    ksef_number: string | null;
+    internal_number: string | null;
+    currency: string | null;
+    issue_date?: string | null;
+  } | null;
 }
 
 export interface KosztDoZaplaty {
@@ -61,6 +77,13 @@ export interface KosztDoZaplaty {
   mpp: boolean | null;
   tytul: string;
   wymagaBialejListy: boolean;
+  /**
+   * Faktura wystawiona przed 1.01.2027 (albo bez czytelnej daty): zapłata
+   * ponad 15 000 zł na rachunek spoza wykazu odbiera też koszt w PIT (art. 22p
+   * w brzmieniu dotychczasowym, art. 3 Dz.U. 2026 poz. 1371). Od faktury
+   * z 1.01.2027 zostaje sama odpowiedzialność za VAT i ZAW-NR.
+   */
+  sankcjaPitBialejListy: boolean;
   /** Pełne zdania: co jest nie tak i co zrobić. */
   uwagi: string[];
 }
@@ -127,6 +150,9 @@ function pozycja(w: WierszKosztuDoZaplaty, dzis: string): KosztDoZaplaty {
   if (!numerKsef) {
     uwagi.push('Faktura nie ma poprawnego numeru KSeF, więc tytuł przelewu to sam numer faktury.');
   }
+  if (platnoscGotowka(extra?.formaPlatnosci) && brutto > PROG_BIALEJ_LISTY_ZL) {
+    uwagi.push(UWAGA_GOTOWKA);
+  }
 
   return {
     id: w.id,
@@ -144,6 +170,7 @@ function pozycja(w: WierszKosztuDoZaplaty, dzis: string): KosztDoZaplaty {
     mpp: w.payment_split,
     tytul: tytulPrzelewu(numerFaktury, numerKsef, { mpp: w.payment_split === true }),
     wymagaBialejListy: brutto > PROG_BIALEJ_LISTY_ZL,
+    sankcjaPitBialejListy: rachunekSpozaWykazuOdbieraKosztPit(dzienWystawieniaKosztu(w)),
     uwagi,
   };
 }
