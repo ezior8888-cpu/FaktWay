@@ -16,7 +16,7 @@ import { useSesja } from '@/stan/sesja';
  * a bez 2FA systemowe Face ID (M5b).
  */
 export default function EkranKonta() {
-  const { konto } = useSesja();
+  const { konto, biometria, potwierdzBiometria } = useSesja();
   const google = konto?.metoda === 'google';
   const [dwaEtapy] = useFlaga('2fa', true);
   const [haslo, setHaslo] = useState('');
@@ -49,9 +49,11 @@ export default function EkranKonta() {
           <Wiersz
             tytul="Usuń moje konto"
             niszczacy
-            onPress={() => {
+            onPress={async () => {
               if (!google && !haslo) return setBlad('Wpisz aktualne hasło, żeby potwierdzić.');
               if (google && dwaEtapy && kod.length !== 6) return setBlad('Wpisz 6-cyfrowy kod z aplikacji TOTP, żeby potwierdzić.');
+              // Konto z Google bez 2FA nie ma hasła ani kodu: potwierdza twarz (M5b), bez biometrii zostaje arkusz.
+              if (google && !dwaEtapy && biometria && !(await potwierdzBiometria())) return setBlad(`Nie potwierdziliśmy ${biometria.nazwa}. Spróbuj jeszcze raz.`);
               potwierdz({ tytul: 'Usunąć konto?', opis: 'Konto zostanie usunięte za 14 dni. Do tego czasu możesz się wycofać.', potwierdz: 'Potwierdź żądanie', anuluj: 'Wróć' }, () => {
                 setZaplanowane(true);
                 setHaslo('');

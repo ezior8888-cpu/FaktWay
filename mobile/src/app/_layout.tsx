@@ -1,4 +1,6 @@
 import { DarkTheme, DefaultTheme, Slot, ThemeProvider } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 import { LogBox, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -11,6 +13,9 @@ import { paleta } from '@/wyglad/kolory';
 // Znane ostrzeżenie React Native w wersji deweloperskiej przy przejściach ekranów
 // (wartości `Animated` bez nasłuchu); nie dotyczy naszego kodu i zasłaniało dół ekranu.
 LogBox.ignoreLogs(['Sending `onAnimatedValueUpdate` with no listeners registered']);
+
+// Ekran startowy z logo (WZORCE-MOBBIN.md 7, ekran 1) zostaje, dopóki sesja nie wczyta się z pęku kluczy.
+void SplashScreen.preventAutoHideAsync();
 
 /**
  * Korzeń aplikacji: motyw nawigacji w kolorach marki (tło pod paskiem nie
@@ -43,7 +48,14 @@ export default function UkladGlowny() {
 }
 
 function Nawigacja() {
-  const zalogowany = useSesja().stan === 'aktywna';
+  const { stan } = useSesja();
+  const zalogowany = stan === 'aktywna';
+  const wczytana = stan !== 'wczytywanie';
+  useEffect(() => {
+    if (wczytana) void SplashScreen.hideAsync();
+  }, [wczytana]);
+  // Bez nawigacji do końca wczytywania: inaczej przekierowanie mignęłoby ekranem logowania.
+  if (!wczytana) return null;
   return (
     <View style={styles.ekran}>
       <Slot />

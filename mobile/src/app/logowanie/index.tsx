@@ -39,6 +39,8 @@ export default function EkranLogowaniaHaslem() {
 
   const dalej = (w: Wynik) => {
     if (!w.ok) {
+      // Zamknięte okno Google to nie błąd: bez komunikatu i wibracji.
+      if (w.blad === 'anulowane') return;
       setBlad(BLEDY_LOGOWANIA[w.blad]);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;

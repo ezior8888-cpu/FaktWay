@@ -65,11 +65,14 @@ export function Blokada() {
 
   if (!zablokowana) return null;
   const imie = imieDoPowitania(konto);
-  const inicjaly = (konto?.imie ?? '')
+  const tekstPowitania = imie ? `${powitanie()}, ${imie}` : powitanie();
+  // Inicjały z imienia i nazwiska, bez nich pierwsza litera e-maila.
+  const inicjaly = ((konto?.imie || konto?.email) ?? '')
     .split(' ')
-    .map((c) => c[0])
+    .map((c) => c[0] ?? '')
     .join('')
-    .slice(0, 2);
+    .slice(0, 2)
+    .toLocaleUpperCase('pl');
   return (
     <NadWszystkim>
       <TloMarki>
@@ -78,14 +81,14 @@ export function Blokada() {
           <View style={styles.logo}>
             <LogoFaktWay wysokosc={26} biale />
           </View>
-          <View style={styles.srodek} accessible accessibilityLabel={`${powitanie()}, ${imie}. ${konto?.firma ?? ''}. Aplikacja zablokowana.`}>
+          <View style={styles.srodek} accessible accessibilityLabel={`${tekstPowitania}. ${konto?.firma ?? ''}. Aplikacja zablokowana.`}>
             <View style={[styles.awatar, { backgroundColor: kolory.naGradiencieTlo }]}>
               <Tekst styl="title2" kolor="naGradiencie" maxFontSizeMultiplier={1.3}>
                 {inicjaly}
               </Tekst>
             </View>
             <Tekst styl="title2" kolor="naGradiencie" style={styles.wysrodkowany}>
-              {`${powitanie()}, ${imie}`}
+              {tekstPowitania}
             </Tekst>
             <Tekst styl="subheadline" kolor="naGradiencie" style={styles.wysrodkowany}>
               {konto?.firma}
@@ -114,14 +117,14 @@ export function Blokada() {
  * powiadomień): system robi wtedy miniaturę ekranu, a na niej nie może być kwot.
  */
 export function Zaslona() {
-  const { stan, zablokowana } = useSesja();
+  const { stan, zablokowana, pytanieSystemu } = useSesja();
   // Tylko jawne „tło” i „nieaktywna”: stan 'unknown' przy starcie nie może zasłonić aplikacji na stałe.
   const [wTle, setWTle] = useState(AppState.currentState === 'background' || AppState.currentState === 'inactive');
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => setWTle(s === 'background' || s === 'inactive'));
     return () => sub.remove();
   }, []);
-  if (!wTle || zablokowana || stan !== 'aktywna') return null;
+  if (!wTle || zablokowana || pytanieSystemu || stan !== 'aktywna') return null;
   return (
     <NadWszystkim>
       <TloMarki>

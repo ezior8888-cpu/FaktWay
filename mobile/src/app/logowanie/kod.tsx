@@ -69,6 +69,13 @@ export default function EkranKodu() {
           opis="Wpisz 6 cyfr. Nowy kod pojawia się w aplikacji co 30 sekund."
           blad={blad}
           autoFocus
+          onWklej={(t) => {
+            const cyfry = t.replace(/\D/g, '').slice(0, 6);
+            if (cyfry.length !== 6) return setBlad('W schowku nie ma 6-cyfrowego kodu.');
+            setKod(cyfry);
+            setBlad(undefined);
+            void wyslij(cyfry);
+          }}
         />
       </Karta>
       <View style={styles.przyciski}>

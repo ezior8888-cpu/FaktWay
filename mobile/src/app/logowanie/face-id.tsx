@@ -44,8 +44,8 @@ export default function EkranPropozycjiFaceId() {
         </Tekst>
       </Karta>
       <View style={styles.przyciski}>
-        <PrzyciskGlowny tytul={`Włącz ${nazwa}`} onPress={() => zakonczPropozycje(true)} />
-        <Pressable onPress={() => zakonczPropozycje(false)} accessibilityRole="button" style={styles.tekstowy}>
+        <PrzyciskGlowny tytul={`Włącz ${nazwa}`} onPress={() => void zakonczPropozycje(true)} />
+        <Pressable onPress={() => void zakonczPropozycje(false)} accessibilityRole="button" style={styles.tekstowy}>
           <Tekst styl="callout" waga="medium" kolor="akcent" style={styles.wysrodkowany}>
             Nie teraz
           </Tekst>

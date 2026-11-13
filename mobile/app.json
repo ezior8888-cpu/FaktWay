@@ -52,6 +52,13 @@
             "backgroundColor": "#161616"
           }
         }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "FaktWay pyta o Face ID, żeby odblokować aplikację bez hasła."
+        }
       ]
     ],
     "experiments": {
