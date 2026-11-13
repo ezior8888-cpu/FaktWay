@@ -19,16 +19,21 @@ import { createClient } from '@/lib/supabase/server';
  *   i członkostwo na każdy takt, a RLS i tak odcina cudze wiersze.
  * - Zadanie spoza firmy albo usunięte po prostu nie wraca; przeglądarka
  *   uzna brak za zmianę i odświeży stronę.
- * - Brak dostępu (sesja wygasła: rola `anon` nie ma praw do tych tabel,
- *   00019, 00024, 00178; albo wygasły token) nie jest chwilowy
- *   (`retryable: false`): przeglądarka odświeży stronę raz, przez bramkę
- *   logowania, i przestanie pytać.
+ * - Brak dostępu (42501: rola `anon` nie ma praw do tych tabel, 00019,
+ *   00024, 00178; PGRST301/PGRST303: zły albo wygasły token) nie jest
+ *   chwilowy (`retryable: false`): przeglądarka odświeży stronę raz
+ *   i przestanie pytać. To tylko zabezpieczenie: sesję wylogowaną albo
+ *   wygasłą zatrzymuje wcześniej bramka logowania (`proxy.ts`), a jej
+ *   przekierowanie obsługuje `hooks/use-status-poll.ts`.
  * - Tylko `id` i `status`, bez komunikatów błędów i danych zadania.
  * - Inny błąd bazy jest chwilowy (`retryable`) i bez treści; do logu sam kod.
  */
 
-/** Kody PostgREST / Postgres dla braku dostępu: `permission denied`, wygasły token. */
-const NO_ACCESS_CODES: ReadonlySet<string> = new Set(['42501', 'PGRST301']);
+/**
+ * Kody braku dostępu: Postgres `permission denied` i błędy tokenu PostgREST
+ * (PGRST301 zły token; PGRST303 wygasły od PostgREST 13, produkcja ma 14).
+ */
+const NO_ACCESS_CODES: ReadonlySet<string> = new Set(['42501', 'PGRST301', 'PGRST303']);
 
 /** Najwięcej id w jednym pytaniu (historia eksportów pokazuje 20 zadań, archiwum 5). */
 export const STATUS_IDS_MAX = 100;

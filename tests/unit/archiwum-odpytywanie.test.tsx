@@ -16,13 +16,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn(), replace: vi.fn() }));
 const statusActions = vi.hoisted(() => ({ getDocumentArchiveStatusesAction: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// `unstable_isUnrecognizedActionError` prawdziwy: rozpoznaje akcję nieznaną serwerowi po nowym wdrożeniu.
+vi.mock('next/navigation', async () => ({
+  useRouter: () => router,
+  unstable_isUnrecognizedActionError: (await import('next/dist/client/components/unrecognized-action-error'))
+    .unstable_isUnrecognizedActionError,
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/app/actions/archiwum', () => ({
   getDocumentArchiveLinkAction: vi.fn(),
   requestDocumentArchiveAction: vi.fn(),
 }));
 vi.mock('@/app/actions/job-statuses', () => statusActions);
+
+import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
 
 import { DocumentArchiveForm } from '@/components/settings/document-archive-form';
 
@@ -140,6 +147,34 @@ describe('Archiwum dokumentów — odpytywanie zlecenia w przygotowaniu', () => 
     expect(router.refresh).toHaveBeenCalledTimes(1);
     await flush(60 * 60_000);
     expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('nowe wdrożenie (serwer nie zna akcji ze starego buildu): jedno odświeżenie i koniec pytań', async () => {
+    statusActions.getDocumentArchiveStatusesAction.mockRejectedValue(
+      new UnrecognizedActionError('Server Action "00ab" was not found on the server.'),
+    );
+    mount([order('generating')]);
+
+    await flush(DELAYS[0]!);
+    // Dawniej odświeżenie co 15 s samo przeładowywało kartę na nowy build.
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(60 * 60_000);
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('wylogowanie w innej karcie: po 3 odrzuconych pytaniach jedno odświeżenie, które przeniesie na logowanie', async () => {
+    statusActions.getDocumentArchiveStatusesAction.mockRejectedValue(
+      new Error('An unexpected response was received from the server.'),
+    );
+    mount([order('generating')]);
+
+    await flush(DELAYS[0]! + DELAYS[1]!);
+    expect(statusCalls()).toBe(2);
+    expect(router.refresh).not.toHaveBeenCalled();
+    await flush(DELAYS[2]!);
+    expect(statusCalls()).toBe(3);
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 

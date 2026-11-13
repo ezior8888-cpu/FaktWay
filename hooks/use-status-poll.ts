@@ -1,10 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { unstable_isUnrecognizedActionError, useRouter } from 'next/navigation';
 
 import { STATUS_POLL, startPollLoop, type PollSchedule } from '@/lib/polling/poll-loop';
 import type { JobStatusesResult } from '@/lib/polling/read-statuses';
+
+/**
+ * Tyle odrzuconych z rzędu pytań (poza brakiem sieci) daje jedno
+ * `router.refresh()`. Tak bramka logowania (`proxy.ts`) odpowiada na akcję po
+ * wylogowaniu w innej karcie, przy wymaganym 2FA i w przerwie technicznej:
+ * przekierowaniem, którego akcja nie przeczyta, a odświeżenie strony za nim
+ * pójdzie. Nie od pierwszego razu: chwilowe 502 przy restarcie serwera daje
+ * to samo odrzucenie, a odświeżenie przeniosłoby kartę na stronę błędu.
+ */
+const REJECTIONS_BEFORE_REFRESH = 3;
 
 /** Zadanie w toku tak, jak pokazuje je strona: id i status z ostatniego renderu. */
 export type PolledJob = { readonly id: string; readonly status: string };
@@ -21,10 +31,13 @@ export type ReadJobStatuses = (ids: string[]) => Promise<JobStatusesResult>;
  * i porównuje je ze statusami z ostatniego renderu. `router.refresh()` idzie
  * dopiero przy zmianie (inny status albo brak zadania w odpowiedzi). Jeśli
  * odświeżona strona nie dotrze przed następnym pytaniem, to pytanie odświeży
- * znowu. Chwilowy błąd odczytu (sieć, błąd bazy) niczego nie odświeża.
- * Odmowa (`retryable: false`: sesja wygasła, zła lista) kończy pytania
- * i odświeża stronę raz: bramka logowania przeniesie na logowanie, a przy
- * żywej sesji strona pokaże ręczne „Odśwież” jak po limicie.
+ * znowu. Brak sieci i chwilowy błąd bazy niczego nie odświeżają. Trzy
+ * odrzucone pytania z rzędu dają jedno odświeżenie, które pójdzie za
+ * przekierowaniem bramki logowania (`REJECTIONS_BEFORE_REFRESH`).
+ * Akcja nieznana serwerowi (nowe wdrożenie) i odmowa odczytu
+ * (`retryable: false`: brak dostępu, zła lista) kończą pytania jednym
+ * odświeżeniem: inny build przeładuje kartę, a przy żywej sesji strona
+ * pokaże ręczne „Odśwież” jak po limicie.
  *
  * Nowe zadanie zlecone gdzie indziej (inna karta, druga osoba) pojawi się
  * przy najbliższej zmianie statusu albo po ręcznym odświeżeniu.
@@ -76,15 +89,32 @@ export function useStatusPoll({
     if (idsKey === '' || capped) return;
     const ids = idsKey.split(',');
     let active = true;
+    let rejections = 0;
     const stop: () => void = startPollLoop({
       schedule,
       poll: async () => {
         let result: JobStatusesResult | undefined;
         try {
           result = await readRef.current(ids);
-        } catch {
-          return; // Sieć albo restart serwera: stan nieznany, pytamy dalej.
+        } catch (error) {
+          if (!active) return;
+          if (unstable_isUnrecognizedActionError(error)) {
+            // Nowe wdrożenie: serwer nie zna akcji ze starego buildu.
+            // Odświeżenie wykryje inny build i przeładuje kartę.
+            stop();
+            setCapped(true);
+            router.refresh();
+            return;
+          }
+          // Brak sieci (`fetch` rzuca `TypeError`): stan nieznany, pytamy dalej.
+          if (error instanceof TypeError) return;
+          rejections += 1;
+          if (rejections < REJECTIONS_BEFORE_REFRESH) return;
+          rejections = 0;
+          router.refresh();
+          return;
         }
+        rejections = 0;
         if (!active || !result) return;
         if (!result.success) {
           if (result.retryable) return;

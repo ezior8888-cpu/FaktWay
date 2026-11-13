@@ -112,8 +112,10 @@ describe('Akcje statusu — błąd bazy', () => {
 
   it.each([
     ['42501', 'permission denied for table export_jobs'],
-    ['PGRST301', 'JWT expired'],
-  ])('brak dostępu (%s: sesja wygasła, rola anon) to nie chwilowy błąd', async (code, message) => {
+    ['PGRST301', 'No suitable key or wrong key type'],
+    // PostgREST 13+ (produkcja: 14) zgłasza wygasły token jako PGRST303.
+    ['PGRST303', 'JWT expired'],
+  ])('brak dostępu (%s: rola anon, zły albo wygasły token) to nie chwilowy błąd', async (code, message) => {
     mocks.in.mockResolvedValue({ data: null, error: { code, message } });
 
     const result = await getExportJobStatusesAction([A]);

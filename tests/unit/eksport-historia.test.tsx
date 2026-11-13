@@ -10,10 +10,17 @@ const actions = vi.hoisted(() => ({
 const statusActions = vi.hoisted(() => ({ getExportJobStatusesAction: vi.fn() }));
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// `unstable_isUnrecognizedActionError` prawdziwy: rozpoznaje akcję nieznaną serwerowi po nowym wdrożeniu.
+vi.mock('next/navigation', async () => ({
+  useRouter: () => router,
+  unstable_isUnrecognizedActionError: (await import('next/dist/client/components/unrecognized-action-error'))
+    .unstable_isUnrecognizedActionError,
+}));
 vi.mock('@/app/actions/exports', () => actions);
 vi.mock('@/app/actions/job-statuses', () => statusActions);
 vi.mock('sonner', () => ({ toast }));
+
+import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
 
 import { RecentExports } from '@/components/exports/export-history';
 import type { ManualExportJobWithFiles } from '@/components/exports/export-formats';
@@ -188,7 +195,7 @@ describe('Historia — odpytywanie eksportów w toku (lekka akcja statusu)', () 
 
   it('nieudany odczyt statusu (sieć, błąd bazy) nie odświeża strony i nie kończy odpytywania', async () => {
     statusActions.getExportJobStatusesAction
-      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce({ success: false, retryable: true })
       .mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
     mount([job({ status: 'generating', export_files: [] })]);
@@ -208,6 +215,63 @@ describe('Historia — odpytywanie eksportów w toku (lekka akcja statusu)', () 
     await flush(until(POLLS_IN_3_MIN));
     expect(statusCalls()).toBe(1);
     expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('brak sieci (fetch rzuca TypeError) przez 3 minuty: bez router.refresh(), pytamy dalej', async () => {
+    statusActions.getExportJobStatusesAction.mockRejectedValue(new TypeError('Failed to fetch'));
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('nowe wdrożenie (serwer nie zna akcji ze starego buildu): od razu jedno router.refresh() i koniec pytań', async () => {
+    statusActions.getExportJobStatusesAction.mockRejectedValue(
+      new UnrecognizedActionError('Server Action "00ab" was not found on the server.'),
+    );
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(1));
+    // Odświeżenie wykryje inny build i przeładuje kartę (dawniej robił to każdy takt).
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('bramka logowania odrzuca pytanie (wylogowanie, 2FA, przerwa techniczna): co 3 odrzucenia z rzędu jedno router.refresh()', async () => {
+    statusActions.getExportJobStatusesAction.mockRejectedValue(
+      new Error('An unexpected response was received from the server.'),
+    );
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(2));
+    // Jedno albo dwa odrzucenia to może być chwilowe 502 przy restarcie serwera.
+    expect(router.refresh).not.toHaveBeenCalled();
+    await flush(until(3) - until(2));
+    // Odświeżenie pójdzie za przekierowaniem bramki (logowanie, 2FA, przerwa).
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(6) - until(3));
+    expect(statusCalls()).toBe(6);
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('odrzucenia przerwane odpowiedzią serwera liczą się od nowa', async () => {
+    const rejected = new Error('An unexpected response was received from the server.');
+    const generating = statuses({ id: 'job-1', status: 'generating' });
+    statusActions.getExportJobStatusesAction
+      .mockRejectedValueOnce(rejected)
+      .mockRejectedValueOnce(rejected)
+      .mockResolvedValueOnce(generating)
+      .mockRejectedValueOnce(rejected)
+      .mockRejectedValueOnce(rejected)
+      .mockResolvedValue(generating);
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(6));
+    expect(statusCalls()).toBe(6);
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
   it('jedno pytanie naraz: wolna odpowiedź nie nakłada się na następną', async () => {

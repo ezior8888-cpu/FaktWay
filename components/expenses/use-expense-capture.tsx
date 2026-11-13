@@ -9,6 +9,11 @@ import { sendExpenseFile } from '@/lib/expenses/photo-upload';
 import { OCR_POLL, nextPollDelay } from '@/lib/polling/poll-loop';
 import { postExpenseUpload } from '@/lib/uploads/client';
 
+/** Limit czekania na odczyt zdjęcia (komunikat „Przekroczono czas oczekiwania (60 s).”). */
+const OCR_TIMEOUT_MS = 60_000;
+/** Ostatnie pytanie o odczyt: 2 s przed limitem. */
+const OCR_LAST_POLL_MS = OCR_TIMEOUT_MS - 2000;
+
 export type CaptureState =
   | { kind: 'idle' }
   | { kind: 'uploading' }
@@ -94,17 +99,23 @@ export function useExpenseCapture({
     }
 
     // Pytanie od razu, potem takty z rosnącym odstępem: 2 s, 3 s, 4,5 s,
-    // 6,75 s i co 10 s (plan skalowania, sesja 11; dawniej co 2 s przez całą
-    // minutę: 31 pytań zamiast 9). Takt w trakcie pytania przepada. Na
-    // karcie w tle pytamy dalej: limit 60 s niżej liczy czas ścienny, więc
-    // pauza kończyłaby czekanie porażką zaraz po powrocie na kartę.
+    // 6,75 s i co 10 s, a ostatni 2 s przed limitem, jak przy dawnym takcie
+    // co 2 s (plan skalowania, sesja 11; dawniej 31 pytań na minutę, teraz
+    // 10). Bez ostatniego odczyt gotowy w ostatnich sekundach skończyłby się
+    // komunikatem o czasie i drugim wgraniem zdjęcia. Takt w trakcie pytania
+    // przepada. Na karcie w tle pytamy dalej: limit 60 s niżej liczy czas
+    // ścienny, więc pauza kończyłaby czekanie porażką zaraz po powrocie.
     let gap = OCR_POLL.firstMs;
+    let scheduledMs = 0;
     const scheduleTick = () => {
+      const wait = Math.min(gap, OCR_LAST_POLL_MS - scheduledMs);
+      if (wait <= 0) return;
+      scheduledMs += wait;
       timers.tick = setTimeout(() => {
         gap = nextPollDelay(gap, OCR_POLL);
         scheduleTick();
         void pollOnce();
-      }, gap);
+      }, wait);
     };
     void pollOnce();
     scheduleTick();
@@ -121,7 +132,7 @@ export function useExpenseCapture({
           : s,
       );
       toast.error('Przekroczono czas oczekiwania');
-    }, 60_000);
+    }, OCR_TIMEOUT_MS);
 
     return () => {
       cancelled = true;
