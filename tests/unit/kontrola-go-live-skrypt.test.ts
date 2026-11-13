@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,8 +17,8 @@ import { createScriptHarness, labelRows, scriptSection, type ScriptHarness } fro
  * - w źródle nie ma adresów IP (repo jest publiczne);
  * - bramka zero i lista przypomnień liczą to samo co kod (stałe z `lib/`).
  *
- * Uruchamiany jest PRAWDZIWY skrypt (`tests/helpers/kontrola-skrypt.ts`:
- * atrapa `ssh` → `bash -c`, jak sshd).
+ * Uruchamiany jest PRAWDZIWY skrypt w katalogu atrap z
+ * `tests/helpers/kontrola-skrypt.ts` (atrapa `ssh` → `bash -c`, jak sshd).
  */
 
 const ROOT = join(__dirname, '..', '..');
@@ -51,18 +52,35 @@ exit 0
 let harness: ScriptHarness;
 
 beforeEach(() => {
-  harness = createScriptHarness(FAKE_DOCKER, SCRIPT);
+  harness = createScriptHarness(FAKE_DOCKER);
 });
 
 afterEach(() => {
   harness.cleanup();
 });
 
+/**
+ * `harness.run` uruchamia tylko `kontrola-faktur-ksef.sh`, więc skrypt go-live
+ * startuje tutaj: w katalogu atrap z tego samego `createScriptHarness` i z tym
+ * samym środowiskiem co `harness.run`, plus argumenty (np. `--sprawdz`).
+ */
 function runScript(env: Record<string, string> = {}, args: string[] = []) {
-  const result = harness.run(env, args);
+  const result = spawnSync('bash', [SCRIPT, ...args], {
+    encoding: 'utf8',
+    timeout: 120_000,
+    env: {
+      NODE_ENV: 'test',
+      PATH: `${join(harness.dir, 'bin')}:${process.env.PATH ?? ''}`,
+      HOME: harness.dir,
+      LANG: 'C.UTF-8',
+      FAKTFLOW_INFRA_ENV: join(harness.dir, 'infra.env'),
+      FAKE_DIR: harness.dir,
+      ...env,
+    },
+  });
   const log = join(harness.dir, 'sql');
   const sql = existsSync(log) ? readFileSync(log, 'utf8').split('\0').slice(0, -1) : [];
-  return { ...result, sql };
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status, sql };
 }
 
 function source(): string {
