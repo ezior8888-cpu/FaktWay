@@ -59,6 +59,8 @@ export type StanDanych = {
   skrzynkaPelna: boolean;
   /** Wydatki (M9): 200 najnowszych według daty dokumentu. */
   wydatkiPelne: boolean;
+  /** Wydatki (M9) nie przyszły, choć faktury tak: zdanie dla listy Kosztów. */
+  wydatkiBlad?: string;
   odswiez: () => Promise<void>;
 };
 

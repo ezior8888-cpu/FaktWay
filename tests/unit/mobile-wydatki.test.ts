@@ -241,6 +241,7 @@ describe('czekanie na odczyt', () => {
     expect(stanOdczytuZOdpowiedzi({ id: 'j', stan: 'completed', wydatekId: 'exp-1', blad: null })).toEqual({ stan: 'gotowy', wydatekId: 'exp-1' });
     expect(stanOdczytuZOdpowiedzi({ id: 'j', stan: 'failed', wydatekId: null, blad: 'Nieczytelne' })).toEqual({ stan: 'nieudany', komunikat: 'Nieczytelne' });
     expect(stanOdczytuZOdpowiedzi({ id: 'j', stan: 'processing', wydatekId: null, blad: null })).toEqual({ stan: 'trwa' });
-    expect(stanOdczytuZOdpowiedzi({ id: 'j', stan: 'completed', wydatekId: null, blad: null })).toEqual({ stan: 'trwa' });
+    // Odczyt skończony, wydatek usunięty na stronie: koniec czekania, nie 90 s kręciołka.
+    expect(stanOdczytuZOdpowiedzi({ id: 'j', stan: 'completed', wydatekId: null, blad: null })).toEqual({ stan: 'brak' });
   });
 });

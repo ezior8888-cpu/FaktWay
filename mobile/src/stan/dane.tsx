@@ -65,6 +65,8 @@ type Dane = {
   faktury?: Lista<Faktura>;
   skrzynka?: Lista<FakturaKosztowa>;
   wydatki?: Lista<Koszt>;
+  /** Ostatnie pobranie wydatków się nie udało (faktury mogły przyjść): zdanie dla listy Kosztów. */
+  wydatkiBlad?: string;
   zapisano?: string;
   pobranie: Pobranie;
 };
@@ -253,12 +255,14 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       faktury: f.ok ? f.dane : d.faktury,
       skrzynka: s.ok ? s.dane : d.skrzynka,
       wydatki: w.ok ? w.dane : d.wydatki,
-      zapisano: f.ok && s.ok && w.ok ? teraz : d.zapisano,
+      wydatkiBlad: w.ok ? undefined : w.blad.komunikat,
+      zapisano: f.ok && s.ok ? teraz : d.zapisano,
     }));
     if (f.ok) void pamiec.zapisz('faktury', u, firma, f.dane, epoka);
     if (s.ok) void pamiec.zapisz('skrzynka', u, firma, s.dane, epoka);
     if (w.ok) void pamiec.zapisz('wydatki', u, firma, w.dane, epoka);
-    const blad = !f.ok ? f.blad : !s.ok ? s.blad : !w.ok ? w.blad : undefined;
+    // Wydatki (M9) nie psują stanu faktur i skrzynki: zostają z poprzedniego pobrania, lista Kosztów ma własny pusty stan.
+    const blad = !f.ok ? f.blad : !s.ok ? s.blad : !w.ok && (w.blad.rodzaj === 'sesja' || w.blad.rodzaj === 'kod') ? w.blad : undefined;
     if (blad) return obsluzBlad(blad);
     ostatnioUdane.current = Date.now();
     setDane((d) => ({ ...d, pobranie: { stan: 'gotowe', bezSieci: false } }));
@@ -426,6 +430,7 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     fakturyPelne: dane.faktury?.pelna ?? true,
     skrzynkaPelna: dane.skrzynka?.pelna ?? true,
     wydatkiPelne: dane.wydatki?.pelna ?? true,
+    wydatkiBlad: dane.wydatkiBlad,
     odswiez,
   };
 
@@ -492,7 +497,8 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     },
     stanOdczytu: async (odczytId) => {
       const firma = dane.firmaId;
-      if (!firma) return { stan: 'nieznany' };
+      // Bez firmy (lista firm od nowa) nie ma o co pytać: koniec czekania, wydatek będzie na liście.
+      if (!firma) return { stan: 'brak' };
       const w = await zapytajApi<OdczytWydatkuOdpowiedz>(`wydatki/odczyt/${encodeURIComponent(odczytId)}`, { firma });
       if (w.ok) return stanOdczytuZOdpowiedzi(w.dane.odczyt);
       if (w.blad.kod === 'not_found') return { stan: 'brak' };

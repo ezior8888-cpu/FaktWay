@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { FakturaTelefonu } from '@/lib/api/mobile/kontrakt';
+import { isCalendarDate } from '@/lib/api/v1/pagination';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 
 /**
@@ -93,10 +94,7 @@ export const KOLUMNY_KPIR_TELEFONU = ['col_7', 'col_8', 'col_10', 'col_11', 'col
 
 // Granice jak w schemacie kosztu KSeF (`lib/expenses/review.ts`): NUMERIC(14, 2) i rozsądne długości tekstów.
 const kwotaWydatku = z.number().finite().min(-999_999_999_999.99).max(999_999_999_999.99);
-const dataWydatku = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-});
+const dataWydatku = z.string().refine(isCalendarDate);
 
 /**
  * Zmiany kosztu z telefonu: te same pola co formularz kosztu strony

@@ -12,6 +12,7 @@ import {
   NOWY_WYDATEK,
   PUSTY_WYDATEK,
   type KolumnaKpir,
+  type Koszt,
 } from '@/dane-przykladowe';
 import { PoleDaty, PolePrzelacznik, PoleTekstowe, PoleWyboru } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
@@ -20,6 +21,8 @@ import { wydatekNaStronie } from '@/komponenty/na-stronie';
 import { potwierdz } from '@/komponenty/potwierdz';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
+import { SzkieletListy } from '@/komponenty/szkielet';
+import { Tekst } from '@/komponenty/tekst';
 import { doPola, groszeZPola as grosze, kwota } from '@/lib/format';
 import { czekaNaZlote, sprawdzFormularz, vatKosztu, type BladFormularza, type FormularzWydatku } from '@/lib/wydatek/zatwierdzenie';
 import { useStanFaktur } from '@/stan/faktury';
@@ -37,29 +40,45 @@ import { MARGINES, ODSTEP, PROMIEN_KARTY } from '@/wyglad/odstepy';
  * wydatek z KSeF, wpis ręczny i usunięcie na faktway.pl.
  */
 export default function EkranWydatku() {
+  const { id, zdjecie } = useLocalSearchParams<{ id: string; zdjecie?: string }>();
+  const { koszty, dane } = useStanFaktur();
+  const k = id === NOWY_WYDATEK ? PUSTY_WYDATEK : koszty.find((x) => x.id === id);
+  if (!k) {
+    // Wydatek z odczytu może dojść z bazy chwilę po wejściu: szkielet zamiast pustego formularza.
+    if (dane.zrodlo === 'baza' && dane.stan === 'ladowanie') {
+      return (
+        <EkranListy>
+          <SzkieletListy wiersze={4} etykieta="Wczytujemy wydatek" />
+        </EkranListy>
+      );
+    }
+    return <StanPusty ikona="file-unknow-line" tytul="Nie ma takiego wydatku" opis="Mógł zostać usunięty na komputerze. Odśwież listę wydatków." />;
+  }
+  // Klucz: pola formularza biorą wartości z wydatku przy pierwszym rysowaniu tego wydatku.
+  return <FormularzKosztu key={k.id || NOWY_WYDATEK} k={k} zdjecie={zdjecie} />;
+}
+
+function FormularzKosztu({ k, zdjecie }: { k: Koszt; zdjecie?: string }) {
   const router = useRouter();
   const kolory = useKolory();
-  const { id, zdjecie } = useLocalSearchParams<{ id: string; zdjecie?: string }>();
-  const { koszty, zapiszKoszt, usunKoszt, zatwierdzKoszt, dane } = useStanFaktur();
+  const { zapiszKoszt, usunKoszt, zatwierdzKoszt, dane } = useStanFaktur();
   const naKoncie = dane.zrodlo === 'baza';
   const { tytul, onScroll, scrollEventThrottle } = useTytulNaGradiencie();
-  const k = id === NOWY_WYDATEK ? PUSTY_WYDATEK : koszty.find((x) => x.id === id);
-  const [dostawca, setDostawca] = useState(k?.dostawca ?? '');
-  const [nip, setNip] = useState(k?.nip ?? '');
-  const [numer, setNumer] = useState(k?.numer ?? '');
-  const [data, setData] = useState(k?.data ?? '2026-11-09');
-  const [netto, setNetto] = useState(k && k.netto ? doPola(k.netto) : '');
-  const [vat, setVat] = useState(k && k.brutto ? doPola(vatKosztu(k)) : '');
-  const [brutto, setBrutto] = useState(k && k.brutto ? doPola(k.brutto) : '');
-  const [kolumna, setKolumna] = useState<KolumnaKpir>(k?.kolumna ?? '13');
-  const [kategoria, setKategoria] = useState(k?.kategoria ?? 'Pozostałe wydatki');
-  const [wKpir, setWKpir] = useState(k?.wKpir ?? true);
-  const [notatki, setNotatki] = useState(k?.opis ?? '');
+  const [dostawca, setDostawca] = useState(k.dostawca);
+  const [nip, setNip] = useState(k.nip ?? '');
+  const [numer, setNumer] = useState(k.numer);
+  const [data, setData] = useState(k.data);
+  const [netto, setNetto] = useState(k.netto ? doPola(k.netto) : '');
+  const [vat, setVat] = useState(k.brutto ? doPola(vatKosztu(k)) : '');
+  const [brutto, setBrutto] = useState(k.brutto ? doPola(k.brutto) : '');
+  const [kolumna, setKolumna] = useState<KolumnaKpir>(k.kolumna);
+  const [kategoria, setKategoria] = useState(k.kategoria);
+  const [wKpir, setWKpir] = useState(k.wKpir);
+  const [notatki, setNotatki] = useState(k.opis);
   const [zlote, setZlote] = useState(false);
   const [blad, setBlad] = useState<BladFormularza | { pole?: undefined; komunikat: string }>();
   const [trwa, setTrwa] = useState(false);
 
-  if (!k) return <StanPusty ikona="file-unknow-line" tytul="Nie ma takiego wydatku" opis="Mógł zostać usunięty na komputerze. Odśwież listę wydatków." />;
   const zKsef = k.zrodlo === 'ksef';
   const nowy = !k.id;
   const waluta = czekaNaZlote(k);
@@ -176,11 +195,16 @@ export default function EkranWydatku() {
           <PolePrzelacznik etykieta="Uwzględnij w KPiR" wartosc={wKpir} onZmiana={setWKpir} />
         </Sekcja>
 
-        <Sekcja naglowek="Notatki" stopka={blad && !blad.pole ? blad.komunikat : undefined}>
+        <Sekcja naglowek="Notatki">
           <PoleTekstowe etykieta="Notatki" wartosc={notatki} onZmiana={setNotatki} podpowiedz="np. Zakup na potrzeby projektu X" wielowierszowe />
         </Sekcja>
 
         <View style={styles.przyciski}>
+          {blad && !blad.pole ? (
+            <Tekst styl="footnote" kolor="blad" accessibilityLiveRegion="polite">
+              {blad.komunikat}
+            </Tekst>
+          ) : null}
           <PrzyciskGlowny tytul={przycisk} ikona={opisNaStronie ? 'global-line' : 'check-line'} trwa={trwa} onPress={() => void zapisz()} />
         </View>
 
@@ -208,6 +232,6 @@ export default function EkranWydatku() {
 }
 
 const styles = StyleSheet.create({
-  przyciski: { marginHorizontal: MARGINES, marginTop: ODSTEP.xl },
+  przyciski: { marginHorizontal: MARGINES, marginTop: ODSTEP.xl, gap: ODSTEP.s },
   zdjecie: { height: 260, borderRadius: PROMIEN_KARTY - 6, margin: ODSTEP.s },
 });

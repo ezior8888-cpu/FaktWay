@@ -194,7 +194,7 @@ export default function EkranKosztow() {
         {widok === 0 ? (
           wczytujeWydatki ? (
             <SzkieletListy etykieta="Wczytujemy wydatki" />
-          ) : zBazy && dane.stan === 'blad' && koszty.length === 0 ? (
+          ) : zBazy && koszty.length === 0 && (dane.stan === 'blad' || dane.wydatkiBlad) ? (
             <StanBledu dane={dane} tytul="Nie udało się pobrać wydatków" />
           ) : widoczne.length === 0 ? (
             <StanPusty

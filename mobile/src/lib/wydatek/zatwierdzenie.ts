@@ -117,8 +117,9 @@ export type StanOdczytuTelefonu =
 
 export function stanOdczytuZOdpowiedzi(o: OdczytWydatkuOdpowiedz['odczyt']): StanOdczytuTelefonu {
   if (o.stan === 'completed' && o.wydatekId) return { stan: 'gotowy', wydatekId: o.wydatekId };
+  // Odczyt skończony, a wydatku już nie ma (usunięty na stronie): czekanie nic nie da.
+  if (o.stan === 'completed') return { stan: 'brak' };
   if (o.stan === 'failed') return { stan: 'nieudany', komunikat: o.blad ?? 'Nie udało się odczytać dokumentu.' };
-  // `completed` bez wydatku nie powinno się zdarzyć; czekamy jak przy `processing`.
   return { stan: 'trwa' };
 }
 

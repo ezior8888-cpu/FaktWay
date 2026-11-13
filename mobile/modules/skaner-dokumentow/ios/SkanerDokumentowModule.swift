@@ -64,10 +64,14 @@ private final class DelegatSkanera: NSObject, VNDocumentCameraViewControllerDele
   }
 
   func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-    let strony = (0..<min(scan.pageCount, najwiecejStron)).map { scan.imageOfPage(at: $0) }
     controller.dismiss(animated: true) {
+      // Strony po jednej poza wątkiem głównym: w pamięci zostaje tylko zmniejszony JPG,
+      // nie dziesięć pełnych bitmap naraz.
       DispatchQueue.global(qos: .userInitiated).async {
         do {
+          let strony = (0..<min(scan.pageCount, najwiecejStron)).compactMap { i in
+            autoreleasepool { zmniejsz(scan.imageOfPage(at: i)).jpegData(compressionQuality: jakoscJpg) }
+          }
           let wynik = try zapisz(strony: strony, wszystkich: scan.pageCount)
           self.promise.resolve(wynik)
         } catch {
@@ -114,23 +118,23 @@ private func plik(_ rozszerzenie: String) -> URL {
 }
 
 /// Jedna strona: JPG. Kilka: PDF ze stronami w rozmiarze zdjęć (każda strona jako JPG w PDF).
-private func zapisz(strony: [UIImage], wszystkich: Int) throws -> [String: Any] {
+private func zapisz(strony: [Data], wszystkich: Int) throws -> [String: Any] {
   guard let pierwsza = strony.first else { throw BladZapisu.pusty }
   if strony.count == 1 {
-    guard let dane = zmniejsz(pierwsza).jpegData(compressionQuality: jakoscJpg) else { throw BladZapisu.pusty }
     let adres = plik("jpg")
-    try dane.write(to: adres, options: .atomic)
-    return ["uri": adres.absoluteString, "typ": "image/jpeg", "strony": 1, "wszystkichStron": wszystkich, "bajty": dane.count]
+    try pierwsza.write(to: adres, options: .atomic)
+    return ["uri": adres.absoluteString, "typ": "image/jpeg", "strony": 1, "wszystkichStron": wszystkich, "bajty": pierwsza.count]
   }
   let adres = plik("pdf")
   let dokument = NSMutableData()
   UIGraphicsBeginPDFContextToData(dokument, .zero, nil)
-  for strona in strony {
-    let mala = zmniejsz(strona)
-    guard let jpg = mala.jpegData(compressionQuality: jakoscJpg), let zJpg = UIImage(data: jpg) else { continue }
-    let ramka = CGRect(origin: .zero, size: CGSize(width: zJpg.size.width * zJpg.scale, height: zJpg.size.height * zJpg.scale))
-    UIGraphicsBeginPDFPageWithInfo(ramka, nil)
-    zJpg.draw(in: ramka)
+  for jpg in strony {
+    autoreleasepool {
+      guard let strona = UIImage(data: jpg) else { return }
+      let ramka = CGRect(origin: .zero, size: CGSize(width: strona.size.width * strona.scale, height: strona.size.height * strona.scale))
+      UIGraphicsBeginPDFPageWithInfo(ramka, nil)
+      strona.draw(in: ramka)
+    }
   }
   UIGraphicsEndPDFContext()
   guard dokument.length > 0 else { throw BladZapisu.pusty }

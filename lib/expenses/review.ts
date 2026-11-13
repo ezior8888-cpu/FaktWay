@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+import { isCalendarDate } from '@/lib/api/v1/pagination';
 import { learnFromCorrection } from '@/lib/categorization';
 import { deductibleAfterVatChange } from '@/lib/categorization/vat-deduction';
 import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
@@ -85,10 +86,7 @@ export type ExpenseReviewResult = { success: true } | { success: false; error: s
 // Argumenty akcji i treść żądania telefonu są niezaufane. Ten schemat działa
 // przed każdym zapisem kosztu KSeF kluczem serwisowym; zwykła ścieżka RLS bez zmian.
 const moneySchema = z.number().finite().min(-999_999_999_999.99).max(999_999_999_999.99);
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-});
+const dateSchema = z.string().refine(isCalendarDate);
 const ksefReviewSchema = z.strictObject({
   kpir_column: z.enum(['col_7', 'col_8', 'col_10', 'col_11', 'col_12', 'col_13', 'col_15', 'col_16']).optional(),
   category_label: z.string().max(200).optional(),
