@@ -38,7 +38,7 @@ vi.mock('@/lib/supabase/server', () => ({
           predicates.push((r) => r[k] != null); return q;
         },
         neq: (k: string, v: unknown) => { predicates.push((r) => r[k] != null && r[k] !== v); return q; },
-        eq: (k: string, v: unknown) => { predicates.push((r) => r[k] === v); return q; },
+        eq: (k: string, v: unknown) => { if (k === 'id') ids = [v]; predicates.push((r) => r[k] === v); return q; },
         in: (k: string, v: unknown[]) => { ids = v; predicates.push((r) => v.includes(r[k])); return q; },
         limit: () => q,
         update: (p: Row) => { patch = p; return q; },
@@ -81,8 +81,11 @@ describe('archiwum Glacier a historia z KSeF', () => {
     await expect(runArchiveOldInvoices(ctx)).resolves.toEqual({ archived: 2 });
 
     expect(m.glacier.mock.calls.map((c) => c[1])).toEqual(['app-1', 'file-1']);
-    for (const update of m.updates.filter((u) => 'archived_at' in u.patch || 'scheduled_deletion_at' in u.patch)) {
-      expect(update.ids).toEqual(['app-1', 'file-1']);
-    }
+    // Znaczniki (i data usunięcia) tylko dla faktur skopiowanych do Glacier,
+    // niezależnie od tego, czy zapis idzie jedną listą, czy po fakturze.
+    const marked = m.updates
+      .filter((u) => 'archived_at' in u.patch || 'scheduled_deletion_at' in u.patch)
+      .flatMap((u) => u.ids as unknown[]);
+    expect([...new Set(marked)].sort()).toEqual(['app-1', 'file-1']);
   });
 });

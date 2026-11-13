@@ -10,8 +10,9 @@ import {
 
 /**
  * Cron codziennie o 3:00 PL — faktury starsze niż ~2 lata od daty wystawienia,
- * z zapisanym XML w R2: kopiujemy XML do S3 Glacier Deep Archive, zapisujemy
- * `archive_storage_path`, potem oznaczamy `archived_at`.
+ * z zapisanym XML w R2: kopiujemy XML do S3 Glacier Deep Archive i zaraz po
+ * wgraniu oznaczamy fakturę jednym zapisem: `archive_storage_path`,
+ * `archived_at` i data usunięcia (`scheduled_deletion_at`).
  */
 /**
  * Runner joba (worker pg-boss).
@@ -43,7 +44,15 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
 
     if (candidates.length === 0) return { archived: 0 };
 
-    const ids = candidates.map((c) => c.id);
+    // Znaczniki z jednej chwili dla całego przebiegu: usunięcie 8 lat po
+    // archiwizacji.
+    const archivedAt = new Date();
+    const deletionDate = new Date(archivedAt);
+    deletionDate.setFullYear(deletionDate.getFullYear() + 8);
+    const marks = {
+      archived_at: archivedAt.toISOString(),
+      scheduled_deletion_at: deletionDate.toISOString(),
+    };
 
     for (const candidate of candidates) {
       await step.run(`glacier-${candidate.id}`, async () => {
@@ -70,45 +79,36 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
           xml
         );
 
+        // Oznaczenie zaraz po wgraniu, jednym UPDATE po `id` (plan skalowania
+        // 3000, sesja 30). Wcześniej osobne kroki po pętli oznaczały wszystkie
+        // kandydatki listą id w adresie (`id=in.(…)`): przy 500 to ok. 19,5 tys.
+        // znaków, a nginx domyślnie przyjmuje 8 KB na wiersz żądania
+        // (konfiguracji Konga z produkcji nie ma w repo). Zapis padał po wgraniu
+        // plików, ponowienie wgrywało je od nowa i archiwum stało.
+        //
+        // Trzy kolumny jednym zapisem: faktura ma wszystkie albo żadnej.
+        // `find-candidates` pomija faktury z `archived_at`, a
+        // `cron.retention-delete` szuka tylko po `scheduled_deletion_at`, więc
+        // `archived_at` bez daty usunięcia oznaczałoby fakturę, której nikt nie
+        // usunie. Ponowienie (pg-boss wykonuje cały handler od nowa, bez pamięci
+        // kroków) pomija faktury już oznaczone: drugi raz idzie tylko ta, której
+        // zapis się nie udał. Warunek `archived_at IS NULL` chroni datę
+        // usunięcia faktury oznaczonej w tym czasie przez inny przebieg.
         const { error: upErr } = await supabase
           .from('invoices')
-          .update({ archive_storage_path: glacierKey })
-          .eq('id', candidate.id);
+          .update({ archive_storage_path: glacierKey, ...marks })
+          .eq('id', candidate.id)
+          .is('archived_at', null);
 
         if (upErr) {
           throw new Error(
-            `archive_storage_path update failed for ${candidate.id}: ${upErr.message}`
+            `Archive marks update failed for ${candidate.id}: ${upErr.message}`
           );
         }
 
         return { glacierKey };
       });
     }
-
-    await step.run('mark-archived', async () => {
-      const supabase = createAdminClient();
-      const { error } = await supabase
-        .from('invoices')
-        .update({
-          archived_at: new Date().toISOString(),
-        })
-        .in('id', ids);
-
-      if (error) throw new Error(`Mark archived failed: ${error.message}`);
-    });
-
-    await step.run('schedule-deletion', async () => {
-      const supabase = createAdminClient();
-      const deletionDate = new Date();
-      deletionDate.setFullYear(deletionDate.getFullYear() + 8);
-
-      const { error } = await supabase
-        .from('invoices')
-        .update({ scheduled_deletion_at: deletionDate.toISOString() })
-        .in('id', ids);
-
-      if (error) throw new Error(`Schedule deletion failed: ${error.message}`);
-    });
 
     return { archived: candidates.length };
 }
