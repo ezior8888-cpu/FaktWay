@@ -116,7 +116,7 @@ podatkowa art. 63 § 1) i reguły programu:
 
 Przykład: jedna stawka 12 %, przychód 15 000 zł, bez odliczeń → ryczałt 1 800 zł.
 Dwie stawki: 8,5 % przychód 10 000 zł i 12 % przychód 5 000 zł, odliczenia
-społeczne 1 000 zł, zdrowotna 0 → części odliczeń 666,67 zł i 333,33 zł;
+społeczne 1 000 zł, zdrowotna 0 → części odliczeń 666,666… zł i 333,333… zł (dokładnie 2/3 i 1/3 z 1 000 zł);
 podstawy 9 333 zł i 4 667 zł; ryczałt 793,305 + 560,04 = 1 353,345 zł → 1 353 zł.
 Dwie stawki, 12 % i 8,5 %, każda z przychodem 1 000,50 zł, i 1 gr odliczeń:
 części po 0,5 gr, przychody po odliczeniu po 1 000,495 zł, obie podstawy

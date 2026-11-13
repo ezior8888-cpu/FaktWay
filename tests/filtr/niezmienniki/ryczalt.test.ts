@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { parametryRoku } from '@/lib/ksiegowosc/parametry';
-import { rozdzielProporcjonalnie, ryczaltMiesiaca, type WejscieRyczaltu } from '@/lib/ksiegowosc/ryczalt';
+import { ryczaltMiesiaca, type WejscieRyczaltu } from '@/lib/ksiegowosc/ryczalt';
 
 import { grosze, stawkaRyczaltu } from '../generatory/ksiegowosc';
 import { opcje } from '../generatory/ustawienia';
@@ -85,20 +85,15 @@ describe('NZ-RYCZ-03: więcej zapłaconych składek nigdy nie daje więcej rycza
   });
 });
 
-describe('NZ-RYCZ-05: odliczenia rozdzielone proporcjonalnie sumują się do całości bez zgubionego grosza', () => {
-  it('rozdzielProporcjonalnie', () => {
+describe('NZ-RYCZ-05: odliczenia nie giną przy podziale na stawki', () => {
+  it('przychód minus odliczono różni się od sumy podstaw najwyżej o zaokrąglenie (50 gr na stawkę)', () => {
+    // Części odliczeń są dokładne (FZ-007), więc przychód minus odliczono to dokładnie suma podstaw przed zaokrągleniem.
     fc.assert(
-      fc.property(grosze(100_000), przychody, (kwota, wagi) => {
-        const sumaWag = [...wagi.values()].reduce((a, b) => a + b, 0);
-        const czesci = rozdzielProporcjonalnie(kwota, wagi);
-        const suma = [...czesci.values()].reduce((a, b) => a + b, 0);
-        expect([...czesci.keys()].sort()).toEqual([...wagi.keys()].sort());
-        expect(suma).toBe(sumaWag === 0 ? 0 : kwota);
-        for (const [pb, czesc] of czesci) {
-          expect(Number.isInteger(czesc) && czesc >= 0).toBe(true);
-          // Każda część różni się od dokładnej proporcji mniej niż o grosz.
-          if (sumaWag > 0) expect(Math.abs(czesc - (kwota * (wagi.get(pb) ?? 0)) / sumaWag)).toBeLessThan(1 + 1e-9);
-        }
+      fc.property(wejscie, (w) => {
+        const r = licz(w);
+        const przychod = [...r.przychodWgStawekGr.values()].reduce((a, b) => a + b, 0);
+        const podstawy = [...r.podstawaWgStawekGr.values()].reduce((a, b) => a + b, 0);
+        expect(Math.abs(przychod - r.odliczenia.odliczonoGr - podstawy)).toBeLessThanOrEqual(50 * r.podstawaWgStawekGr.size);
       }),
       opcje(),
     );
@@ -189,5 +184,21 @@ describe('NZ-RYCZ-02: kontrprzykład z nocnego przebiegu (FZ-007, #649, ziarno 9
       }
     }
     expect(zle).toEqual([]);
+  });
+});
+
+describe('NZ-RYCZ-02: każda podstawa osobno (FZ-007)', () => {
+  it('dopisanie przychodu w jednej stawce nie obniża żadnej podstawy', () => {
+    fc.assert(
+      fc.property(wejscie, stawkaRyczaltu, grosze(100_000), (w, pb, dodatek) => {
+        const wiecej = new Map(w.przychodWgStawekGr);
+        wiecej.set(pb, (wiecej.get(pb) ?? 0) + dodatek);
+        const po = licz({ ...w, przychodWgStawekGr: wiecej });
+        for (const [stawka, podstawa] of licz(w).podstawaWgStawekGr) {
+          expect(po.podstawaWgStawekGr.get(stawka) ?? 0).toBeGreaterThanOrEqual(podstawa);
+        }
+      }),
+      opcje(),
+    );
   });
 });

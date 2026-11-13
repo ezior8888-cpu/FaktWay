@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parametryRoku } from '@/lib/ksiegowosc/parametry';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
-import { doPelnychZlotych, rozdzielProporcjonalnie, ryczaltMiesiaca, type WejscieRyczaltu } from '@/lib/ksiegowosc/ryczalt';
+import { doPelnychZlotych, ryczaltMiesiaca, type WejscieRyczaltu } from '@/lib/ksiegowosc/ryczalt';
 import { zdrowotnaRyczaltu } from '@/lib/ksiegowosc/zdrowotna';
 import { dodajMiesiace, skladkiSpoleczne, type LiczbyZus } from '@/lib/ksiegowosc/zus';
 
@@ -148,10 +148,9 @@ describe('ryczałt za miesiąc', () => {
     expect(w.ryczalt.ryczaltGr).toBe(146_300);
   });
 
-  it('podział co do grosza: reszta tam, gdzie największy ułamek, przy remisie wyższa stawka', () => {
-    expect([...rozdzielProporcjonalnie(100, new Map([[1200, 1], [850, 1], [300, 1]]))]).toEqual([[1200, 34], [850, 33], [300, 33]]);
-    expect([...rozdzielProporcjonalnie(0, new Map([[1200, 5]]))]).toEqual([[1200, 0]]);
+  it('podstawa do pełnych złotych, 50 gr w górę', () => {
     expect(doPelnychZlotych(1_279_650)).toBe(1_279_700);
+    expect(doPelnychZlotych(1_279_649)).toBe(1_279_600);
   });
 
   it('12,5 % po progu najmu liczy się ze swojego klucza; stawka spoza parametrów to brak', () => {

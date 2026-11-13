@@ -4,6 +4,9 @@
 // Nie importuje aplikacji (reguła statyczna wyrocznia-osobno). Zmiana tego
 // pliku to zmiana wiedzy filtra (zgoda:wiedza-prawna); poprawiamy ją tylko
 // wtedy, gdy błąd jest w wyroczni, a nie w aplikacji, i z uzasadnieniem w PR.
+// 13.11.2026 (FZ-007): kroki 4 i 5 SPEC zmienione razem z silnikiem (reguła
+// programu RP-RYCZ-STAWKI-02, napisał je autor naprawy); podział przepisała
+// osobna sesja tylko ze SPEC. Wyrocznia potwierdza wykonanie reguły, nie regułę.
 //
 export interface WejscieRyczaltuWyrocznia {
   przychodWgStawek: Array<[number, number]>;
