@@ -307,7 +307,9 @@
       "poziom": "R1",
       "opis": "Zapłaty faktur; metoda kasowa VAT zależy od daty zapłaty.",
       "sciezki": [
-        "lib/invoices/{manual-payment,paid-labels}.ts",
+        "lib/invoices/{manual-payment,paid-labels,mark-paid}.ts",
+        "lib/api/mobile/naleznosci.ts",
+        "app/api/mobile/v1/naleznosci/**",
         "app/actions/invoice-payments.ts",
         "supabase/migrations/00158_*.sql",
         "app/actions/bank-statement.ts",
@@ -405,6 +407,7 @@
       "opis": "Faktury z KSeF i import z innych programów: kwoty trafiają do ksiąg.",
       "sciezki": [
         "lib/ksef/inbox*.ts",
+        "app/api/mobile/v1/skrzynka/**",
         "lib/ksef/history-sync/**",
         "lib/jobs/runners/{inbox-polling,ksef-history-sync}.ts",
         "lib/import/*.ts",
@@ -568,7 +571,8 @@
         "lib/flo/functions/payment-chase*.ts",
         "lib/jobs/runners/{reminder-scheduler,send-reminder,cancel-reminders-on-payment}.ts",
         "lib/reminders/**",
-        "app/actions/reminders.ts"
+        "app/actions/reminders.ts",
+        "app/api/mobile/v1/przypomnienia/**"
       ]
     },
     {
@@ -765,7 +769,7 @@
         "lib/audit/**",
         "lib/feature-flags/**",
         "lib/api/v1/{auth,pagination,scopes,token}.ts",
-        "lib/api/mobile/{auth,sesja,kontrakt}.ts",
+        "lib/api/mobile/{auth,sesja,kontrakt,tresc}.ts",
         "lib/webhooks/{secret-box,signature,types}.ts"
       ]
     },

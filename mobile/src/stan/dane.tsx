@@ -13,6 +13,11 @@
  *   (`POST /faktury/{id}/wysylka`). Nowa faktura od razu stoi na liście, a
  *   wysłane z telefonu odświeżamy co kilka sekund, aż KSeF przyjmie albo odrzuci
  *   (wibracja „sukces” albo „błąd”, ZASADY-DESIGNU.md, sekcja 7).
+ * - Od M10a zapłata i jej cofnięcie (`POST /faktury/{id}/zaplata`, `/zaplata/cofnij`):
+ *   wiersz zmienia się od razu, pasek „Cofnij”, odmowa serwera przywraca stan
+ *   i mówi dlaczego. `zapytaj` w kontekście konta daje innym ekranom (należności,
+ *   przypomnienie, PDF, skrzynka) API w wybranej firmie z tymi samymi reakcjami
+ *   na koniec sesji, kod 2FA i utratę firmy.
  *
  * Dane należą do jednego konta: zmiana konta albo wylogowanie zeruje je w
  * pamięci od razu (przy rysowaniu, zanim cokolwiek się pokaże), a pobrania
@@ -27,7 +32,6 @@ import { AppState } from 'react-native';
 
 import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
 import { naStronie } from '@/komponenty/na-stronie';
-import { bezDlugichMyslnikow, type BladApi } from '@/lib/api/bledy';
 import type {
   FirmaKonta,
   KontoOdpowiedz,
@@ -35,8 +39,11 @@ import type {
   SesjaOdpowiedz,
   WystawienieOdpowiedz,
   WysylkaSzkicuOdpowiedz,
+  ZaplataOdpowiedz,
 } from '@/lib/api/kontrakt';
 import { zapytajApi } from '@/lib/api/polaczenie';
+import { bladTelefonu, bezDlugichMyslnikow, type BladApi } from '@/lib/api/bledy';
+import type { OpcjeZapytania, Wynik } from '@/lib/api/rdzen';
 import { dzienWarszawa, statusZBazy } from '@/lib/dane/mapowanie';
 import { pamiec } from '@/lib/dane/pamiec-plikow';
 import { pobierzFaktury, pobierzSkrzynke } from '@/lib/dane/zapytania';
@@ -86,6 +93,12 @@ export type KontoFirmy = {
   konto?: KontoOdpowiedz;
   firma?: FirmaKonta;
   wybierzFirme: (id: string) => void;
+  /**
+   * API w wybranej firmie (M10a) z reakcjami jak przy pobieraniu: koniec sesji
+   * wylogowuje, `mfa_required` prosi o kod, utrata firmy odświeża konto. Błąd
+   * wraca do ekranu ze zdaniem dla klienta.
+   */
+  zapytaj: <T>(sciezka: string, opcje?: Omit<OpcjeZapytania, 'firma'>) => Promise<Wynik<T>>;
 };
 
 /** Podpowiedź do pustego formularza faktury (M8): numer, dziś, zwolnienie z VAT; `gotowe` po odpowiedzi serwera. */
@@ -371,6 +384,19 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     await laduj(uzytkownik);
   };
 
+  /** API w wybranej firmie; reakcje na sesję, 2FA i firmę jak przy zapisach (`bladZapisu`). */
+  const zapytaj = async <T,>(sciezka: string, opcje: Omit<OpcjeZapytania, 'firma'> = {}): Promise<Wynik<T>> => {
+    const firma = dane.firmaId;
+    if (!firma) return { ok: false, blad: bladTelefonu('firma') };
+    const w = await zapytajApi<T>(sciezka, { ...opcje, firma });
+    if (!w.ok) bladZapisu(w.blad);
+    return w;
+  };
+
+  /** Zapłata w liście faktur od razu (przed odpowiedzią serwera i przy jej cofnięciu). */
+  const ustawZaplate = (id: string, zaplacona: boolean) =>
+    setDane((d) => (d.faktury ? { ...d, faktury: { ...d.faktury, lista: d.faktury.lista.map((x) => (x.id === id ? { ...x, zaplacona } : x)) } } : d));
+
   const kontoFirmy: KontoFirmy = {
     konto: dane.konto,
     firma: dane.konto?.firmy.find((f) => f.id === dane.firmaId),
@@ -379,6 +405,7 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       setDane((d) => ({ ...d, pobranie: { stan: 'ladowanie', bezSieci: false } }));
       void laduj(uzytkownik, id);
     },
+    zapytaj,
   };
 
   const stanDanych: StanDanych = {
@@ -392,14 +419,48 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     odswiez,
   };
 
-  // Wystawienie i wysyłka szkicu przez API (M8); zapłata, edycja i reszta zapisów do M10 na stronie.
+  /**
+   * Zapłata przez API (M10a): wiersz od razu, potem serwer. Ponowienie i drugie
+   * dotknięcie są bezpieczne (`juzBylo`). Odmowa przywraca stan i mówi dlaczego.
+   */
+  const zmienZaplate = async (wyzej: Stan, f: Faktura, zaplacona: boolean, poZmianie?: () => void): Promise<void> => {
+    ustawZaplate(f.id, zaplacona);
+    const w = await zapytaj<ZaplataOdpowiedz>(zaplacona ? `faktury/${f.id}/zaplata` : `faktury/${f.id}/zaplata/cofnij`, { metoda: 'POST' });
+    if (!w.ok) {
+      ustawZaplate(f.id, !zaplacona);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      // Odmowa z powodu roli albo stanu faktury: ponowienie nic nie da, więc tylko zdanie serwera.
+      const ponowienieNicNieDa = w.blad.kod === 'forbidden' || w.blad.kod === 'payment_refused';
+      if (w.blad.rodzaj !== 'sesja' && w.blad.rodzaj !== 'kod') {
+        wyzej.pokazCofnij({
+          tekst: w.blad.komunikat,
+          przycisk: ponowienieNicNieDa ? 'OK' : 'Ponów',
+          akcja: ponowienieNicNieDa ? () => undefined : () => void zmienZaplate(wyzej, f, zaplacona, poZmianie),
+        });
+      }
+      return;
+    }
+    poZmianie?.();
+    void odswiezFaktury();
+  };
+
+  // Wystawienie i wysyłka szkicu przez API (M8), zapłata (M10a); edycja i reszta zapisów na stronie.
   const zmiana = (wyzej: Stan): Stan => ({
     ...wyzej,
     dzis: dzienWarszawa(),
     dane: stanDanych,
     faktury: dane.faktury?.lista ?? [],
     skrzynka: dane.skrzynka?.lista ?? [],
-    przelaczZaplate: (f) => naStronie('zaplata', f.id),
+    przelaczZaplate: (f) => {
+      const zaplacona = !f.zaplacona;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void zmienZaplate(wyzej, f, zaplacona, () =>
+        wyzej.pokazCofnij({
+          tekst: zaplacona ? `Zapłacona: ${f.numer}` : `Bez zapłaty: ${f.numer}`,
+          akcja: () => void zmienZaplate(wyzej, { ...f, zaplacona }, f.zaplacona),
+        }),
+      );
+    },
     dodajFakture: async (f, wyslij, naKoncie) => {
       const firma = dane.firmaId;
       if (!naKoncie || !firma) {

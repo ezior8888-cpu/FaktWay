@@ -75,6 +75,15 @@ export const MOBILE_API_ERROR_CODES = [
    * Telefon zostaje na obecnej sesji.
    */
   'mfa_not_required',
+  // Należności, przypomnienia, PDF (M10a): zdanie z serwera mówi, co zrobić.
+  /** 403: rola w firmie nie pozwala na tę zmianę (np. księgowa ma wgląd w zapłaty, przypomnienie zatwierdza właściciel albo administrator). */
+  'forbidden',
+  /** 422: zapłaty nie zapisano (faktura skorygowana, z innego źródła, data z przyszłości); `message` mówi dlaczego. */
+  'payment_refused',
+  /** 422: przypomnienia nie przygotowano albo nie zlecono (podgląd wygasł, etap już zlecony, wyłączone); `message` mówi, co zrobić. */
+  'reminder_refused',
+  /** 409: PDF tej faktury nie powstanie w tym stanie (offline bez kodu QR, szkic wycofany); `message` mówi dlaczego. */
+  'pdf_unavailable',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -232,4 +241,123 @@ export interface KodOdpowiedz {
 /** `POST /api/mobile/v1/sesja`: 201 `{ zapisane: true }` przy pierwszym wywołaniu dla sesji, potem 200 `{ zapisane: false }`. */
 export interface SesjaOdpowiedz {
   zapisane: boolean;
+}
+
+// ─── Należności, zapłata, przypomnienia, PDF, skrzynka KSeF (M10a) ─────
+
+/** Wpis przypomnienia o zapłacie (`payment_reminders.status`). */
+export type StatusPrzypomnienia = 'pending' | 'sent' | 'failed' | 'cancelled';
+
+/**
+ * Faktura po terminie, jak wiersz strony „Po terminie” (`/payments/overdue`):
+ * te same faktury (te same zasady: środowisko KSeF, korekty, zaliczki, kwoty),
+ * ten sam limit 100 i ten sam stan przypomnień. Kwoty w złotych.
+ */
+export interface NaleznoscTelefonu {
+  id: string;
+  numer: string;
+  kontrahent: string;
+  nip: string | null;
+  email: string | null;
+  /** Termin płatności, RRRR-MM-DD. */
+  termin: string;
+  brutto: number;
+  doZaplaty: number;
+  dniPoTerminie: number;
+  wstrzymane: boolean;
+  /** Wysłane przypomnienia tej faktury. */
+  wyslane: number;
+  /**
+   * Przypomnienie w kolejce: `brak`, `zaplanowane`, `do_sprawdzenia` (czeka dłużej niż 30 minut)
+   * albo `nieznany` (odczyt się nie udał, przygotowanie nowego jest wtedy zablokowane jak na stronie).
+   */
+  kolejka: 'brak' | 'zaplanowane' | 'do_sprawdzenia' | 'nieznany';
+  /** Ostatni wpis przypomnienia (etap 1 do 4, czas UTC); `null` bez przypomnień, `nieznany` bez odczytu. */
+  ostatnie: { status: StatusPrzypomnienia; etap: number; kiedy: string } | null | 'nieznany';
+}
+
+/** `GET /api/mobile/v1/naleznosci`, 200. `blad`: listy nie da się potwierdzić (to samo zdanie co na stronie), lista jest wtedy pusta. */
+export interface NaleznosciOdpowiedz {
+  faktury: NaleznoscTelefonu[];
+  blad: string | null;
+  /** Lista mogła się nie zmieścić w limicie 100: reszta na faktway.pl. */
+  limit: boolean;
+  /** Przypomnień wysłanych w tym miesiącu; `null`, gdy odczyt się nie udał. */
+  wyslaneWMiesiacu: number | null;
+  /** Rola pozwala oznaczać zapłatę (księgowa ma wgląd). */
+  mozeOznaczac: boolean;
+  /** Przypomnienie zatwierdza do wysyłki właściciel albo administrator. */
+  mozeZatwierdzac: boolean;
+}
+
+/** `POST /api/mobile/v1/faktury/{id}/zaplata`: opcjonalny dzień zapłaty RRRR-MM-DD (domyślnie dziś w Polsce). */
+export interface ZaplataZadanie {
+  dzien?: string;
+}
+
+/**
+ * `POST /faktury/{id}/zaplata` (oznacz) i `POST /faktury/{id}/zaplata/cofnij`, 200.
+ * `juzBylo`: stan był już taki (ponowienie po zerwanym połączeniu), nic się nie zmieniło.
+ */
+export interface ZaplataOdpowiedz {
+  zaplacona: boolean;
+  juzBylo: boolean;
+  numer: string | null;
+}
+
+/** `POST /api/mobile/v1/faktury/{id}/przypomnienie`: podgląd przypomnienia; pusty `email` to adres z faktury. Nic jeszcze nie wychodzi. */
+export interface PodgladPrzypomnieniaZadanie {
+  email?: string;
+}
+
+/** Podgląd do sprawdzenia i zatwierdzenia (jak okno „Przygotuj przypomnienie” na stronie). */
+export interface PodgladPrzypomnieniaOdpowiedz {
+  propozycja: string;
+  /** Wersja podglądu: zatwierdzenie z inną wersją odmawia (podgląd zmienił się w międzyczasie). */
+  wersja: string;
+  /** Do kiedy podgląd jest ważny (ISO). */
+  wazneDo: string;
+  od: string;
+  do: string;
+  odpowiedzNa: string | null;
+  temat: string;
+  tresc: string;
+  /** Załącznik PDF do obejrzenia przed zgodą; `null` bez załącznika. */
+  zalacznik: { nazwa: string; pdfBase64: string } | null;
+}
+
+/** `POST /api/mobile/v1/przypomnienia/{propozycja}/zatwierdz`: zgoda na tę wersję i tę treść (klient może ją poprawić). */
+export interface ZatwierdzeniePrzypomnieniaZadanie {
+  wersja: string;
+  tresc: string;
+}
+
+/** 200: przypomnienie zlecone do wysyłki (wychodzi w oknie wysyłki z ustawień przypomnień). */
+export interface ZatwierdzeniePrzypomnieniaOdpowiedz {
+  zlecone: true;
+}
+
+/** `POST /api/mobile/v1/faktury/{id}/wstrzymanie`: wstrzymuje albo wznawia przypomnienia faktury. */
+export interface WstrzymanieZadanie {
+  wstrzymane: boolean;
+}
+
+export interface WstrzymanieOdpowiedz {
+  wstrzymane: boolean;
+}
+
+/** `GET /api/mobile/v1/faktury/{id}/pdf`, 200: ten sam PDF co na stronie (`/api/invoices/{id}/pdf`), w Base64. */
+export interface PdfFakturyOdpowiedz {
+  nazwa: string;
+  pdfBase64: string;
+}
+
+/**
+ * `POST /api/mobile/v1/skrzynka/sprawdz`, 200: „Sprawdź teraz” w skrzynce KSeF (najwyżej raz na 5 minut).
+ * Faktury pobiera serwer w tle; `komunikat` to zdanie strony.
+ */
+export interface SprawdzenieSkrzynkiOdpowiedz {
+  stan: 'zlecone' | 'w_toku' | 'za_wczesnie' | 'bez_ksef' | 'blad';
+  komunikat: string;
+  ponowZaSekund: number | null;
 }

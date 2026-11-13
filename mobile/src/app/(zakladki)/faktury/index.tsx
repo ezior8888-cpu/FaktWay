@@ -17,6 +17,7 @@ import { WierszFaktury } from '@/komponenty/wiersz-faktury';
 import { dataKrotka, dniMiedzy, kwota } from '@/lib/format';
 import { dni, doZaplaty, ileFaktur, pozostaloDoZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
+import { podpisPrzypomnien, useNaleznosci } from '@/stan/naleznosci';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
 import { useKolory } from '@/wyglad/kolory';
@@ -107,6 +108,8 @@ export default function EkranFaktur() {
   const [statusKsef, setStatusKsef] = useState<(typeof STATUSY_KSEF)[number]>('Wszystkie');
   const [platnosc, setPlatnosc] = useState<(typeof PLATNOSCI)[number]>('Wszystkie');
   const [rodzaj, setRodzaj] = useState<string>('Wszystkie');
+  // Prawdziwe konto (M10a): „Po terminie” z serwera, jak strona (stan przypomnień, limit 100).
+  const naleznosci = useNaleznosci(widok === 2);
 
   const otwarte = faktury.filter(doZaplaty);
   const zalegle = otwarte.filter((f) => statusFaktury(f, dzis).zalegla);
@@ -162,7 +165,7 @@ export default function EkranFaktur() {
         </Stack.Toolbar>
       ) : null}
 
-      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled" onOdswiez={dane.odswiez}>
+      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled" onOdswiez={widok === 2 && naleznosci ? () => Promise.all([dane.odswiez(), naleznosci.odswiez()]).then(() => undefined) : dane.odswiez}>
         {szukaj ? null : (
           <>
             {/* Bez danych nie pokazujemy „0,00 zł”: przy wczytywaniu szkielet, przy błędzie nic (stan błędu niżej). */}
@@ -263,16 +266,14 @@ export default function EkranFaktur() {
           </Sekcja>
         ) : null}
 
-        {widok === 2 && !pierwszeWczytanie && !bladBezDanych ? (
+        {widok === 2 && naleznosci ? <PoTerminieZBazy naleznosci={naleznosci} szukaj={szukaj} /> : null}
+
+        {widok === 2 && !zBazy ? (
           <>
             <Sekcja
               naglowek="Po terminie"
               naglowekWartosc={kwota(sumaDoZaplaty(zalegle))}
-              stopka={
-                zBazy
-                  ? 'Od najdłużej zaległej. Przypomnienia o zapłacie ustawisz i wyślesz na faktway.pl.'
-                  : `Od najdłużej zaległej. Przypomnień w tym miesiącu: ${wyslanePrzypomnienia}, wstrzymanych: ${wstrzymane}. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.`
-              }>
+              stopka={`Od najdłużej zaległej. Przypomnień w tym miesiącu: ${wyslanePrzypomnienia}, wstrzymanych: ${wstrzymane}. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.`}>
               {poTerminie.length === 0
                 ? [<StanPusty key="pusto" ikona="checkbox-circle-line" tytul="Brak pozycji gotowych do przypomnienia" opis="Żadna faktura nie jest po terminie." />]
                 : poTerminie.map((f) => {
@@ -285,21 +286,72 @@ export default function EkranFaktur() {
                         podtytul={`${f.numer} · ${dni(dniMiedzy(f.terminPlatnosci, dzis))} po terminie`}
                         wartosc={kwota(f.brutto, f.waluta)}
                         wartoscKolor="etykieta"
-                        // Stan przypomnień z bazy dochodzi w M10; do tego czasu bez podpisu, żeby nie mówić „Bez przypomnień” na wyrost.
-                        wartoscPodpis={zBazy ? undefined : wstrzymana ? 'Wstrzymane' : p ? `Etap ${p.etap} · wysłane ${p.wyslane}/3` : 'Bez przypomnień'}
+                        wartoscPodpis={wstrzymana ? 'Wstrzymane' : p ? `Etap ${p.etap} · wysłane ${p.wyslane}/3` : 'Bez przypomnień'}
                         wartoscPodpisKolor={wstrzymana ? 'etykietaDrugorzedna' : p ? 'akcent' : 'etykietaDrugorzedna'}
-                        onPress={() =>
-                          zBazy ? router.push({ pathname: '/faktury/[id]', params: { id: f.id } }) : router.push({ pathname: '/faktury/przypomnienie', params: { id: f.id } })
-                        }
+                        onPress={() => router.push({ pathname: '/faktury/przypomnienie', params: { id: f.id } })}
                       />
                     );
                   })}
-              {zBazy ? null : <Wiersz tytul="Ustawienia przypomnień" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />}
+              <Wiersz tytul="Ustawienia przypomnień" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />
             </Sekcja>
           </>
         ) : null}
       </EkranListy>
     </>
+  );
+}
+
+/**
+ * „Po terminie” na prawdziwym koncie (M10a): lista strony `/payments/overdue`
+ * z serwera, ze stanem przypomnień; zapłacone w tej sesji znikają od razu.
+ * Wiersz otwiera przypomnienie (podgląd, zgoda, wstrzymanie, zapłata).
+ */
+function PoTerminieZBazy({ naleznosci, szukaj }: { naleznosci: NonNullable<ReturnType<typeof useNaleznosci>>; szukaj: string }) {
+  const router = useRouter();
+  const { faktury } = useStanFaktur();
+  const { stan, dane: odp, blad, odswiez } = naleznosci;
+  if (stan === 'ladowanie' && !odp) return <SzkieletListy />;
+  if (!odp) {
+    return <StanPusty ikona="error-warning-line" tytul="Nie udało się pobrać faktur po terminie" opis={blad ?? 'Spróbuj ponownie za chwilę.'} akcja={{ tytul: 'Spróbuj ponownie', onPress: () => void odswiez() }} />;
+  }
+  const zaplaconeTeraz = new Set(faktury.filter((f) => f.zaplacona).map((f) => f.id));
+  const fraza = szukaj.trim().toLocaleLowerCase('pl');
+  const lista = odp.faktury
+    .filter((n) => !zaplaconeTeraz.has(n.id))
+    .filter((n) => !fraza || n.kontrahent.toLocaleLowerCase('pl').includes(fraza) || n.numer.toLowerCase().includes(fraza));
+  const wstrzymanych = lista.filter((n) => n.wstrzymane).length;
+  const stopka = odp.blad
+    ? undefined
+    : [
+        'Od najdłużej zaległej.',
+        odp.wyslaneWMiesiacu === null ? null : `Przypomnień w tym miesiącu: ${odp.wyslaneWMiesiacu}, wstrzymanych: ${wstrzymanych}.`,
+        'Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.',
+        odp.limit ? 'To pierwsze 100 faktur po terminie; resztę zobaczysz na faktway.pl.' : null,
+      ]
+        .filter(Boolean)
+        .join(' ');
+  return (
+    <Sekcja naglowek="Po terminie" naglowekWartosc={odp.blad ? undefined : kwota(lista.reduce((s, n) => s + n.doZaplaty, 0))} stopka={stopka}>
+      {odp.blad
+        ? [<StanPusty key="blad" ikona="error-warning-line" tytul="Listy nie da się teraz potwierdzić" opis={`${odp.blad}. Sprawdź ją na faktway.pl albo spróbuj za chwilę.`} akcja={{ tytul: 'Spróbuj ponownie', onPress: () => void odswiez() }} />]
+        : lista.length === 0
+          ? [<StanPusty key="pusto" ikona="checkbox-circle-line" tytul="Brak pozycji gotowych do przypomnienia" opis="Żadna faktura nie jest po terminie." />]
+          : lista.map((n) => {
+              const podpis = podpisPrzypomnien(n);
+              return (
+                <Wiersz
+                  key={n.id}
+                  tytul={n.kontrahent}
+                  podtytul={`${n.numer} · ${dni(n.dniPoTerminie)} po terminie`}
+                  wartosc={kwota(n.doZaplaty)}
+                  wartoscKolor="etykieta"
+                  wartoscPodpis={podpis.tekst}
+                  wartoscPodpisKolor={podpis.kolor}
+                  onPress={() => router.push({ pathname: '/faktury/przypomnienie', params: { id: n.id } })}
+                />
+              );
+            })}
+    </Sekcja>
   );
 }
 

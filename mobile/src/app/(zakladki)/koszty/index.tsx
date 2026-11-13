@@ -11,6 +11,7 @@ import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { RzadLiczb } from '@/komponenty/rzad-liczb';
+import { SprawdzKsefNaKoncie } from '@/komponenty/sprawdz-ksef';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { Tekst } from '@/komponenty/tekst';
 import { dataKrotka, dzienTygodnia, kwota } from '@/lib/format';
@@ -157,10 +158,8 @@ export default function EkranKosztow() {
               </View>
             </Karta>
             {zBazy ? (
-              // „Sprawdź teraz” zleca pobranie z KSeF na serwerze (`requestInboxCheckAction`): trasa API w M10.
-              <Tekst styl="footnote" kolor="etykietaDrugorzedna" style={styles.ksef}>
-                Faktury kosztowe z KSeF pobieramy co 15 minut.
-              </Tekst>
+              // „Sprawdź teraz” zleca pobranie z KSeF na serwerze (M10a, `POST /skrzynka/sprawdz`).
+              <SprawdzKsefNaKoncie style={styles.ksef} />
             ) : (
               <Pressable
                 onPress={sprawdzam ? undefined : sprawdzTeraz}

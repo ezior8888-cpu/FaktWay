@@ -73,6 +73,11 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
   invalid_code: 'serwer',
   mfa_not_required: 'serwer',
+  // Należności, przypomnienia, PDF (M10a): zdanie z serwera mówi, co zrobić.
+  forbidden: 'odmowa',
+  payment_refused: 'odmowa',
+  reminder_refused: 'odmowa',
+  pdf_unavailable: 'odmowa',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */
