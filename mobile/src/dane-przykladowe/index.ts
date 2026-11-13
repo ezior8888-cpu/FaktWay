@@ -4,6 +4,7 @@
  * `lib/dane/mapowanie.ts`). Firmy są zmyślone, NIP to testowy `1234567890`
  * (AGENTS.md, „KSeF-specific”). Kwoty w groszach.
  */
+import { cena, kwota } from '../lib/format';
 
 /** „Dziś” dla danych przykładowych, żeby terminy i zaległości się nie rozjeżdżały. */
 export const DZIS = '2026-11-09';
@@ -113,6 +114,15 @@ export function vatPozycji(p: Pozycja): number {
 
 export function bruttoPozycji(p: Pozycja): number {
   return p.brutto ?? nettoPozycji(p) + vatPozycji(p);
+}
+
+/**
+ * Cena jednostkowa do pokazania: dokładna z faktury („33,3333 zł”), gdy ją
+ * mamy (`cenaTekst`), inaczej z groszy.
+ */
+export function cenaPozycji(p: Pozycja, waluta = 'PLN'): string {
+  const z = p.cenaTekst ? Number(p.cenaTekst.replace(/\s/g, '').replace(',', '.')) : NaN;
+  return Number.isFinite(z) ? cena(z, waluta) : kwota(p.cenaNetto, waluta);
 }
 
 /** „23%” albo „zw”, „np”, „oo”. */

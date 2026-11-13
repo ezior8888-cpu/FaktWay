@@ -5,9 +5,11 @@ import { ActionSheetIOS, Alert, Platform, StyleSheet, View } from 'react-native'
 
 import {
   bruttoPozycji,
+  cenaPozycji,
   DZIS,
   nettoPozycji,
   SPRZEDAWCA,
+  stawkaTekst,
   vatPozycji,
   type Faktura,
   type MetodaPlatnosci,
@@ -452,7 +454,7 @@ function FormularzFaktury() {
             {mamPozycje ? (
               <Sekcja naglowek="Pozycje">
                 {pozycjeGotowe.map((p, i) => (
-                  <Wiersz key={i} tytul={p.nazwa || `Pozycja ${i + 1}`} podtytul={`${p.ilosc} ${p.jednostka} × ${kwota(p.cenaNetto)} netto · VAT ${p.stawkaVat}%`} wartosc={kwota(bruttoPozycji(p))} wartoscKolor="etykieta" />
+                  <Wiersz key={i} tytul={p.nazwa || `Pozycja ${i + 1}`} podtytul={`${p.ilosc} ${p.jednostka} × ${cenaPozycji(p)} netto · VAT ${stawkaTekst(p)}`} wartosc={kwota(bruttoPozycji(p))} wartoscKolor="etykieta" />
                 ))}
               </Sekcja>
             ) : null}
@@ -585,7 +587,7 @@ function FormularzFaktury() {
             {rodzaj === 'korygujaca' && zrodlo ? (
               <Sekcja naglowek="Było" stopka="Pozycje z faktury pierwotnej.">
                 {zrodlo.pozycje.map((p, i) => (
-                  <Wiersz key={i} tytul={p.nazwa} podtytul={`${p.ilosc} ${p.jednostka} × ${kwota(p.cenaNetto)} netto, VAT ${p.stawkaVat}%`} wartosc={kwota(bruttoPozycji(p))} />
+                  <Wiersz key={i} tytul={p.nazwa} podtytul={`${p.ilosc} ${p.jednostka} × ${cenaPozycji(p)} netto, VAT ${stawkaTekst(p)}`} wartosc={kwota(bruttoPozycji(p))} />
                 ))}
               </Sekcja>
             ) : null}
@@ -630,7 +632,7 @@ function FormularzFaktury() {
                         <Wiersz
                           key={`z${i}`}
                           tytul={p.nazwa}
-                          podtytul={`${p.ilosc} ${p.jednostka} × ${kwota(grosze(p.cena) || 0)} · VAT ${STAWKI_ZWYKLE.find((x) => x.wartosc === p.stawka)?.etykieta ?? p.stawka}`}
+                          podtytul={`${p.ilosc} ${p.jednostka} × ${cenaPozycji(doPozycji(p))} · VAT ${STAWKI_ZWYKLE.find((x) => x.wartosc === p.stawka)?.etykieta ?? p.stawka}`}
                           wartosc={kwota(bruttoPozycji(doPozycji(p)))}
                           wartoscKolor="etykieta"
                           onPress={() => setRozwinieta(i)}

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { doWartosciFormularza, fakturaTelefonuSchema } from '@/lib/api/mobile/schematy';
 import { parseRegularInvoiceForm } from '@/lib/invoices/issue-regular';
 
-import type { Faktura } from '../../mobile/src/dane-przykladowe';
+import { cenaPozycji, type Faktura } from '../../mobile/src/dane-przykladowe';
 import {
   doFakturyTelefonu,
   kluczZapisu,
@@ -218,5 +218,11 @@ describe('3: kwoty pozycji jak na serwerze (4 miejsca po przecinku, bez zaokrąg
 
   it('kopia faktury z bazy zachowuje cenę z 4 miejscami (nie obcina do groszy)', () => {
     expect(zBazy().pozycje[0]!.cenaTekst).toBe('33,3333');
+  });
+
+  it('cena w wierszu pozycji i podglądzie: 33,3333 zł, nie 33,33 zł; bez 4 miejsc zwykłe grosze', () => {
+    expect(cenaPozycji(zBazy().pozycje[0]!)).toBe('33,3333\u00a0zł');
+    expect(cenaPozycji({ nazwa: 'x', ilosc: 1, jednostka: 'szt.', cenaNetto: 1050, stawkaVat: 23, cenaTekst: '10,5' })).toBe('10,50\u00a0zł');
+    expect(cenaPozycji({ nazwa: 'x', ilosc: 1, jednostka: 'szt.', cenaNetto: 1050, stawkaVat: 23 })).toBe('10,50\u00a0zł');
   });
 });

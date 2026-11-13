@@ -3,7 +3,7 @@ import { Stack, useIsPreview, useLocalSearchParams, useRouter } from 'expo-route
 import { useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
-import { bruttoPozycji, NAZWA_RODZAJU, nettoPozycji, SPRZEDAWCA, stawkaTekst, vatPozycji, type Faktura, type StatusKsef } from '@/dane-przykladowe';
+import { bruttoPozycji, cenaPozycji, NAZWA_RODZAJU, nettoPozycji, SPRZEDAWCA, stawkaTekst, vatPozycji, type Faktura, type StatusKsef } from '@/dane-przykladowe';
 import { KONTRAHENCI } from '@/dane-przykladowe/kontrahenci';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { NaglowekKwoty } from '@/komponenty/naglowek';
@@ -285,7 +285,7 @@ export default function EkranFaktury() {
             <Wiersz
               key={i}
               tytul={p.nazwa}
-              podtytul={`${p.ilosc.toLocaleString('pl-PL')} ${p.jednostka} × ${kwota(p.cenaNetto, waluta)} netto · VAT ${stawkaTekst(p)}`}
+              podtytul={`${p.ilosc.toLocaleString('pl-PL')} ${p.jednostka} × ${cenaPozycji(p, waluta)} netto · VAT ${stawkaTekst(p)}`}
               wartosc={kwota(bruttoPozycji(p), waluta)}
               wartoscKolor="etykieta"
             />

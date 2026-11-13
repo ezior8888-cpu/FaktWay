@@ -39,6 +39,25 @@ export function kwota(grosze: number, waluta = 'PLN'): string {
   return f.format(grosze / 100).replace(/\s(?=\S+$)/, '\u00a0');
 }
 
+const CENY = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Cena jednostkowa netto z miejscami jak w bazie (`unit_price_net`, do 4):
+ * „33,3333 zł”, „100,00 zł”. Kwoty faktury zostają w groszach (`kwota`).
+ */
+export function cena(wartosc: number, waluta = 'PLN'): string {
+  let f = CENY.get(waluta);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: waluta, minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    } catch {
+      return `${wartosc.toFixed(4).replace(/0{1,2}$/, '').replace('.', ',')}\u00a0${waluta}`;
+    }
+    CENY.set(waluta, f);
+  }
+  return f.format(wartosc).replace(/\s(?=\S+$)/, '\u00a0');
+}
+
 /** „12 lis” dla dat w wierszach listy. Data w formacie RRRR-MM-DD. */
 export function dataKrotka(iso: string): string {
   return DATA_KROTKA.format(new Date(`${iso}T12:00:00`)).replace(/\.$/, '');
