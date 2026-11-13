@@ -11,12 +11,20 @@ import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+
+/** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
+export default function EkranFakturyCyklicznej() {
+  const { dane } = useStanFaktur();
+  if (dane.zrodlo === 'baza') return <EkranTylkoNaStronie co="cykliczna" />;
+  return <EkranFakturyCyklicznejPrzyklad />;
+}
 
 /**
  * Faktura cykliczna: nowa albo edycja (`invoices/recurring`): faktura-wzór,
  * nazwa, harmonogram; akcje Wystaw teraz, Wstrzymaj albo Wznów, Usuń.
  */
-export default function EkranFakturyCyklicznej() {
+function EkranFakturyCyklicznejPrzyklad() {
   const router = useRouter();
   const { id, wzor } = useLocalSearchParams<{ id?: string; wzor?: string }>();
   const { cykliczne, faktury, zapiszCykliczna, usunCykliczna } = useStanFaktur();

@@ -57,11 +57,19 @@ export const magazynSesji: SupportedStorage = {
 const ADRES = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const KLUCZ_PUBLICZNY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+/**
+ * Klucz sesji w pęku kluczy: ten sam, który `supabase-js` wybiera sam
+ * (`sb-<pierwsza część hosta>-auth-token`), więc sesje sprzed M7 zostają.
+ * Jawnie, bo start bez sieci czyta sesję wprost (`sesjaZPekuKluczy`).
+ */
+const KLUCZ_SESJI = ADRES ? `sb-${new URL(ADRES).hostname.split('.')[0]}-auth-token` : undefined;
+
 export const supabase =
   ADRES && KLUCZ_PUBLICZNY
     ? createClient(ADRES, KLUCZ_PUBLICZNY, {
         auth: {
           storage: magazynSesji,
+          storageKey: KLUCZ_SESJI,
           persistSession: true,
           // Odświeżanie tokenu włącza i wyłącza sesja przy zmianie AppState (zalecenie Supabase dla React Native).
           autoRefreshToken: false,
@@ -72,8 +80,14 @@ export const supabase =
       })
     : null;
 
+/** Sesja zapisana w pęku kluczy, bez sieci i bez odświeżania (JSON zapisany przez `supabase-js`). */
+export function sesjaZPekuKluczy(): Promise<string | null> {
+  return KLUCZ_SESJI ? magazynSesji.getItem(KLUCZ_SESJI) as Promise<string | null> : Promise.resolve(null);
+}
+
 /** Drobne ustawienia tego telefonu (blokada, zapamiętany e-mail) w pęku kluczy. */
 export const ustawienia = {
   wczytaj: (klucz: string) => SecureStore.getItemAsync(`faktway.${klucz}`, OPCJE),
   zapisz: (klucz: string, wartosc: string) => SecureStore.setItemAsync(`faktway.${klucz}`, wartosc, OPCJE),
+  usun: (klucz: string) => SecureStore.deleteItemAsync(`faktway.${klucz}`, OPCJE),
 };

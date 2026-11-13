@@ -14,9 +14,10 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { FIRMA } from '@/dane-przykladowe/ustawienia';
+import { przedCzasem } from '@/lib/api/rdzen';
+import { sesjaZTekstu, wymagaKoduBezSieci, type UzytkownikSesji } from '@/lib/logowanie/token';
 import type { KodBledu, Konto, WynikKroku, Zaplecze } from '@/lib/logowanie/typy';
-import { ustawienia } from '@/lib/supabase';
+import { sesjaZPekuKluczy, ustawienia } from '@/lib/supabase';
 
 /** Błąd GoTrue na kod komunikatu; `domyslny` dla odrzuconych danych (hasło, kod). */
 function kodBledu(blad: unknown, domyslny: KodBledu): KodBledu {
@@ -32,18 +33,35 @@ function kodBledu(blad: unknown, domyslny: KodBledu): KodBledu {
   return domyslny;
 }
 
-function konto(uzytkownik: User): Konto {
+function konto(uzytkownik: User | UzytkownikSesji, bezSieci = false): Konto {
   const meta: Record<string, unknown> = uzytkownik.user_metadata ?? {};
   const email = uzytkownik.email ?? '';
   // Bez imienia w profilu zostaje pusty napis: blokada wita wtedy bez imienia, a nie częścią adresu e-mail.
   const imie = [meta.full_name, meta.name].find((x): x is string => typeof x === 'string' && x.trim() !== '')?.trim() ?? '';
   return {
+    id: uzytkownik.id,
     email,
     imie,
-    // Firma przyjdzie z bazy razem z danymi (M7); do tego czasu dane przykładowe.
-    firma: FIRMA.nazwa,
+    // Firma przychodzi z `GET /konto` razem z danymi (`stan/dane.tsx`).
+    firma: '',
     metoda: uzytkownik.app_metadata?.provider === 'google' ? 'google' : 'haslo',
+    ...(bezSieci ? { bezSieci: true } : {}),
   };
+}
+
+/**
+ * Start bez sieci (przegląd M5b): wygasły token i brak internetu to nie koniec
+ * sesji. Supabase zostawia wtedy sesję w pęku kluczy, a `getSession` zwraca
+ * błąd do ponowienia; bierzemy konto z zapisanej sesji. Konto z 2FA bez kodu
+ * w tej sesji i tak idzie do logowania.
+ */
+/** Tyle najdłużej trwa ekran startowy, gdy token trzeba odświeżyć, a sieć nie odpowiada. */
+const LIMIT_STARTU_MS = 3000;
+
+async function kontoBezSieci(): Promise<Konto | undefined> {
+  const zapisana = sesjaZTekstu(await sesjaZPekuKluczy());
+  if (!zapisana || wymagaKoduBezSieci(zapisana)) return undefined;
+  return konto(zapisana.user, true);
 }
 
 export function zapleczeSupabase(supabase: SupabaseClient): Zaplecze {
@@ -59,8 +77,11 @@ export function zapleczeSupabase(supabase: SupabaseClient): Zaplecze {
 
   return {
     start: async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) return undefined;
+      // Ekran startowy czeka najwyżej `LIMIT_STARTU_MS`: bez sieci odświeżenie tokenu ponawia się do 30 s.
+      const wynik = await przedCzasem(supabase.auth.getSession(), LIMIT_STARTU_MS);
+      if (wynik === 'czas') return kontoBezSieci();
+      const { data, error } = wynik;
+      if (!data.session) return error && isAuthRetryableFetchError(error) ? kontoBezSieci() : undefined;
       if (await wymagaKodu()) {
         await supabase.auth.signOut({ scope: 'local' });
         return undefined;

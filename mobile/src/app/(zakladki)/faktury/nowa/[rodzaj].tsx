@@ -27,6 +27,7 @@ import { dataKrotka, dniMiedzy, doPola, groszeZPola as grosze, kwota } from '@/l
 import { useStanFaktur } from '@/stan/faktury';
 import { useKolory } from '@/wyglad/kolory';
 import { CEL_DOTYKU, MARGINES, ODSTEP, PROMIEN_PIGULKI } from '@/wyglad/odstepy';
+import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
 
 const TYTUL: Record<RodzajFaktury, string> = {
   vat: 'Nowa faktura',
@@ -81,6 +82,13 @@ function dodajDni(iso: string, dni: number): string {
 
 const PUSTA: PozycjaFormularza = { nazwa: '', ilosc: '1', jednostka: 'szt', cena: '', stawka: '23' };
 
+/** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
+export default function EkranFormularzaFaktury() {
+  const { dane } = useStanFaktur();
+  if (dane.zrodlo === 'baza') return <EkranTylkoNaStronie co="wystawienie" />;
+  return <EkranFormularzaFakturyPrzyklad />;
+}
+
 /**
  * Formularz faktury: zwykła, zaliczkowa, rozliczająca, korygująca. Odpowiednik
  * `components/invoices/invoice-form.tsx`, `advance-form.tsx`, `final-form.tsx`
@@ -89,7 +97,7 @@ const PUSTA: PozycjaFormularza = { nazwa: '', ilosc: '1', jednostka: 'szt', cena
  * znany kontrahent i wypełniona pozycja zwinięte do wiersza, numer i daty jako
  * wiersze z wartościami, na dole przypięte „Podgląd” i „Wyślij do KSeF” z kwotą.
  */
-export default function EkranFormularzaFaktury() {
+function EkranFormularzaFakturyPrzyklad() {
   const router = useRouter();
   const { rodzaj: rodzajParam, wzor, z, edytuj, wprost } = useLocalSearchParams<{ rodzaj: string; wzor?: string; z?: string; edytuj?: string; wprost?: string }>();
   const rodzaj: RodzajFaktury = (['vat', 'zaliczkowa', 'rozliczajaca', 'korygujaca'] as const).find((r) => r === rodzajParam) ?? 'vat';

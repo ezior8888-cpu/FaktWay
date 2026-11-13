@@ -13,6 +13,7 @@ export default function UkladKosztow() {
     <Stack screenOptions={opcje}>
       <Stack.Screen name="index" options={{ title: 'Koszty', ...gradient }} />
       <Stack.Screen name="[id]" options={{ title: '' }} />
+      <Stack.Screen name="ksef/[id]" options={{ title: '' }} />
       <Stack.Screen
         name="dodaj"
         options={{ presentation: 'formSheet', sheetAllowedDetents: [0.55, 1], sheetGrabberVisible: true, title: 'Dodaj wydatek' }}

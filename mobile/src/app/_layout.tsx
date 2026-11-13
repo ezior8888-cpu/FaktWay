@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Blokada, Zaslona } from '@/komponenty/blokada';
 import { PasekCofnij } from '@/komponenty/pasek-cofnij';
+import { DaneKonta } from '@/stan/dane';
 import { StanFaktur } from '@/stan/faktury';
 import { Sesja, useSesja } from '@/stan/sesja';
 import { paleta } from '@/wyglad/kolory';
@@ -19,7 +20,8 @@ void SplashScreen.preventAutoHideAsync();
 
 /**
  * Korzeń aplikacji: motyw nawigacji w kolorach marki (tło pod paskiem nie
- * mruga), stan danych, sesja. Bez sesji widać tylko logowanie, po
+ * mruga), stan danych, sesja, a pod nią dane prawdziwego konta z bazy
+ * (`DaneKonta`, od M7; na danych przykładowych nic nie robi). Bez sesji widać tylko logowanie, po
  * zalogowaniu tylko zakładki (etap M5): pilnują tego przekierowania w
  * `(zakladki)/_layout.tsx` i `logowanie/_layout.tsx`. Korzeń to `Slot`, nie
  * stos: stos nad zakładkami przejmował styl paska stanu (ciemny napis na
@@ -39,7 +41,9 @@ export default function UkladGlowny() {
       <ThemeProvider value={motyw}>
         <StanFaktur>
           <Sesja>
-            <Nawigacja />
+            <DaneKonta>
+              <Nawigacja />
+            </DaneKonta>
           </Sesja>
         </StanFaktur>
       </ThemeProvider>

@@ -1,9 +1,18 @@
 import { Stack, useRouter } from 'expo-router';
 
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+import { useStanFaktur } from '@/stan/faktury';
+
+/** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
+export default function EkranRodzajuFaktury() {
+  const { dane } = useStanFaktur();
+  if (dane.zrodlo === 'baza') return <EkranTylkoNaStronie co="wystawienie" />;
+  return <EkranRodzajuFakturyPrzyklad />;
+}
 
 /** Wybór rodzaju faktury: odpowiednik `components/invoices/invoice-type-selector.tsx`. */
-export default function EkranRodzajuFaktury() {
+function EkranRodzajuFakturyPrzyklad() {
   const router = useRouter();
   const otworz = (rodzaj: string) => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj } });
   return (

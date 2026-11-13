@@ -15,8 +15,13 @@ import { czcionka } from '@/wyglad/typografia';
  */
 export default function Zakladki() {
   const kolory = useKolory();
-  const doOpisania = useStanFaktur().koszty.filter((k) => k.doOpisania).length;
-  if (useSesja().stan !== 'aktywna') return <Redirect href="/logowanie" />;
+  const { koszty, skrzynka, dane } = useStanFaktur();
+  // Prawdziwe konto (M7): nowe faktury ze skrzynki KSeF; wydatki są jeszcze na danych przykładowych.
+  const doOpisania = dane.zrodlo === 'baza' ? skrzynka.filter((s) => s.status === 'nowa').length : koszty.filter((k) => k.doOpisania).length;
+  const { stan } = useSesja();
+  // `kod`: API poprosiło o kod 2FA w trakcie sesji (`wymagajKodu`), od razu ekran kodu.
+  if (stan === 'kod') return <Redirect href="/logowanie/kod" />;
+  if (stan !== 'aktywna') return <Redirect href="/logowanie" />;
   return (
     <NativeTabs
       tintColor={kolory.akcent}

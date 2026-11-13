@@ -26,11 +26,11 @@ uruchamiasz po kolei, nigdy razem.
 |---|---|
 | `src/app/` | trasy Expo Router: `_layout.tsx` to korzeń (`Slot`, dostawcy, blokada), `(zakladki)/_layout.tsx` zakładki systemowe, każdy folder zakładki ma własny `Stack`; `logowanie/` to stos logowania. Bez sesji układ zakładek przekierowuje na `/logowanie`, po zalogowaniu układ logowania na `/` |
 | `src/komponenty/` | wygląd FaktWay (plan D12, od 12.11 z wykończeniem Copilota, D15): `Tekst`, `EkranListy`, `Sekcja` (karta), `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny`, `Dotyk` (animacja wciśnięcia), `Ikona` i `KoloIkony` (Remix), `Znacznik` (plakietka statusu), `NaglowekKwoty`, `Kafle`, `Wykres` (SVG: słupki, linia, pierścień), `Kubelki`, `Kalendarz`, `LogoFaktWay` (też białe na niebieskim), `PasekMarki`, pola formularza (`formularz.tsx`); od M4c (D15) `Karta` (18 pt, cień), `GradientNaglowka`, `KwotaZGroszami`, `Kategoria`, `KartaWyniku`, `RzadLiczb`, `RzadAkcji`, `OsStatusu`, `PotwierdzenieKsef`, `PasekCofnij`, pomocnik `potwierdz()` (arkusz akcji zamiast `Alert.alert`); `Segmenty` to pigułki; `StanPusty` z opcjonalną akcją; `EkranListy onOdswiez` (pociągnięcie w dół); od M5a `EkranLogowania` (nagłówek na gradiencie w treści), `PoleKodu` (kod TOTP), `Blokada` i `Zaslona` (nad całą aplikacją), `PrzyciskGlowny` z wariantami `karta` i `naGradiencie` i stanem `trwa`; ekrany składasz tylko z nich i z komponentów systemowych |
-| `src/stan/` | stan wspólny dla ekranów na danych przykładowych: faktury, cykliczne, wydatki, przełączniki ustawień; `sesja.tsx` (od M5a): logowanie, kod 2FA, blokada Face ID, z tym samym interfejsem dla Supabase w M5b |
+| `src/stan/` | stan wspólny dla ekranów: `faktury.tsx` (dane przykładowe: faktury, cykliczne, wydatki, przełączniki; `dane` mówi, skąd są dane i w jakim są stanie, `dzis` to dzień do terminów); `sesja.tsx` (od M5a): logowanie, kod 2FA, blokada Face ID, czyszczenie danych przy końcu sesji; `dane.tsx` (od M7): prawdziwe konto z `GET /konto`, wybór firmy, faktury i skrzynka KSeF z bazy podmienione w stanie ekranów (`PodmienStan`) |
 | `src/wyglad/` | paleta (`paleta.ts`, bez React Native, kontrast sprawdza `tests/unit/mobile-kontrast.test.ts`; `kolory.ts` wybiera jasną albo ciemną), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
 | `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit (OFL, `LICENCJE.txt`; IBM Plex Mono usunięty w M4c, D15); ikony Remix zakładek i paska jako obrazy szablonowe |
 | `scripts/ikony-remix.cjs` | generuje `src/komponenty/ikony-remix.ts` z pakietu `@remixicon/react` strony; nową ikonę dopisz tam |
-| `src/lib/` | formatowanie i logika bez interfejsu |
+| `src/lib/` | formatowanie i logika bez interfejsu; `api/` (od M7): kontrakt API strony (reeksport, `metro.config.js`), klient z ponowieniem po 401 (`rdzen.ts`, bez React Native), podpięcie pod sesję (`polaczenie.ts`); `dane/`: mapowanie wierszy bazy na model ekranów, zapytania do bazy, dane z poprzedniego otwarcia w plikach. Pliki bez React Native (`api/rdzen.ts`, `api/bledy.ts`, `dane/mapowanie.ts`, `dane/pamiec.ts`, `logowanie/token.ts`, `status-faktury.ts`) importują względnie, bo czytają je testy strony (`tests/unit/mobile-*.test.ts`) |
 | `src/dane-przykladowe/` | dane do etapów M2 do M4 (zmyślone firmy, NIP testowy) |
 
 ## Expo zmienia się z każdym SDK: nie ufaj pamięci
@@ -120,12 +120,44 @@ uruchamiasz po kolei, nigdy razem.
 - `pod install` (też w `expo prebuild`) pada na kodowaniu bez UTF-8 w
   powłoce: najpierw `export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`.
 
+## Dane z bazy i API (od M7)
+
+- Odczyty idą z telefonu wprost do bazy (RLS), z tokenem sesji i nagłówkiem
+  `x-active-org` przy każdym zapytaniu (`lib/dane/zapytania.ts`). Token
+  podajemy jawnie: bez niego `supabase-js` wysłałby klucz publiczny, a RLS
+  oddałby pustą listę zamiast błędu.
+- API strony (`/api/mobile/v1`) przez `zapytajApi` z `lib/api/polaczenie.ts`:
+  `Authorization: Bearer`, `X-Active-Org` przy trasach z danymi firmy, po 401
+  odświeżenie sesji i jedno ponowienie, brak sieci i 503 nigdy nie wylogowują.
+  Adres serwera w `EXPO_PUBLIC_API_URL` (`mobile/.env.local`; lokalnie
+  `http://localhost:3000`, czyli `pnpm dev` w katalogu głównym).
+- Kontrakt (`lib/api/mobile/kontrakt.ts` strony) importuje `src/lib/api/kontrakt.ts`;
+  Metro widzi ten jeden katalog dzięki `watchFolders` w `metro.config.js`.
+  Po zmianie `metro.config.js` uruchom Metro od nowa.
+- Dane z poprzedniego otwarcia (konto, faktury, skrzynka jednej firmy) leżą w
+  `Paths.cache/faktway-dane/`, z kontem i firmą w każdym zapisie. Wylogowanie,
+  „Zaloguj się na inne konto” i koniec sesji z serwera czyszczą je razem ze
+  stanem w pamięci (`sesja.tsx`, `wyczyscDane`).
+- Zapisy na prawdziwych fakturach (zapłata, wystawienie, e-mail, PDF) jeszcze
+  nie mają API: na prawdziwym koncie telefon mówi, gdzie to zrobić, i otwiera
+  stronę (`komponenty/na-stronie.tsx`). Nie udawaj zapisu w pamięci.
+- Ekrany poza Fakturami i skrzynką KSeF (Pulpit, Wydatki, Księgowość, Więcej)
+  zostają na danych przykładowych do M8 i M10; stopka w Więcej mówi o tym klientowi.
+- `supabase.auth.onAuthStateChange` woła słuchacza wewnątrz blokady
+  `supabase-js`: wywołanie klienta w słuchaczu czeka na samo siebie. Odłóż je
+  (`setTimeout(…, 0)`), jak w `stan/dane.tsx`.
+- Brak internetu w symulatorze: zatrzymaj bramkę lokalnego Supabase
+  (`docker stop supabase_kong_<projekt>`) i `next dev`; telefon dostaje wtedy
+  błąd sieci jak w trybie samolotowym. Wygasły token bez czekania godziny:
+  `jwt_expiry` w `supabase/config.toml` tylko lokalnie, bez commitu.
+
 ## Logowanie na lokalnej bazie (od M5b)
 
 - Bez `mobile/.env.local` aplikacja loguje na danych przykładowych (M5a).
   Z plikiem loguje się do Supabase:
   `EXPO_PUBLIC_SUPABASE_URL` i `EXPO_PUBLIC_SUPABASE_ANON_KEY` z
-  `supabase status -o env` (`pnpm db:local` w katalogu głównym). Plik jest
+  `supabase status -o env` (`pnpm db:local` w katalogu głównym), od M7 też
+  `EXPO_PUBLIC_API_URL=http://localhost:3000`. Plik jest
   poza gitem; tylko lokalna baza, nigdy `db-1`. Po zmianie pliku uruchom
   Metro od nowa.
 - Konto testowe `dev@faktway.test` (bez 2FA) zakłada `scripts/dev/baza-lokalna.sh`.

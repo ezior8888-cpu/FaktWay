@@ -96,7 +96,10 @@ zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 ## 3a. Mapa: strona na telefonie (M4, 09.11.2026)
 
 Każda sekcja panelu strony ma odpowiednik w aplikacji (`mobile/src/app/`).
-Na razie na danych przykładowych; dane z bazy podłączają etapy od M7.
+Od M7 na prawdziwym koncie z bazy są: firma i konto (`GET /konto`), faktury
+wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół). Reszta ekranów
+zostaje na danych przykładowych do M8 (wystawienie), M9 (wydatki ze zdjęcia)
+i M10 (pozostałe); stopka w Więcej mówi o tym klientowi.
 
 | Strona (`app/(dashboard)/`) | Telefon | Trasy |
 |---|---|---|
@@ -206,6 +209,36 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   `tests/unit/mobile-api-proxy.test.ts`, `tests/rls-mobile-api.test.ts` (prawdziwy
   GoTrue i PostgREST w jobie CI „RLS isolation”).
 
+**Stan po M7 (13.11.2026).** Aplikacja korzysta z API i bazy na prawdziwym koncie:
+- Kontrakt strony importowany przez Metro (`mobile/metro.config.js`,
+  `watchFolders` tylko na `lib/api/mobile`), bez kopii. Klient API w
+  `mobile/src/lib/api/` (rdzeń bez React Native, testy
+  `tests/unit/mobile-api-klient.test.ts`): każdy kod z kontraktu ma reakcję,
+  401 to odświeżenie sesji i jedno ponowienie, brak sieci i 503 nie wylogowują.
+  Adres serwera w `EXPO_PUBLIC_API_URL`.
+- Odczyty wprost z bazy (`mobile/src/lib/dane/zapytania.ts`): faktury
+  wystawione (200 ostatnich, z pozycjami) i skrzynka KSeF (200 najnowszych, ze
+  statusem wydatku), zawsze z jawnym tokenem i `x-active-org`. Mapowanie
+  kolumn jak na stronie (`mapowanie.ts`, testy `mobile-dane-mapowanie.test.ts`),
+  także `failed` jako „Błąd wysyłki do KSeF” (nie „Odrzucona”), zapłata
+  częściowa, waluta obca, stawki zw/np.
+- Stan konta w `mobile/src/stan/dane.tsx`: `GET /konto` (karta konta, nazwa
+  firmy w blokadzie, wybór firmy w Więcej zapisany na telefonie), dane z
+  poprzedniego otwarcia od razu z plików (`Paths.cache/faktway-dane/`, klucz
+  konto i firma), świeże w tle; `POST /sesja` raz na sesję po pełnym logowaniu.
+  `mfa_required` prowadzi do ekranu kodu, `invalid_token` po nieudanym
+  odświeżeniu kończy sesję.
+- Start bez sieci z wygasłym tokenem: konto z sesji w pęku kluczy
+  (`lib/logowanie/token.ts`, konto z 2FA bez kodu i tak do logowania), dane z
+  poprzedniego otwarcia z notą „Bez internetu. Dane z …”; po powrocie sieci
+  dane same się odświeżają (odświeżenie tokenu albo próba co 30 s).
+- Wylogowanie, „Zaloguj się na inne konto” i koniec sesji z serwera czyszczą
+  stan w pamięci i pliki danych (`pamiec.ts` z epoką: pobranie zaczęte przed
+  wylogowaniem nic już nie zapisze; testy `mobile-dane-pamiec.test.ts`).
+- Zapisy na prawdziwych fakturach (zapłata, wystawienie, wysyłka, e-mail, PDF,
+  przypomnienia, cykliczne) jeszcze bez API: telefon ich nie udaje, tylko mówi,
+  gdzie to zrobić, i otwiera fakturę na stronie (`komponenty/na-stronie.tsx`).
+
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
 - `tsconfig.json` (`include: **/*.ts`): dodać `mobile` do `exclude`;
@@ -298,21 +331,26 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M7, faktury i skrzynka KSeF na prawdziwych danych. Na
-start M7: klient API w aplikacji (`Authorization: Bearer`, `X-Active-Org`,
-kody z `lib/api/mobile/kontrakt.ts`), `GET /konto` zamiast firmy przykładowej
-(blokada, karta konta, wybór firmy), `POST /sesja` po pełnym logowaniu, adres
-API w `EXPO_PUBLIC_API_URL`. Opisane „Stan po M6” w 4.3. **Stos M4e do M5b nie
-jest w `main`:** #664 do #667 scalono 13.11 do gałęzi bazowych, nie do `main`
-(w `main` jest #663). Całość M4e do M5b leży na `claude/mobile-m5b-supabase`
-i scala się z `main` bez konfliktów; potrzebny PR „Scalenie M4e do M5b do main”,
-a M6 stoi na tej gałęzi. **Decyzja Bartosza przed logowaniem z telefonu na
-produkcji:** GoTrue musi znać adres powrotu `faktway://**` (Google), a
-włączenie captchy w GoTrue (`docs/runbooks/captcha-w-gotrue.md`, krok 2)
-zablokuje logowanie hasłem z aplikacji, która nie ma tokenu Turnstile; do
-wyboru Turnstile w aplikacji albo trasa logowania w API z M6 (pytanie w
-raporcie M6). Otwarte: 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie
-jednym dotknięciem (5.2, `expo-clipboard` już w buildzie), D4, D6.
+**Następny krok:** M8, szybka faktura z wysyłką do KSeF (środowisko TEST).
+Na start M8: trasa zapisu w `app/api/mobile/v1` (wystawienie i wysyłka tymi
+samymi funkcjami z `lib/` co `saveAndSendInvoiceAction`; logikę z akcji
+najpierw wydzielić do `lib/` z testem, plan 4.3), schematy Zod treści żądania w
+osobnym pliku obok kontraktu (decyzja 4.1: jak trafią do aplikacji), klucz
+idempotencji żądania (protokół naprawy, punkt 5). W aplikacji formularz z M4e
+zamiast `EkranTylkoNaStronie` w `faktury/nowa/*` i `dodajFakture`/`wyslijDoKsef`
+w `stan/dane.tsx` przez API zamiast `naStronie`. „Stan po M7” w 4.3.
+**Stos nie jest w `main`:** M7 stoi na M6 (#668), M6 na scaleniu M4e do M5b
+(#669); kolejność scalania #669, #668, potem M7. **Decyzja Bartosza przed
+logowaniem z telefonu na produkcji** bez zmian: adres powrotu `faktway://**`
+w GoTrue (Google) i captcha w GoTrue (`docs/runbooks/captcha-w-gotrue.md`,
+krok 2) a logowanie hasłem z aplikacji (Turnstile w aplikacji albo trasa
+logowania w API). Z M7 zostaje: wybór firmy na telefonie nie zmienia
+`last_active_tenant_id` (strona zaczyna od swojej firmy; trasa w M10, jeśli
+ma być wspólny), Pulpit, Wydatki, Księgowość i ustawienia na danych
+przykładowych do M9 i M10, „Sprawdź teraz” w skrzynce KSeF czeka na trasę
+API (M10), ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
+symulatorze. Otwarte: 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie
+jednym dotknięciem (5.2), D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|

@@ -6,9 +6,18 @@ import { KONTRAHENCI } from '@/dane-przykladowe/kontrahenci';
 import { PoleTekstowe } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { useStanFaktur } from '@/stan/faktury';
+import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+
+/** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
+export default function EkranEmaila() {
+  const { dane } = useStanFaktur();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  if (dane.zrodlo === 'baza') return <EkranTylkoNaStronie co="email" idFaktury={id} />;
+  return <EkranEmailaPrzyklad />;
+}
 
 /** Arkusz „Wyślij e-mailem” ze szczegółu faktury: pole Do, Wyślij, Anuluj. */
-export default function EkranEmaila() {
+function EkranEmailaPrzyklad() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { faktury } = useStanFaktur();
