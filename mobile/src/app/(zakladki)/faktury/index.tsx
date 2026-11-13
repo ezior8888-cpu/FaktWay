@@ -14,6 +14,7 @@ import { Tekst } from '@/komponenty/tekst';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { WierszFaktury } from '@/komponenty/wiersz-faktury';
+import { grosze } from '@/lib/dane/mapowanie';
 import { dataKrotka, dniMiedzy, kwota } from '@/lib/format';
 import { dni, doZaplaty, ileFaktur, pozostaloDoZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
@@ -331,7 +332,7 @@ function PoTerminieZBazy({ naleznosci, szukaj }: { naleznosci: NonNullable<Retur
         .filter(Boolean)
         .join(' ');
   return (
-    <Sekcja naglowek="Po terminie" naglowekWartosc={odp.blad ? undefined : kwota(lista.reduce((s, n) => s + n.doZaplaty, 0))} stopka={stopka}>
+    <Sekcja naglowek="Po terminie" naglowekWartosc={odp.blad ? undefined : kwota(lista.reduce((s, n) => s + grosze(n.doZaplaty), 0))} stopka={stopka}>
       {odp.blad
         ? [<StanPusty key="blad" ikona="error-warning-line" tytul="Listy nie da się teraz potwierdzić" opis={`${odp.blad}. Sprawdź ją na faktway.pl albo spróbuj za chwilę.`} akcja={{ tytul: 'Spróbuj ponownie', onPress: () => void odswiez() }} />]
         : lista.length === 0
@@ -343,7 +344,7 @@ function PoTerminieZBazy({ naleznosci, szukaj }: { naleznosci: NonNullable<Retur
                   key={n.id}
                   tytul={n.kontrahent}
                   podtytul={`${n.numer} · ${dni(n.dniPoTerminie)} po terminie`}
-                  wartosc={kwota(n.doZaplaty)}
+                  wartosc={kwota(grosze(n.doZaplaty))}
                   wartoscKolor="etykieta"
                   wartoscPodpis={podpis.tekst}
                   wartoscPodpisKolor={podpis.kolor}

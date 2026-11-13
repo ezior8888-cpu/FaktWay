@@ -164,10 +164,13 @@ type NaglowekSekcjiProps = { tytul: string; opis?: string; akcja?: { tytul: stri
 /** Nagłówek sekcji wersalikami 12 pt (Copilot, D15), link ze strzałką po prawej. */
 function NaglowekSekcji({ tytul, opis, akcja, wartosc, wKarcie }: NaglowekSekcjiProps) {
   const kolory = useKolory();
+  const { fontScale } = useWindowDimensions();
+  // Przy dużym tekście suma albo link schodzi pod tytuł: obok niego tytuł łamałby słowa w środku (M10a).
+  const pionowo = fontScale >= SKALA_PIONOWA && Boolean(akcja || wartosc);
   return (
     <View style={wKarcie ? styles.naglowekWKarcie : styles.naglowekNad}>
-      <View style={styles.naglowekWiersz}>
-        <Tekst styl="caption1" waga="semibold" kolor="etykietaDrugorzedna" accessibilityRole="header" style={[styles.rozciagniety, styles.wersaliki]}>
+      <View style={pionowo ? styles.naglowekPionowo : styles.naglowekWiersz}>
+        <Tekst styl="caption1" waga="semibold" kolor="etykietaDrugorzedna" accessibilityRole="header" style={[pionowo ? null : styles.rozciagniety, styles.wersaliki]}>
           {tytul}
         </Tekst>
         {akcja ? (
@@ -348,6 +351,7 @@ const styles = StyleSheet.create({
   naglowekNad: { marginHorizontal: MARGINES + ODSTEP.xxs, marginBottom: ODSTEP.xs, gap: ODSTEP.linia },
   naglowekWKarcie: { paddingHorizontal: MARGINES, paddingTop: ODSTEP.s + 2, gap: ODSTEP.linia },
   naglowekWiersz: { flexDirection: 'row', alignItems: 'center', gap: ODSTEP.xs },
+  naglowekPionowo: { alignItems: 'flex-start', gap: ODSTEP.xxs },
   rozciagniety: { flex: 1 },
   wersaliki: { textTransform: 'uppercase', letterSpacing: 0.8 },
   akcjaNaglowka: { flexDirection: 'row', alignItems: 'center', gap: ODSTEP.linia, minHeight: CEL_DOTYKU / 2 },

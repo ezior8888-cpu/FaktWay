@@ -440,6 +440,16 @@ describe('POST /faktury/{id}/przypomnienie (podgląd) i /przypomnienia/{id}/zatw
     expect(await errorOf(response)).toEqual({ code: 'reminder_refused', message: 'Ta sprawa jest już w toku.' });
   });
 
+  it('wysyłka padła po zgodzie: zdanie bez Flo w pierwszej osobie, z tym, co zrobić (plan D13)', async () => {
+    fake.approve.mockResolvedValue({ ok: false, reason: 'blocked', message: 'Nie udało mi się tego dokończyć. Zajmujemy się tym.' });
+    const response = await zatwierdzRoute(req(`przypomnienia/${PROPOSAL}/zatwierdz`, { body: { wersja: VERSION, tresc: 'x' } }), params(PROPOSAL));
+    expect(response.status).toBe(422);
+    const error = await errorOf(response);
+    expect(error.code).toBe('reminder_refused');
+    expect(error.message).toMatch(/^Nie zleciliśmy wysyłki tego przypomnienia\. Przygotuj nowy podgląd/);
+    expect(error.message).not.toMatch(/\bmi\b/);
+  });
+
   it('zła wersja albo pusta treść: 400 bez zatwierdzenia', async () => {
     for (const body of [{ wersja: 'krotka', tresc: 'x' }, { wersja: VERSION, tresc: '   ' }, { wersja: VERSION }]) {
       const response = await zatwierdzRoute(req(`przypomnienia/${PROPOSAL}/zatwierdz`, { body }), params(PROPOSAL));

@@ -17,8 +17,13 @@ export async function readJsonBody(
   options: { maxBytes: number; tooLarge: string; optional?: boolean },
 ): Promise<JsonBody> {
   const type = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
-  // Treść opcjonalna (np. zapłata bez dnia): brak treści to pusty obiekt.
-  if (options.optional && !type && !request.body) return { ok: true, value: {} };
+  // Treść opcjonalna (np. zapłata bez dnia): brak treści to pusty obiekt. Next daje
+  // strumień `body` także przy pustym żądaniu, więc rozstrzyga długość, nie `body`.
+  if (options.optional && !type) {
+    const text = await request.text();
+    if (text.trim() === '') return { ok: true, value: {} };
+    return { ok: false, response: mobileError(400, 'invalid_request', 'Treść żądania to JSON (Content-Type: application/json).', headers) };
+  }
   if (type !== 'application/json') {
     return { ok: false, response: mobileError(400, 'invalid_request', 'Treść żądania to JSON (Content-Type: application/json).', headers) };
   }

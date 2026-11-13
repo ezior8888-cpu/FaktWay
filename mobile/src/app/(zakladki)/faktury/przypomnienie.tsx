@@ -13,6 +13,7 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { SzkieletKwoty, SzkieletListy } from '@/komponenty/szkielet';
 import { Tekst } from '@/komponenty/tekst';
 import type { PodgladPrzypomnieniaOdpowiedz, WstrzymanieOdpowiedz, ZatwierdzeniePrzypomnieniaOdpowiedz } from '@/lib/api/kontrakt';
+import { grosze } from '@/lib/dane/mapowanie';
 import { dataPelna, dniMiedzy, kwota } from '@/lib/format';
 import { udostepnijPdf } from '@/lib/pdf-faktury';
 import { dni } from '@/lib/status-faktury';
@@ -174,7 +175,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
       <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <NaglowekKwoty
           podpis={`${n.kontrahent} · ${n.numer}`}
-          wartosc={kwota(n.doZaplaty)}
+          wartosc={kwota(grosze(n.doZaplaty))}
           status={`${dni(n.dniPoTerminie)} po terminie`}
           statusKolor={n.dniPoTerminie > 7 ? 'blad' : 'ostrzezenie'}
         />

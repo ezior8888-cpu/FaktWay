@@ -19,6 +19,7 @@ import { mobileError, mobileJson } from '@/lib/api/mobile/responses';
 import { readJsonBody } from '@/lib/api/mobile/tresc';
 import { APPROVAL_ROLE_REFUSAL, approveFloProposal, mayApproveProposal } from '@/lib/flo/approve-proposal';
 import { isApprovalVersion } from '@/lib/flo/approval-version';
+import { EXECUTION_FAILED_MESSAGE } from '@/lib/flo/execute';
 import { markInvoicePaid, mayChangePayment, PAYMENT_ROLE_REFUSAL, undoInvoicePaid } from '@/lib/invoices/mark-paid';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { requestInboxCheck } from '@/lib/ksef/inbox-check';
@@ -192,6 +193,13 @@ export async function reminderPreviewFromMobile(caller: MobileCaller, invoiceId:
   return mobileJson(odpowiedz, 200, headers);
 }
 
+/**
+ * Wysyłka padła po zgodzie (żeton zużyty, propozycja wraca do „zatwierdzonej”): drugie
+ * zatwierdzenie tej samej propozycji nie przejdzie, więc klient przygotowuje nowy podgląd.
+ */
+export const REMINDER_DISPATCH_FAILED =
+  'Nie zleciliśmy wysyłki tego przypomnienia. Przygotuj nowy podgląd i spróbuj ponownie. Jeśli błąd się powtórzy, sprawdź status przypomnienia na faktway.pl.';
+
 const zatwierdzenieSchema = z.object({ wersja: z.string(), tresc: z.string().max(20_000) }).strict();
 
 /** `POST /api/mobile/v1/przypomnienia/{propozycja}/zatwierdz`: zgoda na obejrzaną wersję. */
@@ -213,7 +221,11 @@ export async function approveReminderFromMobile(caller: MobileCaller, proposalId
     { editedBody: parsed.data.tresc },
     { onlyKind: 'payment.chase' },
   );
-  if (!result.ok) return mobileError(422, 'reminder_refused', result.message, headers);
+  if (!result.ok) {
+    // Telefon nie ma Flo (plan D13): zdanie wykonawcy w pierwszej osobie zamieniamy na to, co zrobić.
+    const message = result.message === EXECUTION_FAILED_MESSAGE ? REMINDER_DISPATCH_FAILED : result.message;
+    return mobileError(422, 'reminder_refused', message, headers);
+  }
   const odpowiedz: ZatwierdzeniePrzypomnieniaOdpowiedz = { zlecone: true };
   return mobileJson(odpowiedz, 200, headers);
 }

@@ -99,9 +99,11 @@ zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 Każda sekcja panelu strony ma odpowiednik w aplikacji (`mobile/src/app/`).
 Od M7 na prawdziwym koncie z bazy są: firma i konto (`GET /konto`), faktury
 wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół); od M8 także
-wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu.
-Reszta ekranów zostaje na danych przykładowych do M9 (wydatki ze zdjęcia)
-i M10 (pozostałe); stopka w Więcej mówi o tym klientowi.
+wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu;
+od M10a należności („Po terminie”), zapłata i jej cofnięcie, przypomnienie
+o zapłacie (podgląd, zgoda, wstrzymanie), PDF faktury i „Sprawdź teraz” w
+skrzynce KSeF. Reszta ekranów zostaje na danych przykładowych do M9 (wydatki
+ze zdjęcia) i M10b (księgowość, ustawienia); stopka w Więcej mówi o tym klientowi.
 
 | Strona (`app/(dashboard)/`) | Telefon | Trasy |
 |---|---|---|
@@ -307,6 +309,33 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   ponowna wysyłka odrzuconej zostają na stronie do M10; nabywca z UE, PESEL i
   dane z GUS też.
 
+**Stan po M10a (13.11.2026).** Należności, przypomnienia, PDF i „Sprawdź teraz”:
+- Logika strony wydzielona do `lib/` bez zmiany zachowania (testy strony bez
+  zmian zielone przed i po): zapłata i cofnięcie `lib/invoices/mark-paid.ts`,
+  lista „Po terminie” `lib/overdue/load-overdue.ts` (strona `/payments/overdue`
+  tylko ją rysuje), podgląd przypomnienia `lib/reminders/prepare-preview.ts`,
+  wstrzymanie `lib/reminders/pause.ts`, zatwierdzenie propozycji
+  `lib/flo/approve-proposal.ts` (żeton zgody przed wykonaniem, opcja
+  `onlyKind`), „Sprawdź teraz” `lib/ksef/inbox-check.ts`.
+- Trasy (`lib/api/mobile/naleznosci.ts`): `GET /naleznosci` (ta sama lista co
+  strona, stan przypomnień, `mozeOznaczac`, `mozeZatwierdzac`), `POST
+  /faktury/{id}/zaplata` i `/zaplata/cofnij` (RPC 00158, ponowienie daje
+  `juzBylo`), `POST /faktury/{id}/przypomnienie` (podgląd, nic nie wychodzi),
+  `POST /przypomnienia/{id}/zatwierdz` (właściciel albo administrator, tylko
+  `payment.chase`), `POST /faktury/{id}/wstrzymanie`, `GET /faktury/{id}/pdf`
+  (ten sam PDF co strona, w Base64 w JSON, firma z bramki, bo PDF czyta kluczem
+  serwisowym), `POST /skrzynka/sprawdz`. Kody `forbidden`, `payment_refused`,
+  `reminder_refused`, `pdf_unavailable`. Treść opcjonalna (`lib/api/mobile/tresc.ts`).
+- Telefon: zapłata od razu w wierszu, pasek „Cofnij” po odpowiedzi serwera, odmowa
+  przywraca stan i mówi dlaczego („Ponów” albo „OK”); „Po terminie” z serwera ze
+  stanem przypomnień (wspólny magazyn `stan/naleznosci.tsx`), ekran przypomnienia
+  jak okno strony (ta sama reguła, kiedy wolno przygotować), PDF w systemowym
+  arkuszu udostępniania z „Podglądem” (plik w `Paths.cache/faktway-dane/pdf/`,
+  czyszczony przy wylogowaniu), „Sprawdź teraz” pod kartą Kosztów. Kwoty z API są
+  w złotych, ekrany przeliczają je na grosze modelu (`grosze()`).
+- Przypomnienie: telefon nie pokazuje tekstów Flo w pierwszej osobie (D13);
+  porażka wykonania po zgodzie daje zdanie „Nie zleciliśmy wysyłki…” z tym, co zrobić.
+
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
 - `tsconfig.json` (`include: **/*.ts`): dodać `mobile` do `exclude`;
@@ -401,16 +430,26 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M9, wydatek ze zdjęcia: skaner dokumentów, OCR,
-sprawdzenie odczytu i zapis wydatku na prawdziwym koncie (wiersz M9 w sekcji 7).
-Na start M9: logikę `uploadExpensePhotoAction`, `getOcrJobStatusAction` i
-`reviewExpenseAction` (`app/actions/expenses.ts`) najpierw wydzielić do `lib/`
-z testem zgodności, jak M8 zrobił z wystawieniem (`tests/unit/wystawienie-faktury-lib.test.ts`);
-trasy w `app/api/mobile/v1` za `authenticateMobileRequest`; wgrywanie zdjęcia
-przez `lib/uploads/server.ts` (trasy wgrywania są poza proxy, AGENTS.md,
-niezmiennik 7); klucz idempotencji zapisu wydatku (wzór 00201,
-`mobile_idempotency_keys`: nowa wartość `endpoint` w CHECK); systemowy skaner
-dokumentów to nowa paczka natywna, więc nowy build w Xcode.
+**Następny krok:** M10b (druga część M10, wiersz M10 w sekcji 7; M9 robi
+równolegle osobna sesja): księgowość na prawdziwym koncie (terminy, Ten miesiąc,
+podsumowania KPiR, ewidencji i VAT, `app/actions/ksiegowosc-ten-miesiac.ts`,
+moduł za wyłącznikiem `ksiegowosc`), ustawienia (Więcej → Ustawienia: odczyt z
+bazy, zapisy przez API tam, gdzie strona ma akcję), wybór firmy zapisany w
+`last_active_tenant_id` (wspólny ze stroną), usuwanie konta przez API z 2FA i
+metodą logowania z serwera, nie z przełącznika przykładowego (przegląd M5b),
+przez istniejącą ścieżkę RODO z 14 dniami na rezygnację
+(`docs/adr/0006-gdpr-14d-cooling-off.md`). Gałąź M10b dociąga M10a przez
+`git merge`. Logikę akcji strony najpierw do `lib/` z testem zgodności, jak M10a.
+**Z M10a zostaje:** (1) ustalenie do osobnej naprawy: `assertDeliveryDeadline`
+(`lib/reminders/delivery-consent.ts`) porównuje `created_at` żetonu zgody (zegar
+bazy, domyślne `now()`) z `consumed_at` (zegar Node w `lib/flo/approval.ts`) i
+odrzuca zgodę, gdy zegar aplikacji spóźnia się względem bazy bardziej niż odstęp
+między zapisem a zużyciem żetonu; lokalnie (Colima) zatwierdzenie z telefonu
+skończyło się „Termin wysyłki minął” (strona woła tę samą funkcję); na produkcji
+app-1 i db-1 to różne serwery. (2) Pełnoekranowy podgląd PDF w aplikacji (Quick Look) wymaga
+paczki natywnej; dziś PDF otwiera arkusz udostępniania z miniaturą i „Podglądem”.
+(3) Załącznik podglądu przypomnienia sprawdzony testem trasy, nie w symulatorze
+(firma testowa bez wezwania PDF).
 **Przed scaleniem M8:** migracja 00201 (przed wdrożeniem). Numeracja z #643
 (krok 2.5, w `main` przez #713) jest już przeniesiona do
 `lib/invoices/issue-regular.ts`; telefon wpisuje numer w pole, więc idzie
@@ -430,8 +469,7 @@ polskimi znakami nie było sprawdzone wpisywaniem z Maca (symulator nie
 przyjmuje wklejenia), ceny z 4 miejscami po przecinku w kopii faktury
 zaokrąglają się do groszy (model telefonu trzyma grosze). Wcześniejsze otwarte
 (z M7): wybór firmy nie zmienia `last_active_tenant_id`, Pulpit, Wydatki,
-Księgowość i ustawienia na danych przykładowych, „Sprawdź teraz” w skrzynce
-KSeF, ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
+Księgowość i ustawienia na danych przykładowych, ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
 symulatorze, 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie jednym
 dotknięciem (5.2), D4, D6.
 
