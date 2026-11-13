@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { muteKind } from '@/lib/flo/decisions';
 import { createProposal, type CreateProposalInput } from '@/lib/flo/proposals';
@@ -72,6 +72,18 @@ describe('które milczenie wolno zmierzyć', () => {
 });
 
 describe('czego mierzyć nie wolno', () => {
+  beforeEach(() => {
+    // Zegar przypięty do NOW. `muteKind` zapisuje ciszę z datą NOW na 90 dni
+    // (`MUTE_DAYS`), a `createProposal` bierze „teraz” z `new Date()`. Bez
+    // przypięcia „wyciszony rodzaj” robił się czerwony 23.12.2026 o 7:30 UTC.
+    // Reszta pliku nie zależy od zegara, więc przypinamy tylko tutaj.
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('wyłącznik globalny: ani karty, ani wpisu', async () => {
     // Zatrzymanie agenta to decyzja człowieka. Liczenie w tym czasie
     // „co by powiedział" mierzyłoby awarię, a nie trafność.

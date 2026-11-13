@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CROWD_MUTE_SUBJECTS,
@@ -61,6 +61,19 @@ function card(topicKey: string): CreateProposalInput {
     expiresAt: new Date(NOW.getTime() + 7 * 86_400_000),
   };
 }
+
+beforeEach(() => {
+  // Zegar przypięty do NOW. Cisze zapisujemy tu z datą NOW i trwają 90 dni
+  // (`MUTE_DAYS`), a `createProposal` bierze „teraz” z `new Date()`. Bez
+  // przypięcia plik psuł się sam 22.12.2026 o 10:00 UTC: dwa przypadki
+  // robiły się czerwone, a „przyjęcie sprawy zdejmuje jej ciszę” i „REGRESJA”
+  // przechodziły bez względu na kod, bo cisza wygasała sama.
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // ═══════════════════════════════════════════════════════════════
 // Reguła — funkcja czysta
