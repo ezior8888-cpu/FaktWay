@@ -135,7 +135,13 @@ przykładowy trzyma stawkę jako liczbę.
 - Typy bazy z `types/` i schematy Zod współdzielone ze stroną. M2 ustalił:
   do M6 aplikacja ma małą kopię formatowania (`mobile/src/lib/format.ts`),
   a sposób współdzielenia typów i schematów Zod (import przez Metro czy
-  wspólny pakiet) rozstrzyga M6 razem z API.
+  wspólny pakiet) rozstrzyga M6 razem z API. **M6 rozstrzygnął:** kontrakt
+  API (nagłówki, kody błędów, kształty odpowiedzi) leży w
+  `lib/api/mobile/kontrakt.ts` bez żadnych importów (pilnuje
+  `tests/unit/mobile-api-kontrakt.test.ts`), bez wspólnego pakietu. M7
+  podłącza go w aplikacji importem przez Metro; gdyby Metro z `mobile/` nie
+  widziało pliku spoza folderu, kopia w `mobile/` z testem zgodności. Schematy
+  Zod treści żądań (od M8) potrzebują importu `zod`, więc dostaną osobny plik.
 - Listy krótkie i stałe (ustawienia, szczegóły) można składać z `@expo/ui`
   (prawdziwe SwiftUI i Compose); listy danych o nieznanej długości z FlatList
   albo FlashList. Wybór sprawdza M3 na ekranie wzorcowym.
@@ -167,6 +173,38 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   istotnych, jak na stronie.
 - Tokeny push urządzeń: nowa tabela z `tenant_id` i RLS (migracja z rejestru
   w `CLAUDE-DO-CODEXA.md`, w M11).
+
+**Stan po M6 (13.11.2026).** Szkielet w `lib/api/mobile/`, trasy w
+`app/api/mobile/v1/`:
+- Proxy: `/api/mobile` jest na liście ścieżek bez sesji (`isMobileApiPath`
+  w `lib/supabase/middleware.ts`, obok `/api/v1`), a nie w `PUBLIC_API_PREFIXES`.
+  Proxy nie buduje tu klienta z ciasteczek, więc sesja przeglądarki niczego
+  w tym API nie otwiera (bez CSRF), a przerwę techniczną sprawdza trasa.
+- Każde żądanie: `Authorization: Bearer <access_token>`; trasy z danymi firmy
+  także `X-Active-Org: <uuid>` (członkostwo sprawdzone tokenem klienta, potem
+  ten sam nagłówek idzie do PostgREST jak ze strony). Bramka w
+  `authenticateMobileRequest`: przerwa techniczna, limit na adres (300 na
+  minutę, także bez tokenu), kształt tokenu, GoTrue (`getVerifiedMfaStateForToken`,
+  ta sama reguła 2FA co strona), limit na osobę (120 na minutę), firma.
+- Odpowiedzi: JSON, `Cache-Control: no-store`, `X-Request-Id`; błąd
+  `{ error: { code, message } }` z kodem z kontraktu. Dla aplikacji: 401
+  (`missing_token`, `invalid_token`) to odświeżenie sesji i jedno ponowienie
+  (wygasły token dostępu co godzinę), a koniec sesji w telefonie dopiero po
+  nieudanym odświeżeniu; 403
+  `mfa_required` prosi o kod, 400 `missing_org` i 403 `no_active_org` odświeżają
+  wybór firmy, 429 i 503 (`maintenance`, `session_verification_failed`,
+  `service_unavailable`) to „ponów”, nigdy wylogowanie: awaria GoTrue daje 503,
+  nie 401.
+- `GET /api/mobile/v1/konto`: konto, 2FA (`wlaczone`, `poziom`), firmy z rolą
+  i `aktywnaFirma` (ostatnio używana na stronie, gdy nadal jest dostęp).
+- `POST /api/mobile/v1/sesja`: wpis `auth.login` (`method` z claimu `amr`,
+  `session_id`, `client: 'mobile'`) raz na sesję i zlecenie maila o nowym
+  urządzeniu, jak logowanie na stronie. Aplikacja woła ją po pełnym logowaniu
+  (po kodzie 2FA). Bez niej logowanie z telefonu nie zostawia śladu w historii
+  logowań ani maila.
+- Testy: `tests/unit/mobile-api-trasy.test.ts` (prawdziwe trasy, atrapy HTTP),
+  `tests/unit/mobile-api-proxy.test.ts`, `tests/rls-mobile-api.test.ts` (prawdziwy
+  GoTrue i PostgREST w jobie CI „RLS isolation”).
 
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
@@ -260,16 +298,21 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M6, API `app/api/mobile/v1` (Bartosz 13.11: „idź dalej
-cały czas bez przerw”, etapy jeden po drugim, każdy z PR). Kolejność
-scalania: #663, #664, #665, #666, #667. **Przed logowaniem z telefonu na
-produkcji** (decyzja Bartosza): GoTrue musi znać adres powrotu
-`faktway://**` (Google), a włączenie captchy w GoTrue
-(`docs/runbooks/captcha-w-gotrue.md`, krok 2) zablokuje logowanie z
-aplikacji, która nie ma tokenu Turnstile; do wyboru Turnstile w aplikacji
-albo logowanie przez trasę API z M6. Otwarte: 3.9 („Nowa faktura” jednym
-dotknięciem), kopiowanie jednym dotknięciem (5.2, `expo-clipboard` już w
-buildzie), D4, D6.
+**Następny krok:** M7, faktury i skrzynka KSeF na prawdziwych danych. Na
+start M7: klient API w aplikacji (`Authorization: Bearer`, `X-Active-Org`,
+kody z `lib/api/mobile/kontrakt.ts`), `GET /konto` zamiast firmy przykładowej
+(blokada, karta konta, wybór firmy), `POST /sesja` po pełnym logowaniu, adres
+API w `EXPO_PUBLIC_API_URL`. Opisane „Stan po M6” w 4.3. **Stos M4e do M5b nie
+jest w `main`:** #664 do #667 scalono 13.11 do gałęzi bazowych, nie do `main`
+(w `main` jest #663). Całość M4e do M5b leży na `claude/mobile-m5b-supabase`
+i scala się z `main` bez konfliktów; potrzebny PR „Scalenie M4e do M5b do main”,
+a M6 stoi na tej gałęzi. **Decyzja Bartosza przed logowaniem z telefonu na
+produkcji:** GoTrue musi znać adres powrotu `faktway://**` (Google), a
+włączenie captchy w GoTrue (`docs/runbooks/captcha-w-gotrue.md`, krok 2)
+zablokuje logowanie hasłem z aplikacji, która nie ma tokenu Turnstile; do
+wyboru Turnstile w aplikacji albo trasa logowania w API z M6 (pytanie w
+raporcie M6). Otwarte: 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie
+jednym dotknięciem (5.2, `expo-clipboard` już w buildzie), D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -286,3 +329,4 @@ buildzie), D4, D6.
 | 13.11.2026 | M4f | Księgowość: terminy na górze pogrupowane po dniu („Zapłacono 1 z 4”), arkusz „Dane do przelewu” (zaznaczanie, Udostępnij, Oznacz jako zapłacone), zapłaty we wspólnym stanie, przychód i koszty w jednej karcie, formularz zapłat spoza wyliczenia po dotknięciu; Więcej: karta konta z plakietkami KSeF i planu, pięć małych grup ze stanem po prawej, wyszukiwarka po słowach kluczowych; stany: `StanPusty` z akcją, odświeżanie pociągnięciem (Faktury, Koszty), pasek „Cofnij” po zmianie zapłaty, `potwierdz()` na arkuszu akcji w 8 miejscach (WZORCE-MOBBIN.md 5.1, 5.2, 6.1, 8.2, 8.3, 8.5, 8.6). Bez szkieletu ładowania (8.1, przy M7) i kopiowania jednym dotknięciem (nowy build) | #665 |
 | 13.11.2026 | M5a | logowanie na danych przykładowych (WZORCE-MOBBIN.md 7, wzory Mercury, Kraken, Revolut Business): zakładki przeniesione do grupy `(zakladki)`, korzeń `Slot` z przekierowaniami w układach (stos w korzeniu psuł pasek stanu na gradiencie); ekran logowania (gradient, karta z e-mailem i hasłem z okiem i podpowiedziami pęku kluczy, „Nie pamiętasz hasła?”, Google, miejsce na Apple za flagą), kod 2FA w jednym polu z wysyłką po 6 cyfrach i błędami jak na stronie, propozycja Face ID raz po logowaniu, blokada nad całą aplikacją (`FullWindowOverlay`, powitanie, firma, „Odblokuj przez Face ID”, „Zaloguj się na inne konto”) przy starcie i po 3 minutach w tle, zasłona z logo w przełączniku aplikacji, „Wyloguj się” w Więcej, przełącznik blokady w Bezpieczeństwie ze wspólnej sesji, usuwanie konta z Google kodem 2FA; przycisk w wariantach `karta` i `naGradiencie` ze stanem „trwa”; zrzuty `docs/mobile/zrzuty/m5/` | #666 |
 | 13.11.2026 | M5b | logowanie na prawdziwym koncie: `@supabase/supabase-js` z sesją w pęku kluczy (`expo-secure-store`, zapis w kawałkach), zaplecze logowania w dwóch wersjach (`lib/logowanie/`: Supabase albo dane przykładowe, gdy brak `EXPO_PUBLIC_SUPABASE_URL`), kod 2FA przez `mfa.challengeAndVerify` (poziom `aal2` jak na stronie), Google przez `openAuthSessionAsync` i wymianę kodu (PKCE), Face ID przez `expo-local-authentication` (samo przy blokadzie, włączenie blokady potwierdza twarz), „Wklej” w kodzie jako systemowy `UIPasteControl` (bez pytania o schowek), ekran startowy trzymany do odczytu sesji, wylogowanie kończy sesję telefonu na serwerze, odmowa captchy GoTrue z komunikatem. Sprawdzone w symulatorze na lokalnej bazie: konto z TOTP (hasło, wklejony kod, Pulpit), sesja po ponownym uruchomieniu, blokada z systemowym Face ID (rozpoznana, nierozpoznana, anulowana), wylogowanie, konto bez 2FA z propozycją Face ID. Nowy build w Xcode | #667 |
+| 13.11.2026 | M6 | API aplikacji `app/api/mobile/v1` (4.3, „Stan po M6”): bramka `authenticateMobileRequest` w `lib/api/mobile/` (token sesji z `Authorization: Bearer`, ta sama reguła 2FA co strona przez wydzielone `getVerifiedMfaStateForToken`, klient bazy z tokenu i `x-active-org`, limity na adres i osobę, przerwa techniczna, awaria GoTrue jako 503, nie 401), `/api/mobile` bez klienta z ciasteczek w proxy (`isMobileApiPath`); trasy `GET /konto` (konto, 2FA, firmy, `aktywnaFirma`) i `POST /sesja` (wpis `auth.login` z `client: 'mobile'` raz na sesję, mail o nowym urządzeniu); kontrakt bez importów `lib/api/mobile/kontrakt.ts` (decyzja 4.1). Testy: trasy na brak, zły i podrobiony token, ciasteczko zamiast tokenu, AAL1 konta z TOTP, awarię GoTrue, limity, firmę; RLS na prawdziwym GoTrue i PostgREST. Trasa logowania (captcha) czeka na decyzję Bartosza | #NNN |
