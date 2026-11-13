@@ -119,7 +119,8 @@ describe('NZ-RET-01: faktura nie jest usuwana przed końcem okresu przechowywani
       }
     }
     expect(bledy).toEqual([]);
-  });
+    // 38 tys. przebiegów: lokalnie ok. 4 s, w CI ok. 9 s; zwykły vitest ma 5 s (jak inne testy filtra).
+  }, 120_000);
 
   it('losowe chwile przebiegu 2026-2060', () => {
     const od = Date.parse('2026-01-01T00:00:00Z');
