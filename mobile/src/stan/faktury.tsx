@@ -29,8 +29,8 @@ import type { FormularzWydatku, StanOdczytuTelefonu } from '@/lib/wydatek/zatwie
  */
 export type WynikZapisu = { ok: true; id: string; uwaga?: string } | { ok: false; komunikat: string; pole?: string };
 
-/** Zapis na prawdziwym koncie (M8): treść dla `POST /faktury` i klucz jednego wypełnienia formularza. */
-export type ZapisNaKoncie = { faktura: FakturaTelefonu; klucz: string };
+/** Zapis na prawdziwym koncie (M8): treść dla `POST /faktury`, klucz jednego wypełnienia formularza i firma, w której go otwarto. */
+export type ZapisNaKoncie = { faktura: FakturaTelefonu; klucz: string; firma: string };
 
 /** Plik dokumentu kosztu do wgrania (M9): skan albo zdjęcie z galerii, w plikach aplikacji. */
 export type PlikDokumentu = { uri: string; nazwa: string; typ: string };

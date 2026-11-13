@@ -4,6 +4,7 @@
  * `lib/dane/mapowanie.ts`). Firmy są zmyślone, NIP to testowy `1234567890`
  * (AGENTS.md, „KSeF-specific”). Kwoty w groszach.
  */
+import { cena, kwota } from '../lib/format';
 
 /** „Dziś” dla danych przykładowych, żeby terminy i zaległości się nie rozjeżdżały. */
 export const DZIS = '2026-11-09';
@@ -23,6 +24,8 @@ export type Pozycja = {
   stawkaVat: number;
   /** Stawka do pokazania, gdy nie jest liczbą procent („zw”, „np”, „oo”). */
   stawkaOpis?: string;
+  /** Cena netto dokładnie jak na fakturze (do 4 miejsc, „33,3333”), gdy grosze w `cenaNetto` ją zaokrąglają (dane z bazy, M8). */
+  cenaTekst?: string;
   /** Kwoty pozycji zapisane na fakturze (dane z bazy); bez nich liczymy z ilości i ceny. */
   netto?: number;
   vat?: number;
@@ -59,6 +62,12 @@ export type Faktura = {
   waluta?: string;
   sprzedawca?: Strona;
   adresKontrahenta?: string;
+  /**
+   * Rodzaj nabywcy z bazy (M8): firma z polskim NIP, osoba prywatna bez numeru
+   * identyfikacyjnego albo `inny` (firma z UE, osoba z PESEL lub dokumentem),
+   * którego telefon nie wystawia i nie kopiuje (strona tak).
+   */
+  nabywcaTyp?: 'firma' | 'osoba' | 'inny';
   /** Adres nabywcy w dwóch wierszach jak na fakturze (dane z bazy): do nowej faktury dla tego kontrahenta (M8). */
   adresKontrahentaLinie?: { linia1: string; linia2: string };
   emailKontrahenta?: string;
@@ -105,6 +114,15 @@ export function vatPozycji(p: Pozycja): number {
 
 export function bruttoPozycji(p: Pozycja): number {
   return p.brutto ?? nettoPozycji(p) + vatPozycji(p);
+}
+
+/**
+ * Cena jednostkowa do pokazania: dokładna z faktury („33,3333 zł”), gdy ją
+ * mamy (`cenaTekst`), inaczej z groszy.
+ */
+export function cenaPozycji(p: Pozycja, waluta = 'PLN'): string {
+  const z = p.cenaTekst ? Number(p.cenaTekst.replace(/\s/g, '').replace(',', '.')) : NaN;
+  return Number.isFinite(z) ? cena(z, waluta) : kwota(p.cenaNetto, waluta);
 }
 
 /** „23%” albo „zw”, „np”, „oo”. */

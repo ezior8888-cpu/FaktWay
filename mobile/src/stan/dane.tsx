@@ -32,6 +32,7 @@ import { AppState } from 'react-native';
 import type { Faktura, FakturaKosztowa, Koszt } from '@/dane-przykladowe';
 import { naStronie, wydatekNaStronie } from '@/komponenty/na-stronie';
 import { bezDlugichMyslnikow, type BladApi } from '@/lib/api/bledy';
+import { bladFirmyZapisu } from '@/lib/faktura/wystawienie';
 import {
   MOBILE_EXPENSE_FILE_FIELD,
   type FirmaKonta,
@@ -104,7 +105,14 @@ export type KontoFirmy = {
 };
 
 /** Podpowiedź do pustego formularza faktury (M8): numer, dziś, zwolnienie z VAT; `gotowe` po odpowiedzi serwera. */
-export type PodpowiedzFaktury = { gotowe: boolean; numer?: string; dzis?: string; zwolnienieVat: boolean };
+export type PodpowiedzFaktury = {
+  gotowe: boolean;
+  numer?: string;
+  dzis?: string;
+  zwolnienieVat: boolean;
+  /** Seria numeracji (krok 2.5), z której pochodzi `numer`; `null`: numeracja jak dotąd. */
+  seria?: { id: string; podglad: string } | null;
+};
 
 /**
  * `GET /faktury/podpowiedz` dla wybranej firmy, raz na otwarcie formularza.
@@ -120,7 +128,17 @@ export function usePodpowiedzFaktury(): PodpowiedzFaktury {
     let biezace = true;
     void zapytajApi<PodpowiedzFakturyOdpowiedz>('faktury/podpowiedz', { firma }).then((w) => {
       if (!biezace) return;
-      setPodpowiedz(w.ok ? { gotowe: true, numer: w.dane.numer ?? undefined, dzis: w.dane.dzis, zwolnienieVat: w.dane.zwolnienieVat } : { gotowe: true, zwolnienieVat: false });
+      setPodpowiedz(
+        w.ok
+          ? {
+              gotowe: true,
+              numer: w.dane.numer ?? undefined,
+              dzis: w.dane.dzis,
+              zwolnienieVat: w.dane.zwolnienieVat,
+              seria: w.dane.seria && w.dane.numer ? { id: w.dane.seria, podglad: w.dane.numer } : null,
+            }
+          : { gotowe: true, zwolnienieVat: false },
+      );
     });
     return () => {
       biezace = false;
@@ -385,7 +403,9 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   };
 
   /** Błąd sesji z zapisu: te same reakcje co przy pobieraniu; zdanie wraca do formularza. */
-  const bladZapisu = (b: BladApi): Extract<WynikZapisu, { ok: false }> => {
+  const bladZapisu = (b: BladApi, bezOdpowiedzi?: string): Extract<WynikZapisu, { ok: false }> => {
+    // Brak odpowiedzi (sieć, limit 15 s): zapis mógł dojść do serwera; ponowienie z tym samym kluczem go nie zdubluje.
+    if (b.rodzaj === 'polaczenie' && bezOdpowiedzi) return { ok: false, komunikat: bezOdpowiedzi };
     if (b.rodzaj === 'sesja') wyloguj();
     else if (b.rodzaj === 'kod') wymagajKodu();
     // Firma bez dostępu: konto i lista firm od nowa, jak przy pobieraniu.
@@ -448,18 +468,28 @@ function DaneZBazy({ children }: { children: ReactNode }) {
         naStronie('wystawienie');
         return { ok: false, komunikat: 'Tę fakturę wystawisz na faktway.pl.' };
       }
+      // Druga warstwa za formularzem: firma z otwarcia formularza musi być firmą, do której idzie żądanie.
+      const zlaFirma = bladFirmyZapisu(naKoncie.firma, firma);
+      if (zlaFirma) return { ok: false, komunikat: zlaFirma };
       const w = await zapytajApi<WystawienieOdpowiedz>('faktury', {
         metoda: 'POST',
         firma,
         klucz: naKoncie.klucz,
         cialo: { wyslij, faktura: naKoncie.faktura },
       });
-      if (!w.ok) return bladZapisu(w.blad);
+      if (!w.ok)
+        return bladZapisu(
+          w.blad,
+          'Nie wiemy, czy faktura się zapisała: brak odpowiedzi serwera. Sprawdź internet i dotknij jeszcze raz; ten sam formularz nie wystawi drugiej faktury.',
+        );
       // Stawka bez procentu („zw”, „oo”, „np”) od razu z opisem, nie jako 0% modelu formularza.
       const linie = naKoncie.faktura.lines;
       const zOpisem = { ...f, pozycje: f.pozycje.map((p, i) => (linie[i] && !/^\d+$/.test(linie[i].vatRate) ? { ...p, stawkaOpis: linie[i].vatRate } : p)) };
       pokazZapisana(zOpisem, w.dane.faktura);
-      return { ok: true, id: w.dane.faktura.id, ...(w.dane.wysylka?.blad ? { uwaga: bezDlugichMyslnikow(w.dane.wysylka.blad) } : {}) };
+      // „Nie zlecono” to zawsze uwaga, także bez zdania serwera: nigdy fałszywe „Wysyłamy do KSeF”.
+      const wysylka = w.dane.wysylka;
+      const uwaga = wysylka && !wysylka.zlecona ? bezDlugichMyslnikow(wysylka.blad ?? 'Faktura nie poszła do KSeF. Sprawdź jej stan na liście faktur.') : undefined;
+      return { ok: true, id: w.dane.faktura.id, ...(uwaga ? { uwaga } : {}) };
     },
     zastapFakture: (id) => naStronie('edycja', id),
     wyslijDoKsef: async (id) => {
@@ -471,7 +501,8 @@ function DaneZBazy({ children }: { children: ReactNode }) {
         return { ok: false, komunikat: 'Tę fakturę wyślesz ponownie na faktway.pl.' };
       }
       const w = await zapytajApi<WysylkaSzkicuOdpowiedz>(`faktury/${id}/wysylka`, { metoda: 'POST', firma });
-      if (!w.ok) return bladZapisu(w.blad);
+      if (!w.ok)
+        return bladZapisu(w.blad, 'Nie wiemy, czy wysyłka została zlecona: brak odpowiedzi serwera. Odśwież listę; jeśli faktura jest nadal szkicem, wyślij ją jeszcze raz.');
       pokazZapisana(f, w.dane.faktura);
       return { ok: true, id };
     },

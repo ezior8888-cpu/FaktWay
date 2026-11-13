@@ -82,7 +82,7 @@ const EXEMPT_FILES: Record<string, string> = {
   'lib/jobs/runners/ksef-history-sync.ts': 'job: pobranie historii z KSeF (silnik importu); firma z danych joba',
   'lib/invoices/issue-regular.ts': 'logika „Wystaw i wyślij” i szkicu (M8 planu aplikacji mobilnej); firmę podaje wołający: akcje strony po requireUserAndActiveOrg z expectedTenantId (UX-01 w akcji, ISSUING), telefon po authenticateMobileRequest',
   'lib/invoices/send-draft.ts': 'wysyłka istniejącego szkicu wskazanego id (sendDraftInvoiceAction, trasa telefonu); zapytanie filtruje tenant_id firmy z sesji, więc szkic innej firmy to „nie znaleziono”',
-  'lib/api/mobile/faktury.ts': 'API telefonu (POST /api/mobile/v1/faktury, M8): bez ciasteczka firmy; firma z nagłówka X-Active-Org wysłanego z formularza, członkostwo sprawdzone tokenem w authenticateMobileRequest, zapis klientem z tym nagłówkiem (RLS get_current_tenant_id); formularz to arkusz, firmy nie da się zmienić, gdy jest otwarty',
+  'lib/api/mobile/faktury.ts': 'API telefonu (POST /api/mobile/v1/faktury, M8): bez ciasteczka firmy; firma z nagłówka X-Active-Org wysłanego z formularza, członkostwo sprawdzone tokenem w authenticateMobileRequest, zapis klientem z tym nagłówkiem (RLS get_current_tenant_id); telefon zapamiętuje firmę przy otwarciu formularza i odmawia zapisu w innej (bladFirmyZapisu w mobile/src/lib/faktura/wystawienie.ts, jak expectedTenantId)',
   'lib/api/v1/invoice-create.ts': 'publiczne API (POST /api/v1/invoices, krok 7.1): bez sesji i ciasteczka firmy; firmę ustala baza ze skrótu klucza w tokenie (api_create_invoice, 00184), a wysyłka dostaje firmę klucza z api_key_session',
 };
 

@@ -118,6 +118,7 @@ describe.skipIf(!hasDatabase)('M8: faktura z telefonu i klucze idempotencji na b
       buyerName: 'Klient M8', buyerAddressLine1: 'ul. C 3', buyerAddressLine2: '00-003 Warszawa', buyerEmail: '',
       buyerIsConsumer: false, lines: [{ name: 'Usługa', unit: 'szt', quantity: 2, unitPriceNet: 150, vatRate: '23' }],
       paymentMethod: 'transfer', paymentDueDate: '2026-12-04', bankAccount: 'PL61109010140000071219812874', notes: '', splitPayment: false,
+      numberSeriesId: '', numberPreview: '',
     });
     const result = await saveRegularDraft({ supabase: db, userId: aId, tenant: await readTenantSnapshot(db, ORG_A) }, values);
     expect(result.success).toBe(true);
@@ -128,6 +129,28 @@ describe.skipIf(!hasDatabase)('M8: faktura z telefonu i klucze idempotencji na b
     expect(row).toEqual({ tenant_id: ORG_A, ksef_status: 'draft', internal_number: `FV/M8/${RUN}`, gross_total: 369, direction: 'outgoing' });
     const { data: items } = await admin.from('invoice_line_items').select('name, quantity').eq('invoice_id', draftId);
     expect(items).toEqual([{ name: 'Usługa', quantity: 2 }]);
+  });
+
+  it('klucz żądania jako klucz zapisu (00199): drugi szkic z nim nie powstaje, pierwszy widać po kluczu', async () => {
+    const db = dbA as unknown as RegularIssueContext['supabase'];
+    const KLUCZ = '000a8000-3000-4000-8000-000000000001';
+    const values = {
+      ...doWartosciFormularza({
+        internalNumber: `FV/M8K/${RUN}`, issueDate: '2026-11-20', saleDate: '', buyerNip: '5252241585',
+        buyerName: 'Klient M8', buyerAddressLine1: 'ul. C 3', buyerAddressLine2: '00-003 Warszawa', buyerEmail: '',
+        buyerIsConsumer: false, lines: [{ name: 'Usługa', unit: 'szt', quantity: 1, unitPriceNet: 10, vatRate: '23' }],
+        paymentMethod: 'transfer', paymentDueDate: '2026-12-04', bankAccount: 'PL61109010140000071219812874', notes: '', splitPayment: false,
+        numberSeriesId: '', numberPreview: '',
+      }),
+      numberRequestKey: KLUCZ,
+    };
+    const ctx = { supabase: db, userId: aId, tenant: await readTenantSnapshot(db, ORG_A) };
+    const first = await saveRegularDraft(ctx, values);
+    expect(first.success).toBe(true);
+    const again = await saveRegularDraft(ctx, { ...values, internalNumber: `FV/M8K2/${RUN}` });
+    expect(again).toMatchObject({ success: false, invoiceId: first.success ? first.invoiceId : 'x' });
+    const { data } = await dbA.from('invoices').select('id').eq('tenant_id', ORG_A).eq('number_request_key', KLUCZ);
+    expect(data).toEqual([{ id: first.success ? first.invoiceId : 'x' }]);
   });
 
   it('konto dopisuje swój klucz w aktywnej firmie i widzi go', async () => {

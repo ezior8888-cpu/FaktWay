@@ -10,7 +10,7 @@
  * Zasady faktury sprawdza serwer tym samym schematem co strona; telefon robi
  * tylko szybkie sprawdzenie przed wysłaniem (`sprawdz` w formularzu).
  */
-import type { Faktura, MetodaPlatnosci } from '../../dane-przykladowe';
+import type { Faktura, MetodaPlatnosci, Pozycja } from '../../dane-przykladowe';
 import type { FakturaTelefonu, StawkaVatTelefonu } from '../api/kontrakt';
 import { dniMiedzy } from '../format';
 
@@ -35,6 +35,8 @@ export type FormularzZwyklej = {
   mpp: boolean;
   pozycje: PozycjaFormularza[];
   uwagi: string;
+  /** Seria numeracji z podpowiedzi serwera (krok 2.5) i numer, który podpowiedziała; `null` bez serii. */
+  seria?: { id: string; podglad: string } | null;
 };
 
 const STAWKI: readonly StawkaVatTelefonu[] = ['23', '8', '5', '0', 'zw', 'oo', 'np'];
@@ -44,6 +46,11 @@ const METODY: Partial<Record<MetodaPlatnosci, FakturaTelefonu['paymentMethod']>>
   Gotówka: 'cash',
   Karta: 'card',
 };
+
+/** Stawka, którą telefon wystawia (`StawkaVatTelefonu`); inna (np. „np_ii”, „0 WDT”) to `null`: na stronie, nigdy jako 0% ani 23%. */
+export function stawkaTelefonu(stawka: string): StawkaVatTelefonu | null {
+  return STAWKI.find((s) => s === stawka) ?? null;
+}
 
 /** Liczba z pola („1 500,5” → 1500.5) bez zaokrąglania: cena i ilość mogą mieć 4 miejsca po przecinku. */
 export function liczbaZPola(tekst: string): number {
@@ -81,13 +88,17 @@ export function doFakturyTelefonu(f: FormularzZwyklej): FakturaTelefonu {
       unit: p.jednostka.trim() || 'szt',
       quantity: liczbaZPola(p.ilosc),
       unitPriceNet: liczbaZPola(p.cena),
-      vatRate: STAWKI.find((s) => s === p.stawka) ?? '23',
+      // Stawka spoza telefonu idzie bez zmian i serwer ją odrzuci; formularz zatrzymuje ją wcześniej (`sprawdz`).
+      vatRate: (stawkaTelefonu(p.stawka) ?? p.stawka) as StawkaVatTelefonu,
     })),
     paymentMethod: metoda,
     paymentDueDate: dodajDni(f.dataWystawienia, f.terminDni),
     bankAccount: metoda === 'transfer' ? f.rachunek.replace(/\s/g, '') : '',
     notes: f.uwagi.trim(),
     splitPayment: f.mpp,
+    // Numer z licznika serii nadaje baza, gdy w polu została podpowiedź (jak formularz strony).
+    numberSeriesId: f.seria?.id ?? '',
+    numberPreview: f.seria?.podglad ?? '',
   };
 }
 
@@ -123,6 +134,57 @@ export function poleFormularza(pole: string | undefined): PoleBledu {
   }
 }
 
+/** Zaokrąglenie do groszy jak `roundToCents` serwera (`lib/xml/invoice-calculator.ts`). */
+function doGroszy(wartosc: number): number {
+  const znak = Math.sign(wartosc);
+  return (znak * Math.round((Math.abs(wartosc) + Number.EPSILON) * 100)) / 100;
+}
+
+/**
+ * Netto, VAT i brutto pozycji w groszach tak, jak policzy je serwer
+ * (`calculateLineItem`): ilość razy cena z pola bez zaokrąglania ceny, potem
+ * grosze. Pole puste albo błędne liczy się jako 0 (formularz i tak je zatrzyma).
+ */
+export function kwotyPozycji(p: PozycjaFormularza): { netto: number; vat: number; brutto: number } {
+  const ilosc = liczbaZPola(p.ilosc);
+  const cena = liczbaZPola(p.cena);
+  const netto = Number.isFinite(ilosc) && Number.isFinite(cena) ? doGroszy(ilosc * cena) : 0;
+  const procent = /^\d+$/.test(p.stawka) ? Number(p.stawka) : 0;
+  const vat = doGroszy((netto * procent) / 100);
+  const brutto = doGroszy(netto + vat);
+  return { netto: Math.round(netto * 100), vat: Math.round(vat * 100), brutto: Math.round(brutto * 100) };
+}
+
+/**
+ * Zapis z formularza otwartego w innej firmie niż wybrana teraz (np. po
+ * odmowie firmy serwer odświeżył konto): odmowa, jak `expectedTenantId` na
+ * stronie (UX-01). `null`, gdy firma ta sama.
+ */
+export function bladFirmyZapisu(firmaFormularza: string | null | undefined, firmaTeraz: string | null | undefined): string | null {
+  if (firmaFormularza && firmaFormularza === firmaTeraz) return null;
+  return 'Formularz był otwarty w innej firmie niż wybrana teraz. Zamknij formularz i wystaw fakturę od nowa w wybranej firmie.';
+}
+
+/** Stawka pozycji z bazy w zapisie telefonu albo `null`, gdy telefon jej nie wystawia. */
+function stawkaPozycji(p: Pozycja): StawkaVatTelefonu | null {
+  return stawkaTelefonu(p.stawkaOpis ?? String(p.stawkaVat));
+}
+
+/**
+ * Czy „Duplikuj” tej faktury da się zrobić z telefonu: zwykła faktura VAT
+ * w złotych, nabywca firma z NIP albo osoba bez numeru, stawki z listy
+ * telefonu. Reszta (firma z UE, PESEL, np. II, waluta) na stronie, która
+ * kopiuje te dane w całości (`prefillCore`).
+ */
+export function kopiaNaTelefonie(f: Faktura): boolean {
+  return (
+    f.rodzaj === 'vat' &&
+    (f.waluta ?? 'PLN') === 'PLN' &&
+    (f.nabywcaTyp === 'firma' || f.nabywcaTyp === 'osoba') &&
+    f.pozycje.every((p) => stawkaPozycji(p) !== null)
+  );
+}
+
 export type NabywcaZFaktury = {
   nazwa: string;
   nip: string;
@@ -150,14 +212,18 @@ export function nabywcyZFaktur(faktury: readonly Faktura[], najwyzej = 20): Naby
   for (const f of faktury) {
     const linie = f.adresKontrahentaLinie;
     if (!linie?.linia1 || !linie.linia2 || !f.kontrahent || f.rodzaj !== 'vat') continue;
-    const nip = f.nipKontrahenta.replace(/\D/g, '');
+    // Firma z UE i osoba z PESEL albo dokumentem nie trafiają na listę: telefon wystawiłby je jako osobę bez numeru.
+    if (f.nabywcaTyp !== 'firma' && f.nabywcaTyp !== 'osoba') continue;
+    const osoba = f.nabywcaTyp === 'osoba';
+    const nip = osoba ? '' : f.nipKontrahenta.replace(/\D/g, '');
+    if (!osoba && nip.length !== 10) continue;
     const klucz = nip || `osoba:${f.kontrahent.toLowerCase()}`;
     if (widziani.has(klucz)) continue;
     widziani.add(klucz);
     wynik.push({
       nazwa: f.kontrahent,
       nip,
-      osoba: nip.length !== 10,
+      osoba,
       adres1: linie.linia1,
       adres2: linie.linia2,
       email: f.emailKontrahenta ?? '',

@@ -135,6 +135,14 @@ export interface FakturaTelefonu {
   bankAccount: string;
   notes: string;
   splitPayment: boolean;
+  /**
+   * Seria numeracji z podpowiedzi (`PodpowiedzFakturyOdpowiedz.seria`, krok 2.5)
+   * albo pusty tekst. Gdy `internalNumber` równa się `numberPreview`, numer
+   * nadaje licznik serii przy zapisie (jak formularz strony); inny numer
+   * zapisze się jak wpisany ręcznie.
+   */
+  numberSeriesId: string;
+  numberPreview: string;
 }
 
 /** `POST /api/mobile/v1/faktury` (z nagłówkiem `Idempotency-Key`): `wyslij` to „Wyślij do KSeF”, inaczej szkic. */
@@ -173,8 +181,10 @@ export interface WysylkaSzkicuOdpowiedz {
 
 /** `GET /api/mobile/v1/faktury/podpowiedz`: to, czym strona wypełnia pusty formularz. */
 export interface PodpowiedzFakturyOdpowiedz {
-  /** Kolejny numer po ostatniej fakturze (jak `suggestNextInvoiceNumberForTenant`); `null`: firma bez faktur. */
+  /** Kolejny numer jak w pustym formularzu strony (seria domyślna albo po ostatniej fakturze); `null`: brak podpowiedzi. */
   numer: string | null;
+  /** Seria numeracji domyślna dla zwykłej faktury (krok 2.5), z której pochodzi `numer`; `null`: numeracja jak dotąd. */
+  seria: string | null;
   /** Dziś w Polsce, RRRR-MM-DD: data wystawienia faktury wysyłanej do KSeF. */
   dzis: string;
   /** Firma zwolniona z VAT (art. 113): nowa pozycja startuje ze stawką „zw”. */
