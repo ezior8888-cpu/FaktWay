@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { RiDownloadLine, RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { getDocumentArchiveLinkAction, requestDocumentArchiveAction } from '@/app/actions/archiwum';
+import { getDocumentArchiveStatusesAction } from '@/app/actions/job-statuses';
 import { Button } from '@/components/ui/button';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useStatusPoll } from '@/hooks/use-status-poll';
 import {
   ARCHIVE_KIND_LABELS,
   ARCHIVE_LINK_DAYS,
@@ -20,6 +22,7 @@ import {
   type ArchiveKind,
 } from '@/lib/archiwum/okres';
 import type { ArchiveOrderRow } from '@/lib/archiwum/zlecenia';
+import { ARCHIVE_POLL } from '@/lib/polling/poll-loop';
 
 /**
  * Archiwum dokumentów i paczka na kontrolę (plan kompletnej aplikacji, krok
@@ -98,16 +101,16 @@ export function DocumentArchiveForm({
   const [downloading, startDownload] = useTransition();
   const [now, setNow] = useState(() => Date.now());
 
-  // Zlecenie w przygotowaniu: odświeżamy listę, aż zadanie skończy.
-  const active = orders.some((o) => o.status === 'pending' || o.status === 'generating');
-  useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => {
-      setNow(Date.now());
-      router.refresh();
-    }, 15_000);
-    return () => clearInterval(timer);
-  }, [active, router]);
+  // Zlecenie w przygotowaniu: lekkie pytanie o status (15 s, 22,5 s, 33,75 s,
+  // 50,6 s, potem co minutę, tylko na widocznej karcie), a listę odświeżamy
+  // raz, gdy status się zmieni (plan skalowania, sesja 11; dawniej
+  // `router.refresh()` co 15 s, także w tle).
+  useStatusPoll({
+    jobs: orders.filter((o) => o.status === 'pending' || o.status === 'generating'),
+    read: getDocumentArchiveStatusesAction,
+    schedule: ARCHIVE_POLL,
+    onChange: () => setNow(Date.now()),
+  });
 
   if (!canRequest) {
     return (

@@ -22,11 +22,13 @@ import {
 } from '@remixicon/react';
 import { toast } from 'sonner';
 
+import { getImportJobStatusesAction } from '@/app/actions/job-statuses';
 import { DataTablePagination, DataTableView, FinoraListCard } from '@/components/lists/finora-data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Progress } from '@/components/ui/progress';
+import { useStatusPoll } from '@/hooks/use-status-poll';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { countLabel } from '@/lib/i18n/plural';
 import { cn } from '@/lib/utils';
@@ -40,8 +42,6 @@ import {
   isKsefSource,
   isRunning,
   jobStatusGroup,
-  MAX_POLL_TICKS,
-  POLL_INTERVAL_MS,
   progressPercent,
   runningStep,
   sourceDetail,
@@ -60,9 +60,11 @@ import {
  * (liczniki, ostrzeżenia, „Spróbuj ponownie”) zostają na istniejącej stronie
  * postępu `/onboarding/progress/[id]` — wiersz tylko do niej prowadzi.
  *
- * Gdy coś się importuje, lista odświeża się sama (co 4 s, tylko na widocznej
- * karcie, najwyżej 45 razy — potem ręczne „Odśwież”), a koniec importu
- * zgłasza powiadomienie i jeden ukryty komunikat dla czytnika ekranu.
+ * Gdy coś się importuje, lista aktualizuje się sama: lekkie pytanie o status
+ * z rosnącym odstępem, tylko na widocznej karcie, a stronę odświeżamy raz,
+ * gdy status się zmieni (postęp idzie razem ze statusem); po 3 minutach
+ * ręczne „Odśwież” (`hooks/use-status-poll.ts`). Koniec importu zgłasza
+ * powiadomienie i jeden ukryty komunikat dla czytnika ekranu.
  *
  * Decyzja Bartosza 22.10.2026: dawny ręczny import z KSeF, który został
  * „w toku” albo się nie udał, jest przerwany (jego kolejki już nie ma) —
@@ -284,34 +286,18 @@ function HistoryEmpty() {
 export function ImportHistory({ jobs }: { jobs: ImportHistoryJob[] }) {
   const router = useRouter();
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
-  const [ticks, setTicks] = useState(0);
   const liveRef = useRef<HTMLParagraphElement>(null);
   const seenRunning = useRef(new Set<string>());
 
-  const runningKey = jobs
-    .filter(isRunning)
-    .map((job) => job.id)
-    .join(',');
-  // Nowy import w toku (albo któryś się skończył) — licznik odpytań od nowa.
-  // Stan dopasowany w trakcie renderu (wzorzec z dokumentacji Reacta), bez efektu.
-  const [pollKey, setPollKey] = useState(runningKey);
-  if (pollKey !== runningKey) {
-    setPollKey(runningKey);
-    setTicks(0);
-  }
-  const polling = runningKey !== '' && ticks < MAX_POLL_TICKS;
-  const pollingCapped = runningKey !== '' && ticks >= MAX_POLL_TICKS;
-
-  useEffect(() => {
-    if (!polling) return;
-    const timer = setInterval(() => {
-      // Karta w tle nie odpytuje serwera — nie wydajemy też limitu odpytań.
-      if (document.visibilityState !== 'visible') return;
-      setTicks((count) => count + 1);
-      router.refresh();
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [polling, router]);
+  // Plan skalowania, sesja 11: takt pyta lekką akcją o statusy importów
+  // w toku, a stronę odświeżamy raz, gdy status się zmieni (dawniej
+  // `router.refresh()` co 4 s). Postęp importu zmienia się razem ze statusem
+  // (`lib/jobs/runners/bulk-import.ts`), więc pasek nadąża. Dawny ręczny import
+  // z KSeF „w toku” nie jest `isRunning`, więc go nie odpytujemy.
+  const { capped: pollingCapped, resume: resumePolling } = useStatusPoll({
+    jobs: jobs.filter(isRunning),
+    read: getImportJobStatusesAction,
+  });
 
   // Powiadomienie tylko o importach, które trwały w czasie tej wizyty.
   useEffect(() => {
@@ -343,7 +329,7 @@ export function ImportHistory({ jobs }: { jobs: ImportHistoryJob[] }) {
     columns: COLUMNS,
     getRowId: (row) => row.id,
     state: { pagination },
-    // Odpytywanie podmienia `jobs` co 4 s — bez tego tabela wracałaby na stronę 1.
+    // Odświeżenie po zmianie statusu podmienia `jobs` — bez tego tabela wracałaby na stronę 1.
     autoResetPageIndex: false,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
@@ -365,7 +351,7 @@ export function ImportHistory({ jobs }: { jobs: ImportHistoryJob[] }) {
             size="sm"
             type="button"
             onClick={() => {
-              setTicks(0);
+              resumePolling();
               router.refresh();
             }}
           >

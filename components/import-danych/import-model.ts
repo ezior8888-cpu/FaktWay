@@ -50,10 +50,6 @@ export type ImportHistoryJob = Pick<
 /** Ile ostatnich importów czytamy; przy pełnej liście kafle mówią „z ostatnich 100”. */
 export const IMPORT_HISTORY_LIMIT = 100;
 
-/** Odświeżanie historii, gdy coś się importuje: co 4 s, najwyżej 45 razy (3 minuty). */
-export const POLL_INTERVAL_MS = 4000;
-export const MAX_POLL_TICKS = 45;
-
 /** Szczegóły i postęp joba — istniejąca strona z odświeżaniem na żywo. */
 export function importProgressHref(jobId: string): string {
   return `/onboarding/progress/${encodeURIComponent(jobId)}`;
