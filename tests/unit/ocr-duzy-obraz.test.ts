@@ -22,7 +22,7 @@ import type { ExtractedInvoice } from '@/lib/ocr/schema';
 
 const LIMIT_BOKU_PX = 8000;
 const LIMIT_BASE64_BAJTOW = 10_000_000;
-const ZA_DUZE_ZDJECIE = 'Za duże zdjęcie do odczytu (ponad 8000 px). Wgraj mniejsze zdjęcie albo PDF.';
+const ZA_DUZE_ZDJECIE = 'Zdjęcie ma ponad 8000 px i nie da się go odczytać. Potrzebne mniejsze albo PDF.';
 
 /** Co doszło do atrapy API: blok z pierwszej wiadomości i wymiary odczytane z jego bajtów. */
 interface Zapytanie {
@@ -185,27 +185,41 @@ async function wymiary(data: string): Promise<[number, number]> {
   return [meta.width, meta.height];
 }
 
-/** Sam nagłówek PNG: obiecuje 20000×20000 px (400 Mpx), pikseli prawie brak. */
-function naglowekBomby(): string {
-  const chunk = (typ: string, dane: Buffer) => {
+/** PNG złożony ręcznie: nagłówek z wymiarami i jeden blok danych. */
+function png(szerokosc: number, wysokosc: number, bityNaKanal: number, typKoloru: number, dane: Buffer): string {
+  const chunk = (typ: string, tresc: Buffer) => {
     const dlugosc = Buffer.alloc(4);
-    dlugosc.writeUInt32BE(dane.length);
-    const tresc = Buffer.concat([Buffer.from(typ, 'ascii'), dane]);
+    dlugosc.writeUInt32BE(tresc.length);
+    const typITresc = Buffer.concat([Buffer.from(typ, 'ascii'), tresc]);
     const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(zlib.crc32(tresc) >>> 0);
-    return Buffer.concat([dlugosc, tresc, crc]);
+    crc.writeUInt32BE(zlib.crc32(typITresc) >>> 0);
+    return Buffer.concat([dlugosc, typITresc, crc]);
   };
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(20_000, 0);
-  ihdr.writeUInt32BE(20_000, 4);
-  ihdr[8] = 8; // 8 bitów na kanał
-  ihdr[9] = 2; // RGB
+  ihdr.writeUInt32BE(szerokosc, 0);
+  ihdr.writeUInt32BE(wysokosc, 4);
+  ihdr[8] = bityNaKanal;
+  ihdr[9] = typKoloru;
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
-    chunk('IDAT', zlib.deflateSync(Buffer.alloc(16))),
+    chunk('IDAT', zlib.deflateSync(dane)),
     chunk('IEND', Buffer.alloc(0)),
   ]).toString('base64');
+}
+
+/** Sam nagłówek PNG: obiecuje 20000×20000 px (400 Mpx, RGB), pikseli prawie brak. */
+const naglowekBomby = () => png(20_000, 20_000, 8, 2, Buffer.alloc(16));
+
+/**
+ * Poprawny biały PNG czarno-biały (1 bit na piksel): dziesiątki megapikseli
+ * w kilku kilobajtach. Każdy wiersz to bajt filtra (0, bez filtra) i piksele.
+ */
+function bialyPng1Bit(szerokosc: number, wysokosc: number): string {
+  const wiersz = 1 + Math.ceil(szerokosc / 8);
+  const dane = Buffer.alloc(wiersz * wysokosc, 0xff);
+  for (let y = 0; y < wysokosc; y++) dane[y * wiersz] = 0;
+  return png(szerokosc, wysokosc, 1, 0, dane);
 }
 
 describe('OCR: obraz z bokiem ponad 8000 px trafia do API w dopuszczalnym rozmiarze', () => {
@@ -258,7 +272,7 @@ describe('OCR: obraz z bokiem ponad 8000 px trafia do API w dopuszczalnym rozmia
     }
   });
 
-  it('obraz ponad 8000 px, którego nie da się zmniejszyć: polski komunikat i bez płatnego wywołania API', async () => {
+  it('obraz ponad 8000 px, którego nie da się zmniejszyć: polski komunikat i bez wywołania API', async () => {
     // Nagłówek mówi 9000×1200, ale dane są ucięte (np. przerwane wgranie).
     const pelny = await szum(9000, 1200).toBuffer();
     const uciety = pelny.subarray(0, Math.floor(pelny.length * 0.6)).toString('base64');
@@ -289,6 +303,46 @@ describe('OCR: obraz z bokiem ponad 8000 px trafia do API w dopuszczalnym rozmia
     expect(zapytania[0]).toMatchObject({ mediaType: 'image/jpeg', szerokosc: 8000 });
     const { channels } = await sharp(Buffer.from(zapytania[0].data, 'base64')).stats();
     expect(channels.map((kanal) => Math.round(kanal.mean))).toEqual([255, 255, 255]);
+  });
+});
+
+describe('OCR: limit pikseli chroni pamięć workera', () => {
+  // PNG z przeplotem, JPEG progresywny i GIF dekodują się w całości do pamięci:
+  // plik 2 MB o boku 16383 px zajmował w workerze do 2,3 GB (przegląd sesji 34).
+  // Worker dekoduje najwyżej tyle pikseli, ile ma największy obraz, który
+  // przyjmuje API: 8000×8000.
+  it('mały plik ponad 64 Mpx (16000×4001): komunikat bez dekodowania i bez wywołania API', async () => {
+    const plik = bialyPng1Bit(16_000, 4001);
+    expect(plik.length).toBeLessThan(100_000);
+
+    const wynik = await extractInvoiceFromImage(plik, 'image/png');
+
+    expect(wynik.success).toBe(false);
+    expect(wynik.error).toBe(ZA_DUZE_ZDJECIE);
+    expect(zapytania).toHaveLength(0);
+  });
+
+  it('tuż pod limitem (16000×3999) obraz przechodzi, a pełne zdjęcie 50 Mpx z telefonu mieści się w limicie', async () => {
+    const { IMAGE_MAX_DECODE_PIXELS } = await import('@/lib/ocr/image-for-api');
+
+    const wynik = await extractInvoiceFromImage(bialyPng1Bit(16_000, 3999), 'image/png');
+
+    expect(wynik.error).toBeUndefined();
+    expect(wynik.success).toBe(true);
+    expect(zapytania).toHaveLength(1);
+    expect(zapytania[0]).toMatchObject({ mediaType: 'image/jpeg', szerokosc: 8000 });
+    expect(IMAGE_MAX_DECODE_PIXELS).toBe(8000 * 8000);
+    expect(8160 * 6144).toBeLessThanOrEqual(IMAGE_MAX_DECODE_PIXELS);
+  });
+
+  it('zdekodowany GIF nie zostaje w pamięci podręcznej libvips po odczycie', async () => {
+    // Bufor GIF jest poza licznikiem pamięci libvips, więc pamięć podręczna
+    // operacji trzymała go po każdym odczycie (GIF 10000×6400: ok. 256 MB,
+    // cztery po kolei to 1,13 GB zajęte w procesie).
+    const wynik = await extractInvoiceFromImage(await base64(bialy(9000, 60).gif()), 'image/gif');
+
+    expect(wynik.success).toBe(true);
+    expect(sharp.cache().items.current).toBe(0);
   });
 });
 

@@ -25,6 +25,19 @@ export const API_IMAGE_MAX_EDGE_PX = 8000;
 export const API_IMAGE_MAX_BASE64_BYTES = 10_000_000;
 
 /**
+ * Najwięcej pikseli, które worker dekoduje, żeby zmniejszyć obraz: tyle, ile
+ * ma największy obraz przyjmowany przez API (8000×8000). PNG z przeplotem,
+ * JPEG progresywny i GIF dekodują się w całości do pamięci, więc bez limitu
+ * plik 2 MB o boku 16383 px (domyślny limit sharp) zajmował do 2,3 GB.
+ * Pomiar 13.11.2026, jeden wątek libvips jak w workerze: przy tym limicie
+ * szczyt procesu to najwyżej ok. 0,66 GB (PNG 16-bit RGBA z przeplotem),
+ * a zwykłe zdjęcie JPEG 0,14–0,25 GB. Pełne zdjęcie 50 Mpx z telefonu
+ * (8160×6144) mieści się w limicie; obraz ponad limit sharp odrzuca po
+ * samym nagłówku, bez dekodowania.
+ */
+export const IMAGE_MAX_DECODE_PIXELS = API_IMAGE_MAX_EDGE_PX * API_IMAGE_MAX_EDGE_PX;
+
+/**
  * Kolejne próby dłuższego boku, gdy kopia nie mieści się w limicie bajtów.
  * API i tak zmniejsza obraz do 2576 px (modele 4.7 i nowsze) albo 1568 px
  * (pozostałe, w tym model OCR), więc żaden krok nie odbiera modelowi szczegółów.
@@ -37,18 +50,20 @@ const JPEG_QUALITY = 85;
 /**
  * Bez optymalizacji tablic Huffmana: optymalizacja wymaga dwóch przebiegów,
  * więc koder trzyma współczynniki całej kopii w pamięci (ok. 190 MB przy
- * 8000×8000). Pomiar 13.11.2026 dla PNG 16383×16383 (największy, jaki przepuszcza
- * domyślny limit pikseli): szczyt pamięci procesu 523 MB z optymalizacją,
- * 161 MB bez niej, a kopia większa tylko o kilka procent.
+ * 8000×8000). Pomiar 13.11.2026 dla PNG bez przeplotu tuż pod limitem pikseli
+ * (8001×7999, kopia 8000×7998): szczyt pamięci procesu 492 MB z optymalizacją,
+ * 113 MB bez niej, a kopia zdjęcia większa tylko o ok. 3,5%.
  */
 const JPEG_OPTIMISE_CODING = false;
 
 /**
- * Komunikat dla klienta (zadanie OCR, powiadomienie ucina do 80 znaków).
- * Wyjście: mniejsze zdjęcie albo PDF; oryginał zostaje w archiwum, a karta
- * „nie odczytałem” prowadzi do ponownego wgrania.
+ * Komunikat dla klienta, gdy obrazu ponad 8000 px nie da się przygotować dla
+ * API: za dużo pikseli, uszkodzony plik albo kopia ponad limit bajtów. Bez
+ * trybu rozkazującego (lista kontrolna filtra, pkt 16) i do 80 znaków, bo tyle
+ * zostawia powiadomienie. Wyjście: mniejsze zdjęcie albo PDF; oryginał zostaje
+ * w archiwum, a karta „nie odczytałem” prowadzi do ponownego wgrania.
  */
-export const IMAGE_TOO_LARGE_MESSAGE = 'Za duże zdjęcie do odczytu (ponad 8000 px). Wgraj mniejsze zdjęcie albo PDF.';
+export const IMAGE_TOO_LARGE_MESSAGE = 'Zdjęcie ma ponad 8000 px i nie da się go odczytać. Potrzebne mniejsze albo PDF.';
 
 export interface ApiImage {
   data: string;
@@ -59,9 +74,19 @@ export interface ApiImage {
  * Biblioteka natywna ładowana przy pierwszym obrazie, nie przy starcie:
  * `process-ocr` importuje się z resztą handlerów workera, więc brak binarki
  * dla platformy przy imporcie statycznym zatrzymałby wszystkie joby.
+ *
+ * Bez pamięci podręcznej operacji libvips: każdy obraz przerabiamy raz,
+ * a zdekodowany GIF zostawał w niej po każdym odczycie, bo libvips nie liczy
+ * jego bufora do limitu pamięci. Pomiar 13.11.2026: cztery GIF-y 10000×6400
+ * po kolei to 1,13 GB zajęte w procesie z pamięcią podręczną, ok. 0,1 GB bez niej.
+ * Ustawienie jest globalne dla procesu (ten moduł ładuje tylko worker),
+ * a każde wejście sharp (CJS, ESM) przy ładowaniu włącza ją z powrotem,
+ * więc wyłączamy ją przy każdym obrazie.
  */
 async function loadSharp(): Promise<SharpFactory> {
-  return (await import('sharp')).default;
+  const sharp = (await import('sharp')).default;
+  sharp.cache(false);
+  return sharp;
 }
 
 function errorText(e: unknown): string {
@@ -75,9 +100,10 @@ function errorText(e: unknown): string {
  * kopia traci metadane, a przezroczystość idzie na białe tło.
  *
  * Gdy biblioteka nie odczyta wymiarów, obraz idzie bez zmian i decyduje API,
- * jak przed tą zmianą. Gdy obrazu ponad 8000 px nie da się zmniejszyć,
- * rzuca błąd z `IMAGE_TOO_LARGE_MESSAGE`: bez płatnego wywołania, które API
- * i tak by odrzuciło. Funkcja czysta (bez zapisu i efektów zewnętrznych),
+ * jak przed tą zmianą. Gdy obrazu ponad 8000 px nie da się zmniejszyć (ponad
+ * `IMAGE_MAX_DECODE_PIXELS` albo uszkodzony plik), rzuca błąd
+ * z `IMAGE_TOO_LARGE_MESSAGE` zamiast wysyłać obraz, który API odrzuciłoby
+ * z angielskim błędem. Funkcja czysta (bez zapisu i efektów zewnętrznych),
  * więc ponowienie joba po prostu liczy kopię jeszcze raz.
  */
 export async function fitImageForApi(
@@ -88,18 +114,19 @@ export async function fitImageForApi(
   const input = Buffer.from(imageBase64, 'base64');
 
   let sharp: SharpFactory;
-  let longEdge: number;
+  let width: number;
+  let height: number;
   try {
     sharp = await loadSharp();
     // Sam nagłówek, bez dekodowania pikseli, więc bez limitu pikseli: obraz
     // ponad ten limit ma dostać komunikat niżej, a nie przejść bez zmian.
-    const { width, height } = await sharp(input, { limitInputPixels: false }).metadata();
-    longEdge = Math.max(width, height);
+    ({ width, height } = await sharp(input, { limitInputPixels: false }).metadata());
   } catch (e) {
     // Awaria biblioteki nie może zatrzymać odczytu zwykłych zdjęć.
     console.warn(`[ocr] nie odczytano wymiarów obrazu ${mediaType}, idzie bez zmian: ${errorText(e)}`);
     return { data: imageBase64, mediaType };
   }
+  const longEdge = Math.max(width, height);
   if (!Number.isFinite(longEdge) || longEdge <= API_IMAGE_MAX_EDGE_PX) {
     return { data: imageBase64, mediaType };
   }
@@ -107,19 +134,20 @@ export async function fitImageForApi(
   for (const edge of EDGE_STEPS_PX) {
     let output: Buffer;
     try {
-      // Domyślny limit pikseli sharp (16383×16383) odrzuca bomby dekompresyjne.
-      output = await sharp(input, { autoOrient: true })
+      output = await sharp(input, { autoOrient: true, limitInputPixels: IMAGE_MAX_DECODE_PIXELS })
         .resize({ width: edge, height: edge, fit: 'inside' })
         .flatten({ background: '#ffffff' })
         .jpeg({ quality: JPEG_QUALITY, optimiseCoding: JPEG_OPTIMISE_CODING })
         .toBuffer();
     } catch (e) {
-      console.warn(`[ocr] nie zmniejszono obrazu ${mediaType} (${longEdge} px): ${errorText(e)}`);
+      console.warn(`[ocr] nie zmniejszono obrazu ${mediaType} ${width}×${height} px: ${errorText(e)}`);
       throw new Error(IMAGE_TOO_LARGE_MESSAGE, { cause: e });
     }
     const data = output.toString('base64');
     if (data.length <= maxBase64Bytes) return { data, mediaType: 'image/jpeg' };
   }
-  console.warn(`[ocr] kopia obrazu ${mediaType} (${longEdge} px) ponad ${maxBase64Bytes} B nawet przy ${EDGE_STEPS_PX.at(-1)} px`);
+  console.warn(
+    `[ocr] kopia obrazu ${mediaType} ${width}×${height} px ponad ${maxBase64Bytes} B nawet przy ${EDGE_STEPS_PX.at(-1)} px`,
+  );
   throw new Error(IMAGE_TOO_LARGE_MESSAGE);
 }
