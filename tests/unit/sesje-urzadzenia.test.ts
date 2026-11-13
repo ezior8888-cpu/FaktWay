@@ -145,9 +145,13 @@ describe('wiersz listy urządzeń (list_account_sessions)', () => {
     ip_prefix: '83.21.104.0/24',
     device_source: 'login' as const,
   };
+  // Stały zegar dla całego bloku, bo widok liczy limit 30 dni od „teraz”. Z domyślnym
+  // `new Date()` wynik zależałby od dnia uruchomienia: od 8.12.2026 15:40 UTC, 30 dni
+  // po `last_active_at`, pierwszy przypadek dostawałby `inactiveOver30Days: true`.
+  const NOW = new Date('2026-11-10T12:00:00Z');
 
   it('wpis logowania z aplikacji: urządzenie, skrócony IP, sposób i daty po polsku', () => {
-    expect(toAccountSessionView(base)).toEqual({
+    expect(toAccountSessionView(base, undefined, NOW)).toEqual({
       id: base.session_id,
       isCurrent: false,
       kind: 'phone',
@@ -171,21 +175,21 @@ describe('wiersz listy urządzeń (list_account_sessions)', () => {
   it('sesja bez wpisu logowania, zapisana przez serwer aplikacji: bez urządzenia i bez adresu serwera', () => {
     const view = toAccountSessionView({
       ...base, device_source: 'session', login_method: null, user_agent: 'node', ip_prefix: '10.0.1.0/24',
-    });
+    }, undefined, NOW);
     expect(view).toMatchObject({ device: 'Nieznane urządzenie', kind: 'unknown', ip: null, method: null });
   });
 
   it('sesja bez wpisu logowania, odświeżona wprost z przeglądarki: pokazuje to, co widział GoTrue', () => {
-    const view = toAccountSessionView({ ...base, device_source: 'session', login_method: null, user_agent: WINDOWS_EDGE });
+    const view = toAccountSessionView({ ...base, device_source: 'session', login_method: null, user_agent: WINDOWS_EDGE }, undefined, NOW);
     expect(view).toMatchObject({ device: 'Windows (Edge)', ip: '83.21.104.x', method: null });
   });
 
   it('nieznana metoda logowania nie trafia na ekran', () => {
-    expect(toAccountSessionView({ ...base, login_method: 'cokolwiek' }).method).toBeNull();
+    expect(toAccountSessionView({ ...base, login_method: 'cokolwiek' }, undefined, NOW).method).toBeNull();
   });
 
   it('bieżące urządzenie', () => {
-    expect(toAccountSessionView({ ...base, is_current: true }).isCurrent).toBe(true);
+    expect(toAccountSessionView({ ...base, is_current: true }, undefined, NOW).isCurrent).toBe(true);
   });
 
   describe('bieżąca sesja zalogowana przed krokiem 8.5 (bez wpisu logowania)', () => {
@@ -193,19 +197,19 @@ describe('wiersz listy urządzeń (list_account_sessions)', () => {
     const request = { userAgent: MAC_CHROME, ip: '83.21.104.77' };
 
     it('urządzenie i skrócony adres z bieżącego żądania, bo to na pewno to urządzenie', () => {
-      expect(toAccountSessionView(legacy, request)).toMatchObject({ device: 'Mac (Chrome)', kind: 'computer', ip: '83.21.104.x' });
+      expect(toAccountSessionView(legacy, request, NOW)).toMatchObject({ device: 'Mac (Chrome)', kind: 'computer', ip: '83.21.104.x' });
     });
 
     it('inna sesja bez wpisu logowania nie bierze nagłówków tego żądania', () => {
-      expect(toAccountSessionView({ ...legacy, is_current: false }, request)).toMatchObject({ device: 'Nieznane urządzenie', ip: null });
+      expect(toAccountSessionView({ ...legacy, is_current: false }, request, NOW)).toMatchObject({ device: 'Nieznane urządzenie', ip: null });
     });
 
     it('wpis logowania wygrywa z nagłówkami żądania', () => {
-      expect(toAccountSessionView({ ...base, is_current: true }, request)).toMatchObject({ device: 'iPhone (Safari)', ip: '83.21.104.x' });
+      expect(toAccountSessionView({ ...base, is_current: true }, request, NOW)).toMatchObject({ device: 'iPhone (Safari)', ip: '83.21.104.x' });
     });
 
     it('bez nagłówków żądania: nieznane urządzenie zamiast zgadywania', () => {
-      expect(toAccountSessionView(legacy)).toMatchObject({ device: 'Nieznane urządzenie', ip: null });
+      expect(toAccountSessionView(legacy, undefined, NOW)).toMatchObject({ device: 'Nieznane urządzenie', ip: null });
     });
   });
 });
