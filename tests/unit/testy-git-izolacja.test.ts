@@ -21,6 +21,7 @@ const VITEST = path.join(KATALOG, 'node_modules/.bin/vitest');
 // Test hooków żelaznego filtra jest na gałęzi filtra (#504); na `main` bez niego plik jest pomijany.
 const PLIKI: ReadonlyArray<{ plik: string; konfiguracja?: string }> = [
   { plik: 'tests/unit/napraw-hook.test.ts' },
+  { plik: 'tests/unit/hak-straznik-tekstow.test.ts' },
   { plik: 'tests/filtr/hooki.test.ts', konfiguracja: 'vitest.filtr.config.ts' },
 ].filter(({ plik }) => fs.existsSync(path.join(KATALOG, plik)));
 

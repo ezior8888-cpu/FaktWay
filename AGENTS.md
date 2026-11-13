@@ -188,8 +188,9 @@ gałąź i otwórz pull request zamiast walczyć z `main`.
 **Świeży worktree** (zależności, `.env.local`, dowiązanie `.agents/infra.env`,
 hook przed pushem) przygotowuje `bash scripts/dev/przygotuj-worktree.sh`.
 W Claude Code uruchamia go sam hook SessionStart; Codex woła go ręcznie.
-`git push` uruchamia `.githooks/pre-push` (adresy z `infra.env`, typy, eslint,
-`vitest related`; do ok. 3 minut, więc daj poleceniu dłuższy limit czasu).
+`git push` uruchamia `.githooks/pre-push` (adresy z `infra.env`, strażnik
+tekstów dla klienta, typy, eslint, `vitest related`; do ok. 3 minut, więc daj
+poleceniu dłuższy limit czasu).
 Pominięcie: `SKIP_PREPUSH=1 git push`.
 Dysk: `.next` w bezczynnych worktree (3–5 GB każdy) usuwa
 `bash scripts/dev/sprzataj-worktree.sh` (bez `--usun` tylko pokazuje).
