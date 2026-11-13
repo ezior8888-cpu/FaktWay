@@ -30,8 +30,9 @@ uruchamiasz po kolei, nigdy razem.
 | `src/wyglad/` | paleta (`paleta.ts`, bez React Native, kontrast sprawdza `tests/unit/mobile-kontrast.test.ts`; `kolory.ts` wybiera jasną albo ciemną), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
 | `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit (OFL, `LICENCJE.txt`; IBM Plex Mono usunięty w M4c, D15); ikony Remix zakładek i paska jako obrazy szablonowe |
 | `scripts/ikony-remix.cjs` | generuje `src/komponenty/ikony-remix.ts` z pakietu `@remixicon/react` strony; nową ikonę dopisz tam |
-| `src/lib/` | formatowanie i logika bez interfejsu; `api/` (od M7): kontrakt API strony (reeksport, `metro.config.js`), klient z ponowieniem po 401 (`rdzen.ts`, bez React Native), podpięcie pod sesję (`polaczenie.ts`); `dane/`: mapowanie wierszy bazy na model ekranów, zapytania do bazy, dane z poprzedniego otwarcia w plikach; `faktura/` (od M8): formularz faktury na treść `POST /faktury`, pole błędu serwera, nabywcy z ostatnich faktur, klucz zapisu. Pliki bez React Native (`api/rdzen.ts`, `api/bledy.ts`, `dane/mapowanie.ts`, `dane/pamiec.ts`, `faktura/wystawienie.ts`, `logowanie/token.ts`, `status-faktury.ts`) importują względnie, bo czytają je testy strony (`tests/unit/mobile-*.test.ts`) |
+| `src/lib/` | formatowanie i logika bez interfejsu; `api/` (od M7): kontrakt API strony (reeksport, `metro.config.js`), klient z ponowieniem po 401 (`rdzen.ts`, bez React Native), podpięcie pod sesję (`polaczenie.ts`); `dane/`: mapowanie wierszy bazy na model ekranów, zapytania do bazy, dane z poprzedniego otwarcia w plikach; `faktura/` (od M8): formularz faktury na treść `POST /faktury`, pole błędu serwera, nabywcy z ostatnich faktur, klucz zapisu; `wydatek/` (od M9): formularz sprawdzenia odczytu na treść `POST /wydatki/{id}/zatwierdzenie`, czekanie na odczyt; `skaner.ts` (od M9): skaner dokumentów. Pliki bez React Native (`api/rdzen.ts`, `api/bledy.ts`, `dane/mapowanie.ts`, `dane/pamiec.ts`, `faktura/wystawienie.ts`, `wydatek/zatwierdzenie.ts`, `logowanie/token.ts`, `status-faktury.ts`) importują względnie, bo czytają je testy strony (`tests/unit/mobile-*.test.ts`) |
 | `src/dane-przykladowe/` | dane do etapów M2 do M4 (zmyślone firmy, NIP testowy) |
+| `modules/` | lokalne moduły natywne Expo (autolinking z `./modules`, bez paczki z npm): od M9 `skaner-dokumentow` (VisionKit `VNDocumentCameraViewController`, tylko iOS; nakładka JS w `src/lib/skaner.ts`). Zmiana w Swift wymaga nowego buildu |
 
 ## Expo zmienia się z każdym SDK: nie ufaj pamięci
 
@@ -151,8 +152,14 @@ uruchamiasz po kolei, nigdy razem.
   zaliczka, rozliczenie, ponowna wysyłka odrzuconej, e-mail, PDF) nie mają
   jeszcze API: telefon mówi, gdzie to zrobić, i otwiera stronę
   (`komponenty/na-stronie.tsx`). Nie udawaj zapisu w pamięci.
-- Ekrany poza Fakturami i skrzynką KSeF (Pulpit, Wydatki, Księgowość, Więcej)
-  zostają na danych przykładowych do M9 i M10; stopka w Więcej mówi o tym klientowi.
+- Od M9 wydatki: lista z bazy (`pobierzWydatki`, 200 najnowszych według daty
+  dokumentu, ze śladu odczytu tylko klucze waluty), wydatek ze zdjęcia
+  (`wgrajDokument` z kluczem na zdjęcie, `stanOdczytu`, `zatwierdzKoszt` w
+  `stan/dane.tsx`). Waluta kwot to kopia reguły strony (`walutaKwotWydatku`,
+  zgodność sprawdza `tests/unit/mobile-wydatki.test.ts`). Wpis ręczny,
+  usunięcie i opis kosztu z KSeF odsyłają na stronę (`wydatekNaStronie`).
+- Ekrany poza Fakturami, skrzynką KSeF i Wydatkami (Pulpit, Księgowość,
+  Więcej) zostają na danych przykładowych do M10; stopka w Więcej mówi o tym klientowi.
 - `supabase.auth.onAuthStateChange` woła słuchacza wewnątrz blokady
   `supabase-js`: wywołanie klienta w słuchaczu czeka na samo siebie. Odłóż je
   (`setTimeout(…, 0)`), jak w `stan/dane.tsx`.
@@ -214,3 +221,23 @@ uruchamiasz po kolei, nigdy razem.
 - Narzędzie symulatora nie wpisze polskich znaków (wkleja, a symulator nie
   przyjmuje wklejenia z Maca); w obchodzie pisz bez nich albo dotknij
   podpowiedzi klawiatury.
+
+## Wydatek ze zdjęcia w symulatorze (od M9)
+
+- Symulator nie ma aparatu: `skanerDostepny()` daje `false`. Na prawdziwym
+  koncie „Skanuj dokument” proponuje galerię; na danych przykładowych daje
+  przykładowy paragon. Zdjęcie do galerii symulatora:
+  `xcrun simctl addmedia <udid> paragon.jpg` (dane zmyślone, nigdy prawdziwy
+  paragon firmy). Skaner sprawdza się tylko na iPhonie z aparatem.
+- Pełna droga potrzebuje strony (`next dev`), workera (odczyt OCR to zdarzenie
+  `ocr/process-photo`) i bazy z migracjami gałęzi (00202). Worker uruchamiasz
+  jak przy KSeF (wyżej), a odczyt woła model z `ANTHROPIC_API_KEY` z
+  `.env.local` strony; bez klucza zostaje `E2E_MOCK_ANTHROPIC=1` (stała
+  odpowiedź modelu, nie odczyt zdjęcia).
+- Plik zdjęcia idzie do magazynu S3 (`R2_*`): lokalnie atrapa w stylu
+  ścieżek (`R2_ENDPOINT=http://127.0.0.1:<port>`, `R2_FORCE_PATH_STYLE=true`,
+  dowolne `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+  `R2_BUCKET_NAME`) w zmiennych powłoki strony i workera. Nie wgrywaj zdjęć
+  do magazynu z `.env.local`, póki nie wiesz, dokąd wskazuje.
+- `POST /wydatki/zdjecie` jest poza proxy (`proxy.ts`); w dzienniku `next dev`
+  nie ma więc wpisu proxy dla tego żądania, tylko trasy.

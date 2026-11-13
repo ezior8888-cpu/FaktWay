@@ -109,6 +109,7 @@ function uploadCode(refusal: UploadRefusal): MobileApiErrorCode {
       return 'file_invalid';
     case 'timeout':
     case 'bad_body':
+    case 'length_required':
       return 'upload_incomplete';
     case 'rate_limited':
       return 'rate_limited';

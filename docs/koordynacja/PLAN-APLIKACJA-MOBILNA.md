@@ -99,9 +99,10 @@ zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 Każda sekcja panelu strony ma odpowiednik w aplikacji (`mobile/src/app/`).
 Od M7 na prawdziwym koncie z bazy są: firma i konto (`GET /konto`), faktury
 wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół); od M8 także
-wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu.
-Reszta ekranów zostaje na danych przykładowych do M9 (wydatki ze zdjęcia)
-i M10 (pozostałe); stopka w Więcej mówi o tym klientowi.
+wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu;
+od M9 wydatki (lista z bazy) i wydatek ze zdjęcia (skaner, odczyt, sprawdzenie
+odczytu i zapis). Reszta ekranów zostaje na danych przykładowych do M10;
+stopka w Więcej mówi o tym klientowi.
 
 | Strona (`app/(dashboard)/`) | Telefon | Trasy |
 |---|---|---|
@@ -306,6 +307,33 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   odrzucenia (wibracja). Korekta, zaliczka, rozliczenie, zmiana szkicu i
   ponowna wysyłka odrzuconej zostają na stronie do M10; nabywca z UE, PESEL i
   dane z GUS też.
+
+**Stan po M9 (13.11.2026).** Wydatek ze zdjęcia z telefonu:
+- Logika `reviewExpenseAction` i `getOcrJobStatusAction` wydzielona do
+  `lib/expenses/review.ts` (`reviewExpense`, z powodem odmowy dla telefonu
+  i opcją `refuseKsef`) i `lib/expenses/ocr-status.ts` (`readOcrJobStatus`);
+  akcje strony wołają je bez zmiany zachowania (test zgodności
+  `tests/unit/wydatki-lib-zgodnosc.test.ts`, zielony także na starej akcji).
+  Wgranie było w `lib/expenses/accept-upload.ts` od sesji 31 planu
+  skalowania; doszedł krok `onJobCreated` (klucz telefonu przed plikiem i kolejką).
+- Trasy (`lib/api/mobile/wydatki.ts`): `POST /wydatki/zdjecie` (multipart, pole
+  `plik`, poza proxy jak `/api/uploads/*`, ta sama bramka wgrań: rozmiar,
+  odczyt ciała, limit 30 wgrań na 10 minut, budżet bajtów; nagłówek
+  `Idempotency-Key` na jedno zdjęcie, 00202 `mobile_idempotency_keys.ocr_job_id`:
+  ponowienie oddaje to samo zadanie odczytu, inny plik z tym kluczem 409,
+  zadanie porzucone po kluczu czyści się po 5 minutach), `GET
+  /wydatki/odczyt/{id}` (stan odczytu; 503 to „pytaj dalej”, nie „wgraj
+  drugi raz”), `POST /wydatki/{id}/zatwierdzenie` (te same zasady co formularz
+  kosztu strony; koszt z KSeF odsyła na stronę). Kody `file_invalid`,
+  `upload_incomplete`, `expense_invalid`.
+- Telefon: systemowy skaner dokumentów (VisionKit, moduł lokalny
+  `mobile/modules/skaner-dokumentow`, jedna strona JPG, kilka PDF), galeria
+  (`expo-image-picker`), czekanie na odczyt co 2 s do 90 s, ekran „Sprawdź
+  odczyt” ze zdjęciem nad polami, VAT jako osobne pole, przełącznik „Kwoty są
+  w złotych” przy dokumencie w walucie bez kursu; lista Kosztów z bazy
+  (200 najnowszych według daty dokumentu, waluta kwot jak na stronie, kopia
+  reguły z testem zgodności). Wpis ręczny, usunięcie i opis kosztu z KSeF
+  zostają na stronie do M10.
 
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:

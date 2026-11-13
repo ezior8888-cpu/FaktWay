@@ -562,6 +562,12 @@ describe('POST /api/mobile/v1/wydatki/zdjecie', () => {
     expect(writes.filter((w) => w.table !== 'memberships')).toEqual([]);
   });
 
+  it('Content-Length nie liczbą: 411 upload_incomplete (telefon ponawia)', async () => {
+    const response = await wgraj(jpeg(), { contentLength: 'abc' });
+    expect(response.status).toBe(411);
+    expect((await errorOf(response)).code).toBe('upload_incomplete');
+  });
+
   it('nie multipart: 415 file_invalid, bez „Odśwież stronę” w komunikacie', async () => {
     const response = await zdjecieRoute(new Request('https://app.example.test/api/mobile/v1/wydatki/zdjecie', {
       method: 'POST',
