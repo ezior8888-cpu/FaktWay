@@ -62,6 +62,8 @@ export interface MobileLoginSession {
   sessionId: string | null;
   amrMethods: readonly string[];
   db: SupabaseClient;
+  /** Sesja właśnie wydana przez GoTrue (`POST /logowanie`): nie może mieć wpisu, więc bez sprawdzania. */
+  nowa?: boolean;
 }
 
 /**
@@ -74,7 +76,7 @@ export async function recordMobileLoginSession(session: MobileLoginSession): Pro
   // Token GoTrue zawsze ma `session_id`; bez niego wpisu nie da się połączyć z sesją ani odróżnić ponowienia.
   if (!sessionId) return 'no_session';
 
-  if (await isLoginRecorded(createAdminClient(), userId, sessionId)) return 'already_recorded';
+  if (!session.nowa && (await isLoginRecorded(createAdminClient(), userId, sessionId))) return 'already_recorded';
 
   // Firma wpisu jak przy logowaniu hasłem na stronie: ostatnio używana (dziennik firmy pokazuje logowania).
   const aktywnaFirma = await readMobileActiveFirm(session.db, userId);

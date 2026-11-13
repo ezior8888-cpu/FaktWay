@@ -61,8 +61,11 @@ export async function checkPasswordResetRateLimit(
  * - na e-mail: 10 na 15 minut z dowolnych adresów. Hamuje rozproszone zgadywanie
  *   hasła jednego konta. Koszt: ktoś, kto zna adres, może na 15 minut zablokować
  *   logowanie tego konta w aplikacji; strona (z Turnstile) działa wtedy dalej.
+ *   Odmowa tu się nie liczy (`countDenied: false`): inaczej jedna próba co kilka
+ *   minut z dowolnego adresu trzymałaby blokadę cudzego konta bez końca.
  *
- * Każde wywołanie liczy się w oknie, także odmowa (jak `login` strony).
+ * Na adresie IP odmowa liczy się w oknie (jak `login` strony): adres należy do
+ * zgadującego, więc dalsze próby przedłużają blokadę tylko jemu.
  */
 export const MOBILE_LOGIN_RATE_LIMITS = {
   ip: { limit: 20, windowSeconds: 15 * 60 },
@@ -77,7 +80,11 @@ export const MOBILE_LOGIN_RATE_LIMITS = {
 export async function checkMobileLoginRateLimits(ip: string, email: string): Promise<RateLimitResult> {
   const byIp = await checkRateLimit({ bucket: 'mobile_login_ip', identifier: ip, ...MOBILE_LOGIN_RATE_LIMITS.ip });
   if (!byIp.allowed || byIp.fallback) return byIp;
-  const byEmail = await checkRateLimit({ bucket: 'mobile_login_email', identifier: email, ...MOBILE_LOGIN_RATE_LIMITS.email });
+  const byEmail = await checkRateLimit({ bucket: 'mobile_login_email',
+    identifier: email,
+    ...MOBILE_LOGIN_RATE_LIMITS.email,
+    countDenied: false,
+  });
   if (!byEmail.allowed || byEmail.fallback) return byEmail;
   return checkLoginRateLimit(ip, email);
 }
