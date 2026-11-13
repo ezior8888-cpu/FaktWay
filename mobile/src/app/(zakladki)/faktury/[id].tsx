@@ -1,4 +1,6 @@
+import * as Haptics from 'expo-haptics';
 import { Stack, useIsPreview, useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
 import { bruttoPozycji, NAZWA_RODZAJU, nettoPozycji, SPRZEDAWCA, stawkaTekst, vatPozycji, type Faktura, type StatusKsef } from '@/dane-przykladowe';
@@ -50,13 +52,16 @@ function wedlugStawek(f: Faktura) {
 export default function EkranFaktury() {
   const kolory = useKolory();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `uwaga`: szkic zapisany z formularza, ale kolejka KSeF odmówiła (M8); zdanie serwera, co zrobić.
+  const { id, uwaga } = useLocalSearchParams<{ id: string; uwaga?: string }>();
   const { faktury, przelaczZaplate, wyslijDoKsef, wrocDoSzkicu, usunSzkic, potwierdzenie, pokazPotwierdzenie, dzis, dane } = useStanFaktur();
   const zBazy = dane.zrodlo === 'baza';
   // W podglądzie z przytrzymania wiersza ekran nie ustawia paska nawigacji.
   const podglad = useIsPreview();
   const { tytul, onScroll, scrollEventThrottle } = useTytulNaGradiencie();
   const f = faktury.find((x) => x.id === id);
+  const [wysylanie, setWysylanie] = useState(false);
+  const [bladWysylki, setBladWysylki] = useState<string>();
 
   if (!f) {
     // Link do faktury przy pierwszym wczytaniu listy z bazy: szkielet, zanim powiemy, że jej nie ma.
@@ -97,6 +102,24 @@ export default function EkranFaktury() {
     });
 
   const edytuj = () => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj: f.rodzaj, edytuj: f.id, wprost: '1' } });
+
+  // Szkic do KSeF: na prawdziwym koncie przez API (M8), z kółkiem w przycisku i zdaniem serwera przy odmowie.
+  const wyslij = async () => {
+    if (wysylanie) return;
+    setWysylanie(true);
+    setBladWysylki(undefined);
+    const wynik = await wyslijDoKsef(f.id);
+    setWysylanie(false);
+    if (wynik.ok) {
+      if (zBazy) pokazPotwierdzenie(f.id);
+      return;
+    }
+    if (zBazy) {
+      setBladWysylki(wynik.komunikat);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+  };
+  const powodBezWysylki = f.statusKsef === 'robocza' ? (bladWysylki ?? uwaga) : undefined;
 
   const stawki = wedlugStawek(f);
 
@@ -199,18 +222,25 @@ export default function EkranFaktury() {
           />
         ) : null}
 
-        {!podglad && !zBazy && (f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona') ? (
+        {!podglad && powodBezWysylki ? (
+          <Sekcja naglowek="Nie wysłaliśmy do KSeF" stopka="Szkic jest zapisany. Gdy to poprawisz, wyślij go jeszcze raz.">
+            <Wiersz tytul={powodBezWysylki} ikona="alert-fill" ikonaKolor="ostrzezenie" />
+          </Sekcja>
+        ) : null}
+
+        {!podglad && ((!zBazy && f.statusKsef === 'odrzucona') || f.statusKsef === 'robocza') ? (
           <View style={styles.akcja}>
             {f.statusKsef === 'robocza' ? (
               <>
-                <PrzyciskGlowny tytul="Wyślij do KSeF" ikona="send-plane-line" onPress={() => wyslijDoKsef(f.id)} />
-                <PrzyciskGlowny tytul="Edytuj" ikona="pencil-line" wariant="drugorzedny" onPress={edytuj} />
+                <PrzyciskGlowny tytul="Wyślij do KSeF" ikona="send-plane-line" trwa={wysylanie} onPress={() => void wyslij()} />
+                {/* Zmiana szkicu z telefonu na prawdziwym koncie dochodzi w M10; do tego czasu na stronie. */}
+                <PrzyciskGlowny tytul="Edytuj" ikona="pencil-line" wariant="drugorzedny" onPress={zBazy ? () => naStronie('edycja', f.id) : edytuj} />
               </>
             ) : (
               // Odrzucona: najpierw poprawka (np. NIP), ponowna wysyłka bez zmian jako druga droga.
               <>
                 <PrzyciskGlowny tytul="Popraw fakturę" ikona="pencil-line" onPress={edytuj} />
-                <PrzyciskGlowny tytul="Wyślij ponownie bez zmian" ikona="send-plane-line" wariant="drugorzedny" onPress={() => wyslijDoKsef(f.id)} />
+                <PrzyciskGlowny tytul="Wyślij ponownie bez zmian" ikona="send-plane-line" wariant="drugorzedny" onPress={() => void wyslij()} />
               </>
             )}
           </View>

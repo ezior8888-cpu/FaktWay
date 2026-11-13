@@ -23,11 +23,21 @@ import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { Tekst } from '@/komponenty/tekst';
+import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+import {
+  doFakturyTelefonu,
+  kluczZapisu,
+  liczbaZPola,
+  nabywcyZFaktur,
+  poleFormularza,
+  type NabywcaZFaktury,
+  type PozycjaFormularza,
+} from '@/lib/faktura/wystawienie';
 import { dataKrotka, dniMiedzy, doPola, groszeZPola as grosze, kwota } from '@/lib/format';
-import { useStanFaktur } from '@/stan/faktury';
+import { usePodpowiedzFaktury } from '@/stan/dane';
+import { useStanFaktur, type ZapisNaKoncie } from '@/stan/faktury';
 import { useKolory } from '@/wyglad/kolory';
 import { CEL_DOTYKU, MARGINES, ODSTEP, PROMIEN_PIGULKI } from '@/wyglad/odstepy';
-import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
 
 const TYTUL: Record<RodzajFaktury, string> = {
   vat: 'Nowa faktura',
@@ -50,8 +60,6 @@ const STAWKI_ZWYKLE = [
 const STAWKI_ZALICZKI = STAWKI_ZWYKLE.slice(0, 4);
 const STAWKI_ROZLICZENIA = STAWKI_ZWYKLE.filter((s) => s.wartosc !== 'zw');
 
-type PozycjaFormularza = { nazwa: string; ilosc: string; jednostka: string; cena: string; stawka: string };
-
 function liczba(tekst: string): number {
   return Number(tekst.replace(',', '.'));
 }
@@ -66,7 +74,9 @@ function doPozycji(p: PozycjaFormularza): Pozycja {
 
 /** Pozycja zapisanej faktury z powrotem w polach formularza (wzór, korekta, edycja). */
 function zPozycji(p: Pozycja): PozycjaFormularza {
-  return { nazwa: p.nazwa, ilosc: String(p.ilosc), jednostka: p.jednostka, cena: doPola(p.cenaNetto), stawka: String(p.stawkaVat) };
+  // Stawka bez procentu z bazy („zw”, „np”, „oo”) zostaje sobą, nie 0% (M8: kopia prawdziwej faktury).
+  const opis = STAWKI_ZWYKLE.find((s) => s.wartosc === p.stawkaOpis)?.wartosc;
+  return { nazwa: p.nazwa, ilosc: String(p.ilosc).replace('.', ','), jednostka: p.jednostka, cena: doPola(p.cenaNetto), stawka: opis ?? String(p.stawkaVat) };
 }
 
 /** Termin z zapisanej faktury na najbliższą opcję wyboru (7, 14, 30 dni). */
@@ -82,11 +92,24 @@ function dodajDni(iso: string, dni: number): string {
 
 const PUSTA: PozycjaFormularza = { nazwa: '', ilosc: '1', jednostka: 'szt', cena: '', stawka: '23' };
 
-/** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
+/** Kontrahenci przykładowi w kształcie nabywców z faktur (jedna lista do wyboru w formularzu). */
+const NABYWCY_PRZYKLADOWI: NabywcaZFaktury[] = KONTRAHENCI.map((k: Kontrahent) => {
+  const [adres1, adres2] = k.adres.split(', ');
+  return { nazwa: k.nazwa, nip: k.nip, osoba: false, adres1: adres1 ?? '', adres2: adres2 ?? '', email: k.email ?? '', terminDni: k.terminDni };
+});
+
+/**
+ * Na prawdziwym koncie (M8) z telefonu wystawisz zwykłą fakturę VAT (szkic albo
+ * wysyłka do KSeF). Korekta, zaliczka, rozliczenie i zmiana szkicu idą do M10
+ * na stronę: ekran mówi, gdzie to zrobić.
+ */
 export default function EkranFormularzaFaktury() {
   const { dane } = useStanFaktur();
-  if (dane.zrodlo === 'baza') return <EkranTylkoNaStronie co="wystawienie" />;
-  return <EkranFormularzaFakturyPrzyklad />;
+  const { rodzaj, edytuj } = useLocalSearchParams<{ rodzaj: string; edytuj?: string }>();
+  if (dane.zrodlo === 'baza' && (rodzaj !== 'vat' || edytuj)) {
+    return <EkranTylkoNaStronie co={edytuj ? 'edycja' : 'wystawienie'} idFaktury={edytuj} />;
+  }
+  return <FormularzFaktury />;
 }
 
 /**
@@ -97,39 +120,54 @@ export default function EkranFormularzaFaktury() {
  * znany kontrahent i wypełniona pozycja zwinięte do wiersza, numer i daty jako
  * wiersze z wartościami, na dole przypięte „Podgląd” i „Wyślij do KSeF” z kwotą.
  */
-function EkranFormularzaFakturyPrzyklad() {
+function FormularzFaktury() {
   const router = useRouter();
   const { rodzaj: rodzajParam, wzor, z, edytuj, wprost } = useLocalSearchParams<{ rodzaj: string; wzor?: string; z?: string; edytuj?: string; wprost?: string }>();
   const rodzaj: RodzajFaktury = (['vat', 'zaliczkowa', 'rozliczajaca', 'korygujaca'] as const).find((r) => r === rodzajParam) ?? 'vat';
-  const { faktury, dodajFakture, zastapFakture, pokazPotwierdzenie } = useStanFaktur();
+  const { faktury, dodajFakture, zastapFakture, pokazPotwierdzenie, dane, dzis } = useStanFaktur();
+  // Prawdziwe konto (M8): zwykła faktura przez API, nabywcy z ostatnich faktur, numer z podpowiedzi serwera.
+  const zBazy = dane.zrodlo === 'baza';
+  const podpowiedz = usePodpowiedzFaktury();
   const kolory = useKolory();
   const stylKarty = useStylKarty();
   // Edycja szkicu albo odrzuconej faktury: te same pola, zapis w miejscu starej.
   const edytowana = faktury.find((f) => f.id === edytuj && (f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona'));
   const wzorFaktury = edytowana ?? faktury.find((f) => f.id === wzor);
+  const nabywcy = zBazy ? nabywcyZFaktur(faktury) : NABYWCY_PRZYKLADOWI;
+  const dzien = zBazy ? dzis : DZIS;
 
-  const startowy = KONTRAHENCI.find((k) => k.nazwa === (wzorFaktury?.kontrahent ?? faktury.find((f) => f.id === z)?.kontrahent));
-  const [ulicaStart, miastoStart] = startowy?.adres.split(', ') ?? [];
-  const [numer, setNumer] = useState(edytowana?.numer ?? `${PREFIKS[rodzaj]}/11/2026/${faktury.filter((f) => f.rodzaj === rodzaj).length + 1}`);
-  const [dataWyst, setDataWyst] = useState(edytowana?.dataWystawienia ?? DZIS);
-  const [dataSprz, setDataSprz] = useState(edytowana?.dataWystawienia ?? DZIS);
+  const startowy = nabywcy.find((k) => k.nazwa === (wzorFaktury?.kontrahent ?? faktury.find((f) => f.id === z)?.kontrahent));
+  const [numer, setNumer] = useState(edytowana?.numer ?? (zBazy ? '' : `${PREFIKS[rodzaj]}/11/2026/${faktury.filter((f) => f.rodzaj === rodzaj).length + 1}`));
+  const [dataWyst, setDataWyst] = useState(edytowana?.dataWystawienia ?? dzien);
+  const [dataSprz, setDataSprz] = useState(edytowana?.dataWystawienia ?? dzien);
   const [termin, setTermin] = useState(
     edytowana ? najblizszyTermin(dniMiedzy(edytowana.dataWystawienia, edytowana.terminPlatnosci)) : String(startowy?.terminDni ?? 14),
   );
-  const [rodzajNabywcy, setRodzajNabywcy] = useState<'firma' | 'osoba' | 'ue'>('firma');
+  const [rodzajNabywcy, setRodzajNabywcy] = useState<'firma' | 'osoba' | 'ue'>(startowy?.osoba ? 'osoba' : 'firma');
   const [nip, setNip] = useState(edytowana?.nipKontrahenta ?? startowy?.nip ?? '');
   const [nazwa, setNazwa] = useState(edytowana?.kontrahent ?? startowy?.nazwa ?? '');
-  const [adres1, setAdres1] = useState(ulicaStart ?? '');
-  const [adres2, setAdres2] = useState(miastoStart ?? '');
+  const [adres1, setAdres1] = useState(startowy?.adres1 ?? '');
+  const [adres2, setAdres2] = useState(startowy?.adres2 ?? '');
   const [email, setEmail] = useState(startowy?.email ?? '');
   const [metoda, setMetoda] = useState<MetodaPlatnosci>(edytowana?.metodaPlatnosci ?? 'Przelew');
-  const [rachunek, setRachunek] = useState(edytowana?.rachunek ?? SPRZEDAWCA.rachunek);
+  // Rachunek z ostatniej faktury z rachunkiem (strona podpowiada go tak samo przy „Wypełnij z ostatniej”).
+  const [rachunek, setRachunek] = useState(edytowana?.rachunek ?? (zBazy ? (faktury.find((f) => f.rachunek)?.rachunek ?? '') : SPRZEDAWCA.rachunek));
   const [mpp, setMpp] = useState(edytowana?.mpp ?? false);
   const [pozycje, setPozycje] = useState<PozycjaFormularza[]>(
     wzorFaktury ? wzorFaktury.pozycje.map(zPozycji) : [PUSTA],
   );
   const [uwagi, setUwagi] = useState(edytowana?.uwagi ?? '');
   const [bledy, setBledy] = useState<Record<string, string>>({});
+  // Jeden klucz zapisu na otwarcie formularza: ponowienie po zerwanym połączeniu nie wystawi drugiej faktury.
+  const [klucz] = useState(() => kluczZapisu());
+  const [trwa, setTrwa] = useState<'wyslij' | 'szkic' | null>(null);
+  // Podpowiedź serwera (numer, zwolnienie z VAT) przychodzi po otwarciu: wpisujemy ją, póki klient nic nie zmienił.
+  const [podpowiedzWpisana, setPodpowiedzWpisana] = useState(false);
+  if (zBazy && podpowiedz.gotowe && !podpowiedzWpisana && !edytowana) {
+    setPodpowiedzWpisana(true);
+    if (podpowiedz.numer && !numer) setNumer(podpowiedz.numer);
+    if (podpowiedz.zwolnienieVat && !wzorFaktury) setPozycje((l) => l.map((p) => (p === PUSTA ? { ...p, stawka: 'zw' } : p)));
+  }
   // Zwinięte części formularza (Revolut Business): rozwija je dotknięcie albo błąd w środku.
   const [edycjaNabywcy, setEdycjaNabywcy] = useState(false);
   const [edycjaSzczegolow, setEdycjaSzczegolow] = useState(false);
@@ -154,9 +192,12 @@ function EkranFormularzaFakturyPrzyklad() {
   // Zamknięcie ze zmianami pyta „Odrzucić zmiany?” (ZASADY-DESIGNU.md, sekcja 6), także gestem w dół.
   const migawka = JSON.stringify([numer, dataWyst, dataSprz, termin, rodzajNabywcy, nip, nazwa, adres1, adres2, email, metoda, rachunek, mpp, pozycje, uwagi,
     wartoscUmowy, kwotaZaliczki, stawkaZaliczki, realizacja, opisZaliczki, wybraneZaliczki, zrodloId, typKorekty, typKsef, przyczyna]);
-  const [migawkaStartowa] = useState(migawka);
+  // Na prawdziwym koncie punkt startowy to formularz po wpisaniu podpowiedzi serwera (to nie zmiana klienta).
+  const [migawkaStartowa, setMigawkaStartowa] = useState<string | null>(zBazy && !edytowana ? null : migawka);
+  if (migawkaStartowa === null && podpowiedzWpisana) setMigawkaStartowa(migawka);
+  const zmienione = migawkaStartowa !== null && migawka !== migawkaStartowa;
   const [bezPytania, setBezPytania] = useState(false);
-  const wylaczOchrone = usePreventRemove(!bezPytania && migawka !== migawkaStartowa, ({ repeat }) => {
+  const wylaczOchrone = usePreventRemove(!bezPytania && zmienione, ({ repeat }) => {
     const odrzuc = () => {
       setBezPytania(true);
       repeat();
@@ -177,7 +218,7 @@ function EkranFormularzaFakturyPrzyklad() {
   });
 
   const wypelnijZ = (nazwaK: string) => {
-    const k: Kontrahent | undefined = KONTRAHENCI.find((x) => x.nazwa === nazwaK);
+    const k = nabywcy.find((x) => x.nazwa === nazwaK);
     if (!k) {
       // „Nowy nabywca”: czyste pola zamiast danych poprzednio wybranej firmy.
       setNip('');
@@ -189,11 +230,11 @@ function EkranFormularzaFakturyPrzyklad() {
     }
     setNip(k.nip);
     setNazwa(k.nazwa);
-    const [ulica, miasto] = k.adres.split(', ');
-    setAdres1(ulica ?? '');
-    setAdres2(miasto ?? '');
-    setEmail(k.email ?? '');
+    setAdres1(k.adres1);
+    setAdres2(k.adres2);
+    setEmail(k.email);
     setTermin(String(k.terminDni));
+    if (rodzaj === 'vat') setRodzajNabywcy(k.osoba ? 'osoba' : 'firma');
   };
 
   const pozycjeGotowe = pozycje.map(doPozycji);
@@ -225,14 +266,17 @@ function EkranFormularzaFakturyPrzyklad() {
     if ((rodzaj === 'vat' || rodzaj === 'rozliczajaca' || (rodzaj === 'korygujaca' && typKorekty !== 'anulowanie')) && pozycje.some((p) => !p.nazwa.trim()))
       b.pozycje = 'Każda pozycja potrzebuje nazwy.';
     if (mpp && !rachunek.trim()) b.rachunek = 'MPP wymaga numeru rachunku.';
+    // Prawdziwe konto: liczby idą do serwera bez zaokrąglania, więc puste albo błędne pole mówimy od razu.
+    if (zBazy && !b.pozycje && pozycje.some((p) => !(liczbaZPola(p.ilosc) > 0) || !(liczbaZPola(p.cena) >= 0)))
+      b.pozycje = 'Każda pozycja potrzebuje ilości i ceny netto.';
     setBledy(b);
     const ok = Object.keys(b).length === 0;
     if (!ok) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     return ok;
   };
 
-  const zapisz = (wyslij: boolean) => {
-    if (!sprawdz()) return;
+  const zapisz = async (wyslij: boolean) => {
+    if (trwa || !sprawdz()) return;
     const pozycjeFaktury: Pozycja[] =
       rodzaj === 'zaliczkowa'
         ? [{ nazwa: opisZaliczki.trim() || 'Zaliczka', ilosc: 1, jednostka: 'usł.', cenaNetto: zaliczkaNetto, stawkaVat: stawkaProcent(stawkaZaliczki) }]
@@ -268,18 +312,42 @@ function EkranFormularzaFakturyPrzyklad() {
       mpp,
       uwagi: [rodzaj === 'korygujaca' ? `Przyczyna korekty: ${przyczyna.trim()}` : '', uwagi.trim()].filter(Boolean).join('\n') || undefined,
     };
+    if (edytowana) {
+      setBezPytania(true);
+      wylaczOchrone();
+      zastapFakture(edytowana.id, nowa, wyslij);
+      router.dismissTo('/faktury');
+      if (wyslij) {
+        pokazPotwierdzenie(edytowana.id);
+        router.push({ pathname: '/faktury/[id]', params: { id: edytowana.id } });
+      }
+      return;
+    }
+    const naKoncie: ZapisNaKoncie | undefined = zBazy
+      ? {
+          klucz,
+          faktura: doFakturyTelefonu({
+            numer, dataWystawienia: dataWyst, dataSprzedazy: dataSprz, terminDni: Number(termin), rodzajNabywcy: rodzajNabywcy === 'osoba' ? 'osoba' : 'firma',
+            nip, nazwa, adres1, adres2, email, metoda, rachunek, mpp, pozycje, uwagi,
+          }),
+        }
+      : undefined;
+    setTrwa(wyslij ? 'wyslij' : 'szkic');
+    const wynik = await dodajFakture(nowa, wyslij, naKoncie);
+    setTrwa(null);
+    if (!wynik.ok) {
+      // Zdanie serwera (te same zasady co strona) pod polem, którego dotyczy, i na liście nad przyciskiem.
+      const pole = poleFormularza(wynik.pole);
+      setBledy({ [pole === 'ogolny' ? 'serwer' : pole]: wynik.komunikat });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
     setBezPytania(true);
     wylaczOchrone();
-    let id: string;
-    if (edytowana) {
-      zastapFakture(edytowana.id, nowa, wyslij);
-      id = edytowana.id;
-    } else id = dodajFakture(nowa, wyslij);
     router.dismissTo('/faktury');
-    if (wyslij) {
-      pokazPotwierdzenie(id);
-      router.push({ pathname: '/faktury/[id]', params: { id } });
-    }
+    // Szkic zapisany, ale kolejka KSeF odmówiła: szczegół szkicu mówi dlaczego.
+    if (wyslij && !wynik.uwaga) pokazPotwierdzenie(wynik.id);
+    if (wyslij || wynik.uwaga) router.push({ pathname: '/faktury/[id]', params: { id: wynik.id, ...(wynik.uwaga ? { uwaga: wynik.uwaga } : {}) } });
   };
 
   const przyciskWyslij = rodzaj === 'zaliczkowa' ? 'Wyślij zaliczkę' : rodzaj === 'korygujaca' ? 'Wyślij korektę' : 'Wyślij do KSeF';
@@ -293,7 +361,7 @@ function EkranFormularzaFakturyPrzyklad() {
           ? zmianaKorekty
           : sumaNetto + sumaVat;
   const terminData = dodajDni(dataWyst, Number(termin));
-  const znanyNabywca = KONTRAHENCI.some((k) => k.nazwa === nazwa);
+  const znanyNabywca = nabywcy.some((k) => k.nazwa === nazwa);
   const nabywcaZwiniety = znanyNabywca && !edycjaNabywcy && !bledy.nazwa && !bledy.nip && !bledy.adres;
   const szczegolyZwiniete = rodzaj !== 'korygujaca' && !edycjaSzczegolow && !bledy.numer;
   const mamPozycje = !(rodzaj === 'zaliczkowa' || (rodzaj === 'korygujaca' && (!zrodlo || typKorekty === 'anulowanie')));
@@ -335,7 +403,7 @@ function EkranFormularzaFakturyPrzyklad() {
         </Stack.Toolbar>
       ) : null}
       <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button onPress={() => zapisz(false)}>Szkic</Stack.Toolbar.Button>
+        <Stack.Toolbar.Button onPress={() => void zapisz(false)}>{trwa === 'szkic' ? 'Zapisujemy…' : 'Szkic'}</Stack.Toolbar.Button>
       </Stack.Toolbar>
 
       <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: WYSOKOSC_PASKA + ODSTEP.xl }}>
@@ -412,11 +480,13 @@ function EkranFormularzaFakturyPrzyklad() {
               </Sekcja>
             ) : null}
             {rodzaj !== 'korygujaca' && !nabywcaZwiniety ? (
-              <Sekcja naglowek={rodzaj === 'vat' ? 'Nabywca' : 'Nabywca (B2B)'} stopka="Dane firmy z Polski uzupełnimy z GUS po wpisaniu NIP.">
+              <Sekcja
+                naglowek={rodzaj === 'vat' ? 'Nabywca' : 'Nabywca (B2B)'}
+                stopka={zBazy ? 'Na liście są nabywcy z ostatnich faktur. Dane z GUS po NIP uzupełnisz na faktway.pl.' : 'Dane firmy z Polski uzupełnimy z GUS po wpisaniu NIP.'}>
                 <PoleWyboru
                   etykieta="Kontrahent"
-                  wartosc={KONTRAHENCI.some((k) => k.nazwa === nazwa) ? nazwa : ''}
-                  opcje={[{ wartosc: '', etykieta: 'Nowy nabywca' }, ...KONTRAHENCI.map((k) => ({ wartosc: k.nazwa, etykieta: k.nazwa }))]}
+                  wartosc={znanyNabywca ? nazwa : ''}
+                  opcje={[{ wartosc: '', etykieta: 'Nowy nabywca' }, ...nabywcy.map((k) => ({ wartosc: k.nazwa, etykieta: k.nazwa }))]}
                   onZmiana={(n) => {
                     wypelnijZ(n);
                     // Wybrany znany kontrahent od razu zwija się do jednego wiersza.
@@ -430,7 +500,8 @@ function EkranFormularzaFakturyPrzyklad() {
                     opcje={[
                       { wartosc: 'firma', etykieta: 'Firma z Polski (NIP)' },
                       { wartosc: 'osoba', etykieta: 'Osoba prywatna' },
-                      { wartosc: 'ue', etykieta: 'Firma z UE (VAT-UE)' },
+                      // Nabywca z UE (VAT-UE, np. II) na prawdziwym koncie na faktway.pl (M10).
+                      ...(zBazy ? [] : [{ wartosc: 'ue' as const, etykieta: 'Firma z UE (VAT-UE)' }]),
                     ]}
                     onZmiana={setRodzajNabywcy}
                   />
@@ -445,7 +516,7 @@ function EkranFormularzaFakturyPrzyklad() {
                     blad={bledy.nip}
                   />
                 ) : null}
-                {/^\d{10}$/.test(nip.replace(/\D/g, '')) && !nazwa ? (
+                {!zBazy && /^\d{10}$/.test(nip.replace(/\D/g, '')) && !nazwa ? (
                   <Wiersz tytul="Uzupełnij danymi z GUS" akcja onPress={() => wypelnijZ(KONTRAHENCI[0]?.nazwa ?? '')} />
                 ) : null}
                 <PoleTekstowe etykieta="Nazwa" wartosc={nazwa} onZmiana={setNazwa} podpowiedz="Nazwa firmy" blad={bledy.nazwa} />
@@ -625,7 +696,7 @@ function EkranFormularzaFakturyPrzyklad() {
           // Błędy stoją pod polami wyżej; tu ich lista nad przyciskiem, żeby nie trzeba było ich szukać.
           <View style={styles.bledy} accessibilityLiveRegion="polite">
             <Tekst styl="subheadline" kolor="blad" pogrubiony>
-              Do poprawy wyżej:
+              {bledy.serwer && Object.keys(bledy).length === 1 ? 'Nie zapisaliśmy faktury:' : 'Do poprawy wyżej:'}
             </Tekst>
             {Object.values(bledy).map((b) => (
               <Tekst key={b} styl="subheadline" kolor="blad">
@@ -647,7 +718,7 @@ function EkranFormularzaFakturyPrzyklad() {
           <Ikona nazwa={podglad ? 'pencil-line' : 'eye-line'} rozmiar={22} kolor={kolory.etykieta} />
         </Dotyk>
         <View style={styles.rozciagniety}>
-          <PrzyciskGlowny tytul={`${przyciskWyslij} · ${kwota(doZaplatyFormularza)}`} ikona="send-plane-line" onPress={() => zapisz(true)} />
+          <PrzyciskGlowny tytul={`${przyciskWyslij} · ${kwota(doZaplatyFormularza)}`} ikona="send-plane-line" trwa={trwa === 'wyslij'} onPress={() => void zapisz(true)} />
         </View>
       </View>
     </>

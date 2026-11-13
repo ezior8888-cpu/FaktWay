@@ -209,6 +209,9 @@ export function fakturaZBazy(w: WierszFaktury): Faktura {
     waluta,
     sprzedawca: strona,
     adresKontrahenta: adres(nabywca?.address),
+    ...(tekst(nabywca?.address?.addressLine1) || tekst(nabywca?.address?.addressLine2)
+      ? { adresKontrahentaLinie: { linia1: tekst(nabywca?.address?.addressLine1), linia2: tekst(nabywca?.address?.addressLine2) } }
+      : {}),
     emailKontrahenta: tekst(nabywca?.email) || undefined,
     dataSprzedazy: tekst(w.sale_date) || undefined,
     zaplacono: !zaplacona && zaplacono > 0 ? zaplacono : undefined,

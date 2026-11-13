@@ -59,6 +59,8 @@ export type Faktura = {
   waluta?: string;
   sprzedawca?: Strona;
   adresKontrahenta?: string;
+  /** Adres nabywcy w dwóch wierszach jak na fakturze (dane z bazy): do nowej faktury dla tego kontrahenta (M8). */
+  adresKontrahentaLinie?: { linia1: string; linia2: string };
   emailKontrahenta?: string;
   dataSprzedazy?: string;
   bank?: string;
