@@ -35,7 +35,10 @@ export type RateLimitBucket =
   /** Publiczne API: zapis (POST) kluczem, osobno od zapytań (krok 7.1, część 2). */
   | 'api_v1_write'
   /** Wgrania plików (koszt, import), klucz `rodzaj:firma:osoba` — `lib/uploads/server.ts`. */
-  | 'file_upload';
+  | 'file_upload'
+  /** API aplikacji na telefon (`lib/api/mobile/auth.ts`): każde żądanie z adresu i każde osoby. */
+  | 'mobile_api_ip'
+  | 'mobile_api_user';
 
 export interface RateLimitConfig {
   /** Logiczny kubełek — jednoczęściowy prefix klucza Redis. */

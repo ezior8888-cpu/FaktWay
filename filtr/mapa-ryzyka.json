@@ -758,6 +758,7 @@
         "lib/audit/**",
         "lib/feature-flags/**",
         "lib/api/v1/{auth,pagination,scopes,token}.ts",
+        "lib/api/mobile/{auth,sesja}.ts",
         "lib/webhooks/{secret-box,signature,types}.ts"
       ]
     },
