@@ -232,7 +232,7 @@ export function LineItemsSection({
                     </select>
                   </div>
                   {bladStawki(index) ? (
-                    <FieldErrorText fieldId={`line-${index}-vat-rate`} className="col-span-2 mt-0">
+                    <FieldErrorText fieldId={`line-${index}-vat-rate`} className="col-span-2 mt-0" iconClassName="shrink-0">
                       {bladStawki(index)}
                     </FieldErrorText>
                   ) : null}

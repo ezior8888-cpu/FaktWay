@@ -26,17 +26,20 @@ export function FieldErrorText({
   fieldId,
   className,
   icon = true,
+  iconClassName,
   children,
 }: {
   fieldId: string;
   className?: string;
   /** Ikona ostrzeżenia (ozdobna, `aria-hidden`); korekta ma tekst bez ikony. */
   icon?: boolean;
+  /** Dodatkowe klasy ikony, gdy dotychczasowy akapit je miał (np. `shrink-0` w kartach pozycji). */
+  iconClassName?: string;
   children: ReactNode;
 }) {
   return (
     <p id={errorIdFor(fieldId)} role="alert" className={cn(errorTextClass, className)}>
-      {icon ? <AlertCircle aria-hidden="true" className="h-3 w-3" /> : null}
+      {icon ? <AlertCircle aria-hidden="true" className={cn('h-3 w-3', iconClassName)} /> : null}
       {children}
     </p>
   );
