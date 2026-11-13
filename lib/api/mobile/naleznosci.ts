@@ -200,6 +200,22 @@ export async function reminderPreviewFromMobile(caller: MobileCaller, invoiceId:
 export const REMINDER_DISPATCH_FAILED =
   'Nie zleciliśmy wysyłki tego przypomnienia. Przygotuj nowy podgląd i spróbuj ponownie. Jeśli błąd się powtórzy, sprawdź status przypomnienia na faktway.pl.';
 
+/** Podgląd wygasł albo zniknął przed zgodą: klient przygotowuje nowy. */
+export const REMINDER_PREVIEW_EXPIRED = 'Ten podgląd już nie obowiązuje. Przygotuj przypomnienie jeszcze raz i sprawdź je przed zgodą.';
+
+/**
+ * Telefon nie ma Flo (plan D13), więc zdania wykonawcy w pierwszej osobie
+ * („Przygotuję”, „zgłosiłem”, „Nie udało mi się”) zamieniamy na to, co zrobić.
+ * Rozstrzyga powód odmowy, nie treść: nowe zdanie wykonawcy nie przecieknie.
+ */
+export function approvalRefusalForPhone(result: { reason: 'stale' | 'expired' | 'blocked'; message: string }): string {
+  if (result.message === EXECUTION_FAILED_MESSAGE) return REMINDER_DISPATCH_FAILED;
+  if (result.reason === 'expired') return REMINDER_PREVIEW_EXPIRED;
+  // `blocked` z wykonawcy bywa w pierwszej osobie (nieznany rodzaj); zdania strony przed wykonaniem są bezosobowe.
+  if (/\b(mi|zgłosiłem|rozpoznaję|przygotuję)\b/i.test(result.message)) return REMINDER_DISPATCH_FAILED;
+  return result.message;
+}
+
 const zatwierdzenieSchema = z.object({ wersja: z.string(), tresc: z.string().max(20_000) }).strict();
 
 /** `POST /api/mobile/v1/przypomnienia/{propozycja}/zatwierdz`: zgoda na obejrzaną wersję. */
@@ -221,11 +237,7 @@ export async function approveReminderFromMobile(caller: MobileCaller, proposalId
     { editedBody: parsed.data.tresc },
     { onlyKind: 'payment.chase' },
   );
-  if (!result.ok) {
-    // Telefon nie ma Flo (plan D13): zdanie wykonawcy w pierwszej osobie zamieniamy na to, co zrobić.
-    const message = result.message === EXECUTION_FAILED_MESSAGE ? REMINDER_DISPATCH_FAILED : result.message;
-    return mobileError(422, 'reminder_refused', message, headers);
-  }
+  if (!result.ok) return mobileError(422, 'reminder_refused', approvalRefusalForPhone(result), headers);
   const odpowiedz: ZatwierdzeniePrzypomnieniaOdpowiedz = { zlecone: true };
   return mobileJson(odpowiedz, 200, headers);
 }

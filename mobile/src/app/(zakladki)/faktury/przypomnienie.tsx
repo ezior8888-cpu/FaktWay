@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DZIS } from '@/dane-przykladowe';
@@ -13,7 +13,7 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { SzkieletKwoty, SzkieletListy } from '@/komponenty/szkielet';
 import { Tekst } from '@/komponenty/tekst';
 import type { PodgladPrzypomnieniaOdpowiedz, WstrzymanieOdpowiedz, ZatwierdzeniePrzypomnieniaOdpowiedz } from '@/lib/api/kontrakt';
-import { grosze } from '@/lib/dane/mapowanie';
+import { dzienWarszawa, grosze } from '@/lib/dane/mapowanie';
 import { dataPelna, dniMiedzy, kwota } from '@/lib/format';
 import { udostepnijPdf } from '@/lib/pdf-faktury';
 import { dni } from '@/lib/status-faktury';
@@ -51,6 +51,8 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
   const [trwa, setTrwa] = useState<'podglad' | 'zgoda' | 'wstrzymanie'>();
   const [blad, setBlad] = useState<string>();
   const [zlecone, setZlecone] = useState(false);
+  // Drugie dotknięcie w tej samej klatce (zanim `trwa` się narysuje) nie wysyła drugiego żądania.
+  const wToku = useRef(false);
 
   // Podgląd wygasa (30 minut, jak na stronie): po terminie zgoda jest nieważna.
   useEffect(() => {
@@ -104,7 +106,8 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
   };
 
   const przygotuj = async () => {
-    if (trwa) return;
+    if (wToku.current) return;
+    wToku.current = true;
     setTrwa('podglad');
     setBlad(undefined);
     setPodglad(undefined);
@@ -115,6 +118,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
       metoda: 'POST',
       cialo: wpisany && wpisany !== n.email ? { email: wpisany } : {},
     });
+    wToku.current = false;
     setTrwa(undefined);
     if (!w.ok) {
       setBlad(w.blad.komunikat);
@@ -127,16 +131,18 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
   };
 
   const zatwierdz = async () => {
-    if (trwa || !podglad) return;
+    if (wToku.current || !podglad) return;
     if (wygaslo || Date.parse(podglad.wazneDo) <= Date.now()) return setWygaslo(true);
     if (!zgoda) return setBlad('Zaznacz, że sprawdzasz odbiorcę, temat, treść i załączniki.');
     if (!tresc.trim()) return setBlad('Treść wiadomości nie może być pusta.');
+    wToku.current = true;
     setTrwa('zgoda');
     setBlad(undefined);
     const w = await konto.zapytaj<ZatwierdzeniePrzypomnieniaOdpowiedz>(`przypomnienia/${podglad.propozycja}/zatwierdz`, {
       metoda: 'POST',
       cialo: { wersja: podglad.wersja, tresc },
     });
+    wToku.current = false;
     setTrwa(undefined);
     if (!w.ok) {
       // Jak na stronie: odrzucona albo zmieniona operacja wymaga nowego, obejrzanego podglądu.
@@ -152,11 +158,13 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
   };
 
   const wstrzymaj = async (wstrzymane: boolean) => {
-    if (trwa) return;
+    if (wToku.current) return;
+    wToku.current = true;
     setTrwa('wstrzymanie');
     setBlad(undefined);
     naleznosci?.zmien(n.id, { wstrzymane });
     const w = await konto.zapytaj<WstrzymanieOdpowiedz>(`faktury/${n.id}/wstrzymanie`, { metoda: 'POST', cialo: { wstrzymane } });
+    wToku.current = false;
     setTrwa(undefined);
     if (!w.ok) {
       naleznosci?.zmien(n.id, { wstrzymane: !wstrzymane });
@@ -192,7 +200,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
 
         <Sekcja
           naglowek="Przypomnienia"
-          stopka={n.ostatnie && n.ostatnie !== 'nieznany' ? `Ostatnio: ${dataPelna(n.ostatnie.kiedy.slice(0, 10))}, etap ${n.ostatnie.etap}.` : undefined}>
+          stopka={n.ostatnie && n.ostatnie !== 'nieznany' ? `Ostatnio: ${dataPelna(dzienWarszawa(new Date(n.ostatnie.kiedy)))}, etap ${n.ostatnie.etap}.` : undefined}>
           <Wiersz tytul="Status" wartosc={podpis.tekst} />
           <Wiersz tytul="Wysłane" wartosc={String(n.wyslane)} />
           <PolePrzelacznik etykieta="Wstrzymaj przypomnienia" wartosc={n.wstrzymane} onZmiana={(v) => void wstrzymaj(v)} />

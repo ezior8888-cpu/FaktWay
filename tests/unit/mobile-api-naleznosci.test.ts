@@ -450,6 +450,16 @@ describe('POST /faktury/{id}/przypomnienie (podgląd) i /przypomnienia/{id}/zatw
     expect(error.message).not.toMatch(/\bmi\b/);
   });
 
+  it.each([
+    [{ ok: false, reason: 'expired', message: 'Minął termin tej propozycji. Przygotuję ją od nowa.' }, /^Ten podgląd już nie obowiązuje/],
+    [{ ok: false, reason: 'blocked', message: 'Nie rozpoznaję tego rodzaju sprawy, zgłosiłem to zespołowi.' }, /^Nie zleciliśmy wysyłki/],
+    [{ ok: false, reason: 'stale', message: 'Propozycja zmieniła się. Sprawdź ją ponownie przed zatwierdzeniem.' }, /^Propozycja zmieniła się/],
+  ])('odmowa wykonawcy %j: zdanie bez pierwszej osoby', async (wynik, zdanie) => {
+    fake.approve.mockResolvedValue(wynik);
+    const response = await zatwierdzRoute(req(`przypomnienia/${PROPOSAL}/zatwierdz`, { body: { wersja: VERSION, tresc: 'x' } }), params(PROPOSAL));
+    expect((await errorOf(response)).message).toMatch(zdanie);
+  });
+
   it('zła wersja albo pusta treść: 400 bez zatwierdzenia', async () => {
     for (const body of [{ wersja: 'krotka', tresc: 'x' }, { wersja: VERSION, tresc: '   ' }, { wersja: VERSION }]) {
       const response = await zatwierdzRoute(req(`przypomnienia/${PROPOSAL}/zatwierdz`, { body }), params(PROPOSAL));

@@ -453,13 +453,14 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     skrzynka: dane.skrzynka?.lista ?? [],
     przelaczZaplate: (f) => {
       const zaplacona = !f.zaplacona;
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      void zmienZaplate(wyzej, f, zaplacona, () =>
+      // Wibracja „sukces” dopiero po zapisie na serwerze; odmowa daje ostrzeżenie (ZASADY-DESIGNU.md, sekcja 7).
+      void zmienZaplate(wyzej, f, zaplacona, () => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         wyzej.pokazCofnij({
           tekst: zaplacona ? `Zapłacona: ${f.numer}` : `Bez zapłaty: ${f.numer}`,
           akcja: () => void zmienZaplate(wyzej, { ...f, zaplacona }, f.zaplacona),
-        }),
-      );
+        });
+      });
     },
     dodajFakture: async (f, wyslij, naKoncie) => {
       const firma = dane.firmaId;

@@ -2,7 +2,7 @@
  * „PDF” i „Udostępnij” przy fakturze (M10a): na prawdziwym koncie plik PDF
  * z serwera w arkuszu udostępniania, na danych przykładowych opis faktury jak
  * dotąd. Błąd (brak sieci, PDF niedostępny w tym stanie) pokazuje pasek nad
- * zakładkami z „Ponów”, a drugie dotknięcie w trakcie pobierania nic nie robi.
+ * zakładkami z „Ponów” (albo „OK”, gdy ponowienie nic nie da), a drugie dotknięcie w trakcie pobierania nic nie robi.
  */
 import { useRef } from 'react';
 
@@ -21,7 +21,7 @@ export function useUdostepnijPdf(): (f: Faktura) => void {
     trwa.current = true;
     void udostepnijPdfFaktury(k.zapytaj, f.id)
       .then((w) => {
-        if (!w.ok) pokazCofnij({ tekst: w.komunikat, przycisk: 'Ponów', akcja: () => udostepnij(f) });
+        if (!w.ok) pokazCofnij(w.ponow ? { tekst: w.komunikat, przycisk: 'Ponów', akcja: () => udostepnij(f) } : { tekst: w.komunikat, przycisk: 'OK', akcja: () => undefined });
       })
       .finally(() => {
         trwa.current = false;

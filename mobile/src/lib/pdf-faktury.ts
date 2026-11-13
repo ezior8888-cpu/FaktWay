@@ -29,16 +29,17 @@ export async function udostepnijPdf(nazwa: string, pdfBase64: string): Promise<v
   await Share.share({ url: plik.uri, title: plik.name });
 }
 
-export type WynikPdf = { ok: true } | { ok: false; komunikat: string };
+/** `ponow`: ponowienie może pomóc (sieć, serwer); przy odmowie z powodu stanu faktury nie pomoże. */
+export type WynikPdf = { ok: true } | { ok: false; komunikat: string; ponow: boolean };
 
 /** PDF faktury z serwera w arkuszu udostępniania. */
 export async function udostepnijPdfFaktury(zapytaj: KontoFirmy['zapytaj'], id: string): Promise<WynikPdf> {
   const w = await zapytaj<PdfFakturyOdpowiedz>(`faktury/${encodeURIComponent(id)}/pdf`);
-  if (!w.ok) return { ok: false, komunikat: w.blad.komunikat };
+  if (!w.ok) return { ok: false, komunikat: w.blad.komunikat, ponow: w.blad.rodzaj !== 'odmowa' };
   try {
     await udostepnijPdf(w.dane.nazwa, w.dane.pdfBase64);
     return { ok: true };
   } catch {
-    return { ok: false, komunikat: 'Nie udało się zapisać PDF na telefonie. Zwolnij trochę miejsca i spróbuj ponownie.' };
+    return { ok: false, komunikat: 'Nie udało się zapisać PDF na telefonie. Zwolnij trochę miejsca i spróbuj ponownie.', ponow: true };
   }
 }

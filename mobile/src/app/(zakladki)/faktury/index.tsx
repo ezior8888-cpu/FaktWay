@@ -114,6 +114,10 @@ export default function EkranFaktur() {
 
   const otwarte = faktury.filter(doZaplaty);
   const zalegle = otwarte.filter((f) => statusFaktury(f, dzis).zalegla);
+  // Licznik „Po terminie” na prawdziwym koncie z tej samej listy co widok (zasady strony), gdy już ją mamy.
+  const zaplaconeTeraz = new Set(faktury.filter((f) => f.zaplacona).map((f) => f.id));
+  const ilePoTerminie =
+    naleznosci?.dane && !naleznosci.dane.blad ? naleznosci.dane.faktury.filter((n) => !zaplaconeTeraz.has(n.id)).length : zalegle.length;
   const filtrowAktywnych = [statusKsef, platnosc, rodzaj].filter((x) => x !== 'Wszystkie').length;
 
   const widoczne = useMemo(() => {
@@ -188,7 +192,7 @@ export default function EkranFaktur() {
           wybrany={widok}
           onZmiana={setWidok}
           etykieta="Rodzaj listy faktur"
-          liczniki={[undefined, zBazy ? undefined : cykliczne.length, zalegle.length > 0 ? zalegle.length : undefined]}
+          liczniki={[undefined, zBazy ? undefined : cykliczne.length, ilePoTerminie > 0 ? ilePoTerminie : undefined]}
         />
 
         {widok !== 1 && pierwszeWczytanie ? <SzkieletListy /> : null}
@@ -317,10 +321,10 @@ function PoTerminieZBazy({ naleznosci, szukaj }: { naleznosci: NonNullable<Retur
   }
   const zaplaconeTeraz = new Set(faktury.filter((f) => f.zaplacona).map((f) => f.id));
   const fraza = szukaj.trim().toLocaleLowerCase('pl');
-  const lista = odp.faktury
-    .filter((n) => !zaplaconeTeraz.has(n.id))
-    .filter((n) => !fraza || n.kontrahent.toLocaleLowerCase('pl').includes(fraza) || n.numer.toLowerCase().includes(fraza));
-  const wstrzymanych = lista.filter((n) => n.wstrzymane).length;
+  const wszystkie = odp.faktury.filter((n) => !zaplaconeTeraz.has(n.id));
+  const lista = wszystkie.filter((n) => !fraza || n.kontrahent.toLocaleLowerCase('pl').includes(fraza) || n.numer.toLowerCase().includes(fraza));
+  // Jak kafel strony: wstrzymane z całej listy, nie tylko z wyników wyszukiwania.
+  const wstrzymanych = wszystkie.filter((n) => n.wstrzymane).length;
   const stopka = odp.blad
     ? undefined
     : [
