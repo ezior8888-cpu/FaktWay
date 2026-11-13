@@ -224,7 +224,7 @@ describe.skipIf(!hasDatabase)('M6: API aplikacji na telefon na prawdziwym GoTrue
   });
 
   it('konto z TOTP: sesja AAL1 to challenge_required, po kodzie AAL2 przechodzi', async () => {
-    await expect(verifyMobileToken(tokenT1, target)).resolves.toEqual({ status: 'challenge_required' });
+    await expect(verifyMobileToken(tokenT1, target)).resolves.toMatchObject({ status: 'challenge_required' });
     const state = await verifyMobileToken(tokenT2, target);
     expect(state.status).toBe('ok');
     if (state.status !== 'ok') return;

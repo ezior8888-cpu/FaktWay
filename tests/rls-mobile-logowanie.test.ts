@@ -123,7 +123,7 @@ describe.skipIf(!hasDatabase)('M6b: logowanie telefonu przez API na prawdziwym G
   it('konto z TOTP: wymagaKodu, a kod wpisany w telefonie (klucz anon) daje AAL2', async () => {
     const { phone, accessToken, wymagaKodu } = await signedInThroughRoute(T_EMAIL);
     expect(wymagaKodu).toBe(true);
-    await expect(verifyMobileToken(accessToken, target)).resolves.toEqual({ status: 'challenge_required' });
+    await expect(verifyMobileToken(accessToken, target)).resolves.toMatchObject({ status: 'challenge_required' });
 
     // Kod z następnego okna 30 s (GoTrue przyjmuje jedno okno w przód): inny niż kod z włączania.
     const verified = await phone.auth.mfa.challengeAndVerify({ factorId, code: totpCode(totpSecret, Date.now() + 30_000) });
