@@ -157,3 +157,37 @@ describe('NZ-RYCZ-04 i NZ-RYCZ-08', () => {
   it.todo('NZ-RYCZ-04: koszty nie zmieniają ryczałtu (wejście silnika nie ma kosztów; test na ewidencji w F6)');
   it.todo('NZ-RYCZ-08: podział faktury na dwie o tej samej sumie i stawce nie zmienia ryczałtu (test na ewidencji w F6)');
 });
+
+describe('NZ-RYCZ-02: kontrprzykład z nocnego przebiegu (FZ-007, #649, ziarno 924139385)', () => {
+  // Przychód w czterech stawkach, odliczenia mniejsze od przychodu. Dopisanie 0,17 zł
+  // w nowej stawce 10 % przestawiało grosze z podziału odliczeń między stawkami,
+  // a zaokrąglenie podstawy do złotych robiło z grosza 1 zł mniej ryczałtu.
+  const w: WejscieRyczaltu = {
+    przychodWgStawekGr: new Map([[1700, 4_760_460], [300, 38_104_683], [1200, 25_780_476], [850, 22_650_664]]),
+    spoleczneZaplaconeGr: 175_576,
+    zdrowotnaZaplaconaGr: 134_613,
+    nadwyzkaZPoprzednichGr: 1_274_300,
+  };
+
+  it('0,17 zł przychodu w nowej stawce 10 % nie obniża ryczałtu', () => {
+    const wiecej = new Map(w.przychodWgStawekGr).set(1000, 17);
+    expect(licz({ ...w, przychodWgStawekGr: wiecej }).ryczaltGr).toBeGreaterThanOrEqual(licz(w).ryczaltGr);
+  });
+
+  it('żaden grosz od 1 do 200 w nowej albo istniejącej stawce nie obniża ryczałtu ani żadnej podstawy', () => {
+    const przed = licz(w);
+    const zle: string[] = [];
+    for (const pb of [1700, 1500, 1400, 1200, 1000, 850, 550, 300]) {
+      for (let dodatek = 1; dodatek <= 200 && zle.length < 10; dodatek++) {
+        const wiecej = new Map(w.przychodWgStawekGr);
+        wiecej.set(pb, (wiecej.get(pb) ?? 0) + dodatek);
+        const po = licz({ ...w, przychodWgStawekGr: wiecej });
+        if (po.ryczaltGr < przed.ryczaltGr) zle.push(`${pb} +${dodatek} gr: ryczałt ${po.ryczaltGr} < ${przed.ryczaltGr}`);
+        for (const [stawka, podstawa] of przed.podstawaWgStawekGr) {
+          if ((po.podstawaWgStawekGr.get(stawka) ?? 0) < podstawa) zle.push(`${pb} +${dodatek} gr: podstawa ${stawka} spada`);
+        }
+      }
+    }
+    expect(zle).toEqual([]);
+  });
+});

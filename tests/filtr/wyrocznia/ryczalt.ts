@@ -49,32 +49,16 @@ export function ryczaltWyrocznia(w: WejscieRyczaltuWyrocznia): WynikRyczaltuWyro
   const odliczono = dostepne < sumaPrzychodow ? dostepne : sumaPrzychodow;
   const nadwyzka = dostepne - odliczono;
 
-  // podzial z najwieksza reszta; remis: wyzsza stawka (dodatnie jest juz malejaco)
-  const czesci = dodatnie.map(([s, v]) => {
-    const licznik = odliczono * v;
-    return { s, v, calosc: sumaPrzychodow > zero ? licznik / sumaPrzychodow : zero, reszta: sumaPrzychodow > zero ? licznik % sumaPrzychodow : zero };
-  });
-  let rozdane = zero;
-  for (const c of czesci) rozdane += c.calosc;
-  let zostalo = odliczono - rozdane;
-  const kolejnosc = czesci.map((c, i) => ({ c, i })).sort((a, b) => {
-    if (a.c.reszta !== b.c.reszta) return a.c.reszta > b.c.reszta ? -1 : 1;
-    return a.i - b.i;
-  });
-  for (const { c } of kolejnosc) {
-    if (zostalo <= zero) break;
-    c.calosc += BigInt(1);
-    zostalo -= BigInt(1);
-  }
-
+  // podzial dokladny (bez groszy): podstawa = przychod * (suma - odliczono) / suma,
+  // do pelnych zlotych (50 gr w gore), jedno dzielenie calkowite
   const podstawy: Array<[number, number]> = [];
   let licznikRyczaltu = zero;
-  for (const c of czesci) {
-    const podstawaGr = c.v - c.calosc;
-    const zl = (podstawaGr * BigInt(2) + sto) / (sto * BigInt(2)); // pelne zlote, 50 gr w gore
+  for (const [s, v] of dodatnie) {
+    const mian = sto * sumaPrzychodow * BigInt(2);
+    const zl = (v * (sumaPrzychodow - odliczono) * BigInt(2) + sto * sumaPrzychodow) / mian;
     const pod = zl * sto;
-    podstawy.push([c.s, Number(pod)]);
-    licznikRyczaltu += pod * BigInt(c.s);
+    podstawy.push([s, Number(pod)]);
+    licznikRyczaltu += pod * BigInt(s);
   }
   // ryczalt w groszach = licznik / 10000; do pelnych zlotych: licznik / 1_000_000
   const m = d * sto;

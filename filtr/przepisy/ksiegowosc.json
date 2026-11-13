@@ -994,7 +994,7 @@
     },
     {
       "id": "RP-RYCZ-STAWKI-02",
-      "regula": "Przy kilku stawkach odliczenia dzieli się proporcjonalnie do przychodu z każdej stawki (co do grosza); podstawę każdej stawki i ryczałt z sumy zaokrągla się do pełnych złotych.",
+      "regula": "Przy kilku stawkach odliczenia dzieli się proporcjonalnie do przychodu z każdej stawki, dokładnie, bez zaokrąglania części do groszy; podstawę każdej stawki (przychód minus jej część odliczeń) i ryczałt z sumy zaokrągla się do pełnych złotych.",
       "podstawa": [
         {
           "akt": "ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne",
@@ -1015,11 +1015,13 @@
       "testy": [
         "tests/unit/ksiegowosc-silniki.test.ts > dwie stawki: odliczenia proporcjonalnie do przychodu",
         "tests/unit/ksiegowosc-silniki.test.ts > podział co do grosza",
-        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > remis reszt przy podziale odliczeń",
+        "tests/filtr/roznicowe/skladki-ryczalt.test.ts > części odliczeń dokładne",
+        "tests/filtr/niezmienniki/ryczalt.test.ts > kontrprzykład z nocnego przebiegu",
         "tests/filtr/roznicowe/skladki-ryczalt.test.ts > ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące"
       ],
       "parametry": [],
       "niezmienniki": [
+        "NZ-RYCZ-02",
         "NZ-RYCZ-05"
       ],
       "pewnosc": "srednia",
@@ -1027,9 +1029,10 @@
       "interpretacja": null,
       "do_rozstrzygniecia": {
         "kto": "księgowa",
-        "pytanie": "Czy podział składek społecznych proporcjonalnie do przychodu z każdej stawki jest akceptowany (G4)?",
+        "pytanie": "Czy odliczenia przy kilku stawkach dzielić proporcjonalnie do przychodu z każdej stawki (podział programu), czy według wyboru podatnika (np. najpierw od najwyższej stawki)? Jeśli proporcjonalnie: czy część stawki ma być kwotą w groszach (art. 63 § 1 Ordynacji mówi o końcówkach kwot), czy podstawa z dokładnej części, jak liczy program od FZ-007 (dwie stawki po 1 000,50 zł i 1 gr odliczeń: podstawy 1 000 i 1 000 zł; podział co do grosza dawał 1 000 i 1 001 zł)? (G4)",
         "przypadki": [
-          "G4"
+          "G4",
+          "FZ-007"
         ]
       },
       "sprawdzil": {
@@ -1039,7 +1042,7 @@
       "odczyt": "2026-11-09",
       "zrodlo_planu": "§5 „Ryczałt: kilka stawek (K4)”",
       "stan": "dziala",
-      "uwagi": null
+      "uwagi": "FZ-007 (13.11.2026, nocny filtr #649): podział co do grosza z resztami przestawiał grosze między stawkami, gdy przybywało przychodu, i ryczałt spadał o 1 zł (NZ-RYCZ-02); podstawy liczy się z dokładnej części. rozdzielProporcjonalnie (podział co do grosza, NZ-RYCZ-05) silnik już nie używa; zostaje do odpowiedzi księgowej."
     },
     {
       "id": "RP-RYCZ-ODL-01",

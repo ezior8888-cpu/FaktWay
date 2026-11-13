@@ -29,8 +29,8 @@
   - Reguła: Zaliczka nie jest liczona dwa razy: faktura zaliczkowa wchodzi w miesiącu zaliczki, a faktura rozliczająca pomniejszona o rozliczone zaliczki (tak samo w ewidencji i KPiR).
   - Podstawa: art. 14 ust. 1c i ust. 3 pkt 1 (ustawa o podatku dochodowym od osób fizycznych).
   - Jak liczy program: Zaliczka wchodzi do przychodu w miesiącu jej otrzymania (faktury zaliczkowej).
-- **RP-RYCZ-STAWKI-02** (pewność średnia): Czy podział składek społecznych proporcjonalnie do przychodu z każdej stawki jest akceptowany (G4)? Przypadki: G4.
-  - Reguła: Przy kilku stawkach odliczenia dzieli się proporcjonalnie do przychodu z każdej stawki (co do grosza); podstawę każdej stawki i ryczałt z sumy zaokrągla się do pełnych złotych.
+- **RP-RYCZ-STAWKI-02** (pewność średnia): Czy odliczenia przy kilku stawkach dzielić proporcjonalnie do przychodu z każdej stawki (podział programu), czy według wyboru podatnika (np. najpierw od najwyższej stawki)? Jeśli proporcjonalnie: czy część stawki ma być kwotą w groszach (art. 63 § 1 Ordynacji mówi o końcówkach kwot), czy podstawa z dokładnej części, jak liczy program od FZ-007 (dwie stawki po 1 000,50 zł i 1 gr odliczeń: podstawy 1 000 i 1 000 zł; podział co do grosza dawał 1 000 i 1 001 zł)? (G4) Przypadki: G4, FZ-007.
+  - Reguła: Przy kilku stawkach odliczenia dzieli się proporcjonalnie do przychodu z każdej stawki, dokładnie, bez zaokrąglania części do groszy; podstawę każdej stawki (przychód minus jej część odliczeń) i ryczałt z sumy zaokrągla się do pełnych złotych.
   - Podstawa: art. 11 ust. 1 i 1a, art. 12 (ustawa o zryczałtowanym podatku dochodowym od niektórych przychodów osiąganych przez osoby fizyczne).
 - **RP-NAJEM-01** (pewność średnia): Korekta najmu po progu: czy kolejność (najpierw nadwyżka 12,5 %) jest właściwa (G3)? Przypadki: G3.
   - Reguła: Przychód z najmu do 100 tys. zł w roku: 8,5 %, nadwyżka 12,5 %; wiersz przekraczający próg dzieli się, a korekta in minus po przekroczeniu progu najpierw zmniejsza nadwyżkę 12,5 %.

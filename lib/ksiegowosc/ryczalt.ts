@@ -13,7 +13,10 @@
  * - Przy kilku stawkach odliczenia dzielą się proporcjonalnie do przychodu
  *   z każdej stawki (dla zdrowotnej tak mówi podatki.gov.pl; dla społecznych
  *   to podział neutralny, bez wybierania za klienta, D8; księgowa potwierdza
- *   w złotym przypadku G4).
+ *   w złotym przypadku G4). Część stawki jest dokładna, bez zaokrąglania do
+ *   groszy: podział co do grosza przestawiał grosze między stawkami przy
+ *   każdej zmianie przychodu, a zaokrąglenie podstawy robiło z tego 1 zł
+ *   mniej ryczałtu przy większym przychodzie (FZ-007, NZ-RYCZ-02).
  * - Podstawy i ryczałt w pełnych złotych (art. 63 Ordynacji podatkowej).
  */
 
@@ -77,9 +80,22 @@ export function doPelnychZlotych(gr: number): number {
 }
 
 /**
+ * Jak `doPelnychZlotych` (połówka w górę), ale dla ułamka groszy
+ * `licznik / mianownik` (oba nieujemne, mianownik dodatni), bez zaokrąglania
+ * do groszy po drodze.
+ */
+function ulamekDoPelnychZlotych(licznik: bigint, mianownik: bigint): number {
+  const sto = BigInt(100);
+  return Number(((licznik + BigInt(50) * mianownik) / (sto * mianownik)) * sto);
+}
+
+/**
  * Dzieli `kwota` na części proporcjonalne do wag, dokładnie co do grosza:
  * części całkowite w BigInt, a reszta po groszu tam, gdzie ułamek był
- * największy (przy remisie wyższa stawka).
+ * największy (przy remisie wyższa stawka). Podstaw ryczałtu z tego podziału
+ * już nie liczymy (FZ-007: przy nowej stawce grosz z reszty przeskakiwał
+ * między stawkami); podział zostaje do odpowiedzi księgowej
+ * (RP-RYCZ-STAWKI-02).
  */
 export function rozdzielProporcjonalnie(kwota: number, wagi: ReadonlyMap<number, number>): Map<number, number> {
   const suma = [...wagi.values()].reduce((a, b) => a + b, 0);
@@ -131,12 +147,17 @@ export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): Wyn
   const dostepne = w.nadwyzkaZPoprzednichGr + w.spoleczneZaplaconeGr + zdrowotna50ProcGr;
   const przychodGr = [...przychody.values()].reduce((a, b) => a + b, 0);
   const odliczonoGr = Math.min(dostepne, przychodGr);
-  const odliczeniaWgStawek = rozdzielProporcjonalnie(odliczonoGr, przychody);
 
+  // Podstawa stawki: jej przychód minus dokładna część odliczeń, czyli
+  // gr · (przychód − odliczono) / przychód, do pełnych złotych. Rośnie z każdym
+  // przychodem i maleje z odliczeniami, więc więcej przychodu nigdy nie daje
+  // mniej ryczałtu (NZ-RYCZ-02), a więcej składek nigdy więcej ryczałtu (NZ-RYCZ-03).
+  const przychodRazem = BigInt(przychodGr);
+  const poOdliczeniu = przychodRazem - BigInt(odliczonoGr);
   const podstawaWgStawekGr = new Map<number, number>();
   let podatekRazem = 0;
   for (const [pb, gr] of przychody) {
-    const podstawa = doPelnychZlotych(gr - (odliczeniaWgStawek.get(pb) ?? 0));
+    const podstawa = ulamekDoPelnychZlotych(BigInt(gr) * poOdliczeniu, przychodRazem);
     podstawaWgStawekGr.set(pb, podstawa);
     podatekRazem += podstawa * pb;
   }
