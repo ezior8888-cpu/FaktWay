@@ -259,10 +259,11 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** Bartosz ogląda M4c i M4d (PR #663) na iPhonie albo w
-symulatorze: zrzuty `docs/mobile/zrzuty/m4c/`. Po „idź dalej” M4e: faktury
-jak Revolut Business (formularz z kart, potwierdzenie, szczegół z rzędem
-akcji). Otwarte: M4e i M4f przed logowaniem (M5) czy po nim, D4, D6.
+**Następny krok:** Bartosz ogląda M4e (PR stawiany na #663): formularz faktury,
+podgląd, wysyłka z potwierdzeniem i szczegół; zrzuty `docs/mobile/zrzuty/m4e/`.
+Najpierw scalenie #663, potem tego PR. Po „idź dalej” M4f: Księgowość, Więcej
+i wspólne stany ekranu. Otwarte: M4f przed logowaniem (M5) czy po nim, 3.9
+(„Nowa faktura” jednym dotknięciem), D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -275,3 +276,4 @@ akcji). Otwarte: M4e i M4f przed logowaniem (M5) czy po nim, D4, D6.
 | 12.11.2026 | wzorce | Mobbin Pro przez MCP: przegląd ekranów i lista 12 poprawek (`docs/mobile/WZORCE-MOBBIN.md`); porównanie pięciu wzorów całej aplikacji (Copilot, Revolut Business, Mercury, Rocket Money, Remote), wybór D14; makieta pięciu ekranów z przełącznikami zasad wyglądu, decyzja D15 („Wszystko jak Copilot”); `ZASADY-DESIGNU.md` w wersji 3; etapy M4c do M4f | (bez PR, dokumenty niezacommitowane) |
 | 12.11.2026 | M4c | wykończenie Copilota (D15) w komponentach: paleta w `paleta.ts` z testem kontrastu (`tests/unit/mobile-kontrast.test.ts`, 41 par), tło `#F2F4F7`, karty 18 pt bez obwódki z cieniem, nagłówki sekcji wersalikami nad kartą, wiersze bez linii (poza KPiR i ewidencją), gradient pod nagłówkiem z natywnym dużym tytułem w bieli (próba w symulatorze udana), pasek marki Pulpitu na gradiencie z białym logo, kwota z groszami w indeksie, kolorowe kategorie kosztów, przyciski 16 pt i wariant tonalny, Outfit z cyframi tabelarycznymi zamiast IBM Plex Mono (pliki usunięte); 2 uwagi z przeglądu kodu poprawione; zrzuty `docs/mobile/zrzuty/m4c/` | #663 |
 | 12.11.2026 | M4d | po uwadze Bartosza („za dużo ikon, strony za długie, miało być jak w makiecie”) układ z makiety w tym samym PR: Pulpit z kartą wyniku (wykres miesiąca wobec średniej, trzy liczby), „Do przejrzenia”, „Nadchodzące”, reszta kart na nowym ekranie Finanse; Faktury z kartą „Do zapłaty” i paskiem, pigułkami z licznikami, grupą „Do dokończenia”, sumami miesięcy, plakietką tylko przy wyjątkach; Koszty z kartą trzech liczb, listą po dniach i kropką „do opisania”; pigułki zamiast zakładek z kreską wszędzie; ikony w wierszach i kaflach tylko przy stanie; pasek marki Pulpitu poprawiony w trybie ciemnym | #663 |
+| 13.11.2026 | M4e | faktury jak Revolut Business (D14; WZORCE-MOBBIN.md 3.2, 3.3, 3.5, 3.7, 8.4): formularz w kolejności Nabywca, Pozycje, Szczegóły, Płatność; znany kontrahent i wypełniona pozycja zwinięte do wiersza, numer i daty jako wiersze z wartościami; przypięte „Podgląd” (podgląd bez pól z „zmienisz tylko korektą”) i „Wyślij do KSeF” z kwotą; po wysłaniu szczegół z kartą „Wysyłamy do KSeF” → „Przyjęta w KSeF” (numer KSeF, e-mail, udostępnij, Gotowe); szczegół: rząd akcji (Zapłacona, E-mail, PDF, Przypomnij), historia jako oś, kolejność Nabywca, Pozycje i VAT, Płatność, Dokument, Sprzedawca; jedna nazwa „Przyjęta w KSeF”. Bez 3.6 (wybór kontrahenta z wyszukiwaniem) i 3.9 | #664 |
