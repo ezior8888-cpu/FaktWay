@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Lista wyciszeń w ustawieniach (plan FLO 2, K2.16 — druga połowa).
@@ -54,10 +54,21 @@ function card(topicKey: string, title: string): CreateProposalInput {
 }
 
 beforeEach(() => {
+  // Zegar przypięty do NOW. Cisze zapisujemy tu z datą NOW i trwają 90 dni
+  // (`MUTE_DAYS`), a `listSilenced`, `createProposal` i `restoreSilenced`
+  // biorą „teraz” z `new Date()`. Bez przypięcia plik psuł się sam
+  // 22.12.2026 o 10:00 UTC: część przypadków robiła się czerwona, a
+  // sprawdzenia przywracania i cudzego konta przechodziły bez względu na kod,
+  // bo cisza wygasała sama.
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   db = createFakeDb({
     flo_kind_flags: [{ tenant_id: TENANT, kind: KIND, enabled: true, reason: 'test' }],
   });
   fake.client = db.client;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // ═══════════════════════════════════════════════════════════════
