@@ -45,6 +45,8 @@ export const fakturaTelefonuSchema = z.strictObject({
   bankAccount: z.string(),
   notes: z.string(),
   splitPayment: z.boolean(),
+  numberSeriesId: z.string(),
+  numberPreview: z.string(),
 });
 
 export const wystawienieSchema = z.strictObject({
@@ -78,6 +80,8 @@ export function doWartosciFormularza(f: FakturaTelefonu): InvoiceFormValues {
     bankAccount: f.bankAccount,
     notes: f.notes,
     splitPayment: f.splitPayment,
+    numberSeriesId: f.numberSeriesId,
+    numberPreview: f.numberPreview,
   };
 }
 

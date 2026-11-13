@@ -24,8 +24,8 @@ import { kwota } from '@/lib/format';
  */
 export type WynikZapisu = { ok: true; id: string; uwaga?: string } | { ok: false; komunikat: string; pole?: string };
 
-/** Zapis na prawdziwym koncie (M8): treść dla `POST /faktury` i klucz jednego wypełnienia formularza. */
-export type ZapisNaKoncie = { faktura: FakturaTelefonu; klucz: string };
+/** Zapis na prawdziwym koncie (M8): treść dla `POST /faktury`, klucz jednego wypełnienia formularza i firma, w której go otwarto. */
+export type ZapisNaKoncie = { faktura: FakturaTelefonu; klucz: string; firma: string };
 
 /**
  * Skąd są faktury i skrzynka KSeF na ekranie i w jakim są stanie. Dane

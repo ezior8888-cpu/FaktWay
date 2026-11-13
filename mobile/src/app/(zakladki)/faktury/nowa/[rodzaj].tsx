@@ -25,18 +25,22 @@ import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { Tekst } from '@/komponenty/tekst';
 import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
 import {
+  bladFirmyZapisu,
   dodajDni,
   doFakturyTelefonu,
   kluczZapisu,
-  najblizszyTermin,
+  kopiaNaTelefonie,
+  kwotyPozycji,
   liczbaZPola,
+  najblizszyTermin,
+  stawkaTelefonu,
   nabywcyZFaktur,
   poleFormularza,
   type NabywcaZFaktury,
   type PozycjaFormularza,
 } from '@/lib/faktura/wystawienie';
 import { dataKrotka, dniMiedzy, doPola, groszeZPola as grosze, kwota } from '@/lib/format';
-import { usePodpowiedzFaktury } from '@/stan/dane';
+import { useKontoFirmy, usePodpowiedzFaktury } from '@/stan/dane';
 import { useStanFaktur, type ZapisNaKoncie } from '@/stan/faktury';
 import { useKolory } from '@/wyglad/kolory';
 import { CEL_DOTYKU, MARGINES, ODSTEP, PROMIEN_PIGULKI } from '@/wyglad/odstepy';
@@ -62,23 +66,35 @@ const STAWKI_ZWYKLE = [
 const STAWKI_ZALICZKI = STAWKI_ZWYKLE.slice(0, 4);
 const STAWKI_ROZLICZENIA = STAWKI_ZWYKLE.filter((s) => s.wartosc !== 'zw');
 
-function liczba(tekst: string): number {
-  return Number(tekst.replace(',', '.'));
-}
-
 function stawkaProcent(s: string): number {
   return /^\d+$/.test(s) ? Number(s) : 0;
 }
 
+/**
+ * Pozycja do sum i podglądu. Kwoty jak na serwerze (`kwotyPozycji`): ilość
+ * razy cena z pola bez zaokrąglania ceny do groszy, „1 000” to tysiąc.
+ */
 function doPozycji(p: PozycjaFormularza): Pozycja {
-  return { nazwa: p.nazwa.trim(), ilosc: liczba(p.ilosc) || 0, jednostka: p.jednostka || 'szt', cenaNetto: grosze(p.cena) || 0, stawkaVat: stawkaProcent(p.stawka) };
+  const kwoty = kwotyPozycji(p);
+  return {
+    nazwa: p.nazwa.trim(),
+    ilosc: liczbaZPola(p.ilosc) || 0,
+    jednostka: p.jednostka || 'szt',
+    cenaNetto: grosze(p.cena) || 0,
+    cenaTekst: p.cena.trim() || undefined,
+    stawkaVat: stawkaProcent(p.stawka),
+    ...(/^\d+$/.test(p.stawka) ? {} : { stawkaOpis: p.stawka }),
+    ...kwoty,
+  };
 }
 
 /** Pozycja zapisanej faktury z powrotem w polach formularza (wzór, korekta, edycja). */
 function zPozycji(p: Pozycja): PozycjaFormularza {
-  // Stawka bez procentu z bazy („zw”, „np”, „oo”) zostaje sobą, nie 0% (M8: kopia prawdziwej faktury).
-  const opis = STAWKI_ZWYKLE.find((s) => s.wartosc === p.stawkaOpis)?.wartosc;
-  return { nazwa: p.nazwa, ilosc: String(p.ilosc).replace('.', ','), jednostka: p.jednostka, cena: doPola(p.cenaNetto), stawka: opis ?? String(p.stawkaVat) };
+  // Stawka bez procentu z bazy („zw”, „np”, „oo”) zostaje sobą, nie 0%; stawka spoza
+  // listy (np. „np_ii”) też zostaje sobą, a `sprawdz` jej nie przepuści (M8, przegląd #716).
+  const stawka = p.stawkaOpis ?? String(p.stawkaVat);
+  // Cena z bazy z 4 miejscami (`cenaTekst`), nie grosze, które ją zaokrąglają.
+  return { nazwa: p.nazwa, ilosc: String(p.ilosc).replace('.', ','), jednostka: p.jednostka, cena: p.cenaTekst ?? doPola(p.cenaNetto), stawka };
 }
 
 const PUSTA: PozycjaFormularza = { nazwa: '', ilosc: '1', jednostka: 'szt', cena: '', stawka: '23' };
@@ -95,10 +111,15 @@ const NABYWCY_PRZYKLADOWI: NabywcaZFaktury[] = KONTRAHENCI.map((k: Kontrahent) =
  * na stronę: ekran mówi, gdzie to zrobić.
  */
 export default function EkranFormularzaFaktury() {
-  const { dane } = useStanFaktur();
-  const { rodzaj, edytuj } = useLocalSearchParams<{ rodzaj: string; edytuj?: string }>();
+  const { dane, faktury } = useStanFaktur();
+  const { rodzaj, edytuj, wzor } = useLocalSearchParams<{ rodzaj: string; edytuj?: string; wzor?: string }>();
   if (dane.zrodlo === 'baza' && (rodzaj !== 'vat' || edytuj)) {
     return <EkranTylkoNaStronie co={edytuj ? 'edycja' : 'wystawienie'} idFaktury={edytuj} />;
+  }
+  // Kopia faktury dla firmy z UE, osoby z PESEL, w walucie albo ze stawką spoza telefonu: strona kopiuje ją w całości.
+  const wzorFaktury = wzor ? faktury.find((f) => f.id === wzor) : undefined;
+  if (dane.zrodlo === 'baza' && wzorFaktury && !kopiaNaTelefonie(wzorFaktury)) {
+    return <EkranTylkoNaStronie co="wystawienie" idFaktury={wzor} />;
   }
   return <FormularzFaktury />;
 }
@@ -119,6 +140,10 @@ function FormularzFaktury() {
   // Prawdziwe konto (M8): zwykła faktura przez API, nabywcy z ostatnich faktur, numer z podpowiedzi serwera.
   const zBazy = dane.zrodlo === 'baza';
   const podpowiedz = usePodpowiedzFaktury();
+  // Firma, w której otwarto formularz (jak `expectedTenantId` na stronie, UX-01): zapis w innej odmawia.
+  const firmaTeraz = useKontoFirmy()?.firma?.id ?? null;
+  const [firmaFormularza, setFirmaFormularza] = useState(firmaTeraz);
+  if (!firmaFormularza && firmaTeraz) setFirmaFormularza(firmaTeraz);
   const kolory = useKolory();
   const stylKarty = useStylKarty();
   // Edycja szkicu albo odrzuconej faktury: te same pola, zapis w miejscu starej.
@@ -257,6 +282,9 @@ function FormularzFaktury() {
     if ((rodzaj === 'vat' || rodzaj === 'rozliczajaca' || (rodzaj === 'korygujaca' && typKorekty !== 'anulowanie')) && pozycje.some((p) => !p.nazwa.trim()))
       b.pozycje = 'Każda pozycja potrzebuje nazwy.';
     if (mpp && !rachunek.trim()) b.rachunek = 'MPP wymaga numeru rachunku.';
+    // Stawki spoza telefonu (np. „np II” z kopii) wystawia strona: nie zamieniamy ich na inną.
+    if (zBazy && !b.pozycje && pozycje.some((p) => stawkaTelefonu(p.stawka) === null))
+      b.pozycje = 'Tę stawkę VAT (np. „np II” dla firmy z UE) wystawisz na faktway.pl.';
     // Prawdziwe konto: liczby idą do serwera bez zaokrąglania, więc puste albo błędne pole mówimy od razu.
     if (zBazy && !b.pozycje && pozycje.some((p) => !(liczbaZPola(p.ilosc) > 0) || !(liczbaZPola(p.cena) >= 0)))
       b.pozycje = 'Każda pozycja potrzebuje ilości i ceny netto.';
@@ -314,12 +342,23 @@ function FormularzFaktury() {
       }
       return;
     }
-    const naKoncie: ZapisNaKoncie | undefined = zBazy
+    if (zBazy) {
+      const zlaFirma = bladFirmyZapisu(firmaFormularza, firmaTeraz);
+      if (zlaFirma) {
+        setBledy({ serwer: zlaFirma });
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        return;
+      }
+    }
+    const naKoncie: ZapisNaKoncie | undefined = zBazy && firmaFormularza
       ? {
           klucz,
+          firma: firmaFormularza,
           faktura: doFakturyTelefonu({
             numer, dataWystawienia: dataWyst, dataSprzedazy: dataSprz, terminDni: Number(termin), rodzajNabywcy: rodzajNabywcy === 'osoba' ? 'osoba' : 'firma',
             nip, nazwa, adres1, adres2, email, metoda, rachunek, mpp, pozycje, uwagi,
+            // Numer z serii (krok 2.5): podpowiedź serwera; zmieniony w polu numer zapisze się jak wpisany ręcznie.
+            seria: podpowiedz.seria ?? null,
           }),
         }
       : undefined;

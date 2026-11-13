@@ -1,5 +1,6 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
 import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 
@@ -23,7 +24,8 @@ import {
   type RegularIssueResult,
 } from '@/lib/invoices/issue-regular';
 import type { TokenSessionSendActor } from '@/lib/invoices/ksef-submit-enqueue';
-import { suggestNextInvoiceNumberForTenant } from '@/lib/invoices/next-number';
+import { loadInvoiceNumbering } from '@/lib/numeracja/baza';
+import { selectedNumberingOption } from '@/lib/numeracja/model';
 import { sendRegularDraft } from '@/lib/invoices/send-draft';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { isUuid } from '@/lib/supabase/active-org';
@@ -41,8 +43,10 @@ import { isUuid } from '@/lib/supabase/active-org';
  * `mobile_idempotency_keys` (00201) zaraz po zapisie szkicu, przed kolejką KSeF:
  *  - po każdym kroku ponowienie z tym samym kluczem i tą samą treścią oddaje
  *    tę samą fakturę (200, `powtorzenie: true`);
- *  - przerwa po szkicu, przed kluczem: ponowienie trafia na zajęty numer
- *    faktury (unikalny w firmie) i dostaje 422 z numerem, drugiej faktury nie ma;
+ *  - przerwa po szkicu, przed kluczem: ten sam klucz idzie też jako klucz zapisu
+ *    faktury (`number_request_key`, 00199), więc ponowienie znajduje szkic po
+ *    nim, dopisuje klucz i oddaje szkic (drugi INSERT odbija wyzwalacz
+ *    `invoice_number_request_done`);
  *  - przerwa po kluczu, przed kolejką (albo kolejka odmówiła): ponowienie
  *    z `wyslij: true` zleca wysyłkę szkicu jak „Wyślij” (RPC przejmuje tylko szkic);
  *  - po kolejce: ponowienie widzi stan inny niż szkic i niczego nie zleca;
@@ -101,6 +105,26 @@ async function findKey(db: Db, tenantId: string, userId: string, key: string): P
   return (data as KeyRow | null) ?? null;
 }
 
+const SEND_AFTER_DRAFT_FAILED =
+  'Szkic faktury jest zapisany, ale zlecenie wysyłki do KSeF się nie udało. Otwórz szkic na liście faktur i wyślij go jeszcze raz.';
+const SEND_FAILED_EARLIER =
+  'Ta faktura ma błąd wysyłki do KSeF albo KSeF ją odrzucił. Sprawdź powód w szczególe faktury i popraw ją na faktway.pl.';
+
+/** Faktura zapisana z tym kluczem żądania (`number_request_key`, 00199): szkic sprzed przerwy przed wierszem klucza. */
+async function findInvoiceByRequestKey(db: Db, tenantId: string, key: string): Promise<FakturaZapisana | null> {
+  const { data, error } = await db
+    .from('invoices')
+    .select('id, internal_number, ksef_status')
+    .eq('tenant_id', tenantId)
+    .eq('number_request_key' as never, key)
+    .maybeSingle();
+  if (error) throw new MobileUpstreamError('invoices.request_key');
+  const row = data as { id?: unknown; internal_number?: unknown; ksef_status?: unknown } | null;
+  return row && typeof row.id === 'string'
+    ? { id: row.id, numer: String(row.internal_number ?? ''), ksefStatus: String(row.ksef_status ?? 'draft') }
+    : null;
+}
+
 const KEY_SAVE_FAILED =
   'Szkic faktury jest zapisany, ale nie wysłaliśmy go do KSeF, bo nie udało się zapisać zabezpieczenia przed podwójną wysyłką. Otwórz szkic na liście faktur i wyślij go jeszcze raz.';
 
@@ -157,11 +181,14 @@ async function replay(caller: MobileCaller, invoiceId: string, wyslij: boolean):
   let faktura = saved;
   if (wyslij && saved.ksefStatus === 'draft') {
     const sent = await sendRegularDraft({ supabase: db, userId: caller.user.id, tenantId, tokenSession: tokenSessionOf(caller) }, invoiceId);
-    wysylka = sent.success ? { zlecona: true, blad: null } : { zlecona: false, blad: sent.error };
-    // Stan po zleceniu (`queued`) czytamy tylko wtedy, gdy kolejka coś zmieniła.
-    if (sent.success) faktura = (await readSaved(db, tenantId, invoiceId)) ?? saved;
+    // Stan po próbie: zlecenie zmienia go na `queued`; odmowa RPC bywa też tym, że równoległe
+    // pierwsze żądanie właśnie przejęło szkic (wtedy faktura jest w kolejce, a nie „niewysłana”).
+    faktura = (await readSaved(db, tenantId, invoiceId)) ?? saved;
+    wysylka = sent.success || SEND_IN_PROGRESS_OR_DONE.has(faktura.ksefStatus) ? { zlecona: true, blad: null } : { zlecona: false, blad: sent.error };
   } else if (wyslij) {
-    wysylka = { zlecona: SEND_IN_PROGRESS_OR_DONE.has(saved.ksefStatus), blad: null };
+    wysylka = SEND_IN_PROGRESS_OR_DONE.has(saved.ksefStatus)
+      ? { zlecona: true, blad: null }
+      : { zlecona: false, blad: SEND_FAILED_EARLIER };
   }
   const body: WystawienieOdpowiedz = { faktura, powtorzenie: true, wysylka };
   return mobileJson(body, 200, caller.headers);
@@ -192,20 +219,46 @@ export async function issueInvoiceFromMobile(caller: MobileCaller, request: Requ
     return replay(caller, earlier.invoice_id, wyslij);
   }
 
-  // Ten sam schemat i te same komunikaty co formularz strony.
-  const values = doWartosciFormularza(faktura);
+  // Przerwa po szkicu, przed wierszem klucza: szkic znajdziemy po kluczu zapisu faktury.
+  const orphan = await findInvoiceByRequestKey(db, tenantId, key);
+  if (orphan) {
+    await saveKey(db, tenantId, userId, key, hash, orphan.id);
+    return replay(caller, orphan.id, wyslij);
+  }
+
+  // Ten sam schemat i te same komunikaty co formularz strony. Klucz żądania jest też
+  // kluczem zapisu faktury (00199): drugi INSERT z nim odbija baza.
+  const values = { ...doWartosciFormularza(faktura), numberRequestKey: key };
   const checked = parseRegularInvoiceForm(values);
   if (!checked.ok) return mobileError(422, 'invoice_invalid', checked.error, headers, sciezkaPola(checked.path));
 
   const ctx: RegularIssueContext = { supabase: db, userId, tenant: await readTenantSnapshot(db, tenantId), tokenSession: tokenSessionOf(caller) };
   let keySaved = false;
-  const result = wyslij
-    ? await saveAndSendRegularInvoice(ctx, values, async (invoiceId) => {
-        const k = await saveKey(db, tenantId, userId, key, hash, invoiceId);
-        keySaved = k.ok;
-        return k;
-      })
-    : await saveRegularDraft(ctx, values);
+  let result: RegularIssueResult;
+  try {
+    result = wyslij
+      ? await saveAndSendRegularInvoice(ctx, values, async (invoiceId) => {
+          const k = await saveKey(db, tenantId, userId, key, hash, invoiceId);
+          keySaved = k.ok;
+          return k;
+        })
+      : await saveRegularDraft(ctx, values);
+  } catch (error) {
+    // Wyjątek po zapisie szkicu (np. kolejka): klient ma usłyszeć, że szkic jest, i co zrobić,
+    // zamiast 500 bez wyjścia (protokół naprawy, punkt 4). Bez szkicu: zwykła obsługa błędu trasy.
+    const draft = await findInvoiceByRequestKey(db, tenantId, key);
+    if (!draft) throw error;
+    Sentry.captureException(error, { tags: { area: 'api.mobile.faktury' }, extra: { requestId: caller.requestId, invoiceId: draft.id } });
+    if (!keySaved) keySaved = (await saveKey(db, tenantId, userId, key, hash, draft.id)).ok;
+    const body: WystawienieOdpowiedz = {
+      faktura: draft,
+      powtorzenie: false,
+      wysylka: wyslij
+        ? SEND_IN_PROGRESS_OR_DONE.has(draft.ksefStatus) ? { zlecona: true, blad: null } : { zlecona: false, blad: SEND_AFTER_DRAFT_FAILED }
+        : null,
+    };
+    return mobileJson(body, 201, headers);
+  }
 
   if (!wyslij && result.success) {
     // Szkic bez kolejki: klucz po zapisie (przerwę między nimi łapie unikalny numer faktury).
@@ -251,6 +304,12 @@ export async function sendDraftFromMobile(caller: MobileCaller, invoiceId: strin
       }
       return mobileError(409, 'not_draft', 'Ta faktura nie jest szkicem. Odrzuconą albo z błędem wysyłki popraw na faktway.pl.', headers);
     }
+    // Odmowa RPC, bo równoległe żądanie właśnie zleciło wysyłkę: to nie błąd dla klienta.
+    const now = await readSaved(db, tenantId, invoiceId.toLowerCase());
+    if (now && SEND_IN_PROGRESS_OR_DONE.has(now.ksefStatus)) {
+      const body: WysylkaSzkicuOdpowiedz = { faktura: now, juzZlecona: true };
+      return mobileJson(body, 200, headers);
+    }
     return mobileError(422, 'ksef_send_refused', sent.error, headers);
   }
   revalidatePath('/invoices');
@@ -261,15 +320,24 @@ export async function sendDraftFromMobile(caller: MobileCaller, invoiceId: strin
   return mobileJson(body, 200, headers);
 }
 
-/** `GET /api/mobile/v1/faktury/podpowiedz`: numer, dziś i zwolnienie z VAT, jak pusty formularz strony. */
+/**
+ * `GET /api/mobile/v1/faktury/podpowiedz`: numer, seria, dziś i zwolnienie z VAT,
+ * jak pusty formularz strony (`loadInvoiceNumbering` dla zwykłej faktury, krok 2.5).
+ */
 export async function invoiceFormHint(caller: MobileCaller): Promise<NextResponse> {
   const db = dbOf(caller);
   const tenantId = tenantOf(caller);
   const dzis = todayInWarsaw();
-  const [numer, zwolnienie] = await Promise.all([
-    suggestNextInvoiceNumberForTenant(db, tenantId, dzis),
+  const [numbering, zwolnienie] = await Promise.all([
+    loadInvoiceNumbering(db, tenantId, 'regular', dzis),
     readTenantVatExemption(db, tenantId),
   ]);
-  const body: PodpowiedzFakturyOdpowiedz = { numer, dzis, zwolnienieVat: zwolnienie !== null };
+  const option = selectedNumberingOption(numbering);
+  const body: PodpowiedzFakturyOdpowiedz = {
+    numer: option?.preview ?? null,
+    seria: option?.id && option.preview ? option.id : null,
+    dzis,
+    zwolnienieVat: zwolnienie !== null,
+  };
   return mobileJson(body, 200, caller.headers);
 }

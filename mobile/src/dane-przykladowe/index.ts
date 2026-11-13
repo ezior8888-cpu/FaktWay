@@ -23,6 +23,8 @@ export type Pozycja = {
   stawkaVat: number;
   /** Stawka do pokazania, gdy nie jest liczbą procent („zw”, „np”, „oo”). */
   stawkaOpis?: string;
+  /** Cena netto dokładnie jak na fakturze (do 4 miejsc, „33,3333”), gdy grosze w `cenaNetto` ją zaokrąglają (dane z bazy, M8). */
+  cenaTekst?: string;
   /** Kwoty pozycji zapisane na fakturze (dane z bazy); bez nich liczymy z ilości i ceny. */
   netto?: number;
   vat?: number;
@@ -59,6 +61,12 @@ export type Faktura = {
   waluta?: string;
   sprzedawca?: Strona;
   adresKontrahenta?: string;
+  /**
+   * Rodzaj nabywcy z bazy (M8): firma z polskim NIP, osoba prywatna bez numeru
+   * identyfikacyjnego albo `inny` (firma z UE, osoba z PESEL lub dokumentem),
+   * którego telefon nie wystawia i nie kopiuje (strona tak).
+   */
+  nabywcaTyp?: 'firma' | 'osoba' | 'inny';
   /** Adres nabywcy w dwóch wierszach jak na fakturze (dane z bazy): do nowej faktury dla tego kontrahenta (M8). */
   adresKontrahentaLinie?: { linia1: string; linia2: string };
   emailKontrahenta?: string;
