@@ -14,10 +14,29 @@ const KWOTA = new Intl.NumberFormat('pl-PL', {
 const DATA_KROTKA = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short' });
 const DATA_PELNA = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
 const DZIEN_TYGODNIA = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: 'numeric', month: 'long' });
+const GODZINA = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
+const DZIEN_I_GODZINA = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
+const DZIEN_WARSZAWA = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' });
 
-/** Kwota w groszach jako „1 234,56 zł”. Grosze, bo tak liczy generator FA(3). */
-export function kwota(grosze: number): string {
-  return KWOTA.format(grosze / 100).replace(/\s(?=zł$)/, ' ');
+const KWOTY_WALUT = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Kwota w groszach jako „1 234,56 zł”. Grosze, bo tak liczy generator FA(3).
+ * Faktura w innej walucie (z bazy, od M7) dostaje swój symbol: „1 234,56 €”.
+ */
+export function kwota(grosze: number, waluta = 'PLN'): string {
+  if (waluta === 'PLN') return KWOTA.format(grosze / 100).replace(/\s(?=zł$)/, '\u00a0');
+  let f = KWOTY_WALUT.get(waluta);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: waluta, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } catch {
+      // Kod spoza ISO 4217: liczba i kod obok.
+      return `${(grosze / 100).toFixed(2).replace('.', ',')}\u00a0${waluta}`;
+    }
+    KWOTY_WALUT.set(waluta, f);
+  }
+  return f.format(grosze / 100).replace(/\s(?=\S+$)/, '\u00a0');
 }
 
 /** „12 lis” dla dat w wierszach listy. Data w formacie RRRR-MM-DD. */
@@ -76,4 +95,13 @@ export function groszeZPola(tekst: string): number {
 /** Grosze do pola formularza: 1500,50 (bez waluty i spacji). */
 export function doPola(grosze: number): string {
   return (grosze / 100).toFixed(2).replace('.', ',');
+}
+
+/** Kiedy pobrano dane z serwera: „przed chwilą”, „dziś o 12:40”, „12 lis, 12:40”. */
+export function kiedyPobrano(iso: string, teraz = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  if (teraz.getTime() - d.getTime() < 60_000) return 'przed chwilą';
+  if (DZIEN_WARSZAWA.format(d) === DZIEN_WARSZAWA.format(teraz)) return `dziś o ${GODZINA.format(d)}`;
+  return DZIEN_I_GODZINA.format(d).replace(/\.(?=,)/, '');
 }

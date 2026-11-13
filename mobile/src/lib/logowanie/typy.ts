@@ -20,7 +20,17 @@ export const BLEDY_LOGOWANIA = {
 } as const;
 export type KodBledu = keyof typeof BLEDY_LOGOWANIA;
 
-export type Konto = { email: string; imie: string; firma: string; metoda: 'haslo' | 'google' };
+export type Konto = {
+  /** Identyfikator użytkownika (GoTrue); klucz danych w pamięci telefonu. */
+  id: string;
+  email: string;
+  imie: string;
+  /** Nazwa firmy z danych przykładowych; na prawdziwym koncie przychodzi z `GET /konto` (`stan/dane.tsx`). */
+  firma: string;
+  metoda: 'haslo' | 'google';
+  /** Start bez internetu z sesją z pęku kluczy: dane z poprzedniego otwarcia, świeże po powrocie sieci. */
+  bezSieci?: boolean;
+};
 export type Biometria = { nazwa: string; twarz: boolean };
 
 /** Krok logowania po haśle albo Google: od razu konto albo najpierw kod 2FA. */

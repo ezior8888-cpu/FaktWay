@@ -11,7 +11,7 @@ import type { Konto, Zaplecze } from '@/lib/logowanie/typy';
 
 function konto(email?: string, metoda: Konto['metoda'] = 'haslo'): Konto {
   const ty = CZLONKOWIE.find((c) => c.ty) ?? CZLONKOWIE[0];
-  return { email: email ?? ty.email, imie: ty.imie, firma: FIRMA.nazwa, metoda };
+  return { id: 'konto-przykladowe', email: email ?? ty.email, imie: ty.imie, firma: FIRMA.nazwa, metoda };
 }
 
 /** Czas odpowiedzi serwera, żeby było widać stan „trwa logowanie”. */

@@ -17,6 +17,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { LogoFaktWay } from '@/komponenty/logo';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { Tekst } from '@/komponenty/tekst';
+import { useNazwaFirmy } from '@/stan/dane';
 import { imieDoPowitania, useSesja } from '@/stan/sesja';
 import { useKolory } from '@/wyglad/kolory';
 import { CEL_DOTYKU, MARGINES, ODSTEP } from '@/wyglad/odstepy';
@@ -56,6 +57,8 @@ export function Blokada() {
   const kolory = useKolory();
   const { top, bottom } = useSafeAreaInsets();
   const { zablokowana, konto, biometria, odblokuj, wyloguj } = useSesja();
+  // Z `GET /konto` (albo z poprzedniego otwarcia); na danych przykładowych firma z konta przykładowego.
+  const firma = useNazwaFirmy();
 
   // Pytanie systemu pojawia się samo, raz przy każdym pokazaniu blokady (M5b: Face ID).
   const zapytajSystem = useEffectEvent(() => void odblokuj({ sama: true }));
@@ -81,7 +84,7 @@ export function Blokada() {
           <View style={styles.logo}>
             <LogoFaktWay wysokosc={26} biale />
           </View>
-          <View style={styles.srodek} accessible accessibilityLabel={`${tekstPowitania}. ${konto?.firma ?? ''}. Aplikacja zablokowana.`}>
+          <View style={styles.srodek} accessible accessibilityLabel={`${tekstPowitania}. ${firma}. Aplikacja zablokowana.`}>
             <View style={[styles.awatar, { backgroundColor: kolory.naGradiencieTlo }]}>
               <Tekst styl="title2" kolor="naGradiencie" maxFontSizeMultiplier={1.3}>
                 {inicjaly}
@@ -90,9 +93,11 @@ export function Blokada() {
             <Tekst styl="title2" kolor="naGradiencie" style={styles.wysrodkowany}>
               {tekstPowitania}
             </Tekst>
-            <Tekst styl="subheadline" kolor="naGradiencie" style={styles.wysrodkowany}>
-              {konto?.firma}
-            </Tekst>
+            {firma ? (
+              <Tekst styl="subheadline" kolor="naGradiencie" style={styles.wysrodkowany}>
+                {firma}
+              </Tekst>
+            ) : null}
           </View>
           <View style={styles.akcje}>
             <PrzyciskGlowny

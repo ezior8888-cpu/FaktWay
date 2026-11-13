@@ -11,12 +11,16 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { Tekst } from '@/komponenty/tekst';
 import { potwierdz } from '@/komponenty/potwierdz';
 import { Znacznik } from '@/komponenty/znacznik';
-import { useFlaga } from '@/stan/faktury';
+import { useKontoFirmy } from '@/stan/dane';
+import { useFlaga, useStanFaktur } from '@/stan/faktury';
 import { useSesja } from '@/stan/sesja';
 import type { Kolory } from '@/wyglad/kolory';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
 type Pozycja = { tytul: string; trasa: Href; podtytul?: string; stan?: string; stanKolor?: keyof Kolory; slowa?: string };
+
+/** Rola w firmie jak na stronie (zespół w ustawieniach). */
+const NAZWA_ROLI: Record<string, string> = { owner: 'Właściciel', admin: 'Administrator', member: 'Członek zespołu', accountant: 'Księgowa' };
 type Grupa = { naglowek: string; pozycje: Pozycja[] };
 
 /**
@@ -29,9 +33,18 @@ type Grupa = { naglowek: string; pozycje: Pozycja[] };
 export default function EkranWiecej() {
   const router = useRouter();
   const [szukaj, setSzukaj] = useState('');
-  const [dwaEtapy] = useFlaga('2fa', true);
-  const { wyloguj, biometria, blokada } = useSesja();
-  const konto = CZLONKOWIE.find((c) => c.ty);
+  const [dwaEtapyPrzyklad] = useFlaga('2fa', true);
+  const { wyloguj, biometria, blokada, konto: kontoSesji } = useSesja();
+  const kontoFirmy = useKontoFirmy();
+  const { dane } = useStanFaktur();
+  // Prawdziwe konto (M7): firma i rola z `GET /konto`; reszta kart na danych przykładowych do M10.
+  const zBazy = dane.zrodlo === 'baza';
+  const przyklad = CZLONKOWIE.find((c) => c.ty);
+  const konto = zBazy ? (kontoSesji ? { imie: kontoSesji.imie, email: kontoSesji.email } : undefined) : przyklad;
+  const firma = kontoFirmy?.firma;
+  // 2FA na prawdziwym koncie z serwera (`dwaEtapy.wlaczone`); `undefined`, dopóki `GET /konto` nie odpowie.
+  const dwaEtapy = zBazy ? kontoFirmy?.konto?.dwaEtapy.wlaczone : dwaEtapyPrzyklad;
+  const ileFirm = kontoFirmy?.konto?.firmy.length ?? 0;
   const ksefPolaczony = KSEF.status.startsWith('Skonfigurowano');
 
   const grupy: Grupa[] = [
@@ -74,7 +87,7 @@ export default function EkranWiecej() {
           tytul: 'Bezpieczeństwo',
           trasa: '/wiecej/ustawienia/bezpieczenstwo',
           podtytul: biometria ? `Blokada ${biometria.nazwa}: ${blokada ? 'włączona' : 'wyłączona'}` : undefined,
-          stan: dwaEtapy ? '2FA włączone' : '2FA wyłączone',
+          stan: dwaEtapy === undefined ? undefined : dwaEtapy ? '2FA włączone' : '2FA wyłączone',
           stanKolor: dwaEtapy ? 'sukces' : 'ostrzezenie',
           slowa: 'hasło 2fa face id biometria klucz blokada wyloguj',
         },
@@ -113,27 +126,59 @@ export default function EkranWiecej() {
           )
         ) : (
           <>
-            <Karta style={styles.konto}>
-              <Pressable
-                onPress={() => router.push('/wiecej/ustawienia/firma')}
-                accessibilityRole="button"
-                accessibilityLabel={`${FIRMA.nazwa}, NIP ${FIRMA.nip}, ${konto?.email ?? ''}. Dane firmy.`}
-                style={styles.trescKonta}>
-                <Tekst styl="headline">{FIRMA.nazwa}</Tekst>
-                <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry>
-                  {`NIP ${FIRMA.nip} · ${FIRMA.vat}`}
-                </Tekst>
-                {konto ? (
-                  <Tekst styl="footnote" kolor="etykietaDrugorzedna">
-                    {`${konto.imie}, ${konto.email}`}
+            {zBazy ? (
+              <Karta style={styles.konto}>
+                <Pressable
+                  onPress={ileFirm > 1 ? () => router.push('/wiecej/firmy') : undefined}
+                  disabled={ileFirm <= 1}
+                  accessibilityRole={ileFirm > 1 ? 'button' : undefined}
+                  accessibilityLabel={`${firma?.nazwa ?? 'Bez firmy'}${firma?.nip ? `, NIP ${firma.nip}` : ''}, ${konto?.email ?? ''}.${ileFirm > 1 ? ' Zmień firmę.' : ''}`}
+                  style={styles.trescKonta}>
+                  <Tekst styl="headline">{firma?.nazwa ?? (kontoFirmy?.konto ? 'Konto bez firmy' : 'Wczytujemy firmę…')}</Tekst>
+                  {firma ? (
+                    <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry>
+                      {[firma.nip ? `NIP ${firma.nip}` : undefined, NAZWA_ROLI[firma.rola] ?? firma.rola].filter(Boolean).join(' · ')}
+                    </Tekst>
+                  ) : kontoFirmy?.konto ? (
+                    <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+                      Załóż firmę albo przyjmij zaproszenie na faktway.pl.
+                    </Tekst>
+                  ) : null}
+                  {konto ? (
+                    <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+                      {konto.imie ? `${konto.imie}, ${konto.email}` : konto.email}
+                    </Tekst>
+                  ) : null}
+                  {ileFirm > 1 ? (
+                    <Tekst styl="footnote" kolor="akcent" waga="medium" style={styles.zmienFirme}>
+                      {`Zmień firmę (${ileFirm})`}
+                    </Tekst>
+                  ) : null}
+                </Pressable>
+              </Karta>
+            ) : (
+              <Karta style={styles.konto}>
+                <Pressable
+                  onPress={() => router.push('/wiecej/ustawienia/firma')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${FIRMA.nazwa}, NIP ${FIRMA.nip}, ${konto?.email ?? ''}. Dane firmy.`}
+                  style={styles.trescKonta}>
+                  <Tekst styl="headline">{FIRMA.nazwa}</Tekst>
+                  <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry>
+                    {`NIP ${FIRMA.nip} · ${FIRMA.vat}`}
                   </Tekst>
-                ) : null}
-                <View style={styles.plakietki}>
-                  <Znacznik ton={ksefPolaczony ? 'sukces' : 'ostrzezenie'}>{ksefPolaczony ? 'KSeF połączony' : 'KSeF niepołączony'}</Znacznik>
-                  <Znacznik ton="marka">Plan miesięczny</Znacznik>
-                </View>
-              </Pressable>
-            </Karta>
+                  {konto ? (
+                    <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+                      {`${konto.imie}, ${konto.email}`}
+                    </Tekst>
+                  ) : null}
+                  <View style={styles.plakietki}>
+                    <Znacznik ton={ksefPolaczony ? 'sukces' : 'ostrzezenie'}>{ksefPolaczony ? 'KSeF połączony' : 'KSeF niepołączony'}</Znacznik>
+                    <Znacznik ton="marka">Plan miesięczny</Znacznik>
+                  </View>
+                </Pressable>
+              </Karta>
+            )}
 
             {grupy.map((g) => (
               <Sekcja key={g.naglowek} naglowek={g.naglowek}>
@@ -156,7 +201,13 @@ export default function EkranWiecej() {
               />
             </Sekcja>
 
-            <Sekcja stopka={`FaktWay ${Constants.expoConfig?.version ?? ''}, dane przykładowe`} />
+            <Sekcja
+              stopka={
+                zBazy
+                  ? `FaktWay ${Constants.expoConfig?.version ?? ''}. Z Twojego konta: firma, faktury wystawione i skrzynka KSeF. Pozostałe ekrany pokazują jeszcze dane przykładowe.`
+                  : `FaktWay ${Constants.expoConfig?.version ?? ''}, dane przykładowe`
+              }
+            />
           </>
         )}
       </EkranListy>
@@ -168,4 +219,5 @@ const styles = StyleSheet.create({
   konto: { marginTop: ODSTEP.s },
   trescKonta: { padding: MARGINES, gap: ODSTEP.linia },
   plakietki: { flexDirection: 'row', flexWrap: 'wrap', gap: ODSTEP.xs, marginTop: ODSTEP.xs },
+  zmienFirme: { marginTop: ODSTEP.xs },
 });

@@ -3,8 +3,10 @@ import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { DZIS, KATEGORIE_KOSZTOW, NAZWA_ZRODLA, type Koszt, type ZrodloKosztu } from '@/dane-przykladowe';
+import { DZIS, KATEGORIE_KOSZTOW, NAZWA_ZRODLA, type FakturaKosztowa, type Koszt, type ZrodloKosztu } from '@/dane-przykladowe';
 import { Segmenty } from '@/komponenty/formularz';
+import { NotaDanych, StanBledu } from '@/komponenty/stan-danych';
+import { SzkieletListy } from '@/komponenty/szkielet';
 import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
@@ -29,11 +31,14 @@ const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
  * Koszty: odpowiednik sekcji strony `(koszty)` (Wydatki i Skrzynka KSeF)
  * w układzie Copilota (D14): karta z trzema liczbami miesiąca, lista po dniach
  * z kolorowymi kategoriami i kropką „do opisania”, filtry, wydatek ze zdjęcia.
+ * Od M7 na prawdziwym koncie skrzynka KSeF jest z bazy (jak `(koszty)/inbox`
+ * strony); wydatki zostają na danych przykładowych do M9 i M10.
  */
 export default function EkranKosztow() {
   const kolory = useKolory();
   const router = useRouter();
-  const { koszty } = useStanFaktur();
+  const { koszty, skrzynka: wszystkieZKsef, dane } = useStanFaktur();
+  const zBazy = dane.zrodlo === 'baza';
   const [widok, setWidok] = useState(0);
   const [tylkoDoOpisania, setTylkoDoOpisania] = useState(false);
   const [zrodlo, setZrodlo] = useState('Wszystkie źródła');
@@ -45,7 +50,7 @@ export default function EkranKosztow() {
   const miesiac = koszty.filter((k) => k.data.startsWith(DZIS.slice(0, 7)));
   const wKpir = miesiac.filter((k) => k.wKpir);
   const doOpisania = koszty.filter((k) => k.doOpisania);
-  const nowychWSkrzynce = koszty.filter((k) => k.zrodlo === 'ksef' && k.doOpisania).length;
+  const nowychWSkrzynce = wszystkieZKsef.filter((s) => s.status === 'nowa').length;
   const vatDoOdliczenia = miesiac.filter((k) => k.dokument !== 'Paragon').reduce((s, k) => s + (k.brutto - k.netto), 0);
 
   const widoczne = useMemo(() => {
@@ -57,7 +62,11 @@ export default function EkranKosztow() {
       .filter((k) => kategoria === 'Wszystkie kategorie' || k.kategoria === kategoria)
       .filter((k) => !fraza || k.dostawca.toLocaleLowerCase('pl').includes(fraza) || (k.nip ?? '').includes(fraza) || k.numer.toLowerCase().includes(fraza));
   }, [koszty, tylkoDoOpisania, zrodlo, kategoria, szukaj]);
-  const skrzynka = koszty.filter((k) => k.zrodlo === 'ksef').filter((k) => !szukaj || k.dostawca.toLocaleLowerCase('pl').includes(szukaj.toLocaleLowerCase('pl')));
+  const fraza = szukaj.trim().toLocaleLowerCase('pl');
+  const skrzynka = wszystkieZKsef.filter(
+    (s) => !fraza || s.sprzedawca.toLocaleLowerCase('pl').includes(fraza) || s.nipSprzedawcy.includes(fraza) || s.numer.toLowerCase().includes(fraza),
+  );
+  const pierwszeWczytanie = zBazy && dane.stan === 'ladowanie' && wszystkieZKsef.length === 0;
 
   const sprawdzTeraz = () => {
     setSprawdzam(true);
@@ -117,11 +126,14 @@ export default function EkranKosztow() {
       <EkranListy
         gradient={!szukaj}
         keyboardShouldPersistTaps="handled"
-        onOdswiez={() =>
-          new Promise<void>((gotowe) => {
-            sprawdzTeraz();
-            setTimeout(gotowe, 1500);
-          })
+        onOdswiez={
+          zBazy
+            ? dane.odswiez
+            : () =>
+                new Promise<void>((gotowe) => {
+                  sprawdzTeraz();
+                  setTimeout(gotowe, 1500);
+                })
         }>
         {szukaj ? null : (
           <>
@@ -144,21 +156,29 @@ export default function EkranKosztow() {
                 />
               </View>
             </Karta>
-            <Pressable
-              onPress={sprawdzam ? undefined : sprawdzTeraz}
-              accessibilityRole="button"
-              accessibilityLabel={`Ostatnie pobranie z KSeF: ${pobranie}. Sprawdzamy co 15 minut. Sprawdź teraz.`}
-              hitSlop={ODSTEP.xs}
-              style={styles.ksef}>
-              <Tekst styl="footnote" kolor="etykietaDrugorzedna">
-                {sprawdzam ? 'Sprawdzam KSeF…' : `KSeF sprawdzony ${pobranie}, co 15 minut. `}
-                {sprawdzam ? null : (
-                  <Tekst styl="footnote" kolor="akcent" waga="medium">
-                    Sprawdź teraz
-                  </Tekst>
-                )}
+            {zBazy ? (
+              // „Sprawdź teraz” zleca pobranie z KSeF na serwerze (`requestInboxCheckAction`): trasa API w M10.
+              <Tekst styl="footnote" kolor="etykietaDrugorzedna" style={styles.ksef}>
+                Faktury kosztowe z KSeF pobieramy co 15 minut.
               </Tekst>
-            </Pressable>
+            ) : (
+              <Pressable
+                onPress={sprawdzam ? undefined : sprawdzTeraz}
+                accessibilityRole="button"
+                accessibilityLabel={`Ostatnie pobranie z KSeF: ${pobranie}. Sprawdzamy co 15 minut. Sprawdź teraz.`}
+                hitSlop={ODSTEP.xs}
+                style={styles.ksef}>
+                <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+                  {sprawdzam ? 'Sprawdzam KSeF…' : `KSeF sprawdzony ${pobranie}, co 15 minut. `}
+                  {sprawdzam ? null : (
+                    <Tekst styl="footnote" kolor="akcent" waga="medium">
+                      Sprawdź teraz
+                    </Tekst>
+                  )}
+                </Tekst>
+              </Pressable>
+            )}
+            {widok === 1 ? <NotaDanych dane={dane} /> : null}
             <View style={styles.akcja}>
               <PrzyciskGlowny tytul="Dodaj wydatek" ikona="camera-line" onPress={() => router.push('/koszty/dodaj')} />
             </View>
@@ -189,26 +209,51 @@ export default function EkranKosztow() {
               ])}
             </Sekcja>
           )
+        ) : pierwszeWczytanie ? (
+          <SzkieletListy etykieta="Wczytujemy skrzynkę KSeF" />
+        ) : zBazy && dane.stan === 'blad' ? (
+          <StanBledu dane={dane} tytul="Nie udało się pobrać skrzynki KSeF" />
         ) : skrzynka.length === 0 ? (
-          <StanPusty ikona="inbox-archive-line" tytul="Brak faktur przychodzących" opis="Faktury kosztowe z KSeF pojawią się tu same." />
+          <StanPusty
+            ikona={fraza ? 'search-line' : 'inbox-archive-line'}
+            tytul={fraza ? 'Nic nie pasuje' : 'Brak faktur przychodzących'}
+            opis={fraza ? `Brak faktur kosztowych pasujących do „${szukaj.trim()}”.` : 'Faktury kosztowe z KSeF pojawią się tu same.'}
+          />
         ) : (
-          <Sekcja naglowek="Faktury przychodzące z KSeF" stopka="Pokazujemy 200 najnowszych faktur według daty przyjęcia w KSeF.">
-            {skrzynka.map((k) => (
-              <Wiersz
-                key={k.id}
-                tytul={k.dostawca}
-                podtytul={`${k.numer} · wystawiona ${dataKrotka(k.data)}, odebrana ${dataKrotka(k.otrzymano ?? k.data)}`}
-                wartosc={kwota(k.brutto)}
-                wartoscKolor="etykieta"
-                wartoscPodpis={k.doOpisania ? 'Nowa' : 'Opisana'}
-                wartoscPodpisKolor={k.doOpisania ? 'akcent' : 'etykietaDrugorzedna'}
-                onPress={() => router.push({ pathname: '/koszty/[id]', params: { id: k.id } })}
-              />
+          <Sekcja
+            naglowek="Faktury przychodzące z KSeF"
+            stopka={dane.skrzynkaPelna ? undefined : 'Pokazujemy 200 najnowszych faktur według daty przyjęcia w KSeF. Starsze znajdziesz na faktway.pl.'}>
+            {skrzynka.map((s) => (
+              <WierszSkrzynki key={s.id} faktura={s} onPress={() => router.push({ pathname: '/koszty/ksef/[id]', params: { id: s.id } })} />
             ))}
           </Sekcja>
         )}
       </EkranListy>
     </>
+  );
+}
+
+/** Status jak na stronie: „Nowa”, „Opisana”; archiwum z historii KSeF bez kosztu ma własny podpis. */
+function podpisSkrzynki(s: FakturaKosztowa): { tekst?: string; kolor: 'akcent' | 'etykietaDrugorzedna' } {
+  if (s.status === 'nowa') return { tekst: 'Nowa', kolor: 'akcent' };
+  if (s.status === 'opisana') return { tekst: 'Opisana', kolor: 'etykietaDrugorzedna' };
+  if (s.zHistorii) return { tekst: 'Historia z KSeF', kolor: 'etykietaDrugorzedna' };
+  return { kolor: 'etykietaDrugorzedna' };
+}
+
+function WierszSkrzynki({ faktura: s, onPress }: { faktura: FakturaKosztowa; onPress: () => void }) {
+  const podpis = podpisSkrzynki(s);
+  return (
+    <Wiersz
+      tytul={s.sprzedawca}
+      podtytul={`${s.numer} · wystawiona ${dataKrotka(s.dataWystawienia)}${s.otrzymano ? `, odebrana ${dataKrotka(s.otrzymano)}` : ''}`}
+      wartosc={kwota(s.brutto, s.waluta)}
+      wartoscKolor="etykieta"
+      wartoscPodpis={podpis.tekst}
+      wartoscPodpisKolor={podpis.kolor}
+      onPress={onPress}
+      etykietaDostepnosci={`${s.sprzedawca}, ${s.numer}, ${kwota(s.brutto, s.waluta)}${podpis.tekst ? `, ${podpis.tekst}` : ''}`}
+    />
   );
 }
 

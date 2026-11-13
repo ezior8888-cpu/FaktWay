@@ -12,6 +12,7 @@ export default function UkladWiecej() {
   return (
     <Stack screenOptions={opcje}>
       <Stack.Screen name="index" options={{ title: 'Więcej', ...gradient }} />
+      <Stack.Screen name="firmy" options={{ title: 'Zmień firmę' }} />
       <Stack.Screen name="kontrahenci/index" options={{ title: 'Kontrahenci', ...gradient }} />
       <Stack.Screen name="kontrahenci/[id]" options={{ title: '' }} />
       <Stack.Screen name="import" options={{ title: 'Import danych' }} />

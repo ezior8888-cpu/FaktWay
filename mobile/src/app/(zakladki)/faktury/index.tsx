@@ -4,6 +4,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { DZIS, type Faktura, type RodzajFaktury } from '@/dane-przykladowe';
 import { Segmenty } from '@/komponenty/formularz';
+import { otworzNaStronie } from '@/komponenty/na-stronie';
+import { NotaDanych, StanBledu } from '@/komponenty/stan-danych';
+import { SzkieletKwoty, SzkieletListy } from '@/komponenty/szkielet';
 import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { KwotaZGroszami } from '@/komponenty/naglowek';
@@ -12,7 +15,7 @@ import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { WierszFaktury } from '@/komponenty/wiersz-faktury';
 import { dataKrotka, dniMiedzy, kwota } from '@/lib/format';
-import { dni, doZaplaty, ileFaktur, statusFaktury } from '@/lib/status-faktury';
+import { dni, doZaplaty, ileFaktur, pozostaloDoZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
@@ -47,22 +50,30 @@ function grupujPoMiesiacu(faktury: Faktura[]): [string, Faktura[]][] {
   return [...grupy.entries()];
 }
 
+const wZlotych = (f: Faktura) => !f.waluta || f.waluta === 'PLN';
+
+/** Suma w złotych; faktury w walutach obcych (z bazy) nie dodają się do złotówek. */
 function suma(faktury: Faktura[]): number {
-  return faktury.reduce((s, f) => s + f.brutto, 0);
+  return faktury.reduce((s, f) => s + (wZlotych(f) ? f.brutto : 0), 0);
+}
+
+/** Ile klienci jeszcze winni w złotych: bez wpłat częściowych. */
+function sumaDoZaplaty(faktury: Faktura[]): number {
+  return faktury.reduce((s, f) => s + (wZlotych(f) ? pozostaloDoZaplaty(f) : 0), 0);
 }
 
 function pasujeStatusKsef(f: Faktura, filtr: (typeof STATUSY_KSEF)[number]): boolean {
   if (filtr === 'Szkice') return f.statusKsef === 'robocza';
   if (filtr === 'W toku') return f.statusKsef === 'wysylanie';
   if (filtr === 'Przyjęte w KSeF') return f.statusKsef === 'przyjeta';
-  if (filtr === 'Odrzucone i błędy') return f.statusKsef === 'odrzucona';
+  if (filtr === 'Odrzucone i błędy') return f.statusKsef === 'odrzucona' || f.statusKsef === 'blad';
   return true;
 }
 
-function pasujePlatnosc(f: Faktura, filtr: (typeof PLATNOSCI)[number]): boolean {
+function pasujePlatnosc(f: Faktura, filtr: (typeof PLATNOSCI)[number], dzis: string): boolean {
   if (filtr === 'Opłacone') return f.zaplacona;
   if (filtr === 'Nieopłacone') return doZaplaty(f);
-  if (filtr === 'Po terminie') return statusFaktury(f, DZIS).zalegla;
+  if (filtr === 'Po terminie') return statusFaktury(f, dzis).zalegla;
   return true;
 }
 
@@ -80,7 +91,11 @@ export default function EkranFaktur() {
   const kolory = useKolory();
   const router = useRouter();
   const { widok: widokParam } = useLocalSearchParams<{ widok?: string }>();
-  const { faktury, cykliczne, flagi } = useStanFaktur();
+  const { faktury, cykliczne, flagi, dzis, dane } = useStanFaktur();
+  // Prawdziwe konto (M7): lista z bazy; cykliczne i przypomnienia jeszcze na stronie (M10).
+  const zBazy = dane.zrodlo === 'baza';
+  const pierwszeWczytanie = zBazy && dane.stan === 'ladowanie' && faktury.length === 0;
+  const bladBezDanych = zBazy && dane.stan === 'blad';
   const [widok, setWidok] = useState(widokZParametru(widokParam));
   // Link „Faktury cykliczne” z innej zakładki trafia na już otwartą listę: nowy parametr przełącza widok.
   const [ostatniParam, setOstatniParam] = useState(widokParam);
@@ -94,7 +109,7 @@ export default function EkranFaktur() {
   const [rodzaj, setRodzaj] = useState<string>('Wszystkie');
 
   const otwarte = faktury.filter(doZaplaty);
-  const zalegle = otwarte.filter((f) => statusFaktury(f, DZIS).zalegla);
+  const zalegle = otwarte.filter((f) => statusFaktury(f, dzis).zalegla);
   const filtrowAktywnych = [statusKsef, platnosc, rodzaj].filter((x) => x !== 'Wszystkie').length;
 
   const widoczne = useMemo(() => {
@@ -102,16 +117,13 @@ export default function EkranFaktur() {
     const wybranyRodzaj = RODZAJE.find((r) => r.etykieta === rodzaj)?.rodzaj;
     return faktury
       .filter((f) => pasujeStatusKsef(f, statusKsef))
-      .filter((f) => pasujePlatnosc(f, platnosc))
+      .filter((f) => pasujePlatnosc(f, platnosc, dzis))
       .filter((f) => !wybranyRodzaj || f.rodzaj === wybranyRodzaj)
       .filter((f) => !fraza || f.kontrahent.toLocaleLowerCase('pl').includes(fraza) || f.numer.toLowerCase().includes(fraza));
-  }, [faktury, statusKsef, platnosc, rodzaj, szukaj]);
+  }, [faktury, statusKsef, platnosc, rodzaj, szukaj, dzis]);
 
-  // Dane przykładowe: odświeżenie tylko pokazuje kręciołek; z M7 pobiera listę z API.
-  const odswiezListe = () => new Promise<void>((gotowe) => setTimeout(gotowe, 800));
-
-  // Szkice i odrzucone przez KSeF na górze listy, jak „Drafts” w Revolut Business (D14).
-  const doDokonczenia = widoczne.filter((f) => f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona');
+  // Szkice, odrzucone przez KSeF i z błędem wysyłki na górze listy, jak „Drafts” w Revolut Business (D14).
+  const doDokonczenia = widoczne.filter((f) => f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona' || f.statusKsef === 'blad');
 
   const poTerminie = zalegle
     .filter((f) => !szukaj || f.kontrahent.toLocaleLowerCase('pl').includes(szukaj.toLocaleLowerCase('pl')))
@@ -150,10 +162,16 @@ export default function EkranFaktur() {
         </Stack.Toolbar>
       ) : null}
 
-      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled" onOdswiez={odswiezListe}>
+      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled" onOdswiez={dane.odswiez}>
         {szukaj ? null : (
           <>
-            <KartaDoZaplaty otwarte={suma(otwarte)} poTerminie={suma(zalegle)} ilePoTerminie={zalegle.length} />
+            {/* Bez danych nie pokazujemy „0,00 zł”: przy wczytywaniu szkielet, przy błędzie nic (stan błędu niżej). */}
+            {pierwszeWczytanie ? (
+              <SzkieletKwoty />
+            ) : bladBezDanych ? null : (
+              <KartaDoZaplaty otwarte={sumaDoZaplaty(otwarte)} poTerminie={sumaDoZaplaty(zalegle)} ilePoTerminie={zalegle.length} />
+            )}
+            <NotaDanych dane={dane} />
             {/* D7 (Bartosz, 09.11.2026): „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku. */}
             <View style={styles.akcja}>
               <PrzyciskGlowny tytul="Nowa faktura" ikona="add-line" onPress={() => router.push('/faktury/nowa')} />
@@ -166,10 +184,13 @@ export default function EkranFaktur() {
           wybrany={widok}
           onZmiana={setWidok}
           etykieta="Rodzaj listy faktur"
-          liczniki={[undefined, cykliczne.length, zalegle.length > 0 ? zalegle.length : undefined]}
+          liczniki={[undefined, zBazy ? undefined : cykliczne.length, zalegle.length > 0 ? zalegle.length : undefined]}
         />
 
-        {widok === 0 ? (
+        {widok !== 1 && pierwszeWczytanie ? <SzkieletListy /> : null}
+        {widok !== 1 && bladBezDanych ? <StanBledu dane={dane} tytul="Nie udało się pobrać faktur" /> : null}
+
+        {widok === 0 && !pierwszeWczytanie && !bladBezDanych ? (
           widoczne.length === 0 ? (
             <StanPusty
               ikona={szukaj || filtrowAktywnych > 0 ? 'search-line' : 'file-text-line'}
@@ -210,11 +231,21 @@ export default function EkranFaktur() {
                   ))}
                 </Sekcja>
               ))}
+              {dane.fakturyPelne ? null : <Sekcja stopka="Pokazujemy 200 ostatnio wystawionych faktur. Starsze znajdziesz na faktway.pl." />}
             </>
           )
         ) : null}
 
-        {widok === 1 ? (
+        {widok === 1 && zBazy ? (
+          <StanPusty
+            ikona="repeat-line"
+            tytul="Faktury cykliczne na faktway.pl"
+            opis="Ta wersja aplikacji pokazuje faktury wystawione z Twojego konta. Faktury cykliczne zobaczysz i ustawisz na stronie."
+            akcja={{ tytul: 'Otwórz faktway.pl', onPress: () => otworzNaStronie('cykliczna') }}
+          />
+        ) : null}
+
+        {widok === 1 && !zBazy ? (
           <Sekcja naglowek="Faktury cykliczne" stopka="Wystawiamy je według harmonogramu z faktury-wzoru. Wzorem może być tylko przyjęta faktura VAT w złotych.">
             {cykliczne.map((c) => (
               <Wiersz
@@ -232,12 +263,16 @@ export default function EkranFaktur() {
           </Sekcja>
         ) : null}
 
-        {widok === 2 ? (
+        {widok === 2 && !pierwszeWczytanie && !bladBezDanych ? (
           <>
             <Sekcja
               naglowek="Po terminie"
-              naglowekWartosc={kwota(suma(zalegle))}
-              stopka={`Od najdłużej zaległej. Przypomnień w tym miesiącu: ${wyslanePrzypomnienia}, wstrzymanych: ${wstrzymane}. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.`}>
+              naglowekWartosc={kwota(sumaDoZaplaty(zalegle))}
+              stopka={
+                zBazy
+                  ? 'Od najdłużej zaległej. Przypomnienia o zapłacie ustawisz i wyślesz na faktway.pl.'
+                  : `Od najdłużej zaległej. Przypomnień w tym miesiącu: ${wyslanePrzypomnienia}, wstrzymanych: ${wstrzymane}. Przypomnienia przygotowujemy do zatwierdzenia; nic nie wychodzi samo.`
+              }>
               {poTerminie.length === 0
                 ? [<StanPusty key="pusto" ikona="checkbox-circle-line" tytul="Brak pozycji gotowych do przypomnienia" opis="Żadna faktura nie jest po terminie." />]
                 : poTerminie.map((f) => {
@@ -247,16 +282,19 @@ export default function EkranFaktur() {
                       <Wiersz
                         key={f.id}
                         tytul={f.kontrahent}
-                        podtytul={`${f.numer} · ${dni(dniMiedzy(f.terminPlatnosci, DZIS))} po terminie`}
-                        wartosc={kwota(f.brutto)}
+                        podtytul={`${f.numer} · ${dni(dniMiedzy(f.terminPlatnosci, dzis))} po terminie`}
+                        wartosc={kwota(f.brutto, f.waluta)}
                         wartoscKolor="etykieta"
-                        wartoscPodpis={wstrzymana ? 'Wstrzymane' : p ? `Etap ${p.etap} · wysłane ${p.wyslane}/3` : 'Bez przypomnień'}
+                        // Stan przypomnień z bazy dochodzi w M10; do tego czasu bez podpisu, żeby nie mówić „Bez przypomnień” na wyrost.
+                        wartoscPodpis={zBazy ? undefined : wstrzymana ? 'Wstrzymane' : p ? `Etap ${p.etap} · wysłane ${p.wyslane}/3` : 'Bez przypomnień'}
                         wartoscPodpisKolor={wstrzymana ? 'etykietaDrugorzedna' : p ? 'akcent' : 'etykietaDrugorzedna'}
-                        onPress={() => router.push({ pathname: '/faktury/przypomnienie', params: { id: f.id } })}
+                        onPress={() =>
+                          zBazy ? router.push({ pathname: '/faktury/[id]', params: { id: f.id } }) : router.push({ pathname: '/faktury/przypomnienie', params: { id: f.id } })
+                        }
                       />
                     );
                   })}
-              <Wiersz tytul="Ustawienia przypomnień" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />
+              {zBazy ? null : <Wiersz tytul="Ustawienia przypomnień" strzalka onPress={() => router.push('/wiecej/ustawienia/przypomnienia')} />}
             </Sekcja>
           </>
         ) : null}
