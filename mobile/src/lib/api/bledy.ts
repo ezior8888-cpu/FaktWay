@@ -53,6 +53,10 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   session_verification_failed: 'ponow',
   service_unavailable: 'ponow',
   internal_error: 'serwer',
+  // Tylko `POST /logowanie` (M6b), który idzie obok tego klienta (`lib/logowanie/przez-api.ts`).
+  invalid_request: 'serwer',
+  invalid_credentials: 'serwer',
+  login_unavailable: 'ponow',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */

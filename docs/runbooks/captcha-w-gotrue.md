@@ -103,6 +103,13 @@ Kolejność odwrotna niż przy włączaniu, żeby nie przejść przez stan D:
   (GoTrue pomija captcha dla `pkce`, `refresh_token` i `id_token`).
 - Wywołania z kluczem `service_role` (joby, panel admina) GoTrue przepuszcza
   bez captcha.
+- Aplikacja na telefon loguje się hasłem przez `POST /api/mobile/v1/logowanie`
+  (kluczem serwisowym, plan aplikacji mobilnej, decyzja D16), więc krok 2 jej
+  nie blokuje. Warunek: aplikacja z etapu M6b. Wersja z M5b loguje się wprost
+  do GoTrue i po kroku 2 pokaże „Logowanie w aplikacji jest chwilowo
+  niedostępne”. Kod 2FA, odświeżanie sesji i wylogowanie z telefonu idą wprost
+  do GoTrue i captchy nie wymagają (sprawdzenie w planie, sekcja 4.2). Bez
+  Redisa trasa telefonu odmawia, bo limity prób zastępują tam captchę.
 - Testowe logowanie do testów obciążeniowych (`/api/dev/load-test-session`)
   nie przejdzie przy captcha w GoTrue. Działa tylko poza produkcją.
 - Kod: `lib/security/bot-check.ts` (przełącznik, rozpoznanie odmowy captcha),

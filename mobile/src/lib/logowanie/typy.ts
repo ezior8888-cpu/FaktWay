@@ -13,7 +13,10 @@ export const BLEDY_LOGOWANIA = {
   za_duzo_prob: 'Zbyt wiele prób. Poczekaj chwilę i spróbuj ponownie.',
   brak_polaczenia: 'Nie możemy się połączyć. Sprawdź internet i spróbuj ponownie.',
   nieznany: 'Coś poszło nie tak. Spróbuj ponownie.',
-  /** GoTrue z włączoną captchą (`docs/runbooks/captcha-w-gotrue.md`) odrzuca logowanie bez tokenu Turnstile. */
+  /**
+   * Logowanie hasłem w aplikacji niedostępne: trasa `POST /logowanie` bez limitów prób (Redis) albo
+   * GoTrue odrzucił klucz serwera (`login_unavailable`, M6b); przed M6b odmowa captchy w GoTrue.
+   */
   captcha: 'Logowanie w aplikacji jest chwilowo niedostępne. Zaloguj się na faktway.pl albo spróbuj za kilka minut.',
   /** Klient zamknął okno Google: bez komunikatu. */
   anulowane: '',
