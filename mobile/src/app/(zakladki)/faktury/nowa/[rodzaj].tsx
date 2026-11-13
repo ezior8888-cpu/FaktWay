@@ -25,8 +25,10 @@ import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { Tekst } from '@/komponenty/tekst';
 import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
 import {
+  dodajDni,
   doFakturyTelefonu,
   kluczZapisu,
+  najblizszyTermin,
   liczbaZPola,
   nabywcyZFaktur,
   poleFormularza,
@@ -77,17 +79,6 @@ function zPozycji(p: Pozycja): PozycjaFormularza {
   // Stawka bez procentu z bazy („zw”, „np”, „oo”) zostaje sobą, nie 0% (M8: kopia prawdziwej faktury).
   const opis = STAWKI_ZWYKLE.find((s) => s.wartosc === p.stawkaOpis)?.wartosc;
   return { nazwa: p.nazwa, ilosc: String(p.ilosc).replace('.', ','), jednostka: p.jednostka, cena: doPola(p.cenaNetto), stawka: opis ?? String(p.stawkaVat) };
-}
-
-/** Termin z zapisanej faktury na najbliższą opcję wyboru (7, 14, 30 dni). */
-function najblizszyTermin(dni: number): string {
-  return [7, 14, 30].reduce((a, b) => (Math.abs(b - dni) < Math.abs(a - dni) ? b : a)).toString();
-}
-
-function dodajDni(iso: string, dni: number): string {
-  const d = new Date(`${iso}T12:00:00`);
-  d.setDate(d.getDate() + dni);
-  return d.toISOString().slice(0, 10);
 }
 
 const PUSTA: PozycjaFormularza = { nazwa: '', ilosc: '1', jednostka: 'szt', cena: '', stawka: '23' };
@@ -141,7 +132,7 @@ function FormularzFaktury() {
   const [dataWyst, setDataWyst] = useState(edytowana?.dataWystawienia ?? dzien);
   const [dataSprz, setDataSprz] = useState(edytowana?.dataWystawienia ?? dzien);
   const [termin, setTermin] = useState(
-    edytowana ? najblizszyTermin(dniMiedzy(edytowana.dataWystawienia, edytowana.terminPlatnosci)) : String(startowy?.terminDni ?? 14),
+    edytowana ? String(najblizszyTermin(dniMiedzy(edytowana.dataWystawienia, edytowana.terminPlatnosci))) : String(startowy?.terminDni ?? 14),
   );
   const [rodzajNabywcy, setRodzajNabywcy] = useState<'firma' | 'osoba' | 'ue'>(startowy?.osoba ? 'osoba' : 'firma');
   const [nip, setNip] = useState(edytowana?.nipKontrahenta ?? startowy?.nip ?? '');

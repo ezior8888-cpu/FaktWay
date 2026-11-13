@@ -96,8 +96,10 @@ export type PodpowiedzFaktury = { gotowe: boolean; numer?: string; dzis?: string
  * Na danych przykładowych i bez sieci: `gotowe` bez numeru (klient wpisze go sam).
  */
 export function usePodpowiedzFaktury(): PodpowiedzFaktury {
-  const firma = use(Kontekst)?.firma?.id;
-  const [podpowiedz, setPodpowiedz] = useState<PodpowiedzFaktury>({ gotowe: !firma, zwolnienieVat: false });
+  const kontekst = use(Kontekst);
+  const firma = kontekst?.firma?.id;
+  // Dane przykładowe (bez kontekstu konta): od razu gotowe. Prawdziwe konto czeka na firmę z `GET /konto`.
+  const [podpowiedz, setPodpowiedz] = useState<PodpowiedzFaktury>({ gotowe: kontekst === null, zwolnienieVat: false });
   useEffect(() => {
     if (!firma) return;
     let biezace = true;
@@ -174,6 +176,8 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   }
 
   const pokolenie = useRef(0);
+  /** Takt sprawdzania statusu KSeF: zegar uzbraja się od nowa także wtedy, gdy pobranie się nie udało. */
+  const [takt, setTakt] = useState(0);
   const ostatnioUdane = useRef(0);
   const firmaPokazana = useRef<string | null | undefined>(undefined);
   /** Faktury wysłane z telefonu w tej sesji, których wynik w KSeF śledzimy. */
@@ -331,19 +335,21 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       sledzone.current.set(id, proby + 1);
       wDrodze = true;
     }
-    if (wDrodze) void odswiezFaktury();
+    if (wDrodze) void odswiezFaktury().finally(() => setTakt((t) => t + 1));
   });
   const fakturyTeraz = dane.faktury;
   useEffect(() => {
     if (sledzone.current.size === 0) return;
     const zegar = setTimeout(() => sprawdzWysylane(), STATUS_KSEF_CO_MS);
     return () => clearTimeout(zegar);
-  }, [fakturyTeraz]);
+  }, [fakturyTeraz, takt]);
 
   /** Błąd sesji z zapisu: te same reakcje co przy pobieraniu; zdanie wraca do formularza. */
   const bladZapisu = (b: BladApi): WynikZapisu => {
     if (b.rodzaj === 'sesja') wyloguj();
     else if (b.rodzaj === 'kod') wymagajKodu();
+    // Firma bez dostępu: konto i lista firm od nowa, jak przy pobieraniu.
+    else if (b.rodzaj === 'firma' && uzytkownik) void laduj(uzytkownik);
     return { ok: false, komunikat: b.komunikat, ...(b.pole ? { pole: b.pole } : {}) };
   };
 
@@ -407,7 +413,10 @@ function DaneZBazy({ children }: { children: ReactNode }) {
         cialo: { wyslij, faktura: naKoncie.faktura },
       });
       if (!w.ok) return bladZapisu(w.blad);
-      pokazZapisana(f, w.dane.faktura);
+      // Stawka bez procentu („zw”, „oo”, „np”) od razu z opisem, nie jako 0% modelu formularza.
+      const linie = naKoncie.faktura.lines;
+      const zOpisem = { ...f, pozycje: f.pozycje.map((p, i) => (linie[i] && !/^\d+$/.test(linie[i].vatRate) ? { ...p, stawkaOpis: linie[i].vatRate } : p)) };
+      pokazZapisana(zOpisem, w.dane.faktura);
       return { ok: true, id: w.dane.faktura.id, ...(w.dane.wysylka?.blad ? { uwaga: bezDlugichMyslnikow(w.dane.wysylka.blad) } : {}) };
     },
     zastapFakture: (id) => naStronie('edycja', id),

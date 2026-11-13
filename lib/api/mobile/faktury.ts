@@ -154,13 +154,16 @@ async function replay(caller: MobileCaller, invoiceId: string, wyslij: boolean):
   if (!saved) throw new MobileUpstreamError('mobile_idempotency_keys.invoice');
 
   let wysylka: WystawienieOdpowiedz['wysylka'] = null;
+  let faktura = saved;
   if (wyslij && saved.ksefStatus === 'draft') {
     const sent = await sendRegularDraft({ supabase: db, userId: caller.user.id, tenantId, tokenSession: tokenSessionOf(caller) }, invoiceId);
     wysylka = sent.success ? { zlecona: true, blad: null } : { zlecona: false, blad: sent.error };
+    // Stan po zleceniu (`queued`) czytamy tylko wtedy, gdy kolejka coś zmieniła.
+    if (sent.success) faktura = (await readSaved(db, tenantId, invoiceId)) ?? saved;
   } else if (wyslij) {
     wysylka = { zlecona: SEND_IN_PROGRESS_OR_DONE.has(saved.ksefStatus), blad: null };
   }
-  const body: WystawienieOdpowiedz = { faktura: (await readSaved(db, tenantId, invoiceId)) ?? saved, powtorzenie: true, wysylka };
+  const body: WystawienieOdpowiedz = { faktura, powtorzenie: true, wysylka };
   return mobileJson(body, 200, caller.headers);
 }
 

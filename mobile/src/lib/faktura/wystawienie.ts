@@ -12,6 +12,7 @@
  */
 import type { Faktura, MetodaPlatnosci } from '../../dane-przykladowe';
 import type { FakturaTelefonu, StawkaVatTelefonu } from '../api/kontrakt';
+import { dniMiedzy } from '../format';
 
 /** Pozycja w polach formularza: tekst z klawiatury („1500,50”, „1,5”). */
 export type PozycjaFormularza = { nazwa: string; ilosc: string; jednostka: string; cena: string; stawka: string };
@@ -136,10 +137,6 @@ export type NabywcaZFaktury = {
 /** Najbliższa opcja terminu (7, 14, 30 dni) dla zapisanej faktury. */
 export function najblizszyTermin(dni: number): number {
   return [7, 14, 30].reduce((a, b) => (Math.abs(b - dni) < Math.abs(a - dni) ? b : a));
-}
-
-function dniMiedzy(od: string, doDnia: string): number {
-  return Math.round((Date.parse(`${doDnia}T12:00:00Z`) - Date.parse(`${od}T12:00:00Z`)) / 86_400_000);
 }
 
 /**
