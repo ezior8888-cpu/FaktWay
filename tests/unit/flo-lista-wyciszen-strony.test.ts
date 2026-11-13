@@ -258,7 +258,9 @@ describe('lista wyciszeń Flo przy setkach spraw', () => {
   });
 
   it('1200 kart: każda sprawa podpisana NAJNOWSZĄ kartą, także za tysięcznym wierszem', async () => {
-    // 100 spraw po 12 kart; adres jeszcze się mieści, odpowiedź już nie.
+    // 100 spraw po 12 kart. Dawne jedno zapytanie (1200 wierszy) produkcja ucina do 1000.
+    // Po naprawie dwie paczki (63 i 37 kluczy), a najnowsza karta sprawy 41 leży dopiero
+    // na drugiej stronie pierwszej paczki, więc liczy się wybór przez granicę stron.
     serve({
       flo_decisions: [decision('payment.chase'), ...range(0, 100).map((n) => decision(subject(n)))],
       flo_proposals: cards(range(0, 100), 12),
@@ -268,6 +270,38 @@ describe('lista wyciszeń Flo przy setkach spraw', () => {
 
     expect(list.filter((entry) => entry.wholeKind).map((entry) => entry.key)).toEqual(['payment.chase']);
     expect(subjectLabels(list)).toEqual(Object.fromEntries(range(0, 100).map((n) => [subject(n), title(n, 11)])));
+  });
+
+  it('ponad 1000 kart w jednej paczce: tytuł także dla sprawy spoza pierwszego tysiąca', async () => {
+    // Trzy sprawy to jedna paczka, ale 1201 kart. Jedno `.in()` na paczkę, bez stron,
+    // dostałoby 1000 wierszy i bez błędu zgubiło resztę. Samotna karta sprawy 7 jest
+    // najstarsza, ma największe `id` i leży na końcu tabeli, więc odpada po dacie
+    // malejąco (jak w dawnym zapytaniu), po `id` rosnąco i bez porządku.
+    const busy = cards([1, 2], 600);
+    const lonely: Row = {
+      id: cardId(0xf0000000, 7, 0),
+      tenant_id: T,
+      kind: 'payment.confirm',
+      topic_key: subject(7),
+      status: 'dismissed',
+      title: title(7, 0),
+      created_at: iso(NOW.getTime() - 10 * DAY),
+    };
+    expect(busy.length + 1).toBeGreaterThan(POSTGREST_MAX_ROWS);
+    serve({
+      flo_decisions: [1, 2, 7].map((n) => decision(subject(n))),
+      flo_proposals: [...busy, lonely],
+    });
+
+    const list = await listSilenced();
+
+    expect(subjectLabels(list)).toEqual({
+      [subject(1)]: title(1, 599),
+      [subject(2)]: title(2, 599),
+      [subject(7)]: title(7, 0),
+    });
+    // Jedna paczka: ponad 1000 wierszy przeszło wyłącznie dzięki stronom.
+    expect(new Set(titleReads().map((read) => (read.inValues ?? []).join(','))).size).toBe(1);
   });
 
   it('o tytuły pyta tylko dla spraw, które ekran pokaże', async () => {
