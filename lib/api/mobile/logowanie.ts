@@ -208,6 +208,7 @@ export async function handleMobilePasswordLogin(request: Request): Promise<NextR
       sessionId: result.sessionId,
       amrMethods: result.amrMethods,
       db: createMobileDbClient(result.accessToken),
+      nowa: true,
     });
   } catch {
     // Jak na stronie: wpis nie blokuje logowania. Bez wpisu nie ma zlecenia maila; zrobi je `POST /sesja`.

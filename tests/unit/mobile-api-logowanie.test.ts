@@ -308,6 +308,8 @@ describe('POST /api/mobile/v1/logowanie: udane logowanie przy captchy w GoTrue',
     const rest = requests.filter((entry) => entry.url.pathname.startsWith('/rest/v1/') && !entry.url.pathname.endsWith('audit_logs'));
     expect(rest.length).toBeGreaterThan(0);
     for (const entry of rest) expect(entry.authorization).toBe(sesja.accessToken);
+    // Świeża sesja nie ma wpisu: bez zapytania o niego (robi to tylko POST /sesja).
+    expect(requests.filter((entry) => entry.url.pathname.endsWith('audit_logs') && entry.method === 'GET')).toHaveLength(0);
   });
 
   it('konto z TOTP: sesja AAL1 i wymagaKodu true; wpis logowania jak na stronie (przed kodem)', async () => {
@@ -446,6 +448,11 @@ describe('POST /api/mobile/v1/logowanie: limity prób', () => {
     const blocked = await zaloguj({ email: 'A@ksef-saas.test', haslo: PASS }, { ip: '192.0.2.200' });
     expect(blocked.status).toBe(429);
     expect(goTrueCalls()).toBe(before);
+    // Odmowy nie przedłużają blokady cudzego konta: w oknie zostaje 10 prób, nie 12.
+    expect((await zaloguj({ email: 'a@ksef-saas.test', haslo: PASS }, { ip: '192.0.2.201' })).status).toBe(429);
+    const emailKeys = [...fake.sets.entries()].filter(([key]) => key.startsWith('rl:mobile_login_email:'));
+    expect(emailKeys).toHaveLength(1);
+    expect(emailKeys[0]![1].size).toBe(limit);
   });
 
   it('ten sam limit co logowanie na stronie (5 prób na adres i e-mail w 15 minut)', async () => {
