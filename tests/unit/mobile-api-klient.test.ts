@@ -57,6 +57,10 @@ describe('kody błędów kontraktu', () => {
       session_verification_failed: 'ponow',
       service_unavailable: 'ponow',
       internal_error: 'serwer',
+      // Tylko `POST /logowanie` (M6b); ekran logowania ma własne teksty (`lib/logowanie/przez-api.ts`).
+      invalid_request: 'serwer',
+      invalid_credentials: 'serwer',
+      login_unavailable: 'ponow',
     };
     expect(Object.keys(oczekiwane).sort()).toEqual([...MOBILE_API_ERROR_CODES].sort());
     for (const kod of MOBILE_API_ERROR_CODES) expect(rodzajBledu(500, kod)).toBe(oczekiwane[kod]);

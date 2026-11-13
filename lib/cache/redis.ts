@@ -57,7 +57,11 @@
  *     (`lib/invoice-share/buyer-invoice.ts`) i publiczne API `/api/v1`
  *     (`lib/api/v1/auth.ts`, limit na klucz i adres): `fallback: true` z
  *     ogólnego limitera (`lib/rate-limit/index.ts` liczy wtedy w pamięci) to
- *     odmowa; API odpowiada wtedy 503, także gdy Redis nie jest skonfigurowany.
+ *     odmowa; API odpowiada wtedy 503, także gdy Redis nie jest skonfigurowany;
+ *   - logowanie hasłem z telefonu (`POST /api/mobile/v1/logowanie`,
+ *     `lib/api/mobile/logowanie.ts`): `fallback: true` to odmowa 503
+ *     `login_unavailable`, bo trasa nie ma captchy i limity prób są tam jedyną
+ *     ochroną przed zgadywaniem haseł. Klient loguje się wtedy na stronie.
  * Skutek pośredni: kodu nie da się podać ani włączyć 2FA, więc to, co wymaga
  * potwierdzonego 2FA (`getVerifiedMfaState`), działa tylko w sesji już
  * potwierdzonej kodem: wgranie certyfikatu KSeF, wstrzymanie historii KSeF
@@ -65,7 +69,7 @@
  * nadawanie dostępu (także ustawienia wysyłki dla księgowej), eksport danych
  * konta i urządzenia biometrii. Przy fladze `requireMfaForSensitive` także
  * wysyłka do KSeF i płatności właściciela albo admina.
- * Przechodzą (limit w pamięci procesu): logowanie hasłem konta bez 2FA,
+ * Przechodzą (limit w pamięci procesu): logowanie hasłem na stronie konta bez 2FA,
  * rejestracja, logowanie biometrią (daje AAL1, nie AAL2) i pozostałe ogólne limity.
  * Nie odmawia, ale gaśnie: monitor KSeF (`lib/ksef/health-status.ts`): baner,
  * `isKsefHealthy` (zwraca `true`, więc wysyłka nie odkłada ponowień przy

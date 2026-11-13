@@ -7,6 +7,12 @@
  * hasło albo Google daje sesję na poziomie `aal1`; gdy konto ma TOTP, sesja
  * przechodzi na `aal2` dopiero po kodzie. Sesja bez drugiego kroku nie zostaje
  * w telefonie (`anulujKod`, `start`).
+ *
+ * Hasło od M6b (decyzja D16) idzie przez API strony (`POST /api/mobile/v1/logowanie`,
+ * `lib/logowanie/przez-api.ts`), bo GoTrue z captchą odrzuca logowanie hasłem
+ * bez tokenu Turnstile. Sesję z odpowiedzi wkłada `setSession`; kod 2FA,
+ * Google (PKCE), odświeżanie i wylogowanie zostają wprost w GoTrue (captchy
+ * nie wymagają, sprawdzone 13.11.2026, plan 4.2).
  */
 import { isAuthRetryableFetchError, type SupabaseClient, type User } from '@supabase/supabase-js';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -14,6 +20,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+import { zalogujHaslem } from '@/lib/api/polaczenie';
 import { przedCzasem } from '@/lib/api/rdzen';
 import { sesjaZTekstu, wymagaKoduBezSieci, type UzytkownikSesji } from '@/lib/logowanie/token';
 import type { KodBledu, Konto, WynikKroku, Zaplecze } from '@/lib/logowanie/typy';
@@ -91,9 +98,12 @@ export function zapleczeSupabase(supabase: SupabaseClient): Zaplecze {
 
     zaloguj: async (email, haslo) => {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: haslo });
-        if (error || !data.user) return { ok: false, blad: kodBledu(error, 'zle_dane') };
-        return await poPierwszymKroku(data.user);
+        const odp = await zalogujHaslem(email, haslo);
+        if (!odp.ok) return odp;
+        const { data, error } = await supabase.auth.setSession({ access_token: odp.sesja.accessToken, refresh_token: odp.sesja.refreshToken });
+        if (error || !data.user) return { ok: false, blad: kodBledu(error, 'nieznany') };
+        // Serwer i sesja w telefonie liczą to samo; którekolwiek mówi „kod”, telefon o niego prosi.
+        return { ok: true, konto: konto(data.user), wymagaKodu: odp.wymagaKodu || (await wymagaKodu()) };
       } catch (e) {
         return { ok: false, blad: kodBledu(e, 'nieznany') };
       }

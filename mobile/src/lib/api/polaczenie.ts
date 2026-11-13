@@ -7,6 +7,7 @@
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 
 import { przedCzasem, utworzKlienta, zBazy, type OdpowiedzBazy, type Odswiezenie, type Token, type Wynik } from '@/lib/api/rdzen';
+import { zalogujPrzezApi } from '@/lib/logowanie/przez-api';
 import { supabase } from '@/lib/supabase';
 
 export const ADRES_API = process.env.EXPO_PUBLIC_API_URL?.trim() || undefined;
@@ -50,6 +51,11 @@ const zaleznosci = {
 
 /** `GET`/`POST` na `/api/mobile/v1/<sciezka>`. */
 export const zapytajApi = utworzKlienta(zaleznosci);
+
+/** `POST /api/mobile/v1/logowanie` (M6b, decyzja D16): hasło przez API, bez tokenu, z tym samym limitem czasu. */
+export function zalogujHaslem(email: string, haslo: string) {
+  return zalogujPrzezApi(zaleznosci, email, haslo);
+}
 
 /** Odczyt z bazy tokenem telefonu; `zapytanie` dostaje token do nagłówka `Authorization`. */
 export function czytajZBazy<T>(zapytanie: (token: string, sygnal: AbortSignal) => PromiseLike<OdpowiedzBazy<T>>): Promise<Wynik<T>> {

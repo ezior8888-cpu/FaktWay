@@ -16,9 +16,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * Strona zapisuje `auth.login` przy każdym logowaniu (hasło w
  * `app/(auth)/login/actions.ts`, Google w `/auth/callback`): z niego żyją
  * historia logowań i lista urządzeń (00174) oraz mail o nowym urządzeniu
- * (`requestNewLoginCheck`). Telefon loguje się w GoTrue sam (M5b), więc tego
+ * (`requestNewLoginCheck`). Telefon logował się w GoTrue sam (M5b), więc tego
  * wpisu nie było. Aplikacja woła `POST /api/mobile/v1/sesja` raz, po pełnym
- * logowaniu (po kodzie 2FA, gdy konto go ma).
+ * logowaniu (po kodzie 2FA, gdy konto go ma). Od M6b logowanie hasłem idzie
+ * przez `POST /api/mobile/v1/logowanie`, które zapisuje wpis od razu po haśle,
+ * jak strona (`lib/api/mobile/logowanie.ts`); `POST /sesja` zastaje go gotowy.
  *
  * Wszystko, co trafia do wpisu, pochodzi ze sprawdzonego tokenu (`session_id`,
  * metoda z `amr`) i nagłówków żądania (adres i urządzenie czyta `logAudit`);
@@ -54,25 +56,49 @@ export async function isLoginRecorded(admin: SupabaseClient, userId: string, ses
   return (data ?? []).length > 0;
 }
 
-export async function recordMobileLogin(caller: MobileCaller): Promise<MobileLoginRecord> {
-  const sessionId = caller.session.sessionId;
+/** Sesja telefonu do wpisu: tożsamość i fakty ze sprawdzonego tokenu, klient bazy z tym tokenem (RLS). */
+export interface MobileLoginSession {
+  userId: string;
+  sessionId: string | null;
+  amrMethods: readonly string[];
+  db: SupabaseClient;
+  /** Sesja właśnie wydana przez GoTrue (`POST /logowanie`): nie może mieć wpisu, więc bez sprawdzania. */
+  nowa?: boolean;
+}
+
+/**
+ * Wpis `auth.login` dla sesji telefonu i zlecenie maila o nowym urządzeniu, raz na sesję.
+ * Wołają go `POST /sesja` (po pełnym logowaniu, także Google) i `POST /logowanie`
+ * (zaraz po haśle, jak strona). Błąd bazy albo nieudany zapis rzuca `MobileUpstreamError`.
+ */
+export async function recordMobileLoginSession(session: MobileLoginSession): Promise<MobileLoginRecord> {
+  const { userId, sessionId } = session;
   // Token GoTrue zawsze ma `session_id`; bez niego wpisu nie da się połączyć z sesją ani odróżnić ponowienia.
   if (!sessionId) return 'no_session';
 
-  if (await isLoginRecorded(createAdminClient(), caller.user.id, sessionId)) return 'already_recorded';
+  if (!session.nowa && (await isLoginRecorded(createAdminClient(), userId, sessionId))) return 'already_recorded';
 
   // Firma wpisu jak przy logowaniu hasłem na stronie: ostatnio używana (dziennik firmy pokazuje logowania).
-  const aktywnaFirma = await readMobileActiveFirm(caller.db, caller.user.id);
-  const method = mobileLoginMethod(caller.session.amrMethods);
+  const aktywnaFirma = await readMobileActiveFirm(session.db, userId);
+  const method = mobileLoginMethod(session.amrMethods);
   const saved = await logAuditWithResult({
     action: 'auth.login',
     tenantId: aktywnaFirma,
-    userId: caller.user.id,
+    userId,
     metadata: { ...(method ? { method } : {}), ...sessionAuditMetadata(sessionId), client: 'mobile' },
   });
   // Bez wpisu runner maila nie znalazłby logowania; telefon ponowi wywołanie.
   if (!saved) throw new MobileUpstreamError('audit_logs insert');
 
-  await requestNewLoginCheck({ userId: caller.user.id, sessionId });
+  await requestNewLoginCheck({ userId, sessionId });
   return 'recorded';
+}
+
+export async function recordMobileLogin(caller: MobileCaller): Promise<MobileLoginRecord> {
+  return recordMobileLoginSession({
+    userId: caller.user.id,
+    sessionId: caller.session.sessionId,
+    amrMethods: caller.session.amrMethods,
+    db: caller.db,
+  });
 }

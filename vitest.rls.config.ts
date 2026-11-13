@@ -162,6 +162,10 @@ export default defineConfig({
       // które tokeny GoTrue uznaje (anon, serwisowy, podrobiony, wylogowany: odmowa, nie awaria),
       // AAL1 i AAL2 z prawdziwym TOTP, lista firm i x-active-org przez RLS, filtr wpisu logowania.
       'tests/rls-mobile-api.test.ts',
+      // Plan aplikacji mobilnej, M6b (D16, bez migracji): logowanie hasłem przez API kluczem serwisowym;
+      // zwykła sesja klienta, odmowy, TOTP z kodem w telefonie, odświeżenie kluczem anon. Z
+      // RLS_TEST_GOTRUE_CAPTCHA=on (stos z captchą w GoTrue, nie w CI) także odmowa klucza anon.
+      'tests/rls-mobile-logowanie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
