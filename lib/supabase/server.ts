@@ -7,6 +7,7 @@ import {
   ACTIVE_ORG_HEADER,
   isUuid,
 } from './active-org';
+import { createSupabaseFetch } from './fetch-timeout';
 
 /**
  * Supabase client do użycia na serwerze:
@@ -20,6 +21,10 @@ import {
  * nagłówek `x-active-org` do każdego żądania PostgREST. Funkcja w bazie
  * `public.get_current_tenant_id()` waliduje membership — sfałszowanie
  * cookie z obcym uuid nie da dostępu.
+ *
+ * Każde wywołanie ma limit czasu (`lib/supabase/fetch-timeout.ts`, sesja 5
+ * planu skalowania): odczyt 10 s, zapis 30 s. Przekroczenie to `error`
+ * w wyniku (PostgREST) albo błąd przejściowy auth-js, a nie wylogowanie.
  */
 export async function createClient() {
   const cookieStore = await cookies();
@@ -54,7 +59,10 @@ export async function createClient() {
           }
         },
       },
-      global: Object.keys(headers).length > 0 ? { headers } : undefined,
+      global: {
+        fetch: createSupabaseFetch(),
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      },
     }
   );
 }
@@ -90,7 +98,10 @@ export async function createClientForOrg(orgId: string | null | undefined) {
           }
         },
       },
-      global: Object.keys(headers).length > 0 ? { headers } : undefined,
+      global: {
+        fetch: createSupabaseFetch(),
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      },
     }
   );
 }
@@ -106,6 +117,10 @@ export async function createClientForOrg(orgId: string | null | undefined) {
  * service_role jest "nadpisywany" rolą `authenticated` i RLS znów łapie
  * operacje. Dlatego używamy czystego `supabase-js` z wyłączonym persist
  * session - to prawdziwy admin bez kontekstu usera.
+ *
+ * Limit czasu jak w `createClient`, a w workerze pg-boss dłuższy (odczyt
+ * 60 s, zapis 120 s, `enableWorkerSupabaseTimeouts`): `service_role` nie ma
+ * limitu w bazie, a joby robią długie, poprawne operacje.
  */
 export function createAdminClient() {
   return createSupabaseClient(
@@ -116,6 +131,7 @@ export function createAdminClient() {
         persistSession: false,
         autoRefreshToken: false,
       },
+      global: { fetch: createSupabaseFetch() },
     }
   );
 }
