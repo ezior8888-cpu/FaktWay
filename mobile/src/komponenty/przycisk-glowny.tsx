@@ -4,42 +4,69 @@
  * marki; wariant drugorzędny jest tonalny (jasnoniebieskie tło, niebieski
  * napis), np. cofnięcie akcji albo druga droga. Na telefonie wyższy (cel
  * dotyku) i z animacją wciśnięcia na sprężynie.
+ *
+ * Od M5 (logowanie): `karta` to biały przycisk z cieniem karty dla drugiej
+ * drogi na tle ekranu („Zaloguj przez Google”), `naGradiencie` to biały
+ * przycisk na pełnym gradiencie marki (ekran blokady). `trwa` pokazuje
+ * kółko ładowania zamiast napisu i blokuje ponowne dotknięcie.
  */
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Dotyk } from '@/komponenty/dotyk';
 import { Ikona, type NazwaIkony } from '@/komponenty/ikona';
 import { Tekst } from '@/komponenty/tekst';
-import { useKolory } from '@/wyglad/kolory';
-import { CEL_DOTYKU, ODSTEP, PROMIEN_PRZYCISKU } from '@/wyglad/odstepy';
+import { useCiemny, useKolory, type Kolory } from '@/wyglad/kolory';
+import { CEL_DOTYKU, CIEN_KARTY, ODSTEP, PROMIEN_PRZYCISKU } from '@/wyglad/odstepy';
 
 export type PrzyciskGlownyProps = {
   tytul: string;
   ikona?: NazwaIkony;
-  /** `glowny`: tło marki; `drugorzedny`: tonalny, jasnoniebieskie tło i niebieski napis. */
-  wariant?: 'glowny' | 'drugorzedny';
+  /**
+   * `glowny`: tło marki; `drugorzedny`: tonalny, jasnoniebieskie tło i niebieski
+   * napis; `karta`: biały z cieniem karty; `naGradiencie`: biały na gradiencie.
+   */
+  wariant?: Wariant;
+  /** Trwa akcja (logowanie, wysyłka): kółko zamiast napisu, dotknięcie nic nie robi. */
+  trwa?: boolean;
   onPress: () => void;
 };
 
-export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', onPress }: PrzyciskGlownyProps) {
+type Wariant = 'glowny' | 'drugorzedny' | 'karta' | 'naGradiencie';
+
+const KOLORY: Record<Wariant, { tlo: keyof Kolory; tresc: keyof Kolory }> = {
+  glowny: { tlo: 'akcentWypelnienie', tresc: 'naAkcencie' },
+  drugorzedny: { tlo: 'akcentTlo', tresc: 'akcentNaTle' },
+  karta: { tlo: 'tloKomorki', tresc: 'etykieta' },
+  naGradiencie: { tlo: 'naGradiencie', tresc: 'gradientGora' },
+};
+
+export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', trwa, onPress }: PrzyciskGlownyProps) {
   const kolory = useKolory();
-  const glowny = wariant === 'glowny';
-  const kolorTresci = glowny ? kolory.naAkcencie : kolory.akcentNaTle;
+  const ciemny = useCiemny();
+  const kolorTresci = kolory[KOLORY[wariant].tresc];
   return (
     <Dotyk
-      onPress={onPress}
-      wibracja={glowny}
+      onPress={trwa ? undefined : onPress}
+      wibracja={wariant === 'glowny' && !trwa}
       accessibilityRole="button"
       accessibilityLabel={tytul}
+      accessibilityState={{ busy: Boolean(trwa) }}
       style={[
         styles.przycisk,
-        { backgroundColor: glowny ? kolory.akcentWypelnienie : kolory.akcentTlo },
+        { backgroundColor: kolory[KOLORY[wariant].tlo] },
+        wariant === 'karta' && !ciemny ? { boxShadow: CIEN_KARTY } : null,
       ]}>
       <View style={styles.tresc}>
-        {ikona ? <Ikona nazwa={ikona} rozmiar={18} kolor={kolorTresci} /> : null}
-        <Tekst styl="callout" waga="semibold" style={{ color: kolorTresci }} numberOfLines={2}>
-          {tytul}
-        </Tekst>
+        {trwa ? (
+          <ActivityIndicator color={kolorTresci} />
+        ) : (
+          <>
+            {ikona ? <Ikona nazwa={ikona} rozmiar={18} kolor={kolorTresci} /> : null}
+            <Tekst styl="callout" waga="semibold" style={[styles.napis, { color: kolorTresci }]} numberOfLines={2}>
+              {tytul}
+            </Tekst>
+          </>
+        )}
       </View>
     </Dotyk>
   );
@@ -54,4 +81,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tresc: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ODSTEP.xs },
+  napis: { textAlign: 'center', flexShrink: 1 },
 });

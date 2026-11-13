@@ -24,9 +24,9 @@ uruchamiasz po kolei, nigdy razem.
 
 | Katalog | Co |
 |---|---|
-| `src/app/` | trasy Expo Router: `_layout.tsx` to zakładki systemowe, każdy folder zakładki ma własny `Stack` |
-| `src/komponenty/` | wygląd FaktWay (plan D12, od 12.11 z wykończeniem Copilota, D15): `Tekst`, `EkranListy`, `Sekcja` (karta), `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny`, `Dotyk` (animacja wciśnięcia), `Ikona` i `KoloIkony` (Remix), `Znacznik` (plakietka statusu), `NaglowekKwoty`, `Kafle`, `Wykres` (SVG: słupki, linia, pierścień), `Kubelki`, `Kalendarz`, `LogoFaktWay` (też białe na niebieskim), `PasekMarki`, pola formularza (`formularz.tsx`); od M4c (D15) `Karta` (18 pt, cień), `GradientNaglowka`, `KwotaZGroszami`, `Kategoria`, `KartaWyniku`, `RzadLiczb`, `RzadAkcji`, `OsStatusu`, `PotwierdzenieKsef`, `PasekCofnij`, pomocnik `potwierdz()` (arkusz akcji zamiast `Alert.alert`); `Segmenty` to pigułki; `StanPusty` z opcjonalną akcją; `EkranListy onOdswiez` (pociągnięcie w dół); ekrany składasz tylko z nich i z komponentów systemowych |
-| `src/stan/` | stan wspólny dla ekranów na danych przykładowych: faktury, cykliczne, wydatki, przełączniki ustawień |
+| `src/app/` | trasy Expo Router: `_layout.tsx` to korzeń (`Slot`, dostawcy, blokada), `(zakladki)/_layout.tsx` zakładki systemowe, każdy folder zakładki ma własny `Stack`; `logowanie/` to stos logowania. Bez sesji układ zakładek przekierowuje na `/logowanie`, po zalogowaniu układ logowania na `/` |
+| `src/komponenty/` | wygląd FaktWay (plan D12, od 12.11 z wykończeniem Copilota, D15): `Tekst`, `EkranListy`, `Sekcja` (karta), `Wiersz`, `WierszFaktury` (gesty, podgląd, menu), `PrzyciskGlowny`, `Dotyk` (animacja wciśnięcia), `Ikona` i `KoloIkony` (Remix), `Znacznik` (plakietka statusu), `NaglowekKwoty`, `Kafle`, `Wykres` (SVG: słupki, linia, pierścień), `Kubelki`, `Kalendarz`, `LogoFaktWay` (też białe na niebieskim), `PasekMarki`, pola formularza (`formularz.tsx`); od M4c (D15) `Karta` (18 pt, cień), `GradientNaglowka`, `KwotaZGroszami`, `Kategoria`, `KartaWyniku`, `RzadLiczb`, `RzadAkcji`, `OsStatusu`, `PotwierdzenieKsef`, `PasekCofnij`, pomocnik `potwierdz()` (arkusz akcji zamiast `Alert.alert`); `Segmenty` to pigułki; `StanPusty` z opcjonalną akcją; `EkranListy onOdswiez` (pociągnięcie w dół); od M5a `EkranLogowania` (nagłówek na gradiencie w treści), `PoleKodu` (kod TOTP), `Blokada` i `Zaslona` (nad całą aplikacją), `PrzyciskGlowny` z wariantami `karta` i `naGradiencie` i stanem `trwa`; ekrany składasz tylko z nich i z komponentów systemowych |
+| `src/stan/` | stan wspólny dla ekranów na danych przykładowych: faktury, cykliczne, wydatki, przełączniki ustawień; `sesja.tsx` (od M5a): logowanie, kod 2FA, blokada Face ID, z tym samym interfejsem dla Supabase w M5b |
 | `src/wyglad/` | paleta (`paleta.ts`, bez React Native, kontrast sprawdza `tests/unit/mobile-kontrast.test.ts`; `kolory.ts` wybiera jasną albo ciemną), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
 | `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit (OFL, `LICENCJE.txt`; IBM Plex Mono usunięty w M4c, D15); ikony Remix zakładek i paska jako obrazy szablonowe |
 | `scripts/ikony-remix.cjs` | generuje `src/komponenty/ikony-remix.ts` z pakietu `@remixicon/react` strony; nową ikonę dopisz tam |
@@ -103,3 +103,15 @@ uruchamiasz po kolei, nigdy razem.
 - Zmiana rozmiaru tekstu w ustawieniach przy działającej aplikacji nie
   przelicza układu kafli (`fontScale`): przed zrzutem z dużym tekstem uruchom
   aplikację od nowa.
+- Korzeń aplikacji to `Slot`, nie `Stack` z `Stack.Protected`: stos nad
+  zakładkami przejmuje styl paska stanu i na gradiencie Pulpitu robi się
+  ciemny napis (sprawdzone w M5a). Ochronę tras robią `Redirect` w układach
+  `(zakladki)` i `logowanie`.
+- Warstwa nad całą aplikacją, także nad otwartym arkuszem (blokada, zasłona):
+  `FullWindowOverlay` z `react-native-screens`, nie widok w korzeniu, bo
+  arkusz natywny leży nad korzeniem.
+- `onSubmitEditing` bywa o znak w tyle za stanem, gdy klawisz „Zaloguj” pada
+  tuż po ostatniej literze: `PoleTekstowe onZatwierdz` dostaje tekst wprost z
+  pola, używaj go zamiast stanu.
+- Narzędzie symulatora robi zrzut przed narysowaniem ostatnich zmian po
+  wpisaniu tekstu; przed oceną zrzutu odczekaj sekundę albo zrób drugi.
