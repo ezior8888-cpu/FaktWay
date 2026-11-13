@@ -11,15 +11,21 @@
  * Serwer i telefon obsługuje zaplecze (`lib/logowanie/`): Supabase, gdy
  * aplikacja ma adres bazy, inaczej dane przykładowe z M5a. Ekrany widzą tylko
  * `useSesja`.
+ *
+ * Koniec sesji (wylogowanie, „Zaloguj się na inne konto”, serwer odrzucił
+ * sesję) czyści dane poprzedniego konta: stan w pamięci (`wyczysc` w
+ * `stan/faktury.tsx`; dane z bazy trzyma `stan/dane.tsx` pod kluczem konta)
+ * i dane z poprzedniego otwarcia w plikach (`lib/dane/pamiec-plikow.ts`).
  */
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
+import { pamiec } from '@/lib/dane/pamiec-plikow';
 import { zapleczePrzykladowe } from '@/lib/logowanie/przykladowe';
 import { zapleczeSupabase } from '@/lib/logowanie/supabase';
 import { BLEDY_LOGOWANIA, type Biometria, type KodBledu, type Konto, type WynikKroku, type Zaplecze } from '@/lib/logowanie/typy';
 import { supabase } from '@/lib/supabase';
-import { useFlaga } from '@/stan/faktury';
+import { useFlaga, useStanFaktur } from '@/stan/faktury';
 
 export { BLEDY_LOGOWANIA, type Biometria, type KodBledu, type Konto };
 
@@ -63,6 +69,11 @@ type Kontekst = {
   /** Systemowe pytanie o Face ID. `sama`: wywołane przy pokazaniu blokady, nie przyciskiem. */
   odblokuj: (opcje?: { sama?: boolean }) => Promise<boolean>;
   wyloguj: () => void;
+  /**
+   * API odpowiedziało `mfa_required`: konto ma teraz 2FA (włączone np. na
+   * komputerze), a ta sesja nie ma kodu. Ekran kodu, bez wylogowania.
+   */
+  wymagajKodu: () => void;
 };
 
 const SesjaKontekst = createContext<Kontekst | null>(null);
@@ -73,7 +84,15 @@ const KLUCZ = { blokada: 'blokada', propozycja: 'propozycja-face-id', email: 'em
 export function Sesja({ children }: { children: ReactNode }) {
   // Dane przykładowe: o kodzie 2FA decyduje przełącznik z Więcej, Bezpieczeństwo; na prawdziwym koncie serwer.
   const [dwaEtapyPrzykladowe] = useFlaga('2fa', true);
+  const { wyczysc: wyczyscStan } = useStanFaktur();
   const [zaplecze] = useState<Zaplecze>(() => (supabase ? zapleczeSupabase(supabase) : zapleczePrzykladowe()));
+
+  /** Dane poprzedniego konta znikają z pamięci i z plików telefonu. */
+  const wyczyscDane = () => {
+    wyczyscStan();
+    void pamiec.wyczysc().catch(() => undefined);
+  };
+  const poKoncuSesji = useEffectEvent(wyczyscDane);
 
   const [stan, setStan] = useState<StanSesji>('wczytywanie');
   const [konto, setKonto] = useState<Konto>();
@@ -128,6 +147,7 @@ export function Sesja({ children }: { children: ReactNode }) {
         setOczekujace(undefined);
         setZablokowana(false);
         setStan((s) => (s === 'wczytywanie' ? s : 'brak'));
+        poKoncuSesji();
       }),
     [zaplecze],
   );
@@ -239,7 +259,14 @@ export function Sesja({ children }: { children: ReactNode }) {
       zapiszBlokade(false);
       setPropozycjaPokazana(false);
       void zaplecze.zapisz(KLUCZ.propozycja, '0');
+      wyczyscDane();
       void zaplecze.wyloguj();
+    },
+    wymagajKodu: () => {
+      if (stan !== 'aktywna' || !konto) return;
+      setOczekujace(konto);
+      setZablokowana(false);
+      setStan('kod');
     },
   };
 

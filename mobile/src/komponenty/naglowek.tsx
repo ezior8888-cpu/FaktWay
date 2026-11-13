@@ -5,14 +5,14 @@
  * w indeksie górnym, status; status z kolorem oceny (sukces, ostrzeżenie, błąd)
  * jest plakietką, jak na stronie.
  */
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Karta } from '@/komponenty/karta';
 import { Tekst } from '@/komponenty/tekst';
 import { Znacznik } from '@/komponenty/znacznik';
 import { tonKoloru, type Kolory } from '@/wyglad/kolory';
 import type { StylTekstu } from '@/wyglad/typografia';
-import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { MARGINES, ODSTEP, SKALA_PIONOWA } from '@/wyglad/odstepy';
 
 type StylKwoty = Extract<StylTekstu, 'largeTitle' | 'title1'>;
 
@@ -67,7 +67,9 @@ const STYL_GROSZY: Record<StylKwoty, StylTekstu> = { largeTitle: 'callout', titl
  * etykiety nagłówka. W wierszach list i polach grosze zostają po przecinku.
  */
 export function KwotaZGroszami({ wartosc, styl }: { wartosc: string; styl: StylKwoty }) {
-  const czesci = KWOTA.exec(wartosc);
+  const { fontScale } = useWindowDimensions();
+  // Przy dużym tekście indeks rośnie prawie do rozmiaru złotych i „98⁴⁰ zł” czyta się jak „9840 zł”: wtedy zwykły zapis z przecinkiem.
+  const czesci = fontScale >= SKALA_PIONOWA ? null : KWOTA.exec(wartosc);
   if (!czesci) {
     return (
       <Tekst styl={styl} cyfry={/\d/.test(wartosc)} selectable>

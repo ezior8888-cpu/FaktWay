@@ -14,13 +14,22 @@ import { dataPelna, dniMiedzy, kwota } from '@/lib/format';
 import { dni } from '@/lib/status-faktury';
 import { useFlaga, useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+
+/** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
+export default function EkranPrzypomnienia() {
+  const { dane } = useStanFaktur();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  if (dane.zrodlo === 'baza') return <EkranTylkoNaStronie co="przypomnienie" idFaktury={id} />;
+  return <EkranPrzypomnieniaPrzyklad />;
+}
 
 /**
  * Przypomnienie o zapłacie (strona „Po terminie”): podgląd wiadomości,
  * zgoda i zlecenie wysyłki; wstrzymanie przypomnień; oznaczenie zapłaty.
  * Nic nie wychodzi samo, jak na stronie.
  */
-export default function EkranPrzypomnienia() {
+function EkranPrzypomnieniaPrzyklad() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { faktury, przelaczZaplate } = useStanFaktur();
