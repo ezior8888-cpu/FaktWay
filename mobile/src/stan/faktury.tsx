@@ -1,25 +1,58 @@
 /**
- * Stan aplikacji na danych przykładowych: faktury (zapłata, nowe, wysyłka do
- * KSeF, usunięcie szkicu), faktury cykliczne i proste przełączniki ustawień.
- * Wspólny dla wszystkich ekranów. Prawdziwe dane i zapis przez API: M7 i M10
- * (np. `markInvoicePaidAction` po stronie strony).
+ * Stan wspólny dla wszystkich ekranów: faktury (zapłata, nowe, wysyłka do
+ * KSeF, usunięcie szkicu), skrzynka KSeF, faktury cykliczne, wydatki i proste
+ * przełączniki ustawień.
+ *
+ * Ten dostawca trzyma dane przykładowe. Na prawdziwym koncie (od M7)
+ * `DaneKonta` (`stan/dane.tsx`) podmienia faktury i skrzynkę KSeF na dane z
+ * bazy przez `PodmienStan`, a zapisy na tych fakturach odsyła na faktway.pl,
+ * dopóki API ich nie ma (M8 wystawienie, M10 zapłata i reszta).
  */
 import * as Haptics from 'expo-haptics';
 import { createContext, use, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Share } from 'react-native';
 
-import { FAKTURY, KOSZTY, type Faktura, type Koszt } from '@/dane-przykladowe';
+import { DZIS, FAKTURY, KOSZTY, skrzynkaPrzykladowa, type Faktura, type FakturaKosztowa, type Koszt } from '@/dane-przykladowe';
 import { CYKLICZNE, type FakturaCykliczna } from '@/dane-przykladowe/kontrahenci';
 import { kwota } from '@/lib/format';
 
-type Stan = {
+/**
+ * Skąd są faktury i skrzynka KSeF na ekranie i w jakim są stanie. Dane
+ * przykładowe są zawsze gotowe; dane z bazy mają ładowanie, błąd i datę.
+ */
+export type StanDanych = {
+  zrodlo: 'przyklad' | 'baza';
+  stan: 'ladowanie' | 'gotowe' | 'blad';
+  /** Zdanie dla klienta, gdy ostatnie pobranie się nie udało. */
+  blad?: string;
+  /** Kiedy pobrano to, co widać (ISO); stare dane pokazujemy z tą datą. */
+  zapisano?: string;
+  /** Ostatnie pobranie nie doszło do serwera: widać dane z poprzedniego otwarcia. */
+  bezSieci: boolean;
+  /** Lista ma limit (200 najnowszych): reszta na faktway.pl. */
+  fakturyPelne: boolean;
+  skrzynkaPelna: boolean;
+  odswiez: () => Promise<void>;
+};
+
+export type Stan = {
+  /** Dziś (RRRR-MM-DD): data przykładowa albo dzień w Warszawie dla danych z bazy. */
+  dzis: string;
+  dane: StanDanych;
   faktury: Faktura[];
-  /** Oznacza albo cofa zapłatę (z wibracją); jedno miejsce dla gestu, menu i przycisku. */
+  skrzynka: FakturaKosztowa[];
+  /** Oznacza albo cofa zapłatę (z wibracją i paskiem „Cofnij”); jedno miejsce dla gestu, menu i przycisku. */
   przelaczZaplate: (f: Faktura) => void;
   /** Dodaje fakturę; `wyslij` symuluje wysyłkę do KSeF i przyjęcie po chwili. Zwraca id. */
   dodajFakture: (f: Faktura, wyslij: boolean) => string;
   /** Zapisuje poprawiony szkic albo odrzuconą fakturę w miejscu starej; `wyslij` jak w `dodajFakture`. */
   zastapFakture: (id: string, f: Faktura, wyslij: boolean) => void;
+  /** Faktura właśnie wysłana z formularza: jej szczegół pokazuje kartę „Wysyłamy do KSeF” → „Przyjęta w KSeF”. */
+  potwierdzenie: string | undefined;
+  /** Pasek „Cofnij” nad zakładkami (`PasekCofnij`): co się stało i jak to odwrócić. */
+  cofnij: { id: number; tekst: string; akcja: () => void } | undefined;
+  pokazCofnij: (c: { tekst: string; akcja: () => void } | undefined) => void;
+  pokazPotwierdzenie: (id: string | undefined) => void;
   /** Wysyła szkic albo odrzuconą fakturę ponownie do KSeF. */
   wyslijDoKsef: (id: string) => void;
   /** Cofa odrzuconą fakturę do szkicu. */
@@ -35,6 +68,8 @@ type Stan = {
   /** Proste przełączniki ekranów ustawień i list (np. wstrzymane przypomnienia). */
   flagi: Record<string, boolean>;
   ustawFlage: (klucz: string, wartosc: boolean) => void;
+  /** Wylogowanie i zmiana konta: wszystko wraca do stanu z uruchomienia aplikacji. */
+  wyczysc: () => void;
 };
 
 const Kontekst = createContext<Stan | null>(null);
@@ -51,14 +86,18 @@ export function StanFaktur({ children }: { children: ReactNode }) {
   const [cykliczne, setCykliczne] = useState<FakturaCykliczna[]>(CYKLICZNE);
   const [flagi, setFlagi] = useState<Record<string, boolean>>({});
   const [koszty, setKoszty] = useState<Koszt[]>(KOSZTY);
+  const [potwierdzenie, setPotwierdzenie] = useState<string>();
+  const [cofnij, setCofnij] = useState<Stan['cofnij']>();
   const licznik = useRef(0);
+  const zegary = useRef(new Set<ReturnType<typeof setTimeout>>());
 
   const wartosc = useMemo<Stan>(() => {
     const zmien = (id: string, zmiana: Partial<Faktura>) =>
       setFaktury((lista) => lista.map((f) => (f.id === id ? { ...f, ...zmiana } : f)));
 
     const przyjmijPoChwili = (id: string) => {
-      setTimeout(() => {
+      const zegar = setTimeout(() => {
+        zegary.current.delete(zegar);
         setFaktury((lista) =>
           lista.map((f) =>
             f.id === id && f.statusKsef === 'wysylanie' ? { ...f, statusKsef: 'przyjeta', numerKsef: numerKsef(f), blad: undefined } : f,
@@ -66,13 +105,30 @@ export function StanFaktur({ children }: { children: ReactNode }) {
         );
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }, CZAS_KSEF_MS);
+      zegary.current.add(zegar);
     };
 
     return {
+      dzis: DZIS,
+      dane: {
+        zrodlo: 'przyklad',
+        stan: 'gotowe',
+        bezSieci: false,
+        fakturyPelne: true,
+        skrzynkaPelna: true,
+        // Dane przykładowe: odświeżenie tylko pokazuje kręciołek.
+        odswiez: () => new Promise<void>((gotowe) => setTimeout(gotowe, 800)),
+      },
       faktury,
+      skrzynka: skrzynkaPrzykladowa(koszty),
       przelaczZaplate: (f) => {
         zmien(f.id, { zaplacona: !f.zaplacona });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCofnij({
+          id: Date.now(),
+          tekst: f.zaplacona ? `Bez zapłaty: ${f.numer}` : `Zapłacona: ${f.numer}`,
+          akcja: () => zmien(f.id, { zaplacona: f.zaplacona }),
+        });
       },
       dodajFakture: (f, wyslij) => {
         licznik.current += 1;
@@ -85,6 +141,10 @@ export function StanFaktur({ children }: { children: ReactNode }) {
         setFaktury((lista) => lista.map((x) => (x.id === id ? { ...f, id, statusKsef: wyslij ? 'wysylanie' : 'robocza', blad: undefined } : x)));
         if (wyslij) przyjmijPoChwili(id);
       },
+      potwierdzenie,
+      pokazPotwierdzenie: setPotwierdzenie,
+      cofnij,
+      pokazCofnij: (c) => setCofnij(c ? { ...c, id: Date.now() } : undefined),
       wyslijDoKsef: (id) => {
         zmien(id, { statusKsef: 'wysylanie', blad: undefined });
         przyjmijPoChwili(id);
@@ -104,15 +164,36 @@ export function StanFaktur({ children }: { children: ReactNode }) {
       usunKoszt: (id) => setKoszty((lista) => lista.filter((x) => x.id !== id)),
       flagi,
       ustawFlage: (klucz, v) => setFlagi((f) => ({ ...f, [klucz]: v })),
+      wyczysc: () => {
+        for (const zegar of zegary.current) clearTimeout(zegar);
+        zegary.current.clear();
+        setFaktury(FAKTURY);
+        setCykliczne(CYKLICZNE);
+        setKoszty(KOSZTY);
+        setFlagi({});
+        setPotwierdzenie(undefined);
+        setCofnij(undefined);
+      },
     };
-  }, [faktury, cykliczne, koszty, flagi]);
+  }, [faktury, cykliczne, koszty, flagi, potwierdzenie, cofnij]);
 
   return <Kontekst value={wartosc}>{children}</Kontekst>;
 }
 
+/**
+ * Podmienia część stanu dla ekranów pod spodem (dane z bazy na prawdziwym
+ * koncie, `stan/dane.tsx`). Reszta, np. przełączniki ustawień, zostaje z
+ * dostawcy wyżej.
+ */
+export function PodmienStan({ zmiana, children }: { zmiana: (stan: Stan) => Stan; children: ReactNode }) {
+  const wyzej = use(Kontekst);
+  if (!wyzej) throw new Error('PodmienStan poza <StanFaktur>');
+  return <Kontekst value={zmiana(wyzej)}>{children}</Kontekst>;
+}
+
 /** Systemowy arkusz udostępniania z opisem faktury (PDF dochodzi w M10). */
 export function udostepnijFakture(f: Faktura): void {
-  void Share.share({ message: `Faktura ${f.numer} dla ${f.kontrahent}, ${kwota(f.brutto)}.` });
+  void Share.share({ message: `Faktura ${f.numer} dla ${f.kontrahent}, ${kwota(f.brutto, f.waluta)}.` });
 }
 
 export function useStanFaktur(): Stan {

@@ -115,6 +115,7 @@ export async function searchAuditLogs(
 export const KNOWN_AUDIT_ACTIONS = [
   // Auth
   'auth.login',
+  'auth.login_failed',
   'auth.logout',
   'auth.signup',
   'auth.password_reset_requested',

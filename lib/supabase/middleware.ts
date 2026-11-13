@@ -112,6 +112,21 @@ export function isPublicApiPath(pathname: string): boolean {
   return API_KEY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+/**
+ * API aplikacji na telefon (plan aplikacji mobilnej 4.3, M6): każda trasa
+ * `/api/mobile/…` uwierzytelnia sama, tokenem sesji Supabase z nagłówka
+ * `Authorization: Bearer` (`lib/api/mobile/auth.ts`: token, 2FA, firma,
+ * limity, przerwa techniczna). Jak przy `/api/v1` proxy nie buduje tu klienta
+ * z ciasteczek: sesja przeglądarki nic w tym API nie otwiera, więc nie ma tu
+ * CSRF, a proxy nie odpowiada 401, zanim trasa sprawdzi token telefonu.
+ * Tylko ten prefiks (dokładnie albo z `/`); `/api/mobilex` zostaje za bramką.
+ */
+const MOBILE_API_PREFIX = '/api/mobile';
+
+export function isMobileApiPath(pathname: string): boolean {
+  return pathname === MOBILE_API_PREFIX || pathname.startsWith(`${MOBILE_API_PREFIX}/`);
+}
+
 export function isNoSessionPath(pathname: string): boolean {
   // Tunele PostHog i Sentry mają własny mechanizm (`lib/telemetry-tunnel.ts`,
   // wołany w `proxy.ts` przed `updateSession`: zdejmuje też ciasteczka).
@@ -120,6 +135,8 @@ export function isNoSessionPath(pathname: string): boolean {
   if (isTelemetryTunnelPath(pathname)) return true;
   // Publiczne API ma własne uwierzytelnienie kluczem (`isPublicApiPath`).
   if (isPublicApiPath(pathname)) return true;
+  // API aplikacji na telefon: token sesji w nagłówku (`isMobileApiPath`).
+  if (isMobileApiPath(pathname)) return true;
   return NO_SESSION_PATHS.some(({ path, match }) =>
     pathname === path || (match === 'prefix' && pathname.startsWith(`${path}/`)),
   );

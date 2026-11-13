@@ -10,7 +10,7 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
-import { DZIS, type Faktura } from '@/dane-przykladowe';
+import type { Faktura } from '@/dane-przykladowe';
 import { Ikona } from '@/komponenty/ikona';
 import { Tekst } from '@/komponenty/tekst';
 import { Znacznik } from '@/komponenty/znacznik';
@@ -29,14 +29,16 @@ const TLO_COFNIJ = '#6C727E';
 
 export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
   const kolory = useKolory();
-  const { przelaczZaplate } = useStanFaktur();
+  const { przelaczZaplate, dzis } = useStanFaktur();
   const { fontScale } = useWindowDimensions();
   const swipe = useRef<SwipeableMethods>(null);
   // Link z `asChild` spłaszcza style (Slot), więc styl zależny od wciśnięcia liczymy ze stanu.
   const [wcisniety, setWcisniety] = useState(false);
-  const status = statusFaktury(f, DZIS);
+  const status = statusFaktury(f, dzis);
   const pionowo = fontScale >= SKALA_PIONOWA;
   const mozeZaplacic = doZaplaty(f) || f.zaplacona;
+  // Faktura w terminie: termin w podpisie, bez plakietki (wzór Revolut Business, D14); plakietka tylko przy wyjątkach.
+  const zwykla = status.ton === 'neutralny' && f.statusKsef !== 'robocza';
 
   const akcja = (postep: SharedValue<number>) => (
     <AkcjaPrzesuniecia
@@ -50,7 +52,7 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
     <Link href={{ pathname: '/faktury/[id]', params: { id: f.id } }} asChild>
       <Link.Trigger>
         <Pressable
-          accessibilityLabel={`${f.kontrahent}, ${kwota(f.brutto)}, ${status.tekst}`}
+          accessibilityLabel={`${f.kontrahent}, ${kwota(f.brutto, f.waluta)}, ${status.tekst}`}
           accessibilityHint="Otwiera fakturę"
           onPressIn={() => setWcisniety(true)}
           onPressOut={() => setWcisniety(false)}
@@ -64,16 +66,18 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
               {f.kontrahent}
             </Tekst>
             <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry numberOfLines={pionowo ? 2 : 1}>
-              {f.numer} · {dataKrotka(f.dataWystawienia)}
+              {f.numer} · {zwykla ? `termin ${dataKrotka(f.terminPlatnosci)}` : dataKrotka(f.dataWystawienia)}
             </Tekst>
           </View>
           <View style={pionowo ? styles.prawaPionowa : styles.prawa}>
             <Tekst styl="callout" cyfry waga="medium" numberOfLines={1}>
-              {kwota(f.brutto)}
+              {kwota(f.brutto, f.waluta)}
             </Tekst>
-            <Znacznik ton={status.ton} trwa={status.trwa}>
-              {status.tekst}
-            </Znacznik>
+            {zwykla ? null : (
+              <Znacznik ton={status.ton} trwa={status.trwa}>
+                {status.tekst}
+              </Znacznik>
+            )}
           </View>
         </Pressable>
       </Link.Trigger>
