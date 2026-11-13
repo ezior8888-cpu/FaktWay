@@ -48,7 +48,7 @@ Etapy (plan, sekcja 7, od 12.11.2026): **M4c** wykończenie Copilota w
 komponentach (D15), **M4d** układ Copilota na Pulpicie, Fakturach i Kosztach
 (pozycje 1 i 2), **M4e** wystawienie i szczegół według Revolut Business
 (pozycje 4 i 6), **M4f** Księgowość, Więcej i wspólne stany (pozycje 3, 5 i 8).
-M4c i M4d zrobione 12.11.2026 w jednym PR (#663). Potem M5 według sekcji 7 tego pliku.
+M4c i M4d zrobione 12.11.2026 w jednym PR (#663). M4e (3.2, 3.3, 3.5, 3.7, 8.4) 13.11.2026; 3.6 i 3.9 czekają. M4f (5.1, 5.2, 6.1, 8.2, 8.3, 8.5, 8.6) 13.11.2026 (#665). M5a (sekcja 7 na danych przykładowych) 13.11.2026; „Wklej” w kodzie 2FA, Face ID w polu po wygaśnięciu sesji i ekran startu wchodzą z M5b.
 
 **Do decyzji Bartosza**
 - Kolejność: M4c do M4f przed logowaniem (M5) czy po nim (rekomendacja:
@@ -417,6 +417,13 @@ aplikacja startuje od logowania, jak Mercury.
 | 4. Propozycja Face ID | raz, po pierwszym logowaniu, tylko gdy telefon ma biometrię. `KoloIkony`, „Odblokowuj FaktWay twarzą”, jedno zdanie, „Włącz Face ID” i tekstowe „Nie teraz”; ten sam przełącznik co `wiecej/ustawienia/bezpieczenstwo.tsx:79`; nazwa z `supportedAuthenticationTypesAsync` | [Fidelity](https://mobbin.com/screens/8b44ab13-a693-4ebb-9359-ae0829de6db3?utm_source=claude&utm_medium=ai-assistant&utm_source_platform=mcp), [Betterment](https://mobbin.com/screens/9aaf12b8-f572-4043-8834-5b4a4cb1616f?utm_source=claude&utm_medium=ai-assistant&utm_source_platform=mcp) |
 | 5. Blokada przy powrocie | logo, „Dzień dobry, Anna”, nazwa firmy (księgowe z kilkoma firmami); systemowe pytanie Face ID samo; po anulowaniu „Odblokuj” i „Zaloguj się na inne konto”. Bez własnego PIN-u (zapas: kod telefonu). Blokada po kilku minutach w tle, w przełączniku aplikacji treść zasłonięta (kwoty) | [Revolut Business, odblokowanie](https://mobbin.com/flows/9a8b70af-4837-42ea-b60a-a2ec74064090?tab=screens&utm_source=claude&utm_medium=ai-assistant&utm_source_platform=mcp) |
 | 6. Wyloguj, usuń konto | „Wyloguj” w Więcej (dziś brak). Usuwanie jest (`wiecej/ustawienia/konto.tsx:35`), ale potwierdza się je hasłem (`:41`), a konto z Google hasła nie ma: dla niego Face ID albo kod 2FA | |
+
+Zrobione w M5a (13.11.2026): ekrany 2 do 6 i zasłona w przełączniku
+aplikacji, na danych przykładowych. Świadomie inaczej: blokada odblokowuje
+po 3 minutach w tle (stała `BLOKADA_PO_MS`), a po wylogowaniu propozycja
+Face ID pojawia się znowu, bo blokada należy do sesji na telefonie. Ekran 1
+(start z logo) i Face ID w polu e-mail czekają na M5b, bo zależą od sesji
+zapisanej w `expo-secure-store`.
 
 Na później (duży koszt, potrzebny serwer): logowanie kodem QR z komputera, jak
 w Mercury; nasi klienci zakładają konto na komputerze.

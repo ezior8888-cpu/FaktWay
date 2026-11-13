@@ -14,12 +14,18 @@ import { kwota } from '@/lib/format';
 
 type Stan = {
   faktury: Faktura[];
-  /** Oznacza albo cofa zapłatę (z wibracją); jedno miejsce dla gestu, menu i przycisku. */
+  /** Oznacza albo cofa zapłatę (z wibracją i paskiem „Cofnij”); jedno miejsce dla gestu, menu i przycisku. */
   przelaczZaplate: (f: Faktura) => void;
   /** Dodaje fakturę; `wyslij` symuluje wysyłkę do KSeF i przyjęcie po chwili. Zwraca id. */
   dodajFakture: (f: Faktura, wyslij: boolean) => string;
   /** Zapisuje poprawiony szkic albo odrzuconą fakturę w miejscu starej; `wyslij` jak w `dodajFakture`. */
   zastapFakture: (id: string, f: Faktura, wyslij: boolean) => void;
+  /** Faktura właśnie wysłana z formularza: jej szczegół pokazuje kartę „Wysyłamy do KSeF” → „Przyjęta w KSeF”. */
+  potwierdzenie: string | undefined;
+  /** Pasek „Cofnij” nad zakładkami (`PasekCofnij`): co się stało i jak to odwrócić. */
+  cofnij: { id: number; tekst: string; akcja: () => void } | undefined;
+  pokazCofnij: (c: { tekst: string; akcja: () => void } | undefined) => void;
+  pokazPotwierdzenie: (id: string | undefined) => void;
   /** Wysyła szkic albo odrzuconą fakturę ponownie do KSeF. */
   wyslijDoKsef: (id: string) => void;
   /** Cofa odrzuconą fakturę do szkicu. */
@@ -51,6 +57,8 @@ export function StanFaktur({ children }: { children: ReactNode }) {
   const [cykliczne, setCykliczne] = useState<FakturaCykliczna[]>(CYKLICZNE);
   const [flagi, setFlagi] = useState<Record<string, boolean>>({});
   const [koszty, setKoszty] = useState<Koszt[]>(KOSZTY);
+  const [potwierdzenie, setPotwierdzenie] = useState<string>();
+  const [cofnij, setCofnij] = useState<Stan['cofnij']>();
   const licznik = useRef(0);
 
   const wartosc = useMemo<Stan>(() => {
@@ -73,6 +81,11 @@ export function StanFaktur({ children }: { children: ReactNode }) {
       przelaczZaplate: (f) => {
         zmien(f.id, { zaplacona: !f.zaplacona });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCofnij({
+          id: Date.now(),
+          tekst: f.zaplacona ? `Bez zapłaty: ${f.numer}` : `Zapłacona: ${f.numer}`,
+          akcja: () => zmien(f.id, { zaplacona: f.zaplacona }),
+        });
       },
       dodajFakture: (f, wyslij) => {
         licznik.current += 1;
@@ -85,6 +98,10 @@ export function StanFaktur({ children }: { children: ReactNode }) {
         setFaktury((lista) => lista.map((x) => (x.id === id ? { ...f, id, statusKsef: wyslij ? 'wysylanie' : 'robocza', blad: undefined } : x)));
         if (wyslij) przyjmijPoChwili(id);
       },
+      potwierdzenie,
+      pokazPotwierdzenie: setPotwierdzenie,
+      cofnij,
+      pokazCofnij: (c) => setCofnij(c ? { ...c, id: Date.now() } : undefined),
       wyslijDoKsef: (id) => {
         zmien(id, { statusKsef: 'wysylanie', blad: undefined });
         przyjmijPoChwili(id);
@@ -105,7 +122,7 @@ export function StanFaktur({ children }: { children: ReactNode }) {
       flagi,
       ustawFlage: (klucz, v) => setFlagi((f) => ({ ...f, [klucz]: v })),
     };
-  }, [faktury, cykliczne, koszty, flagi]);
+  }, [faktury, cykliczne, koszty, flagi, potwierdzenie, cofnij]);
 
   return <Kontekst value={wartosc}>{children}</Kontekst>;
 }

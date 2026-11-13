@@ -6,8 +6,8 @@
  * Okrągłe ikony Remix, liczby cyframi tabelarycznymi, statusy jako plakietki
  * (docs/mobile/ZASADY-DESIGNU.md, sekcja 5).
  */
-import { Children, Fragment, isValidElement, type ReactElement, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewProps } from 'react-native';
+import { Children, Fragment, isValidElement, useState, type ReactElement, type ReactNode } from 'react';
+import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewProps } from 'react-native';
 
 import { GradientNaglowka } from '@/komponenty/gradient-naglowka';
 import { Karta } from '@/komponenty/karta';
@@ -25,15 +25,34 @@ import { CEL_DOTYKU, MARGINES, ODSTEP, SKALA_PIONOWA } from '@/wyglad/odstepy';
 /**
  * `gradient`: miękki gradient pod nagłówkiem (D15) na ekranach z dużym tytułem
  * albo dużą kwotą; `'pod-paskiem'` na Pulpicie, gdzie nad treścią stoi pasek
- * marki z własnym gradientem.
+ * marki z własnym gradientem. `onOdswiez`: odświeżanie pociągnięciem w dół
+ * (WZORCE-MOBBIN.md 8.3); kręciołek jest biały na gradiencie.
  */
-export function EkranListy({ children, gradient, ...reszta }: ScrollViewProps & { children: ReactNode; gradient?: boolean | 'pod-paskiem' }) {
+export function EkranListy({
+  children,
+  gradient,
+  onOdswiez,
+  ...reszta
+}: ScrollViewProps & { children: ReactNode; gradient?: boolean | 'pod-paskiem'; onOdswiez?: () => Promise<void> }) {
   const kolory = useKolory();
+  const [odswiezam, setOdswiezam] = useState(false);
+  const odswiez = async () => {
+    if (!onOdswiez) return;
+    setOdswiezam(true);
+    try {
+      await onOdswiez();
+    } finally {
+      setOdswiezam(false);
+    }
+  };
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       style={{ backgroundColor: kolory.tloGrupowane }}
       contentContainerStyle={styles.tresc}
+      refreshControl={
+        onOdswiez ? <RefreshControl refreshing={odswiezam} onRefresh={() => void odswiez()} tintColor={gradient ? kolory.naGradiencie : kolory.etykietaDrugorzedna} /> : undefined
+      }
       {...reszta}>
       {gradient ? <GradientNaglowka podPaskiem={gradient === 'pod-paskiem'} /> : null}
       {children}

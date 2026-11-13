@@ -62,7 +62,10 @@ okrągłego „Podgląd” (wzór Revolut Business, D14). Przycisk główny jest
 ekran. Na szczegółach dokumentu akcje stoją pod kwotą w rzędzie białych
 pigułek z ikoną („Zapłacona”, „Wyślij”, „PDF”), reszta w menu „Więcej”.
 Akcja drugorzędna w karcie (np. „Zatwierdź kategorie”) i cofnięcie mają
-wariant tonalny: jasnoniebieskie tło, niebieski napis.
+wariant tonalny: jasnoniebieskie tło, niebieski napis. Druga droga na tle
+ekranu („Zaloguj przez Google”) to biały przycisk z cieniem karty (wariant
+`karta`). Gdy akcja trwa (logowanie, wysyłka), przycisk pokazuje kółko
+ładowania zamiast napisu i nie reaguje na kolejne dotknięcie.
 
 Przyciski w pasku u góry (filtr, kalendarz, udostępnij, więcej) mają ikony
 Remix z `wyglad/ikony-paska.ts`; pozycje menu systemowego zostają z ikonami
@@ -141,6 +144,17 @@ Kontrast tych par (4.5:1 w obu trybach) sprawdza test, zanim trafią do `kolory.
   pasku zakładek, przyciskach i pasku nawigacji. Okrągła ikona w wierszu albo
   kaflu tylko wtedy, gdy mówi o stanie (błąd, ostrzeżenie, sukces); ozdobne
   ikony przy każdym wierszu zaśmiecały ekrany (Bartosz, 12.11.2026).
+  Wyjątek: znak Face ID to systemowy symbol `faceid` (Remix go nie ma, a
+  klient zna go z innych aplikacji); na Androidzie odcisk palca z Remix.
+  Drugi wyjątek: „Wklej” w polu kodu to systemowy przycisk wklejania
+  (`UIPasteControl`, czcionka systemu, kolory marki), bo tylko on czyta
+  schowek bez pytania klienta o zgodę.
+- **Logowanie i blokada** (M5a): ekrany logowania mają nagłówek w treści
+  (białe logo, tytuł, jedno zdanie) na gradiencie i karty niżej, jak reszta
+  aplikacji. Blokada i zasłona w przełączniku aplikacji leżą na pełnym
+  gradiencie (od `gradientGora` do `gradientSrodek`) z białym tekstem; jedyny
+  przycisk na nim jest biały z napisem w kolorze `gradientGora`
+  (`PrzyciskGlowny wariant="naGradiencie"`).
 - **Tryb ciemny obowiązkowo** od pierwszego ekranu, z palety ciemnej.
 
 ## 5. Karty, listy i stany ekranu
