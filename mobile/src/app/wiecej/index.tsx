@@ -1,61 +1,151 @@
 import Constants from 'expo-constants';
-import { useRouter, type Href } from 'expo-router';
+import { Stack, useRouter, type Href } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import type { NazwaIkony } from '@/komponenty/ikona';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { FIRMA, KSEF } from '@/dane-przykladowe/ustawienia';
+import { CZLONKOWIE, FIRMA, KSEF } from '@/dane-przykladowe/ustawienia';
+import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { StanPusty } from '@/komponenty/stan-pusty';
+import { Tekst } from '@/komponenty/tekst';
+import { Znacznik } from '@/komponenty/znacznik';
+import { useFlaga } from '@/stan/faktury';
 import type { Kolory } from '@/wyglad/kolory';
+import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
-type Pozycja = { tytul: string; ikona: NazwaIkony; kolor?: keyof Kolory; trasa: Href; podtytul?: string };
-
-const USTAWIENIA: Pozycja[] = [
-  { tytul: 'Firma', ikona: 'building2-line', trasa: '/wiecej/ustawienia/firma', podtytul: 'Dane firmy, VAT, metoda kasowa' },
-  { tytul: 'Bezpieczeństwo', ikona: 'shield-keyhole-line', trasa: '/wiecej/ustawienia/bezpieczenstwo', podtytul: 'Hasło, 2FA, logowanie biometrią' },
-  { tytul: 'Powiadomienia', ikona: 'notification3-line', trasa: '/wiecej/ustawienia/powiadomienia' },
-  { tytul: 'KSeF', ikona: 'shield-check-line', kolor: 'sukces', trasa: '/wiecej/ustawienia/ksef', podtytul: KSEF.status },
-  { tytul: 'Przypomnienia', ikona: 'mail-unread-line', trasa: '/wiecej/ustawienia/przypomnienia', podtytul: 'Przypomnienia o zapłacie' },
-  { tytul: 'Księgowa', ikona: 'user-star-line', trasa: '/wiecej/ustawienia/ksiegowa', podtytul: 'Co-Pilot i udostępnione dostępy' },
-  { tytul: 'Zespół', ikona: 'team-line', trasa: '/wiecej/ustawienia/zespol' },
-  { tytul: 'Abonament', ikona: 'bank-card-line', trasa: '/wiecej/ustawienia/abonament' },
-  { tytul: 'Dziennik zdarzeń', ikona: 'history-line', trasa: '/wiecej/ustawienia/dziennik' },
-  { tytul: 'Konto i dane (RODO)', ikona: 'account-circle-line', trasa: '/wiecej/ustawienia/konto' },
-];
+type Pozycja = { tytul: string; trasa: Href; podtytul?: string; stan?: string; stanKolor?: keyof Kolory; slowa?: string };
+type Grupa = { naglowek: string; pozycje: Pozycja[] };
 
 /**
  * Więcej: wszystko, czego nie ma w czterech pierwszych zakładkach. Odpowiada
  * pozostałym pozycjom menu strony i kartom ustawień (`settings-tabs.ts`).
+ * Układ jak Google Account i Deel (WZORCE-MOBBIN.md 6.1): karta konta na
+ * górze, małe grupy ze stanem po prawej, wyszukiwarka po słowach kluczowych.
+ * „Wyloguj” dochodzi z logowaniem (etap M5).
  */
 export default function EkranWiecej() {
   const router = useRouter();
+  const [szukaj, setSzukaj] = useState('');
+  const [dwaEtapy] = useFlaga('2fa', true);
+  const konto = CZLONKOWIE.find((c) => c.ty);
+  const ksefPolaczony = KSEF.status.startsWith('Skonfigurowano');
+
+  const grupy: Grupa[] = [
+    {
+      naglowek: 'Sprzedaż i dane',
+      pozycje: [
+        { tytul: 'Kontrahenci', trasa: '/wiecej/kontrahenci', slowa: 'klienci nabywcy dostawcy nip' },
+        { tytul: 'Faktury cykliczne', trasa: { pathname: '/faktury', params: { widok: 'cykliczne' } }, slowa: 'abonament co miesiąc' },
+        { tytul: 'Przepływy', trasa: '/przeplywy', slowa: 'wpływy wydatki pieniądze' },
+        { tytul: 'Analizy', trasa: '/analizy', slowa: 'sprzedaż koszty wykresy' },
+        { tytul: 'Import danych', trasa: '/wiecej/import', slowa: 'csv excel przeniesienie' },
+      ],
+    },
+    {
+      naglowek: 'Firma i KSeF',
+      pozycje: [
+        { tytul: 'Firma', trasa: '/wiecej/ustawienia/firma', podtytul: 'Dane firmy, VAT, metoda kasowa', slowa: 'nip adres rachunek bank metoda kasowa zwolnienie' },
+        { tytul: 'KSeF', trasa: '/wiecej/ustawienia/ksef', stan: ksefPolaczony ? 'Połączony' : 'Niepołączony', stanKolor: ksefPolaczony ? 'sukces' : 'ostrzezenie', slowa: 'certyfikat token uprawnienia' },
+        { tytul: 'Księgowa', trasa: '/wiecej/ustawienia/ksiegowa', podtytul: 'Co-Pilot i udostępnione dostępy', slowa: 'biuro rachunkowe dostęp' },
+      ],
+    },
+    {
+      naglowek: 'Powiadomienia i przypomnienia',
+      pozycje: [
+        { tytul: 'Powiadomienia', trasa: '/wiecej/ustawienia/powiadomienia', slowa: 'push e-mail' },
+        { tytul: 'Przypomnienia o zapłacie', trasa: '/wiecej/ustawienia/przypomnienia', slowa: 'windykacja po terminie' },
+      ],
+    },
+    {
+      naglowek: 'Zespół i abonament',
+      pozycje: [
+        { tytul: 'Zespół', trasa: '/wiecej/ustawienia/zespol', stan: `${CZLONKOWIE.length} osoby`, slowa: 'użytkownicy zaproszenia role' },
+        { tytul: 'Abonament', trasa: '/wiecej/ustawienia/abonament', stan: 'Plan miesięczny', slowa: 'subskrypcja płatność faktura' },
+      ],
+    },
+    {
+      naglowek: 'Bezpieczeństwo i dane',
+      pozycje: [
+        { tytul: 'Bezpieczeństwo', trasa: '/wiecej/ustawienia/bezpieczenstwo', stan: dwaEtapy ? '2FA włączone' : '2FA wyłączone', stanKolor: dwaEtapy ? 'sukces' : 'ostrzezenie', slowa: 'hasło 2fa face id biometria klucz' },
+        { tytul: 'Dziennik zdarzeń', trasa: '/wiecej/ustawienia/dziennik', slowa: 'logi historia audyt' },
+        { tytul: 'Konto i dane (RODO)', trasa: '/wiecej/ustawienia/konto', slowa: 'usuń konto eksport danych rodo' },
+      ],
+    },
+  ];
+
+  const fraza = szukaj.trim().toLocaleLowerCase('pl');
+  const wyniki = fraza
+    ? grupy.flatMap((g) => g.pozycje).filter((p) => `${p.tytul} ${p.podtytul ?? ''} ${p.slowa ?? ''}`.toLocaleLowerCase('pl').includes(fraza))
+    : [];
+
+  const wiersz = (p: Pozycja) => (
+    <Wiersz
+      key={p.tytul}
+      tytul={p.tytul}
+      podtytul={p.podtytul}
+      wartosc={p.stan}
+      wartoscKolor={p.stanKolor ?? 'etykietaDrugorzedna'}
+      strzalka
+      onPress={() => router.push(p.trasa)}
+    />
+  );
+
   return (
-    <EkranListy gradient>
-      <Sekcja>
-        <Wiersz tytul={FIRMA.nazwa} podtytul={`NIP ${FIRMA.nip} · ${FIRMA.vat}`} ikona="building2-line" strzalka onPress={() => router.push('/wiecej/ustawienia/firma')} />
-      </Sekcja>
+    <>
+      <Stack.SearchBar placeholder="Szukaj ustawień, np. 2FA" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
+      <EkranListy gradient={!fraza} keyboardShouldPersistTaps="handled">
+        {fraza ? (
+          wyniki.length > 0 ? (
+            <Sekcja naglowek="Wyniki">{wyniki.map(wiersz)}</Sekcja>
+          ) : (
+            <StanPusty ikona="search-line" tytul="Nic nie znaleźliśmy" opis={`Brak ustawień pasujących do „${szukaj.trim()}”.`} />
+          )
+        ) : (
+          <>
+            <Karta style={styles.konto}>
+              <Pressable
+                onPress={() => router.push('/wiecej/ustawienia/firma')}
+                accessibilityRole="button"
+                accessibilityLabel={`${FIRMA.nazwa}, NIP ${FIRMA.nip}, ${konto?.email ?? ''}. Dane firmy.`}
+                style={styles.trescKonta}>
+                <Tekst styl="headline">{FIRMA.nazwa}</Tekst>
+                <Tekst styl="footnote" kolor="etykietaDrugorzedna" cyfry>
+                  {`NIP ${FIRMA.nip} · ${FIRMA.vat}`}
+                </Tekst>
+                {konto ? (
+                  <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+                    {`${konto.imie}, ${konto.email}`}
+                  </Tekst>
+                ) : null}
+                <View style={styles.plakietki}>
+                  <Znacznik ton={ksefPolaczony ? 'sukces' : 'ostrzezenie'}>{ksefPolaczony ? 'KSeF połączony' : 'KSeF niepołączony'}</Znacznik>
+                  <Znacznik ton="marka">Plan miesięczny</Znacznik>
+                </View>
+              </Pressable>
+            </Karta>
 
-      <Sekcja naglowek="Sprzedaż i dane">
-        <Wiersz tytul="Kontrahenci" ikona="contacts-book3-line" strzalka onPress={() => router.push('/wiecej/kontrahenci')} />
-        <Wiersz tytul="Faktury cykliczne" ikona="repeat-line" strzalka onPress={() => router.navigate({ pathname: '/faktury', params: { widok: 'cykliczne' } })} />
-        <Wiersz tytul="Przepływy" ikona="exchange-funds-line" strzalka onPress={() => router.push('/przeplywy')} />
-        <Wiersz tytul="Analizy" ikona="bar-chart2-line" strzalka onPress={() => router.push('/analizy')} />
-        <Wiersz tytul="Import danych" ikona="download2-line" strzalka onPress={() => router.push('/wiecej/import')} />
-      </Sekcja>
+            {grupy.map((g) => (
+              <Sekcja key={g.naglowek} naglowek={g.naglowek}>
+                {g.pozycje.map(wiersz)}
+              </Sekcja>
+            ))}
 
-      <Sekcja naglowek="Ustawienia">
-        {USTAWIENIA.map((p) => (
-          <Wiersz key={p.tytul} tytul={p.tytul} podtytul={p.podtytul} ikona={p.ikona} ikonaKolor={p.kolor} strzalka onPress={() => router.push(p.trasa)} />
-        ))}
-      </Sekcja>
+            <Sekcja naglowek="Pomoc">
+              <Wiersz tytul="Centrum pomocy" strzalka onPress={() => void WebBrowser.openBrowserAsync('https://faktway.pl/pomoc')} />
+              <Wiersz tytul="Napisz do nas" strzalka onPress={() => void WebBrowser.openBrowserAsync('https://faktway.pl/kontakt')} />
+            </Sekcja>
 
-      <Sekcja naglowek="Pomoc">
-        <Wiersz tytul="Centrum pomocy" ikona="question-line" strzalka onPress={() => void WebBrowser.openBrowserAsync('https://faktway.pl/pomoc')} />
-        <Wiersz tytul="Napisz do nas" ikona="mail-line" strzalka onPress={() => void WebBrowser.openBrowserAsync('https://faktway.pl/kontakt')} />
-      </Sekcja>
-
-      <Sekcja stopka={`FaktWay ${Constants.expoConfig?.version ?? ''}, dane przykładowe`}>
-        <Wiersz tytul="Wersja aplikacji" wartosc={Constants.expoConfig?.version ?? ''} />
-      </Sekcja>
-    </EkranListy>
+            <Sekcja stopka={`FaktWay ${Constants.expoConfig?.version ?? ''}, dane przykładowe`} />
+          </>
+        )}
+      </EkranListy>
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  konto: { marginTop: ODSTEP.s },
+  trescKonta: { padding: MARGINES, gap: ODSTEP.linia },
+  plakietki: { flexDirection: 'row', flexWrap: 'wrap', gap: ODSTEP.xs, marginTop: ODSTEP.xs },
+});

@@ -107,6 +107,9 @@ export default function EkranFaktur() {
       .filter((f) => !fraza || f.kontrahent.toLocaleLowerCase('pl').includes(fraza) || f.numer.toLowerCase().includes(fraza));
   }, [faktury, statusKsef, platnosc, rodzaj, szukaj]);
 
+  // Dane przykładowe: odświeżenie tylko pokazuje kręciołek; z M7 pobiera listę z API.
+  const odswiezListe = () => new Promise<void>((gotowe) => setTimeout(gotowe, 800));
+
   // Szkice i odrzucone przez KSeF na górze listy, jak „Drafts” w Revolut Business (D14).
   const doDokonczenia = widoczne.filter((f) => f.statusKsef === 'robocza' || f.statusKsef === 'odrzucona');
 
@@ -147,7 +150,7 @@ export default function EkranFaktur() {
         </Stack.Toolbar>
       ) : null}
 
-      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
+      <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled" onOdswiez={odswiezListe}>
         {szukaj ? null : (
           <>
             <KartaDoZaplaty otwarte={suma(otwarte)} poTerminie={suma(zalegle)} ilePoTerminie={zalegle.length} />
@@ -171,7 +174,21 @@ export default function EkranFaktur() {
             <StanPusty
               ikona={szukaj || filtrowAktywnych > 0 ? 'search-line' : 'file-text-line'}
               tytul={szukaj || filtrowAktywnych > 0 ? 'Brak faktur dla tych filtrów' : 'Brak faktur wystawionych'}
-              opis={szukaj || filtrowAktywnych > 0 ? 'Zmień wyszukiwanie albo filtry w menu u góry.' : 'Wystaw pierwszą fakturę przyciskiem „Nowa faktura”.'}
+              opis={szukaj || filtrowAktywnych > 0 ? 'Zmień wyszukiwanie albo filtry w menu u góry.' : 'Wystaw pierwszą fakturę, a pojawi się tutaj.'}
+              akcja={
+                filtrowAktywnych > 0
+                  ? {
+                      tytul: 'Wyczyść filtry',
+                      onPress: () => {
+                        setStatusKsef('Wszystkie');
+                        setPlatnosc('Wszystkie');
+                        setRodzaj('Wszystkie');
+                      },
+                    }
+                  : szukaj
+                    ? undefined
+                    : { tytul: 'Nowa faktura', onPress: () => router.push('/faktury/nowa') }
+              }
             />
           ) : (
             <>

@@ -7,6 +7,7 @@ import type { FakturaCykliczna } from '@/dane-przykladowe/kontrahenci';
 import { PoleDaty, PoleTekstowe, PoleWyboru } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
@@ -112,17 +113,10 @@ export default function EkranFakturyCyklicznej() {
               tytul="Usuń fakturę cykliczną"
               niszczacy
               onPress={() =>
-                Alert.alert(`Usunąć fakturę cykliczną „${istniejaca.opis}”?`, 'Wystawione już faktury się nie zmienią.', [
-                  { text: 'Anuluj', style: 'cancel' },
-                  {
-                    text: 'Usuń',
-                    style: 'destructive',
-                    onPress: () => {
-                      usunCykliczna(istniejaca.id);
-                      router.back();
-                    },
-                  },
-                ])
+                potwierdz({ tytul: `Usunąć fakturę cykliczną „${istniejaca.opis}”?`, opis: 'Wystawione już faktury się nie zmienią.', potwierdz: 'Usuń' }, () => {
+                  usunCykliczna(istniejaca.id);
+                  router.back();
+                })
               }
             />
           </Sekcja>

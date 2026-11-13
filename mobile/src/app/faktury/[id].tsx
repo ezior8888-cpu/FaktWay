@@ -1,5 +1,5 @@
 import { Stack, useIsPreview, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, Share, StyleSheet, View } from 'react-native';
+import { Share, StyleSheet, View } from 'react-native';
 
 import { bruttoPozycji, DZIS, NAZWA_RODZAJU, nettoPozycji, SPRZEDAWCA, vatPozycji, type Faktura, type StatusKsef } from '@/dane-przykladowe';
 import { KONTRAHENCI } from '@/dane-przykladowe/kontrahenci';
@@ -10,6 +10,7 @@ import { PotwierdzenieKsef } from '@/komponenty/potwierdzenie-ksef';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { RzadAkcji, type Akcja } from '@/komponenty/rzad-akcji';
 import { StanPusty } from '@/komponenty/stan-pusty';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { dataKrotka, dataPelna, kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
@@ -66,17 +67,10 @@ export default function EkranFaktury() {
   const vat = f.brutto - f.netto;
 
   const usun = () =>
-    Alert.alert('Usunąć szkic?', 'Numer faktury będzie można użyć ponownie.', [
-      { text: 'Anuluj', style: 'cancel' },
-      {
-        text: 'Usuń szkic',
-        style: 'destructive',
-        onPress: () => {
-          usunSzkic(f.id);
-          router.back();
-        },
-      },
-    ]);
+    potwierdz({ tytul: 'Usunąć szkic?', opis: 'Numer faktury będzie można użyć ponownie.', potwierdz: 'Usuń szkic' }, () => {
+      usunSzkic(f.id);
+      router.back();
+    });
 
   const edytuj = () => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj: f.rodzaj, edytuj: f.id, wprost: '1' } });
 

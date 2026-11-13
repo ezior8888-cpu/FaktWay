@@ -17,6 +17,7 @@ export default function UkladKsiegowosci() {
       <Stack.Screen name="vat" options={{ title: 'VAT' }} />
       <Stack.Screen name="eksport" options={{ title: 'Eksport' }} />
       <Stack.Screen name="ustawienia-podatkowe" options={{ title: 'Ustawienia podatkowe' }} />
+      <Stack.Screen name="przelew" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, title: 'Dane do przelewu' }} />
     </Stack>
   );
 }
