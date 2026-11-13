@@ -13,7 +13,7 @@
  *
  * Kwoty w bazie są w złotych (numeric), na telefonie w groszach.
  */
-import type { Faktura, FakturaKosztowa, MetodaPlatnosci, Pozycja, RodzajFaktury, StatusKsef, Strona } from '../../dane-przykladowe';
+import type { Faktura, FakturaKosztowa, KolumnaKpir, Koszt, MetodaPlatnosci, Pozycja, RodzajFaktury, StatusKsef, Strona, ZrodloKosztu } from '../../dane-przykladowe';
 
 /** Kolumny pozycji, w jednej linii jak na stronie (`LINE_COLUMNS`). */
 export const KOLUMNY_POZYCJI = 'ordinal, name, unit, quantity, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount';
@@ -259,4 +259,146 @@ export function skrzynkaZBazy(wiersze: WierszSkrzynki[], wydatki: PowiazanyWydat
       pozycje: pozycjeZBazy(w.invoice_line_items),
     };
   });
+}
+
+// ─── Wydatki (M9) ─────────────────────────────────────────────────────
+
+/**
+ * Kolumny wydatku (jak lista i formularz kosztu strony). Ze śladu odczytu
+ * (`ocr_extracted_data`, bywa duży) tylko klucze, po których strona ustala
+ * walutę kwot: `currency`, `source`, `fx`, `pln_confirmation`.
+ */
+export const KOLUMNY_WYDATKU = [
+  'id, source, seller_name, seller_nip, document_number, document_type, issue_date',
+  'net_amount, vat_amount, gross_amount, kpir_column, category_label, is_reviewed, is_deductible, notes, ksef_invoice_id',
+  'slad_waluta:ocr_extracted_data->currency, slad_zrodlo:ocr_extracted_data->source, slad_kurs:ocr_extracted_data->fx',
+  'slad_zlote:ocr_extracted_data->pln_confirmation',
+].join(', ');
+
+export type WierszWydatku = {
+  id: string;
+  source?: string | null;
+  seller_name?: string | null;
+  seller_nip?: string | null;
+  document_number?: string | null;
+  document_type?: string | null;
+  issue_date?: string | null;
+  net_amount?: number | string | null;
+  vat_amount?: number | string | null;
+  gross_amount?: number | string | null;
+  kpir_column?: string | null;
+  category_label?: string | null;
+  is_reviewed?: boolean | null;
+  is_deductible?: boolean | null;
+  notes?: string | null;
+  ksef_invoice_id?: string | null;
+  slad_waluta?: unknown;
+  slad_zrodlo?: unknown;
+  slad_kurs?: unknown;
+  slad_zlote?: unknown;
+};
+
+/** Ślad odczytu w kształcie `ocr_extracted_data` (tylko klucze waluty), do reguły waluty kwot. */
+export type SladWaluty = { currency?: unknown; source?: unknown; fx?: unknown; pln_confirmation?: unknown } | null;
+
+export function sladZWiersza(w: Pick<WierszWydatku, 'slad_waluta' | 'slad_zrodlo' | 'slad_kurs' | 'slad_zlote'>): SladWaluty {
+  const slad: Record<string, unknown> = {};
+  if (w.slad_waluta !== null && w.slad_waluta !== undefined) slad.currency = w.slad_waluta;
+  if (w.slad_zrodlo !== null && w.slad_zrodlo !== undefined) slad.source = w.slad_zrodlo;
+  if (w.slad_kurs !== null && w.slad_kurs !== undefined) slad.fx = w.slad_kurs;
+  if (w.slad_zlote !== null && w.slad_zlote !== undefined) slad.pln_confirmation = w.slad_zlote;
+  return Object.keys(slad).length > 0 ? slad : null;
+}
+
+const ZLOTY = 'PLN';
+
+function obiekt(v: unknown): Record<string, unknown> | null {
+  return v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+function kodObcy(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const kod = v.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(kod) && kod !== ZLOTY ? kod : null;
+}
+
+/** Kopia `hasKsefCurrencyRate` strony (`lib/expenses/ksef-currency-review.ts`). */
+function kursKsef(slad: SladWaluty, waluta: string, dataWystawienia: string): boolean {
+  if (!slad || slad.source !== 'ksef_inbox' || slad.currency !== waluta) return false;
+  const fx = obiekt(slad.fx);
+  if (!fx) return false;
+  return fx.currency === waluta
+    && typeof fx.mid === 'number'
+    && Number.isFinite(fx.mid)
+    && fx.mid > 0
+    && typeof fx.tableNo === 'string'
+    && fx.tableNo.trim().length > 0
+    && typeof fx.effectiveDate === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(fx.effectiveDate)
+    && fx.effectiveDate < dataWystawienia
+    && fx.appliedFor === dataWystawienia;
+}
+
+/**
+ * Waluta kwot kosztu: kopia `expenseAmountsCurrency` strony
+ * (`lib/expenses/ocr-currency-review.ts`), bo aplikacja nie importuje kodu
+ * strony spoza kontraktu. Zgodność obu sprawdza
+ * `tests/unit/mobile-wydatki.test.ts` na tej samej tabeli przypadków.
+ * OCR: waluta obca bez kursu NBP i bez potwierdzenia złotych. KSeF: ślad
+ * waluty bez potwierdzonego kursu.
+ */
+export function walutaKwotWydatku(w: { source: string | null; ksef_invoice_id: string | null; issue_date: string; slad: SladWaluty }): string {
+  const slad = w.slad;
+  if (w.source === 'ksef_inbox' || w.ksef_invoice_id !== null) {
+    const waluta = slad?.source === 'ksef_inbox' ? kodObcy(slad.currency) : null;
+    if (!waluta) return ZLOTY;
+    return kursKsef(slad, waluta, w.issue_date) ? ZLOTY : waluta;
+  }
+  if (!slad || slad.source === 'ksef_inbox') return ZLOTY;
+  const waluta = kodObcy(slad.currency);
+  if (!waluta) return ZLOTY;
+  if (obiekt(slad.fx) || obiekt(slad.pln_confirmation)) return ZLOTY;
+  return waluta;
+}
+
+const ZRODLO_WYDATKU: Record<string, ZrodloKosztu> = { ksef_inbox: 'ksef', ocr_photo: 'zdjecie', manual: 'reczny', import: 'import' };
+
+const DOKUMENT_WYDATKU: Record<string, Koszt['dokument']> = {
+  invoice: 'Faktura',
+  simplified_invoice: 'Faktura uproszczona',
+  receipt: 'Paragon',
+  other: 'Inny dokument',
+};
+
+const KOLUMNY_Z_BAZY: Record<string, KolumnaKpir> = {
+  col_7: '7', col_8: '8', col_10: '10', col_11: '11', col_12: '12', col_13: '13', col_15: '15', col_16: '16',
+};
+
+/**
+ * Wydatek z bazy na model telefonu. Jak formularz kosztu strony
+ * (`buildInitialForm`): NIP same cyfry, kolumna spoza listy to 13, bez
+ * kategorii „Pozostałe wydatki”, bez numeru pusty tekst.
+ */
+export function wydatekZBazy(w: WierszWydatku): Koszt {
+  const zrodlo = ZRODLO_WYDATKU[tekst(w.source)] ?? 'reczny';
+  const data = tekst(w.issue_date);
+  const nip = tekst(w.seller_nip).replace(/\D/g, '');
+  return {
+    id: w.id,
+    dostawca: tekst(w.seller_name),
+    ...(nip ? { nip } : {}),
+    opis: typeof w.notes === 'string' ? w.notes : '',
+    data,
+    netto: grosze(w.net_amount),
+    brutto: grosze(w.gross_amount),
+    vat: grosze(w.vat_amount),
+    zrodlo,
+    doOpisania: w.is_reviewed !== true,
+    kategoria: tekst(w.category_label) || 'Pozostałe wydatki',
+    kolumna: KOLUMNY_Z_BAZY[tekst(w.kpir_column)] ?? '13',
+    dokument: DOKUMENT_WYDATKU[tekst(w.document_type) || 'invoice'] ?? 'Inny dokument',
+    numer: tekst(w.document_number),
+    wKpir: w.is_deductible === true,
+    walutaKwot: walutaKwotWydatku({ source: w.source ?? null, ksef_invoice_id: w.ksef_invoice_id ?? null, issue_date: data, slad: sladZWiersza(w) }),
+  };
 }
