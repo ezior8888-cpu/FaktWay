@@ -84,7 +84,9 @@ const NavItem = memo(function NavItem({ item, active, current, onPrimaryDown, on
         isActive={active}
         aria-current={current ? 'page' : undefined}
         className={ACTIVE_ITEM_CLASS}
-        render={<Link href={item.href} prefetch={prefetchable ? undefined : false} />}
+        // Z góry pobiera tylko `PrefetchDashboardRoutes` (cele dolnego paska),
+        // pozycja menu: po najechaniu albo fokusie (plan skalowania 3000, sesja 10).
+        render={<Link href={item.href} prefetch={false} />}
         onPointerDown={e => {
           if (!shouldHandlePrimaryInAppNav(e)) return
           onPrimaryDown(item.href)

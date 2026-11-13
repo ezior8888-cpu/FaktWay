@@ -147,6 +147,13 @@ export function shadowSubject(input: {
  * nierozstrzygniętych: sprawa zamknięta i wracająca po miesiącach to nowa
  * sprawa, nie duplikat.
  *
+ * Klucz tematu porównuje baza (`proposal->>topicKey`), a nie pamięć: do
+ * sesji 29 planu skalowania czytaliśmy wszystkie nierozstrzygnięte wpisy
+ * rodzaju jednym zapytaniem, a produkcja ucina odpowiedź do 1000 wierszy
+ * bez błędu (`PGRST_DB_MAX_ROWS`) — sprawa spoza pierwszego tysiąca
+ * dostawała drugi wpis przy każdym przebiegu. Na odpowiedź wystarcza jeden
+ * wiersz.
+ *
  * Zwraca `false`, gdy wpis był już wcześniej — do liczenia w testach
  * i w logach, nie do sterowania czymkolwiek.
  */
@@ -156,19 +163,15 @@ export async function recordShadow(
 ): Promise<boolean> {
   const { data, error } = await db
     .from('flo_shadow')
-    .select('id, proposal')
+    .select('id')
     .eq('tenant_id', input.tenantId)
     .eq('kind', input.kind)
-    .is('matched', null);
+    .is('matched', null)
+    .eq('proposal->>topicKey', input.proposal.topicKey)
+    .limit(1);
 
   if (error) throw new Error(error.message);
-
-  const juzMamy = (data ?? []).some(
-    (row) =>
-      (row.proposal as { topicKey?: unknown } | null)?.topicKey ===
-      input.proposal.topicKey,
-  );
-  if (juzMamy) return false;
+  if ((data ?? []).length > 0) return false;
 
   const insert = await db.from('flo_shadow').insert({
     tenant_id: input.tenantId,

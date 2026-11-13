@@ -17,6 +17,7 @@
  */
 
 import { floDb, type FloDbClient, type FloDecisionRow } from '@/lib/flo/db-types';
+import { readAllByKey } from '@/lib/pagination/keyset';
 import type { FloProposalKind } from '@/types/flo';
 
 /**
@@ -300,14 +301,22 @@ async function readMuted(
   now: Date,
   db: FloDbClient,
 ): Promise<Array<{ kind: string; muted_until: string | null }>> {
-  const { data, error } = await db
-    .from('flo_decisions')
-    .select('kind, muted_until')
-    .eq('tenant_id', tenantId)
-    .gt('muted_until', now.toISOString());
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const nowIso = now.toISOString();
+  // Stronami po `kind`, jak `readDecisionRows` — wyciszonych spraw bywa
+  // ponad 1000, a PostgREST ucina odpowiedź bez błędu.
+  return readAllByKey<{ kind: string; muted_until: string | null }>(
+    'wyciszenia Flo',
+    (row) => row.kind,
+    (afterKind, limit) => {
+      let query = db
+        .from('flo_decisions')
+        .select('kind, muted_until')
+        .eq('tenant_id', tenantId)
+        .gt('muted_until', nowIso);
+      if (afterKind !== null) query = query.gt('kind', afterKind);
+      return query.order('kind', { ascending: true }).limit(limit);
+    },
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -317,20 +326,30 @@ async function readMuted(
 /**
  * Jeden odczyt zamiast dwóch: wiersze rodzaju i spraw tego konta.
  *
- * Wierszy jest tyle, ile rodzajów plus sprawy, o których klient coś
- * powiedział — czyli kilkanaście, nie tysiące.
+ * Wierszy jest tyle, ile rodzajów plus spraw, o których klient coś
+ * powiedział. Wiersz sprawy nie znika, więc u firmy, która od miesięcy
+ * odrzuca karty, są ich tysiące. Produkcja ucina każdą odpowiedź PostgREST
+ * do 1000 wierszy bez błędu (`PGRST_DB_MAX_ROWS`), a jedno zapytanie
+ * gubiło wtedy resztę i wyciszony rodzaj wracał (sesja 29 planu
+ * skalowania). Dlatego stronami po `kind` (klucz główny w obrębie firmy);
+ * błąd na dowolnej stronie to wyjątek, nie krótsza lista.
  */
 export async function readDecisionRows(
   tenantId: string,
   db: FloDbClient = floDb(),
 ): Promise<DecisionRow[]> {
-  const { data, error } = await db
-    .from('flo_decisions')
-    .select('kind, accepted, dismissed, muted_until, last_at')
-    .eq('tenant_id', tenantId);
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DecisionRow[];
+  return readAllByKey<DecisionRow>(
+    'pamięć decyzji Flo',
+    (row) => row.kind,
+    (afterKind, limit) => {
+      let query = db
+        .from('flo_decisions')
+        .select('kind, accepted, dismissed, muted_until, last_at')
+        .eq('tenant_id', tenantId);
+      if (afterKind !== null) query = query.gt('kind', afterKind);
+      return query.order('kind', { ascending: true }).limit(limit);
+    },
+  );
 }
 
 /** Czy agent ma milczeć w tej sprawie — odczyt plus reguła. */

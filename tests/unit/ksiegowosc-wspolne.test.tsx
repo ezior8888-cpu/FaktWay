@@ -23,7 +23,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
-// Testy KPiR mockują tylko `push` — wspólne części nie mogą sięgać po nic więcej.
+// Testy KPiR mockują tylko `push` — wspólne części nie mogą sięgać po nic więcej przy renderze.
+// Link zakładki (`SectionTabLink`) woła `prefetch` dopiero po najechaniu albo fokusie; taki test dodaje go do atrapy.
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
 import { KSIEGOWOSC_TABS, KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';

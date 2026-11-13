@@ -5,6 +5,7 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { CorrectionInvoiceForm } from '@/components/invoices/correction-form';
 import { sanitizeSearch } from '@/lib/invoices/list-query';
 import { loadCorrectionPicker, type CorrectionPicker } from '@/lib/invoices/correction-picker';
+import { loadNumberingForForm } from '@/lib/numeracja/strona';
 
 export default async function NewCorrectionPage({
   searchParams,
@@ -22,6 +23,8 @@ export default async function NewCorrectionPage({
   const picker: CorrectionPicker = tenantId
     ? await loadCorrectionPicker(supabase, { tenantId, environment, parentId: params.parentId, q })
     : { parentInvoices: [], truncated: false, preselectRefusal: null };
+  // Krok 2.5: seria domyślna korekty i podpowiedź numeru; błąd = formularz bez podpowiedzi.
+  const numbering = tenantId ? await loadNumberingForForm(supabase, tenantId, 'correction') : null;
 
   return (
     <CorrectionPageFrame>
@@ -35,6 +38,7 @@ export default async function NewCorrectionPage({
         searchQuery={q}
         truncated={picker.truncated}
         tenantId={tenantId ?? ''}
+        {...(numbering ? { numbering } : {})}
       />
     </CorrectionPageFrame>
   );
