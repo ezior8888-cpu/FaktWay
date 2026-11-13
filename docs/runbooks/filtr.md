@@ -49,8 +49,8 @@ powód, kto, do kiedy.
 Strażnicy w działającej aplikacji (F13, plan B4.10, `lib/bezpieczniki/`)
 sprawdzają kwoty i terminy tuż przed pokazaniem, zatwierdzeniem
 i przypomnieniem, plik JPK_V7M przed pobraniem i wysyłką, a pliki JPK_EWP
-i JPK_PKPIR przed pobraniem. W module
-księgowości blokują od razu (D-F7): pozycja, która nie przejdzie kontroli,
+i JPK_PKPIR przed pobraniem, a plik FA(3) przed wysyłką do KSeF (na razie
+tylko alarm, niżej). W module księgowości blokują od razu (D-F7): pozycja, która nie przejdzie kontroli,
 staje się brakiem z komunikatem „Tej kwoty nie pokazujemy, bo kontrola
 spójności wykryła błąd po naszej stronie. Zgłosiliśmy go.”, plik nie wychodzi
 (niżej), a operator dostaje alarm. Strażnik niczego nie zapisuje w bazie: po
@@ -135,6 +135,39 @@ i nie podaje wzoru; program liczy je według RP-SPIS-01), wartości spisu
 z natury (P_1, P_2, P_5B), kolumny bez wzoru w opisie (K_10, K_11, K_15,
 K_16B) i kwoty wierszy wobec faktur, kosztów i wpisów (silniki ewidencji
 i KPiR, testy filtra).
+
+### FA(3) przed wysyłką do KSeF (`lib/bezpieczniki/fa3.ts`)
+
+Sprawdza gotowy plik FA(3) po kontroli XSD, w `submitInvoiceFullFlow`
+(`lib/ksef/submit-invoice-full.ts`), jedynym miejscu, w którym FaktWay
+buduje XML faktury do KSeF (faktura zwykła, korekta, zaliczka, rozliczenie).
+Wzory są z opisów pól w schemacie MF (`lib/xml/schemas/fa3/schemat.xsd`)
+i z rejestru (`RP-FA-SUMY-01`, `RP-FA-KOR-01`, `RP-FA-ZAL-01`,
+`RP-FA-ROZ-01`), cytowane w nagłówku strażnika.
+
+**Na razie tylko alarm (D-F7).** Faktura idzie do KSeF tak jak dotąd, klient
+niczego nie widzi. Po dwóch tygodniach bez fałszywych alarmów blokada
+(faktura czeka z komunikatem) wymaga zgody Bartosza. Tag `straznik` to
+`fa3`, `rodzaj` to `RodzajFaktury` małymi literami (`vat`, `kor`, `zal`,
+`roz`), a `miesiac` to miesiąc daty wystawienia (`P_1`).
+
+| Kod | Co znaczy |
+|---|---|
+| `FILTR-RT-FA3-01` | `P_15` różni się od sumy pól `P_13_x` i `P_14_x` wszystkich stawek (bez `P_14_xW`), albo któreś z tych pól nie jest kwotą; także plik bez węzła `Faktura/Fa` |
+| `FILTR-RT-FA3-02` | faktura VAT: `P_13_x` różni się od sumy `P_11` pozycji w tej stawce, albo pole nie jest kwotą |
+| `FILTR-RT-FA3-03` | faktura VAT: `P_14_x` różni się od `P_13_x` razy stawka o więcej niż pół grosza na pozycję w tej stawce (więcej niż zaokrąglenie podatku pozycji), albo pozycje jednej grupy mają różne stawki |
+| `FILTR-RT-FA3-04` | pozycja „zw” bez `P_19 = 1` i podstawy zwolnienia (`P_19A`, `P_19B` albo `P_19C`); w fakturze VAT `P_19 = 1` bez pozycji „zw”; pozycja „oo” albo „np II” bez `P_18 = 1` |
+
+Faktura z alarmem jest już w KSeF (albo za chwilę będzie). Kolejność:
+odtworzyć plik dla firmy, miesiąca i rodzaju (archiwum XML w R2, ścieżka
+w `xml_documents`), porównać z danymi faktury, a przy prawdziwym błędzie
+generatora naprawić go według protokołu (`AGENTS.md`). Czy firmy dostają
+fakturę korygującą, decyduje Bartosz z księgową. Poza tym strażnikiem:
+kontrole 02 i 03 dla korekt, zaliczek i rozliczeń (ich sumy sprawdzają testy
+filtra `tests/filtr/xsd/fa3-*.test.ts`), faktura z pozycją w stawce spoza
+listy albo bez `P_11` (wzoru nie da się sprawdzić z pliku), stawka
+z podatkiem u firmy zwolnionej z art. 113 (zatrzymuje ją kolejka wysyłki,
+F12-G6b) i daty (NZ-FA-07).
 
 ### Co zrobić
 
