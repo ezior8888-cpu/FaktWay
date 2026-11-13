@@ -8,7 +8,8 @@ export interface MobileSupabaseTarget {
   serviceRoleKey?: string;
 }
 
-function resolveTarget(target: MobileSupabaseTarget): { url: string; anonKey: string } {
+/** Adres i klucz anon; też dla zapytań do GoTrue tokenem klienta bez `supabase-js` (`lib/api/mobile/kod.ts`). */
+export function resolveTarget(target: MobileSupabaseTarget): { url: string; anonKey: string } {
   const url = target.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = target.anonKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) throw new Error('Brak adresu albo klucza anon Supabase');
