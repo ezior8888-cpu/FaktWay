@@ -168,6 +168,9 @@ describe('ShellScrollMemory: kliknięcie, zanim przyjdzie strona podzakładki (1
     ['link z Cmd (nowa karta)', () => click(add('a', { href: '/przeplywy' }), { metaKey: true })],
     ['link z Shift (nowe okno)', () => click(add('a', { href: '/przeplywy' }), { shiftKey: true })],
     ['link z Alt (pobranie)', () => click(add('a', { href: '/przeplywy' }), { altKey: true })],
+    ['adres e-mail kontrahenta (mailto:)', () => click(add('a', { href: 'mailto:biuro@firma.test' }))],
+    ['numer telefonu (tel:)', () => click(add('a', { href: 'tel:+48500000000' }))],
+    ['kotwica na tej samej stronie', () => click(add('a', { href: '#tresc' }))],
   ] as const)('drugie kliknięcie bez przejścia w tej karcie (%s) zostawia ekran na miejscu', (_, secondClick) => {
     const tab = add('a', { href: TAB, 'data-ff-keep-scroll': '' });
     setScrollTop(520);

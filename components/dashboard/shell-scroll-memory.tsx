@@ -34,9 +34,11 @@ function shellScroller(): HTMLElement | null {
 /**
  * Link, którym to kliknięcie przenosi w tej karcie, albo `null`. Warunki jak
  * w `linkClicked` z `next/link`: `<a href>` bez `target` innego niż `_self`
- * i bez `download`, klik lewym przyciskiem bez Ctrl, Cmd, Shift i Alt. Resztę
- * (link do nowej karty albo do pobrania, przycisk, puste miejsce) przeglądarka
- * i Next obsługują bez przejścia w tej karcie.
+ * i bez `download`, klik lewym przyciskiem bez Ctrl, Cmd, Shift i Alt. Do tego
+ * adres w tej aplikacji i inna strona niż obecna: `mailto:`, `tel:` i kotwica
+ * `#…` na tej samej stronie nie zmieniają trasy. Resztę (link do nowej karty
+ * albo do pobrania, przycisk, puste miejsce) przeglądarka i Next obsługują bez
+ * przejścia w tej karcie.
  */
 function linkNavigatingHere(e: MouseEvent): HTMLAnchorElement | null {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
@@ -44,6 +46,10 @@ function linkNavigatingHere(e: MouseEvent): HTMLAnchorElement | null {
   if (!link) return null;
   const target = link.getAttribute('target');
   if ((target && target !== '_self') || link.hasAttribute('download')) return null;
+  const url = new URL(link.href, window.location.href);
+  if (url.origin !== window.location.origin) return null;
+  const samePage = url.pathname === window.location.pathname && url.search === window.location.search;
+  if (samePage && url.hash) return null;
   return link;
 }
 
