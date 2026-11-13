@@ -30,7 +30,7 @@ uruchamiasz po kolei, nigdy razem.
 | `src/wyglad/` | paleta (`paleta.ts`, bez React Native, kontrast sprawdza `tests/unit/mobile-kontrast.test.ts`; `kolory.ts` wybiera jasną albo ciemną), czcionki i skala tekstu, odstępy i kształty, opcje pasków (`naglowki.ts`), ikony paska (`ikony-paska.ts`); jedyne miejsce na wartości wyglądu |
 | `assets/fonts/`, `assets/zakladki/`, `assets/pasek/` | Outfit (OFL, `LICENCJE.txt`; IBM Plex Mono usunięty w M4c, D15); ikony Remix zakładek i paska jako obrazy szablonowe |
 | `scripts/ikony-remix.cjs` | generuje `src/komponenty/ikony-remix.ts` z pakietu `@remixicon/react` strony; nową ikonę dopisz tam |
-| `src/lib/` | formatowanie i logika bez interfejsu; `api/` (od M7): kontrakt API strony (reeksport, `metro.config.js`), klient z ponowieniem po 401 (`rdzen.ts`, bez React Native), podpięcie pod sesję (`polaczenie.ts`); `dane/`: mapowanie wierszy bazy na model ekranów, zapytania do bazy, dane z poprzedniego otwarcia w plikach. Pliki bez React Native (`api/rdzen.ts`, `api/bledy.ts`, `dane/mapowanie.ts`, `dane/pamiec.ts`, `logowanie/token.ts`, `status-faktury.ts`) importują względnie, bo czytają je testy strony (`tests/unit/mobile-*.test.ts`) |
+| `src/lib/` | formatowanie i logika bez interfejsu; `api/` (od M7): kontrakt API strony (reeksport, `metro.config.js`), klient z ponowieniem po 401 (`rdzen.ts`, bez React Native), podpięcie pod sesję (`polaczenie.ts`); `dane/`: mapowanie wierszy bazy na model ekranów, zapytania do bazy, dane z poprzedniego otwarcia w plikach; `faktura/` (od M8): formularz faktury na treść `POST /faktury`, pole błędu serwera, nabywcy z ostatnich faktur, klucz zapisu. Pliki bez React Native (`api/rdzen.ts`, `api/bledy.ts`, `dane/mapowanie.ts`, `dane/pamiec.ts`, `faktura/wystawienie.ts`, `logowanie/token.ts`, `status-faktury.ts`) importują względnie, bo czytają je testy strony (`tests/unit/mobile-*.test.ts`) |
 | `src/dane-przykladowe/` | dane do etapów M2 do M4 (zmyślone firmy, NIP testowy) |
 
 ## Expo zmienia się z każdym SDK: nie ufaj pamięci
@@ -138,11 +138,21 @@ uruchamiasz po kolei, nigdy razem.
   `Paths.cache/faktway-dane/`, z kontem i firmą w każdym zapisie. Wylogowanie,
   „Zaloguj się na inne konto” i koniec sesji z serwera czyszczą je razem ze
   stanem w pamięci (`sesja.tsx`, `wyczyscDane`).
-- Zapisy na prawdziwych fakturach (zapłata, wystawienie, e-mail, PDF) jeszcze
-  nie mają API: na prawdziwym koncie telefon mówi, gdzie to zrobić, i otwiera
-  stronę (`komponenty/na-stronie.tsx`). Nie udawaj zapisu w pamięci.
+- Od M8 wystawienie zwykłej faktury VAT (szkic albo „Wyślij do KSeF”) i
+  wysyłka szkicu idą przez API (`stan/dane.tsx`: `dodajFakture`, `wyslijDoKsef`;
+  treść żądania z formularza w `lib/faktura/wystawienie.ts`, bez React
+  Native, testy `tests/unit/mobile-faktura-wystawienie.test.ts`). Każdy zapis
+  niesie `klucz` (UUID jednego wypełnienia formularza, nagłówek
+  `Idempotency-Key`): ponowienie po zerwanym połączeniu oddaje tę samą
+  fakturę. Zasady faktury sprawdza serwer schematem strony; odmowa
+  `invoice_invalid` ma `field`, a `poleFormularza` kładzie zdanie pod polem.
+  Zdania serwera idą przez `bezDlugichMyslnikow` (strona je ma, aplikacja nie).
+- Pozostałe zapisy na prawdziwych fakturach (zapłata, zmiana szkicu, korekta,
+  zaliczka, rozliczenie, ponowna wysyłka odrzuconej, e-mail, PDF) nie mają
+  jeszcze API: telefon mówi, gdzie to zrobić, i otwiera stronę
+  (`komponenty/na-stronie.tsx`). Nie udawaj zapisu w pamięci.
 - Ekrany poza Fakturami i skrzynką KSeF (Pulpit, Wydatki, Księgowość, Więcej)
-  zostają na danych przykładowych do M8 i M10; stopka w Więcej mówi o tym klientowi.
+  zostają na danych przykładowych do M9 i M10; stopka w Więcej mówi o tym klientowi.
 - `supabase.auth.onAuthStateChange` woła słuchacza wewnątrz blokady
   `supabase-js`: wywołanie klienta w słuchaczu czeka na samo siebie. Odłóż je
   (`setTimeout(…, 0)`), jak w `stan/dane.tsx`.
@@ -179,3 +189,26 @@ uruchamiasz po kolei, nigdy razem.
   `xcrun simctl pbcopy <udid>`.
 - Pytanie systemu o Face ID robi aplikację „nieaktywną” jak przełącznik
   aplikacji; zasłona (`Zaslona`) pomija je przez `pytanieSystemu` z sesji.
+
+## Wysyłka do KSeF TEST z symulatora (od M8)
+
+- Pełna droga potrzebuje strony (`next dev`), workera pg-boss i bazy z
+  migracjami gałęzi. Migracji z niescalonej gałęzi nie wgrywaj na wspólną bazę
+  dev: osobny stos Supabase (`--workdir`, porty 573xx, pamięć projektu
+  „rls-lokalnie-osobny-stos”).
+- Firma z fikcyjnym NIP z poprawną sumą kontrolną (`1234567890` jej nie ma, a
+  KSeF TEST sprawdza NIP) i certyfikat samopodpisany jak w
+  `scripts/test-ksef-wysylka.ts` (`makeSelfSignedCertificate`,
+  `prepareKsefCredentials`, `encryptCredentials`), plus `ksef_verified_at` i
+  `ksef_verified_environment = 'test'`.
+- `pnpm worker:dev` nie czyta `.env.local` (Next czyta): bez
+  `node --env-file=.env.local --import ./lib/jobs/server-only-hook.mjs --import tsx lib/jobs/worker.ts`
+  worker nie odszyfruje certyfikatu („KSEF_CREDENTIALS_ENCRYPTION_KEY nie jest
+  ustawione”). Zmienne powłoki mają pierwszeństwo przed plikiem.
+- Worker wgrywa XML do S3 przed wysyłką; lokalnie bez `R2_*` wystarczy
+  atrapa S3 w stylu ścieżek (`R2_ENDPOINT`, `R2_FORCE_PATH_STYLE=true`).
+- Metro uruchomione z `CI=1` nie przeładowuje zmian w kodzie: po edycji
+  uruchom je od nowa bez `CI`.
+- Narzędzie symulatora nie wpisze polskich znaków (wkleja, a symulator nie
+  przyjmuje wklejenia z Maca); w obchodzie pisz bez nich albo dotknij
+  podpowiedzi klawiatury.
