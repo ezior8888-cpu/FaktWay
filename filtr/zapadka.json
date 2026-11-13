@@ -7,7 +7,6 @@
     },
     "data-warszawa": {
       "app/actions/expenses.ts": 1,
-      "app/actions/invoice-payments.ts": 1,
       "app/actions/ksiegowosc-ewidencja.ts": 1,
       "components/dashboard/footer.tsx": 1,
       "components/expenses/kpir-view.tsx": 1,

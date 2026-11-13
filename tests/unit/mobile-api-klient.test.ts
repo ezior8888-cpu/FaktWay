@@ -72,6 +72,11 @@ describe('kody błędów kontraktu', () => {
       // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
       invalid_code: 'serwer',
       mfa_not_required: 'serwer',
+      // Należności, przypomnienia, PDF (M10a): zdanie serwera mówi, co zrobić.
+      forbidden: 'odmowa',
+      payment_refused: 'odmowa',
+      reminder_refused: 'odmowa',
+      pdf_unavailable: 'odmowa',
     };
     expect(Object.keys(oczekiwane).sort()).toEqual([...MOBILE_API_ERROR_CODES].sort());
     for (const kod of MOBILE_API_ERROR_CODES) expect(rodzajBledu(500, kod)).toBe(oczekiwane[kod]);

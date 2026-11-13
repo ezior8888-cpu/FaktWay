@@ -68,8 +68,10 @@ export function mayChangePayment(role: string): boolean {
 const invoiceIdSchema = z.string().uuid();
 /** Sam kształt daty: czy nie jest z przyszłości, sprawdza RPC na dzień w Warszawie. */
 const paidOnSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
-  const parsed = new Date(`${value}T12:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  // Czy taki dzień istnieje w kalendarzu (bez 30 lutego); to sprawdzenie kształtu, nie „dziś”.
+  const [y, m, d] = value.split('-').map(Number) as [number, number, number];
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  return parsed.getUTCFullYear() === y && parsed.getUTCMonth() === m - 1 && parsed.getUTCDate() === d;
 });
 
 /** Odmowa przed bazą (zły identyfikator albo dzień); `null`, gdy dane mają poprawny kształt. */

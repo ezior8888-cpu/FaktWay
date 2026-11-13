@@ -71,7 +71,7 @@ const EXEMPT_FILES: Record<string, string> = {
   'lib/jobs/runners/auto-categorize-inbox.ts': 'job: koszt z faktury odebranej (expenses); firma z danych joba',
   'lib/flo/functions/payment-confirm.ts': 'potwierdzenie wpłaty (payments); firma z zapisanej propozycji',
   'app/actions/recurring-invoices.ts': 'harmonogram faktur cyklicznych (recurring_invoices); z invoices tylko odczyt szablonu',
-  'app/actions/reminders.ts': 'przypomnienie o płatności (flo_proposals); z invoices tylko odczyt',
+  'lib/reminders/prepare-preview.ts': 'podgląd przypomnienia o płatności (flo_proposals, od M10a wspólny dla strony i telefonu); z invoices tylko odczyt',
   'lib/billing/self-invoice.ts': 'faktura za abonament (RPC create_billing_vat_invoice); firma klienta z płatności Stripe, sprzedawca z konfiguracji operatora',
   'lib/jobs/runners/self-invoice-payment.ts': 'job: wysyłka faktury za abonament; firma z danych płatności',
   'lib/ksef/duplicate-decision-rpc.ts': 'decyzja o duplikacie istniejącego dokumentu wskazanego id (RPC decide_ksef_duplicate*); firmę podaje wołający — decideKsefDuplicateAction albo operator',
