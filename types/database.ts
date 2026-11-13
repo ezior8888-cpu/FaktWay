@@ -1,6 +1,6 @@
-// Wygenerowane 11.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00198
-// (m.in. 00174-00198 planu kompletnej aplikacji i 00186 planu skalowania). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 13.11.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00199
+// (m.in. 00174-00199 planu kompletnej aplikacji i 00186 planu skalowania). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -2936,6 +2936,113 @@ export type Database = {
           },
         ]
       }
+      invoice_number_counters: {
+        Row: {
+          id: string
+          last_value: number
+          period: string
+          series_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          last_value: number
+          period: string
+          series_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          last_value?: number
+          period?: string
+          series_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_number_counters_series_fk"
+            columns: ["tenant_id", "series_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_number_series"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
+      }
+      invoice_number_series: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          default_kinds: string[]
+          id: string
+          name: string
+          pattern: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          default_kinds?: string[]
+          id?: string
+          name: string
+          pattern?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          default_kinds?: string[]
+          id?: string
+          name?: string
+          pattern?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_number_series_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_number_series_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "ksef_inbox_live_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_number_series_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "invoice_number_series_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_number_series_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_share_links: {
         Row: {
           created_at: string
@@ -3064,6 +3171,10 @@ export type Database = {
           last_error_suggestion: string | null
           net_total: number | null
           notes: string | null
+          number_counter: number | null
+          number_period: string | null
+          number_request_key: string | null
+          number_series_id: string | null
           offline_idempotency_key: string | null
           offline_qr_certyfikat: string | null
           offline_qr_offline: string | null
@@ -3139,6 +3250,10 @@ export type Database = {
           last_error_suggestion?: string | null
           net_total?: number | null
           notes?: string | null
+          number_counter?: number | null
+          number_period?: string | null
+          number_request_key?: string | null
+          number_series_id?: string | null
           offline_idempotency_key?: string | null
           offline_qr_certyfikat?: string | null
           offline_qr_offline?: string | null
@@ -3214,6 +3329,10 @@ export type Database = {
           last_error_suggestion?: string | null
           net_total?: number | null
           notes?: string | null
+          number_counter?: number | null
+          number_period?: string | null
+          number_request_key?: string | null
+          number_series_id?: string | null
           offline_idempotency_key?: string | null
           offline_qr_certyfikat?: string | null
           offline_qr_offline?: string | null
@@ -3248,6 +3367,13 @@ export type Database = {
           xml_storage_path?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_number_series_fk"
+            columns: ["tenant_id", "number_series_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_number_series"
+            referencedColumns: ["tenant_id", "id"]
+          },
           {
             foreignKeyName: "invoices_parent_invoice_id_fkey"
             columns: ["parent_invoice_id"]
@@ -8660,6 +8786,10 @@ export type Database = {
           last_error_suggestion: string | null
           net_total: number | null
           notes: string | null
+          number_counter: number | null
+          number_period: string | null
+          number_request_key: string | null
+          number_series_id: string | null
           offline_idempotency_key: string | null
           offline_qr_certyfikat: string | null
           offline_qr_offline: string | null
@@ -8830,6 +8960,74 @@ export type Database = {
         Returns: undefined
       }
       invoice_manual_payment: { Args: { p_invoice_id: string }; Returns: Json }
+      invoice_number_kinds: { Args: { p_kinds: string[] }; Returns: string[] }
+      invoice_number_next: {
+        Args: { p_issue_date: string; p_series_id: string }
+        Returns: Json
+      }
+      invoice_number_next_counter: {
+        Args: {
+          p_pattern: string
+          p_period: string
+          p_series_id: string
+          p_tenant_id: string
+        }
+        Returns: number
+      }
+      invoice_number_pattern_problem: {
+        Args: { p_pattern: string }
+        Returns: string
+      }
+      invoice_number_pattern_skeleton: {
+        Args: { p_pattern: string }
+        Returns: string
+      }
+      invoice_number_period: {
+        Args: { p_issue_date: string; p_pattern: string }
+        Returns: string
+      }
+      invoice_number_preview_of: {
+        Args: {
+          p_issue_date: string
+          p_pattern: string
+          p_series_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      invoice_number_render: {
+        Args: { p_counter: number; p_pattern: string; p_period: string }
+        Returns: string
+      }
+      invoice_number_series_create: {
+        Args: {
+          p_default_kinds: string[]
+          p_first_number: number
+          p_name: string
+          p_pattern: string
+        }
+        Returns: Json
+      }
+      invoice_number_series_delete: {
+        Args: { p_series_id: string }
+        Returns: Json
+      }
+      invoice_number_series_ensure_default: {
+        Args: { p_tenant_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      invoice_number_series_overview: {
+        Args: { p_issue_date: string }
+        Returns: Json
+      }
+      invoice_number_series_set_active: {
+        Args: { p_active: boolean; p_series_id: string }
+        Returns: Json
+      }
+      invoice_number_series_update: {
+        Args: { p_default_kinds: string[]; p_name: string; p_series_id: string }
+        Returns: Json
+      }
       invoice_payments: { Args: { p_invoice_id: string }; Returns: Json }
       invoice_share_link_view: {
         Args: { p_count_open?: boolean; p_token_hash: string }
@@ -9268,6 +9466,10 @@ export type Database = {
           last_error_suggestion: string | null
           net_total: number | null
           notes: string | null
+          number_counter: number | null
+          number_period: string | null
+          number_request_key: string | null
+          number_series_id: string | null
           offline_idempotency_key: string | null
           offline_qr_certyfikat: string | null
           offline_qr_offline: string | null
@@ -9356,6 +9558,10 @@ export type Database = {
           last_error_suggestion: string | null
           net_total: number | null
           notes: string | null
+          number_counter: number | null
+          number_period: string | null
+          number_request_key: string | null
+          number_series_id: string | null
           offline_idempotency_key: string | null
           offline_qr_certyfikat: string | null
           offline_qr_offline: string | null
