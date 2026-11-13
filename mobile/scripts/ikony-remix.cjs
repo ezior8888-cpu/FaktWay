@@ -12,7 +12,7 @@ SendPlaneLine CheckboxCircleFill CheckboxCircleLine AddLine CheckLine FileUnknow
 CameraLine CashLine RefreshLine EditBoxLine ShareBoxLine PriceTag3Line EqualizerLine GlobalLine QuestionLine ImageLine UserStarLine UserSearchLine AccountCircleLine TeamLine EditCircleLine
 ShieldKeyholeLine ShieldCheckLine FileList2Line LinkM SmartphoneLine MacbookLine SearchLine FileTextLine PlayLine PauseLine ArrowGoBackLine FingerprintLine AlertFill MailUnreadLine MailLine
 BankCardLine HistoryLine CheckboxMultipleLine BankLine Building2Line NotificationBadgeLine Notification3Line ArrowUpCircleFill ArrowDownCircleFill ArrowRightSLine ArrowDownSLine ArrowUpSLine
-CalendarLine Loader4Line Filter3Line ShareForwardLine DeleteBinLine WalletLine MoneyDollarCircleLine ArrowLeftRightLine CloseLine TimeLine ErrorWarningLine InformationLine LogoutBoxRLine KeyLine ArrowRightUpLine ArrowRightDownLine EyeLine`.split(/\s+/).filter(Boolean);
+CalendarLine Loader4Line Filter3Line ShareForwardLine DeleteBinLine WalletLine MoneyDollarCircleLine ArrowLeftRightLine CloseLine TimeLine ErrorWarningLine InformationLine LogoutBoxRLine KeyLine ArrowRightUpLine ArrowRightDownLine EyeLine EyeOffLine GoogleFill`.split(/\s+/).filter(Boolean);
 const wynik = {};
 for (const n of NAZWY) {
   const C = remix['Ri' + n];

@@ -21,9 +21,14 @@ type Props = {
    * więc ten zaczyna się od koloru, na którym tamten się kończy.
    */
   podPaskiem?: boolean;
+  /**
+   * Gdzie w treści zaczyna się pierwsza karta, gdy nad nią stoi własny
+   * nagłówek ekranu zamiast paska nawigacji (ekrany logowania).
+   */
+  odsuniecie?: number;
 };
 
-export function GradientNaglowka({ podPaskiem }: Props) {
+export function GradientNaglowka({ podPaskiem, odsuniecie = 0 }: Props) {
   const kolory = useKolory();
   const wysokosc = NAD + GRADIENT.podTrescia;
   const offset = (y: number) => Math.min(1, Math.max(0, (NAD + y) / wysokosc));
@@ -45,7 +50,7 @@ export function GradientNaglowka({ podPaskiem }: Props) {
   return (
     <View
       pointerEvents="none"
-      style={[styles.warstwa, { top: -NAD, height: wysokosc }]}
+      style={[styles.warstwa, { top: odsuniecie - NAD, height: wysokosc }]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants">
       <Svg width="100%" height="100%">

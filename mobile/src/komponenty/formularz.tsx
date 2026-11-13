@@ -7,8 +7,8 @@
  */
 import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
-import { useEffect, useState } from 'react';
-import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { useEffect, useState, type Ref } from 'react';
+import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions, type ReturnKeyTypeOptions, type TextInputInstance } from 'react-native';
 import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Ikona } from '@/komponenty/ikona';
@@ -34,9 +34,25 @@ type PoleTekstoweProps = {
   tajne?: boolean;
   /** Numer (faktury, konta) cyframi tabelarycznymi także przy zwykłej klawiaturze. */
   cyfry?: boolean;
+  /** Podpowiedzi pęku kluczy: e-mail konta, obecne hasło albo nowe hasło (iOS proponuje silne). */
+  autouzupelnianie?: 'login' | 'haslo' | 'nowe-haslo';
+  /**
+   * Klawisz „Dalej” albo „Zaloguj” na klawiaturze i co robi. Dostaje tekst
+   * wprost z pola: stan bywa o jeden znak w tyle, gdy klawisz pada tuż po
+   * ostatniej literze (sprawdzone w symulatorze).
+   */
+  klawiszZatwierdz?: ReturnKeyTypeOptions;
+  onZatwierdz?: (tekst: string) => void;
+  poleRef?: Ref<TextInputInstance>;
 };
 
-/** Obwódka pola: przy aktywnym polu płynnie w kolor marki, przy błędzie czerwona. */
+const AUTOUZUPELNIANIE = {
+  login: { textContentType: 'username', autoComplete: 'username' },
+  haslo: { textContentType: 'password', autoComplete: 'current-password' },
+  'nowe-haslo': { textContentType: 'newPassword', autoComplete: 'new-password' },
+} as const;
+
+/** Obwódka pola: przy aktywnym polu płynnie w kolor marki, przy błędzie czerwona (także z fokusem). */
 function useObwodka(aktywne: boolean, blad: boolean) {
   const kolory = useKolory();
   const postep = useSharedValue(0);
@@ -44,20 +60,37 @@ function useObwodka(aktywne: boolean, blad: boolean) {
     postep.set(withTiming(aktywne ? 1 : 0, { duration: 160 }));
   }, [aktywne, postep]);
   const spoczynek = blad ? kolory.blad : kolory.obwodka;
-  const akcent = kolory.akcent;
+  const akcent = blad ? kolory.blad : kolory.akcent;
   return useAnimatedStyle(() => ({ borderColor: interpolateColor(postep.value, [0, 1], [spoczynek, akcent]) }));
 }
 
-export function PoleTekstowe({ etykieta, wartosc, onZmiana, podpowiedz, klawiatura, blad, wielowierszowe, tajne, cyfry }: PoleTekstoweProps) {
+export function PoleTekstowe({
+  etykieta,
+  wartosc,
+  onZmiana,
+  podpowiedz,
+  klawiatura,
+  blad,
+  wielowierszowe,
+  tajne,
+  cyfry,
+  autouzupelnianie,
+  klawiszZatwierdz,
+  onZatwierdz,
+  poleRef,
+}: PoleTekstoweProps) {
   const kolory = useKolory();
   const [aktywne, setAktywne] = useState(false);
+  const [widoczne, setWidoczne] = useState(false);
+  const podpowiedzi = autouzupelnianie ? AUTOUZUPELNIANIE[autouzupelnianie] : tajne ? AUTOUZUPELNIANIE.haslo : undefined;
   const obwodka = useObwodka(aktywne, Boolean(blad));
   const liczby = cyfry ?? (klawiatura !== undefined && KLAWIATURY_LICZB.includes(klawiatura));
   return (
     <View style={styles.pole}>
       <Etykieta tekst={etykieta} />
-      <Animated.View style={[styles.ramka, { backgroundColor: kolory.tlo }, obwodka]}>
+      <Animated.View style={[styles.ramka, tajne ? styles.ramkaHasla : null, { backgroundColor: kolory.tlo }, obwodka]}>
         <TextInput
+          ref={poleRef}
           value={wartosc}
           onChangeText={onZmiana}
           onFocus={() => setAktywne(true)}
@@ -66,13 +99,33 @@ export function PoleTekstowe({ etykieta, wartosc, onZmiana, podpowiedz, klawiatu
           placeholderTextColor={kolory.etykietaTrzeciorzedna}
           keyboardType={klawiatura}
           multiline={wielowierszowe}
-          secureTextEntry={tajne}
-          textContentType={tajne ? 'password' : undefined}
+          secureTextEntry={tajne && !widoczne}
+          textContentType={podpowiedzi?.textContentType}
+          autoComplete={podpowiedzi?.autoComplete}
           autoCapitalize={tajne || klawiatura === 'email-address' ? 'none' : undefined}
+          autoCorrect={tajne || klawiatura === 'email-address' ? false : undefined}
+          returnKeyType={klawiszZatwierdz}
+          onSubmitEditing={onZatwierdz ? (e) => onZatwierdz(e.nativeEvent.text) : undefined}
+          submitBehavior={onZatwierdz ? 'submit' : undefined}
           selectionColor={kolory.akcent}
           accessibilityLabel={etykieta}
-          style={[stylTekstu('body', { cyfry: liczby }), styles.wejscie, wielowierszowe ? styles.wejscieWielo : null, { color: kolory.etykieta }]}
+          style={[
+            stylTekstu('body', { cyfry: liczby }),
+            styles.wejscie,
+            tajne ? styles.rozciagniety : null,
+            wielowierszowe ? styles.wejscieWielo : null,
+            { color: kolory.etykieta },
+          ]}
         />
+        {tajne ? (
+          <Pressable
+            onPress={() => setWidoczne((w) => !w)}
+            accessibilityRole="button"
+            accessibilityLabel={widoczne ? 'Ukryj hasło' : 'Pokaż hasło'}
+            style={styles.oko}>
+            <Ikona nazwa={widoczne ? 'eye-off-line' : 'eye-line'} rozmiar={20} kolor={kolory.etykietaDrugorzedna} />
+          </Pressable>
+        ) : null}
       </Animated.View>
       {blad ? (
         <Tekst styl="footnote" kolor="blad">
@@ -83,6 +136,64 @@ export function PoleTekstowe({ etykieta, wartosc, onZmiana, podpowiedz, klawiatu
   );
 }
 PoleTekstowe.pole = true;
+
+type PoleKoduProps = {
+  etykieta: string;
+  wartosc: string;
+  onZmiana: (kod: string) => void;
+  /** Zdanie pod polem, gdy nie ma błędu. */
+  opis?: string;
+  blad?: string;
+  poleRef?: Ref<TextInputInstance>;
+  /** Klawiatura od razu (ekran kodu przy logowaniu), nie w zwykłym formularzu. */
+  autoFocus?: boolean;
+};
+
+/**
+ * Kod z aplikacji TOTP: jedno pole z dużymi cyframi tabelarycznymi zamiast
+ * sześciu kratek (WZORCE-MOBBIN.md 7, ekran 3): działa z autouzupełnianiem
+ * kodów iOS i z dużym tekstem. Przyjmuje tylko cyfry, najwyżej 6.
+ */
+export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, autoFocus }: PoleKoduProps) {
+  const kolory = useKolory();
+  const [aktywne, setAktywne] = useState(false);
+  const obwodka = useObwodka(aktywne, Boolean(blad));
+  return (
+    <View style={styles.pole}>
+      <Etykieta tekst={etykieta} />
+      <Animated.View style={[styles.ramka, { backgroundColor: kolory.tlo }, obwodka]}>
+        <TextInput
+          ref={poleRef}
+          value={wartosc}
+          onChangeText={(t) => onZmiana(t.replace(/\D/g, '').slice(0, 6))}
+          onFocus={() => setAktywne(true)}
+          onBlur={() => setAktywne(false)}
+          keyboardType="number-pad"
+          textContentType="oneTimeCode"
+          autoComplete="one-time-code"
+          maxLength={6}
+          autoFocus={autoFocus}
+          placeholder="000000"
+          placeholderTextColor={kolory.etykietaTrzeciorzedna}
+          selectionColor={kolory.akcent}
+          accessibilityLabel={etykieta}
+          accessibilityHint="Sześć cyfr"
+          style={[stylTekstu('title1', { cyfry: true }), styles.wejscieKodu, { color: kolory.etykieta }]}
+        />
+      </Animated.View>
+      {blad ? (
+        <Tekst styl="footnote" kolor="blad">
+          {blad}
+        </Tekst>
+      ) : opis ? (
+        <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+          {opis}
+        </Tekst>
+      ) : null}
+    </View>
+  );
+}
+PoleKodu.pole = true;
 
 function Etykieta({ tekst }: { tekst: string }) {
   return (
@@ -304,6 +415,9 @@ const styles = StyleSheet.create({
   wejscie: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.s - 2 },
   wejscieWielo: { minHeight: CEL_DOTYKU * 2, textAlignVertical: 'top' },
   rozciagniety: { flex: 1 },
+  ramkaHasla: { flexDirection: 'row', alignItems: 'center' },
+  oko: { minWidth: CEL_DOTYKU, minHeight: CEL_DOTYKU, alignItems: 'center', justifyContent: 'center' },
+  wejscieKodu: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.xs, letterSpacing: ODSTEP.xs, textAlign: 'center' },
   wierszPrzelacznika: {
     minHeight: CEL_DOTYKU + ODSTEP.xs,
     paddingHorizontal: MARGINES,

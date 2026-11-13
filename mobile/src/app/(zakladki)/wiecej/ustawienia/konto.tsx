@@ -1,18 +1,26 @@
 import { useState } from 'react';
 import { Share } from 'react-native';
 
-import { PolePrzelacznik, PoleTekstowe } from '@/komponenty/formularz';
+import { PoleKodu, PolePrzelacznik, PoleTekstowe } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna } from '@/lib/format';
 import { useFlaga } from '@/stan/faktury';
+import { useSesja } from '@/stan/sesja';
 
 /**
  * Konto i dane (RODO): pobranie danych, usunięcie konta z 14 dniami na
  * rezygnację (wymóg Apple: usuwanie konta w aplikacji), analityka.
+ * Usunięcie potwierdza się hasłem; konto z Google hasła w FaktWay nie ma,
+ * więc potwierdza je kod z aplikacji TOTP (WZORCE-MOBBIN.md 7, ekran 6),
+ * a bez 2FA systemowe Face ID (M5b).
  */
 export default function EkranKonta() {
+  const { konto } = useSesja();
+  const google = konto?.metoda === 'google';
+  const [dwaEtapy] = useFlaga('2fa', true);
   const [haslo, setHaslo] = useState('');
+  const [kod, setKod] = useState('');
   const [zaplanowane, setZaplanowane] = useFlaga('usuniecie-konta', false);
   const [analityka, setAnalityka] = useFlaga('analityka', true);
   const [blad, setBlad] = useState<string>();
@@ -34,15 +42,20 @@ export default function EkranKonta() {
         </Sekcja>
       ) : (
         <Sekcja naglowek="Trwałe usunięcie konta" stopka={blad ?? 'Masz 14 dni na rezygnację. Faktury przechowujemy tyle, ile wymaga prawo podatkowe.'}>
-          <PoleTekstowe etykieta="Aktualne hasło" wartosc={haslo} onZmiana={setHaslo} tajne />
+          {!google ? <PoleTekstowe etykieta="Aktualne hasło" wartosc={haslo} onZmiana={setHaslo} tajne /> : null}
+          {google && dwaEtapy ? (
+            <PoleKodu etykieta="Kod z aplikacji (TOTP)" wartosc={kod} onZmiana={setKod} opis="Logujesz się przez Google, więc potwierdzasz kodem z aplikacji." />
+          ) : null}
           <Wiersz
             tytul="Usuń moje konto"
             niszczacy
             onPress={() => {
-              if (!haslo) return setBlad('Wpisz aktualne hasło, żeby potwierdzić.');
+              if (!google && !haslo) return setBlad('Wpisz aktualne hasło, żeby potwierdzić.');
+              if (google && dwaEtapy && kod.length !== 6) return setBlad('Wpisz 6-cyfrowy kod z aplikacji TOTP, żeby potwierdzić.');
               potwierdz({ tytul: 'Usunąć konto?', opis: 'Konto zostanie usunięte za 14 dni. Do tego czasu możesz się wycofać.', potwierdz: 'Potwierdź żądanie', anuluj: 'Wróć' }, () => {
                 setZaplanowane(true);
                 setHaslo('');
+                setKod('');
                 setBlad(undefined);
               });
             }}

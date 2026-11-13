@@ -7,6 +7,7 @@ import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { potwierdz } from '@/komponenty/potwierdz';
 import { dataPelna } from '@/lib/format';
 import { useFlaga } from '@/stan/faktury';
+import { BLOKADA_PO_MS, useSesja } from '@/stan/sesja';
 
 const WYMAGANIA = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,128}$/;
 
@@ -16,7 +17,7 @@ export default function EkranBezpieczenstwa() {
   const [nowe, setNowe] = useState('');
   const [komunikat, setKomunikat] = useState<string>();
   const [dwaEtapy, setDwaEtapy] = useFlaga('2fa', true);
-  const [faceId, setFaceId] = useFlaga('blokada-face-id', false);
+  const { biometria, blokada, ustawBlokade } = useSesja();
   const [klucze, setKlucze] = useState(KLUCZE_DOSTEPU);
 
   const zmienHaslo = () => {
@@ -32,7 +33,7 @@ export default function EkranBezpieczenstwa() {
     <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Sekcja naglowek="Hasło" stopka={komunikat ?? '12 do 128 znaków, mała i duża litera, cyfra oraz znak specjalny.'}>
         <PoleTekstowe etykieta="Aktualne hasło" wartosc={stare} onZmiana={setStare} tajne />
-        <PoleTekstowe etykieta="Nowe hasło" wartosc={nowe} onZmiana={setNowe} tajne />
+        <PoleTekstowe etykieta="Nowe hasło" wartosc={nowe} onZmiana={setNowe} tajne autouzupelnianie="nowe-haslo" />
         <Wiersz tytul="Zmień hasło" akcja onPress={zmienHaslo} />
       </Sekcja>
 
@@ -71,9 +72,15 @@ export default function EkranBezpieczenstwa() {
         />
       </Sekcja>
 
-      <Sekcja naglowek="Ta aplikacja" stopka="Po włączeniu aplikacja poprosi o Face ID przy każdym otwarciu.">
-        <PolePrzelacznik etykieta="Blokada Face ID" wartosc={faceId} onZmiana={setFaceId} />
-      </Sekcja>
+      {biometria ? (
+        <Sekcja
+          naglowek="Ta aplikacja"
+          stopka={`Po włączeniu aplikacja poprosi o ${biometria.nazwa} przy otwarciu i po ${BLOKADA_PO_MS / 60000} minutach w tle. W przełączniku aplikacji kwoty są zawsze zasłonięte.`}>
+          <PolePrzelacznik etykieta={`Blokada ${biometria.nazwa}`} wartosc={blokada} onZmiana={ustawBlokade} />
+        </Sekcja>
+      ) : (
+        <Sekcja naglowek="Ta aplikacja" stopka="Ten telefon nie ma Face ID ani czytnika odcisków palców, więc blokada aplikacji jest niedostępna. W przełączniku aplikacji kwoty są zawsze zasłonięte." />
+      )}
     </EkranListy>
   );
 }

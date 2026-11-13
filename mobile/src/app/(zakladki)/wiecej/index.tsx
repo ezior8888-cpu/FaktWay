@@ -9,8 +9,10 @@ import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { Tekst } from '@/komponenty/tekst';
+import { potwierdz } from '@/komponenty/potwierdz';
 import { Znacznik } from '@/komponenty/znacznik';
 import { useFlaga } from '@/stan/faktury';
+import { useSesja } from '@/stan/sesja';
 import type { Kolory } from '@/wyglad/kolory';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
@@ -22,12 +24,13 @@ type Grupa = { naglowek: string; pozycje: Pozycja[] };
  * pozostałym pozycjom menu strony i kartom ustawień (`settings-tabs.ts`).
  * Układ jak Google Account i Deel (WZORCE-MOBBIN.md 6.1): karta konta na
  * górze, małe grupy ze stanem po prawej, wyszukiwarka po słowach kluczowych.
- * „Wyloguj” dochodzi z logowaniem (etap M5).
+ * „Wyloguj się” na końcu, z potwierdzeniem w arkuszu akcji (etap M5).
  */
 export default function EkranWiecej() {
   const router = useRouter();
   const [szukaj, setSzukaj] = useState('');
   const [dwaEtapy] = useFlaga('2fa', true);
+  const { wyloguj, biometria, blokada } = useSesja();
   const konto = CZLONKOWIE.find((c) => c.ty);
   const ksefPolaczony = KSEF.status.startsWith('Skonfigurowano');
 
@@ -67,7 +70,14 @@ export default function EkranWiecej() {
     {
       naglowek: 'Bezpieczeństwo i dane',
       pozycje: [
-        { tytul: 'Bezpieczeństwo', trasa: '/wiecej/ustawienia/bezpieczenstwo', stan: dwaEtapy ? '2FA włączone' : '2FA wyłączone', stanKolor: dwaEtapy ? 'sukces' : 'ostrzezenie', slowa: 'hasło 2fa face id biometria klucz' },
+        {
+          tytul: 'Bezpieczeństwo',
+          trasa: '/wiecej/ustawienia/bezpieczenstwo',
+          podtytul: biometria ? `Blokada ${biometria.nazwa}: ${blokada ? 'włączona' : 'wyłączona'}` : undefined,
+          stan: dwaEtapy ? '2FA włączone' : '2FA wyłączone',
+          stanKolor: dwaEtapy ? 'sukces' : 'ostrzezenie',
+          slowa: 'hasło 2fa face id biometria klucz blokada wyloguj',
+        },
         { tytul: 'Dziennik zdarzeń', trasa: '/wiecej/ustawienia/dziennik', slowa: 'logi historia audyt' },
         { tytul: 'Konto i dane (RODO)', trasa: '/wiecej/ustawienia/konto', slowa: 'usuń konto eksport danych rodo' },
       ],
@@ -134,6 +144,16 @@ export default function EkranWiecej() {
             <Sekcja naglowek="Pomoc">
               <Wiersz tytul="Centrum pomocy" strzalka onPress={() => void WebBrowser.openBrowserAsync('https://faktway.pl/pomoc')} />
               <Wiersz tytul="Napisz do nas" strzalka onPress={() => void WebBrowser.openBrowserAsync('https://faktway.pl/kontakt')} />
+            </Sekcja>
+
+            <Sekcja>
+              <Wiersz
+                tytul="Wyloguj się"
+                niszczacy
+                onPress={() =>
+                  potwierdz({ tytul: 'Wylogować się?', opis: 'Następnym razem zalogujesz się e-mailem i hasłem albo przez Google.', potwierdz: 'Wyloguj się' }, wyloguj)
+                }
+              />
             </Sekcja>
 
             <Sekcja stopka={`FaktWay ${Constants.expoConfig?.version ?? ''}, dane przykładowe`} />

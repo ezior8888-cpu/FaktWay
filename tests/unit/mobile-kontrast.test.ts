@@ -83,6 +83,16 @@ describe.each([
     expect(kontrast('#FFFFFF', k.gradientGora)).toBeGreaterThanOrEqual(3);
     expect(kontrast('#FFFFFF', k.gradientSrodek)).toBeGreaterThanOrEqual(3);
   });
+
+  // Logowanie i blokada (M5a): zwykły tekst na gradiencie i biały przycisk z napisem w kolorze `gradientGora`.
+  it('zwykły biały tekst na gradiencie logowania i blokady ma co najmniej 4.5:1', () => {
+    expect(kontrast(k.naGradiencie, k.gradientGora)).toBeGreaterThanOrEqual(4.5);
+    expect(kontrast(k.naGradiencie, k.gradientSrodek)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('napis białego przycisku na gradiencie ma co najmniej 4.5:1', () => {
+    expect(kontrast(k.gradientGora, k.naGradiencie)).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe('tony kategorii kosztów', () => {
