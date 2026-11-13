@@ -18,10 +18,18 @@ import { opcje } from '../generatory/ustawienia';
  * - Ustawowo: do przedawnienia zobowiązania podatkowego (art. 112 ustawy
  *   o VAT, art. 86 § 1 Ordynacji podatkowej), czyli 5 lat od końca roku,
  *   w którym upłynął termin płatności podatku (art. 70 § 1 Ordynacji).
- *   Podatek z faktury wystawionej w roku R ma termin płatności najpóźniej
- *   w roku R+1 (VAT za grudzień i za IV kwartał, PIT i CIT za rok), więc bez
- *   zawieszenia i przerwania biegu przedawnienie mija najpóźniej z końcem
- *   roku R+6.
+ *   Test sprawdza tylko model memoriałowy: obowiązek podatkowy w roku
+ *   wystawienia R, termin płatności najpóźniej w R+1 (VAT za grudzień i za
+ *   IV kwartał, PIT za rok), bez zawieszenia i przerwania biegu
+ *   przedawnienia (art. 70 Ordynacji) i bez zdarzeń po wystawieniu. Wtedy
+ *   przedawnienie mija najpóźniej z końcem roku R+6.
+ *   Poza modelem, więc poza tym testem: metoda kasowa VAT (art. 21 ust. 1
+ *   pkt 1 ustawy o VAT: obowiązek z dniem zapłaty, choćby po latach),
+ *   korekta i ulga na złe długi po latach (art. 89a, 89b), termin
+ *   przesunięty z dnia wolnego (art. 12 § 5 Ordynacji), rok podatkowy CIT
+ *   dłuższy niż 12 miesięcy. Przy metodzie kasowej i zapłacie po latach
+ *   przedawnienie może minąć później niż 10 lat od wystawienia: to pytanie
+ *   do księgowej i osobne ustalenie, nie gwarancja tego testu.
  *
  * Fakturę usuwa `cron.retention-delete`, gdy `scheduled_deletion_at` jest
  * wcześniejszy niż chwila przebiegu (`lib/jobs/runners/retention-delete.ts`),
@@ -91,7 +99,7 @@ function bledyPrzebiegu(teraz: number): string[] {
   }
   const koniecUstawowy = `${Number(najpozniejWystawiona.slice(0, 4)) + 6}-12-31 23:59:59.999`;
   if (!(usuniecie > koniecUstawowy)) {
-    bledy.push(`przebieg ${wPolsce(teraz)}: faktura z ${najpozniejWystawiona} usunięta ${usuniecie}, przed przedawnieniem ${koniecUstawowy}`);
+    bledy.push(`przebieg ${wPolsce(teraz)}: faktura z ${najpozniejWystawiona} usunięta ${usuniecie}, przed przedawnieniem w modelu memoriałowym ${koniecUstawowy}`);
   }
   return bledy;
 }
@@ -103,7 +111,7 @@ describe('NZ-RET-01: faktura nie jest usuwana przed końcem okresu przechowywani
     expect(LATA_DO_ARCHIWUM).toBeLessThan(LATA_PRZECHOWYWANIA_FAKTUR);
   });
 
-  it('każdy dzień 2026-2060 (początek dnia, 3:00 przebiegu, koniec dnia w Polsce): usunięcie po 10 latach od wystawienia i po przedawnieniu', () => {
+  it('każdy dzień 2026-2060 (początek dnia, 3:00 przebiegu, koniec dnia w Polsce): usunięcie po 10 latach od wystawienia i po przedawnieniu w modelu memoriałowym', () => {
     const bledy: string[] = [];
     for (let dzien = '2026-01-01'; dzien <= '2060-12-31' && bledy.length < 10; dzien = dzienPo(dzien, 1)) {
       for (const czas of ['00:00:00.000', '03:00:00.000', '23:59:59.999']) {

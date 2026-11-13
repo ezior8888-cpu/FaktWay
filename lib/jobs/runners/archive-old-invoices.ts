@@ -21,8 +21,10 @@ import {
 export async function runArchiveOldInvoices({ step, logger }: JobContext) {
     // Granica i termin usunięcia z tej samej chwili, dni w Polsce
     // (lib/retention/terminy.ts, NZ-RET-01: usunięcie po 10 latach od wystawienia).
+    // Oba liczone przed pierwszym zapisem: błąd daty zatrzymuje przebieg na starcie.
     const teraz = new Date();
     const issueBefore = granicaArchiwizacji(teraz);
+    const terminUsuniecia = terminUsunieciaPoArchiwizacji(teraz);
 
     const candidates = await step.run('find-candidates', async () => {
       const supabase = createAdminClient();
@@ -103,7 +105,7 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
       const supabase = createAdminClient();
       const { error } = await supabase
         .from('invoices')
-        .update({ scheduled_deletion_at: terminUsunieciaPoArchiwizacji(teraz) })
+        .update({ scheduled_deletion_at: terminUsuniecia })
         .in('id', ids);
 
       if (error) throw new Error(`Schedule deletion failed: ${error.message}`);
