@@ -12,6 +12,7 @@ import type { ReactNode } from 'react'
 
 // Next Imports
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 // Third-party Imports
 import { RiSettings3Line } from '@remixicon/react'
@@ -38,6 +39,13 @@ import { SidebarTrigger } from '@/components/ui/sidebar'
  * profilu i w „Więcej”). Od `sm` w górę pasek jest taki jak był.
  */
 export function AppHeader({ profile }: { profile: ReactNode }) {
+  const router = useRouter()
+  // Zębatka pobiera Ustawienia dopiero po najechaniu albo fokusie, jak pozycje
+  // menu (plan skalowania 3000, sesja 10).
+  const prefetchSettings = () => {
+    void router.prefetch('/settings')
+  }
+
   return (
     <header className='ff-shell-header sticky top-0 z-40 w-full shrink-0 px-2 sm:px-6'>
       {/* Wewnętrzny kontener jak w Finorze (układ „compact”: `max-w-348`, `py-2`). */}
@@ -58,9 +66,11 @@ export function AppHeader({ profile }: { profile: ReactNode }) {
             variant='ghost'
             size='icon'
             className='max-sm:hidden'
-            render={<Link href='/settings' />}
+            render={<Link href='/settings' prefetch={false} />}
             nativeButton={false}
             aria-label='Ustawienia'
+            onPointerEnter={prefetchSettings}
+            onFocus={prefetchSettings}
           >
             <RiSettings3Line aria-hidden />
           </Button>
