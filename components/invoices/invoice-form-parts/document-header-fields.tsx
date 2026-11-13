@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
 import { DocumentHeaderRow } from '@/components/invoices/finora/invoice-document';
@@ -7,8 +8,17 @@ import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 
 import { FieldErrorText, fieldErrorProps } from './field-error-text';
 
-/** Numer i daty w nagłówku dokumentu (obok sprzedawcy). */
-export function DocumentHeaderFields({ form }: { form: UseFormReturn<InvoiceFormValues> }) {
+/**
+ * Numer i daty w nagłówku dokumentu (obok sprzedawcy). `seriesRow` (krok 2.5):
+ * wybór serii numeracji nad numerem, gdy firma ma kilka serii.
+ */
+export function DocumentHeaderFields({
+  form,
+  seriesRow = null,
+}: {
+  form: UseFormReturn<InvoiceFormValues>;
+  seriesRow?: ReactNode;
+}) {
   /**
    * Pigułki terminu: „14 dni” zamiast wybierania daty z kalendarza.
    * Liczone od daty wystawienia z formularza, nie od dzisiaj — inaczej przy
@@ -25,6 +35,7 @@ export function DocumentHeaderFields({ form }: { form: UseFormReturn<InvoiceForm
 
   return (
     <>
+      {seriesRow}
       <DocumentHeaderRow
         label="Numer faktury"
         htmlFor="internalNumber"

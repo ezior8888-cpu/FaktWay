@@ -57,6 +57,8 @@ import { EU_BUYER_COUNTRIES } from '@/lib/schemas/invoice-form';
 import { calculateLineItem } from '@/lib/xml/invoice-calculator';
 import { CORRECTION_TYPE_LABELS } from '@/types/invoice-types';
 import type { CorrectionInvoiceData, ZeroVatAmountChangeRate } from '@/types/invoice-types';
+import type { InvoiceNumbering } from '@/lib/numeracja/model';
+import { hasSeriesChoice, numberingDefaults, SeriesSelect, useSeriesNumber } from './numeracja/series-select-row';
 
 import {
   getCorrectionParentContextAction,
@@ -194,6 +196,8 @@ export interface CorrectionInvoiceFormProps {
   searchQuery?: string;
   /** Kandydatów jest więcej niż na liście. */
   truncated?: boolean;
+  /** Krok 2.5: serie numeracji z serią domyślną korekty i podpowiedzią numeru. */
+  numbering?: InvoiceNumbering | null;
 }
 
 // Daty w czasie polskim, nie UTC (F-013).
@@ -310,6 +314,7 @@ export function CorrectionInvoiceForm({
   preselectRefusal = null,
   searchQuery = '',
   truncated = false,
+  numbering = null,
 }: CorrectionInvoiceFormProps) {
   const validPreselect = useMemo(() => {
     const id = preselectedParentId?.trim();
@@ -556,6 +561,7 @@ export function CorrectionInvoiceForm({
       defaults={defaults}
       onPickOther={handleBackToPick}
       tenantId={tenantId}
+      numbering={numbering}
     />
   );
 }
@@ -615,12 +621,17 @@ interface CorrectionFillFormProps {
   defaults: CorrectionFormIn;
   onPickOther: () => void;
   tenantId: string;
+  numbering: InvoiceNumbering | null;
 }
 
-function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: CorrectionFillFormProps) {
+function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId, numbering }: CorrectionFillFormProps) {
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isSending, startSending] = useTransition();
+
+  // Krok 2.5: seria domyślna korekty, jej podpowiedź i klucz zapisu (jeden na otwarcie formularza).
+  const numberDefaults = numberingDefaults(numbering);
+  const [numberRequestKey] = useState(() => crypto.randomUUID());
 
   const form = useForm<CorrectionFormIn, unknown, CorrectionFormParsed>({
     resolver: zodResolver(correctionInvoiceSchema) as Resolver<
@@ -628,12 +639,31 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
       unknown,
       CorrectionFormParsed
     >,
-    defaultValues: defaults,
+    defaultValues: {
+      ...defaults,
+      internalNumber: defaults.internalNumber || numberDefaults.preview || '',
+      numberSeriesId: numberDefaults.numberSeriesId,
+      numberPreview: numberDefaults.numberPreview,
+      numberRequestKey,
+    },
   });
 
   const correctionType = useWatch({ control: form.control, name: 'correctionType' });
   const typKorekty = useWatch({ control: form.control, name: 'typKorekty' }) ?? '2';
   const paymentMethod = useWatch({ control: form.control, name: 'paymentMethod' });
+  const issueDateWatch = useWatch({ control: form.control, name: 'issueDate' }) ?? defaults.issueDate;
+
+  // Krok 2.5: zmiana serii albo daty podpowiada numer z serii, o ile w polu nie ma numeru wpisanego ręcznie.
+  const series = useSeriesNumber({
+    numbering,
+    issueDate: issueDateWatch,
+    read: () => ({ number: form.getValues('internalNumber') ?? '', preview: form.getValues('numberPreview') || undefined }),
+    write: ({ seriesId, preview, number }) => {
+      form.setValue('numberSeriesId', seriesId);
+      form.setValue('numberPreview', preview);
+      if (number !== undefined) form.setValue('internalNumber', number, { shouldValidate: form.formState.isSubmitted });
+    },
+  });
 
   // Nabywca i pozycje „Było” przychodzą z faktury pierwotnej (formularz nabywcy
   // nie zmienia) — z nich wynika dostępność np. II i stawka korekty kwotowej.
@@ -739,6 +769,12 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther, tenantId }: Corr
         </h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {hasSeriesChoice(numbering) ? (
+            <div className="sm:col-span-2">
+              <Label htmlFor="number-series" className={labelClass}>Seria numeracji</Label>
+              <SeriesSelect id="number-series" numbering={numbering} seriesId={series.seriesId} onSelect={series.selectSeries} disabled={busy} />
+            </div>
+          ) : null}
           <div>
             <Label htmlFor="kor-numer" className={labelClass}>Numer korekty</Label>
             <Input

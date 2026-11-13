@@ -16,13 +16,16 @@
  * Biała lista (RP-BL-01): koszt ponad 15 000 zł brutto wraca z planu jako
  * kandydat ze znacznikiem `bialaLista`; akcja sprawdza rachunek świeżo
  * (metoda `check` API MF) i dopiero wynik „TAK” z zapisanym dowodem wpuszcza
- * go do pliku. Plik niczego nie oznacza jako zapłacone.
+ * go do pliku. Plik niczego nie oznacza jako zapłacone. Skutki rachunku spoza
+ * wykazu w powodzie zależą od dnia wystawienia faktury (`biala-lista-pit.ts`).
  *
  * Ten moduł to typy, stałe i teksty (biorą je ekran i akcja, bez importów
- * wykonywalnych); plan pliku jest w `plik-przelewow-plan.ts`. Testy:
+ * serwerowych; jedyny import wykonywalny to zdanie o skutkach z
+ * `biala-lista-pit.ts`); plan pliku jest w `plik-przelewow-plan.ts`. Testy:
  * `tests/unit/plik-przelewow-akcja.test.ts`.
  */
 
+import { skutkiRachunkuSpozaWykazu } from '@/lib/expenses/biala-lista-pit';
 import type { KosztDoZaplaty, WierszKosztuDoZaplaty } from '@/lib/expenses/do-zaplaty';
 import type { PrzelewElixir } from '@/lib/expenses/elixir0';
 
@@ -135,13 +138,14 @@ export const POWODY: Readonly<Record<Exclude<KodPominiecia, 'zaplacony' | 'walut
     `Kwota ponad 15 000 zł, a koszt nie ma polskiego NIP sprzedawcy, więc rachunku nie da się sprawdzić w wykazie podatników VAT. Plik go nie zawiera: sprawdź rachunek w ${WYSZUKIWARKA}.`,
 };
 
-/** Rachunek spoza wykazu (metoda check: „NIE”). Skutki jak w RP-BL-01 i ostrzeżeniu z części 1. */
-export function powodPozaWykazem(dzien: string, requestId: string): string {
+/**
+ * Rachunek spoza wykazu (metoda check: „NIE”). Skutki jak w RP-BL-01 i ostrzeżeniu z części 1:
+ * `sankcjaPit` to `KosztDoZaplaty.sankcjaPitBialejListy` (dzień wystawienia faktury, nie dzień pliku).
+ */
+export function powodPozaWykazem(dzien: string, requestId: string, sankcjaPit: boolean): string {
   return (
     `Tego rachunku nie ma w wykazie podatników VAT przy NIP sprzedawcy (stan na ${dataPl(dzien)}, numer zapytania ${requestId}). ` +
-    'Zapłata ponad 15 000 zł na rachunek spoza wykazu oznacza, że tej kwoty nie zaliczysz do kosztów w PIT i odpowiadasz ' +
-    'solidarnie za VAT niezapłacony przez sprzedawcę, chyba że w ciągu 7 dni od zlecenia przelewu zawiadomisz naczelnika ' +
-    'właściwego urzędu skarbowego (formularz ZAW-NR). Plik go nie zawiera: wyjaśnij rachunek ze sprzedawcą.'
+    `${skutkiRachunkuSpozaWykazu(sankcjaPit)} Plik go nie zawiera: wyjaśnij rachunek ze sprzedawcą.`
   );
 }
 

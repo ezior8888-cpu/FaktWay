@@ -75,9 +75,12 @@ describe('zakładki ekranu Kosztów (poprawka 21.10.2026)', () => {
     }
   });
 
-  it('w menu nie ma osobnej pozycji Skrzynki KSeF, a zakładka ma prefetch', () => {
+  // Świadoma zmiana (plan skalowania 3000, sesja 10): zakładki sekcji nie idą
+  // z góry po wejściu na panel. Pobiera je rząd zakładek na ekranie sekcji
+  // (`SectionTabs`, pełny prefetch, `koszty-zakladki.test.tsx`).
+  it('w menu nie ma osobnej pozycji Skrzynki KSeF, a zakładka nie idzie z góry', () => {
     expect(dashboardNavItems.map((i) => i.href)).not.toContain('/inbox');
-    expect(getDashboardPrefetchHrefs()).toEqual(expect.arrayContaining(['/expenses', '/inbox']));
+    expect(getDashboardPrefetchHrefs()).not.toContain('/inbox');
   });
 });
 
@@ -95,11 +98,13 @@ describe('zakładki ekranu Księgowości (poprawka 21.10.2026)', () => {
     expect(isActiveNavPath('/reports/exports', '/import-danych')).toBe(false);
   });
 
-  it('w menu nie ma osobnej pozycji Eksportu, a zakładka ma prefetch', () => {
+  // Świadoma zmiana (plan skalowania 3000, sesja 10): jak przy Kosztach,
+  // zakładka Eksportu nie idzie z góry.
+  it('w menu nie ma osobnej pozycji Eksportu, a zakładka nie idzie z góry', () => {
     const hrefs = dashboardNavItems.map((i) => i.href);
     expect(hrefs).not.toContain('/reports/exports');
     expect(hrefs.filter((h) => h === '/reports/kpir')).toHaveLength(1);
-    expect(getDashboardPrefetchHrefs()).toEqual(expect.arrayContaining(['/reports/kpir', '/reports/exports']));
+    expect(getDashboardPrefetchHrefs()).not.toContain('/reports/exports');
   });
 });
 
@@ -121,10 +126,12 @@ describe('zakładki ekranu Faktur (poprawka 21.10.2026)', () => {
     expect(hrefs).not.toContain('/payments/overdue');
   });
 
-  it('zakładki mają prefetch (przełączenie jak pozycja menu), w przeciwieństwie do /analizy/*', () => {
-    expect(getDashboardPrefetchHrefs()).toEqual(
-      expect.arrayContaining(['/invoices/recurring', '/payments/overdue']),
-    );
+  // Świadoma zmiana (plan skalowania 3000, sesja 10): dawniej zakładki szły
+  // z góry jak pozycje menu, teraz z góry idą tylko cele dolnego paska.
+  it('zakładki nie idą z góry po wejściu na panel', () => {
+    const hrefs = getDashboardPrefetchHrefs();
+    expect(hrefs).not.toContain('/invoices/recurring');
+    expect(hrefs).not.toContain('/payments/overdue');
   });
 });
 
@@ -183,7 +190,7 @@ describe('struktura menu (plan Finora §4)', () => {
     expect([dashboardNewInvoiceAction.label, dashboardNewInvoiceAction.href]).toEqual(['Nowa faktura', '/invoices/new']);
     expect(dashboardNavItems.map((i) => i.href)).not.toContain('/invoices/new');
     expect(dashboardNavItems.map((i) => i.label)).not.toContain('Wystaw fakturę');
-    // Kreator dalej ma prefetch, jak pozycja menu.
+    // Kreator dalej idzie z góry: jest celem dolnego paska.
     expect(getDashboardPrefetchHrefs()).toContain('/invoices/new');
   });
 
@@ -246,6 +253,12 @@ describe('struktura menu (plan Finora §4)', () => {
     }
     expect(hrefs).toContain('/invoices');
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  // Plan skalowania 3000, sesja 10: z góry tylko cele dolnego paska, reszta
+  // menu po najechaniu albo fokusie (`prefetch-panelu.test.tsx`).
+  it('getDashboardPrefetchHrefs to dokładnie cele dolnego paska', () => {
+    expect(getDashboardPrefetchHrefs()).toEqual(['/dashboard', '/invoices', '/invoices/new', '/przeplywy']);
   });
 
   it('/analizy/* bez prefetchu (ciężkie agregaty, plan Finora §4)', () => {

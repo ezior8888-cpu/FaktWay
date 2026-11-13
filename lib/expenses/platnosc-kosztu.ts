@@ -227,6 +227,8 @@ export interface UwagiPlatnosci {
   terminOpis: string | null;
   rachunekFaktora: string | null;
   zaplaconoCzesciowo: number | null;
+  /** Kod `FormaPlatnosci` zapisany przy odczycie pliku (tekst, np. „1” to gotówka) albo `null`. */
+  formaPlatnosci: string | null;
   problemy: string[];
 }
 
@@ -241,6 +243,7 @@ export function uwagiPlatnosci(json: unknown): UwagiPlatnosci | null {
     terminOpis: napis(o.terminOpis),
     rachunekFaktora: napis(o.rachunekFaktora),
     zaplaconoCzesciowo: liczba(o.zaplaconoCzesciowo),
+    formaPlatnosci: napis(o.formaPlatnosci),
     problemy: Array.isArray(o.problemy) ? o.problemy.filter((x): x is string => typeof x === 'string') : [],
   };
 }

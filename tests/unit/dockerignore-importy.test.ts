@@ -4,19 +4,42 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Obraz Dockera nie ma katalogów z `.dockerignore`, a `next build` sprawdza typy
- * wszystkich plików z `tsconfig.json`, także `scripts/`. Import z `tests/` przechodzi
- * więc lokalnie i w CI (pełna kopia repo), a pada dopiero po 16 minutach budowania
- * na produkcji. Tak padło wdrożenie #363 przez `scripts/test-ksef-kreator.ts`.
+ * Obraz Dockera nie ma katalogów ani plików z `.dockerignore`, a `next build` sprawdza
+ * typy wszystkich plików z `tsconfig.json`: `scripts/` i pliki w katalogu głównym też.
+ * Import czegoś, czego w obrazie nie ma, przechodzi więc lokalnie i w CI (pełna kopia
+ * repo), a pada dopiero po kilkunastu minutach budowania obrazu. Tak padło:
+ * - wdrożenie #363: `scripts/test-ksef-kreator.ts` importował z `tests/`;
+ * - budowanie obrazu po scaleniu #504 (11.11): `vitest.filtr.config.ts` importował
+ *   `./vitest.config`, który `.dockerignore` pomija. Stary strażnik tego nie widział,
+ *   bo czytał tylko listę katalogów i sprawdzał tylko importy z pominiętych katalogów.
+ *
+ * Dlatego skan obejmuje wszystko, co trafia do obrazu, zamiast listy katalogów, która
+ * po cichu się starzeje. Reguły z `*` i `!` są pomijane: skan może przez to objąć plik,
+ * którego w obrazie nie ma (fałszywy alarm), ale nie przeoczy pliku, który w nim jest.
  */
 const ROOT = path.resolve(__dirname, '../..');
-const SOURCE_DIRS = ['app', 'components', 'lib', 'scripts', 'types', 'hooks', 'emails'];
+const TS_FILE = /\.(?:tsx?|mts|cts)$/;
 const IMPORT = /(?:from\s+|import\s*\(\s*|import\s+|require\(\s*)['"]([^'"]+)['"]/g;
+/** Co TypeScript dokleja do importu bez rozszerzenia, szukając pliku. */
+const RESOLVED_SUFFIXES = ['', '.ts', '.tsx', '.mts', '.cts', '.d.ts', '.js', '.mjs', '.cjs', '.json', '/index.ts', '/index.tsx'];
+/**
+ * Pominięte w `.dockerignore`, ale odtwarzane w obrazie przez `next build` przed
+ * sprawdzeniem typów (np. `next-env.d.ts` importuje `./.next/types/routes.d.ts`).
+ */
+const BUILT_IN_IMAGE = ['.next'];
 
-function ignoreRules(): { dirs: string[]; files: Set<string> } {
+type IgnoreRules = { dirs: string[]; files: Set<string> };
+
+/** Ścieżka od katalogu głównego z `/`, jak w `.dockerignore` (także na Windowsie). */
+function fromRoot(full: string): string {
+  return path.relative(ROOT, full).split(path.sep).join('/');
+}
+
+function ignoreRules(): IgnoreRules {
   const lines = readFileSync(path.join(ROOT, '.dockerignore'), 'utf8')
     .split('\n')
-    .map((line) => line.trim())
+    // `docs/` i `/docs` znaczą w `.dockerignore` to samo co `docs`.
+    .map((line) => (line.trim().startsWith('#') ? '#' : line.trim().replace(/^\/+|\/+$/g, '')))
     .filter((line) => line && !line.startsWith('#') && !line.startsWith('!') && !line.includes('*'));
   return {
     dirs: lines.filter((line) => existsSync(path.join(ROOT, line)) && statSync(path.join(ROOT, line)).isDirectory()),
@@ -24,32 +47,38 @@ function ignoreRules(): { dirs: string[]; files: Set<string> } {
   };
 }
 
-function sourceFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
+/**
+ * Pliki TypeScript w obrazie: wszystko oprócz reguł z `.dockerignore`, `node_modules`
+ * i nazw z kropką na początku (tych `tsconfig` i tak nie dopasowuje, a `.claude/`
+ * w głównej kopii trzyma całe worktree).
+ */
+function imageFiles(dir: string, rules: IgnoreRules): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(full);
-    return /\.tsx?$/.test(entry.name) ? [full] : [];
+    if (entry.name.startsWith('.') || entry.name === 'node_modules' || rules.files.has(fromRoot(full))) return [];
+    if (entry.isDirectory()) return imageFiles(full, rules);
+    return TS_FILE.test(entry.name) ? [full] : [];
   });
 }
 
-/** Pliki w obrazie, które importują coś z katalogu pominiętego w obrazie. */
-function importsOfIgnoredDirs(): string[] {
-  const { dirs, files } = ignoreRules();
+/** Pliki w obrazie, które importują coś, czego w obrazie nie ma: katalog albo plik z `.dockerignore`. */
+function importsOfIgnoredPaths(): string[] {
+  const rules = ignoreRules();
+  const within = (target: string, dir: string) => target === dir || target.startsWith(`${dir}/`);
+  const ignored = (target: string) =>
+    !BUILT_IN_IMAGE.some((dir) => within(target, dir)) &&
+    (rules.dirs.some((dir) => within(target, dir)) ||
+      RESOLVED_SUFFIXES.some((suffix) => rules.files.has(`${target}${suffix}`)));
   const found: string[] = [];
-  for (const file of SOURCE_DIRS.flatMap((dir) => sourceFiles(path.join(ROOT, dir)))) {
-    const relative = path.relative(ROOT, file);
-    if (files.has(relative)) continue;
+  for (const file of imageFiles(ROOT, rules)) {
     for (const match of readFileSync(file, 'utf8').matchAll(IMPORT)) {
       const specifier = match[1];
       const target = specifier.startsWith('@/')
         ? specifier.slice(2)
         : specifier.startsWith('.')
-          ? path.relative(ROOT, path.resolve(path.dirname(file), specifier))
+          ? fromRoot(path.resolve(path.dirname(file), specifier))
           : null;
-      if (target && dirs.some((dir) => target === dir || target.startsWith(`${dir}/`))) {
-        found.push(`${relative} → ${specifier}`);
-      }
+      if (target && ignored(target)) found.push(`${fromRoot(file)} → ${specifier}`);
     }
   }
   return found;
@@ -60,7 +89,13 @@ describe('.dockerignore a importy w kodzie budowanym w obrazie', () => {
     expect(ignoreRules().dirs).toEqual(expect.arrayContaining(['tests', 'e2e']));
   });
 
-  it('żaden plik w obrazie nie importuje z katalogu pominiętego w obrazie', () => {
-    expect(importsOfIgnoredDirs()).toEqual([]);
+  it('skan obejmuje kod z obrazu, także pliki w katalogu głównym, i pomija testy', () => {
+    const scanned = imageFiles(ROOT, ignoreRules()).map(fromRoot);
+    expect(scanned).toEqual(expect.arrayContaining(['next.config.ts', 'proxy.ts', 'lib/supabase/server.ts']));
+    expect(scanned.filter((file) => file.startsWith('tests/') || file === 'vitest.config.ts')).toEqual([]);
+  });
+
+  it('żaden plik w obrazie nie importuje katalogu ani pliku pominiętego w obrazie', () => {
+    expect(importsOfIgnoredPaths()).toEqual([]);
   });
 });

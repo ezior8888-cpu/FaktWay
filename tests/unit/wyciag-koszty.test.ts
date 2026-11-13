@@ -166,7 +166,7 @@ describe('kosztDoPrzelewu i rachunki do odczytu', () => {
     return {
       id: 'a', sprzedawca: 'Dostawca', nip: '1234567890', numerFaktury: 'FV/1', numerKsef: KSEF_A, termin: '2026-11-20', dniDoTerminu: 9,
       przeterminowany: false, kwota: 1230, brutto: 1230, vat: 230, rachunek: '27114020040000300201355387', mpp: false, tytul: KSEF_A,
-      wymagaBialejListy: false, uwagi: [], ...over,
+      wymagaBialejListy: false, sankcjaPitBialejListy: true, uwagi: [], ...over,
     };
   }
 

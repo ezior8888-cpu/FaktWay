@@ -11,15 +11,6 @@ import { cn } from '@/lib/utils';
 
 const EXPORTS_HREF = '/reports/exports';
 
-/** Prefetch RSC `/reports/exports` gdy user jest w `(dashboard)` — skraca opóźnienie pierwszego kliku. */
-export function PrefetchExportsRoute() {
-  const router = useRouter();
-  useEffect(() => {
-    void router.prefetch(EXPORTS_HREF);
-  }, [router]);
-  return null;
-}
-
 /**
  * Link „Eksport PDF” (karta „Podsumowanie podatku VAT” na `/przeplywy`,
  * przycisk konturowy Finory): agresywny prefetch + natychmiastowy stan „busy”
