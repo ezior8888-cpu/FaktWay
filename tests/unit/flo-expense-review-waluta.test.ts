@@ -415,9 +415,27 @@ function fakeClient(result: {
     columns: [] as string[],
     eq: [] as Array<[string, string]>,
   };
+  // Strony po `id` jak w bazie (sesja 29 planu skalowania): `gt` pomija już
+  // przeczytane, `limit` ucina stronę; odczyt kończy pusta strona.
+  const page = (afterId: string | null, limit: number) => {
+    if (!result.data) return result;
+    const data = [...result.data]
+      .sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0))
+      .filter((row) => afterId === null || String(row.id) > afterId)
+      .slice(0, limit);
+    return { data, error: result.error };
+  };
   const client = {
     from: (table: string) => {
       calls.table.push(table);
+      let afterId: string | null = null;
+      const query = {
+        gt: (_column: string, value: string) => {
+          afterId = value;
+          return query;
+        },
+        order: () => ({ limit: async (limit: number) => page(afterId, limit) }),
+      };
       return {
         select: (columns: string) => {
           calls.columns.push(columns);
@@ -425,9 +443,9 @@ function fakeClient(result: {
             eq: (column: string, value: string) => {
               calls.eq.push([column, value]);
               return {
-                eq: async (column2: string, value2: string) => {
+                eq: (column2: string, value2: string) => {
                   calls.eq.push([column2, value2]);
-                  return result;
+                  return query;
                 },
               };
             },
