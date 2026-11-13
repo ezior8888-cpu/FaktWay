@@ -1,6 +1,6 @@
 /**
  * Plakietka statusu jak na stronie (`components/invoices/status-badge.tsx`):
- * tekst w kolorze roli na jej 10% tle, małe zaokrąglenie. Status niesie
+ * tekst w kolorze roli na jej 10% tle, mocno zaokrąglona (D15). Status niesie
  * napis, nie sam kolor; kręcące się kółko mówi, że coś trwa (np. wysyłka do KSeF).
  */
 import { useEffect } from 'react';
@@ -10,7 +10,7 @@ import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, wi
 import { Ikona } from '@/komponenty/ikona';
 import { Tekst } from '@/komponenty/tekst';
 import { kolorTonu, useKolory, type Ton } from '@/wyglad/kolory';
-import { ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { ODSTEP, PROMIEN_POLA } from '@/wyglad/odstepy';
 
 type Props = { ton: Ton; children: string; trwa?: boolean };
 
@@ -48,8 +48,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: ODSTEP.xxs,
-    paddingHorizontal: ODSTEP.xs - 2,
+    paddingHorizontal: ODSTEP.xs,
     paddingVertical: ODSTEP.linia,
-    borderRadius: PROMIEN,
+    // 12 pt: w jednej linii wygląda jak pigułka, zawinięty opis nie robi się owalem.
+    borderRadius: PROMIEN_POLA,
   },
 });

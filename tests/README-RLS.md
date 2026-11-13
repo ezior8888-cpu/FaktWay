@@ -11,6 +11,8 @@ Testy w `rls-isolation.test.ts` tworzą konta, modyfikują członkostwa i faktur
 - `RLS_TEST_ALLOW_DESTRUCTIVE=isolated-local-database`: świadome potwierdzenie, że wskazana baza jest przeznaczona do tworzenia i usuwania danych testowych.
 - `RLS_TEST_DATABASE_URL` (testy `rls-kolejkowanie-wysylki.test.ts`, `rls-kontrola-dziennik-prob.test.ts` i `rls-kontrola-offline24.test.ts`): połączenie `postgresql://` do TEJ SAMEJ lokalnej bazy, też wyłącznie numeryczny loopback — pg-boss zapisuje zlecenia w transakcji z RPC cyklu życia faktury, a sekcje 12 i 4a `scripts/ops/kontrola-faktur-ksef.sh` czytają bazę programem `psql` (musi być w `PATH`).
 
+- `RLS_TEST_GOTRUE_CAPTCHA=on` (opcjonalnie, `rls-mobile-logowanie.test.ts`): ta baza ma GoTrue z włączoną captchą (`[auth.captcha]` w konfiguracji stosu, np. z sekretem testowym Cloudflare `2x0000000000000000000000000000000AA`, który odrzuca każdy token). Test sprawdza wtedy także, że logowanie hasłem kluczem anon dostaje odmowę captchy, a logowanie telefonu przez API, kod 2FA, odświeżenie i wylogowanie przechodzą. Bez zmiennej ta część jest pominięta (stos CI nie ma captchy).
+
 Zdalne adresy, także prywatna sieć i staging, oraz nazwy DNS, w tym `localhost`, są zablokowane. Nie ma przełącznika dopuszczającego zdalną bazę. Jeżeli proces otrzyma również konfigurację aplikacji, guard odrzuci ten sam lokalny cel lub ponowne użycie jej kluczy. Komunikaty błędów nie wypisują adresów ani wartości kluczy.
 
 Nie wczytuj do testów plików środowiskowych aplikacji ani produkcyjnych sekretów. Nie usuwaj konfiguracji aplikacji tylko po to, aby obejść wykryty konflikt: przygotuj osobną bazę i klucze.

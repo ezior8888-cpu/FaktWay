@@ -6,6 +6,8 @@ export type VerifiedMfaState =
   | { status: 'unauthenticated' }
   | { status: 'enrollment_required' | 'challenge_required' | 'verified'; user: User };
 
+type MfaTokenAuth = Pick<SupabaseClient['auth'], 'getUser' | 'getClaims'>;
+
 /**
  * Only the access token is read from cookie storage. Identity and factors come
  * from Auth; AAL comes from verified claims for that EXACT token. Never trust
@@ -19,11 +21,19 @@ export async function getVerifiedMfaState(
   if (sessionError) throw new Error('mfa_session_unavailable');
   const token = sessionData.session?.access_token;
   if (!token) return { status: 'unauthenticated' };
+  return getVerifiedMfaStateForToken(supabase.auth, token);
+}
 
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+/**
+ * Ten sam werdykt dla tokenu podanego wprost, a nie z ciasteczek: API aplikacji
+ * na telefon (`lib/api/mobile/auth.ts`) dostaje go w nagłówku `Authorization: Bearer`.
+ * Tożsamość i czynniki z GoTrue (`getUser`), poziom z claims tego tokenu (`getClaims`).
+ */
+export async function getVerifiedMfaStateForToken(auth: MfaTokenAuth, token: string): Promise<VerifiedMfaState> {
+  const { data: userData, error: userError } = await auth.getUser(token);
   if (userError || !userData.user) return { status: 'unauthenticated' };
 
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+  const { data: claimsData, error: claimsError } = await auth.getClaims(token);
   if (claimsError || !claimsData || claimsData.claims.sub !== userData.user.id) {
     throw new Error('mfa_claims_invalid');
   }

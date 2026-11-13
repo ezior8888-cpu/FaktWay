@@ -8,11 +8,12 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Dotyk } from '@/komponenty/dotyk';
 import { Ikona, KoloIkony, type NazwaIkony } from '@/komponenty/ikona';
+import { useStylKarty } from '@/komponenty/karta';
 import { Tekst } from '@/komponenty/tekst';
 import { Znacznik } from '@/komponenty/znacznik';
 import { zmiana as tekstZmiany } from '@/lib/format';
 import { tonKoloru, useKolory, type Kolory } from '@/wyglad/kolory';
-import { MARGINES, OBWODKA, ODSTEP, PROMIEN, SKALA_PIONOWA } from '@/wyglad/odstepy';
+import { MARGINES, ODSTEP, SKALA_PIONOWA } from '@/wyglad/odstepy';
 
 export type Kafel = {
   klucz: string;
@@ -22,13 +23,17 @@ export type Kafel = {
   opis?: string;
   /** Ton plakietki; bez niego plakietka ma kolor marki. */
   opisKolor?: keyof Kolory;
+  /** Okrągła ikona: od D15 tylko w kolorze stanu (`ikonaKolor` sukces, ostrzeżenie, błąd), ozdobne nie rysują się. */
   ikona?: NazwaIkony;
-  /** Ton okrągłej ikony (np. wpływy zielone, wydatki czerwone); domyślnie marka. */
+  /** Ton okrągłej ikony (np. wpływy zielone, wydatki czerwone). */
   ikonaKolor?: keyof Kolory;
   /** Zmiana wobec poprzedniego okresu w procentach: w prawym górnym rogu ze strzałką. */
   zmiana?: number;
   onPress?: () => void;
 };
+
+/** Ikona w kaflu zostaje tylko wtedy, gdy mówi o stanie (D15). */
+const TONY_STANU: (keyof Kolory)[] = ['sukces', 'ostrzezenie', 'blad'];
 
 /** Opis dłuższy niż tyle znaków nie mieści się w plakietce połowy ekranu. */
 const DLUGOSC_PLAKIETKI = 24;
@@ -48,6 +53,8 @@ export function Kafle({ kafle }: { kafle: Kafel[] }) {
 
 function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
   const kolory = useKolory();
+  const stylKarty = useStylKarty();
+  const ikona = k.ikonaKolor && TONY_STANU.includes(k.ikonaKolor) ? k.ikona : undefined;
   const zmianaKolor: keyof Kolory = k.zmiana === undefined || k.zmiana === 0 ? 'etykietaDrugorzedna' : k.zmiana > 0 ? 'sukces' : 'blad';
   const etykieta = [k.podpis, k.wartosc, k.zmiana !== undefined ? `${tekstZmiany(k.zmiana)} wobec poprzedniego okresu` : null, k.opis]
     .filter(Boolean)
@@ -59,10 +66,10 @@ function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
       skala={0.98}
       accessibilityRole={k.onPress ? 'button' : undefined}
       accessibilityLabel={etykieta}
-      style={[styles.kafel, szeroki && styles.kafelSzeroki, { backgroundColor: kolory.tloKomorki, borderColor: kolory.obwodka }]}>
-      {k.ikona || k.zmiana !== undefined ? (
+      style={[styles.kafel, szeroki && styles.kafelSzeroki, stylKarty]}>
+      {ikona || k.zmiana !== undefined ? (
         <View style={styles.gora}>
-          {k.ikona ? <KoloIkony nazwa={k.ikona} rozmiar={32} ton={k.ikonaKolor ? tonKoloru(k.ikonaKolor) : 'marka'} /> : <View />}
+          {ikona && k.ikonaKolor ? <KoloIkony nazwa={ikona} rozmiar={32} ton={tonKoloru(k.ikonaKolor)} /> : <View />}
           {k.zmiana !== undefined ? (
             <View style={styles.zmiana}>
               <Tekst styl="footnote" kolor={zmianaKolor} cyfry waga="medium">
@@ -74,7 +81,7 @@ function KafelWidok({ kafel: k, szeroki }: { kafel: Kafel; szeroki: boolean }) {
         </View>
       ) : null}
       <View style={styles.liczby}>
-        {/* Liczby i kwoty w IBM Plex Mono, nazwy (np. „Biuro”, „Kowalczyk Studio”) w Outfit. */}
+        {/* Liczby i kwoty cyframi tabelarycznymi, nazwy (np. „Biuro”, „Kowalczyk Studio”) zwykłymi. */}
         <Tekst styl="title2" cyfry={/\d/.test(k.wartosc)} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {k.wartosc}
         </Tekst>
@@ -103,8 +110,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: ODSTEP.m - 2,
     gap: ODSTEP.s,
-    borderRadius: PROMIEN,
-    borderWidth: OBWODKA,
   },
   kafelSzeroki: { flexBasis: '100%' },
   gora: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

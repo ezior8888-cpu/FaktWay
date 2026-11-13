@@ -37,10 +37,7 @@
             "./assets/fonts/Outfit-Regular.ttf",
             "./assets/fonts/Outfit-Medium.ttf",
             "./assets/fonts/Outfit-SemiBold.ttf",
-            "./assets/fonts/Outfit-Bold.ttf",
-            "./assets/fonts/IBMPlexMono-Regular.ttf",
-            "./assets/fonts/IBMPlexMono-Medium.ttf",
-            "./assets/fonts/IBMPlexMono-SemiBold.ttf"
+            "./assets/fonts/Outfit-Bold.ttf"
           ]
         }
       ],
@@ -54,6 +51,13 @@
             "image": "./assets/images/ekran-startowy.png",
             "backgroundColor": "#161616"
           }
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "FaktWay pyta o Face ID, żeby odblokować aplikację bez hasła."
         }
       ]
     ],

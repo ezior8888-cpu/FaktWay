@@ -4,6 +4,11 @@ import { resolve } from 'node:path';
 export default defineConfig({
   // Vite też potrafi ładować pliki .env; testy lokalne nie dziedziczą sekretów apki.
   envDir: false,
+  // Testy strony czytają czyste pliki aplikacji z `mobile/src` (tests/unit/mobile-*).
+  // Bez tego Vite przy ich transformacji szuka najbliższego tsconfig, czyli
+  // `mobile/tsconfig.json` z `expo/tsconfig.base`, a w CI strony paczek aplikacji
+  // nie ma (TSCONFIG_ERROR). Główny tsconfig to i tak jedyny inny w repo.
+  tsconfig: resolve(__dirname, 'tsconfig.json'),
   // Path alias `@/*` zgodny z tsconfig.json (`baseUrl: ".", paths: { "@/*": ["./*"] }`).
   // Bez tego testy nie mogą importować z `@/lib/...` — vitest sam tego nie czyta z tsconfig.
   resolve: {

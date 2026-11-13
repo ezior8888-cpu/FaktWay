@@ -1,11 +1,9 @@
 Outfit: Copyright 2021 The Outfit Project Authors (https://github.com/Outfitio/Outfit-Fonts).
-IBM Plex Mono: Copyright 2017 IBM Corp. with Reserved Font Name "Plex".
 
-Obie czcionki: SIL Open Font License 1.1 (pełny tekst niżej). Pliki z pakietów
-@expo-google-fonts/outfit 0.4.3 i @expo-google-fonts/ibm-plex-mono 0.4.1, nazwy zmienione
-na nazwy PostScript (Outfit-Medium.ttf), bo pod tą nazwą czcionkę widzi iOS i Android.
-
-Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+Licencja: SIL Open Font License 1.1 (pełny tekst niżej). Pliki z pakietu
+@expo-google-fonts/outfit 0.4.3, nazwy zmienione na nazwy PostScript
+(Outfit-Medium.ttf), bo pod tą nazwą czcionkę widzi iOS i Android. IBM Plex Mono
+usunięty 12.11.2026 (plan aplikacji, D15: liczby w Outfit).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 
