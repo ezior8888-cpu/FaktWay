@@ -8,9 +8,9 @@
  * - `firma` (400 `missing_org`, 403 `no_active_org`): wybór firmy od nowa.
  * - `ponow` (429, 503): spróbować później. Nigdy wylogowanie: awaria GoTrue
  *   to 503, nie 401.
- * - `odmowa` (M8: 404, 409, 422 przy fakturach): serwer odmówił z powodu treści
- *   albo stanu faktury. Telefon pokazuje zdanie z serwera (co poprawić), przy
- *   `invoice_invalid` pod polem `pole`.
+ * - `odmowa` (M8: 404, 409, 422 przy fakturach; M9: plik i zasady kosztu):
+ *   serwer odmówił z powodu treści albo stanu faktury lub kosztu. Telefon
+ *   pokazuje zdanie z serwera (co poprawić), przy `invoice_invalid` pod polem `pole`.
  * - `polaczenie`: brak internetu albo serwer nie odpowiedział.
  * - `serwer`: 500 albo odpowiedź spoza kontraktu.
  */
@@ -61,6 +61,10 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   not_found: 'odmowa',
   not_draft: 'odmowa',
   ksef_send_refused: 'odmowa',
+  // Wydatki (M9): plik i zasady kosztu mówi serwer; niedokończone wgranie telefon ponawia z tym samym kluczem.
+  file_invalid: 'odmowa',
+  upload_incomplete: 'ponow',
+  expense_invalid: 'odmowa',
   rate_limited: 'ponow',
   maintenance: 'ponow',
   session_verification_failed: 'ponow',

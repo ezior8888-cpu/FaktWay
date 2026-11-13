@@ -59,6 +59,11 @@ describe('kody błędów kontraktu', () => {
       not_found: 'odmowa',
       not_draft: 'odmowa',
       ksef_send_refused: 'odmowa',
+      // Wydatki (M9): format i rozmiar pliku oraz zasady kosztu mówi serwer; niedokończone wgranie
+      // telefon ponawia z tym samym kluczem (bez drugiego odczytu).
+      file_invalid: 'odmowa',
+      upload_incomplete: 'ponow',
+      expense_invalid: 'odmowa',
       rate_limited: 'ponow',
       maintenance: 'ponow',
       session_verification_failed: 'ponow',

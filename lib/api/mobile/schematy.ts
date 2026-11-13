@@ -85,3 +85,40 @@ export function doWartosciFormularza(f: FakturaTelefonu): InvoiceFormValues {
 export function sciezkaPola(path: ReadonlyArray<PropertyKey>): string | undefined {
   return path.length > 0 ? path.map(String).join('.') : undefined;
 }
+
+// ─── Wydatki (M9): opis kosztu ze zdjęcia ────────────────────────────
+
+/** Kolumny KPiR z formularza kosztu strony (`KPIR_OPTIONS` w `components/expenses/expense-edit-form.tsx`). */
+export const KOLUMNY_KPIR_TELEFONU = ['col_7', 'col_8', 'col_10', 'col_11', 'col_12', 'col_13', 'col_15', 'col_16'] as const;
+
+// Granice jak w schemacie kosztu KSeF (`lib/expenses/review.ts`): NUMERIC(14, 2) i rozsądne długości tekstów.
+const kwotaWydatku = z.number().finite().min(-999_999_999_999.99).max(999_999_999_999.99);
+const dataWydatku = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+});
+
+/**
+ * Zmiany kosztu z telefonu: te same pola co formularz kosztu strony
+ * (`reviewExpenseAction`), bez potwierdzenia walutowej faktury KSeF (koszt
+ * z KSeF opisuje się na stronie). Zasady zapisu (waluta, KPiR, odliczenie
+ * VAT) sprawdza potem `reviewExpense` z `lib/expenses/review.ts`.
+ */
+export const zmianyWydatkuSchema = z.strictObject({
+  seller_name: z.string().trim().min(1).max(500),
+  seller_nip: z.string().max(32).nullable(),
+  document_number: z.string().max(200).optional(),
+  issue_date: dataWydatku,
+  net_amount: kwotaWydatku,
+  vat_amount: kwotaWydatku,
+  gross_amount: kwotaWydatku,
+  kpir_column: z.enum(KOLUMNY_KPIR_TELEFONU),
+  category_label: z.string().max(200),
+  is_deductible: z.boolean(),
+  notes: z.string().max(10_000).optional(),
+  confirmPlnAmounts: z.boolean().optional(),
+});
+
+export const zatwierdzenieWydatkuSchema = z.strictObject({
+  zmiany: zmianyWydatkuSchema,
+});
