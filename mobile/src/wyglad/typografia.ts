@@ -1,9 +1,11 @@
 /**
- * Typografia FaktWay (plan aplikacji, D12): Outfit na interfejs, IBM Plex
- * Mono na liczby, numery faktur, NIP-y i daty, jak w wersji na komputer
- * (`app/layout.tsx` strony, plan Finora D2). Czcionki są wbudowane w aplikację
- * (`app.json`, plugin `expo-font`), więc działają od pierwszej klatki, także
- * w paskach nawigacji i zakładek.
+ * Typografia FaktWay: Outfit na wszystko, także na liczby (plan aplikacji,
+ * D15, „wszystko jak Copilot”; wcześniej liczby w IBM Plex Mono, D12).
+ * Liczby, kwoty, numery, NIP-y i daty mają cyfry tabelaryczne
+ * (`fontVariant: ['tabular-nums']`, funkcja `tnum` w plikach Outfit), więc
+ * kolumny kwot się nie rozjeżdżają. Czcionka jest wbudowana w aplikację
+ * (`app.json`, plugin `expo-font`), więc działa od pierwszej klatki, także w
+ * paskach nawigacji i zakładek.
  *
  * Wagę wybiera się plikiem czcionki, nie `fontWeight`: przy własnej czcionce
  * `fontWeight` na Androidzie wraca do czcionki systemowej. `dynamicTypeRamp`
@@ -21,16 +23,8 @@ const OUTFIT: Record<Waga, string> = {
   bold: 'Outfit-Bold',
 };
 
-/** IBM Plex Mono nie ma w aplikacji pliku Bold: pogrubione liczby są SemiBold. */
-const PLEX_MONO: Record<Waga, string> = {
-  regular: 'IBMPlexMono-Regular',
-  medium: 'IBMPlexMono-Medium',
-  semibold: 'IBMPlexMono-SemiBold',
-  bold: 'IBMPlexMono-SemiBold',
-};
-
-export function czcionka(waga: Waga = 'regular', cyfry = false): string {
-  return (cyfry ? PLEX_MONO : OUTFIT)[waga];
+export function czcionka(waga: Waga = 'regular'): string {
+  return OUTFIT[waga];
 }
 
 export type StylTekstu =
@@ -70,13 +64,12 @@ export const SKALA: Record<StylTekstu, Definicja> = {
 /** Gotowy styl tekstu (czcionka, rozmiar, interlinia) dla pól i miejsc bez komponentu `Tekst`. */
 export function stylTekstu(styl: StylTekstu, opcje: { waga?: Waga; cyfry?: boolean } = {}): TextStyle {
   const d = SKALA[styl];
-  // Plex Mono jest szeroki: liczby trochę ciaśniej, żeby kwoty mieściły się w kolumnach.
-  const ciasniej = opcje.cyfry ? Math.min(0, -0.02 * d.fontSize) : 0;
   return {
-    fontFamily: czcionka(opcje.waga ?? d.waga, opcje.cyfry),
+    fontFamily: czcionka(opcje.waga ?? d.waga),
     fontSize: d.fontSize,
     lineHeight: d.lineHeight,
-    letterSpacing: d.letterSpacing + ciasniej,
+    letterSpacing: d.letterSpacing,
+    ...(opcje.cyfry ? { fontVariant: ['tabular-nums'] as TextStyle['fontVariant'] } : null),
   };
 }
 

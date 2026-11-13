@@ -7,15 +7,17 @@
  */
 import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
-import { useEffect, useState } from 'react';
-import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions, type LayoutChangeEvent } from 'react-native';
-import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import * as Clipboard from 'expo-clipboard';
+import { useEffect, useState, type Ref } from 'react';
+import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions, type ReturnKeyTypeOptions, type TextInputInstance } from 'react-native';
+import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Ikona } from '@/komponenty/ikona';
+import { useStylKarty } from '@/komponenty/karta';
 import { Tekst } from '@/komponenty/tekst';
 import { dataPelna } from '@/lib/format';
 import { useKolory } from '@/wyglad/kolory';
-import { CEL_DOTYKU, MARGINES, OBWODKA, ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { CEL_DOTYKU, MARGINES, OBWODKA, ODSTEP, PROMIEN_PIGULKI, PROMIEN_POLA } from '@/wyglad/odstepy';
 import { stylTekstu } from '@/wyglad/typografia';
 
 const KLAWIATURY_LICZB: KeyboardTypeOptions[] = ['number-pad', 'decimal-pad', 'numeric', 'phone-pad', 'numbers-and-punctuation'];
@@ -31,11 +33,27 @@ type PoleTekstoweProps = {
   wielowierszowe?: boolean;
   /** Hasło: znaki ukryte, podpowiedź pęku kluczy iOS. */
   tajne?: boolean;
-  /** Numer (faktury, konta) w IBM Plex Mono także przy zwykłej klawiaturze. */
+  /** Numer (faktury, konta) cyframi tabelarycznymi także przy zwykłej klawiaturze. */
   cyfry?: boolean;
+  /** Podpowiedzi pęku kluczy: e-mail konta, obecne hasło albo nowe hasło (iOS proponuje silne). */
+  autouzupelnianie?: 'login' | 'haslo' | 'nowe-haslo';
+  /**
+   * Klawisz „Dalej” albo „Zaloguj” na klawiaturze i co robi. Dostaje tekst
+   * wprost z pola: stan bywa o jeden znak w tyle, gdy klawisz pada tuż po
+   * ostatniej literze (sprawdzone w symulatorze).
+   */
+  klawiszZatwierdz?: ReturnKeyTypeOptions;
+  onZatwierdz?: (tekst: string) => void;
+  poleRef?: Ref<TextInputInstance>;
 };
 
-/** Obwódka pola: przy aktywnym polu płynnie w kolor marki, przy błędzie czerwona. */
+const AUTOUZUPELNIANIE = {
+  login: { textContentType: 'username', autoComplete: 'username' },
+  haslo: { textContentType: 'password', autoComplete: 'current-password' },
+  'nowe-haslo': { textContentType: 'newPassword', autoComplete: 'new-password' },
+} as const;
+
+/** Obwódka pola: przy aktywnym polu płynnie w kolor marki, przy błędzie czerwona (także z fokusem). */
 function useObwodka(aktywne: boolean, blad: boolean) {
   const kolory = useKolory();
   const postep = useSharedValue(0);
@@ -43,20 +61,37 @@ function useObwodka(aktywne: boolean, blad: boolean) {
     postep.set(withTiming(aktywne ? 1 : 0, { duration: 160 }));
   }, [aktywne, postep]);
   const spoczynek = blad ? kolory.blad : kolory.obwodka;
-  const akcent = kolory.akcent;
+  const akcent = blad ? kolory.blad : kolory.akcent;
   return useAnimatedStyle(() => ({ borderColor: interpolateColor(postep.value, [0, 1], [spoczynek, akcent]) }));
 }
 
-export function PoleTekstowe({ etykieta, wartosc, onZmiana, podpowiedz, klawiatura, blad, wielowierszowe, tajne, cyfry }: PoleTekstoweProps) {
+export function PoleTekstowe({
+  etykieta,
+  wartosc,
+  onZmiana,
+  podpowiedz,
+  klawiatura,
+  blad,
+  wielowierszowe,
+  tajne,
+  cyfry,
+  autouzupelnianie,
+  klawiszZatwierdz,
+  onZatwierdz,
+  poleRef,
+}: PoleTekstoweProps) {
   const kolory = useKolory();
   const [aktywne, setAktywne] = useState(false);
+  const [widoczne, setWidoczne] = useState(false);
+  const podpowiedzi = autouzupelnianie ? AUTOUZUPELNIANIE[autouzupelnianie] : tajne ? AUTOUZUPELNIANIE.haslo : undefined;
   const obwodka = useObwodka(aktywne, Boolean(blad));
   const liczby = cyfry ?? (klawiatura !== undefined && KLAWIATURY_LICZB.includes(klawiatura));
   return (
     <View style={styles.pole}>
       <Etykieta tekst={etykieta} />
-      <Animated.View style={[styles.ramka, { backgroundColor: kolory.tlo }, obwodka]}>
+      <Animated.View style={[styles.ramka, tajne ? styles.ramkaHasla : null, { backgroundColor: kolory.tlo }, obwodka]}>
         <TextInput
+          ref={poleRef}
           value={wartosc}
           onChangeText={onZmiana}
           onFocus={() => setAktywne(true)}
@@ -65,13 +100,33 @@ export function PoleTekstowe({ etykieta, wartosc, onZmiana, podpowiedz, klawiatu
           placeholderTextColor={kolory.etykietaTrzeciorzedna}
           keyboardType={klawiatura}
           multiline={wielowierszowe}
-          secureTextEntry={tajne}
-          textContentType={tajne ? 'password' : undefined}
+          secureTextEntry={tajne && !widoczne}
+          textContentType={podpowiedzi?.textContentType}
+          autoComplete={podpowiedzi?.autoComplete}
           autoCapitalize={tajne || klawiatura === 'email-address' ? 'none' : undefined}
+          autoCorrect={tajne || klawiatura === 'email-address' ? false : undefined}
+          returnKeyType={klawiszZatwierdz}
+          onSubmitEditing={onZatwierdz ? (e) => onZatwierdz(e.nativeEvent.text) : undefined}
+          submitBehavior={onZatwierdz ? 'submit' : undefined}
           selectionColor={kolory.akcent}
           accessibilityLabel={etykieta}
-          style={[stylTekstu('body', { cyfry: liczby }), styles.wejscie, wielowierszowe ? styles.wejscieWielo : null, { color: kolory.etykieta }]}
+          style={[
+            stylTekstu('body', { cyfry: liczby }),
+            styles.wejscie,
+            tajne ? styles.rozciagniety : null,
+            wielowierszowe ? styles.wejscieWielo : null,
+            { color: kolory.etykieta },
+          ]}
         />
+        {tajne ? (
+          <Pressable
+            onPress={() => setWidoczne((w) => !w)}
+            accessibilityRole="button"
+            accessibilityLabel={widoczne ? 'Ukryj hasło' : 'Pokaż hasło'}
+            style={styles.oko}>
+            <Ikona nazwa={widoczne ? 'eye-off-line' : 'eye-line'} rozmiar={20} kolor={kolory.etykietaDrugorzedna} />
+          </Pressable>
+        ) : null}
       </Animated.View>
       {blad ? (
         <Tekst styl="footnote" kolor="blad">
@@ -82,6 +137,99 @@ export function PoleTekstowe({ etykieta, wartosc, onZmiana, podpowiedz, klawiatu
   );
 }
 PoleTekstowe.pole = true;
+
+type PoleKoduProps = {
+  etykieta: string;
+  wartosc: string;
+  onZmiana: (kod: string) => void;
+  /** Zdanie pod polem, gdy nie ma błędu. */
+  opis?: string;
+  blad?: string;
+  poleRef?: Ref<TextInputInstance>;
+  /** Klawiatura od razu (ekran kodu przy logowaniu), nie w zwykłym formularzu. */
+  autoFocus?: boolean;
+  /**
+   * „Wklej” w polu po prawej: dostaje tekst ze schowka. Na iOS to systemowy
+   * przycisk wklejania (`UIPasteControl`), który nie pyta o zgodę na odczyt
+   * schowka; gdzie go nie ma, zwykły przycisk z `getStringAsync`.
+   */
+  onWklej?: (tekst: string) => void;
+};
+
+const WKLEJ = { width: CEL_DOTYKU + ODSTEP.m, height: CEL_DOTYKU - ODSTEP.xs };
+
+/**
+ * Kod z aplikacji TOTP: jedno pole z dużymi cyframi tabelarycznymi zamiast
+ * sześciu kratek (WZORCE-MOBBIN.md 7, ekran 3): działa z autouzupełnianiem
+ * kodów iOS i z dużym tekstem. Przyjmuje tylko cyfry, najwyżej 6.
+ */
+export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, autoFocus, onWklej }: PoleKoduProps) {
+  const kolory = useKolory();
+  const [aktywne, setAktywne] = useState(false);
+  const obwodka = useObwodka(aktywne, Boolean(blad));
+  return (
+    <View style={styles.pole}>
+      <Etykieta tekst={etykieta} />
+      <Animated.View style={[styles.ramka, onWklej ? styles.ramkaHasla : null, { backgroundColor: kolory.tlo }, obwodka]}>
+        {/* Odstęp po lewej tej samej szerokości co przycisk po prawej, żeby cyfry stały na środku. */}
+        {onWklej ? <View style={styles.akcjaPola} /> : null}
+        <TextInput
+          ref={poleRef}
+          value={wartosc}
+          onChangeText={(t) => onZmiana(t.replace(/\D/g, '').slice(0, 6))}
+          onFocus={() => setAktywne(true)}
+          onBlur={() => setAktywne(false)}
+          keyboardType="number-pad"
+          textContentType="oneTimeCode"
+          autoComplete="one-time-code"
+          maxLength={6}
+          autoFocus={autoFocus}
+          placeholder="000000"
+          placeholderTextColor={kolory.etykietaTrzeciorzedna}
+          selectionColor={kolory.akcent}
+          accessibilityLabel={etykieta}
+          accessibilityHint="Sześć cyfr"
+          style={[stylTekstu('title1', { cyfry: true }), styles.wejscieKodu, onWklej ? styles.rozciagniety : null, { color: kolory.etykieta }]}
+        />
+        {onWklej && Clipboard.isPasteButtonAvailable ? (
+          <View style={styles.akcjaPola}>
+            <Clipboard.ClipboardPasteButton
+              acceptedContentTypes={['plain-text']}
+              displayMode="labelOnly"
+              cornerStyle="capsule"
+              backgroundColor={kolory.akcentTlo}
+              foregroundColor={kolory.akcentNaTle}
+              style={WKLEJ}
+              onPress={(dane) => {
+                if (dane.type === 'text') onWklej(dane.text);
+              }}
+            />
+          </View>
+        ) : onWklej ? (
+          <Pressable
+            onPress={() => void Clipboard.getStringAsync().then(onWklej)}
+            accessibilityRole="button"
+            accessibilityLabel="Wklej"
+            style={styles.akcjaPola}>
+            <Tekst styl="subheadline" waga="semibold" kolor="akcent" maxFontSizeMultiplier={1.4}>
+              Wklej
+            </Tekst>
+          </Pressable>
+        ) : null}
+      </Animated.View>
+      {blad ? (
+        <Tekst styl="footnote" kolor="blad">
+          {blad}
+        </Tekst>
+      ) : opis ? (
+        <Tekst styl="footnote" kolor="etykietaDrugorzedna">
+          {opis}
+        </Tekst>
+      ) : null}
+    </View>
+  );
+}
+PoleKodu.pole = true;
 
 function Etykieta({ tekst }: { tekst: string }) {
   return (
@@ -193,55 +341,42 @@ type SegmentyProps = {
   wybrany: number;
   onZmiana: (indeks: number) => void;
   etykieta: string;
+  /** Liczba przy pigułce (np. „Po terminie 2”); pusta pozycja = bez liczby. */
+  liczniki?: (number | undefined)[];
 };
 
-const SPREZYNA_KRESKI = { damping: 22, stiffness: 260 };
-
 /**
- * Zakładki sekcji jak na stronie (`components/lists/section-tabs.tsx`): napisy
- * w rzędzie, linia pod spodem, aktywną zaznacza kreska, która płynnie
- * przesuwa się pod wybrany napis.
+ * Podzakładki sekcji jako pigułki (plan aplikacji, D14 i D15; wzór Revolut
+ * Business): wybrana w kolorze marki, pozostałe białe na tle ekranu. Przy
+ * dużym tekście zawijają się do kolejnej linii zamiast ucinać napisy.
  */
-export function Segmenty({ wartosci, wybrany, onZmiana, etykieta }: SegmentyProps) {
+export function Segmenty({ wartosci, wybrany, onZmiana, etykieta, liczniki }: SegmentyProps) {
   const kolory = useKolory();
-  const [uklad, setUklad] = useState<{ x: number; w: number }[]>([]);
-  const x = useSharedValue(0);
-  const szer = useSharedValue(0);
-  const cel = uklad[wybrany];
-  useEffect(() => {
-    if (!cel) return;
-    // Pierwsze ustawienie bez animacji: kreska ma stać pod zakładką od razu.
-    const pierwsze = szer.get() === 0;
-    x.set(pierwsze ? cel.x : withSpring(cel.x, SPREZYNA_KRESKI));
-    szer.set(pierwsze ? cel.w : withSpring(cel.w, SPREZYNA_KRESKI));
-  }, [cel, x, szer]);
-  const kreska = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: szer.value }));
-
-  const zapisz = (i: number) => (e: LayoutChangeEvent) => {
-    const { x: lx, width } = e.nativeEvent.layout;
-    setUklad((u) => {
-      const nowy = [...u];
-      nowy[i] = { x: lx, w: width };
-      return nowy;
-    });
-  };
-
+  const stylKarty = useStylKarty();
   return (
-    <View style={[styles.zakladki, { borderBottomColor: kolory.obwodka }]} accessibilityRole="tablist" accessibilityLabel={etykieta}>
-      {wartosci.map((nazwa, i) => (
-        <Pressable
-          key={nazwa}
-          onLayout={zapisz(i)}
-          onPress={() => onZmiana(i)}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: i === wybrany }}
-          style={styles.zakladka}>
-          <Tekst styl="callout" waga="medium" kolor={i === wybrany ? 'etykieta' : 'etykietaDrugorzedna'} numberOfLines={1}>
-            {nazwa}
-          </Tekst>
-        </Pressable>
-      ))}
-      <Animated.View style={[styles.kreska, { backgroundColor: kolory.etykieta }, kreska]} />
+    <View style={styles.pigulki} accessibilityRole="tablist" accessibilityLabel={etykieta}>
+      {wartosci.map((nazwa, i) => {
+        const wybrana = i === wybrany;
+        const licznik = liczniki?.[i];
+        return (
+          <Pressable
+            key={nazwa}
+            onPress={() => onZmiana(i)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: wybrana }}
+            accessibilityLabel={licznik === undefined ? nazwa : `${nazwa}, ${licznik}`}
+            style={[styles.pigulka, wybrana ? { backgroundColor: kolory.akcentWypelnienie } : [stylKarty, styles.pigulkaKsztalt]]}>
+            <Tekst styl="subheadline" waga="medium" style={{ color: wybrana ? kolory.naAkcencie : kolory.etykieta }} numberOfLines={1}>
+              {nazwa}
+            </Tekst>
+            {licznik !== undefined ? (
+              <Tekst styl="footnote" cyfry style={{ color: wybrana ? kolory.naAkcencie : kolory.etykietaDrugorzedna }}>
+                {licznik}
+              </Tekst>
+            ) : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -265,7 +400,7 @@ function doIso(d: Date): string {
 }
 
 /**
- * Data: pole z datą w IBM Plex Mono; dotknięcie rozwija pod nim systemowy
+ * Data: pole z datą cyframi tabelarycznymi; dotknięcie rozwija pod nim systemowy
  * kalendarz (na Androidzie systemowe okno), wybór dnia go zwija.
  */
 export function PoleDaty({ etykieta, wartosc, onZmiana, najwczesniej }: PoleDatyProps) {
@@ -311,11 +446,15 @@ PoleDaty.pole = true;
 
 const styles = StyleSheet.create({
   pole: { paddingHorizontal: MARGINES, paddingVertical: ODSTEP.xs, gap: ODSTEP.xs - 2 },
-  ramka: { minHeight: CEL_DOTYKU, borderWidth: OBWODKA, borderRadius: PROMIEN, justifyContent: 'center' },
+  ramka: { minHeight: CEL_DOTYKU, borderWidth: OBWODKA, borderRadius: PROMIEN_POLA, justifyContent: 'center' },
   ramkaWiersz: { flexDirection: 'row', alignItems: 'center', gap: ODSTEP.xs, paddingHorizontal: ODSTEP.s },
   wejscie: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.s - 2 },
   wejscieWielo: { minHeight: CEL_DOTYKU * 2, textAlignVertical: 'top' },
   rozciagniety: { flex: 1 },
+  ramkaHasla: { flexDirection: 'row', alignItems: 'center' },
+  oko: { minWidth: CEL_DOTYKU, minHeight: CEL_DOTYKU, alignItems: 'center', justifyContent: 'center' },
+  akcjaPola: { width: CEL_DOTYKU + ODSTEP.m, minHeight: CEL_DOTYKU, alignItems: 'center', justifyContent: 'center' },
+  wejscieKodu: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.xs, letterSpacing: ODSTEP.xs, textAlign: 'center' },
   wierszPrzelacznika: {
     minHeight: CEL_DOTYKU + ODSTEP.xs,
     paddingHorizontal: MARGINES,
@@ -324,7 +463,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: ODSTEP.s,
   },
-  zakladki: { flexDirection: 'row', marginHorizontal: MARGINES, marginTop: ODSTEP.l, borderBottomWidth: OBWODKA },
-  zakladka: { paddingHorizontal: ODSTEP.s, paddingVertical: ODSTEP.s - 2, minHeight: CEL_DOTYKU, justifyContent: 'center' },
-  kreska: { position: 'absolute', left: 0, bottom: -OBWODKA, height: 2 },
+  pigulki: { flexDirection: 'row', flexWrap: 'wrap', gap: ODSTEP.xs, marginHorizontal: MARGINES, marginTop: ODSTEP.l },
+  pigulka: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ODSTEP.xxs + 2,
+    minHeight: CEL_DOTYKU - ODSTEP.xxs,
+    paddingHorizontal: ODSTEP.m - 2,
+    borderRadius: PROMIEN_PIGULKI,
+  },
+  pigulkaKsztalt: { borderRadius: PROMIEN_PIGULKI },
 });

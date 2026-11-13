@@ -1,7 +1,7 @@
 /**
  * Wykresy jak na stronie (recharts w `components/dashboard/finora/chart-finance.tsx`):
  * słupki (także składane), linia z polem i pierścień w odcieniach niebieskiego
- * marki, przerywana siatka, osie w IBM Plex Mono. Rysowane w SVG, więc
+ * marki, przerywana siatka, osie cyframi tabelarycznymi Outfit. Rysowane w SVG, więc
  * wyglądają tak samo na iOS i Androidzie. Wchodzą płynną animacją na wątku
  * interfejsu (Reanimated), a dotknięcie pokazuje wartość jak dymek na stronie.
  * Rysunek leży w karcie `Sekcja swobodna`, więc nie ma własnego tła.
@@ -14,14 +14,14 @@ import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react
 import { Tekst } from '@/komponenty/tekst';
 import { liczbaKrotka } from '@/lib/format';
 import { useKolory, type Kolory } from '@/wyglad/kolory';
-import { OBWODKA, ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { OBWODKA, ODSTEP, PROMIEN_POLA } from '@/wyglad/odstepy';
 
 import type { PunktWykresu, SeriaWykresu, WykresProps } from './wykres-typy';
 
 const AnimowanyRect = Animated.createAnimatedComponent(Rect);
 const AnimowanaSciezka = Animated.createAnimatedComponent(Path);
 
-/** Szerokość podpisów osi Y („30 tys.” w Plex Mono 11 pt, z zapasem na duży tekst). */
+/** Szerokość podpisów osi Y („30 tys.” w Outfit 11 pt, z zapasem na duży tekst). */
 const OS_Y = 58;
 const WYSOKOSC_OSI_X = 20;
 const PALETA: (keyof Kolory)[] = ['wykres2', 'wykres1', 'wykres3', 'wykres4', 'wykres5'];
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: ODSTEP.s - 2,
     paddingVertical: ODSTEP.xs - 2,
     borderWidth: OBWODKA,
-    borderRadius: PROMIEN,
+    borderRadius: PROMIEN_POLA,
     gap: ODSTEP.linia,
   },
   wierszDymka: { flexDirection: 'row', alignItems: 'center', gap: ODSTEP.xxs + 2 },

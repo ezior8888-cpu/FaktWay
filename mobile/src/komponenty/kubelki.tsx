@@ -10,7 +10,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 
 import { Tekst } from '@/komponenty/tekst';
 import { useKolory, type Kolory } from '@/wyglad/kolory';
-import { MARGINES, ODSTEP, PROMIEN } from '@/wyglad/odstepy';
+import { MARGINES, ODSTEP, PROMIEN_SLUPKA } from '@/wyglad/odstepy';
 
 export type Kubelek = { podpis: string; procent: number; kwota: string; kolor: keyof Kolory };
 
@@ -58,6 +58,6 @@ const styles = StyleSheet.create({
   rzad: { flexDirection: 'row', paddingHorizontal: MARGINES - ODSTEP.xs, paddingVertical: ODSTEP.s },
   kolumna: { flex: 1, paddingHorizontal: ODSTEP.xs, gap: ODSTEP.xxs },
   miejsceSlupka: { height: WYSOKOSC, justifyContent: 'flex-end', marginVertical: ODSTEP.xxs },
-  tor: { height: WYSOKOSC, justifyContent: 'flex-end', borderRadius: PROMIEN, overflow: 'hidden' },
-  slupek: { width: '100%', borderRadius: PROMIEN },
+  tor: { height: WYSOKOSC, justifyContent: 'flex-end', borderRadius: PROMIEN_SLUPKA, overflow: 'hidden' },
+  slupek: { width: '100%', borderRadius: PROMIEN_SLUPKA },
 });

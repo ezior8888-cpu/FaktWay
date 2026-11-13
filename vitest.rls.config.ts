@@ -158,6 +158,10 @@ export default defineConfig({
       // fakturach, numer z bazy bez dubli naraz, wystawionego nie zmienia nikt, kwoty w CHECK-ach,
       // historia wysyłek, powiązanie z fakturą w INSERT (jedna faktura na numer zamiany), poza przychodem.
       'tests/rls-proformy.test.ts',
+      // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu;
+      // które tokeny GoTrue uznaje (anon, serwisowy, podrobiony, wylogowany: odmowa, nie awaria),
+      // AAL1 i AAL2 z prawdziwym TOTP, lista firm i x-active-org przez RLS, filtr wpisu logowania.
+      'tests/rls-mobile-api.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

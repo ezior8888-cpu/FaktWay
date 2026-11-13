@@ -8,7 +8,7 @@ type Props = TextProps & {
   styl?: StylTekstu;
   /** Kolor semantyczny; domyślnie etykieta główna. */
   kolor?: keyof Kolory;
-  /** Liczby, kwoty, numery, NIP-y i daty: IBM Plex Mono, jak na stronie. */
+  /** Liczby, kwoty, numery, NIP-y i daty: cyfry tabelaryczne Outfit (D15), kolumny się nie rozjeżdżają. */
   cyfry?: boolean;
   /** Skrót dla `waga="semibold"` (np. kwota w wierszu). */
   pogrubiony?: boolean;
@@ -17,8 +17,8 @@ type Props = TextProps & {
 };
 
 /**
- * Jedyny komponent tekstu w aplikacji. Pilnuje czcionek FaktWay (Outfit,
- * IBM Plex Mono), skali stylów, Dynamic Type i kolorów semantycznych
+ * Jedyny komponent tekstu w aplikacji. Pilnuje czcionki FaktWay (Outfit z
+ * cyframi tabelarycznymi w liczbach), skali stylów, Dynamic Type i kolorów semantycznych
  * (docs/mobile/ZASADY-DESIGNU.md, sekcja 3).
  */
 export function Tekst({ styl = 'body', kolor = 'etykieta', cyfry, pogrubiony, waga, style, ...reszta }: Props) {

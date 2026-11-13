@@ -21,6 +21,13 @@ export const RAPORT_MIESIACA = {
   przychodZmiana: 2,
 };
 
+/**
+ * Zysk listopada narastająco na koniec dni 1 do 9 (dziś = 9.11), w groszach;
+ * ostatni punkt równa się zyskowi z `RAPORT_MIESIACA` (34 560 zł minus 11 280 zł).
+ * Wykres karty wyniku na Pulpicie (D14, wzór Copilota).
+ */
+export const ZYSK_NARASTAJACO = [240_000, 1_310_000, 1_370_000, 1_980_000, 2_160_000, 2_130_000, 2_290_000, 2_340_000, 2_328_000];
+
 /** VAT należny w ostatnich 12 miesiącach, zł. */
 export const VAT_NALEZNY = [
   { x: 'gru', y: 5_800 }, { x: 'sty', y: 4_900 }, { x: 'lut', y: 5_200 }, { x: 'mar', y: 6_100 },
