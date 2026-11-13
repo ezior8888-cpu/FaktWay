@@ -1,0 +1,180 @@
+name: Strażnik zegara
+
+# Nocny strażnik bomb czasowych w testach (uwaga 2 z przeglądu PR #720).
+# Bomba czasowa to test z datą wpisaną na sztywno, gdy kod pod testem bierze
+# `new Date()`. Taki test jest zielony do pewnego dnia, potem czerwieni CI
+# każdego PR, a bywa, że wcześniej przestaje cokolwiek sprawdzać (mutanty
+# w #720). Ten workflow co noc uruchamia testy z jobów `vitest` i `static`
+# z ci.yml (Vitest i testy tsx FA(3), bez bazy) z zegarem przesuniętym o 45 dni
+# do przodu. Bomba czerwieni więc najpierw jego, z zapasem na spokojną naprawę.
+#
+# Przesunięcie robi libfaketime (LD_PRELOAD) dla wszystkich procesów kroku
+# naraz: Node, bash, `date`, `find`. Samo podmienienie `Date` w Node dawało
+# fałszywe alarmy, gdy test woła skrypt bash (restore-drill: `find -mmin`).
+# - `vi.useFakeTimers({ now })`, `vi.setSystemTime` i `vi.spyOn(Date, 'now')`
+#   wygrywają z przesunięciem: podmieniają `Date` w JS i zegara systemu nie pytają.
+# - FAKETIME_DONT_FAKE_MONOTONIC=1: zegar monotoniczny (timery, limity czasu
+#   Vitest) zostaje prawdziwy.
+# - NO_FAKE_STAT=1: bash widzi czasy plików tak jak Node (z jądra, bez
+#   przesunięcia). Czas ustawiony z przesuniętego zegara (`utimesSync`,
+#   `touch -d`) zgadza się więc z zegarem testu, ale plik zapisany w trakcie
+#   testu ma czas sprzed przesunięcia. Test, który porównałby świeży plik
+#   z zegarem, dałby fałszywy alarm (13.11.2026 takiego nie ma).
+# - Nie przesuwa się nic poza runnerem, w tym baza: testy rls-* biorą `now()`
+#   z Postgresa, dlatego ich tu nie ma (jak w jobie `vitest` w ci.yml).
+#
+# Czerwony przebieg z harmonogramu zakłada jedno issue; kolejne czerwone noce
+# nie dublują go, dopóki jest otwarte. Ręcznie: Actions → Strażnik zegara →
+# Run workflow, także z inną liczbą dni (np. 365).
+on:
+  schedule:
+    # 03:23 UTC (4:23 zimą, 5:23 latem w Warszawie), po filtrze nocnym (02:37).
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dni:
+        description: 'O ile dni przesunąć zegar do przodu (1–3650)'
+        required: false
+        default: '45'
+  # Zmiana tego pliku sprawdza się w swoim PR, tym samym przebiegiem co w nocy.
+  pull_request:
+    paths:
+      - .github/workflows/straznik-zegara.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: straznik-zegara-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  testy:
+    name: Testy z zegarem +${{ inputs.dni || '45' }} dni
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DNI: ${{ inputs.dni || '45' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+      - name: Install XML schema validator
+        # Zapasowy serwer pakietów przy awarii mirrora Azure (11.11.2026, jak ci.yml).
+        run: bash scripts/ci/zainstaluj-xmllint.sh
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Instalacja libfaketime
+        # Listy pakietów (i ewentualny zapasowy serwer) ustawił już skrypt xmllint.
+        run: |
+          if ! [[ "$DNI" =~ ^[1-9][0-9]{0,3}$ ]] || [ "$DNI" -gt 3650 ]; then
+            echo "::error::Liczba dni musi być od 1 do 3650, jest: '$DNI'"
+            exit 1
+          fi
+          sudo apt-get install --yes --no-install-recommends libfaketime
+          biblioteka=$(dpkg -L libfaketime | grep -E '/libfaketime\.so\.1$' | head -n 1 || true)
+          if [ ! -f "$biblioteka" ]; then
+            echo "::error::Pakiet libfaketime nie ma pliku libfaketime.so.1 (dpkg -L libfaketime)"
+            exit 1
+          fi
+          echo "LIBFAKETIME=$biblioteka" >> "$GITHUB_ENV"
+      # Bez tego kroku zepsute przesunięcie (inna ścieżka biblioteki, nowy obraz
+      # runnera) dałoby zielony przebieg przy prawdziwym zegarze: strażnik by
+      # niczego nie sprawdzał, a wyglądałby na sprawny.
+      - name: Przesunięcie działa w Node i w bashu
+        id: zegar
+        env:
+          LD_PRELOAD: ${{ env.LIBFAKETIME }}
+          FAKETIME: +${{ env.DNI }}d
+          FAKETIME_DONT_FAKE_MONOTONIC: '1'
+          NO_FAKE_STAT: '1'
+        run: |
+          prawdziwy=$(env -u LD_PRELOAD date -u +%s)
+          w_bashu=$(date -u +%s)
+          w_node=$(node -e 'process.stdout.write(String(Math.floor(Date.now() / 1000)))')
+          oczekiwane=$(( DNI * 86400 ))
+          echo "Prawdziwy zegar: $(date -u -d "@$prawdziwy" +%FT%TZ). Testy widzą: $(date -u -d "@$w_bashu" +%FT%TZ)."
+          blad=0
+          for wpis in "bash $w_bashu" "node $w_node"; do
+            read -r nazwa zegar <<< "$wpis"
+            odchylka=$(( zegar - prawdziwy - oczekiwane ))
+            if [ "${odchylka#-}" -gt 120 ]; then
+              echo "::error::$nazwa: zegar przesunięty o $(( zegar - prawdziwy )) s zamiast $oczekiwane s, libfaketime nie działa"
+              blad=1
+            fi
+          done
+          # Czas pliku ustawiony z przesuniętego zegara (jak restore-drill:
+          # utimesSync w Node, potem find -mmin w bashu) wygląda tak samo dla obu.
+          plik=$(mktemp)
+          node -e 'const t = Date.now() / 1000 - 72 * 3600; require("node:fs").utimesSync(process.argv[1], t, t)' "$plik"
+          czas_node=$(node -e 'process.stdout.write(String(Math.floor(require("node:fs").statSync(process.argv[1]).mtimeMs / 1000)))' "$plik")
+          czas_bash=$(stat -c %Y "$plik")
+          wiek=$(( $(date -u +%s) - czas_bash ))
+          if [ "$czas_node" != "$czas_bash" ] || [ "$wiek" -lt $(( 72 * 3600 - 120 )) ] || [ "$wiek" -gt $(( 72 * 3600 + 120 )) ]; then
+            echo "::error::Czas pliku sprzed 72 h: Node $czas_node, bash $czas_bash, wiek w bashu $wiek s (NO_FAKE_STAT?)"
+            blad=1
+          fi
+          rm -f "$plik"
+          exit "$blad"
+      - name: Vitest (jak job vitest w ci.yml, bez bazy)
+        run: pnpm exec vitest run
+        env:
+          LD_PRELOAD: ${{ env.LIBFAKETIME }}
+          FAKETIME: +${{ env.DNI }}d
+          FAKETIME_DONT_FAKE_MONOTONIC: '1'
+          NO_FAKE_STAT: '1'
+      - name: Testy tsx (generator, kalkulator i walidator FA(3), jak job static)
+        # Także po czerwonym Vitest, żeby jeden przebieg pokazał obie listy.
+        if: ${{ !cancelled() && steps.zegar.outcome == 'success' }}
+        run: pnpm run test
+        env:
+          LD_PRELOAD: ${{ env.LIBFAKETIME }}
+          FAKETIME: +${{ env.DNI }}d
+          FAKETIME_DONT_FAKE_MONOTONIC: '1'
+          NO_FAKE_STAT: '1'
+
+  # Osobny job: prawo zapisu w issues bez kodu z repo i bez testów.
+  zgloszenie:
+    name: Issue po czerwonej nocy
+    needs: testy
+    if: ${{ failure() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Jedno otwarte issue naraz
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRZEBIEG: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          numer=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 500 --json number,title \
+            --jq 'map(select(.title | startswith("Strażnik zegara:"))) | first | .number // empty')
+          if [ -n "$numer" ]; then
+            echo "Issue #$numer jest otwarte, nowego nie zakładam. Przebieg: $PRZEBIEG"
+            exit 0
+          fi
+          tresc=$(mktemp)
+          {
+            echo "Nocny przebieg testów z zegarem przesuniętym o 45 dni do przodu jest czerwony: $PRZEBIEG"
+            echo
+            cat <<'TRESC'
+          **Co to znaczy.** Któryś test przestanie przechodzić najpóźniej za 45 dni i wtedy zaczerwieni CI każdego PR. Zwykle to bomba czasowa: data w teście wpisana na sztywno, a kod pod testem bierze `new Date()`. Czerwone przypadki są w adnotacjach przebiegu.
+
+          **Co zrobić.**
+          1. Gdy czerwony jest krok „Przesunięcie działa w Node i w bashu”, zepsuło się narzędzie (libfaketime), nie test.
+          2. Inaczej uruchom czerwony przypadek przy prawdziwym zegarze. Zielony znaczy bombę: naprawa to jawne `now` w wywołaniu albo `vi.useFakeTimers({ now: NOW, toFake: ['Date'] })` w teście (wzór: PR #720). Czerwony także dziś to zwykły błąd, nie zegar.
+          3. Odtworzenie na Linuksie: `LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1 FAKETIME=+45d FAKETIME_DONT_FAKE_MONOTONIC=1 NO_FAKE_STAT=1 pnpm exec vitest run <plik>`.
+          4. Po naprawie: Actions → Strażnik zegara → Run workflow, potem zamknij to issue. Dopóki jest otwarte, kolejne czerwone noce nie zakładają nowego.
+          TRESC
+          } > "$tresc"
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Strażnik zegara: czerwony przebieg nocny (zegar +45 dni)" \
+            --body-file "$tresc"
