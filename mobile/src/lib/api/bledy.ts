@@ -57,6 +57,9 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   invalid_request: 'serwer',
   invalid_credentials: 'serwer',
   login_unavailable: 'ponow',
+  // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
+  invalid_code: 'serwer',
+  mfa_not_required: 'serwer',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */
