@@ -131,6 +131,9 @@ inna niż w „Rejestrze braków” z 17.10).
 tylko próba na KSeF TEST (kod też w #360). 2 i 8 (#405, #410, wdrożone 08.11).
 Częściowo: 7 (#350, #351), 28 (alarm skrzynki liczony w bazie, 00160), 29
 (lista korekt, #283). Przegląd 08.11 w dzienniku (sekcja 6).
+**Scalone od 11.11:** 31, 6 i 32 (zbiorczy #563), 21 (#579, migracja 00186),
+3 (#597), 12 (#598), 10 (#654, #678) i 29 część 2 (#660, obie w zbiorczym
+#713). Czekają na scalenie: 29 część 1 (#652) i 30 (#655). W toku: 5.
 
 **Kolejność wykonania (Bartosz, 03.11):** 2 → 8 → 31 → 21 → 13 → 28 → 14 →
 17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24 → 29 → 30 → 32 → 34 → 33, a po
@@ -264,8 +267,21 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 09.11.2026 | Sesja 31: pliki ponad 1 MB przez trasy wgrywania z własnym limitem rozmiaru i liczby wgrań, `/share-target` z limitem poniżej progu OCR | #538 | w zbiorczym |
 | 09.11.2026 | Sesja 6: klient Redisa z limitem 500 ms, jednym ponowieniem i obwodem, osobny ping w `/api/health` | #539 | w zbiorczym; wyprzedziła kolejność, bo 21 czekała na #473 |
 | 09.11.2026 | Sesja 32: odczyty duplikatów importu paczkami po 100 (F-089) | #558 | w zbiorczym |
+| 10.11.2026 | Zbiorczy: #476, #538 (sesja 31), #539 (sesja 6), #558 (sesja 32) | #563 | scalony 11.11 |
+| 10.11.2026 | Sesja 21: indeksy częściowe pod crony KSeF, strażnik bez I3, UNIQUE katalogu produktów | #579 | scalony 11.11; migracja 00186 |
+| 11.11.2026 | Sesja 3: sprzątanie pulsu Flo jednym UPDATE (FLO-01) | #597 | scalony 11.11 |
+| 11.11.2026 | Sesja 12: kopia JSON z bezpiecznikiem rozmiaru i stronicowaniem po kluczu | #598 | scalony 11.11 |
+| 12.11.2026 | Sesja 10: prefetch panelu z góry tylko dla celów dolnego paska, reszta po najechaniu; menu profilu bez prefetchu Analiz | #654, #657 | scalone 13.11 w zbiorczym #713 |
+| 12.11.2026 | Sesja 29 część 1: eksport RODO, historia sprzedawcy i reguły nazw czytane stronami | #652 | PR otwarty, CI zielone, czeka na Bartosza |
+| 12.11.2026 | Sesja 29 część 2: Flo i walidacja kontrahentów czytają stronami do końca | #660 | scalony 13.11 w zbiorczym #713 |
+| 12.11.2026 | Sesja 30: oznaczenie faktury w archiwum zaraz po wgraniu do Glacier | #655 | PR otwarty; czerwony „RLS isolation” to niestabilny test z #579, który naprawia #662 |
+| 13.11.2026 | Niestabilny test planisty z #579 (`tests/rls-indeksy-cronow-produkty.test.ts`) | #662 | PR otwarty, CI zielone; scalić przed #655; dubel #677 zamknięty |
+| 13.11.2026 | Build obrazu na `main` padał od #504 (`vitest.filtr.config.ts` importował plik spoza obrazu) | #661 | scalony 13.11, obraz `main` znowu się buduje |
+| 13.11.2026 | Sesja 10 (ciąg dalszy): zakładki sekcji z pełnym prefetchem dopiero z zamiarem | #678 | scalony 13.11 w zbiorczym #713; poprawka przewijania przy drugim dotknięciu w #718 (otwarty) |
+| 13.11.2026 | Sesja 5: limity czasu `fetch` w klientach Supabase | brak | w toku, osobna sesja |
 
-**Następny krok:** sesja 21 (#473 scalony 08.11, więc rejestr wolny; numer
-migracji przy otwarciu PR; indeksy bez `CONCURRENTLY`). Nie równolegle z 28.
-Dalej 28, próba 14 na KSeF TEST, 5 i 7, 3, 12, 18, 10, 11, 24, 29, 30, 34, 33,
-a po pomiarze 15 i 16.
+**Następny krok:** sesja 5 (w toku od 13.11), po jej scaleniu 7, bo obie
+zmieniają `lib/supabase/` i proxy. Na Bartosza czekają 28 (migracja z RPC:
+kto ją pisze, numer z rejestru) i próba 14 na KSeF TEST. Dalej według
+kolejności 18, 11, 24, 34, 33, a po pomiarze 15 i 16. Scalanie: #662 przed
+#655, bo czerwony test w #655 to ten, który naprawia #662.
