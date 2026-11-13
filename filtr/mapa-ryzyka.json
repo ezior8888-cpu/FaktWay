@@ -262,7 +262,10 @@
       "opis": "Data wystawienia i sprzedaży, numeracja faktur.",
       "sciezki": [
         "lib/invoices/{issue-date,sale-date,display-date,next-number}.ts",
-        "lib/ksef/special-issue-date.ts"
+        "lib/ksef/special-issue-date.ts",
+        "lib/numeracja/**",
+        "app/actions/numeracja.ts",
+        "supabase/migrations/00199_*.sql"
       ]
     },
     {

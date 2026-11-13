@@ -24,7 +24,11 @@ export interface DashboardNavItem {
   label: string;
   /** Ikona Remix (komponent) — sidebar, ⌘K, arkusz „Więcej". */
   icon: RemixiconComponentType;
-  /** `false` = nie prefetchuj trasy (ciężkie strony). Domyślnie prefetch. */
+  /**
+   * `false` = bez prefetchu, także po najechaniu (ciężkie strony, plan Finora §4).
+   * Domyślnie trasę pobiera najechanie albo fokus na pozycji menu; po wejściu na
+   * panel z góry idą tylko cele dolnego paska (`getDashboardPrefetchHrefs`).
+   */
   prefetch?: false;
 }
 
@@ -235,26 +239,23 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-const EXTRA_PREFETCH_HREFS = [
-  "/settings",
-  "/invoices/new",
-  // Zakładki ekranów Faktur, Kosztów i Księgowości — przełączenie ma być tak
-  // szybkie jak pozycja menu.
-  "/invoices/recurring",
-  "/payments/overdue",
-  "/inbox",
-  "/reports/exports",
-] as const;
-
-/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia + zakładki Faktur, Kosztów i Księgowości. */
+/**
+ * Trasy, które `PrefetchDashboardRoutes` pobiera z góry po wejściu na panel:
+ * cele dolnego paska (Pulpit, Faktury, Nowa, Miesiąc), te same na każdej
+ * szerokości. Resztę menu pobiera najechanie albo fokus na pozycji, a zakładki
+ * sekcji (cykliczne, po terminie, skrzynka KSeF, eksport) pobiera ich własny
+ * rząd zakładek na ekranie sekcji (`SectionTabs`).
+ *
+ * DLACZEGO TYLKO CELE PASKA (plan skalowania 3000, sesja 10). Każde pobranie
+ * z wyprzedzeniem to żądanie RSC przez bramkę logowania (`proxy.ts` pyta
+ * GoTrue) i render layoutu panelu na serwerze. Dawniej z góry szło prawie całe
+ * menu z zakładkami, czyli kilkanaście takich żądań na każde wejście.
+ */
 export function getDashboardPrefetchHrefs(): string[] {
-  const set = new Set<string>(
+  const noPrefetch = new Set(
     dashboardNavItems
-      .filter((item) => item.prefetch !== false)
+      .filter((item) => item.prefetch === false)
       .map((item) => item.href),
   );
-  for (const href of EXTRA_PREFETCH_HREFS) {
-    set.add(href);
-  }
-  return [...set];
+  return [...MOBILE_TAB_HREFS].filter((href) => !noPrefetch.has(href));
 }

@@ -4,6 +4,7 @@ import { AdvanceInvoiceForm } from '@/components/invoices/advance-form';
 import { SellerProfileBlock } from '@/components/invoices/seller-profile-block';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { loadTenantSellerForForms } from '@/lib/invoices/load-tenant-seller';
+import { loadNumberingForForm } from '@/lib/numeracja/strona';
 import {
   advanceInvoiceFromQuote,
   loadQuoteSource,
@@ -27,6 +28,9 @@ function param(params: SearchParams, key: string): string | null {
  * faktura, tylko z `&kolejna=1` (potwierdzenie na ekranie dokumentu). Dokument
  * z kilkoma stawkami albo ze stawką spoza formularza zaliczki: pusty formularz
  * z komunikatem i linkiem do dokumentu.
+ *
+ * Krok 2.5: seria domyślna zaliczki i podpowiedź numeru; błąd odczytu to
+ * formularz bez podpowiedzi, jak dotąd.
  */
 export default async function NewAdvanceInvoicePage({
   searchParams,
@@ -55,6 +59,7 @@ export default async function NewAdvanceInvoicePage({
       }
     }
   }
+  const numbering = await loadNumberingForForm(null, loaded.tenantId, 'advance');
 
   // P5: szerokość daje siatka Finory w formularzu (dokument + kolumna 18rem).
   // UX-01: firma sprzedawcy idzie do formularza — zapis sprawdzi, że to wciąż aktywna firma;
@@ -64,6 +69,7 @@ export default async function NewAdvanceInvoicePage({
       key={loaded.tenantId}
       initialSeller={loaded.seller}
       tenantId={loaded.tenantId}
+      {...(numbering ? { numbering } : {})}
       {...(fromQuote
         ? { initialValues: fromQuote.initialValues, salesQuoteId: fromQuote.salesQuoteId, salesQuoteSeq: fromQuote.salesQuoteSeq }
         : {})}

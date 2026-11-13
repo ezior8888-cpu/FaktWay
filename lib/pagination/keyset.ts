@@ -33,7 +33,8 @@
  * Klucz: `id` typu uuid. Postgres porównuje uuid bajtowo, co odpowiada
  * porównaniu napisów z małymi literami hex w JS — tym samym, którym helper
  * sprawdza kolejność. Dla kluczy liczbowych albo tekstowych z kolacją
- * helper się nie nadaje (rzuci „identyfikatory nie rosną”).
+ * helper się nie nadaje (rzuci „identyfikatory nie rosną”); klucz tekstowy
+ * czyta `readAllByKey` niżej.
  *
  * Bez importów `@/…` i bez `server-only`: skrypty w `scripts/` importują
  * `lib/` ścieżką względną.
@@ -147,4 +148,77 @@ export async function readAllById<T extends { id: string }>(
   const all: T[] = [];
   await forEachPageById(label, fetchPage, (rows) => { all.push(...rows); }, options);
   return all;
+}
+
+/** Zapytanie o jedną stronę po kluczu tekstowym: wiersze o kluczu `> afterKey` (bez kursora — od początku), rosnąco po kluczu, najwyżej `limit`. */
+export type KeysetFetchPageByKey<T> = (afterKey: string | null, limit: number) => PromiseLike<KeysetPage<T>>;
+
+/**
+ * Jak `readAllById`, ale po kluczu TEKSTOWYM — dla tabel bez `id`, np.
+ * `flo_decisions` z kluczem głównym `(tenant_id, kind)` (sesja 29 planu
+ * skalowania). Wywołujący buduje stronę tak samo, tylko po swojej kolumnie:
+ *
+ *   (afterKey, limit) => {
+ *     let query = db.from('flo_decisions').select('kind, …').eq('tenant_id', tenantId);
+ *     if (afterKey !== null) query = query.gt('kind', afterKey);
+ *     return query.order('kind', { ascending: true }).limit(limit);
+ *   }
+ *
+ * Kolejność ustala baza: `order(kolumna)` i `gt(kolumna, kursor)` porównują
+ * tą samą kolacją kolumny, więc strony na siebie nie zachodzą i nic nie
+ * ginie. Kolacja bazy nie musi być bajtowa (migracja 00191 pisze wprost
+ * `COLLATE "C"` tam, gdzie jej potrzebuje), a wtedy porządek napisów w JS
+ * różni się od porządku w Postgresie — dlatego helper NIE sprawdza
+ * kolejności w JS (rzucałby przy poprawnej odpowiedzi). W zamian pilnuje,
+ * żeby żaden klucz nie wrócił drugi raz: zignorowane `gt` daje powtórkę
+ * zawsze, brak `order` prawie zawsze — wyjątek zamiast pętli albo luki.
+ * Brak `order` w zapytaniu łapie więc przede wszystkim test wywołującego
+ * z atrapą, która sortuje dopiero po `order`.
+ *
+ * Klucz: niepusty napis, unikalny w czytanym zbiorze (np. klucz główny
+ * w obrębie firmy). Komunikaty błędów nie zawierają wartości klucza —
+ * klucze tematów Flo niosą nazwy kontrahentów.
+ *
+ * Reszta gwarancji jak w `forEachPageById`: błąd albo `data: null` →
+ * wyjątek, strona dłuższa niż `limit` → wyjątek, koniec tylko na pustej
+ * stronie, pułap `maxPages`.
+ */
+export async function readAllByKey<T>(
+  label: string,
+  keyOf: (row: T) => unknown,
+  fetchPage: KeysetFetchPageByKey<T>,
+  options: KeysetOptions = {},
+): Promise<T[]> {
+  const { pageSize, maxPages } = checkOptions(label, options);
+  const all: T[] = [];
+  const seen = new Set<string>();
+  let afterKey: string | null = null;
+  let pages = 0;
+
+  for (;;) {
+    const page = await fetchPage(afterKey, pageSize);
+    if (page.error) throw new KeysetPageError(label, page.error.message);
+    if (!Array.isArray(page.data)) throw new KeysetPageError(label, 'odpowiedź bez danych i bez błędu, więc nie wiadomo, czy to koniec listy');
+    const data = page.data;
+    if (data.length === 0) return all;
+    if (data.length > pageSize) {
+      throw new KeysetPageError(label, `strona ma ${data.length} wierszy przy limicie ${pageSize} (zapytanie bez limit?)`);
+    }
+    let last: string | null = null;
+    for (const row of data) {
+      const key = keyOf(row);
+      if (typeof key !== 'string' || key === '') throw new KeysetPageError(label, 'wiersz bez klucza (pusty albo nie napis)');
+      if (seen.has(key)) {
+        throw new KeysetPageError(label, `klucz wrócił drugi raz na stronie ${pages + 1} (zapytanie bez order albo bez gt po kluczu)`);
+      }
+      seen.add(key);
+      last = key;
+    }
+    if (pages >= maxPages) {
+      throw new KeysetPageError(label, `ponad ${maxPages} stron po ${pageSize} wierszy: odczyt przerwany, lista niepełna`);
+    }
+    pages += 1;
+    all.push(...data);
+    afterKey = last;
+  }
 }

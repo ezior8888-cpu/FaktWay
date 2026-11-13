@@ -1,5 +1,4 @@
-import Link from 'next/link';
-
+import { SectionTabLink } from '@/components/lists/section-tab-link';
 import { LinkPendingMark } from '@/components/navigation/link-pending-mark';
 import { cn } from '@/lib/utils';
 
@@ -24,13 +23,17 @@ export interface SectionTab<T extends string = string> {
  *
  * Komponent serwerowy (bez stanu): aktywną zakładkę podaje strona.
  *
- * PŁYNNOŚĆ NA TELEFONIE (zgłoszenie Bartosza 23.10.2026). Linki mają pełny
- * prefetch (`prefetch`), bo domyślny dla stron dynamicznych pobiera tylko
- * szkielet: przejście z „Wystawione” na „Cykliczne” czekało wtedy na serwer
- * z podkreśleniem w starym miejscu, a „Po terminie” (inny segment) zamieniało
- * całą stronę — z kaflami i tym rzędem — na ogólny szkielet. Gdy strona
- * jeszcze nie przyszła, `LinkPendingMark` przenosi podkreślenie na dotkniętą
- * zakładkę od razu (`.ff-section-tabs` w `globals.css`).
+ * PŁYNNOŚĆ (zgłoszenie Bartosza 23.10.2026, pobieranie zmienione w planie
+ * skalowania 3000, sesja 10). Pełny prefetch wszystkich zakładek z góry
+ * renderował przy każdym wejściu i po każdym `router.refresh()` całe strony
+ * sąsiednich zakładek. Teraz zakładka pobiera się w pełni, z danymi, dopiero
+ * gdy kursor zostanie na niej chwilę albo dojdzie do niej klawiatura
+ * (`SectionTabLink`). Kliknięcie, gdy strona już przyszła, przełącza od razu;
+ * kliknięcie wcześniej i dotyk (bez pobierania z wyprzedzeniem) czekają na
+ * serwer. W tym czasie `LinkPendingMark` od razu przenosi podkreślenie na
+ * wybraną zakładkę (`.ff-section-tabs` w `globals.css`). W Fakturach,
+ * Kosztach i zakładkach JDG stara tabela stoi, aż przyjdzie nowa, a KPiR
+ * i Eksport mają własny `loading.tsx`, więc pokazują szkielet.
  *
  * JEDNA STRONA, NIE PODSTRONA (poprawka Bartosza 25.10.2026). Rząd stoi
  * w layoucie sekcji (`(faktury)`, `(koszty)`, `reports`) razem z kaflami
@@ -61,10 +64,9 @@ export function SectionTabs<T extends string>({
       {tabs.map((tab) => {
         const current = tab.value === active;
         return (
-          <Link
+          <SectionTabLink
             key={tab.value}
             href={tab.href}
-            prefetch
             scroll={false}
             data-ff-keep-scroll=""
             aria-current={current ? 'page' : undefined}
@@ -79,7 +81,7 @@ export function SectionTabs<T extends string>({
           >
             {tab.label}
             <LinkPendingMark />
-          </Link>
+          </SectionTabLink>
         );
       })}
     </nav>

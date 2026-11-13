@@ -25,6 +25,14 @@ import {
 } from '@/lib/invoices/calculator';
 import { matchesTenantSeller, sellerFromTenantProfile } from '@/lib/invoices/tenant-seller';
 import {
+  numberConflictOf,
+  numberRefusalText,
+  numberRequestOf,
+  saveWithInvoiceNumber,
+  type NumberColumns,
+  type NumberedResult,
+} from '@/lib/numeracja/nadanie';
+import {
   buyerPartyFromBuyerData,
   sellerPartyFromSellerData,
 } from '@/lib/invoices/map-buyer-party';
@@ -277,16 +285,23 @@ async function fetchSettlementRows(
   return rows;
 }
 
+/**
+ * `numberColumns` (krok 2.5, 00199): seria, okres, licznik i klucz zapisu;
+ * bez serii pusty obiekt (wiersz jak dotąd). Odmowę numeru przez bazę wynik
+ * niesie w `numberConflict` dla `saveWithInvoiceNumber`.
+ */
 async function insertFinalDraft(
   supabase: SupabaseClient,
   tenantId: string,
   ghost: Invoice,
   envelope: FinalInvoiceData,
   settlement: AdvanceInvoiceSettlementRow[],
-): Promise<ActionResult> {
+  numberColumns: NumberColumns = {},
+): Promise<NumberedResult<ActionResult>> {
   const { data: inserted, error: invErr } = await supabase
     .from('invoices')
     .insert({
+      ...numberColumns,
       tenant_id: tenantId,
       direction: 'outgoing',
       ksef_status: 'draft',
@@ -314,10 +329,12 @@ async function insertFinalDraft(
     .single();
 
   if (invErr || !inserted) {
+    const numberConflict = numberConflictOf(invErr);
     return {
       success: false,
       error: specialDataInsertError(invErr, `faktury rozliczającej ${ghost.internalNumber}`)
-        ?? invErr?.message ?? 'Nie udało się zapisać faktury rozliczającej',
+        ?? numberRefusalText(invErr) ?? invErr?.message ?? 'Nie udało się zapisać faktury rozliczającej',
+      ...(numberConflict ? { numberConflict } : {}),
     };
   }
 
@@ -402,17 +419,21 @@ export async function saveFinalAction(raw: unknown, expectedTenantId: string): P
     const payload = await resolveFinalPayload(supabase, tenant.id, { ...parsed.data, seller });
     if ('error' in payload) return { success: false, error: payload.error };
 
-    const ghost = ghostFinalInvoice(payload.envelope);
-
-    const result = await insertFinalDraft(supabase, tenant.id, ghost, payload.envelope, payload.settlement);
-    if (result.success) {
+    // Krok 2.5: numer z licznika serii albo z pola, ten sam w kolumnie, fa3_data i danych wysyłki.
+    const saved = await saveWithInvoiceNumber(supabase, numberRequestOf(parsed.data), payload.envelope.issueDate, async (assigned) => {
+      const envelope = { ...payload.envelope, internalNumber: assigned.number };
+      const ghost = ghostFinalInvoice(envelope);
+      return { result: await insertFinalDraft(supabase, tenant.id, ghost, envelope, payload.settlement, assigned.columns), built: ghost };
+    });
+    const result = saved.result;
+    if (result.success && saved.built) {
       await logAudit({
         action: 'invoice.draft_created',
         tenantId: tenant.id,
         userId,
         entityType: 'invoice',
         entityId: result.invoiceId,
-        metadata: { kind: 'final', internalNumber: ghost.internalNumber },
+        metadata: { kind: 'final', internalNumber: saved.built.internalNumber },
       });
       revalidatePath('/invoices');
     }

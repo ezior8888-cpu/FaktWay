@@ -37,6 +37,14 @@ import {
 } from '@/lib/invoices/recurring/issue';
 import { suggestNextInvoiceNumberForTenant } from '@/lib/invoices/next-number';
 import {
+  numberConflictOf,
+  numberRefusalText,
+  numberRequestOf,
+  saveWithInvoiceNumber,
+  type NumberColumns,
+  type NumberedResult,
+} from '@/lib/numeracja/nadanie';
+import {
   salesQuoteConflictMessage,
   salesQuoteConvertedAudit,
   salesQuoteLinkForSave,
@@ -237,7 +245,12 @@ export type InvoiceActionResult =
  *  przepuszcza jedną fakturę na okres. Po udanym zapisie (z pozycjami)
  *  warunkowy UPDATE przesuwa `next_run_date`; jego błąd nie psuje zapisu.
  *  Oba zdarzenia — zajęcie okresu i samonaprawa daty po 23505 — idą do
- *  `audit_logs` (K3). Bez `recurring` wiersz i zachowanie są takie jak przed N1. */
+ *  `audit_logs` (K3). Bez `recurring` wiersz i zachowanie są takie jak przed N1.
+ *
+ *  `numberColumns` (krok 2.5, 00199): seria, okres, licznik i klucz zapisu
+ *  z `saveWithInvoiceNumber`; formularz bez serii daje pusty obiekt, więc
+ *  wiersz jest taki jak przed serią. Odmowę numeru przez bazę wynik niesie
+ *  w `numberConflict`, żeby zapis wziął następny numer z serii. */
 async function insertInvoiceAndLines(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
@@ -245,7 +258,8 @@ async function insertInvoiceAndLines(
   formValues?: InvoiceFormValues,
   recurringIssue?: { link: RecurringIssueLink; userId: string },
   salesQuoteIssue?: { link: SalesQuoteIssueLink; userId: string },
-): Promise<InvoiceActionResult> {
+  numberColumns: NumberColumns = {},
+): Promise<NumberedResult<InvoiceActionResult>> {
   const recurring = recurringIssue?.link;
   const recurringUserId = recurringIssue?.userId ?? null;
   // Krok 2.4: faktura z proformy albo oferty niesie powiązanie w tym samym INSERT
@@ -256,7 +270,10 @@ async function insertInvoiceAndLines(
     .from('invoices')
     // N1: tylko faktura z pozycji cyklicznej niesie dwie nowe kolumny —
     // zwykła faktura ma wiersz bez zmian (bez tych kluczy, nie z NULL-ami).
-    .insert(withSalesQuoteColumns(withRecurringColumns(draftInvoiceRow(tenantId, invoice, formValues), recurring), salesQuote))
+    .insert({
+      ...withSalesQuoteColumns(withRecurringColumns(draftInvoiceRow(tenantId, invoice, formValues), recurring), salesQuote),
+      ...numberColumns,
+    })
     .select('id')
     .single();
 
@@ -303,6 +320,11 @@ async function insertInvoiceAndLines(
       const taken = await salesQuoteConflictMessage(supabase, tenantId, salesQuote, invErr);
       if (taken) return { success: false, error: taken };
     }
+    // Krok 2.5: numer z serii zajęty w międzyczasie albo drugi zapis z tym
+    // samym kluczem — `saveWithInvoiceNumber` bierze następny numer albo
+    // podaje numer zapisanej faktury. Numer wpisany ręcznie dostaje niżej
+    // ten sam komunikat co dotąd.
+    const numberConflict = numberConflictOf(invErr);
     // Postgres 23505 = unique_violation. Po migracji 00028 to oznacza duplikat
     // `internal_number` w obrębie tego tenanta — najczęściej double-click "Wystaw
     // i wyślij" lub równoległa próba zapisu z innej karty. Friendly message
@@ -312,11 +334,13 @@ async function insertInvoiceAndLines(
       return {
         success: false,
         error: `Faktura o numerze "${invoice.internalNumber}" już istnieje. Sprawdź listę faktur lub wybierz inny numer.`,
+        ...(numberConflict ? { numberConflict } : {}),
       };
     }
     return {
       success: false,
-      error: invErr?.message ?? 'Nie udało się zapisać faktury',
+      error: numberRefusalText(invErr) ?? invErr?.message ?? 'Nie udało się zapisać faktury',
+      ...(numberConflict ? { numberConflict } : {}),
     };
   }
 
@@ -421,21 +445,29 @@ export async function saveDraftAction(
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
     // Bez 00094 nie znamy prawnej adnotacji P_16; nie zapisujemy dokumentu.
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
-    const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
 
     // Krok 2.4: dokument (proforma, oferta) z formularza sprawdzony przed zapisem.
     const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, values.salesQuoteId, values.salesQuoteSeq);
     if (!salesQuote.ok) return { success: false, error: salesQuote.error };
-    // Zwykły szkic — bez pozycji cyklicznej (odmowa wyżej).
-    const result = await insertInvoiceAndLines(
-      supabase,
-      tenant.id,
-      invoice,
-      values,
-      undefined,
-      salesQuote.link ? { link: salesQuote.link, userId } : undefined,
-    );
-    if (result.success && result.invoiceId) {
+    // Zwykły szkic — bez pozycji cyklicznej (odmowa wyżej). Krok 2.5: numer
+    // z licznika serii, gdy w polu została podpowiedź serii, inaczej z pola.
+    const saved = await saveWithInvoiceNumber(supabase, numberRequestOf(values), values.issueDate, async (assigned) => {
+      const numbered = { ...values, internalNumber: assigned.number };
+      const built = buildInvoiceFromForm(numbered, tenant, vatExemptionBasis, cashMethod);
+      const result = await insertInvoiceAndLines(
+        supabase,
+        tenant.id,
+        built,
+        numbered,
+        undefined,
+        salesQuote.link ? { link: salesQuote.link, userId } : undefined,
+        assigned.columns,
+      );
+      return { result, built };
+    });
+    const result = saved.result;
+    const invoice = saved.built;
+    if (result.success && result.invoiceId && invoice) {
       await logAudit({
         action: 'invoice.draft_created',
         tenantId: tenant.id,
@@ -480,10 +512,10 @@ export async function saveAndSendInvoiceAction(
     const vatExemptionBasis = await readTenantVatExemption(supabase, tenant.id);
     // Bez 00094 nie znamy prawnej adnotacji P_16; nie zapisujemy dokumentu.
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
-    const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
+    const draft = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
     // 0) „zw” bez podstawy zwolnienia: mówimy od razu, zanim faktura pójdzie do
     //    kolejki KSeF i wróci jako odrzucona. Szkic da się zapisać bez tego.
-    if (invoice.lines.some((l) => l.vatRate === 'zw') && !invoice.annotations?.vatExemptionBasis) {
+    if (draft.lines.some((l) => l.vatRate === 'zw') && !draft.annotations?.vatExemptionBasis) {
       return { success: false, error: ZW_WITHOUT_BASIS_MESSAGE };
     }
     // N1: pozycja wstrzymana, usunięta albo obca — odmowa przed zapisem.
@@ -493,15 +525,25 @@ export async function saveAndSendInvoiceAction(
     const salesQuote = await salesQuoteLinkForSave(supabase, tenant.id, values.salesQuoteId, values.salesQuoteSeq);
     if (!salesQuote.ok) return { success: false, error: salesQuote.error };
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
-    const saved = await insertInvoiceAndLines(
-      supabase,
-      tenant.id,
-      invoice,
-      values,
-      recurring.link ? { link: recurring.link, userId } : undefined,
-      salesQuote.link ? { link: salesQuote.link, userId } : undefined,
-    );
+    //    Krok 2.5: numer z licznika serii nadaje baza przy tym zapisie; faktura
+    //    do kolejki KSeF (XML, P_2) ma numer, który się zapisał.
+    const numbered = await saveWithInvoiceNumber(supabase, numberRequestOf(values), values.issueDate, async (assigned) => {
+      const formValues = { ...values, internalNumber: assigned.number };
+      const built = buildInvoiceFromForm(formValues, tenant, vatExemptionBasis, cashMethod);
+      const result = await insertInvoiceAndLines(
+        supabase,
+        tenant.id,
+        built,
+        formValues,
+        recurring.link ? { link: recurring.link, userId } : undefined,
+        salesQuote.link ? { link: salesQuote.link, userId } : undefined,
+        assigned.columns,
+      );
+      return { result, built };
+    });
+    const saved = numbered.result;
     if (!saved.success) return saved;
+    const invoice = numbered.built ?? draft;
 
     const enq = await enqueueKsefSubmitAfterDraft({
       supabase,
