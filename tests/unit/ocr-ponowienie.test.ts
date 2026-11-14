@@ -34,6 +34,8 @@ const state = vi.hoisted(() => ({
   insertError: null as { code: string; message: string } | null,
   cardReadError: false,
   jobUpdateError: false,
+  // Tylko zapis odczytu przed kosztem (`save-ocr-read`) dostaje błąd bazy.
+  readSaveError: false,
   ocrFails: false,
   aiBudgetExhausted: false,
   // Pola odczytu modelu nadpisujące domyślny paragon (np. waluta).
@@ -88,6 +90,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (table: string) => {
       const filters: Array<[string, unknown]> = [];
       let insertRow: Row | null = null;
+      let updateRow: Row | null = null;
       let limited = false;
       let orderBy: { column: string; ascending: boolean } | null = null;
       const q: Record<string, unknown> = {};
@@ -100,7 +103,7 @@ vi.mock('@/lib/supabase/admin', () => ({
           return q;
         },
         limit: () => { limited = true; return q; },
-        update: (v: Row) => { if (table === 'ocr_jobs') state.jobUpdates.push(v); return q; },
+        update: (v: Row) => { updateRow = v; if (table === 'ocr_jobs') state.jobUpdates.push(v); return q; },
         insert: (r: Row) => { insertRow = r; return q; },
         single: async () => {
           if (table === 'ocr_jobs') {
@@ -165,7 +168,9 @@ vi.mock('@/lib/supabase/admin', () => ({
         },
         then: (ok: (v: { error: { message: string } | null }) => unknown) =>
           Promise.resolve({
-            error: table === 'ocr_jobs' && state.jobUpdateError ? { message: 'zapis odrzucony' } : null,
+            error: table === 'ocr_jobs' && (state.jobUpdateError || (
+              state.readSaveError && updateRow !== null && 'extracted_data' in updateRow && !('status' in updateRow)
+            )) ? { message: 'zapis odrzucony' } : null,
           }).then(ok),
       });
       return q;
@@ -228,6 +233,7 @@ beforeEach(() => {
   state.insertError = null;
   state.cardReadError = false;
   state.jobUpdateError = false;
+  state.readSaveError = false;
   state.ocrFails = false;
   state.aiBudgetExhausted = false;
   state.extractData = {};
@@ -601,6 +607,42 @@ describe('B4 — indeks UNIQUE (tenant_id, ocr_job_id): wyścig dwóch przebieg�
 
     await expect(runProcessOcr(event, ctx)).rejects.toThrow('null value in column "seller_name"');
     expect(state.expenseReads).toBe(2);
+  });
+});
+
+describe('738u1-u2: ponowienie po błędzie po odczycie nie płaci drugi raz za odczyt', () => {
+  it('odczyt trafia do zadania przed zapisem kosztu; ponowienie bierze go bez zdjęcia, budżetu AI i modelu', async () => {
+    state.insertError = { code: '08006', message: 'połączenie z bazą zerwane' };
+    await expect(runProcessOcr(event, ctx)).rejects.toThrow('połączenie z bazą zerwane');
+    const savedRead = state.jobUpdates.find((u) => 'extracted_data' in u);
+    expect(savedRead).toMatchObject({
+      extracted_data: expect.objectContaining({ seller_name: 'Stacja Paliw', gross_amount: 123 }),
+      ai_model_used: 'claude-test',
+    });
+    expect(savedRead).not.toHaveProperty('status');
+
+    // Wiersz zadania po pierwszym przebiegu (atrapa bazy nie łączy zapisów sama).
+    state.jobRow = { ...state.jobRow, ...savedRead };
+    state.insertError = null;
+    state.jobUpdates = [];
+
+    expect(await runProcessOcr(event, ctx)).toEqual({ success: true, expenseId: 'exp-1' });
+    expect(state.extract).toHaveBeenCalledTimes(1);
+    expect(state.download).toHaveBeenCalledTimes(1);
+    expect(state.budget).toHaveBeenCalledTimes(1);
+    expect(state.expenses).toHaveLength(1);
+    // Ślad odczytu zostaje z przebiegu, który zapłacił: zakończenie go nie nadpisuje.
+    const completed = state.jobUpdates.find((u) => u.status === 'completed');
+    expect(completed).toBeDefined();
+    expect(completed).not.toHaveProperty('ai_input_tokens');
+  });
+
+  it('nieudany zapis odczytu nie ponawia joba: koszt powstaje, log i Sentry', async () => {
+    state.readSaveError = true;
+
+    expect(await runProcessOcr(event, ctx)).toMatchObject({ success: true });
+    expect(state.expenses).toHaveLength(1);
+    expect(state.sentry).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tags: { job: 'process-ocr', step: 'save-ocr-read' } }));
   });
 });
 

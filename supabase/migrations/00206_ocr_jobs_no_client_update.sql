@@ -1,0 +1,27 @@
+-- ═══════════════════════════════════════════════════════════════
+-- 00206: klient nie zmienia zadania OCR (ustalenie 738u1-u2, 14.11.2026)
+--
+-- KIEDY WGRAĆ: PRZED wdrożeniem kodu z tego PR. Addytywna w sensie zgodności:
+-- ani strona, ani telefon nie robią UPDATE na ocr_jobs sesją klienta
+-- (zapisuje je tylko klucz serwisowy: lib/expenses/accept-upload.ts,
+-- lib/jobs/runners/process-ocr.ts), więc stary kod działa bez zmian.
+-- Bez DROP tabel i kolumn, bez zmiany danych.
+--
+-- Od tego PR job OCR przy ponowieniu bierze zapisany odczyt modelu
+-- z ocr_jobs.extracted_data zamiast płacić za drugi. Polityka
+-- ocr_jobs_update_own_tenant z 00034 z grantem UPDATE dla authenticated
+-- pozwalała każdemu członkowi firmy zmienić ten wiersz przez PostgREST, czyli
+-- wpisać własne kwoty jako „odczyt modelu” i dostać koszt z source =
+-- ocr_photo i śladem odczytu niezgodnym z dokumentem. Odbieramy UPDATE.
+-- SELECT (stan odczytu po wgraniu), INSERT i DELETE (sprzątanie zadania bez
+-- pliku w API telefonu) bez zmian. Polityka UPDATE zostaje, bez grantu nie
+-- działa; usunięcie jej to osobna decyzja.
+--
+-- Po wgraniu:
+--   SELECT has_table_privilege('authenticated', 'public.ocr_jobs', 'UPDATE');
+--   -- oczekiwane: false
+--   SELECT has_table_privilege('authenticated', 'public.ocr_jobs', 'SELECT');
+--   -- oczekiwane: true
+-- ═══════════════════════════════════════════════════════════════
+
+REVOKE UPDATE ON TABLE public.ocr_jobs FROM authenticated;

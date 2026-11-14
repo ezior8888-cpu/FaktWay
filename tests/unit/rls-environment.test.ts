@@ -164,6 +164,8 @@ describe('separate RLS test configuration', () => {
       // 00201 (plan aplikacji mobilnej, M8): faktura z telefonu i klucze idempotencji.
       'tests/rls-mobile-faktury.test.ts',
       'tests/rls-mobile-naleznosci.test.ts',
+      // Ustalenie 738u1-u2: ponowienie OCR bez drugiego płatnego odczytu.
+      'tests/rls-ocr-ponowienie-bez-oplaty.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
