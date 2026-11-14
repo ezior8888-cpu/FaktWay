@@ -187,6 +187,10 @@ export default defineConfig({
       // „Po terminie” tymi samymi funkcjami co strona, klientem z tokenem i x-active-org; księgowa
       // i konto spoza firmy dostają odmowę w bazie.
       'tests/rls-mobile-naleznosci.test.ts',
+      // 00205 (ustalenie 738u1 z obchodu M9): koszt dopasowany regułą globalną (słowo albo NIP
+      // z kpir_global_rules) zapisuje się przez prawdziwy runner process-ocr po jednym odczycie;
+      // baza przyjmuje każdą wartość categorization_method, którą zwraca klasyfikator.
+      'tests/rls-kategoryzacja-reguly-globalne.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
