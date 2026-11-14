@@ -24,6 +24,48 @@ const FOREIGN = 'c'.repeat(40);
 const RUNNER = 'ghcr.io/ezior8888-cpu/faktway-runner';
 const WORKER = 'ghcr.io/ezior8888-cpu/faktway-worker';
 
+/**
+ * `jq` jest prawdziwy, bez atrapy: `ghcr_rewizja` (coolify-wspolne.sh) czyta
+ * nim odpowiedzi GHCR, a jego filtry to część tego, co sprawdzamy. Brak `jq`
+ * skrypt połyka (`ghcr_rewizja … 2>/dev/null || true` w `czekaj_na_obrazy`):
+ * nie widzi żadnego obrazu, czeka do limitu i kończy „Brak obrazów”.
+ * Na Windowsie bez `jq` (14.11.2026) padało tak 13 testów GHCR, z mylącą
+ * asercją, a 10 z nich trwało po ok. 41 s.
+ *
+ * Dlatego testy, w których skrypt odpytuje GHCR, idą przez `itGhcr`. Bez `jq`:
+ * - lokalnie są pominięte, z powodem przy teście i w ostrzeżeniu pliku;
+ * - na CI są czerwone z komunikatem „brak jq”, bo zmiana obrazu CI nie może
+ *   po cichu wyłączyć tych testów.
+ * Podział sprawdza `afterEach`: atrapa `curl` zapisuje do `curl.log` ostatni
+ * argument każdego wywołania, czyli adres, a adres z hostem `ghcr.io` znaczy,
+ * że skrypt odpytał GHCR. Host porównujemy po parsowaniu (`new URL`), a nie
+ * podciągiem `ghcr.io/`, który może stać w dowolnym miejscu adresu (CodeQL
+ * `js/incomplete-url-substring-sanitization`).
+ *
+ * `jq` sprawdzamy tak, jak widzi go skrypt: w bashu, z tym samym PATH. Natywny
+ * `jq.exe` na Windowsie bez `--binary` kończy linie CRLF, a `$(jq -r …)`
+ * zostawia wtedy `\r` w tokenie i skrótach, więc taki `jq` też się nie nadaje.
+ */
+const jqProbe = spawnSync('bash', ['-c', `printf '{"a":1}' | jq -r .a`], { encoding: 'utf8' });
+const hasJq = jqProbe.status === 0 && jqProbe.stdout === '1\n';
+const onCi = !['', '0', 'false'].includes(process.env.CI ?? '');
+const NO_JQ_MESSAGE =
+  'brak jq w bashu (albo jq wypisuje CRLF), a ghcr_rewizja (scripts/ops/coolify-wspolne.sh) czyta nim odpowiedzi GHCR';
+if (!hasJq && !onCi) console.warn(`${NO_JQ_MESSAGE}: testy GHCR w tym pliku są pominięte. Zainstaluj jq, żeby je uruchomić.`);
+
+let ghcrTest = false;
+
+function itGhcr(name: string, fn: () => void | Promise<void>) {
+  it(name, (ctx) => {
+    if (!hasJq) {
+      if (onCi) throw new Error(`${NO_JQ_MESSAGE}. Na CI to błąd obrazu runnera, a nie powód do pominięcia testu.`);
+      ctx.skip(NO_JQ_MESSAGE);
+    }
+    ghcrTest = true;
+    return fn();
+  });
+}
+
 const FAKE_SSH = `#!/usr/bin/env bash
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -171,9 +213,23 @@ function publish(sha: string, label = sha) {
   write(fake(`ghcr-faktway-runner-${sha}`), label);
 }
 
+/**
+ * Limit czasu testu i przebiegu skryptu. Każdy test uruchamia skrypt raz, a ten
+ * startuje dziesiątki procesów (atrapy `ssh`, `docker`, `curl`, `git` to też
+ * skrypty basha). W Git Bashu na Windowsie start procesu kosztuje dziesiątki ms,
+ * więc przy domyślnych 5 s Vitesta (pomiar 14.11.2026) „repo --wdroz” padał
+ * zawsze (6,5–7,2 s), a „repo: przywraca…” i „repo naprawia…” czasem
+ * (4,2–5,7 s). 60 s jak w restore-drill-skrypt i db-backup-skrypt.
+ * `spawnSync` blokuje wątek, więc Vitest ocenia czas testu dopiero po jego
+ * końcu. Zawieszony skrypt przerywa `timeout` w `spawnSync`, a `run()` rzuca
+ * wtedy `ETIMEDOUT` zamiast mylącej asercji na niepełnym wyjściu.
+ */
+const SCRIPT_TIMEOUT = 60_000;
+
 function run(script: 'wdroz-produkcje.sh' | 'coolify-zrodlo.sh', args: string[] = [], env: Record<string, string> = {}) {
   const r = spawnSync('bash', [join(dir, 'scripts/ops', script), ...args], {
     encoding: 'utf8',
+    timeout: SCRIPT_TIMEOUT,
     env: {
       NODE_ENV: 'test',
       PATH: `${join(dir, 'bin')}:${process.env.PATH ?? ''}`,
@@ -183,6 +239,7 @@ function run(script: 'wdroz-produkcje.sh' | 'coolify-zrodlo.sh', args: string[] 
       ...env,
     },
   });
+  if (r.error) throw r.error;
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
@@ -214,11 +271,36 @@ beforeEach(() => {
   write(fake('running-1'), `apptest:${OLD}\n`);
 });
 
+/** Hosty adresów z `curl.log` atrapy `curl`; wiersz, który nie jest adresem, pomijamy. */
+function curlHosts(): string[] {
+  if (!existsSync(fake('curl.log'))) return [];
+  return readFileSync(fake('curl.log'), 'utf8')
+    .split('\n')
+    .flatMap((line) => {
+      try {
+        return [new URL(line.trim()).hostname];
+      } catch {
+        return [];
+      }
+    });
+}
+
 afterEach(() => {
+  const queriedGhcr = curlHosts().some((host) => host === 'ghcr.io');
+  const markedGhcr = ghcrTest;
+  ghcrTest = false;
   rmSync(dir, { recursive: true, force: true });
+  if (queriedGhcr && !markedGhcr) {
+    throw new Error('Skrypt odpytał GHCR (atrapa curl), więc ten test musi iść przez itGhcr: bez jq czeka i pada z mylącą asercją.');
+  }
+  if (!queriedGhcr && markedGhcr) {
+    throw new Error(
+      'Test idzie przez itGhcr, a skrypt nie odpytał GHCR. Jeśli test padł już wcześniej, zacznij od tamtego błędu (skrypt pewnie odmówił przed GHCR); inaczej test nie potrzebuje itGhcr.',
+    );
+  }
 });
 
-describe('wdroz-produkcje.sh: build z repo (bez argumentów)', () => {
+describe('wdroz-produkcje.sh: build z repo (bez argumentów)', { timeout: SCRIPT_TIMEOUT }, () => {
   it('wdraża worker, potem aplikację, z commitem HEAD, i uruchamia kontrolę', () => {
     repoMode();
     const r = run('wdroz-produkcje.sh');
@@ -244,8 +326,8 @@ describe('wdroz-produkcje.sh: build z repo (bez argumentów)', () => {
   });
 });
 
-describe('wdroz-produkcje.sh --obraz', () => {
-  it('ustawia tag SHA i wdraża worker, potem aplikację, z commitem SHA', () => {
+describe('wdroz-produkcje.sh --obraz', { timeout: SCRIPT_TIMEOUT }, () => {
+  itGhcr('ustawia tag SHA i wdraża worker, potem aplikację, z commitem SHA', () => {
     imageMode();
     publish(SHA);
     const r = run('wdroz-produkcje.sh', ['--obraz', SHA]);
@@ -260,7 +342,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(tinkerLog()).not.toContain('->save(');
   });
 
-  it('bez SHA bierze origin/main', () => {
+  itGhcr('bez SHA bierze origin/main', () => {
     imageMode();
     publish(SHA);
     const r = run('wdroz-produkcje.sh', ['--obraz']);
@@ -285,7 +367,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log()).toEqual([]);
   });
 
-  it('czeka, aż obrazy pojawią się w GHCR, i dopiero wtedy wdraża', () => {
+  itGhcr('czeka, aż obrazy pojawią się w GHCR, i dopiero wtedy wdraża', () => {
     imageMode();
     write(
       fake('po-sleep'),
@@ -298,7 +380,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log()).toContain(`wdrozenie 1 ${SHA}`);
   });
 
-  it('po limicie czekania na obrazy kończy się kodem 1 bez wdrożenia', () => {
+  itGhcr('po limicie czekania na obrazy kończy się kodem 1 bez wdrożenia', () => {
     imageMode();
     const r = run('wdroz-produkcje.sh', ['--obraz', SHA], { WDROZ_CZEKAJ_MIN: '1' });
     expect(r.code).toBe(1);
@@ -306,7 +388,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log()).toEqual([]);
   });
 
-  it('obraz z etykietą innego commita zatrzymuje wdrożenie od razu', () => {
+  itGhcr('obraz z etykietą innego commita zatrzymuje wdrożenie od razu', () => {
     imageMode();
     publish(SHA, OLD);
     const r = run('wdroz-produkcje.sh', ['--obraz', SHA]);
@@ -315,7 +397,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log()).toEqual([]);
   });
 
-  it('za mało miejsca na app-1: nic nie wdraża', () => {
+  itGhcr('za mało miejsca na app-1: nic nie wdraża', () => {
     imageMode();
     publish(SHA);
     write(fake('free'), '2');
@@ -325,7 +407,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log()).toEqual([]);
   });
 
-  it('nieudany worker: tag wraca na poprzedni, aplikacja nietknięta', () => {
+  itGhcr('nieudany worker: tag wraca na poprzedni, aplikacja nietknięta', () => {
     imageMode(OLD);
     publish(SHA);
     write(fake('status-2'), 'failed');
@@ -337,7 +419,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log().filter((l) => l.startsWith('wdrozenie'))).toEqual([`wdrozenie 2 ${SHA}`]);
   });
 
-  it('nieudana aplikacja po workerze: tag aplikacji wraca, komunikat o stanie mieszanym', () => {
+  itGhcr('nieudana aplikacja po workerze: tag aplikacji wraca, komunikat o stanie mieszanym', () => {
     imageMode(OLD);
     publish(SHA);
     write(fake('status-1'), 'failed');
@@ -350,7 +432,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log()).not.toContain('kontrola');
   });
 
-  it('finished, ale kontener na innym obrazie: kod 1 i bez aplikacji', () => {
+  itGhcr('finished, ale kontener na innym obrazie: kod 1 i bez aplikacji', () => {
     imageMode(OLD);
     publish(SHA);
     // Coolify zgłasza finished, ale nie podmienia kontenera.
@@ -361,7 +443,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log().filter((l) => l.startsWith('wdrozenie'))).toEqual([`wdrozenie 2 ${SHA}`]);
   });
 
-  it('brak stanu z Coolify (SSH/tinker milczy): stan nieznany, tag zostaje na SHA', () => {
+  itGhcr('brak stanu z Coolify (SSH/tinker milczy): stan nieznany, tag zostaje na SHA', () => {
     imageMode(OLD);
     publish(SHA);
     write(fake('status-2'), '');
@@ -373,7 +455,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
     expect(log().filter((l) => l.startsWith('wdrozenie'))).toEqual([`wdrozenie 2 ${SHA}`]);
   });
 
-  it('stary kontener chwilę na liście: czeka, aż zostanie tylko nowy', () => {
+  itGhcr('stary kontener chwilę na liście: czeka, aż zostanie tylko nowy', () => {
     imageMode(OLD);
     publish(SHA);
     // Po wdrożeniu workera stary kontener jeszcze widać; znika po pierwszym czekaniu.
@@ -403,8 +485,8 @@ describe('wdroz-produkcje.sh --obraz', () => {
   });
 });
 
-describe('coolify-zrodlo.sh', () => {
-  it('obraz bez SHA: bierze SHA działających kontenerów, worker przed aplikacją, bez wdrożenia', () => {
+describe('coolify-zrodlo.sh', { timeout: SCRIPT_TIMEOUT }, () => {
+  itGhcr('obraz bez SHA: bierze SHA działających kontenerów, worker przed aplikacją, bez wdrożenia', () => {
     repoMode();
     publish(OLD);
     const r = run('coolify-zrodlo.sh', ['obraz']);
@@ -447,7 +529,7 @@ describe('coolify-zrodlo.sh', () => {
     expect(log()).toEqual([]);
   });
 
-  it('obraz odmawia bez obrazów w GHCR i niczego nie zmienia', () => {
+  itGhcr('obraz odmawia bez obrazów w GHCR i niczego nie zmienia', () => {
     repoMode();
     const r = run('coolify-zrodlo.sh', ['obraz', OLD]);
     expect(r.code).toBe(1);
@@ -475,7 +557,7 @@ describe('coolify-zrodlo.sh', () => {
     expect(log()).toEqual([]);
   });
 
-  it('obraz --wdroz przełącza i od razu wdraża ten sam SHA', () => {
+  itGhcr('obraz --wdroz przełącza i od razu wdraża ten sam SHA', () => {
     repoMode();
     publish(OLD);
     const r = run('coolify-zrodlo.sh', ['obraz', OLD, '--wdroz']);
@@ -483,7 +565,7 @@ describe('coolify-zrodlo.sh', () => {
     expect(log().filter((l) => !l.startsWith('zmiana'))).toEqual([`wdrozenie 2 ${OLD}`, `wdrozenie 1 ${OLD}`, 'kontrola']);
   });
 
-  it('obraz --wdroz przy braku miejsca na app-1 niczego nie przełącza', () => {
+  itGhcr('obraz --wdroz przy braku miejsca na app-1 niczego nie przełącza', () => {
     repoMode();
     publish(OLD);
     write(fake('free'), '2');
