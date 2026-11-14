@@ -33,8 +33,28 @@ export interface ReceivedInvoicesResult {
    * podał i okna nie wolno przesunąć.
    */
   hwm: string | null;
+  /**
+   * E1-W10-b: pobieranie skończyło się na budżecie zapytań, zanim KSeF oddał
+   * całe okno. Data trwałego zapisu ostatniej pobranej faktury, obcięta do
+   * milisekundy w dół: tu zaczyna się następne okno (`from` włącznie, więc
+   * faktury z tą samą datą wracają i odsiewa je `filter-existing`). Nie wychodzi
+   * poza `hwm`, bo zapytanie z `restrictToPermanentStorageHwmDate` nie wychodzi
+   * poza HWM, więc poniżej tej daty KSeF też gwarantuje komplet.
+   * `null` = okno pobrane w całości.
+   */
+  resumeFrom: string | null;
   /** Ile zapytań (stron) poszło do KSeF w tym oknie — do wiersza podsumowania audytu. */
   requests: number;
+}
+
+export interface ReceivedInvoicesOptions {
+  /**
+   * Budżet zapytań (stron) na wywołanie (E1-W10-b, skrzynka:
+   * `INBOX_METADATA_REQUESTS_PER_RUN`). Po jego wyczerpaniu pobieranie kończy
+   * się z `resumeFrom`, o ile ostatnia strona wyszła za `dateFrom`; inaczej pyta
+   * dalej, do pierwszej strony z późniejszą datą. Bez budżetu: do końca okna.
+   */
+  maxRequests?: number;
 }
 
 /**
@@ -58,6 +78,11 @@ export interface ReceivedInvoicesResult {
  * wartości `isTruncated`) i dla `hasMore = false` bez `isTruncated` zachowanie
  * jest bez zmian; reguła MF „`hasMore = false` → koniec” dostaje jeden wyjątek:
  * `isTruncated`.
+ *
+ * E1-W10-b: z `options.maxRequests` pobieranie kończy się po tylu zapytaniach,
+ * nawet gdy okno ma więcej stron (`resumeFrom`). MF liczy limit 16 zapytań na
+ * minutę i 20 na godzinę na NIP, więc okno ponad 16 stron pobierane naraz
+ * kończyło się 429, a wszystko pobrane do tej chwili przepadało.
  */
 async function queryReceivedInvoicesOnce(
   auth: KsefAuth,
@@ -65,15 +90,18 @@ async function queryReceivedInvoicesOnce(
   dateTo: Date,
   env?: KsefEnvironment,
   auditContext?: InboxAuditContext,
+  options?: ReceivedInvoicesOptions,
 ): Promise<ReceivedInvoicesResult> {
   return ksefRateLimiter.enqueue(auth.nip, async () => {
     const authSession = await ksefSessionCache.getSession(auth, env);
     const accessToken = authSession.accessToken;
 
     const byNumber = new Map<string, InvoiceMetadata>();
+    const maxRequests = options?.maxRequests ?? Number.POSITIVE_INFINITY;
     let from = dateFrom.toISOString();
     let pageOffset = 0;
     let hwm: string | null = null;
+    let resumeFrom: string | null = null;
     let requests = 0;
 
     for (let request = 0; ; request += 1) {
@@ -120,10 +148,27 @@ async function queryReceivedInvoicesOnce(
       for (const inv of page) byNumber.set(inv.ksefNumber, inv);
       hwm = response.permanentStorageHwmDate ?? null;
 
+      // Koniec okna: ani dalszych stron, ani ucięcia (E1-W10, opis wyżej).
+      if (!response.isTruncated && !response.hasMore) break;
+
+      // E1-W10-b: budżet wyczerpany, a w oknie jest więcej. Koniec na dacie
+      // ostatniej faktury (sortowanie rosnące, więc wszystko pobrane ma datę nie
+      // późniejszą). Obcięcie do milisekundy w dół: KSeF podaje ułamki do
+      // mikrosekund, a zaokrąglenie w górę przeskoczyłoby faktury z tą samą
+      // milisekundą na następnej stronie. Brak postępu za `dateFrom` (cała porcja
+      // z datą początku okna) = pytamy dalej: przebieg z budżetem stałby w miejscu.
+      const last = page[page.length - 1];
+      if (requests >= maxRequests && last?.permanentStorageDate) {
+        const lastMs = Date.parse(last.permanentStorageDate);
+        if (lastMs > dateFrom.getTime()) {
+          resumeFrom = new Date(lastMs).toISOString();
+          break;
+        }
+      }
+
       // `isTruncated` przed `hasMore` (E1-W10, opis wyżej). Brak postępu rzuca:
       // HWM stoi, a alarm zaległości skrzynki pokaże problem.
       if (response.isTruncated) {
-        const last = page[page.length - 1];
         if (!last?.permanentStorageDate || Date.parse(last.permanentStorageDate) <= Date.parse(from)) {
           throw new Error('KSeF: wynik skrzynki ucięty, a okna nie da się zawęzić');
         }
@@ -131,11 +176,10 @@ async function queryReceivedInvoicesOnce(
         pageOffset = 0;
         continue;
       }
-      if (!response.hasMore) break;
       pageOffset += 1;
     }
 
-    return { invoices: [...byNumber.values()], hwm, requests };
+    return { invoices: [...byNumber.values()], hwm, resumeFrom, requests };
   });
 }
 
@@ -150,13 +194,14 @@ export async function queryReceivedInvoices(
   dateTo: Date,
   env?: KsefEnvironment,
   auditContext?: InboxAuditContext,
+  options?: ReceivedInvoicesOptions,
 ): Promise<ReceivedInvoicesResult> {
   try {
-    return await queryReceivedInvoicesOnce(auth, dateFrom, dateTo, env, auditContext);
+    return await queryReceivedInvoicesOnce(auth, dateFrom, dateTo, env, auditContext, options);
   } catch (error) {
     if (!(error instanceof KsefApiError) || error.status !== 401) throw error;
     ksefSessionCache.invalidate(auth.nip, env);
-    return queryReceivedInvoicesOnce(auth, dateFrom, dateTo, env, auditContext);
+    return queryReceivedInvoicesOnce(auth, dateFrom, dateTo, env, auditContext, options);
   }
 }
 

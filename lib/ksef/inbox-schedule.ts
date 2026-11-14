@@ -58,8 +58,34 @@ export const INBOX_MAX_INTERVAL_MS = DAY_MS;
  */
 const INBOX_MIN_GAP_SHARE = 0.5;
 
-/** Nadrabianie po przerwie dłuższej niż limit zakresu API: następne okno po tylu ms (12/h przy limicie 20/h). */
+/**
+ * Nadrabianie: następny przebieg po tylu ms, gdy okno skończyło się przed „teraz”
+ * (limit zakresu API, 90 dni) albo przebieg skończył się na budżecie zapytań
+ * (`INBOX_METADATA_REQUESTS_PER_RUN`). 12/h przy limicie 20/h.
+ */
 export const INBOX_CATCH_UP_INTERVAL_MS = 5 * MINUTE_MS;
+
+/**
+ * Budżet zapytań o metadane na jeden przebieg (E1-W10-b): jedna strona, czyli
+ * do 250 faktur. Większe okno (np. 4000 faktur po przerwie w certyfikacie)
+ * przebieg kończy w połowie: HWM idzie do daty ostatniej pobranej faktury, resztę
+ * biorą kolejne przebiegi co `INBOX_CATCH_UP_INTERVAL_MS`, czyli do 3000 faktur
+ * na godzinę. Dawniej przebieg szedł do końca okna: 18 stron od razu przekraczało
+ * 16 zapytań na minutę, 429 wyrzucał cały przebieg, HWM stał, a następny
+ * przebieg zaczynał od początku.
+ *
+ * Dlaczego 1: następny przebieg startuje najwcześniej 5 minut po końcu
+ * poprzedniego (nadrabianie co 5 minut, poziom gorący rzadziej, „Sprawdź teraz”
+ * 00160 odbija prośbę w trakcie przebiegu i przez 5 minut po nim, ponowień
+ * pg-boss nie ma), więc to najwyżej 12 zapytań na godzinę przy limicie MF 20/h.
+ * Dwa zapytania na przebieg dawałyby 24/h. Synchronizacja historii, która ma
+ * ten sam limit, w tym czasie ustępuje skrzynce (`inboxLagYieldThresholdMs`).
+ *
+ * Wyjątek: strona, której wszystkie faktury mają datę początku okna (do
+ * milisekundy), nie daje punktu wznowienia, więc przebieg pyta dalej, do
+ * pierwszej strony z późniejszą datą (`lib/ksef/inbox.ts`).
+ */
+export const INBOX_METADATA_REQUESTS_PER_RUN = 1;
 
 /** Subskrypcja, która daje firmie poziom inny niż uśpiony (próba, opłacona, w trakcie ponawiania płatności). */
 export const INBOX_ACTIVE_SUBSCRIPTION_STATUSES: readonly string[] = ['trialing', 'active', 'past_due'];

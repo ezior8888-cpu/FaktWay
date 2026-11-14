@@ -448,16 +448,26 @@ describe('przebieg po długiej przerwie', () => {
     expect(st.cursor!.window_to).toBe('2026-11-02T10:59:00.000Z');
   });
 
-  it('przerwa 200 dni: kolejne okna 90 dni co 5 minut, bez dziur, potem zwykły rytm', async () => {
+  // E1-W10-b: dawniej 600 faktur równo przez 200 dni, trzy przebiegi (okna
+  // 90 + 90 + 20 dni) i kilka stron w jednym przebiegu. Teraz przebieg pyta
+  // o jedną stronę (`INBOX_METADATA_REQUESTS_PER_RUN`), więc dane mają oba
+  // powody nadrabiania naraz: rzadkie faktury (okno 90 dni bez budżetu) i gęste
+  // (budżet przed końcem okna). Stąd cztery przebiegi zamiast trzech.
+  it('przerwa 200 dni: okna do 90 dni i przebiegi po jednej stronie co 5 minut, bez dziur, potem zwykły rytm', async () => {
     const start = NOW.getTime() - 200 * DAY;
     st.cursor = { window_to: new Date(start).toISOString() };
-    // 600 faktur równo przez 200 dni: strony i okna muszą je wszystkie pokryć.
-    st.ksefInvoices = Array.from({ length: 600 }, (_, i) =>
-      ksefInvoice(i, new Date(start + (i + 1) * (200 * DAY / 601)).toISOString()));
+    // 100 faktur w pierwszych 90 dniach (jedna strona), 500 w kolejnych 110
+    // (dwa przebiegi kończą się na budżecie).
+    const sparse = Array.from({ length: 100 }, (_, i) =>
+      ksefInvoice(i, new Date(start + (i + 1) * (90 * DAY / 101)).toISOString()));
+    const dense = Array.from({ length: 500 }, (_, i) =>
+      ksefInvoice(100 + i, new Date(start + 90 * DAY + (i + 1) * (110 * DAY / 501)).toISOString()));
+    st.ksefInvoices = [...sparse, ...dense];
+    const saved = () => new Set(st.invoices.map((r) => r.ksef_number));
 
     const passes: Array<{ from: string; next: number }> = [];
     let now = NOW.getTime();
-    for (let pass = 0; pass < 6; pass += 1) {
+    for (let pass = 0; pass < 10; pass += 1) {
       vi.setSystemTime(now);
       st.ksefHwm = new Date(now - 60_000).toISOString();
       st.schedule!.poll_lease_until = new Date(now + 60_000).toISOString();
@@ -466,23 +476,31 @@ describe('przebieg po długiej przerwie', () => {
       await runInboxPollTenant(DATA, context());
       const next = Date.parse(finishCalls().at(-1)!.p_next_poll_at as string);
       passes.push({ from, next: next - now });
-      if (Date.parse(st.cursor!.window_to as string) >= now - 120_000) break;
+      // Po każdym przebiegu: nic poniżej zapisanego HWM nie przepadło.
+      const hwm = Date.parse(st.cursor!.window_to as string);
+      expect(st.ksefInvoices.filter((inv) =>
+        Date.parse(inv.permanentStorageDate as string) < hwm && !saved().has(inv.ksefNumber))).toEqual([]);
+      if (hwm >= now - 120_000) break;
       now = next;
     }
 
-    // Trzy okna: 90 + 90 + 20 dni. Dwa pierwsze przebiegi nadrabiają od razu.
-    expect(passes).toHaveLength(3);
-    expect(passes[0]!.next).toBe(INBOX_CATCH_UP_INTERVAL_MS);
-    expect(passes[1]!.next).toBe(INBOX_CATCH_UP_INTERVAL_MS);
-    expect(passes[2]!.next).toBeGreaterThan(INBOX_CATCH_UP_INTERVAL_MS);
-    // Okna przylegają: koniec jednego to początek następnego.
+    // Okno 90 dni z rzadkimi fakturami, dwa przebiegi na budżecie w gęstych,
+    // ostatni dochodzi do HWM KSeF. Trzy pierwsze nadrabiają od razu.
+    expect(passes).toHaveLength(4);
+    expect(passes.slice(0, 3).map((p) => p.next)).toEqual(Array.from({ length: 3 }, () => INBOX_CATCH_UP_INTERVAL_MS));
+    expect(passes[3]!.next).toBeGreaterThan(INBOX_CATCH_UP_INTERVAL_MS);
+    // Okna przylegają: całe okno = jego koniec, budżet = data ostatniej pobranej faktury.
     expect(Date.parse(passes[1]!.from) - Date.parse(passes[0]!.from)).toBe(90 * DAY);
-    expect(Date.parse(passes[2]!.from) - Date.parse(passes[1]!.from)).toBe(90 * DAY);
+    expect(passes[2]!.from).toBe(dense[249]!.permanentStorageDate);
+    expect(passes[3]!.from).toBe(dense[498]!.permanentStorageDate);
+    // Jedno zapytanie na przebieg, każde w limicie 90 dni.
+    expect(st.ksefQueries).toHaveLength(passes.length);
+    for (const q of st.ksefQueries) {
+      expect(Date.parse(q.to) - Date.parse(q.from)).toBeLessThanOrEqual(90 * DAY);
+    }
     // Każda faktura dokładnie raz.
-    expect(new Set(st.invoices.map((r) => r.ksef_number)).size).toBe(600);
+    expect(saved().size).toBe(600);
     expect(st.invoices).toHaveLength(600);
-    // Strona 250: 600 faktur w trzech oknach wymaga więcej niż jednej strony.
-    expect(st.ksefQueries.some((q) => q.pageOffset > 0)).toBe(true);
   });
 });
 

@@ -9,7 +9,8 @@ migracja `00160`. Test obciążenia: `load-tests/ksef-inbox/`.
 Cron `cron.inbox-polling` co minutę bierze firmy, których termin (`next_poll_at`) minął,
 do limitu slotów, i zapisuje im zlecenia w jednej transakcji z dzierżawą. Reszta należnych
 czeka na następny takt, od najdawniej należnych. Worker odpytuje KSeF od HWM, więc przerwa
-dowolnej długości nie gubi faktur: dłuższa niż 90 dni idzie kolejnymi oknami co 5 minut.
+dowolnej długości nie gubi faktur: dłuższa niż 90 dni albo z więcej niż jedną stroną faktur
+idzie kolejnymi przebiegami co 5 minut (budżet zapytań, sekcja „Limity KSeF, które przyjęto”).
 
 | Poziom | Warunek (liczony po każdym przebiegu) | Odstęp w dzień | W nocy (22-6) |
 |---|---|---|---|
@@ -59,6 +60,17 @@ wydłużają blokadę, także dla zakresu adresów.
 
 Dokumentacja nie podaje limitu na sam adres IP poza `/auth/challenge`. Mówi tylko, że przy
 skrajnym ruchu MF może zablokować zakres adresów.
+
+Budżet zapytań przebiegu (E1-W10-b, `INBOX_METADATA_REQUESTS_PER_RUN` w
+`lib/ksef/inbox-schedule.ts`): przebieg skrzynki wysyła jedno zapytanie o metadane, czyli
+stronę 250 faktur. Większe okno, np. po przerwie w certyfikacie, kończy się na dacie
+ostatniej pobranej faktury, HWM idzie do niej, a następny przebieg zaczyna od niej za
+5 minut. Nadrabianie to więc 12 zapytań i ok. 3000 faktur na godzinę, w limicie 20/h.
+Wcześniej przebieg brał całe okno naraz: ponad 16 stron kończyło się 429, a HWM stał.
+Wyjątek: strona, na której każda faktura ma datę początku okna, nie daje postępu, więc
+przebieg pyta dalej, do pierwszej strony z późniejszą datą. Przebieg na budżecie widać
+w logu workera („Skrzynka: przebieg skończony na budżecie zapytań”) i, gdy dodał faktury,
+po `resumeFrom` w wierszu podsumowania w `audit_logs`.
 
 ## Sesja KSeF
 

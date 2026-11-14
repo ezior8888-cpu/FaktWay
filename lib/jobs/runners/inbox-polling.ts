@@ -10,6 +10,7 @@ import {
 import { classifyInboxPollError } from '@/lib/ksef/inbox-poll-errors';
 import {
   INBOX_CATCH_UP_INTERVAL_MS,
+  INBOX_METADATA_REQUESTS_PER_RUN,
   inboxActivityTier,
   inboxDispatchLimit,
   inboxOldestLagSeconds,
@@ -82,10 +83,10 @@ export const KSEF_NUMBERS_PER_QUERY = 100;
 export const INBOX_INITIAL_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
 /**
- * Okno zapytania skrzynki (AUD-18): od HWM ostatniego pełnego przebiegu,
- * więc przerwa dowolnej długości jest nadrabiana; bez HWM — 48 h wstecz.
- * Zaległość ponad 90 dni nadrabiają kolejne przebiegi. `null` = nie ma
- * czego pytać (HWM nie starszy niż „teraz”).
+ * Okno zapytania skrzynki (AUD-18): od HWM ostatniego przebiegu, więc przerwa
+ * dowolnej długości jest nadrabiana; bez HWM — 48 h wstecz. Zaległość ponad
+ * 90 dni albo ponad budżet zapytań przebiegu (E1-W10-b) nadrabiają kolejne
+ * przebiegi. `null` = nie ma czego pytać (HWM nie starszy niż „teraz”).
  */
 export function inboxQueryWindow(
   hwm: string | null,
@@ -213,7 +214,10 @@ interface InboxPollOutcome {
   newlyAdded: number;
   /** KSeF nie podał HWM: okno stoi, więc to nie jest sukces. */
   hwmMissing: boolean;
-  /** Okno ucięte limitem zakresu API: reszta zaległości czeka na następne okno. */
+  /**
+   * Okno ucięte limitem zakresu API albo przebieg skończony na budżecie zapytań:
+   * reszta zaległości czeka na następny przebieg za `INBOX_CATCH_UP_INTERVAL_MS`.
+   */
   catchingUp: boolean;
 }
 
@@ -351,18 +355,22 @@ async function pollTenantInbox(
       return { fetched: 0, newlyAdded: 0, hwmMissing: false, catchingUp: false };
     }
 
-    const { invoices: newInvoices, hwm, requests } = await step.run('query-ksef', async () => {
+    const query = await step.run('query-ksef', async () => {
       const credentials = await getTenantKsefCredentials(tenantId);
       // Faza 23 sekcja 3 + EXT-03: strona `/invoices/query/metadata` trafia do
       // audytu tylko przy błędzie; przebieg, który dodał faktury — niżej.
+      // E1-W10-b: budżet zapytań na przebieg, bo MF liczy 16/min i 20/h na NIP.
       return queryReceivedInvoices(
         credentials,
         new Date(window.from),
         new Date(window.to),
         env,
         { tenantId },
+        { maxRequests: INBOX_METADATA_REQUESTS_PER_RUN },
       );
     });
+    const { invoices: newInvoices, hwm, requests } = query;
+    const resumeFrom = query.resumeFrom ?? null;
 
     // HWM przesuwamy dopiero po zapisie faktur — na każdej ścieżce, także bez
     // nowych faktur. Błąd wcześniej = HWM stoi, kolejny przebieg zapyta o to
@@ -372,13 +380,24 @@ async function pollTenantInbox(
         logger.warn('KSeF nie podał HWM skrzynki — okno zostaje na miejscu', { tenantId });
         return { fetched, newlyAdded, hwmMissing: true, catchingUp: false };
       }
-      const nextHwm = nextInboxHwm(hwm, window);
+      // E1-W10-b: przebieg skończony na budżecie zapytań przesuwa HWM tylko do
+      // daty ostatniej pobranej faktury (nie dalej niż HWM KSeF, opis
+      // `resumeFrom`). Następny przebieg zaczyna od niej, więc postęp zostaje
+      // także wtedy, gdy któryś z kolejnych przebiegów dostanie 429.
+      const nextHwm = nextInboxHwm(resumeFrom ?? hwm, window);
       await step.run('advance-hwm', () =>
         saveInboxHwm(tenantId, { windowFrom: window.from, hwm: nextHwm, fetched, saved: newlyAdded }),
       );
-      // Okno skończyło się przed „teraz” (limit zakresu API): zaległość ponad 90 dni
-      // nadrabiają kolejne przebiegi, bez czekania na rytm poziomu firmy.
-      const catchingUp = Date.parse(window.to) < Date.now() - INBOX_CATCH_UP_INTERVAL_MS;
+      if (resumeFrom) {
+        logger.info('Skrzynka: przebieg skończony na budżecie zapytań, reszta okna w następnym', {
+          tenantId,
+          requests,
+          resumeFrom: nextHwm,
+        });
+      }
+      // Reszta okna (budżet zapytań) albo okno skończone przed „teraz” (limit zakresu
+      // API): zaległość nadrabiają kolejne przebiegi, bez czekania na rytm poziomu firmy.
+      const catchingUp = resumeFrom !== null || Date.parse(window.to) < Date.now() - INBOX_CATCH_UP_INTERVAL_MS;
       return { fetched, newlyAdded, hwmMissing: false, catchingUp };
     };
 
@@ -517,6 +536,8 @@ async function pollTenantInbox(
           windowFrom: window.from,
           windowTo: window.to,
           hwm,
+          // E1-W10-b: przebieg częściowy kończy się tutaj (`null` = całe okno).
+          resumeFrom,
           requests,
           fetched: newInvoices.length,
           added: insertedInvoices.length,

@@ -17,10 +17,13 @@ import type { JobContext } from '@/lib/jobs/registry';
 // kursor HWM skrzynki) oraz karta FLO i push, które nie dotyczą okna.
 // Prawdziwe: `ksefFetch`, `queryReceivedInvoices`, runner skrzynki.
 //
-// Ten test sprawdza poprawność pętli, nie pojemność: 41 zapytań w jednym
-// przebiegu przekracza limit MF (16/min, 20/h na NIP i adres IP), więc na
-// prawdziwym KSeF przebieg dostałby 429 wcześniej. To osobne ustalenie W10-b
-// (plan, sekcja 8).
+// E1-W10-b: 41 zapytań w jednym przebiegu przekracza limit MF (16/min, 20/h na
+// NIP i adres IP), więc runner bierze jedną stronę na przebieg
+// (`INBOX_METADATA_REQUESTS_PER_RUN`) i nie dochodzi do 10 000. rekordu w jednym
+// zapytaniu. Pętlę zawężania (W10) sprawdzamy więc wprost na
+// `queryReceivedInvoices` bez budżetu, a runner: 10 001 faktur w wielu
+// przebiegach, po każdym HWM bez przeskoczonej faktury. Tempo i limity MF:
+// tests/unit/skrzynka-budzet-przebiegu.test.ts.
 
 const st = vi.hoisted(() => ({
   /** Wiersze `invoices` zapisane przez runner (klient serwisowy). */
@@ -94,6 +97,8 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { runInboxPollTenant } from '@/lib/jobs/runners/inbox-polling';
+import type { KsefAuth } from '@/lib/ksef/auth';
+import { INBOX_PAGE_SIZE, queryReceivedInvoices } from '@/lib/ksef/inbox';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const DATA = { tenantId: TENANT, nip: '1234567890', environment: 'test' as const };
@@ -210,6 +215,24 @@ function skippedBelowHwm(hwm: string): string[] {
     .map((inv) => inv.invoiceNumber);
 }
 
+/**
+ * Przebiegi runnera jeden po drugim (budżet: jedna strona na przebieg), aż HWM
+ * skrzynki dojdzie do HWM KSeF. Po każdym przebiegu: nic poniżej zapisanego HWM
+ * nie przepadło. Zwraca liczbę przebiegów.
+ */
+async function runUntilCaughtUp(maxRuns = 60): Promise<number> {
+  let runs = 0;
+  while (st.hwm !== KSEF_HWM && runs < maxRuns) {
+    runs += 1;
+    await runInboxPollTenant(DATA, ctx).catch(() => undefined);
+    expect(skippedBelowHwm(st.hwm!)).toEqual([]);
+  }
+  return runs;
+}
+
+/** 10 001 faktur po jednej stronie, a każdy przebieg poza pierwszym pobiera jeszcze raz ostatnią fakturę poprzedniego. */
+const RUNS_FOR_TOTAL = 1 + Math.ceil((TOTAL - INBOX_PAGE_SIZE) / (INBOX_PAGE_SIZE - 1));
+
 beforeEach(() => {
   st.invoices = [];
   st.hwm = START_HWM;
@@ -224,54 +247,89 @@ afterEach(() => {
 describe('skrzynka KSeF — okno z 10 001 fakturami (limit 10 000 na zapytanie)', () => {
   // `last-page` był czerwony przed naprawą E1-W10; `every-page` (zawężenie już
   // po pierwszej stronie, przypadek opisany przez MF) przechodził i ma przechodzić dalej.
+  // E1-W10-b: pętla zawężania wprost, bez budżetu (runner ma budżet, nagłówek pliku).
   it.each<TruncationFlag>(['last-page', 'every-page'])(
-    'isTruncated (%s) — 10 001 wierszy bez dubli, HWM nie przeskakuje żadnej faktury',
+    'isTruncated (%s) — zapytanie bez budżetu: 10 001 wierszy bez dubli, zawężenie od daty ostatniego rekordu',
     async (flag) => {
       const ksef = fakeKsef(flag);
 
-      await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ fetched: TOTAL, newlyAdded: TOTAL });
+      const result = await queryReceivedInvoices(
+        { nip: '1234567890' } as KsefAuth,
+        new Date(START_HWM),
+        new Date(KSEF_HWM),
+        'test',
+      );
 
-      expect(st.invoices).toHaveLength(TOTAL);
-      expect(new Set(savedNumbers()).size).toBe(TOTAL);
-      expect(st.saved).toHaveLength(1);
-      expect(skippedBelowHwm(st.saved[0]!.hwm)).toEqual([]);
-      // HWM się przesuwa (do HWM KSeF, w oknie przebiegu), a nie tylko „nie przeskakuje”.
-      expect(st.saved[0]!.hwm).toBe(KSEF_HWM);
+      const numbers = new Set(result.invoices.map((inv) => inv.ksefNumber));
+      expect(result.invoices).toHaveLength(TOTAL);
+      expect(KSEF_INVOICES.filter((inv) => !numbers.has(inv.ksefNumber))).toEqual([]);
+      // Całe okno: HWM z KSeF, bez punktu wznowienia.
+      expect(result).toMatchObject({ hwm: KSEF_HWM, resumeFrom: null, requests: 41 });
       // Zawężenie: nowe `from` od daty ostatniego pobranego rekordu, strona od zera.
       const narrowed = ksef.queries.filter((q) => q.from !== START_HWM);
       expect(narrowed[0]).toMatchObject({ pageOffset: 0 });
       // Koszt pętli: 40 stron po 250 i jedno zapytanie po zawężeniu, w bezpieczniku
-      // pętli. Limit MF przekracza (W10-b, nagłówek pliku).
+      // pętli. Limit MF przekracza, dlatego runner ma budżet (W10-b).
       expect(ksef.queries).toHaveLength(41);
       expect(ksef.queries.length).toBeLessThanOrEqual(MAX_REQUESTS);
     },
   );
 
-  it('błąd KSeF na zapytaniu po zawężeniu — nic nie zapisane, HWM stoi; ponowienie od zera pobiera komplet', async () => {
-    fakeKsef('last-page', { failOnRequest: 41 });
-    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ fetched: 0, newlyAdded: 0, failed: 'ksef' });
-    expect(st.invoices).toHaveLength(0);
-    expect(st.saved).toEqual([]);
-    expect(st.hwm).toBe(START_HWM);
+  // E1-W10-b: dawniej jeden przebieg pobierał 10 001 faktur w 41 zapytaniach
+  // i zapisywał HWM raz. Teraz przebieg = jedno zapytanie, a HWM idzie częściowo.
+  it.each<TruncationFlag>(['last-page', 'every-page'])(
+    'isTruncated (%s) — runner po jednej stronie na przebieg: 10 001 wierszy bez dubli, HWM nie przeskakuje żadnej faktury',
+    async (flag) => {
+      const ksef = fakeKsef(flag);
 
-    vi.unstubAllGlobals();
-    fakeKsef('last-page');
+      const runs = await runUntilCaughtUp();
+
+      expect(st.invoices).toHaveLength(TOTAL);
+      expect(new Set(savedNumbers()).size).toBe(TOTAL);
+      // HWM się przesuwa (do HWM KSeF), a nie tylko „nie przeskakuje”.
+      expect(st.hwm).toBe(KSEF_HWM);
+      expect(runs).toBe(RUNS_FOR_TOTAL);
+      expect(ksef.queries).toHaveLength(runs);
+      // HWM rośnie z każdym przebiegiem.
+      const hwms = st.saved.map((c) => Date.parse(c.hwm));
+      expect(hwms).toEqual([...hwms].sort((a, b) => a - b));
+      expect(new Set(hwms).size).toBe(hwms.length);
+    },
+  );
+
+  // E1-W10-b: dawniej błąd w 41. zapytaniu wyrzucał cały przebieg (nic nie
+  // zapisane). Teraz 41. zapytanie to ostatni przebieg, a błąd zostawia postęp.
+  it('błąd KSeF w trakcie nadrabiania — postęp wcześniejszych przebiegów zostaje, HWM stoi; następny przebieg bierze resztę', async () => {
+    fakeKsef('last-page', { failOnRequest: 3 });
     await runInboxPollTenant(DATA, ctx);
+    await runInboxPollTenant(DATA, ctx);
+    const hwmBefore = st.hwm;
+    expect(Date.parse(hwmBefore!)).toBeGreaterThan(Date.parse(START_HWM));
+    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ fetched: 0, newlyAdded: 0, failed: 'ksef' });
+    expect(st.hwm).toBe(hwmBefore);
+    expect(st.invoices).toHaveLength(2 * INBOX_PAGE_SIZE - 1);
+
+    await runUntilCaughtUp();
     expect(new Set(savedNumbers()).size).toBe(TOTAL);
-    expect(skippedBelowHwm(st.saved[0]!.hwm)).toEqual([]);
+    expect(st.invoices).toHaveLength(TOTAL);
+    expect(st.hwm).toBe(KSEF_HWM);
   });
 
   it('ponowienie po zapisie faktur, a przed zapisem HWM — bez dubli, potem HWM się przesuwa', async () => {
     fakeKsef('last-page');
     st.failSaves = 1;
     await expect(runInboxPollTenant(DATA, ctx)).rejects.toThrow('zapis kursora');
-    expect(st.invoices).toHaveLength(TOTAL);
+    expect(st.invoices).toHaveLength(INBOX_PAGE_SIZE);
     expect(st.hwm).toBe(START_HWM);
 
-    // pg-boss powtarza cały handler: to samo okno, te same 10 001 faktur, już w bazie.
-    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ fetched: TOTAL, newlyAdded: 0 });
-    expect(st.invoices).toHaveLength(TOTAL);
+    // pg-boss powtarza cały handler: to samo okno, ta sama strona, już w bazie.
+    await expect(runInboxPollTenant(DATA, ctx)).resolves.toMatchObject({ fetched: INBOX_PAGE_SIZE, newlyAdded: 0 });
+    expect(st.invoices).toHaveLength(INBOX_PAGE_SIZE);
     expect(st.saved).toHaveLength(1);
     expect(skippedBelowHwm(st.saved[0]!.hwm)).toEqual([]);
+
+    await runUntilCaughtUp();
+    expect(new Set(savedNumbers()).size).toBe(TOTAL);
+    expect(st.invoices).toHaveLength(TOTAL);
   });
 });
