@@ -369,22 +369,36 @@ function amountsDiffer(a: number, b: number): boolean {
   return Math.abs(toGrosze(a) - toGrosze(b)) > AMOUNT_TOLERANCE_GROSZE;
 }
 
+/** num / den do liczby całkowitej, połówka od zera (jak `roundToCents`); den > 0, liczby całkowite. */
+function divRoundHalfAway(num: number, den: number): number {
+  const q = Math.floor((2 * Math.abs(num) + den) / (2 * den));
+  return num < 0 ? -q : q;
+}
+
+/** VAT od netto w groszach (art. 106e ust. 1 pkt 14 i ust. 11): netto × stawka / 100. */
+function vatFromNetGrosze(netGrosze: number, ratePct: number): number {
+  return divRoundHalfAway(ratePct * netGrosze, 100);
+}
+
+/** VAT od brutto w groszach (art. 106e ust. 7 i ust. 11): brutto × stawka / (100 + stawka). */
+function vatFromGrossGrosze(grossGrosze: number, ratePct: number): number {
+  return divRoundHalfAway(ratePct * grossGrosze, 100 + ratePct);
+}
+
 /**
  * Czy VAT pozycji wynika z jej netto albo brutto według ustawy o VAT (FZ-008):
- * - od netto (art. 106e ust. 1 pkt 14): VAT = netto × stawka / 100,
- * - od brutto (art. 106e ust. 7 i 9): VAT = brutto × stawka / (100 + stawka),
- *   netto = brutto − VAT,
- * zaokrąglony do grosza (ust. 11). W groszach całkowitych (netto N, VAT V,
- * brutto B = N + V, stawka s) to warunek |100·V − s·N| ≤ (100 + s) / 2, bo
- * 100·V − s·N = (100 + s)·V − s·B: granica to pół grosza VAT liczonego od
- * brutto, a VAT od netto (|100·V − s·N| ≤ 50) mieści się w niej zawsze.
- * Remisu (dokładnie pół grosza) przy stawkach 23, 8, 5 i 0 nie ma, bo ta
- * równość nie ma rozwiązania w liczbach całkowitych, więc granica jest
- * jednoznaczna. Faktura za abonament FaktWay liczy się od brutto (`lib/billing/self-invoice.ts`, RPC
- * `create_billing_vat_invoice`), bo Stripe pobiera kwotę brutto.
+ * od netto (art. 106e ust. 1 pkt 14) albo od brutto (ust. 7; netto to wtedy
+ * brutto − VAT, ust. 9), w obu przypadkach do grosza (ust. 11). Brutto pozycji
+ * to netto + VAT (sprawdzane osobno), więc wzór od brutto liczy się z N + V.
+ * VAT od netto jest zawsze też VAT od brutto dla B = N + V, więc druga metoda
+ * dodaje tylko kwoty, przy których VAT od brutto różni się o grosz (przy 23 %
+ * ok. 19 % kwot brutto). Faktura za abonament FaktWay liczy się od brutto
+ * (`lib/billing/self-invoice.ts`, RPC `create_billing_vat_invoice`), bo Stripe
+ * pobiera kwotę brutto.
  */
 export function lineVatMatchesRate(netGrosze: number, vatGrosze: number, ratePct: number): boolean {
-  return 2 * Math.abs(100 * vatGrosze - ratePct * netGrosze) <= 100 + ratePct;
+  return vatGrosze === vatFromNetGrosze(netGrosze, ratePct)
+    || vatGrosze === vatFromGrossGrosze(netGrosze + vatGrosze, ratePct);
 }
 
 const ZERO_VAT_RATE_LABELS: Partial<Record<VatRate, string>> = {
@@ -395,10 +409,9 @@ function lineVatMessage(line: InvoiceLineItem, netGr: number, vatGr: number, rat
   if (ratePct === 0) {
     return `Pozycja ${line.ordinal}: stawka „${ZERO_VAT_RATE_LABELS[line.vatRate] ?? line.vatRate}” nie ma VAT, a pozycja ma VAT ${line.vatAmount}.`;
   }
-  // Pół grosza w górę (ust. 11), w liczbach całkowitych; netto i brutto ≥ 0 w fakturze zwykłej.
-  const fromNet = Math.floor((netGr * ratePct + 50) / 100);
+  const fromNet = vatFromNetGrosze(netGr, ratePct);
   const grossGr = netGr + vatGr;
-  const fromGross = Math.floor((2 * grossGr * ratePct + 100 + ratePct) / (2 * (100 + ratePct)));
+  const fromGross = vatFromGrossGrosze(grossGr, ratePct);
   return (
     `Pozycja ${line.ordinal}: VAT (${line.vatAmount}) nie wynika ze stawki ${ratePct}%: ` +
     `od netto ${line.netAmount} wychodzi ${groszeToZloty(fromNet)}, ` +
@@ -486,7 +499,7 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
     const vatGr = toGrosze(line.vatAmount);
     const ratePct: number | undefined = getVatPercentage(line.vatRate);
     if (ratePct === undefined) {
-      errors.push(`Pozycja ${line.ordinal}: nieznana stawka VAT „${line.vatRate}”.`);
+      errors.push(`Pozycja ${line.ordinal}: nieznana stawka VAT „${line.vatRate}”. Wybierz w pozycji stawkę z listy formularza.`);
     } else if (!lineVatMatchesRate(netGr, vatGr, ratePct)) {
       errors.push(lineVatMessage(line, netGr, vatGr, ratePct));
     }

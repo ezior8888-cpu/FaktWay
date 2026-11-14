@@ -5,7 +5,7 @@ import type { JobContext } from '@/lib/jobs/registry';
 import type { Invoice, InvoiceLineItem } from '@/types/invoice';
 
 /**
- * FZ-008 (`docs/filtr/USTALENIA.md`): faktura VAT za abonament FaktWay liczy
+ * FZ-008 (ustalenie żelaznego filtra z 14.11.2026): faktura VAT za abonament FaktWay liczy
  * się od brutto, bo Stripe pobiera kwotę brutto (art. 106e ust. 7, 9 i 11
  * ustawy o VAT; `lib/billing/self-invoice.ts`, RPC `create_billing_vat_invoice`
  * w 00162). Walidacja przed wysyłką (`validateInvoice`) liczyła VAT pozycji
@@ -109,7 +109,7 @@ import { clearOperatorCache } from '@/lib/billing/operator-config';
 import { runSelfInvoicePayment } from '@/lib/jobs/runners/self-invoice-payment';
 import { runSubmitInvoice } from '@/lib/jobs/runners/submit-invoice';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
-import { validateInvoice } from '@/lib/xml/invoice-calculator';
+import { lineVatMatchesRate, validateInvoice } from '@/lib/xml/invoice-calculator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 
 const ADDRESS = { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' };
@@ -384,5 +384,57 @@ describe('FZ-008: VAT pozycji w walidacji wysyłki (art. 106e ust. 1 pkt 14, ust
       const errors = validateInvoice(fakturaZPozycja({ unitPriceNet: 100, netAmount: 100, vatAmount: 0.01, grossAmount: 100.01, vatRate }), now);
       expect(errors.join(' ')).toMatch(/Pozycja 1: stawka/);
     }
+  });
+});
+
+/**
+ * Wyrocznia niezależna od kodu: liczby całkowite BigInt, połówka w górę
+ * (art. 106e ust. 11), wzory z ust. 1 pkt 14 (od netto) i ust. 7 (od brutto).
+ */
+function wyroczniaVat(nettoGr: number, vatGr: number, stawka: number): boolean {
+  const [n, v, s] = [BigInt(nettoGr), BigInt(vatGr), BigInt(stawka)];
+  const [dwa, sto] = [BigInt(2), BigInt(100)];
+  const odNetto = (dwa * s * n + sto) / (dwa * sto);
+  const brutto = n + v;
+  const odBrutto = (dwa * s * brutto + (sto + s)) / (dwa * (sto + s));
+  return v === odNetto || v === odBrutto;
+}
+
+describe('FZ-008: VAT pozycji przyjęty wtedy i tylko wtedy, gdy wynika z netto albo z brutto', () => {
+  const now = new Date('2026-11-14T12:00:00.000Z');
+  const STAWKI = [['23', 23], ['8', 8], ['5', 5], ['0', 0]] as const;
+  const bladVat = (errors: string[]) => errors.some((e) => e.includes('nie wynika ze stawki') || e.includes('nie ma VAT'));
+
+  it('losowe netto do 10 mln zł, VAT w pobliżu VAT od netto, stawki 23, 8, 5 i 0 %', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 1_000_000_000 }),
+        fc.integer({ min: -3, max: 3 }),
+        fc.constantFrom(...STAWKI),
+        (nettoGr, przesuniecie, [vatRate, stawka]) => {
+          const vatGr = Math.max(0, Math.floor((2 * stawka * nettoGr + 100) / 200) + przesuniecie);
+          const invoice = fakturaZPozycja({
+            unitPriceNet: nettoGr / 100,
+            netAmount: nettoGr / 100,
+            vatAmount: vatGr / 100,
+            grossAmount: (nettoGr + vatGr) / 100,
+            vatRate,
+          });
+          expect(bladVat(validateInvoice(invoice, now))).toBe(!wyroczniaVat(nettoGr, vatGr, stawka));
+        },
+      ),
+      { numRuns: 5000 },
+    );
+  });
+
+  it('remis (dokładnie pół grosza) rozstrzyga połówka w górę: stawka 4 % spoza listy, netto 0,13 zł', () => {
+    // od netto 0,13 · 4 % = 0,0052 → 0,01; od brutto 0,13 · 4/104 = 0,005 → 0,01. VAT 0 nie wynika z żadnej metody.
+    expect(lineVatMatchesRate(13, 0, 4)).toBe(false);
+    expect(lineVatMatchesRate(13, 1, 4)).toBe(true);
+  });
+
+  it('nieznana stawka w pozycji: błąd z nazwą stawki i tym, co zrobić', () => {
+    const invoice = fakturaZPozycja({ unitPriceNet: 100, netAmount: 100, vatAmount: 7, grossAmount: 107, vatRate: '7' as never });
+    expect(validateInvoice(invoice, now)).toContain('Pozycja 1: nieznana stawka VAT „7”. Wybierz w pozycji stawkę z listy formularza.');
   });
 });
