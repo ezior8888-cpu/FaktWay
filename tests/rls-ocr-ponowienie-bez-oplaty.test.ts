@@ -20,6 +20,11 @@ import { getRlsTestEnvironment } from './helpers/rls-environment';
  * Atrapy tylko dla wyjść poza bazę: model (Anthropic), S3, budżet AI (Redis),
  * push, kurs NBP (HTTP) i, w jednym przypadku, zerwane połączenie z bazą
  * przy zapisie kosztu.
+ *
+ * Skoro job czyta zapisany odczyt jako dane kosztu, klient nie może go
+ * zmieniać: 00206 odbiera rolom klienta UPDATE na `ocr_jobs` (polityka
+ * `ocr_jobs_update_own_tenant` z 00034 pozwalała członkowi firmy wpisać
+ * własne kwoty jako „odczyt modelu”).
  */
 
 const m = vi.hoisted(() => ({
@@ -288,6 +293,29 @@ describe.skipIf(!hasDatabase)('ponowienie OCR bez drugiego płatnego odczytu (73
     expect(koszty).toHaveLength(1);
     expect(koszty[0]).toMatchObject({ seller_name: 'Sklep Biurowe Centrum', gross_amount: 100, category_label: 'Materiały biurowe' });
     expect(await zadanie(ocrJobId)).toMatchObject({ status: 'completed', expense_id: koszty[0].id, ai_input_tokens: 1200 });
+  });
+
+  it('klient (sesja członka firmy) nie zmienia odczytu ani stanu zadania OCR (00206)', async () => {
+    const ocrJobId = await zadanieOcr();
+    const client = createClient(environment!.url, environment!.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { 'x-active-org': ORG } },
+    });
+    const { error: signInError } = await client.auth.signInWithPassword({ email: EMAIL, password: PASS });
+    if (signInError) throw signInError;
+    // Zadanie jest widoczne dla firmy (odczyt stanu po wgraniu zostaje).
+    const visible = await client.from('ocr_jobs').select('id').eq('id', ocrJobId);
+    expect(visible.error).toBeNull();
+    expect(visible.data).toHaveLength(1);
+
+    const forged = await client
+      .from('ocr_jobs')
+      .update({ extracted_data: odczyt({ gross_amount: 99999 }), status: 'processing' })
+      .eq('id', ocrJobId)
+      .select('id');
+
+    expect(forged.error?.code).toBe('42501');
+    expect(await zadanie(ocrJobId)).toMatchObject({ status: 'pending', extracted_data: null });
   });
 
   it('zapisany odczyt, którego schemat nie przyjmuje: nowy odczyt i koszt z niego', async () => {
