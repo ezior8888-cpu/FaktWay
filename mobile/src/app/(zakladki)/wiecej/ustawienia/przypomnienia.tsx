@@ -55,7 +55,7 @@ function EkranPrzypomnienZBazy({ ustawienia }: { ustawienia: StanUstawien }) {
       </EkranListy>
     );
   }
-  const zmien = MA_ADRES_STRONY ? <Wiersz tytul="Zmień na faktway.pl" ikona="global-line" akcja onPress={() => otworzStrone('/settings/reminders')} /> : null;
+  const zmien = MA_ADRES_STRONY ? <Wiersz tytul="Zmień na faktway.pl" ikona="global-line" akcja onPress={() => otworzStrone('/settings/reminders', () => void ustawienia.odswiez())} /> : null;
   if (!p.zapisane) {
     return (
       <EkranListy onOdswiez={ustawienia.odswiez}>

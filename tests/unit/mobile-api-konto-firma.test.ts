@@ -247,6 +247,13 @@ describe('POST /api/mobile/v1/konto/usuniecie', () => {
     expect(fake.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'gdpr.deletion_requested', userId: USER_PASS, metadata: expect.objectContaining({ client: 'mobile' }) }));
   });
 
+  it('bez NEXT_PUBLIC_APP_URL link anulowania w mailu ma adres serwera z żądania, nigdy samą ścieżkę', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
+    const response = await usunRoute(req('konto/usuniecie', { body: { haslo: 'Poprawne-Haslo-1' } }));
+    expect(response.status).toBe(200);
+    expect(fake.mail).toHaveBeenCalledWith(expect.objectContaining({ cancelUrl: `https://app.example.test/gdpr/cancel?token=${'a'.repeat(64)}` }));
+  });
+
   it('złe hasło: 400 `invalid_credentials`, bez żądania; brak hasła: 400 bez sprawdzania', async () => {
     const zle = await usunRoute(req('konto/usuniecie', { body: { haslo: 'zle' } }));
     expect(zle.status).toBe(400);

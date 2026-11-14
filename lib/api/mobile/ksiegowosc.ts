@@ -21,7 +21,7 @@ import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
 import { daneDoPrzelewu, podpisKwot } from '@/lib/ksiegowosc/przelew';
 import { NAZWY_ROZLICZEN } from '@/lib/ksiegowosc/ten-miesiac';
 import { aktualne, czytajTenMiesiac, doZatwierdzenia, miesiacZakonczony, zaplacono } from '@/lib/ksiegowosc/ten-miesiac-dane';
-import { oznaczZaplacone, zatwierdzMiesiac } from '@/lib/ksiegowosc/ten-miesiac-zapis';
+import { oznaczZaplacone, zatwierdzenieSchema, zatwierdzMiesiac } from '@/lib/ksiegowosc/ten-miesiac-zapis';
 import { czyKsiegowoscWlaczona } from '@/lib/ksiegowosc/wylacznik';
 import { isUuid } from '@/lib/supabase/active-org';
 
@@ -132,7 +132,8 @@ export async function monthForMobile(caller: MobileCaller, request: Request): Pr
   return mobileJson(odpowiedz, 200, headers);
 }
 
-const zatwierdzenieSchema = z.object({ miesiac: z.string(), skroty: z.record(z.string(), z.string()) }).strict();
+// Schemat strony bez nadwyżki VAT (wpisuje się ją na stronie): treść spoza kontraktu to 400, nie odmowa rozliczenia.
+const zatwierdzenieTelefonuSchema = zatwierdzenieSchema.omit({ nadwyzkaVat: true }).strict();
 
 /** `POST /api/mobile/v1/ksiegowosc/zatwierdz`. */
 export async function approveMonthFromMobile(caller: MobileCaller, request: Request): Promise<NextResponse> {
@@ -141,7 +142,7 @@ export async function approveMonthFromMobile(caller: MobileCaller, request: Requ
   if (!ROLE_ZAPISU.has(org.role)) return mobileError(403, 'forbidden', TYLKO_WLASCICIEL, headers);
   const raw = await readJsonBody(request, headers, { maxBytes: MAX_BODY_BYTES, tooLarge: 'Treść jest za długa.' });
   if (!raw.ok) return raw.response;
-  const parsed = zatwierdzenieSchema.safeParse(raw.value);
+  const parsed = zatwierdzenieTelefonuSchema.safeParse(raw.value);
   if (!parsed.success) return mobileError(400, 'invalid_request', 'Treść żądania nie pasuje do kontraktu. Zaktualizuj aplikację FaktWay.', headers);
   const wynik = await zatwierdzMiesiac(
     { client: caller.db as Db, tenantId: org.tenantId, userId: caller.user.id },

@@ -42,9 +42,16 @@ export function otworzNaStronie(co: ZmianaNaStronie, idFaktury?: string): void {
   if (adres) void WebBrowser.openBrowserAsync(adres);
 }
 
-/** Dowolna strona panelu, np. `/expenses/<id>`; bez adresu serwera nic nie robi. */
-export function otworzStrone(sciezka: string): void {
-  if (ADRES_API) void WebBrowser.openBrowserAsync(`${ADRES_API.replace(/\/+$/, '')}${sciezka}`);
+/**
+ * Dowolna strona panelu, np. `/expenses/<id>`; bez adresu serwera nic nie robi.
+ * `poPowrocie` po zamknięciu przeglądarki: ekran, który pokazuje to, co klient
+ * mógł właśnie zmienić na stronie (ustawienia), wczytuje dane od nowa.
+ */
+export function otworzStrone(sciezka: string, poPowrocie?: () => void): void {
+  if (!ADRES_API) return;
+  void WebBrowser.openBrowserAsync(`${ADRES_API.replace(/\/+$/, '')}${sciezka}`)
+    .catch(() => undefined)
+    .then(() => poPowrocie?.());
 }
 
 export const MA_ADRES_STRONY = Boolean(ADRES_API);

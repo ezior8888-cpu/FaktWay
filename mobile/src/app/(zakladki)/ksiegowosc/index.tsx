@@ -56,7 +56,10 @@ function EkranKsiegowosciZBazy({ konto }: { konto: KontoFirmy }) {
   const [trwa, setTrwa] = useState(false);
   const [blad, setBlad] = useState<string>();
   const wToku = useRef(false);
-  const [firmaEkranu] = useState(konto.firma?.id ?? null);
+  // Firma danych na ekranie (magazyn ma klucz firmy), nie z pierwszego otwarcia: zakładka zostaje
+  // otwarta po zmianie firmy w Więcej i nie da się jej „zamknąć i otworzyć od nowa”. Zmianę między
+  // narysowaniem a wysłaniem dalej łapie `zapytaj` (firma teraz kontra firma ekranu).
+  const firmaEkranu = konto.firma?.id ?? null;
   const d = ten?.dane;
 
   const zatwierdz = async () => {

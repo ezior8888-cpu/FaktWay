@@ -132,7 +132,8 @@ export async function requestDeletionFromMobile(caller: MobileCaller, request: R
     userEmail: caller.user.email,
     ipAddress: clientIpFromHeaders(request.headers) ?? undefined,
     userAgent: request.headers.get('user-agent') ?? undefined,
-    origin: process.env.NEXT_PUBLIC_APP_URL ?? '',
+    // Jak akcja strony (nagłówek Origin): bez adresu w zmiennych adres serwera z żądania, nigdy sama ścieżka w mailu.
+    origin: process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin,
     auditMetadata: { client: 'mobile', confirmation: potwierdzenie.sposob },
   });
   if (!wynik.ok) {

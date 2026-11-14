@@ -71,7 +71,7 @@ function EkranKsefZBazy({ ustawienia }: { ustawienia: StanUstawien }) {
             ? 'Pliki certyfikatu (.crt i .key) i hasło do klucza wgrasz na faktway.pl. Do tego potrzebna jest weryfikacja dwuetapowa.'
             : 'Certyfikat KSeF podłącza właściciel firmy na faktway.pl.'
         }>
-        {wlasciciel && MA_ADRES_STRONY ? <Wiersz tytul={akcja} ikona="global-line" akcja onPress={() => otworzStrone('/settings/ksef')} /> : null}
+        {wlasciciel && MA_ADRES_STRONY ? <Wiersz tytul={akcja} ikona="global-line" akcja onPress={() => otworzStrone('/settings/ksef', () => void ustawienia.odswiez())} /> : null}
       </Sekcja>
       {polaczono && MA_ADRES_STRONY ? (
         <Sekcja naglowek="Historia faktur z KSeF" stopka="Po podłączeniu FaktWay sam pobiera historię faktur z KSeF.">

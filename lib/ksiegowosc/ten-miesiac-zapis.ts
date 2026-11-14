@@ -44,8 +44,9 @@ export type WynikZaplaty = { success: true } | { success: false; error: string; 
 
 const NIEDOSTEPNE = 'Rozliczenie miesiąca nie jest jeszcze dostępne dla tej firmy.';
 const BLAD = 'Nie udało się zapisać i nic się nie zmieniło. Można spróbować jeszcze raz.';
+// Zdania bez „strony”: widzi je też telefon (M10b), który po odmowie wczytuje miesiąc od nowa.
 const ZMIANA_OD_OTWARCIA =
-  'Dane miesiąca zmieniły się od otwarcia strony, więc nic nie zatwierdziliśmy. Strona pokazuje teraz aktualne kwoty do sprawdzenia.';
+  'Dane miesiąca zmieniły się od otwarcia, więc nic nie zatwierdziliśmy. Pokazujemy teraz aktualne kwoty do sprawdzenia.';
 const STRONA = '/reports/ten-miesiac';
 
 async function wlaczony(client: SupabaseClient, tenantId: string): Promise<boolean> {
@@ -117,7 +118,7 @@ export async function zatwierdzMiesiac(ctx: RozliczeniaKontekst, wejscie: z.inpu
   const { error } = await client.from('tax_settlements').insert(nowe);
   if (error) {
     if (error.code === '23505') {
-      return { success: false, error: 'Ktoś właśnie zatwierdził ten miesiąc; po odświeżeniu strony widać aktualną wersję.' };
+      return { success: false, error: 'Ktoś właśnie zatwierdził ten miesiąc; po odświeżeniu widać aktualną wersję.' };
     }
     return { success: false, error: BLAD };
   }

@@ -207,8 +207,21 @@ describe('POST /ksiegowosc/zatwierdz i /rozliczenia/{id}/zaplata', () => {
     expect(fake.zatwierdz).toHaveBeenCalledTimes(1);
   });
 
+  it('treść spoza kontraktu (nieznany rodzaj, zły skrót, zły miesiąc): 400 `invalid_request` bez zapisu, nie odmowa rozliczenia', async () => {
+    for (const body of [
+      { miesiac: '2026-10', skroty: { inny: H('b') } },
+      { miesiac: '2026-10', skroty: { vat: 'abc' } },
+      { miesiac: '10-2026', skroty: {} },
+    ]) {
+      const response = await zatwierdzRoute(req('ksiegowosc/zatwierdz', { method: 'POST', body }));
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe('invalid_request');
+    }
+    expect(fake.zatwierdz).not.toHaveBeenCalled();
+  });
+
   it('odmowa zapisu (dane zmieniły się od otwarcia): 422 `settlement_refused` ze zdaniem strony', async () => {
-    fake.zatwierdz.mockResolvedValue({ success: false, error: 'Dane miesiąca zmieniły się od otwarcia strony, więc nic nie zatwierdziliśmy.' });
+    fake.zatwierdz.mockResolvedValue({ success: false, error: 'Dane miesiąca zmieniły się od otwarcia, więc nic nie zatwierdziliśmy.' });
     const response = await zatwierdzRoute(req('ksiegowosc/zatwierdz', { method: 'POST', body: { miesiac: '2026-10', skroty: {} } }));
     expect(response.status).toBe(422);
     expect(((await response.json()) as { error: { code: string } }).error.code).toBe('settlement_refused');

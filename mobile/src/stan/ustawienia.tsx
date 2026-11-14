@@ -12,6 +12,7 @@
 import { useEffect, useEffectEvent, useSyncExternalStore } from 'react';
 
 import type { UstawieniaOdpowiedz } from '@/lib/api/kontrakt';
+import { czyscPrzyKoncuSesji } from '@/stan/czyszczenie';
 import { useKontoFirmy } from '@/stan/dane';
 
 export type StanUstawien = {
@@ -38,6 +39,11 @@ function subskrybuj(sluchacz: () => void): () => void {
   sluchacze.add(sluchacz);
   return () => sluchacze.delete(sluchacz);
 }
+
+czyscPrzyKoncuSesji(() => {
+  wpisy.clear();
+  for (const s of sluchacze) s();
+});
 
 export function useUstawienia(): StanUstawien | null {
   const k = useKontoFirmy();

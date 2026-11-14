@@ -63,7 +63,7 @@ function EkranFirmyZBazy({ ustawienia }: { ustawienia: StanUstawien }) {
             ? 'Dane firmy, VAT i datę rozpoczęcia zmienisz na faktway.pl. Wpływają na faktury i rozliczenia, dlatego zapisujemy je tam, z pełnym sprawdzeniem.'
             : 'Dane firmy zmienia właściciel albo administrator na faktway.pl.'
         }>
-        {mozeZmienic && MA_ADRES_STRONY ? <Wiersz tytul="Zmień na faktway.pl" ikona="global-line" akcja onPress={() => otworzStrone('/settings')} /> : null}
+        {mozeZmienic && MA_ADRES_STRONY ? <Wiersz tytul="Zmień na faktway.pl" ikona="global-line" akcja onPress={() => otworzStrone('/settings', () => void ustawienia.odswiez())} /> : null}
       </Sekcja>
     </EkranListy>
   );

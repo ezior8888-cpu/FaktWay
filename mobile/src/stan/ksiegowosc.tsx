@@ -13,6 +13,7 @@ import { useEffect, useEffectEvent, useSyncExternalStore } from 'react';
 
 import type { PozycjaRozliczeniaTelefonu, TenMiesiacOdpowiedz } from '@/lib/api/kontrakt';
 import type { Wynik } from '@/lib/api/rdzen';
+import { czyscPrzyKoncuSesji } from '@/stan/czyszczenie';
 import { useKontoFirmy } from '@/stan/dane';
 
 export type StanTenMiesiac = {
@@ -37,6 +38,11 @@ function subskrybuj(sluchacz: () => void): () => void {
   sluchacze.add(sluchacz);
   return () => sluchacze.delete(sluchacz);
 }
+
+czyscPrzyKoncuSesji(() => {
+  wpisy.clear();
+  for (const s of sluchacze) s();
+});
 
 function przyjmij(baza: string, klucz: string, w: Wynik<TenMiesiacOdpowiedz>): void {
   const byl = wpisy.get(klucz);
