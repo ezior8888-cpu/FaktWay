@@ -12,7 +12,8 @@ import { generateIdempotencyKey } from '@/lib/ksef/idempotency';
 
 type Row = Record<string, unknown>;
 type Result = { data: Row[] | Row | null; count?: number; error: { code: string; message: string } | null };
-type Operation = { table: string; mode: string; selection: string; filters: Array<[string, unknown]>; nullableNonAccepted?: boolean };
+// `head`: licznik kontrolny odczytu po kluczu (QRY-07), bez wierszy.
+type Operation = { table: string; mode: string; selection: string; filters: Array<[string, unknown]>; nullableNonAccepted?: boolean; head?: boolean };
 let tables: Record<string, Row[]>;
 let operations: Operation[];
 let errorFor: (op: Operation) => boolean;
@@ -31,7 +32,7 @@ function database() {
     const ordering: Array<{ key: string; ascending: boolean }> = [];
     const query = {
       range(from: number, to: number) { window = [from, to]; return query; },
-      select(selection = '*', options?: { count?: string; head?: boolean }) { op.selection = selection; count = !!options?.count; head = !!options?.head; return query; },
+      select(selection = '*', options?: { count?: string; head?: boolean }) { op.selection = selection; count = !!options?.count; head = !!options?.head; op.head = head; return query; },
       insert(value: Row) { op.mode = 'insert'; patch = value; return query; },
       update(value: Row) { op.mode = 'update'; patch = value; return query; },
       delete() { op.mode = 'delete'; return query; },
@@ -55,11 +56,13 @@ function database() {
       gte(key: string, value: string) { predicates.push(row => String(row[key]) >= value); return query; },
       lte(key: string, value: string) { predicates.push(row => String(row[key]) <= value); return query; },
       lt(key: string, value: string) { predicates.push(row => String(row[key]) < value); return query; },
+      // Odczyt po kluczu (QRY-07, sesja 33): `gt('id')` i `limit` jak w PostgREST.
+      gt(key: string, value: string) { predicates.push(row => String(row[key]) > value); return query; },
       order(key: string, options?: { ascending?: boolean }) {
         ordering.push({ key, ascending: options?.ascending !== false });
         return query;
       },
-      limit() { return query; },
+      limit(n: number) { window = [0, n - 1]; return query; },
       single() { singular = true; return query; },
       maybeSingle() { singular = true; return query; },
       then(resolve: (value: Result) => unknown, reject: (error: unknown) => unknown) {
@@ -221,7 +224,10 @@ describe('tenant boundaries for accounting exports', () => {
     expect(result.expenses).toHaveLength(1200);
     expect(result.expenses[0]?.id).toBe('expense-0001');
     expect(result.expenses.at(-1)?.id).toBe('expense-0000');
-    expect(operations.filter(op => op.table === 'expenses')).toHaveLength(3);
+    // Sesja 33 (QRY-07): 3 strony po kluczu i 1 licznik kontrolny przy kilku stronach.
+    const kosztow = operations.filter(op => op.table === 'expenses');
+    expect(kosztow.filter(op => !op.head)).toHaveLength(3);
+    expect(kosztow.filter(op => op.head)).toHaveLength(1);
   });
 
   it.each(['missing', 'foreign', 'unknown', 'unlinked'])('blocks ambiguous KSeF expense: %s', async kind => {
@@ -351,7 +357,10 @@ describe('tenant boundaries for accounting exports', () => {
     const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
     expect(data.issuedInvoices).toHaveLength(1200);
     expect(data.issuedInvoices.at(-1)?.invoiceNumber).toBe('invoice-1199');
-    expect(operations.filter(op => op.table === 'invoices' && op.selection === '*')).toHaveLength(3);
+    // Sesja 33 (QRY-07): 3 strony po kluczu i 1 licznik kontrolny przy kilku stronach.
+    const faktur = operations.filter(op => op.table === 'invoices' && op.selection === '*');
+    expect(faktur.filter(op => !op.head)).toHaveLength(3);
+    expect(faktur.filter(op => op.head)).toHaveLength(1);
   });
 
   it('fetches all 1200 correction parents outside the export period', async () => {
@@ -383,7 +392,10 @@ describe('tenant boundaries for accounting exports', () => {
     const data = await fetchInvoicesForExport({ ...exportParams, direction: 'issued' });
     expect(data.issuedInvoices[0]?.lines).toHaveLength(1200);
     expect(data.issuedInvoices[0]?.lines.at(-1)?.name).toBe('LINE-1200');
-    expect(operations.filter(op => op.table === 'invoice_line_items')).toHaveLength(3);
+    // Sesja 33 (QRY-07): 3 strony po kluczu i 1 licznik kontrolny przy kilku stronach.
+    const pozycji = operations.filter(op => op.table === 'invoice_line_items');
+    expect(pozycji.filter(op => !op.head)).toHaveLength(3);
+    expect(pozycji.filter(op => op.head)).toHaveLength(1);
   });
 
   it('fails the export if a later invoice page cannot be read', async () => {

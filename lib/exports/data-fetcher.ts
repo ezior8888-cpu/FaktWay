@@ -14,7 +14,7 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import { costDocumentType } from '@/lib/expenses/vat-deduction-document';
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { readCompletePagesByKey } from '@/lib/accounting/read-complete-pages';
 import type { KsefEnvironment } from '@/types/ksef';
 import type { Database, Json } from '@/types/database';
 
@@ -177,17 +177,17 @@ async function fetchExpensesForExport(
   params: FetchInvoicesParams,
   environment: KsefEnvironment,
 ): Promise<ExportExpense[]> {
-  const rows = await readCompletePages('expenses', (from, to) =>
-    supabase
+  const rows = await readCompletePagesByKey('expenses', ({ afterId, limit, count, head }) => {
+    let query = supabase
       .from('expenses')
-      .select('id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label, is_reviewed, ocr_extracted_data', { count: 'exact' })
+      .select('id, source, ksef_invoice_id, issue_date, document_number, document_type, seller_name, seller_nip, seller_address, net_amount, vat_amount, gross_amount, vat_deductible_amount, kpir_column, category_label, is_reviewed, ocr_extracted_data', count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', params.tenantId)
       .eq('is_deductible', true)
       .gte('issue_date', params.periodStart)
-      .lte('issue_date', params.periodEnd)
-      .order('id', { ascending: true })
-      .range(from, to),
-  );
+      .lte('issue_date', params.periodEnd);
+    if (afterId !== null) query = query.gt('id', afterId);
+    return query.order('id', { ascending: true }).limit(limit);
+  });
 
   const eligible = await filterExpensesForKsefEnvironment(
     supabase,
@@ -291,22 +291,22 @@ async function fetchInvoiceRows(
     includeCorrections?: boolean;
   },
 ): Promise<InvoiceRow[]> {
-  const rows = await readCompletePages('invoices', (from, to) => {
+  const rows = await readCompletePagesByKey('invoices', ({ afterId, limit, count, head }) => {
     let query = supabase
       .from('invoices')
-      .select('*', { count: 'exact' })
+      .select('*', count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', params.tenantId)
       .eq('direction', params.direction === 'issued' ? 'outgoing' : 'incoming')
       .eq('ksef_status', 'accepted')
       .eq('ksef_environment', params.environment)
       .gte('issue_date', params.periodStart)
-      .lte('issue_date', params.periodEnd)
-      .order('id', { ascending: true });
+      .lte('issue_date', params.periodEnd);
 
     if (params.includeCorrections === false) {
       query = query.eq('invoice_kind', 'regular');
     }
-    return query.range(from, to);
+    if (afterId !== null) query = query.gt('id', afterId);
+    return query.order('id', { ascending: true }).limit(limit);
   });
   return rows.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
@@ -402,18 +402,18 @@ async function resolveLinesForInvoices(
     const grouped = new Map<string, LineItemRow[]>();
     for (let from = 0; from < missingIds.length; from += 100) {
       const batch = missingIds.slice(from, from + 100);
-      const dbLines = await readCompletePages('invoice_line_items', (pageFrom, pageTo) =>
-        supabase
+      const dbLines = await readCompletePagesByKey('invoice_line_items', ({ afterId, limit, count, head }) => {
+        let query = supabase
           .from('invoice_line_items')
           .select(
             // vat_amount: VAT pozycji z tabeli, nie przeliczany (main).
             'id, invoice_id, ordinal, name, unit, quantity, unit_price_net, net_amount, vat_rate, vat_amount',
-            { count: 'exact' },
+            count ? { count: 'exact', head } : undefined,
           )
-          .in('invoice_id', batch)
-          .order('id', { ascending: true })
-          .range(pageFrom, pageTo),
-      );
+          .in('invoice_id', batch);
+        if (afterId !== null) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      });
       dbLines.sort((a, b) =>
         a.invoice_id.localeCompare(b.invoice_id) ||
         a.ordinal - b.ordinal || a.id.localeCompare(b.id));

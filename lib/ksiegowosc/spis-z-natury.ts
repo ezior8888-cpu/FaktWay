@@ -14,7 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { readCompletePagesByKey } from '@/lib/accounting/read-complete-pages';
 import { kwotaNaGrosze } from '@/lib/ksiegowosc/wpisy-reczne';
 
 /** Najwcześniejszy spis: na koniec 2025 r., czyli na początek pierwszego roku modułu. */
@@ -99,15 +99,15 @@ export function zWierszaSpisu(w: WierszSpisu): Spis {
  * wgraniem 00173 tabeli nie ma: to brak spisów, nie awaria.
  */
 export async function czytajSpisy(client: SupabaseClient, tenantId: string, rok: number): Promise<Spis[]> {
-  const wiersze = await readCompletePages<WierszSpisu>('kpir: spisy z natury', async (from, to) => {
-    const wynik = await client
+  const wiersze = await readCompletePagesByKey<WierszSpisu>('kpir: spisy z natury', async ({ afterId, limit, count, head }) => {
+    let q = client
       .from('ledger_inventory_counts')
-      .select(KOLUMNY_SPISU, { count: 'exact' })
+      .select(KOLUMNY_SPISU, count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', tenantId)
       .gte('data', `${rok - 1}-12-31`)
-      .lte('data', `${rok}-12-31`)
-      .order('id', { ascending: true })
-      .range(from, to);
+      .lte('data', `${rok}-12-31`);
+    if (afterId !== null) q = q.gt('id', afterId);
+    const wynik = await q.order('id', { ascending: true }).limit(limit);
     // Przed wgraniem 00173: Postgres 42P01, PostgREST PGRST205.
     if (wynik.error && (wynik.error.code === '42P01' || wynik.error.code === 'PGRST205')) return { data: [], count: 0, error: null };
     return { data: wynik.data as WierszSpisu[] | null, count: wynik.count, error: wynik.error };

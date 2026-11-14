@@ -118,6 +118,8 @@ describe('strona KPiR — podpięcie', () => {
           eq() { return query; },
           or() { return query; },
           range() { return query; },
+          gt() { return query; },
+          limit() { return query; },
           in() { return query; },
           gte() { return query; },
           lte() { return query; },

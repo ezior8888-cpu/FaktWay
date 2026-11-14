@@ -1,4 +1,4 @@
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { readCompletePagesByKey } from '@/lib/accounting/read-complete-pages';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
@@ -85,15 +85,17 @@ export async function getKpirData(
     tenantId, periodStart, periodEnd, direction: 'outgoing', environment,
   });
 
-  const expenses = await readCompletePages('expenses', (from, to) => supabase
-    .from('expenses')
-    .select('*', { count: 'exact' })
-    .eq('tenant_id', tenantId)
-    .eq('is_deductible', true)
-    .gte('issue_date', periodStart)
-    .lte('issue_date', periodEnd)
-    .order('id', { ascending: true })
-    .range(from, to));
+  const expenses = await readCompletePagesByKey('expenses', ({ afterId, limit, count, head }) => {
+    let query = supabase
+      .from('expenses')
+      .select('*', count ? { count: 'exact', head } : undefined)
+      .eq('tenant_id', tenantId)
+      .eq('is_deductible', true)
+      .gte('issue_date', periodStart)
+      .lte('issue_date', periodEnd);
+    if (afterId !== null) query = query.gt('id', afterId);
+    return query.order('id', { ascending: true }).limit(limit);
+  });
   const visibleExpenses = await filterExpensesForKsefEnvironment(
     supabase, tenantId, environment, expenses,
   );
@@ -117,20 +119,22 @@ export async function getKpirData(
     currencyError = error instanceof Error ? error.message : 'Nie można potwierdzić walut kosztów KSeF';
   }
 
-  const invoices = await readCompletePages('invoices', (from, to) => supabase
-    .from('invoices')
-    .select(
-      `id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids, currency, ${RECEIPT_REVENUE_COLUMNS}`,
-      { count: 'exact' },
-    )
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .eq('ksef_environment', environment)
-    .gte('issue_date', periodStart)
-    .lte('issue_date', periodEnd)
-    .order('id', { ascending: true })
-    .range(from, to));
+  const invoices = await readCompletePagesByKey('invoices', ({ afterId, limit, count, head }) => {
+    let query = supabase
+      .from('invoices')
+      .select(
+        `id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids, currency, ${RECEIPT_REVENUE_COLUMNS}`,
+        count ? { count: 'exact', head } : undefined,
+      )
+      .eq('tenant_id', tenantId)
+      .eq('direction', 'outgoing')
+      .eq('ksef_status', 'accepted')
+      .eq('ksef_environment', environment)
+      .gte('issue_date', periodStart)
+      .lte('issue_date', periodEnd);
+    if (afterId !== null) query = query.gt('id', afterId);
+    return query.order('id', { ascending: true }).limit(limit);
+  });
   invoices.sort((a, b) =>
     a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
 

@@ -73,8 +73,10 @@ const validCount = (count: number | null | undefined): count is number =>
  * tylko przy pierwszej stronie, kolejne strony idą po kluczu
  * (`id > ostatni`, bez OFFSET), a przy więcej niż jednej stronie na końcu
  * jeden licznik kontrolny (`head`). `readCompletePages` liczy COUNT nad
- * całym filtrem przy KAŻDEJ stronie i przewija OFFSET-em; zostaje bez zmian
- * dla KPiR i eksportów, dopóki ich nie przeniesie osobna sesja z testami.
+ * całym filtrem przy KAŻDEJ stronie i przewija OFFSET-em. Od sesji 33 po
+ * kluczu czytają też KPiR, ewidencja przychodów i eksporty (złoty wzorzec
+ * wyników: `tests/unit/kpir-eksporty-po-kluczu.test.ts`); `readCompletePages`
+ * zostaje dla pozostałych odczytów, dopóki nie przeniesie ich osobna sesja.
  *
  * Bezpieczniki (te same komunikaty co w `readCompletePages`):
  * - błąd strony → `${label}: <treść błędu>`;

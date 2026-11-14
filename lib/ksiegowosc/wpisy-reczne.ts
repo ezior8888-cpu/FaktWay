@@ -12,7 +12,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { readCompletePagesByKey } from '@/lib/accounting/read-complete-pages';
 import { STAWKI_JPK_EWP_PB, type WpisReczny } from '@/lib/ksiegowosc/ewidencja';
 import { KOLUMNY_KPIR, type WpisKpir } from '@/lib/ksiegowosc/kpir';
 import { PROFIL_OD_MIN } from '@/lib/ksiegowosc/profil';
@@ -126,17 +126,17 @@ export async function czytajWpisyReczne(
   od: string,
   doDnia: string,
 ): Promise<WpisReczny[]> {
-  const wiersze = await readCompletePages<WierszWpisu>('ewidencja: wpisy ręczne', async (from, to) => {
-    const wynik = await client
+  const wiersze = await readCompletePagesByKey<WierszWpisu>('ewidencja: wpisy ręczne', async ({ afterId, limit, count, head }) => {
+    let q = client
       .from('ledger_manual_entries')
-      .select(KOLUMNY_WPISU, { count: 'exact' })
+      .select(KOLUMNY_WPISU, count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', tenantId)
       // Wpisy KPiR (00171) nie mają stawki i nie należą do ewidencji ryczałtu.
       .not('stawka_pb', 'is', null)
       .gte('data_przychodu', od)
-      .lte('data_przychodu', doDnia)
-      .order('id', { ascending: true })
-      .range(from, to);
+      .lte('data_przychodu', doDnia);
+    if (afterId !== null) q = q.gt('id', afterId);
+    const wynik = await q.order('id', { ascending: true }).limit(limit);
     if (wynik.error && czyBrakTabeli(wynik.error.code)) return { data: [], count: 0, error: null };
     return { data: wynik.data as WierszWpisu[] | null, count: wynik.count, error: wynik.error };
   });
@@ -196,16 +196,16 @@ export async function czytajWpisyKpir(
   od: string,
   doDnia: string,
 ): Promise<(WpisKpir & { rodzaj: RodzajWpisu })[]> {
-  const wiersze = await readCompletePages<WierszWpisuKpir>('kpir: wpisy ręczne', async (from, to) => {
-    const wynik = await client
+  const wiersze = await readCompletePagesByKey<WierszWpisuKpir>('kpir: wpisy ręczne', async ({ afterId, limit, count, head }) => {
+    let q = client
       .from('ledger_manual_entries')
-      .select(KOLUMNY_WPISU_KPIR, { count: 'exact' })
+      .select(KOLUMNY_WPISU_KPIR, count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', tenantId)
       .not('kolumna', 'is', null)
       .gte('data_przychodu', od)
-      .lte('data_przychodu', doDnia)
-      .order('id', { ascending: true })
-      .range(from, to);
+      .lte('data_przychodu', doDnia);
+    if (afterId !== null) q = q.gt('id', afterId);
+    const wynik = await q.order('id', { ascending: true }).limit(limit);
     if (wynik.error && (czyBrakTabeli(wynik.error.code) || wynik.error.code === '42703')) return { data: [], count: 0, error: null };
     return { data: wynik.data as WierszWpisuKpir[] | null, count: wynik.count, error: wynik.error };
   });

@@ -107,7 +107,7 @@ describe('przepływy — okno sześciu miesięcy w Europe/Warsaw', () => {
 describe('KPiR — domyślny miesiąc w Europe/Warsaw', () => {
   function emptyDatabase() {
     const builder: Record<string, unknown> = {};
-    for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'lt', 'is', 'order', 'range']) {
+    for (const method of ['select', 'eq', 'in', 'gt', 'gte', 'lte', 'lt', 'is', 'order', 'range', 'limit']) {
       builder[method] = () => builder;
     }
     builder.then = (resolve: (value: unknown) => unknown) =>
