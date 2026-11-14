@@ -12,7 +12,8 @@
  * - VAT: płatnik VAT składa JPK_V7M co miesiąc także przy VAT 0 zł (termin
  *   ten sam, 25.), więc kwota zero daje przypomnienie o pliku (F11-B5), chyba
  *   że MF przyjął już plik wysłany z FaktWay za ten miesiąc (`jpkPrzyjete`).
- * - Teksty bez trybu rozkazującego i bez porad (D8).
+ * - Teksty bez trybu rozkazującego i bez porad (D8); kwoty z podpisem „według
+ *   Twoich danych i stawek na {rok}”, jak na stronie (NZ-TRESC-02).
  */
 
 import { monthLabel, shiftMonth } from '@/lib/expenses/month';
@@ -20,6 +21,7 @@ import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { terminDla, type Termin } from '@/lib/ksiegowosc/kalendarz';
+import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/przelew';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import type { RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
 import { aktualne, zaplacono, type PozycjaZeSkrotem, type Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
@@ -162,6 +164,12 @@ export interface Tresc {
 
 const adres = (miesiac: string) => `/reports/ten-miesiac?month=${Number(miesiac.slice(5, 7))}&year=${miesiac.slice(0, 4)}`;
 
+/** Podpis kwot (NZ-TRESC-02), jak na stronie „Ten miesiąc”; treść bez kwot nie ma podpisu. */
+function podpisKwot(miesiac: string, pozycje: readonly PozycjaPrzypomnienia[]): string | null {
+  if (!pozycje.some((p) => p.kwotaGr !== null)) return null;
+  return podpisKwotMiesiaca(miesiac, pozycje.some((p) => p.rodzaj === 'zdrowotna' && p.kwotaGr !== null));
+}
+
 /** VAT 0 zł (F11-B5): nie ma czego zapłacić, więc idzie osobnym zdaniem o JPK_V7M. */
 const jestVatZero = (p: PozycjaPrzypomnienia) => p.rodzaj === 'vat' && p.kwotaGr === 0;
 
@@ -174,6 +182,8 @@ export function trescTerminu(w: { miesiac: string; termin: Termin; dni: DniPrzed
   if (doZaplaty.length < w.pozycje.length) {
     zdania.push(`VAT do zapłaty za ${monthLabel(w.miesiac)}: ${zl(0)}; JPK_V7M za ten miesiąc ma ten sam termin.`);
   }
+  const podpis = podpisKwot(w.miesiac, w.pozycje);
+  if (podpis) zdania.push(podpis);
   return {
     tytul: `Termin ${data}: rozliczenie za ${monthLabel(w.miesiac)}`,
     tresc: zdania.join(' '),
@@ -184,7 +194,9 @@ export function trescTerminu(w: { miesiac: string; termin: Termin; dni: DniPrzed
 export function trescWyliczenia(w: { miesiac: string; pozycje: readonly PozycjaPrzypomnienia[] }): Tresc {
   return {
     tytul: `Rozliczenie za ${monthLabel(w.miesiac)} jest wyliczone`,
-    tresc: `Według Twoich danych: ${lista(w.pozycje)}. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.`,
+    tresc: [`Do zapłaty: ${lista(w.pozycje)}.`, podpisKwot(w.miesiac, w.pozycje), 'Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.']
+      .filter((z): z is string => z !== null)
+      .join(' '),
     adres: adres(w.miesiac),
   };
 }

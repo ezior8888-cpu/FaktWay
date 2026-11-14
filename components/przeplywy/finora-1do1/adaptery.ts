@@ -13,6 +13,7 @@ import type { InflowEntry } from '@/lib/dashboard/inflows';
 import type { TaxEstimate } from '@/lib/dashboard/tax-estimate';
 import { monthLabel } from '@/lib/expenses/month';
 import type { Odlozyc } from '@/lib/ksiegowosc/odlozyc';
+import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/przelew';
 import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney, formatPlPercentChange } from '@/lib/format/pl';
@@ -245,8 +246,10 @@ const BEZ_PROFILU = /nie ma ustawień podatkowych/;
  * miesiąc (podatek, składki społeczne, zdrowotna, a przy czynnym VAT także VAT, K7.1) zamiast 19 % liniowego.
  * W środku udział w przychodzie miesiąca, kwota i „do odłożenia”. Bez kwot
  * (brak profilu, parametry czekające na księgową, D7) karta mówi, dlaczego.
+ * Kwota ma podpis jak na stronie „Ten miesiąc” (NZ-TRESC-02), z rokiem
+ * miesiąca szacunku i, w styczniu, rokiem składkowym zdrowotnej.
  */
-export function odlozycProps(w: Odlozyc, rok: number): PierscienDane {
+export function odlozycProps(w: Odlozyc): PierscienDane {
   const subtitle = `Szacunek za ${monthLabel(w.miesiac)} z danych do dziś`;
   if (!w.ok) {
     return {
@@ -260,15 +263,13 @@ export function odlozycProps(w: Odlozyc, rok: number): PierscienDane {
     };
   }
   const pct = w.przychodGr && w.przychodGr > 0 ? Math.round((w.kwotaGr / w.przychodGr) * 100) : 0;
+  const podpis = podpisKwotMiesiaca(w.miesiac, w.pozycje.some((p) => p.rodzaj === 'zdrowotna'));
   return {
     title: 'Odłóż na podatek',
     subtitle,
     pct: Math.min(100, Math.max(0, pct)),
     lines: [`${pct}%`, formatPlCompactMoney(w.kwotaGr / 100), 'do odłożenia'],
-    caption:
-      w.braki.length > 0
-        ? 'Część kwot bez szacunku; szczegóły w „Ten miesiąc”.'
-        : `Według Twoich danych i stawek na ${rok} r.`,
+    caption: w.braki.length > 0 ? `${podpis} Część kwot bez szacunku, szczegóły w „Ten miesiąc”.` : podpis,
   };
 }
 

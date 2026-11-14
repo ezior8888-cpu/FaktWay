@@ -231,7 +231,7 @@ async function PierscienKarta({ supabase, tenantId, nowIso, tryb, className }: S
     if (pilotaz) {
       const dzis = todayInWarsaw(new Date(nowIso));
       const szacunek = await czytajOdlozyc(supabase, tenantId, dzis);
-      return <StatisticsSavingsGoalCard {...odlozycProps(szacunek, Number(dzis.slice(0, 4)))} className={className} />;
+      return <StatisticsSavingsGoalCard {...odlozycProps(szacunek)} className={className} />;
     }
     const data = await getCashFlowData(supabase, tenantId, new Date(nowIso));
     return <StatisticsSavingsGoalCard {...podatekProps(data.taxEstimate, tryb)} className={className} />;

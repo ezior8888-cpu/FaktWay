@@ -1,5 +1,8 @@
+import { render } from '@react-email/render';
 import { describe, expect, it } from 'vitest';
 
+import TerminRozliczenia from '@/lib/email/templates/TerminRozliczenia';
+import { terminDla } from '@/lib/ksiegowosc/kalendarz';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import { grupyFormy, niezaplacone, terminyNaDzis, trescTerminu, trescWyliczenia } from '@/lib/ksiegowosc/przypomnienia';
 import type { PozycjaZeSkrotem, Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
@@ -122,7 +125,7 @@ describe('F11-B5: VAT 0 zł', () => {
   it('treść: fakty o VAT 0 zł i terminie JPK_V7M, razem z pozycjami do zapłaty', () => {
     const [t] = terminyNaDzis('2026-11-20');
     expect(trescTerminu({ miesiac: '2026-10', termin: t.termin, dni: 5, pozycje: [{ rodzaj: 'vat', kwotaGr: 0 }] }).tresc).toBe(
-      'Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.',
+      'Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin. Według Twoich danych i stawek na 2026 r.',
     );
     const razem = trescTerminu({ miesiac: '2026-10', termin: t.termin, dni: 1, pozycje: [{ rodzaj: 'zdrowotna', kwotaGr: 100 }, { rodzaj: 'vat', kwotaGr: 0 }] }).tresc;
     expect(razem).toContain('Bez oznaczonej zapłaty: składka zdrowotna 1,00 zł.');
@@ -145,7 +148,7 @@ describe('treść', () => {
       ],
     });
     expect(t.tytul).toBe('Termin 20.11.2026: rozliczenie za październik 2026');
-    expect(t.tresc).toBe('Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składka zdrowotna.');
+    expect(t.tresc).toBe('Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składka zdrowotna. Według Twoich danych i stawek na 2026 r.');
     expect(t.adres).toBe('/reports/ten-miesiac?month=10&year=2026');
     expect(trescTerminu({ miesiac: '2026-10', termin: termin.termin, dni: 1, pozycje: [] }).tresc).toMatch(/^Jutro, 20\.11\.2026/);
   });
@@ -153,9 +156,35 @@ describe('treść', () => {
   it('wyliczony miesiąc i teksty bez trybu rozkazującego i długich myślników (D8)', () => {
     const t = trescWyliczenia({ miesiac: '2026-10', pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 153_600 }, { rodzaj: 'zus_spoleczne', kwotaGr: 192_676 }] });
     expect(t.tytul).toBe('Rozliczenie za październik 2026 jest wyliczone');
-    expect(t.tresc).toBe('Według Twoich danych: ryczałt 1536,00 zł, składki społeczne 1926,76 zł. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.');
+    expect(t.tresc).toBe('Do zapłaty: ryczałt 1536,00 zł, składki społeczne 1926,76 zł. Według Twoich danych i stawek na 2026 r. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.');
     const wszystko = [t.tytul, t.tresc, trescTerminu({ miesiac: '2026-10', termin: termin.termin, dni: 5, pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 1 }] }).tresc].join(' ');
     expect(wszystko).not.toMatch(/[—–]|Zapłać|Sprawdź|Uzupełnij|Otwórz|Pamiętaj/);
+  });
+});
+
+describe('podpis kwot (NZ-TRESC-02)', () => {
+  // Termin składek za styczeń 2027 (20.02 to sobota, więc 22.02).
+  const styczen = { termin: terminDla({ rodzaj: 'zus', rok: 2027, miesiac: 1 })! };
+
+  it('styczeń: przy składce zdrowotnej z kwotą także rok składkowy, bez niej sam rok stawek', () => {
+    const zZdrowotna = trescTerminu({ miesiac: '2027-01', termin: styczen.termin, dni: 5, pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 100 }, { rodzaj: 'zdrowotna', kwotaGr: 49_835 }] });
+    expect(zZdrowotna.tresc).toMatch(
+      /Według Twoich danych i stawek na 2027 r\.; składka zdrowotna według stawek roku składkowego od lutego 2026 r\. do stycznia 2027 r\.$/,
+    );
+    const bezZdrowotnej = trescTerminu({ miesiac: '2027-01', termin: styczen.termin, dni: 5, pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 100 }, { rodzaj: 'zdrowotna', kwotaGr: null }] });
+    expect(bezZdrowotnej.tresc).toMatch(/Według Twoich danych i stawek na 2027 r\.$/);
+    expect(trescWyliczenia({ miesiac: '2027-01', pozycje: [{ rodzaj: 'zdrowotna', kwotaGr: 49_835 }] }).tresc).toContain('roku składkowego od lutego 2026 r. do stycznia 2027 r.');
+  });
+
+  it('przypomnienie bez kwot (parametry czekają na księgową) nie ma podpisu kwot', () => {
+    const t = trescTerminu({ miesiac: '2026-10', termin: styczen.termin, dni: 1, pozycje: [{ rodzaj: 'ryczalt', kwotaGr: null }, { rodzaj: 'zdrowotna', kwotaGr: null }] });
+    expect(t.tresc).not.toMatch(/Według Twoich danych|zł/);
+  });
+
+  it('mail: podpis raz, z treści przypomnienia', async () => {
+    const t = trescTerminu({ miesiac: '2026-10', termin: styczen.termin, dni: 5, pozycje: [{ rodzaj: 'ryczalt', kwotaGr: 153_600 }] });
+    const html = await render(TerminRozliczenia({ tytul: t.tytul, tresc: t.tresc, adres: t.adres }));
+    expect(html.match(/według Twoich danych/gi)).toHaveLength(1);
   });
 });
 
