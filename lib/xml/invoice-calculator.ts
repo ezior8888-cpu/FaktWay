@@ -342,13 +342,19 @@ export function issueDateRangeErrors(issueDateIso: string, now: Date = new Date(
   return errors;
 }
 
-/** Kwota w groszach całkowitych: porównania kwot bez błędów liczb zmiennoprzecinkowych (FZ-008). */
+/**
+ * Kwota w groszach całkowitych: porównania kwot bez błędów liczb
+ * zmiennoprzecinkowych (FZ-008). Najpierw grosz jak wszędzie
+ * (`roundToCents`), potem ×100 domknięte do liczby całkowitej
+ * (`roundToDecimals(…, 0)`), bez nowych zaokrągleń obok tych dwóch.
+ */
 function toGrosze(value: number): number {
-  return Math.round(roundToCents(value) * 100);
+  return roundToDecimals(roundToCents(value) * 100, 0);
 }
 
-function formatGrosze(grosze: number): string {
-  return (grosze / 100).toFixed(2);
+/** Grosze z powrotem na złote do komunikatu (jak reszta komunikatów: liczba, np. 20.99). */
+function groszeToZloty(grosze: number): number {
+  return grosze / 100;
 }
 
 /**
@@ -389,13 +395,14 @@ function lineVatMessage(line: InvoiceLineItem, netGr: number, vatGr: number, rat
   if (ratePct === 0) {
     return `Pozycja ${line.ordinal}: stawka „${ZERO_VAT_RATE_LABELS[line.vatRate] ?? line.vatRate}” nie ma VAT, a pozycja ma VAT ${line.vatAmount}.`;
   }
+  // Pół grosza w górę (ust. 11), w liczbach całkowitych; netto i brutto ≥ 0 w fakturze zwykłej.
   const fromNet = Math.floor((netGr * ratePct + 50) / 100);
   const grossGr = netGr + vatGr;
   const fromGross = Math.floor((2 * grossGr * ratePct + 100 + ratePct) / (2 * (100 + ratePct)));
   return (
     `Pozycja ${line.ordinal}: VAT (${line.vatAmount}) nie wynika ze stawki ${ratePct}%: ` +
-    `od netto ${line.netAmount} wychodzi ${formatGrosze(fromNet)}, ` +
-    `a od brutto ${formatGrosze(grossGr)} wychodzi ${formatGrosze(fromGross)}.`
+    `od netto ${line.netAmount} wychodzi ${groszeToZloty(fromNet)}, ` +
+    `a od brutto ${groszeToZloty(grossGr)} wychodzi ${groszeToZloty(fromGross)}.`
   );
 }
 
@@ -485,7 +492,7 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
     }
     if (toGrosze(line.grossAmount) !== netGr + vatGr) {
       errors.push(
-        `Pozycja ${line.ordinal}: brutto (${line.grossAmount}) to nie netto + VAT (${formatGrosze(netGr + vatGr)}).`
+        `Pozycja ${line.ordinal}: brutto (${line.grossAmount}) to nie netto + VAT (${groszeToZloty(netGr + vatGr)}).`
       );
     }
   }
