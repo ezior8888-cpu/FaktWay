@@ -1,6 +1,7 @@
 
 
 import type { JobContext } from '@/lib/jobs/registry';
+import { granicaArchiwizacji, terminUsunieciaPoArchiwizacji } from '@/lib/retention/terminy';
 import { createAdminClient } from '@/lib/supabase/server';
 import { uploadToGlacier } from '@/lib/storage/glacier';
 import {
@@ -19,9 +20,12 @@ import {
  * Rejestracja pg-boss: lib/jobs/handlers/package-a.ts (kolejka cron.archive-old-invoices).
  */
 export async function runArchiveOldInvoices({ step, logger }: JobContext) {
-    const twoYearsAgo = new Date();
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    const issueBefore = twoYearsAgo.toISOString().slice(0, 10);
+    // Granica i termin usunięcia z tej samej chwili, dni w Polsce
+    // (lib/retention/terminy.ts, NZ-RET-01: usunięcie po 10 latach od wystawienia).
+    // Oba liczone przed pierwszym zapisem: błąd daty zatrzymuje przebieg na starcie.
+    const teraz = new Date();
+    const issueBefore = granicaArchiwizacji(teraz);
+    const terminUsuniecia = terminUsunieciaPoArchiwizacji(teraz);
 
     const candidates = await step.run('find-candidates', async () => {
       const supabase = createAdminClient();
@@ -44,14 +48,11 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
 
     if (candidates.length === 0) return { archived: 0 };
 
-    // Znaczniki z jednej chwili dla całego przebiegu: usunięcie 8 lat po
-    // archiwizacji.
-    const archivedAt = new Date();
-    const deletionDate = new Date(archivedAt);
-    deletionDate.setFullYear(deletionDate.getFullYear() + 8);
+    // Znaczniki z jednej chwili dla całego przebiegu. Termin usunięcia
+    // policzony na starcie, z tej samej chwili co granica (NZ-RET-01).
     const marks = {
-      archived_at: archivedAt.toISOString(),
-      scheduled_deletion_at: deletionDate.toISOString(),
+      archived_at: new Date().toISOString(),
+      scheduled_deletion_at: terminUsuniecia,
     };
 
     for (const candidate of candidates) {

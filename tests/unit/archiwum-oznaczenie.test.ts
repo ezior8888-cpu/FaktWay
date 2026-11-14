@@ -52,7 +52,7 @@ import { createJobStep } from '@/lib/jobs/step-shim';
 /** Cron o 3:00 w Polsce (CET), więc granica dwóch lat to 2024-11-11. */
 const NOW = new Date('2026-11-11T02:00:00.000Z');
 const ARCHIVED_AT = '2026-11-11T02:00:00.000Z';
-const DELETION_AT = '2034-11-11T02:00:00.000Z';
+const DELETION_AT = '2034-11-11T23:00:00.000Z';
 
 /** Wiersz żądania ponad ten rozmiar bramka odrzuca (nginx: `large_client_header_buffers 4 8k`). */
 const REQUEST_LINE_LIMIT = 8192;

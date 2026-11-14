@@ -11,9 +11,10 @@
  * - Rozliczenie (ROZ) jest pomniejszone o rozliczone zaliczki, jak w KPiR
  *   (`kpirRevenueNet`), więc zaliczki się nie dublują.
  * - Faktura do paragonu (FP) nie jest przychodem: sprzedaż wchodzi z raportu kasy.
- *   Do czasu reguły, która sprawdzi, że raport kasy obejmuje sprzedaż z FP
- *   (następny PR kroku 1.2, złoty przypadek G30), FP daje brak: miesiąc bez
- *   sum, bo FP nie może po cichu zniknąć ani być drugim przychodem.
+ *   FP jest poza ewidencją (`pominiete`), gdy raporty kasy z miesiąca paragonu
+ *   obejmują kwotę faktur do paragonów z tego miesiąca (`pokrycieFakturDoParagonu`,
+ *   krok 1.2, złoty przypadek G30); inaczej brak, bo FP nie może po cichu
+ *   zniknąć ani być drugim przychodem.
  * - Waluta: kurs średni NBP z ostatniego dnia roboczego przed dniem przychodu.
  * - Stawka: z pozycji, a bez niej domyślna z wersji profilu na dzień przychodu
  *   (`stawkaRyczaltuPozycji`). Dzień ze skalą albo liniowym nie należy do
@@ -188,14 +189,6 @@ const PROFIL_TEKST = 'Ustawienia są w Księgowości, w zakładce „Ustawienia 
 const POMOC_TEKST = 'Taki dokument rozdzielimy ręcznie po zgłoszeniu w Pomocy.';
 
 /**
- * Brak przy fakturze do paragonu (krok 1.2 planu kompletnej aplikacji). Art.
- * 109 ust. 3d ustawy o VAT i zasada 2 planu księgowości: sprzedaż z paragonu
- * wchodzi z raportu kasy, a sama FP nie jest przychodem. FaktWay nie sprawdza
- * jeszcze, czy raport kasy obejmuje tę sprzedaż (wpis ręczny może być innym
- * dowodem), więc miesiąc nie ma sum: FP nie zniknie ani nie wejdzie drugi raz.
- * Wyjście jak przy innych dokumentach, których ewidencja nie rozdzieli: Pomoc.
- */
-/**
  * F11-C4: faktura z importu KSeF, której JPK odmawia, bo FaktWay nie zna
  * pewnie jej dnia przychodu albo kwoty (`importedContentFlags` w
  * `lib/exports/data-fetcher.ts`): import sprzed odczytu daty sprzedaży
@@ -222,13 +215,113 @@ export function brakFakturyZImportu(numer: string, dzien: string, powod: Niepewn
   );
 }
 
-export function brakFakturyDoParagonu(numer: string, dzien: string, gdzie: 'ewidencji' | 'księgi'): string {
-  return (
+/**
+ * Faktura do paragonu (krok 1.2 planu kompletnej aplikacji, RP-FP-01). Zasada 2
+ * planu księgowości: FP nie jest drugim przychodem, jeśli sprzedaż weszła już
+ * z raportu kasy (art. 14 ust. 1 ustawy o PIT: przychód ze sprzedaży powstaje
+ * raz; art. 109 ust. 3d ustawy o VAT: FP nie zwiększa wartości sprzedaży).
+ *
+ * Reguła pokrycia (miesiąc i kwoty, #509): FP jest poza ewidencją i KPiR, gdy
+ * raporty kasy z miesiąca paragonu (dzień przychodu FP) są nie niższe niż
+ * faktury do paragonów z tego miesiąca. Raport kasy to wpis ręczny „Raport
+ * z kasy rejestrującej” (w KPiR w kolumnie 7); rodzaj ma w formularzu wartość
+ * domyślną, więc dochodzi warunek kwot. Bez raportu, przy niższej kwocie albo
+ * przy FP w walucie, korekcie, zaliczce i kwocie nie większej niż 0 jest brak
+ * z nazwą faktury i wyjściem: FP nie zniknie i nie wejdzie drugi raz.
+ * Przyjęte według rekomendacji, do potwierdzenia przez księgową (G30).
+ */
+export interface RaportKasy {
+  /** Dzień przychodu wpisu (RRRR-MM-DD). */
+  dzien: string;
+  kwotaGr: number;
+}
+
+export type PokrycieFp = { pokryta: true; powod: string } | { pokryta: false; komunikat: string };
+
+export type BrakPokryciaFp =
+  | { powod: 'brak_raportu' }
+  | { powod: 'raport_nizszy'; raportyGr: number; fakturyGr: number }
+  | { powod: 'nie_zestawi'; opis: string };
+
+const MIEJSCE: Readonly<Record<'ewidencji' | 'księgi', string>> = { ewidencji: 'W ewidencji', księgi: 'W księdze' };
+
+export function brakFakturyDoParagonu(numer: string, dzien: string, gdzie: 'ewidencji' | 'księgi', brak: BrakPokryciaFp): string {
+  const miesiac = monthLabel(dzien.slice(0, 7));
+  const wstep =
     `Faktura ${numer} z ${formatIsoDatePl(dzien)} to faktura do paragonu: sprzedaż z paragonu wchodzi do ${gdzie} ` +
-    `z raportu kasy, a sama faktura nie jest przychodem. FaktWay nie sprawdza jeszcze, czy raport kasy za ` +
-    `${monthLabel(dzien.slice(0, 7))} obejmuje tę sprzedaż, więc tego miesiąca nie liczy, żeby sprzedaż nie zniknęła ` +
-    'ani nie weszła dwa razy. Miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.'
-  );
+    'z raportu kasy, a sama faktura nie jest przychodem.';
+  switch (brak.powod) {
+    case 'brak_raportu':
+      return (
+        `${wstep} ${MIEJSCE[gdzie]} za ${miesiac} nie ma raportu kasy (wpis ręczny „Raport z kasy rejestrującej”` +
+        `${gdzie === 'księgi' ? ', kolumna 7' : ''}), więc FaktWay nie liczy tego miesiąca, żeby sprzedaż z paragonu nie zniknęła. ` +
+        'Raport kasy za ten miesiąc dodaje się we wpisach ręcznych. Jeśli tej sprzedaży nie zapisano na kasie, miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.'
+      );
+    case 'raport_nizszy':
+      return (
+        `${wstep} Raporty kasy za ${miesiac} (${kwotaTekst(brak.raportyGr)} zł) są niższe niż faktury do paragonów ` +
+        `z tego miesiąca (${kwotaTekst(brak.fakturyGr)} zł), więc nie obejmują całej tej sprzedaży i FaktWay nie liczy ` +
+        'tego miesiąca. Kwoty raportów kasy są we wpisach ręcznych; jeśli się zgadzają, miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.'
+      );
+    case 'nie_zestawi':
+      return (
+        `${wstep} Tej faktury (${brak.opis}) FaktWay nie zestawi z raportem kasy, więc nie liczy tego miesiąca. ` +
+        'Miesiąc policzymy ręcznie po zgłoszeniu w Pomocy.'
+      );
+  }
+}
+
+/** Co FP z importu może mieć poza zwykłą fakturą w złotych (FaktWay wystawia FP tylko tak). */
+function opisNiezestawialnej(f: FakturaEwidencji): string | null {
+  if (f.rodzaj !== 'zwykla') return NAZWY_RODZAJU[f.rodzaj];
+  if (f.waluta.toUpperCase() !== 'PLN') return `w ${f.waluta.toUpperCase()}`;
+  if (f.nettoGr <= 0) return `z kwotą netto ${kwotaTekst(f.nettoGr)} zł`;
+  return null;
+}
+
+/**
+ * Pokrycie każdej FP raportami kasy z miesiąca jej dnia przychodu (zasada
+ * w komentarzu nad `RaportKasy`). Wynik po `id` faktury, dla każdej FP z listy.
+ */
+export function pokrycieFakturDoParagonu(
+  faktury: readonly FakturaEwidencji[],
+  raporty: readonly RaportKasy[],
+  gdzie: 'ewidencji' | 'księgi',
+): Map<string, PokrycieFp> {
+  const miesiac = (dzien: string) => dzien.slice(0, 7);
+  const fpWMiesiacu = new Map<string, number>();
+  for (const f of faktury) {
+    if (!f.fp || opisNiezestawialnej(f) !== null) continue;
+    const m = miesiac(dzienPrzychodu(f));
+    fpWMiesiacu.set(m, (fpWMiesiacu.get(m) ?? 0) + f.nettoGr);
+  }
+  const raportyWMiesiacu = new Map<string, number>();
+  for (const r of raporty) raportyWMiesiacu.set(miesiac(r.dzien), (raportyWMiesiacu.get(miesiac(r.dzien)) ?? 0) + r.kwotaGr);
+
+  const wynik = new Map<string, PokrycieFp>();
+  for (const f of faktury) {
+    if (!f.fp) continue;
+    const dzien = dzienPrzychodu(f);
+    const brak = (b: BrakPokryciaFp) => wynik.set(f.id, { pokryta: false, komunikat: brakFakturyDoParagonu(f.numer, dzien, gdzie, b) });
+    const opis = opisNiezestawialnej(f);
+    if (opis !== null) {
+      brak({ powod: 'nie_zestawi', opis });
+      continue;
+    }
+    const raportyGr = raportyWMiesiacu.get(miesiac(dzien));
+    const fakturyGr = fpWMiesiacu.get(miesiac(dzien)) ?? 0;
+    if (raportyGr === undefined) brak({ powod: 'brak_raportu' });
+    else if (raportyGr < fakturyGr) brak({ powod: 'raport_nizszy', raportyGr, fakturyGr });
+    else {
+      wynik.set(f.id, {
+        pokryta: true,
+        powod:
+          `Faktura do paragonu nie jest drugim przychodem: sprzedaż z paragonu weszła do ${gdzie} z raportu kasy ` +
+          `za ${monthLabel(miesiac(dzien))}.`,
+      });
+    }
+  }
+  return wynik;
 }
 
 interface Czesc {
@@ -360,6 +453,12 @@ export function zbudujEwidencje(wejscie: WejscieEwidencji): Ewidencja {
   const braki: BrakEwidencji[] = [];
   const pominiete: PominietaFaktura[] = [];
   const wiersze: Omit<WierszEwidencji, 'lp'>[] = [];
+  // Krok 1.2: FP poza przychodem, gdy raport kasy z miesiąca paragonu ją obejmuje (RP-FP-01).
+  const pokrycieFp = pokrycieFakturDoParagonu(
+    wejscie.faktury,
+    wejscie.wpisy.filter((w) => w.rodzaj === 'raport_kasy').map((w) => ({ dzien: w.dataPrzychodu, kwotaGr: w.kwotaGr })),
+    'ewidencji',
+  );
 
   for (const f of wejscie.faktury) {
     const dzien = dzienPrzychodu(f);
@@ -383,7 +482,9 @@ export function zbudujEwidencje(wejscie: WejscieEwidencji): Ewidencja {
       continue;
     }
     if (f.fp) {
-      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'ewidencji') });
+      const p = pokrycieFp.get(f.id) ?? { pokryta: false, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'ewidencji', { powod: 'brak_raportu' }) };
+      if (p.pokryta) pominiete.push({ numer: f.numer, dzien, powod: p.powod });
+      else braki.push({ dzien, dokument: f.numer, komunikat: p.komunikat });
       continue;
     }
 
