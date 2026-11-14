@@ -101,8 +101,15 @@ Od M7 na prawdziwym koncie z bazy są: firma i konto (`GET /konto`), faktury
 wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół); od M8 także
 wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu;
 od M9 wydatki (lista z bazy) i wydatek ze zdjęcia (skaner, odczyt, sprawdzenie
-odczytu i zapis). Reszta ekranów zostaje na danych przykładowych do M10;
-stopka w Więcej mówi o tym klientowi.
+odczytu i zapis); od M10a należności („Po terminie”), zapłata i jej cofnięcie, przypomnienie
+o zapłacie (podgląd, zgoda, wstrzymanie), PDF faktury i „Sprawdź teraz” w
+skrzynce KSeF; od M10b księgowość („Ten miesiąc”: terminy, kwoty, dane do
+przelewu, zatwierdzenie miesiąca, zapłata), ustawienia Firma, KSeF,
+Przypomnienia i Bezpieczeństwo (odczyt, zmiany na faktway.pl), wybór firmy
+wspólny ze stroną i usunięcie konta. Na danych przykładowych zostają
+Kontrahenci, Przepływy, Analizy i Import danych; karty
+ustawień bez API (Księgowa, Powiadomienia, Zespół, Abonament, Dziennik)
+otwierają stronę. Stopka w Więcej mówi o tym klientowi.
 
 | Strona (`app/(dashboard)/`) | Telefon | Trasy |
 |---|---|---|
@@ -346,6 +353,77 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   reguły z testem zgodności). Wpis ręczny, usunięcie i opis kosztu z KSeF
   zostają na stronie do M10.
 
+**Stan po M10a (13.11.2026).** Należności, przypomnienia, PDF i „Sprawdź teraz”:
+- Logika strony wydzielona do `lib/` bez zmiany zachowania (testy strony bez
+  zmian zielone przed i po): zapłata i cofnięcie `lib/invoices/mark-paid.ts`,
+  lista „Po terminie” `lib/overdue/load-overdue.ts` (strona `/payments/overdue`
+  tylko ją rysuje), podgląd przypomnienia `lib/reminders/prepare-preview.ts`,
+  wstrzymanie `lib/reminders/pause.ts`, zatwierdzenie propozycji
+  `lib/flo/approve-proposal.ts` (żeton zgody przed wykonaniem, opcja
+  `onlyKind`), „Sprawdź teraz” `lib/ksef/inbox-check.ts`.
+- Trasy (`lib/api/mobile/naleznosci.ts`): `GET /naleznosci` (ta sama lista co
+  strona, stan przypomnień, `mozeOznaczac`, `mozeZatwierdzac`), `POST
+  /faktury/{id}/zaplata` i `/zaplata/cofnij` (RPC 00158, ponowienie daje
+  `juzBylo`), `POST /faktury/{id}/przypomnienie` (podgląd, nic nie wychodzi),
+  `POST /przypomnienia/{id}/zatwierdz` (właściciel albo administrator, tylko
+  `payment.chase`), `POST /faktury/{id}/wstrzymanie`, `GET /faktury/{id}/pdf`
+  (ten sam PDF co strona, w Base64 w JSON, firma z bramki, bo PDF czyta kluczem
+  serwisowym), `POST /skrzynka/sprawdz`. Kody `forbidden`, `payment_refused`,
+  `reminder_refused`, `pdf_unavailable`. Treść opcjonalna (`lib/api/mobile/tresc.ts`).
+- Telefon: zapłata od razu w wierszu, pasek „Cofnij” po odpowiedzi serwera, odmowa
+  przywraca stan i mówi dlaczego („Ponów” albo „OK”); „Po terminie” z serwera ze
+  stanem przypomnień (wspólny magazyn `stan/naleznosci.tsx`), ekran przypomnienia
+  jak okno strony (ta sama reguła, kiedy wolno przygotować), PDF w systemowym
+  arkuszu udostępniania z „Podglądem” (plik w `Paths.cache/faktway-dane/pdf/`,
+  czyszczony przy wylogowaniu), „Sprawdź teraz” pod kartą Kosztów. Kwoty z API są
+  w złotych, ekrany przeliczają je na grosze modelu (`grosze()`).
+- Przypomnienie: telefon nie pokazuje tekstów Flo w pierwszej osobie (D13);
+  porażka wykonania po zgodzie daje zdanie „Nie zleciliśmy wysyłki…” z tym, co zrobić.
+
+**Stan po M10b (14.11.2026).** Księgowość, ustawienia, wybór firmy, usunięcie konta:
+- Logika strony w `lib/` bez zmiany zachowania (testy strony zielone przed i po):
+  zapis „Ten miesiąc” `lib/ksiegowosc/ten-miesiac-zapis.ts` (zatwierdzenie i
+  zapłata), dane do przelewu `lib/ksiegowosc/przelew.ts`, żądanie i anulowanie
+  usunięcia konta `lib/gdpr/account-deletion.ts`, sprawdzenie hasła
+  `lib/auth/password-check.ts` (wspólny limit prób), ostatnia firma
+  `lib/organizations/last-active.ts`, model ustawień przypomnień
+  `lib/reminders/settings-model.ts` (formularz strony i telefon).
+- Trasy: `POST /firma` (wybór firmy w `users.last_active_tenant_id`, ta sama
+  funkcja co przełącznik strony), `GET /ksiegowosc?miesiac=` (wyliczenie strony,
+  wyłącznik `ten_miesiac`, dane do przelewu, stan wersji i zapłat, skróty
+  pozycji), `POST /ksiegowosc/zatwierdz` i `/ksiegowosc/rozliczenia/{id}/zaplata`
+  (właściciel albo administrator; odmowa `settlement_refused` ze zdaniem
+  strony), `GET /ustawienia` (Firma, KSeF, Przypomnienia do odczytu),
+  `GET` i `POST /konto/usuniecie`, `POST /konto/usuniecie/anuluj`. Kody
+  `reauth_required`, `deletion_blocked`, `deletion_in_progress`, `settlement_refused`.
+- Decyzje M10b (podjęte w sesji według planu, zasad designu i `AGENTS.md`):
+  (1) usunięcie konta: 2FA wymusza bramka, konto z hasłem potwierdza hasłem
+  (GoTrue, klient z kluczem serwisowym jak `POST /logowanie`, D16), konto tylko
+  z Google świeżym logowaniem w tej sesji, najwyżej 10 minut (claim `amr`);
+  metoda z `app_metadata.providers`, nigdy z telefonu. Strona nie ma drogi dla
+  konta bez hasła, a Apple wymaga usuwania konta w aplikacji.
+  (2) Księgowość z telefonu: „Ten miesiąc” z zatwierdzeniem i zapłatą; nadwyżki
+  VAT telefon nie wpisuje (liczy jak strona bez wpisu: z MF albo z poprzedniej
+  wersji); KPiR, ewidencja, VAT i JPK, eksport i zapłaty spoza wyliczenia
+  otwierają stronę. (3) Ustawienia do odczytu: zapis danych firmy, VAT i daty
+  rozpoczęcia zmienia faktury i rozliczenia, certyfikat KSeF wymaga plików i 2FA,
+  a formularz przypomnień ma granice i podgląd; te zmiany zostają przy
+  formularzach strony („Zmień na faktway.pl”, po powrocie ekran wczytuje dane od
+  nowa). Stan KSeF liczy serwer (`hasConfiguredKsefProof`), bo telefon nie zna
+  środowiska aplikacji; przypomnienia widzi tylko właściciel, jak zakładka strony.
+  (4) Wybór firmy w telefonie zapisuje się też dla strony
+  (`last_active_tenant_id`), więc po następnym logowaniu otwiera się ta sama firma.
+- Telefon: zapis zawsze w firmie danych na ekranie (`firmaEkranu`); magazyny
+  należności, księgowości i ustawień czyszczone przy końcu sesji
+  (`stan/czyszczenie.ts`); wiersze Więcej według roli jak zakładki strony.
+- Obchód w symulatorze (18 Pro, własny stos z migracjami gałęzi) znalazł i
+  naprawił: zimny start linkiem prosto w zakładkę pytał API przed ustawieniem
+  wybranej firmy („Nie masz już dostępu do tej firmy”; ref firmy teraz w efekcie
+  układu), ekran konta wymagał wybranej firmy (trasy konta idą `bezFirmy`), złe
+  hasło dawało „Coś poszło nie tak” (kod `invalid_credentials` niesie zdanie
+  serwera), nagłówek Księgowości mówił „Nic do zapłaty”, gdy żadnej kwoty nie
+  dało się policzyć (stawki 2026 czekają na sprawdzenie, jak na stronie).
+
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
 - `tsconfig.json` (`include: **/*.ts`): dodać `mobile` do `exclude`;
@@ -440,7 +518,32 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** dokończyć obchód M9 w symulatorze iPhone 17 (wymaga zgody w panelu symulatora; build ze skanerem zainstalowany, drogę serwera sprawdzono przez API na osobnym stosie), zrzuty do `docs/mobile/zrzuty/m9/`; potem M10 (pozostałe ekrany z 3a). Osobno: błąd z `main`, enum `categorization_method` bez `rule_global_keyword` i `rule_global_nip` (paragon ze stacji, hotelu, Allegro nie zapisuje się po OCR, 3 płatne odczyty na próbę), osobna gałąź i PR.
+**Następny krok:** M12 (Android, wiersz M12 w sekcji 7; sekcja 10 zasad
+designu): dopasowanie konwencji i checklista na emulatorze Androida. M11
+(powiadomienia push, logowanie Apple) i M13 (sklep) czekają na płatne konto
+Apple. Przed M12 scalić po kolei #716 (M8), #740 (mapa filtra dla telefonu), #738 (M9) i #752 (gałąź `claude/mobile-m10b-ksiegowosc-ustawienia-v2`: M10a, M10b i M9 w jednej gałęzi; zastępuje #739 i #751, bo w historii #751 gitleaks znalazł testowe hasło).
+**Z M9 zostaje:** obchód M9 w symulatorze iPhone 17 (wymaga zgody w panelu symulatora; build ze skanerem zainstalowany, drogę serwera sprawdzono przez API na osobnym stosie), zrzuty do `docs/mobile/zrzuty/m9/`. Osobno: błąd z `main`, enum `categorization_method` bez `rule_global_keyword` i `rule_global_nip` (paragon ze stacji, hotelu, Allegro nie zapisuje się po OCR, 3 płatne odczyty na próbę), osobna gałąź i PR.
+**Z M10b zostaje:** (1) zapisy ustawień (dane firmy, VAT, data rozpoczęcia,
+certyfikat KSeF, przypomnienia, hasło, 2FA, klucze dostępu) i karty Księgowa,
+Powiadomienia, Zespół, Abonament, Dziennik są na stronie; API dla nich to
+osobny etap, gdy Bartosz zdecyduje, które mają być w telefonie. (2) KPiR,
+ewidencja, VAT i JPK, eksport, nadwyżka VAT i zapłaty spoza wyliczenia na
+stronie. (3) Kontrahenci, Przepływy, Analizy i Import danych na danych
+przykładowych. (4) Formularz przypomnień strony pokazuje „włączone”, gdy firma
+nie zapisała jeszcze ustawień, a scheduler bez zapisu niczego nie przygotowuje
+(telefon mówi „Nie ustawione”); do osobnej naprawy po stronie strony.
+(5) Konto z dostawcą `email` bez ustawionego hasła (np. z zaproszenia) nie
+potwierdzi usunięcia z telefonu; ścieżka: ustawić hasło na stronie.
+**Z M10a zostaje:** (1) ustalenie do osobnej naprawy: `assertDeliveryDeadline`
+(`lib/reminders/delivery-consent.ts`) porównuje `created_at` żetonu zgody (zegar
+bazy, domyślne `now()`) z `consumed_at` (zegar Node w `lib/flo/approval.ts`) i
+odrzuca zgodę, gdy zegar aplikacji spóźnia się względem bazy bardziej niż odstęp
+między zapisem a zużyciem żetonu; lokalnie (Colima) zatwierdzenie z telefonu
+skończyło się „Termin wysyłki minął” (strona woła tę samą funkcję); na produkcji
+app-1 i db-1 to różne serwery. (2) Pełnoekranowy podgląd PDF w aplikacji (Quick Look) wymaga
+paczki natywnej; dziś PDF otwiera arkusz udostępniania z miniaturą i „Podglądem”.
+(3) Załącznik podglądu przypomnienia sprawdzony testem trasy, nie w symulatorze
+(firma testowa bez wezwania PDF).
 **Przed scaleniem M8:** migracja 00201 (przed wdrożeniem; 00199 z #643 już
 na produkcji). Numeracja z #643 jest w `lib/invoices/issue-regular.ts`;
 telefon wysyła serię i podgląd numeru z podpowiedzi oraz klucz zapisu jako
@@ -462,8 +565,7 @@ z `error || !row`) zwraca „nie znaleziono” także przy błędzie bazy, więc
 chwilowy błąd odczytu wygląda jak usunięta faktura (strona i telefon tak
 samo); naprawa osobnym PR według protokołu. Wcześniejsze otwarte
 (z M7): wybór firmy nie zmienia `last_active_tenant_id`, Pulpit, Wydatki,
-Księgowość i ustawienia na danych przykładowych, „Sprawdź teraz” w skrzynce
-KSeF, ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
+Księgowość i ustawienia na danych przykładowych, ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
 symulatorze, 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie jednym
 dotknięciem (5.2), D4, D6.
 
@@ -488,4 +590,6 @@ dotknięciem (5.2), D4, D6.
 | 13.11.2026 | M6c | kod 2FA z telefonu przez nasze API (z przeglądu M6b, decyzja Bartosza: osobny etap przed M8; 4.2): trasa `POST /api/mobile/v1/kod` (`lib/api/mobile/kod.ts`) jak `verifyMfaChallengeAction` strony: kod spoza 6 cyfr i konto bez TOTP bez zużycia próby, `checkMfaRateLimit` wspólny ze stroną (bez Redisa 503 „Nie możemy teraz sprawdzić kodu”), wyzwanie i kod w GoTrue tokenem klienta i kluczem anon, sprawdzenie nowego tokenu (AAL2, to samo konto), wpisy `auth.mfa_challenge_failed` i `auth.mfa_challenge_succeeded` z `client: 'mobile'`, sesja AAL2 dla `setSession`; bramka w wariancie `mfa: 'challenge'` (inna sesja: 409 `mfa_not_required`, pozostałe trasy bez zmian); aplikacja: `potwierdzKod` przez trasę. Testy: trasa z atrapami (20), rdzeń aplikacji (16), prawdziwy GoTrue (`tests/rls-mobile-kod.test.ts`). Sprawdzone na osobnym stosie z migracjami i Redisem dev: limit 5 prób (6. próba 429), wpisy audytu; symulator: hasło, zły kod, dobry kod, Pulpit; zrzuty `docs/mobile/zrzuty/m6c/`. Z przeglądu kodu 4 uwagi poprawione. Zostaje: GoTrue przyjmuje `/factors/{id}/verify` wprost z kluczem anon (jak przy stronie), więc dla omijającego aplikację zaporą jest limit GoTrue | #711 |
 | 13.11.2026 | M8 | szybka faktura z telefonu do KSeF (4.3, „Stan po M8”): logika „Wystaw i wyślij”, szkicu i wysyłki szkicu wydzielona do `lib/invoices/{issue-regular,send-draft}.ts` (test zgodności ze stroną), kolejka KSeF z sesji tokenu (`tokenSession`: 2FA i znacznik KSeF bez ciasteczek), trasy `POST /faktury` z kluczem idempotencji (00201 `mobile_idempotency_keys`), `POST /faktury/{id}/wysylka`, `GET /faktury/podpowiedz`; w aplikacji formularz zwykłej faktury przez API (nabywcy z ostatnich faktur, numer z serwera, błąd serwera pod polem), szkic i „Wyślij do KSeF” przy szkicu, status co 3 s do przyjęcia; zdania serwera bez długich myślników, pola i przycisk zawijają się przy dużym tekście. Sprawdzone w symulatorze 17e na osobnym stosie z prawdziwym KSeF TEST (4 faktury przyjęte, fikcyjny NIP, certyfikat samopodpisany); 7 uwag z przeglądu (6 poprawionych); scalenie z #713 (numeracja #643 przeniesiona do `lib/`); zrzuty `docs/mobile/zrzuty/m8/` | #716 |
 | 13.11.2026 | M8, przegląd | niezależny przegląd #716 (9 uwag) i odpowiedzi: (1) nabywca z UE i osoba z PESEL nie stają się osobą prywatną, stawki spoza telefonu nie stają się 0%, „Duplikuj” takiej faktury otwiera stronę; (2) zapis do firmy formularza; (3) kwoty pozycji jak `calculateLineItem` (cena do 4 miejsc, 3 × 33,3333 = 123,00 zł), cena pokazywana z 4 miejscami; (4) seria numeracji z podpowiedzi; (5) klucz żądania jako `numberRequestKey` (00199) i ponowienie po przerwie; (6) wyjątek po szkicu to 201 ze szkicem, telefon bez odpowiedzi mówi „nie wiemy”; (7) wyścig przy ponowieniu i stan `failed`; (8) bez zmian, decyzja Bartosza; (9) zapisane jako ustalenie M8-9. Sprawdzone w symulatorze: nabywcy bez firmy z UE, duplikat faktury z UE na stronie, duplikat z ceną 33,3333 przyjęty w KSeF TEST (123,00 zł, `number_request_key` zapisany); zrzuty 13 do 18 w `docs/mobile/zrzuty/m8/` | #716 |
+| 13.11.2026 | M10a | należności, przypomnienia, PDF i „Sprawdź teraz” z telefonu (4.3, „Stan po M10a”): logika strony wydzielona do `lib/` bez zmian zachowania (zapłata `lib/invoices/mark-paid.ts`, lista „Po terminie” `lib/overdue/load-overdue.ts`, podgląd i wstrzymanie przypomnienia, zatwierdzenie propozycji `lib/flo/approve-proposal.ts`, „Sprawdź teraz”), 8 tras w `app/api/mobile/v1` (lista, zapłata i cofnięcie, podgląd, zgoda tylko właściciela i administratora, wstrzymanie, PDF z firmą z bramki, skrzynka); w aplikacji zapłata z „Cofnij”, „Po terminie” z serwera, ekran przypomnienia jak okno strony, PDF w arkuszu udostępniania z „Podglądem”, „Sprawdź teraz” w Kosztach, nagłówek sekcji przy dużym tekście. Testy: trasy (48, czerwone przed zmianą), baza (`rls-mobile-naleznosci`, 5), testy strony bez zmian zielone. Sprawdzone w symulatorze 18 Pro na własnym stosie (zapłata i cofnięcie w bazie, podgląd i odmowy, wstrzymanie, PDF, limit 5 minut); 7 uwag z przeglądu poprawionych; ustalenie o zegarach w `assertDeliveryDeadline` do osobnej naprawy; zrzuty `docs/mobile/zrzuty/m10/` | #752 (zastąpił #739) |
 | 14.11.2026 | M9 | wydatek ze zdjęcia (4.3, „Stan po M9”): `lib/expenses/{review,ocr-status}.ts` (test zgodności także na starej akcji), trasy `/wydatki/zdjecie` (poza proxy, klucz 00202), `/wydatki/odczyt/{id}`, `/wydatki/{id}/zatwierdzenie`; skaner VisionKit (moduł lokalny), galeria, sprawdzenie odczytu, wydatki z bazy. Sprawdzone przez API na osobnym stosie z prawdziwym OCR: wgranie, ponowienie (to samo zadanie), wydatek w bazie, zatwierdzenie. Obchód w symulatorze czeka na zgodę | #738 |
+| 14.11.2026 | M10b | księgowość, ustawienia, wybór firmy i usunięcie konta z telefonu (4.3, „Stan po M10b”): logika strony wydzielona do `lib/` bez zmian zachowania (zapis „Ten miesiąc”, dane do przelewu, usunięcie konta RODO, sprawdzenie hasła, ostatnia firma, model ustawień przypomnień), 8 tras w `app/api/mobile/v1` (`firma`, `ksiegowosc` z zatwierdzeniem i zapłatą, `ustawienia`, `konto/usuniecie` z anulowaniem); w aplikacji „Ten miesiąc” z zatwierdzeniem i danymi do przelewu, Firma, KSeF, Przypomnienia i Bezpieczeństwo z konta (zmiany na faktway.pl), wybór firmy zapisany też dla strony, usunięcie konta hasłem albo świeżym logowaniem Google. Decyzje sesji w 4.3. Testy tras (konto i firma 13, księgowość 9, ustawienia 9; czerwone przed zmianą albo mutacją), testy strony bez zmian zielone; 6 uwag z przeglądu i 4 z obchodu poprawione; zrzuty `docs/mobile/zrzuty/m10/m10b-*` | #752 (zastąpił #751 po trafieniu gitleaks na testowe hasło) |

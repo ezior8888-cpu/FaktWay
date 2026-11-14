@@ -1,14 +1,10 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
-import { logAudit } from '@/lib/audit/log';
 import { trustedClientIp } from '@/lib/auth/client-ip';
 import { reauthenticateWithPassword } from '@/lib/auth/reauth';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
-import { sendGdprDeletionScheduledEmail } from '@/lib/email/send';
-import { cancelOwnGdprRequest, createGdprRequest } from '@/lib/gdpr/deletion';
-import { GdprDeletionBlockedError } from '@/lib/gdpr/deletion-blockers';
+import { cancelAccountDeletion, scheduleAccountDeletion } from '@/lib/gdpr/account-deletion';
 import { readTurnstileToken } from '@/lib/security/bot-check';
 import { createClient } from '@/lib/supabase/server';
 
@@ -47,42 +43,19 @@ export async function requestGdprDeletionAction(formData: FormData): Promise<Gdp
 
   const requestHeaders = await headers();
   const origin = requestHeaders.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
-  try {
-    const created = await createGdprRequest({
-      userId: user.id, userEmail: user.email,
-      ipAddress: trustedClientIp(requestHeaders) ?? undefined,
-      userAgent: requestHeaders.get('user-agent') ?? undefined,
-    });
-    const scheduledFor = created.scheduledFor.toLocaleDateString('pl-PL', {
-      year: 'numeric', month: 'long', day: 'numeric',
-    });
-    let emailSent = false;
-    if (created.cancelToken) {
-      try {
-        const delivery = await sendGdprDeletionScheduledEmail({
-          userEmail: user.email, scheduledFor,
-          cancelUrl: `${origin}/gdpr/cancel?token=${created.cancelToken}`,
-        });
-        emailSent = delivery.sent;
-      } catch {
-        // Żądanie już istnieje. Pokazujemy prawdziwy stan i możliwość anulowania hasłem.
-        emailSent = false;
-      }
-    }
-    if (!created.alreadyScheduled) {
-      await logAudit({
-        action: 'gdpr.deletion_requested', tenantId: null, userId: user.id,
-        metadata: { request_id: created.id, scheduled_for: created.scheduledFor.toISOString() },
-      });
-    }
-    revalidatePath('/settings/account');
-    return { ok: true, scheduledFor, alreadyScheduled: created.alreadyScheduled, emailSent };
-  } catch (err) {
-    if (err instanceof GdprDeletionBlockedError) {
-      return { ok: false, error: 'active_subscription', organizations: err.organizations };
-    }
-    return { ok: false, error: 'request_failed' };
+  // Żądanie, mail z linkiem anulowania i audyt: `lib/gdpr/account-deletion.ts` (to samo dla telefonu).
+  const scheduled = await scheduleAccountDeletion({
+    userId: user.id, userEmail: user.email,
+    ipAddress: trustedClientIp(requestHeaders) ?? undefined,
+    userAgent: requestHeaders.get('user-agent') ?? undefined,
+    origin,
+  });
+  if (!scheduled.ok) {
+    return scheduled.error === 'active_subscription'
+      ? { ok: false, error: 'active_subscription', organizations: scheduled.organizations }
+      : { ok: false, error: 'request_failed' };
   }
+  return { ok: true, scheduledFor: scheduled.scheduledFor, alreadyScheduled: scheduled.alreadyScheduled, emailSent: scheduled.emailSent };
 }
 
 /** Awaryjna droga anulowania, gdy mail nie dotarł: sesja + aktualne hasło. */
@@ -95,16 +68,6 @@ export async function cancelOwnGdprDeletionAction(formData: FormData): Promise<G
   const { user } = state;
   const passwordError = await confirmGdprPassword(formData);
   if (passwordError) return passwordError;
-  try {
-    const result = await cancelOwnGdprRequest(user.id);
-    if (!result.ok) return { ok: false, error: 'not_pending' };
-    await logAudit({
-      action: 'gdpr.deletion_canceled', tenantId: null, userId: user.id,
-      metadata: { method: 'authenticated_password_confirmation', request_id: result.requestId },
-    });
-    revalidatePath('/settings/account');
-    return { ok: true };
-  } catch {
-    return { ok: false, error: 'request_failed' };
-  }
+  const canceled = await cancelAccountDeletion({ userId: user.id, method: 'authenticated_password_confirmation' });
+  return canceled.ok ? { ok: true } : { ok: false, error: canceled.error };
 }

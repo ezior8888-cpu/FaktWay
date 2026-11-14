@@ -5,8 +5,6 @@ import { z } from 'zod';
 
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
-import { sendJobEvent } from '@/lib/jobs/enqueue';
-import { invoicePaymentReceived } from '@/lib/jobs/events';
 import { invalidateTenantDashboard } from '@/lib/cache/invalidation';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
@@ -27,21 +25,27 @@ import {
 } from '@/lib/invoices/invoice-payments';
 import {
   INVOICE_PAYMENT_ROLES,
-  MARK_PAID_FAILED,
-  markPaidRefusalText,
-  UNDO_PAID_FAILED,
   type MarkInvoicePaidResult,
-  type MarkPaidRefusal,
   type UndoInvoicePaidResult,
 } from '@/lib/invoices/manual-payment';
+import {
+  PAYMENT_ROLE_REFUSAL,
+  emitPaymentReceived,
+  markInvoicePaid,
+  markPaidInputRefusal,
+  revalidatePaymentViews,
+  undoInvoicePaid,
+  undoPaidInputRefusal,
+} from '@/lib/invoices/mark-paid';
 import { ActionAuthError, requireOrgRole, type AuthContext } from '@/lib/supabase/auth-context';
-import { emitWebhookEvent } from '@/lib/webhooks/emit';
 
 /**
  * „Zapłacone” jednym dotknięciem (FaktWay 1.0 §3 pkt 3): akcje na kliencie
- * sesji, bez klucza serwisowego. Firmę, rolę i wszystkie warunki sprawdza
- * jeszcze raz RPC z 00158 w jednej transakcji z zapisem, a `payments` zostaje
- * zablokowana dla sesji (00074).
+ * sesji, bez klucza serwisowego. Logika oznaczenia i cofnięcia leży od M10a
+ * w `lib/invoices/mark-paid.ts` (ta sama dla telefonu); tu tylko sesja z
+ * ciasteczek i rola. Firmę, rolę i wszystkie warunki sprawdza jeszcze raz RPC
+ * z 00158 w jednej transakcji z zapisem, a `payments` zostaje zablokowana dla
+ * sesji (00074).
  *
  * Audyt (`invoice.marked_paid`, `invoice.paid_undone`) zapisują same RPC w tej
  * samej transakcji co wpłata, więc akcja go nie dubluje. Ponowienie: oba RPC są
@@ -50,15 +54,7 @@ import { emitWebhookEvent } from '@/lib/webhooks/emit';
  * po rzeczywistej zmianie.
  */
 
-/**
- * Funkcje z 00158. `types/database.ts` generujemy z produkcji dopiero po wgraniu
- * migracji (AGENTS.md, „Typy bazy”), do tego czasu klient widzi je przez ten kształt.
- */
 type RpcResult = PromiseLike<{ data: unknown; error: { code?: string; message: string; hint?: string | null } | null }>;
-interface ManualPaymentRpc {
-  rpc(fn: 'mark_invoice_paid', args: { p_invoice_id: string; p_paid_on: string | null }): RpcResult;
-  rpc(fn: 'undo_invoice_paid', args: { p_invoice_id: string }): RpcResult;
-}
 /** Funkcje z 00176 (wpłaty częściowe), do czasu typów z produkcji przez ten kształt. */
 interface PaymentEntryRpc {
   rpc(
@@ -75,52 +71,14 @@ interface PaymentEntryRpc {
   rpc(fn: 'void_invoice_payment', args: { p_payment_id: string }): RpcResult;
 }
 
-/**
- * Zdarzenie „wpłata zapisana” (krok 8.1): anulowanie przypomnień przy pełnej zapłacie
- * i push „Otrzymana płatność”. Wołane tylko po wyniku „zapisano”, nigdy po
- * `already_*` ani odmowie. Wpłata jest już w bazie, więc błąd kolejki nie psuje
- * akcji: logujemy i idziemy dalej (przypomnienia zdejmuje też RPC, a push to dodatek).
- */
-async function emitPaymentReceived(invoiceId: string, paymentId: string): Promise<void> {
-  try {
-    await sendJobEvent({
-      ...invoicePaymentReceived.create({ invoiceId, paymentId }),
-      singletonKey: `payment:${paymentId}`,
-    });
-  } catch (e) {
-    console.error('[invoice-payments] invoice/payment.received', e instanceof Error ? e.message : e);
-  }
-}
-
 const invoiceIdSchema = z.string().uuid();
-/** Sam kształt daty: czy nie jest z przyszłości, sprawdza RPC na dzień w Warszawie. */
-const paidOnSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
-  const parsed = new Date(`${value}T12:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-});
 
-/** Strony, na których zmienia się stan płatności albo suma wpływów. */
-function revalidatePaymentViews(invoiceId: string): void {
-  revalidatePath('/invoices');
-  revalidatePath(`/invoices/${invoiceId}`);
-  revalidatePath('/payments/overdue');
-  revalidatePath('/dashboard');
-  revalidatePath('/przeplywy');
-  revalidatePath('/analizy/sprzedaz');
-}
-
-const ROLE_REFUSAL = {
-  mark: 'Zapłatę oznacza właściciel, administrator albo członek firmy. Księgowa ma tu wgląd.',
-  record: 'Wpłaty zapisuje właściciel, administrator albo członek firmy. Księgowa ma tu wgląd.',
-  void: 'Wpłaty cofa właściciel, administrator albo członek firmy. Księgowa ma tu wgląd.',
-} as const;
-
-async function authorized(kind: keyof typeof ROLE_REFUSAL = 'mark'): Promise<{ ctx: AuthContext } | { error: string }> {
+async function authorized(kind: keyof typeof PAYMENT_ROLE_REFUSAL = 'mark'): Promise<{ ctx: AuthContext } | { error: string }> {
   try {
     return { ctx: await requireOrgRole([...INVOICE_PAYMENT_ROLES]) };
   } catch (e) {
     if (e instanceof ActionAuthError) {
-      return { error: e.message === 'Niewystarczające uprawnienia' ? ROLE_REFUSAL[kind] : e.message };
+      return { error: e.message === 'Niewystarczające uprawnienia' ? PAYMENT_ROLE_REFUSAL[kind] : e.message };
     }
     throw e;
   }
@@ -131,74 +89,21 @@ function text(value: unknown): string | null {
 }
 
 export async function markInvoicePaidAction(invoiceId: string, paidOn?: string): Promise<MarkInvoicePaidResult> {
-  if (!invoiceIdSchema.safeParse(invoiceId).success) return { success: false, error: MARK_PAID_FAILED };
-  if (paidOn !== undefined && !paidOnSchema.safeParse(paidOn).success) {
-    return { success: false, error: markPaidRefusalText('invalid_date') };
-  }
+  const refused = markPaidInputRefusal(invoiceId, paidOn);
+  if (refused) return refused;
   const auth = await authorized();
   if ('error' in auth) return { success: false, error: auth.error };
   const { supabase, tenantId, user, role } = auth.ctx;
-
-  const { data, error } = await (supabase as unknown as ManualPaymentRpc).rpc('mark_invoice_paid', {
-    p_invoice_id: invoiceId,
-    p_paid_on: paidOn ?? null,
-  });
-  if (error || typeof data !== 'object' || data === null) {
-    console.error('[invoice-payments] mark_invoice_paid', error?.code);
-    return { success: false, error: MARK_PAID_FAILED };
-  }
-  const result = data as Record<string, unknown>;
-  const number = text(result.internal_number);
-
-  if (result.status === 'refused') {
-    return { success: false, error: markPaidRefusalText(result.code as MarkPaidRefusal, number) };
-  }
-  if (result.status === 'already_paid') return { success: true, status: 'already_paid', number };
-  if (result.status !== 'marked') return { success: false, error: MARK_PAID_FAILED };
-
-  const amount = Number(result.amount);
-  const day = String(result.paid_on);
-  await invalidateTenantDashboard(tenantId);
-  revalidatePaymentViews(invoiceId);
-  const markedPaymentId = text(result.payment_id);
-  if (markedPaymentId) await emitPaymentReceived(invoiceId, markedPaymentId);
-  await trackServer({
-    userId: user.id,
-    tenantId,
-    event: ANALYTICS_EVENTS.invoiceMarkedPaid,
-    properties: { source: 'manual', role },
-  });
-  // Webhook „wpłata zapisana” (krok 7.1, część 3) dla nowej wpłaty z RPC. Fail-open:
-  // wpłata jest już zapisana; przy wyłączonej fladze `publicApiEnabled` nic się nie zleca.
-  const paymentId = text(result.payment_id);
-  if (paymentId) await emitWebhookEvent({ tenantId, type: 'payment.recorded', entityId: paymentId });
-  return { success: true, status: 'marked', amount, paidOn: day, number };
+  return markInvoicePaid({ supabase, tenantId, userId: user.id, role }, invoiceId, paidOn);
 }
 
 export async function undoInvoicePaidAction(invoiceId: string): Promise<UndoInvoicePaidResult> {
-  if (!invoiceIdSchema.safeParse(invoiceId).success) return { success: false, error: UNDO_PAID_FAILED };
+  const refused = undoPaidInputRefusal(invoiceId);
+  if (refused) return refused;
   const auth = await authorized();
   if ('error' in auth) return { success: false, error: auth.error };
   const { supabase, tenantId } = auth.ctx;
-
-  const { data, error } = await (supabase as unknown as ManualPaymentRpc).rpc('undo_invoice_paid', {
-    p_invoice_id: invoiceId,
-  });
-  if (error || typeof data !== 'object' || data === null) {
-    console.error('[invoice-payments] undo_invoice_paid', error?.code);
-    return { success: false, error: UNDO_PAID_FAILED };
-  }
-  const result = data as Record<string, unknown>;
-
-  if (result.status === 'refused') {
-    return { success: false, error: markPaidRefusalText('not_found') };
-  }
-  if (result.status === 'nothing_to_undo') return { success: true, status: 'nothing_to_undo' };
-  if (result.status !== 'undone') return { success: false, error: UNDO_PAID_FAILED };
-
-  await invalidateTenantDashboard(tenantId);
-  revalidatePaymentViews(invoiceId);
-  return { success: true, status: 'undone' };
+  return undoInvoicePaid({ supabase, tenantId }, invoiceId);
 }
 
 // ─── Wpłaty częściowe i historia wpłat (plan kompletnej aplikacji, krok 3.1, 00176) ───

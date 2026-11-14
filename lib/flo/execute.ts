@@ -32,6 +32,9 @@ import { logAuditSystem } from '@/lib/audit/log-system';
 import type { AuditAction } from '@/lib/audit/log';
 import { isFloProposalKind, type FloApproveInput, type FloApproveResult } from '@/types/flo';
 
+/** Odpowiedź, gdy wykonanie padło po zużyciu żetonu (telefon zamienia ją na zdanie bez Flo, plan D13). */
+export const EXECUTION_FAILED_MESSAGE = 'Nie udało mi się tego dokończyć. Zajmujemy się tym.';
+
 export interface ExecuteProposalInput {
   proposalId: string;
   tenantId: string;
@@ -252,7 +255,7 @@ export async function executeProposal(
     return {
       ok: false,
       reason: 'blocked',
-      message: 'Nie udało mi się tego dokończyć. Zajmujemy się tym.',
+      message: EXECUTION_FAILED_MESSAGE,
     };
   }
 

@@ -13,85 +13,22 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import type { Database } from '@/types/database';
+import {
+  reminderSettingsFromRow,
+  type ReminderSettings,
+  type ReminderSettingsRow,
+} from '@/lib/reminders/settings-model';
 
-type SettingsRow = Database['public']['Tables']['reminder_settings']['Row'] | null;
-
-export interface Settings {
-  enabled: boolean;
-  stage_1_enabled: boolean;
-  stage_1_days_after_due: number;
-  stage_2_enabled: boolean;
-  stage_2_days_after_due: number;
-  stage_3_enabled: boolean;
-  stage_3_days_after_due: number;
-  sender_name: string | null;
-  /**
-   * Dawne „Adres From”. Nie trafia już do „Od:” (Resend wysyła tylko z domen
-   * FaktWay) — służy jako Reply-To, gdy `reply_to_email` jest pusty. Pola nie
-   * ma w formularzu; kolumna zostaje, bo część kont ma ją wypełnioną.
-   */
-  sender_email: string | null;
-  reply_to_email: string | null;
-  pause_on_reply: boolean;
-  pause_on_partial_payment: boolean;
-  send_on_weekdays_only: boolean;
-  send_hour: number;
-  max_reminders_per_invoice: number;
-}
+type SettingsRow = ReminderSettingsRow;
+/** Model i wartości domyślne: `lib/reminders/settings-model.ts` (ten sam odczyt dla telefonu). */
+export type Settings = ReminderSettings;
 
 interface Props {
   initialSettings: SettingsRow;
   tenantName: string;
 }
 
-const DEFAULT_SETTINGS: Settings = {
-  enabled: true,
-  stage_1_enabled: true,
-  stage_1_days_after_due: 3,
-  stage_2_enabled: true,
-  stage_2_days_after_due: 7,
-  stage_3_enabled: true,
-  stage_3_days_after_due: 14,
-  sender_name: null,
-  sender_email: null,
-  reply_to_email: null,
-  pause_on_reply: true,
-  pause_on_partial_payment: true,
-  send_on_weekdays_only: true,
-  send_hour: 9,
-  max_reminders_per_invoice: 3,
-};
-
-function rowToSettings(row: SettingsRow, tenantName: string): Settings {
-  const nameFallback = tenantName.trim() || null;
-  if (!row) {
-    return { ...DEFAULT_SETTINGS, sender_name: nameFallback };
-  }
-  return {
-    enabled: row.enabled,
-    stage_1_enabled: row.stage_1_enabled,
-    stage_1_days_after_due: row.stage_1_days_after_due,
-    stage_2_enabled: row.stage_2_enabled,
-    stage_2_days_after_due: row.stage_2_days_after_due,
-    stage_3_enabled: row.stage_3_enabled,
-    stage_3_days_after_due: row.stage_3_days_after_due,
-    sender_name:
-      typeof row.sender_name === 'string' && row.sender_name.trim()
-        ? row.sender_name.trim()
-        : nameFallback,
-    sender_email: row.sender_email?.trim() || null,
-    reply_to_email: row.reply_to_email?.trim() || null,
-    pause_on_reply: row.pause_on_reply,
-    pause_on_partial_payment: row.pause_on_partial_payment,
-    send_on_weekdays_only: row.send_on_weekdays_only,
-    send_hour: Math.min(18, Math.max(6, row.send_hour ?? 9)),
-    max_reminders_per_invoice: Math.min(
-      20,
-      Math.max(1, row.max_reminders_per_invoice ?? 3),
-    ),
-  };
-}
+const rowToSettings = reminderSettingsFromRow;
 
 function toPayload(s: Settings): ReminderSettingsPayload {
   const days = (n: number) => Math.min(90, Math.max(1, n));

@@ -26,9 +26,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { approvedReminderDelivery } from '@/lib/reminders/delivery-consent';
-import { createApproval } from '@/lib/flo/approval';
-import { approvalOperationHash, isApprovalVersion, parseApprovalInput, proposalApprovalVersion } from '@/lib/flo/approval-version';
+import { approveFloProposal } from '@/lib/flo/approve-proposal';
 import { floDb, type FloDbClient, type FloProposalRow } from '@/lib/flo/db-types';
 import {
   muteKind,
@@ -39,7 +37,6 @@ import {
 } from '@/lib/flo/decisions';
 import { buildSilencedList, silencedSubjectKeys, type SilencedEntry } from '@/lib/flo/silenced';
 import { floKindLabel } from '@/components/flo/kind-labels';
-import { executeProposal } from '@/lib/flo/execute';
 // Skutek uboczny: rejestracja wykonawców propozycji. NIE USUWAĆ.
 import '@/lib/flo/functions';
 import { listOpen } from '@/lib/flo/proposals';
@@ -119,94 +116,9 @@ export async function approveProposal(
   input?: FloApproveInput,
 ): Promise<FloApproveResult> {
   const { tenantId, user, role } = await requireUserAndActiveOrg();
-  // AUD-113: zatwierdzenie uruchamia działanie na zewnątrz w imieniu firmy
-  // (np. ponaglenie do kontrahenta) — tylko właściciel i administrator.
-  if (role !== 'owner' && role !== 'admin') {
-    return { ok: false, reason: 'blocked', message: 'Działania FLO zatwierdza właściciel albo administrator firmy.' };
-  }
-  if (!isApprovalVersion(expectedVersion)) {
-    return { ok: false, reason: 'stale', message: 'Odśwież propozycję i sprawdź ją przed zatwierdzeniem.' };
-  }
-  try {
-    input = parseApprovalInput(input);
-  } catch {
-    return { ok: false, reason: 'blocked', message: 'Sprawdź wprowadzone dane.' };
-  }
-
-  const loaded = await floDb()
-    .from('flo_proposals')
-    .select('*')
-    .eq('id', id)
-    // Filtr po organizacji to druga linia obrony obok RLS: klient administracyjny
-    // omija polityki, więc przynależność sprawdzamy tu jawnie.
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-
-  if (loaded.error) throw new Error(loaded.error.message);
-  const proposal = loaded.data as FloProposalRow | null;
-
-  if (!proposal) {
-    return {
-      ok: false,
-      reason: 'expired',
-      message: 'Tej propozycji już nie ma.',
-    };
-  }
-
-  if (proposalApprovalVersion(proposal) !== expectedVersion) {
-    return { ok: false, reason: 'stale', message: 'Propozycja zmieniła się. Sprawdź ją ponownie przed zatwierdzeniem.' };
-  }
-
-  if (proposal.kind === 'payment.chase') {
-    try {
-      if (proposal.payload.preparedBy !== user.id) throw new Error('wrong-previewer');
-      approvedReminderDelivery(proposal, input);
-    } catch {
-      return { ok: false, reason: 'blocked', message: 'Przygotuj nowy podgląd przypomnienia. Zachowaj informację o płatności, która mogła już zostać wykonana.' };
-    }
-  }
-
-  let approvalId: string;
-  try {
-    approvalId = await createApproval({
-      proposalId: id,
-      tenantId,
-      userId: user.id,
-      snapshot: {
-        approvalVersion: 1,
-        proposalVersion: expectedVersion,
-        operationHash: approvalOperationHash(expectedVersion, input),
-        title: proposal.title,
-        body: proposal.body,
-        kind: proposal.kind,
-        payload: proposal.payload,
-        // Co klient wpisał albo zaznaczył, klikając.
-        input: input ?? null,
-        clickedAt: new Date().toISOString(),
-      },
-    });
-  } catch {
-    // Żeton już istnieje i jest zużyty — czyli ktoś kliknął przed nami.
-    return {
-      ok: false,
-      reason: 'blocked',
-      message: 'Ta sprawa jest już w toku.',
-    };
-  }
-
-  const result = await executeProposal({
-    proposalId: id,
-    tenantId,
-    userId: user.id,
-    approvalId,
-    proposalVersion: expectedVersion,
-    input,
-  });
-
-  revalidatePath('/flo');
-  revalidatePath('/dashboard');
-  revalidatePath('/dashboard');
-  return result;
+  // Żeton zgody, wykonanie i odświeżenie widoków: `lib/flo/approve-proposal.ts`
+  // (to samo dla przypomnienia zatwierdzanego z telefonu).
+  return approveFloProposal({ tenantId, userId: user.id, role }, id, expectedVersion, input);
 }
 
 /**

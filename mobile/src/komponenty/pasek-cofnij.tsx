@@ -23,7 +23,7 @@ export function PasekCofnij() {
 
   useEffect(() => {
     if (!cofnij) return;
-    AccessibilityInfo.announceForAccessibility(`${cofnij.tekst}. Możesz cofnąć.`);
+    AccessibilityInfo.announceForAccessibility(cofnij.przycisk ? cofnij.tekst : `${cofnij.tekst}. Możesz cofnąć.`);
     const t = setTimeout(() => pokazCofnij(undefined), CZAS_MS);
     return () => clearTimeout(t);
   }, [cofnij, pokazCofnij]);
@@ -41,11 +41,11 @@ export function PasekCofnij() {
             pokazCofnij(undefined);
           }}
           accessibilityRole="button"
-          accessibilityLabel="Cofnij"
+          accessibilityLabel={cofnij.przycisk ?? 'Cofnij'}
           hitSlop={ODSTEP.xs}
           style={styles.cofnij}>
           <Tekst styl="subheadline" waga="semibold" style={{ color: kolory.tloKomorki }}>
-            Cofnij
+            {cofnij.przycisk ?? 'Cofnij'}
           </Tekst>
         </Pressable>
       </View>

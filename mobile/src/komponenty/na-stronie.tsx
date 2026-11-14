@@ -1,7 +1,8 @@
 /**
  * Zmiana prawdziwej faktury, której API telefonu jeszcze nie ma (od M8
- * wystawienie zwykłej faktury i wysyłka szkicu idą przez API; korekta,
- * zaliczka, rozliczenie, zmiana szkicu, zapłata, e-mail i przypomnienia w M10).
+ * wystawienie zwykłej faktury i wysyłka szkicu idą przez API, od M10a zapłata,
+ * przypomnienia i PDF; korekta, zaliczka, rozliczenie, zmiana szkicu, e-mail,
+ * XML i cykliczne zostają na stronie).
  * Telefon nie udaje zapisu: mówi, gdzie to zrobić, i otwiera tę samą
  * fakturę na stronie. Systemowy arkusz akcji jak `potwierdz()`.
  */
@@ -13,17 +14,15 @@ import { EkranListy } from '@/komponenty/lista';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { ADRES_API } from '@/lib/api/polaczenie';
 
-export type ZmianaNaStronie = 'zaplata' | 'wystawienie' | 'edycja' | 'wysylka' | 'email' | 'przypomnienie' | 'cykliczna' | 'pdf';
+export type ZmianaNaStronie = 'wystawienie' | 'edycja' | 'wysylka' | 'email' | 'cykliczna' | 'xml';
 
 const TYTULY: Record<ZmianaNaStronie, string> = {
-  zaplata: 'Zapłatę oznaczysz na faktway.pl',
   wystawienie: 'Fakturę wystawisz na faktway.pl',
   edycja: 'Szkic zmienisz na faktway.pl',
   wysylka: 'Do KSeF wyślesz na faktway.pl',
   email: 'E-mail z fakturą wyślesz na faktway.pl',
-  przypomnienie: 'Przypomnienie wyślesz na faktway.pl',
   cykliczna: 'Faktury cykliczne ustawisz na faktway.pl',
-  pdf: 'PDF i XML pobierzesz na faktway.pl',
+  xml: 'XML pobierzesz na faktway.pl',
 };
 
 export const OPIS_NA_STRONIE = 'Ta wersja aplikacji pokazuje faktury z Twojego konta. Zmiany zapiszesz na razie na stronie; z telefonu dojdą w kolejnych wersjach.';
@@ -43,9 +42,16 @@ export function otworzNaStronie(co: ZmianaNaStronie, idFaktury?: string): void {
   if (adres) void WebBrowser.openBrowserAsync(adres);
 }
 
-/** Dowolna strona panelu, np. `/expenses/<id>`; bez adresu serwera nic nie robi. */
-export function otworzStrone(sciezka: string): void {
-  if (ADRES_API) void WebBrowser.openBrowserAsync(`${ADRES_API.replace(/\/+$/, '')}${sciezka}`);
+/**
+ * Dowolna strona panelu, np. `/expenses/<id>`; bez adresu serwera nic nie robi.
+ * `poPowrocie` po zamknięciu przeglądarki: ekran, który pokazuje to, co klient
+ * mógł właśnie zmienić na stronie (ustawienia), wczytuje dane od nowa.
+ */
+export function otworzStrone(sciezka: string, poPowrocie?: () => void): void {
+  if (!ADRES_API) return;
+  void WebBrowser.openBrowserAsync(`${ADRES_API.replace(/\/+$/, '')}${sciezka}`)
+    .catch(() => undefined)
+    .then(() => poPowrocie?.());
 }
 
 export const MA_ADRES_STRONY = Boolean(ADRES_API);
