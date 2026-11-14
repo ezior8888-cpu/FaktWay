@@ -48,6 +48,12 @@ uruchamiasz po kolei, nigdy razem.
 - Po dodaniu biblioteki z kodem natywnym potrzebny jest nowy build (`pnpm run ios`);
   Expo Go nie pokazuje natywnych zakładek ani efektu szkła, więc go nie używamy.
 - Teksty po polsku, nazwa produktu tylko „FaktWay” (pilnuje `tests/unit/nazwa-produktu.test.ts`).
+- `src/` jest na mapie żelaznego filtra (`filtr/mapa-ryzyka.json`, obszary `mobile.*`).
+  - **R1:** formularz faktury, `lib/faktura/`, `lib/dane/mapowanie.ts`, `stan/dane.tsx` i Koszty.
+  - **R2:** Pulpit, Księgowość i dane przykładowe.
+  - **R3:** reszta.
+
+  Zmiana w R1 albo R2 to karta w opisie PR i drugi czytelnik (`AGENTS.md` w katalogu głównym, „Żelazny filtr”). Kwoty i dni liczy serwer. `Math.round` na kwocie albo dzień z lokalnego `getDate` w R1 to nowe naruszenie (`node scripts/filtr/reguly.mjs --sprawdz`). Gdy telefon musi coś odtworzyć do podglądu, piszesz wyjątek `// filtr-wyjatek: <reguła> <powód>`, a Bartosz nadaje etykietę `zgoda:wyjatek-filtra`.
 
 ## Pułapki (sprawdzone w symulatorze)
 
