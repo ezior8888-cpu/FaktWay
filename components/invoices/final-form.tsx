@@ -519,7 +519,8 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId, num
                 </div>
                 {fields.map((field, index) => {
                   const watched = watchedLines[index];
-                  const lineErr = fieldErrorProps('final-lines', !!form.formState.errors.lines?.[index] || !!form.formState.errors.lines?.message || !!form.formState.errors.lines?.root);
+                  const lineErr = (pole: 'name' | 'unit' | 'quantity' | 'unitPriceNet' | 'vatRate') =>
+                    fieldErrorProps('final-lines', !!form.formState.errors.lines?.[index]?.[pole]);
                   const calc = calculateLineItem({
                     quantity: Number(watched?.quantity) || 0,
                     unitPriceNet: Number(watched?.unitPriceNet) || 0,
@@ -527,13 +528,13 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId, num
                   });
                   return (
                     <div key={field.id} className={cn(LINE_GRID, 'items-start')}>
-                      <Input aria-label={`Nazwa pozycji ${index + 1}`} {...lineErr} {...form.register(`lines.${index}.name`)} />
-                      <Input aria-label={`Jednostka pozycji ${index + 1}`} {...lineErr} {...form.register(`lines.${index}.unit`)} />
+                      <Input aria-label={`Nazwa pozycji ${index + 1}`} {...lineErr('name')} {...form.register(`lines.${index}.name`)} />
+                      <Input aria-label={`Jednostka pozycji ${index + 1}`} {...lineErr('unit')} {...form.register(`lines.${index}.unit`)} />
                       <Input
                         type="number"
                         step="0.0001"
                         aria-label={`Ilość pozycji ${index + 1}`}
-                        {...lineErr}
+                        {...lineErr('quantity')}
                         className="text-right tabular-nums"
                         {...form.register(`lines.${index}.quantity`, { valueAsNumber: true })}
                       />
@@ -541,14 +542,14 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices, tenantId, num
                         type="number"
                         step="0.01"
                         aria-label={`Cena netto pozycji ${index + 1}`}
-                        {...lineErr}
+                        {...lineErr('unitPriceNet')}
                         className="text-right tabular-nums"
                         {...form.register(`lines.${index}.unitPriceNet`, { valueAsNumber: true })}
                       />
                       <select
                         className={vatSelectClass}
                         aria-label={`Stawka VAT pozycji ${index + 1}`}
-                        {...lineErr}
+                        {...lineErr('vatRate')}
                         {...form.register(`lines.${index}.vatRate`)}
                       >
                         <option value="23">23%</option>

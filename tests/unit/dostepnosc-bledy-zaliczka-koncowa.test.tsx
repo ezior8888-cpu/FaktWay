@@ -117,4 +117,26 @@ describe('A-01: błędy pól w formularzu faktury rozliczającej', () => {
     await zapisz();
     sprawdzPowiazanie(['internalNumber-error', 'final-bank-account-error', 'final-advance-ids-error', 'final-lines-error']);
   });
+
+  it('wiersz z samą złą ceną: aria-invalid ma tylko pole ceny', async () => {
+    await render(<FinalInvoiceForm initialSeller={seller} advanceInvoices={zaliczki} tenantId={TENANT} />);
+    const pole = (etykieta: string) => host.querySelector<HTMLElement>(`[aria-label="${etykieta}"]`)!;
+    const wpiszEtykieta = async (etykieta: string, value: string) => {
+      const el = pole(etykieta) as HTMLInputElement;
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        setter.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    await wpiszEtykieta('Nazwa pozycji 1', 'Usługa');
+    await wpiszEtykieta('Cena netto pozycji 1', '-5');
+    await zapisz();
+    const cena = pole('Cena netto pozycji 1');
+    expect(cena.getAttribute('aria-invalid')).toBe('true');
+    expect(cena.getAttribute('aria-describedby')).toBe('final-lines-error');
+    for (const e of ['Nazwa pozycji 1', 'Jednostka pozycji 1', 'Ilość pozycji 1', 'Stawka VAT pozycji 1']) {
+      expect(pole(e).getAttribute('aria-invalid'), e).toBeNull();
+    }
+  });
 });
