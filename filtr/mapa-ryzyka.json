@@ -246,7 +246,8 @@
       "poziom": "R1",
       "opis": "Generator FA(3), adnotacje (MPP, zw, np, oo), walidacja XSD, dane sprzedawcy i nabywcy.",
       "sciezki": [
-        "lib/xml/{fa3-generator,fa3-annotations,fa3-p12,fa3-limits,validator}.ts",
+        "lib/xml/{fa3-generator,fa3-annotations,fa3-p12,validator}.ts",
+        "lib/xml/fa3-limits.ts",
         "lib/xml/schemas/fa3/**",
         "lib/invoices/{annotations,vat-exemption,vat-ue,cash-method,special-data,map-buyer-party,tenant-seller,load-tenant-seller}.ts",
         "lib/ksef/special-invoice-data.ts",
