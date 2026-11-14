@@ -294,7 +294,7 @@ test('walidacja wyrzuca InvoiceValidationError gdy dane są niespójne', () => {
   );
 });
 
-test('FaWiersz ma poprawną kolejność: NrWierszaFa → (klasyfikacja) → P_7 → P_8A → P_8B → P_9A → P_11 → P_12', () => {
+test('FaWiersz ma kolejność z XSD: NrWierszaFa → P_7 → (klasyfikacja) → P_8A → P_8B → P_9A → P_11 → P_12', () => {
   const xml = generateFA3Xml(
     buildInvoice({
       lines: [
@@ -310,10 +310,11 @@ test('FaWiersz ma poprawną kolejność: NrWierszaFa → (klasyfikacja) → P_7 
       ],
     }),
   );
+  // XSD FaWiersz: P_7, Indeks, GTIN, PKWiU, CN, PKOB, P_8A (C1-KOLEJNOSC).
   const order = [
     '<NrWierszaFa>',
-    '<GTIN>',
     '<P_7>',
+    '<GTIN>',
     '<P_8A>',
     '<P_8B>',
     '<P_9A>',
@@ -326,6 +327,8 @@ test('FaWiersz ma poprawną kolejność: NrWierszaFa → (klasyfikacja) → P_7 
     assert.ok(idx > lastIdx, `${tag} powinien pojawić się po poprzednim elemencie`);
     lastIdx = idx;
   }
+  const { ok, stderr } = validateAgainstXsd(xml);
+  assert.ok(ok, `XSD validation failed:\n${stderr}`);
 });
 
 // ═══════════════════════════════════════════════════════════════

@@ -516,6 +516,9 @@ function buildFaWiersz(
   const wiersz = fa.ele('FaWiersz');
 
   wiersz.ele('NrWierszaFa').txt(String(line.ordinal));
+  // XSD FaWiersz: P_7, Indeks, GTIN, PKWiU, CN, PKOB, P_8A. Kod towaru idzie
+  // więc po nazwie, nie przed nią (C1-KOLEJNOSC).
+  wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
 
   // Klasyfikacja – GTIN dla 8-14 cyfr, CN dla 8-10 cyfr z literami,
   // PKWiU dla innych. MVP: ograniczamy do GTIN vs PKWiU (fallback).
@@ -530,9 +533,7 @@ function buildFaWiersz(
     }
   }
 
-  wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
-
-  // P_8A (jednostka) i P_8B (ilość) muszą być po klasyfikacji.
+  // P_8A (jednostka) i P_8B (ilość) po nazwie i klasyfikacji.
   wiersz.ele('P_8A').txt(requireText(line.unit, `line[${line.ordinal}].unit`));
   wiersz.ele('P_8B').txt(formatDecimal(line.quantity, 4));
 

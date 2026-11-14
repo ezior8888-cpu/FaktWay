@@ -305,6 +305,8 @@ function buildBuyer(root: any, buyer: BuyerData): void {
 function appendFaWiersz(fa: any, line: InvoiceLineItem): void {
   const wiersz = fa.ele('FaWiersz');
   wiersz.ele('NrWierszaFa').txt(String(line.ordinal));
+  // XSD FaWiersz: P_7, Indeks, GTIN, PKWiU, CN, PKOB, P_8A (C1-KOLEJNOSC).
+  wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
 
   if (line.classificationCode) {
     if (/^\d{8,14}$/.test(line.classificationCode)) {
@@ -316,7 +318,6 @@ function appendFaWiersz(fa: any, line: InvoiceLineItem): void {
     }
   }
 
-  wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
   wiersz.ele('P_8A').txt(requireText(line.unit, `line[${line.ordinal}].unit`));
   wiersz.ele('P_8B').txt(formatDecimal(line.quantity, 4));
   wiersz.ele('P_9A').txt(formatDecimal(line.unitPriceNet, 4));
