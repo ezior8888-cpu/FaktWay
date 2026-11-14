@@ -89,26 +89,20 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
       });
     }
 
+    // Archiwizacja i termin usunięcia jednym zapisem (FZ-009): ponowienie
+    // zaczyna od zera i bierze tylko faktury bez `archived_at`, więc błąd
+    // między dwoma osobnymi zapisami zostawiał fakturę na zawsze bez terminu.
     await step.run('mark-archived', async () => {
       const supabase = createAdminClient();
       const { error } = await supabase
         .from('invoices')
         .update({
           archived_at: new Date().toISOString(),
+          scheduled_deletion_at: terminUsuniecia,
         })
         .in('id', ids);
 
       if (error) throw new Error(`Mark archived failed: ${error.message}`);
-    });
-
-    await step.run('schedule-deletion', async () => {
-      const supabase = createAdminClient();
-      const { error } = await supabase
-        .from('invoices')
-        .update({ scheduled_deletion_at: terminUsuniecia })
-        .in('id', ids);
-
-      if (error) throw new Error(`Schedule deletion failed: ${error.message}`);
     });
 
     return { archived: candidates.length };
