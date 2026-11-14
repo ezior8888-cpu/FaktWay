@@ -32,6 +32,7 @@ import { AppState } from 'react-native';
 
 import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
 import { naStronie } from '@/komponenty/na-stronie';
+import { bladFirmyZapisu } from '@/lib/faktura/wystawienie';
 import type {
   FirmaKonta,
   KontoOdpowiedz,
@@ -98,11 +99,27 @@ export type KontoFirmy = {
    * wylogowuje, `mfa_required` prosi o kod, utrata firmy odświeża konto. Błąd
    * wraca do ekranu ze zdaniem dla klienta.
    */
-  zapytaj: <T>(sciezka: string, opcje?: Omit<OpcjeZapytania, 'firma'>) => Promise<Wynik<T>>;
+  zapytaj: <T>(sciezka: string, opcje?: OpcjeFirmy) => Promise<Wynik<T>>;
 };
 
+/**
+ * `firmaEkranu`: zapis dla firmy, w której otwarto ekran (przypomnienie, zapłata).
+ * Gdy wybrana firma zmieniła się w międzyczasie, telefon odmawia bez żądania, jak
+ * `bladFirmyZapisu` przy fakturze (M8) i `expectedTenantId` na stronie (UX-01).
+ */
+export type OpcjeFirmy = Omit<OpcjeZapytania, 'firma'> & { firmaEkranu?: string | null };
+
+export const INNA_FIRMA_EKRANU = 'Ten ekran był otwarty w innej firmie niż wybrana teraz. Zamknij go i otwórz od nowa w wybranej firmie.';
+
 /** Podpowiedź do pustego formularza faktury (M8): numer, dziś, zwolnienie z VAT; `gotowe` po odpowiedzi serwera. */
-export type PodpowiedzFaktury = { gotowe: boolean; numer?: string; dzis?: string; zwolnienieVat: boolean };
+export type PodpowiedzFaktury = {
+  gotowe: boolean;
+  numer?: string;
+  dzis?: string;
+  zwolnienieVat: boolean;
+  /** Seria numeracji (krok 2.5), z której pochodzi `numer`; `null`: numeracja jak dotąd. */
+  seria?: { id: string; podglad: string } | null;
+};
 
 /**
  * `GET /faktury/podpowiedz` dla wybranej firmy, raz na otwarcie formularza.
@@ -118,7 +135,17 @@ export function usePodpowiedzFaktury(): PodpowiedzFaktury {
     let biezace = true;
     void zapytajApi<PodpowiedzFakturyOdpowiedz>('faktury/podpowiedz', { firma }).then((w) => {
       if (!biezace) return;
-      setPodpowiedz(w.ok ? { gotowe: true, numer: w.dane.numer ?? undefined, dzis: w.dane.dzis, zwolnienieVat: w.dane.zwolnienieVat } : { gotowe: true, zwolnienieVat: false });
+      setPodpowiedz(
+        w.ok
+          ? {
+              gotowe: true,
+              numer: w.dane.numer ?? undefined,
+              dzis: w.dane.dzis,
+              zwolnienieVat: w.dane.zwolnienieVat,
+              seria: w.dane.seria && w.dane.numer ? { id: w.dane.seria, podglad: w.dane.numer } : null,
+            }
+          : { gotowe: true, zwolnienieVat: false },
+      );
     });
     return () => {
       biezace = false;
@@ -189,6 +216,8 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   }
 
   const pokolenie = useRef(0);
+  /** Wybrana firma w chwili zapisu (zapisy porównują ją z firmą ekranu). */
+  const firmaTeraz = useRef<string | null | undefined>(undefined);
   /** Takt sprawdzania statusu KSeF: zegar uzbraja się od nowa także wtedy, gdy pobranie się nie udało. */
   const [takt, setTakt] = useState(0);
   const ostatnioUdane = useRef(0);
@@ -358,7 +387,9 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   }, [fakturyTeraz, takt]);
 
   /** Błąd sesji z zapisu: te same reakcje co przy pobieraniu; zdanie wraca do formularza. */
-  const bladZapisu = (b: BladApi): WynikZapisu => {
+  const bladZapisu = (b: BladApi, bezOdpowiedzi?: string): WynikZapisu => {
+    // Brak odpowiedzi (sieć, limit 15 s): zapis mógł dojść do serwera; ponowienie z tym samym kluczem go nie zdubluje.
+    if (b.rodzaj === 'polaczenie' && bezOdpowiedzi) return { ok: false, komunikat: bezOdpowiedzi };
     if (b.rodzaj === 'sesja') wyloguj();
     else if (b.rodzaj === 'kod') wymagajKodu();
     // Firma bez dostępu: konto i lista firm od nowa, jak przy pobieraniu.
@@ -384,11 +415,19 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     await laduj(uzytkownik);
   };
 
+  const firmaWybrana = dane.firmaId;
+  useEffect(() => {
+    firmaTeraz.current = firmaWybrana;
+  }, [firmaWybrana]);
+
   /** API w wybranej firmie; reakcje na sesję, 2FA i firmę jak przy zapisach (`bladZapisu`). */
-  const zapytaj = async <T,>(sciezka: string, opcje: Omit<OpcjeZapytania, 'firma'> = {}): Promise<Wynik<T>> => {
-    const firma = dane.firmaId;
-    if (!firma) return { ok: false, blad: bladTelefonu('firma') };
-    const w = await zapytajApi<T>(sciezka, { ...opcje, firma });
+  const zapytaj = async <T,>(sciezka: string, opcje: OpcjeFirmy = {}): Promise<Wynik<T>> => {
+    const { firmaEkranu, ...reszta } = opcje;
+    // Firma z chwili wywołania, nie z rysowania, w którym powstała ta funkcja (ponowienie z paska „Cofnij”).
+    const teraz = firmaTeraz.current;
+    if (!teraz) return { ok: false, blad: bladTelefonu('firma') };
+    if (firmaEkranu !== undefined && firmaEkranu !== teraz) return { ok: false, blad: { rodzaj: 'odmowa', status: 0, komunikat: INNA_FIRMA_EKRANU } };
+    const w = await zapytajApi<T>(sciezka, { ...reszta, firma: teraz });
     if (!w.ok) bladZapisu(w.blad);
     return w;
   };
@@ -423,9 +462,14 @@ function DaneZBazy({ children }: { children: ReactNode }) {
    * Zapłata przez API (M10a): wiersz od razu, potem serwer. Ponowienie i drugie
    * dotknięcie są bezpieczne (`juzBylo`). Odmowa przywraca stan i mówi dlaczego.
    */
-  const zmienZaplate = async (wyzej: Stan, f: Faktura, zaplacona: boolean, poZmianie?: () => void): Promise<void> => {
+  const zmienZaplate = async (wyzej: Stan, f: Faktura, zaplacona: boolean, firmaEkranu: string | null | undefined, poZmianie?: () => void): Promise<void> => {
+    // Inna firma niż przy dotknięciu (np. „Cofnij” po zmianie firmy): bez zmiany w liście i bez żądania.
+    if (firmaEkranu !== firmaTeraz.current) {
+      wyzej.pokazCofnij({ tekst: INNA_FIRMA_EKRANU, przycisk: 'OK', akcja: () => undefined });
+      return;
+    }
     ustawZaplate(f.id, zaplacona);
-    const w = await zapytaj<ZaplataOdpowiedz>(zaplacona ? `faktury/${f.id}/zaplata` : `faktury/${f.id}/zaplata/cofnij`, { metoda: 'POST' });
+    const w = await zapytaj<ZaplataOdpowiedz>(zaplacona ? `faktury/${f.id}/zaplata` : `faktury/${f.id}/zaplata/cofnij`, { metoda: 'POST', firmaEkranu });
     if (!w.ok) {
       ustawZaplate(f.id, !zaplacona);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -435,7 +479,7 @@ function DaneZBazy({ children }: { children: ReactNode }) {
         wyzej.pokazCofnij({
           tekst: w.blad.komunikat,
           przycisk: ponowienieNicNieDa ? 'OK' : 'Ponów',
-          akcja: ponowienieNicNieDa ? () => undefined : () => void zmienZaplate(wyzej, f, zaplacona, poZmianie),
+          akcja: ponowienieNicNieDa ? () => undefined : () => void zmienZaplate(wyzej, f, zaplacona, firmaEkranu, poZmianie),
         });
       }
       return;
@@ -453,12 +497,13 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     skrzynka: dane.skrzynka?.lista ?? [],
     przelaczZaplate: (f) => {
       const zaplacona = !f.zaplacona;
+      const firmaEkranu = dane.firmaId;
       // Wibracja „sukces” dopiero po zapisie na serwerze; odmowa daje ostrzeżenie (ZASADY-DESIGNU.md, sekcja 7).
-      void zmienZaplate(wyzej, f, zaplacona, () => {
+      void zmienZaplate(wyzej, f, zaplacona, firmaEkranu, () => {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         wyzej.pokazCofnij({
           tekst: zaplacona ? `Zapłacona: ${f.numer}` : `Bez zapłaty: ${f.numer}`,
-          akcja: () => void zmienZaplate(wyzej, { ...f, zaplacona }, f.zaplacona),
+          akcja: () => void zmienZaplate(wyzej, { ...f, zaplacona }, f.zaplacona, firmaEkranu),
         });
       });
     },
@@ -468,18 +513,28 @@ function DaneZBazy({ children }: { children: ReactNode }) {
         naStronie('wystawienie');
         return { ok: false, komunikat: 'Tę fakturę wystawisz na faktway.pl.' };
       }
+      // Druga warstwa za formularzem: firma z otwarcia formularza musi być firmą, do której idzie żądanie.
+      const zlaFirma = bladFirmyZapisu(naKoncie.firma, firma);
+      if (zlaFirma) return { ok: false, komunikat: zlaFirma };
       const w = await zapytajApi<WystawienieOdpowiedz>('faktury', {
         metoda: 'POST',
         firma,
         klucz: naKoncie.klucz,
         cialo: { wyslij, faktura: naKoncie.faktura },
       });
-      if (!w.ok) return bladZapisu(w.blad);
+      if (!w.ok)
+        return bladZapisu(
+          w.blad,
+          'Nie wiemy, czy faktura się zapisała: brak odpowiedzi serwera. Sprawdź internet i dotknij jeszcze raz; ten sam formularz nie wystawi drugiej faktury.',
+        );
       // Stawka bez procentu („zw”, „oo”, „np”) od razu z opisem, nie jako 0% modelu formularza.
       const linie = naKoncie.faktura.lines;
       const zOpisem = { ...f, pozycje: f.pozycje.map((p, i) => (linie[i] && !/^\d+$/.test(linie[i].vatRate) ? { ...p, stawkaOpis: linie[i].vatRate } : p)) };
       pokazZapisana(zOpisem, w.dane.faktura);
-      return { ok: true, id: w.dane.faktura.id, ...(w.dane.wysylka?.blad ? { uwaga: bezDlugichMyslnikow(w.dane.wysylka.blad) } : {}) };
+      // „Nie zlecono” to zawsze uwaga, także bez zdania serwera: nigdy fałszywe „Wysyłamy do KSeF”.
+      const wysylka = w.dane.wysylka;
+      const uwaga = wysylka && !wysylka.zlecona ? bezDlugichMyslnikow(wysylka.blad ?? 'Faktura nie poszła do KSeF. Sprawdź jej stan na liście faktur.') : undefined;
+      return { ok: true, id: w.dane.faktura.id, ...(uwaga ? { uwaga } : {}) };
     },
     zastapFakture: (id) => naStronie('edycja', id),
     wyslijDoKsef: async (id) => {
@@ -491,7 +546,8 @@ function DaneZBazy({ children }: { children: ReactNode }) {
         return { ok: false, komunikat: 'Tę fakturę wyślesz ponownie na faktway.pl.' };
       }
       const w = await zapytajApi<WysylkaSzkicuOdpowiedz>(`faktury/${id}/wysylka`, { metoda: 'POST', firma });
-      if (!w.ok) return bladZapisu(w.blad);
+      if (!w.ok)
+        return bladZapisu(w.blad, 'Nie wiemy, czy wysyłka została zlecona: brak odpowiedzi serwera. Odśwież listę; jeśli faktura jest nadal szkicem, wyślij ją jeszcze raz.');
       pokazZapisana(f, w.dane.faktura);
       return { ok: true, id };
     },

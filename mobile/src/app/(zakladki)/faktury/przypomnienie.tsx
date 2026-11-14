@@ -51,6 +51,8 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
   const [trwa, setTrwa] = useState<'podglad' | 'zgoda' | 'wstrzymanie'>();
   const [blad, setBlad] = useState<string>();
   const [zlecone, setZlecone] = useState(false);
+  // Firma, w której otwarto ekran: każdy zapis idzie do niej albo nie idzie wcale (zmiana firmy w Więcej).
+  const [firmaEkranu] = useState(konto.firma?.id ?? null);
   // Drugie dotknięcie w tej samej klatce (zanim `trwa` się narysuje) nie wysyła drugiego żądania.
   const wToku = useRef(false);
 
@@ -117,6 +119,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
     const w = await konto.zapytaj<PodgladPrzypomnieniaOdpowiedz>(`faktury/${n.id}/przypomnienie`, {
       metoda: 'POST',
       cialo: wpisany && wpisany !== n.email ? { email: wpisany } : {},
+      firmaEkranu,
     });
     wToku.current = false;
     setTrwa(undefined);
@@ -141,6 +144,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
     const w = await konto.zapytaj<ZatwierdzeniePrzypomnieniaOdpowiedz>(`przypomnienia/${podglad.propozycja}/zatwierdz`, {
       metoda: 'POST',
       cialo: { wersja: podglad.wersja, tresc },
+      firmaEkranu,
     });
     wToku.current = false;
     setTrwa(undefined);
@@ -163,7 +167,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
     setTrwa('wstrzymanie');
     setBlad(undefined);
     naleznosci?.zmien(n.id, { wstrzymane });
-    const w = await konto.zapytaj<WstrzymanieOdpowiedz>(`faktury/${n.id}/wstrzymanie`, { metoda: 'POST', cialo: { wstrzymane } });
+    const w = await konto.zapytaj<WstrzymanieOdpowiedz>(`faktury/${n.id}/wstrzymanie`, { metoda: 'POST', cialo: { wstrzymane }, firmaEkranu });
     wToku.current = false;
     setTrwa(undefined);
     if (!w.ok) {

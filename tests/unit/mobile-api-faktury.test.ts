@@ -93,6 +93,8 @@ let lines: Row[] = [];
 let keys: Row[] = [];
 let keyInsertFails = false;
 let idCounter = 0;
+let counter = 4;
+let series: Row[] = [];
 const writes: Array<{ table: string; method: string }> = [];
 
 const memberships = [
@@ -161,10 +163,19 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     return reply(request, keys.filter((k) => k.user_id === sub && k.tenant_id === current && matches(url, k, ['tenant_id', 'user_id', 'idempotency_key'])));
   }
 
+  if (table === 'rpc/invoice_number_series_overview') return Response.json({ series });
+  if (table === 'rpc/invoice_number_next') {
+    counter += 1;
+    return Response.json({ status: 'ok', number: `FV/${counter}/11/2026`, counter, period: '2026-11' });
+  }
   if (table === 'invoices') {
     if (method === 'POST') {
       const row = JSON.parse(await request.text()) as Row;
       if (row.tenant_id !== current) return Response.json({ code: '42501', message: 'RLS' }, { status: 403 });
+      // Wyzwalacz 00199 `zzz_invoice_number_assign`: drugi zapis z tym samym kluczem zapisu.
+      if (row.number_request_key && invoices.some((i) => i.tenant_id === row.tenant_id && i.number_request_key === row.number_request_key)) {
+        return Response.json({ code: 'P0001', message: 'invoice_number_request_done' }, { status: 400 });
+      }
       if (invoices.some((i) => i.tenant_id === row.tenant_id && i.internal_number === row.internal_number)) {
         return conflict('uq_invoices_tenant_internal_number');
       }
@@ -176,7 +187,7 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
       invoices = invoices.filter((i) => !(i.tenant_id === current && matches(url, i, ['id'])));
       return new Response(null, { status: 204 });
     }
-    const visible = invoices.filter((i) => i.tenant_id === current && matches(url, i, ['id', 'tenant_id', 'direction']));
+    const visible = invoices.filter((i) => i.tenant_id === current && matches(url, i, ['id', 'tenant_id', 'direction', 'number_request_key']));
     return reply(request, url.searchParams.has('limit') ? visible.slice(-1) : visible);
   }
   if (table === 'invoice_line_items') {
@@ -208,6 +219,8 @@ const faktura = (extra: Partial<FakturaTelefonu> = {}): FakturaTelefonu => ({
   bankAccount: 'PL61109010140000071219812874',
   notes: '',
   splitPayment: false,
+  numberSeriesId: '',
+  numberPreview: '',
   ...extra,
 });
 
@@ -248,6 +261,8 @@ beforeEach(() => {
   keys = [];
   keyInsertFails = false;
   idCounter = 0;
+  counter = 4;
+  series = [];
   writes.length = 0;
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-13T09:00:00Z'));
@@ -400,19 +415,64 @@ describe('POST /api/mobile/v1/faktury', () => {
     expect(fake.enqueue).toHaveBeenCalledTimes(2);
   });
 
-  it('klucz nie zapisał się po szkicu: bez kolejki; ponowienie trafia na numer i nie tworzy drugiej faktury', async () => {
+  it('klucz nie zapisał się po szkicu: bez kolejki; ponowienie oddaje ten szkic (klucz zapisu 00199) i zleca wysyłkę raz', async () => {
     keyInsertFails = true;
     const body = { wyslij: true, faktura: faktura() };
     const first = (await (await wystaw(body)).json()) as WystawienieOdpowiedz;
     expect(first.wysylka).toEqual({ zlecona: false, blad: expect.stringContaining('Szkic faktury jest zapisany') });
     expect(fake.enqueue).not.toHaveBeenCalled();
+    // Klucz żądania idzie też jako klucz zapisu faktury (`number_request_key`).
+    expect(invoices[0]).toMatchObject({ number_request_key: KEY_1 });
 
     keyInsertFails = false;
     const again = await wystaw(body);
-    expect(again.status).toBe(422);
-    expect((await errorOf(again)).message).toBe('Faktura o numerze "FV/1/11/2026" już istnieje. Sprawdź listę faktur lub wybierz inny numer.');
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({
+      faktura: { id: invoices[0]!.id, numer: 'FV/1/11/2026', ksefStatus: 'queued' },
+      powtorzenie: true,
+      wysylka: { zlecona: true, blad: null },
+    });
     expect(invoices).toHaveLength(1);
-    expect(fake.enqueue).not.toHaveBeenCalled();
+    expect(keys).toEqual([expect.objectContaining({ idempotency_key: KEY_1, invoice_id: invoices[0]!.id })]);
+    expect(fake.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('wyjątek kolejki po zapisie szkicu: 201 ze szkicem i zdaniem, co zrobić (nie 500)', async () => {
+    fake.enqueue.mockRejectedValueOnce(new Error('pg-boss: connection terminated'));
+    const response = await wystaw({ wyslij: true, faktura: faktura() });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as WystawienieOdpowiedz;
+    expect(body.faktura).toMatchObject({ id: invoices[0]!.id, ksefStatus: 'draft' });
+    expect(body.wysylka).toEqual({ zlecona: false, blad: expect.stringContaining('Szkic faktury jest zapisany') });
+  });
+
+  it('powtórzenie, gdy faktura ma już błąd wysyłki albo odrzucenie: nie udaje „wysłano”', async () => {
+    const body = { wyslij: true, faktura: faktura() };
+    await wystaw(body);
+    invoices[0]!.ksef_status = 'failed';
+    const again = (await (await wystaw(body)).json()) as WystawienieOdpowiedz;
+    expect(again.wysylka).toEqual({ zlecona: false, blad: expect.stringContaining('faktway.pl') });
+  });
+
+  it('powtórzenie w trakcie pierwszego żądania: gdy kolejkę przejęło tamto, odpowiedź mówi „zlecona”', async () => {
+    fake.enqueue.mockResolvedValueOnce({ ok: false, error: 'Najpierw wgraj certyfikat KSeF.' });
+    const body = { wyslij: true, faktura: faktura() };
+    await wystaw(body);
+    // Drugie żądanie przegrywa wyścig: RPC odmawia („już wysyłana”), bo pierwsze właśnie przejęło szkic.
+    fake.enqueue.mockImplementationOnce(async () => {
+      invoices[0]!.ksef_status = 'queued';
+      return { ok: false, error: 'Faktura jest już wysyłana do KSeF.' };
+    });
+    const again = (await (await wystaw(body)).json()) as WystawienieOdpowiedz;
+    expect(again.wysylka).toEqual({ zlecona: true, blad: null });
+    expect(again.faktura.ksefStatus).toBe('queued');
+  });
+
+  it('numer z serii (krok 2.5): seria i podpowiedź z formularza, numer nadaje licznik przy zapisie', async () => {
+    const SERIA = '5e71e5e7-0000-4000-8000-000000000001';
+    const response = await wystaw({ wyslij: false, faktura: faktura({ internalNumber: 'FV/5/11/2026', numberSeriesId: SERIA, numberPreview: 'FV/5/11/2026', issueDate: '2026-11-20' }) });
+    expect(response.status).toBe(201);
+    expect(invoices[0]).toMatchObject({ number_series_id: SERIA, internal_number: 'FV/5/11/2026', number_counter: 5, number_request_key: KEY_1 });
   });
 
   it('szkic (`wyslij: false`): bez kolejki, z kluczem; ponowienie oddaje ten szkic', async () => {
@@ -495,6 +555,15 @@ describe('GET /api/mobile/v1/faktury/podpowiedz', () => {
     });
     const response = await podpowiedzRoute(request);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ numer: null, dzis: DZIS, zwolnienieVat: false });
+    expect(await response.json()).toEqual({ numer: null, seria: null, dzis: DZIS, zwolnienieVat: false });
+  });
+
+  it('firma z serią domyślną: numer z licznika i id serii (jak formularz strony)', async () => {
+    const SERIA = '5e71e5e7-0000-4000-8000-000000000001';
+    series = [{ id: SERIA, name: 'Faktury', pattern: 'FV/{N}/{MM}/{RRRR}', is_active: true, active: true, default_kinds: ['regular'], next: { number: 'FV/5/11/2026', counter: 5, period: '2026-11' } }];
+    const request = new Request('https://app.example.test/api/mobile/v1/faktury/podpowiedz', {
+      headers: { authorization: `Bearer ${TOKEN_A}`, 'x-active-org': ORG_A, 'x-real-ip': '198.51.100.10' },
+    });
+    expect(await (await podpowiedzRoute(request)).json()).toEqual({ numer: 'FV/5/11/2026', seria: SERIA, dzis: DZIS, zwolnienieVat: false });
   });
 });
