@@ -596,8 +596,9 @@ export function importedContentFlags(
   const lineProblems = strings(o.lineAmountProblems);
   const fileMarkers = isRecordJson(o.ksefMarkers) ? (o.ksefMarkers as Fa3Markers) : undefined;
   // Krok 1.2: faktura do paragonu wystawiona w FaktWay (`fa3_data.receipt`) ma
-  // w pliku KSeF `Fa/FP` = 1 jak FP z importu. JPK nie zna jeszcze typu FP
-  // (art. 109 ust. 3d: bez zwiększenia sprzedaży), więc ta sama odmowa.
+  // w pliku KSeF `Fa/FP` = 1 jak FP z importu, więc to samo oznaczenie: JPK_V7M
+  // wykazuje ją typem dokumentu FP bez podatku należnego (art. 109 ust. 3d),
+  // a JPK_FA i CSV, które nie mają oznaczenia FP, odmawiają.
   const markers = isReceiptInvoiceFa3(o) ? { ...fileMarkers, fp: true as const } : fileMarkers;
   const saleDates = isRecordJson(o.saleDates) ? o.saleDates : undefined;
   return {

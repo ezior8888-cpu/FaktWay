@@ -38,6 +38,8 @@ import { LineItemsSection } from './invoice-form-parts/line-items-section';
 import { PaymentSection } from './invoice-form-parts/payment-section';
 import { ReceiptInvoiceFields } from './invoice-form-parts/receipt-invoice-fields';
 import { useLinesDesktopLayout } from './invoice-form-parts/use-lines-desktop-layout';
+import { ERROR_TOAST_MS, FormErrorSummary, type FormErrorState } from './invoice-form-parts/form-error-summary';
+import { collectValidationIssues } from './invoice-form-parts/validation-issues';
 import { numberingDefaults, SeriesSelectRow, useSeriesNumber } from './numeracja/series-select-row';
 import type { InvoiceNumbering } from '@/lib/numeracja/model';
 import { firstValidationMessage } from './invoice-form-parts/validation-message';
@@ -112,6 +114,15 @@ export function InvoiceForm({
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isSending, startSending] = useTransition();
+  // Stały blok błędów nad akcjami (A-05): toast znika, blok zostaje i bierze fokus.
+  const [blad, setBlad] = useState<FormErrorState | null>(null);
+  const pokazBlad = (zmiana: Partial<Omit<FormErrorState, 'nonce'>>) =>
+    setBlad((poprzedni) => ({
+      issues: [],
+      saveError: null,
+      ...zmiana,
+      nonce: (poprzedni?.nonce ?? 0) + 1,
+    }));
   const [buyerVatStatus, setBuyerVatStatus] =
     useState<CachedValidationResult | null>(null);
 
@@ -138,6 +149,8 @@ export function InvoiceForm({
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
+    // Fokus po nieudanym zapisie bierze blok błędów (A-05), z odnośnikami do pól.
+    shouldFocusError: false,
     defaultValues: {
       internalNumber: suggestedNumber ?? '',
       issueDate: today,
@@ -275,6 +288,7 @@ export function InvoiceForm({
   const handleSaveDraft = form.handleSubmit(
     (values) => {
       if (submitInFlightRef.current) return;
+      setBlad(null);
       submitInFlightRef.current = true;
       startSaving(async () => {
         try {
@@ -283,10 +297,13 @@ export function InvoiceForm({
             toast.success('Szkic zapisany');
             router.push(`/invoices/${result.invoiceId}`);
           } else {
-            toast.error(result.error);
+            toast.error(result.error, { duration: ERROR_TOAST_MS });
+            pokazBlad({ saveError: result.error });
           }
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Błąd zapisu');
+          const komunikat = e instanceof Error ? e.message : 'Błąd zapisu';
+          toast.error(komunikat, { duration: ERROR_TOAST_MS });
+          pokazBlad({ saveError: komunikat });
         } finally {
           submitInFlightRef.current = false;
         }
@@ -294,7 +311,8 @@ export function InvoiceForm({
     },
     (errors) => {
       submitInFlightRef.current = false;
-      toast.error(firstValidationMessage(errors));
+      toast.error(firstValidationMessage(errors), { duration: ERROR_TOAST_MS });
+      pokazBlad({ issues: collectValidationIssues(errors) });
     }
   );
 
@@ -338,6 +356,7 @@ export function InvoiceForm({
         }
       }
 
+      setBlad(null);
       submitInFlightRef.current = true;
       startSending(async () => {
         try {
@@ -346,11 +365,14 @@ export function InvoiceForm({
             toast.success('Wysyłanie faktury do KSeF rozpoczęte');
             router.push(`/invoices/${result.invoiceId}`);
           } else {
-            toast.error(result.error);
+            toast.error(result.error, { duration: ERROR_TOAST_MS });
+            pokazBlad({ saveError: result.error });
             if (result.invoiceId) router.push(`/invoices/${result.invoiceId}`);
           }
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Błąd wysyłki');
+          const komunikat = e instanceof Error ? e.message : 'Błąd wysyłki';
+          toast.error(komunikat, { duration: ERROR_TOAST_MS });
+          pokazBlad({ saveError: komunikat });
         } finally {
           submitInFlightRef.current = false;
         }
@@ -358,7 +380,8 @@ export function InvoiceForm({
     },
     (errors) => {
       submitInFlightRef.current = false;
-      toast.error(firstValidationMessage(errors));
+      toast.error(firstValidationMessage(errors), { duration: ERROR_TOAST_MS });
+      pokazBlad({ issues: collectValidationIssues(errors) });
     }
   );
 
@@ -401,6 +424,8 @@ export function InvoiceForm({
       {prefill && !prefillUzyty ? (
         <PrefillBanner contractorName={prefill.contractorName} onFill={wypelnijZOstatniej} />
       ) : null}
+
+      <FormErrorSummary state={blad} />
 
       <InvoiceCreateGrid>
         <InvoiceDocumentCard

@@ -1145,6 +1145,8 @@ wpisać wraz ze źródłem; wartość podana w tabeli trzeba potwierdzić źród
 
 1. W którym miesiącu ujmuje się fakturę do paragonu w ewidencji (marzec czy kwiecień) i z jakim oznaczeniem, żeby nie podwoić sprzedaży?
 2. Jak ujmować w KPiR przychód z paragonu i z faktury do paragonu, aby przychód nie powstał dwa razy?
+3. FaktWay (krok 1.2, część 2) wykazuje FP w JPK_V7M za miesiąc wystawienia, z oznaczeniem FP i pełnymi kwotami w polach K_, bez wliczania do PodatekNalezny i do deklaracji. Raportów z kasy (RO) FaktWay nie wykazuje, więc plik za miesiąc, w którym jest paragon do FP z tego samego miesiąca, nie powstaje. Czy plik za kwiecień z wierszem FP i bez wierszy RO byłby poprawny, gdyby w kwietniu nie było innej sprzedaży z kasy?
+4. FaktWay uznaje, że sprzedaż z FP weszła już do ewidencji i KPiR, gdy wpisy „Raport z kasy rejestrującej” (w KPiR w kolumnie 7) z miesiąca paragonu (tu marzec) są nie niższe niż faktury do paragonów z tego miesiąca (kwoty netto). Bez takiego wpisu albo przy niższej kwocie miesiąc ma brak. Czy to wystarczy, czy FP trzeba powiązać z konkretnym raportem (numer, dzień)?
 
 **Dane**
 
