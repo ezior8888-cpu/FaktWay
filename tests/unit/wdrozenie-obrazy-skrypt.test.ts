@@ -210,9 +210,23 @@ function publish(sha: string, label = sha) {
   write(fake(`ghcr-faktway-runner-${sha}`), label);
 }
 
+/**
+ * Limit czasu testu i przebiegu skryptu. Każdy test uruchamia skrypt raz, a ten
+ * startuje dziesiątki procesów (atrapy `ssh`, `docker`, `curl`, `git` to też
+ * skrypty basha). W Git Bashu na Windowsie start procesu kosztuje dziesiątki ms,
+ * więc przy domyślnych 5 s Vitesta (pomiar 14.11.2026) „repo --wdroz” padał
+ * zawsze (6,5–7,2 s), a „repo: przywraca…” i „repo naprawia…” czasem
+ * (4,2–5,7 s). 60 s jak w restore-drill-skrypt i db-backup-skrypt.
+ * `spawnSync` blokuje wątek, więc Vitest ocenia czas testu dopiero po jego
+ * końcu. Zawieszony skrypt przerywa `timeout` w `spawnSync`, a `run()` rzuca
+ * wtedy `ETIMEDOUT` zamiast mylącej asercji na niepełnym wyjściu.
+ */
+const SCRIPT_TIMEOUT = 60_000;
+
 function run(script: 'wdroz-produkcje.sh' | 'coolify-zrodlo.sh', args: string[] = [], env: Record<string, string> = {}) {
   const r = spawnSync('bash', [join(dir, 'scripts/ops', script), ...args], {
     encoding: 'utf8',
+    timeout: SCRIPT_TIMEOUT,
     env: {
       NODE_ENV: 'test',
       PATH: `${join(dir, 'bin')}:${process.env.PATH ?? ''}`,
@@ -222,6 +236,7 @@ function run(script: 'wdroz-produkcje.sh' | 'coolify-zrodlo.sh', args: string[] 
       ...env,
     },
   });
+  if (r.error) throw r.error;
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
@@ -268,7 +283,7 @@ afterEach(() => {
   }
 });
 
-describe('wdroz-produkcje.sh: build z repo (bez argumentów)', () => {
+describe('wdroz-produkcje.sh: build z repo (bez argumentów)', { timeout: SCRIPT_TIMEOUT }, () => {
   it('wdraża worker, potem aplikację, z commitem HEAD, i uruchamia kontrolę', () => {
     repoMode();
     const r = run('wdroz-produkcje.sh');
@@ -294,7 +309,7 @@ describe('wdroz-produkcje.sh: build z repo (bez argumentów)', () => {
   });
 });
 
-describe('wdroz-produkcje.sh --obraz', () => {
+describe('wdroz-produkcje.sh --obraz', { timeout: SCRIPT_TIMEOUT }, () => {
   itGhcr('ustawia tag SHA i wdraża worker, potem aplikację, z commitem SHA', () => {
     imageMode();
     publish(SHA);
@@ -453,7 +468,7 @@ describe('wdroz-produkcje.sh --obraz', () => {
   });
 });
 
-describe('coolify-zrodlo.sh', () => {
+describe('coolify-zrodlo.sh', { timeout: SCRIPT_TIMEOUT }, () => {
   itGhcr('obraz bez SHA: bierze SHA działających kontenerów, worker przed aplikacją, bez wdrożenia', () => {
     repoMode();
     publish(OLD);
