@@ -56,12 +56,12 @@ function database() {
       gte(key: string, value: string) { predicates.push(row => String(row[key]) >= value); return query; },
       lte(key: string, value: string) { predicates.push(row => String(row[key]) <= value); return query; },
       lt(key: string, value: string) { predicates.push(row => String(row[key]) < value); return query; },
-      // Odczyt po kluczu (QRY-07, sesja 33): `gt('id')` i `limit` jak w PostgREST.
       gt(key: string, value: string) { predicates.push(row => String(row[key]) > value); return query; },
       order(key: string, options?: { ascending?: boolean }) {
         ordering.push({ key, ascending: options?.ascending !== false });
         return query;
       },
+      // Odczyt po kluczu (QRY-07, sesja 33): `limit` to okno jak w PostgREST, razem z `gt` wyżej.
       limit(n: number) { window = [0, n - 1]; return query; },
       single() { singular = true; return query; },
       maybeSingle() { singular = true; return query; },
