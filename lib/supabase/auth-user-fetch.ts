@@ -11,18 +11,22 @@
  * Twórz nowy `fetch` na każde żądanie i nie przenoś go dalej: pamięć wyniku
  * trwa tylko tyle, co jedna decyzja bramki. Sesja cofnięta w GoTrue jest
  * odrzucona już przy następnym żądaniu. Odmowy i błędy nie zostają w pamięci.
+ *
+ * `baseFetch` to `fetch`, który naprawdę idzie do sieci (w proxy: z terminem
+ * bramki, sesja 5). Bez niego globalny `fetch` z chwili wywołania.
  */
-export function createAuthUserFetch(): typeof fetch {
+export function createAuthUserFetch(baseFetch?: typeof fetch): typeof fetch {
   const accepted = new Map<string, Response>();
+  const send: typeof fetch = (input, init) => (baseFetch ?? fetch)(input, init);
 
   return async (input, init) => {
     const authorization = isAuthUserRead(input, init) ? requestHeaders(input, init).get('authorization') : null;
-    if (!authorization) return fetch(input, init);
+    if (!authorization) return send(input, init);
 
     const known = accepted.get(authorization);
     if (known) return known.clone();
 
-    const response = await fetch(input, init);
+    const response = await send(input, init);
     if (!response.ok) return response;
     accepted.set(authorization, response);
     return response.clone();
