@@ -102,6 +102,7 @@ export type PowiazanyWydatek = { id: string; ksef_invoice_id: string | null; is_
 export function grosze(wartosc: unknown): number {
   if (wartosc === null || wartosc === undefined || wartosc === '') return 0;
   const n = typeof wartosc === 'number' ? wartosc : Number(wartosc);
+  // filtr-wyjatek: kwoty-bez-float złote z bazy na grosze całkowite tylko do wyświetlenia; cena z 4 miejscami idzie do kopii faktury osobno (cenaTekst)
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 

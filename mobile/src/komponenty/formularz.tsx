@@ -395,9 +395,9 @@ function zIso(iso: string): Date {
 }
 
 function doIso(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dz = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${dz}`;
+  // filtr-wyjatek: data-warszawa dzień wybrany w kalendarzu telefonu (data z zIso w południe strefy urządzenia), nie „dziś”; „dziś” po polsku liczy dzienWarszawa
+  const [rok, miesiac, dzien] = [d.getFullYear(), d.getMonth() + 1, d.getDate()];
+  return `${rok}-${String(miesiac).padStart(2, '0')}-${String(dzien).padStart(2, '0')}`;
 }
 
 /**

@@ -62,7 +62,7 @@ export function liczbaZPola(tekst: string): number {
 export function dodajDni(iso: string, dni: number): string {
   const d = new Date(`${iso}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + dni);
-  return d.toISOString().slice(0, 10);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -137,6 +137,7 @@ export function poleFormularza(pole: string | undefined): PoleBledu {
 /** Zaokrąglenie do groszy jak `roundToCents` serwera (`lib/xml/invoice-calculator.ts`). */
 function doGroszy(wartosc: number): number {
   const znak = Math.sign(wartosc);
+  // filtr-wyjatek: kwoty-bez-float podgląd odtwarza roundToCents serwera (lib/xml/invoice-calculator.ts), którego telefon nie importuje; kwoty do KSeF liczy serwer
   return (znak * Math.round((Math.abs(wartosc) + Number.EPSILON) * 100)) / 100;
 }
 
@@ -152,6 +153,7 @@ export function kwotyPozycji(p: PozycjaFormularza): { netto: number; vat: number
   const procent = /^\d+$/.test(p.stawka) ? Number(p.stawka) : 0;
   const vat = doGroszy((netto * procent) / 100);
   const brutto = doGroszy(netto + vat);
+  // filtr-wyjatek: kwoty-bez-float złote już zaokrąglone przez doGroszy zamienione na grosze całkowite, tylko do podglądu
   return { netto: Math.round(netto * 100), vat: Math.round(vat * 100), brutto: Math.round(brutto * 100) };
 }
 
