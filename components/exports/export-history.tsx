@@ -25,11 +25,13 @@ import {
 import { toast } from 'sonner';
 
 import { downloadExportFileAction, startExportAction } from '@/app/actions/exports';
+import { getExportJobStatusesAction } from '@/app/actions/job-statuses';
 import { DataTablePagination, DataTableView, FinoraListCard } from '@/components/lists/finora-data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useStatusPoll } from '@/hooks/use-status-poll';
 import { saveBlob } from '@/lib/download';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
@@ -57,15 +59,13 @@ import { describeExportPeriod, formatExportRange } from './export-period';
  * - powód odmowy tylko przy „Błąd” i zawsze z przyciskiem naprawy
  *   (`exportFixFor`); gotowy plik nigdy nie pokazuje starego błędu;
  * - zakończony eksport bez pliku to „Pusty” z wyjaśnieniem, nie zielone „Gotowe”;
- * - wiersze „Oczekuje” / „Generowanie” odświeżają się same (co 4 s, gdy karta
- *   jest widoczna, najwyżej 45 razy — potem ręczne „Odśwież”), a gotowy plik
- *   zgłasza się powiadomieniem z „Pobierz”;
+ * - wiersze „Oczekuje” / „Generowanie” aktualizują się same (lekkie pytanie
+ *   o status z rosnącym odstępem, gdy karta jest widoczna; stronę odświeżamy
+ *   raz, gdy status się zmieni; po 3 minutach ręczne „Odśwież” —
+ *   `hooks/use-status-poll.ts`), a gotowy plik zgłasza się powiadomieniem
+ *   z „Pobierz”;
  * - pobranie nie odświeża strony (licznik pobrań nie jest tu pokazywany).
  */
-
-/** Co ile odpytujemy serwer o eksporty w toku i ile razy najwyżej (3 minuty). */
-export const POLL_INTERVAL_MS = 4000;
-export const MAX_POLL_TICKS = 45;
 
 type HistoryStatus = ExportJobStatus | 'empty';
 
@@ -374,34 +374,16 @@ const PAGE_SIZE = 10;
 export function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
   const router = useRouter();
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
-  const [ticks, setTicks] = useState(0);
   const liveRef = useRef<HTMLParagraphElement>(null);
   const seenInProgress = useRef(new Set<string>());
 
-  const inProgressKey = jobs
-    .filter(isInProgress)
-    .map((job) => job.id)
-    .join(',');
-  // Nowy eksport w toku (albo któryś się skończył) — licznik odpytań od nowa.
-  // Stan dopasowany w trakcie renderu (wzorzec z dokumentacji Reacta), bez efektu.
-  const [pollKey, setPollKey] = useState(inProgressKey);
-  if (pollKey !== inProgressKey) {
-    setPollKey(inProgressKey);
-    setTicks(0);
-  }
-  const polling = inProgressKey !== '' && ticks < MAX_POLL_TICKS;
-  const pollingCapped = inProgressKey !== '' && ticks >= MAX_POLL_TICKS;
-
-  useEffect(() => {
-    if (!polling) return;
-    const timer = setInterval(() => {
-      // Karta w tle nie odpytuje serwera — nie wydajemy też limitu odpytań.
-      if (document.visibilityState !== 'visible') return;
-      setTicks((count) => count + 1);
-      router.refresh();
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [polling, router]);
+  // Plan skalowania, sesja 11: takt pyta lekką akcją o statusy eksportów
+  // w toku, a stronę odświeżamy raz, gdy status się zmieni (dawniej
+  // `router.refresh()` co 4 s). Nowy zestaw eksportów w toku liczy limit od nowa.
+  const { capped: pollingCapped, resume: resumePolling } = useStatusPoll({
+    jobs: jobs.filter(isInProgress),
+    read: getExportJobStatusesAction,
+  });
 
   // Powiadomienie tylko o eksportach, które były w toku w czasie tej wizyty —
   // nie o tych, które skończyły się, zanim strona się otworzyła. Czytnik ekranu
@@ -439,7 +421,7 @@ export function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
     columns: COLUMNS,
     getRowId: (row) => row.id,
     state: { pagination },
-    // Odpytywanie podmienia `jobs` co 4 s — bez tego tabela wracałaby na stronę 1.
+    // Odświeżenie po zmianie statusu podmienia `jobs` — bez tego tabela wracałaby na stronę 1.
     autoResetPageIndex: false,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
@@ -462,7 +444,7 @@ export function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
               size="sm"
               type="button"
               onClick={() => {
-                setTicks(0);
+                resumePolling();
                 router.refresh();
               }}
             >

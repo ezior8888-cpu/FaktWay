@@ -4,11 +4,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * E16: przycisk „Dodaj wydatek” po wgraniu zdjęcia odpytuje co 2 s stan
- * odczytu. Chwilowy błąd (odpowiedź `retryable: true` albo odrzucona
- * obietnica akcji) nie może kończyć czekania porażką — klient wgrałby
- * zdjęcie drugi raz i powstałby drugi wydatek. Pytania nie nakładają się:
- * wolna odpowiedź nie daje podwójnego toastu ani przejścia.
+ * E16: przycisk „Dodaj wydatek” po wgraniu zdjęcia odpytuje stan odczytu.
+ * Chwilowy błąd (odpowiedź `retryable: true` albo odrzucona obietnica akcji)
+ * nie może kończyć czekania porażką — klient wgrałby zdjęcie drugi raz
+ * i powstałby drugi wydatek. Pytania nie nakładają się: wolna odpowiedź nie
+ * daje podwójnego toastu ani przejścia.
+ *
+ * Plan skalowania, sesja 11 (REQ-08, CAC-10) — świadoma zmiana oczekiwań:
+ * zamiast co 2 s przez całą minutę (31 pytań) pytamy od razu, potem po 2 s,
+ * 3 s, 4,5 s, 6,75 s i co 10 s, a ostatnie pytanie 2 s przed limitem, jak
+ * dawniej (10 pytań do 58 s). Limit 60 s bez zmian.
  */
 
 type StatusResult = Awaited<
@@ -127,7 +132,10 @@ describe('CaptureButton — odpytywanie stanu odczytu (E16)', () => {
     expect(mocks.getStatus).toHaveBeenCalledTimes(2);
     expect(buttonText()).toContain('Rozpoznaję');
 
-    await advance(2000);
+    // Drugi odstęp to 3 s (sesja 11; dawniej znów 2 s).
+    await advance(2999);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(2);
+    await advance(1);
     expect(mocks.getStatus).toHaveBeenCalledTimes(3);
     expect(mocks.router.push).toHaveBeenCalledOnce();
     expect(mocks.router.push).toHaveBeenCalledWith(`/expenses/${EXPENSE_ID}`);
@@ -184,8 +192,10 @@ describe('CaptureButton — odpytywanie stanu odczytu (E16)', () => {
 
     await renderAndUpload();
     await advance(58_000);
-    // Pytanie od razu + co 2 s do 58 s włącznie.
-    expect(mocks.getStatus).toHaveBeenCalledTimes(30);
+    // Pytanie od razu, potem po 2 s, 5 s, 9,5 s, 16,25 s, 26,25 s, 36,25 s,
+    // 46,25 s, 56,25 s i ostatnie po 58 s, 2 s przed limitem: 10 pytań do
+    // 58 s (przed sesją 11: co 2 s, 30 pytań).
+    expect(mocks.getStatus).toHaveBeenCalledTimes(10);
     expect(mocks.toast.error).not.toHaveBeenCalled();
     expect(buttonText()).toContain('Rozpoznaję');
 
@@ -199,6 +209,28 @@ describe('CaptureButton — odpytywanie stanu odczytu (E16)', () => {
     expect(mocks.getStatus).toHaveBeenCalledTimes(calls);
     expect(mocks.toast.error).toHaveBeenCalledOnce();
     expect(mocks.router.push).not.toHaveBeenCalled();
+  });
+
+  it('odczyt gotowy tuż przed limitem: ostatnie pytanie 2 s przed 60 s go widzi, bez komunikatu o czasie', async () => {
+    // Pytania do 56,25 s widzą odczyt w toku; zadanie kończy się chwilę później.
+    mocks.getStatus.mockResolvedValue(job('completed', EXPENSE_ID));
+    for (let i = 0; i < 9; i++) mocks.getStatus.mockResolvedValueOnce(job('processing'));
+
+    await renderAndUpload();
+    await advance(57_999);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(9);
+    expect(mocks.router.push).not.toHaveBeenCalled();
+
+    await advance(1);
+    // Bez tego pytania klient dostałby „Przekroczono czas oczekiwania”,
+    // choć wydatek już powstał, i wgrałby zdjęcie drugi raz.
+    expect(mocks.getStatus).toHaveBeenCalledTimes(10);
+    expect(mocks.router.push).toHaveBeenCalledWith(`/expenses/${EXPENSE_ID}`);
+
+    await advance(10_000);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(mocks.toast.success).toHaveBeenCalledOnce();
+    expect(mocks.getStatus).toHaveBeenCalledTimes(10);
   });
 
   it('wisząca odpowiedź → jedno pytanie naraz; po odpowiedzi jedno przejście i jeden toast', async () => {
@@ -290,10 +322,27 @@ describe('CaptureButton — odpytywanie stanu odczytu (E16)', () => {
     });
     expect(mocks.router.push).not.toHaveBeenCalled();
 
-    // Następny takt (6 s) pyta znowu.
-    await advance(1000);
+    // Takty po 2 s i 5 s przepadły (pytanie w toku); następny (9,5 s) pyta znowu.
+    await advance(4499);
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+    await advance(1);
     expect(mocks.getStatus).toHaveBeenCalledTimes(2);
     expect(mocks.router.push).toHaveBeenCalledOnce();
     expect(mocks.router.push).toHaveBeenCalledWith(`/expenses/${EXPENSE_ID}`);
+  });
+
+  it('rosnący odstęp: od razu, po 2 s, 3 s, 4,5 s, 6,75 s, potem co 10 s', async () => {
+    mocks.getStatus.mockResolvedValue(job('processing'));
+
+    await renderAndUpload();
+    expect(mocks.getStatus).toHaveBeenCalledTimes(1);
+    const gaps = [2000, 3000, 4500, 6750, 10_000, 10_000];
+    for (const [i, gap] of gaps.entries()) {
+      await advance(gap - 1);
+      expect(mocks.getStatus).toHaveBeenCalledTimes(i + 1);
+      await advance(1);
+      expect(mocks.getStatus).toHaveBeenCalledTimes(i + 2);
+    }
+    expect(mocks.toast.error).not.toHaveBeenCalled();
   });
 });

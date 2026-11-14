@@ -749,11 +749,12 @@
     {
       "id": "pomocnicze",
       "poziom": "R3",
-      "opis": "Daty i strefa Warszawy, formatowanie kwot, odczyt stronami, schematy formularzy, typy, dziennik audytowy, przełączniki funkcji.",
+      "opis": "Daty i strefa Warszawy, formatowanie kwot, odczyt stronami, schematy formularzy, typy, dziennik audytowy, przełączniki funkcji, odpytywanie o stan zadań.",
       "sciezki": [
         "lib/format/**",
         "lib/accounting/read-complete-pages.ts",
         "lib/pagination/**",
+        "lib/polling/**",
         "lib/schemas/**",
         "types/invoice*.ts",
         "types/**",

@@ -6,7 +6,13 @@ import { toast } from 'sonner';
 
 import { getOcrJobStatusAction } from '@/app/actions/expenses';
 import { sendExpenseFile } from '@/lib/expenses/photo-upload';
+import { OCR_POLL, nextPollDelay } from '@/lib/polling/poll-loop';
 import { postExpenseUpload } from '@/lib/uploads/client';
+
+/** Limit czekania na odczyt zdjęcia (komunikat „Przekroczono czas oczekiwania (60 s).”). */
+const OCR_TIMEOUT_MS = 60_000;
+/** Ostatnie pytanie o odczyt: 2 s przed limitem. */
+const OCR_LAST_POLL_MS = OCR_TIMEOUT_MS - 2000;
 
 export type CaptureState =
   | { kind: 'idle' }
@@ -44,8 +50,12 @@ export function useExpenseCapture({
 
     const jobId = processingJobId;
     let cancelled = false;
-    const timers: { interval?: ReturnType<typeof setInterval> } = {};
-    // Jedno pytanie naraz: odpowiedź wolniejsza niż takt (2 s) nie może
+    const timers: { tick?: ReturnType<typeof setTimeout> } = {};
+    const stopTicks = () => {
+      if (timers.tick) clearTimeout(timers.tick);
+      timers.tick = undefined;
+    };
+    // Jedno pytanie naraz: odpowiedź wolniejsza niż takt nie może
     // nakładać się na następne — dwie odpowiedzi „completed” dałyby
     // podwójny toast i podwójne przejście do wydatku.
     let inFlight = false;
@@ -64,14 +74,14 @@ export function useExpenseCapture({
         // porażki (klient wgrałby zdjęcie drugi raz → drugi wydatek). Pytamy
         // dalej; limit 60 s niżej i tak zakończy czekanie.
         if (status.retryable) return;
-        if (timers.interval) clearInterval(timers.interval);
+        stopTicks();
         setState({ kind: 'failed', error: status.error });
         toast.error(status.error);
         return;
       }
 
       if (status.job.status === 'completed' && status.job.expense_id) {
-        if (timers.interval) clearInterval(timers.interval);
+        stopTicks();
         toast.success('Wydatek rozpoznany!');
         router.push(`/expenses/${status.job.expense_id}`);
         setState({ kind: 'idle' });
@@ -79,7 +89,7 @@ export function useExpenseCapture({
       }
 
       if (status.job.status === 'failed') {
-        if (timers.interval) clearInterval(timers.interval);
+        stopTicks();
         setState({
           kind: 'failed',
           error: status.job.error_message ?? 'Nieznany błąd',
@@ -88,12 +98,31 @@ export function useExpenseCapture({
       }
     }
 
+    // Pytanie od razu, potem takty z rosnącym odstępem: 2 s, 3 s, 4,5 s,
+    // 6,75 s i co 10 s, a ostatni 2 s przed limitem, jak przy dawnym takcie
+    // co 2 s (plan skalowania, sesja 11; dawniej 31 pytań na minutę, teraz
+    // 10). Bez ostatniego odczyt gotowy w ostatnich sekundach skończyłby się
+    // komunikatem o czasie i drugim wgraniem zdjęcia. Takt w trakcie pytania
+    // przepada. Na karcie w tle pytamy dalej: limit 60 s niżej liczy czas
+    // ścienny, więc pauza kończyłaby czekanie porażką zaraz po powrocie.
+    let gap = OCR_POLL.firstMs;
+    let scheduledMs = 0;
+    const scheduleTick = () => {
+      const wait = Math.min(gap, OCR_LAST_POLL_MS - scheduledMs);
+      if (wait <= 0) return;
+      scheduledMs += wait;
+      timers.tick = setTimeout(() => {
+        gap = nextPollDelay(gap, OCR_POLL);
+        scheduleTick();
+        void pollOnce();
+      }, wait);
+    };
     void pollOnce();
-    timers.interval = setInterval(() => void pollOnce(), 2000);
+    scheduleTick();
 
     const timeoutId = setTimeout(() => {
       cancelled = true;
-      if (timers.interval) clearInterval(timers.interval);
+      stopTicks();
       setState((s) =>
         s.kind === 'processing' && s.jobId === jobId
           ? {
@@ -103,11 +132,11 @@ export function useExpenseCapture({
           : s,
       );
       toast.error('Przekroczono czas oczekiwania');
-    }, 60_000);
+    }, OCR_TIMEOUT_MS);
 
     return () => {
       cancelled = true;
-      if (timers.interval) clearInterval(timers.interval);
+      stopTicks();
       clearTimeout(timeoutId);
     };
   }, [processingJobId, router]);

@@ -7,24 +7,39 @@ const actions = vi.hoisted(() => ({
   startExportAction: vi.fn(),
   downloadExportFileAction: vi.fn(),
 }));
+const statusActions = vi.hoisted(() => ({ getExportJobStatusesAction: vi.fn() }));
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// `unstable_isUnrecognizedActionError` prawdziwy: rozpoznaje akcję nieznaną serwerowi po nowym wdrożeniu.
+vi.mock('next/navigation', async () => ({
+  useRouter: () => router,
+  unstable_isUnrecognizedActionError: (await import('next/dist/client/components/unrecognized-action-error'))
+    .unstable_isUnrecognizedActionError,
+}));
 vi.mock('@/app/actions/exports', () => actions);
+vi.mock('@/app/actions/job-statuses', () => statusActions);
 vi.mock('sonner', () => ({ toast }));
 
-import { MAX_POLL_TICKS, POLL_INTERVAL_MS, RecentExports } from '@/components/exports/export-history';
+import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
+
+import { RecentExports } from '@/components/exports/export-history';
 import type { ManualExportJobWithFiles } from '@/components/exports/export-formats';
 import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 
 /**
  * Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): historia
- * eksportów odświeża się sama, dopóki coś się generuje (co 4 s, najwyżej
- * 45 razy, tylko na widocznej karcie), a potem daje ręczne „Odśwież”.
- * Nieudany eksport pokazuje powód i przycisk wyjścia, gotowy — nigdy
- * starego błędu, a gotowy bez pliku to „Pusty”, nie „Gotowe”. Zmianę
- * statusu ogłasza jeden ukryty komunikat z nazwą pliku i okresem (gotowy
- * i nieudany), a nie każda plakietka z osobna.
+ * eksportów aktualizuje się sama, dopóki coś się generuje (tylko na
+ * widocznej karcie), a po 3 minutach daje ręczne „Odśwież”. Nieudany
+ * eksport pokazuje powód i przycisk wyjścia, gotowy — nigdy starego błędu,
+ * a gotowy bez pliku to „Pusty”, nie „Gotowe”. Zmianę statusu ogłasza jeden
+ * ukryty komunikat z nazwą pliku i okresem (gotowy i nieudany), a nie każda
+ * plakietka z osobna.
+ *
+ * Plan skalowania, sesja 11 (REQ-08, CAC-V01) — świadoma zmiana oczekiwań:
+ * takt nie woła już `router.refresh()` (pełny render strony z layoutem
+ * i ponowny prefetch linków co 4 s), tylko lekką akcję z samymi statusami
+ * eksportów w toku. Strona odświeża się raz, gdy status się zmieni. Odstęp
+ * rośnie: 4 s, 6 s, 9 s, 13,5 s, potem co 15 s.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -59,6 +74,7 @@ beforeEach(() => {
   toast.success.mockReset();
   toast.error.mockReset();
   actions.startExportAction.mockReset();
+  statusActions.getExportJobStatusesAction.mockReset();
 });
 
 afterEach(() => {
@@ -81,70 +97,291 @@ function rerender(jobs: ManualExportJobWithFiles[]) {
   act(() => root!.render(<RecentExports jobs={jobs} />));
 }
 
-const tick = (ms: number) => act(() => vi.advanceTimersByTime(ms));
-
 /** Ukryty komunikat dla czytników ekranu (`p.sr-only[aria-live]`). */
 const liveRegion = (el: HTMLElement) => el.querySelector<HTMLElement>('p.sr-only[aria-live="polite"]');
 
 const buttons = (el: HTMLElement, text: string) =>
   [...el.querySelectorAll<HTMLElement>('button, a')].filter((b) => b.textContent?.trim() === text);
 
-describe('Historia — odświeżanie eksportów w toku', () => {
-  it('co 4 s, dopóki coś się generuje; po 45 razach stop i ręczne „Odśwież”', () => {
-    const el = mount([job({ status: 'pending', export_files: [] })]);
-    expect(router.refresh).not.toHaveBeenCalled();
+/**
+ * Odstępy kolejnych pytań: 4 s, 6 s, 9 s, 13,5 s, potem co 15 s
+ * (`pollDelays(STATUS_POLL)` — pilnuje tego `odpytywanie-statusu-petla.test.ts`).
+ * Wpisane na sztywno, żeby test był czerwony na kodzie sprzed sesji 11.
+ */
+const DELAYS = [4000, 6000, 9000, 13_500, 15_000];
+const delay = (n: number) => DELAYS[Math.min(n, DELAYS.length - 1)]!;
+/** Czas od zamontowania do n-tego pytania (od 1). */
+const until = (n: number) => Array.from({ length: n }, (_, i) => delay(i)).reduce((sum, ms) => sum + ms, 0);
+/** Tyle pytań mieści 3 minuty odpytywania (13. pytanie po 167,5 s, 14. po 182,5 s). */
+const POLLS_IN_3_MIN = 14;
 
-    tick(POLL_INTERVAL_MS - 1);
+const statuses = (...rows: Array<{ id: string; status: string }>) => ({ success: true as const, statuses: rows });
+const flush = (ms: number) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+const statusCalls = () => statusActions.getExportJobStatusesAction.mock.calls.length;
+
+describe('Historia — odpytywanie eksportów w toku (lekka akcja statusu)', () => {
+  it('pomiar: 3 minuty generowania bez zmiany statusu = 0 × router.refresh(), 14 lekkich pytań', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
+    mount([job({ status: 'generating', export_files: [] }), job({ id: 'job-2' })]);
+
+    await flush(180_000);
+    // Przed sesją 11: 45 × router.refresh() (co 4 s) i 0 lekkich pytań.
     expect(router.refresh).not.toHaveBeenCalled();
-    tick(1);
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN - 1);
+    await flush(until(POLLS_IN_3_MIN) - 180_000);
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('takt bez zmiany statusu: jedno pytanie o statusy eksportów w toku, bez router.refresh()', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
+    mount([job({ status: 'generating', export_files: [] }), job({ id: 'job-2' })]);
+
+    await flush(until(1) - 1);
+    expect(router.refresh).not.toHaveBeenCalled();
+    expect(statusCalls()).toBe(0);
+    await flush(1);
+    expect(router.refresh).not.toHaveBeenCalled();
+    expect(statusCalls()).toBe(1);
+    // Tylko eksporty w toku: gotowego `job-2` nie odpytujemy.
+    expect(statusActions.getExportJobStatusesAction).toHaveBeenLastCalledWith(['job-1']);
+  });
+
+  it('rosnący odstęp: pytania po 4 s, 6 s, 9 s, 13,5 s, potem co 15 s', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'pending' }));
+    mount([job({ status: 'pending', export_files: [] })]);
+
+    for (let n = 1; n <= 7; n++) {
+      await flush(delay(n - 1) - 1);
+      expect(statusCalls()).toBe(n - 1);
+      await flush(1);
+      expect(statusCalls()).toBe(n);
+    }
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('zmiana statusu: router.refresh() raz; dane z odświeżonej strony kończą odpytywanie', async () => {
+    statusActions.getExportJobStatusesAction
+      .mockResolvedValueOnce(statuses({ id: 'job-1', status: 'generating' }))
+      .mockResolvedValueOnce(statuses({ id: 'job-1', status: 'completed' }));
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(1));
+    expect(router.refresh).not.toHaveBeenCalled();
+    await flush(delay(1));
     expect(router.refresh).toHaveBeenCalledTimes(1);
 
-    tick(POLL_INTERVAL_MS * (MAX_POLL_TICKS - 1));
-    expect(router.refresh).toHaveBeenCalledTimes(MAX_POLL_TICKS);
-    expect(MAX_POLL_TICKS).toBe(45);
+    // Odświeżona strona: eksport gotowy, nic już nie trwa.
+    rerender([job()]);
+    await flush(until(10));
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(statusCalls()).toBe(2);
+  });
 
-    tick(POLL_INTERVAL_MS * 10);
-    expect(router.refresh).toHaveBeenCalledTimes(MAX_POLL_TICKS);
+  it('krok w toku (pending → generating): jedno odświeżenie, dalej pytania bez odświeżania', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
+    mount([job({ status: 'pending', export_files: [] })]);
+
+    await flush(until(1));
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    rerender([job({ status: 'generating', export_files: [] })]);
+    await flush(until(4) - until(1));
+    expect(statusCalls()).toBe(4);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('nieudany odczyt statusu (sieć, błąd bazy) nie odświeża strony i nie kończy odpytywania', async () => {
+    statusActions.getExportJobStatusesAction
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({ success: false, retryable: true })
+      .mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(3));
+    expect(statusCalls()).toBe(3);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('odmowa odczytu (sesja wygasła): jedno router.refresh() i koniec pytań', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue({ success: false, retryable: false });
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(1));
+    // Pełne odświeżenie przechodzi przez bramkę logowania (dawniej robił to każdy takt).
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('brak sieci (fetch rzuca TypeError) przez 3 minuty: bez router.refresh(), pytamy dalej', async () => {
+    statusActions.getExportJobStatusesAction.mockRejectedValue(new TypeError('Failed to fetch'));
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('nowe wdrożenie (serwer nie zna akcji ze starego buildu): od razu jedno router.refresh() i koniec pytań', async () => {
+    statusActions.getExportJobStatusesAction.mockRejectedValue(
+      new UnrecognizedActionError('Server Action "00ab" was not found on the server.'),
+    );
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(1));
+    // Odświeżenie wykryje inny build i przeładuje kartę (dawniej robił to każdy takt).
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('bramka logowania odrzuca pytanie (wylogowanie, 2FA, przerwa techniczna): co 3 odrzucenia z rzędu jedno router.refresh()', async () => {
+    statusActions.getExportJobStatusesAction.mockRejectedValue(
+      new Error('An unexpected response was received from the server.'),
+    );
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(2));
+    // Jedno albo dwa odrzucenia to może być chwilowe 502 przy restarcie serwera.
+    expect(router.refresh).not.toHaveBeenCalled();
+    await flush(until(3) - until(2));
+    // Odświeżenie pójdzie za przekierowaniem bramki (logowanie, 2FA, przerwa).
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(6) - until(3));
+    expect(statusCalls()).toBe(6);
+    expect(router.refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('odrzucenia przerwane odpowiedzią serwera liczą się od nowa', async () => {
+    const rejected = new Error('An unexpected response was received from the server.');
+    const generating = statuses({ id: 'job-1', status: 'generating' });
+    statusActions.getExportJobStatusesAction
+      .mockRejectedValueOnce(rejected)
+      .mockRejectedValueOnce(rejected)
+      .mockResolvedValueOnce(generating)
+      .mockRejectedValueOnce(rejected)
+      .mockRejectedValueOnce(rejected)
+      .mockResolvedValue(generating);
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(6));
+    expect(statusCalls()).toBe(6);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('jedno pytanie naraz: wolna odpowiedź nie nakłada się na następną', async () => {
+    let resolve!: (value: unknown) => void;
+    statusActions.getExportJobStatusesAction
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolve = r;
+        }),
+      )
+      .mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
+    mount([job({ status: 'generating', export_files: [] })]);
+
+    await flush(until(5));
+    expect(statusCalls()).toBe(1);
+    await act(async () => {
+      resolve(statuses({ id: 'job-1', status: 'generating' }));
+    });
+    await flush(delay(1));
+    expect(statusCalls()).toBe(2);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('po 3 minutach odpytywania stop i ręczne „Odśwież”, które wznawia lekkie odpytywanie', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'pending' }));
+    const el = mount([job({ status: 'pending', export_files: [] })]);
+    expect(buttons(el, 'Odśwież')).toHaveLength(0);
+
+    await flush(until(POLLS_IN_3_MIN));
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN);
+    await flush(15_000 * 10);
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN);
+    expect(router.refresh).not.toHaveBeenCalled();
 
     const refresh = buttons(el, 'Odśwież');
     expect(refresh).toHaveLength(1);
     act(() => refresh[0]!.click());
-    expect(router.refresh).toHaveBeenCalledTimes(MAX_POLL_TICKS + 1);
-    // Ręczne odświeżenie wznawia odpytywanie.
-    tick(POLL_INTERVAL_MS);
-    expect(router.refresh).toHaveBeenCalledTimes(MAX_POLL_TICKS + 2);
+    // Ręczne „Odśwież” to jedno pełne odświeżenie, potem znów lekkie pytania.
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(1));
+    expect(statusCalls()).toBe(POLLS_IN_3_MIN + 1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(buttons(el, 'Odśwież')).toHaveLength(0);
   });
 
-  it('bez eksportów w toku nie odpytuje; koniec generowania zatrzymuje odpytywanie', () => {
+  it('bez eksportów w toku nie odpytuje; koniec generowania zatrzymuje odpytywanie', async () => {
+    statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
     mount([job(), job({ id: 'job-2', status: 'failed', export_files: [] })]);
-    tick(POLL_INTERVAL_MS * 5);
-    expect(router.refresh).not.toHaveBeenCalled();
+    await flush(until(5));
+    expect(statusCalls()).toBe(0);
 
     rerender([job({ status: 'generating', export_files: [] })]);
-    tick(POLL_INTERVAL_MS);
-    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(1));
+    expect(statusCalls()).toBe(1);
     rerender([job()]);
-    tick(POLL_INTERVAL_MS * 5);
-    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await flush(until(5));
+    expect(statusCalls()).toBe(1);
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
-  it('karta w tle nie odpytuje', () => {
-    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  it('karta w tle nie odpytuje; po powrocie pyta od razu', async () => {
+    let visibility: DocumentVisibilityState = 'hidden';
+    const spy = vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
     try {
+      statusActions.getExportJobStatusesAction.mockResolvedValue(statuses({ id: 'job-1', status: 'generating' }));
       mount([job({ status: 'generating', export_files: [] })]);
-      tick(POLL_INTERVAL_MS * 3);
+      await flush(until(5));
+      expect(statusCalls()).toBe(0);
+      expect(router.refresh).not.toHaveBeenCalled();
+
+      visibility = 'visible';
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(statusCalls()).toBe(1);
       expect(router.refresh).not.toHaveBeenCalled();
     } finally {
-      visibility.mockRestore();
+      spy.mockRestore();
     }
   });
 
-  it('po odmontowaniu nic nie odpytuje', () => {
+  it('po odmontowaniu nic nie odpytuje', async () => {
     mount([job({ status: 'pending', export_files: [] })]);
     act(() => root!.unmount());
     root = null;
-    tick(POLL_INTERVAL_MS * 3);
+    await flush(until(3));
+    expect(statusCalls()).toBe(0);
     expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('odmontowanie w trakcie pytania: spóźniona zmiana statusu nie odświeża strony', async () => {
+    let resolve!: (value: unknown) => void;
+    statusActions.getExportJobStatusesAction.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    mount([job({ status: 'generating', export_files: [] })]);
+    await flush(until(1));
+    expect(statusCalls()).toBe(1);
+
+    act(() => root!.unmount());
+    root = null;
+    await act(async () => {
+      resolve(statuses({ id: 'job-1', status: 'completed' }));
+    });
+    await flush(until(3));
+    expect(router.refresh).not.toHaveBeenCalled();
+    expect(statusCalls()).toBe(1);
   });
 });
 
