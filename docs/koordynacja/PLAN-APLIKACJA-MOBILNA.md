@@ -493,7 +493,7 @@ częścią „gotowe” od M3.
 **Następny krok:** M12 (Android, wiersz M12 w sekcji 7; sekcja 10 zasad
 designu): dopasowanie konwencji i checklista na emulatorze Androida. M11
 (powiadomienia push, logowanie Apple) i M13 (sklep) czekają na płatne konto
-Apple. Przed M12 scalić po kolei #716 (M8), #739 (M10a) i #751 (M10b, zawiera oba).
+Apple. Przed M12 scalić po kolei #716 (M8), #740 (mapa filtra dla telefonu), #739 (M10a) i #751 (M10b, zawiera wszystkie trzy).
 **Z M10b zostaje:** (1) zapisy ustawień (dane firmy, VAT, data rozpoczęcia,
 certyfikat KSeF, przypomnienia, hasło, 2FA, klucze dostępu) i karty Księgowa,
 Powiadomienia, Zespół, Abonament, Dziennik są na stronie; API dla nich to

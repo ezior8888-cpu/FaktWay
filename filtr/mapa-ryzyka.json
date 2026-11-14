@@ -784,12 +784,25 @@
       ]
     },
     {
+      "id": "mobile.naleznosci",
+      "poziom": "R1",
+      "opis": "Telefon (od M10a): należności po terminie i przypomnienia o zapłacie: kwoty do zapłaty na liście, reguła, kiedy wolno przygotować przypomnienie, i treść wiadomości do kontrahenta przed zgodą (jak windykacja i faktury.platnosci na stronie).",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/faktury/index.tsx",
+        "mobile/src/app/(zakladki)/faktury/przypomnienie.tsx",
+        "mobile/src/lib/naleznosci.ts",
+        "mobile/src/stan/naleznosci.tsx"
+      ]
+    },
+    {
       "id": "mobile.szacunki",
       "poziom": "R2",
       "opis": "Telefon: pulpit i księgowość: szacunki podatków i składek, wynik, terminy i treści o podatkach (jak ksiegowosc.ekrany i szacunki na stronie).",
       "sciezki": [
         "mobile/src/app/(zakladki)/(pulpit)/**",
-        "mobile/src/app/(zakladki)/ksiegowosc/**"
+        "mobile/src/app/(zakladki)/ksiegowosc/**",
+        "mobile/src/stan/ksiegowosc.tsx",
+        "mobile/src/stan/ustawienia.tsx"
       ]
     },
     {
