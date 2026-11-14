@@ -93,7 +93,10 @@ describe('strażnik FA(3) w wysyłce do KSeF: tylko alarm (D-F7)', () => {
     await expect(submitInvoiceFullFlow(T, ID, faktura(), AUTH, 'test', null, null, null, 'a-1')).resolves.toMatchObject({ ksefNumber: 'K' });
     expect(m.posted).toBe(true);
     expect(alarmyFa3()).toHaveLength(1);
-    expect(alarmyFa3()[0]![1]).toMatchObject({ tags: { kod: KODY_FA3.suma, straznik: 'fa3', tenantId: T, rodzaj: 'vat', miesiac: '2026-11' } });
+    expect(alarmyFa3()[0]![1]).toMatchObject({
+      tags: { kod: KODY_FA3.suma, straznik: 'fa3', tenantId: T, rodzaj: 'vat', miesiac: '2026-11' },
+      extra: { dokumentId: ID },
+    });
   });
 
   it('plik z prawdziwego generatora: bez alarmu', async () => {

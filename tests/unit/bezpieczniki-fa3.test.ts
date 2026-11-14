@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { alarmujFa3, KODY_FA3, sprawdzFa3 } from '@/lib/bezpieczniki/fa3';
+import { generateAdvanceInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { finalizeInvoice, type InvoiceInput } from '@/lib/xml/invoice-calculator';
 import { validateFA3 } from '@/lib/xml/validator';
 import type { Invoice, VatRate } from '@/types/invoice';
+import type { AdvanceInvoiceData } from '@/types/invoice-types';
 
 /**
  * Strażnik FA(3) (żelazny filtr F13 część 4, `lib/bezpieczniki/fa3.ts`).
@@ -136,20 +138,69 @@ describe('strażnik FA(3): plik zepsuty jak przez błąd generatora', () => {
 
 describe('tryb „tylko alarm” (D-F7)', () => {
   it('alarm idzie do Sentry z kodem i firmą, faktura nie jest zatrzymywana', () => {
-    const alarmy = alarmujFa3(zmien(xmlZ(MIESZANA, 'art. 43 ust. 1 pkt 37 ustawy o VAT'), 'P_15', plusGrosz), 'ten-1');
+    const alarmy = alarmujFa3(zmien(xmlZ(MIESZANA, 'art. 43 ust. 1 pkt 37 ustawy o VAT'), 'P_15', plusGrosz), 'ten-1', 'fv-1');
     expect(alarmy.map((a) => a.kod)).toEqual([KODY_FA3.suma]);
     expect(sentry.captureMessage).toHaveBeenCalledTimes(1);
-    expect(sentry.captureMessage.mock.calls[0]![1]).toMatchObject({ tags: { kod: KODY_FA3.suma, tenantId: 'ten-1', straznik: 'fa3' } });
+    expect(sentry.captureMessage.mock.calls[0]![1]).toMatchObject({
+      tags: { kod: KODY_FA3.suma, tenantId: 'ten-1', straznik: 'fa3' },
+      extra: { dokumentId: 'fv-1' },
+      fingerprint: [KODY_FA3.suma, 'vat', '2026-11'],
+    });
   });
 
   it('plik bez błędów: nic nie idzie do Sentry', () => {
-    expect(alarmujFa3(xmlZ(MIESZANA, 'art. 43 ust. 1 pkt 37 ustawy o VAT'), 'ten-1')).toEqual([]);
+    expect(alarmujFa3(xmlZ(MIESZANA, 'art. 43 ust. 1 pkt 37 ustawy o VAT'), 'ten-1', 'fv-1')).toEqual([]);
     expect(sentry.captureMessage).not.toHaveBeenCalled();
   });
 
   it('błąd Sentry nie wychodzi poza strażnika', () => {
     const xml = zmien(xmlZ(MIESZANA, 'art. 43 ust. 1 pkt 37 ustawy o VAT'), 'P_15', plusGrosz);
     sentry.captureMessage.mockImplementation(() => { throw new Error('sentry padł'); });
-    expect(() => alarmujFa3(xml, 'ten-1')).not.toThrow();
+    expect(() => alarmujFa3(xml, 'ten-1', 'fv-1')).not.toThrow();
+  });
+});
+
+describe('strażnik FA(3): podatek od brutto i faktura zaliczkowa (FA3-03)', () => {
+  /** Jedna pozycja 23 % policzona od brutto (art. 106e ust. 7), jak faktura za abonament: netto = brutto / 1,23, VAT = brutto − netto. */
+  const odBrutto = (netto: string, vat: string, brutto: string) =>
+    xmlZ([{ vatRate: '23', quantity: 1, unitPriceNet: 10 }])
+      .replace(/<P_11>[^<]*<\/P_11>/, `<P_11>${netto}</P_11>`)
+      .replace(/<P_13_1>[^<]*<\/P_13_1>/, `<P_13_1>${netto}</P_13_1>`)
+      .replace(/<P_14_1>[^<]*<\/P_14_1>/, `<P_14_1>${vat}</P_14_1>`)
+      .replace(/<P_15>[^<]*<\/P_15>/, `<P_15>${brutto}</P_15>`);
+
+  it('abonament 22,49 zł od brutto (netto 18,28 zł, VAT 4,21 zł): bez alarmu', () => {
+    expect(sprawdzFa3(odBrutto('18.28', '4.21', '22.49'))).toEqual([]);
+  });
+
+  it('ta sama pozycja z VAT policzonym stawką 8 %: FILTR-RT-FA3-03', () => {
+    expect(kody(odBrutto('18.28', '1.46', '19.74'))).toEqual([KODY_FA3.podatek]);
+  });
+
+  const zaliczka = (stawka: '23' | '8', zaliczkaGr: number): string =>
+    generateAdvanceInvoiceXml({
+      invoiceType: 'advance',
+      internalNumber: 'ZAL/2026/11/1',
+      issueDate: '2026-11-09',
+      paymentMethod: 'transfer',
+      paymentDueDate: '2026-11-23',
+      bankAccount: 'PL61109010140000071219812874',
+      seller: { nip: '1234563218', name: 'Firma', address: { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' } },
+      buyer: { type: 'b2b', idType: 'nip', nip: '1111111111', name: 'Klient', address: { countryCode: 'PL', addressLine1: 'ul. Klienta 2', addressLine2: '02-001 Warszawa' } },
+      taxAnnotations: { cashMethod: 2, splitPayment: 2 },
+      advanceAmount: zaliczkaGr / 100,
+      totalContractAmount: 10_000,
+      vatRate: stawka,
+      description: 'Zaliczka na usługę',
+    } as AdvanceInvoiceData, { generatedAt: new Date('2026-11-09T10:00:00Z') });
+
+  it.each([['23', 123_000], ['23', 1_999], ['8', 54_321]] as const)('zaliczka %s %% z generatora (%i gr): bez alarmu', (stawka, gr) => {
+    expect(sprawdzFa3(zaliczka(stawka, gr))).toEqual([]);
+  });
+
+  it('zaliczka z podatkiem o złotówkę wyższym i netto o złotówkę niższym (P_15 bez zmian): FILTR-RT-FA3-03', () => {
+    const xml = zaliczka('23', 123_000);
+    const zle = zmien(zmien(xml, 'P_14_1', (v) => (Math.round(Number(v) * 100) + 100) / 100 + ''), 'P_13_1', (v) => (Math.round(Number(v) * 100) - 100) / 100 + '');
+    expect(kody(zle)).toEqual([KODY_FA3.podatek]);
   });
 });

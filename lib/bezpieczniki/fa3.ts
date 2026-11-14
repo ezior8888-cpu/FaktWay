@@ -25,10 +25,16 @@
  *   P_13_10 „oo”. Pozycja z inną stawką (ryczałt taksówek, OSS, marża) albo
  *   bez P_11 (np. P_11A przy fakturze od brutto) wyłącza kontrole 02 i 03
  *   dla tej faktury: wzoru nie da się wtedy sprawdzić z samego pliku.
- * - FILTR-RT-FA3-03 (NZ-FA-02, NZ-ZAOKR-06): faktura VAT: P_14_x różni się od
- *   P_13_x razy stawka najwyżej o pół grosza na pozycję w tej stawce. Tyle
- *   daje zaokrąglenie podatku każdej pozycji osobno; podatek od sumy w
- *   stawce mieści się tym bardziej, więc kontrola nie rozstrzyga metody.
+ * - FILTR-RT-FA3-03 (NZ-FA-02, NZ-ZAOKR-06, RP-FA-ZAL-01): P_14_x różni się
+ *   od P_13_x razy stawka najwyżej o zaokrąglenie: (100 + stawka) / 2 setnych
+ *   grosza na pozycję w tej stawce. Pół grosza na pozycję daje podatek od
+ *   netto (od pozycji albo od sumy w stawce); podatek od brutto (art. 106e
+ *   ust. 7, np. faktura za abonament, i wzór zaliczki z art. 106f ust. 1
+ *   pkt 3) odchyla się o pół grosza × (100 + stawka) / 100. Zła stawka albo
+ *   błąd o złotówkę wychodzą daleko poza tę granicę. Faktura VAT: grupy
+ *   z pozycji FaWiersz; faktura zaliczkowa: jedna „pozycja” na stawkę, stawka
+ *   z wierszy zamówienia (P_12Z), bez sprawdzenia, gdy zamówienie ma w tej
+ *   grupie kilka stawek.
  * - FILTR-RT-FA3-04 (NZ-FA-03): pozycja zwolniona („zw” w P_12 albo P_12Z)
  *   wymaga P_19 = 1 z podstawą zwolnienia (P_19A, P_19B albo P_19C), a w
  *   fakturze VAT także odwrotnie. Pozycja „oo” albo „np II” wymaga P_18 = 1
@@ -90,7 +96,7 @@ const parser = new XMLParser({
 const KWOTA = /^(-?)(\d+)(?:\.(\d{1,2}))?$/;
 const ZERO = BigInt(0);
 const JEDEN = BigInt(1);
-const PIECDZIESIAT = BigInt(50);
+const DWA = BigInt(2);
 const STO = BigInt(100);
 
 /** Kwota TKwotowy w groszach; `null`, gdy pole nie jest pojedynczą kwotą. Brak pola to 0. */
@@ -141,6 +147,7 @@ export function sprawdzFa3(xml: string): AlarmFa3[] {
   sprawdzSume(fa, zglos);
   const pozycje = wiersze(fa.FaWiersz);
   if (rodzaj === 'vat') sprawdzPozycje(fa, pozycje, zglos);
+  else if (rodzaj === 'zal') sprawdzZaliczke(fa, zglos);
   sprawdzOznaczenia(fa, rodzaj, pozycje, zglos);
   return alarmy;
 }
@@ -190,12 +197,34 @@ function sprawdzPozycje(fa: Wezel, pozycje: Wezel[], zglos: Zglos): void {
       zglos(KODY_FA3.podatek, `pozycje w ${pole.netto} mają różne stawki`);
       continue;
     }
-    const procent = BigInt([...procenty][0] ?? pole.stawki[0]);
-    // |P_14 − P_13 × stawka| ≤ pół grosza na pozycję, w setnych grosza: |100·P_14 − P_13·procent| ≤ 50·ile.
-    const roznica = STO * p14 - p13 * procent;
-    if ((roznica < ZERO ? -roznica : roznica) > PIECDZIESIAT * zPozycji.ile) {
-      zglos(KODY_FA3.podatek, `${pole.podatek} nie zgadza się z ${pole.netto} i stawką (więcej niż zaokrąglenie pozycji)`);
+    sprawdzPodatek(p13, p14, BigInt([...procenty][0] ?? pole.stawki[0]), zPozycji.ile, pole, zglos);
+  }
+}
+
+/** FA3-03: |100·P_14 − P_13·procent| ≤ (100 + procent) / 2 · ile, w setnych grosza (nagłówek pliku). */
+function sprawdzPodatek(p13: bigint, p14: bigint, procent: bigint, ile: bigint, pole: { netto: string; podatek: string }, zglos: Zglos): void {
+  const roznica = STO * p14 - p13 * procent;
+  if (DWA * (roznica < ZERO ? -roznica : roznica) > (STO + procent) * ile) {
+    zglos(KODY_FA3.podatek, `${pole.podatek} nie zgadza się z ${pole.netto} i stawką (więcej niż zaokrąglenie pozycji)`);
+  }
+}
+
+/** Faktura zaliczkowa: podatek każdej stawki ze wzoru art. 106f ust. 1 pkt 3 (RP-FA-ZAL-01), przez FA3-03. */
+function sprawdzZaliczke(fa: Wezel, zglos: Zglos): void {
+  const stawkiZamowienia = new Set(wiersze(wezel(fa.Zamowienie)?.ZamowienieWiersz).map((w) => tekst(w, 'P_12Z')));
+  for (const pole of STAWKI_FA3) {
+    if (!('podatek' in pole)) continue;
+    const p13 = grosze(fa, pole.netto);
+    const p14 = grosze(fa, pole.podatek);
+    if (p13 === null || p14 === null) {
+      zglos(KODY_FA3.podatek, `pole ${pole.netto} albo ${pole.podatek} nie jest kwotą albo występuje więcej niż raz`);
+      continue;
     }
+    if (p13 === ZERO && p14 === ZERO) continue;
+    const procenty = (pole.stawki as readonly string[]).filter((s) => stawkiZamowienia.has(s));
+    // Stawki zaliczki nie da się ustalić z zamówienia (brak albo kilka w grupie): wzoru nie sprawdzamy.
+    if (procenty.length !== 1) continue;
+    sprawdzPodatek(p13, p14, BigInt(procenty[0] ?? '0'), JEDEN, pole, zglos);
   }
 }
 
@@ -218,13 +247,14 @@ function sprawdzOznaczenia(fa: Wezel, rodzaj: string, pozycje: Wezel[], zglos: Z
 }
 
 /**
- * Tryb „tylko alarm” (D-F7): alarmy do Sentry, wysyłka idzie dalej. Błąd
- * samego strażnika trafia tylko do logu, nigdy nie zatrzymuje faktury.
+ * Tryb „tylko alarm” (D-F7): alarmy do Sentry z identyfikatorem faktury
+ * (`extra`, poza odciskiem), wysyłka idzie dalej. Błąd samego strażnika
+ * trafia tylko do logu, nigdy nie zatrzymuje faktury.
  */
-export function alarmujFa3(xml: string, tenantId: string): AlarmFa3[] {
+export function alarmujFa3(xml: string, tenantId: string, invoiceId: string): AlarmFa3[] {
   try {
     const alarmy = sprawdzFa3(xml);
-    if (alarmy.length > 0) zglosAlarmy(alarmy, { tenantId, straznik: 'fa3' });
+    if (alarmy.length > 0) zglosAlarmy(alarmy, { tenantId, straznik: 'fa3', dokumentId: invoiceId });
     return alarmy;
   } catch (e) {
     console.error('[FILTR-RT] strażnik FA(3) nie zadziałał', e instanceof Error ? e.message : String(e));

@@ -155,19 +155,35 @@ niczego nie widzi. Po dwóch tygodniach bez fałszywych alarmów blokada
 |---|---|
 | `FILTR-RT-FA3-01` | `P_15` różni się od sumy pól `P_13_x` i `P_14_x` wszystkich stawek (bez `P_14_xW`), albo któreś z tych pól nie jest kwotą; także plik bez węzła `Faktura/Fa` |
 | `FILTR-RT-FA3-02` | faktura VAT: `P_13_x` różni się od sumy `P_11` pozycji w tej stawce, albo pole nie jest kwotą |
-| `FILTR-RT-FA3-03` | faktura VAT: `P_14_x` różni się od `P_13_x` razy stawka o więcej niż pół grosza na pozycję w tej stawce (więcej niż zaokrąglenie podatku pozycji), albo pozycje jednej grupy mają różne stawki |
+| `FILTR-RT-FA3-03` | faktura VAT i zaliczkowa: `P_14_x` różni się od `P_13_x` razy stawka o więcej niż zaokrąglenie, czyli (100 + stawka) / 2 setnych grosza na pozycję w tej stawce (pokrywa podatek od netto i od brutto, np. fakturę za abonament i wzór zaliczki z art. 106f ust. 1 pkt 3), albo pozycje jednej grupy mają różne stawki |
 | `FILTR-RT-FA3-04` | pozycja „zw” bez `P_19 = 1` i podstawy zwolnienia (`P_19A`, `P_19B` albo `P_19C`); w fakturze VAT `P_19 = 1` bez pozycji „zw”; pozycja „oo” albo „np II” bez `P_18 = 1` |
 
 Faktura z alarmem jest już w KSeF (albo za chwilę będzie). Kolejność:
-odtworzyć plik dla firmy, miesiąca i rodzaju (archiwum XML w R2, ścieżka
-w `xml_documents`), porównać z danymi faktury, a przy prawdziwym błędzie
+znaleźć plik po identyfikatorze faktury z pola `extra.dokumentId` zgłoszenia
+(archiwum XML w R2, ścieżka w `xml_documents`), porównać z danymi faktury,
+a przy prawdziwym błędzie
 generatora naprawić go według protokołu (`AGENTS.md`). Czy firmy dostają
 fakturę korygującą, decyduje Bartosz z księgową. Poza tym strażnikiem:
-kontrole 02 i 03 dla korekt, zaliczek i rozliczeń (ich sumy sprawdzają testy
-filtra `tests/filtr/xsd/fa3-*.test.ts`), faktura z pozycją w stawce spoza
+kontrola 02 dla korekt, zaliczek i rozliczeń oraz 03 dla korekt i rozliczeń
+(ich sumy sprawdzają testy filtra `tests/filtr/xsd/fa3-*.test.ts`), faktura
+z pozycją w stawce spoza
 listy albo bez `P_11` (wzoru nie da się sprawdzić z pliku), stawka
 z podatkiem u firmy zwolnionej z art. 113 (zatrzymuje ją kolejka wysyłki,
 F12-G6b) i daty (NZ-FA-07).
+
+**Przejście na blokadę (D-F7, decyzja Bartosza).** Warunki, wszystkie naraz:
+1. dwa tygodnie liczone od wdrożenia workera z tym strażnikiem (wysyłka do
+   KSeF działa w workerze), bez fałszywego alarmu `straznik:fa3` w Sentry;
+   każdy alarm z tego okresu rozpatrzony: błąd generatora naprawiony według
+   protokołu albo strażnik poprawiony;
+2. tekst dla klienta w miejscu, w którym faktura czeka (nazwa faktury, kod
+   pierwszego alarmu, że błąd jest po naszej stronie i co dalej), w tym samym
+   duchu co odmowa pliku JPK_V7M;
+3. ścieżka operatora: ponowienie wysyłki po naprawie generatora albo
+   strażnika, bez ręcznej zmiany pliku;
+4. wyłącznik: możliwość powrotu do trybu „tylko alarm” bez wdrożenia.
+Do tego czasu ogólne zdania tej sekcji o blokadzie („zła kwota do klienta nie
+doszła”, „plik nie wychodzi”) faktur FA(3) nie dotyczą.
 
 ### Co zrobić
 
@@ -180,7 +196,8 @@ F12-G6b) i daty (NZ-FA-07).
 2. **`/admin/centrum` bez zmian.** Alarmy FILTR-RT jeszcze się tam nie
    pokazują (tak samo `critical-alerts-monitor`); to kolejna część F13.
    Panel nie ma też akcji dla tych alarmów: klient nie musi nic robić, bo zła
-   kwota do niego nie doszła. Wyjątek to pliki JPK (punkt 4).
+   kwota do niego nie doszła. Wyjątki: pliki JPK (punkt 4) i faktury FA(3)
+   w trybie „tylko alarm”, które idą do KSeF mimo alarmu (sekcja FA(3) wyżej).
 3. **Zakres.** Jedna firma czy wiele, jeden miesiąc czy kilka. Gdy błąd może
    dotyczyć liczb, których strażnik nie sprawdza (odliczenia w opisie pod
    kaflami, nadwyżka VAT na następny miesiąc), Bartosz decyduje

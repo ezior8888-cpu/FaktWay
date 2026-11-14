@@ -124,7 +124,7 @@ export async function submitInvoiceFullFlow(
   // 2b. Strażnik FA(3) (żelazny filtr F13 część 4, D-F7): sumy, pozycje, podatek
   //     i oznaczenia z pliku. Przez pierwsze dwa tygodnie tylko alarm FILTR-RT-FA3
   //     w Sentry; faktura idzie dalej, a błąd strażnika nie zatrzymuje wysyłki.
-  alarmujFa3(xml, tenantId);
+  alarmujFa3(xml, tenantId, invoiceId);
 
   // 3. Upload do R2 PRZED wysyłką do KSeF.
   //    - sukces KSeF → mamy archive z SHA-256 integrity check
