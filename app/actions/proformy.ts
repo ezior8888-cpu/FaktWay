@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { lookupBuyerAction } from '@/components/invoices/actions';
 import { logAudit } from '@/lib/audit/log';
 import { sendEmail, type EmailStubResult } from '@/lib/email/send';
+import { loadCompanyPdfLogo } from '@/lib/pdf/logo-odczyt';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { countQuoteEmailsTo, counterpartyFromContractor, getQuote, quotesTable } from '@/lib/proformy/baza';
 import { normalizeQuoteRecipient, quoteEmailHtml, quoteEmailIdempotencyKey, quoteEmailSubject } from '@/lib/proformy/mail';
@@ -28,10 +29,13 @@ import { ActionAuthError, requireUserAndActiveOrg, type AuthContext } from '@/li
  *
  * Ponowienie od zera (protokół, pkt 5), wysyłka mailem:
  *  1. odczyt dokumentu i liczby zapisanych wysyłek na ten adres: bez skutków;
- *  2. PDF: powtarzalny (ten sam dokument, te same bajty);
- *  3. mail z kluczem `sales-quote/<id>/<skrót adresu>/<liczba zapisanych wysyłek>`:
- *     ponowienie po wysyłce bez zapisu historii daje ten sam klucz i tę samą
- *     treść, więc Resend nie wyśle drugi raz (klucz ważny 24 h);
+ *  2. PDF: powtarzalny (ten sam dokument i to samo logo firmy, te same bajty);
+ *  3. mail z kluczem `sales-quote/<id>/<skrót adresu>/<liczba zapisanych wysyłek>`
+ *     (z logo na PDF także `/<skrót klucza logo>`): ponowienie po wysyłce bez
+ *     zapisu historii daje ten sam klucz i tę samą treść, więc Resend nie
+ *     wyśle drugi raz (klucz ważny 24 h); po zmianie logo w międzyczasie PDF
+ *     jest inny, więc i klucz (bez tego Resend odrzucałby ponowienie przez
+ *     24 h jako ten sam klucz z inną treścią);
  *  4. zapis historii RPC `record_sales_quote_email`: raz na klucz, audyt
  *     tylko przy nowym wpisie. Świadome „Wyślij ponownie” po zapisanej
  *     wysyłce ma nowy klucz.
@@ -306,7 +310,9 @@ export async function sendQuoteEmailAction(quoteId: string, recipientEmail: stri
   const pdfInput = quotePdfInput(quote);
   if (!pdfInput) return { success: false, error: QUOTE_TEXTS.emailDraft };
 
-  const pdf = await renderQuotePdf(pdfInput);
+  // Logo firmy z ustawień (krok 2.2); bez pliku albo przy błędzie PDF bez logo.
+  const companyLogo = await loadCompanyPdfLogo(tenantId);
+  const pdf = await renderQuotePdf(pdfInput, { logo: companyLogo.logo });
   const content = {
     kind: pdfInput.kind,
     number: pdfInput.number,
@@ -315,7 +321,7 @@ export async function sendQuoteEmailAction(quoteId: string, recipientEmail: stri
     validUntil: pdfInput.validUntil,
     issuerName: pdfInput.issuer.name,
   };
-  const idempotencyKey = quoteEmailIdempotencyKey(quote.id, recipient, previousSends);
+  const idempotencyKey = quoteEmailIdempotencyKey(quote.id, recipient, previousSends, companyLogo.logo ? companyLogo.key : null);
 
   let sent: EmailStubResult;
   try {

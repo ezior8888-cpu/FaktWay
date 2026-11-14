@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { formatIbanForPrint } from '@/lib/noty/model';
+import { drawPdfLogo, type PdfLogo } from '@/lib/pdf/logo';
 import {
   QUOTE_KIND_LABELS,
   QUOTE_PAYMENT_METHOD_LABELS,
@@ -88,7 +89,16 @@ function decimal4(n: number): string {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
-export async function renderQuotePdf(quote: QuotePdfInput): Promise<Buffer> {
+export interface QuotePdfOptions {
+  /**
+   * Logo firmy z ustawień (krok 2.2), sprawdzone przy odczycie
+   * (`lib/pdf/logo-odczyt.ts`). Brak = nagłówek jak dotąd. To samo logo daje
+   * ten sam plik, więc ponowienie maila z kluczem idempotencji działa dalej.
+   */
+  logo?: PdfLogo | null;
+}
+
+export async function renderQuotePdf(quote: QuotePdfInput, options: QuotePdfOptions = {}): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'A4',
@@ -110,7 +120,7 @@ export async function renderQuotePdf(quote: QuotePdfInput): Promise<Buffer> {
       const left = MARGIN;
       const width = doc.page.width - MARGIN * 2;
 
-      drawHeader(doc, quote, left, width);
+      drawHeader(doc, quote, options.logo ?? null, left, width);
       drawParties(doc, quote, left, width);
       drawItems(doc, quote, left, width);
       drawVatSummary(doc, quote, left, width);
@@ -135,17 +145,19 @@ function ensureSpace(doc: Doc, height: number): void {
   if (doc.y + height > contentBottom(doc)) doc.addPage();
 }
 
-function drawHeader(doc: Doc, quote: QuotePdfInput, left: number, width: number): void {
+function drawHeader(doc: Doc, quote: QuotePdfInput, logo: PdfLogo | null, left: number, width: number): void {
+  // Logo firmy (krok 2.2) w lewym górnym rogu, nagłówek pod nim; bez logo `top` = MARGIN jak dotąd.
+  const top = MARGIN + drawPdfLogo(doc, logo, left, MARGIN);
   doc.font('bold').fontSize(20).fillColor('#111111');
-  doc.text(QUOTE_KIND_LABELS[quote.kind], left, MARGIN, { width });
+  doc.text(QUOTE_KIND_LABELS[quote.kind], left, top, { width });
   doc.font('body').fontSize(11).fillColor('#444444');
-  doc.text(`Nr ${quote.number}`, left, MARGIN + 26, { width });
+  doc.text(`Nr ${quote.number}`, left, top + 26, { width });
   doc.fontSize(9).fillColor('#666666');
-  doc.text(`Data wystawienia: ${formatIsoDatePl(quote.issueDate)}`, left, MARGIN + 44, { width });
-  let ruleY = MARGIN + 64;
+  doc.text(`Data wystawienia: ${formatIsoDatePl(quote.issueDate)}`, left, top + 44, { width });
+  let ruleY = top + 64;
   if (quote.kind === 'offer' && quote.validUntil) {
-    doc.text(`Oferta ważna do: ${formatIsoDatePl(quote.validUntil)}`, left, MARGIN + 56, { width });
-    ruleY = MARGIN + 76;
+    doc.text(`Oferta ważna do: ${formatIsoDatePl(quote.validUntil)}`, left, top + 56, { width });
+    ruleY = top + 76;
   }
   doc.moveTo(left, ruleY).lineTo(left + width, ruleY).strokeColor('#dddddd').stroke();
   doc.y = ruleY + 14;

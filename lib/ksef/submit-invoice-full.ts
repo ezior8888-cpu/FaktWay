@@ -1,6 +1,7 @@
 import type { Invoice } from '@/types/invoice';
 import type { CorrectionInvoiceData, AdvanceInvoiceData, FinalInvoiceData } from '@/types/invoice-types';
 import type { AdvanceInvoiceSettlementRow } from '@/lib/ksef/fa3-advance-generator';
+import { alarmujFa3 } from '@/lib/bezpieczniki/fa3';
 import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
 import {
   generateAdvanceInvoiceXml,
@@ -119,6 +120,11 @@ export async function submitInvoiceFullFlow(
       validation.errors.map((e) => `Linia ${e.line}: ${e.message}`),
     );
   }
+
+  // 2b. Strażnik FA(3) (żelazny filtr F13 część 4, D-F7): sumy, pozycje, podatek
+  //     i oznaczenia z pliku. Przez pierwsze dwa tygodnie tylko alarm FILTR-RT-FA3
+  //     w Sentry; faktura idzie dalej, a błąd strażnika nie zatrzymuje wysyłki.
+  alarmujFa3(xml, tenantId, invoiceId);
 
   // 3. Upload do R2 PRZED wysyłką do KSeF.
   //    - sukces KSeF → mamy archive z SHA-256 integrity check

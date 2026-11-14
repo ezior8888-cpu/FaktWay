@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache';
 
 import { logAudit, type AuditAction } from '@/lib/audit/log';
+import { suggestProducts } from '@/lib/produkty/baza';
 import {
   duplicateProductMessage,
   productFormSchema,
   type ProductFormInput,
+  type ProductSuggestion,
 } from '@/lib/produkty/model';
 import { ActionAuthError, requireOrgRole } from '@/lib/supabase/auth-context';
 
@@ -14,6 +16,8 @@ export type ProductActionResult = { success: true; id?: string } | { success: fa
 
 /** Księgowa ma wgląd; katalog zmieniają pozostali członkowie (jak kontrahentów). */
 const EDITOR_ROLES = ['owner', 'admin', 'member'] as const;
+/** Podpowiedź tylko czyta katalog, więc dostaje ją każdy członek firmy. */
+const READER_ROLES = ['owner', 'admin', 'member', 'accountant'] as const;
 
 const NOT_FOUND = 'Nie znaleziono produktu w tej organizacji.';
 /** Kod Postgresa dla naruszenia unikalnego klucza (nazwa + jednostka, 00186). */
@@ -201,4 +205,26 @@ export async function deleteProductAction(productId: string): Promise<ProductAct
   });
   revalidatePath('/produkty');
   return { success: true, id: productId };
+}
+
+export type ProductSuggestResult = { ok: true; items: ProductSuggestion[] } | { ok: false };
+
+/**
+ * Podpowiedź produktów przy nazwie pozycji faktury (plan kompletnej
+ * aplikacji, krok 2.6, część 2a). Firma z sesji, odczyt przez RLS (00013).
+ * Błąd sesji albo bazy to `ok: false` bez wyjątku: formularz pokazuje krótką
+ * informację, a nazwę pozycji dalej można wpisać ręcznie.
+ */
+export async function suggestProductsAction(query: string): Promise<ProductSuggestResult> {
+  if (typeof query !== 'string') return { ok: true, items: [] };
+  try {
+    const { supabase, tenantId } = await requireOrgRole([...READER_ROLES]);
+    // Fraza ma najwyżej 100 znaków (`suggestProducts`); dłuższe wejście nie idzie dalej.
+    return { ok: true, items: await suggestProducts(supabase, tenantId, query.slice(0, 200)) };
+  } catch (e) {
+    if (!(e instanceof ActionAuthError)) {
+      console.error('[produkty] podpowiedź katalogu:', e instanceof Error ? e.message : e);
+    }
+    return { ok: false };
+  }
 }

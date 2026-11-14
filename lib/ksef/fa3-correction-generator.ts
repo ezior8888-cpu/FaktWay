@@ -335,6 +335,8 @@ function appendFaWiersze(fa: XMLBuilder, lines: CorrectionRow[]): void {
     const wiersz = fa.ele('FaWiersz');
 
     wiersz.ele('NrWierszaFa').txt(String(line.ordinal));
+    // Kolejność z XSD (FaWiersz): P_7, potem klasyfikacja (GTIN, PKWiU, CN), potem P_8A.
+    wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
     if (line.classificationCode) {
       if (/^\d{8,14}$/.test(line.classificationCode)) {
         wiersz.ele('GTIN').txt(line.classificationCode);
@@ -345,7 +347,6 @@ function appendFaWiersze(fa: XMLBuilder, lines: CorrectionRow[]): void {
       }
     }
 
-    wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
     wiersz.ele('P_8A').txt(requireText(line.unit, `line[${line.ordinal}].unit`));
     wiersz.ele('P_8B').txt(formatDecimal(line.quantity, 4));
     wiersz.ele('P_9A').txt(formatDecimal(line.unitPriceNet, 4));
