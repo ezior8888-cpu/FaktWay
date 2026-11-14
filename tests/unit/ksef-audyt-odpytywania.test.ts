@@ -138,6 +138,10 @@ function ksefHttp(route: Route) {
   return fetchMock;
 }
 
+// Data trwałego zapisu sprzed okna (HWM skrzynki 02.10). Budżet zapytań
+// przebiegu (E1-W10-b) kończy przebieg tylko na stronie, której ostatnia faktura
+// wychodzi za początek okna, więc testy dwóch stron niżej dalej pytają o obie
+// w jednym przebiegu. Data w oknie skończyłaby przebieg po pierwszej stronie.
 function faktura(n: number) {
   return {
     ksefNumber: `5260001246-20260925-${String(n).padStart(12, '0')}-00`,
