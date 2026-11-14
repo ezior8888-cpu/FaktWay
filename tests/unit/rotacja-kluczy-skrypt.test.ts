@@ -19,10 +19,12 @@ const SCRIPT = resolve(__dirname, '../../scripts/ops/rotacja-kluczy.sh');
 // Limity czasu. Jeden przebieg skryptu to kilkaset krótkich procesów (sed,
 // awk, sha256sum, atrapy). Na Linuksie (CI) cały plik trwa ok. 7 s, ale
 // w Git Bashu na Windowsie każdy start procesu kosztuje dziesiątki ms: jeden
-// przebieg trwa tam ok. 22 s, a test z trzema przebiegami ponad minutę.
+// przebieg trwa tam 20–30 s, a test z trzema przebiegami do 90 s (pomiar
+// 14.11.2026, także przy trzech przebiegach pliku naraz).
 // `spawnSync` blokuje wątek, więc Vitest porównuje czas z limitem testu
 // dopiero po końcu testu. Zawieszony skrypt przerywa zatem `RUN_TIMEOUT`,
-// a limit testu mieści najwięcej trzy przebiegi (tyle ma jeden test niżej).
+// a limit testu mieści najwięcej trzy przebiegi (tyle ma jeden test niżej:
+// nowy test z czwartym przebiegiem musi podnieść mnożnik).
 const RUN_TIMEOUT = 60_000;
 const TEST_TIMEOUT = 3 * RUN_TIMEOUT;
 
