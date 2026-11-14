@@ -88,6 +88,12 @@ async function faktura(fields: Record<string, unknown> = {}): Promise<string> {
   return id;
 }
 
+/** Korygowana faktura musi być przyjęta w KSeF (wyzwalacz korekty, 00118): jak w `rls-dzieci-faktur`. */
+const przyjeta = (): Record<string, unknown> => ({
+  ksef_status: 'accepted', ksef_environment: 'test', xml_storage_path: 'x.xml',
+  ksef_number: `9480000014-20160115-${String(counter + 1).padStart(12, '0')}-00`,
+});
+
 const korekta = (rodzic: string, fields: Record<string, unknown> = {}) =>
   faktura({
     invoice_type: 'KOR', invoice_kind: 'correction', parent_invoice_id: rodzic,
@@ -112,7 +118,7 @@ describe.skipIf(!hasDatabase)('FZ-005: retention-delete a korekty i koszty na pr
     if (error) throw error;
     const owner = await userId(OWNER_EMAIL);
 
-    ids.oryginal = await faktura();
+    ids.oryginal = await faktura(przyjeta());
     ids.korektaPrzedTerminem = await korekta(ids.oryginal, { scheduled_deletion_at: PRZED_TERMINEM });
     ids.zwykla = await faktura();
     ids.zKosztem = await faktura({ direction: 'incoming', origin: 'ksef_inbox' });
@@ -122,7 +128,7 @@ describe.skipIf(!hasDatabase)('FZ-005: retention-delete a korekty i koszty na pr
       issue_date: '2016-01-15', net_amount: 1000, vat_amount: 230, gross_amount: 1230, payment_split: false,
     });
     if (kosztError) throw new Error(`insert koszt: ${kosztError.message}`);
-    ids.parzystyOryginal = await faktura();
+    ids.parzystyOryginal = await faktura(przyjeta());
     ids.parzystaKorekta = await korekta(ids.parzystyOryginal);
   });
 
