@@ -521,7 +521,7 @@ częścią „gotowe” od M3.
 **Następny krok:** M12 (Android, wiersz M12 w sekcji 7; sekcja 10 zasad
 designu): dopasowanie konwencji i checklista na emulatorze Androida. M11
 (powiadomienia push, logowanie Apple) i M13 (sklep) czekają na płatne konto
-Apple. Przed M12 scalić po kolei #716 (M8), #740 (mapa filtra dla telefonu), #738 (M9) i PR M10 z gałęzi `claude/mobile-m10b-ksiegowosc-ustawienia-v2` (M10a, M10b i M9 w jednej gałęzi; zastępuje #739 i #751, bo w historii #751 gitleaks znalazł testowe hasło).
+Apple. Przed M12 scalić po kolei #716 (M8), #740 (mapa filtra dla telefonu), #738 (M9) i #752 (gałąź `claude/mobile-m10b-ksiegowosc-ustawienia-v2`: M10a, M10b i M9 w jednej gałęzi; zastępuje #739 i #751, bo w historii #751 gitleaks znalazł testowe hasło).
 **Z M9 zostaje:** obchód M9 w symulatorze iPhone 17 (wymaga zgody w panelu symulatora; build ze skanerem zainstalowany, drogę serwera sprawdzono przez API na osobnym stosie), zrzuty do `docs/mobile/zrzuty/m9/`. Osobno: błąd z `main`, enum `categorization_method` bez `rule_global_keyword` i `rule_global_nip` (paragon ze stacji, hotelu, Allegro nie zapisuje się po OCR, 3 płatne odczyty na próbę), osobna gałąź i PR.
 **Z M10b zostaje:** (1) zapisy ustawień (dane firmy, VAT, data rozpoczęcia,
 certyfikat KSeF, przypomnienia, hasło, 2FA, klucze dostępu) i karty Księgowa,
