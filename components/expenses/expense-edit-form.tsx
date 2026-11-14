@@ -42,6 +42,7 @@ import { hasKsefCurrencyRate } from '@/lib/expenses/ksef-currency-review';
 import type { ReceiptMatchView } from '@/lib/expenses/receipt-invoice-match-view';
 import { costDocumentType, vatDeductionForDocument } from '@/lib/expenses/vat-deduction-document';
 import { ocrAmountsAwaitingPln, ocrDocumentGross } from '@/lib/expenses/ocr-currency-review';
+import { isAutoCategorized } from '@/lib/categorization/methods';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
 import { cn } from '@/lib/utils';
@@ -165,9 +166,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency, paymentSectio
 
   const confidence = Number(expense.categorization_confidence ?? 0);
   const method = expense.categorization_method;
-  const wasAutoClassified =
-    method != null &&
-    ['rule_nip', 'rule_keyword', 'ml_heuristic', 'ai_claude'].includes(method);
+  const wasAutoClassified = isAutoCategorized(method);
 
   const handleSave = () => {
     startSave(async () => {

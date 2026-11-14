@@ -3,17 +3,11 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/database';
 
-export type KpirColumn = Database['public']['Enums']['kpir_column'];
+import type { CategorizationMethod } from './methods';
 
-export type CategorizationMethod =
-  | 'rule_nip'
-  | 'rule_keyword'
-  | 'rule_global_nip'
-  | 'rule_global_keyword'
-  | 'learned'
-  | 'ml_heuristic'
-  | 'ai_claude'
-  | 'manual';
+export { CATEGORIZATION_METHODS, type CategorizationMethod } from './methods';
+
+export type KpirColumn = Database['public']['Enums']['kpir_column'];
 
 export interface CategorizationResult {
   kpir_column: KpirColumn;
