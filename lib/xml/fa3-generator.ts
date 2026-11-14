@@ -11,6 +11,13 @@ import {
 } from './invoice-calculator';
 import { RECEIPT_ONLY_REGULAR_MESSAGE, RECEIPT_XML_KEYS } from '@/lib/invoices/receipt-invoice';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
+import {
+  assertFa3TextLimits,
+  FA3_TEXT_LIMITS,
+  fa3LineChecks,
+  fa3PartyChecks,
+  type Fa3TextCheck,
+} from '@/lib/xml/fa3-limits';
 
 // ═══════════════════════════════════════════════════════════════
 // STAŁE SCHEMATU FA(3)
@@ -178,6 +185,35 @@ function splitVatUe(vatUeNumber: string): { kodUE: string; numer: string } {
   return { kodUE: parsed.kodUE, numer: parsed.numer };
 }
 
+/**
+ * Tekst, który generator wstawi do XML, z granicami XSD (C1). Wartości są
+ * dokładnie takie, jakie wstawiają funkcje `build*` niżej, żeby nie odrzucić
+ * niczego, co XSD przyjmuje.
+ */
+function regularTextChecks(invoice: Invoice): Fa3TextCheck[] {
+  const { buyer } = invoice;
+  // NrID jak w `buildBuyerChoice`: tylko bez NIP i bez numeru VAT-UE.
+  const nrId = buyer.nip || buyer.vatUeNumber ? undefined : buyer.pesel?.trim() || buyer.nrInny?.trim();
+  // P_19A/B/C jak w `buildAdnotacje`: tylko przy pozycji ze stawką „zw”.
+  const zwBasis = invoice.lines.some((l) => l.vatRate === 'zw')
+    ? invoice.annotations?.vatExemptionBasis?.trim()
+    : undefined;
+  return [
+    ...fa3PartyChecks('Sprzedawca', invoice.seller),
+    ...fa3PartyChecks('Nabywca', buyer),
+    { label: 'Nabywca, numer dokumentu', value: nrId, limit: FA3_TEXT_LIMITS.nrId },
+    { label: 'Numer faktury', value: invoice.internalNumber, limit: FA3_TEXT_LIMITS.p2 },
+    { label: 'Podstawa zwolnienia z VAT', value: zwBasis, limit: FA3_TEXT_LIMITS.p19, fromSettings: true },
+    ...fa3LineChecks(invoice.lines),
+    {
+      label: 'Nazwa banku',
+      value: invoice.payment.bankAccount ? invoice.payment.bankName : undefined,
+      limit: FA3_TEXT_LIMITS.nazwaBanku,
+    },
+    { label: 'Uwagi', value: invoice.notes, limit: FA3_TEXT_LIMITS.stopkaFaktury },
+  ];
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Główna funkcja
 // ═══════════════════════════════════════════════════════════════
@@ -199,6 +235,11 @@ export function generateFA3Xml(
       throw new InvoiceValidationError(errors);
     }
   }
+
+  // C1: tekst, którego XSD nie przyjmie (za długi, z samych spacji, ze znakiem
+  // sterującym), odrzucamy przed budową pliku, z nazwą pola. Dotąd padał
+  // dopiero w walidatorze XSD, surowym komunikatem xmllint.
+  assertFa3TextLimits(regularTextChecks(invoice));
 
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktura', {
     xmlns: FA3_NAMESPACE,

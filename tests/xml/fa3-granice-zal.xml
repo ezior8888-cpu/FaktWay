@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaFa>2026-11-14T10:00:00Z</DataWytworzeniaFa>
+    <SystemInfo>KSeF SaaS v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>1234563218</NIP>
+      <Nazwa>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</AdresL1>
+      <AdresL2>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</AdresL2>
+    </Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <KodKraju>PL</KodKraju>
+      <NrID>AB1234567AB1234567AB1234567AB1234567AB1234567AB123</NrID>
+      <Nazwa>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</AdresL1>
+      <AdresL2>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</AdresL2>
+    </Adres>
+    <JST>2</JST>
+    <GV>2</GV>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2026-11-14</P_1>
+    <P_2>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażó</P_2>
+    <P_13_1>1000.00</P_13_1>
+    <P_14_1>230.00</P_14_1>
+    <P_15>1230.00</P_15>
+    <Adnotacje>
+      <P_16>2</P_16>
+      <P_17>2</P_17>
+      <P_18>2</P_18>
+      <P_18A>2</P_18A>
+      <Zwolnienie>
+        <P_19N>1</P_19N>
+      </Zwolnienie>
+      <NoweSrodkiTransportu>
+        <P_22N>1</P_22N>
+      </NoweSrodkiTransportu>
+      <P_23>2</P_23>
+      <PMarzy>
+        <P_PMarzyN>1</P_PMarzyN>
+      </PMarzy>
+    </Adnotacje>
+    <RodzajFaktury>ZAL</RodzajFaktury>
+    <DodatkowyOpis>
+      <Klucz>Wartość_umowy_całkowita_PLN</Klucz>
+      <Wartosc>12300.00</Wartosc>
+    </DodatkowyOpis>
+    <FaWiersz>
+      <NrWierszaFa>1</NrWierszaFa>
+      <P_7>Zaliczka: Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaź</P_7>
+      <P_8A>szt.</P_8A>
+      <P_8B>1.0000</P_8B>
+      <P_9A>1000.0000</P_9A>
+      <P_11>1000.00</P_11>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <Platnosc>
+      <TerminPlatnosci>
+        <Termin>2026-11-28</Termin>
+      </TerminPlatnosci>
+      <FormaPlatnosci>6</FormaPlatnosci>
+      <RachunekBankowy>
+        <NrRB>61109010140000071219812874</NrRB>
+      </RachunekBankowy>
+    </Platnosc>
+    <Zamowienie>
+      <WartoscZamowienia>12300.00</WartoscZamowienia>
+      <ZamowienieWiersz>
+        <NrWierszaZam>1</NrWierszaZam>
+        <P_7Z>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaź</P_7Z>
+        <P_8AZ>szt.</P_8AZ>
+        <P_8BZ>1.0000</P_8BZ>
+        <P_9AZ>10000.0000</P_9AZ>
+        <P_11NettoZ>10000.00</P_11NettoZ>
+        <P_11VatZ>2300.00</P_11VatZ>
+        <P_12Z>23</P_12Z>
+      </ZamowienieWiersz>
+    </Zamowienie>
+  </Fa>
+  <Stopka>
+    <Informacje>
+      <StopkaFaktury>Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć gęślą jaźń Zażółć g</StopkaFaktury>
+    </Informacje>
+  </Stopka>
+</Faktura>

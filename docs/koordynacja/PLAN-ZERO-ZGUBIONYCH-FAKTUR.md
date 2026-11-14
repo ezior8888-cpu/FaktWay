@@ -31,7 +31,7 @@ Stan sprawdzony w kodzie 05.11.2026, wiersze A4-D, B3, G2, H1a, L1a i L1b 08.11.
 | B1 | założenia robocze | `cykl-zycia-faktury-ksef.md` §9 (D7–D9); prawnik na końcu (sekcja 9) |
 | B2a, B2b | częściowo | `ISSUE_DATE_PASSED` tylko dla KOR, ZAL, ROZ (#242); zwykła faktura nie ma bezpiecznika |
 | B3 | scalone | #412, w #460 08.11.2026: stan MF z Latarni w cronie i na banerze |
-| C1 | nie | brak wspólnego modułu granic |
+| C1 | w PR | moduł granic `lib/xml/fa3-limits.ts` w PR #736 (14.11.2026): formularze, walidatory ZAL/KOR/ROZ i 3 generatory z bramką przed XML; z przeglądu C1-KOLEJNOSC i C1-EMAIL w sekcji 8 |
 | C2 | nie | sprzedawca korekty z przeglądarki (`correction-actions.ts:259`); generator bez `PrefiksPodatnika`; S7, S8 częściowo |
 | C3 | nie | generator korekt odmawia `zw` (`fa3-correction-generator.ts:285`) |
 | C4 | nie | hamulce aktywne (`kind-holds.ts:9`) |
@@ -538,6 +538,8 @@ Dotąd leżały w kolumnie „co zostało” dziennika, bez właściciela. Przyd
 | G1-PACZKA | `failWip` oblewa całą paczkę (`batchSize` > 1: offline-queue 25, `inbox.invoice-received` 10, OCR, import, eksporty 5), więc już przerobione joby wykonają się ponownie | G1 (idempotencja) | sprawdzone 10.11: otwarte |
 | G1-LIMIT | trzecie przerwanie tego samego joba (`retryLimit: 2`) daje `failed` bez `onExhausted`; wysyłka zostaje w `sending`, widać ją tylko w I2 i alarmie po 15 min | G1, po #561 (`run-job.ts`) | sprawdzone 10.11: otwarte |
 | G1-POAKCEPT | śmierć po zapisie akceptacji (`submit-invoice/save-accepted.ts:14`, krok z `submit-invoice.ts:542`) kończy ponowienie na strażniku (`submit-invoice.ts:172-186`): ginie wiersz `xml_documents`, emit-success, audit-success | D2 | sprawdzone 10.11: otwarte |
+| C1-KOLEJNOSC | GTIN, PKWiU i CN przed P_7 we wszystkich 3 generatorach (`fa3-generator.ts:565`, `fa3-advance-generator.ts:320`, `fa3-correction-generator.ts:347`), a w sekwencji FaWiersz XSD są po P_7: pozycja z kodem klasyfikacji daje `XSD_INVALID`; test `fa3-generator.test.ts:296` utrwala złą kolejność, bo nie waliduje XSD. Które ścieżki ustawiają kod na produkcji, do ustalenia | nowa karta po scaleniu C1 (#736) | sprawdzone 14.11: otwarte (`validateFA3` odrzuca zwykłą fakturę z GTIN) |
+| C1-EMAIL | e-mail nabywcy bez granicy XSD (`TAdresEmail` do 255 znaków): formularz sprawdza tylko składnię | po C1 | sprawdzone 14.11: otwarte |
 
 **Po bramce** (opis w dzienniku i `ksef-error-codes.md`, stan niesprawdzony): D-A4-1b-3-MI (prawdopodobnie nieaktualne po decyzji 22.10), 440 bez numeru oryginału (z #336: wyjściem zostają I5 i „Tylko uzgodnij”), -UPO (w D1), -DATE, -PAY, -CAT, -LIST, -EVID, -FLO-NUM, GEN-PESEL-KRAJ, C5b-b, C5b-c, C5b-d, C5c-b, C5c-e, W9-b, W9-c, W9-e, W9-g, IMP-ACC, IMP-PROD, IMP-KOR, IMP-STAWKA, IMP-B2C-NRINNY, IMP-STOPKA-WIELE, IMP-ID-XSD, IDX-ENV, ZAP-01-a do ZAP-01-e, CQ-IDENT, zapis stanu KSeF do bazy bez Redisa (z B3), typy bazy z produkcji (`types/database.ts` kończy się na 00154), limity 5 s w `ksef-connect-credentials*` pod obciążeniem (zasada 5), L1b (warunkowo) i L2–L5 (wydajność wysyłki, karty L1a i L1b), z przeglądu W10 (10.11.2026): W10-d (historia: zawężenie z kursorem równym końcowi okna pyta o `[end, end]`, `windows.ts:249`), W10-e (decyzja „zawęź / koniec / następna strona” w trzech kopiach: `inbox.ts`, `applyBackfillPage`, `applyLivePage`), W10-f (`FAKTFLOW-DLA-AI.md:153` opisuje nieistniejący `continuationToken`) oraz ustalenia bez kodu z dziennika (m.in. I5 przy konflikcie 23505, ponowny push po błędzie Resend, błąd Resend w pętli `cert-expiry-alert`).
 

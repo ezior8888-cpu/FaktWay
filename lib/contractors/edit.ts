@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { sanitizeSearch } from '@/lib/invoices/list-query';
+import { FA3_TEXT_LIMITS, isXmlSafe, liczbaZnakow, NO_CONTROL_CHARS_MESSAGE } from '@/lib/xml/fa3-limits';
 
 /**
  * Kontrahenci — edycja, usuwanie i wyszukiwanie (F-011 w raporcie audytu
@@ -9,20 +10,19 @@ import { sanitizeSearch } from '@/lib/invoices/list-query';
  * odświeżały i nie dało się ich poprawić.
  */
 
-const XML_FORBIDDEN_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/;
-const NO_CONTROL_CHARS_MESSAGE = 'Usuń niewidoczne znaki sterujące (np. wklejone z Worda)';
-
-const text = (min: number, required: string) =>
+// Nazwa i adres kontrahenta trafiają do Podmiot2 faktury: granice XSD
+// i znaki sterujące z modułu granic (C1), jak w danych firmy.
+const text = (min: number, required: string, max: number) =>
   z
     .string()
-    .refine((v) => !XML_FORBIDDEN_CHARS.test(v), NO_CONTROL_CHARS_MESSAGE)
+    .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE)
     .transform((v) => v.trim().replace(/\s+/g, ' '))
-    .pipe(z.string().min(min, required).max(512, 'Maksymalnie 512 znaków'));
+    .pipe(z.string().min(min, required).max(max, `Maksymalnie ${liczbaZnakow(max)}`));
 
 export const contractorEditSchema = z.object({
-  name: text(1, 'Podaj nazwę kontrahenta'),
-  addressLine1: text(0, ''),
-  addressLine2: text(0, ''),
+  name: text(1, 'Podaj nazwę kontrahenta', FA3_TEXT_LIMITS.nazwa.max),
+  addressLine1: text(0, '', FA3_TEXT_LIMITS.adresL1.max),
+  addressLine2: text(0, '', FA3_TEXT_LIMITS.adresL2.max),
   email: z.union([z.literal(''), z.string().trim().email('Nieprawidłowy adres e-mail')]),
 });
 
