@@ -269,7 +269,7 @@ Jak to wygląda w kodzie (M12a, 14.11.2026; iOS bez zmian):
 | Menu w pasku | menu Compose na białej karcie z ciemnym tekstem; grupy filtrów jako podmenu z tytułem | `Stack.Toolbar.Menu`, `GRUPY_MENU_W_LINII` |
 | Pole wyboru | nasze pole jak na iOS, lista w menu Material pod polem | `komponenty/menu-wyboru.android.tsx` |
 | Dotyk | fala Material przycięta do zaokrąglenia zamiast zmniejszenia | `Dotyk`, `DotykFala`, `android_ripple` w wierszach |
-| Wstecz | systemowy przycisk wstecz cofa stos i zamyka arkusz; formularz z niezapisanymi zmianami pyta „Odrzucić zmiany?”; przy blokadzie chowa aplikację | `usePreventRemove`, `komponenty/blokada.tsx` |
+| Wstecz | systemowy przycisk wstecz cofa stos i zamyka arkusz; formularz z niezapisanymi zmianami pyta „Odrzucić zmiany?”; przy blokadzie wychodzi z aplikacji | `usePreventRemove`, `komponenty/blokada.tsx` |
 | Zdjęcie wydatku | systemowy aparat i galeria (skaner VisionKit jest tylko na iPhonie) | `koszty/dodaj.tsx` |
 | Biometria | systemowe okno Androida, nazwa „odcisk palca”, gdy telefon ma czytnik; ikona odcisku z Remix | `lib/logowanie/supabase.ts` |
 | Wklej kod | zwykły przycisk „Wklej” (Android nie pyta o zgodę na schowek) | `PoleKodu` |

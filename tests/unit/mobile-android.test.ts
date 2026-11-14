@@ -208,15 +208,13 @@ describe('konfiguracja Androida (app.json)', () => {
     expect(config.android.predictiveBackGestureEnabled).toBe(true);
   });
 
-  it('bez uprawnień, których aplikacja nie używa (okno nad innymi, zapis plików, mikrofon)', () => {
+  it('bez uprawnień, których aplikacja nie używa (okno nad innymi, odczyt plików, mikrofon)', () => {
     expect(config.android.blockedPermissions).toEqual(
-      expect.arrayContaining([
-        'android.permission.SYSTEM_ALERT_WINDOW',
-        'android.permission.READ_EXTERNAL_STORAGE',
-        'android.permission.WRITE_EXTERNAL_STORAGE',
-        'android.permission.RECORD_AUDIO',
-      ]),
+      expect.arrayContaining(['android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.RECORD_AUDIO']),
     );
+    // Zapis plików zostaje: expo-image-picker 58 wymaga go do aparatu na Androidzie 7 do 9
+    // (`ensureCameraPermissionsAreGranted`, API poniżej 29; minSdk 24). Biblioteka ogranicza go do API 32.
+    expect(config.android.blockedPermissions).not.toContain('android.permission.WRITE_EXTERNAL_STORAGE');
     // Aparat (zdjęcie wydatku) i biometria zostają: dokładają je pluginy.
     const nazwy = config.plugins.map((w) => (Array.isArray(w) ? w[0] : w));
     expect(nazwy).toEqual(expect.arrayContaining(['expo-image-picker', 'expo-local-authentication']));

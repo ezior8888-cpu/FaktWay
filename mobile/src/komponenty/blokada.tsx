@@ -67,7 +67,8 @@ export function Blokada() {
   }, [zablokowana]);
 
   // Android (M12): blokada to zwykły widok nad stosem, więc systemowy „wstecz” cofałby ukryte pod nią
-  // ekrany. Przy blokadzie „wstecz” chowa aplikację, jak na ekranie blokady innych aplikacji z kwotami.
+  // ekrany. Przy blokadzie „wstecz” wychodzi z aplikacji (`exitApp`; od Androida 12 system ją tylko chowa,
+  // wcześniej zamyka ekran), jak na ekranie blokady innych aplikacji z kwotami. Blokada zostaje przy powrocie.
   useEffect(() => {
     if (!zablokowana || Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {

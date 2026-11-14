@@ -156,7 +156,7 @@ export default function EkranDodawaniaWydatku() {
   const zGalerii = async () => {
     const wynik = await ImagePicker.launchImageLibraryAsync(OPCJE_GALERII).catch(() => null);
     if (zamkniety.current) return;
-    if (!wynik) return blad('Nie można otworzyć galerii', 'Spróbuj jeszcze raz albo zeskanuj dokument.', false);
+    if (!wynik) return blad('Nie można otworzyć galerii', `Spróbuj jeszcze raz albo ${APARAT_ZAMIAST_SKANERA ? 'zrób zdjęcie aparatem' : 'zeskanuj dokument'}.`, false);
     const zdjecie = wynik.canceled ? undefined : wynik.assets[0];
     if (!zdjecie) return;
     wybierz({ uri: zdjecie.uri, nazwa: zdjecie.fileName ?? 'zdjecie.jpg', typ: zdjecie.mimeType ?? 'image/jpeg' });
