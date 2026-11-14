@@ -151,6 +151,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-proformy.test.ts',
       // 00199 (krok 2.5): serie numeracji faktur, wyścig dwóch wystawień w jednej serii na prawdziwej bazie.
       'tests/rls-numeracja.test.ts',
+      // 00203 (krok 2.2, część 1): logo firmy, CHECK katalogu firmy, wyzwalacz bez zmiany z sesji klienta.
+      'tests/rls-logo-firmy.test.ts',
       // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu.
       'tests/rls-mobile-api.test.ts',
       // Plan aplikacji mobilnej, M6b (D16, bez migracji): logowanie hasłem przez API przy captchy w GoTrue.

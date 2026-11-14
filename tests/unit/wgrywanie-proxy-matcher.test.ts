@@ -31,7 +31,16 @@ const matchers = getMiddlewareMatchers(config.matcher, {});
 const passesProxy = (pathname: string) => matchers.some((m) => new RegExp(m.regexp).test(pathname));
 
 describe('matcher proxy a trasy wgrywania', () => {
-  it.each(['/api/uploads/expense', '/api/uploads/import', '/api/uploads/expense/', '/share-target', '/share-target/'])(
+  it.each([
+    '/api/uploads/expense',
+    '/api/uploads/import',
+    '/api/uploads/expense/',
+    // Logo firmy na fakturze (plan kompletnej aplikacji, krok 2.2, część 1).
+    '/api/uploads/logo',
+    '/api/uploads/logo/',
+    '/share-target',
+    '/share-target/',
+  ])(
     '%s omija proxy (ciało nie jest buforowane przed trasą)',
     (pathname) => {
       expect(passesProxy(pathname)).toBe(false);
@@ -44,6 +53,8 @@ describe('matcher proxy a trasy wgrywania', () => {
     '/api/uploads/inna',
     '/api/uploads/expense/x',
     '/api/uploads/expenses',
+    '/api/uploads/logo/x',
+    '/api/uploads/logos',
     '/share-target/x',
     '/share-target/x/strona',
     '/api/uploadsx/expense',
@@ -84,9 +95,9 @@ function routeFiles(dir: string): string[] {
 describe('każda trasa poza proxy pilnuje się sama', () => {
   const uploads = routeFiles(path.join(process.cwd(), 'app', 'api', 'uploads'));
 
-  it('pod /api/uploads/ są trasy kosztu i importu', () => {
+  it('pod /api/uploads/ są trasy kosztu, importu i logo firmy', () => {
     const names = uploads.map((file) => path.relative(process.cwd(), file).split(path.sep).join('/')).sort();
-    expect(names).toEqual(['app/api/uploads/expense/route.ts', 'app/api/uploads/import/route.ts']);
+    expect(names).toEqual(['app/api/uploads/expense/route.ts', 'app/api/uploads/import/route.ts', 'app/api/uploads/logo/route.ts']);
   });
 
   it.each([
