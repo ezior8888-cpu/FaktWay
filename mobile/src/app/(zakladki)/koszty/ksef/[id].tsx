@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { bruttoPozycji, stawkaTekst, type FakturaKosztowa } from '@/dane-przykladowe';
+import { bruttoPozycji, cenaPozycji, stawkaTekst, type FakturaKosztowa } from '@/dane-przykladowe';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { MA_ADRES_STRONY, otworzStrone } from '@/komponenty/na-stronie';
 import { NaglowekKwoty } from '@/komponenty/naglowek';
@@ -87,7 +87,7 @@ export default function EkranFakturyKosztowej() {
               <Wiersz
                 key={i}
                 tytul={p.nazwa}
-                podtytul={`${p.ilosc.toLocaleString('pl-PL')} ${p.jednostka} × ${kwota(p.cenaNetto, s.waluta)} netto · VAT ${stawkaTekst(p)}`}
+                podtytul={`${p.ilosc.toLocaleString('pl-PL')} ${p.jednostka} × ${cenaPozycji(p, s.waluta)} netto · VAT ${stawkaTekst(p)}`}
                 wartosc={kwota(bruttoPozycji(p), s.waluta)}
                 wartoscKolor="etykieta"
               />

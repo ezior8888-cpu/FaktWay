@@ -9,6 +9,10 @@
  *   świeże dociągamy w tle. Bez internetu zostają te z pamięci z datą.
  * - `POST /api/mobile/v1/sesja` raz na sesję, po pełnym logowaniu (wpis w
  *   historii logowań i mail o nowym urządzeniu, jak na stronie).
+ * - Od M8 szybka faktura (`POST /faktury`, z kluczem zapisu) i wysyłka szkicu
+ *   (`POST /faktury/{id}/wysylka`). Nowa faktura od razu stoi na liście, a
+ *   wysłane z telefonu odświeżamy co kilka sekund, aż KSeF przyjmie albo odrzuci
+ *   (wibracja „sukces” albo „błąd”, ZASADY-DESIGNU.md, sekcja 7).
  *
  * Dane należą do jednego konta: zmiana konta albo wylogowanie zeruje je w
  * pamięci od razu (przy rysowaniu, zanim cokolwiek się pokaże), a pobrania
@@ -17,20 +21,29 @@
  *
  * Na danych przykładowych (bez adresu bazy) ten dostawca nic nie robi.
  */
+import * as Haptics from 'expo-haptics';
 import { createContext, use, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
 import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
 import { naStronie } from '@/komponenty/na-stronie';
-import type { BladApi } from '@/lib/api/bledy';
-import type { FirmaKonta, KontoOdpowiedz, SesjaOdpowiedz } from '@/lib/api/kontrakt';
+import { bezDlugichMyslnikow, type BladApi } from '@/lib/api/bledy';
+import { bladFirmyZapisu } from '@/lib/faktura/wystawienie';
+import type {
+  FirmaKonta,
+  KontoOdpowiedz,
+  PodpowiedzFakturyOdpowiedz,
+  SesjaOdpowiedz,
+  WystawienieOdpowiedz,
+  WysylkaSzkicuOdpowiedz,
+} from '@/lib/api/kontrakt';
 import { zapytajApi } from '@/lib/api/polaczenie';
-import { dzienWarszawa } from '@/lib/dane/mapowanie';
+import { dzienWarszawa, statusZBazy } from '@/lib/dane/mapowanie';
 import { pamiec } from '@/lib/dane/pamiec-plikow';
 import { pobierzFaktury, pobierzSkrzynke } from '@/lib/dane/zapytania';
 import { daneTokenu } from '@/lib/logowanie/token';
 import { supabase, ustawienia } from '@/lib/supabase';
-import { PodmienStan, type Stan, type StanDanych } from '@/stan/faktury';
+import { PodmienStan, type Stan, type StanDanych, type WynikZapisu } from '@/stan/faktury';
 import { useSesja } from '@/stan/sesja';
 
 type Lista<T> = { lista: T[]; pelna: boolean };
@@ -57,6 +70,11 @@ const SWIEZE_MS = 2 * 60 * 1000;
 /** Bez internetu próbujemy znowu co tyle, dopóki aplikacja jest na wierzchu. */
 const PONOW_BEZ_SIECI_MS = 30 * 1000;
 
+/** Faktura wysłana z telefonu: status z bazy co tyle, aż KSeF przyjmie albo odrzuci. */
+const STATUS_KSEF_CO_MS = 3000;
+/** Najwyżej tyle sprawdzeń (około 3 minuty); potem status odświeży pociągnięcie listy. */
+const STATUS_KSEF_PROB = 60;
+
 const KLUCZ_SESJI_ZAPISANEJ = 'sesja-zapisana';
 const kluczFirmy = (uzytkownik: string) => `firma.${uzytkownik}`;
 
@@ -70,6 +88,49 @@ export type KontoFirmy = {
   firma?: FirmaKonta;
   wybierzFirme: (id: string) => void;
 };
+
+/** Podpowiedź do pustego formularza faktury (M8): numer, dziś, zwolnienie z VAT; `gotowe` po odpowiedzi serwera. */
+export type PodpowiedzFaktury = {
+  gotowe: boolean;
+  numer?: string;
+  dzis?: string;
+  zwolnienieVat: boolean;
+  /** Seria numeracji (krok 2.5), z której pochodzi `numer`; `null`: numeracja jak dotąd. */
+  seria?: { id: string; podglad: string } | null;
+};
+
+/**
+ * `GET /faktury/podpowiedz` dla wybranej firmy, raz na otwarcie formularza.
+ * Na danych przykładowych i bez sieci: `gotowe` bez numeru (klient wpisze go sam).
+ */
+export function usePodpowiedzFaktury(): PodpowiedzFaktury {
+  const kontekst = use(Kontekst);
+  const firma = kontekst?.firma?.id;
+  // Dane przykładowe (bez kontekstu konta): od razu gotowe. Prawdziwe konto czeka na firmę z `GET /konto`.
+  const [podpowiedz, setPodpowiedz] = useState<PodpowiedzFaktury>({ gotowe: kontekst === null, zwolnienieVat: false });
+  useEffect(() => {
+    if (!firma) return;
+    let biezace = true;
+    void zapytajApi<PodpowiedzFakturyOdpowiedz>('faktury/podpowiedz', { firma }).then((w) => {
+      if (!biezace) return;
+      setPodpowiedz(
+        w.ok
+          ? {
+              gotowe: true,
+              numer: w.dane.numer ?? undefined,
+              dzis: w.dane.dzis,
+              zwolnienieVat: w.dane.zwolnienieVat,
+              seria: w.dane.seria && w.dane.numer ? { id: w.dane.seria, podglad: w.dane.numer } : null,
+            }
+          : { gotowe: true, zwolnienieVat: false },
+      );
+    });
+    return () => {
+      biezace = false;
+    };
+  }, [firma]);
+  return podpowiedz;
+}
 
 const Kontekst = createContext<KontoFirmy | null>(null);
 
@@ -133,8 +194,12 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   }
 
   const pokolenie = useRef(0);
+  /** Takt sprawdzania statusu KSeF: zegar uzbraja się od nowa także wtedy, gdy pobranie się nie udało. */
+  const [takt, setTakt] = useState(0);
   const ostatnioUdane = useRef(0);
   const firmaPokazana = useRef<string | null | undefined>(undefined);
+  /** Faktury wysłane z telefonu w tej sesji, których wynik w KSeF śledzimy. */
+  const sledzone = useRef(new Map<string, number>());
 
   const obsluzBlad = (b: BladApi) => {
     // Odświeżenie sesji już się nie udało (`lib/api/rdzen.ts`): koniec sesji na tym telefonie.
@@ -257,6 +322,69 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     return () => clearInterval(zegar);
   }, [bezSieci]);
 
+  /** Sama lista faktur wybranej firmy (po zapisie i przy śledzeniu statusu KSeF). */
+  const odswiezFaktury = async (): Promise<void> => {
+    const firma = firmaPokazana.current;
+    if (!uzytkownik || !firma) return;
+    const moje = pokolenie.current;
+    const epoka = pamiec.epoka();
+    const f = await pobierzFaktury(firma);
+    if (pokolenie.current !== moje || firmaPokazana.current !== firma || !f.ok) return;
+    setDane((d) => ({ ...d, faktury: f.dane }));
+    void pamiec.zapisz('faktury', uzytkownik, firma, f.dane, epoka);
+  };
+
+  // Wynik KSeF faktur wysłanych z telefonu: co kilka sekund, póki są w drodze.
+  const sprawdzWysylane = useEffectEvent(() => {
+    const lista = dane.faktury?.lista ?? [];
+    let wDrodze = false;
+    for (const [id, proby] of sledzone.current) {
+      const f = lista.find((x) => x.id === id);
+      if (f && f.statusKsef !== 'wysylanie') {
+        sledzone.current.delete(id);
+        if (f.statusKsef === 'przyjeta') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        else if (f.statusKsef === 'odrzucona' || f.statusKsef === 'blad') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        continue;
+      }
+      if (proby >= STATUS_KSEF_PROB) {
+        sledzone.current.delete(id);
+        continue;
+      }
+      sledzone.current.set(id, proby + 1);
+      wDrodze = true;
+    }
+    if (wDrodze) void odswiezFaktury().finally(() => setTakt((t) => t + 1));
+  });
+  const fakturyTeraz = dane.faktury;
+  useEffect(() => {
+    if (sledzone.current.size === 0) return;
+    const zegar = setTimeout(() => sprawdzWysylane(), STATUS_KSEF_CO_MS);
+    return () => clearTimeout(zegar);
+  }, [fakturyTeraz, takt]);
+
+  /** Błąd sesji z zapisu: te same reakcje co przy pobieraniu; zdanie wraca do formularza. */
+  const bladZapisu = (b: BladApi, bezOdpowiedzi?: string): WynikZapisu => {
+    // Brak odpowiedzi (sieć, limit 15 s): zapis mógł dojść do serwera; ponowienie z tym samym kluczem go nie zdubluje.
+    if (b.rodzaj === 'polaczenie' && bezOdpowiedzi) return { ok: false, komunikat: bezOdpowiedzi };
+    if (b.rodzaj === 'sesja') wyloguj();
+    else if (b.rodzaj === 'kod') wymagajKodu();
+    // Firma bez dostępu: konto i lista firm od nowa, jak przy pobieraniu.
+    else if (b.rodzaj === 'firma' && uzytkownik) void laduj(uzytkownik);
+    return { ok: false, komunikat: b.komunikat, ...(b.pole ? { pole: b.pole } : {}) };
+  };
+
+  /** Faktura z serwera od razu na liście (szczegół ją widzi), potem lista od nowa w tle. */
+  const pokazZapisana = (f: Faktura, zapisana: { id: string; numer: string; ksefStatus: string }) => {
+    const statusKsef = statusZBazy(zapisana.ksefStatus);
+    setDane((d) => {
+      const lista = (d.faktury?.lista ?? []).filter((x) => x.id !== zapisana.id);
+      const stara = d.faktury?.lista.find((x) => x.id === zapisana.id);
+      return { ...d, faktury: { lista: [{ ...(stara ?? f), id: zapisana.id, numer: zapisana.numer, statusKsef }, ...lista], pelna: d.faktury?.pelna ?? true } };
+    });
+    if (statusKsef === 'wysylanie') sledzone.current.set(zapisana.id, 0);
+    void odswiezFaktury();
+  };
+
   const odswiez = async () => {
     if (!uzytkownik) return;
     setDane((d) => (d.pobranie.stan === 'blad' ? { ...d, pobranie: { stan: 'ladowanie', bezSieci: false } } : d));
@@ -284,7 +412,7 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     odswiez,
   };
 
-  // Zapisy na prawdziwych fakturach przyjdą z API (M8 wystawienie, M10 zapłata i reszta); do tego czasu strona.
+  // Wystawienie i wysyłka szkicu przez API (M8); zapłata, edycja i reszta zapisów do M10 na stronie.
   const zmiana = (wyzej: Stan): Stan => ({
     ...wyzej,
     dzis: dzienWarszawa(),
@@ -292,12 +420,50 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     faktury: dane.faktury?.lista ?? [],
     skrzynka: dane.skrzynka?.lista ?? [],
     przelaczZaplate: (f) => naStronie('zaplata', f.id),
-    dodajFakture: () => {
-      naStronie('wystawienie');
-      return '';
+    dodajFakture: async (f, wyslij, naKoncie) => {
+      const firma = dane.firmaId;
+      if (!naKoncie || !firma) {
+        naStronie('wystawienie');
+        return { ok: false, komunikat: 'Tę fakturę wystawisz na faktway.pl.' };
+      }
+      // Druga warstwa za formularzem: firma z otwarcia formularza musi być firmą, do której idzie żądanie.
+      const zlaFirma = bladFirmyZapisu(naKoncie.firma, firma);
+      if (zlaFirma) return { ok: false, komunikat: zlaFirma };
+      const w = await zapytajApi<WystawienieOdpowiedz>('faktury', {
+        metoda: 'POST',
+        firma,
+        klucz: naKoncie.klucz,
+        cialo: { wyslij, faktura: naKoncie.faktura },
+      });
+      if (!w.ok)
+        return bladZapisu(
+          w.blad,
+          'Nie wiemy, czy faktura się zapisała: brak odpowiedzi serwera. Sprawdź internet i dotknij jeszcze raz; ten sam formularz nie wystawi drugiej faktury.',
+        );
+      // Stawka bez procentu („zw”, „oo”, „np”) od razu z opisem, nie jako 0% modelu formularza.
+      const linie = naKoncie.faktura.lines;
+      const zOpisem = { ...f, pozycje: f.pozycje.map((p, i) => (linie[i] && !/^\d+$/.test(linie[i].vatRate) ? { ...p, stawkaOpis: linie[i].vatRate } : p)) };
+      pokazZapisana(zOpisem, w.dane.faktura);
+      // „Nie zlecono” to zawsze uwaga, także bez zdania serwera: nigdy fałszywe „Wysyłamy do KSeF”.
+      const wysylka = w.dane.wysylka;
+      const uwaga = wysylka && !wysylka.zlecona ? bezDlugichMyslnikow(wysylka.blad ?? 'Faktura nie poszła do KSeF. Sprawdź jej stan na liście faktur.') : undefined;
+      return { ok: true, id: w.dane.faktura.id, ...(uwaga ? { uwaga } : {}) };
     },
     zastapFakture: (id) => naStronie('edycja', id),
-    wyslijDoKsef: (id) => naStronie('wysylka', id),
+    wyslijDoKsef: async (id) => {
+      const firma = dane.firmaId;
+      const f = dane.faktury?.lista.find((x) => x.id === id);
+      // Odrzucona albo z błędem wysyłki: poprawka i ponowna wysyłka na stronie (M10).
+      if (!firma || !f || f.statusKsef !== 'robocza') {
+        naStronie('wysylka', id);
+        return { ok: false, komunikat: 'Tę fakturę wyślesz ponownie na faktway.pl.' };
+      }
+      const w = await zapytajApi<WysylkaSzkicuOdpowiedz>(`faktury/${id}/wysylka`, { metoda: 'POST', firma });
+      if (!w.ok)
+        return bladZapisu(w.blad, 'Nie wiemy, czy wysyłka została zlecona: brak odpowiedzi serwera. Odśwież listę; jeśli faktura jest nadal szkicem, wyślij ją jeszcze raz.');
+      pokazZapisana(f, w.dane.faktura);
+      return { ok: true, id };
+    },
     wrocDoSzkicu: (id) => naStronie('edycja', id),
     usunSzkic: (id) => naStronie('edycja', id),
   });

@@ -295,7 +295,8 @@ export function PoleWyboru<T extends string>({ etykieta, wartosc, opcje, onZmian
           styles.ramkaWiersz,
           { borderColor: kolory.obwodka, backgroundColor: pressed ? kolory.wypelnienie : kolory.tlo },
         ]}>
-        <Tekst styl="body" numberOfLines={1} style={styles.rozciagniety} kolor={wybrana ? 'etykieta' : 'etykietaTrzeciorzedna'}>
+        {/* Do trzech linii: przy największym tekście wartość się zawija zamiast ucinać (ZASADY-DESIGNU.md, sekcja 3). */}
+        <Tekst styl="body" numberOfLines={3} style={styles.rozciagniety} kolor={wybrana ? 'etykieta' : 'etykietaTrzeciorzedna'}>
           {wybrana?.etykieta ?? 'Wybierz'}
         </Tekst>
         <Ikona nazwa="arrow-down-s-line" rozmiar={20} kolor={kolory.etykietaDrugorzedna} />
@@ -394,9 +395,9 @@ function zIso(iso: string): Date {
 }
 
 function doIso(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dz = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${dz}`;
+  // filtr-wyjatek: data-warszawa dzień wybrany w kalendarzu telefonu (data z zIso w południe strefy urządzenia), nie „dziś”; „dziś” po polsku liczy dzienWarszawa
+  const [rok, miesiac, dzien] = [d.getFullYear(), d.getMonth() + 1, d.getDate()];
+  return `${rok}-${String(miesiac).padStart(2, '0')}-${String(dzien).padStart(2, '0')}`;
 }
 
 /**

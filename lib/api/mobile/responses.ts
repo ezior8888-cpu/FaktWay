@@ -25,8 +25,9 @@ export function mobileError(
   code: MobileApiErrorCode,
   message: string,
   headers: Record<string, string> = {},
+  field?: string,
 ): NextResponse {
-  const body: MobileApiError = { error: { code, message } };
+  const body: MobileApiError = { error: { code, message, ...(field ? { field } : {}) } };
   return NextResponse.json(body, { status, headers: { ...BASE_HEADERS, ...headers } });
 }
 

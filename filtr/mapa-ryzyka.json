@@ -17,6 +17,7 @@
       "scripts/",
       "supabase/migrations/",
       "content/",
+      "mobile/src/",
       "proxy.ts",
       "instrumentation.ts",
       "instrumentation-client.ts",
@@ -234,6 +235,10 @@
         "app/actions/noty.ts",
         "lib/noty/**",
         "lib/api/v1/invoice-create.ts",
+        "lib/invoices/{issue-regular,send-draft}.ts",
+        "lib/api/mobile/{faktury,schematy}.ts",
+        "app/api/mobile/v1/faktury/**",
+        "supabase/migrations/00201_*.sql",
         "app/api/v1/invoices/route.ts",
         "app/api/noty/**",
         "app/actions/proformy.ts",
@@ -754,6 +759,51 @@
       ]
     },
     {
+      "id": "mobile.faktury",
+      "poziom": "R1",
+      "opis": "Telefon (od M8): treść faktury przed wysyłką do KSeF składana na telefonie: nabywca, stawki, pozycje i kwoty w formularzu, duplikat z faktury z bazy, firma, do której idzie zapis, i kwota z pola w groszach (`lib/kwota-z-pola.ts`, też dla Kosztów). Serwer sprawdza treść schematem strony, ale zły nabywca albo stawka z telefonu przechodzi jako poprawna faktura (przegląd #716).",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/faktury/nowa/**",
+        "mobile/src/lib/faktura/**",
+        "mobile/src/lib/dane/mapowanie.ts",
+        "mobile/src/stan/dane.tsx",
+        "mobile/src/lib/kwota-z-pola.ts"
+      ]
+    },
+    {
+      "id": "mobile.koszty",
+      "poziom": "R1",
+      "opis": "Telefon: wydatki i faktury kosztowe (od M9 zapis ze zdjęcia): kwoty, VAT i kategoria, które trafiają do KPiR i rozliczenia VAT.",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/koszty/**"
+      ]
+    },
+    {
+      "id": "mobile.szacunki",
+      "poziom": "R2",
+      "opis": "Telefon: pulpit i księgowość: szacunki podatków i składek, wynik, terminy i treści o podatkach (jak ksiegowosc.ekrany i szacunki na stronie).",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/(pulpit)/**",
+        "mobile/src/app/(zakladki)/ksiegowosc/**"
+      ]
+    },
+    {
+      "id": "mobile.dane-przykladowe",
+      "poziom": "R2",
+      "opis": "Dane przykładowe telefonu (aplikacja bez EXPO_PUBLIC_SUPABASE_URL): klient nie może wziąć ich za swoje.",
+      "sciezki": [
+        "mobile/src/dane-przykladowe/**"
+      ]
+    },
+    {
+      "id": "mobile.ekrany",
+      "poziom": "R3",
+      "opis": "Telefon: pozostałe ekrany, komponenty, stan, klient API, pamięć offline, wygląd i logowanie. Obliczenia i treść dokumentów są w mobile.faktury i mobile.koszty (R1), szacunki w mobile.szacunki (R2); wyższy poziom wygrywa. Logika obliczeń w innym pliku telefonu to uwaga w przeglądzie.",
+      "sciezki": [
+        "mobile/src/**"
+      ]
+    },
+    {
       "id": "pomocnicze",
       "poziom": "R3",
       "opis": "Daty i strefa Warszawy, formatowanie kwot, odczyt stronami, schematy formularzy, typy, dziennik audytowy, przełączniki funkcji.",
@@ -768,7 +818,7 @@
         "lib/audit/**",
         "lib/feature-flags/**",
         "lib/api/v1/{auth,pagination,scopes,token}.ts",
-        "lib/api/mobile/{auth,sesja}.ts",
+        "lib/api/mobile/{auth,sesja,kontrakt}.ts",
         "lib/webhooks/{secret-box,signature,types}.ts"
       ]
     },
