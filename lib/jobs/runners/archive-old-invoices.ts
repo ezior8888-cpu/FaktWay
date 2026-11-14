@@ -12,7 +12,8 @@ import {
 /**
  * Cron codziennie o 3:00 PL — faktury starsze niż ~2 lata od daty wystawienia,
  * z zapisanym XML w R2: kopiujemy XML do S3 Glacier Deep Archive, zapisujemy
- * `archive_storage_path`, potem oznaczamy `archived_at`.
+ * `archive_storage_path`, potem jednym zapisem `archived_at` i termin usunięcia
+ * `scheduled_deletion_at` (usuwa `cron.retention-delete`).
  */
 /**
  * Runner joba (worker pg-boss).
