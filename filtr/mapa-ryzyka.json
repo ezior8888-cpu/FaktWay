@@ -17,6 +17,7 @@
       "scripts/",
       "supabase/migrations/",
       "content/",
+      "mobile/src/",
       "proxy.ts",
       "instrumentation.ts",
       "instrumentation-client.ts",
@@ -748,6 +749,50 @@
       "opis": "Dane przykładowe (tryb demo): klient nie może wziąć ich za swoje; granicę przykład-prawda pilnuje tests/unit/dane-granica.test.ts.",
       "sciezki": [
         "lib/demo/**"
+      ]
+    },
+    {
+      "id": "mobile.faktury",
+      "poziom": "R1",
+      "opis": "Telefon (od M8): treść faktury przed wysyłką do KSeF składana na telefonie: nabywca, stawki, pozycje i kwoty w formularzu, duplikat z faktury z bazy i firma, do której idzie zapis. Serwer sprawdza treść schematem strony, ale zły nabywca albo stawka z telefonu przechodzi jako poprawna faktura (przegląd #716).",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/faktury/nowa/**",
+        "mobile/src/lib/faktura/**",
+        "mobile/src/lib/dane/mapowanie.ts",
+        "mobile/src/stan/dane.tsx"
+      ]
+    },
+    {
+      "id": "mobile.koszty",
+      "poziom": "R1",
+      "opis": "Telefon: wydatki i faktury kosztowe (od M9 zapis ze zdjęcia): kwoty, VAT i kategoria, które trafiają do KPiR i rozliczenia VAT.",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/koszty/**"
+      ]
+    },
+    {
+      "id": "mobile.szacunki",
+      "poziom": "R2",
+      "opis": "Telefon: pulpit i księgowość: szacunki podatków i składek, wynik, terminy i treści o podatkach (jak ksiegowosc.ekrany i szacunki na stronie).",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/(pulpit)/**",
+        "mobile/src/app/(zakladki)/ksiegowosc/**"
+      ]
+    },
+    {
+      "id": "mobile.dane-przykladowe",
+      "poziom": "R2",
+      "opis": "Dane przykładowe telefonu (aplikacja bez EXPO_PUBLIC_SUPABASE_URL): klient nie może wziąć ich za swoje.",
+      "sciezki": [
+        "mobile/src/dane-przykladowe/**"
+      ]
+    },
+    {
+      "id": "mobile.ekrany",
+      "poziom": "R3",
+      "opis": "Telefon: pozostałe ekrany, komponenty, stan, klient API, pamięć offline, wygląd i logowanie. Obliczenia i treść dokumentów są w mobile.faktury i mobile.koszty (R1), szacunki w mobile.szacunki (R2); wyższy poziom wygrywa. Logika obliczeń w innym pliku telefonu to uwaga w przeglądzie.",
+      "sciezki": [
+        "mobile/src/**"
       ]
     },
     {
