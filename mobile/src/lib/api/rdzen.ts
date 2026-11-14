@@ -10,7 +10,7 @@
  * nie przejdzie. Brak internetu nigdy nie kończy sesji.
  */
 import { bladApi, bladTelefonu, type BladApi } from './bledy';
-import { MOBILE_ACTIVE_ORG_HEADER } from './kontrakt';
+import { MOBILE_ACTIVE_ORG_HEADER, MOBILE_IDEMPOTENCY_HEADER } from './kontrakt';
 
 /** Token dostępu z sesji telefonu albo powód, dla którego go nie ma. */
 export type Token = { token: string } | { brak: 'sesja' | 'polaczenie' };
@@ -33,7 +33,13 @@ export type Zaleznosci = {
 
 export type Wynik<T> = { ok: true; dane: T; status: number } | { ok: false; blad: BladApi };
 
-export type OpcjeZapytania = { metoda?: 'GET' | 'POST'; firma?: string | null; cialo?: unknown };
+export type OpcjeZapytania = {
+  metoda?: 'GET' | 'POST';
+  firma?: string | null;
+  cialo?: unknown;
+  /** Zapis (M8): `Idempotency-Key`, ten sam w każdym ponowieniu tego zapisu. */
+  klucz?: string;
+};
 
 export const BRAK_ADRESU_API = 'Aplikacja nie ma adresu serwera FaktWay (EXPO_PUBLIC_API_URL).';
 
@@ -57,12 +63,13 @@ export function adresTrasy(adres: string, sciezka: string): string {
 }
 
 /** Nagłówki żądania do API: token zawsze, firma przy trasach z danymi firmy. */
-export function naglowki(token: string, firma?: string | null, zCialem = false): Record<string, string> {
+export function naglowki(token: string, firma?: string | null, zCialem = false, klucz?: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     Accept: 'application/json',
     ...(zCialem ? { 'Content-Type': 'application/json' } : {}),
     ...(firma ? { [MOBILE_ACTIVE_ORG_HEADER]: firma } : {}),
+    ...(klucz ? { [MOBILE_IDEMPOTENCY_HEADER]: klucz } : {}),
   };
 }
 
@@ -95,7 +102,7 @@ export function utworzKlienta(z: Zaleznosci) {
       try {
         odp = await z.pobierz(adresTrasy(adres, sciezka), {
           method: opcje.metoda ?? 'GET',
-          headers: naglowki(token, opcje.firma, zCialem),
+          headers: naglowki(token, opcje.firma, zCialem, opcje.klucz),
           ...(zCialem ? { body: JSON.stringify(opcje.cialo) } : {}),
         });
       } catch {

@@ -5,8 +5,8 @@
  *
  * Ten dostawca trzyma dane przykładowe. Na prawdziwym koncie (od M7)
  * `DaneKonta` (`stan/dane.tsx`) podmienia faktury i skrzynkę KSeF na dane z
- * bazy przez `PodmienStan`, a zapisy na tych fakturach odsyła na faktway.pl,
- * dopóki API ich nie ma (M8 wystawienie, M10 zapłata i reszta).
+ * bazy przez `PodmienStan`. Wystawienie zwykłej faktury i wysyłka szkicu idą
+ * od M8 przez API; reszta zapisów odsyła na faktway.pl do M10.
  */
 import * as Haptics from 'expo-haptics';
 import { createContext, use, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -14,7 +14,18 @@ import { Share } from 'react-native';
 
 import { DZIS, FAKTURY, KOSZTY, skrzynkaPrzykladowa, type Faktura, type FakturaKosztowa, type Koszt } from '@/dane-przykladowe';
 import { CYKLICZNE, type FakturaCykliczna } from '@/dane-przykladowe/kontrahenci';
+import type { FakturaTelefonu } from '@/lib/api/kontrakt';
 import { kwota } from '@/lib/format';
+
+/**
+ * Wynik zapisu faktury. `uwaga`: zapis się udał, ale coś zostało do zrobienia
+ * (np. szkic zapisany, a kolejka KSeF odmówiła). `pole`: pole formularza z błędem
+ * serwera (`buyerName`, `lines.0.name`).
+ */
+export type WynikZapisu = { ok: true; id: string; uwaga?: string } | { ok: false; komunikat: string; pole?: string };
+
+/** Zapis na prawdziwym koncie (M8): treść dla `POST /faktury`, klucz jednego wypełnienia formularza i firma, w której go otwarto. */
+export type ZapisNaKoncie = { faktura: FakturaTelefonu; klucz: string; firma: string };
 
 /**
  * Skąd są faktury i skrzynka KSeF na ekranie i w jakim są stanie. Dane
@@ -43,8 +54,11 @@ export type Stan = {
   skrzynka: FakturaKosztowa[];
   /** Oznacza albo cofa zapłatę (z wibracją i paskiem „Cofnij”); jedno miejsce dla gestu, menu i przycisku. */
   przelaczZaplate: (f: Faktura) => void;
-  /** Dodaje fakturę; `wyslij` symuluje wysyłkę do KSeF i przyjęcie po chwili. Zwraca id. */
-  dodajFakture: (f: Faktura, wyslij: boolean) => string;
+  /**
+   * Dodaje fakturę; `wyslij` to „Wyślij do KSeF” (na danych przykładowych przyjęcie po chwili).
+   * Na prawdziwym koncie zapis idzie przez API z `naKoncie` (M8).
+   */
+  dodajFakture: (f: Faktura, wyslij: boolean, naKoncie?: ZapisNaKoncie) => Promise<WynikZapisu>;
   /** Zapisuje poprawiony szkic albo odrzuconą fakturę w miejscu starej; `wyslij` jak w `dodajFakture`. */
   zastapFakture: (id: string, f: Faktura, wyslij: boolean) => void;
   /** Faktura właśnie wysłana z formularza: jej szczegół pokazuje kartę „Wysyłamy do KSeF” → „Przyjęta w KSeF”. */
@@ -53,8 +67,8 @@ export type Stan = {
   cofnij: { id: number; tekst: string; akcja: () => void } | undefined;
   pokazCofnij: (c: { tekst: string; akcja: () => void } | undefined) => void;
   pokazPotwierdzenie: (id: string | undefined) => void;
-  /** Wysyła szkic albo odrzuconą fakturę ponownie do KSeF. */
-  wyslijDoKsef: (id: string) => void;
+  /** Wysyła szkic albo odrzuconą fakturę ponownie do KSeF (na prawdziwym koncie szkic przez API, M8). */
+  wyslijDoKsef: (id: string) => Promise<WynikZapisu>;
   /** Cofa odrzuconą fakturę do szkicu. */
   wrocDoSzkicu: (id: string) => void;
   usunSzkic: (id: string) => void;
@@ -135,7 +149,7 @@ export function StanFaktur({ children }: { children: ReactNode }) {
         const id = `n${licznik.current}`;
         setFaktury((lista) => [{ ...f, id, statusKsef: wyslij ? 'wysylanie' : 'robocza' }, ...lista]);
         if (wyslij) przyjmijPoChwili(id);
-        return id;
+        return Promise.resolve({ ok: true, id });
       },
       zastapFakture: (id, f, wyslij) => {
         setFaktury((lista) => lista.map((x) => (x.id === id ? { ...f, id, statusKsef: wyslij ? 'wysylanie' : 'robocza', blad: undefined } : x)));
@@ -148,6 +162,7 @@ export function StanFaktur({ children }: { children: ReactNode }) {
       wyslijDoKsef: (id) => {
         zmien(id, { statusKsef: 'wysylanie', blad: undefined });
         przyjmijPoChwili(id);
+        return Promise.resolve({ ok: true, id });
       },
       wrocDoSzkicu: (id) => zmien(id, { statusKsef: 'robocza', blad: undefined }),
       usunSzkic: (id) => setFaktury((lista) => lista.filter((f) => !(f.id === id && f.statusKsef === 'robocza'))),

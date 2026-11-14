@@ -98,8 +98,9 @@ zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 
 Każda sekcja panelu strony ma odpowiednik w aplikacji (`mobile/src/app/`).
 Od M7 na prawdziwym koncie z bazy są: firma i konto (`GET /konto`), faktury
-wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół). Reszta ekranów
-zostaje na danych przykładowych do M8 (wystawienie), M9 (wydatki ze zdjęcia)
+wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół); od M8 także
+wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu.
+Reszta ekranów zostaje na danych przykładowych do M9 (wydatki ze zdjęcia)
 i M10 (pozostałe); stopka w Więcej mówi o tym klientowi.
 
 | Strona (`app/(dashboard)/`) | Telefon | Trasy |
@@ -146,6 +147,12 @@ przykładowy trzyma stawkę jako liczbę.
   podłącza go w aplikacji importem przez Metro; gdyby Metro z `mobile/` nie
   widziało pliku spoza folderu, kopia w `mobile/` z testem zgodności. Schematy
   Zod treści żądań (od M8) potrzebują importu `zod`, więc dostaną osobny plik.
+  **M8 rozstrzygnął:** schematy leżą w `lib/api/mobile/schematy.ts` i do
+  aplikacji nie trafiają (aplikacja nie ma `zod`). Telefon dostaje z kontraktu
+  typy treści (`FakturaTelefonu`, równe wyjściu schematu, pilnuje test), robi
+  szybkie sprawdzenie przed wysłaniem, a serwer sprawdza każde żądanie tym
+  samym schematem formularza co strona i odsyła błąd z polem (`invoice_invalid`,
+  `field`), który telefon pokazuje pod polem.
 - Listy krótkie i stałe (ustawienia, szczegóły) można składać z `@expo/ui`
   (prawdziwe SwiftUI i Compose); listy danych o nieznanej długości z FlatList
   albo FlashList. Wybór sprawdza M3 na ekranie wzorcowym.
@@ -274,6 +281,43 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   przypomnienia, cykliczne) jeszcze bez API: telefon ich nie udaje, tylko mówi,
   gdzie to zrobić, i otwiera fakturę na stronie (`komponenty/na-stronie.tsx`).
 
+**Stan po M8 (13.11.2026).** Szybka faktura z telefonu do KSeF:
+- Logika wystawienia i wysyłki szkicu wydzielona z akcji strony do
+  `lib/invoices/issue-regular.ts` (`saveRegularDraft`, `saveAndSendRegularInvoice`,
+  `parseRegularInvoiceForm`, `readTenantSnapshot`) i `lib/invoices/send-draft.ts`
+  (`sendRegularDraft`); akcje strony wołają je bez zmiany zachowania (test
+  zgodności `tests/unit/wystawienie-faktury-lib.test.ts`).
+- Kolejka KSeF z sesji tokenu: `tokenSession` w `enqueueKsefSubmitAfterDraft`
+  bierze 2FA z tokenu (`assertSensitiveMfa`) i czyta znacznik weryfikacji KSeF
+  klientem z tokenem. Bez tego telefon dostawałby odmowę 2FA przy włączonej
+  fladze `requireMfaForSensitive` i „zweryfikuj certyfikat” zawsze.
+- Trasy: `POST /faktury` (szkic albo „Wyślij do KSeF”, nagłówek
+  `Idempotency-Key` z UUID na jedno wypełnienie formularza, tabela
+  `mobile_idempotency_keys` z 00201: ponowienie oddaje tę samą fakturę i nie
+  zleca drugiej wysyłki, inna treść z tym kluczem to 409), `POST
+  /faktury/{id}/wysylka` (szkic do KSeF; już zlecona daje 200 z `juzZlecona`),
+  `GET /faktury/podpowiedz` (numer, dziś, zwolnienie z VAT jak pusty formularz
+  strony). Kody `invoice_invalid`, `idempotency_conflict`, `not_found`,
+  `not_draft`, `ksef_send_refused`, `missing_idempotency_key`.
+- Telefon: na prawdziwym koncie zwykła faktura VAT przez API (nabywcy z
+  ostatnich faktur, numer z podpowiedzi, rachunek z ostatniej faktury z
+  rachunkiem, stawki zw/oo/np tekstem), szkic przez API, „Wyślij do KSeF” przy
+  szkicu w szczególe; po wysyłce status z bazy co 3 s aż do przyjęcia albo
+  odrzucenia (wibracja). Korekta, zaliczka, rozliczenie, zmiana szkicu i
+  ponowna wysyłka odrzuconej zostają na stronie do M10; nabywca z UE, PESEL i
+  dane z GUS też.
+- Po niezależnym przeglądzie #716 (13.11.2026): nabywca z UE, osoba z PESEL
+  albo dokumentem i stawki spoza telefonu (np. „np II”) nie trafiają do
+  formularza (lista nabywców pomija je, „Duplikuj” takiej faktury otwiera
+  stronę), zapis idzie do firmy, w której otwarto formularz (zmiana firmy w
+  trakcie to odmowa z instrukcją), kwoty pozycji liczone jak na serwerze
+  (cena do 4 miejsc, netto i VAT zaokrąglane w pozycji), numer z serii
+  (`numberSeriesId` i `numberPreview` z podpowiedzi), klucz żądania także
+  jako `numberRequestKey` (00199), więc ponowienie po przerwie między szkicem
+  a kluczem w 00201 oddaje ten sam szkic; wyjątek po zapisie szkicu to 201 ze
+  szkicem i informacją, że wysyłka nie wyszła; telefon bez odpowiedzi mówi
+  „Nie wiemy, czy faktura się zapisała”.
+
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
 - `tsconfig.json` (`include: **/*.ts`): dodać `mobile` do `exclude`;
@@ -368,31 +412,41 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M8, szybka faktura z wysyłką do KSeF (środowisko TEST).
-Na start M8: trasa zapisu w `app/api/mobile/v1` (wystawienie i wysyłka tymi
-samymi funkcjami z `lib/` co `saveAndSendInvoiceAction`; logikę z akcji
-najpierw wydzielić do `lib/` z testem, plan 4.3), schematy Zod treści żądania w
-osobnym pliku obok kontraktu (decyzja 4.1: jak trafią do aplikacji), klucz
-idempotencji żądania (protokół naprawy, punkt 5). W aplikacji formularz z M4e
-zamiast `EkranTylkoNaStronie` w `faktury/nowa/*` i `dodajFakture`/`wyslijDoKsef`
-w `stan/dane.tsx` przez API zamiast `naStronie`. „Stan po M7” w 4.3.
-**Stos nie jest w `main`:** M7 stoi na M6 (#668), M6 na scaleniu M4e do M5b
-(#669), a do `main` przenosi je #670; PR M7 (#671) ma bazę
-`claude/mobile-scalenie-m6`, po scaleniu #670 bazę trzeba przestawić na `main`.
-**Przed logowaniem z telefonu na produkcji:** adres powrotu `faktway://**` w
-GoTrue (Google). Logowanie hasłem idzie od M6b przez `POST
-/api/mobile/v1/logowanie` (D16), więc krok 2 runbooka `captcha-w-gotrue.md`
-nie blokuje aplikacji z M6b; wymaga działającego Redisa (bez niego trasa
-odmawia). Z M6b zostaje: limity GoTrue na adres widzą przy logowaniu hasłem
-tylko adres app-1 (tak samo strona; plan skalowania, sesja 25); kod 2FA z
-telefonu idzie od M6c przez `POST /api/mobile/v1/kod`, z limitem prób i
-wpisami `auth.mfa_challenge_*` jak na stronie. Z M7 zostaje: wybór firmy na telefonie nie zmienia
-`last_active_tenant_id` (strona zaczyna od swojej firmy; trasa w M10, jeśli
-ma być wspólny), Pulpit, Wydatki, Księgowość i ustawienia na danych
-przykładowych do M9 i M10, „Sprawdź teraz” w skrzynce KSeF czeka na trasę
-API (M10), ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
-symulatorze. Otwarte: 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie
-jednym dotknięciem (5.2), D4, D6.
+**Następny krok:** M9, wydatek ze zdjęcia: skaner dokumentów, OCR,
+sprawdzenie odczytu i zapis wydatku na prawdziwym koncie (wiersz M9 w sekcji 7).
+Na start M9: logikę `uploadExpensePhotoAction`, `getOcrJobStatusAction` i
+`reviewExpenseAction` (`app/actions/expenses.ts`) najpierw wydzielić do `lib/`
+z testem zgodności, jak M8 zrobił z wystawieniem (`tests/unit/wystawienie-faktury-lib.test.ts`);
+trasy w `app/api/mobile/v1` za `authenticateMobileRequest`; wgrywanie zdjęcia
+przez `lib/uploads/server.ts` (trasy wgrywania są poza proxy, AGENTS.md,
+niezmiennik 7); klucz idempotencji zapisu wydatku (wzór 00201,
+`mobile_idempotency_keys`: nowa wartość `endpoint` w CHECK); systemowy skaner
+dokumentów to nowa paczka natywna, więc nowy build w Xcode.
+**Przed scaleniem M8:** migracja 00201 (przed wdrożeniem; 00199 z #643 już
+na produkcji). Numeracja z #643 jest w `lib/invoices/issue-regular.ts`;
+telefon wysyła serię i podgląd numeru z podpowiedzi oraz klucz zapisu jako
+`numberRequestKey`. #711 i #713 są w `main`, gałąź M8 je zawiera.
+**Przed logowaniem z telefonu na produkcji (bez zmian od M6b):** adres
+powrotu `faktway://**` w GoTrue (Google); logowanie hasłem przez `POST
+/api/mobile/v1/logowanie` (D16) wymaga działającego Redisa. Z M6b zostaje:
+limity GoTrue na adres widzą przy logowaniu hasłem tylko adres app-1, kod 2FA
+z telefonu od M6c przez `POST /api/mobile/v1/kod`, z limitem prób i wpisami
+`auth.mfa_challenge_*` jak na stronie.
+**Z M8 zostaje:** zmiana szkicu, korekta, zaliczka, rozliczenie, ponowna
+wysyłka odrzuconej, nabywca z UE i z PESEL, dane z GUS po NIP, pole uwag z
+polskimi znakami nie było sprawdzone wpisywaniem z Maca (symulator nie
+przyjmuje wklejenia). Z przeglądu #716: (8) `mobile/` zostaje poza mapą
+ryzyka żelaznego filtra (decyzja Bartosza, bez zmiany
+`filtr/mapa-ryzyka.json`); (9) ustalenie M8-9, odziedziczone ze strony, nie
+naprawione: `sendRegularDraft` (`lib/invoices/send-draft.ts`, odczyt szkicu
+z `error || !row`) zwraca „nie znaleziono” także przy błędzie bazy, więc
+chwilowy błąd odczytu wygląda jak usunięta faktura (strona i telefon tak
+samo); naprawa osobnym PR według protokołu. Wcześniejsze otwarte
+(z M7): wybór firmy nie zmienia `last_active_tenant_id`, Pulpit, Wydatki,
+Księgowość i ustawienia na danych przykładowych, „Sprawdź teraz” w skrzynce
+KSeF, ścieżka `mfa_required` w trakcie sesji sprawdzona testem, nie w
+symulatorze, 3.9 („Nowa faktura” jednym dotknięciem), kopiowanie jednym
+dotknięciem (5.2), D4, D6.
 
 | Data | Etap | Co zrobiono | PR |
 |---|---|---|---|
@@ -413,3 +467,5 @@ jednym dotknięciem (5.2), D4, D6.
 | 13.11.2026 | M7 | faktury i skrzynka KSeF z bazy na prawdziwym koncie (4.3, „Stan po M7”): klient `/api/mobile/v1` z kontraktem strony przez Metro (bez kopii), 401 to odświeżenie sesji i jedno ponowienie, 503 i brak sieci nie wylogowują, limit 15 s na żądanie; `GET /konto` (karta konta, firma w blokadzie, wybór firmy w Więcej), `POST /sesja` raz na sesję (sprawdzone: jeden wpis `auth.login` z `client: mobile` na logowanie); lista i szczegół faktur z bazy (błąd wysyłki osobno od odrzuconej, zapłata częściowa, waluta obca, stawki zw/np), skrzynka KSeF ze statusem wydatku i nowy ekran faktury kosztowej; szkielet, błąd z „Spróbuj ponownie”, nota „Bez internetu. Dane z …”; dane z poprzedniego otwarcia w plikach, start bez sieci z wygasłym tokenem pokazuje je w 3 s zamiast logowania (przegląd M5b; sprawdzone z tokenem 150 s i zatrzymaną bramką), po powrocie sieci odświeżenie samo; wylogowanie i koniec sesji czyszczą pamięć i pliki (sprawdzone w kontenerze aplikacji); zapisy na prawdziwych fakturach odsyłają na stronę; przy dużym tekście kwoty z przecinkiem zamiast groszy w indeksie (poprawka M4c). Testy `tests/unit/mobile-{api-klient,dane-mapowanie,dane-pamiec,sesja-offline}.test.ts`; 6 uwag z przeglądu kodu (3 poprawione); zrzuty `docs/mobile/zrzuty/m7/` | #671 |
 | 13.11.2026 | M6b | logowanie hasłem przez nasze API (D16): sprawdzenie na lokalnym GoTrue z captchą (4.2: klucz serwisowy pomija captchę, `refresh_token`, `/factors`, `/logout`, PKCE jej nie wymagają); trasa `POST /api/mobile/v1/logowanie` (`lib/api/mobile/logowanie.ts`) z limitami na adres IP, e-mail i wspólnym ze stroną, odmową bez Redisa (503 `login_unavailable`), wpisem `auth.login` jak na stronie i `auth.login_failed` bez konta i adresu; aplikacja: `zaloguj` przez trasę i `setSession`, komunikaty z M5b. Testy: trasa z atrapą GoTrue z captchą, prawdziwy GoTrue z captchą (`RLS_TEST_GOTRUE_CAPTCHA=on`), rdzeń aplikacji. Symulator na stosie z captchą: złe hasło, odmowa bez Redisa, hasło, kod 2FA, Pulpit; zrzuty `docs/mobile/zrzuty/m6b/`. Dwie uwagi z przeglądu kodu poprawione | #673 (serwer), #674 (aplikacja, do `main` przez #679) |
 | 13.11.2026 | M6c | kod 2FA z telefonu przez nasze API (z przeglądu M6b, decyzja Bartosza: osobny etap przed M8; 4.2): trasa `POST /api/mobile/v1/kod` (`lib/api/mobile/kod.ts`) jak `verifyMfaChallengeAction` strony: kod spoza 6 cyfr i konto bez TOTP bez zużycia próby, `checkMfaRateLimit` wspólny ze stroną (bez Redisa 503 „Nie możemy teraz sprawdzić kodu”), wyzwanie i kod w GoTrue tokenem klienta i kluczem anon, sprawdzenie nowego tokenu (AAL2, to samo konto), wpisy `auth.mfa_challenge_failed` i `auth.mfa_challenge_succeeded` z `client: 'mobile'`, sesja AAL2 dla `setSession`; bramka w wariancie `mfa: 'challenge'` (inna sesja: 409 `mfa_not_required`, pozostałe trasy bez zmian); aplikacja: `potwierdzKod` przez trasę. Testy: trasa z atrapami (20), rdzeń aplikacji (16), prawdziwy GoTrue (`tests/rls-mobile-kod.test.ts`). Sprawdzone na osobnym stosie z migracjami i Redisem dev: limit 5 prób (6. próba 429), wpisy audytu; symulator: hasło, zły kod, dobry kod, Pulpit; zrzuty `docs/mobile/zrzuty/m6c/`. Z przeglądu kodu 4 uwagi poprawione. Zostaje: GoTrue przyjmuje `/factors/{id}/verify` wprost z kluczem anon (jak przy stronie), więc dla omijającego aplikację zaporą jest limit GoTrue | #711 |
+| 13.11.2026 | M8 | szybka faktura z telefonu do KSeF (4.3, „Stan po M8”): logika „Wystaw i wyślij”, szkicu i wysyłki szkicu wydzielona do `lib/invoices/{issue-regular,send-draft}.ts` (test zgodności ze stroną), kolejka KSeF z sesji tokenu (`tokenSession`: 2FA i znacznik KSeF bez ciasteczek), trasy `POST /faktury` z kluczem idempotencji (00201 `mobile_idempotency_keys`), `POST /faktury/{id}/wysylka`, `GET /faktury/podpowiedz`; w aplikacji formularz zwykłej faktury przez API (nabywcy z ostatnich faktur, numer z serwera, błąd serwera pod polem), szkic i „Wyślij do KSeF” przy szkicu, status co 3 s do przyjęcia; zdania serwera bez długich myślników, pola i przycisk zawijają się przy dużym tekście. Sprawdzone w symulatorze 17e na osobnym stosie z prawdziwym KSeF TEST (4 faktury przyjęte, fikcyjny NIP, certyfikat samopodpisany); 7 uwag z przeglądu (6 poprawionych); scalenie z #713 (numeracja #643 przeniesiona do `lib/`); zrzuty `docs/mobile/zrzuty/m8/` | #716 |
+| 13.11.2026 | M8, przegląd | niezależny przegląd #716 (9 uwag) i odpowiedzi: (1) nabywca z UE i osoba z PESEL nie stają się osobą prywatną, stawki spoza telefonu nie stają się 0%, „Duplikuj” takiej faktury otwiera stronę; (2) zapis do firmy formularza; (3) kwoty pozycji jak `calculateLineItem` (cena do 4 miejsc, 3 × 33,3333 = 123,00 zł), cena pokazywana z 4 miejscami; (4) seria numeracji z podpowiedzi; (5) klucz żądania jako `numberRequestKey` (00199) i ponowienie po przerwie; (6) wyjątek po szkicu to 201 ze szkicem, telefon bez odpowiedzi mówi „nie wiemy”; (7) wyścig przy ponowieniu i stan `failed`; (8) bez zmian, decyzja Bartosza; (9) zapisane jako ustalenie M8-9. Sprawdzone w symulatorze: nabywcy bez firmy z UE, duplikat faktury z UE na stronie, duplikat z ceną 33,3333 przyjęty w KSeF TEST (123,00 zł, `number_request_key` zapisany); zrzuty 13 do 18 w `docs/mobile/zrzuty/m8/` | #716 |
