@@ -494,3 +494,49 @@ export interface ZaplataRozliczeniaZadanie {
 export interface ZaplataRozliczeniaOdpowiedz {
   zaplacone: boolean;
 }
+
+// ─── Ustawienia firmy (M10b) ──────────────────────────────────────────
+
+/**
+ * `GET /api/mobile/v1/ustawienia`: to, co karty Firma, KSeF i Przypomnienia
+ * strony pokazują, do odczytu. Zmiany zapisuje się na stronie.
+ */
+export interface UstawieniaOdpowiedz {
+  firma: {
+    nazwa: string;
+    nip: string;
+    /** Dwie linie adresu jak na stronie (`address_json`). */
+    adres: { linia1: string; linia2: string };
+    rachunek: string | null;
+    /** RRRR-MM-DD albo `null`. */
+    rozpoczecie: string | null;
+    /** Podstawa zwolnienia z VAT; `null`: czynny podatnik VAT bez zwolnienia. */
+    zwolnienie: string | null;
+    /** Zwolnienie podmiotowe (art. 113): firma nie jest czynnym podatnikiem VAT. */
+    zwolnieniePodmiotowe: boolean;
+    metodaKasowa: boolean;
+  };
+  ksef: {
+    /** Jak plakietka strony: połączono (dowód w środowisku aplikacji), do potwierdzenia, brak certyfikatu. */
+    stan: 'polaczono' | 'do_potwierdzenia' | 'brak';
+    /** RRRR-MM-DD albo `null`. */
+    certyfikatDo: string | null;
+  };
+  /**
+   * Tylko dla właściciela (zakładka strony też tylko dla niego); `null` dla
+   * pozostałych ról. `zapisane: false`: firma nie zapisała ustawień, więc
+   * FaktWay nie przygotowuje przypomnień (reszta pól to propozycja strony).
+   */
+  przypomnienia: {
+    zapisane: boolean;
+    wlaczone: boolean;
+    etapy: Array<{ etap: 1 | 2 | 3; wlaczony: boolean; dniPoTerminie: number }>;
+    godzina: number;
+    tylkoDniRobocze: boolean;
+    najwiecej: number;
+    nadawca: string | null;
+    odpowiedzNa: string | null;
+    wstrzymajPoOdpowiedzi: boolean;
+    wstrzymajPoCzesciowej: boolean;
+  } | null;
+}

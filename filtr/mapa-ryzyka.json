@@ -628,7 +628,9 @@
         "app/actions/{company-profile,organizations,tax-office,cash-method,vat-exemption,business-start}.ts",
         "lib/invoices/business-start.ts",
         "components/settings/{cash-method-form,tax-office-form,vat-exemption-form,business-start-form,complete-nip-form,company-deletion}.tsx",
-        "app/actions/company-bank-account.ts"
+        "app/actions/company-bank-account.ts",
+        "lib/api/mobile/ustawienia.ts",
+        "app/api/mobile/v1/ustawienia/**"
       ]
     },
     {
