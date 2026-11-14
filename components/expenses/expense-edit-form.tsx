@@ -165,9 +165,13 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency, paymentSectio
 
   const confidence = Number(expense.categorization_confidence ?? 0);
   const method = expense.categorization_method;
+  // Metody, przy których kategorię ustawił automat (reguła albo model), nie
+  // klient: `manual` to kategoria domyślna albo wpis klienta, `learned` reguła
+  // firmy z jej poprawki albo zgody w FLO (bez zmian od 05.2026). Reguły
+  // globalne (738u1, 00205) są automatem jak reguły słów i NIP.
   const wasAutoClassified =
     method != null &&
-    ['rule_nip', 'rule_keyword', 'ml_heuristic', 'ai_claude'].includes(method);
+    ['rule_nip', 'rule_keyword', 'rule_global_nip', 'rule_global_keyword', 'ml_heuristic', 'ai_claude'].includes(method);
 
   const handleSave = () => {
     startSave(async () => {

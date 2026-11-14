@@ -943,7 +943,7 @@
       "poziom": "R1",
       "opis": "SQL: pochodzenie kosztów i prawo do odliczenia (expenses.is_deductible).",
       "sciezki": [
-        "supabase/migrations/{00034,00123,00127,00128,00175,00177,00196}_*.sql"
+        "supabase/migrations/{00034,00123,00127,00128,00175,00177,00196,00205}_*.sql"
       ]
     },
     {
