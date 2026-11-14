@@ -28,6 +28,7 @@ export function LineItemsSection({
   linesDesktopLayout,
   remove,
   onAddLine,
+  vatExempt = false,
 }: {
   form: UseFormReturn<InvoiceFormValues>;
   fields: FieldArrayWithId<InvoiceFormValues, 'lines', 'id'>[];
@@ -35,6 +36,8 @@ export function LineItemsSection({
   linesDesktopLayout: boolean;
   remove: (index: number) => void;
   onAddLine: () => void;
+  /** Firma zwolniona z VAT: podpowiedź z katalogu nie zastępuje „zw” stawką z podatkiem. */
+  vatExempt?: boolean;
 }) {
   /** Błąd stawki pozycji — np. „np. II” bez nabywcy z UE (AUD-70). */
   const bladStawki = (index: number): string | undefined =>
@@ -66,7 +69,7 @@ export function LineItemsSection({
               });
               return (
                 <div key={field.id} className={cn(LINE_GRID, 'items-start')}>
-                  <ProductNameInput form={form} index={index} ariaLabel={`Nazwa pozycji ${index + 1}`} />
+                  <ProductNameInput form={form} index={index} ariaLabel={`Nazwa pozycji ${index + 1}`} vatExempt={vatExempt} />
                   <Input
                     aria-label={`Jednostka pozycji ${index + 1}`}
                     {...form.register(`lines.${index}.unit`)}
@@ -170,6 +173,7 @@ export function LineItemsSection({
                     index={index}
                     id={`line-${index}-name`}
                     placeholder="np. Usługa programistyczna"
+                    vatExempt={vatExempt}
                   />
                 </div>
 

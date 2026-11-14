@@ -73,10 +73,10 @@ const czekaj = (ms: number) => act(async () => {
   await new Promise((r) => setTimeout(r, ms));
 });
 
-async function pokaz(siatka: boolean) {
+async function pokaz(siatka: boolean, opcjeFormularza: { vatExempt?: boolean } = {}) {
   ustawUklad(siatka);
   await act(async () => {
-    root.render(<InvoiceForm tenantId={TENANT} initialValues={{}} />);
+    root.render(<InvoiceForm tenantId={TENANT} initialValues={{}} vatExempt={opcjeFormularza.vatExempt} />);
   });
 }
 
@@ -222,6 +222,32 @@ describe('podpowiedź produktów w polu nazwy pozycji', () => {
     expect(opcje().map((o) => o.textContent)).toEqual([expect.stringContaining('Szkolenie BHP')]);
     await czekaj(400);
     expect(opcje().map((o) => o.textContent)).toEqual([expect.stringContaining('Szkolenie BHP')]);
+  });
+
+  it('firma zwolniona z VAT: produkt ze stawką z podatkiem nie zmienia „zw”, informacja pod polem', async () => {
+    await pokaz(false, { vatExempt: true });
+    const p = pola(false);
+    expect(p.stawka.value).toBe('zw');
+    await wpisz(p.nazwa, 'Szk');
+    klawisz(p.nazwa, 'ArrowDown');
+    klawisz(p.nazwa, 'Enter');
+    await czekaj(10);
+    expect(p.nazwa.value).toBe('Szkolenie BHP');
+    expect(p.jednostka.value).toBe('godz.');
+    expect(p.cena.value).toBe('150');
+    expect(p.stawka.value).toBe('zw');
+    expect(p.nazwa.parentElement?.textContent).toContain('stawka pozycji została bez zmian');
+  });
+
+  it('opuszczenie pola w trakcie zapytania: lista się nie otwiera', async () => {
+    await pokaz(false);
+    const p = pola(false);
+    act(() => p.nazwa.focus());
+    await wpisz(p.nazwa, 'Szk', 50);
+    act(() => p.nazwa.blur());
+    await czekaj(400);
+    expect(lista()).toBeNull();
+    expect(p.nazwa.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('błąd katalogu: krótka informacja pod polem, wpis ręczny dalej działa', async () => {

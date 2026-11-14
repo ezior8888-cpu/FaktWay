@@ -6,6 +6,7 @@ import type { UseFormReturn } from 'react-hook-form';
 import { suggestProductsAction } from '@/app/actions/produkty';
 import { Input } from '@/components/ui/input';
 import { formatPlMoney } from '@/lib/format/pl';
+import { TAXED_VAT_RATES } from '@/lib/invoices/vat-exemption';
 import {
   PRODUCT_SUGGESTIONS_MIN_QUERY,
   PRODUCT_VAT_RATE_LABELS,
@@ -30,6 +31,12 @@ function details(p: ProductSuggestion): string {
     .join(' · ');
 }
 
+/** Firma zwolniona z VAT, produkt ze stawką z podatkiem: stawka pozycji zostaje, klient widzi dlaczego. */
+function exemptRateText(p: ProductSuggestion): string {
+  const rate = p.vatRate ? PRODUCT_VAT_RATE_LABELS[p.vatRate] : '';
+  return `Produkt ma w katalogu stawkę ${rate}, a firma ma ustawione zwolnienie z VAT, więc stawka pozycji została bez zmian. Stawkę zmienisz w polu VAT pozycji.`;
+}
+
 function countText(n: number): string {
   return `${n} ${n === 1 ? 'podpowiedź' : 'podpowiedzi'} z katalogu. Strzałki wybierają, Enter wstawia.`;
 }
@@ -41,6 +48,13 @@ function countText(n: number): string {
  * i Enterem albo kliknięciem wstawia nazwę, jednostkę, cenę netto i stawkę
  * VAT (cenę i stawkę tylko wtedy, gdy produkt je ma). Ilości nie zmienia.
  * Nazwę dalej można wpisać ręcznie; bez wyboru nic się nie podmienia.
+ *
+ * Firma zwolniona z VAT (`vatExempt`, nowe pozycje dostają „zw”): stawka
+ * z podatkiem z katalogu (23, 8, 5 %, `TAXED_VAT_RATES`) nie zastępuje
+ * stawki pozycji, a pod polem stoi informacja, gdzie ją zmienić. Sprzedaż
+ * opodatkowaną przy zwolnieniu przedmiotowym klient ustawia ręcznie, jak
+ * dotąd; przy art. 113 wysyłkę i tak zatrzymuje odmowa
+ * `exemptTenantTaxedInvoiceMessage`.
  *
  * Wzorzec combobox z listą (WAI-ARIA): `aria-expanded`, `aria-controls`,
  * `aria-activedescendant`, liczba podpowiedzi w regionie `role="status"`.
@@ -54,18 +68,22 @@ export function ProductNameInput({
   id,
   ariaLabel,
   placeholder,
+  vatExempt = false,
 }: {
   form: UseFormReturn<InvoiceFormValues>;
   index: number;
   id?: string;
   ariaLabel?: string;
   placeholder?: string;
+  /** Firma zwolniona z VAT: stawka z podatkiem z katalogu nie zastępuje stawki pozycji. */
+  vatExempt?: boolean;
 }) {
   const listId = `${useId()}-podpowiedzi`;
   const [items, setItems] = useState<ProductSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [unavailable, setUnavailable] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const request = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +113,7 @@ export function ProductNameInput({
 
   function schedule(value: string) {
     cancelPending();
+    setNote(null);
     const phrase = value.trim();
     if (phrase.length < PRODUCT_SUGGESTIONS_MIN_QUERY) {
       setItems([]);
@@ -132,10 +151,13 @@ export function ProductNameInput({
     form.setValue(`lines.${index}.name`, p.name, opts);
     form.setValue(`lines.${index}.unit`, p.unit, opts);
     if (p.priceNet !== null) form.setValue(`lines.${index}.unitPriceNet`, p.priceNet, opts);
-    if (p.vatRate) form.setValue(`lines.${index}.vatRate`, p.vatRate, opts);
+    const keepExemptRate = vatExempt && p.vatRate !== null && TAXED_VAT_RATES.includes(p.vatRate);
+    if (p.vatRate && !keepExemptRate) form.setValue(`lines.${index}.vatRate`, p.vatRate, opts);
     setItems([]);
     close();
-    setStatus(`Wstawiono z katalogu: ${p.name}.`);
+    const exemptNote = keepExemptRate ? exemptRateText(p) : null;
+    setNote(exemptNote);
+    setStatus(exemptNote ? `Wstawiono z katalogu: ${p.name}. ${exemptNote}` : `Wstawiono z katalogu: ${p.name}.`);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -185,6 +207,8 @@ export function ProductNameInput({
         }}
         onBlur={(e) => {
           void field.onBlur(e);
+          // Zapytanie w locie nie otworzy już listy pod polem, którego klient nie edytuje.
+          cancelPending();
           close();
         }}
         onKeyDown={onKeyDown}
@@ -215,6 +239,7 @@ export function ProductNameInput({
         </ul>
       ) : null}
       {unavailable ? <p className="text-muted-foreground mt-1 text-xs">{UNAVAILABLE}</p> : null}
+      {note ? <p className="text-muted-foreground mt-1 text-xs">{note}</p> : null}
       <span role="status" className="sr-only">
         {status}
       </span>

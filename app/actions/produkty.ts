@@ -219,7 +219,8 @@ export async function suggestProductsAction(query: string): Promise<ProductSugge
   if (typeof query !== 'string') return { ok: true, items: [] };
   try {
     const { supabase, tenantId } = await requireOrgRole([...READER_ROLES]);
-    return { ok: true, items: await suggestProducts(supabase, tenantId, query) };
+    // Fraza ma najwyżej 100 znaków (`suggestProducts`); dłuższe wejście nie idzie dalej.
+    return { ok: true, items: await suggestProducts(supabase, tenantId, query.slice(0, 200)) };
   } catch (e) {
     if (!(e instanceof ActionAuthError)) {
       console.error('[produkty] podpowiedź katalogu:', e instanceof Error ? e.message : e);
