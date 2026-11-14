@@ -118,8 +118,8 @@ function zrodloKwoty(w: WynikMiesiaca, rodzaj: RodzajRozliczenia): { kwotaGr: nu
 
 const DZIEN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Dzień RRRR-MM-DD (północ UTC, jak w kalendarzu) jest roboczy; zła data to nie dzień roboczy. */
-function wDzienRoboczy(dzien: unknown): boolean {
+/** Dzień RRRR-MM-DD (północ UTC, jak w kalendarzu) jest roboczy; zła data to nie dzień roboczy. Też dla strażnika przypomnień. */
+export function wDzienRoboczy(dzien: unknown): boolean {
   const czesci = typeof dzien === 'string' ? DZIEN.exec(dzien) : null;
   if (!czesci) return false;
   const [rok, miesiac, dzienMiesiaca] = [Number(czesci[1]), Number(czesci[2]), Number(czesci[3])];
