@@ -12,10 +12,17 @@ import { MissingTaxOfficeError } from '@/lib/exports/tax-office';
 import { isKnownTaxOffice } from '@/lib/exports/tax-offices';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { documentAllowsVatDeduction } from '@/lib/expenses/vat-deduction-document';
+import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { parseVatUe } from '@/lib/invoices/vat-ue';
 
 import type { ExportExpense } from './data-fetcher';
-import { amountsOf, type JpkInvoice } from './jpk-fa-generator';
+import {
+  amountsOf,
+  isPlainReceiptInvoice,
+  JPK_DOCUMENT_REFUSAL_PREFIX,
+  JpkDocumentNotSupportedError,
+  type JpkInvoice,
+} from './jpk-fa-generator';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 const JPK_V7M_NAMESPACE = 'http://crd.gov.pl/wzor/2025/12/19/14090/';
@@ -82,6 +89,50 @@ export class JpkV7mReverseChargeNotSupportedError extends Error {
   }
 }
 
+/**
+ * Faktura do paragonu (FP) ze sprzedażą z miesiąca pliku (krok 1.2 planu
+ * kompletnej aplikacji). Sprzedaż z kasy rejestrującej wykazuje się w ewidencji
+ * zapisem zbiorczym z oznaczeniem RO, a FP osobno, z oznaczeniem FP i bez
+ * zwiększenia sprzedaży ani podatku należnego (art. 109 ust. 3d ustawy o VAT;
+ * MF, „Pytania i odpowiedzi JPK_VAT z deklaracją”, oznaczenia dokumentów).
+ * Raportów z kasy FaktWay nie wykazuje, więc plik z taką FP zaniżyłby podatek
+ * należny o sprzedaż z paragonu: odmowa z wyjściem, jak przy wpisach ręcznych
+ * przychodu (F11-A1, `lib/ksiegowosc/vat-dane.ts`).
+ */
+export class JpkV7mReceiptSaleInPeriodError extends JpkDocumentNotSupportedError {
+  constructor(invoiceNumber: string, ksefNumber: string | undefined, saleDate: string) {
+    super(invoiceNumber, ksefNumber, 'to faktura do paragonu ze sprzedażą z miesiąca pliku.');
+    this.message =
+      `${JPK_DOCUMENT_REFUSAL_PREFIX} faktura ${invoiceNumber}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''} jest fakturą do paragonu (FP) ` +
+      `z ${formatIsoDatePl(saleDate)}, czyli do sprzedaży z kasy rejestrującej w miesiącu, którego dotyczy plik. Taką sprzedaż ` +
+      'wykazuje się w JPK_V7M raportem z kasy (RO), a fakturę do paragonu osobno, z oznaczeniem FP i bez podatku należnego. ' +
+      'Raportów z kasy FaktWay nie wykazuje w JPK_V7M, więc plik nie powstał, żeby nie zaniżyć podatku należnego. ' +
+      'JPK_V7M za ten miesiąc trzeba przygotować poza FaktWay, np. z księgową.';
+    this.name = 'JpkV7mReceiptSaleInPeriodError';
+  }
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Czy faktura idzie do pliku jako wiersz FP (krok 1.2). Wiersz FP ma typ
+ * dokumentu FP i pełne kwoty faktury (MF: FP „w pełnych wartościach”), ale nie
+ * wchodzi do PodatekNalezny (opis pola w XSD: „z wyłączeniem faktur oznaczonych
+ * FP”) ani do deklaracji (art. 109 ust. 3d: FP „nie zwiększają wartości
+ * sprzedaży oraz podatku należnego”), bo sprzedaż weszła raportem z kasy (RO)
+ * za miesiąc paragonu. Plik jest za miesiąc wystawienia (art. 109 ust. 3d: FP
+ * ujmuje się w okresie wystawienia), więc paragon musi być z wcześniejszego
+ * miesiąca; paragon z miesiąca wystawienia albo nieznana data sprzedaży to
+ * odmowa (`JpkV7mReceiptSaleInPeriodError`).
+ */
+function receiptInvoiceRow(inv: JpkInvoice): boolean {
+  if (!isPlainReceiptInvoice(inv)) return false;
+  const saleDate = inv.saleDate?.trim() ?? '';
+  const sale = ISO_DAY.test(saleDate) ? saleDate : inv.issueDate;
+  if (sale.slice(0, 7) >= inv.issueDate.slice(0, 7)) throw new JpkV7mReceiptSaleInPeriodError(inv.invoiceNumber, inv.ksefNumber, sale);
+  return true;
+}
+
 /** Sumy netto/VAT wg stawki — w groszach, bez zaokrągleń pośrednich. */
 interface RateBucket {
   net23: number;
@@ -128,52 +179,74 @@ export function wholeZloty(n: number): number {
 }
 
 /**
- * Sumuje sprzedaż wg stawek VAT — kwoty z faktury tak, jak są w KSeF
- * (`amountsOf`, to samo co JPK_FA). Faktura rozliczeniowa (ROZ) wchodzi
- * po odjęciu zaliczek (art. 106f ust. 3): zaliczki są już w ewidencji
- * z własnych faktur, a do 01.10.2026 ROZ dokładała je drugi raz. VAT
- * pozycji jest ten z faktury, a nie przeliczany od nowa z netto.
+ * Sumuje sprzedaż wg stawek VAT do deklaracji: wiersze bez FP (art. 109
+ * ust. 3d, `receiptInvoiceRow`). Każda faktura, także FP, przechodzi przez te
+ * same odmowy co jej wiersz w ewidencji, więc rozliczenie w module i plik mówią
+ * to samo.
  */
 function aggregateSales(invoices: readonly JpkInvoice[]): RateBucket {
   assertOutgoingInvoicesInPln(invoices);
   const b = emptyBucket();
   for (const inv of invoices) {
-    for (const { rate, net, vat } of amountsOf(inv).rates) {
-      switch (rate) {
-        case '23':
-          b.net23 += net;
-          b.vat23 += vat;
-          break;
-        case '8':
-          b.net8 += net;
-          b.vat8 += vat;
-          break;
-        case '5':
-          b.net5 += net;
-          b.vat5 += vat;
-          break;
-        case '0':
-          b.net0 += net;
-          break;
-        case 'zw':
-          b.netZw += net;
-          break;
-        case 'np':
-          b.netNp += net;
-          break;
-        case 'np_ii':
-          b.netNp += net;
-          b.netNpII += net;
-          break;
-        case 'oo':
-          throw new JpkV7mReverseChargeNotSupportedError();
-        default:
-          // `amountsOf` przepuszcza tylko stawki z pól JPK_FA — tu nie dochodzi.
-          throw new Error(`JPK_V7M: stawka "${rate}" nie ma pola w ewidencji.`);
-      }
+    if (receiptInvoiceRow(inv)) {
+      // Wiersz FP: kwoty przechodzą te same odmowy co w ewidencji, ale bez sum deklaracji.
+      addRowAmounts(emptyBucket(), inv);
+      continue;
     }
+    // Ta sama kolejność dodawania co przed krokiem 1.2 (kwoty float, potem zaokrąglenie).
+    addRowAmounts(b, inv);
   }
   return b;
+}
+
+function rowAmounts(inv: JpkInvoice): RateBucket {
+  const b = emptyBucket();
+  addRowAmounts(b, inv);
+  return b;
+}
+
+/**
+ * Kwoty wiersza ewidencji wg stawek VAT — z faktury tak, jak są w KSeF
+ * (`amountsOf`, to samo co JPK_FA; FP z pełnymi kwotami). Faktura
+ * rozliczeniowa (ROZ) wchodzi po odjęciu zaliczek (art. 106f ust. 3): zaliczki
+ * są już w ewidencji z własnych faktur, a do 01.10.2026 ROZ dokładała je drugi
+ * raz. VAT pozycji jest ten z faktury, a nie przeliczany od nowa z netto.
+ */
+function addRowAmounts(b: RateBucket, inv: JpkInvoice): void {
+  for (const { rate, net, vat } of amountsOf(inv, { receiptInvoiceAsFp: true }).rates) {
+    switch (rate) {
+      case '23':
+        b.net23 += net;
+        b.vat23 += vat;
+        break;
+      case '8':
+        b.net8 += net;
+        b.vat8 += vat;
+        break;
+      case '5':
+        b.net5 += net;
+        b.vat5 += vat;
+        break;
+      case '0':
+        b.net0 += net;
+        break;
+      case 'zw':
+        b.netZw += net;
+        break;
+      case 'np':
+        b.netNp += net;
+        break;
+      case 'np_ii':
+        b.netNp += net;
+        b.netNpII += net;
+        break;
+      case 'oo':
+        throw new JpkV7mReverseChargeNotSupportedError();
+      default:
+        // `amountsOf` przepuszcza tylko stawki z pól JPK_FA — tu nie dochodzi.
+        throw new Error(`JPK_V7M: stawka "${rate}" nie ma pola w ewidencji.`);
+    }
+  }
 }
 
 /**
@@ -316,8 +389,11 @@ function counterpartyId(inv: JpkInvoice): { country?: string; number: string } {
  * (23/8/5/0/zw), sprzedaż poza krajem („np” i „np_ii”, K_11/P_11; „np_ii”
  * także w K_12/P_12 — usługi z art. 100 ust. 1 pkt 4) i nabycia pozostałe
  * (P_42/P_43). Odwrotne obciążenie („oo”) — odmowa
- * (`JpkV7mReverseChargeNotSupportedError`). Pola specjalne (WDT, eksport,
- * import usług, środki trwałe, ulgi) — do rozszerzenia.
+ * (`JpkV7mReverseChargeNotSupportedError`). Faktura do paragonu: wiersz
+ * z typem dokumentu FP poza PodatekNalezny i deklaracją (`receiptInvoiceRow`),
+ * a FP z paragonem z miesiąca pliku to odmowa (raportów z kasy, RO, FaktWay nie
+ * wykazuje). Pola specjalne (WDT, eksport, import usług, środki trwałe, ulgi,
+ * GTU, RO, WEW) — do rozszerzenia.
  */
 export function generateJpkV7m(data: JpkV7mInputData): string {
   const taxOffice = (data.issuer.taxOfficeCode ?? '').trim();
@@ -428,8 +504,12 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
     // Tylko gdy data sprzedaży różni się od daty wystawienia (opis pola MF).
     if (inv.saleDate && inv.saleDate !== inv.issueDate) s.ele('DataSprzedazy').txt(inv.saleDate).up();
     ksefMarker(s, inv.ksefNumber);
+    // Krok 1.2: oznaczenie dowodu sprzedaży FP (TDowoduSprzedazy) zaraz po
+    // NrKSeF/OFF/BFK/DI, przed GTU i polami K_ (kolejność z XSD).
+    const fp = receiptInvoiceRow(inv);
+    if (fp) s.ele('TypDokumentu').txt('FP').up();
 
-    const b = aggregateSales([inv]);
+    const b = rowAmounts(inv);
     if (b.netZw) s.ele('K_10').txt(money(b.netZw)).up();
     if (b.netNp) s.ele('K_11').txt(money(b.netNp)).up();
     if (b.netNpII) s.ele('K_12').txt(money(b.netNpII)).up();
@@ -446,7 +526,8 @@ export function generateJpkV7m(data: JpkV7mInputData): string {
       s.ele('K_19').txt(money(b.net23)).up();
       s.ele('K_20').txt(money(b.vat23)).up();
     }
-    podatekNalezny += b.vat5 + b.vat8 + b.vat23;
+    // PodatekNalezny: „z wyłączeniem faktur oznaczonych FP” (opis pola w XSD).
+    if (!fp) podatekNalezny += b.vat5 + b.vat8 + b.vat23;
   });
 
   ewid

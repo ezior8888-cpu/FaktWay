@@ -12,8 +12,9 @@
  * Przychód z faktur jak ewidencja ryczałtu (K3, `ewidencja.ts`): dzień
  * sprzedaży nie później niż wystawienie, korekta różnicą w dniu wystawienia,
  * rozliczenie pomniejszone o zaliczki, faktura do paragonu nie jest przychodem
- * (do reguły pokrycia raportem kasy daje brak, krok 1.2), waluta po kursie
- * NBP. Koszty z listy kosztów uznanych za koszt, w kwocie jak KPiR w aplikacji (`kpirCostAmount`: netto i VAT bez odliczenia),
+ * (poza księgą, gdy raport kasy z kolumny 7 z miesiąca paragonu ją obejmuje,
+ * inaczej brak: `pokrycieFakturDoParagonu`, krok 1.2), waluta po kursie NBP.
+ * Koszty z listy kosztów uznanych za koszt, w kwocie jak KPiR w aplikacji (`kpirCostAmount`: netto i VAT bez odliczenia),
  * w kolumnie z kategorii kosztu. Koszt B+R (w aplikacji `col_15`) idzie do
  * K_13 i dodatkowo do K_16 (kolumna 16 to zapis kosztów B+R już ujętych
  * w kosztach). Do księgi należą dni ze skalą albo liniowym; dzień
@@ -35,6 +36,7 @@ import {
   dzienPrzychodu,
   kluczKursu,
   kwotaTekst,
+  pokrycieFakturDoParagonu,
   przeliczNaPln,
   type BrakEwidencji,
   type FakturaEwidencji,
@@ -87,6 +89,12 @@ export interface WpisKpir {
   kolumna: KolumnaKpir;
   kwotaGr: number;
   opis: string | null;
+  /**
+   * Rodzaj dowodu z `ledger_manual_entries` (`czytajWpisyKpir`). Tylko wpis
+   * „raport_kasy” w kolumnie 7 obejmuje fakturę do paragonu (krok 1.2); wpis
+   * bez rodzaju nie jest raportem kasy.
+   */
+  rodzaj?: 'raport_kasy' | 'inny';
 }
 
 /** Fundusz Pracy i FS z zapłaty składek społecznych (K7.3, D21): koszt w dniu zapłaty. */
@@ -238,6 +246,12 @@ export function zbudujKpir(wejscie: WejscieKpir): Kpir {
   const braki: BrakEwidencji[] = [];
   const pominiete: PominietaFaktura[] = [];
   const wiersze: Omit<WierszKpir, 'lp'>[] = [];
+  // Krok 1.2: jak ewidencja, FP poza przychodem, gdy raport kasy (kolumna 7) z miesiąca paragonu ją obejmuje.
+  const pokrycieFp = pokrycieFakturDoParagonu(
+    wejscie.faktury,
+    wejscie.wpisy.filter((w) => w.rodzaj === 'raport_kasy' && w.kolumna === 'k7').map((w) => ({ dzien: w.data, kwotaGr: w.kwotaGr })),
+    'księgi',
+  );
 
   for (const f of wejscie.faktury) {
     const dzien = dzienPrzychodu(f);
@@ -253,8 +267,9 @@ export function zbudujKpir(wejscie: WejscieKpir): Kpir {
       continue;
     }
     if (f.fp) {
-      // Krok 1.2: jak ewidencja, FP daje brak do reguły pokrycia raportem kasy (następny PR).
-      braki.push({ dzien, dokument: f.numer, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'księgi') });
+      const p = pokrycieFp.get(f.id) ?? { pokryta: false, komunikat: brakFakturyDoParagonu(f.numer, dzien, 'księgi', { powod: 'brak_raportu' }) };
+      if (p.pokryta) pominiete.push({ numer: f.numer, dzien, powod: p.powod });
+      else braki.push({ dzien, dokument: f.numer, komunikat: p.komunikat });
       continue;
     }
     let kwotaGr = f.rodzaj === 'rozliczenie' ? f.nettoGr - f.rozliczoneZaliczkiGr : f.nettoGr;

@@ -244,7 +244,7 @@ planu.
 | L6 | Noty korygujące uchylone; błąd poprawia tylko faktura korygująca | od 1.02.2026 | korekty są, na produkcji wstrzymane | 1.1 |
 | L7 | Obowiązkowe elementy faktury i adnotacje (art. 106e): m.in. MPP przy towarach z załącznika 15 powyżej 15 000 zł, metoda kasowa, samofakturowanie, odwrotne obciążenie, procedura marży, zwolnienie z podstawą | stale | częściowo (sekcja 2.1) | 2.7 |
 | L8 | Faktura w walucie: kurs NBP z ostatniego dnia roboczego przed powstaniem obowiązku podatkowego, kwota VAT w złotych (art. 31a, art. 106e ust. 11) | stale | brak | 2.1 |
-| L9 | Sprzedaż za granicę: WDT i eksport 0 % (dowody wywozu i dostawy), usługi dla firm z UE poza Polską, VAT-UE co miesiąc do 25., także przy rozliczeniu kwartalnym | stale | brak WDT i eksportu; usługi „np” są | 2.3, 4.5, 4.6 |
+| L9 | Sprzedaż za granicę: WDT i eksport 0 % (dowody wywozu i dostawy), usługi dla firm z UE poza Polską, VAT-UE co miesiąc do 25., także przy rozliczeniu kwartalnym. Od 18.11.2026 eksport według nowego art. 41 ust. 6 do 9a (Dz.U. 2026 poz. 1446, RP-EX-01): dowody wywozu przed terminem deklaracji za okres dostawy, bez nich dostawa w następnym okresie, bez dowodów także wtedy stawka krajowa, późniejsze dowody to korekta w okresie ich otrzymania, zaliczka z 0 % przy wywozie w 6 miesięcy | stale | brak WDT i eksportu; usługi „np” są | 2.3, 4.5, 4.6 |
 | L10 | Zakupy z zagranicy: czynny podatnik sam nalicza VAT w JPK (import usług, WNT); zwolniony z VAT składa VAT-8 (zarejestrowany do VAT-UE) albo VAT-9M | stale | JPK odrzuca odwrotne obciążenie; zakupy tylko K_42, K_43 | 4.5, 4.6 |
 | L11 | VAT kwartalny (JPK_V7K): mały podatnik do 2 mln euro sprzedaży z VAT, nie w pierwszych 12 miesiącach, zawiadomienie do 25. drugiego miesiąca kwartału; ewidencja co miesiąc, deklaracja za kwartał; metoda kasowa oznacza kwartał | stale | tylko JPK_V7M | 4.1 |
 | L12 | Zaliczki PIT kwartalne (mali podatnicy do 2 mln euro, czyli 8 517 000 zł w 2026 r., i rozpoczynający działalność) i ryczałt kwartalny (przychód do 200 000 euro, czyli 851 720 zł); termin 20. po kwartale | stale | tylko miesięcznie | 4.1 |
@@ -471,6 +471,21 @@ działają na KSeF produkcyjnym, a dwa nowe obowiązki z 2027 r. są obsłużone
   wszystkich generatorach; VIES w formularzu (sprawdzenie jest w walidacji
   kontrahentów); pola dowodów przy fakturze; dane trafiają do VAT-UE (4.6)
   i JPK (4.5).
+- **Eksport od 18.11.2026 (Dz.U. 2026 poz. 1446, RP-EX-01):** art. 41 ust. 6
+  do 9a w nowym brzmieniu. Stawka 0 % tylko z dowodami wywozu (dokumenty celne,
+  a także dokument przewoźnika albo spedytora, potwierdzenie operatora
+  pocztowego, dokument celny państwa spoza UE z oświadczeniem nabywcy, ust. 6c)
+  przed terminem deklaracji za okres dostawy (ust. 6). Bez dowodów dostawy nie
+  wykazuje się w tym okresie, tylko w następnym ze stawką 0 %, gdy dowody są
+  przed terminem deklaracji za ten okres (ust. 7); bez dowodów także wtedy
+  stawka krajowa (ust. 7a); dowody otrzymane później to korekta podatku
+  należnego w okresie ich otrzymania (ust. 9). Zaliczka przed eksportem: 0 %,
+  gdy wywóz nastąpi w 6 miesięcy od końca miesiąca zapłaty i w tym terminie są
+  dowody (ust. 9a). Przejściowo (art. 3 ustawy): nowe zasady dla eksportu,
+  dla którego termin deklaracji nie minął przed 18.11.2026; ust. 9a także dla
+  zapłaty sprzed 18.11.2026 przy wywozie od tego dnia. Krok potrzebuje więc
+  pól dowodu i terminu przy fakturze, przypomnienia przed terminem deklaracji
+  i ścieżki przesunięcia, stawki krajowej i korekty w JPK (4.5).
 - **Praca:** M; zależy od 2.1.
 - **Ryzyko:** R1 (stawki i adnotacje).
 - **Sprawdzamy na:** VIES (API UE); KSeF TEST (P_13_6_2, P_13_6_3); broszura JPK_V7(3) (K_21, K_22) i e-mikrofirma; księgowa (G21). **Brakuje:** porównania z e-mikrofirmą i podpisu G21.
@@ -1523,5 +1538,17 @@ stopa wypadkowa (kwiecień), nowe wzory formularzy i schematy JPK.
 | 11.11.2026 | 3.2, część 3 | #616 | gotowe do scalenia po #614 (stos) | przelewy do dostawców z wyciągu jako zapłaty kosztów z listy „Do zapłaty”; propozycje tylko w przeglądarce (RODO); migracja 00196 przed wdrożeniem; przy scalaniu A i B osobno przestawić bazę na main |
 | 11.11.2026 | 8.1, część 3 | #617 | scalone do A (#587) | wpis w dzwonku przy wpłacie do faktury („Otrzymana płatność”, „Wpłata częściowa”); migracja 00197 przed wdrożeniem |
 | 11.11.2026 | 2.5 | #642 | gotowe do scalenia | serie numeracji faktur: własny wzór ({RRRR}, {MM}, {M}, {N}), seria domyślna każdego rodzaju, podpowiedź numeru dla zwykłej, zaliczkowej, końcowej i korekty; numer z licznika nadaje baza pod blokadą serii (dwa wystawienia naraz: dwa kolejne numery), numer zajęty w KSeF nie wraca z licznika; firma bez serii numeruje jak dotąd; migracja 00199 przed wdrożeniem; decyzje według rekomendacji do potwierdzenia przy scalaniu (opis PR); test RLS z wyścigiem w CI |
+| 11.11.2026 | 8.4, część 2 | #618 | scalone w #620 (6a65c1ce) | etykiety korekty, `main` i `h1` w logowaniu, semantyka panelu pomocy |
+| 11.11.2026 | 2.8, wydruk zbiorczy | #619 | scalone w #629 (39b8e713) | audyt pobrania paczki PDF faktur |
+| 11.11.2026 | 2.4 | #621 | scalone w #639 (f1ec9aba); 00198 wgrana na db-1 11.11 (#644) | proforma i oferta: numeracja PRO i OF, PDF, mail, zamiana w fakturę |
+| 11.11.2026 | 8.4, część 2b | #632 | scalone w #639 (f1ec9aba) | A-13, A-14, A-15, A-16, A-19 |
+| 11.11.2026 | 2.5 | #642 | zamknięty, zastąpiony przez #643 | trzy czerwone kontrole (identyfikator pola serii, CodeQL, gitleaks); #643 to jeden commit od main |
+| 12.11.2026 | 2.5 | #643 | gotowe do scalenia po etykiecie `zgoda:wiedza-prawna` (nadaje Bartosz) | serie numeracji z licznikiem pod blokadą serii, migracja 00199 **przed** wdrożeniem; mapa ryzyka i karta filtra uzupełnione po #504; drugi czytelnik bez blokad, uwagi: pierwszy numer serii tylko w bieżącym okresie, luka po usunięciu szkicu, który nie jest ostatni (pytanie do księgowej) |
+| 12.11.2026 | 3.4, zmiana prawa | #651 | gotowe do scalenia (CI 19 z 19) | art. 22p PIT od 1.01.2027 (Dz.U. 2026 poz. 1371): zdanie o koszcie w PIT przy rachunku spoza wykazu tylko dla faktur wystawionych przed 2027 r. (P_1, a bez niego data kosztu); VAT i ZAW-NR bez zmian; pytanie 18 do prawnika; przed scaleniem porównać cytaty z PDF ustawy; bez migracji |
+| 13.11.2026 | 2.5 | #643 | scalone w #713 (6d0ffd4f) i wdrożone 13.11; 00199 wgrana na db-1 13.11 | po #504 dopisane do mapy ryzyka i karta filtra z przeglądem drugiego czytelnika; etykieta `zgoda:wiedza-prawna` na zbiorczym #713 |
+| 13.11.2026 | 3.4, zmiana prawa | #651 | scalone i wdrożone 13.11 (koordynator) | cytaty z art. 1 pkt 2, art. 3 i art. 6 Dz.U. 2026 poz. 1371 potwierdzone w oficjalnym PDF (RP-BL-01) |
+| 13.11.2026 | 8.4, część 3 | #712 | gotowe do scalenia (CI 19 z 19) | A-01, A-05, A-06: błędy pól powiązane z polami, stały blok błędów z odnośnikami i fokusem, wynik NIP ogłaszany; wygląd bez zmian poza nowym blokiem (wzorzec znaczników 10 z 10 jak w main); po #713 pole serii w bloku błędów; dalej: A-01 dla zaliczki i końcowej, `closeButton` toastu do decyzji (D1) |
+| 13.11.2026 | 2.6, część 1 | #714 | gotowe do scalenia (CI 19 z 19) | ekran katalogu `/produkty` na tabeli `products` (lista, szukanie, dodaj, edytuj, archiwizuj, usuń nieużyty), kody GTU ze schematu FA(3), audyt, menu obok proform; bez migracji; dalej: podpowiedź w formularzu, GTU i PKWiU w pozycjach, cena brutto, ceny dla kontrahenta |
+| 13.11.2026 | 1.2, część 2 | #715 | gotowe do scalenia po etykiecie `zgoda:wiedza-prawna` | faktura do paragonu w JPK_V7M (typ dokumentu FP, pełne kwoty, poza podatkiem należnym i deklaracją; paragon z miesiąca pliku: odmowa), w ewidencji i KPiR poza przychodem przy pokryciu raportem kasy; RP-FP-01 i RP-FP-02 w `filtr/przepisy/ksiegowosc.json`; pytania G30 nr 3 i 4 do księgowej |
 
-**Następny krok:** decyzja Bartosza o scaleniu: #614 (A+B jednym ruchem) albo #587 (A, 34 PR) i potem #588 (B, 10 PR, D11); najpierw #482 (niestabilny test biometrii) i decyzja o #612 (pułap sterty buildu 5120 MB); #616 stoi na #614. Potem migracje przed wdrożeniem w kolejności numerów 00174-00185 i 00187-00197 (00186 należy do planu skalowania) i wdrożenie. Krok 2.5 (#642) czeka na decyzję o scaleniu, potem migracja 00199 przed wdrożeniem. Dalej w planie: 8.4 część 2 (poprawki dostępności po scaleniu), kroki formularza faktury (2.6, 2.8) po scaleniu #509, 1.2 część 2 (FP w JPK po S-01 filtra), 2.9 część 2 (nota odsetkowa, gdy stawki odsetek będą zweryfikowane), 6.2 część 5 (uprawnienia KSeF dla osób), 9.1 kadry na koniec (P3).
+**Następny krok:** scalenie #712, #714 i #715 (zbiorczy z PR filtra po poleceniu Bartosza; #715 z etykietą `zgoda:wiedza-prawna`). W toku: 2.2 część 1 (logo firmy na PDF faktury i proformy, migracja 00201 przed wdrożeniem). Dalej: 2.6 część 2 (podpowiedź produktów w formularzu, GTU i PKWiU w pozycjach) po scaleniu #712 i #714; 2.8 częściami (autozapis, ustawienia domyślne, numer zamówienia, szablon maila); 1.6 część 2 (komunikat w aplikacji, faktury spoza KSeF w historii) po #715; 2.1 waluty, potem 2.3 z nowym brzmieniem art. 41 ust. 6 do 9a (RP-EX-01); 2.9 część 2, 6.2 część 5, 9.1 kadry na koniec (P3).
