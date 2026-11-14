@@ -37,12 +37,12 @@ die() {
 zaladuj_infra_env() {
   local main_root="" common_dir candidate env_file="" v
   if command -v git >/dev/null 2>&1; then
-    common_dir=$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null || true)
+    # Ścieżka bezwzględna, bo w worktree Git Bash na Windowsie podaje `C:/…`,
+    # której nie da się dokleić do $ROOT. Gdy `cd` się nie uda, main_root
+    # zostaje pusty, a funkcja sprawdza pozostałe miejsca.
+    common_dir=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
     if [ -n "$common_dir" ]; then
-      case "$common_dir" in
-        /*) main_root=$(cd "$common_dir/.." && pwd) ;;
-        *)  main_root=$(cd "$ROOT/$common_dir/.." && pwd) ;;
-      esac
+      main_root=$(cd "$common_dir/.." 2>/dev/null && pwd) || main_root=""
     fi
   fi
   for candidate in "${FAKTFLOW_INFRA_ENV:-}" "$ROOT/.agents/infra.env" "${main_root:+$main_root/.agents/infra.env}"; do
