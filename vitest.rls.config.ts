@@ -187,6 +187,9 @@ export default defineConfig({
       // „Po terminie” tymi samymi funkcjami co strona, klientem z tokenem i x-active-org; księgowa
       // i konto spoza firmy dostają odmowę w bazie.
       'tests/rls-mobile-naleznosci.test.ts',
+      // Ustalenie 738u1-u2 (bez migracji): ponowienie joba OCR po błędzie po odczycie (kurs NBP,
+      // zapis kosztu) bierze zapisany odczyt z ocr_jobs zamiast płacić za drugi; prawdziwy runner.
+      'tests/rls-ocr-ponowienie-bez-oplaty.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

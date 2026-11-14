@@ -36,6 +36,7 @@ import type { Database, Json } from '@/types/database';
 import { ocrProcessPhotoRequested } from '../events';
 
 type OcrJobRow = Database['public']['Tables']['ocr_jobs']['Row'];
+type OcrJobUpdate = Database['public']['Tables']['ocr_jobs']['Update'];
 
 function extractedInvoiceToJson(data: ExtractedInvoice, fx: RateStamp | null = null): Json {
   return JSON.parse(JSON.stringify(fx ? { ...data, fx } : data)) as Json;
@@ -401,82 +402,136 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       if (error) throw new Error(error.message);
     });
 
-    const { imageBase64, mimeType } = await step.run('fetch-photo', async () => {
-      const { buffer, mimeType: mt } = await downloadExpensePhoto(job.source_file_path, tenantId);
-      return { imageBase64: buffer.toString('base64'), mimeType: mt };
-    });
-
-    // AUD-107: budżet AI firmy PRZED wywołaniem modelu — po fakcie limit
-    // byłby tylko statystyką.
-    const aiBudget = await step.run('ai-budget', () => checkTenantAiBudget(tenantId, 'ocr'));
-    const ocrResult = aiBudget.allowed
-      ? await step.run('claude-vision-ocr', async () => {
-          return extractInvoiceFromImage(imageBase64, mimeType);
-        })
-      : { success: false as const, error: aiBudget.message, inputTokens: 0, outputTokens: 0, processingTimeMs: 0 };
-    if (aiBudget.allowed) {
-      await step.run('ai-usage', () =>
-        recordTenantAiUsage(tenantId, { inputTokens: ocrResult.inputTokens, outputTokens: ocrResult.outputTokens }),
-      );
-    }
-
-    if (!ocrResult.success || !ocrResult.data) {
-      // Równoległy przebieg tego samego zadania (wyścig pg-boss) mógł zapisać
-      // wydatek po wczesnym sprawdzeniu. „Nie rozpoznano” z kartą „wgraj je
-      // jeszcze raz” skończyłoby się drugim kosztem w KPiR (B4).
-      const concurrent = await step.run('find-saved-expense-after-ocr', () =>
-        findOcrJobExpense(supabase, tenantId, ocrJobId),
-      );
-      if (concurrent) return finishSaved(concurrent);
-
-      await step.run('mark-failed', async () => {
-        const { error } = await supabase
-          .from('ocr_jobs')
-          .update({
-            status: 'failed',
-            error_message: ocrResult.error ?? 'OCR failed',
-            ai_input_tokens: ocrResult.inputTokens,
-            ai_output_tokens: ocrResult.outputTokens,
-            processing_time_ms: ocrResult.processingTimeMs,
-            completed_at: new Date().toISOString(),
-          })
-          .eq('id', ocrJobId)
-          .eq('tenant_id', tenantId);
-
-        if (error) throw new Error(error.message);
+    /**
+     * Odczyt dokumentu modelem: zdjęcie, budżet AI firmy, płatne wywołanie,
+     * zużycie. `stop` = zadanie skończone tutaj (nie rozpoznano albo koszt
+     * zapisał równoległy przebieg). Udany odczyt trafia do `ocr_jobs` od razu
+     * (`save-ocr-read`), zanim przyjdą kroki, które mogą paść (kurs NBP,
+     * kategoryzacja, zapis kosztu).
+     */
+    const readWithModel = async (): Promise<
+      | { kind: 'stop'; result: Awaited<ReturnType<typeof finish>> | { success: false } }
+      | { kind: 'read'; data: ExtractedInvoice; trace: OcrJobUpdate }
+    > => {
+      const { imageBase64, mimeType } = await step.run('fetch-photo', async () => {
+        const { buffer, mimeType: mt } = await downloadExpensePhoto(job.source_file_path, tenantId);
+        return { imageBase64: buffer.toString('base64'), mimeType: mt };
       });
 
-      await requireTenantMember(job.created_by, tenantId);
-      // „Nieudane” już zapisane, karta niżej zostaje — push jest dodatkiem.
-      // Błąd (np. PushReadError: awaria bazy) nie może ponowić joba: ponowienie
-      // od zera zapłaciłoby drugi raz za OCR i mogło nie dojść do karty.
-      try {
-        await sendPushToUser(job.created_by, 'invoice_rejected', {
-          title: '❌ Nie udało się rozpoznać paragonu',
-          body:
-            ocrResult.error?.slice(0, 80) ??
-            'Spróbuj ponownie z lepszym zdjęciem',
-          url: '/expenses',
-          tag: `ocr-${ocrJobId}`,
-        });
-      } catch (e) {
-        logger.warn('OCR: push „nie rozpoznano” nieudany — karta i status zadania zostają', {
-          ocrJobId,
-          tenantId,
-          error: e instanceof Error ? e.message : String(e),
-        });
-        Sentry.captureException(e, { tags: { job: 'process-ocr', step: 'push-failed' }, extra: { ocrJobId, tenantId } });
+      // AUD-107: budżet AI firmy PRZED wywołaniem modelu — po fakcie limit
+      // byłby tylko statystyką.
+      const aiBudget = await step.run('ai-budget', () => checkTenantAiBudget(tenantId, 'ocr'));
+      const ocrResult = aiBudget.allowed
+        ? await step.run('claude-vision-ocr', async () => {
+            return extractInvoiceFromImage(imageBase64, mimeType);
+          })
+        : { success: false as const, error: aiBudget.message, inputTokens: 0, outputTokens: 0, processingTimeMs: 0 };
+      if (aiBudget.allowed) {
+        await step.run('ai-usage', () =>
+          recordTenantAiUsage(tenantId, { inputTokens: ocrResult.inputTokens, outputTokens: ocrResult.outputTokens }),
+        );
       }
 
-      // Karta agenta zamiast samego powiadomienia: powiadomienie znika,
-      // a klient musi wiedzieć, że zdjęcie ZOSTAŁO w archiwum. Bez tego
-      // wyrzuca paragon i po miesiącu nie ma czego odtwarzać.
-      await step.run('flo-failed-card', () => createFailedCardOnce(supabase, tenantId, ocrJobId));
+      if (!ocrResult.success || !ocrResult.data) {
+        // Równoległy przebieg tego samego zadania (wyścig pg-boss) mógł zapisać
+        // wydatek po wczesnym sprawdzeniu. „Nie rozpoznano” z kartą „wgraj je
+        // jeszcze raz” skończyłoby się drugim kosztem w KPiR (B4).
+        const concurrent = await step.run('find-saved-expense-after-ocr', () =>
+          findOcrJobExpense(supabase, tenantId, ocrJobId),
+        );
+        if (concurrent) return { kind: 'stop' as const, result: await finishSaved(concurrent) };
 
-      return { success: false as const };
-    }
+        await step.run('mark-failed', async () => {
+          const { error } = await supabase
+            .from('ocr_jobs')
+            .update({
+              status: 'failed',
+              error_message: ocrResult.error ?? 'OCR failed',
+              ai_input_tokens: ocrResult.inputTokens,
+              ai_output_tokens: ocrResult.outputTokens,
+              processing_time_ms: ocrResult.processingTimeMs,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', ocrJobId)
+            .eq('tenant_id', tenantId);
 
-    const extractedData = extractedInvoiceSchema.parse(ocrResult.data);
+          if (error) throw new Error(error.message);
+        });
+
+        await requireTenantMember(job.created_by, tenantId);
+        // „Nieudane” już zapisane, karta niżej zostaje — push jest dodatkiem.
+        // Błąd (np. PushReadError: awaria bazy) nie może ponowić joba: ponowienie
+        // od zera zapłaciłoby drugi raz za OCR i mogło nie dojść do karty.
+        try {
+          await sendPushToUser(job.created_by, 'invoice_rejected', {
+            title: '❌ Nie udało się rozpoznać paragonu',
+            body:
+              ocrResult.error?.slice(0, 80) ??
+              'Spróbuj ponownie z lepszym zdjęciem',
+            url: '/expenses',
+            tag: `ocr-${ocrJobId}`,
+          });
+        } catch (e) {
+          logger.warn('OCR: push „nie rozpoznano” nieudany — karta i status zadania zostają', {
+            ocrJobId,
+            tenantId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          Sentry.captureException(e, { tags: { job: 'process-ocr', step: 'push-failed' }, extra: { ocrJobId, tenantId } });
+        }
+
+        // Karta agenta zamiast samego powiadomienia: powiadomienie znika,
+        // a klient musi wiedzieć, że zdjęcie ZOSTAŁO w archiwum. Bez tego
+        // wyrzuca paragon i po miesiącu nie ma czego odtwarzać.
+        await step.run('flo-failed-card', () => createFailedCardOnce(supabase, tenantId, ocrJobId));
+
+        return { kind: 'stop' as const, result: { success: false as const } };
+      }
+
+      const data = extractedInvoiceSchema.parse(ocrResult.data);
+      const trace: OcrJobUpdate = {
+        extracted_data: extractedInvoiceToJson(data),
+        ai_model_used: ocrResult.modelUsed,
+        ai_input_tokens: ocrResult.inputTokens,
+        ai_output_tokens: ocrResult.outputTokens,
+        processing_time_ms: ocrResult.processingTimeMs,
+      };
+      // Bez tego zapisu ponowienie po błędzie w dalszym kroku płaciło za odczyt
+      // od nowa (do 3 razy za zdjęcie, 738u1-u2). Zapis jest dodatkiem: jego
+      // błąd nie może ponowić joba, bo ponowienie zapłaciłoby właśnie teraz.
+      await step.run('save-ocr-read', async () => {
+        try {
+          const { error } = await supabase
+            .from('ocr_jobs')
+            .update(trace)
+            .eq('id', ocrJobId)
+            .eq('tenant_id', tenantId);
+          if (error) throw new Error(error.message);
+        } catch (e) {
+          logger.warn('OCR: zapis odczytu przed kosztem nieudany — ponowienie zapłaci za odczyt jeszcze raz', {
+            ocrJobId,
+            tenantId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          Sentry.captureException(e, { tags: { job: 'process-ocr', step: 'save-ocr-read' }, extra: { ocrJobId, tenantId } });
+        }
+      });
+      return { kind: 'read', data, trace };
+    };
+
+    // Ponowienie po udanym odczycie (pg-boss powtarza cały job): odczyt tego
+    // zadania jest już w `ocr_jobs.extracted_data`, więc bez zdjęcia, budżetu AI
+    // i drugiego płatnego wywołania modelu (738u1-u2). Ślad odczytu (tokeny,
+    // model) zostaje z przebiegu, który zapłacił. Zapis, którego obecny schemat
+    // nie przyjmuje (np. sprzed wdrożenia), znaczy nowy odczyt.
+    const savedRead = extractedInvoiceSchema.safeParse(job.extracted_data);
+    const read = savedRead.success
+      ? { kind: 'read' as const, data: savedRead.data, trace: {} satisfies OcrJobUpdate }
+      : await readWithModel();
+    if (read.kind === 'stop') return read.result;
+    if (savedRead.success) logger.info('OCR: ponowienie z zapisanego odczytu, bez wywołania modelu', { ocrJobId, tenantId });
+
+    const extractedData = read.data;
 
     // Dokument w walucie obcej → kurs średni NBP z ostatniego dnia roboczego
     // PRZED datą dokumentu (art. 11a ust. 2 PIT). Błąd sieci rzuca (ponowienie);
@@ -600,13 +655,8 @@ export async function runProcessOcr(data: Parameters<typeof ocrProcessPhotoReque
       },
       {
         kind: 'fresh',
-        trace: {
-          extracted_data: extractedInvoiceToJson(extractedData),
-          ai_model_used: ocrResult.modelUsed,
-          ai_input_tokens: ocrResult.inputTokens,
-          ai_output_tokens: ocrResult.outputTokens,
-          processing_time_ms: ocrResult.processingTimeMs,
-        },
+        // Ten sam ślad co w `save-ocr-read` (albo pusty przy zapisanym odczycie).
+        trace: read.trace,
       },
     );
 }
