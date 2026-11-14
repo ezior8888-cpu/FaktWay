@@ -108,7 +108,7 @@ export function rozdzielProporcjonalnie(kwota: number, wagi: ReadonlyMap<number,
 export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): WynikRyczaltu {
   const odliczenieZdrowotnej = liczby.odliczenieZdrowotnej?.wartosc ?? null;
   if (odliczenieZdrowotnej === null) {
-    return { ok: false, brak: 'Brak w parametrach części składki zdrowotnej, którą odlicza się od przychodu.' };
+    return { ok: false, brak: 'Brak w parametrach części składki zdrowotnej, którą odlicza się od przychodu, więc ryczałtu nie liczymy.' };
   }
 
   const lacznie = new Map<number, number>();
@@ -121,7 +121,7 @@ export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): Wyn
     if (gr === 0) continue;
     const klucz = KLUCZE_STAWEK[pb];
     if (!klucz || liczby[klucz]?.wartosc !== pb) {
-      return { ok: false, brak: `Stawki ${etykietaStawki(pb)} nie ma w parametrach ryczałtu na ten rok.` };
+      return { ok: false, brak: `Stawki ${etykietaStawki(pb)} nie ma w parametrach ryczałtu na ten rok, więc ryczałtu nie liczymy.` };
     }
     if (gr < 0) ujemneNaKolejneGr.set(pb, gr);
     else przychody.set(pb, gr);

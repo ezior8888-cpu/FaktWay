@@ -101,14 +101,14 @@ export function skladkiSpoleczne(miesiac: string, wersja: WersjaProfilu, liczby:
     if (polozenie === 'przed') {
       return {
         ok: false,
-        brak: `Etap „${etap}” zaczyna się ${formatIsoDatePl(wersja.zusOd)}, a rozliczany miesiąc to ${nazwaMiesiaca}. ${USTAWIENIA}`,
+        brak: `Etap „${etap}” zaczyna się ${formatIsoDatePl(wersja.zusOd)}, a rozliczany miesiąc to ${nazwaMiesiaca}, więc składek za ten miesiąc nie liczymy. ${USTAWIENIA}`,
       };
     }
     if (polozenie === 'po') {
       const ostatniDzien = new Date(Date.parse(`${koniec}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
       return {
         ok: false,
-        brak: `Etap „${etap}” trwał do ${formatIsoDatePl(ostatniDzien)}, a rozliczany miesiąc to ${nazwaMiesiaca}. ${USTAWIENIA}`,
+        brak: `Etap „${etap}” trwał do ${formatIsoDatePl(ostatniDzien)}, a rozliczany miesiąc to ${nazwaMiesiaca}, więc składek za ten miesiąc nie liczymy. ${USTAWIENIA}`,
       };
     }
     // Ulga zaczęta w trakcie miesiąca to wciąż zero: przed startem nie było
@@ -119,7 +119,7 @@ export function skladkiSpoleczne(miesiac: string, wersja: WersjaProfilu, liczby:
       return { ok: false, brak: `Etap „${etap}” zaczyna się albo kończy w trakcie miesiąca (${nazwaMiesiaca}). ${PROPORCJA}` };
     }
   } else if (wersja.zusEtap !== 'pelny') {
-    return { ok: false, brak: `Etap „${etap}” potrzebuje daty początku. ${USTAWIENIA}` };
+    return { ok: false, brak: `Etap „${etap}” potrzebuje daty początku, więc składek za ${nazwaMiesiaca} nie liczymy. ${USTAWIENIA}` };
   }
 
   if (wersja.zusEtap === 'ulga_na_start') return { ok: true, skladki: ZERO };
