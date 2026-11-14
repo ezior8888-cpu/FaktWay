@@ -124,3 +124,10 @@ export function kiedyPobrano(iso: string, teraz = new Date()): string {
   if (DZIEN_WARSZAWA.format(d) === DZIEN_WARSZAWA.format(teraz)) return `dziś o ${GODZINA.format(d)}`;
   return DZIEN_I_GODZINA.format(d).replace(/\.(?=,)/, '');
 }
+
+/** Numer rachunku do czytania: 26 cyfr NRB jak „61 1090 1014 …”; inny zapis bez zmian. */
+export function rachunek(numer: string): string {
+  const cyfry = numer.replace(/\s+/g, '');
+  if (!/^\d{26}$/.test(cyfry)) return numer;
+  return `${cyfry.slice(0, 2)} ${cyfry.slice(2).replace(/(\d{4})(?=\d)/g, '$1 ')}`;
+}

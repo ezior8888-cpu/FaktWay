@@ -67,7 +67,8 @@ describe('kody błędów kontraktu', () => {
       // `POST /logowanie` (M6b; ekran logowania ma własne teksty, `lib/logowanie/przez-api.ts`) i treść
       // spoza kontraktu w `POST /faktury` (M8): błąd programu, nie klienta.
       invalid_request: 'serwer',
-      invalid_credentials: 'serwer',
+      // Od M10b też złe hasło przy potwierdzeniu usunięcia konta: zdanie serwera („Hasło jest nieprawidłowe…”).
+      invalid_credentials: 'odmowa',
       login_unavailable: 'ponow',
       // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
       invalid_code: 'serwer',
@@ -93,6 +94,11 @@ describe('kody błędów kontraktu', () => {
     // Bez zdania od serwera: tekst ogólny, bez pola.
     expect(bladApi(409, { error: { code: 'not_draft', message: ' ' } })).toMatchObject({ rodzaj: 'odmowa', komunikat: KOMUNIKATY.odmowa });
     expect(bladApi(409, { error: { code: 'not_draft', message: 'x', field: 'buyerName' } }).pole).toBeUndefined();
+  });
+
+  it('złe hasło przy usunięciu konta (M10b): zdanie serwera, nie „coś poszło nie tak”', () => {
+    const b = bladApi(400, { error: { code: 'invalid_credentials', message: 'Hasło jest nieprawidłowe. Sprawdź je i spróbuj ponownie.' } });
+    expect(b).toMatchObject({ rodzaj: 'odmowa', komunikat: 'Hasło jest nieprawidłowe. Sprawdź je i spróbuj ponownie.' });
   });
 
   it('zdanie serwera bez długich myślników (ZASADY-DESIGNU.md, sekcja 8)', () => {

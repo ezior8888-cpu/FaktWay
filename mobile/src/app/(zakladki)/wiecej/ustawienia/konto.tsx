@@ -40,7 +40,7 @@ function EkranKontaZBazy({ konto }: { konto: KontoFirmy }) {
   const wToku = useRef(false);
 
   const zapytaj = konto.zapytaj;
-  const wczytajTeraz = useEffectEvent(() => zapytaj<UsuniecieKontaOdpowiedz>('konto/usuniecie'));
+  const wczytajTeraz = useEffectEvent(() => zapytaj<UsuniecieKontaOdpowiedz>('konto/usuniecie', { bezFirmy: true }));
   const [odswiezenie, setOdswiezenie] = useState(0);
   useEffect(() => {
     let biezace = true;
@@ -86,7 +86,7 @@ function EkranKontaZBazy({ konto }: { konto: KontoFirmy }) {
     wToku.current = true;
     setTrwa(true);
     setBlad(undefined);
-    const w = await zapytaj<UsuniecieZaplanowaneOdpowiedz | AnulowanieUsunieciaOdpowiedz>(sciezka, { metoda: 'POST', cialo: zHaslem ? { haslo } : {} });
+    const w = await zapytaj<UsuniecieZaplanowaneOdpowiedz | AnulowanieUsunieciaOdpowiedz>(sciezka, { metoda: 'POST', cialo: zHaslem ? { haslo } : {}, bezFirmy: true });
     wToku.current = false;
     setTrwa(false);
     if (!w.ok) {

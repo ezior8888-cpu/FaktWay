@@ -29,7 +29,7 @@
  * Na danych przykładowych (bez adresu bazy) ten dostawca nic nie robi.
  */
 import * as Haptics from 'expo-haptics';
-import { createContext, use, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
+import { createContext, use, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
 import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
@@ -110,7 +110,11 @@ export type KontoFirmy = {
  * Gdy wybrana firma zmieniła się w międzyczasie, telefon odmawia bez żądania, jak
  * `bladFirmyZapisu` przy fakturze (M8) i `expectedTenantId` na stronie (UX-01).
  */
-export type OpcjeFirmy = Omit<OpcjeZapytania, 'firma'> & { firmaEkranu?: string | null };
+export type OpcjeFirmy = Omit<OpcjeZapytania, 'firma'> & {
+  firmaEkranu?: string | null;
+  /** Trasa konta bez firmy (`org: 'none'`, np. usunięcie konta, M10b): bez `X-Active-Org` i bez wymogu wybranej firmy. */
+  bezFirmy?: boolean;
+};
 
 export const INNA_FIRMA_EKRANU = 'Ten ekran był otwarty w innej firmie niż wybrana teraz. Zamknij go i otwórz od nowa w wybranej firmie.';
 
@@ -424,13 +428,22 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   };
 
   const firmaWybrana = dane.firmaId;
-  useEffect(() => {
+  // Efekt układu, nie zwykły: zwykłe efekty dzieci (pobranie w ekranie zakładki otwartej linkiem przy
+  // zimnym starcie) biegną przed efektami tego dostawcy i widziałyby jeszcze `null` („Nie masz już
+  // dostępu do tej firmy”). Efekty układu całego drzewa kończą się przed pierwszym zwykłym efektem.
+  useLayoutEffect(() => {
     firmaTeraz.current = firmaWybrana;
   }, [firmaWybrana]);
 
   /** API w wybranej firmie; reakcje na sesję, 2FA i firmę jak przy zapisach (`bladZapisu`). */
   const zapytaj = async <T,>(sciezka: string, opcje: OpcjeFirmy = {}): Promise<Wynik<T>> => {
-    const { firmaEkranu, ...reszta } = opcje;
+    const { firmaEkranu, bezFirmy, ...reszta } = opcje;
+    if (bezFirmy) {
+      // Konto bez firmy też musi móc się usunąć: bez nagłówka firmy, te same reakcje na sesję i 2FA.
+      const w = await zapytajApi<T>(sciezka, reszta);
+      if (!w.ok) bladZapisu(w.blad);
+      return w;
+    }
     // Firma z chwili wywołania, nie z rysowania, w którym powstała ta funkcja (ponowienie z paska „Cofnij”).
     const teraz = firmaTeraz.current;
     if (!teraz) return { ok: false, blad: bladTelefonu('firma') };

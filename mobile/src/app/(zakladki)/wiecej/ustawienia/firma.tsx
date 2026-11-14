@@ -7,7 +7,7 @@ import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { MA_ADRES_STRONY, otworzStrone } from '@/komponenty/na-stronie';
 import { SzkieletListy } from '@/komponenty/szkielet';
 import { StanPusty } from '@/komponenty/stan-pusty';
-import { dataPelna } from '@/lib/format';
+import { dataPelna, rachunek } from '@/lib/format';
 import { useKontoFirmy } from '@/stan/dane';
 import { statusVat, useUstawienia, type StanUstawien } from '@/stan/ustawienia';
 
@@ -46,7 +46,7 @@ function EkranFirmyZBazy({ ustawienia }: { ustawienia: StanUstawien }) {
         <Wiersz tytul="NIP" wartosc={f.nip || 'Brak'} zaznaczalna />
         <Wiersz tytul="Nazwa" podtytul={f.nazwa || 'Brak'} zaznaczalna />
         <Wiersz tytul="Adres" podtytul={adres || 'Brak'} zaznaczalna />
-        <Wiersz tytul="Rachunek do faktur" podtytul={f.rachunek ?? 'Nie podano'} zaznaczalna />
+        <Wiersz tytul="Rachunek do faktur" podtytul={f.rachunek ? rachunek(f.rachunek) : 'Nie podano'} zaznaczalna />
       </Sekcja>
 
       <Sekcja naglowek="Podatek VAT">

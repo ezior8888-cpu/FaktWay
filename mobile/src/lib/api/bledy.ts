@@ -68,7 +68,8 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   internal_error: 'serwer',
   // Tylko `POST /logowanie` (M6b), który idzie obok tego klienta (`lib/logowanie/przez-api.ts`).
   invalid_request: 'serwer',
-  invalid_credentials: 'serwer',
+  // Od M10b też złe hasło przy potwierdzeniu usunięcia konta (`konto/usuniecie`): zdanie serwera.
+  invalid_credentials: 'odmowa',
   login_unavailable: 'ponow',
   // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
   invalid_code: 'serwer',

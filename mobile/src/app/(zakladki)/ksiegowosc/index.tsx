@@ -121,6 +121,8 @@ function EkranKsiegowosciZBazy({ konto }: { konto: KontoFirmy }) {
   }
 
   const policzone = d.pozycje.filter((p) => p.kwotaGr !== null);
+  // Pozycje bez kwoty (np. stawki roku czekają na sprawdzenie): „Nic do zapłaty” byłoby nieprawdą.
+  const bezKwoty = d.pozycje.length - policzone.length;
   const doZaplaty = policzone.reduce((s, p) => s + doZaplatyGr(p), 0);
   const zaplacone = policzone.filter((p) => doZaplatyGr(p) === 0 && p.rozliczenie?.status === 'zaplacone').length;
   const najblizszy = policzone.filter((p) => doZaplatyGr(p) > 0 && p.termin).map((p) => p.termin!.faktyczny).sort()[0];
@@ -145,8 +147,18 @@ function EkranKsiegowosciZBazy({ konto }: { konto: KontoFirmy }) {
           podpis={`Rozliczenie za ${nazwaMiesiaca(d.miesiac)}`}
           wartosc={kwota(doZaplaty)}
           styl="title1"
-          status={d.braki ? 'Kwot nie liczymy' : doZaplaty === 0 || !najblizszy ? 'Nic do zapłaty' : `Do zapłaty, najbliższy termin ${kiedyTermin(d.dzis, najblizszy)}`}
-          statusKolor={d.braki ? 'ostrzezenie' : doZaplaty === 0 ? 'sukces' : 'etykietaDrugorzedna'}
+          status={
+            d.braki
+              ? 'Kwot nie liczymy'
+              : doZaplaty > 0 && najblizszy
+                ? `Do zapłaty, najbliższy termin ${kiedyTermin(d.dzis, najblizszy)}`
+                : bezKwoty > 0
+                  ? policzone.length === 0
+                    ? 'Kwot jeszcze nie pokazujemy'
+                    : 'Części kwot jeszcze nie pokazujemy'
+                  : 'Nic do zapłaty'
+          }
+          statusKolor={d.braki || (doZaplaty === 0 && bezKwoty > 0) ? 'ostrzezenie' : doZaplaty === 0 ? 'sukces' : 'etykietaDrugorzedna'}
         />
 
         {d.braki ? (
