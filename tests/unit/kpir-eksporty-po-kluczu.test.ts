@@ -593,6 +593,40 @@ describe('QRY-07: KPiR i eksporty czytają po kluczu (COUNT na pierwszej stronie
   }, CZAS);
 });
 
+describe('eksport bez korekt (`includeCorrections: false`)', () => {
+  // Gałąź spoza złotego wzorca (dane bez korekt, eksport wołany bez tej opcji). Filtr
+  // rodzaju siedzi w opakowaniu strony, więc ma iść na każdą stronę i na licznik
+  // kontrolny. Zaliczki i faktury rozliczające z października są rozsiane po stronach
+  // (id przemieszane), więc filtr zgubiony na którejkolwiek stronie dałby je w wyniku.
+  it('duża firma: każde zapytanie o faktury ma `invoice_kind = regular`, a wynik to dokładnie zwykłe faktury', async () => {
+    const dane = tabele(DUZA);
+    const log: Zapytanie[] = [];
+    const wynik = await fetchInvoicesForExport(
+      {
+        tenantId: FIRMA, periodStart: '2026-10-01', periodEnd: '2026-10-31', direction: 'both',
+        includeExpenses: false, includeCorrections: false,
+      },
+      liczacyKlient(dane, log) as unknown as Parameters<typeof fetchInvoicesForExport>[1],
+    );
+    const faktur = log.filter((z) =>
+      z.tabela === 'invoices' && czyStronami(z) && z.filtry.some(([metoda, args]) => metoda === 'eq' && args[0] === 'direction'));
+    // Wystawione (3 strony) i otrzymane (2 strony): każdy odczyt kończy licznik kontrolny.
+    expect(faktur.filter((z) => !z.head)).toHaveLength(5);
+    expect(faktur.filter((z) => z.head)).toHaveLength(2);
+    for (const z of faktur) expect(z.filtry).toContainEqual(['eq', ['invoice_kind', 'regular']]);
+
+    const zPazdziernika = (kierunek: string) => dane.invoices!.filter((f) =>
+      f.tenant_id === FIRMA && f.direction === kierunek && f.ksef_status === 'accepted'
+      && String(f.issue_date) >= '2026-10-01' && String(f.issue_date) <= '2026-10-31');
+    expect(zPazdziernika('outgoing').some((f) => f.invoice_kind !== 'regular')).toBe(true);
+    const zwykle = (kierunek: string) => zPazdziernika(kierunek).filter((f) => f.invoice_kind === 'regular');
+    expect(wynik.issuedInvoices.map((f) => f.invoiceNumber).sort())
+      .toEqual(zwykle('outgoing').map((f) => String(f.internal_number)).sort());
+    expect(wynik.receivedInvoices).toHaveLength(zwykle('incoming').length);
+    expect(new Set([...wynik.issuedInvoices, ...wynik.receivedInvoices].map((f) => f.invoiceType))).toEqual(new Set(['regular']));
+  }, CZAS);
+});
+
 describe('bezpieczniki zostają: zapis w trakcie odczytu kilku stron', () => {
   /** Druga strona odczytu: po kluczu albo OFFSET od 500 (kod sprzed sesji 33). */
   const drugaStrona = (z: Zapytanie) => czyStronami(z) && (z.poKluczu !== null || (z.range !== null && z.range[0] > 0));
