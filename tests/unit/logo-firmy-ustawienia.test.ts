@@ -231,7 +231,7 @@ describe('POST /api/uploads/logo', () => {
     expect(klucze()).toEqual([tenant().logo_storage_key]);
   });
 
-  it('przed migracją 00202 (brak kolumny): komunikat o aktualizacji bazy i bez pliku', async () => {
+  it('przed migracją 00203 (brak kolumny): komunikat o aktualizacji bazy i bez pliku', async () => {
     m.db.failures['tenants:select'] = { code: '42703', message: 'column tenants.logo_storage_key does not exist' };
     const { status, body } = await wgraj(LOGO_PNG);
     expect(status).toBe(503);

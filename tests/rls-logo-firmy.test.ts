@@ -4,7 +4,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getRlsTestEnvironment } from './helpers/rls-environment';
 
 /**
- * 00202 na prawdziwej bazie: `tenants.logo_storage_key`, logo firmy na
+ * 00203 na prawdziwej bazie: `tenants.logo_storage_key`, logo firmy na
  * wydruku (plan kompletnej aplikacji, krok 2.2, część 1).
  *
  * Wydruk czyta plik logo kluczem serwisowym magazynu, więc klucz w wierszu
@@ -31,8 +31,8 @@ const admin: SupabaseClient = environment
   ? createClient(environment.url, environment.serviceRoleKey)
   : (null as unknown as SupabaseClient);
 
-const ORG = '00202202-0000-4000-8000-000000000001';
-const OTHER_ORG = '00202202-0000-4000-8000-000000000002';
+const ORG = '00203203-0000-4000-8000-000000000001';
+const OTHER_ORG = '00203203-0000-4000-8000-000000000002';
 const OWNER_EMAIL = 'rls-logo-owner@ksef-saas.test';
 const MEMBER_EMAIL = 'rls-logo-member@ksef-saas.test';
 const OTHER_EMAIL = 'rls-logo-other@ksef-saas.test';
@@ -78,7 +78,7 @@ async function setKey(key: string | null) {
   return admin.from('tenants').update({ logo_storage_key: key }).eq('id', ORG);
 }
 
-describe.skipIf(!hasDatabase)('00202: logo firmy w tenants na prawdziwym PostgREST', () => {
+describe.skipIf(!hasDatabase)('00203: logo firmy w tenants na prawdziwym PostgREST', () => {
   beforeAll(async () => {
     const ownerId = await userId(OWNER_EMAIL);
     const memberId = await userId(MEMBER_EMAIL);
@@ -88,8 +88,8 @@ describe.skipIf(!hasDatabase)('00202: logo firmy w tenants na prawdziwym PostgRE
       await admin.from('tenants').delete().eq('id', org);
     }
     const { error: tErr } = await admin.from('tenants').insert([
-      { id: ORG, nip: '9480000038', name: 'Firma Logo 00202' },
-      { id: OTHER_ORG, nip: '9480000045', name: 'Inna firma 00202' },
+      { id: ORG, nip: '9480000038', name: 'Firma Logo 00203' },
+      { id: OTHER_ORG, nip: '9480000045', name: 'Inna firma 00203' },
     ]);
     if (tErr) throw tErr;
     await admin.from('users').upsert(
@@ -134,7 +134,7 @@ describe.skipIf(!hasDatabase)('00202: logo firmy w tenants na prawdziwym PostgRE
     expect(await storedKey()).toBeNull();
   });
 
-  it('członek firmy czyta klucz kluczem użytkownika (GRANT SELECT z 00202)', async () => {
+  it('członek firmy czyta klucz kluczem użytkownika (GRANT SELECT z 00203)', async () => {
     expect((await setKey(KEY)).error).toBeNull();
     const member = await signedIn(MEMBER_EMAIL, ORG);
     const { data, error } = await member.from('tenants').select('logo_storage_key').eq('id', ORG).maybeSingle();
@@ -159,7 +159,7 @@ describe.skipIf(!hasDatabase)('00202: logo firmy w tenants na prawdziwym PostgRE
     expect(clear.error?.code).toBe('42501');
     expect(await storedKey()).toBe(KEY);
 
-    const rename = await owner.from('tenants').update({ name: 'Firma Logo 00202 (nowa nazwa)' }).eq('id', ORG).select('id');
+    const rename = await owner.from('tenants').update({ name: 'Firma Logo 00203 (nowa nazwa)' }).eq('id', ORG).select('id');
     expect(rename.error).toBeNull();
     expect(rename.data).toHaveLength(1);
     expect(await storedKey()).toBe(KEY);

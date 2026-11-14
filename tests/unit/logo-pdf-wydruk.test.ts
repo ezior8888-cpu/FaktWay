@@ -160,7 +160,7 @@ describe('generateInvoicePdf: logo firmy', () => {
     expect(m.magazyn.wywolania).toEqual([]);
   });
 
-  it('przed migracją 00202 (brak kolumny): PDF bez logo, bez wpisu w logu', async () => {
+  it('przed migracją 00203 (brak kolumny): PDF bez logo, bez wpisu w logu', async () => {
     m.db.failures['tenants:select'] = { code: '42703', message: 'column tenants.logo_storage_key does not exist' };
     const wynik = await generateInvoicePdf('inv-1', TENANT);
     expect(wynik).toMatchObject({ success: true, qrStateKey: KLUCZ_BEZ_LOGO });

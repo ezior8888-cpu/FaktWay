@@ -5,12 +5,12 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 /**
  * Logo firmy do wydruku (plan kompletnej aplikacji, krok 2.2, część 1):
- * klucz z `tenants.logo_storage_key` (00202) i plik z magazynu.
+ * klucz z `tenants.logo_storage_key` (00203) i plik z magazynu.
  *
  * Wydruk nigdy nie odmawia z powodu logo: brak klucza, brak pliku, błąd bazy
  * albo magazynu i plik, który nie przeszedł sprawdzenia (`checkStoredLogo`),
  * dają PDF bez logo i wpis `[pdf-logo]` w logu procesu (bez treści pliku).
- * Brak kolumny przed wgraniem 00202 to zwykły brak logo, bez wpisu.
+ * Brak kolumny przed wgraniem 00203 to zwykły brak logo, bez wpisu.
  */
 
 function isMissingColumn(code: string | undefined): boolean {

@@ -162,7 +162,7 @@ export default defineConfig({
       // w jednej serii dają różne kolejne numery (blokada serii w wyzwalaczu), obca firma, role, wzór
       // bez licznika, numer zajęty w KSeF nie wraca z licznika, istniejące numery bez zmian.
       'tests/rls-numeracja.test.ts',
-      // 00202 (plan kompletnej aplikacji, krok 2.2, część 1): logo firmy; CHECK wiąże klucz z katalogiem
+      // 00203 (plan kompletnej aplikacji, krok 2.2, część 1): logo firmy; CHECK wiąże klucz z katalogiem
       // logo tej firmy (też dla klucza serwisowego), wyzwalacz bez zmiany z sesji klienta, GRANT SELECT.
       'tests/rls-logo-firmy.test.ts',
       // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu;

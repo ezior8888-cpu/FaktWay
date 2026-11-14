@@ -21,7 +21,7 @@ import { isTenantStoragePath } from './tenant-path';
  * część 1). Klucz: `tenants/<id firmy>/logo/<uuid>.png|jpg`, nowy przy każdym
  * wgraniu (plik pod kluczem nigdy się nie zmienia, więc PDF w pamięci
  * podręcznej z tym kluczem w nazwie jest zawsze aktualny). Ten sam wzór
- * pilnuje CHECK `tenants_logo_storage_key_check` (00202) w bazie.
+ * pilnuje CHECK `tenants_logo_storage_key_check` (00203) w bazie.
  *
  * Katalog leży pod prefiksem `tenants/<id>/`, który zamiata usuwanie firmy
  * (`docs/prawne/usuwanie-firmy-projekt.md`, § 6.5; lista prefiksów

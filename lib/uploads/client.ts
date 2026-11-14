@@ -38,7 +38,7 @@ export type CompanyLogoView =
   | { status: 'ok'; previewUrl: string | null; format: 'png' | 'jpeg' }
   /** Wskaźnik w bazie jest, pliku w magazynie nie ma: wydruk bez logo. */
   | { status: 'missing' }
-  /** Odczyt się nie udał (albo przed migracją 00202). */
+  /** Odczyt się nie udał (albo przed migracją 00203). */
   | { status: 'unavailable' };
 
 type Failure = { success: false; error: string };

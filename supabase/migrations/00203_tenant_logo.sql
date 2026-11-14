@@ -1,4 +1,4 @@
--- 00202: logo firmy na wydruku (plan kompletnej aplikacji, krok 2.2, część 1:
+-- 00203: logo firmy na wydruku (plan kompletnej aplikacji, krok 2.2, część 1:
 -- logo w nagłówku PDF faktury, proformy i oferty).
 --
 -- KIEDY WGRAĆ: PRZED wdrożeniem (addytywna: nowa kolumna NULL, CHECK na nowej

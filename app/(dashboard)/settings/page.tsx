@@ -66,7 +66,7 @@ export default async function SettingsPage() {
     readTenantBankAccount(supabase, tenantId),
     // Serie numeracji (00199, krok 2.5); `null`, gdy odczyt się nie udał.
     readInvoiceSeries(supabase as unknown as SupabaseClient, today),
-    // Logo na fakturze (00202, krok 2.2); przed migracją albo przy błędzie stan „unavailable”.
+    // Logo na fakturze (00203, krok 2.2); przed migracją albo przy błędzie stan „unavailable”.
     readCompanyLogoForSettings(supabase, tenantId),
   ]);
 

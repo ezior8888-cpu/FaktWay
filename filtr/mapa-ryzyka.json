@@ -849,7 +849,7 @@
       "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja, plik logo na wydruku tylko z katalogu firmy i tylko od serwera).",
       "sciezki": [
         "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql",
-        "supabase/migrations/00202_*.sql"
+        "supabase/migrations/00203_*.sql"
       ]
     },
     {

@@ -32,7 +32,7 @@ export type { CompanyLogoView };
  *
  * Zmienia właściciel i administrator, jak dane firmy (`updateCompanyProfileAction`).
  * Zapis wskaźnika `tenants.logo_storage_key` kluczem serwisowym po sprawdzeniu
- * roli; sesji klienta zmianę kolumny odrzuca wyzwalacz z 00202. Audyt:
+ * roli; sesji klienta zmianę kolumny odrzuca wyzwalacz z 00203. Audyt:
  * `tenant.updated` z `metadata.field = 'logo'`, jak inne ustawienia firmy.
  *
  * Ponowienie od zera (protokół, pkt 5) i pliki w magazynie:
@@ -240,7 +240,7 @@ interface TenantsReader {
 }
 
 /**
- * Stan logo do ustawień, klientem z sesji (RLS i GRANT SELECT z 00202):
+ * Stan logo do ustawień, klientem z sesji (RLS i GRANT SELECT z 00203):
  * podpisany adres podglądu tylko dla klucza z katalogu logo tej firmy i tylko,
  * gdy plik jest w magazynie.
  */
