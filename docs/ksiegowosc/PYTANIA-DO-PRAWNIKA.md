@@ -13,9 +13,12 @@ znajomości kodu.
   Funkcje z pytań 7-17 jeszcze nie działają: opinia rozstrzyga, czy i jak je
   zbudować. Pytanie 18 dotyczy ostrzeżenia przy zapłacie kosztu, które
   FaktWay liczy już według daty z faktury (P_1).
+- **Pytania 19 i 20** dotyczą przechowywania i usuwania faktur, które
+  program robi już dziś (zadania w tle, dla wszystkich firm). Opinia
+  rozstrzyga, co zmienić w programie albo w dokumentach.
 
 Stan opisu: pytania 1-6 z 4.11.2026, pytania 7-17 z 9.11.2026, pytanie 18
-z 12.11.2026. Moduł jest
+z 12.11.2026, pytania 19 i 20 z 14.11.2026. Moduł jest
 w budowie i jest wyłączony dla klientów.
 
 ## 1. Co robi moduł
@@ -356,6 +359,61 @@ tej ustawy: data P_1 czy dzień przesłania do KSeF? Czy ostrzeżenie według
 P_1, które obejmuje co najmniej te faktury co według dnia przesłania, może
 zostać?
 
+### Pytanie 19. Okres przechowywania faktur: dokumenty a program
+
+Program codziennie przenosi do archiwum faktury starsze niż 2 lata, a po 10
+latach od dnia wystawienia usuwa fakturę razem z jej plikami (XML, UPO,
+PDF). Robi to sam, także w trakcie trwania umowy, i nie uprzedza o tym
+klienta. Dotyczy to faktur klientów, które FaktWay przetwarza na polecenie
+klienta, i faktur, które FaktWay wystawia klientom za abonament.
+
+Dokumenty mówią co innego:
+
+- regulamin: „Obowiązek przechowywania faktur i ewidencji przez okres
+  wymagany przepisami podatkowymi ciąży na Kliencie. (…) Serwis przechowuje
+  Dane Klienta przez czas trwania Umowy i umożliwia ich eksport”;
+- polityka prywatności, faktury za abonament (FaktWay jako administrator):
+  przez okres wymagany przepisami podatkowymi, „co do zasady 5 lat od końca
+  roku, w którym upłynął termin płatności podatku”.
+
+**Pytanie:** Jaki okres przechowywania faktur przyjąć i wpisać w regulaminie,
+umowie powierzenia i polityce prywatności, żeby zgadzał się z programem?
+W szczególności:
+
+1. czy FaktWay może usuwać faktury klienta 10 lat od wystawienia w trakcie
+   trwania umowy, skoro regulamin mówi o przechowywaniu przez czas trwania
+   umowy, i czy musi o tym klienta uprzedzić (z jakim wyprzedzeniem,
+   z możliwością eksportu);
+2. czy 10 lat od wystawienia to właściwy okres dla faktur klientów, skoro
+   obowiązek przechowywania trwa do przedawnienia zobowiązania podatkowego
+   (co do zasady 5 lat od końca roku, w którym upłynął termin płatności
+   podatku, a bieg przedawnienia bywa zawieszony albo przerwany);
+3. czy faktury FaktWay za abonament mogą być przechowywane 10 lat od
+   wystawienia, skoro polityka prywatności podaje 5 lat od końca roku
+   z terminem płatności podatku.
+
+Pytanie uzupełnia pytania 6 i 16.
+
+### Pytanie 20. Faktura, która jest wzorem faktur cyklicznych
+
+Klient może ustawić cykl: program co miesiąc (albo w innym rytmie) wystawia
+nową fakturę na wzór faktury już wystawionej. Wzorem jest prawdziwa faktura
+klienta z danymi nabywcy. Gdy wzór dochodzi do końca okresu przechowywania
+(10 lat od wystawienia, pytanie 19), program usuwa go, a razem z nim cały
+cykl, bez uprzedzenia. Najwcześniej może się to zdarzyć ok. 2034 r. (faktury
+z 2024 r. wczytane z historii).
+
+Rozważamy dwa rozwiązania: (a) faktura-wzór zostaje, dopóki cykl działa,
+także po 10 latach; (b) cykl trzyma własną kopię danych potrzebnych do
+kolejnych faktur (nabywca, pozycje), a fakturę-wzór usuwa się jak każdą
+inną.
+
+**Pytanie:** Czy w rozwiązaniu (a) możemy przechowywać fakturę-wzór i dane
+nabywcy dłużej niż okres przechowywania, dopóki klient korzysta z cyklu,
+i na jakiej podstawie (polecenie klienta jako administratora, umowa
+powierzenia)? Czy rozwiązanie (b) jest pod tym względem bezpieczniejsze?
+Czy przed usunięciem cyklu albo wzoru musimy klienta uprzedzić?
+
 ## 3. Czego potrzebujemy w odpowiedzi
 
 - Pisemnej opinii (może być jeden dokument) z odpowiedzią na każde pytanie.
@@ -373,6 +431,9 @@ zostać?
   pytaniu 1.
 - Przy pytaniach 15 i 17: wskazówek do regulaminu.
 - Przy pytaniu 18: którą datę przyjąć i czy ostrzeżenie według P_1 może zostać.
+- Przy pytaniach 19 i 20: okresu przechowywania do wpisania w regulaminie,
+  umowie powierzenia i polityce prywatności oraz tego, czy i z jakim
+  wyprzedzeniem uprzedzać klienta przed usunięciem.
 
 ## 4. Materiały
 
