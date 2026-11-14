@@ -66,6 +66,9 @@ Budżet zapytań przebiegu (E1-W10-b, `INBOX_METADATA_REQUESTS_PER_RUN` w
 stronę 250 faktur. Większe okno, np. po przerwie w certyfikacie, kończy się na dacie
 ostatniej pobranej faktury, HWM idzie do niej, a następny przebieg zaczyna od niej za
 5 minut. Nadrabianie to więc 12 zapytań i ok. 3000 faktur na godzinę, w limicie 20/h.
+Historia KSeF ustępuje w całości dopiero przy zaległości skrzynki ponad próg poziomu (co
+najmniej 60 minut), więc przy świeżej paczce obie razem dochodzą do 20/h. 429 odsuwa wtedy
+tylko następny przebieg (o `Retry-After`, domyślnie 15 minut), a postęp zostaje.
 Wcześniej przebieg brał całe okno naraz: ponad 16 stron kończyło się 429, a HWM stał.
 Wyjątek: strona, na której każda faktura ma datę początku okna, nie daje postępu, więc
 przebieg pyta dalej, do pierwszej strony z późniejszą datą. Przebieg na budżecie widać

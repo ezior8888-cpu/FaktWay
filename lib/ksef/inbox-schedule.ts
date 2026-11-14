@@ -75,11 +75,20 @@ export const INBOX_CATCH_UP_INTERVAL_MS = 5 * MINUTE_MS;
  * przebieg zaczynał od początku.
  *
  * Dlaczego 1: następny przebieg startuje najwcześniej 5 minut po końcu
- * poprzedniego (nadrabianie co 5 minut, poziom gorący rzadziej, „Sprawdź teraz”
- * 00160 odbija prośbę w trakcie przebiegu i przez 5 minut po nim, ponowień
- * pg-boss nie ma), więc to najwyżej 12 zapytań na godzinę przy limicie MF 20/h.
- * Dwa zapytania na przebieg dawałyby 24/h. Synchronizacja historii, która ma
- * ten sam limit, w tym czasie ustępuje skrzynce (`inboxLagYieldThresholdMs`).
+ * poprzedniego (termin nadrabiania liczy się od końca przebiegu, poziom gorący
+ * idzie rzadziej, a „Sprawdź teraz” 00160 odbija prośbę w trakcie przebiegu
+ * i przez 5 minut po nim), więc skrzynka zadaje zwykle najwyżej 12 zapytań na
+ * godzinę przy limicie MF 20/h. Dwa zapytania na przebieg dawałyby 24/h.
+ * Dodatkowe zapytanie biorą się tylko z trzech miejsc: ponowienie po 401 od
+ * czystej sesji (`queryReceivedInvoices`), wyjątek niżej i ponowienie joba
+ * przez pg-boss, gdy worker padł w trakcie przebiegu (`QUEUE_POLICY`
+ * w `lib/jobs/boss.ts`, po kilku minutach).
+ *
+ * Synchronizacja historii ma ten sam limit. Ustępuje skrzynce w całości
+ * dopiero, gdy zaległość skrzynki przekracza próg poziomu
+ * (`inboxLagYieldThresholdMs`, co najmniej 60 minut), więc przy świeżej paczce
+ * obie mogą razem dojść do 20/h. 429 tylko odsuwa wtedy następny przebieg
+ * (o `Retry-After`, domyślnie 15 minut), a postęp poprzednich przebiegów zostaje.
  *
  * Wyjątek: strona, której wszystkie faktury mają datę początku okna (do
  * milisekundy), nie daje punktu wznowienia, więc przebieg pyta dalej, do
