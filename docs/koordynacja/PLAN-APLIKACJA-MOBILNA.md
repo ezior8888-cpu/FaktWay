@@ -569,7 +569,17 @@ Android 15 albo nowszy; drugi obraz z Androidem 12 do punktu 13). Zrzuty do
     przejściach nie miga bielą, tytuły w pasku mieszczą się albo skracają.
 16. **TalkBack.** Etykiety ikon w pasku (X: „Anuluj” albo „Zamknij”), stan
     pigułek, pole wyboru „rozwinięte”, kwoty z groszami czytane w całości.
-17. **Decyzja po M12b:** skaner dokumentów ML Kit (kod w Kotlinie, dane
+17. **Z przeglądu kodu M12a (do sprawdzenia, a gdy się potwierdzi, do
+    naprawy):** (a) zasłona w przełączniku aplikacji opiera się na stanie
+    `inactive`, którego Android nie ma, więc miniatura w ostatnich aplikacjach
+    pokaże kwoty; odpowiednik to `FLAG_SECURE` (np. `expo-screen-capture`,
+    nowa paczka natywna); (b) blokada to na Androidzie zwykły widok w
+    korzeniu: sprawdzić, czy otwarty arkusz (dane do przelewu, dodaj wydatek)
+    nie zostaje nad nią po powrocie z tła; (c) aparat: gdy system ubije
+    aplikację w trakcie zdjęcia, wynik ginie (`getPendingResultAsync` nie jest
+    czytane); (d) aktywny filtr na niebieskim pasku ma tę samą białą ikonę co
+    nieaktywny (do rozważenia znacznik z liczbą).
+18. **Decyzja po M12b:** skaner dokumentów ML Kit (kod w Kotlinie, dane
     o użyciu wysyłane do Google, wpis w formularzu bezpieczeństwa danych
     Google Play) albo zostaje aparat systemowy.
 
@@ -595,9 +605,11 @@ Bartosz zainstaluje Android Studio, SDK i obraz emulatora (około 10 GB). M11
 (powiadomienia push, logowanie Apple) i M13 (sklep) czekają na płatne konto
 Apple. M8, M9 i M10 są w `main` i na produkcji od 14.11.2026 (#716, #740, #738,
 #752; migracje 00201 i 00202).
-**Z M12a zostaje:** wszystko, czego nie widać bez emulatora (sekcja 7a); menu
+**Z M12a zostaje:** wszystko, czego nie widać bez emulatora (sekcja 7a), w tym
+cztery ryzyka z przeglądu kodu (7a, punkt 17: zasłona w ostatnich aplikacjach,
+blokada a arkusz, zdjęcie po ubiciu aplikacji, znacznik filtra); menu
 przy przytrzymaniu wiersza faktury na Androidzie (dziś go nie ma, akcje są w
-szczególe); decyzja o skanerze ML Kit (7a, punkt 17).
+szczególe); decyzja o skanerze ML Kit (7a, punkt 18).
 **Z M9 zostaje:** obchód M9 w symulatorze iPhone 17 (wymaga zgody w panelu symulatora; build ze skanerem zainstalowany, drogę serwera sprawdzono przez API na osobnym stosie), zrzuty do `docs/mobile/zrzuty/m9/`. Osobno: błąd z `main`, enum `categorization_method` bez `rule_global_keyword` i `rule_global_nip` (paragon ze stacji, hotelu, Allegro nie zapisuje się po OCR, 3 płatne odczyty na próbę), osobna gałąź i PR.
 **Z M10b zostaje:** (1) zapisy ustawień (dane firmy, VAT, data rozpoczęcia,
 certyfikat KSeF, przypomnienia, hasło, 2FA, klucze dostępu) i karty Księgowa,

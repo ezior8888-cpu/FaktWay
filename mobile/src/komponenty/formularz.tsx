@@ -376,6 +376,8 @@ export function Segmenty({ wartosci, wybrany, onZmiana, etykieta, liczniki }: Se
             accessibilityRole="tab"
             accessibilityState={{ selected: wybrana }}
             accessibilityLabel={licznik === undefined ? nazwa : `${nazwa}, ${licznik}`}
+            // Android: na wybranej pigułce (kolor marki) jasna fala; zwykła byłaby niewidoczna.
+            {...(Platform.OS === 'android' && wybrana ? { fala: kolory.falaNaAkcencie } : {})}
             style={[styles.pigulka, wybrana ? { backgroundColor: kolory.akcentWypelnienie } : [stylKarty, styles.pigulkaKsztalt]]}>
             <Tekst styl="subheadline" waga="medium" style={{ color: wybrana ? kolory.naAkcencie : kolory.etykieta }} numberOfLines={1}>
               {nazwa}
