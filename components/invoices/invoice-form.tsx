@@ -479,6 +479,7 @@ export function InvoiceForm({
             linesDesktopLayout={linesDesktopLayout}
             remove={remove}
             onAddLine={() => append(newLine)}
+            vatExempt={vatExempt}
           />
 
           <Separator />
