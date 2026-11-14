@@ -773,7 +773,8 @@
       "poziom": "R1",
       "opis": "Telefon: wydatki i faktury kosztowe (od M9 zapis ze zdjęcia): kwoty, VAT i kategoria, które trafiają do KPiR i rozliczenia VAT.",
       "sciezki": [
-        "mobile/src/app/(zakladki)/koszty/**"
+        "mobile/src/app/(zakladki)/koszty/**",
+        "mobile/src/lib/wydatek/**"
       ]
     },
     {

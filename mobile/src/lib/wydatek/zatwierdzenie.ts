@@ -65,7 +65,8 @@ export function formularzZKosztu(k: Koszt): FormularzWydatku {
   };
 }
 
-const zlote = (grosze: number) => Math.round(grosze) / 100;
+/** Grosze (liczba całkowita z `groszeZPola`) na złote dla serwera; bez zaokrąglania, bo groszy nie ma czego zaokrąglać. */
+const zlote = (grosze: number) => grosze / 100;
 
 /** Treść zatwierdzenia jak formularz kosztu strony. */
 export function zmianyWydatku(f: FormularzWydatku, waluta: string | null): ZmianyWydatkuTelefonu {
