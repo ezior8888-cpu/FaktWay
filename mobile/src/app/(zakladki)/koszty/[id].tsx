@@ -25,6 +25,7 @@ import { SzkieletListy } from '@/komponenty/szkielet';
 import { Tekst } from '@/komponenty/tekst';
 import { doPola, groszeZPola as grosze, kwota } from '@/lib/format';
 import { czekaNaZlote, sprawdzFormularz, vatKosztu, type BladFormularza, type FormularzWydatku } from '@/lib/wydatek/zatwierdzenie';
+import { useKontoFirmy } from '@/stan/dane';
 import { useStanFaktur } from '@/stan/faktury';
 import { useKolory } from '@/wyglad/kolory';
 import { useTytulNaGradiencie } from '@/wyglad/naglowki';
@@ -63,6 +64,10 @@ function FormularzKosztu({ k, zdjecie }: { k: Koszt; zdjecie?: string }) {
   const kolory = useKolory();
   const { zapiszKoszt, usunKoszt, zatwierdzKoszt, dane } = useStanFaktur();
   const naKoncie = dane.zrodlo === 'baza';
+  // Firma wydatku: ta, w której go otwarto; zapis po przełączeniu firmy jest odrzucany (jak przy fakturze, M8).
+  const firmaTeraz = useKontoFirmy()?.firma?.id ?? null;
+  const [firmaWydatku, setFirmaWydatku] = useState(firmaTeraz);
+  if (!firmaWydatku && firmaTeraz) setFirmaWydatku(firmaTeraz);
   const { tytul, onScroll, scrollEventThrottle } = useTytulNaGradiencie();
   const [dostawca, setDostawca] = useState(k.dostawca);
   const [nip, setNip] = useState(k.nip ?? '');
@@ -117,7 +122,7 @@ function FormularzKosztu({ k, zdjecie }: { k: Koszt; zdjecie?: string }) {
       return router.back();
     }
     setTrwa(true);
-    const w = await zatwierdzKoszt(k, f);
+    const w = await zatwierdzKoszt(k, f, firmaWydatku);
     setTrwa(false);
     if (!w.ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);

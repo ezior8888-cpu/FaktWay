@@ -19,6 +19,7 @@ import { zmianyWydatkuSchema } from '../../lib/api/mobile/schematy';
 import { expenseAmountsCurrency } from '../../lib/expenses/ocr-currency-review';
 import { KOLUMNY_WYDATKU, sladZWiersza, walutaKwotWydatku, wydatekZBazy, type WierszWydatku } from '../../mobile/src/lib/dane/mapowanie';
 import {
+  bladFirmyWydatku,
   czekaNaZlote,
   czekajNaOdczyt,
   formularzZKosztu,
@@ -190,6 +191,15 @@ describe('treść zatwierdzenia', () => {
     expect(sprawdzFormularz({ ...f, brutto: 0 })?.pole).toBe('brutto');
     expect(sprawdzFormularz({ ...f, netto: Number.NaN })?.pole).toBe('netto');
     expect(sprawdzFormularz({ ...f, data: '' })?.pole).toBe('data');
+  });
+});
+
+describe('firma ekranu przy zapisie (jak faktura, M8)', () => {
+  it('ta sama firma: można zapisać; inna albo nieznana: odmowa ze zdaniem, co zrobić', () => {
+    expect(bladFirmyWydatku('firma-a', 'firma-a')).toBeNull();
+    expect(bladFirmyWydatku('firma-a', 'firma-b')).toContain('innej firmie');
+    expect(bladFirmyWydatku(null, 'firma-a')).toContain('Wróć do listy wydatków');
+    expect(bladFirmyWydatku('firma-a', null)).not.toBeNull();
   });
 });
 

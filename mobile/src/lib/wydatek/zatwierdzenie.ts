@@ -88,6 +88,16 @@ export function zmianyWydatku(f: FormularzWydatku, waluta: string | null): Zmian
   };
 }
 
+/**
+ * Firma ekranu (zapamiętana przy otwarciu arkusza albo wydatku) różna od
+ * wybranej teraz: odmowa przed wysłaniem, jak `bladFirmyZapisu` przy fakturze
+ * (M8, na stronie `expectedTenantId`, UX-01). `null`, gdy firma ta sama.
+ */
+export function bladFirmyWydatku(firmaEkranu: string | null | undefined, firmaTeraz: string | null | undefined): string | null {
+  if (firmaEkranu && firmaEkranu === firmaTeraz) return null;
+  return 'Ten wydatek był otwarty w innej firmie niż wybrana teraz. Wróć do listy wydatków i otwórz go w wybranej firmie.';
+}
+
 /** Pole z błędem i zdanie pod nim; `null`, gdy można wysłać. Resztę sprawdza serwer. */
 export type BladFormularza = { pole: 'dostawca' | 'data' | 'netto' | 'vat' | 'brutto'; komunikat: string };
 

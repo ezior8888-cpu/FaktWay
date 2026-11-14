@@ -51,7 +51,7 @@ import { pamiec } from '@/lib/dane/pamiec-plikow';
 import { pobierzFaktury, pobierzSkrzynke, pobierzWydatki } from '@/lib/dane/zapytania';
 import { daneTokenu } from '@/lib/logowanie/token';
 import { supabase, ustawienia } from '@/lib/supabase';
-import { czekaNaZlote, stanOdczytuZOdpowiedzi, zmianyWydatku } from '@/lib/wydatek/zatwierdzenie';
+import { bladFirmyWydatku, czekaNaZlote, stanOdczytuZOdpowiedzi, zmianyWydatku } from '@/lib/wydatek/zatwierdzenie';
 import { PodmienStan, type Stan, type StanDanych, type WynikWgrania, type WynikZapisu } from '@/stan/faktury';
 import { useSesja } from '@/stan/sesja';
 
@@ -515,9 +515,12 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       return '';
     },
     usunKoszt: (id) => wydatekNaStronie(id),
-    wgrajDokument: async (plik, klucz): Promise<WynikWgrania> => {
+    wgrajDokument: async (plik, klucz, firmaEkranu): Promise<WynikWgrania> => {
       const firma = dane.firmaId;
       if (!firma) return { ok: false, komunikat: 'Wybierz firmę w Więcej i spróbuj ponownie.', ponow: false };
+      // Arkusz otwarty w innej firmie: zdjęcie nie trafi do firmy, której klient nie wybrał.
+      const zlaFirma = bladFirmyWydatku(firmaEkranu, firma);
+      if (zlaFirma) return { ok: false, komunikat: zlaFirma, ponow: false };
       const formularz = new FormData();
       // React Native wysyła plik z dysku po `uri` (bez czytania go do pamięci JS).
       formularz.append(MOBILE_EXPENSE_FILE_FIELD, { uri: plik.uri, name: plik.nazwa, type: plik.typ } as unknown as Blob);
@@ -526,8 +529,9 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       // Sieć, przerwa, 503 i niedokończone wgranie: ponowienie z tym samym kluczem jest bezpieczne.
       return { ok: false, komunikat: bladZapisu(w.blad).komunikat, ponow: w.blad.rodzaj === 'ponow' || w.blad.rodzaj === 'polaczenie' };
     },
-    stanOdczytu: async (odczytId) => {
-      const firma = dane.firmaId;
+    stanOdczytu: async (odczytId, firmaEkranu) => {
+      // Odczyt należy do firmy, w której wgrano zdjęcie, nawet gdy klient przełączył firmę w trakcie.
+      const firma = firmaEkranu ?? dane.firmaId;
       // Bez firmy (lista firm od nowa) nie ma o co pytać: koniec czekania, wydatek będzie na liście.
       if (!firma) return { stan: 'brak' };
       const w = await zapytajApi<OdczytWydatkuOdpowiedz>(`wydatki/odczyt/${encodeURIComponent(odczytId)}`, { firma });
@@ -541,9 +545,11 @@ function DaneZBazy({ children }: { children: ReactNode }) {
       return { stan: 'nieznany' };
     },
     odswiezWydatki,
-    zatwierdzKoszt: async (k, f) => {
+    zatwierdzKoszt: async (k, f, firmaEkranu) => {
       const firma = dane.firmaId;
       if (!firma) return { ok: false, komunikat: 'Wybierz firmę w Więcej i spróbuj ponownie.' };
+      const zlaFirma = bladFirmyWydatku(firmaEkranu, firma);
+      if (zlaFirma) return { ok: false, komunikat: zlaFirma };
       if (k.zrodlo === 'ksef') {
         wydatekNaStronie(k.id);
         return { ok: false, komunikat: 'Wydatek z KSeF opiszesz na faktway.pl.' };

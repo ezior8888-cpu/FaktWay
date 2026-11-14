@@ -101,13 +101,13 @@ export type Stan = {
    * Wgrywa zdjęcie albo PDF kosztu i zleca odczyt (M9). `klucz` jeden na zdjęcie:
    * ponowienie po zerwanym połączeniu oddaje to samo zadanie, bez drugiego kosztu.
    */
-  wgrajDokument: (plik: PlikDokumentu, klucz: string) => Promise<WynikWgrania>;
-  /** Jedno pytanie o stan odczytu (`czekajNaOdczyt` pyta co 2 s). */
-  stanOdczytu: (odczytId: string) => Promise<StanOdczytuTelefonu>;
+  wgrajDokument: (plik: PlikDokumentu, klucz: string, firma?: string | null) => Promise<WynikWgrania>;
+  /** Jedno pytanie o stan odczytu (`czekajNaOdczyt` pyta co 2 s), w firmie, w której wgrano zdjęcie. */
+  stanOdczytu: (odczytId: string, firma?: string | null) => Promise<StanOdczytuTelefonu>;
   /** Lista wydatków od nowa (po odczycie, żeby szczegół widział nowy wydatek). */
   odswiezWydatki: () => Promise<void>;
   /** Opis i akceptacja wydatku z formularza (na koncie `POST /wydatki/{id}/zatwierdzenie`, M9). */
-  zatwierdzKoszt: (k: Koszt, f: FormularzWydatku) => Promise<WynikZapisu>;
+  zatwierdzKoszt: (k: Koszt, f: FormularzWydatku, firma?: string | null) => Promise<WynikZapisu>;
   /** Proste przełączniki ekranów ustawień i list (np. wstrzymane przypomnienia). */
   flagi: Record<string, boolean>;
   ustawFlage: (klucz: string, wartosc: boolean) => void;

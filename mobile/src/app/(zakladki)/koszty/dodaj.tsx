@@ -15,6 +15,7 @@ import { Tekst } from '@/komponenty/tekst';
 import { kluczZapisu } from '@/lib/faktura/wystawienie';
 import { skanerDostepny, skanujDokument } from '@/lib/skaner';
 import { czekajNaOdczyt } from '@/lib/wydatek/zatwierdzenie';
+import { useKontoFirmy } from '@/stan/dane';
 import { useStanFaktur, type PlikDokumentu } from '@/stan/faktury';
 import { MARGINES, ODSTEP, PROMIEN_KARTY } from '@/wyglad/odstepy';
 import { useKolory } from '@/wyglad/kolory';
@@ -49,6 +50,10 @@ export default function EkranDodawaniaWydatku() {
   const kolory = useKolory();
   const { wgrajDokument, stanOdczytu, odswiezWydatki, dane } = useStanFaktur();
   const naKoncie = dane.zrodlo === 'baza';
+  // Firma arkusza: zapamiętana przy otwarciu (albo gdy konto dojdzie), wgranie i odczyt idą do niej.
+  const firmaTeraz = useKontoFirmy()?.firma?.id ?? null;
+  const [firmaArkusza, setFirmaArkusza] = useState(firmaTeraz);
+  if (!firmaArkusza && firmaTeraz) setFirmaArkusza(firmaTeraz);
   const [etap, setEtap] = useState<Etap>({ rodzaj: 'wybor' });
   const [podglad, setPodglad] = useState<string>();
   const plik = useRef<PlikDokumentu | null>(null);
@@ -71,13 +76,13 @@ export default function EkranDodawaniaWydatku() {
     const p = plik.current;
     if (!p) return;
     setEtap({ rodzaj: 'wgrywanie' });
-    const w = await wgrajDokument(p, klucz.current);
+    const w = await wgrajDokument(p, klucz.current, firmaArkusza);
     if (zamkniety.current) return;
     if (!w.ok) {
       return blad(w.ponow ? 'Nie udało się wysłać zdjęcia' : 'FaktWay nie przyjął tego pliku', w.komunikat, w.ponow);
     }
     setEtap({ rodzaj: 'rozpoznaje' });
-    const koniec = await czekajNaOdczyt(() => stanOdczytu(w.odczytId), { przerwano: () => zamkniety.current });
+    const koniec = await czekajNaOdczyt(() => stanOdczytu(w.odczytId, firmaArkusza), { przerwano: () => zamkniety.current });
     if (zamkniety.current || koniec.wynik === 'przerwano') return;
     switch (koniec.wynik) {
       case 'gotowy':
