@@ -62,7 +62,6 @@ const ISSUING_FILES = Object.keys(ISSUING).map((file) => `components/invoices/${
  */
 const EXEMPT_FILES: Record<string, string> = {
   'components/invoices/actions-detail.ts': 'akcje na istniejącym dokumencie wskazanym id (ponowienie, reset, duplikat, e-mail, XML) — patrz EXEMPT',
-  'components/invoices/draft-actions.ts': 'wysyłka i usunięcie istniejącego szkicu wskazanego id — patrz EXEMPT',
   'components/invoices/buyer-link-actions.ts': 'link dla nabywcy na istniejącej fakturze (odczyt, tworzenie, cofnięcie po id); firma z sesji, zapis klientem sesji (RLS)',
   'lib/invoices/ksef-submit-enqueue.ts': 'definicja zlecenia wysyłki; firmę podaje wołający (akcja albo job)',
   'lib/ksef/offline-queue.ts': 'kolejka offline wysyłki (ksef_offline_queue); firmę podaje wołający',
@@ -81,6 +80,9 @@ const EXEMPT_FILES: Record<string, string> = {
   'app/admin/ksef/actions.ts': 'operator w /admin: ponowienie wysyłki i decyzja o duplikacie istniejącego dokumentu; firma z wiersza faktury',
   'lib/jobs/runners/bulk-import.ts': 'job: import z pliku (silnik importu); firma z danych joba',
   'lib/jobs/runners/ksef-history-sync.ts': 'job: pobranie historii z KSeF (silnik importu); firma z danych joba',
+  'lib/invoices/issue-regular.ts': 'logika „Wystaw i wyślij” i szkicu (M8 planu aplikacji mobilnej); firmę podaje wołający: akcje strony po requireUserAndActiveOrg z expectedTenantId (UX-01 w akcji, ISSUING), telefon po authenticateMobileRequest',
+  'lib/invoices/send-draft.ts': 'wysyłka istniejącego szkicu wskazanego id (sendDraftInvoiceAction, trasa telefonu); zapytanie filtruje tenant_id firmy z sesji, więc szkic innej firmy to „nie znaleziono”',
+  'lib/api/mobile/faktury.ts': 'API telefonu (POST /api/mobile/v1/faktury, M8): bez ciasteczka firmy; firma z nagłówka X-Active-Org wysłanego z formularza, członkostwo sprawdzone tokenem w authenticateMobileRequest, zapis klientem z tym nagłówkiem (RLS get_current_tenant_id); telefon zapamiętuje firmę przy otwarciu formularza i odmawia zapisu w innej (bladFirmyZapisu w mobile/src/lib/faktura/wystawienie.ts, jak expectedTenantId)',
   'lib/api/v1/invoice-create.ts': 'publiczne API (POST /api/v1/invoices, krok 7.1): bez sesji i ciasteczka firmy; firmę ustala baza ze skrótu klucza w tokenie (api_create_invoice, 00184), a wysyłka dostaje firmę klucza z api_key_session',
 };
 

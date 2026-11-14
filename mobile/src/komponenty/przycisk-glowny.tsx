@@ -62,7 +62,7 @@ export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', trwa, onPress
         ) : (
           <>
             {ikona ? <Ikona nazwa={ikona} rozmiar={18} kolor={kolorTresci} /> : null}
-            <Tekst styl="callout" waga="semibold" style={[styles.napis, { color: kolorTresci }]} numberOfLines={2}>
+            <Tekst styl="callout" waga="semibold" style={[styles.napis, { color: kolorTresci }]} numberOfLines={3}>
               {tytul}
             </Tekst>
           </>
