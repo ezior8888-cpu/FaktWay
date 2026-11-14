@@ -12,7 +12,7 @@
  * zły filtr zmienia wynik testu.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobContext } from '@/lib/jobs/registry';
 
@@ -394,11 +394,22 @@ describe('cron.support-chat-retention — runner', () => {
 });
 
 describe('rejestr jobów — cron retencji czatu', () => {
-  it('kolejka jest w CRON_JOBS (codziennie) i ma zarejestrowany handler', async () => {
-    const { CRON_JOBS } = await import('@/lib/jobs/queues');
-    const { getRegisteredJobs } = await import('@/lib/jobs/registry');
-    await import('@/lib/jobs/handlers/package-a');
+  let CRON_JOBS: (typeof import('@/lib/jobs/queues'))['CRON_JOBS'];
+  let getRegisteredJobs: (typeof import('@/lib/jobs/registry'))['getRegisteredJobs'];
 
+  // Zimny import rejestru jobów z `package-a` (handlery, runnery i ich zależności)
+  // to prawie cały czas tego testu: na Windowsie ok. 2 s, a gdy kilka sesji
+  // testuje naraz, dłużej. Limit to domyślne 5 s na test z `vitest.config.ts`,
+  // a ten sam import z `package-d` w `joby-fanout-skrzynka.test.ts` już go
+  // przekraczał w haku przed pushem. Dlatego import idzie tu, raz, z jawnym
+  // limitem 60 s, a sam test zostaje przy zwykłym limicie.
+  beforeAll(async () => {
+    ({ CRON_JOBS } = await import('@/lib/jobs/queues'));
+    ({ getRegisteredJobs } = await import('@/lib/jobs/registry'));
+    await import('@/lib/jobs/handlers/package-a');
+  }, 60_000);
+
+  it('kolejka jest w CRON_JOBS (codziennie) i ma zarejestrowany handler', () => {
     const cron = CRON_JOBS.find((c) => c.queue === 'cron.support-chat-retention');
     expect(cron, 'brak cron.support-chat-retention w CRON_JOBS').toBeDefined();
     // Codziennie: przy przebiegu raz w miesiącu rozmowa żyłaby do 25 miesięcy.
