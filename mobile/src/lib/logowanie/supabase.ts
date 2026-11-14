@@ -10,9 +10,10 @@
  *
  * Hasło od M6b (decyzja D16) idzie przez API strony (`POST /api/mobile/v1/logowanie`,
  * `lib/logowanie/przez-api.ts`), bo GoTrue z captchą odrzuca logowanie hasłem
- * bez tokenu Turnstile. Sesję z odpowiedzi wkłada `setSession`; kod 2FA,
- * Google (PKCE), odświeżanie i wylogowanie zostają wprost w GoTrue (captchy
- * nie wymagają, sprawdzone 13.11.2026, plan 4.2).
+ * bez tokenu Turnstile. Kod 2FA od M6c też przez API (`POST /api/mobile/v1/kod`):
+ * tam jest limit prób kodu i audyt strony. Sesje z odpowiedzi wkłada
+ * `setSession`; Google (PKCE), odświeżanie i wylogowanie zostają wprost w
+ * GoTrue (captchy nie wymagają, sprawdzone 13.11.2026, plan 4.2).
  */
 import { isAuthRetryableFetchError, type SupabaseClient, type User } from '@supabase/supabase-js';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -20,7 +21,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { zalogujHaslem } from '@/lib/api/polaczenie';
+import { potwierdzKodNaSerwerze, zalogujHaslem } from '@/lib/api/polaczenie';
 import { przedCzasem } from '@/lib/api/rdzen';
 import { sesjaZTekstu, wymagaKoduBezSieci, type UzytkownikSesji } from '@/lib/logowanie/token';
 import type { KodBledu, Konto, WynikKroku, Zaplecze } from '@/lib/logowanie/typy';
@@ -129,11 +130,15 @@ export function zapleczeSupabase(supabase: SupabaseClient): Zaplecze {
 
     potwierdzKod: async (kod) => {
       try {
-        const czynniki = await supabase.auth.mfa.listFactors();
-        const totp = czynniki.data?.totp[0];
-        if (czynniki.error || !totp) return { ok: false, blad: kodBledu(czynniki.error, 'nieznany') };
-        const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: totp.id, code: kod });
-        if (error) return { ok: false, blad: kodBledu(error, 'zly_kod') };
+        const odp = await potwierdzKodNaSerwerze(kod);
+        if (!odp.ok) return odp;
+        if (odp.sesja) {
+          const { data, error } = await supabase.auth.setSession({ access_token: odp.sesja.accessToken, refresh_token: odp.sesja.refreshToken });
+          if (error || !data.user) return { ok: false, blad: kodBledu(error, 'nieznany') };
+          return { ok: true, konto: konto(data.user) };
+        }
+        // Serwer mówi, że sesja nie czekała na kod (409): zostaje obecna, ale tylko gdy telefon liczy to samo.
+        if (await wymagaKodu()) return { ok: false, blad: 'nieznany' };
         const { data } = await supabase.auth.getUser();
         return data.user ? { ok: true, konto: konto(data.user) } : { ok: false, blad: 'nieznany' };
       } catch (e) {

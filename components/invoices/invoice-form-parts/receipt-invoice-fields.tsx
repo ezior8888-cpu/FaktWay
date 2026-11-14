@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
-import { AlertCircle } from 'lucide-react';
 
 import { DocumentHeaderRow } from '@/components/invoices/finora/invoice-document';
 import { Input } from '@/components/ui/input';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 
-import { errorTextClass, type BuyerKind } from './constants';
+import type { BuyerKind } from './constants';
+import { FieldErrorText, fieldErrorProps } from './field-error-text';
 
 /**
  * Faktura do paragonu (krok 1.2 planu kompletnej aplikacji): pole wyboru na
@@ -38,15 +38,10 @@ export function ReceiptInvoiceFields({
   onReceiptDateChange: (value: string) => void;
 }) {
   const errors = form.formState.errors;
-  const error = (message: string | undefined): ReactNode =>
-    message ? (
-      <p className={errorTextClass}>
-        <AlertCircle className="h-3 w-3" />
-        {message}
-      </p>
-    ) : null;
-  const receiptInvoiceError = error(errors.receiptInvoice?.message);
-  const nipOnReceiptError = error(errors.buyerNipOnReceipt?.message);
+  const error = (fieldId: string, message: string | undefined): ReactNode =>
+    message ? <FieldErrorText fieldId={fieldId}>{message}</FieldErrorText> : null;
+  const receiptInvoiceError = error('receipt-invoice', errors.receiptInvoice?.message);
+  const nipOnReceiptError = error('buyer-nip-on-receipt', errors.buyerNipOnReceipt?.message);
 
   return (
     <div data-testid="pola-faktury-do-paragonu" className="space-y-3">
@@ -55,6 +50,7 @@ export function ReceiptInvoiceFields({
           <input
             id="receipt-invoice"
             type="checkbox"
+            {...fieldErrorProps('receipt-invoice', !!errors.receiptInvoice)}
             className="accent-primary h-4 w-4"
             {...form.register('receiptInvoice', {
               onChange: (e: { target: { checked: boolean } }) => onToggle(e.target.checked),
@@ -70,18 +66,19 @@ export function ReceiptInvoiceFields({
       </div>
       {enabled ? (
         <>
-          <DocumentHeaderRow label="Numer paragonu" htmlFor="receipt-number" error={error(errors.receiptNumber?.message)}>
-            <Input id="receipt-number" {...form.register('receiptNumber')} />
+          <DocumentHeaderRow label="Numer paragonu" htmlFor="receipt-number" error={error('receipt-number', errors.receiptNumber?.message)}>
+            <Input id="receipt-number" {...fieldErrorProps('receipt-number', !!errors.receiptNumber)} {...form.register('receiptNumber')} />
           </DocumentHeaderRow>
           <DocumentHeaderRow
             label="Data paragonu"
             htmlFor="receipt-date"
             hint="To także data sprzedaży na fakturze."
-            error={error(errors.receiptDate?.message)}
+            error={error('receipt-date', errors.receiptDate?.message)}
           >
             <Input
               id="receipt-date"
               type="date"
+              {...fieldErrorProps('receipt-date', !!errors.receiptDate)}
               {...form.register('receiptDate', {
                 onChange: (e: { target: { value: string } }) => onReceiptDateChange(e.target.value),
               })}
@@ -91,17 +88,17 @@ export function ReceiptInvoiceFields({
             label="Numer unikatowy kasy"
             htmlFor="cash-register-number"
             hint="Na paragonie obok logo fiskalnego, np. ABC1234567890."
-            error={error(errors.cashRegisterNumber?.message)}
+            error={error('cash-register-number', errors.cashRegisterNumber?.message)}
           >
-            <Input id="cash-register-number" autoCapitalize="characters" {...form.register('cashRegisterNumber')} />
+            <Input id="cash-register-number" autoCapitalize="characters" {...fieldErrorProps('cash-register-number', !!errors.cashRegisterNumber)} {...form.register('cashRegisterNumber')} />
           </DocumentHeaderRow>
           <DocumentHeaderRow
             label="Data żądania faktury"
             htmlFor="receipt-request-date"
             hint="Opcjonalnie, gdy nabywca poprosił o fakturę przed dniem wystawienia."
-            error={error(errors.receiptRequestDate?.message)}
+            error={error('receipt-request-date', errors.receiptRequestDate?.message)}
           >
-            <Input id="receipt-request-date" type="date" {...form.register('receiptRequestDate')} />
+            <Input id="receipt-request-date" type="date" {...fieldErrorProps('receipt-request-date', !!errors.receiptRequestDate)} {...form.register('receiptRequestDate')} />
           </DocumentHeaderRow>
           {buyerKind === 'pl' ? (
             <div className="space-y-1.5">
@@ -109,6 +106,7 @@ export function ReceiptInvoiceFields({
                 <input
                   id="buyer-nip-on-receipt"
                   type="checkbox"
+                  {...fieldErrorProps('buyer-nip-on-receipt', !!errors.buyerNipOnReceipt)}
                   className="accent-primary h-4 w-4"
                   {...form.register('buyerNipOnReceipt')}
                 />

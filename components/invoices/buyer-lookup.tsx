@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useId, useTransition } from 'react';
 import { Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +35,9 @@ export function BuyerLookup({
   inputId,
 }: Props) {
   const [isLoading, startLoading] = useTransition();
+  const generowanyId = useId();
+  const poleId = inputId ?? generowanyId;
+  const opisId = `${poleId}-opis`;
 
   const handleLookup = () => {
     startLoading(async () => {
@@ -57,7 +60,9 @@ export function BuyerLookup({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <NipValidatedInput
-            id={inputId}
+            id={poleId}
+            invalid={Boolean(nipError)}
+            describedBy={opisId}
             value={nip}
             onChange={(v) =>
               onNipChange(v.replace(/\D/g, '').slice(0, 10))
@@ -82,16 +87,18 @@ export function BuyerLookup({
           aria-label="Wyszukaj w GUS lub historii kontrahentów"
         >
           {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
           ) : (
-            <Search className="h-4 w-4 text-muted-foreground" />
+            <Search aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
           )}
         </Button>
       </div>
       {nipError ? (
-        <p className="text-xs text-red-600 dark:text-red-400">{nipError}</p>
+        <p id={opisId} role="alert" className="text-xs text-red-600 dark:text-red-400">
+          {nipError}
+        </p>
       ) : (
-        <p className="text-xs text-muted-foreground">
+        <p id={opisId} className="text-xs text-muted-foreground">
           Wpisz NIP — weryfikacja VAT w tle — i opcjonalnie kliknij lupę, żeby
           uzupełnić nazwę i adres (GUS / historia).
         </p>

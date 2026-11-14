@@ -30,7 +30,9 @@ import type { UserRole } from '@/lib/supabase/auth-context';
  *  3. token z nagłówka (kształt JWT sprawdzony bez sieci);
  *  4. GoTrue: `getUser(token)` (tożsamość, czynniki 2FA) i `getClaims(token)`
  *     (poziom tej sesji), ta sama reguła co strona (`getVerifiedMfaStateForToken`):
- *     konto z TOTP w sesji AAL1 dostaje 403 `mfa_required`;
+ *     konto z TOTP w sesji AAL1 dostaje 403 `mfa_required`. Wyjątek to tylko
+ *     `mfa: 'challenge'` (trasa kodu 2FA, M6c): przepuszcza właśnie taką sesję,
+ *     a każdą inną (bez 2FA albo już po kodzie) odrzuca 409 `mfa_not_required`;
  *  5. limit na osobę (z kilku adresów i telefonów razem);
  *  6. przy trasie z danymi firmy: `X-Active-Org` i aktywne członkostwo,
  *     sprawdzone tokenem klienta (RLS), bez klucza serwisowego.
@@ -72,15 +74,26 @@ export interface MobileSessionClaims {
 export type MobileTokenState =
   | { status: 'ok'; user: User; mfaEnabled: boolean; claims: MobileSessionClaims }
   | { status: 'unauthenticated' }
-  | { status: 'challenge_required' };
+  /** Konto z 2FA w sesji AAL1. Konto i claims tylko dla trasy kodu (`mfa: 'challenge'`); reszta odmawia. */
+  | { status: 'challenge_required'; user: User; claims: MobileSessionClaims };
 
 export interface MobileCaller {
   requestId: string;
   /** Nagłówki dla każdej odpowiedzi tego żądania. */
   headers: Record<string, string>;
   user: { id: string; email: string | null };
-  /** Konto ma zweryfikowany TOTP (i ta sesja jest po kodzie, inaczej byłoby 403). */
+  /**
+   * Konto ma zweryfikowany TOTP (i ta sesja jest po kodzie, inaczej byłoby 403).
+   * Przy `mfa: 'challenge'` sesja jest na AAL1 i czeka na kod; `true` tylko z czynnikiem TOTP.
+   */
   mfaEnabled: boolean;
+  /** Token z nagłówka. Tylko przy `mfa: 'challenge'`: trasa kodu potwierdza nim kod w GoTrue. */
+  accessToken: string | null;
+  /**
+   * Zweryfikowany czynnik TOTP z odpowiedzi GoTrue (`getUser`), nie z treści tokenu.
+   * Tylko przy `mfa: 'challenge'`; `null`, gdy konto ma 2FA innego rodzaju niż TOTP.
+   */
+  totpFactorId: string | null;
   session: MobileSessionClaims;
   /** Tylko przy `org: 'required'`. */
   org: { tenantId: string; role: UserRole } | null;
@@ -154,17 +167,17 @@ export async function verifyMobileToken(token: string, target: MobileSupabaseTar
   } as Pick<SupabaseClient['auth'], 'getUser' | 'getClaims'>, token);
 
   if (state.status === 'unauthenticated') return state;
-  if (state.status === 'challenge_required') return { status: 'challenge_required' };
   const claims = verifiedClaims as JwtPayload | null;
   if (!claims || claims.sub !== state.user.id) throw new Error('mobile_claims_missing');
   // Podpis i ważność tokenu sprawdził już GoTrue, więc jego `session_id` i `amr` czytamy jak strona.
   const facts = readAccessTokenFacts(token);
-  return {
-    status: 'ok',
-    user: state.user,
-    mfaEnabled: state.status === 'verified',
-    claims: { sessionId: facts.sessionId, aal: claims.aal === 'aal2' ? 'aal2' : 'aal1', amrMethods: facts.amrMethods },
+  const sessionClaims: MobileSessionClaims = {
+    sessionId: facts.sessionId,
+    aal: claims.aal === 'aal2' ? 'aal2' : 'aal1',
+    amrMethods: facts.amrMethods,
   };
+  if (state.status === 'challenge_required') return { status: 'challenge_required', user: state.user, claims: sessionClaims };
+  return { status: 'ok', user: state.user, mfaEnabled: state.status === 'verified', claims: sessionClaims };
 }
 
 /**
@@ -190,10 +203,20 @@ export async function findActiveMembership(
   return { role: (typeof role === 'string' ? role : 'member') as UserRole };
 }
 
+/**
+ * `mfa` (domyślnie `verified`): konto z 2FA tylko po kodzie (AAL2), jak strona.
+ * `challenge` ma tylko `POST /kod` (M6c): przepuszcza sesję AAL1 konta z 2FA,
+ * żeby można było w niej wpisać kod. Sesja przed kodem nie dostaje firmy.
+ */
+export type MobileAuthOptions =
+  | { org: 'none' | 'required'; mfa?: 'verified' }
+  | { org: 'none'; mfa: 'challenge' };
+
 export async function authenticateMobileRequest(
   request: Request,
-  options: { org: 'none' | 'required' },
+  options: MobileAuthOptions,
 ): Promise<MobileAuthResult> {
+  const mfaMode = options.mfa ?? 'verified';
   const requestId = randomUUID();
   const base = { 'X-Request-Id': requestId };
 
@@ -228,8 +251,11 @@ export async function authenticateMobileRequest(
     return fail(mobileError(503, 'session_verification_failed', MOBILE_UNAVAILABLE, base));
   }
   if (state.status === 'unauthenticated') return invalidToken(base);
-  if (state.status === 'challenge_required') {
+  if (mfaMode === 'verified' && state.status === 'challenge_required') {
     return fail(mobileError(403, 'mfa_required', 'Wpisz kod z aplikacji uwierzytelniającej, żeby dokończyć logowanie.', base));
+  }
+  if (mfaMode === 'challenge' && state.status !== 'challenge_required') {
+    return fail(mobileError(409, 'mfa_not_required', 'Ta sesja nie czeka na kod. Możesz korzystać z aplikacji.', base));
   }
 
   // Bez liczenia odmów: `Retry-After` to czas, po którym zapytanie naprawdę przejdzie.
@@ -240,6 +266,8 @@ export async function authenticateMobileRequest(
     countDenied: false,
   });
   if (!userLimit.allowed) return rateLimited(userLimit, base);
+
+  const totpFactorId = state.user.factors?.find((factor) => factor.factor_type === 'totp' && factor.status === 'verified')?.id ?? null;
 
   let org: MobileCaller['org'] = null;
   if (options.org === 'required') {
@@ -265,7 +293,9 @@ export async function authenticateMobileRequest(
       requestId,
       headers: base,
       user: { id: state.user.id, email: state.user.email ?? null },
-      mfaEnabled: state.mfaEnabled,
+      mfaEnabled: state.status === 'challenge_required' ? totpFactorId !== null : state.mfaEnabled,
+      accessToken: mfaMode === 'challenge' ? bearer.token : null,
+      totpFactorId: mfaMode === 'challenge' ? totpFactorId : null,
       session: state.claims,
       org,
       db: createMobileDbClient(bearer.token, { activeOrg: org?.tenantId ?? null }),

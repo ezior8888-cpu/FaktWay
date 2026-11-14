@@ -105,10 +105,11 @@ describe('pkt 1: przychód z faktur i wpisów ręcznych', () => {
 });
 
 describe('pkt 2: faktura do paragonu', () => {
-  // Krok 1.2 planu kompletnej aplikacji (świadoma zmiana testu): FP dalej nie
-  // jest drugim przychodem, ale do reguły, która sprawdzi pokrycie raportem kasy
-  // (następny PR, G30), miesiąc z FP ma brak zamiast cichego pominięcia.
-  it('FP nie jest drugim przychodem; miesiąc z FP ma brak z nazwą faktury i wyjściem', () => {
+  // Krok 1.2 planu kompletnej aplikacji: FP nie jest drugim przychodem. Od
+  // części 2 (reguła pokrycia, `faktura-do-paragonu-pokrycie-kasy.test.ts`) FP
+  // jest poza ewidencją tylko wtedy, gdy raporty kasy z miesiąca paragonu
+  // obejmują jej kwotę; tu raport (2500 zł) jest niższy niż FP (10 000 zł).
+  it('FP nie jest drugim przychodem; raport kasy niższy niż FP: brak z nazwą faktury i wyjściem', () => {
     const e = ewidencja({ faktury: [faktura({ fp: true })], wpisy: [wpis()] });
     expect(e.wiersze.map((w) => w.dowod)).toEqual(['RK/03/2026']);
     expect(e.pominiete).toEqual([]);
