@@ -226,3 +226,25 @@ describe('3: kwoty pozycji jak na serwerze (4 miejsca po przecinku, bez zaokrąg
     expect(cenaPozycji({ nazwa: 'x', ilosc: 1, jednostka: 'szt.', cenaNetto: 1050, stawkaVat: 23 })).toBe('10,50\u00a0zł');
   });
 });
+
+// ─── Filtr na telefonie: dodajDni bez toISOString (reguła data-warszawa) ───
+
+import { dodajDni } from '../../mobile/src/lib/faktura/wystawienie';
+
+describe('dodajDni: dni kalendarzowe bez strefy', () => {
+  it('przechodzi miesiąc, rok i luty przestępny, cofa się przy liczbie ujemnej', () => {
+    expect(dodajDni('2026-11-14', 14)).toBe('2026-11-28');
+    expect(dodajDni('2026-01-31', 1)).toBe('2026-02-01');
+    expect(dodajDni('2026-12-31', 1)).toBe('2027-01-01');
+    expect(dodajDni('2028-02-28', 1)).toBe('2028-02-29');
+    expect(dodajDni('2026-03-01', -1)).toBe('2026-02-28');
+    expect(dodajDni('2026-11-14', 0)).toBe('2026-11-14');
+  });
+
+  it('nie zależy od zmiany czasu w Polsce (ostatnia niedziela marca i października)', () => {
+    expect(dodajDni('2026-03-28', 1)).toBe('2026-03-29');
+    expect(dodajDni('2026-03-29', 1)).toBe('2026-03-30');
+    expect(dodajDni('2026-10-24', 1)).toBe('2026-10-25');
+    expect(dodajDni('2026-10-25', 1)).toBe('2026-10-26');
+  });
+});
