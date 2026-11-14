@@ -240,7 +240,8 @@
         "lib/proformy/**",
         "app/api/proformy/**",
         "app/actions/produkty.ts",
-        "lib/produkty/**"
+        "lib/produkty/**",
+        "supabase/migrations/00204_*.sql"
       ]
     },
     {

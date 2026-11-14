@@ -151,6 +151,9 @@ export default defineConfig({
       // 00186 (plan skalowania 3000, sesja 21): wynik strażnika cyklu życia przed i po, lekka funkcja bez I3,
       // wklejanie ksef_upo_expected, indeksy cronów w planach, UNIQUE katalogu produktów i kontrola dubli.
       'tests/rls-indeksy-cronow-produkty.test.ts',
+      // 00204 (plan kompletnej aplikacji, krok 2.6): licznik użyć produktu z katalogu przy zapisie faktury;
+      // klucz jak indeks 00186, raz na wywołanie, archiwalne też, cudza firma i sesja bez firmy bez zmian, atomowo.
+      'tests/rls-produkty-licznik.test.ts',
       // Plan skalowania 3000, sesja 12 (QAL-01, bez migracji): nocna kopia JSON czyta
       // tabele stronami po kluczu; filtry kursora (też klucz złożony) przez prawdziwy PostgREST.
       'tests/rls-kopia-json-stronicowanie.test.ts',
