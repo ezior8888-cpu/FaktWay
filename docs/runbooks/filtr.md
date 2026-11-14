@@ -86,12 +86,16 @@ rozliczenia (przy terminie `termin`), a `miesiac` to okres rozliczenia.
 | Kod | Co znaczy | Co widzi klient |
 |---|---|---|
 | `FILTR-RT-PRZ-01` | kwota pozycji nie jest całkowitą liczbą groszy od zera w górę, albo ryczałt, zaliczka PIT lub VAT ma grosze (art. 63 § 1 Ordynacji podatkowej) | przypomnienie o terminie bez tej kwoty, jak przy braku podpisu księgowej (D7) |
-| `FILTR-RT-PRZ-02` | termin przypomnienia nie przypada w dzień roboczy albo nie jest datą | brak przypomnienia (bez wpisu „sent”, więc przebieg następnego etapu spróbuje znowu); „Ten miesiąc” pokazuje termin po swojej kontroli |
+| `FILTR-RT-PRZ-02` | termin przypomnienia nie przypada w dzień roboczy albo nie jest datą | brak przypomnienia; oba etapy (5 dni i 1 dzień przed) mają ten sam termin, więc oba są wstrzymane; „Ten miesiąc” pokazuje termin po swojej kontroli |
 
 Przy PRZ-01 sprawdzić zatwierdzoną wersję rozliczenia firmy za ten miesiąc
 (kwota zapisana przy zatwierdzeniu) i silnik, który ją policzył; przy PRZ-02
 kalendarz terminów (`lib/ksiegowosc/kalendarz.ts`, RP-TERM-02). Naprawa
-według protokołu (`AGENTS.md`).
+według protokołu (`AGENTS.md`). Przy PRZ-02 dotyczy to wszystkich firm
+w pilotażu z tym terminem: po naprawie kalendarza codzienny przebieg liczy
+etapy od poprawionego terminu, więc przypomnienia wyjdą, jeśli ich dni są
+jeszcze przed nami; gdy termin jest bliżej niż 5 dni, Bartosz decyduje, czy
+uprzedzić firmy z alarmu (tag `tenantId`) inną drogą.
 
 ### JPK_V7M (`lib/bezpieczniki/jpk-v7m.ts`)
 
