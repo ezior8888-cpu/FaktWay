@@ -59,6 +59,14 @@
         {
           "faceIDPermission": "FaktWay pyta o Face ID, żeby odblokować aplikację bez hasła."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FaktWay otwiera zdjęcie paragonu albo faktury, które wybierzesz, żeby odczytać z niego wydatek.",
+          "cameraPermission": "FaktWay skanuje paragon albo fakturę aparatem, żeby odczytać z niej wydatek.",
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {

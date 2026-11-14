@@ -23,7 +23,7 @@ export type Magazyn = {
 /** Zmiana kształtu zapisanych danych podnosi wersję: stare zapisy się wtedy nie wczytają. */
 export const WERSJA_PAMIECI = 1;
 
-export type RodzajDanych = 'konto' | 'faktury' | 'skrzynka';
+export type RodzajDanych = 'konto' | 'faktury' | 'skrzynka' | 'wydatki';
 
 export type Zapis<T> = { wersja: number; uzytkownik: string; firma: string | null; zapisano: string; dane: T };
 

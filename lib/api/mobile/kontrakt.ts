@@ -17,9 +17,10 @@
 export const MOBILE_ACTIVE_ORG_HEADER = 'X-Active-Org';
 
 /**
- * Zapis z telefonu (M8, `POST /faktury`): UUID wylosowany raz na wypełnienie
- * formularza. Ponowienie z tym samym kluczem i tą samą treścią oddaje fakturę
- * z pierwszego zapisu (bez drugiej faktury i drugiej wysyłki).
+ * Zapis z telefonu (M8 `POST /faktury`, M9 `POST /wydatki/zdjecie`): UUID
+ * wylosowany raz na wypełnienie formularza albo jedno zdjęcie. Ponowienie
+ * z tym samym kluczem i tą samą treścią oddaje wynik pierwszego zapisu (bez
+ * drugiej faktury, drugiej wysyłki, drugiego odczytu i drugiego kosztu).
  */
 export const MOBILE_IDEMPOTENCY_HEADER = 'Idempotency-Key';
 
@@ -50,6 +51,15 @@ export const MOBILE_API_ERROR_CODES = [
   'not_draft',
   /** 422: kolejka KSeF odmówiła wysyłki szkicu (brak certyfikatu, pauza, 2FA); szkic zostaje, `message` mówi co zrobić. */
   'ksef_send_refused',
+  /**
+   * 400, 413, 415: `POST /wydatki/zdjecie` (M9): brak pliku, plik nie jest zdjęciem ani PDF albo jest za duży.
+   * `message` mówi, co zrobić; ponowienie tego samego pliku nic nie zmieni.
+   */
+  'file_invalid',
+  /** 400, 408: `POST /wydatki/zdjecie` (M9): nie dotarł cały plik albo wysyłka trwała za długo. Ponów z tym samym kluczem. */
+  'upload_incomplete',
+  /** 422: `POST /wydatki/{id}/zatwierdzenie` (M9): zasada zapisu kosztu (waluta, KPiR, koszt z KSeF); `message` mówi co zrobić. */
+  'expense_invalid',
   /** 429, z nagłówkiem `Retry-After`. */
   'rate_limited',
   /** 503, z nagłówkiem `Retry-After`. */
@@ -197,6 +207,70 @@ export interface PodpowiedzFakturyOdpowiedz {
   dzis: string;
   /** Firma zwolniona z VAT (art. 113): nowa pozycja startuje ze stawką „zw”. */
   zwolnienieVat: boolean;
+}
+
+// ─── Wydatki (M9): wydatek ze zdjęcia ─────────────────────────────────
+
+/** `POST /api/mobile/v1/wydatki/zdjecie`: pole formularza `multipart/form-data` z plikiem (JPG, PNG, WEBP, GIF albo PDF). */
+export const MOBILE_EXPENSE_FILE_FIELD = 'plik';
+
+/**
+ * `POST /api/mobile/v1/wydatki/zdjecie` (z nagłówkiem `Idempotency-Key`): 201 nowe wgranie,
+ * 200 powtórzenie (ten sam klucz i ten sam plik). `odczyt.id` to zadanie odczytu (OCR) do
+ * `GET /wydatki/odczyt/{id}`; wydatek z odczytu zapisuje serwer.
+ */
+export interface WgranieWydatkuOdpowiedz {
+  odczyt: { id: string };
+  powtorzenie: boolean;
+}
+
+/** Stan zadania odczytu jak kolumna `ocr_jobs.status`. */
+export type StanOdczytu = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * `GET /api/mobile/v1/wydatki/odczyt/{id}`: 200 ze stanem. `wydatekId` przy `completed`;
+ * `blad` przy `failed` (zdanie z odczytu). 404 `not_found`: zadania nie ma (koniec czekania);
+ * 503: stan nieznany, pytaj dalej (nie wgrywaj zdjęcia drugi raz).
+ */
+export interface OdczytWydatkuOdpowiedz {
+  odczyt: { id: string; stan: StanOdczytu; wydatekId: string | null; blad: string | null };
+}
+
+/** Kolumna KPiR jak enum `kpir_column` (ta sama lista co formularz kosztu na stronie). */
+export type KolumnaKpirTelefonu = 'col_7' | 'col_8' | 'col_10' | 'col_11' | 'col_12' | 'col_13' | 'col_15' | 'col_16';
+
+/**
+ * Zmiany kosztu jak formularz kosztu strony (`ExpenseEditForm`, `ExpenseReviewUpdates`):
+ * kwoty w złotych do 2 miejsc, data RRRR-MM-DD, NIP same cyfry albo `null`.
+ * `confirmPlnAmounts` tylko przy dokumencie w walucie bez kursu NBP: klient wpisał złote.
+ */
+export interface ZmianyWydatkuTelefonu {
+  seller_name: string;
+  seller_nip: string | null;
+  document_number?: string;
+  issue_date: string;
+  net_amount: number;
+  vat_amount: number;
+  gross_amount: number;
+  kpir_column: KolumnaKpirTelefonu;
+  category_label: string;
+  is_deductible: boolean;
+  notes?: string;
+  confirmPlnAmounts?: boolean;
+}
+
+/** `POST /api/mobile/v1/wydatki/{id}/zatwierdzenie`: opis i akceptacja kosztu ze zdjęcia (nie z KSeF). */
+export interface ZatwierdzenieWydatkuZadanie {
+  zmiany: ZmianyWydatkuTelefonu;
+}
+
+/**
+ * `POST /api/mobile/v1/wydatki/{id}/zatwierdzenie`, 200. `opisany: false`, gdy koszt został
+ * poza KPiR do wyjaśnienia (kwoty w walucie bez potwierdzenia złotych). Ponowienie zapisuje
+ * to samo drugi raz (bez drugiego kosztu), więc nie potrzebuje klucza.
+ */
+export interface ZatwierdzenieWydatkuOdpowiedz {
+  wydatek: { id: string; opisany: boolean; wKpir: boolean };
 }
 
 /** Jak `UserRole` strony (`lib/supabase/auth-context.ts`); zgodność sprawdza test kontraktu. */

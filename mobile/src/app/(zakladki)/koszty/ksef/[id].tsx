@@ -24,8 +24,8 @@ function status(s: FakturaKosztowa): { tekst: string; kolor: 'info' | 'sukces' |
  * Faktura kosztowa ze skrzynki KSeF (etap M7): odpowiednik wiersza
  * `(koszty)/inbox` strony, tylko do odczytu, w układzie szczegółu faktury
  * (kwota na gradiencie, potem sprzedawca, dokument, pozycje). Opis i
- * kategoria wydatku: na danych przykładowych ekran wydatku, na prawdziwym
- * koncie strona (ekran wydatku z bazy w M9 i M10).
+ * kategoria wydatku: ekran wydatku (od M9 także z bazy); opis kosztu z KSeF
+ * na prawdziwym koncie odsyła na faktway.pl (porównanie z XML i kursem).
  */
 export default function EkranFakturyKosztowej() {
   const router = useRouter();
@@ -50,7 +50,7 @@ export default function EkranFakturyKosztowej() {
   }
 
   const st = status(s);
-  // Ekran wydatku jest dziś tylko na danych przykładowych; wydatek z bazy otwiera strona.
+  // Wydatek spoza 200 najnowszych na telefonie otwiera strona.
   const wydatekWTelefonie = s.wydatekId ? koszty.some((k) => k.id === s.wydatekId) : false;
   const vat = s.netto === undefined ? undefined : s.brutto - s.netto;
 

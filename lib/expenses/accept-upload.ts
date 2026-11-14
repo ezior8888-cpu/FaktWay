@@ -28,6 +28,12 @@ import {
  * Limit zależy od typu z zawartości (AUD-105): zdjęcie do 7 MB (próg odczytu
  * OCR), PDF do 10 MB. Typ czytamy z pierwszych bajtów, zanim cały plik trafi
  * do bufora.
+ *
+ * Od M9 planu aplikacji mobilnej woła je też `POST /api/mobile/v1/wydatki/zdjecie`
+ * (`lib/api/mobile/wydatki.ts`) z `onJobCreated`: klucz idempotencji telefonu
+ * powstaje zaraz po zadaniu OCR, zanim plik trafi do magazynu, a odczyt do
+ * kolejki. Odmowa klucza (np. równoległe ponowienie zdążyło pierwsze) kończy
+ * wgranie bez pliku i bez odczytu, a zadanie znika. Strona go nie podaje.
  */
 
 export type ExpenseDocumentKind = 'zdjecie' | 'pdf';
@@ -53,14 +59,20 @@ export function expenseTooLargeMessage(kind: ExpenseDocumentKind, size: number):
     : `Zdjęcie ma ${label}, a do odczytu można wgrać najwyżej ${UPLOAD_IMAGE_LIMIT_LABEL}. Zrób zdjęcie w niższej rozdzielczości albo zapisz je jako mniejszy JPG.`;
 }
 
+/** Odmowa `onJobCreated`: kod HTTP i komunikat dla klienta. */
+export type JobCreatedRefusal = { ok: false; status: number; error: string };
+
 export async function acceptExpenseDocument({
   userId,
   tenantId,
   file,
+  onJobCreated,
 }: {
   userId: string;
   tenantId: string;
   file: File;
+  /** Krok po zapisie zadania OCR, przed magazynem i kolejką (telefon: klucz idempotencji). */
+  onJobCreated?: (ocrJobId: string) => Promise<{ ok: true } | JobCreatedRefusal>;
 }): Promise<ExpenseUploadOutcome> {
   // Typ z zawartości, nie z nagłówka przeglądarki (AUD-105).
   const mimeType = detectExpensePhotoType(new Uint8Array(await file.slice(0, SIGNATURE_BYTES).arrayBuffer()));
@@ -104,6 +116,20 @@ export async function acceptExpenseDocument({
 
   if (jobError || !ocrJob) {
     return { success: false, status: 500, error: 'Błąd zapisu joba' };
+  }
+
+  if (onJobCreated) {
+    let claimed: { ok: true } | JobCreatedRefusal;
+    try {
+      claimed = await onJobCreated(ocrJob.id);
+    } catch {
+      claimed = { ok: false, status: 500, error: 'Błąd zapisu joba' };
+    }
+    if (!claimed.ok) {
+      // Bez pliku i bez zdarzenia: zadanie nie da wydatku, więc znika.
+      await admin.from('ocr_jobs').delete().eq('id', ocrJob.id);
+      return { success: false, status: claimed.status, error: claimed.error };
+    }
   }
 
   let r2Key: string | null = null;

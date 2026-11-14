@@ -533,7 +533,10 @@
         "lib/jobs/runners/{auto-categorize-inbox,process-ocr}.ts",
         "app/actions/{expense-payments,plik-przelewow,receipt-invoice-match}.ts",
         "app/api/uploads/expense/route.ts",
-        "app/actions/expense-thread.ts"
+        "app/actions/expense-thread.ts",
+        "lib/api/mobile/wydatki.ts",
+        "app/api/mobile/v1/wydatki/**",
+        "supabase/migrations/00202_*.sql"
       ]
     },
     {
@@ -780,7 +783,8 @@
       "poziom": "R1",
       "opis": "Telefon: wydatki i faktury kosztowe (od M9 zapis ze zdjęcia): kwoty, VAT i kategoria, które trafiają do KPiR i rozliczenia VAT.",
       "sciezki": [
-        "mobile/src/app/(zakladki)/koszty/**"
+        "mobile/src/app/(zakladki)/koszty/**",
+        "mobile/src/lib/wydatek/**"
       ]
     },
     {
