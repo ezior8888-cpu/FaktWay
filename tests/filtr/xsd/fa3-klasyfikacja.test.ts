@@ -15,12 +15,15 @@ import { PRZYPADKI, ZIARNO } from '../generatory/ustawienia';
  * `FaWiersz` oficjalnego XSD FA(3) kody stoją po nazwie towaru: P_7, Indeks,
  * GTIN, PKWiU, CN, PKOB, dopiero potem P_8A. Generatory faktury zwykłej,
  * rozliczającej (ROZ) i korygującej (KOR) wstawiały kod przed P_7, więc
- * pozycja z kodem dawała XML, którego XSD nie przyjmuje (`XSD_INVALID` przed
- * wysyłką do KSeF).
+ * pozycja z kodem dawała XML, którego XSD nie przyjmuje: wysyłka takiej
+ * faktury kończyłaby się `XSD_INVALID`, zanim cokolwiek trafi do KSeF.
  *
- * Który z trzech elementów dostaje kod, generator wybiera po kształcie kodu;
- * ROZ i KOR biorą go z `pkwiuCode` i przepuszczają tylko litery i cyfry.
- * Kody w macierzy są dobrane tak, żeby każdy generator wstawił każdy element.
+ * Który z trzech elementów dostaje kod, generator wybiera po kształcie kodu,
+ * a ROZ i KOR biorą go z `pkwiuCode` i przepuszczają tylko litery i cyfry.
+ * To osobne ustalenie C1-KLASYFIKACJA. Macierz zastaje ten wybór, nie
+ * poprawia go: w ROZ i KOR kod EAN i kod CN podane w `pkwiuCode` dają
+ * `<GTIN>` i `<CN>`. Naprawa C1-KLASYFIKACJA (osobne pola na kody) zmieni
+ * wejścia tych przypadków, a nie usunie ich.
  */
 const ILE = PRZYPADKI > 1_000 ? 300 : 25;
 const opcjeXsd = ZIARNO === undefined ? { numRuns: ILE } : { numRuns: ILE, seed: ZIARNO };
@@ -38,23 +41,22 @@ const adres = (linia1: string) => ({ countryCode: 'PL', addressLine1: linia1, ad
 
 /** Pozycje ROZ i KOR: kod w `pkwiuCode`, stawka 23% (stawka nie ma tu znaczenia). */
 const liniePkwiu = (pozycje: Pozycja[]): InvoiceLine[] =>
-  pozycje.map(({ kod, ...p }) => ({ ...p, vatRate: '23', ...(kod === undefined ? {} : { pkwiuCode: kod }) }));
+  pozycje.map(({ kod, ...p }) => ({ ...p, vatRate: '23', pkwiuCode: kod }));
 
-/** Faktura zwykła: kod idzie wprost do `classificationCode`. */
+/**
+ * Faktura zwykła: kod idzie wprost do `classificationCode`. Generator sprawdza
+ * sumę kontrolną NIP, więc NIP-y są fikcyjne, ale z poprawną sumą (jak
+ * w `tests/rls-wyciag-podatki.test.ts`); `1234567890` tej kontroli nie przechodzi.
+ */
 function zwykla(pozycje: Pozycja[]): string {
   const invoice = finalizeInvoice({
     internalNumber: 'FV 2026/11/001',
     type: 'VAT',
     issueDate: '2026-11-14',
     saleDate: '2026-11-14',
-    seller: { nip: '5260001246', name: 'ACME Software sp. z o.o.', address: adres('ul. Przykładowa 1/2'), email: 'biuro@acme.test' },
-    buyer: { nip: '5252241585', name: 'Klient sp. z o.o.', address: adres('ul. Klienta 10'), email: 'kontakt@klient.test' },
-    lines: pozycje.map(({ kod, ...p }, i) => ({
-      ordinal: i + 1,
-      ...p,
-      vatRate: '23' as const,
-      ...(kod === undefined ? {} : { classificationCode: kod }),
-    })),
+    seller: { nip: '1234563218', name: 'ACME Software sp. z o.o.', address: adres('ul. Przykładowa 1/2'), email: 'biuro@acme.test' },
+    buyer: { nip: '1111111111', name: 'Klient sp. z o.o.', address: adres('ul. Klienta 10'), email: 'kontakt@klient.test' },
+    lines: pozycje.map(({ kod, ...p }, i) => ({ ordinal: i + 1, ...p, vatRate: '23' as const, classificationCode: kod })),
     payment: {
       currency: 'PLN',
       dueDate: '2026-11-28',
@@ -94,8 +96,12 @@ function rozliczenie(pozycje: Pozycja[]): string {
   return generateFinalInvoiceXml(data, [zaliczka], { generatedAt: new Date('2026-09-20T10:00:00Z') });
 }
 
-/** Korekta „przed/po”: każda pozycja zmienia ilość, więc ma wiersz `StanPrzed` i wiersz po, oba z kodem. */
-function korekta(pozycje: Pozycja[]): string {
+/**
+ * Korekta. „Przed/po” zmienia ilość każdej pozycji, więc każda ma wiersz
+ * `StanPrzed` i wiersz po, oba z kodem. Anulowanie daje jeden wiersz na
+ * pozycję faktury pierwotnej (ilość na minusie), bez `StanPrzed`.
+ */
+function korekta(rodzaj: 'before_after' | 'cancellation', pozycje: Pozycja[]): string {
   const przed = liniePkwiu(pozycje);
   const data = {
     invoiceType: 'correction',
@@ -107,13 +113,13 @@ function korekta(pozycje: Pozycja[]): string {
     parentInvoiceNumber: 'FV 2026/09/001',
     parentInvoiceIssueDate: '2026-09-30',
     parentKsefNumber: '1234567890-20260930-0100001AF629-AF',
-    correctionType: 'before_after',
+    correctionType: rodzaj,
     correctionReason: 'Zmiana warunków po reklamacji',
     typKorekty: '2',
     seller: { nip: '1234567890', name: 'ACME Software sp. z o.o.', address: adres('ul. Przykładowa 1/2') },
     buyer: { type: 'b2b', idType: 'nip', nip: '1234567890', name: 'Klient sp. z o.o.', address: adres('ul. Klienta 10') },
     linesBefore: przed,
-    linesAfter: przed.map((l) => ({ ...l, quantity: l.quantity + 1 })),
+    ...(rodzaj === 'before_after' ? { linesAfter: przed.map((l) => ({ ...l, quantity: l.quantity + 1 })) } : {}),
   } as unknown as CorrectionInvoiceData;
   return generateCorrectionInvoiceXml(data, { generatedAt: new Date('2026-11-09T10:00:00Z') });
 }
@@ -121,7 +127,8 @@ function korekta(pozycje: Pozycja[]): string {
 const GENERATORY = [
   { nazwa: 'zwykła', xml: zwykla, wierszyNaPozycje: 1 },
   { nazwa: 'ROZ', xml: rozliczenie, wierszyNaPozycje: 1 },
-  { nazwa: 'KOR przed/po', xml: korekta, wierszyNaPozycje: 2 },
+  { nazwa: 'KOR przed/po', xml: (p: Pozycja[]) => korekta('before_after', p), wierszyNaPozycje: 2 },
+  { nazwa: 'KOR anulowanie', xml: (p: Pozycja[]) => korekta('cancellation', p), wierszyNaPozycje: 1 },
 ];
 
 /** Treść każdego `FaWiersz`. */

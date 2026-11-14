@@ -94,7 +94,7 @@ function validateAgainstXsd(xml: string): { ok: boolean; stderr: string } {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Testy struktury XML (niezależne od xmllint)
+// Testy struktury XML (część sprawdza też XSD przez xmllint)
 // ═══════════════════════════════════════════════════════════════
 
 test('generateFA3Xml wstawia namespace FA(3)', () => {
@@ -328,7 +328,7 @@ test('FaWiersz ma kolejność z XSD: NrWierszaFa → P_7 → (klasyfikacja) → 
     lastIdx = idx;
   }
   const { ok, stderr } = validateAgainstXsd(xml);
-  assert.ok(ok, `XSD validation failed:\n${stderr}`);
+  assert.ok(ok, `XSD validation failed:\n${stderr}\n\n---XML---\n${xml}`);
 });
 
 // ═══════════════════════════════════════════════════════════════
