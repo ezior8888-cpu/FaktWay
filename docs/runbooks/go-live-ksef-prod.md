@@ -6,7 +6,7 @@ część pracy. Ten plik sam niczego nie zmienia.
 
 - **Kontrola, tylko odczyt, jedna linia:** `./scripts/ops/kontrola-go-live-ksef.sh`
   (sam ładuje `.agents/infra.env`). Oczekiwane wartości są w etykietach wyniku.
-- **Dowody** `plik:linia` sprawdzone na `origin/main` z 13.11.2026 (`6d0ffd4f`).
+- **Dowody** `plik:linia` sprawdzone na `origin/main` z 14.11.2026 (`faaca068`).
   Gdy plik się zmieni, szukaj nazwy funkcji, nie numeru linii.
 - **Powiązane runbooki:** [hamulce-ksef.md](./hamulce-ksef.md) (wyłącznik
   i przerwa techniczna), [wdrozenie-produkcji.md](./wdrozenie-produkcji.md),
@@ -191,9 +191,10 @@ udostępnienia API i tak zamyka flaga `publicApiEnabled`
 (`lib/api/v1/auth.ts:129–131`; `lib/api/v1/availability.ts:3–15`). API aplikacji
 na telefon (`/api/mobile`) proxy przepuszcza bez sesji z ciasteczek
 (`lib/supabase/middleware.ts:139`, `:195`), więc przerwę sprawdza jego własna
-bramka: 503 `maintenance`, zanim odczyta token (`lib/api/mobile/auth.ts:205–210`).
-Dziś są tam trzy trasy. Konto i sesja wołają tę bramkę na starcie
-(`app/api/mobile/v1/konto/route.ts:14`, `app/api/mobile/v1/sesja/route.ts:15`),
+bramka: 503 `maintenance`, zanim odczyta token (`lib/api/mobile/auth.ts:228–233`).
+Dziś są tam cztery trasy. Konto, sesja i kod 2FA wołają tę bramkę na starcie
+(`app/api/mobile/v1/konto/route.ts:14`, `app/api/mobile/v1/sesja/route.ts:15`,
+`app/api/mobile/v1/kod/route.ts:11` → `lib/api/mobile/kod.ts:168`),
 a logowanie hasłem sprawdza przerwę samo, zanim zapyta GoTrue
 (`app/api/mobile/v1/logowanie/route.ts:11–12`; `lib/api/mobile/logowanie.ts:144–149`).
 Żadna nie tworzy ani nie wysyła faktur. Włączenie dociera
