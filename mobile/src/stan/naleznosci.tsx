@@ -15,6 +15,7 @@ import { useEffect, useEffectEvent, useSyncExternalStore } from 'react';
 
 import type { NaleznosciOdpowiedz, NaleznoscTelefonu } from '@/lib/api/kontrakt';
 import type { Wynik } from '@/lib/api/rdzen';
+import { czyscPrzyKoncuSesji } from '@/stan/czyszczenie';
 import { useKontoFirmy } from '@/stan/dane';
 
 export type StanNaleznosci = {
@@ -41,6 +42,11 @@ function subskrybuj(sluchacz: () => void): () => void {
   sluchacze.add(sluchacz);
   return () => sluchacze.delete(sluchacz);
 }
+
+czyscPrzyKoncuSesji(() => {
+  wpisy.clear();
+  for (const s of sluchacze) s();
+});
 
 function przyjmij(klucz: string, w: Wynik<NaleznosciOdpowiedz>): void {
   const byl = wpisy.get(klucz);

@@ -13,6 +13,8 @@
  *   (`POST /faktury/{id}/wysylka`). Nowa faktura od razu stoi na liście, a
  *   wysłane z telefonu odświeżamy co kilka sekund, aż KSeF przyjmie albo odrzuci
  *   (wibracja „sukces” albo „błąd”, ZASADY-DESIGNU.md, sekcja 7).
+ * - Od M10b wybór firmy w Więcej zapisuje się też na serwerze (`POST /firma`),
+ *   więc strona otwiera tę samą firmę.
  * - Od M10a zapłata i jej cofnięcie (`POST /faktury/{id}/zaplata`, `/zaplata/cofnij`):
  *   wiersz zmienia się od razu, pasek „Cofnij”, odmowa serwera przywraca stan
  *   i mówi dlaczego. `zapytaj` w kontekście konta daje innym ekranom (należności,
@@ -27,7 +29,7 @@
  * Na danych przykładowych (bez adresu bazy) ten dostawca nic nie robi.
  */
 import * as Haptics from 'expo-haptics';
-import { createContext, use, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react';
+import { createContext, use, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
 import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
@@ -40,6 +42,7 @@ import type {
   SesjaOdpowiedz,
   WystawienieOdpowiedz,
   WysylkaSzkicuOdpowiedz,
+  FirmaZapisanaOdpowiedz,
   ZaplataOdpowiedz,
 } from '@/lib/api/kontrakt';
 import { zapytajApi } from '@/lib/api/polaczenie';
@@ -107,7 +110,11 @@ export type KontoFirmy = {
  * Gdy wybrana firma zmieniła się w międzyczasie, telefon odmawia bez żądania, jak
  * `bladFirmyZapisu` przy fakturze (M8) i `expectedTenantId` na stronie (UX-01).
  */
-export type OpcjeFirmy = Omit<OpcjeZapytania, 'firma'> & { firmaEkranu?: string | null };
+export type OpcjeFirmy = Omit<OpcjeZapytania, 'firma'> & {
+  firmaEkranu?: string | null;
+  /** Trasa konta bez firmy (`org: 'none'`, np. usunięcie konta, M10b): bez `X-Active-Org` i bez wymogu wybranej firmy. */
+  bezFirmy?: boolean;
+};
 
 export const INNA_FIRMA_EKRANU = 'Ten ekran był otwarty w innej firmie niż wybrana teraz. Zamknij go i otwórz od nowa w wybranej firmie.';
 
@@ -249,7 +256,12 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     if (!aktualne()) return;
     const firma = wybierzFirme(k.dane, zapamietana);
     // Wybór z Więcej zostaje na telefonie dopiero, gdy serwer potwierdził firmę na liście konta.
-    if (wybrana && firma === wybrana) void ustawienia.zapisz(kluczFirmy(u), wybrana).catch(() => undefined);
+    if (wybrana && firma === wybrana) {
+      void ustawienia.zapisz(kluczFirmy(u), wybrana).catch(() => undefined);
+      // Ta sama firma przy następnym otwarciu strony (M10b, `last_active_tenant_id`). Nieudany zapis
+      // nie zmienia wyboru na telefonie, więc wynik pomijamy; ponowienie zapisuje to samo.
+      void zapytajApi<FirmaZapisanaOdpowiedz>('firma', { metoda: 'POST', firma: wybrana }).catch(() => undefined);
+    }
     if (!firma) {
       firmaPokazana.current = null;
       ostatnioUdane.current = Date.now();
@@ -416,13 +428,22 @@ function DaneZBazy({ children }: { children: ReactNode }) {
   };
 
   const firmaWybrana = dane.firmaId;
-  useEffect(() => {
+  // Efekt układu, nie zwykły: zwykłe efekty dzieci (pobranie w ekranie zakładki otwartej linkiem przy
+  // zimnym starcie) biegną przed efektami tego dostawcy i widziałyby jeszcze `null` („Nie masz już
+  // dostępu do tej firmy”). Efekty układu całego drzewa kończą się przed pierwszym zwykłym efektem.
+  useLayoutEffect(() => {
     firmaTeraz.current = firmaWybrana;
   }, [firmaWybrana]);
 
   /** API w wybranej firmie; reakcje na sesję, 2FA i firmę jak przy zapisach (`bladZapisu`). */
   const zapytaj = async <T,>(sciezka: string, opcje: OpcjeFirmy = {}): Promise<Wynik<T>> => {
-    const { firmaEkranu, ...reszta } = opcje;
+    const { firmaEkranu, bezFirmy, ...reszta } = opcje;
+    if (bezFirmy) {
+      // Konto bez firmy też musi móc się usunąć: bez nagłówka firmy, te same reakcje na sesję i 2FA.
+      const w = await zapytajApi<T>(sciezka, reszta);
+      if (!w.ok) bladZapisu(w.blad);
+      return w;
+    }
     // Firma z chwili wywołania, nie z rysowania, w którym powstała ta funkcja (ponowienie z paska „Cofnij”).
     const teraz = firmaTeraz.current;
     if (!teraz) return { ok: false, blad: bladTelefonu('firma') };

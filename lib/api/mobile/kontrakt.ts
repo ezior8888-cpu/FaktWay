@@ -84,6 +84,15 @@ export const MOBILE_API_ERROR_CODES = [
   'reminder_refused',
   /** 409: PDF tej faktury nie powstanie w tym stanie (offline bez kodu QR, szkic wycofany); `message` mówi dlaczego. */
   'pdf_unavailable',
+  // Konto i księgowość (M10b): zdanie z serwera mówi, co zrobić.
+  /** 403: usunięcie konta bez hasła wymaga świeżego logowania w tej sesji (konto tylko z Google). Telefon prowadzi do ponownego logowania. */
+  'reauth_required',
+  /** 409: konta nie usuniemy, bo firma ma aktywny abonament; `message` nazywa firmę i mówi, co zrobić. */
+  'deletion_blocked',
+  /** 409: usuwanie konta już trwa i nie da się go anulować. */
+  'deletion_in_progress',
+  /** 422: rozliczenia nie zatwierdzono albo zapłaty nie zapisano (miesiąc trwa, dane się zmieniły, zła data); `message` mówi dlaczego. */
+  'settlement_refused',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -370,4 +379,164 @@ export interface SprawdzenieSkrzynkiOdpowiedz {
   stan: 'zlecone' | 'w_toku' | 'za_wczesnie' | 'bez_ksef' | 'blad';
   komunikat: string;
   ponowZaSekund: number | null;
+}
+
+// ─── Firma i usunięcie konta (M10b) ───────────────────────────────────
+
+/** `POST /api/mobile/v1/firma` (z `X-Active-Org`): firma zapisana jako ostatnio używana, wspólna ze stroną. `zapisane: false`: zapis się nie udał, wybór zostaje na telefonie. */
+export interface FirmaZapisanaOdpowiedz {
+  aktywnaFirma: string;
+  zapisane: boolean;
+}
+
+/**
+ * `GET /api/mobile/v1/konto/usuniecie`: stan usunięcia konta i to, jak je potwierdzić.
+ * `potwierdzenie` z serwera: `haslo` (konto z hasłem) albo `swieze_logowanie` (konto
+ * tylko z Google: logowanie w tej sesji nie starsze niż 10 minut, do `swiezeDo`).
+ */
+export interface UsuniecieKontaOdpowiedz {
+  /** Kiedy konto zostanie usunięte (ISO); `null` bez żądania. */
+  zaplanowane: string | null;
+  potwierdzenie: 'haslo' | 'swieze_logowanie';
+  /** Do kiedy świeże logowanie wystarcza (ISO); `null`, gdy nie wystarcza albo konto ma hasło. */
+  swiezeDo: string | null;
+}
+
+/** `POST /konto/usuniecie` i `POST /konto/usuniecie/anuluj`: hasło tylko przy koncie z hasłem. */
+export interface PotwierdzenieKontaZadanie {
+  haslo?: string;
+}
+
+/** `POST /konto/usuniecie`, 200. `juzBylo`: żądanie już istniało (ponowienie), bez nowego maila. */
+export interface UsuniecieZaplanowaneOdpowiedz {
+  zaplanowane: string;
+  juzBylo: boolean;
+  /** Mail z linkiem do anulowania wyszedł. */
+  mailWyslany: boolean;
+}
+
+/** `POST /konto/usuniecie/anuluj`, 200. `juzBylo`: nie było czego anulować (ponowienie). */
+export interface AnulowanieUsunieciaOdpowiedz {
+  anulowane: true;
+  juzBylo: boolean;
+}
+
+// ─── Księgowość, „Ten miesiąc” (M10b) ─────────────────────────────────
+
+/** Rodzaj rozliczenia (`RodzajRozliczenia` z `lib/ksiegowosc/ten-miesiac.ts`; zgodność sprawdza test). */
+export type RodzajRozliczeniaTelefonu = 'ryczalt' | 'pit' | 'zus_spoleczne' | 'zdrowotna' | 'vat';
+
+/** Pozycja „Do zapłaty”, jak wiersz strony `reports/ten-miesiac`. Kwoty w groszach. */
+export interface PozycjaRozliczeniaTelefonu {
+  rodzaj: RodzajRozliczeniaTelefonu;
+  nazwa: string;
+  /** `null`: kwoty nie liczymy (`brak` mówi dlaczego i co dalej). */
+  kwotaGr: number | null;
+  brak: string | null;
+  /** Termin faktyczny i ustawowy (RRRR-MM-DD); `przesuniety` na dzień roboczy. */
+  termin: { faktyczny: string; nominalny: string; przesuniety: boolean } | null;
+  /** Dane do przelewu, to samo zdanie co na stronie. */
+  przelew: string;
+  /** Ostatnia zatwierdzona wersja; `null`: niezatwierdzone. */
+  rozliczenie: { id: string; wersja: number; kwotaGr: number; status: 'zatwierdzone' | 'zaplacone'; zaplaconeO: string | null } | null;
+  /** Ile już zapłacono (najwyższa zapłacona wersja), w groszach. */
+  zaplaconoGr: number;
+  /** Dane zmieniły się po zatwierdzeniu: nowa kwota czeka na zatwierdzenie. */
+  zmiana: boolean;
+}
+
+/**
+ * `GET /api/mobile/v1/ksiegowosc?miesiac=RRRR-MM` (domyślnie poprzedni miesiąc, jak strona).
+ * `wlaczona: false`: moduł księgowości nie jest włączony dla tej firmy (reszta pól pusta).
+ */
+export interface TenMiesiacOdpowiedz {
+  wlaczona: boolean;
+  miesiac: string;
+  /** Miesiące do wyboru, od najnowszego. */
+  miesiace: string[];
+  dzis: string;
+  /** Podpis pod kwotami („Według Twoich danych i stawek na … r.”). */
+  podpis: string;
+  forma: 'ryczalt' | 'skala' | 'liniowy' | null;
+  /** Braki, przez które miesiąca nie liczymy (zdania strony); `null`, gdy policzony. */
+  braki: string[] | null;
+  przychodGr: number | null;
+  kosztyGr: number | null;
+  pozycje: PozycjaRozliczeniaTelefonu[];
+  /** Właściciel albo administrator zatwierdza i oznacza zapłaty. */
+  mozeEdytowac: boolean;
+  miesiacZakonczony: boolean;
+  /** Pozycje policzone, a jeszcze niezatwierdzone w tej postaci. */
+  doZatwierdzenia: number;
+  /** Skróty pozycji z tego widoku: zatwierdzenie zapisze tylko to, co klient widział. */
+  skroty: Partial<Record<RodzajRozliczeniaTelefonu, string>>;
+  /** Wszystkie wersje rozliczeń miesiąca, od najnowszej. */
+  historia: Array<{ rodzaj: RodzajRozliczeniaTelefonu; nazwa: string; wersja: number; kwotaGr: number; zatwierdzoneO: string; zaplaconeO: string | null }>;
+}
+
+/** `POST /api/mobile/v1/ksiegowosc/zatwierdz`: miesiąc i skróty z widoku. */
+export interface ZatwierdzenieMiesiacaZadanie {
+  miesiac: string;
+  skroty: Partial<Record<RodzajRozliczeniaTelefonu, string>>;
+}
+
+/** 200: `nowe` wersji zapisanych (0: wszystko było już zatwierdzone, ponowienie). */
+export interface ZatwierdzenieMiesiacaOdpowiedz {
+  nowe: number;
+}
+
+/** `POST /api/mobile/v1/ksiegowosc/rozliczenia/{id}/zaplata`: `dzien` RRRR-MM-DD przy `zaplacone: true`. */
+export interface ZaplataRozliczeniaZadanie {
+  zaplacone: boolean;
+  dzien: string | null;
+}
+
+export interface ZaplataRozliczeniaOdpowiedz {
+  zaplacone: boolean;
+}
+
+// ─── Ustawienia firmy (M10b) ──────────────────────────────────────────
+
+/**
+ * `GET /api/mobile/v1/ustawienia`: to, co karty Firma, KSeF i Przypomnienia
+ * strony pokazują, do odczytu. Zmiany zapisuje się na stronie.
+ */
+export interface UstawieniaOdpowiedz {
+  firma: {
+    nazwa: string;
+    nip: string;
+    /** Dwie linie adresu jak na stronie (`address_json`). */
+    adres: { linia1: string; linia2: string };
+    rachunek: string | null;
+    /** RRRR-MM-DD albo `null`. */
+    rozpoczecie: string | null;
+    /** Podstawa zwolnienia z VAT; `null`: czynny podatnik VAT bez zwolnienia. */
+    zwolnienie: string | null;
+    /** Zwolnienie podmiotowe (art. 113): firma nie jest czynnym podatnikiem VAT. */
+    zwolnieniePodmiotowe: boolean;
+    metodaKasowa: boolean;
+  };
+  ksef: {
+    /** Jak plakietka strony: połączono (dowód w środowisku aplikacji), do potwierdzenia, brak certyfikatu. */
+    stan: 'polaczono' | 'do_potwierdzenia' | 'brak';
+    /** RRRR-MM-DD albo `null`. */
+    certyfikatDo: string | null;
+  };
+  /**
+   * Tylko dla właściciela (zakładka strony też tylko dla niego); `null` dla
+   * pozostałych ról. `zapisane: false`: firma nie zapisała ustawień, więc
+   * FaktWay nie przygotowuje przypomnień (reszta pól to propozycja strony).
+   */
+  przypomnienia: {
+    zapisane: boolean;
+    wlaczone: boolean;
+    etapy: Array<{ etap: 1 | 2 | 3; wlaczony: boolean; dniPoTerminie: number }>;
+    godzina: number;
+    tylkoDniRobocze: boolean;
+    najwiecej: number;
+    nadawca: string | null;
+    odpowiedzNa: string | null;
+    wstrzymajPoOdpowiedzi: boolean;
+    wstrzymajPoCzesciowej: boolean;
+  } | null;
 }

@@ -68,7 +68,8 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   internal_error: 'serwer',
   // Tylko `POST /logowanie` (M6b), który idzie obok tego klienta (`lib/logowanie/przez-api.ts`).
   invalid_request: 'serwer',
-  invalid_credentials: 'serwer',
+  // Od M10b też złe hasło przy potwierdzeniu usunięcia konta (`konto/usuniecie`): zdanie serwera.
+  invalid_credentials: 'odmowa',
   login_unavailable: 'ponow',
   // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
   invalid_code: 'serwer',
@@ -78,6 +79,11 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   payment_refused: 'odmowa',
   reminder_refused: 'odmowa',
   pdf_unavailable: 'odmowa',
+  // Konto (M10b): ekran konta ma własną reakcję na `reauth_required` (ponowne logowanie).
+  reauth_required: 'odmowa',
+  deletion_blocked: 'odmowa',
+  deletion_in_progress: 'odmowa',
+  settlement_refused: 'odmowa',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */

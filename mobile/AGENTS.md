@@ -176,8 +176,27 @@ uruchamiasz po kolei, nigdy razem.
   zmian, także z długimi myślnikami: serwer sprawdza przy zgodzie, czy zdanie o
   płatności, która mogła już wyjść, zostało w treści. `bezDlugichMyslnikow` tylko
   dla komunikatów błędów.
-- Ekrany poza Fakturami i skrzynką KSeF (Pulpit, Wydatki, Księgowość, Więcej)
-  zostają na danych przykładowych do M9 i M10b; stopka w Więcej mówi o tym klientowi.
+- Od M10b księgowość „Ten miesiąc” (`stan/ksiegowosc.tsx`: zatwierdzenie,
+  zapłata; kwoty z API w groszach), ustawienia Firma, KSeF, Przypomnienia
+  (`stan/ustawienia.tsx`, `GET /ustawienia`, do odczytu) i Bezpieczeństwo
+  (2FA z `GET /konto`), wybór firmy (`POST /firma`) i usunięcie konta
+  (`konto/usuniecie`) idą przez API. Zmiana ustawień otwiera stronę
+  (`otworzStrone(sciezka, poPowrocie)`: po zamknięciu przeglądarki ekran
+  wczytuje dane od nowa). Na prawdziwym koncie wiersze Więcej według roli jak
+  zakładki strony; karty bez API (`strona` w pozycji) otwierają faktway.pl.
+- Zapis z ekranu niesie `firmaEkranu`. Ekran otwierany na wierzchu (arkusz,
+  przelew) trzyma firmę z otwarcia (`useState`), korzeń zakładki bierze firmę
+  bieżących danych, bo zostaje otwarty po zmianie firmy i nie da się go
+  zamknąć.
+- Magazyn na poziomie modułu (`useSyncExternalStore`) rejestruje czyszczenie w
+  `stan/czyszczenie.ts` (`czyscPrzyKoncuSesji`); `sesja.tsx` czyści je razem z
+  resztą danych konta.
+- Zwykłe efekty dzieci biegną przed efektami dostawcy. Ref czytany przez
+  funkcję dostawcy w efekcie ekranu (np. `firmaTeraz` w `zapytaj`) ustawiaj w
+  `useLayoutEffect`, inaczej ekran otwarty linkiem przy zimnym starcie widzi
+  jeszcze `null`. Trasy konta bez firmy (`org: 'none'`) wołaj z `bezFirmy: true`.
+- Na danych przykładowych zostają Kontrahenci, Przepływy, Analizy i Import
+  danych (Pulpit i Wydatki do M9); stopka w Więcej mówi o tym klientowi.
 - `supabase.auth.onAuthStateChange` woła słuchacza wewnątrz blokady
   `supabase-js`: wywołanie klienta w słuchaczu czeka na samo siebie. Odłóż je
   (`setTimeout(…, 0)`), jak w `stan/dane.tsx`.
