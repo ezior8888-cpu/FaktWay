@@ -136,7 +136,9 @@
       "poziom": "R1",
       "opis": "Rozliczenie miesiąca: zatwierdzenie, wersje, zapłaty, ekran „Ten miesiąc”.",
       "sciezki": [
-        "lib/ksiegowosc/{ten-miesiac,ten-miesiac-dane,miesiac-strony,zaplata-reczna}.ts",
+        "lib/ksiegowosc/{ten-miesiac,ten-miesiac-dane,miesiac-strony,zaplata-reczna,ten-miesiac-zapis,przelew}.ts",
+        "lib/api/mobile/ksiegowosc.ts",
+        "app/api/mobile/v1/ksiegowosc/**",
         "app/actions/ksiegowosc-ten-miesiac.ts",
         "components/ksiegowosc/ten-miesiac-akcje.tsx",
         "supabase/migrations/{00168,00172}_*.sql"
@@ -605,6 +607,8 @@
         "lib/jobs/runners/{archive-old-invoices,retention-delete,cleanup-audit-logs,cleanup-old-backups,gdpr-process-deletions,support-chat-retention}.ts",
         "app/(auth)/gdpr/**",
         "app/(dashboard)/settings/account/**",
+        "lib/api/mobile/konto-usuniecie.ts",
+        "app/api/mobile/v1/konto/usuniecie/**",
         "app/admin/users/actions.ts",
         "app/api/gdpr/**",
         "lib/support/retention.ts",

@@ -82,6 +82,7 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   reauth_required: 'odmowa',
   deletion_blocked: 'odmowa',
   deletion_in_progress: 'odmowa',
+  settlement_refused: 'odmowa',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */

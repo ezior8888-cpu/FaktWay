@@ -91,6 +91,8 @@ export const MOBILE_API_ERROR_CODES = [
   'deletion_blocked',
   /** 409: usuwanie konta już trwa i nie da się go anulować. */
   'deletion_in_progress',
+  /** 422: rozliczenia nie zatwierdzono albo zapłaty nie zapisano (miesiąc trwa, dane się zmieniły, zła data); `message` mówi dlaczego. */
+  'settlement_refused',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -417,4 +419,78 @@ export interface UsuniecieZaplanowaneOdpowiedz {
 export interface AnulowanieUsunieciaOdpowiedz {
   anulowane: true;
   juzBylo: boolean;
+}
+
+// ─── Księgowość, „Ten miesiąc” (M10b) ─────────────────────────────────
+
+/** Rodzaj rozliczenia (`RodzajRozliczenia` z `lib/ksiegowosc/ten-miesiac.ts`; zgodność sprawdza test). */
+export type RodzajRozliczeniaTelefonu = 'ryczalt' | 'pit' | 'zus_spoleczne' | 'zdrowotna' | 'vat';
+
+/** Pozycja „Do zapłaty”, jak wiersz strony `reports/ten-miesiac`. Kwoty w groszach. */
+export interface PozycjaRozliczeniaTelefonu {
+  rodzaj: RodzajRozliczeniaTelefonu;
+  nazwa: string;
+  /** `null`: kwoty nie liczymy (`brak` mówi dlaczego i co dalej). */
+  kwotaGr: number | null;
+  brak: string | null;
+  /** Termin faktyczny i ustawowy (RRRR-MM-DD); `przesuniety` na dzień roboczy. */
+  termin: { faktyczny: string; nominalny: string; przesuniety: boolean } | null;
+  /** Dane do przelewu, to samo zdanie co na stronie. */
+  przelew: string;
+  /** Ostatnia zatwierdzona wersja; `null`: niezatwierdzone. */
+  rozliczenie: { id: string; wersja: number; kwotaGr: number; status: 'zatwierdzone' | 'zaplacone'; zaplaconeO: string | null } | null;
+  /** Ile już zapłacono (najwyższa zapłacona wersja), w groszach. */
+  zaplaconoGr: number;
+  /** Dane zmieniły się po zatwierdzeniu: nowa kwota czeka na zatwierdzenie. */
+  zmiana: boolean;
+}
+
+/**
+ * `GET /api/mobile/v1/ksiegowosc?miesiac=RRRR-MM` (domyślnie poprzedni miesiąc, jak strona).
+ * `wlaczona: false`: moduł księgowości nie jest włączony dla tej firmy (reszta pól pusta).
+ */
+export interface TenMiesiacOdpowiedz {
+  wlaczona: boolean;
+  miesiac: string;
+  /** Miesiące do wyboru, od najnowszego. */
+  miesiace: string[];
+  dzis: string;
+  /** Podpis pod kwotami („Według Twoich danych i stawek na … r.”). */
+  podpis: string;
+  forma: 'ryczalt' | 'skala' | 'liniowy' | null;
+  /** Braki, przez które miesiąca nie liczymy (zdania strony); `null`, gdy policzony. */
+  braki: string[] | null;
+  przychodGr: number | null;
+  kosztyGr: number | null;
+  pozycje: PozycjaRozliczeniaTelefonu[];
+  /** Właściciel albo administrator zatwierdza i oznacza zapłaty. */
+  mozeEdytowac: boolean;
+  miesiacZakonczony: boolean;
+  /** Pozycje policzone, a jeszcze niezatwierdzone w tej postaci. */
+  doZatwierdzenia: number;
+  /** Skróty pozycji z tego widoku: zatwierdzenie zapisze tylko to, co klient widział. */
+  skroty: Partial<Record<RodzajRozliczeniaTelefonu, string>>;
+  /** Wszystkie wersje rozliczeń miesiąca, od najnowszej. */
+  historia: Array<{ rodzaj: RodzajRozliczeniaTelefonu; nazwa: string; wersja: number; kwotaGr: number; zatwierdzoneO: string; zaplaconeO: string | null }>;
+}
+
+/** `POST /api/mobile/v1/ksiegowosc/zatwierdz`: miesiąc i skróty z widoku. */
+export interface ZatwierdzenieMiesiacaZadanie {
+  miesiac: string;
+  skroty: Partial<Record<RodzajRozliczeniaTelefonu, string>>;
+}
+
+/** 200: `nowe` wersji zapisanych (0: wszystko było już zatwierdzone, ponowienie). */
+export interface ZatwierdzenieMiesiacaOdpowiedz {
+  nowe: number;
+}
+
+/** `POST /api/mobile/v1/ksiegowosc/rozliczenia/{id}/zaplata`: `dzien` RRRR-MM-DD przy `zaplacone: true`. */
+export interface ZaplataRozliczeniaZadanie {
+  zaplacone: boolean;
+  dzien: string | null;
+}
+
+export interface ZaplataRozliczeniaOdpowiedz {
+  zaplacone: boolean;
 }
