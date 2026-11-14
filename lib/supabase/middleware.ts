@@ -9,6 +9,13 @@ import { isTelemetryTunnelPath } from '@/lib/telemetry-tunnel';
 
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_HEADER, isUuid } from './active-org';
 import { createAuthUserFetch } from './auth-user-fetch';
+import {
+  createSupabaseDeadline,
+  createSupabaseFetch,
+  PROXY_GATE_TIMEOUT_MS,
+  TIMED_OUT,
+  type SupabaseDeadline,
+} from './fetch-timeout';
 
 /**
  * Ścieżki marketingowe — dostęp bez logowania (spec 19.1.3).
@@ -188,12 +195,31 @@ const APP_HOME = '/dashboard';
  *  2. Zalogowany na /login lub /register → `APP_HOME`.
  *  3. Bootstrap `ksef.active_org` na chronionych trasach (bez /onboarding, bez /api).
  *  4. /onboarding — bez redirectu z proxy (soft-nav loop); strona sama decyduje.
+ *  5. Supabase nie odpowiada w terminie bramki: chroniona trasa dostaje 503
+ *     „spróbuj ponownie”, publiczna jedzie dalej jak dla gościa. Nigdy
+ *     przekierowanie na logowanie ani skasowanie sesji.
  */
 export async function updateSession(request: NextRequest) {
   // Przed `createServerClient`: bez klienta nie ma `getClaims()` ani
   // odświeżenia ciasteczek (zob. `NO_SESSION_PATHS`).
   if (isNoSessionPath(request.nextUrl.pathname)) return NextResponse.next();
 
+  // Plan skalowania 3000, sesja 5: jeden termin na wszystkie wywołania
+  // Supabase w bramce. Bez niego zawieszony GoTrue trzymał żądanie do 300 s,
+  // a błąd po czasie kończył się przekierowaniem na logowanie.
+  const gate = createSupabaseDeadline(PROXY_GATE_TIMEOUT_MS, 'bramka proxy');
+  try {
+    return await decideSession(request, gate);
+  } finally {
+    gate.dispose();
+  }
+}
+
+function logGateTimeout(step: string, outcome: string): void {
+  console.warn(`[proxy] Supabase nie odpowiedział w ${PROXY_GATE_TIMEOUT_MS} ms (krok: ${step}): ${outcome}`);
+}
+
+async function decideSession(request: NextRequest, gate: SupabaseDeadline) {
   let supabaseResponse = NextResponse.next({ request });
   // Nagłówki, które `@supabase/ssr` podaje w `setAll` razem z ciasteczkami
   // sesji (`Cache-Control: private, no-store…`, `Expires`, `Pragma`). Odpowiedź
@@ -213,6 +239,23 @@ export async function updateSession(request: NextRequest) {
     return withSessionCookies(NextResponse.json({ error }, {
       status, headers: { 'Cache-Control': 'no-store' },
     }));
+  }
+
+  const path = request.nextUrl.pathname;
+  const isApi = path === '/api' || path.startsWith('/api/');
+  const isAdmin = path === '/admin' || path.startsWith('/admin/');
+
+  /** Sesji nie da się teraz sprawdzić: 503 „spróbuj ponownie”, ciasteczka sesji zostają. */
+  function sessionUnavailable(): NextResponse {
+    return isApi
+      ? denyApi('session_verification_failed', 503)
+      : withSessionCookies(new NextResponse('Nie udało się zweryfikować sesji. Spróbuj ponownie.', {
+        status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+      }));
+  }
+  function gateTimedOut(step: string): NextResponse {
+    logGateTimeout(step, '503');
+    return sessionUnavailable();
   }
 
   const activeOrgCookie = request.cookies.get(ACTIVE_ORG_COOKIE)?.value;
@@ -242,8 +285,9 @@ export async function updateSession(request: NextRequest) {
         },
       },
       global: {
-        // Wszystkie sprawdzenia tokenu w tym żądaniu dzielą jedną odpowiedź GoTrue.
-        fetch: createAuthUserFetch(),
+        // Wszystkie sprawdzenia tokenu w tym żądaniu dzielą jedną odpowiedź GoTrue,
+        // a każde wywołanie Supabase przerywa termin bramki.
+        fetch: createAuthUserFetch(createSupabaseFetch({ deadline: gate.signal })),
         ...(isUuid(activeOrgCookie) ? { headers: { [ACTIVE_ORG_HEADER]: activeOrgCookie } } : {}),
       },
     },
@@ -263,12 +307,15 @@ export async function updateSession(request: NextRequest) {
   // żyje w proxy do wygaśnięcia access tokenu (~1h max). Akceptowalne:
   // każda mutacja i odczyt danych przechodzi przez Server Action / route,
   // które robią pełny `auth.getUser()` w `requireUserAndActiveOrg()`.
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const userId = claimsData?.claims.sub ?? null;
-
-  const path = request.nextUrl.pathname;
-  const isApi = path === '/api' || path.startsWith('/api/');
-  const isAdmin = path === '/admin' || path.startsWith('/admin/');
+  const claims = await gate.within(supabase.auth.getClaims());
+  if (claims === TIMED_OUT) {
+    // Po terminie auth-js oddaje „brak sesji”, choć sesja może być ważna.
+    // Chroniona trasa: 503 (fail-closed bez wylogowania). Publiczna sesji
+    // nie potrzebuje, więc jedzie dalej jak dla gościa, z nietkniętymi ciasteczkami.
+    if (!isPublicPath(path)) return gateTimedOut('sesja');
+    logGateTimeout('sesja', 'trasa publiczna jak dla gościa');
+  }
+  const userId = claims === TIMED_OUT ? null : claims.data?.claims.sub ?? null;
 
   // Zalogowany na landingu jedzie na `APP_HOME`, także z telefonu: panel jest
   // dostępny na każdym urządzeniu (FaktWay 1.0, bez bramki BUG-008).
@@ -307,12 +354,16 @@ export async function updateSession(request: NextRequest) {
   // (operator) i logowanie. Przed MFA i danymi firmy — w przerwie nie
   // dotykamy bazy bardziej, niż trzeba.
   const isOnboarding = path === '/onboarding' || path.startsWith('/onboarding/');
-  if (userId && !isAdmin && (!isPublicPath(path) || isOnboarding) && await isMaintenanceMode()) {
-    if (isApi) return denyApi('maintenance', 503);
-    const url = request.nextUrl.clone();
-    url.pathname = MAINTENANCE_PATH;
-    url.search = '';
-    return withSessionCookies(NextResponse.redirect(url));
+  if (userId && !isAdmin && (!isPublicPath(path) || isOnboarding)) {
+    const maintenance = await gate.within(isMaintenanceMode());
+    if (maintenance === TIMED_OUT) return gateTimedOut('przerwa techniczna');
+    if (maintenance) {
+      if (isApi) return denyApi('maintenance', 503);
+      const url = request.nextUrl.clone();
+      url.pathname = MAINTENANCE_PATH;
+      url.search = '';
+      return withSessionCookies(NextResponse.redirect(url));
+    }
   }
 
   // Recheck authoritative factors and the claims of the exact session token.
@@ -321,19 +372,14 @@ export async function updateSession(request: NextRequest) {
   // Sesja po biometrii (znacznik tej sesji) przechodzi przez panel bez kodu;
   // `/admin` zawsze wymaga prawdziwego kodu, a tu zachowujemy też głęboki link.
   if (userId && !isPublicPath(path)) {
-    const state = await (isAdmin
+    const state = await gate.within((isAdmin
       ? getVerifiedMfaState(supabase)
       : getPanelMfaState(supabase, () => request.cookies.get(PASSKEY_SESSION_COOKIE)?.value)
-    ).catch(() => null);
+    ).catch(() => null));
+    if (state === TIMED_OUT) return gateTimedOut('2FA');
     const verificationFailed = !state ||
       (state.status !== 'unauthenticated' && state.user.id !== userId);
-    if (verificationFailed) {
-      return isApi
-        ? denyApi('session_verification_failed', 503)
-        : withSessionCookies(new NextResponse('Nie udało się zweryfikować sesji. Spróbuj ponownie.', {
-          status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
-        }));
-    }
+    if (verificationFailed) return sessionUnavailable();
     if (state.status === 'unauthenticated') {
       if (isApi) return denyApi('not_authenticated', 401);
       const url = request.nextUrl.clone();
@@ -360,15 +406,17 @@ export async function updateSession(request: NextRequest) {
     !!userId && !isPublicPath(path) && !isApi && !isAdmin && !isUuid(activeOrgCookie);
 
   if (needsBootstrap) {
-    const { data: candidates } = await supabase
+    const candidates = await gate.within(supabase
       .from('memberships')
       .select('organization_id, joined_at')
       .eq('user_id', userId!)
       .eq('status', 'active')
       .order('joined_at', { ascending: false })
-      .limit(50);
+      .limit(50));
+    // Po terminie pusta lista to nie „brak firm”: bez tego proxy wysłałoby na /onboarding.
+    if (candidates === TIMED_OUT) return gateTimedOut('wybór firmy');
 
-    const memberships = candidates ?? [];
+    const memberships = candidates.data ?? [];
 
     if (memberships.length === 0) {
       const url = request.nextUrl.clone();
@@ -379,13 +427,14 @@ export async function updateSession(request: NextRequest) {
       return res;
     }
 
-    const { data: profile } = await supabase
+    const profile = await gate.within(supabase
       .from('users')
       .select('last_active_tenant_id')
       .eq('id', userId!)
-      .maybeSingle();
+      .maybeSingle());
+    if (profile === TIMED_OUT) return gateTimedOut('wybór firmy');
 
-    const lastActive = profile?.last_active_tenant_id ?? null;
+    const lastActive = profile.data?.last_active_tenant_id ?? null;
     const preferred = memberships.find((m) => m.organization_id === lastActive);
     const choice = preferred?.organization_id ?? memberships[0]!.organization_id;
 
