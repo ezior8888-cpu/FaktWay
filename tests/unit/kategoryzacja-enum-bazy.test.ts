@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { CATEGORIZATION_METHODS } from '@/lib/categorization/rule-engine';
+import { CATEGORIZATION_METHODS } from '@/lib/categorization/methods';
 
 /**
  * Ustalenie 738u1 (obchód M9, 14.11.2026): klasyfikator zwracał

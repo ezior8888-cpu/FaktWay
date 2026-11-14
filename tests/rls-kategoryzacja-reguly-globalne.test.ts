@@ -39,7 +39,7 @@ vi.mock('@/lib/ai/tenant-ai-budget', () => ({
 }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToUser: vi.fn(async () => undefined) }));
 
-import { CATEGORIZATION_METHODS } from '@/lib/categorization/rule-engine';
+import { CATEGORIZATION_METHODS } from '@/lib/categorization/methods';
 import { runProcessOcr } from '@/lib/jobs/runners/process-ocr';
 
 const hasDatabase = Boolean(
