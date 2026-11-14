@@ -4,7 +4,7 @@
   "description": "Bot Telegrama dla operatorów FaktWay (B-2). docs/runbooks/bramka-telegram.md",
   "type": "module",
   "engines": {
-    "node": ">=22.23.4"
+    "node": ">=22.23.5"
   },
   "scripts": {
     "start": "node main.mjs",
