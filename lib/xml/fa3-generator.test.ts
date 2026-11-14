@@ -294,7 +294,10 @@ test('walidacja wyrzuca InvoiceValidationError gdy dane są niespójne', () => {
   );
 });
 
-test('FaWiersz ma poprawną kolejność: NrWierszaFa → (klasyfikacja) → P_7 → P_8A → P_8B → P_9A → P_11 → P_12', () => {
+// Kolejność z XSD (typ FaWiersz): P_7 stoi przed GTIN, PKWiU i CN. Do 11.2026
+// ten test utrwalał klasyfikację przed P_7, czego XSD nie przyjmuje (sprawdza
+// to `tests/unit/fa3-fawiersz-klasyfikacja-xsd.test.ts` na walidatorze).
+test('FaWiersz ma poprawną kolejność: NrWierszaFa → P_7 → (klasyfikacja) → P_8A → P_8B → P_9A → P_11 → P_12', () => {
   const xml = generateFA3Xml(
     buildInvoice({
       lines: [
@@ -312,8 +315,8 @@ test('FaWiersz ma poprawną kolejność: NrWierszaFa → (klasyfikacja) → P_7 
   );
   const order = [
     '<NrWierszaFa>',
-    '<GTIN>',
     '<P_7>',
+    '<GTIN>',
     '<P_8A>',
     '<P_8B>',
     '<P_9A>',

@@ -517,6 +517,11 @@ function buildFaWiersz(
 
   wiersz.ele('NrWierszaFa').txt(String(line.ordinal));
 
+  // Kolejność z XSD (typ FaWiersz): NrWierszaFa, UU_ID, P_6A, P_7, Indeks,
+  // GTIN, PKWiU, CN, PKOB, P_8A… Klasyfikacja stoi więc po nazwie (P_7),
+  // a przed jednostką (P_8A); przed P_7 plik nie przechodził XSD.
+  wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
+
   // Klasyfikacja – GTIN dla 8-14 cyfr, CN dla 8-10 cyfr z literami,
   // PKWiU dla innych. MVP: ograniczamy do GTIN vs PKWiU (fallback).
   if (line.classificationCode) {
@@ -529,8 +534,6 @@ function buildFaWiersz(
       wiersz.ele('PKWiU').txt(line.classificationCode);
     }
   }
-
-  wiersz.ele('P_7').txt(requireText(line.name, `line[${line.ordinal}].name`));
 
   // P_8A (jednostka) i P_8B (ilość) muszą być po klasyfikacji.
   wiersz.ele('P_8A').txt(requireText(line.unit, `line[${line.ordinal}].unit`));
