@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import { useOpcjeGradientu, useOpcjeStosu } from '@/wyglad/naglowki';
+import { useOpcjeGradientu, useOpcjeStosu, useOpcjeSzczegoluNaGradiencie } from '@/wyglad/naglowki';
 
 /** Lista zakładki zawsze leży pod spodem: arkusze i ekrany otwarte linkiem mają „wstecz” i prezentują się jako arkusze. */
 export const unstable_settings = { anchor: 'index' };
@@ -9,12 +9,13 @@ export const unstable_settings = { anchor: 'index' };
 export default function UkladWiecej() {
   const opcje = useOpcjeStosu();
   const gradient = useOpcjeGradientu();
+  const szczegol = useOpcjeSzczegoluNaGradiencie();
   return (
     <Stack screenOptions={opcje}>
       <Stack.Screen name="index" options={{ title: 'Więcej', ...gradient }} />
       <Stack.Screen name="firmy" options={{ title: 'Zmień firmę' }} />
       <Stack.Screen name="kontrahenci/index" options={{ title: 'Kontrahenci', ...gradient }} />
-      <Stack.Screen name="kontrahenci/[id]" options={{ title: '' }} />
+      <Stack.Screen name="kontrahenci/[id]" options={{ title: '', ...szczegol }} />
       <Stack.Screen name="import" options={{ title: 'Import danych' }} />
       <Stack.Screen name="ustawienia/firma" options={{ title: 'Firma' }} />
       <Stack.Screen name="ustawienia/bezpieczenstwo" options={{ title: 'Bezpieczeństwo' }} />

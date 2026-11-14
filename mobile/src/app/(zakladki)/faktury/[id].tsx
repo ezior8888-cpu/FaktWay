@@ -21,8 +21,7 @@ import { useStanFaktur } from '@/stan/faktury';
 import { useUdostepnijPdf } from '@/stan/pdf';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
-import { useKolory } from '@/wyglad/kolory';
-import { useTytulNaGradiencie } from '@/wyglad/naglowki';
+import { useKoloryPaska, useTytulNaGradiencie } from '@/wyglad/naglowki';
 
 const NAZWA_STATUSU_KSEF: Record<StatusKsef, string> = {
   przyjeta: 'Przyjęta w KSeF',
@@ -51,7 +50,7 @@ function wedlugStawek(f: Faktura) {
  * Rzadsze akcje (XML, korekta, duplikat, cykliczna) w menu „…”.
  */
 export default function EkranFaktury() {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(true);
   const router = useRouter();
   // `uwaga`: szkic zapisany z formularza, ale kolejka KSeF odmówiła (M8); zdanie serwera, co zrobić.
   const { id, uwaga } = useLocalSearchParams<{ id: string; uwaga?: string }>();
@@ -166,9 +165,9 @@ export default function EkranFaktury() {
       {podglad ? null : (
         <>
           <Stack.Screen options={{ title: f.numer, headerTitleStyle: tytul }} />
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={kolory.etykieta} accessibilityLabel="Pobierz PDF i udostępnij" onPress={() => udostepnijPdf(f)} />
-            <Stack.Toolbar.Menu icon={IKONY_PASKA.wiecej} iconRenderingMode="template" tintColor={kolory.etykieta} title="Akcje faktury">
+          <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+            <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={pasek.ikona} accessibilityLabel="Pobierz PDF i udostępnij" onPress={() => udostepnijPdf(f)} />
+            <Stack.Toolbar.Menu icon={IKONY_PASKA.wiecej} iconRenderingMode="template" tintColor={pasek.ikona} title="Akcje faktury">
               <Stack.Toolbar.MenuAction icon="envelope" onPress={() => router.push({ pathname: '/faktury/email', params: { id: f.id } })}>
                 Wyślij e-mailem
               </Stack.Toolbar.MenuAction>

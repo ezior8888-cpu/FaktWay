@@ -6,12 +6,13 @@
  * Telefon nie udaje zapisu: mówi, gdzie to zrobić, i otwiera tę samą
  * fakturę na stronie. Systemowy arkusz akcji jak `potwierdz()`.
  */
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
 
 import { EkranListy } from '@/komponenty/lista';
 import { StanPusty } from '@/komponenty/stan-pusty';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 import { ADRES_API } from '@/lib/api/polaczenie';
 
 export type ZmianaNaStronie = 'wystawienie' | 'edycja' | 'wysylka' | 'email' | 'cykliczna' | 'xml';
@@ -110,9 +111,7 @@ export function EkranTylkoNaStronie({ co, idFaktury }: { co: ZmianaNaStronie; id
   const router = useRouter();
   return (
     <>
-      <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button onPress={() => router.back()}>Zamknij</Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="lewa" tytul="Zamknij" onPress={() => router.back()} />
       <EkranListy>
         <TylkoNaStronie co={co} idFaktury={idFaktury} />
       </EkranListy>

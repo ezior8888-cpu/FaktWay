@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -12,6 +12,7 @@ import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { WierszFaktury } from '@/komponenty/wiersz-faktury';
 import { potwierdz } from '@/komponenty/potwierdz';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 import { kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
 import { useFlaga, useStanFaktur } from '@/stan/faktury';
@@ -38,9 +39,7 @@ export default function EkranKontrahenta() {
 
   return (
     <>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button onPress={() => setEdycja(!edycja)}>{edycja ? 'Gotowe' : 'Edytuj'}</Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="prawa" tytul={edycja ? 'Gotowe' : 'Edytuj'} naGradiencie onPress={() => setEdycja(!edycja)} />
       <EkranListy gradient keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <NaglowekKwoty
           podpis={nazwa}

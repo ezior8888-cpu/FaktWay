@@ -11,7 +11,7 @@ import { Wykres } from '@/komponenty/wykres';
 import { dataKrotka, kwota, kwotaKrotka, zmiana } from '@/lib/format';
 import { dni } from '@/lib/status-faktury';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
-import { useKolory } from '@/wyglad/kolory';
+import { useKoloryPaska } from '@/wyglad/naglowki';
 
 const MIESIACE = ['Listopad 2026', 'Październik 2026', 'Wrzesień 2026', 'Sierpień 2026', 'Lipiec 2026', 'Czerwiec 2026'];
 
@@ -20,7 +20,7 @@ const MIESIACE = ['Listopad 2026', 'Październik 2026', 'Wrzesień 2026', 'Sierp
  * i `analizy/koszty` (przełącznik Sprzedaż/Koszty, wybór miesiąca).
  */
 export default function EkranAnaliz() {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(false);
   const router = useRouter();
   const { rodzaj } = useLocalSearchParams<{ rodzaj?: string }>();
   const [widok, setWidok] = useState(rodzaj === 'koszty' ? 1 : 0);
@@ -37,8 +37,8 @@ export default function EkranAnaliz() {
 
   return (
     <>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={kolory.etykieta} title="Wybierz miesiąc">
+      <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={pasek.ikona} title="Wybierz miesiąc">
           {MIESIACE.map((m) => (
             <Stack.Toolbar.MenuAction key={m} isOn={miesiac === m} onPress={() => setMiesiac(m)}>
               {m}

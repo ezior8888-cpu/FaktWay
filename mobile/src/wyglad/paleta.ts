@@ -73,6 +73,12 @@ export type Kolory = {
   naGradiencie: string;
   /** Tło awatara i okrągłych przycisków na gradiencie. */
   naGradiencieTlo: string;
+  /** Podpowiedź w polu wyszukiwania na niebieskim pasku Androida (M12). */
+  naGradiencieDrugorzedny: string;
+  /** Fala przy dotknięciu na Androidzie (M12): na kartach, polach i przyciskach jasnych. */
+  fala: string;
+  /** Fala na przycisku w kolorze marki. */
+  falaNaAkcencie: string;
 };
 
 export const JASNE: Kolory = {
@@ -111,6 +117,9 @@ export const JASNE: Kolory = {
   gradientDol: '#6E99F4',
   naGradiencie: '#FFFFFF',
   naGradiencieTlo: 'rgba(255,255,255,0.2)',
+  naGradiencieDrugorzedny: 'rgba(255,255,255,0.72)',
+  fala: 'rgba(36,99,239,0.12)',
+  falaNaAkcencie: 'rgba(255,255,255,0.24)',
 };
 
 export const CIEMNE: Kolory = {
@@ -149,6 +158,9 @@ export const CIEMNE: Kolory = {
   gradientDol: '#1B2A55',
   naGradiencie: '#FFFFFF',
   naGradiencieTlo: 'rgba(255,255,255,0.16)',
+  naGradiencieDrugorzedny: 'rgba(255,255,255,0.72)',
+  fala: 'rgba(97,164,247,0.16)',
+  falaNaAkcencie: 'rgba(0,0,0,0.16)',
 };
 
 /** Ton plakietki i okrągłej ikony: kolor tekstu i tło 10% (jak `STATUS_TONE_CLASS` na stronie). */

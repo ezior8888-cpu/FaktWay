@@ -1,6 +1,7 @@
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 import { useStanFaktur } from '@/stan/faktury';
 
 /**
@@ -14,9 +15,7 @@ export default function EkranRodzajuFaktury() {
   const otworz = (rodzaj: string) => router.push({ pathname: '/faktury/nowa/[rodzaj]', params: { rodzaj } });
   return (
     <>
-      <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button onPress={() => router.dismissTo('/faktury')}>Anuluj</Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="lewa" tytul="Anuluj" onPress={() => router.dismissTo('/faktury')} />
       <EkranListy>
         <Sekcja naglowek="Rodzaj faktury" stopka={zBazy ? 'Z telefonu wystawisz fakturę zwykłą. Korektę, zaliczkę i rozliczenie wystawisz na faktway.pl.' : undefined}>
           <Wiersz tytul="Faktura zwykła" podtytul="Standardowa faktura sprzedażowa B2B lub B2C" ikona="file-text-line" strzalka onPress={() => otworz('vat')} />

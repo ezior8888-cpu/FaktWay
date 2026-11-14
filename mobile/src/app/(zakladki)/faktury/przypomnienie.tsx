@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -12,6 +12,7 @@ import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { SzkieletKwoty, SzkieletListy } from '@/komponenty/szkielet';
 import { Tekst } from '@/komponenty/tekst';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 import type { PodgladPrzypomnieniaOdpowiedz, WstrzymanieOdpowiedz, ZatwierdzeniePrzypomnieniaOdpowiedz } from '@/lib/api/kontrakt';
 import { dzienWarszawa, grosze } from '@/lib/dane/mapowanie';
 import { dataPelna, dniMiedzy, kwota } from '@/lib/format';
@@ -64,11 +65,7 @@ function EkranPrzypomnieniaZBazy({ konto }: { konto: KontoFirmy }) {
     return () => clearTimeout(zegar);
   }, [podglad]);
 
-  const zamknij = (
-    <Stack.Toolbar placement="left">
-      <Stack.Toolbar.Button onPress={() => router.back()}>Zamknij</Stack.Toolbar.Button>
-    </Stack.Toolbar>
-  );
+  const zamknij = <PrzyciskPaska strona="lewa" tytul="Zamknij" onPress={() => router.back()} />;
 
   if (!n) {
     const laduje = !naleznosci || naleznosci.stan === 'ladowanie';
@@ -321,9 +318,7 @@ function EkranPrzypomnieniaPrzyklad() {
 
   return (
     <>
-      <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button onPress={() => router.back()}>Zamknij</Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="lewa" tytul="Zamknij" onPress={() => router.back()} />
       <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <NaglowekKwoty
           podpis={`${f.kontrahent} · ${f.numer}`}

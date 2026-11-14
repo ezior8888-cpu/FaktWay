@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { NOWY_WYDATEK } from '@/dane-przykladowe';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
@@ -33,6 +33,14 @@ const OPCJE_GALERII: ImagePicker.ImagePickerOptions = {
   quality: 0.7,
   preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
 };
+
+/**
+ * Android (M12): skaner VisionKit jest tylko na iPhonie, więc „Zrób zdjęcie”
+ * otwiera systemowy aparat. Ta sama kompresja co galeria; odczyt robi serwer
+ * jak dla zdjęcia z galerii. Skaner ML Kit to osobna decyzja (plan, M12b).
+ */
+const OPCJE_APARATU: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.7 };
+const APARAT_ZAMIAST_SKANERA = Platform.OS === 'android';
 
 /**
  * Arkusz „Dodaj wydatek” (etap M9; na stronie przycisk „Dodaj wydatek”,
@@ -116,6 +124,7 @@ export default function EkranDodawaniaWydatku() {
     if (!skanerDostepny()) {
       // Dane przykładowe w symulatorze: odczyt przykładowego paragonu bez aparatu.
       if (!naKoncie) return wybierz({ uri: '', nazwa: 'przyklad.jpg', typ: 'image/jpeg' });
+      if (APARAT_ZAMIAST_SKANERA) return zAparatu();
       return potwierdz(
         { tytul: 'Skaner działa na iPhonie z aparatem', opis: 'Na tym urządzeniu wybierz zdjęcie dokumentu z galerii.', potwierdz: 'Wybierz z galerii', zwykly: true },
         () => void zGalerii(),
@@ -130,10 +139,24 @@ export default function EkranDodawaniaWydatku() {
     }
   };
 
+  const zAparatu = async () => {
+    const zgoda = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
+    if (zamkniety.current) return;
+    if (!zgoda?.granted) {
+      return blad('FaktWay nie ma dostępu do aparatu', 'Zezwól na aparat w ustawieniach telefonu albo wybierz zdjęcie dokumentu z galerii.', false);
+    }
+    const wynik = await ImagePicker.launchCameraAsync(OPCJE_APARATU).catch(() => null);
+    if (zamkniety.current) return;
+    if (!wynik) return blad('Nie można otworzyć aparatu', 'Spróbuj jeszcze raz albo wybierz zdjęcie z galerii.', false);
+    const zdjecie = wynik.canceled ? undefined : wynik.assets[0];
+    if (!zdjecie) return;
+    wybierz({ uri: zdjecie.uri, nazwa: zdjecie.fileName ?? 'zdjecie.jpg', typ: zdjecie.mimeType ?? 'image/jpeg' });
+  };
+
   const zGalerii = async () => {
     const wynik = await ImagePicker.launchImageLibraryAsync(OPCJE_GALERII).catch(() => null);
     if (zamkniety.current) return;
-    if (!wynik) return blad('Nie można otworzyć galerii', 'Spróbuj jeszcze raz albo zeskanuj dokument.', false);
+    if (!wynik) return blad('Nie można otworzyć galerii', `Spróbuj jeszcze raz albo ${APARAT_ZAMIAST_SKANERA ? 'zrób zdjęcie aparatem' : 'zeskanuj dokument'}.`, false);
     const zdjecie = wynik.canceled ? undefined : wynik.assets[0];
     if (!zdjecie) return;
     wybierz({ uri: zdjecie.uri, nazwa: zdjecie.fileName ?? 'zdjecie.jpg', typ: zdjecie.mimeType ?? 'image/jpeg' });
@@ -177,7 +200,11 @@ export default function EkranDodawaniaWydatku() {
   return (
     <EkranListy>
       <Sekcja stopka="Paragon albo faktura: dane odczytamy sami. Potem sprawdzasz odczyt i zatwierdzasz wydatek.">
-        <Wiersz tytul="Skanuj dokument" podtytul="Aparat sam wykryje krawędzie kartki" ikona="camera-line" strzalka onPress={() => void skanuj()} />
+        {APARAT_ZAMIAST_SKANERA ? (
+          <Wiersz tytul="Zrób zdjęcie" podtytul="Cały dokument w kadrze, przy dobrym świetle" ikona="camera-line" strzalka onPress={() => void skanuj()} />
+        ) : (
+          <Wiersz tytul="Skanuj dokument" podtytul="Aparat sam wykryje krawędzie kartki" ikona="camera-line" strzalka onPress={() => void skanuj()} />
+        )}
         <Wiersz tytul="Wybierz z galerii" podtytul="Zdjęcie paragonu albo faktury" ikona="image-line" strzalka onPress={() => void zGalerii()} />
         <Wiersz tytul="Wpisz ręcznie" ikona="edit-box-line" strzalka onPress={reczny} />
       </Sekcja>

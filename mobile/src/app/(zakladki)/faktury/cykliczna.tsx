@@ -12,6 +12,7 @@ import { dataPelna, kwota } from '@/lib/format';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 
 /** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
 export default function EkranFakturyCyklicznej() {
@@ -57,14 +58,8 @@ function EkranFakturyCyklicznejPrzyklad() {
   return (
     <>
       <Stack.Screen options={{ title: istniejaca ? 'Faktura cykliczna' : 'Nowa cykliczna' }} />
-      <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button onPress={() => router.back()}>Anuluj</Stack.Toolbar.Button>
-      </Stack.Toolbar>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button variant="done" onPress={() => zapisz()}>
-          {istniejaca ? 'Zapisz' : 'Dodaj'}
-        </Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="lewa" tytul="Anuluj" onPress={() => router.back()} />
+      <PrzyciskPaska strona="prawa" tytul={istniejaca ? 'Zapisz' : 'Dodaj'} glowny onPress={() => zapisz()} />
 
       <EkranListy keyboardShouldPersistTaps="handled">
         <Sekcja naglowek="Faktura-wzór" stopka="Wzorem może być przyjęta w KSeF faktura VAT w złotych.">

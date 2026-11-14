@@ -498,8 +498,91 @@ częścią „gotowe” od M3.
 | M9 | Wydatek ze zdjęcia: skaner, OCR, sprawdzenie | wydatek zapisany ze skanu |
 | M10 | Pozostałe ekrany z 3a na prawdziwych danych (należności, przypomnienia, PDF, księgowość, ustawienia); usuwanie konta przez API, z 2FA i metodą logowania z serwera, nie z przełącznika przykładowego (przegląd M5b) | każdy ekran z 3a czyta i zapisuje bazę |
 | M11 | Powiadomienia push (D9), logowanie Apple; wymaga płatnego konta | powiadomienie o nowej fakturze na telefonie |
-| M12 | Android: dopasowanie konwencji (sekcja 10 zasad) | checklista na emulatorze Androida |
+| M12a | Android w kodzie, bez emulatora: konwencje z sekcji 10 zasad (pasek Material, wstecz, fala, menu w polach wyboru), `app.json` (pakiet, ikona, uprawnienia), decyzje dla funkcji tylko z iOS | pakiet JS i `expo prebuild` dla Androida bez błędów, test `mobile-android` czerwony przed zmianą, iOS bez zmian |
+| M12b | Android na emulatorze: build w Android Studio i checklista z sekcji 7a; wymaga instalacji Android Studio, SDK i obrazu emulatora (około 10 GB, decyzja Bartosza) | każdy punkt 7a sprawdzony ze zrzutem albo poprawiony |
 | M13 | Sklep: ikona, zrzuty, opisy, polityka i etykiety prywatności, konto dla recenzenta, beta TestFlight i zamknięty test Google | aplikacja zgłoszona do przeglądu |
+
+### 7a. M12b: checklista na emulatorze Androida
+
+Do sprawdzenia po zainstalowaniu Android Studio (emulator z Google Play,
+Android 15 albo nowszy; drugi obraz z Androidem 12 do punktu 13). Zrzuty do
+`docs/mobile/zrzuty/m12/`, jasny i ciemny motyw, największy tekst.
+
+1. **Build.** `pnpm run android` w `mobile/` buduje się bez błędów (Kotlin,
+   Compose z `@expo/ui`, moduły Expo). Moduł skanera ma tylko część iOS, więc
+   Android go pomija (`requireOptionalNativeModule`).
+2. **Start i pasek stanu.** Ekran startowy z logo (jasny i ciemny), potem
+   logowanie na gradiencie z jasnymi ikonami paska stanu. Po Pulpicie (jasny
+   pasek stanu) przejście na Finanse, Ustawienia, KPiR: ciemne ikony w jasnym
+   motywie, jasne w ciemnym.
+3. **Zakładki.** Pasek Material na dole: pięć zakładek z ikonami Remix, napisy
+   w Outfit, licznik przy Kosztach, kolor marki przy wybranej, bez nachodzenia
+   na pasek nawigacji systemu (gesty i trzy przyciski).
+4. **Górny pasek.** Faktury, Koszty, Księgowość, Więcej, Kontrahenci: pasek w
+   kolorze góry gradientu bez szwu z gradientem w treści, biały tytuł w Outfit
+   po lewej. Szczegół faktury, wydatku, faktury z KSeF i kontrahenta: to samo
+   ze strzałką wstecz. Ekrany bez gradientu: szary pasek, ciemny tytuł.
+5. **Ikony i menu w pasku.** Filtr, kalendarz, udostępnij, więcej: białe na
+   okręgu 20% bieli na niebieskim pasku, ciemne na zwykłym, bez kwadratu za
+   ikoną. Menu: biała karta, ciemny tekst, ptaszek przy wybranej pozycji; w
+   filtrach faktur podmenu „Status KSeF”, „Płatność”, „Rodzaj”; „Usuń” na
+   czerwono.
+6. **Wyszukiwarka w pasku.** Lupa biała na niebieskim pasku; po dotknięciu pole
+   z białym tekstem i podpowiedzią; strzałka zamyka wyszukiwanie.
+7. **Przyciski z napisem.** Nowa faktura (X zamyka arkusz, „Szkic” po prawej),
+   faktura otwarta z „Duplikuj” (X), cykliczna (X, „Zapisz”), e-mail (X,
+   „Wyślij”), przypomnienie (X), kontrahent („Edytuj”, „Gotowe” białe),
+   ekrany „Tylko na stronie” (X). Odstępy od krawędzi i tytułu, cel dotyku 48 dp.
+8. **Systemowy wstecz.** Cofa stos w każdej zakładce; zamyka arkusz (dane do
+   przelewu, dodaj wydatek, e-mail); w formularzu faktury ze zmianami pyta
+   „Odrzucić zmiany?”, bez zmian zamyka od razu; gest przewidywanego powrotu
+   (Android 14 i nowszy) pokazuje poprzedni ekran; przy blokadzie chowa
+   aplikację i nie cofa ekranów pod blokadą; na korzeniu zakładki wychodzi.
+9. **Fala.** Przycisk główny (jasna fala na niebieskim), tonalny, biały
+   z cieniem, pigułki pod nagłówkiem, rząd akcji szczegółu, kafle, wiersze kart
+   (rogi przycina karta), wiersz faktury, pole wyboru, „Wszystkie ›” przy
+   nagłówku, „Cofnij”, „Wklej”, oko hasła, awatar Pulpitu. Fala nie wychodzi
+   rogami poza zaokrąglenie, cień przycisku i kafla zostaje.
+10. **Pola formularza.** Bez kreski Material pod tekstem, kursor i zaznaczenie
+    w kolorze marki, obwódka przechodzi w niebieski przy pisaniu; pole wyboru
+    otwiera menu Material pod polem (wybrana w kolorze marki); data otwiera
+    systemowy kalendarz; przełącznik z białym kciukiem na niebieskim torze;
+    klawiatura nie zasłania aktywnego pola (formularz faktury, wydatek,
+    logowanie, kod 2FA).
+11. **Gesty i listy.** Przesunięcie wiersza faktury („Zapłacona”, „Cofnij”) z
+    wibracją; odświeżanie pociągnięciem z kółkiem w kolorze marki; przy
+    przytrzymaniu wiersza nie ma podglądu ani menu (`Link.Menu` działa tylko na
+    iOS), akcje są w szczególe; do oceny, czy dodać menu Material.
+12. **Logowanie i blokada.** Logowanie hasłem, kod 2FA z „Wklej” (Android
+    pokazuje komunikat o odczycie schowka), Google przez kartę przeglądarki
+    i powrót `faktway://`, propozycja odcisku palca, blokada z systemowym oknem
+    biometrii (odcisk rozpoznany, nierozpoznany, anulowany, kod telefonu),
+    zasłona w przełączniku aplikacji bez kwot.
+13. **Zdjęcie wydatku.** „Zrób zdjęcie” otwiera aparat systemowy (pytanie
+    o dostęp, odmowa z komunikatem), „Wybierz z galerii” otwiera systemowy
+    wybór zdjęć (także na Androidzie 12, bez uprawnienia do odczytu plików),
+    aparat na Androidzie 9 (pyta też o zapis plików), odczyt i sprawdzenie
+    odczytu jak na iOS.
+14. **PDF i udostępnianie.** PDF faktury w arkuszu udostępniania Androida,
+    „Dane do przelewu” udostępniają tekst.
+15. **Tryb ciemny i duży tekst.** Każdy ekran z punktów 2 do 14 w ciemnym
+    motywie i przy największym rozmiarze czcionki: nic się nie ucina, tło przy
+    przejściach nie miga bielą, tytuły w pasku mieszczą się albo skracają.
+16. **TalkBack.** Etykiety ikon w pasku (X: „Anuluj” albo „Zamknij”), stan
+    pigułek, pole wyboru „rozwinięte”, kwoty z groszami czytane w całości.
+17. **Z przeglądu kodu M12a (do sprawdzenia, a gdy się potwierdzi, do
+    naprawy):** (a) zasłona w przełączniku aplikacji opiera się na stanie
+    `inactive`, którego Android nie ma, więc miniatura w ostatnich aplikacjach
+    pokaże kwoty; odpowiednik to `FLAG_SECURE` (np. `expo-screen-capture`,
+    nowa paczka natywna); (b) blokada to na Androidzie zwykły widok w
+    korzeniu: sprawdzić, czy otwarty arkusz (dane do przelewu, dodaj wydatek)
+    nie zostaje nad nią po powrocie z tła; (c) aparat: gdy system ubije
+    aplikację w trakcie zdjęcia, wynik ginie (`getPendingResultAsync` nie jest
+    czytane); (d) aktywny filtr na niebieskim pasku ma tę samą białą ikonę co
+    nieaktywny (do rozważenia znacznik z liczbą).
+18. **Decyzja po M12b:** skaner dokumentów ML Kit (kod w Kotlinie, dane
+    o użyciu wysyłane do Google, wpis w formularzu bezpieczeństwa danych
+    Google Play) albo zostaje aparat systemowy.
 
 ---
 
@@ -518,10 +601,16 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M12 (Android, wiersz M12 w sekcji 7; sekcja 10 zasad
-designu): dopasowanie konwencji i checklista na emulatorze Androida. M11
+**Następny krok:** M12b (Android na emulatorze, checklista w sekcji 7a), gdy
+Bartosz zainstaluje Android Studio, SDK i obraz emulatora (około 10 GB). M11
 (powiadomienia push, logowanie Apple) i M13 (sklep) czekają na płatne konto
-Apple. Przed M12 scalić po kolei #716 (M8), #740 (mapa filtra dla telefonu), #738 (M9) i #752 (gałąź `claude/mobile-m10b-ksiegowosc-ustawienia-v2`: M10a, M10b i M9 w jednej gałęzi; zastępuje #739 i #751, bo w historii #751 gitleaks znalazł testowe hasło).
+Apple. M8, M9 i M10 są w `main` i na produkcji od 14.11.2026 (#716, #740, #738,
+#752; migracje 00201 i 00202).
+**Z M12a zostaje:** wszystko, czego nie widać bez emulatora (sekcja 7a), w tym
+cztery ryzyka z przeglądu kodu (7a, punkt 17: zasłona w ostatnich aplikacjach,
+blokada a arkusz, zdjęcie po ubiciu aplikacji, znacznik filtra); menu
+przy przytrzymaniu wiersza faktury na Androidzie (dziś go nie ma, akcje są w
+szczególe); decyzja o skanerze ML Kit (7a, punkt 18).
 **Z M9 zostaje:** obchód M9 w symulatorze iPhone 17 (wymaga zgody w panelu symulatora; build ze skanerem zainstalowany, drogę serwera sprawdzono przez API na osobnym stosie), zrzuty do `docs/mobile/zrzuty/m9/`. Osobno: błąd z `main`, enum `categorization_method` bez `rule_global_keyword` i `rule_global_nip` (paragon ze stacji, hotelu, Allegro nie zapisuje się po OCR, 3 płatne odczyty na próbę), osobna gałąź i PR.
 **Z M10b zostaje:** (1) zapisy ustawień (dane firmy, VAT, data rozpoczęcia,
 certyfikat KSeF, przypomnienia, hasło, 2FA, klucze dostępu) i karty Księgowa,
@@ -593,3 +682,4 @@ dotknięciem (5.2), D4, D6.
 | 13.11.2026 | M10a | należności, przypomnienia, PDF i „Sprawdź teraz” z telefonu (4.3, „Stan po M10a”): logika strony wydzielona do `lib/` bez zmian zachowania (zapłata `lib/invoices/mark-paid.ts`, lista „Po terminie” `lib/overdue/load-overdue.ts`, podgląd i wstrzymanie przypomnienia, zatwierdzenie propozycji `lib/flo/approve-proposal.ts`, „Sprawdź teraz”), 8 tras w `app/api/mobile/v1` (lista, zapłata i cofnięcie, podgląd, zgoda tylko właściciela i administratora, wstrzymanie, PDF z firmą z bramki, skrzynka); w aplikacji zapłata z „Cofnij”, „Po terminie” z serwera, ekran przypomnienia jak okno strony, PDF w arkuszu udostępniania z „Podglądem”, „Sprawdź teraz” w Kosztach, nagłówek sekcji przy dużym tekście. Testy: trasy (48, czerwone przed zmianą), baza (`rls-mobile-naleznosci`, 5), testy strony bez zmian zielone. Sprawdzone w symulatorze 18 Pro na własnym stosie (zapłata i cofnięcie w bazie, podgląd i odmowy, wstrzymanie, PDF, limit 5 minut); 7 uwag z przeglądu poprawionych; ustalenie o zegarach w `assertDeliveryDeadline` do osobnej naprawy; zrzuty `docs/mobile/zrzuty/m10/` | #752 (zastąpił #739) |
 | 14.11.2026 | M9 | wydatek ze zdjęcia (4.3, „Stan po M9”): `lib/expenses/{review,ocr-status}.ts` (test zgodności także na starej akcji), trasy `/wydatki/zdjecie` (poza proxy, klucz 00202), `/wydatki/odczyt/{id}`, `/wydatki/{id}/zatwierdzenie`; skaner VisionKit (moduł lokalny), galeria, sprawdzenie odczytu, wydatki z bazy. Sprawdzone przez API na osobnym stosie z prawdziwym OCR: wgranie, ponowienie (to samo zadanie), wydatek w bazie, zatwierdzenie. Obchód w symulatorze czeka na zgodę | #738 |
 | 14.11.2026 | M10b | księgowość, ustawienia, wybór firmy i usunięcie konta z telefonu (4.3, „Stan po M10b”): logika strony wydzielona do `lib/` bez zmian zachowania (zapis „Ten miesiąc”, dane do przelewu, usunięcie konta RODO, sprawdzenie hasła, ostatnia firma, model ustawień przypomnień), 8 tras w `app/api/mobile/v1` (`firma`, `ksiegowosc` z zatwierdzeniem i zapłatą, `ustawienia`, `konto/usuniecie` z anulowaniem); w aplikacji „Ten miesiąc” z zatwierdzeniem i danymi do przelewu, Firma, KSeF, Przypomnienia i Bezpieczeństwo z konta (zmiany na faktway.pl), wybór firmy zapisany też dla strony, usunięcie konta hasłem albo świeżym logowaniem Google. Decyzje sesji w 4.3. Testy tras (konto i firma 13, księgowość 9, ustawienia 9; czerwone przed zmianą albo mutacją), testy strony bez zmian zielone; 6 uwag z przeglądu i 4 z obchodu poprawione; zrzuty `docs/mobile/zrzuty/m10/m10b-*` | #752 (zastąpił #751 po trafieniu gitleaks na testowe hasło) |
+| 14.11.2026 | M12a | Android w kodzie, bez emulatora (sekcja 10 zasad, rozpisana w tabeli): pasek Material z tytułem po lewej, na ekranach z gradientem w kolorze góry gradientu z białym tytułem i ikonami, gradient w treści od koloru paska (`wyglad/pasek-android.ts`, kontrast białego tekstu sprawdzony testem); styl paska stanu na każdym ekranie (po Pulpicie zostawał biały na jasnym); przyciski z napisem w pasku przez `PrzyciskPaska` (na Androidzie `Stack.Toolbar.Button` bez ikony nic nie rysował: nie dało się zapisać szkicu ani wysłać e-maila; teraz X po lewej i napis po prawej); menu Compose na białej karcie, grupy filtrów jako podmenu; wyszukiwarka biała na niebieskim pasku; pole wyboru: nasze pole z menu Material (było systemowe pole w naszej ramce); fala przycięta do zaokrągleń w `Dotyk`, pigułkach, wierszach, polach i przyciskach tekstowych; bez kreski Material pod polami; kciuk przełącznika w kolorach marki; wstecz przy blokadzie wychodzi z aplikacji; `app.json`: kolor marki, zablokowane uprawnienia (okno nad innymi, odczyt plików, mikrofon; zapis plików zostaje, bo aparat na Androidzie 7 do 9 go wymaga), pakiet i ikona adaptacyjna bez zmian. Decyzje: skaner na Androidzie to aparat systemowy i galeria (ML Kit wymaga Kotlina, którego nie zbudujemy bez Android Studio, i wysyła Google dane o użyciu; do decyzji po M12b), „Wklej” zwykłym przyciskiem (Android nie pyta o zgodę), biometria przez systemowe okno z nazwą „odcisk palca”. Sprawdzone: `expo export` Android i iOS, `expo prebuild --platform android` (manifest, uprawnienia, ikona, czcionki Outfit), `pnpm run sprawdz`, test `mobile-android` (9, czerwone przed zmianą), testy telefonu (487), filtr. Checklista M12b w sekcji 7a | #765 |

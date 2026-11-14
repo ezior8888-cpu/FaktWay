@@ -48,6 +48,7 @@ export function PrzyciskGlowny({ tytul, ikona, wariant = 'glowny', trwa, onPress
     <Dotyk
       onPress={trwa ? undefined : onPress}
       wibracja={wariant === 'glowny' && !trwa}
+      fala={wariant === 'glowny' ? kolory.falaNaAkcencie : undefined}
       accessibilityRole="button"
       accessibilityLabel={tytul}
       accessibilityState={{ busy: Boolean(trwa) }}

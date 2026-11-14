@@ -19,8 +19,9 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { Wykres } from '@/komponenty/wykres';
 import { dataKrotka, kwota, kwotaKrotka, zmiana } from '@/lib/format';
 import { doZaplaty, kiedyTermin } from '@/lib/status-faktury';
-import { useKolory, type Kolory } from '@/wyglad/kolory';
+import { type Kolory } from '@/wyglad/kolory';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { GRUPY_MENU_W_LINII, useKoloryPaska } from '@/wyglad/naglowki';
 
 const OKRESY: { klucz: Okres; nazwa: string }[] = [
   { klucz: 'tygodniowo', nazwa: 'Tygodniowo' },
@@ -41,7 +42,7 @@ const STATUSY = ['Wszystkie', 'Opłacona', 'Korekta', 'Zatwierdzony', 'Do akcept
 
 /** Przepływy pieniężne: odpowiednik `app/(dashboard)/przeplywy`. */
 export default function EkranPrzeplywow() {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(false);
   const router = useRouter();
   const [okres, setOkres] = useState(1);
   const [kategoria, setKategoria] = useState<(typeof KATEGORIE)[number]>('Wszystkie');
@@ -59,16 +60,16 @@ export default function EkranPrzeplywow() {
 
   return (
     <>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={kolory.etykieta} title="Filtruj operacje">
-          <Stack.Toolbar.Menu title="Kategoria" inline>
+      <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={pasek.ikona} title="Filtruj operacje">
+          <Stack.Toolbar.Menu title="Kategoria" inline={GRUPY_MENU_W_LINII}>
             {KATEGORIE.map((k) => (
               <Stack.Toolbar.MenuAction key={k} isOn={kategoria === k} onPress={() => setKategoria(k)}>
                 {k}
               </Stack.Toolbar.MenuAction>
             ))}
           </Stack.Toolbar.Menu>
-          <Stack.Toolbar.Menu title="Status" inline>
+          <Stack.Toolbar.Menu title="Status" inline={GRUPY_MENU_W_LINII}>
             {STATUSY.map((s) => (
               <Stack.Toolbar.MenuAction key={s} isOn={status === s} onPress={() => setStatus(s)}>
                 {s}

@@ -13,6 +13,7 @@ import { Tekst } from '@/komponenty/tekst';
 import type { SprawdzenieSkrzynkiOdpowiedz } from '@/lib/api/kontrakt';
 import { useKontoFirmy } from '@/stan/dane';
 import { useStanFaktur } from '@/stan/faktury';
+import { useKolory } from '@/wyglad/kolory';
 import { ODSTEP } from '@/wyglad/odstepy';
 
 /** Po zleceniu lista skrzynki odświeża się po tylu sekundach (pobranie z KSeF trwa chwilę). */
@@ -21,6 +22,7 @@ const ODSWIEZ_PO_MS = 20_000;
 export function SprawdzKsefNaKoncie({ style }: { style?: StyleProp<ViewStyle> }) {
   const konto = useKontoFirmy();
   const { dane } = useStanFaktur();
+  const kolory = useKolory();
   const [trwa, setTrwa] = useState(false);
   const [komunikat, setKomunikat] = useState<string>();
   const zegar = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -51,6 +53,7 @@ export function SprawdzKsefNaKoncie({ style }: { style?: StyleProp<ViewStyle> })
       accessibilityLabel={`${opis} Sprawdź teraz.`}
       accessibilityState={{ busy: trwa }}
       hitSlop={ODSTEP.xs}
+      android_ripple={{ color: kolory.fala }}
       style={style}>
       <Tekst styl="footnote" kolor="etykietaDrugorzedna">
         {trwa ? 'Sprawdzam KSeF…' : `${opis} `}

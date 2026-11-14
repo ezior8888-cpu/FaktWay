@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 
@@ -7,6 +7,7 @@ import { PoleTekstowe } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { useStanFaktur } from '@/stan/faktury';
 import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 
 /** Na prawdziwym koncie (M7) ten zapis jeszcze nie działa z telefonu: ekran mówi, gdzie go zrobić. */
 export default function EkranEmaila() {
@@ -38,14 +39,8 @@ function EkranEmailaPrzyklad() {
 
   return (
     <>
-      <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button onPress={() => router.back()}>Anuluj</Stack.Toolbar.Button>
-      </Stack.Toolbar>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button variant="done" onPress={wyslij}>
-          Wyślij
-        </Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="lewa" tytul="Anuluj" onPress={() => router.back()} />
+      <PrzyciskPaska strona="prawa" tytul="Wyślij" glowny onPress={wyslij} />
       <EkranListy keyboardShouldPersistTaps="handled">
         <Sekcja stopka={blad ?? (f ? `Faktura ${f.numer} jako PDF w załączniku.` : undefined)}>
           {wyslano ? (

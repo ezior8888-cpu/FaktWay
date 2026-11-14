@@ -1,8 +1,11 @@
 /**
  * Systemowy skaner dokumentów (etap M9): na iOS VisionKit przez moduł lokalny
- * `modules/skaner-dokumentow/ios/SkanerDokumentowModule.swift`. Android i symulator bez aparatu:
+ * `modules/skaner-dokumentow/ios/SkanerDokumentowModule.swift`. Symulator bez aparatu:
  * `skanerDostepny()` daje `false`, a ekran proponuje zdjęcie z galerii.
- * Android dostanie skaner ML Kit w M12.
+ * Android (decyzja M12): moduł nie ma części na Androida, więc `false`, a
+ * „Dodaj wydatek” otwiera systemowy aparat (`koszty/dodaj.tsx`). Skaner ML Kit
+ * wymaga kodu w Kotlinie, który da się zbudować dopiero z Android Studio, i
+ * wysyła Google dane o użyciu; zostaje do decyzji (plan, M12b).
  */
 import { requireOptionalNativeModule } from 'expo';
 
