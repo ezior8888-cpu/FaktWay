@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // AUD-91: (1) zdarzenie z kilkoma kolejkami (wynik wysyłki → powiadomienie
 // + Offline24) szło kolejnymi `boss.send` — błąd przy drugiej kolejce
@@ -80,10 +80,22 @@ describe('fan-out do kilku kolejek', () => {
 });
 
 describe('fan-out skrzynki', () => {
-  it('worker przepuszcza jeden przebieg skrzynki na NIP naraz', async () => {
+  let getRegisteredJobs: (typeof import('@/lib/jobs/registry'))['getRegisteredJobs'];
+
+  // Zimny import rejestru jobów z `package-d` (handlery, runnery i ich zależności)
+  // to prawie cały czas tego pliku. Na Windowsie trwa ok. 5 s nawet na bezczynnej
+  // maszynie, a gdy kilka sesji testuje naraz, ok. 6 s i więcej, czyli tyle albo
+  // więcej niż domyślne 5 s na test z `vitest.config.ts` (hak przed pushem padał
+  // na tym limicie). Dlatego import idzie tu, raz, z jawnym limitem 60 s, a sam
+  // test zostaje przy zwykłym limicie. `vi.resetModules()` zostaje przed importem,
+  // więc rejestr i `package-d` ładują się od zera, tak jak wcześniej w teście.
+  beforeAll(async () => {
     vi.resetModules();
-    const { getRegisteredJobs } = await import('@/lib/jobs/registry');
+    ({ getRegisteredJobs } = await import('@/lib/jobs/registry'));
     await import('@/lib/jobs/handlers/package-d');
+  }, 60_000);
+
+  it('worker przepuszcza jeden przebieg skrzynki na NIP naraz', () => {
     const job = getRegisteredJobs().find((j) => j.queue === 'inbox.poll.tenant');
     expect(job?.groupConcurrency).toBe(1);
   });
