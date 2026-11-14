@@ -8,7 +8,6 @@ import type { MobileCaller } from '@/lib/api/mobile/auth';
 import { createMobileLoginClient } from '@/lib/api/mobile/db';
 import type {
   AnulowanieUsunieciaOdpowiedz,
-  FirmaZapisanaOdpowiedz,
   UsuniecieKontaOdpowiedz,
   UsuniecieZaplanowaneOdpowiedz,
 } from '@/lib/api/mobile/kontrakt';
@@ -18,12 +17,10 @@ import { clientIpFromHeaders } from '@/lib/auth/client-ip';
 import { confirmAccountPassword } from '@/lib/auth/password-check';
 import { cancelAccountDeletion, scheduleAccountDeletion } from '@/lib/gdpr/account-deletion';
 import { getActiveGdprRequest } from '@/lib/gdpr/deletion';
-import { rememberLastActiveOrganization } from '@/lib/organizations/last-active';
 
 /**
- * Konto z telefonu (plan aplikacji mobilnej, M10b): wybór firmy wspólny ze
- * stroną i usunięcie konta (RODO, 14 dni na rezygnację, ADR 0006) tymi samymi
- * funkcjami z `lib/` co strona.
+ * Usunięcie konta z telefonu (plan aplikacji mobilnej, M10b; RODO, 14 dni na
+ * rezygnację, ADR 0006) tymi samymi funkcjami z `lib/` co strona.
  *
  * Potwierdzenie usunięcia i anulowania (decyzja M10b, opis w planie):
  *  - 2FA: konto z TOTP przechodzi bramkę tylko po kodzie (AAL2), jak
@@ -37,7 +34,7 @@ import { rememberLastActiveOrganization } from '@/lib/organizations/last-active'
  *    nigdy z telefonu.
  *
  * Ponowienie: istniejące żądanie oddaje `juzBylo` bez maila i audytu; brak
- * żądania przy anulowaniu to `juzBylo`; wybór firmy zapisuje to samo.
+ * żądania przy anulowaniu to `juzBylo`.
  */
 
 /** Ile wystarcza świeże logowanie przy koncie bez hasła. */
@@ -56,16 +53,6 @@ function swiezeDo(caller: MobileCaller, teraz = Date.now()): number | null {
   if (o === null) return null;
   const koniec = (o + SWIEZE_LOGOWANIE_SEKUND) * 1000;
   return koniec > teraz ? koniec : null;
-}
-
-// ─── Wybór firmy ──────────────────────────────────────────────────────
-
-/** `POST /api/mobile/v1/firma`: członkostwo w firmie z nagłówka sprawdziła bramka (tokenem klienta). */
-export async function rememberFirmFromMobile(caller: MobileCaller): Promise<NextResponse> {
-  if (!caller.org) throw new Error('Trasa firmy bez firmy (org: required)');
-  const zapisane = await rememberLastActiveOrganization(caller.db, caller.user.id, caller.org.tenantId);
-  const odpowiedz: FirmaZapisanaOdpowiedz = { aktywnaFirma: caller.org.tenantId, zapisane };
-  return mobileJson(odpowiedz, 200, caller.headers);
 }
 
 // ─── Usunięcie konta ──────────────────────────────────────────────────
