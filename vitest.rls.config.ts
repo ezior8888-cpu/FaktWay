@@ -187,6 +187,9 @@ export default defineConfig({
       // „Po terminie” tymi samymi funkcjami co strona, klientem z tokenem i x-active-org; księgowa
       // i konto spoza firmy dostają odmowę w bazie.
       'tests/rls-mobile-naleznosci.test.ts',
+      // FZ-005 (bez migracji): cron.retention-delete a klucze RESTRICT korekty i kosztu z KSeF;
+      // usunięcie po kolei, korekta przed oryginałem, zablokowane faktury zostają z plikami.
+      'tests/rls-retencja-usuwanie.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
