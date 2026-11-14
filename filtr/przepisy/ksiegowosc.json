@@ -2817,7 +2817,8 @@
       ],
       "testy": [
         "tests/unit/ksiegowosc-mikrorachunek.test.ts > wektor z oficjalnego generatora MF",
-        "tests/unit/ksiegowosc-mikrorachunek.test.ts > niepoprawny NIP nie daje numeru"
+        "tests/unit/ksiegowosc-mikrorachunek.test.ts > niepoprawny NIP nie daje numeru",
+        "tests/filtr/roznicowe/mikrorachunek.test.ts > mikrorachunek z NIP kontra wyrocznia"
       ],
       "parametry": [],
       "niezmienniki": [
