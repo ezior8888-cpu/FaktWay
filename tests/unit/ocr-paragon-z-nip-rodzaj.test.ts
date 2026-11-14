@@ -47,9 +47,16 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (table: string) => {
       const q: Record<string, unknown> = {};
       let insertRow: Row | null = null;
+      // Historia sprzedawcy czyta stronami po `id` (sesja 29 planu skalowania).
+      let pagedById = false;
       Object.assign(q, {
         select: () => q,
         eq: () => q,
+        gt: () => q,
+        order: (column: string) => {
+          pagedById = column === 'id';
+          return q;
+        },
         limit: () => q,
         update: () => q,
         insert: (r: Row) => {
@@ -71,7 +78,9 @@ vi.mock('@/lib/supabase/admin', () => ({
           if (table === 'memberships') return { data: { user_id: USER }, error: null };
           return { data: null, error: null };
         },
-        then: (ok: (v: { error: null }) => unknown) => Promise.resolve({ error: null }).then(ok),
+        // Strona historii: pusta lista, jak sprzedawca bez wcześniejszych kosztów.
+        then: (ok: (v: { data?: Row[]; error: null }) => unknown) =>
+          Promise.resolve(pagedById ? { data: [], error: null } : { error: null }).then(ok),
       });
       return q;
     },

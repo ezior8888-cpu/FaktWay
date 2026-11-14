@@ -32,13 +32,18 @@ vi.mock('@/lib/supabase/server', () => ({
         },
         eq(k: string, v: unknown) { filters.push((r) => r[k] === v); return q; },
         in(k: string, v: unknown[]) { filters.push((r) => v.includes(r[k])); return q; },
+        gt(k: string, v: unknown) { filters.push((r) => String(r[k]) > String(v)); return q; },
         order: () => q,
         limit: () => q,
-        returns: async () => {
-          const data = (s.rows[table] ?? [])
-            .filter((r) => filters.every((f) => f(r)))
-            .map((r) => (columns ? Object.fromEntries(columns.filter((c) => c in r).map((c) => [c, r[c]])) : r));
-          return { data, count: data.length, error: null };
+        // Sekcje stronami czekają na samo zapytanie, profil przez `returns()`.
+        returns: () => q,
+        then<A, B>(ok: (value: { data: Row[]; count: number; error: null }) => A, fail?: (error: unknown) => B) {
+          return Promise.resolve().then(() => {
+            const data = (s.rows[table] ?? [])
+              .filter((r) => filters.every((f) => f(r)))
+              .map((r) => (columns ? Object.fromEntries(columns.filter((c) => c in r).map((c) => [c, r[c]])) : r));
+            return { data, count: data.length, error: null as null };
+          }).then(ok, fail);
         },
       };
       return q;
@@ -63,9 +68,10 @@ beforeEach(() => {
     memberships: [{ id: 'm1', user_id: USER, organization_id: 'org-1', role: 'owner', status: 'active' }],
     audit_logs: [{ id: 'a1', user_id: USER, action: 'auth.login' }],
     users: [{ id: USER, name: 'Jan Testowy', role: 'owner', last_login: null, created_at: '2026-01-01' }],
+    // Każda tabela ma `id` (uuid): eksport stronami czyta po nim, także gdy go nie eksportuje.
     email_preferences: [
-      { user_id: USER, category: 'marketing', unsubscribed_at: '2026-02-01', source: 'link', reason: null },
-      { user_id: OTHER, category: 'marketing', unsubscribed_at: '2026-02-01', source: 'link', reason: SECRET },
+      { id: 'e1', user_id: USER, category: 'marketing', unsubscribed_at: '2026-02-01', source: 'link', reason: null },
+      { id: 'e2', user_id: OTHER, category: 'marketing', unsubscribed_at: '2026-02-01', source: 'link', reason: SECRET },
     ],
     push_subscriptions: [{
       id: 'p1', user_id: USER, tenant_id: 'org-1', endpoint: `https://push.example/${SECRET}`, p256dh: SECRET, auth: SECRET,
@@ -80,14 +86,14 @@ beforeEach(() => {
       { id: 'c2', user_id: OTHER, status: 'open', category: 'inne', subject: SECRET, created_at: '2026-04-01' },
     ],
     support_messages: [
-      { conversation_id: 'c1', role: 'user', content: 'Jak wystawić korektę?', created_at: '2026-04-01' },
-      { conversation_id: 'c2', role: 'user', content: SECRET, created_at: '2026-04-01' },
+      { id: 's1', conversation_id: 'c1', role: 'user', content: 'Jak wystawić korektę?', created_at: '2026-04-01' },
+      { id: 's2', conversation_id: 'c2', role: 'user', content: SECRET, created_at: '2026-04-01' },
     ],
     organization_join_requests: [{ id: 'j1', requested_by_user_id: USER, organization_id: 'org-2', status: 'pending', message: 'Cześć', created_at: '2026-05-01' }],
     organization_invitations: [{ id: 'i1', email: EMAIL, organization_id: 'org-1', role: 'admin', token_hash: SECRET, invited_by: OTHER, invited_at: '2026-01-01' }],
     gdpr_deletion_requests: [{ id: 'g1', user_id: USER, status: 'canceled', scheduled_for: '2026-06-15', cancel_token_hash: SECRET, created_at: '2026-06-01' }],
-    newsletter_subscribers: [{ email: EMAIL, source: 'blog', created_at: '2026-01-05', unsubscribed_at: null }],
-    email_bounces: [{ email: EMAIL, bounce_type: 'soft', reason: 'mailbox full', occurred_at: '2026-07-01', raw_payload: { s: SECRET } }],
+    newsletter_subscribers: [{ id: 'n1', email: EMAIL, source: 'blog', created_at: '2026-01-05', unsubscribed_at: null }],
+    email_bounces: [{ id: 'b1', email: EMAIL, bounce_type: 'soft', reason: 'mailbox full', occurred_at: '2026-07-01', raw_payload: { s: SECRET } }],
   };
 });
 

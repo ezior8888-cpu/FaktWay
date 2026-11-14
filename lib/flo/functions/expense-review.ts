@@ -35,6 +35,7 @@ import { registerFloHandler } from '@/lib/flo/handlers';
 import type { CreateProposalInput } from '@/lib/flo/proposals';
 import { captureUndo } from '@/lib/flo/undo';
 import { documentCurrency, HOME_CURRENCY } from '@/lib/ocr/currency';
+import { readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 // ═══════════════════════════════════════════════════════════════
@@ -418,6 +419,20 @@ interface ExpensesRows {
   error: { message: string } | null;
 }
 
+/** Strona wydatków po `id` (`readAllById`). */
+interface ExpensesPageQuery {
+  gt(column: string, value: string): ExpensesPageQuery;
+  order(
+    column: string,
+    options: { ascending: boolean },
+  ): {
+    limit(count: number): PromiseLike<{
+      data: Array<Record<string, unknown> & { id: string }> | null;
+      error: { message: string } | null;
+    }>;
+  };
+}
+
 interface ExpensesClient {
   from: (table: 'expenses' | 'ocr_jobs') => {
     select: (columns: string) => {
@@ -425,7 +440,7 @@ interface ExpensesClient {
         column: string,
         value: string,
       ) => {
-        eq: (column: string, value: string) => Promise<ExpensesRows>;
+        eq: (column: string, value: string) => ExpensesPageQuery;
       };
       in: (
         column: string,
@@ -527,17 +542,24 @@ export async function readSellerHistory(
 ): Promise<SellerHistory> {
   if (!sellerName) return sellerHistoryFrom([]);
 
-  const { data, error } = await client
-    .from('expenses')
-    .select(
-      'id, gross_amount, is_deductible, currency:ocr_extracted_data->>currency, fx:ocr_extracted_data->fx',
-    )
-    .eq('tenant_id', tenantId)
-    .eq('seller_name', sellerName);
+  // Sesja 29 planu skalowania: stronami po `id`. Jedno zapytanie oddawało
+  // najwyżej 1000 wierszy (`PGRST_DB_MAX_ROWS`) bez błędu, więc u dostawcy
+  // z ponad 1000 dokumentami liczba i mediana szły z przypadkowego kawałka.
+  // Koniec na pustej stronie, bez liczby z pierwszej: paragon dopisany
+  // w trakcie odczytu (zdjęcia wgrane paczką) nie wywraca karty.
+  const rows = await readAllById('historia sprzedawcy', (afterId, limit) => {
+    let query = client
+      .from('expenses')
+      .select(
+        'id, gross_amount, is_deductible, currency:ocr_extracted_data->>currency, fx:ocr_extracted_data->fx',
+      )
+      .eq('tenant_id', tenantId)
+      .eq('seller_name', sellerName);
+    if (afterId) query = query.gt('id', afterId);
+    return query.order('id', { ascending: true }).limit(limit);
+  });
 
-  if (error) throw new Error(error.message);
-
-  return sellerHistoryFrom((data ?? []).map(historyEntryFromRow));
+  return sellerHistoryFrom(rows.map(historyEntryFromRow));
 }
 
 function historyEntryFromRow(row: Record<string, unknown>): SellerHistoryEntry {

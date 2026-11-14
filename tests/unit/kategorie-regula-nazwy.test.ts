@@ -16,13 +16,22 @@ vi.mock('@/lib/supabase/admin', () => ({
       const filters: Array<[string, unknown]> = [];
       let op: 'select' | 'update' = 'select';
       let patch: Rule = {};
+      // Reguły nazwy czytane stronami po `id` (sesja 29 planu skalowania).
+      let afterId: string | null = null;
+      let limit: number | undefined;
       const rows = () =>
         table === 'categorization_rules'
-          ? st.rules.filter((r) => filters.every(([k, v]) => r[k] === v))
+          ? st.rules
+              .filter((r) => filters.every(([k, v]) => r[k] === v))
+              .filter((r) => afterId === null || String(r.id) > afterId)
+              .slice(0, limit)
           : [];
       const q = {
         select: () => q,
         not: () => q,
+        gt: (_k: string, v: string) => { afterId = v; return q; },
+        order: () => q,
+        limit: (n: number) => { limit = n; return q; },
         update: (p: Rule) => { op = 'update'; patch = p; return q; },
         eq: (k: string, v: unknown) => { filters.push([k, v]); return q; },
         maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),

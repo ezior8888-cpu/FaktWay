@@ -52,20 +52,24 @@ beforeEach(() => {
       if (!rows[table]) throw new Error('Unexpected table: ' + table);
       const filters: Array<[string, unknown]> = [];
       let limit = 1000;
+      const run = () => {
+        const selected = rows[table].filter((row) => filters.every(([key, value]) => row[key] === value));
+        return { data: selected.slice(0, Math.min(limit, rowLimit)),
+          count: omitCount ? null : selected.length,
+          error: failedTable === table ? { message: PRIVATE } : null };
+      };
       const query = {
-        select: (_columns: string, opts: { count: string }) => {
-          expect(opts.count).toBe('exact'); return query;
+        select: (_columns: string, opts?: { count?: string }) => {
+          expect(opts?.count).toBe('exact'); return query;
         },
         eq: (key: string, value: unknown) => { filters.push([key, value]); return query; },
         in: () => query,
         order: () => query,
         limit: (value: number) => { limit = value; return query; },
-        returns: async () => {
-          const selected = rows[table].filter((row) => filters.every(([key, value]) => row[key] === value));
-          return { data: selected.slice(0, Math.min(limit, rowLimit)),
-            count: omitCount ? null : selected.length,
-            error: failedTable === table ? { message: PRIVATE } : null };
-        },
+        // Sekcje stronami czekają na samo zapytanie, profil przez `returns()`.
+        returns: () => query,
+        then: <A, B>(ok: (value: ReturnType<typeof run>) => A, fail?: (error: unknown) => B) =>
+          Promise.resolve().then(run).then(ok, fail),
       };
       return query;
     },
@@ -87,11 +91,11 @@ describe('bounded account export', () => {
     expect(data).not.toHaveProperty('invoices_count');
   });
 
-  it('reports a database row cap honestly rather than pretending completeness', async () => {
+  // Sesja 29 planu skalowania: sekcje idą stronami w komplecie, więc ucięta
+  // strona nie jest już „uczciwym kawałkiem” z truncated: true, tylko odmową.
+  it('refuses a silently capped page rather than exporting a partial file', async () => {
     rowLimit = 1;
-    const data = await collectUserData(USER);
-    expect(data.coverage.memberships).toEqual({ returned: 1, total: 2, truncated: true });
-    expect(data.coverage.audit_logs).toEqual({ returned: 1, total: 1, truncated: false });
+    await expect(collectUserData(USER)).rejects.toThrow(/^account_export_data_unavailable$/);
   });
 
   it.each(['memberships', 'audit_logs'])('refuses partial success on %s errors', async (table) => {
