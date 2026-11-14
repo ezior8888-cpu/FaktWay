@@ -23,9 +23,21 @@ export { normalizeNoteRecipient as normalizeQuoteRecipient } from '@/lib/noty/ma
  * Adres idzie do klucza tylko jako skrót: klucz trafia do dzienników dostawcy.
  * Przedrostek `sales-quote/<id>/` sprawdza RPC `record_sales_quote_email` (00198).
  */
-export function quoteEmailIdempotencyKey(quoteId: string, recipient: string, previousSends: number): string {
+export function quoteEmailIdempotencyKey(
+  quoteId: string,
+  recipient: string,
+  previousSends: number,
+  /**
+   * Klucz logo firmy na PDF w załączniku (krok 2.2) albo `null` bez logo.
+   * Resend przy tym samym kluczu porównuje treść, a logo zmienia PDF: inne
+   * logo to inny klucz, więc ponowienie po zmianie logo nie utknie na 24 h.
+   * Bez logo klucz jest taki jak przed tym krokiem.
+   */
+  logoKey: string | null = null,
+): string {
   const hash = createHash('sha256').update(recipient.trim().toLowerCase()).digest('hex').slice(0, 16);
-  return `sales-quote/${quoteId}/${hash}/${previousSends}`;
+  const logo = logoKey ? `/${createHash('sha256').update(logoKey).digest('hex').slice(0, 16)}` : '';
+  return `sales-quote/${quoteId}/${hash}/${previousSends}${logo}`;
 }
 
 export interface QuoteEmailContent {

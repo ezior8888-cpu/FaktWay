@@ -609,12 +609,16 @@
     {
       "id": "ustawienia.firma",
       "poziom": "R1",
-      "opis": "Dane firmy i ustawienia podatkowe, które trafiają na faktury i do JPK: NIP, adres, urząd skarbowy, metoda kasowa, zwolnienie z VAT, data rozpoczęcia działalności, usunięcie firmy.",
+      "opis": "Dane firmy i ustawienia podatkowe, które trafiają na faktury i do JPK: NIP, adres, urząd skarbowy, metoda kasowa, zwolnienie z VAT, data rozpoczęcia działalności, logo na wydruku faktury, usunięcie firmy.",
       "sciezki": [
         "app/actions/{company-profile,organizations,tax-office,cash-method,vat-exemption,business-start}.ts",
         "lib/invoices/business-start.ts",
         "components/settings/{cash-method-form,tax-office-form,vat-exemption-form,business-start-form,complete-nip-form,company-deletion}.tsx",
-        "app/actions/company-bank-account.ts"
+        "app/actions/company-bank-account.ts",
+        "app/actions/company-logo.ts",
+        "app/api/uploads/logo/route.ts",
+        "lib/invoices/logo-firmy.ts",
+        "components/settings/company-logo-form.tsx"
       ]
     },
     {
@@ -839,9 +843,10 @@
     {
       "id": "sql.integralnosc",
       "poziom": "R1",
-      "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja).",
+      "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja, plik logo na wydruku tylko z katalogu firmy i tylko od serwera).",
       "sciezki": [
-        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql"
+        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql",
+        "supabase/migrations/00202_*.sql"
       ]
     },
     {

@@ -49,7 +49,7 @@ export const config = {
   // cichym błędem dekodera w przeglądarce.
   //
   // Trasy wgrywania (`/api/uploads/expense`, `/api/uploads/import`,
-  // `/share-target`; same te adresy, bez podścieżek) też omijają proxy
+  // `/api/uploads/logo`, `/share-target`; same te adresy, bez podścieżek) też omijają proxy
   // (plan skalowania, sesja 31): na ścieżce z matchera Next czyta CAŁE ciało
   // żądania i trzyma w pamięci jego kopię do 10 MiB, zanim trasa ruszy, a
   // nadmiar ucina po cichu. Te trasy same sprawdzają Origin, rozmiar przed
@@ -57,7 +57,7 @@ export const config = {
   // (`lib/uploads/server.ts`). Nowa trasa wgrywania: dopisz ją tu i w
   // `tests/unit/wgrywanie-proxy-matcher.test.ts`, który pilnuje bramki.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icons/|api/uploads/(?:expense|import)/?$|share-target/?$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|mp4|webm|mov|woff|woff2)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icons/|api/uploads/(?:expense|import|logo)/?$|share-target/?$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|mp4|webm|mov|woff|woff2)$).*)',
     // Tunel PostHog w całości, także pliki z rozszerzeniem z listy wyżej
     // i każdy zapis wielkości liter (Next przepisuje `/Ingest/…` tak samo):
     // tylko proxy zdejmuje z niego ciasteczka (`lib/telemetry-tunnel.ts`).

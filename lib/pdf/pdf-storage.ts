@@ -39,20 +39,38 @@ function parseYearMonth(issueDate: string): { year: string; month: string } {
   return { year: year!, month: month! };
 }
 
-/** Buduje klucz R2 dla PDF faktury. */
+/**
+ * Buduje klucz R2 dla PDF faktury.
+ *
+ * `logoKey` (krok 2.2, logo firmy): PDF z logo ma w nazwie skrót klucza logo
+ * (`.l<16 znaków>`). Klucz logo jest nowy przy każdym wgraniu, więc zmiana
+ * albo usunięcie logo daje nowy PDF bez podbijania wersji renderera, a firma
+ * bez logo zachowuje dotychczasowe klucze i PDF-y w pamięci podręcznej.
+ */
 export function buildInvoicePdfKey(
   tenantId: string,
   invoiceId: string,
   issueDate: string,
   qrPayload: string | null = null,
   ksefNumber: string | null = null,
+  logoKey: string | null = null,
 ): string {
   const { year, month } = parseYearMonth(issueDate);
   const qrState = createHash('sha256')
     .update(JSON.stringify([qrPayload, ksefNumber]))
     .digest('hex')
     .slice(0, 32);
-  return `${tenantId}/${year}/${month}/${invoiceId}.v${PDF_RENDERER_VERSION}.${qrState}.pdf`;
+  const logo = logoKey ? `.l${createHash('sha256').update(logoKey).digest('hex').slice(0, 16)}` : '';
+  return `${tenantId}/${year}/${month}/${invoiceId}.v${PDF_RENDERER_VERSION}.${qrState}${logo}.pdf`;
+}
+
+/**
+ * Klucz PDF bez części logo: sam stan kodu QR i numeru KSeF. Ten stan
+ * sprawdza się przed wydaniem PDF (`verifyInvoicePdfDeliveryState`); zmiana
+ * logo w międzyczasie nie jest zmianą stanu faktury.
+ */
+export function invoicePdfQrStateKey(key: string): string {
+  return key.replace(/\.l[0-9a-f]{16}\.pdf$/, '.pdf');
 }
 
 export async function uploadInvoicePdf(

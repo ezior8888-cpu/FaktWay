@@ -9,7 +9,8 @@ import { formatUploadSize, UPLOAD_BODY_LIMIT_BYTES, UPLOAD_FILE_LIMIT_LABEL } fr
 
 /**
  * Bramka tras wgrywania plików (plan skalowania, sesja 31; LIM-08, HOR-V1,
- * CPU-06): `/api/uploads/expense`, `/api/uploads/import`, `/share-target`.
+ * CPU-06): `/api/uploads/expense`, `/api/uploads/import`, `/share-target`
+ * i `/api/uploads/logo` (logo firmy, plan kompletnej aplikacji, krok 2.2).
  *
  * PO CO. Trasy są POZA proxy (`proxy.ts`, matcher): proxy Next czyta całe
  * ciało żądania z gniazda i trzyma w pamięci jego kopię do 10 MiB, zanim
@@ -31,7 +32,7 @@ import { formatUploadSize, UPLOAD_BODY_LIMIT_BYTES, UPLOAD_FILE_LIMIT_LABEL } fr
  * w toaście, `/share-target` zamienia ją na komunikat na Kosztach.
  */
 
-export type UploadKind = 'expense' | 'import';
+export type UploadKind = 'expense' | 'import' | 'logo';
 
 export type UploadRefusalReason =
   | 'bad_type'
@@ -64,11 +65,12 @@ export const UPLOAD_RATE_WINDOW_SECONDS = 600;
 
 /**
  * Ile wgrań na osobę w firmie w oknie. Koszt to zwykle kilka zdjęć z rzędu
- * (rozliczenie miesiąca), import to kilka plików (np. kwartały). Limit łapie
- * pętlę albo skrypt, a nie człowieka; odczyty OCR ma osobno budżet AI firmy
+ * (rozliczenie miesiąca), import to kilka plików (np. kwartały), logo firmy
+ * (krok 2.2) to kilka prób wyboru pliku. Limit łapie pętlę albo skrypt,
+ * a nie człowieka; odczyty OCR ma osobno budżet AI firmy
  * (`lib/ai/tenant-ai-budget.ts`).
  */
-export const UPLOAD_RATE_LIMITS: Record<UploadKind, number> = { expense: 30, import: 10 };
+export const UPLOAD_RATE_LIMITS: Record<UploadKind, number> = { expense: 30, import: 10, logo: 10 };
 
 /**
  * Budżet bajtów wgrań naraz w procesie web: cztery największe pliki albo
