@@ -13,7 +13,8 @@ import {
 /**
  * Cron codziennie o 3:00 PL — faktury starsze niż ~2 lata od daty wystawienia,
  * z zapisanym XML w R2: kopiujemy XML do S3 Glacier Deep Archive, zapisujemy
- * `archive_storage_path`, potem oznaczamy `archived_at`.
+ * `archive_storage_path`, potem jednym zapisem `archived_at` i termin usunięcia
+ * `scheduled_deletion_at` (usuwa `cron.retention-delete`).
  */
 /**
  * Runner joba (worker pg-boss).
@@ -92,20 +93,20 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
       });
     }
 
+    // Archiwizacja i termin usunięcia jednym zapisem (FZ-009): ponowienie
+    // zaczyna od zera i bierze tylko faktury bez `archived_at`, więc błąd
+    // między dwoma osobnymi zapisami zostawiał fakturę na zawsze bez terminu.
     await step.run('mark-archived', async () => {
       const supabase = createAdminClient();
+      // Każda paczka jednym zapisem obu kolumn: błąd w kolejnej paczce zostawia
+      // poprzednie z terminem, a pozostałe bez `archived_at` bierze ponowienie.
       const archivedAt = new Date().toISOString();
       for (const paczka of paczki) {
-        const { error } = await supabase.from('invoices').update({ archived_at: archivedAt }).in('id', paczka);
+        const { error } = await supabase
+          .from('invoices')
+          .update({ archived_at: archivedAt, scheduled_deletion_at: terminUsuniecia })
+          .in('id', paczka);
         if (error) throw new Error(`Mark archived failed: ${error.message}`);
-      }
-    });
-
-    await step.run('schedule-deletion', async () => {
-      const supabase = createAdminClient();
-      for (const paczka of paczki) {
-        const { error } = await supabase.from('invoices').update({ scheduled_deletion_at: terminUsuniecia }).in('id', paczka);
-        if (error) throw new Error(`Schedule deletion failed: ${error.message}`);
       }
     });
 

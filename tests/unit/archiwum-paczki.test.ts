@@ -6,9 +6,11 @@ import type { JobContext } from '@/lib/jobs/registry';
  * FZ-011 (i punkt 30 planu skalowania 3000): `cron.archive-old-invoices`
  * oznaczał nawet 500 faktur jednym `.in('id', ids)`, a ten filtr trafia do
  * adresu PATCH (500 identyfikatorów to ok. 19 KB, ponad limit wiersza
- * żądania bramki, `lib/pagination/in-list.ts`). Zapisy idą paczkami po
- * najwyżej 100 identyfikatorów, a wynik jest ten sam: każda kandydatka
- * oznaczona raz.
+ * żądania bramki, `lib/pagination/in-list.ts`). Zapisy idą paczkami
+ * z `inListChunks` (najwyżej 100 wartości i 4000 znaków w adresie, dla UUID
+ * 88 w paczce), a wynik jest ten sam: każda kandydatka oznaczona raz. Każda
+ * paczka zapisuje obie kolumny naraz (FZ-009), więc błąd w kolejnej paczce
+ * nie zostawia poprzednich bez terminu usunięcia.
  */
 
 type Row = Record<string, unknown>;
@@ -16,6 +18,8 @@ const m = vi.hoisted(() => ({
   invoices: [] as Row[],
   /** Każdy zapis do `invoices`: zmiana i lista z `.in('id', …)` (albo `null` przy `.eq`). */
   zapisy: [] as Array<{ patch: Row; ids: string[] | null }>,
+  /** Numer zapisu listą (od 1), który raz kończy się błędem; `null`: bez błędu. */
+  bladZapisuListy: null as number | null,
 }));
 
 vi.mock('@/lib/storage/glacier', () => ({ uploadToGlacier: vi.fn(async (_t: string, id: string) => `glacier/${id}`) }));
@@ -42,6 +46,10 @@ vi.mock('@/lib/supabase/server', () => ({
         maybeSingle: async () => ({ data: null, error: null }),
         then: (ok: (v: unknown) => unknown) => {
           if (patch && table === 'invoices') {
+            if (ids && m.bladZapisuListy !== null && m.zapisy.filter((z) => z.ids).length + 1 === m.bladZapisuListy) {
+              m.bladZapisuListy = null;
+              return Promise.resolve({ data: null, error: { message: 'canceling statement due to statement timeout' } }).then(ok);
+            }
             m.zapisy.push({ patch, ids });
             for (const r of m.invoices.filter((r) => predicates.every((p) => p(r)))) Object.assign(r, patch);
             return Promise.resolve({ data: null, error: null }).then(ok);
@@ -71,13 +79,14 @@ const faktura = (i: number): Row => ({
 beforeEach(() => {
   vi.clearAllMocks();
   m.zapisy = [];
+  m.bladZapisuListy = null;
 });
 
 describe('archiwum Glacier: zapisy paczkami (FZ-011)', () => {
-  it('250 kandydatek: każdy zapis listą najwyżej 100 identyfikatorów, każda faktura oznaczona raz', async () => {
-    m.invoices = Array.from({ length: 250 }, (_, i) => faktura(i));
+  it('500 kandydatek (limit przebiegu): każdy zapis listą najwyżej 100 identyfikatorów, każda faktura oznaczona raz', async () => {
+    m.invoices = Array.from({ length: 500 }, (_, i) => faktura(i));
 
-    await expect(runArchiveOldInvoices(ctx)).resolves.toEqual({ archived: 250 });
+    await expect(runArchiveOldInvoices(ctx)).resolves.toEqual({ archived: 500 });
 
     const listy = m.zapisy.filter((z) => z.ids !== null);
     expect(listy.length).toBeGreaterThan(0);
@@ -86,6 +95,18 @@ describe('archiwum Glacier: zapisy paczkami (FZ-011)', () => {
       const oznaczone = listy.filter((z) => kolumna in z.patch).flatMap((z) => z.ids!);
       expect(oznaczone.sort()).toEqual(m.invoices.map((f) => f.id).sort());
     }
+    expect(m.invoices.every((f) => f.archived_at != null && typeof f.scheduled_deletion_at === 'string')).toBe(true);
+  });
+
+  it('błąd w drugiej paczce: pierwsza ma już termin, ponowienie od zera oznacza resztę', async () => {
+    m.invoices = Array.from({ length: 250 }, (_, i) => faktura(i));
+    m.bladZapisuListy = 2;
+
+    await expect(runArchiveOldInvoices(ctx)).rejects.toThrow('statement timeout');
+    // Po błędzie żadna faktura nie jest zarchiwizowana bez terminu.
+    expect(m.invoices.filter((f) => f.archived_at != null && f.scheduled_deletion_at == null)).toEqual([]);
+
+    await runArchiveOldInvoices(ctx);
     expect(m.invoices.every((f) => f.archived_at != null && typeof f.scheduled_deletion_at === 'string')).toBe(true);
   });
 });
