@@ -18,45 +18,76 @@ import type { JobContext } from '@/lib/jobs/registry';
 import { computeFingerprint } from '@/lib/flo/fingerprint';
 import { buildChaseProposal } from '@/lib/flo/functions/payment-chase';
 import { createProposal } from '@/lib/flo/proposals';
+import { forEachPageById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   decideNextReminder,
   findInvoicesRequiringReminders,
+  type InvoiceForScheduling,
 } from '@/lib/reminders/scheduler';
 
 /**
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
+ *
+ * Kolejność (sesja 18 planu skalowania, DB-03, JOB-08): najpierw firmy
+ * z włączonym Wkurzaczem, stronami ustawień po `id`, potem zaległe faktury
+ * tylko tych firm, paczkami i stronami. Każda strona faktur jest
+ * przetworzona, zanim przyjdzie następna. Do 13.11.2026 cron czytał
+ * kandydatów wszystkich firm naraz (także firm z wyłączonymi ponagleniami
+ * i bez ustawień) i trzymał całą listę w pamięci przed pierwszą decyzją.
  */
 export async function runReminderScheduler({ step, logger }: JobContext) {
-  const candidates = await step.run('find-candidates', async () => {
-    return findInvoicesRequiringReminders();
-  });
+  const admin = createAdminClient();
+  let tenants = 0;
+  let processed = 0;
+  let proposedCount = 0;
+  let errors = 0;
 
-  if (candidates.length === 0) {
-    return { processed: 0, proposed: 0, message: 'Brak kandydatów' };
+  // Firmy z włączonym Wkurzaczem: odsiew w zapytaniu, zanim padnie pytanie
+  // o jakąkolwiek fakturę. Brak wiersza ustawień = ponaglenia wyłączone (jak
+  // w `decideNextReminder`). Decyzja per faktura i tak sprawdza ustawienia
+  // jeszcze raz; tu tylko odsiew. Błąd strony rzuca: „nie wiem, kto ma
+  // włączone” to nie „nikt”, inaczej awaria bazy wyglądałaby jak spokojna
+  // godzina bez ponagleń.
+  await forEachPageById<{ id: string; tenant_id: string }>(
+    'przypomnienia: firmy z włączonymi ponagleniami',
+    (afterId, limit) =>
+      step.run('load-enabled-tenants', async () => {
+        let query = admin.from('reminder_settings').select('id, tenant_id').eq('enabled', true);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      }),
+    async (settings) => {
+      tenants += settings.length;
+      await findInvoicesRequiringReminders(
+        settings.map((s) => s.tenant_id),
+        async (invoices) => {
+          for (const invoice of invoices) await processInvoice(invoice);
+        },
+      );
+    },
+  );
+
+  if (errors > 0) {
+    logger.error('Scheduler ponagleń: faktury z błędem', { errors, processed });
   }
 
-  // Firmy z włączonym Wkurzaczem — jedno zapytanie zamiast pytania o
-  // ustawienia przy każdej z setek faktur co godzinę (AUD-89). Decyzja per
-  // faktura i tak sprawdza ustawienia jeszcze raz; tu tylko odsiew.
-  const enabledTenants = await step.run('load-enabled-tenants', () =>
-    readEnabledTenants([...new Set(candidates.map((c) => c.tenant_id))]),
-  );
-  const enabled = new Set(enabledTenants);
+  if (processed === 0) {
+    return { tenants, processed: 0, proposed: 0, errors: 0, message: 'Brak kandydatów' };
+  }
 
-  let proposedCount = 0;
-  const errors: Array<{ invoiceId: string; error: string }> = [];
+  return { tenants, processed, proposed: proposedCount, errors };
 
-  for (const invoice of candidates) {
-    if (!enabled.has(invoice.tenant_id)) continue;
+  async function processInvoice(invoice: InvoiceForScheduling): Promise<void> {
+    processed++;
     try {
       const decision = await step.run(`decide-${invoice.id}`, async () => {
         return decideNextReminder(invoice);
       });
 
       if (!decision.shouldSend || !decision.stage || !decision.scheduledFor) {
-        continue;
+        return;
       }
 
       const created = await step.run(`propose-${invoice.id}`, async () => {
@@ -105,7 +136,7 @@ export async function runReminderScheduler({ step, logger }: JobContext) {
       if (created) proposedCount++;
     } catch (e) {
       const error = e instanceof Error ? e.message : 'Unknown';
-      errors.push({ invoiceId: invoice.id, error });
+      errors++;
       // Do 02.10 błąd był tylko liczony — propozycja ponaglenia nie
       // powstawała, a w logach nie było śladu dlaczego.
       logger.warn('Nie udało się przygotować propozycji ponaglenia', {
@@ -115,19 +146,6 @@ export async function runReminderScheduler({ step, logger }: JobContext) {
       });
     }
   }
-
-  if (errors.length > 0) {
-    logger.error('Scheduler ponagleń: faktury z błędem', {
-      errors: errors.length,
-      processed: candidates.length,
-    });
-  }
-
-  return {
-    processed: candidates.length,
-    proposed: proposedCount,
-    errors: errors.length,
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -137,26 +155,6 @@ export async function runReminderScheduler({ step, logger }: JobContext) {
 // dla tekstu, progów i bezpieczników. Tutaj zostaje wyłącznie to, czego
 // scheduler potrzebuje do wyliczeń.
 // ═══════════════════════════════════════════════════════════════
-
-/** Lista uczestnicząca w odsiewie musi być pełna: błąd odczytu rzuca. */
-const SETTINGS_CHUNK = 100;
-
-async function readEnabledTenants(tenantIds: string[]): Promise<string[]> {
-  const supabase = createAdminClient();
-  const out: string[] = [];
-  for (let i = 0; i < tenantIds.length; i += SETTINGS_CHUNK) {
-    const { data, error } = await supabase
-      .from('reminder_settings')
-      .select('tenant_id')
-      .in('tenant_id', tenantIds.slice(i, i + SETTINGS_CHUNK))
-      .eq('enabled', true);
-    // „Nie wiem, kto ma włączone” to nie „nikt” — inaczej awaria bazy
-    // wyglądałaby jak spokojna godzina bez ponagleń.
-    if (error) throw new Error(`Nie można odczytać ustawień ponagleń: ${error.message}`);
-    for (const row of (data ?? []) as Array<{ tenant_id: string }>) out.push(row.tenant_id);
-  }
-  return out;
-}
 
 function daysOverdue(dueDate: string | null): number {
   if (!dueDate) return 0;

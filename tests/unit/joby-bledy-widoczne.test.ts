@@ -13,14 +13,25 @@ const mocks = vi.hoisted(() => ({
   decide: vi.fn(),
   validate: vi.fn(),
   proposal: vi.fn(),
+  /** Firmy, o których faktury runner zapytał (jedna lista na wywołanie). */
+  askedTenants: [] as string[][],
 }));
 
 vi.mock('@/lib/reminders/scheduler', () => ({
-  findInvoicesRequiringReminders: async () => mocks.candidates,
+  // Jak prawdziwy odczyt: tylko faktury firm z listy, jedną stroną.
+  findInvoicesRequiringReminders: async (tenantIds: readonly string[], onPage: (page: Row[]) => Promise<void>) => {
+    mocks.askedTenants.push([...tenantIds]);
+    const page = mocks.candidates.filter((c) => tenantIds.includes(String(c.tenant_id)));
+    if (page.length > 0) await onPage(page);
+    return { pages: page.length > 0 ? 1 : 0, rows: page.length };
+  },
   decideNextReminder: mocks.decide,
 }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: mocks.proposal }));
-vi.mock('@/lib/flo/fingerprint', () => ({
+// Prawdziwe `fingerprintOf` (czysty skrót faktów, używa go `buildChaseProposal`);
+// atrapa tylko dla odczytu stanu z bazy.
+vi.mock('@/lib/flo/fingerprint', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/flo/fingerprint')>()),
   computeFingerprint: async () => ({ state: { facts: { grossTotal: 100, paidAmount: 0 }, context: {} } }),
 }));
 vi.mock('@/lib/validation/cache', () => ({ validateNipCached: mocks.validate }));
@@ -35,6 +46,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         update() { op = 'update'; return q; },
         eq(k: string, v: unknown) { predicates.push((r) => r[k] === v); return q; },
         in(k: string, v: unknown[]) { predicates.push((r) => v.includes(r[k])); return q; },
+        gt(k: string, v: string) { predicates.push((r) => String(r[k]) > v); return q; },
         not: () => q,
         or: () => q,
         order: () => q,
@@ -89,24 +101,28 @@ beforeEach(() => {
   mocks.settingsError = null;
   mocks.contractors = [];
   mocks.updateError = null;
+  mocks.askedTenants = [];
   mocks.decide.mockResolvedValue({ shouldSend: false, skipReason: 'test' });
   mocks.proposal.mockResolvedValue({ status: 'created' });
 });
 
 describe('scheduler ponagleń', () => {
-  it('faktury firm z wyłączonym Wkurzaczem odpadają jednym zapytaniem, bez decyzji per faktura', async () => {
+  it('faktury firm z wyłączonym Wkurzaczem i bez ustawień nie są nawet czytane, bez decyzji per faktura', async () => {
     mocks.candidates = [invoice('a1', 'A'), invoice('b1', 'B'), invoice('b2', 'B'), invoice('c1', 'C')];
-    mocks.settings = [{ tenant_id: 'A', enabled: true }, { tenant_id: 'B', enabled: false }];
+    mocks.settings = [{ id: 's-1', tenant_id: 'A', enabled: true }, { id: 's-2', tenant_id: 'B', enabled: false }];
 
     const out = await runReminderScheduler(ctx());
 
+    // Sesja 18 planu skalowania (DB-03): do 13.11.2026 runner czytał faktury
+    // wszystkich czterech i odsiewał po odczycie (`processed: 4`).
+    expect(mocks.askedTenants).toEqual([['A']]);
     expect(mocks.decide.mock.calls.map((c) => (c[0] as Row).id)).toEqual(['a1']);
-    expect(out).toMatchObject({ processed: 4 });
+    expect(out).toMatchObject({ tenants: 1, processed: 1 });
   });
 
   it('błąd jednej faktury trafia do logów z identyfikatorem, reszta idzie dalej', async () => {
     mocks.candidates = [invoice('a1', 'A'), invoice('a2', 'A')];
-    mocks.settings = [{ tenant_id: 'A', enabled: true }];
+    mocks.settings = [{ id: 's-1', tenant_id: 'A', enabled: true }];
     mocks.decide.mockRejectedValueOnce(new Error('timeout bazy'));
     const c = ctx();
 
@@ -118,6 +134,25 @@ describe('scheduler ponagleń', () => {
       expect.objectContaining({ invoiceId: 'a1', error: 'timeout bazy' }),
     );
     expect(out).toMatchObject({ errors: 1 });
+  });
+
+  it('decyzja „wyślij” tworzy propozycję; „updated” (ta sama karta przy ponowieniu) nie liczy się jako nowa', async () => {
+    mocks.candidates = [invoice('a1', 'A'), invoice('a2', 'A'), invoice('a3', 'A')];
+    mocks.settings = [{ id: 's-1', tenant_id: 'A', enabled: true }];
+    const when = new Date('2026-11-14T09:00:00Z');
+    mocks.decide
+      .mockResolvedValueOnce({ shouldSend: true, stage: 'stage_1', scheduledFor: when })
+      .mockResolvedValueOnce({ shouldSend: false, skipReason: 'test' })
+      .mockResolvedValueOnce({ shouldSend: true, stage: 'stage_2', scheduledFor: when });
+    mocks.proposal.mockResolvedValueOnce({ status: 'created' }).mockResolvedValueOnce({ status: 'updated' });
+
+    const out = await runReminderScheduler(ctx());
+
+    expect(mocks.proposal.mock.calls.map((c) => (c[0] as { topicKey: string }).topicKey)).toEqual([
+      'payment.chase:a1:stage_1',
+      'payment.chase:a3:stage_2',
+    ]);
+    expect(out).toMatchObject({ tenants: 1, processed: 3, proposed: 1, errors: 0 });
   });
 
   it('błąd odczytu ustawień przerywa przebieg, zamiast udawać „wszyscy wyłączeni”', async () => {

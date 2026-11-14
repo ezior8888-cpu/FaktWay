@@ -1,7 +1,9 @@
 // Decyzje: który etap przypomnienia i kiedy zaplanować wysyłkę.
 
 import { RECEIPT_REVENUE_COLUMNS } from '@/lib/invoices/receipt-revenue-guard';
-import { isReceiptInvoice } from '@/lib/reminders/delivery-schema';
+import { inListChunks } from '@/lib/pagination/in-list';
+import { forEachPageById } from '@/lib/pagination/keyset';
+import { isReceiptInvoice, type ReminderChaseCandidate } from '@/lib/reminders/delivery-schema';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import type { Database, Json } from '@/types/database';
@@ -300,10 +302,8 @@ function rollToWeekdayUtc(scheduledFor: Date, sendHour: number): Date {
 }
 
 // ============================================================================
-// Bulk — kandydaci do kolejnego przebiegu crona Inngest
+// Bulk: kandydaci do przebiegu crona `cron.reminder-scheduler` (pg-boss)
 // ============================================================================
-
-const CANDIDATE_PAGE = 500;
 
 /**
  * Rodzaje faktur, które są osobnym długiem kontrahenta. Korekta NIE jest —
@@ -312,73 +312,96 @@ const CANDIDATE_PAGE = 500;
  */
 export const CHASEABLE_INVOICE_KINDS = ['regular', 'advance', 'final'] as const;
 
+/** Wiersz kandydata z bazy (aliasy faktury do paragonu z `RECEIPT_REVENUE_COLUMNS`). */
+interface CandidateRow extends ReminderChaseCandidate {
+  id: string;
+  tenant_id: string;
+  internal_number: string | null;
+  payment_due_date: string | null;
+  gross_total: number | null;
+  paid_amount: number | null;
+  buyer_data: Json | null;
+  buyer_nip: string | null;
+  reminders_paused: boolean;
+  invoice_kind: string | null;
+  payment_data: Json | null;
+}
+
 /**
- * Faktury po terminie — kandydaci do ponaglenia, dla WSZYSTKICH firm.
+ * Faktury po terminie, kandydaci do ponaglenia, tylko podanych firm.
  *
- * Czytane stronami po `id`: do 27.09 stał tu jeden `limit(500)` bez
- * sortowania na całą platformę, więc przy ponad 500 zaległych fakturach część
- * firm po cichu przestawała dostawać przypomnienia. (Na Inngest przebieg ma
- * limit kroków — produkcja chodzi na pg-boss, gdzie go nie ma.)
+ * Sesja 18 planu skalowania (DB-03, JOB-08). Do 13.11.2026 funkcja czytała
+ * zaległe faktury WSZYSTKICH firm, także tych z wyłączonymi ponagleniami
+ * (odsiew dopiero w cronie, po odczycie), i oddawała jedną tablicę z całą
+ * listą: pamięć crona rosła z liczbą stron. Teraz wywołujący podaje firmy
+ * (cron: te z włączonymi ponagleniami), a funkcja czyta je paczkami
+ * (`inListChunks`) i stronami po `id` (`forEachPageById`). Każdą stronę
+ * oddaje `onPage`, zanim zapyta o następną, więc w pamięci jest jedna strona.
+ *
+ * Koniec tylko na pustej stronie, więc strona ucięta przez
+ * `PGRST_DB_MAX_ROWS` nie kończy odczytu po cichu. Błąd strony to wyjątek
+ * `KeysetPageError` z `onPage` już wywołanym dla wcześniejszych stron.
+ * Wynik: liczba stron i wierszy oddanych przez bazę (przed odsiewem FP).
  */
-export async function findInvoicesRequiringReminders(): Promise<
-  InvoiceForScheduling[]
-> {
+export async function findInvoicesRequiringReminders(
+  tenantIds: readonly string[],
+  onPage: (invoices: InvoiceForScheduling[]) => Promise<void>,
+): Promise<{ pages: number; rows: number }> {
   const supabase = createAdminClient();
 
   const todaySlice = new Date().toISOString().slice(0, 10);
-  const out: InvoiceForScheduling[] = [];
-  let lastId: string | null = null;
+  let pages = 0;
+  let rows = 0;
 
-  for (;;) {
-    let query = supabase
-      .from('invoices')
-      .select(
-        `id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused, invoice_kind, payment_data, ${RECEIPT_REVENUE_COLUMNS}`,
-      )
-      .eq('direction', 'outgoing')
-      .eq('ksef_status', 'accepted')
-      // Bez korekt: kontrahent dostawał ponaglenie za FV i drugie za jej KOR.
-      .in('invoice_kind', [...CHASEABLE_INVOICE_KINDS])
-      // Import historii nie zna wpłat: zaciągnięte faktury są „nieopłacone"
-      // tylko dlatego. Ta sama reguła co K-01 (payment-confirm-producer).
-      .eq('origin', 'app')
-      .in('payment_status', ['unpaid', 'partial', 'overdue'])
-      .lt('payment_due_date', todaySlice)
-      .eq('reminders_paused', false)
-      .order('id', { ascending: true })
-      .limit(CANDIDATE_PAGE);
-    if (lastId !== null) query = query.gt('id', lastId);
-
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-
-    const page = data ?? [];
-    for (const row of page) {
-      // Krok 1.2: faktura do paragonu jest zapłacona przy kasie (status płatności zostaje,
-      // ale przypomnienia dla niej nie powstają). Strona kursora liczy się bez filtra.
-      if (isReceiptInvoice(row)) continue;
-      out.push({
-        id: row.id,
-        tenant_id: row.tenant_id,
-        internal_number: row.internal_number ?? null,
-        payment_due_date: row.payment_due_date ?? null,
-        gross_total: row.gross_total,
-        paid_amount: row.paid_amount,
-        buyer_data: row.buyer_data,
-        buyer_nip: row.buyer_nip ?? null,
-        reminders_paused: row.reminders_paused,
-        invoice_kind: row.invoice_kind,
-        payment_data: row.payment_data,
-      });
-    }
-    if (page.length < CANDIDATE_PAGE) break;
-
-    const nextId: string = page[page.length - 1]!.id;
-    if (lastId !== null && nextId <= lastId) {
-      throw new Error('przypomnienia: stronicowanie nie posuwa się naprzód');
-    }
-    lastId = nextId;
+  for (const chunk of inListChunks(tenantIds)) {
+    const read = await forEachPageById<CandidateRow>(
+      'przypomnienia: kandydaci do ponaglenia',
+      (afterId, limit) => {
+        let query = supabase
+          .from('invoices')
+          .select(
+            `id, tenant_id, internal_number, payment_due_date, gross_total, paid_amount, buyer_data, buyer_nip, reminders_paused, invoice_kind, payment_data, ${RECEIPT_REVENUE_COLUMNS}`,
+          )
+          .in('tenant_id', chunk)
+          .eq('direction', 'outgoing')
+          .eq('ksef_status', 'accepted')
+          // Bez korekt: kontrahent dostawał ponaglenie za FV i drugie za jej KOR.
+          .in('invoice_kind', [...CHASEABLE_INVOICE_KINDS])
+          // Import historii nie zna wpłat: zaciągnięte faktury są „nieopłacone"
+          // tylko dlatego. Ta sama reguła co K-01 (payment-confirm-producer).
+          .eq('origin', 'app')
+          .in('payment_status', ['unpaid', 'partial', 'overdue'])
+          .lt('payment_due_date', todaySlice)
+          .eq('reminders_paused', false);
+        if (afterId) query = query.gt('id', afterId);
+        return query.order('id', { ascending: true }).limit(limit);
+      },
+      async (page) => {
+        const invoices: InvoiceForScheduling[] = [];
+        for (const row of page) {
+          // Krok 1.2: faktura do paragonu jest zapłacona przy kasie (status płatności zostaje,
+          // ale przypomnienia dla niej nie powstają). Strona kursora liczy się bez filtra.
+          if (isReceiptInvoice(row)) continue;
+          invoices.push({
+            id: row.id,
+            tenant_id: row.tenant_id,
+            internal_number: row.internal_number ?? null,
+            payment_due_date: row.payment_due_date ?? null,
+            gross_total: row.gross_total,
+            paid_amount: row.paid_amount,
+            buyer_data: row.buyer_data,
+            buyer_nip: row.buyer_nip ?? null,
+            reminders_paused: row.reminders_paused,
+            invoice_kind: row.invoice_kind,
+            payment_data: row.payment_data,
+          });
+        }
+        if (invoices.length > 0) await onPage(invoices);
+      },
+    );
+    pages += read.pages;
+    rows += read.rows;
   }
 
-  return out;
+  return { pages, rows };
 }

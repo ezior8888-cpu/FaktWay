@@ -73,6 +73,15 @@ function faktura(id: string, o: Row = {}): Row {
   };
 }
 
+/** Kandydaci firmy TENANT, zebrani ze wszystkich stron. */
+async function kandydaci(): Promise<string[]> {
+  const ids: string[] = [];
+  await findInvoicesRequiringReminders([TENANT], async (page) => {
+    ids.push(...page.map((i) => i.id));
+  });
+  return ids;
+}
+
 beforeEach(() => {
   db.rows = [];
   db.ignoreGt = false;
@@ -94,13 +103,13 @@ describe('kandydaci do ponaglenia (cron)', () => {
       // jest po stronie wyzwalacza i decideNextReminder, nie tego filtra.
       faktura('i-roz', { invoice_kind: 'final', invoice_type: 'ROZ' }),
     ];
-    const ids = (await findInvoicesRequiringReminders()).map((i) => i.id);
+    const ids = await kandydaci();
     expect(ids).toEqual(['a-zwykla', 'd-zaliczka', 'i-roz']);
   });
 
   it('ponad 500 zaległych na platformie — każda trafia do przebiegu', async () => {
     db.rows = Array.from({ length: 1203 }, (_, n) => faktura(`inv-${String(n).padStart(5, '0')}`));
-    const ids = (await findInvoicesRequiringReminders()).map((i) => i.id);
+    const ids = await kandydaci();
     expect(ids).toHaveLength(1203);
     expect(new Set(ids).size).toBe(1203);
   });
@@ -108,7 +117,7 @@ describe('kandydaci do ponaglenia (cron)', () => {
   it('kursor stoi w miejscu → błąd zamiast pętli bez końca', async () => {
     db.rows = Array.from({ length: 600 }, (_, n) => faktura(`inv-${String(n).padStart(5, '0')}`));
     db.ignoreGt = true;
-    await expect(findInvoicesRequiringReminders()).rejects.toThrow(/nie posuwa się naprzód/);
+    await expect(kandydaci()).rejects.toThrow(/identyfikatory nie rosną/);
   });
 });
 
