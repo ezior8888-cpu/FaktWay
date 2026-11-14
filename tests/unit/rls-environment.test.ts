@@ -159,6 +159,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-mobile-kod.test.ts',
       // 00201 (plan aplikacji mobilnej, M8): faktura z telefonu i klucze idempotencji.
       'tests/rls-mobile-faktury.test.ts',
+      'tests/rls-mobile-naleznosci.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

@@ -126,6 +126,13 @@ uruchamiasz po kolei, nigdy razem.
   z narzędzia symulatora: przeciągnij go (`swipe` o 35 pt w bok).
 - `pod install` (też w `expo prebuild`) pada na kodowaniu bez UTF-8 w
   powłoce: najpierw `export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`.
+- PDF przez `Share.share({ url })` z pliku w `Paths.cache`: arkusz iOS pokazuje
+  miniaturę, „Podgląd”, „Drukuj” i „Zachowaj w Plikach” bez nowej paczki
+  natywnej. Arkusz zamyka przeciągnięcie w dół od jego górnej krawędzi, nie
+  dotknięcie obok.
+- Stan wspólny dla kilku ekranów (lista i arkusz nad nią) trzymaj w jednym
+  magazynie (`useSyncExternalStore`, wzór `stan/naleznosci.tsx`): osobny
+  `useState` w każdym ekranie zostawia pod arkuszem stary stan.
 
 ## Dane z bazy i API (od M7)
 
@@ -154,8 +161,16 @@ uruchamiasz po kolei, nigdy razem.
   fakturę. Zasady faktury sprawdza serwer schematem strony; odmowa
   `invoice_invalid` ma `field`, a `poleFormularza` kładzie zdanie pod polem.
   Zdania serwera idą przez `bezDlugichMyslnikow` (strona je ma, aplikacja nie).
-- Pozostałe zapisy na prawdziwych fakturach (zapłata, zmiana szkicu, korekta,
-  zaliczka, rozliczenie, ponowna wysyłka odrzuconej, e-mail, PDF) nie mają
+- Od M10a zapłata i cofnięcie (`stan/dane.tsx`, `przelaczZaplate`), należności
+  „Po terminie” (`stan/naleznosci.tsx`, jeden magazyn dla listy i ekranu
+  przypomnienia), przypomnienie (podgląd, zgoda, wstrzymanie), PDF
+  (`stan/pdf.ts`, `lib/pdf-faktury.ts`) i „Sprawdź teraz”
+  (`komponenty/sprawdz-ksef.tsx`) idą przez API. Nowe ekrany wołają API przez
+  `useKontoFirmy().zapytaj` (firma z wyboru, reakcje na koniec sesji, kod 2FA
+  i utratę firmy jak przy zapisach M8). Kwoty z API są w złotych: na ekranie
+  `kwota(grosze(x))`, bo model telefonu trzyma grosze.
+- Pozostałe zapisy na prawdziwych fakturach (zmiana szkicu, korekta, zaliczka,
+  rozliczenie, ponowna wysyłka odrzuconej, e-mail, XML, cykliczne) nie mają
   jeszcze API: telefon mówi, gdzie to zrobić, i otwiera stronę
   (`komponenty/na-stronie.tsx`). Nie udawaj zapisu w pamięci.
 - Od M9 wydatki: lista z bazy (`pobierzWydatki`, 200 najnowszych według daty
@@ -164,8 +179,31 @@ uruchamiasz po kolei, nigdy razem.
   `stan/dane.tsx`). Waluta kwot to kopia reguły strony (`walutaKwotWydatku`,
   zgodność sprawdza `tests/unit/mobile-wydatki.test.ts`). Wpis ręczny,
   usunięcie i opis kosztu z KSeF odsyłają na stronę (`wydatekNaStronie`).
-- Ekrany poza Fakturami, skrzynką KSeF i Wydatkami (Pulpit, Księgowość,
-  Więcej) zostają na danych przykładowych do M10; stopka w Więcej mówi o tym klientowi.
+- Treść wiadomości z serwera (np. przypomnienie o zapłacie) pokazujemy bez
+  zmian, także z długimi myślnikami: serwer sprawdza przy zgodzie, czy zdanie o
+  płatności, która mogła już wyjść, zostało w treści. `bezDlugichMyslnikow` tylko
+  dla komunikatów błędów.
+- Od M10b księgowość „Ten miesiąc” (`stan/ksiegowosc.tsx`: zatwierdzenie,
+  zapłata; kwoty z API w groszach), ustawienia Firma, KSeF, Przypomnienia
+  (`stan/ustawienia.tsx`, `GET /ustawienia`, do odczytu) i Bezpieczeństwo
+  (2FA z `GET /konto`), wybór firmy (`POST /firma`) i usunięcie konta
+  (`konto/usuniecie`) idą przez API. Zmiana ustawień otwiera stronę
+  (`otworzStrone(sciezka, poPowrocie)`: po zamknięciu przeglądarki ekran
+  wczytuje dane od nowa). Na prawdziwym koncie wiersze Więcej według roli jak
+  zakładki strony; karty bez API (`strona` w pozycji) otwierają faktway.pl.
+- Zapis z ekranu niesie `firmaEkranu`. Ekran otwierany na wierzchu (arkusz,
+  przelew) trzyma firmę z otwarcia (`useState`), korzeń zakładki bierze firmę
+  bieżących danych, bo zostaje otwarty po zmianie firmy i nie da się go
+  zamknąć.
+- Magazyn na poziomie modułu (`useSyncExternalStore`) rejestruje czyszczenie w
+  `stan/czyszczenie.ts` (`czyscPrzyKoncuSesji`); `sesja.tsx` czyści je razem z
+  resztą danych konta.
+- Zwykłe efekty dzieci biegną przed efektami dostawcy. Ref czytany przez
+  funkcję dostawcy w efekcie ekranu (np. `firmaTeraz` w `zapytaj`) ustawiaj w
+  `useLayoutEffect`, inaczej ekran otwarty linkiem przy zimnym starcie widzi
+  jeszcze `null`. Trasy konta bez firmy (`org: 'none'`) wołaj z `bezFirmy: true`.
+- Na danych przykładowych zostają Kontrahenci, Przepływy, Analizy i Import
+  danych; stopka w Więcej mówi o tym klientowi.
 - `supabase.auth.onAuthStateChange` woła słuchacza wewnątrz blokady
   `supabase-js`: wywołanie klienta w słuchaczu czeka na samo siebie. Odłóż je
   (`setTimeout(…, 0)`), jak w `stan/dane.tsx`.

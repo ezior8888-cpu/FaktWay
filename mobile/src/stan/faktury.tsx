@@ -81,9 +81,12 @@ export type Stan = {
   zastapFakture: (id: string, f: Faktura, wyslij: boolean) => void;
   /** Faktura właśnie wysłana z formularza: jej szczegół pokazuje kartę „Wysyłamy do KSeF” → „Przyjęta w KSeF”. */
   potwierdzenie: string | undefined;
-  /** Pasek „Cofnij” nad zakładkami (`PasekCofnij`): co się stało i jak to odwrócić. */
-  cofnij: { id: number; tekst: string; akcja: () => void } | undefined;
-  pokazCofnij: (c: { tekst: string; akcja: () => void } | undefined) => void;
+  /**
+   * Pasek „Cofnij” nad zakładkami (`PasekCofnij`): co się stało i jak to odwrócić.
+   * `przycisk`: inny napis niż „Cofnij” (np. „Ponów” po odmowie serwera, M10a).
+   */
+  cofnij: { id: number; tekst: string; akcja: () => void; przycisk?: string } | undefined;
+  pokazCofnij: (c: { tekst: string; akcja: () => void; przycisk?: string } | undefined) => void;
   pokazPotwierdzenie: (id: string | undefined) => void;
   /** Wysyła szkic albo odrzuconą fakturę ponownie do KSeF (na prawdziwym koncie szkic przez API, M8). */
   wyslijDoKsef: (id: string) => Promise<WynikZapisu>;
@@ -306,7 +309,7 @@ export function PodmienStan({ zmiana, children }: { zmiana: (stan: Stan) => Stan
   return <Kontekst value={zmiana(wyzej)}>{children}</Kontekst>;
 }
 
-/** Systemowy arkusz udostępniania z opisem faktury (PDF dochodzi w M10). */
+/** Systemowy arkusz udostępniania z opisem faktury (dane przykładowe; na prawdziwym koncie PDF z serwera, `lib/pdf-faktury.ts`). */
 export function udostepnijFakture(f: Faktura): void {
   void Share.share({ message: `Faktura ${f.numer} dla ${f.kontrahent}, ${kwota(f.brutto, f.waluta)}.` });
 }

@@ -30,7 +30,7 @@ export default function EkranFirm() {
         naglowek="Twoje firmy"
         stopka={
           konto.wszystkie
-            ? 'Firma, którą wybierzesz, zostaje na tym telefonie. Na komputerze wybierasz ją osobno.'
+            ? 'Firmę, którą wybierzesz, zapamiętamy też dla faktway.pl i innych telefonów: otworzy się po następnym zalogowaniu.'
             : `Pokazujemy ${konto.firmy.length} najnowszych firm z Twojego konta. Pozostałe wybierzesz na faktway.pl.`
         }>
         {konto.firmy.map((f) => {
