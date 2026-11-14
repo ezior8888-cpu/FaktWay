@@ -1,8 +1,19 @@
 // Warstwa 1b: reguła nauczona po nazwie sprzedawcy (`name_exact`)
 
+import { readAllById } from '@/lib/pagination/keyset';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-import type { CategorizationResult } from './rule-engine';
+import type { CategorizationResult, KpirColumn } from './rule-engine';
+
+interface NameRule {
+  id: string;
+  match_value: string;
+  hit_count: number | null;
+  kpir_column: KpirColumn;
+  category_label: string;
+  min_amount: number | string | null;
+  max_amount: number | string | null;
+}
 
 /** Nazwa sprzedawcy do porównań: bez wielkości liter i nadmiarowych spacji. */
 function normalizeSellerName(raw: string): string {
@@ -25,13 +36,29 @@ export async function classifyByExactName(
   if (!wanted) return null;
 
   const supabase = createAdminClient();
-  const { data: rules } = await supabase
-    .from('categorization_rules')
-    .select('id, match_value, hit_count, kpir_column, category_label, min_amount, max_amount')
-    .eq('tenant_id', tenantId)
-    .eq('match_type', 'name_exact');
+  // Sesja 29 planu skalowania: wszystkie reguły stronami po `id`. Jedno
+  // zapytanie oddawało najwyżej 1000 wierszy (`PGRST_DB_MAX_ROWS`) bez
+  // błędu, więc reguła spoza tego kawałka nie działała. Błąd odczytu dalej
+  // znaczy „brak reguły” (dalsze warstwy), jak przed zmianą: kategoryzacja
+  // idzie w jobie OCR przed zapisem wydatku, a wyjątek ponowiłby płatny OCR.
+  let rules: NameRule[];
+  try {
+    rules = await readAllById<NameRule>('reguły nazwy sprzedawcy', (afterId, limit) => {
+      let query = supabase
+        .from('categorization_rules')
+        .select('id, match_value, hit_count, kpir_column, category_label, min_amount, max_amount')
+        .eq('tenant_id', tenantId)
+        .eq('match_type', 'name_exact');
+      if (afterId) query = query.gt('id', afterId);
+      return query.order('id', { ascending: true }).limit(limit);
+    });
+  } catch (error) {
+    // Bez śladu w logu awaria bazy wyłączałaby reguły nazw po cichu.
+    console.warn('[categorization] reguły nazwy niedostępne:', error instanceof Error ? error.message : 'nieznany błąd');
+    return null;
+  }
 
-  const rule = (rules ?? []).find((r) => normalizeSellerName(r.match_value) === wanted);
+  const rule = rules.find((r) => normalizeSellerName(r.match_value) === wanted);
   if (!rule) return null;
   if (grossAmount !== undefined) {
     if (rule.min_amount != null && grossAmount < Number(rule.min_amount)) return null;

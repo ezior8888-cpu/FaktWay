@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Szybka kontrola przed pushem: adresy serwerów z `.agents/infra.env` w nowych
-# liniach (repo jest publiczne), typy, eslint zmienionych plików i testy
-# Vitest związane ze zmienionymi plikami (`vitest related`). To siatka
-# bezpieczeństwa, nie zamiennik `pnpm run ci && pnpm build` z AGENTS.md.
+# liniach (repo jest publiczne), strażnik tekstów dla klienta, typy, eslint
+# zmienionych plików i testy Vitest związane ze zmienionymi plikami
+# (`vitest related`). To siatka bezpieczeństwa, nie zamiennik
+# `pnpm run ci && pnpm build` z AGENTS.md.
 #
 # Włącza go `scripts/dev/przygotuj-worktree.sh` (git config core.hooksPath
 # .githooks). Milczy, gdy wszystko gra. Trwa od kilku sekund do ok. 3 minut
@@ -21,12 +22,14 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_
 
 zero=0000000000000000000000000000000000000000
 changed=""
+changed_all=""                                    # także usunięte, bez przeniesień, bez cytowania polskich znaków
 ranges=()
 while read -r _local_ref local_sha _remote_ref _remote_sha; do
   [ "$local_sha" = "$zero" ] && continue          # usuwanie gałęzi
   base="$(git merge-base origin/main "$local_sha" 2>/dev/null)" || continue
   ranges+=("$base..$local_sha")
   changed+="$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha")"$'\n'
+  changed_all+="$(git -c core.quotePath=false diff --name-only --no-renames "$base" "$local_sha")"$'\n'
 done
 [ ${#ranges[@]} -gt 0 ] || exit 0
 
@@ -67,8 +70,21 @@ fi
 filtr_testy=0
 case "$filtr_poziom" in R1|R2) [ -f vitest.filtr.config.ts ] && filtr_testy=1 ;; esac
 
+# Strażnik tekstów dla klienta (tests/unit/teksty-straznik.test.ts) czyta pliki
+# przez `git ls-files`, nie przez importy, więc `vitest related` go nie znajdzie
+# i długi myślnik w nowym komunikacie wychodził dopiero w CI (#538, #660).
+# Uruchamiamy go, gdy push zmienia albo usuwa plik w katalogach, które czyta
+# (tych samych co w strażniku, pilnuje tego tests/unit/hak-straznik-tekstow.test.ts),
+# albo jego zapisany stan. Here-string, nie `printf | grep -q`: przy pipefail
+# długa lista dawała fałszywe „brak” (grep kończy wcześniej, printf dostaje SIGPIPE).
+teksty=0
+if [ -f tests/unit/teksty-straznik.test.ts ] &&
+  grep -qE '^(app|components|lib|hooks|content)/|^tests/unit/(teksty-straznik\.test\.ts|fixtures/teksty-stan\.json)$' <<<"$changed_all"; then
+  teksty=1
+fi
+
 code="$(printf '%s' "$changed" | grep -E '\.(ts|tsx|js|mjs|cjs)$' | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
-[ -n "$code" ] || [ "$filtr_testy" -eq 1 ] || exit 0
+[ -n "$code" ] || [ "$filtr_testy" -eq 1 ] || [ "$teksty" -eq 1 ] || exit 0
 # Typy, eslint i testy potrzebują zależności; kontrola adresów wyżej ich nie potrzebuje.
 [ -d node_modules ] || { echo "pre-push: brak node_modules, typy i testy pominięte (pnpm install)" >&2; exit 0; }
 
@@ -81,6 +97,12 @@ fail() {
   exit 1
 }
 
+# Strażnik tekstów najpierw: trwa kilka sekund, a typy nawet minutę. Pusta
+# ZAPISZ_STAN_TEKSTOW, żeby hook nigdy nie przepisał stanu strażnika.
+if [ "$teksty" -eq 1 ]; then
+  ZAPISZ_STAN_TEKSTOW='' pnpm -s exec vitest run tests/unit/teksty-straznik.test.ts >"$log" 2>&1 ||
+    fail "strażnik tekstów czerwony (długi myślnik albo plakietka w tekście dla klienta, albo stan do zapisania)"
+fi
 if [ -n "$code" ]; then
   pnpm -s typecheck >"$log" 2>&1 || fail "pnpm typecheck czerwony"
   # shellcheck disable=SC2086

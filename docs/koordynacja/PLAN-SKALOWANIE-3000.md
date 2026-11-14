@@ -131,6 +131,10 @@ inna niż w „Rejestrze braków” z 17.10).
 tylko próba na KSeF TEST (kod też w #360). 2 i 8 (#405, #410, wdrożone 08.11).
 Częściowo: 7 (#350, #351), 28 (alarm skrzynki liczony w bazie, 00160), 29
 (lista korekt, #283). Przegląd 08.11 w dzienniku (sekcja 6).
+**Scalone od 11.11:** 31, 6 i 32 (zbiorczy #563), 21 (#579, migracja 00186),
+3 (#597), 12 (#598), 10 (#654, #657, #678) i 29 część 2 (#660, #676; obie
+w zbiorczym #713). Czekają na scalenie w zbiorczym #730: 29 część 1 (#652),
+30 (#655) i poprawka sesji 10 (#718). Czekają na Bartosza: 5 (#732), 11 (#729), 18 (#731) i 34 (#728, decyzje w opisie).
 
 **Kolejność wykonania (Bartosz, 03.11):** 2 → 8 → 31 → 21 → 13 → 28 → 14 →
 17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24 → 29 → 30 → 32 → 34 → 33, a po
@@ -264,8 +268,41 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 09.11.2026 | Sesja 31: pliki ponad 1 MB przez trasy wgrywania z własnym limitem rozmiaru i liczby wgrań, `/share-target` z limitem poniżej progu OCR | #538 | w zbiorczym |
 | 09.11.2026 | Sesja 6: klient Redisa z limitem 500 ms, jednym ponowieniem i obwodem, osobny ping w `/api/health` | #539 | w zbiorczym; wyprzedziła kolejność, bo 21 czekała na #473 |
 | 09.11.2026 | Sesja 32: odczyty duplikatów importu paczkami po 100 (F-089) | #558 | w zbiorczym |
+| 10.11.2026 | Zbiorczy: #476, #538 (sesja 31), #539 (sesja 6), #558 (sesja 32) | #563 | scalony 11.11 |
+| 10.11.2026 | Sesja 21: indeksy częściowe pod crony KSeF, strażnik bez I3, UNIQUE katalogu produktów | #579 | scalony 11.11; migracja 00186 |
+| 11.11.2026 | Sesja 3: sprzątanie pulsu Flo jednym UPDATE (FLO-01) | #597 | scalony 11.11 |
+| 11.11.2026 | Sesja 12: kopia JSON z bezpiecznikiem rozmiaru i stronicowaniem po kluczu | #598 | scalony 11.11 |
+| 12.11.2026 | Sesja 10: prefetch panelu z góry tylko dla celów dolnego paska, reszta po najechaniu; menu profilu bez prefetchu Analiz | #654, #657 | scalone 13.11 w zbiorczym #713 |
+| 12.11.2026 | Sesja 29 część 1: eksport RODO, historia sprzedawcy i reguły nazw czytane stronami | #652 | w zbiorczym #730 |
+| 12.11.2026 | Sesja 29 część 2: Flo i walidacja kontrahentów czytają stronami do końca | #660 | scalony 13.11 w zbiorczym #713 |
+| 12.11.2026 | Sesja 30: oznaczenie faktury w archiwum zaraz po wgraniu do Glacier | #655 | w zbiorczym #730, po #662 |
+| 12.11.2026 | Z przeglądu #652: `.gitattributes` z LF (ustalenie 4), `pnpm filtr:lokalnie` na Windowsie (ustalenie 7) | #658, #659 | w zbiorczym #730; #659 to maszyneria filtra (`zgoda:zmiana-filtra`) |
+| 13.11.2026 | Niestabilny test planisty z #579 (`tests/rls-indeksy-cronow-produkty.test.ts`) | #662 | w zbiorczym #730, przed #655; dubel #677 zamknięty |
+| 13.11.2026 | Z #660: hak przed pushem uruchamia strażnika tekstów dla klienta | #675 | w zbiorczym #730; maszyneria filtra (`zgoda:zmiana-filtra`) |
+| 13.11.2026 | Sesja 29 część 2, ustalenie 1 z #660: tytuły wyciszonych spraw Flo paczkami i stronami | #676 | scalony 13.11 w zbiorczym #713; ustalenie 1 z #676 (testy z przypiętym zegarem) w #720, otwarty |
+| 13.11.2026 | Build obrazu na `main` padał od #504 (`vitest.filtr.config.ts` importował plik spoza obrazu) | #661 | scalony 13.11, obraz `main` znowu się buduje |
+| 13.11.2026 | Sesja 10 (ciąg dalszy): zakładki sekcji z pełnym prefetchem dopiero z zamiarem | #678 | scalony 13.11 w zbiorczym #713; poprawka przewijania przy drugim dotknięciu w #718 (w zbiorczym #730) |
+| 13.11.2026 | Dziennik po 11–13.11 | #719 | w zbiorczym #730 |
+| 13.11.2026 | Zbiorczy: #662, #655 (sesja 30), #652 (sesja 29 część 1), #658, #659, #675, #718 (sesja 10), #719 | #730 | 14.11 wciągnięty `main` po #725 i #740, z poprawką z sekcji „Styk z #725” w opisie (runner archiwum: termin usunięcia z #717 w jednym zapisie z #655); czeka na etykietę `zgoda:zmiana-filtra` i scalenie; bez migracji; wdrożenie: worker, potem aplikacja |
+| 13.11.2026 | Sesja 5: limity czasu wywołań Supabase (bramka proxy 5 s daje 503 zamiast wylogowania; żądania 10/30 s, worker 60/120 s; w renderze RSC odczyt bez sygnału, żeby Next dalej sklejał) | #732 | otwarty 14.11, automatyczne scalenie włączone 14.11; R3, bez migracji, bez wspólnych plików z #725 i #728–#731; czas ponownego użycia tokenu odświeżania w GoTrue na produkcji domyślny (10 s), sprawdzone 14.11; sesja 7 po scaleniu (lista w opisie PR, sekcja „Co zostaje dla sesji 7”) |
+| 13.11.2026 | Sesja 18: ponaglenia tylko dla firm z włączonymi ponagleniami, kandydaci strona po stronie | #731 | otwarty 14.11; bez migracji; straż czerwona jak w #656 (`windykacja` to R1 bez reguły w rejestrze), decyzja Bartosza |
+| 13.11.2026 | Sesja 11: lekkie odpytywanie statusu eksportów, importów i OCR | #729 | otwarty 14.11; R3, bez migracji, scala się bez konfliktu z #725 i #730 |
+| 13.11.2026 | Sesja 34: OCR obrazów ponad 8000 px (obraz zmniejszany w workerze przed wysłaniem do API) | #728 | otwarty 14.11; 5 decyzji dla Bartosza w opisie; straż czerwona jak w #656 (`lib/ocr/**` to R1 bez reguły w rejestrze) |
+| 14.11.2026 | Ustalenie z #732 (dla sesji 30, ale #655 tego nie zmienia): runner archiwum gubi `error` odczytu `xml_documents` i wtedy wgrywa XML do Glacier bez kontroli skrótu (`lib/jobs/runners/archive-old-invoices.ts`, R1 `retencja`; tak samo na `main`, w #730 i w #725). Kopia w R2 i skrót w `xml_documents` zostają | brak | osobna naprawa z czerwonym testem po scaleniu #725 i #730, bo oba zmieniają ten plik |
+| 14.11.2026 | Ustalenia z #732 poza sesją 7: fabryki klientów Supabase bez limitu czasu (`lib/api/v1/db.ts`, `lib/api/mobile/db.ts`, `lib/auth/reauth.ts`, skrypty), reszta LIM-05 (`S3Client`, klient Anthropic, ciało odpowiedzi `ksefFetch`, JOB-07) | brak | osobne PR po scaleniu #732; pełna lista w jego opisie, sekcja „Osobne ustalenia” |
+| 14.11.2026 | Z pushu #730: test `/expenses` (`tests/unit/wydatki-miesiac.test.ts`) padał w haku na Windowsie na limicie 5 s przy zimnym imporcie strony | #733 | otwarty 14.11; R0, sam test, bez migracji; hak przeszedł bez obejść; inne testy blisko limitu 5 s na Windowsie (m.in. `rotacja-kluczy-skrypt`, w pełnym biegu 12 z 13 czerwonych) w opisie PR, sekcja „Osobne ustalenia” |
+| 14.11.2026 | Scalony zbiorczy #725 Bartosza (w nim #715 i #717) | #725 | sesja 33 odblokowana: #715 zmieniał `lib/exports/data-fetcher.ts`; styk z #730 rozwiązany w #730 |
 
-**Następny krok:** sesja 21 (#473 scalony 08.11, więc rejestr wolny; numer
-migracji przy otwarciu PR; indeksy bez `CONCURRENTLY`). Nie równolegle z 28.
-Dalej 28, próba 14 na KSeF TEST, 5 i 7, 3, 12, 18, 10, 11, 24, 29, 30, 34, 33,
-a po pomiarze 15 i 16.
+**Następny krok:** #725 scalony 14.11, a #730 ma już `main` z poprawką
+z sekcji „Styk z #725”. Teraz etykieta `zgoda:zmiana-filtra` na #730
+i scalenie po zielonym CI. #732 (5) ma włączone automatyczne scalenie, które
+ruszy, gdy gałąź będzie aktualna względem `main`, a CI zielone. Na scalenie
+czekają 11 (#729) i poprawka testu z haka (#733), a 18 (#731) i 34 (#728) na
+decyzję Bartosza o straży (jak w #656; w #728 jeszcze 5 decyzji w opisie).
+Po scaleniu #732 przychodzi 7 (lista w opisie #732), bo obie zmieniają
+`lib/supabase/` i proxy. Po scaleniu #730 osobna naprawa runnera archiwum
+(ustalenie z 14.11). 33 można robić od razu: #715 jest w `main`, a pliki
+z `readCompletePages` nie pokrywają się z żadnym otwartym PR (sprawdzone 14.11).
+Na Bartosza czekają 28 (migracja z RPC: kto ją pisze, numer z rejestru)
+i próba 14 na KSeF TEST. Dalej 24 (w `Dockerfile` są tylko szkice #193 i #197,
+czekające na decyzję Bartosza). Po pomiarze 15 i 16.

@@ -16,7 +16,9 @@ import { getRlsTestDatabaseUrl, getRlsTestEnvironment } from './helpers/rls-envi
  *    00186) i liczymy jeszcze raz;
  *  - `ksef_lifecycle_violations_without_i3()` = pełna funkcja bez wierszy I3;
  *  - planista wkleja `ksef_upo_expected` (w planie zostaje tylko funkcja
- *    pomocnicza) i używa nowych indeksów w zapytaniach cronów;
+ *    pomocnicza);
+ *  - nowe indeksy pasują do zapytań cronów: plan na pustej kopii tabeli z samym
+ *    oczekiwanym indeksem, więc werdykt nie zależy od statystyk wspólnej bazy;
  *  - równoległe importy tej samej nowej pozycji tworzą jeden produkt;
  *  - kontrola dubli w migracji przerywa ją przy dublach katalogu.
  *
@@ -178,6 +180,57 @@ const indexNames = (node: PlanNode): string[] => [
   ...(node['Index Name'] ? [node['Index Name']] : []),
   ...(node.Plans ?? []).flatMap(indexNames),
 ];
+
+/** Zapytanie crona i indeks 00186, który ma je obsłużyć. */
+type PlanCase = { index: string; sql: string; param?: unknown };
+
+/**
+ * Indeksy w planie zapytania na pustej kopii tabeli, na której stoi tylko oczekiwany indeks
+ * (ta sama nazwa i definicja, z `pg_get_indexdef`); skan sekwencyjny wyłączony.
+ *
+ * Na prawdziwej tabeli planista bierze najtańszy z pasujących indeksów, a koszt zależy od
+ * statystyk, czyli od danych innych plików testów i od chwili autovacuum. 12.11.2026 w #655
+ * wybrał tam `idx_invoices_tenant_payment_due` (00044) i test był czerwony bez zmiany kodu.
+ * Na kopii oczekiwany indeks jest jedyną drogą bez skanu sekwencyjnego, więc werdykt zależy
+ * tylko od tego, czy indeks pasuje do zapytania: kolumny i warunek indeksu częściowego.
+ * Kontrole niżej pokazują, że plan bez indeksu też tu wychodzi.
+ *
+ * Bez ANALYZE: pusta, nigdy nieanalizowana kopia ma za każdym razem te same szacunki.
+ * Bez SET ROLE: kopia należy do roli połączenia i nie ma RLS, więc plan jest taki jak dla
+ * service_role (które RLS omija), a samo service_role nie ma do niej uprawnień.
+ */
+async function planIndexes(tx: SqlRunner, { index, sql, param }: PlanCase): Promise<string[]> {
+  const { rows } = await tx.executeSql(
+    `SELECT pg_get_indexdef(c.oid) AS def
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = $1 AND c.relkind = 'i'`,
+    [index],
+  );
+  const def = String(rows[0]?.def ?? '');
+  const match = /^CREATE (UNIQUE )?INDEX (\S+) ON public\.(\w+) (USING .+)$/.exec(def);
+  if (!match) throw new Error(`${index}: brak indeksu w public albo nieoczekiwana definicja „${def}”`);
+  const [, unique = '', name, table, body] = match;
+  const copy = `pg_temp.kopia_${table}`;
+  const query = sql.replace(new RegExp(`\\bpublic\\.${table}\\b`, 'g'), copy);
+  if (query === sql) throw new Error(`${index}: zapytanie nie czyta public.${table}`);
+
+  await tx.executeSql(`CREATE TEMP TABLE kopia_${table} (LIKE public.${table})`);
+  await tx.executeSql(`CREATE ${unique}INDEX ${name} ON ${copy} ${body}`);
+  await tx.executeSql('SET LOCAL enable_seqscan = off');
+  await tx.executeSql('SET LOCAL plan_cache_mode = force_custom_plan');
+  let explained;
+  if (param === undefined) {
+    explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${query}`);
+  } else {
+    // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
+    const statement = `rls_00186_q_${Date.now()}`;
+    await tx.executeSql(`PREPARE ${statement}(text) AS ${query}`);
+    explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${statement}('${String(param)}')`);
+    await tx.executeSql(`DEALLOCATE ${statement}`);
+  }
+  const plan = explained.rows[0]!['QUERY PLAN'] as Array<{ Plan: PlanNode }>;
+  return indexNames(plan[0]!.Plan);
+}
 
 describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog produktów', { timeout: 120_000 }, () => {
   beforeAll(async () => {
@@ -341,7 +394,7 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
     });
 
     const ID = '00186aaa-0000-4000-8000-ffffffffffff';
-    const CASES: ReadonlyArray<{ index: string; sql: string; param?: unknown }> = [
+    const CASES: ReadonlyArray<PlanCase> = [
       // ksef_lifecycle_violations I4 / I9
       { index: 'idx_invoices_ksef_status_in_flight', sql: "SELECT id FROM public.invoices WHERE direction = 'outgoing' AND ksef_status IN ('failed', 'rejected')" },
       // critical-alerts-monitor: sending bez znacznika przejęcia
@@ -363,27 +416,43 @@ describe.skipIf(!hasDatabase)('00186: indeksy cronów, predykat UPO i katalog pr
       { index: 'idx_products_tenant_id', sql: `SELECT id, name, unit, use_count FROM public.products WHERE tenant_id = '${ORG_P}' AND id > '${ID}' ORDER BY id LIMIT 1000` },
     ];
 
-    it.each(CASES)('$index: $sql', async ({ index, sql, param }) => {
-      const used = await rolledBack(async (tx) => {
-        await tx.executeSql('ANALYZE public.invoices, public.ksef_submissions, public.ksef_send_attempts, public.ocr_jobs, public.products');
-        await tx.executeSql('SET LOCAL ROLE service_role');
-        await tx.executeSql('SET LOCAL enable_seqscan = off');
-        await tx.executeSql('SET LOCAL plan_cache_mode = force_custom_plan');
-        let explained;
-        if (param === undefined) {
-          explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) ${sql}`);
-        } else {
-          // PREPARE żyje w sesji puli, nie w transakcji: nazwa jednorazowa i DEALLOCATE.
-          const name = `rls_00186_q_${Date.now()}`;
-          await tx.executeSql(`PREPARE ${name}(text) AS ${sql}`);
-          explained = await tx.executeSql(`EXPLAIN (FORMAT JSON) EXECUTE ${name}('${String(param)}')`);
-          await tx.executeSql(`DEALLOCATE ${name}`);
-        }
-        const plan = explained.rows[0]!['QUERY PLAN'] as Array<{ Plan: PlanNode }>;
-        return indexNames(plan[0]!.Plan);
-      });
+    it.each(CASES)('$index: $sql', async (c) => {
+      const used = await rolledBack((tx) => planIndexes(tx, c));
 
-      expect(used).toContain(index);
+      expect(used).toContain(c.index);
+    });
+
+    // Werdykt nie zależy od reszty tabeli. 12.11.2026 (#655) planista na wspólnej bazie
+    // testowej wybrał dla tych zapytań stary `idx_invoices_tenant_payment_due` (00044,
+    // `WHERE direction = 'outgoing'`), a w #652 i #654 tego samego dnia indeks 00186. Rywal
+    // niżej pasuje do zapytania lepiej niż 00186, więc przy planie na prawdziwej tabeli
+    // wygrywał zawsze (czerwień przed naprawą, #662). Na kopii tabeli go nie ma.
+    it.each(CASES.filter((c) => c.index === 'idx_invoices_ksef_status_in_flight' && c.sql.includes("direction = 'outgoing'")))(
+      'inny pasujący indeks na tabeli nie zmienia werdyktu: $sql',
+      async (c) => {
+        const used = await rolledBack(async (tx) => {
+          await tx.executeSql(
+            `CREATE INDEX rls_00186_rywal ON public.invoices (ksef_status) INCLUDE (id)
+              WHERE direction = 'outgoing' AND ksef_status IN ('failed', 'rejected')`,
+          );
+          return planIndexes(tx, c);
+        });
+
+        expect(used).toContain(c.index);
+      },
+    );
+
+    // Werdykt umie wyjść „nie”: zapytanie spoza warunku indeksu częściowego i zapytanie po
+    // kolumnie spoza indeksu idą skanem sekwencyjnym kopii, bez żadnego indeksu w planie.
+    const MISSES: ReadonlyArray<PlanCase> = [
+      { index: 'idx_invoices_ksef_status_in_flight', sql: "SELECT id FROM public.invoices WHERE direction = 'outgoing' AND ksef_status = 'draft'" },
+      { index: 'idx_products_tenant_id', sql: "SELECT id FROM public.products WHERE name = 'Szkolenie zespolu 00186'" },
+    ];
+
+    it.each(MISSES)('kontrola: $index nie pasuje do $sql', async (c) => {
+      const used = await rolledBack((tx) => planIndexes(tx, c));
+
+      expect(used).toEqual([]);
     });
   });
 
