@@ -342,6 +342,63 @@ export function issueDateRangeErrors(issueDateIso: string, now: Date = new Date(
   return errors;
 }
 
+/** Kwota w groszach całkowitych: porównania kwot bez błędów liczb zmiennoprzecinkowych (FZ-008). */
+function toGrosze(value: number): number {
+  return Math.round(roundToCents(value) * 100);
+}
+
+function formatGrosze(grosze: number): string {
+  return (grosze / 100).toFixed(2);
+}
+
+/**
+ * Granica 1 grosza dla netto pozycji i sum faktury, jak od pierwszej wersji
+ * walidatora. Do FZ-008 liczona na liczbach zmiennoprzecinkowych (0,01), więc
+ * różnica dokładnie 1 grosza raz przechodziła, a raz nie. XML bierze sumy
+ * z pozycji (`generateFA3Xml`), więc ta granica nie trafia do pliku.
+ */
+const AMOUNT_TOLERANCE_GROSZE = 1;
+
+function amountsDiffer(a: number, b: number): boolean {
+  return Math.abs(toGrosze(a) - toGrosze(b)) > AMOUNT_TOLERANCE_GROSZE;
+}
+
+/**
+ * Czy VAT pozycji wynika z jej netto albo brutto według ustawy o VAT (FZ-008):
+ * - od netto (art. 106e ust. 1 pkt 14): VAT = netto × stawka / 100,
+ * - od brutto (art. 106e ust. 7 i 9): VAT = brutto × stawka / (100 + stawka),
+ *   netto = brutto − VAT,
+ * zaokrąglony do grosza (ust. 11). W groszach całkowitych (netto N, VAT V,
+ * brutto B = N + V, stawka s) to warunek |100·V − s·N| ≤ (100 + s) / 2, bo
+ * 100·V − s·N = (100 + s)·V − s·B: granica to pół grosza VAT liczonego od
+ * brutto, a VAT od netto (|100·V − s·N| ≤ 50) mieści się w niej zawsze.
+ * Remisu (dokładnie pół grosza) przy stawkach 23, 8, 5 i 0 nie ma, bo ta
+ * równość nie ma rozwiązania w liczbach całkowitych, więc granica jest
+ * jednoznaczna. Faktura za abonament FaktWay liczy się od brutto (`lib/billing/self-invoice.ts`, RPC
+ * `create_billing_vat_invoice`), bo Stripe pobiera kwotę brutto.
+ */
+export function lineVatMatchesRate(netGrosze: number, vatGrosze: number, ratePct: number): boolean {
+  return 2 * Math.abs(100 * vatGrosze - ratePct * netGrosze) <= 100 + ratePct;
+}
+
+const ZERO_VAT_RATE_LABELS: Partial<Record<VatRate, string>> = {
+  '0': '0%', zw: 'zw', oo: 'oo', np: 'np', np_ii: 'np II',
+};
+
+function lineVatMessage(line: InvoiceLineItem, netGr: number, vatGr: number, ratePct: number): string {
+  if (ratePct === 0) {
+    return `Pozycja ${line.ordinal}: stawka „${ZERO_VAT_RATE_LABELS[line.vatRate] ?? line.vatRate}” nie ma VAT, a pozycja ma VAT ${line.vatAmount}.`;
+  }
+  const fromNet = Math.floor((netGr * ratePct + 50) / 100);
+  const grossGr = netGr + vatGr;
+  const fromGross = Math.floor((2 * grossGr * ratePct + 100 + ratePct) / (2 * (100 + ratePct)));
+  return (
+    `Pozycja ${line.ordinal}: VAT (${line.vatAmount}) nie wynika ze stawki ${ratePct}%: ` +
+    `od netto ${line.netAmount} wychodzi ${formatGrosze(fromNet)}, ` +
+    `a od brutto ${formatGrosze(grossGr)} wychodzi ${formatGrosze(fromGross)}.`
+  );
+}
+
 export function validateInvoice(invoice: Invoice, now: Date = new Date()): string[] {
   const errors: string[] = [];
 
@@ -411,38 +468,41 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
     }
 
     const calculated = calculateLineItem(line);
-    if (Math.abs(calculated.netAmount - line.netAmount) > 0.01) {
+    if (amountsDiffer(calculated.netAmount, line.netAmount)) {
       errors.push(
         `Pozycja ${line.ordinal}: netAmount (${line.netAmount}) nie zgadza się z ` +
           `quantity * unitPriceNet (${calculated.netAmount}).`
       );
     }
-    if (Math.abs(calculated.vatAmount - line.vatAmount) > 0.01) {
-      errors.push(
-        `Pozycja ${line.ordinal}: vatAmount (${line.vatAmount}) nie zgadza się z ` +
-          `netAmount * ${line.vatRate}% (${calculated.vatAmount}).`
-      );
+    // FZ-008: VAT od netto albo od brutto (art. 106e), w groszach całkowitych.
+    const netGr = toGrosze(line.netAmount);
+    const vatGr = toGrosze(line.vatAmount);
+    const ratePct: number | undefined = getVatPercentage(line.vatRate);
+    if (ratePct === undefined) {
+      errors.push(`Pozycja ${line.ordinal}: nieznana stawka VAT „${line.vatRate}”.`);
+    } else if (!lineVatMatchesRate(netGr, vatGr, ratePct)) {
+      errors.push(lineVatMessage(line, netGr, vatGr, ratePct));
     }
-    if (Math.abs(calculated.grossAmount - line.grossAmount) > 0.01) {
+    if (toGrosze(line.grossAmount) !== netGr + vatGr) {
       errors.push(
-        `Pozycja ${line.ordinal}: grossAmount nie zgadza się z netAmount + vatAmount.`
+        `Pozycja ${line.ordinal}: brutto (${line.grossAmount}) to nie netto + VAT (${formatGrosze(netGr + vatGr)}).`
       );
     }
   }
 
   // ── Totale całej faktury ───────────────────────────────────
   const totals = calculateInvoiceTotals(invoice.lines);
-  if (Math.abs(totals.netTotal - invoice.netTotal) > 0.01) {
+  if (amountsDiffer(totals.netTotal, invoice.netTotal)) {
     errors.push(
       `Suma netto faktury (${invoice.netTotal}) nie zgadza się z sumą pozycji (${totals.netTotal}).`
     );
   }
-  if (Math.abs(totals.vatTotal - invoice.vatTotal) > 0.01) {
+  if (amountsDiffer(totals.vatTotal, invoice.vatTotal)) {
     errors.push(
       `Suma VAT faktury (${invoice.vatTotal}) nie zgadza się z sumą pozycji (${totals.vatTotal}).`
     );
   }
-  if (Math.abs(totals.grossTotal - invoice.grossTotal) > 0.01) {
+  if (amountsDiffer(totals.grossTotal, invoice.grossTotal)) {
     errors.push(
       `Suma brutto faktury (${invoice.grossTotal}) nie zgadza się z sumą pozycji (${totals.grossTotal}).`
     );
@@ -451,14 +511,14 @@ export function validateInvoice(invoice: Invoice, now: Date = new Date()): strin
   // ── Sumy per stawka muszą zgadzać się z totalem netto ──────
   const perRate = summarizeVatPerRate(invoice.lines);
   const netPerRateSum = roundToCents(perRate.reduce((s, r) => s + r.netSum, 0));
-  if (Math.abs(netPerRateSum - invoice.netTotal) > 0.01) {
+  if (amountsDiffer(netPerRateSum, invoice.netTotal)) {
     errors.push(
       `Suma netto per stawka VAT (${netPerRateSum}) nie zgadza się z sumą netto faktury (${invoice.netTotal}).`
     );
   }
 
   // ── Płatność ───────────────────────────────────────────────
-  if (Math.abs(invoice.payment.amountDue - invoice.grossTotal) > 0.01) {
+  if (amountsDiffer(invoice.payment.amountDue, invoice.grossTotal)) {
     errors.push(
       `Kwota do zapłaty (${invoice.payment.amountDue}) nie zgadza się z kwotą brutto (${invoice.grossTotal}).`
     );
