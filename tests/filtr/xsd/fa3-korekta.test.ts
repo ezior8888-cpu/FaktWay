@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
+import { sprawdzFa3 } from '@/lib/bezpieczniki/fa3';
 import { generateCorrectionInvoiceXml } from '@/lib/ksef/fa3-correction-generator';
 import { calculateLineItem, roundToCents } from '@/lib/xml/invoice-calculator';
 import { validateFA3 } from '@/lib/xml/validator';
@@ -106,6 +107,8 @@ async function sprawdz(data: CorrectionInvoiceData, przed: Linia[], po: Linia[],
   const xml = generateCorrectionInvoiceXml(data, { generatedAt: new Date('2026-11-09T10:00:00Z') });
   const wynik = await validateFA3(xml);
   expect(wynik.errors.map((b) => b.message)).toEqual([]);
+  // Strażnik FA(3) (F13 część 4) nie zgłasza alarmu dla pliku z prawdziwego generatora.
+  expect(sprawdzFa3(xml)).toEqual([]);
 
   const p13 = suma(pola(xml, /<P_13_[0-9_]+>(-?[\d.]+)<\/P_13_[0-9_]+>/g));
   const p14 = suma(pola(xml, /<P_14_\d+>(-?[\d.]+)<\/P_14_\d+>/g));
@@ -160,6 +163,8 @@ describe('FA(3) KOR: losowe korekty', () => {
         const xml = generateCorrectionInvoiceXml(data, { generatedAt: new Date('2026-11-09T10:00:00Z') });
         const wynik = await validateFA3(xml);
         expect(wynik.errors.map((b) => b.message)).toEqual([]);
+        // Strażnik FA(3) (F13 część 4) nie zgłasza alarmu dla pliku z prawdziwego generatora.
+        expect(sprawdzFa3(xml)).toEqual([]);
 
         for (const r of Object.keys(POLE_NETTO) as Stawka[]) {
           expect(pola(xml, pole(POLE_NETTO[r]))).toEqual(r === s ? [Math.round(netto * 100)] : []);
