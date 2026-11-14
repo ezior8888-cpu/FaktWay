@@ -10,6 +10,7 @@ import {
   RiFileList3Line,
   RiFileTextLine,
   RiMoreLine,
+  RiPriceTag3Line,
   RiReceiptLine,
   RiSafe2Line,
   RiSettings3Line,
@@ -87,6 +88,7 @@ export const dashboardNavSections: DashboardNavSection[] = [
       // na końcu sekcji, nie rodzaj faktury: dokumenty poza KSeF i poza przychodem;
       // pozostałe pozycje bez zmian (decyzja D1).
       { href: "/proformy", label: "Proformy i oferty", icon: RiDraftLine },
+      { href: "/produkty", label: "Produkty i usługi", icon: RiPriceTag3Line }, // krok 2.6, katalog (D1)
     ],
   },
   {
