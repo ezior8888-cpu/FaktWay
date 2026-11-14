@@ -36,6 +36,9 @@ const from = vi.fn((table: string) => {
   const query = {
     select: (_columns: string, options?: { count?: string; head?: boolean }) => { count = !!options?.count; head = !!options?.head; return query; },
     range: (from: number, to: number) => { window = [from, to]; return query; },
+    // Strony po kluczu (QRY-07, sesja 33): `id > ostatnie id` i `limit` od początku reszty.
+    gt: (key: string, value: string) => { filters.push((row) => String(row[key]) > value); return query; },
+    limit: (n: number) => { window = [0, n - 1]; return query; },
     eq: (key: string, value: unknown) => { filters.push((row) => row[key] === value); return query; },
     in: (key: string, values: unknown[]) => { filters.push((row) => values.includes(row[key])); return query; },
     or: (filter: string) => {

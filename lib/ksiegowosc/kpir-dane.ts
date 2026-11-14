@@ -14,7 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { readCompletePagesByKey } from '@/lib/accounting/read-complete-pages';
 import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
 import { attachKsefNumbers, type ExportExpense } from '@/lib/exports/data-fetcher';
 import { assertKsefExpensesReadyForPln, KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
@@ -110,16 +110,16 @@ export const KOMUNIKAT_WALUTA_KOSZTU =
 /** Koszty roku z KSeF i spoza KSeF, z numerem KSeF powiązanej faktury. */
 async function koszty(client: SupabaseClient, tenantId: string, rok: number): Promise<KosztKpir[] | { komunikat: string }> {
   const srodowisko = requireConfiguredKsefEnvironment();
-  const wiersze = await readCompletePages<WierszKosztu>('kpir: koszty', async (from, to) => {
-    const wynik = await client
+  const wiersze = await readCompletePagesByKey<WierszKosztu>('kpir: koszty', async ({ afterId, limit, count, head }) => {
+    let q = client
       .from('expenses')
-      .select(KOLUMNY_KOSZTU, { count: 'exact' })
+      .select(KOLUMNY_KOSZTU, count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', tenantId)
       .eq('is_deductible', true)
       .gte('issue_date', `${rok}-01-01`)
-      .lte('issue_date', `${rok}-12-31`)
-      .order('id', { ascending: true })
-      .range(from, to);
+      .lte('issue_date', `${rok}-12-31`);
+    if (afterId !== null) q = q.gt('id', afterId);
+    const wynik = await q.order('id', { ascending: true }).limit(limit);
     return { data: wynik.data as WierszKosztu[] | null, count: wynik.count, error: wynik.error };
   });
   // F11-C2: wydatki na reprezentację nie są kosztem (art. 23 ust. 1 pkt 23 ustawy o PIT).
@@ -191,15 +191,15 @@ interface WierszZaplaty {
  * tabeli nie ma: to brak zapłat, nie awaria.
  */
 async function zaplaconeSkladki(client: SupabaseClient, tenantId: string): Promise<ZaplaconeSkladki[]> {
-  const wiersze = await readCompletePages<WierszZaplaty>('kpir: zapłacone składki', async (from, to) => {
-    const wynik = await client
+  const wiersze = await readCompletePagesByKey<WierszZaplaty>('kpir: zapłacone składki', async ({ afterId, limit, count, head }) => {
+    let q = client
       .from('tax_settlements')
-      .select('id, okres, wersja, kwota_gr, zaplacone_o, spoleczne_bez_fp:migawka->spoleczneBezFpGr', { count: 'exact' })
+      .select('id, okres, wersja, kwota_gr, zaplacone_o, spoleczne_bez_fp:migawka->spoleczneBezFpGr', count ? { count: 'exact', head } : undefined)
       .eq('tenant_id', tenantId)
       .eq('rodzaj', 'zus_spoleczne')
-      .eq('status', 'zaplacone')
-      .order('id', { ascending: true })
-      .range(from, to);
+      .eq('status', 'zaplacone');
+    if (afterId !== null) q = q.gt('id', afterId);
+    const wynik = await q.order('id', { ascending: true }).limit(limit);
     // Przed wgraniem 00168: Postgres 42P01, PostgREST PGRST205.
     if (wynik.error && (wynik.error.code === '42P01' || wynik.error.code === 'PGRST205')) return { data: [], count: 0, error: null };
     return { data: wynik.data as WierszZaplaty[] | null, count: wynik.count, error: wynik.error };

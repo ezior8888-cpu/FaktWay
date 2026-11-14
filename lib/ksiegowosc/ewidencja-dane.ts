@@ -2,8 +2,9 @@
  * Odczyt danych ewidencji przychodów za rok (plan księgowości JDG, K3).
  * Liczy `zbudujEwidencje` z `ewidencja.ts`; tu są tylko zapytania, z tymi
  * samymi filtrami co KPiR (`lib/reports/kpir-data.ts`, PLAN-FINORA §2.4):
- * faktury `outgoing` przyjęte w aktywnym środowisku KSeF, sumy przez
- * `readCompletePages`, zaliczki przez `fetchSettledAdvancesNet`.
+ * faktury `outgoing` przyjęte w aktywnym środowisku KSeF, komplet wierszy
+ * stronami po kluczu (`readCompletePagesByKey`, QRY-07), zaliczki przez
+ * `fetchSettledAdvancesNet`.
  *
  * Przychód roku to faktury wystawione w roku i faktury wystawione później
  * za sprzedaż z tego roku: dzień przychodu to dzień sprzedaży, nie później
@@ -15,7 +16,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { readCompletePagesByKey } from '@/lib/accounting/read-complete-pages';
 import { formatBuyerAddress, type BuyerDataJson } from '@/lib/exports/data-fetcher';
 import type { RateLookup } from '@/lib/flo/nbp';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -157,13 +158,14 @@ async function pozycje(client: SupabaseClient, ids: readonly string[], tylkoZeSt
   const wynik: WierszPozycji[] = [];
   for (const kawalek of kawalki(ids)) {
     wynik.push(
-      ...(await readCompletePages<WierszPozycji>('ewidencja: pozycje faktur', (from, to) => {
+      ...(await readCompletePagesByKey<WierszPozycji>('ewidencja: pozycje faktur', ({ afterId, limit, count, head }) => {
         let q = client
           .from('invoice_line_items')
-          .select('id, invoice_id, net_amount, ryczalt_rate', { count: 'exact' })
+          .select('id, invoice_id, net_amount, ryczalt_rate', count ? { count: 'exact', head } : undefined)
           .in('invoice_id', kawalek);
         if (tylkoZeStawka) q = q.not('ryczalt_rate', 'is', null);
-        return q.order('id', { ascending: true }).range(from, to);
+        if (afterId !== null) q = q.gt('id', afterId);
+        return q.order('id', { ascending: true }).limit(limit);
       })),
     );
   }
@@ -296,18 +298,18 @@ export async function czytajFakturyRoku(
   }
 
   try {
-    const wiersze = await readCompletePages<WierszFaktury>('ewidencja: faktury', async (from, to) => {
-      const wynik = await client
+    const wiersze = await readCompletePagesByKey<WierszFaktury>('ewidencja: faktury', async ({ afterId, limit, count, head }) => {
+      let q = client
         .from('invoices')
-        .select(KOLUMNY_FAKTURY, { count: 'exact' })
+        .select(KOLUMNY_FAKTURY, count ? { count: 'exact', head } : undefined)
         .eq('tenant_id', tenantId)
         .eq('direction', 'outgoing')
         .eq('ksef_status', 'accepted')
         .eq('ksef_environment', srodowisko)
         .gte('issue_date', od)
-        .or(`issue_date.lte.${koniecRoku},sale_date.lte.${koniecRoku}`)
-        .order('id', { ascending: true })
-        .range(from, to);
+        .or(`issue_date.lte.${koniecRoku},sale_date.lte.${koniecRoku}`);
+      if (afterId !== null) q = q.gt('id', afterId);
+      const wynik = await q.order('id', { ascending: true }).limit(limit);
       return { data: wynik.data as WierszFaktury[] | null, count: wynik.count, error: wynik.error };
     });
     const [rozliczone, zeStawkami] = await Promise.all([

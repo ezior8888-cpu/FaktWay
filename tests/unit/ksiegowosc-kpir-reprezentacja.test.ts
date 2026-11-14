@@ -80,8 +80,10 @@ let KOSZTY: unknown[] = [KOSZT_KSEF];
 
 function lancuch(wynik: () => unknown) {
   const l: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'gte', 'lte', 'order', 'in']) l[m] = () => l;
+  for (const m of ['select', 'eq', 'gt', 'gte', 'lte', 'order', 'in']) l[m] = () => l;
+  // Strona: `range` (OFFSET) albo `limit` (po kluczu, QRY-07); jedna strona danych.
   l.range = async () => wynik();
+  l.limit = async () => wynik();
   l.then = (ok: (v: unknown) => unknown, blad: (e: unknown) => unknown) => Promise.resolve(wynik()).then(ok, blad);
   return l;
 }

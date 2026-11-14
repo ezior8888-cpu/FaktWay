@@ -51,9 +51,11 @@ function client(invoices: Row[]) {
         gte: (c: string, v: string) => (preds.push((r) => String(r[c]) >= v), q),
         lte: (c: string, v: string) => (preds.push((r) => String(r[c]) <= v), q),
         lt: (c: string, v: string) => (preds.push((r) => String(r[c]) < v), q),
+        gt: (c: string, v: string) => (preds.push((r) => String(r[c]) > v), q),
         or: () => q,
         order: () => q,
         range: () => q,
+        limit: () => q,
         then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => {
           const src = table === 'invoices' ? rows : [];
           const m = src.filter((r) => preds.every((p) => p(r)));

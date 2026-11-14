@@ -1,0 +1,112 @@
+{
+ "duża firma: każdy odczyt na 2–3 stronach": {
+  "raport KPiR (getKpirData)": {
+   "liczby": {
+    "month": 10,
+    "year": 2026,
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-31",
+    "expenses": 1053,
+    "invoices": 1101,
+    "currencyBlocked": null,
+    "settledError": null
+   },
+   "sha256": "e73b43e8a694e7aae4ddd71688b0c2701a1854cfdc04d31dc8dabb9e3df42467",
+   "znaki": 1044608
+  },
+  "eksport (fetchInvoicesForExport)": {
+   "liczby": {
+    "issuer.nip": "1234567890",
+    "issuer.name": "Firma Testowa sp. z o.o.",
+    "issuedInvoices": 1101,
+    "receivedInvoices": 520,
+    "expenses": 1053
+   },
+   "sha256": "a1383575fb1dc83edf3937c12ffdc88dd80dc7cd5e5f7748f285f19b13cdc967",
+   "znaki": 2127515
+  },
+  "KPiR modułu (czytajKpir)": {
+   "liczby": {
+    "ok": true,
+    "kpir.rok": 2026,
+    "kpir.wiersze": 3248,
+    "kpir.braki": 0,
+    "kpir.pominiete": 0,
+    "wpisy": 520,
+    "wersje": 1,
+    "spisy": 520
+   },
+   "sha256": "6c32502faf0f8153ef42868767456faf5dfba78da9fa9c071b1f27b1ad8872e9",
+   "znaki": 1423404
+  },
+  "ewidencja przychodów (czytajEwidencje)": {
+   "liczby": {
+    "ok": true,
+    "ewidencja.rok": 2026,
+    "ewidencja.wiersze": 8059,
+    "ewidencja.braki": 27,
+    "ewidencja.pominiete": 0,
+    "ewidencja.ryczaltWRoku": true,
+    "wpisy": 520,
+    "wersje": 1
+   },
+   "sha256": "5a0fee1865a351bd7450b434b3d20994ad918f57b176e2f01f8983afe171c72d",
+   "znaki": 2539836
+  }
+ },
+ "mała firma: każdy odczyt na jednej stronie": {
+  "raport KPiR (getKpirData)": {
+   "liczby": {
+    "month": 10,
+    "year": 2026,
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-31",
+    "expenses": 14,
+    "invoices": 12,
+    "currencyBlocked": null,
+    "settledError": null
+   },
+   "sha256": "d1bcf6a0369284a37834ca6c1a9853d62934059388b6b413fcde73bd4b5fcfc3",
+   "znaki": 12775
+  },
+  "eksport (fetchInvoicesForExport)": {
+   "liczby": {
+    "issuer.nip": "1234567890",
+    "issuer.name": "Firma Testowa sp. z o.o.",
+    "issuedInvoices": 12,
+    "receivedInvoices": 6,
+    "expenses": 14
+   },
+   "sha256": "3dbc4676ca1672e2364dd5eeecb6696c1a31605d3dfd056f4fca9d54f6b3f5a1",
+   "znaki": 19708
+  },
+  "KPiR modułu (czytajKpir)": {
+   "liczby": {
+    "ok": true,
+    "kpir.rok": 2026,
+    "kpir.wiersze": 48,
+    "kpir.braki": 0,
+    "kpir.pominiete": 0,
+    "wpisy": 4,
+    "wersje": 1,
+    "spisy": 2
+   },
+   "sha256": "bc76f01b76df49802f27a8d1f3ac6bfa84a5e3e5cc98898ad46299dde85bd1b6",
+   "znaki": 20351
+  },
+  "ewidencja przychodów (czytajEwidencje)": {
+   "liczby": {
+    "ok": true,
+    "ewidencja.rok": 2026,
+    "ewidencja.wiersze": 39,
+    "ewidencja.braki": 2,
+    "ewidencja.pominiete": 0,
+    "ewidencja.ryczaltWRoku": true,
+    "wpisy": 4,
+    "wersje": 1
+   },
+   "sha256": "707d1b39d99d74ab796b33160de49ac7ee927bf87ecf9b237ce12df11a935b32",
+   "znaki": 12949
+  }
+ }
+}

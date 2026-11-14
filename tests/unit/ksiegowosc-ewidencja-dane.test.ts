@@ -93,8 +93,9 @@ describe('czytajEwidencje: zapytania jak w KPiR', () => {
     const wynik = await czytajEwidencje(client, 'firma-1', 2026, { kurs: vi.fn() });
     expect(wynik.ok).toBe(true);
     const faktur = wywolania.filter((w) => w.tabela === 'invoices').slice(-9);
+    // Pierwsza strona po kluczu (QRY-07, sesja 33): COUNT i `limit`, bez OFFSET i bez `gt`.
     expect(faktur.map((w) => [w.metoda, ...w.args.slice(0, 2)])).toEqual([
-      ['select', expect.stringContaining('fp:fa3_data->ksefMarkers->>fp'), { count: 'exact' }],
+      ['select', expect.stringContaining('fp:fa3_data->ksefMarkers->>fp'), { count: 'exact', head: false }],
       ['eq', 'tenant_id', 'firma-1'],
       ['eq', 'direction', 'outgoing'],
       ['eq', 'ksef_status', 'accepted'],
@@ -103,7 +104,7 @@ describe('czytajEwidencje: zapytania jak w KPiR', () => {
       // F11-C3 (11.11): bez okna 60 dni po roku; faktura z marca za grudzień to przychód roku sprzedaży.
       ['or', 'issue_date.lte.2026-12-31,sale_date.lte.2026-12-31'],
       ['order', 'id', { ascending: true }],
-      ['range', 0, 499],
+      ['limit', 500],
     ]);
     if (!wynik.ok) return;
     expect(wynik.ewidencja.wiersze.map((w) => [w.dowod, w.kwotaGr, w.stawkaPb, w.idKontrahenta])).toEqual([['FV/1/2026', 1_000_00, 1200, '1234567890']]);
