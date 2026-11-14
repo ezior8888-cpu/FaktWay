@@ -298,6 +298,12 @@ export type AuditAction =
   // Kontrahenci — poprawka danych i usunięcie z bazy (audyt bloku 1, F-011).
   | 'contractor.updated'
   | 'contractor.deleted'
+  // Katalog produktów i usług (plan kompletnej aplikacji, krok 2.6): metadane bez cen.
+  | 'product.created'
+  | 'product.updated'
+  | 'product.archived'
+  | 'product.restored'
+  | 'product.deleted'
   | 'retention.deletion_requested'
   | 'retention.deletion_executed'
   | 'invitation.created'

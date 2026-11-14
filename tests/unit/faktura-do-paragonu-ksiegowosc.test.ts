@@ -25,11 +25,13 @@ import { vatMiesiaca } from '@/lib/ksiegowosc/vat';
  * sprzedaży ani podatku należnego, bo sprzedaż weszła z kasy. Zasada 2 planu
  * księgowości: FP nie jest drugim przychodem, sprzedaż wchodzi z raportu kasy.
  *
- * Bezpieczna wersja do czasu typu FP w JPK i reguły pokrycia raportem kasy
- * (następny PR, G30): FP nie staje się po cichu drugim przychodem ani nie znika.
- * Miesiąc z FP w ewidencji i KPiR ma brak (bez sum), także gdy w miesiącu jest
- * wpis raportu kasy (wpis ręczny może być innym dowodem, rodzaj ma wartość
- * domyślną). VAT miesiąca i JPK odmawiają z treścią generatora.
+ * Część 1 (#509) dawała przy FP zawsze brak i odmowę JPK. Część 2 (świadome
+ * zmiany przypadków niżej): FP jest poza ewidencją i KPiR, gdy raport kasy
+ * z miesiąca paragonu ją obejmuje (reguła pokrycia, szczegóły
+ * w `faktura-do-paragonu-pokrycie-kasy.test.ts`), a JPK_V7M wykazuje ją typem
+ * dokumentu FP bez podatku należnego (`faktura-do-paragonu-jpk-v7m.test.ts`).
+ * FP nie staje się po cichu drugim przychodem ani nie znika; JPK_FA odmawia
+ * (bez oznaczenia FP w strukturze).
  */
 
 const RYCZALT: WersjaProfilu = {
@@ -73,10 +75,13 @@ describe('ewidencja ryczałtu: FP nie jest drugim przychodem i nie znika', () =>
     expect(brakiOkresu(e, '2026-10-01', '2026-10-31')).toHaveLength(1);
   });
 
-  it('FP z wpisem raportu kasy w tym samym miesiącu: dalej brak, a przychód tylko z raportu (bez FP)', () => {
+  it('FP z raportem kasy z miesiąca paragonu (5000 zł, FP 1000 zł): poza ewidencją, przychód tylko z raportu (bez FP)', () => {
+    // Krok 1.2, część 2 (świadoma zmiana testu): w części 1 ten przypadek dawał
+    // brak; reguła pokrycia raportem kasy (miesiąc i kwoty) wyłącza FP z przychodu.
     const e = zbudujEwidencje({ rok: 2026, faktury: [fakturaFp()], wpisy: [raportKasy('2026-10-31')], wersje: [RYCZALT], kursy: new Map() });
     expect(e.wiersze.map((w) => w.dowod)).toEqual(['RK/2026-10-31']);
-    expect(e.braki.map((b) => b.dokument)).toEqual(['FV/5/11/2026']);
+    expect(e.braki).toEqual([]);
+    expect(e.pominiete.map((p) => p.numer)).toEqual(['FV/5/11/2026']);
   });
 });
 
@@ -92,7 +97,10 @@ describe('KPiR: ta sama zasada co ewidencja', () => {
     expect(k.braki[0]!.komunikat).toMatch(/do paragonu.*księgi.*Pomocy/);
   });
 
-  it('FP z wpisem raportu kasy: dalej brak, przychód tylko z raportu', () => {
+  it('FP z wpisem kolumny 7 bez rodzaju dowodu: dalej brak (to nie raport kasy), przychód tylko z wpisu', () => {
+    // Krok 1.2, część 2: FP obejmuje tylko wpis z rodzajem „raport_kasy” (z bazy
+    // zawsze go ma, `czytajWpisyKpir`); przypadek z rodzajem jest w
+    // `faktura-do-paragonu-pokrycie-kasy.test.ts`.
     const k = zbudujKpir({ rok: 2026, faktury: [fakturaFp()], koszty: [], wpisy: [wpisKasy('2026-10-31')], wersje: [SKALA], kursy: new Map() });
     expect(k.wiersze.map((w) => [w.dowod, w.kwoty.k7])).toEqual([['RK/2026-10-31', 5_000_00]]);
     expect(k.braki.map((b) => b.dokument)).toEqual(['FV/5/11/2026']);
@@ -140,21 +148,29 @@ function jpkFaktura(o: Partial<JpkInvoice> = {}): JpkInvoice {
 
 const PARAGON_FA3 = { receipt: { receiptNumber: '000123', receiptDate: '2026-10-15', cashRegisterNumber: 'ABC1234567890' } };
 
-describe('JPK_V7M i VAT miesiąca: FP z FaktWay odmawia jak FP z importu', () => {
+describe('JPK i VAT miesiąca: FP z FaktWay ma to samo oznaczenie co FP z importu', () => {
   it('flagi treści dokumentu: paragon w fa3_data to oznaczenie FP', () => {
     expect(importedContentFlags('app', PARAGON_FA3).ksefMarkers).toEqual({ fp: true });
     expect(importedContentFlags('app', {}).ksefMarkers).toBeUndefined();
   });
 
-  it('kwoty JPK: odmowa z numerem faktury i oznaczeniem FP', () => {
+  it('kwoty JPK_FA (bez oznaczenia FP w strukturze): odmowa z numerem faktury i oznaczeniem FP', () => {
     const inv = jpkFaktura(importedContentFlags('app', PARAGON_FA3));
     expect(() => amountsOf(inv)).toThrow(JpkDocumentNotSupportedError);
     expect(() => amountsOf(inv)).toThrow(/JPK wstrzymany:.*FV\/5\/11\/2026.*faktura do paragonu \(FP\)/);
   });
 
-  it('VAT miesiąca w module księgowości: brak z treścią odmowy zamiast kwoty', () => {
+  it('VAT miesiąca w module księgowości: FP do paragonu z października w listopadzie bez podatku należnego', () => {
+    // Krok 1.2, część 2 (świadoma zmiana testu): w części 1 był tu brak; teraz
+    // FP to wiersz z typem FP poza deklaracją (art. 109 ust. 3d).
     const wynik = vatMiesiaca({ sprzedaz: [jpkFaktura(importedContentFlags('app', PARAGON_FA3))], koszty: [] }, 0);
-    expect(wynik).toEqual({ ok: false, brak: expect.stringMatching(/FV\/5\/11\/2026.*faktura do paragonu \(FP\)/) });
+    expect(wynik).toMatchObject({ ok: true, naleznyGr: 0, doZaplatyGr: 0, liczbaSprzedazy: 1 });
+  });
+
+  it('VAT miesiąca w module księgowości: FP do paragonu z tego samego miesiąca to brak (raport z kasy RO)', () => {
+    const tenSam = jpkFaktura({ ...importedContentFlags('app', PARAGON_FA3), saleDate: '2026-11-02' });
+    const wynik = vatMiesiaca({ sprzedaz: [tenSam], koszty: [] }, 0);
+    expect(wynik).toEqual({ ok: false, brak: expect.stringMatching(/FV\/5\/11\/2026.*fakturą do paragonu.*\(RO\).*poza FaktWay/) });
   });
 });
 
