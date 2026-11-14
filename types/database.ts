@@ -9762,6 +9762,8 @@ export type Database = {
         | "ai_claude"
         | "manual"
         | "learned"
+        | "rule_global_nip"
+        | "rule_global_keyword"
       correction_type_enum: "before_after" | "amount_change" | "cancellation"
       email_bounce_type_enum: "hard" | "soft" | "complaint" | "delivery_delay"
       email_category_enum: "transactional" | "product_updates" | "marketing"
@@ -9997,6 +9999,8 @@ export const Constants = {
         "ai_claude",
         "manual",
         "learned",
+        "rule_global_nip",
+        "rule_global_keyword",
       ],
       correction_type_enum: ["before_after", "amount_change", "cancellation"],
       email_bounce_type_enum: ["hard", "soft", "complaint", "delivery_delay"],

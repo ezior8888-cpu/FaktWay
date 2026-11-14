@@ -27,7 +27,7 @@ import type { ExpenseRow } from '@/components/expenses/expenses-list';
 
 type Method = ExpenseRow['categorization_method'];
 
-function expense(method: string | null): ExpenseRow {
+function expense(method: Method): ExpenseRow {
   return {
     id: 'e-1',
     tenant_id: 'firma-a',
@@ -37,9 +37,7 @@ function expense(method: string | null): ExpenseRow {
     payment_split: null,
     payment_terms: null,
     categorization_confidence: 0.88,
-    // Typy bazy (`types/database.ts`) dostaną wartości z 00205 po wgraniu
-    // migracji na produkcję (runbook wgrywania migracji, „Typy bazy”).
-    categorization_method: method as Method,
+    categorization_method: method,
     category_label: 'Paliwo',
     created_at: '2026-11-10T10:00:00Z',
     created_by: null,
@@ -71,7 +69,7 @@ function expense(method: string | null): ExpenseRow {
 const html = (node: ReactElement) => renderToStaticMarkup(node);
 
 describe('formularz kosztu: kategoria z reguły globalnej', () => {
-  it.each(['rule_global_keyword', 'rule_global_nip'])('metoda %s pokazuje ramkę „Auto-kategoryzacja”', (method) => {
+  it.each(['rule_global_keyword', 'rule_global_nip'] as const)('metoda %s pokazuje ramkę „Auto-kategoryzacja”', (method) => {
     const markup = html(<ExpenseEditForm expense={expense(method)} photoUrl={null} ksefCurrency={null} />);
 
     expect(markup).toContain('Auto-kategoryzacja');
