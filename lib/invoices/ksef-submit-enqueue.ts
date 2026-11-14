@@ -25,7 +25,7 @@ import {
 import { decryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { getGlobalFlagForExecution } from '@/lib/feature-flags/global-flags';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { assertSensitiveMfa, SensitiveMfaRequiredError } from '@/lib/auth/sensitive-mfa';
+import { assertSensitiveMfa, SensitiveMfaRequiredError, type TokenMfaStatus } from '@/lib/auth/sensitive-mfa';
 import { shouldUseOfflineMode } from '@/lib/ksef/health-check';
 import { isOffline24Enabled } from '@/lib/ksef/offline24-policy';
 import { isRozSubmission, ROZ_SUBMISSION_HOLD_MESSAGE } from '@/lib/ksef/roz-submission-hold';
@@ -93,6 +93,19 @@ export interface EnqueueKsefSubmitParams {
    * (`requireMfaForSensitive`) klucz nie przejdzie, więc wtedy odmowa.
    */
   companyKey?: CompanyKeySendActor;
+  /**
+   * Konto zlecające z tokenu sesji, nie z ciasteczek strony (aplikacja na
+   * telefon, `/api/mobile/v1`, M8). `supabase` to wtedy klient z tym tokenem:
+   * z niego czytamy znacznik weryfikacji KSeF, a 2FA (AUD-65) sprawdzamy na
+   * stanie tokenu. Bez tego obie kontrole czytałyby puste ciasteczka i
+   * odmawiały każdemu telefonowi.
+   */
+  tokenSession?: TokenSessionSendActor;
+}
+
+/** Sesja telefonu: stan 2FA tokenu z `authenticateMobileRequest` (konto z TOTP bez kodu tam już dostało 403). */
+export interface TokenSessionSendActor {
+  mfa: TokenMfaStatus;
 }
 
 /** Klucz API, którym program klienta zleca wysyłkę (`POST /api/v1/invoices`). */
@@ -273,7 +286,7 @@ async function decideKsefSubmitEnqueue(
   } else {
     if (!userId) throw new Error('Wysyłka do KSeF bez konta i bez klucza API');
     try {
-      await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit');
+      await assertSensitiveMfa({ tenantId, userId }, 'ksef_submit', params.tokenSession?.mfa);
     } catch (e) {
       if (e instanceof SensitiveMfaRequiredError) {
         return { ok: false, code: 'MFA_REQUIRED', refusal: 'MFA_REQUIRED', error: e.message };
@@ -286,7 +299,8 @@ async function decideKsefSubmitEnqueue(
 
   try {
     // Klucz API: znacznik czyta token klucza (tylko jego firma, 00184), nie sesja z ciasteczek.
-    await requireKsefVerification(tenantId, params.companyKey ? params.supabase : undefined);
+    // Telefon: token sesji klienta (RLS jak na stronie).
+    await requireKsefVerification(tenantId, params.companyKey || params.tokenSession ? params.supabase : undefined);
   } catch (e) {
     if (e instanceof KsefNotVerifiedError) {
       return {

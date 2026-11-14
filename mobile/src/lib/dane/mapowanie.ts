@@ -22,7 +22,7 @@ export const KOLUMNY_POZYCJI = 'ordinal, name, unit, quantity, unit_price_net, v
 export const KOLUMNY_FAKTURY = [
   'id, internal_number, invoice_kind, issue_date, sale_date, payment_due_date',
   'ksef_status, ksef_number, net_total, vat_total, gross_total, currency',
-  'payment_status, paid_amount, buyer_nip, buyer_data, seller_data, payment_data, notes',
+  'payment_status, paid_amount, buyer_nip, is_b2c, buyer_id_type, buyer_data, seller_data, payment_data, notes',
   'last_error, last_error_field, last_error_suggestion, created_at',
   `invoice_line_items(${KOLUMNY_POZYCJI})`,
 ].join(', ');
@@ -34,7 +34,7 @@ export const KOLUMNY_SKRZYNKI = `id, internal_number, ksef_number, issue_date, s
 export const LIMIT_LISTY = 200;
 
 type Adres = { addressLine1?: string | null; addressLine2?: string | null } | null | undefined;
-type StronaZBazy = { name?: string | null; nip?: string | null; address?: Adres; email?: string | null } | null | undefined;
+type StronaZBazy = { name?: string | null; nip?: string | null; vatUeNumber?: string | null; address?: Adres; email?: string | null } | null | undefined;
 
 export type WierszPozycji = {
   ordinal?: number | null;
@@ -64,6 +64,9 @@ export type WierszFaktury = {
   payment_status?: string | null;
   paid_amount?: number | string | null;
   buyer_nip?: string | null;
+  /** Kolumny nabywcy jak `buyerColumnsFromInvoiceForm` strony: firma z UE ma `buyer_nip` NULL i `is_b2c` false. */
+  is_b2c?: boolean | null;
+  buyer_id_type?: string | null;
   buyer_data?: unknown;
   seller_data?: unknown;
   payment_data?: unknown;
@@ -99,6 +102,7 @@ export type PowiazanyWydatek = { id: string; ksef_invoice_id: string | null; is_
 export function grosze(wartosc: unknown): number {
   if (wartosc === null || wartosc === undefined || wartosc === '') return 0;
   const n = typeof wartosc === 'number' ? wartosc : Number(wartosc);
+  // filtr-wyjatek: kwoty-bez-float złote z bazy na grosze całkowite tylko do wyświetlenia; cena z 4 miejscami idzie do kopii faktury osobno (cenaTekst)
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
@@ -163,11 +167,26 @@ export function pozycjeZBazy(wiersze: WierszPozycji[] | null | undefined): Pozyc
       ilosc: liczba(w.quantity),
       jednostka: tekst(w.unit),
       cenaNetto: grosze(w.unit_price_net),
+      // Cena bez zaokrąglania do groszy (NUMERIC(14,4)): kopia faktury liczy z niej jak serwer.
+      ...(w.unit_price_net === null || w.unit_price_net === undefined ? {} : { cenaTekst: String(liczba(w.unit_price_net)).replace('.', ',') }),
       ...stawkaZBazy(w.vat_rate),
       netto: grosze(w.net_amount),
       vat: grosze(w.vat_amount),
       brutto: grosze(w.gross_amount),
     }));
+}
+
+/**
+ * Rodzaj nabywcy z kolumn faktury (`buyerColumnsFromInvoiceForm` strony):
+ * numer VAT-UE albo firma bez polskiego NIP to `inny`, osoba prywatna tylko
+ * bez numeru identyfikacyjnego to `osoba`, firma z 10-cyfrowym NIP to `firma`.
+ */
+export function rodzajNabywcy(w: Pick<WierszFaktury, 'buyer_nip' | 'is_b2c' | 'buyer_id_type' | 'buyer_data'>): NonNullable<Faktura['nabywcaTyp']> {
+  const nabywca = (w.buyer_data ?? null) as StronaZBazy;
+  if (tekst(nabywca?.vatUeNumber)) return 'inny';
+  if (w.is_b2c === true) return !w.buyer_id_type || w.buyer_id_type === 'no_id' ? 'osoba' : 'inny';
+  const nip = (tekst(w.buyer_nip) || tekst(nabywca?.nip)).replace(/\D/g, '');
+  return nip.length === 10 ? 'firma' : 'inny';
 }
 
 /** Faktura wystawiona z bazy na model ekranów (lista i szczegół). */
@@ -208,7 +227,11 @@ export function fakturaZBazy(w: WierszFaktury): Faktura {
         : undefined,
     waluta,
     sprzedawca: strona,
+    nabywcaTyp: rodzajNabywcy(w),
     adresKontrahenta: adres(nabywca?.address),
+    ...(tekst(nabywca?.address?.addressLine1) || tekst(nabywca?.address?.addressLine2)
+      ? { adresKontrahentaLinie: { linia1: tekst(nabywca?.address?.addressLine1), linia2: tekst(nabywca?.address?.addressLine2) } }
+      : {}),
     emailKontrahenta: tekst(nabywca?.email) || undefined,
     dataSprzedazy: tekst(w.sale_date) || undefined,
     zaplacono: !zaplacona && zaplacono > 0 ? zaplacono : undefined,

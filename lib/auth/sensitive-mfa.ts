@@ -39,12 +39,23 @@ export class SensitiveMfaRequiredError extends Error {
 
 const GUARDED_ROLES = new Set(['owner', 'admin']);
 
+/** Stan 2FA sesji sprawdzonej poza ciasteczkami (token telefonu, `lib/api/mobile/auth.ts`). */
+export type TokenMfaStatus = 'verified' | 'enrollment_required' | 'challenge_required';
+
+/**
+ * `tokenMfa`: sesja nie z ciasteczek strony, tylko z tokenu sprawdzonego przez
+ * wołającego (`getVerifiedMfaStateForToken`); ta sama reguła na tym stanie.
+ * Bez niego stan czytamy z ciasteczek, jak dotąd.
+ */
 export async function assertSensitiveMfa(
   ctx: { tenantId: string; userId: string },
   operation: SensitiveOperation,
+  tokenMfa?: TokenMfaStatus,
 ): Promise<void> {
+  const readState = async () =>
+    tokenMfa ? { status: tokenMfa } : await getVerifiedMfaState(await createClient()).catch(() => null);
   if (operation !== 'ksef_submit') {
-    const state = await getVerifiedMfaState(await createClient()).catch(() => null);
+    const state = await readState();
     if (!state || state.status === 'challenge_required') throw new SensitiveMfaRequiredError(operation, 'challenge');
   }
 
@@ -66,7 +77,7 @@ export async function assertSensitiveMfa(
   const role = (membership as { role?: string } | null)?.role;
   if (!role || !GUARDED_ROLES.has(role)) return;
 
-  const state = await getVerifiedMfaState(await createClient()).catch(() => null);
+  const state = await readState();
   if (state?.status === 'challenge_required') throw new SensitiveMfaRequiredError(operation, 'challenge');
   if (state?.status !== 'verified') throw new SensitiveMfaRequiredError(operation, 'enrollment');
 }

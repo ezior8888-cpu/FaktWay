@@ -1,7 +1,8 @@
 /**
- * Zmiana prawdziwej faktury, której API telefonu jeszcze nie ma (etap M7:
- * faktury tylko do odczytu; wystawienie M8, zapłata, e-mail i przypomnienia
- * M10). Telefon nie udaje zapisu: mówi, gdzie to zrobić, i otwiera tę samą
+ * Zmiana prawdziwej faktury, której API telefonu jeszcze nie ma (od M8
+ * wystawienie zwykłej faktury i wysyłka szkicu idą przez API; korekta,
+ * zaliczka, rozliczenie, zmiana szkicu, zapłata, e-mail i przypomnienia w M10).
+ * Telefon nie udaje zapisu: mówi, gdzie to zrobić, i otwiera tę samą
  * fakturę na stronie. Systemowy arkusz akcji jak `potwierdz()`.
  */
 import { Stack, useRouter } from 'expo-router';

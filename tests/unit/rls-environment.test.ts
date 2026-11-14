@@ -157,6 +157,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-mobile-logowanie.test.ts',
       // Plan aplikacji mobilnej, M6c (bez migracji): kod 2FA z telefonu przez API.
       'tests/rls-mobile-kod.test.ts',
+      // 00201 (plan aplikacji mobilnej, M8): faktura z telefonu i klucze idempotencji.
+      'tests/rls-mobile-faktury.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
