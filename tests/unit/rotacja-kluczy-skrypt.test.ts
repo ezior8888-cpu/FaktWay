@@ -16,6 +16,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = resolve(__dirname, '../../scripts/ops/rotacja-kluczy.sh');
 
+// Limity czasu. Jeden przebieg skryptu to kilkaset krótkich procesów (sed,
+// awk, sha256sum, atrapy). Na Linuksie (CI) cały plik trwa ok. 7 s, ale
+// w Git Bashu na Windowsie każdy start procesu kosztuje dziesiątki ms: jeden
+// przebieg trwa tam ok. 22 s, a test z trzema przebiegami ponad minutę.
+// `spawnSync` blokuje wątek, więc Vitest porównuje czas z limitem testu
+// dopiero po końcu testu. Zawieszony skrypt przerywa zatem `RUN_TIMEOUT`,
+// a limit testu mieści najwięcej trzy przebiegi (tyle ma jeden test niżej).
+const RUN_TIMEOUT = 60_000;
+const TEST_TIMEOUT = 3 * RUN_TIMEOUT;
+
 const FAKE_SSH = `#!/usr/bin/env bash
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -173,7 +183,7 @@ function run(opts: Opts = {}, args: string[] = []) {
 
   const result = spawnSync('bash', [SCRIPT, ...args], {
     encoding: 'utf8',
-    timeout: 60_000,
+    timeout: RUN_TIMEOUT,
     env: {
       NODE_ENV: 'test',
       PATH: `${join(dir, 'bin')}:${process.env.PATH ?? ''}`,
@@ -184,6 +194,9 @@ function run(opts: Opts = {}, args: string[] = []) {
       FAKE_DIR: dir,
     },
   });
+  // Przerwany przebieg (ETIMEDOUT) albo brak basha: błąd wprost, zamiast
+  // niepełnego wyjścia i mylącej asercji w teście.
+  if (result.error) throw result.error;
   return { out: result.stdout + result.stderr, status: result.status };
 }
 
@@ -202,7 +215,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe('rotacja-kluczy.sh', () => {
+describe('rotacja-kluczy.sh', { timeout: TEST_TIMEOUT }, () => {
   it('wszystko spójne i działa: kod 0, odciski zamiast wartości, wiek kluczy z JWT', () => {
     const { out, status } = run();
     expect(out).toContain('Wszystko OK.');
