@@ -84,6 +84,13 @@ export const MOBILE_API_ERROR_CODES = [
   'reminder_refused',
   /** 409: PDF tej faktury nie powstanie w tym stanie (offline bez kodu QR, szkic wycofany); `message` mówi dlaczego. */
   'pdf_unavailable',
+  // Konto i księgowość (M10b): zdanie z serwera mówi, co zrobić.
+  /** 403: usunięcie konta bez hasła wymaga świeżego logowania w tej sesji (konto tylko z Google). Telefon prowadzi do ponownego logowania. */
+  'reauth_required',
+  /** 409: konta nie usuniemy, bo firma ma aktywny abonament; `message` nazywa firmę i mówi, co zrobić. */
+  'deletion_blocked',
+  /** 409: usuwanie konta już trwa i nie da się go anulować. */
+  'deletion_in_progress',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -370,4 +377,44 @@ export interface SprawdzenieSkrzynkiOdpowiedz {
   stan: 'zlecone' | 'w_toku' | 'za_wczesnie' | 'bez_ksef' | 'blad';
   komunikat: string;
   ponowZaSekund: number | null;
+}
+
+// ─── Firma i usunięcie konta (M10b) ───────────────────────────────────
+
+/** `POST /api/mobile/v1/firma` (z `X-Active-Org`): firma zapisana jako ostatnio używana, wspólna ze stroną. `zapisane: false`: zapis się nie udał, wybór zostaje na telefonie. */
+export interface FirmaZapisanaOdpowiedz {
+  aktywnaFirma: string;
+  zapisane: boolean;
+}
+
+/**
+ * `GET /api/mobile/v1/konto/usuniecie`: stan usunięcia konta i to, jak je potwierdzić.
+ * `potwierdzenie` z serwera: `haslo` (konto z hasłem) albo `swieze_logowanie` (konto
+ * tylko z Google: logowanie w tej sesji nie starsze niż 10 minut, do `swiezeDo`).
+ */
+export interface UsuniecieKontaOdpowiedz {
+  /** Kiedy konto zostanie usunięte (ISO); `null` bez żądania. */
+  zaplanowane: string | null;
+  potwierdzenie: 'haslo' | 'swieze_logowanie';
+  /** Do kiedy świeże logowanie wystarcza (ISO); `null`, gdy nie wystarcza albo konto ma hasło. */
+  swiezeDo: string | null;
+}
+
+/** `POST /konto/usuniecie` i `POST /konto/usuniecie/anuluj`: hasło tylko przy koncie z hasłem. */
+export interface PotwierdzenieKontaZadanie {
+  haslo?: string;
+}
+
+/** `POST /konto/usuniecie`, 200. `juzBylo`: żądanie już istniało (ponowienie), bez nowego maila. */
+export interface UsuniecieZaplanowaneOdpowiedz {
+  zaplanowane: string;
+  juzBylo: boolean;
+  /** Mail z linkiem do anulowania wyszedł. */
+  mailWyslany: boolean;
+}
+
+/** `POST /konto/usuniecie/anuluj`, 200. `juzBylo`: nie było czego anulować (ponowienie). */
+export interface AnulowanieUsunieciaOdpowiedz {
+  anulowane: true;
+  juzBylo: boolean;
 }

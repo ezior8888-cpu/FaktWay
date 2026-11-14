@@ -77,6 +77,10 @@ describe('kody błędów kontraktu', () => {
       payment_refused: 'odmowa',
       reminder_refused: 'odmowa',
       pdf_unavailable: 'odmowa',
+      // Konto (M10b).
+      reauth_required: 'odmowa',
+      deletion_blocked: 'odmowa',
+      deletion_in_progress: 'odmowa',
     };
     expect(Object.keys(oczekiwane).sort()).toEqual([...MOBILE_API_ERROR_CODES].sort());
     for (const kod of MOBILE_API_ERROR_CODES) expect(rodzajBledu(500, kod)).toBe(oczekiwane[kod]);

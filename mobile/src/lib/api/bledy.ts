@@ -78,6 +78,10 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   payment_refused: 'odmowa',
   reminder_refused: 'odmowa',
   pdf_unavailable: 'odmowa',
+  // Konto (M10b): ekran konta ma własną reakcję na `reauth_required` (ponowne logowanie).
+  reauth_required: 'odmowa',
+  deletion_blocked: 'odmowa',
+  deletion_in_progress: 'odmowa',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */

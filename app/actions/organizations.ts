@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { logAudit } from '@/lib/audit/log';
+import { rememberLastActiveOrganization } from '@/lib/organizations/last-active';
 import { requireCodeForAccessGrant } from '@/lib/auth/access-grant-mfa';
 import { emailsForUserIds } from '@/lib/auth/auth-users';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -234,10 +235,8 @@ export async function setActiveOrganizationAction(
 
   await setActiveOrgCookie(orgId);
 
-  await supabase
-    .from('users')
-    .update({ last_active_tenant_id: orgId })
-    .eq('id', user.id);
+  // Ten sam zapis co wybór firmy w telefonie (`lib/organizations/last-active.ts`).
+  await rememberLastActiveOrganization(supabase, user.id, orgId);
 
   revalidatePath('/');
   return { success: true };

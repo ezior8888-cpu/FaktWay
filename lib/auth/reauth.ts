@@ -3,8 +3,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 import { createClient } from '@/lib/supabase/server';
-import { checkPasswordOperationRateLimit } from '@/lib/rate-limit/password';
-import { isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
+import { confirmAccountPassword } from '@/lib/auth/password-check';
 
 export interface ReauthResult {
   ok: boolean;
@@ -45,13 +44,9 @@ export async function reauthenticateWithPassword(
     return { ok: false, error: 'not_authenticated' };
   }
 
-  // Every caller, including GDPR, shares one authoritative account budget.
-  // Keep it here so a new sensitive action cannot omit the password-attempt limit.
-  const limit = await checkPasswordOperationRateLimit(user.id).catch(() => null);
-  if (!limit || limit.unavailable) return { ok: false, error: 'verification_unavailable' };
-  if (!limit.allowed) return { ok: false, error: 'rate_limited', retryAfter: limit.retryAfter };
-
-  const verifier = createSupabaseClient(
+  // Limit prób, logowanie na osobnym kliencie i sprzątanie sesji: `lib/auth/password-check.ts`
+  // (to samo dla telefonu, M10b).
+  const verifier = () => createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -62,38 +57,5 @@ export async function reauthenticateWithPassword(
       },
     },
   );
-
-  const token = typeof captchaToken === 'string' && captchaToken.length >= 10 && captchaToken.length <= 2048
-    ? captchaToken
-    : undefined;
-  const { data, error } = await verifier.auth.signInWithPassword({
-    email: user.email,
-    password,
-    ...(token ? { options: { captchaToken: token } } : {}),
-  });
-
-  // Nawet niespójna odpowiedź tożsamości nie może zostawić celowo otwartej
-  // sesji. Używamy JWT wyłącznie z odpowiedzi tego logowania i zakresu local.
-  // Zwykłe auth.signOut() ukrywa błędy HTTP 401/403/404. Jego warstwa admin
-  // zachowuje te błędy; nazwa SDK nie oznacza użycia klucza service_role.
-  let cleanupFailed = false;
-  const temporaryToken = data.session?.access_token;
-  if (typeof temporaryToken === 'string' && temporaryToken) {
-    try {
-      const { error: cleanupError } = await verifier.auth.admin.signOut(temporaryToken, 'local');
-      cleanupFailed = Boolean(cleanupError);
-    } catch {
-      cleanupFailed = true;
-    }
-  }
-
-  if (error) {
-    return { ok: false, error: isGoTrueCaptchaRejection(error) ? 'verification_unavailable' : 'invalid_password' };
-  }
-
-  if (cleanupFailed || typeof temporaryToken !== 'string' || !temporaryToken || data.user?.id !== user.id) {
-    return { ok: false, error: 'unknown' };
-  }
-
-  return { ok: true };
+  return confirmAccountPassword({ userId: user.id, email: user.email, password, verifier, captchaToken });
 }
