@@ -88,9 +88,9 @@ describe('KPiR 2026', () => {
   });
 
   it('korekta w dniu wystawienia, rozliczenie bez zaliczek, faktura do paragonu poza przychodem z brakiem', () => {
-    // Krok 1.2 planu kompletnej aplikacji (świadoma zmiana testu): FP dalej nie
-    // jest przychodem, ale do reguły pokrycia raportem kasy (następny PR, G30)
-    // daje brak zamiast cichego pominięcia, także gdy w miesiącu jest wpis raportu.
+    // Krok 1.2 planu kompletnej aplikacji: FP nie jest przychodem. Wpis niżej
+    // nie ma rodzaju dowodu, więc nie jest raportem kasy i FP zostaje brakiem
+    // (reguła pokrycia z części 2: `faktura-do-paragonu-pokrycie-kasy.test.ts`).
     const k = zbudujKpir(
       wejscie({
         faktury: [

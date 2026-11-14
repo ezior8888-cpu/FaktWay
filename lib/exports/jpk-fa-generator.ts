@@ -271,6 +271,26 @@ export class JpkDocumentNotSupportedError extends Error {
   }
 }
 
+/**
+ * Krok 1.2 planu kompletnej aplikacji: faktura do paragonu (FP) w pliku bez
+ * oznaczenia FP. JPK_FA(4) nie ma takiego pola (schemat w repo), więc program,
+ * który wczyta plik, wziąłby FP za zwykłą sprzedaż, choć sprzedaż z paragonu
+ * weszła już raportem z kasy (art. 109 ust. 3d ustawy o VAT: FP nie zwiększa
+ * wartości sprzedaży). JPK_V7M wykazuje FP typem dokumentu
+ * (`amountsOf(inv, { receiptInvoiceAsFp: true })`).
+ */
+export class JpkFaReceiptInvoiceNotSupportedError extends JpkDocumentNotSupportedError {
+  constructor(invoiceNumber: string, ksefNumber: string | undefined) {
+    super(invoiceNumber, ksefNumber, 'to faktura do paragonu (FP).');
+    this.message =
+      `${JPK_DOCUMENT_REFUSAL_PREFIX} faktura ${invoiceNumber}${ksefNumber ? ` (KSeF ${ksefNumber})` : ''} to faktura do paragonu (FP). ` +
+      'JPK_FA nie ma oznaczenia FP, więc program, który wczyta ten plik, policzyłby ją jak zwykłą sprzedaż, choć sprzedaż ' +
+      'z paragonu weszła już raportem z kasy. Plik nie powstał, żeby ta sprzedaż nie weszła drugi raz: JPK_FA za ten okres ' +
+      'trzeba przygotować poza FaktWay. Fakturę do paragonu wpisuje się w ewidencji VAT z oznaczeniem FP.';
+    this.name = 'JpkFaReceiptInvoiceNotSupportedError';
+  }
+}
+
 function unsupportedRate(inv: JpkInvoice, rate: string): JpkDocumentNotSupportedError {
   const label = importedVatRateLabel(rate);
   return new JpkDocumentNotSupportedError(
@@ -443,13 +463,31 @@ function linePct(vatRate: string): number {
   return rate === '23' || rate === '8' || rate === '5' ? Number(rate) / 100 : 0;
 }
 
+/** Jedyną przeszkodą w pliku bez oznaczenia FP jest sama FP (`JpkFaReceiptInvoiceNotSupportedError`). */
+const RECEIPT_INVOICE_ONLY = Symbol('receipt-invoice-only');
+
+export interface AmountsOptions {
+  /**
+   * Krok 1.2: plik ma typ dokumentu FP (JPK_V7M(3), `TypDokumentu`), więc
+   * zwykła faktura do paragonu nie jest przeszkodą. Kwoty są pełne, jak bez
+   * oznaczenia; wyłączenie z sum deklaracji robi generator JPK_V7M. JPK_FA(4),
+   * CSV i EDI++ takiego oznaczenia nie mają (domyślnie odmowa).
+   */
+  receiptInvoiceAsFp?: boolean;
+}
+
+/** Faktura do paragonu, którą JPK_V7M wykazuje typem FP: zwykła faktura (korekty FP FaktWay nie wystawia). */
+export function isPlainReceiptInvoice(inv: Pick<JpkInvoice, 'ksefMarkers' | 'invoiceType' | 'importedDocumentType'>): boolean {
+  return inv.ksefMarkers?.fp === true && inv.invoiceType === 'regular' && !inv.importedDocumentType;
+}
+
 /**
  * C5b: treść z pliku KSeF, której JPK FaktWay nie wykaże albo nie zna —
  * `null`, gdy nic nie stoi na przeszkodzie. Oznaczenia i procedury czytane
  * z faktów (każde pochodzenie wiersza); spójność zwolnienia — tylko import
  * (faktury FaktWay sprzed #60 nie mają podstawy w adnotacjach).
  */
-function importedContentRefusal(inv: JpkInvoice): string | null {
+function importedContentRefusal(inv: JpkInvoice, options: AmountsOptions): string | typeof RECEIPT_INVOICE_ONLY | null {
   if (inv.importedAnnotationsMissing) {
     // Magiczny import wycofany (decyzja Bartosza 22.10.2026): uzupełnia to
     // synchronizacja historii KSeF (pozycja `repair_content`), bez akcji klienta.
@@ -458,7 +496,12 @@ function importedContentRefusal(inv: JpkInvoice): string | null {
   if (inv.importedAnnotationProblems?.length) {
     return `ma w KSeF adnotacje, których import nie udało się odczytać (${inv.importedAnnotationProblems.join('; ')}) — FaktWay nie wie, czy dotyczy jej metoda kasowa, MPP albo procedura szczególna.`;
   }
-  const cannot = [...annotationsJpkCannotExpress(inv.annotations), ...markersJpkCannotExpress(inv.ksefMarkers)];
+  // Krok 1.2: JPK_V7M wykazuje zwykłą FP typem dokumentu FP; korekty FP i plik
+  // bez oznaczenia FP (JPK_FA) dalej odmawiają.
+  const fpInFile = options.receiptInvoiceAsFp === true && isPlainReceiptInvoice(inv);
+  const markers = fpInFile ? { ...inv.ksefMarkers, fp: undefined } : inv.ksefMarkers;
+  const cannot = [...annotationsJpkCannotExpress(inv.annotations), ...markersJpkCannotExpress(markers)];
+  if (cannot.length === 1 && markers?.fp && options.receiptInvoiceAsFp !== true) return RECEIPT_INVOICE_ONLY;
   if (cannot.length) return `ma w KSeF oznaczenie, którego FaktWay nie wykazuje w JPK: ${cannot.join(', ')}.`;
   if (inv.importedFromKsef && inv.annotations !== undefined &&
       exemptionMismatch(inv.annotations, inv.lines.map((l) => l.vatRate))) {
@@ -470,9 +513,10 @@ function importedContentRefusal(inv: JpkInvoice): string | null {
   return null;
 }
 
-export function amountsOf(inv: JpkInvoice): InvoiceAmounts {
+export function amountsOf(inv: JpkInvoice, options: AmountsOptions = {}): InvoiceAmounts {
   if (inv.importedDocumentType) throw unsupportedImportedType(inv, inv.importedDocumentType);
-  const contentRefusal = importedContentRefusal(inv);
+  const contentRefusal = importedContentRefusal(inv, options);
+  if (contentRefusal === RECEIPT_INVOICE_ONLY) throw new JpkFaReceiptInvoiceNotSupportedError(inv.invoiceNumber, inv.ksefNumber);
   if (contentRefusal) throw new JpkDocumentNotSupportedError(inv.invoiceNumber, inv.ksefNumber, contentRefusal);
   // Stawka przed kwotami (C5c): dokument ze stawką spoza FaktWay dostaje dokładny powód.
   const items = inv.lines.map((line) => toLineItem(line, inv));

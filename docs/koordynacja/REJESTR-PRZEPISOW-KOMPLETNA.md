@@ -77,15 +77,16 @@ Zasady:
 
 #### RP-FP-02. Typ dokumentu FP w JPK_V7
 
-- Reguła: Faktura do paragonu jest w JPK_V7 oznaczana typem dokumentu FP.
-- Podstawa: Broszura JPK_VAT z deklaracją od 1.02.2026, https://podatki.gov.pl/media/wgbkrejs/broszura-jpk_vat-z-deklaracj%C4%85-od-1-lutego-2026-r.pdf
+- Reguła: Faktura do paragonu jest w JPK_V7 oznaczana typem dokumentu FP, w okresie wystawienia, z pełnymi kwotami; kwoty FP nie wchodzą do PodatekNalezny ani do deklaracji, bo sprzedaż z kasy wykazuje zapis zbiorczy RO.
+- Podstawa: Broszura JPK_VAT z deklaracją od 1.02.2026, https://podatki.gov.pl/media/wgbkrejs/broszura-jpk_vat-z-deklaracj%C4%85-od-1-lutego-2026-r.pdf ; art. 109 ust. 3d ustawy o VAT; XSD JPK_V7M(3) w repo (TDowoduSprzedazy, opis PodatekNalezny); MF, „Pytania i odpowiedzi JPK_VAT z deklaracją”, oznaczenia dokumentów, pytania 15, 17, 18, 20, 22, 23: https://www.podatki.gov.pl/podatki-firmowe/jednolity-plik-kontrolny/jpk_vat-z-deklaracja/pytania-i-odpowiedzi
 - Obowiązuje: od 2026-02-01, bez daty końca
-- Obszary mapy: `jpk.v7`
-- Pewność: średnia
-- Wzorzec: poziom 4, broszura JPK_VAT 2026
-- Do rozstrzygnięcia: księgowa: jak FP wpływa na sumy deklaracji, żeby sprzedaż z paragonu nie była policzona dwa razy
-- Odczyt: 2026-11-08
+- Obszary mapy: `jpk.vat-fa`, `ksiegowosc.vat`
+- Pewność: wysoka (od odczytu pytań i odpowiedzi MF 13.11.2026)
+- Wzorzec: poziom 4, pytania i odpowiedzi MF i broszura JPK_VAT 2026; opis pola PodatekNalezny w XSD
+- Do rozstrzygnięcia: księgowa (G30): czy plik za miesiąc wystawienia FP do paragonu z wcześniejszego miesiąca jest kompletny bez wierszy RO, gdy w tym miesiącu nie było sprzedaży z kasy
+- Odczyt: 2026-11-13
 - Kroki planu: 1.2, 4.5
+- W rejestrze filtra: `filtr/przepisy/ksiegowosc.json`, RP-FP-02 (krok 1.2, część 2)
 
 
 ## PLAT: Płatności i numer KSeF
@@ -586,6 +587,20 @@ Zasady:
 - Kroki planu: 2.1, 3.6
 
 
+## EX: Eksport towarów
+
+#### RP-EX-01. Eksport towarów: stawka 0 % i dowody wywozu
+
+- Reguła: Stawka 0 % w eksporcie towarów tylko wtedy, gdy podatnik przed upływem terminu do złożenia deklaracji za okres dostawy ma dowody wywozu poza UE (ust. 6): dokumenty potwierdzone przez organy celne (ust. 6a), a także dokument przewozowy przewoźnika albo spedytora, potwierdzenie operatora pocztowego albo dokument administracji celnej państwa spoza UE z pisemnym oświadczeniem nabywcy (ust. 6c). Bez dowodów w tym terminie dostawy nie wykazuje się w ewidencji za ten okres, tylko w następnym ze stawką 0 %, jeśli dowody są przed terminem deklaracji za następny okres (ust. 7); bez dowodów także wtedy stosuje się stawkę krajową (ust. 7a). Dowody otrzymane później dają korektę podatku należnego w okresie ich otrzymania (ust. 9). Zapłata przed eksportem: 0 % dla otrzymanej zapłaty, gdy wywóz nastąpi w 6 miesięcy od końca miesiąca jej otrzymania i w tym terminie są dowody, z odpowiednim stosowaniem ust. 7, 7a i 9 (ust. 9a). Ust. 8 i 11 uchylone.
+- Podstawa: ustawa z 8.10.2026 r. o zmianie ustawy o podatku od towarów i usług, Dz.U. 2026 poz. 1446 (ogłoszona 3.11.2026), art. 1 pkt 6 (art. 41 ust. 4, 5, 6, 6a, 6c, 7, 7a, 8, 9, 9a i 11 ustawy o VAT) i art. 3 (przepis przejściowy): https://api.sejm.gov.pl/eli/acts/DU/2026/1446 ; tekst z oficjalnego PDF w notatkach koordynatora (DZU-2026-1446-tekst.md), wynik w zgłoszeniu #701
+- Obowiązuje: od 18.11.2026 (14 dni od ogłoszenia; art. 1 pkt 6 nie jest wśród wyjątków z art. 7), bez daty końca. Przejściowo (art. 3): ust. 6 do 7a i 9 w nowym brzmieniu do eksportu, dla którego termin deklaracji nie upłynął przed 18.11.2026; ust. 9a także do zapłaty otrzymanej przed 18.11.2026, gdy wywóz nastąpi od tego dnia
+- Obszary mapy: do ustalenia przy kroku 2.3 (stawki FA(3) „0 EX”, P_13_6_3; ewidencja i JPK_V7M, K_22)
+- Pewność: wysoka co do brzmienia (tekst oficjalnego PDF aktu); sposób pokazania przesunięcia, stawki krajowej i korekty w ewidencji do potwierdzenia przez księgową (G21)
+- Wzorzec: Dz.U. 2026 poz. 1446 (tekst aktu); broszura JPK_V7(3) (K_22) przy kroku 2.3
+- Do rozstrzygnięcia: księgowa (G21): jak program ma prowadzić eksport bez dowodów (przesunięcie do następnego okresu, potem stawka krajowa) i korektę po późniejszych dowodach; czy przypomnienie o dowodach liczy się od terminu deklaracji miesięcznej i kwartalnej
+- Odczyt: 2026-11-13 (tekst PDF z notatek koordynatora)
+- Kroki planu: 2.3, 4.5
+
 ## Tabela zbiorcza
 
 | Id | Tytuł | Pewność | Kroki |
@@ -595,7 +610,7 @@ Zasady:
 | RP-KSEF-03 | Przechowywanie faktur w KSeF | wysoka | 6.4 |
 | RP-KSEF-04 | Paragon z NIP i kasy od 2027 r. (projekt) | niska | 1.3 |
 | RP-FP-01 | Faktura do paragonu tylko z NIP | wysoka | 1.2 |
-| RP-FP-02 | Typ dokumentu FP w JPK_V7 | średnia | 1.2, 4.5 |
+| RP-FP-02 | Typ dokumentu FP w JPK_V7 | wysoka | 1.2, 4.5 |
 | RP-PLAT-01 | Numer KSeF w tytule przelewu | wysoka | 1.4, 3.2 |
 | RP-PLAT-02 | Identyfikator zbiorczy | wysoka | 1.4 |
 | RP-PLAT-03 | Podstawa prawna obowiązku w tytule przelewu | średnia | 1.4 |
@@ -623,6 +638,7 @@ Zasady:
 | RP-AUTO-02 | PIT od samochodu o użytku mieszanym | średnia | 4.7 |
 | RP-AUTO-03 | Limity kosztu samochodu od 2026 r. | wysoka | 4.7 |
 | RP-BL-01 | Płatność na rachunek spoza wykazu | średnia | 3.4 |
+| RP-EX-01 | Eksport towarów: stawka 0 % i dowody wywozu | wysoka | 2.3, 4.5 |
 | RP-ZUS-01 | DRA co miesiąc | wysoka | 4.4 |
 | RP-ZUS-02 | Import plików KEDU w ePłatniku | wysoka | 4.4 |
 | RP-ZUS-03 | Mały ZUS Plus 2026 | wysoka | 4.3 |
