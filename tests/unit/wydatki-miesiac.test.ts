@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { monthLabel, monthRange, parseExpenseMonth, shiftMonth } from '@/lib/expenses/month';
 
@@ -44,9 +44,10 @@ describe('strona /expenses — zakres miesiąca w zapytaniu', () => {
 
   // Zimny import strony (Next, komponenty, moduły z `lib/`) to prawie cały czas
   // tego pliku. Na Windowsie trwa ok. 4-5 s, a gdy kilka sesji testuje naraz,
-  // 8-20 s, czyli ponad domyślne 5 s na test z `vitest.config.ts` (hak przed
-  // pushem padał na tym limicie). Dlatego import idzie tu, raz, z jawnym
-  // limitem 60 s, a sam test z wywołaniem strony zostaje przy zwykłym limicie.
+  // ok. 8 s i więcej (cały plik do 20 s), czyli ponad domyślne 5 s na test
+  // z `vitest.config.ts` (hak przed pushem padał na tym limicie). Dlatego import
+  // idzie tu, raz, z jawnym limitem 60 s, a sam test z wywołaniem strony zostaje
+  // przy zwykłym limicie.
   // Atrapa stoi przed importem, bo `vi.doMock` działa tylko na późniejsze `import()`.
   beforeAll(async () => {
     vi.doMock('@/lib/supabase/page-context', () => ({
@@ -61,6 +62,11 @@ describe('strona /expenses — zakres miesiąca w zapytaniu', () => {
     }));
     ({ default: ExpensesPage } = await import('@/app/(dashboard)/(koszty)/expenses/page'));
   }, 60_000);
+
+  // Każdy test widzi tylko swoje zapytania (wcześniej tablica była w teście).
+  beforeEach(() => {
+    calls.length = 0;
+  });
 
   it('wybrany miesiąc: od pierwszego do ostatniego dnia', async () => {
     await ExpensesPage({ searchParams: Promise.resolve({ miesiac: '2026-02' }) });
