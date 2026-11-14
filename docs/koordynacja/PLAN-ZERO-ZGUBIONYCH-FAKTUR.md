@@ -41,7 +41,7 @@ Stan sprawdzony w kodzie 05.11.2026, wiersze A4-D, B3, G2, H1a, L1a i L1b 08.11.
 | D2 | częściowo | skrót z `xml_storage_path` faktury (`lib/pdf/invoice-data.ts:252`) |
 | E1 | częściowo | W10 w PR #574 (skrzynka i historia KSeF, 10.11.2026); S12 (wiersz bez środowiska rzuca błąd, `inbox-polling.ts:142`) i S9 otwarte; z przeglądu nowe W10-b (okno ponad ok. 16 stron nie mieści się w limicie MF) i W10-c w sekcji 8 |
 | E2 | skreślona | decyzja Bartosza 22.10: Magiczny import znika |
-| F1 | nie | brak runbooka przełączenia |
+| F1 | częściowo | runbook i kontrola w PR #721 (14.11.2026): `docs/runbooks/go-live-ksef-prod.md`, `scripts/ops/kontrola-go-live-ksef.sh`; zostają kolumna albo filtr faktur TEST per firma (migracja, Bartosz), komunikaty zamiast wyjątków na pulpicie (`app/`), próba przełączenia na kopii bazy (Bartosz, I3; DoD karty) i decyzje D1–D8 z §1 runbooka (D3 = D-A4-1b-3-SYS, zmiana wymaga migracji i kodu); nowe ustalenia F1-a…F1-f w §5 runbooka, do sekcji 8 |
 | F2 | częściowo | pulpit i analizy mają kontrolę środowiska, `kpir-data.ts` i portal księgowej nie |
 | G1 | częściowo | stopBoss w PR #577, idempotencja jobów zostaje (przypomnienia po #519, #521, #550); czas łaski Coolify do potwierdzenia (G1-LASKA) |
 | G2 | częściowo | wysyłka ma `localConcurrency: 5` (`package-d.ts:67`), reszta `batchSize`; kolejność worker przed web w `/wdroz` zrobiona (#449, w #460) |
