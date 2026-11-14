@@ -182,10 +182,10 @@ describe('wysyłka i szkic', () => {
     m.send.mockResolvedValueOnce({ success: false, error: 'Brak firmy' });
     await render(<InvoiceForm tenantId={TENANT} initialValues={podklad} />);
     await wyslij();
-    expect(m.toastError).toHaveBeenLastCalledWith('KSeF odmówił');
+    expect(m.toastError).toHaveBeenLastCalledWith('KSeF odmówił', { duration: 10000 });
     expect(m.push).toHaveBeenCalledWith('/invoices/inv-2');
     await wyslij();
-    expect(m.toastError).toHaveBeenLastCalledWith('Brak firmy');
+    expect(m.toastError).toHaveBeenLastCalledWith('Brak firmy', { duration: 10000 });
     expect(m.push).toHaveBeenCalledTimes(1);
     expect(m.send).toHaveBeenCalledTimes(2);
   });
@@ -196,11 +196,11 @@ describe('wysyłka i szkic', () => {
     m.saveDraft.mockRejectedValueOnce('coś');
     await render(<InvoiceForm tenantId={TENANT} initialValues={podklad} />);
     await wyslij();
-    expect(m.toastError).toHaveBeenLastCalledWith('sieć padła');
+    expect(m.toastError).toHaveBeenLastCalledWith('sieć padła', { duration: 10000 });
     await wyslij();
-    expect(m.toastError).toHaveBeenLastCalledWith('Błąd wysyłki');
+    expect(m.toastError).toHaveBeenLastCalledWith('Błąd wysyłki', { duration: 10000 });
     await klik(przycisk('Szkic'));
-    expect(m.toastError).toHaveBeenLastCalledWith('Błąd zapisu');
+    expect(m.toastError).toHaveBeenLastCalledWith('Błąd zapisu', { duration: 10000 });
   });
 
   it('szkic: akcja szkicu z firmą strony, toast i przejście', async () => {
@@ -220,7 +220,7 @@ describe('wysyłka i szkic', () => {
     await klik(przycisk('Szkic'));
     expect(m.send).not.toHaveBeenCalled();
     expect(m.saveDraft).not.toHaveBeenCalled();
-    expect(m.toastError.mock.calls).toEqual([[PIERWSZY_BLAD], [PIERWSZY_BLAD]]);
+    expect(m.toastError.mock.calls).toEqual([[PIERWSZY_BLAD, { duration: 10000 }], [PIERWSZY_BLAD, { duration: 10000 }]]);
   });
 
   it('cena 0 zł: pytanie; „Anuluj” zatrzymuje wysyłkę, „OK” ją puszcza', async () => {

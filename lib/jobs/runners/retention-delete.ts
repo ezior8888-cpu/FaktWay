@@ -10,8 +10,9 @@ import {
 } from '@/lib/retention/invoice-files';
 
 /**
- * Cron codziennie o 4:00 PL — usuwa faktury, których `scheduled_deletion_at`
- * już minął (polityka retencji, np. 10 lat od momentu zaplanowania usunięcia).
+ * Cron codziennie o 4:00 PL: usuwa faktury, których `scheduled_deletion_at`
+ * już minął. Termin zapisuje archiwizacja: północ po dniu „archiwizacja plus
+ * 8 lat”, czyli co najmniej 10 lat od wystawienia (`lib/retention/terminy.ts`).
  *
  * HARD DELETE — `invoice_line_items`, `ksef_submissions`, `xml_documents`
  * kasują się kaskadowo (FK ON DELETE CASCADE w schemacie). Najpierw pliki
