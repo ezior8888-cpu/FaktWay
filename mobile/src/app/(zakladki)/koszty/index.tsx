@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { DZIS, KATEGORIE_KOSZTOW, NAZWA_ZRODLA, type FakturaKosztowa, type Koszt, type ZrodloKosztu } from '@/dane-przykladowe';
+import { KATEGORIE_KOSZTOW, NAZWA_ZRODLA, type FakturaKosztowa, type Koszt, type ZrodloKosztu } from '@/dane-przykladowe';
 import { Segmenty } from '@/komponenty/formularz';
 import { NotaDanych, StanBledu } from '@/komponenty/stan-danych';
 import { SzkieletListy } from '@/komponenty/szkielet';
@@ -11,9 +11,11 @@ import { Karta } from '@/komponenty/karta';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { RzadLiczb } from '@/komponenty/rzad-liczb';
+import { SprawdzKsefNaKoncie } from '@/komponenty/sprawdz-ksef';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { Tekst } from '@/komponenty/tekst';
 import { dataKrotka, dzienTygodnia, kwota } from '@/lib/format';
+import { vatKosztu } from '@/lib/wydatek/zatwierdzenie';
 import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
@@ -32,12 +34,13 @@ const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
  * w układzie Copilota (D14): karta z trzema liczbami miesiąca, lista po dniach
  * z kolorowymi kategoriami i kropką „do opisania”, filtry, wydatek ze zdjęcia.
  * Od M7 na prawdziwym koncie skrzynka KSeF jest z bazy (jak `(koszty)/inbox`
- * strony); wydatki zostają na danych przykładowych do M9 i M10.
+ * strony), od M9 także wydatki (jak `(koszty)/expenses`: 200 najnowszych
+ * według daty dokumentu), z wydatkiem ze zdjęcia w „Dodaj wydatek”.
  */
 export default function EkranKosztow() {
   const kolory = useKolory();
   const router = useRouter();
-  const { koszty, skrzynka: wszystkieZKsef, dane } = useStanFaktur();
+  const { koszty, skrzynka: wszystkieZKsef, dane, dzis } = useStanFaktur();
   const zBazy = dane.zrodlo === 'baza';
   const [widok, setWidok] = useState(0);
   const [tylkoDoOpisania, setTylkoDoOpisania] = useState(false);
@@ -47,11 +50,13 @@ export default function EkranKosztow() {
   const [pobranie, setPobranie] = useState('dziś, 7:45');
   const [sprawdzam, setSprawdzam] = useState(false);
 
-  const miesiac = koszty.filter((k) => k.data.startsWith(DZIS.slice(0, 7)));
+  // Sumy w złotych: kwoty w walucie dokumentu bez kursu (do potwierdzenia) nie wchodzą.
+  const miesiac = koszty.filter((k) => k.data.startsWith(dzis.slice(0, 7)) && (k.walutaKwot ?? 'PLN') === 'PLN');
   const wKpir = miesiac.filter((k) => k.wKpir);
   const doOpisania = koszty.filter((k) => k.doOpisania);
   const nowychWSkrzynce = wszystkieZKsef.filter((s) => s.status === 'nowa').length;
-  const vatDoOdliczenia = miesiac.filter((k) => k.dokument !== 'Paragon').reduce((s, k) => s + (k.brutto - k.netto), 0);
+  const vatDoOdliczenia = miesiac.filter((k) => k.dokument !== 'Paragon').reduce((s, k) => s + vatKosztu(k), 0);
+  const wczytujeWydatki = zBazy && dane.stan === 'ladowanie' && koszty.length === 0;
 
   const widoczne = useMemo(() => {
     const fraza = szukaj.trim().toLocaleLowerCase('pl');
@@ -83,11 +88,11 @@ export default function EkranKosztow() {
       tytul={k.dostawca}
       kategoria={k.kategoria}
       podtytul={NAZWA_ZRODLA[k.zrodlo]}
-      wartosc={kwota(k.brutto)}
+      wartosc={kwota(k.brutto, k.walutaKwot ?? 'PLN')}
       wartoscKolor="etykieta"
       prawaStrona={<View style={[styles.kropka, { backgroundColor: k.doOpisania ? kolory.akcent : 'transparent' }]} />}
       onPress={() => router.push({ pathname: '/koszty/[id]', params: { id: k.id } })}
-      etykietaDostepnosci={`${k.dostawca}, ${k.kategoria}, ${kwota(k.brutto)}, ${k.doOpisania ? 'do opisania' : 'opisany'}`}
+      etykietaDostepnosci={`${k.dostawca}, ${k.kategoria}, ${kwota(k.brutto, k.walutaKwot ?? 'PLN')}, ${k.doOpisania ? 'do opisania' : 'opisany'}`}
     />
   );
 
@@ -141,7 +146,7 @@ export default function EkranKosztow() {
               <View style={styles.trescKarty}>
                 <RzadLiczb
                   liczby={[
-                    { wartosc: kwota(wKpir.reduce((s, k) => s + k.brutto, 0)), podpis: 'wydatki w listopadzie' },
+                    { wartosc: kwota(wKpir.reduce((s, k) => s + k.brutto, 0)), podpis: `wydatki w ${MIESIAC_MIEJSCOWNIK[Number(dzis.slice(5, 7)) - 1] ?? 'tym miesiącu'}` },
                     { wartosc: kwota(vatDoOdliczenia), podpis: 'VAT do odliczenia' },
                     {
                       wartosc: String(doOpisania.length),
@@ -157,10 +162,8 @@ export default function EkranKosztow() {
               </View>
             </Karta>
             {zBazy ? (
-              // „Sprawdź teraz” zleca pobranie z KSeF na serwerze (`requestInboxCheckAction`): trasa API w M10.
-              <Tekst styl="footnote" kolor="etykietaDrugorzedna" style={styles.ksef}>
-                Faktury kosztowe z KSeF pobieramy co 15 minut.
-              </Tekst>
+              // „Sprawdź teraz” zleca pobranie z KSeF na serwerze (M10a, `POST /skrzynka/sprawdz`).
+              <SprawdzKsefNaKoncie style={styles.ksef} />
             ) : (
               <Pressable
                 onPress={sprawdzam ? undefined : sprawdzTeraz}
@@ -178,7 +181,7 @@ export default function EkranKosztow() {
                 </Tekst>
               </Pressable>
             )}
-            {widok === 1 ? <NotaDanych dane={dane} /> : null}
+            {zBazy ? <NotaDanych dane={dane} /> : null}
             <View style={styles.akcja}>
               <PrzyciskGlowny tytul="Dodaj wydatek" ikona="camera-line" onPress={() => router.push('/koszty/dodaj')} />
             </View>
@@ -188,7 +191,11 @@ export default function EkranKosztow() {
         <Segmenty wartosci={['Wydatki', 'Skrzynka KSeF']} wybrany={widok} onZmiana={setWidok} etykieta="Rodzaje kosztów" liczniki={[undefined, nowychWSkrzynce > 0 ? nowychWSkrzynce : undefined]} />
 
         {widok === 0 ? (
-          widoczne.length === 0 ? (
+          wczytujeWydatki ? (
+            <SzkieletListy etykieta="Wczytujemy wydatki" />
+          ) : zBazy && koszty.length === 0 && (dane.stan === 'blad' || dane.wydatkiBlad) ? (
+            <StanBledu dane={dane} tytul="Nie udało się pobrać wydatków" />
+          ) : widoczne.length === 0 ? (
             <StanPusty
               ikona="inbox-archive-line"
               tytul="Brak wydatków"
@@ -199,7 +206,13 @@ export default function EkranKosztow() {
             <Sekcja
               naglowek={tylkoDoOpisania ? 'Do opisania' : undefined}
               naglowekAkcja={tylkoDoOpisania ? { tytul: 'Pokaż wszystkie', onPress: () => setTylkoDoOpisania(false) } : undefined}
-              stopka={zrodlo !== 'Wszystkie źródła' || kategoria !== 'Wszystkie kategorie' ? `Filtr: ${zrodlo}, ${kategoria}.` : undefined}>
+              stopka={
+                zrodlo !== 'Wszystkie źródła' || kategoria !== 'Wszystkie kategorie'
+                  ? `Filtr: ${zrodlo}, ${kategoria}.`
+                  : dane.wydatkiPelne
+                    ? undefined
+                    : 'Pokazujemy 200 najnowszych wydatków według daty dokumentu. Starsze znajdziesz na faktway.pl.'
+              }>
               {/* Lista po dniach jak w Copilocie (D14): nagłówek dnia, pod nim wydatki. */}
               {poDniach(widoczne).flatMap(([dzien, lista]) => [
                 <Tekst key={`dzien-${dzien}`} styl="caption1" waga="semibold" kolor="etykietaDrugorzedna" accessibilityRole="header" style={styles.dzien}>
@@ -232,6 +245,9 @@ export default function EkranKosztow() {
     </>
   );
 }
+
+/** Miesiąc w miejscowniku do podpisu „wydatki w listopadzie”. */
+const MIESIAC_MIEJSCOWNIK = ['styczniu', 'lutym', 'marcu', 'kwietniu', 'maju', 'czerwcu', 'lipcu', 'sierpniu', 'wrześniu', 'październiku', 'listopadzie', 'grudniu'];
 
 /** Status jak na stronie: „Nowa”, „Opisana”; archiwum z historii KSeF bez kosztu ma własny podpis. */
 function podpisSkrzynki(s: FakturaKosztowa): { tekst?: string; kolor: 'akcent' | 'etykietaDrugorzedna' } {

@@ -25,6 +25,7 @@ import { zapleczePrzykladowe } from '@/lib/logowanie/przykladowe';
 import { zapleczeSupabase } from '@/lib/logowanie/supabase';
 import { BLEDY_LOGOWANIA, type Biometria, type KodBledu, type Konto, type WynikKroku, type Zaplecze } from '@/lib/logowanie/typy';
 import { supabase } from '@/lib/supabase';
+import { wyczyscMagazyny } from '@/stan/czyszczenie';
 import { useFlaga, useStanFaktur } from '@/stan/faktury';
 
 export { BLEDY_LOGOWANIA, type Biometria, type KodBledu, type Konto };
@@ -90,6 +91,7 @@ export function Sesja({ children }: { children: ReactNode }) {
   /** Dane poprzedniego konta znikają z pamięci i z plików telefonu. */
   const wyczyscDane = () => {
     wyczyscStan();
+    wyczyscMagazyny();
     void pamiec.wyczysc().catch(() => undefined);
   };
   const poKoncuSesji = useEffectEvent(wyczyscDane);

@@ -16,7 +16,8 @@ import { Tekst } from '@/komponenty/tekst';
 import { Znacznik } from '@/komponenty/znacznik';
 import { dataKrotka, kwota } from '@/lib/format';
 import { doZaplaty, statusFaktury } from '@/lib/status-faktury';
-import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
+import { useStanFaktur } from '@/stan/faktury';
+import { useUdostepnijPdf } from '@/stan/pdf';
 import { useKolory } from '@/wyglad/kolory';
 import { CEL_DOTYKU, MARGINES, ODSTEP, SKALA_PIONOWA } from '@/wyglad/odstepy';
 
@@ -30,6 +31,7 @@ const TLO_COFNIJ = '#6C727E';
 export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
   const kolory = useKolory();
   const { przelaczZaplate, dzis } = useStanFaktur();
+  const udostepnijPdf = useUdostepnijPdf();
   const { fontScale } = useWindowDimensions();
   const swipe = useRef<SwipeableMethods>(null);
   // Link z `asChild` spłaszcza style (Slot), więc styl zależny od wciśnięcia liczymy ze stanu.
@@ -90,7 +92,7 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
             onPress={() => przelaczZaplate(f)}
           />
         ) : null}
-        <Link.MenuAction title="Udostępnij" icon="square.and.arrow.up" onPress={() => udostepnijFakture(f)} />
+        <Link.MenuAction title="Udostępnij PDF" icon="square.and.arrow.up" onPress={() => udostepnijPdf(f)} />
       </Link.Menu>
     </Link>
   );

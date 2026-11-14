@@ -183,6 +183,10 @@ export default defineConfig({
       // z tokenem; klucze idempotencji: własne konto i firma, UNIQUE, klucz złożony z firmą, bez UPDATE
       // i DELETE dla klienta, usunięcie szkicu usuwa klucz.
       'tests/rls-mobile-faktury.test.ts',
+      // Plan aplikacji mobilnej, M10a (bez migracji): zapłata, cofnięcie, wstrzymanie przypomnień i lista
+      // „Po terminie” tymi samymi funkcjami co strona, klientem z tokenem i x-active-org; księgowa
+      // i konto spoza firmy dostają odmowę w bazie.
+      'tests/rls-mobile-naleznosci.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

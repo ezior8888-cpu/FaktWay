@@ -14,7 +14,8 @@ import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { miesiacZParametrow } from '@/lib/ksiegowosc/miesiac-strony';
-import { formatujRachunek, mikrorachunekZNip } from '@/lib/ksiegowosc/mikrorachunek';
+import { mikrorachunekZNip } from '@/lib/ksiegowosc/mikrorachunek';
+import { daneDoPrzelewu, podpisKwot } from '@/lib/ksiegowosc/przelew';
 import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
 import { NAZWY_ROZLICZEN, type RodzajRozliczenia, type VatWyniku } from '@/lib/ksiegowosc/ten-miesiac';
 import {
@@ -52,12 +53,6 @@ type DaneOk = Extract<DaneMiesiaca, { ok: true }>;
 const zl = (gr: number) => `${formatPlMoney(gr / 100)} zł`;
 
 /** Podpis każdej kwoty (plan, sekcja 8): rok stawek, a dla zdrowotnej rok składkowy, gdy jest inny. Kończy się kropką. */
-function podpis(rok: number, rokSkladkowy: number): string {
-  const zdrowotna =
-    rokSkladkowy !== rok ? `; składka zdrowotna według stawek roku składkowego od lutego ${rokSkladkowy} r. do stycznia ${rokSkladkowy + 1} r.` : '';
-  return `Według Twoich danych i stawek na ${rok} r.${zdrowotna}`;
-}
-
 export default async function TenMiesiacPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string; nadwyzka?: string }> }) {
   const ctx = await getPageContext();
   const werdykt = await czyKsiegowoscWlaczona(ctx.supabase, ctx.tenantId, 'ten_miesiac');
@@ -109,13 +104,13 @@ export default async function TenMiesiacPage({ searchParams }: { searchParams: P
         </Alert>
       ) : (
         <>
-          <Kafle dane={dane} podpisKwot={podpis(rok, rokSkladkowy)} />
+          <Kafle dane={dane} podpisKwot={podpisKwot(rok, rokSkladkowy)} />
 
           <Card>
             <CardContent className="flex flex-col gap-4">
               <div>
                 <h2 className="text-sm font-medium">Do zapłaty</h2>
-                <p className="text-muted-foreground text-xs">{podpis(rok, rokSkladkowy)}</p>
+                <p className="text-muted-foreground text-xs">{podpisKwot(rok, rokSkladkowy)}</p>
               </div>
               <ul className="flex flex-col gap-4" aria-label="Rozliczenia do zapłaty">
                 {dane.pozycje.map((p) => (
@@ -225,26 +220,6 @@ function Kafle({ dane, podpisKwot }: { dane: DaneOk; podpisKwot: string }) {
 }
 
 /** Symbol na przelewie na mikrorachunek według wykazu MF (Dz.U. 2025 poz. 1305, część II i III): PPE przy ryczałcie, PIT (zaliczka miesięczna) przy skali, PPL (stawka 19 %) przy liniowym, JPK-V7M przy VAT. PIT-36 i PIT-36L to zeznania roczne. */
-const SYMBOL: Readonly<Record<'ryczalt' | 'skala' | 'liniowy', string>> = { ryczalt: 'PPE', skala: 'PIT', liniowy: 'PPL' };
-
-function daneDoPrzelewu(
-  rodzaj: RodzajRozliczenia,
-  miesiac: string,
-  nip: string | null,
-  mikro: string | null,
-  nrs: string | null,
-  forma: 'ryczalt' | 'skala' | 'liniowy',
-): string {
-  if (rodzaj === 'ryczalt' || rodzaj === 'pit' || rodzaj === 'vat') {
-    if (nip === null) return 'Nie udało się odczytać NIP firmy, więc mikrorachunku teraz nie pokazujemy; strona spróbuje ponownie przy następnym otwarciu.';
-    if (!mikro) return 'Mikrorachunek podatkowy wylicza się z NIP firmy, a NIP jest w Ustawieniach, w danych firmy.';
-    const symbol = rodzaj === 'vat' ? 'JPK-V7M' : SYMBOL[forma];
-    return `Mikrorachunek podatkowy ${formatujRachunek(mikro)}, symbol formularza ${symbol}, okres ${miesiac.slice(2, 4)}M${miesiac.slice(5, 7)}, identyfikator NIP ${nip}.`;
-  }
-  if (!nrs) return 'Numer rachunku składkowego jest w PUE ZUS; można go zapisać w zakładce „Ustawienia podatkowe”.';
-  return `Rachunek składkowy ZUS ${formatujRachunek(nrs)}.`;
-}
-
 /**
  * Stan ostatniej zatwierdzonej wersji z kontrolką zapłaty. Dopłata liczy się od
  * najwyższej zapłaconej wersji, tak jak odliczenia (`przyrostyZaplat`).

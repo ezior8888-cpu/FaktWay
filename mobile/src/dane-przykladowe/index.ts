@@ -254,15 +254,22 @@ export type FakturaKosztowa = {
 };
 
 export type ZrodloKosztu = 'ksef' | 'zdjecie' | 'reczny' | 'import';
-export type KolumnaKpir = '10' | '11' | '12' | '13' | '15';
+/** Kolumny KPiR jak w formularzu kosztu strony (`KPIR_OPTIONS`); 7, 8 i 16 tylko gdy już są przy koszcie z bazy. */
+export type KolumnaKpir = '7' | '8' | '10' | '11' | '12' | '13' | '15' | '16';
 
 export const NAZWA_KOLUMNY: Record<KolumnaKpir, string> = {
+  '7': 'Kol. 7',
+  '8': 'Kol. 8',
   '10': 'Kol. 10: Towary handlowe i materiały',
   '11': 'Kol. 11: Koszty uboczne zakupu',
   '12': 'Kol. 12: Wynagrodzenia',
   '13': 'Kol. 13: Pozostałe wydatki',
   '15': 'Kol. 15: Koszty B+R',
+  '16': 'Kol. 16',
 };
+
+/** Kolumny do wyboru przy koszcie: bez 7 i 8 (przychód) i 16, chyba że koszt już ją ma. */
+export const KOLUMNY_KOSZTU: KolumnaKpir[] = ['10', '11', '12', '13', '15'];
 
 export const NAZWA_ZRODLA: Record<ZrodloKosztu, string> = { ksef: 'KSeF', zdjecie: 'Zdjęcie', reczny: 'Ręcznie', import: 'Import' };
 
@@ -289,6 +296,16 @@ export type Koszt = {
   /** Data przyjęcia w KSeF (skrzynka). */
   otrzymano?: string;
   wKpir: boolean;
+  /**
+   * VAT w groszach, gdy jest zapisany osobno (koszt z bazy, M9). Bez niego VAT
+   * to brutto minus netto (dane przykładowe).
+   */
+  vat?: number;
+  /**
+   * Waluta kwot (koszt z bazy, M9): `PLN` albo kod waluty, gdy kwoty nie są
+   * jeszcze w złotych (dokument w walucie bez kursu NBP), jak lista strony.
+   */
+  walutaKwot?: string;
 };
 
 /** Id trasy `/koszty/[id]` dla wydatku wpisywanego ręcznie, jeszcze niezapisanego. */

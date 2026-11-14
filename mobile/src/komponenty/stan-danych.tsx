@@ -45,7 +45,7 @@ export function StanBledu({ dane, tytul }: { dane: StanDanych; tytul: string }) 
     <StanPusty
       ikona={dane.bezSieci ? 'global-line' : 'error-warning-line'}
       tytul={tytul}
-      opis={dane.blad ?? 'Spróbuj ponownie za chwilę.'}
+      opis={dane.blad ?? dane.wydatkiBlad ?? 'Spróbuj ponownie za chwilę.'}
       akcja={{ tytul: 'Spróbuj ponownie', onPress: () => void dane.odswiez() }}
     />
   );

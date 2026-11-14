@@ -69,6 +69,22 @@ export interface MobileSessionClaims {
   aal: 'aal1' | 'aal2';
   /** Metody z claimu `amr` (np. `password`, `oauth`, `totp`). */
   amrMethods: string[];
+  /**
+   * Najpóźniejsze potwierdzenie tożsamości w tej sesji (sekundy, z `amr[].timestamp`
+   * sprawdzonego tokenu); `null` bez `amr`. Świeże logowanie przy usuwaniu konta (M10b).
+   */
+  potwierdzonoO: number | null;
+}
+
+/** Najpóźniejszy znacznik czasu z `amr` sprawdzonego tokenu. */
+function amrTimestamp(claims: JwtPayload): number | null {
+  const amr = (claims as { amr?: unknown }).amr;
+  if (!Array.isArray(amr)) return null;
+  const times = amr.flatMap((entry: unknown) => {
+    const t = typeof entry === 'object' && entry !== null ? (entry as { timestamp?: unknown }).timestamp : undefined;
+    return typeof t === 'number' && Number.isFinite(t) ? [t] : [];
+  });
+  return times.length > 0 ? Math.max(...times) : null;
 }
 
 export type MobileTokenState =
@@ -81,7 +97,12 @@ export interface MobileCaller {
   requestId: string;
   /** Nagłówki dla każdej odpowiedzi tego żądania. */
   headers: Record<string, string>;
-  user: { id: string; email: string | null };
+  user: {
+    id: string;
+    email: string | null;
+    /** Metody logowania konta z GoTrue (`app_metadata.providers`, np. `email`, `google`); `email` to konto z hasłem. */
+    providers: string[];
+  };
   /**
    * Konto ma zweryfikowany TOTP (i ta sesja jest po kodzie, inaczej byłoby 403).
    * Przy `mfa: 'challenge'` sesja jest na AAL1 i czeka na kod; `true` tylko z czynnikiem TOTP.
@@ -175,6 +196,7 @@ export async function verifyMobileToken(token: string, target: MobileSupabaseTar
     sessionId: facts.sessionId,
     aal: claims.aal === 'aal2' ? 'aal2' : 'aal1',
     amrMethods: facts.amrMethods,
+    potwierdzonoO: amrTimestamp(claims),
   };
   if (state.status === 'challenge_required') return { status: 'challenge_required', user: state.user, claims: sessionClaims };
   return { status: 'ok', user: state.user, mfaEnabled: state.status === 'verified', claims: sessionClaims };
@@ -211,6 +233,13 @@ export async function findActiveMembership(
 export type MobileAuthOptions =
   | { org: 'none' | 'required'; mfa?: 'verified' }
   | { org: 'none'; mfa: 'challenge' };
+
+function providersOf(user: User): string[] {
+  const providers = (user.app_metadata as { providers?: unknown; provider?: unknown } | undefined)?.providers;
+  if (Array.isArray(providers)) return providers.filter((p): p is string => typeof p === 'string');
+  const provider = user.app_metadata?.provider;
+  return typeof provider === 'string' ? [provider] : [];
+}
 
 export async function authenticateMobileRequest(
   request: Request,
@@ -292,7 +321,7 @@ export async function authenticateMobileRequest(
     caller: {
       requestId,
       headers: base,
-      user: { id: state.user.id, email: state.user.email ?? null },
+      user: { id: state.user.id, email: state.user.email ?? null, providers: providersOf(state.user) },
       mfaEnabled: state.status === 'challenge_required' ? totpFactorId !== null : state.mfaEnabled,
       accessToken: mfaMode === 'challenge' ? bearer.token : null,
       totpFactorId: mfaMode === 'challenge' ? totpFactorId : null,
