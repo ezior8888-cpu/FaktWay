@@ -13,11 +13,13 @@ import { calculateLineItem } from '@/lib/xml/invoice-calculator';
 
 import { FieldErrorText, fieldErrorProps } from './field-error-text';
 import { labelClass, LINE_GRID, vatSelectClass } from './constants';
+import { ProductNameInput } from './product-name-input';
 
 /**
  * Sekcja „Pozycje”: wiersze siatki od 1360 px albo karty
  * (`useLinesDesktopLayout`), dodawanie i usuwanie pozycji. Sumy liczy
- * formularz (`toLineItems`) i pokazuje pod sekcją.
+ * formularz (`toLineItems`) i pokazuje pod sekcją. Pole nazwy podpowiada
+ * produkty z katalogu (`ProductNameInput`, krok 2.6, część 2a).
  */
 export function LineItemsSection({
   form,
@@ -64,10 +66,7 @@ export function LineItemsSection({
               });
               return (
                 <div key={field.id} className={cn(LINE_GRID, 'items-start')}>
-                  <Input
-                    aria-label={`Nazwa pozycji ${index + 1}`}
-                    {...form.register(`lines.${index}.name`)}
-                  />
+                  <ProductNameInput form={form} index={index} ariaLabel={`Nazwa pozycji ${index + 1}`} />
                   <Input
                     aria-label={`Jednostka pozycji ${index + 1}`}
                     {...form.register(`lines.${index}.unit`)}
@@ -166,10 +165,11 @@ export function LineItemsSection({
 
                 <div>
                   <Label htmlFor={`line-${index}-name`} className={labelClass}>Nazwa pozycji</Label>
-                  <Input
+                  <ProductNameInput
+                    form={form}
+                    index={index}
                     id={`line-${index}-name`}
                     placeholder="np. Usługa programistyczna"
-                    {...form.register(`lines.${index}.name`)}
                   />
                 </div>
 
