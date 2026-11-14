@@ -132,8 +132,9 @@ tylko próba na KSeF TEST (kod też w #360). 2 i 8 (#405, #410, wdrożone 08.11)
 Częściowo: 7 (#350, #351), 28 (alarm skrzynki liczony w bazie, 00160), 29
 (lista korekt, #283). Przegląd 08.11 w dzienniku (sekcja 6).
 **Scalone od 11.11:** 31, 6 i 32 (zbiorczy #563), 21 (#579, migracja 00186),
-3 (#597), 12 (#598), 10 (#654, #678) i 29 część 2 (#660, obie w zbiorczym
-#713). Czekają na scalenie: 29 część 1 (#652) i 30 (#655). W toku: 5.
+3 (#597), 12 (#598), 10 (#654, #657, #678) i 29 część 2 (#660, #676; obie
+w zbiorczym #713). Czekają na scalenie w zbiorczym #730: 29 część 1 (#652),
+30 (#655) i poprawka sesji 10 (#718). W toku: 5 i 18. Czekają na Bartosza: 11 (#729) i 34 (#728, decyzje w opisie).
 
 **Kolejność wykonania (Bartosz, 03.11):** 2 → 8 → 31 → 21 → 13 → 28 → 14 →
 17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24 → 29 → 30 → 32 → 34 → 33, a po
@@ -272,16 +273,29 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 11.11.2026 | Sesja 3: sprzątanie pulsu Flo jednym UPDATE (FLO-01) | #597 | scalony 11.11 |
 | 11.11.2026 | Sesja 12: kopia JSON z bezpiecznikiem rozmiaru i stronicowaniem po kluczu | #598 | scalony 11.11 |
 | 12.11.2026 | Sesja 10: prefetch panelu z góry tylko dla celów dolnego paska, reszta po najechaniu; menu profilu bez prefetchu Analiz | #654, #657 | scalone 13.11 w zbiorczym #713 |
-| 12.11.2026 | Sesja 29 część 1: eksport RODO, historia sprzedawcy i reguły nazw czytane stronami | #652 | PR otwarty, CI zielone, czeka na Bartosza |
+| 12.11.2026 | Sesja 29 część 1: eksport RODO, historia sprzedawcy i reguły nazw czytane stronami | #652 | w zbiorczym #730 |
 | 12.11.2026 | Sesja 29 część 2: Flo i walidacja kontrahentów czytają stronami do końca | #660 | scalony 13.11 w zbiorczym #713 |
-| 12.11.2026 | Sesja 30: oznaczenie faktury w archiwum zaraz po wgraniu do Glacier | #655 | PR otwarty; czerwony „RLS isolation” to niestabilny test z #579, który naprawia #662 |
-| 13.11.2026 | Niestabilny test planisty z #579 (`tests/rls-indeksy-cronow-produkty.test.ts`) | #662 | PR otwarty, CI zielone; scalić przed #655; dubel #677 zamknięty |
+| 12.11.2026 | Sesja 30: oznaczenie faktury w archiwum zaraz po wgraniu do Glacier | #655 | w zbiorczym #730, po #662 |
+| 12.11.2026 | Z przeglądu #652: `.gitattributes` z LF (ustalenie 4), `pnpm filtr:lokalnie` na Windowsie (ustalenie 7) | #658, #659 | w zbiorczym #730; #659 to maszyneria filtra (`zgoda:zmiana-filtra`) |
+| 13.11.2026 | Niestabilny test planisty z #579 (`tests/rls-indeksy-cronow-produkty.test.ts`) | #662 | w zbiorczym #730, przed #655; dubel #677 zamknięty |
+| 13.11.2026 | Z #660: hak przed pushem uruchamia strażnika tekstów dla klienta | #675 | w zbiorczym #730; maszyneria filtra (`zgoda:zmiana-filtra`) |
+| 13.11.2026 | Sesja 29 część 2, ustalenie 1 z #660: tytuły wyciszonych spraw Flo paczkami i stronami | #676 | scalony 13.11 w zbiorczym #713; ustalenie 1 z #676 (testy z przypiętym zegarem) w #720, otwarty |
 | 13.11.2026 | Build obrazu na `main` padał od #504 (`vitest.filtr.config.ts` importował plik spoza obrazu) | #661 | scalony 13.11, obraz `main` znowu się buduje |
-| 13.11.2026 | Sesja 10 (ciąg dalszy): zakładki sekcji z pełnym prefetchem dopiero z zamiarem | #678 | scalony 13.11 w zbiorczym #713; poprawka przewijania przy drugim dotknięciu w #718 (otwarty) |
+| 13.11.2026 | Sesja 10 (ciąg dalszy): zakładki sekcji z pełnym prefetchem dopiero z zamiarem | #678 | scalony 13.11 w zbiorczym #713; poprawka przewijania przy drugim dotknięciu w #718 (w zbiorczym #730) |
+| 13.11.2026 | Dziennik po 11–13.11 | #719 | w zbiorczym #730 |
+| 13.11.2026 | Zbiorczy: #662, #655 (sesja 30), #652 (sesja 29 część 1), #658, #659, #675, #718 (sesja 10), #719 | #730 | po zbiorczym #725 (w nim #717, ten sam runner archiwum co #655): wciągnięcie `main` z poprawką z opisu, potem etykieta `zgoda:zmiana-filtra` i scalenie; bez migracji; wdrożenie: worker, potem aplikacja |
 | 13.11.2026 | Sesja 5: limity czasu `fetch` w klientach Supabase | brak | w toku, osobna sesja |
+| 13.11.2026 | Sesja 18: ponaglenia paczkami | brak | w toku, osobna sesja |
+| 13.11.2026 | Sesja 11: lekkie odpytywanie statusu eksportów, importów i OCR | #729 | otwarty 14.11; R3, bez migracji, scala się bez konfliktu z #725 i #730 |
+| 13.11.2026 | Sesja 34: OCR obrazów ponad 8000 px (obraz zmniejszany w workerze przed wysłaniem do API) | #728 | otwarty 14.11; 5 decyzji dla Bartosza w opisie; straż czerwona jak w #656 (`lib/ocr/**` to R1 bez reguły w rejestrze) |
 
-**Następny krok:** sesja 5 (w toku od 13.11), po jej scaleniu 7, bo obie
-zmieniają `lib/supabase/` i proxy. Na Bartosza czekają 28 (migracja z RPC:
-kto ją pisze, numer z rejestru) i próba 14 na KSeF TEST. Dalej według
-kolejności 18, 11, 24, 34, 33, a po pomiarze 15 i 16. Scalanie: #662 przed
-#655, bo czerwony test w #655 to ten, który naprawia #662.
+**Następny krok:** najpierw zbiorczy #725 Bartosza, potem #730. W #725
+jest #717, który zmienia ten sam runner archiwum co #655. Po scaleniu #725
+wciągnąć `main` do #730 z poprawką z sekcji „Styk z #725” w jego opisie.
+Dopiero po tym pushu etykieta `zgoda:zmiana-filtra` i scalenie. Sesje 5 i 18 w toku od
+13.11. 11 czeka na scalenie w #729, a 34 w #728 na decyzje Bartosza (5 w opisie, straż czerwona jak w #656).
+Po scaleniu 5 przychodzi 7, bo obie zmieniają `lib/supabase/` i proxy.
+Na Bartosza czekają 28 (migracja z RPC: kto ją pisze, numer z rejestru)
+i próba 14 na KSeF TEST. Dalej 24 (w `Dockerfile` są tylko szkice #193 i #197,
+czekające na decyzję Bartosza), a 33 dopiero po scaleniu #715 (w zbiorczym #725), bo oba zmieniają
+`lib/exports/data-fetcher.ts`. Po pomiarze 15 i 16.
