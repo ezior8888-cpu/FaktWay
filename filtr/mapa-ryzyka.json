@@ -754,12 +754,13 @@
     {
       "id": "mobile.faktury",
       "poziom": "R1",
-      "opis": "Telefon (od M8): treść faktury przed wysyłką do KSeF składana na telefonie: nabywca, stawki, pozycje i kwoty w formularzu, duplikat z faktury z bazy i firma, do której idzie zapis. Serwer sprawdza treść schematem strony, ale zły nabywca albo stawka z telefonu przechodzi jako poprawna faktura (przegląd #716).",
+      "opis": "Telefon (od M8): treść faktury przed wysyłką do KSeF składana na telefonie: nabywca, stawki, pozycje i kwoty w formularzu, duplikat z faktury z bazy, firma, do której idzie zapis, i kwota z pola w groszach (`lib/kwota-z-pola.ts`, też dla Kosztów). Serwer sprawdza treść schematem strony, ale zły nabywca albo stawka z telefonu przechodzi jako poprawna faktura (przegląd #716).",
       "sciezki": [
         "mobile/src/app/(zakladki)/faktury/nowa/**",
         "mobile/src/lib/faktura/**",
         "mobile/src/lib/dane/mapowanie.ts",
-        "mobile/src/stan/dane.tsx"
+        "mobile/src/stan/dane.tsx",
+        "mobile/src/lib/kwota-z-pola.ts"
       ]
     },
     {
