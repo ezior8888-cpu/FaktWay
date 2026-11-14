@@ -12,6 +12,7 @@ import type {
   WysylkaSzkicuOdpowiedz,
 } from '@/lib/api/mobile/kontrakt';
 import { MobileUpstreamError, mobileError, mobileJson } from '@/lib/api/mobile/responses';
+import { readJsonBody } from '@/lib/api/mobile/tresc';
 import { doWartosciFormularza, sciezkaPola, wystawienieSchema } from '@/lib/api/mobile/schematy';
 import { requestDigest } from '@/lib/api/v1/invoice-create';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -140,23 +141,8 @@ async function saveKey(db: Db, tenantId: string, userId: string, key: string, ha
   return error ? { ok: false, error: KEY_SAVE_FAILED } : { ok: true };
 }
 
-type Body = { ok: true; value: unknown } | { ok: false; response: NextResponse };
-
-async function readJson(request: Request, headers: Record<string, string>): Promise<Body> {
-  const type = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
-  if (type !== 'application/json') {
-    return { ok: false, response: mobileError(400, 'invalid_request', 'Treść żądania to JSON (Content-Type: application/json).', headers) };
-  }
-  const declared = Number(request.headers.get('content-length') ?? '0');
-  const text = Number.isFinite(declared) && declared > MAX_BODY_BYTES ? null : await request.text();
-  if (text === null || Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES) {
-    return { ok: false, response: mobileError(400, 'invalid_request', 'Faktura jest za duża do wysłania z telefonu. Wystaw ją na faktway.pl.', headers) };
-  }
-  try {
-    return { ok: true, value: JSON.parse(text) };
-  } catch {
-    return { ok: false, response: mobileError(400, 'invalid_request', 'Treść żądania nie jest poprawnym JSON.', headers) };
-  }
+function readJson(request: Request, headers: Record<string, string>) {
+  return readJsonBody(request, headers, { maxBytes: MAX_BODY_BYTES, tooLarge: 'Faktura jest za duża do wysłania z telefonu. Wystaw ją na faktway.pl.' });
 }
 
 const MISSING_KEY = 'Brak klucza zapisu (Idempotency-Key). Zaktualizuj aplikację FaktWay i spróbuj ponownie.';

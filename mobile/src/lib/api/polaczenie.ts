@@ -6,7 +6,7 @@
  */
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 
-import { przedCzasem, utworzKlienta, zBazy, type OdpowiedzBazy, type Odswiezenie, type Token, type Wynik } from '@/lib/api/rdzen';
+import { przedCzasem, utworzKlienta, zBazy, type OdpowiedzBazy, type OpcjePobrania, type Odswiezenie, type Token, type Wynik } from '@/lib/api/rdzen';
 import { potwierdzKodPrzezApi, zalogujPrzezApi } from '@/lib/logowanie/przez-api';
 import { supabase } from '@/lib/supabase';
 
@@ -35,10 +35,10 @@ async function odswiez(): Promise<Odswiezenie> {
 /** Dłużej żądanie nie wisi (portal Wi-Fi, martwa sieć): przerwane daje „brak połączenia”, a nie kręciołek bez końca. */
 const LIMIT_ZADANIA_MS = 15000;
 
-/** `fetch` z przerwaniem po `LIMIT_ZADANIA_MS`; ten sam dla API i dla bazy (`global.fetch` klienta Supabase nie zmieniamy). */
-function zLimitem(adres: string, opcje: { method: string; headers: Record<string, string>; body?: string }) {
+/** `fetch` z przerwaniem po `LIMIT_ZADANIA_MS` (albo `limitMs` żądania); ten sam dla API i dla bazy (`global.fetch` klienta Supabase nie zmieniamy). */
+function zLimitem(adres: string, { limitMs, ...opcje }: OpcjePobrania) {
   const przerwij = new AbortController();
-  const zegar = setTimeout(() => przerwij.abort(), LIMIT_ZADANIA_MS);
+  const zegar = setTimeout(() => przerwij.abort(), limitMs ?? LIMIT_ZADANIA_MS);
   return fetch(adres, { ...opcje, signal: przerwij.signal }).finally(() => clearTimeout(zegar));
 }
 

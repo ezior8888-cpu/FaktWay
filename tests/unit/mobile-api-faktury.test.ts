@@ -354,7 +354,9 @@ describe('POST /api/mobile/v1/faktury', () => {
       tenantId: ORG_A, userId: USER_A, invoiceId: invoices[0]!.id, nip: '5260001246', auditKind: 'regular', tokenSession: { mfa: 'enrollment_required' },
     }));
     // Klucz zapisany przed kolejką: przerwa po kolejce nie zostawia szkicu bez klucza.
-    expect(writes.map((w) => w.table)).toEqual(['invoices', 'invoice_line_items', 'mobile_idempotency_keys']);
+    // Licznik użyć produktów (krok 2.6, 00204) liczy się przy każdej zapisanej
+    // fakturze z pozycjami, także z telefonu, zaraz po pozycjach.
+    expect(writes.map((w) => w.table)).toEqual(['invoices', 'invoice_line_items', 'rpc/product_usage_record', 'mobile_idempotency_keys']);
   });
 
   it('konto z TOTP po kodzie: kolejka dostaje 2FA „verified” z tokenu', async () => {

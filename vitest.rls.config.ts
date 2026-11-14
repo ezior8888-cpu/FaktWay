@@ -151,6 +151,9 @@ export default defineConfig({
       // 00186 (plan skalowania 3000, sesja 21): wynik strażnika cyklu życia przed i po, lekka funkcja bez I3,
       // wklejanie ksef_upo_expected, indeksy cronów w planach, UNIQUE katalogu produktów i kontrola dubli.
       'tests/rls-indeksy-cronow-produkty.test.ts',
+      // 00204 (plan kompletnej aplikacji, krok 2.6): licznik użyć produktu z katalogu przy zapisie faktury;
+      // klucz jak indeks 00186, raz na wywołanie, archiwalne też, cudza firma i sesja bez firmy bez zmian, atomowo.
+      'tests/rls-produkty-licznik.test.ts',
       // Plan skalowania 3000, sesja 12 (QAL-01, bez migracji): nocna kopia JSON czyta
       // tabele stronami po kluczu; filtry kursora (też klucz złożony) przez prawdziwy PostgREST.
       'tests/rls-kopia-json-stronicowanie.test.ts',
@@ -162,6 +165,9 @@ export default defineConfig({
       // w jednej serii dają różne kolejne numery (blokada serii w wyzwalaczu), obca firma, role, wzór
       // bez licznika, numer zajęty w KSeF nie wraca z licznika, istniejące numery bez zmian.
       'tests/rls-numeracja.test.ts',
+      // 00203 (plan kompletnej aplikacji, krok 2.2, część 1): logo firmy; CHECK wiąże klucz z katalogiem
+      // logo tej firmy (też dla klucza serwisowego), wyzwalacz bez zmiany z sesji klienta, GRANT SELECT.
+      'tests/rls-logo-firmy.test.ts',
       // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu;
       // które tokeny GoTrue uznaje (anon, serwisowy, podrobiony, wylogowany: odmowa, nie awaria),
       // AAL1 i AAL2 z prawdziwym TOTP, lista firm i x-active-org przez RLS, filtr wpisu logowania.
@@ -177,6 +183,10 @@ export default defineConfig({
       // z tokenem; klucze idempotencji: własne konto i firma, UNIQUE, klucz złożony z firmą, bez UPDATE
       // i DELETE dla klienta, usunięcie szkicu usuwa klucz.
       'tests/rls-mobile-faktury.test.ts',
+      // Plan aplikacji mobilnej, M10a (bez migracji): zapłata, cofnięcie, wstrzymanie przypomnień i lista
+      // „Po terminie” tymi samymi funkcjami co strona, klientem z tokenem i x-active-org; księgowa
+      // i konto spoza firmy dostają odmowę w bazie.
+      'tests/rls-mobile-naleznosci.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

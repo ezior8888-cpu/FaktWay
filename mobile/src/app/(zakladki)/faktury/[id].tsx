@@ -17,7 +17,8 @@ import { potwierdz } from '@/komponenty/potwierdz';
 import { naStronie, otworzNaStronie } from '@/komponenty/na-stronie';
 import { dataKrotka, dataPelna, kwota } from '@/lib/format';
 import { doZaplaty, pozostaloDoZaplaty, statusFaktury } from '@/lib/status-faktury';
-import { udostepnijFakture, useStanFaktur } from '@/stan/faktury';
+import { useStanFaktur } from '@/stan/faktury';
+import { useUdostepnijPdf } from '@/stan/pdf';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
 import { useKolory } from '@/wyglad/kolory';
@@ -62,6 +63,8 @@ export default function EkranFaktury() {
   const f = faktury.find((x) => x.id === id);
   const [wysylanie, setWysylanie] = useState(false);
   const [bladWysylki, setBladWysylki] = useState<string>();
+  // PDF z serwera w arkuszu udostępniania (M10a); na danych przykładowych opis faktury.
+  const udostepnijPdf = useUdostepnijPdf();
 
   if (!f) {
     // Link do faktury przy pierwszym wczytaniu listy z bazy: szkielet, zanim powiemy, że jej nie ma.
@@ -129,8 +132,7 @@ export default function EkranFaktury() {
       ? [{ tytul: f.zaplacona ? 'Cofnij zapłatę' : 'Zapłacona', ikona: f.zaplacona ? ('arrow-go-back-line' as const) : ('check-line' as const), onPress: () => przelaczZaplate(f) }]
       : []),
     { tytul: 'E-mail', ikona: 'mail-line', onPress: () => router.push({ pathname: '/faktury/email', params: { id: f.id } }) },
-    // PDF z serwera dochodzi w M10 (`app/api/invoices/[id]/pdf`); na prawdziwym koncie do tego czasu strona.
-    { tytul: 'PDF', ikona: 'file-download-line', onPress: () => (zBazy ? naStronie('pdf', f.id) : udostepnijFakture(f)) },
+    { tytul: 'PDF', ikona: 'file-download-line', onPress: () => udostepnijPdf(f) },
     ...(status.zalegla
       ? [{ tytul: 'Przypomnij', ikona: 'notification3-line' as const, onPress: () => router.push({ pathname: '/faktury/przypomnienie', params: { id: f.id } }) }]
       : []),
@@ -165,16 +167,16 @@ export default function EkranFaktury() {
         <>
           <Stack.Screen options={{ title: f.numer, headerTitleStyle: tytul }} />
           <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={kolory.etykieta} accessibilityLabel={zBazy ? 'Udostępnij opis faktury' : 'Pobierz PDF i udostępnij'} onPress={() => udostepnijFakture(f)} />
+            <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={kolory.etykieta} accessibilityLabel="Pobierz PDF i udostępnij" onPress={() => udostepnijPdf(f)} />
             <Stack.Toolbar.Menu icon={IKONY_PASKA.wiecej} iconRenderingMode="template" tintColor={kolory.etykieta} title="Akcje faktury">
               <Stack.Toolbar.MenuAction icon="envelope" onPress={() => router.push({ pathname: '/faktury/email', params: { id: f.id } })}>
                 Wyślij e-mailem
               </Stack.Toolbar.MenuAction>
-              <Stack.Toolbar.MenuAction icon="doc.richtext" onPress={() => (zBazy ? naStronie('pdf', f.id) : udostepnijFakture(f))}>
+              <Stack.Toolbar.MenuAction icon="doc.richtext" onPress={() => udostepnijPdf(f)}>
                 Pobierz PDF
               </Stack.Toolbar.MenuAction>
               {przyjeta ? (
-                <Stack.Toolbar.MenuAction icon="chevron.left.forwardslash.chevron.right" onPress={() => (zBazy ? naStronie('pdf', f.id) : pobierz('XML'))}>
+                <Stack.Toolbar.MenuAction icon="chevron.left.forwardslash.chevron.right" onPress={() => (zBazy ? naStronie('xml', f.id) : pobierz('XML'))}>
                   Pobierz XML
                 </Stack.Toolbar.MenuAction>
               ) : null}
@@ -217,7 +219,7 @@ export default function EkranFaktury() {
           <PotwierdzenieKsef
             faktura={f}
             onEmail={() => router.push({ pathname: '/faktury/email', params: { id: f.id } })}
-            onUdostepnij={() => udostepnijFakture(f)}
+            onUdostepnij={() => udostepnijPdf(f)}
             onGotowe={() => pokazPotwierdzenie(undefined)}
           />
         ) : null}

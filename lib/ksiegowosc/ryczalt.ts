@@ -13,7 +13,11 @@
  * - Przy kilku stawkach odliczenia dzielą się proporcjonalnie do przychodu
  *   z każdej stawki (dla zdrowotnej tak mówi podatki.gov.pl; dla społecznych
  *   to podział neutralny, bez wybierania za klienta, D8; księgowa potwierdza
- *   w złotym przypadku G4).
+ *   w złotym przypadku G4). Część stawki jest dokładna, bez zaokrąglania do
+ *   groszy: podział co do grosza (z resztami po groszu) przestawiał grosze
+ *   między stawkami przy każdej zmianie przychodu, a zaokrąglenie podstawy
+ *   robiło z tego 1 zł mniej ryczałtu przy większym przychodzie (FZ-007,
+ *   NZ-RYCZ-02).
  * - Podstawy i ryczałt w pełnych złotych (art. 63 Ordynacji podatkowej).
  */
 
@@ -76,35 +80,6 @@ export function doPelnychZlotych(gr: number): number {
   return Math.floor((gr + 50) / 100) * 100;
 }
 
-/**
- * Dzieli `kwota` na części proporcjonalne do wag, dokładnie co do grosza:
- * części całkowite w BigInt, a reszta po groszu tam, gdzie ułamek był
- * największy (przy remisie wyższa stawka).
- */
-export function rozdzielProporcjonalnie(kwota: number, wagi: ReadonlyMap<number, number>): Map<number, number> {
-  const suma = [...wagi.values()].reduce((a, b) => a + b, 0);
-  const wynik = new Map<number, number>();
-  if (kwota === 0 || suma === 0) {
-    for (const pb of wagi.keys()) wynik.set(pb, 0);
-    return wynik;
-  }
-  const reszty: [number, bigint][] = [];
-  let rozdzielone = 0;
-  for (const [pb, waga] of wagi) {
-    const licznik = BigInt(kwota) * BigInt(waga);
-    const czesc = Number(licznik / BigInt(suma));
-    wynik.set(pb, czesc);
-    rozdzielone += czesc;
-    reszty.push([pb, licznik % BigInt(suma)]);
-  }
-  reszty.sort((a, b) => (a[1] === b[1] ? b[0] - a[0] : a[1] > b[1] ? -1 : 1));
-  for (let i = 0; i < kwota - rozdzielone; i++) {
-    const pb = reszty[i % reszty.length][0];
-    wynik.set(pb, (wynik.get(pb) ?? 0) + 1);
-  }
-  return wynik;
-}
-
 export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): WynikRyczaltu {
   const odliczenieZdrowotnej = liczby.odliczenieZdrowotnej?.wartosc ?? null;
   if (odliczenieZdrowotnej === null) {
@@ -131,12 +106,19 @@ export function ryczaltMiesiaca(w: WejscieRyczaltu, liczby: LiczbyRyczaltu): Wyn
   const dostepne = w.nadwyzkaZPoprzednichGr + w.spoleczneZaplaconeGr + zdrowotna50ProcGr;
   const przychodGr = [...przychody.values()].reduce((a, b) => a + b, 0);
   const odliczonoGr = Math.min(dostepne, przychodGr);
-  const odliczeniaWgStawek = rozdzielProporcjonalnie(odliczonoGr, przychody);
 
+  // Podstawa stawki: jej przychód minus dokładna część odliczeń, czyli
+  // gr · (przychód − odliczono) / przychód, do pełnych złotych. Rośnie z każdym
+  // przychodem i maleje z odliczeniami, więc więcej przychodu nigdy nie daje
+  // mniej ryczałtu (NZ-RYCZ-02), a więcej składek nigdy więcej ryczałtu (NZ-RYCZ-03).
+  // Ułamek grosza obcinamy przed `doPelnychZlotych`: granica 50 gr leży na całym
+  // groszu, więc wynik jest ten sam co zaokrąglenie dokładnej kwoty.
+  const przychodRazem = BigInt(przychodGr);
+  const poOdliczeniu = przychodRazem - BigInt(odliczonoGr);
   const podstawaWgStawekGr = new Map<number, number>();
   let podatekRazem = 0;
   for (const [pb, gr] of przychody) {
-    const podstawa = doPelnychZlotych(gr - (odliczeniaWgStawek.get(pb) ?? 0));
+    const podstawa = doPelnychZlotych(Number((BigInt(gr) * poOdliczeniu) / przychodRazem));
     podstawaWgStawekGr.set(pb, podstawa);
     podatekRazem += podstawa * pb;
   }

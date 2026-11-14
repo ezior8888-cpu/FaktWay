@@ -11,14 +11,17 @@ import {
   fakturaZBazy,
   KOLUMNY_FAKTURY,
   KOLUMNY_SKRZYNKI,
+  KOLUMNY_WYDATKU,
   LIMIT_LISTY,
   skrzynkaZBazy,
+  wydatekZBazy,
   type PowiazanyWydatek,
   type WierszFaktury,
   type WierszSkrzynki,
+  type WierszWydatku,
 } from '@/lib/dane/mapowanie';
 import { supabase } from '@/lib/supabase';
-import type { Faktura, FakturaKosztowa } from '@/dane-przykladowe';
+import type { Faktura, FakturaKosztowa, Koszt } from '@/dane-przykladowe';
 
 /** Nagłówek firmy dla PostgREST (`ACTIVE_ORG_HEADER` strony, małymi literami jak w `lib/supabase/active-org.ts`). */
 const NAGLOWEK_FIRMY = 'x-active-org';
@@ -94,4 +97,26 @@ export async function pobierzSkrzynke(firma: string): Promise<WynikListy<Faktura
   if (!wynik.ok) return wynik;
   const wydatki = wynik.dane.length > 0 ? await wydatkiSkrzynki(firma, wynik.dane.map((w) => w.id)) : [];
   return { ok: true, status: wynik.status, dane: { lista: skrzynkaZBazy(wynik.dane, wydatki), pelna: wynik.dane.length < LIMIT_LISTY } };
+}
+
+/**
+ * Wydatki (M9): najnowsze według daty dokumentu, jak lista kosztów strony
+ * (`expenses` w `(koszty)/expenses`), wszystkie źródła (zdjęcie, KSeF, ręcznie, import).
+ */
+export async function pobierzWydatki(firma: string): Promise<WynikListy<Koszt>> {
+  const wynik = await czytajZBazy<WierszWydatku[]>((token, sygnal) =>
+    klient()
+      .from('expenses')
+      .select(KOLUMNY_WYDATKU)
+      .eq('tenant_id', firma)
+      .order('issue_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(LIMIT_LISTY)
+      .setHeader('Authorization', `Bearer ${token}`)
+      .setHeader(NAGLOWEK_FIRMY, firma)
+      .abortSignal(sygnal)
+      .returns<WierszWydatku[]>(),
+  );
+  if (!wynik.ok) return wynik;
+  return { ok: true, status: wynik.status, dane: { lista: wynik.dane.map(wydatekZBazy), pelna: wynik.dane.length < LIMIT_LISTY } };
 }

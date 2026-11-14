@@ -137,7 +137,9 @@
       "poziom": "R1",
       "opis": "Rozliczenie miesiąca: zatwierdzenie, wersje, zapłaty, ekran „Ten miesiąc”.",
       "sciezki": [
-        "lib/ksiegowosc/{ten-miesiac,ten-miesiac-dane,miesiac-strony,zaplata-reczna}.ts",
+        "lib/ksiegowosc/{ten-miesiac,ten-miesiac-dane,miesiac-strony,zaplata-reczna,ten-miesiac-zapis,przelew}.ts",
+        "lib/api/mobile/ksiegowosc.ts",
+        "app/api/mobile/v1/ksiegowosc/**",
         "app/actions/ksiegowosc-ten-miesiac.ts",
         "components/ksiegowosc/ten-miesiac-akcje.tsx",
         "supabase/migrations/{00168,00172}_*.sql"
@@ -245,7 +247,8 @@
         "lib/proformy/**",
         "app/api/proformy/**",
         "app/actions/produkty.ts",
-        "lib/produkty/**"
+        "lib/produkty/**",
+        "supabase/migrations/00204_*.sql"
       ]
     },
     {
@@ -310,7 +313,9 @@
       "poziom": "R1",
       "opis": "Zapłaty faktur; metoda kasowa VAT zależy od daty zapłaty.",
       "sciezki": [
-        "lib/invoices/{manual-payment,paid-labels}.ts",
+        "lib/invoices/{manual-payment,paid-labels,mark-paid}.ts",
+        "lib/api/mobile/naleznosci.ts",
+        "app/api/mobile/v1/naleznosci/**",
         "app/actions/invoice-payments.ts",
         "supabase/migrations/00158_*.sql",
         "app/actions/bank-statement.ts",
@@ -408,6 +413,7 @@
       "opis": "Faktury z KSeF i import z innych programów: kwoty trafiają do ksiąg.",
       "sciezki": [
         "lib/ksef/inbox*.ts",
+        "app/api/mobile/v1/skrzynka/**",
         "lib/ksef/history-sync/**",
         "lib/jobs/runners/{inbox-polling,ksef-history-sync}.ts",
         "lib/import/*.ts",
@@ -528,7 +534,10 @@
         "lib/jobs/runners/{auto-categorize-inbox,process-ocr}.ts",
         "app/actions/{expense-payments,plik-przelewow,receipt-invoice-match}.ts",
         "app/api/uploads/expense/route.ts",
-        "app/actions/expense-thread.ts"
+        "app/actions/expense-thread.ts",
+        "lib/api/mobile/wydatki.ts",
+        "app/api/mobile/v1/wydatki/**",
+        "supabase/migrations/00202_*.sql"
       ]
     },
     {
@@ -571,7 +580,8 @@
         "lib/flo/functions/payment-chase*.ts",
         "lib/jobs/runners/{reminder-scheduler,send-reminder,cancel-reminders-on-payment}.ts",
         "lib/reminders/**",
-        "app/actions/reminders.ts"
+        "app/actions/reminders.ts",
+        "app/api/mobile/v1/przypomnienia/**"
       ]
     },
     {
@@ -602,6 +612,8 @@
         "lib/jobs/runners/{archive-old-invoices,retention-delete,cleanup-audit-logs,cleanup-old-backups,gdpr-process-deletions,support-chat-retention}.ts",
         "app/(auth)/gdpr/**",
         "app/(dashboard)/settings/account/**",
+        "lib/api/mobile/konto-usuniecie.ts",
+        "app/api/mobile/v1/konto/usuniecie/**",
         "app/admin/users/actions.ts",
         "app/api/gdpr/**",
         "lib/support/retention.ts",
@@ -616,12 +628,18 @@
     {
       "id": "ustawienia.firma",
       "poziom": "R1",
-      "opis": "Dane firmy i ustawienia podatkowe, które trafiają na faktury i do JPK: NIP, adres, urząd skarbowy, metoda kasowa, zwolnienie z VAT, data rozpoczęcia działalności, usunięcie firmy.",
+      "opis": "Dane firmy i ustawienia podatkowe, które trafiają na faktury i do JPK: NIP, adres, urząd skarbowy, metoda kasowa, zwolnienie z VAT, data rozpoczęcia działalności, logo na wydruku faktury, usunięcie firmy.",
       "sciezki": [
         "app/actions/{company-profile,organizations,tax-office,cash-method,vat-exemption,business-start}.ts",
         "lib/invoices/business-start.ts",
         "components/settings/{cash-method-form,tax-office-form,vat-exemption-form,business-start-form,complete-nip-form,company-deletion}.tsx",
-        "app/actions/company-bank-account.ts"
+        "app/actions/company-bank-account.ts",
+        "app/actions/company-logo.ts",
+        "app/api/uploads/logo/route.ts",
+        "lib/invoices/logo-firmy.ts",
+        "components/settings/company-logo-form.tsx",
+        "lib/api/mobile/ustawienia.ts",
+        "app/api/mobile/v1/ustawienia/**"
       ]
     },
     {
@@ -770,7 +788,19 @@
       "poziom": "R1",
       "opis": "Telefon: wydatki i faktury kosztowe (od M9 zapis ze zdjęcia): kwoty, VAT i kategoria, które trafiają do KPiR i rozliczenia VAT.",
       "sciezki": [
-        "mobile/src/app/(zakladki)/koszty/**"
+        "mobile/src/app/(zakladki)/koszty/**",
+        "mobile/src/lib/wydatek/**"
+      ]
+    },
+    {
+      "id": "mobile.naleznosci",
+      "poziom": "R1",
+      "opis": "Telefon (od M10a): należności po terminie i przypomnienia o zapłacie: kwoty do zapłaty na liście, reguła, kiedy wolno przygotować przypomnienie, i treść wiadomości do kontrahenta przed zgodą (jak windykacja i faktury.platnosci na stronie).",
+      "sciezki": [
+        "mobile/src/app/(zakladki)/faktury/index.tsx",
+        "mobile/src/app/(zakladki)/faktury/przypomnienie.tsx",
+        "mobile/src/lib/naleznosci.ts",
+        "mobile/src/stan/naleznosci.tsx"
       ]
     },
     {
@@ -779,7 +809,9 @@
       "opis": "Telefon: pulpit i księgowość: szacunki podatków i składek, wynik, terminy i treści o podatkach (jak ksiegowosc.ekrany i szacunki na stronie).",
       "sciezki": [
         "mobile/src/app/(zakladki)/(pulpit)/**",
-        "mobile/src/app/(zakladki)/ksiegowosc/**"
+        "mobile/src/app/(zakladki)/ksiegowosc/**",
+        "mobile/src/stan/ksiegowosc.tsx",
+        "mobile/src/stan/ustawienia.tsx"
       ]
     },
     {
@@ -813,7 +845,7 @@
         "lib/audit/**",
         "lib/feature-flags/**",
         "lib/api/v1/{auth,pagination,scopes,token}.ts",
-        "lib/api/mobile/{auth,sesja,kontrakt}.ts",
+        "lib/api/mobile/{auth,sesja,kontrakt,tresc}.ts",
         "lib/webhooks/{secret-box,signature,types}.ts"
       ]
     },
@@ -892,9 +924,10 @@
     {
       "id": "sql.integralnosc",
       "poziom": "R1",
-      "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja).",
+      "opis": "SQL: integralność dokumentów (blokady zmian wystawionych faktur, korekty, numeracja, plik logo na wydruku tylko z katalogu firmy i tylko od serwera).",
       "sciezki": [
-        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql"
+        "supabase/migrations/{00028,00117,00118,00119,00122,00125,00132,00133,00135,00137,00154,00164,00184,00186,00193,00198}_*.sql",
+        "supabase/migrations/00203_*.sql"
       ]
     },
     {

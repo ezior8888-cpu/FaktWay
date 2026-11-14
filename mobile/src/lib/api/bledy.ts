@@ -8,9 +8,9 @@
  * - `firma` (400 `missing_org`, 403 `no_active_org`): wybór firmy od nowa.
  * - `ponow` (429, 503): spróbować później. Nigdy wylogowanie: awaria GoTrue
  *   to 503, nie 401.
- * - `odmowa` (M8: 404, 409, 422 przy fakturach): serwer odmówił z powodu treści
- *   albo stanu faktury. Telefon pokazuje zdanie z serwera (co poprawić), przy
- *   `invoice_invalid` pod polem `pole`.
+ * - `odmowa` (M8: 404, 409, 422 przy fakturach; M9: plik i zasady kosztu):
+ *   serwer odmówił z powodu treści albo stanu faktury lub kosztu. Telefon
+ *   pokazuje zdanie z serwera (co poprawić), przy `invoice_invalid` pod polem `pole`.
  * - `polaczenie`: brak internetu albo serwer nie odpowiedział.
  * - `serwer`: 500 albo odpowiedź spoza kontraktu.
  */
@@ -61,6 +61,10 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   not_found: 'odmowa',
   not_draft: 'odmowa',
   ksef_send_refused: 'odmowa',
+  // Wydatki (M9): plik i zasady kosztu mówi serwer; niedokończone wgranie telefon ponawia z tym samym kluczem.
+  file_invalid: 'odmowa',
+  upload_incomplete: 'ponow',
+  expense_invalid: 'odmowa',
   rate_limited: 'ponow',
   maintenance: 'ponow',
   session_verification_failed: 'ponow',
@@ -68,11 +72,22 @@ const RODZAJ_KODU: Record<MobileApiErrorCode, RodzajBledu> = {
   internal_error: 'serwer',
   // Tylko `POST /logowanie` (M6b), który idzie obok tego klienta (`lib/logowanie/przez-api.ts`).
   invalid_request: 'serwer',
-  invalid_credentials: 'serwer',
+  // Od M10b też złe hasło przy potwierdzeniu usunięcia konta (`konto/usuniecie`): zdanie serwera.
+  invalid_credentials: 'odmowa',
   login_unavailable: 'ponow',
   // Tylko `POST /kod` (M6c); ekran kodu ma własne teksty (`lib/logowanie/przez-api.ts`).
   invalid_code: 'serwer',
   mfa_not_required: 'serwer',
+  // Należności, przypomnienia, PDF (M10a): zdanie z serwera mówi, co zrobić.
+  forbidden: 'odmowa',
+  payment_refused: 'odmowa',
+  reminder_refused: 'odmowa',
+  pdf_unavailable: 'odmowa',
+  // Konto (M10b): ekran konta ma własną reakcję na `reauth_required` (ponowne logowanie).
+  reauth_required: 'odmowa',
+  deletion_blocked: 'odmowa',
+  deletion_in_progress: 'odmowa',
+  settlement_refused: 'odmowa',
 };
 
 /** Kod błędu z ciała `{ error: { code } }`, gdy jest w kontrakcie. */

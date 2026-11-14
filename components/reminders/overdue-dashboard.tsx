@@ -55,25 +55,12 @@ import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
 import { plural } from '@/lib/i18n/plural';
-import type { LatestReminderState, ReminderStatus } from '@/lib/overdue/reminder-overview';
+import type { OverdueInvoice } from '@/lib/overdue/load-overdue';
+import type { ReminderStatus } from '@/lib/overdue/reminder-overview';
 import { cn } from '@/lib/utils';
 
-export interface OverdueInvoice {
-  id: string;
-  internal_number: string;
-  payment_due_date: string;
-  gross_total: number;
-  amount_due: number;
-  days_overdue: number;
-  buyer_name: string;
-  buyer_nip: string | null;
-  buyer_email: string | null;
-  reminders_paused: boolean;
-  reminders_sent_count: number;
-  reminder_status: 'none' | 'pending' | 'review' | 'unavailable';
-  /** Ostatni wpis `payment_reminders` (kolumny „Przypomnienie” i „Status”). */
-  latest_reminder: LatestReminderState;
-}
+/** Wiersz listy: kształt z `lib/overdue/load-overdue.ts` (ten sam dla strony i telefonu). */
+export type { OverdueInvoice };
 
 interface Props {
   overdueInvoices: OverdueInvoice[];

@@ -7,21 +7,87 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { KSEF } from '@/dane-przykladowe/ustawienia';
 import { PoleTekstowe } from '@/komponenty/formularz';
 import { EkranListy, Sekcja, Wiersz } from '@/komponenty/lista';
+import { MA_ADRES_STRONY, otworzStrone } from '@/komponenty/na-stronie';
 import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
+import { StanPusty } from '@/komponenty/stan-pusty';
+import { SzkieletListy } from '@/komponenty/szkielet';
 import { Tekst } from '@/komponenty/tekst';
 import { dataPelna } from '@/lib/format';
+import { useKontoFirmy } from '@/stan/dane';
+import { NAZWA_STANU_KSEF, useUstawienia, type StanUstawien } from '@/stan/ustawienia';
 import { useKolory } from '@/wyglad/kolory';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 
 const KROKI = ['Sprawdzenie warunków', 'Pobierz certyfikat z KSeF', 'Wgraj pliki', 'Sprawdzamy w KSeF', 'Połączono'];
+
+export default function EkranKsefIPolaczenia() {
+  const ustawienia = useUstawienia();
+  if (ustawienia) return <EkranKsefZBazy ustawienia={ustawienia} />;
+  return <EkranKsef />;
+}
+
+/**
+ * KSeF na prawdziwym koncie (M10b): stan połączenia jak plakietka strony
+ * (liczy serwer: „połączono” tylko z dowodem w środowisku aplikacji). Pliki
+ * certyfikatu (.crt, .key i hasło) wgrywa się na faktway.pl (decyzja M10b:
+ * kreator strony sprawdza 2FA, rolę i pliki w KSeF; wgrywanie plików z telefonu poza M10).
+ */
+function EkranKsefZBazy({ ustawienia }: { ustawienia: StanUstawien }) {
+  const rola = useKontoFirmy()?.firma?.rola;
+  const { dane } = ustawienia;
+  if (!dane) {
+    return (
+      <EkranListy>
+        {ustawienia.stan === 'blad' ? (
+          <StanPusty ikona="error-warning-line" tytul="Nie udało się wczytać połączenia z KSeF" opis={ustawienia.blad ?? 'Spróbuj ponownie za chwilę.'} akcja={{ tytul: 'Spróbuj ponownie', onPress: () => void ustawienia.odswiez() }} />
+        ) : (
+          <SzkieletListy wiersze={3} etykieta="Wczytujemy połączenie z KSeF" />
+        )}
+      </EkranListy>
+    );
+  }
+  const { ksef, firma } = dane;
+  const polaczono = ksef.stan === 'polaczono';
+  const opis = polaczono
+    ? ksef.certyfikatDo
+      ? `Certyfikat ważny do ${dataPelna(ksef.certyfikatDo)}`
+      : 'Certyfikat wgrany'
+    : ksef.stan === 'do_potwierdzenia'
+      ? 'Certyfikat wgrany, ale trzeba go potwierdzić ponownie'
+      : 'Podłącz KSeF, aby móc wysyłać faktury';
+  const wlasciciel = rola === 'owner';
+  const akcja = polaczono ? 'Odnów certyfikat na faktway.pl' : ksef.stan === 'do_potwierdzenia' ? 'Wgraj certyfikat ponownie na faktway.pl' : 'Podłącz KSeF na faktway.pl';
+  return (
+    <EkranListy onOdswiez={ustawienia.odswiez}>
+      <NaglowekKwoty podpis="Połączenie z KSeF" wartosc={NAZWA_STANU_KSEF[ksef.stan]} styl="title1" status={opis} statusKolor={polaczono ? 'sukces' : 'ostrzezenie'} />
+      <Sekcja naglowek="Połączenie">
+        <Wiersz tytul="NIP" wartosc={firma.nip || 'Brak'} />
+        {polaczono && ksef.certyfikatDo ? <Wiersz tytul="Certyfikat ważny do" wartosc={dataPelna(ksef.certyfikatDo)} /> : null}
+      </Sekcja>
+      <Sekcja
+        stopka={
+          wlasciciel
+            ? 'Pliki certyfikatu (.crt i .key) i hasło do klucza wgrasz na faktway.pl. Do tego potrzebna jest weryfikacja dwuetapowa.'
+            : 'Certyfikat KSeF podłącza właściciel firmy na faktway.pl.'
+        }>
+        {wlasciciel && MA_ADRES_STRONY ? <Wiersz tytul={akcja} ikona="global-line" akcja onPress={() => otworzStrone('/settings/ksef', () => void ustawienia.odswiez())} /> : null}
+      </Sekcja>
+      {polaczono && MA_ADRES_STRONY ? (
+        <Sekcja naglowek="Historia faktur z KSeF" stopka="Po podłączeniu FaktWay sam pobiera historię faktur z KSeF.">
+          <Wiersz tytul="Zobacz postęp pobierania" ikona="global-line" akcja onPress={() => otworzStrone('/import-danych')} />
+        </Sekcja>
+      ) : null}
+    </EkranListy>
+  );
+}
 
 /**
  * KSeF: status połączenia i kreator podłączenia certyfikatu (5 kroków, jak
  * na stronie): warunki, instrukcja Aplikacji Podatnika, pliki .crt i .key,
  * sprawdzenie w KSeF, połączono.
  */
-export default function EkranKsef() {
+function EkranKsef() {
   const router = useRouter();
   const kolory = useKolory();
   const [krok, setKrok] = useState<number | null>(null);

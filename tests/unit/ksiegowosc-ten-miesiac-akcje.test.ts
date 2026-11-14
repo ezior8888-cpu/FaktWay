@@ -178,7 +178,7 @@ describe('zatwierdzenie miesiąca', () => {
   });
 
   it('kwota zmieniła się od otwarcia strony: odmowa bez zapisu i odświeżenie, żeby było widać nową kwotę', async () => {
-    expect(await zatwierdz({ ...SKROTY, ryczalt: H('9') })).toMatchObject({ success: false, error: expect.stringContaining('zmieniły się od otwarcia strony') });
+    expect(await zatwierdz({ ...SKROTY, ryczalt: H('9') })).toMatchObject({ success: false, error: expect.stringMatching(/^Dane miesiąca zmieniły się od otwarcia, więc nic nie zatwierdziliśmy\. Pokazujemy/) });
     expect(await zatwierdz({ zus_spoleczne: H('b'), zdrowotna: H('c') })).toMatchObject({ success: false });
     expect(mocks.wstawione).toEqual([]);
     expect(mocks.revalidate).toHaveBeenCalledWith('/reports/ten-miesiac');

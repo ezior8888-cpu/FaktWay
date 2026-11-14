@@ -27,6 +27,8 @@ export interface KontekstAlarmu {
   tenantId: string;
   /** Który strażnik zgłasza, np. `ten-miesiac`. */
   straznik: string;
+  /** Identyfikator dokumentu (np. faktury), żeby operator znalazł plik; trafia do `extra`, poza odcisk i tagi. */
+  dokumentId?: string;
 }
 
 export function zglosAlarmy(alarmy: readonly AlarmFiltra[], kontekst: KontekstAlarmu): void {
@@ -43,6 +45,7 @@ export function zglosAlarmy(alarmy: readonly AlarmFiltra[], kontekst: KontekstAl
           tenantId: kontekst.tenantId,
         },
         fingerprint: [alarm.kod, alarm.rodzaj, alarm.miesiac],
+        ...(kontekst.dokumentId ? { extra: { dokumentId: kontekst.dokumentId } } : {}),
       });
     } catch (e) {
       console.error('[FILTR-RT] alarm nie trafił do Sentry', alarm.kod, alarm.rodzaj, alarm.miesiac, e instanceof Error ? e.message : String(e));

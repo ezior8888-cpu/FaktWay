@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
+import { sprawdzFa3 } from '@/lib/bezpieczniki/fa3';
 import { generateFA3Xml } from '@/lib/xml/fa3-generator';
 import { finalizeInvoice, type InvoiceInput } from '@/lib/xml/invoice-calculator';
 import { validateFA3 } from '@/lib/xml/validator';
@@ -74,6 +75,8 @@ describe('FA(3): losowe faktury', () => {
         const xml = generateFA3Xml(gotowa(linie), { generatedAt: new Date('2026-11-09T10:00:00Z') });
         const wynik = await validateFA3(xml);
         expect(wynik.errors.map((b) => b.message)).toEqual([]);
+        // Strażnik FA(3) (F13 część 4) nie zgłasza alarmu dla pliku z prawdziwego generatora.
+        expect(sprawdzFa3(xml)).toEqual([]);
 
         const p13 = pola(xml, /<P_13_[0-9_]+>(-?[\d.]+)<\/P_13_[0-9_]+>/g).reduce((a, b) => a + b, 0);
         const p14 = pola(xml, /<P_14_\d+>(-?[\d.]+)<\/P_14_\d+>/g).reduce((a, b) => a + b, 0);

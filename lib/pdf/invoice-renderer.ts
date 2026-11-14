@@ -15,6 +15,7 @@ import {
 import { tytulPrzelewuNaDokumencie } from '@/lib/invoices/tytul-przelewu';
 import { RECEIPT_INVOICE_LABEL, receiptDetailsLine } from '@/lib/invoices/receipt-invoice';
 import { vatSummaryAgreesWithGross } from '@/lib/invoices/vat-summary';
+import { drawPdfLogo, type PdfLogo } from '@/lib/pdf/logo';
 import { PUBLIC_SITE_DOMAIN, PUBLIC_SITE_URL } from '@/lib/site';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
@@ -60,6 +61,11 @@ export interface RenderInvoiceOptions {
    * samo oznaczenie. FP z danymi niesie `invoice.receipt`.
    */
   receiptInvoiceMarker?: boolean;
+  /**
+   * Logo firmy z ustawień (krok 2.2), sprawdzone przy odczycie
+   * (`lib/pdf/logo-odczyt.ts`). Brak = nagłówek jak dotąd.
+   */
+  logo?: PdfLogo | null;
 }
 
 /**
@@ -189,7 +195,7 @@ export async function renderInvoicePdf(
     const left = PAGE_MARGIN;
 
     // Napis rysuje się tylko razem z kodem (warunek w `drawHeader`).
-    drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, left, pageWidth);
+    drawHeader(doc, invoice, qrBuffer, opts.qrLabel ?? null, opts.logo ?? null, left, pageWidth);
     drawPreviewNotice(doc, opts.previewNotice, left, pageWidth);
     drawCorrectedInvoice(doc, opts.correctedInvoice, left, pageWidth);
     drawReceiptInvoice(doc, receiptInvoiceLines(invoice, opts.receiptInvoiceMarker === true), left, pageWidth);
@@ -264,26 +270,30 @@ function drawHeader(
   invoice: Invoice,
   qr: Buffer | null,
   qrCaption: string | null,
+  logo: PdfLogo | null,
   left: number,
   width: number,
 ): void {
+  // Logo firmy (krok 2.2) w lewym górnym rogu; tytuł, numer i daty schodzą
+  // pod nie. Bez logo `top` to dawne PAGE_MARGIN i nagłówek jest jak dotąd.
+  const top = PAGE_MARGIN + drawPdfLogo(doc, logo, left, PAGE_MARGIN);
   const title = INVOICE_TYPE_LABEL[invoice.type] ?? 'Faktura';
   doc.font('bold').fontSize(20).fillColor('#111111');
-  doc.text(title, left, PAGE_MARGIN);
+  doc.text(title, left, top);
   doc.font('body').fontSize(11).fillColor('#444444');
-  doc.text(`Nr ${invoice.internalNumber}`, left, PAGE_MARGIN + 26);
+  doc.text(`Nr ${invoice.internalNumber}`, left, top + 26);
 
   doc.fontSize(9).fillColor('#666666');
   doc.text(
     `Data wystawienia: ${fmtDate(invoice.issueDate)}`,
     left,
-    PAGE_MARGIN + 44,
+    top + 44,
   );
   if (invoice.saleDate && invoice.saleDate !== invoice.issueDate) {
     doc.text(
       `${invoice.type === 'ZAL' ? 'Data otrzymania zapłaty' : 'Data sprzedaży'}: ${fmtDate(invoice.saleDate)}`,
       left,
-      PAGE_MARGIN + 56,
+      top + 56,
     );
   }
 
@@ -297,7 +307,9 @@ function drawHeader(
     }
   }
 
-  const ruleY = PAGE_MARGIN + (qr ? QR_SIZE + 16 : 78);
+  // Linia pod niższym z bloków: nagłówek (78 pt od góry tekstu) albo kod QR
+  // z napisem. Bez logo to dawne PAGE_MARGIN + (kod ? 88 : 78).
+  const ruleY = Math.max(top + 78, qr ? PAGE_MARGIN + QR_SIZE + 16 : 0);
   doc
     .moveTo(left, ruleY)
     .lineTo(left + width, ruleY)

@@ -3,9 +3,11 @@ import {
   buildInvoicePdfKey,
   downloadInvoicePdf,
   invoicePdfExists,
+  invoicePdfQrStateKey,
   uploadInvoicePdf,
 } from './pdf-storage';
 import { renderInvoicePdf } from './invoice-renderer';
+import { loadPdfLogo, readTenantLogoKey } from './logo-odczyt';
 import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 import { findKsefNumberTaken, type KsefNumberTaken } from '@/lib/ksef/submission-log';
@@ -139,7 +141,9 @@ export async function verifyInvoicePdfDeliveryState(
   const currentKey = buildInvoicePdfKey(
     tenantId, invoiceId, current.issueDate, currentQr.qrPayload, current.ksefNumber,
   );
-  return currentKey === expectedQrStateKey ? null : pdfStateChanged();
+  // Logo firmy (krok 2.2) jest w kluczu PDF, ale nie w stanie faktury:
+  // porównujemy sam stan kodu QR i numeru KSeF.
+  return currentKey === invoicePdfQrStateKey(expectedQrStateKey) ? null : pdfStateChanged();
 }
 
 /**
@@ -203,7 +207,10 @@ export async function generateInvoicePdf(
   // Faktura z numerem KSeF udostępniana poza systemem musi mieć KOD I.
   // Brak skrótu XML lub innych składników URL nie może zwrócić starego cache.
   const filename = `Faktura_${sanitizeFilename(data.invoice.internalNumber)}.pdf`;
-  const key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate, qrPayload, data.ksefNumber);
+  // Logo firmy (krok 2.2): klucz logo jest w kluczu PDF, więc zmiana albo
+  // usunięcie logo daje nowy PDF; firma bez logo ma klucze jak dotąd.
+  const logoKey = await readTenantLogoKey(tenantId);
+  let key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate, qrPayload, data.ksefNumber, logoKey);
 
   // Cache hit: PDF istnieje i jest świeższy niż ostatnia zmiana faktury.
   const cacheValid =
@@ -228,6 +235,10 @@ export async function generateInvoicePdf(
   // KOD I wg specyfikacji MF: link weryfikacyjny z NIP-u, daty i SHA-256
   // pliku XML — nie sam numer KSeF. Szkic bez pliku → bez kodu.
   if (!pdf) {
+    // Brak pliku logo, błąd magazynu albo uszkodzony plik: PDF bez logo (wpis
+    // w logu) pod kluczem bez logo, więc następne pobranie spróbuje logo znów.
+    const logo = logoKey ? await loadPdfLogo(logoKey, tenantId) : null;
+    if (!logo) key = buildInvoicePdfKey(tenantId, invoiceId, data.issueDate, qrPayload, data.ksefNumber);
     pdf = await renderInvoicePdf(data.invoice, {
       ksefNumber: data.ksefNumber,
       qrPayload,
@@ -236,6 +247,7 @@ export async function generateInvoicePdf(
       receiptInvoiceMarker: data.receiptInvoiceMarker,
       testWatermark: (process.env.KSEF_ENV ?? 'test') === 'test',
       previewNotice: missingKodI ? PREVIEW_WITHOUT_KOD_I : null,
+      logo,
     });
 
     try {

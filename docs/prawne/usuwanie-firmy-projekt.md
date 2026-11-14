@@ -365,6 +365,7 @@ NIP na nagrobku nie jest do niczego potrzebny.
 |---|---|
 | `${tenantId}/…` — XML, UPO, PDF faktur, import z KSeF, eksporty | `lib/storage/r2.ts:51-103`, `lib/pdf/pdf-storage.ts:51`, `lib/import/ksef-xml-archive.ts:34` |
 | `tenants/${tenantId}/expenses/…` — zdjęcia kosztów (OCR) | `lib/storage/expenses.ts:82` |
+| `tenants/${tenantId}/logo/…` — logo firmy na wydruku (dopisane 14.11.2026, krok 2.2 planu kompletnej aplikacji; klucz jawny w `tenants.logo_storage_key`, 00203, a pliki sprzed nieudanego zapisu zamiata `sweepTenantLogos`) | `lib/storage/logo.ts` |
 | `exports/${tenantId}/…`, `imports/${tenantId}/…`, `upo/${tenantId}/…`, `reminders/${tenantId}/…` | `lib/storage/tenant-path.ts:13-16` (kanoniczna lista prefiksów), `exports-generate.ts:231`, `lib/import/file-storage.ts:15`, `lib/ksef/upo-storage.ts:8-12` |
 | `archive_storage_path` w osobnym koszyku archiwum (Glacier) | `lib/storage/glacier.ts:23-53`, `archive-old-invoices` |
 

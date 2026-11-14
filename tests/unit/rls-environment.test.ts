@@ -145,12 +145,16 @@ describe('separate RLS test configuration', () => {
       // 00197 (plan kompletnej aplikacji, krok 8.1, część 3): wpis w dzwonku przy wpłacie do faktury.
       'tests/rls-dzwonek-wplaty.test.ts',
       'tests/rls-indeksy-cronow-produkty.test.ts',
+      // 00204 (plan kompletnej aplikacji, krok 2.6): licznik użyć produktu z katalogu przy zapisie faktury.
+      'tests/rls-produkty-licznik.test.ts',
       // Plan skalowania 3000, sesja 12: stronicowanie nocnej kopii JSON przez PostgREST.
       'tests/rls-kopia-json-stronicowanie.test.ts',
       // 00198 (plan kompletnej aplikacji, krok 2.4): proforma i oferta, powiązanie z fakturą.
       'tests/rls-proformy.test.ts',
       // 00199 (krok 2.5): serie numeracji faktur, wyścig dwóch wystawień w jednej serii na prawdziwej bazie.
       'tests/rls-numeracja.test.ts',
+      // 00203 (krok 2.2, część 1): logo firmy, CHECK katalogu firmy, wyzwalacz bez zmiany z sesji klienta.
+      'tests/rls-logo-firmy.test.ts',
       // Plan aplikacji mobilnej, M6 (bez migracji): API `/api/mobile/v1` z tokenu sesji telefonu.
       'tests/rls-mobile-api.test.ts',
       // Plan aplikacji mobilnej, M6b (D16, bez migracji): logowanie hasłem przez API przy captchy w GoTrue.
@@ -159,6 +163,7 @@ describe('separate RLS test configuration', () => {
       'tests/rls-mobile-kod.test.ts',
       // 00201 (plan aplikacji mobilnej, M8): faktura z telefonu i klucze idempotencji.
       'tests/rls-mobile-faktury.test.ts',
+      'tests/rls-mobile-naleznosci.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
