@@ -25,6 +25,7 @@ import { getRegisteredJobs, registerJob } from './registry';
 import { wrapHandler } from './run-job';
 import { workOptionsFor } from './work-options';
 import { startProcessMetrics } from '@/lib/observability/process-metrics';
+import { enableWorkerSupabaseTimeouts } from '@/lib/supabase/fetch-timeout';
 import {
   flushWorkerSentry,
   initWorkerSentry,
@@ -68,6 +69,8 @@ async function main(): Promise<void> {
 
   // Harmonogram i nadzór pg-boss prowadzi TYLKO worker (AUD-88).
   enableWorkerRole();
+  // Dłuższe limity czasu Supabase niż w żądaniach (plan skalowania, sesja 5).
+  enableWorkerSupabaseTimeouts();
   const boss = await startBoss();
   boss.on('error', (err) => log.error('pg-boss error', err));
 
