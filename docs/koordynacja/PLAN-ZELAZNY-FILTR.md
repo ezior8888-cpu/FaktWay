@@ -727,7 +727,7 @@ Każdy niezmiennik ma identyfikator, regułę z rejestru i test w
 | NZ-RYCZ-02 | Więcej przychodu nigdy nie daje mniej ryczałtu (przy tych samych odliczeniach) |
 | NZ-RYCZ-03 | Więcej zapłaconych składek nigdy nie daje więcej ryczałtu |
 | NZ-RYCZ-04 | Koszty nie zmieniają ryczałtu |
-| NZ-RYCZ-05 | Suma przychodów według stawek równa się przychodowi miesiąca; odliczenia rozdzielone proporcjonalnie sumują się do całości bez zgubionego grosza |
+| NZ-RYCZ-05 | Suma przychodów według stawek równa się przychodowi miesiąca; odliczenia rozdzielone na stawki nie giną: przychód minus odliczono różni się od sumy podstaw najwyżej o zaokrąglenie (od FZ-007 części dokładne, bez groszy) |
 | NZ-RYCZ-06 | Niewykorzystane odliczenie przechodzi na kolejne miesiące roku według rejestru (w obrębie roku; reszta do zeznania rocznego, K9) |
 | NZ-RYCZ-07 | Próg najmu: stawka niższa do progu, wyższa od nadwyżki, próg liczony narastająco w roku, przekroczenie w trakcie miesiąca dzieli ten miesiąc |
 | NZ-RYCZ-08 | Podział faktury na dwie o tej samej sumie i stawce w tym samym miesiącu nie zmienia ryczałtu |

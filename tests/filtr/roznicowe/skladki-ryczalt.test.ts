@@ -101,8 +101,8 @@ describe('wyrocznia ryczałtu za miesiąc', () => {
     nadwyzka: grosze(20_000),
   });
 
-  it('remis reszt przy podziale odliczeń: grosz dostaje wyższa stawka (reguła programu, RP-RYCZ-STAWKI-02)', () => {
-    // Dwie stawki po 1 000,50 zł i 1 gr odliczeń: stawka z groszem ma podstawę 1 000 zł, druga 1 001 zł.
+  it('części odliczeń dokładne: dwie stawki po 1 000,50 zł i 1 gr odliczeń mają obie podstawę 1 000 zł (reguła programu, RP-RYCZ-STAWKI-02, FZ-007)', () => {
+    // Części po 0,5 gr, po odliczeniu po 1 000,495 zł. Podział co do grosza dawał grosz wyższej stawce: 1 000 i 1 001 zł.
     const przychod: Array<[number, number]> = [[1200, 100_050], [850, 100_050]];
     const aplikacja = ryczaltMiesiaca(
       { przychodWgStawekGr: new Map(przychod), spoleczneZaplaconeGr: 1, zdrowotnaZaplaconaGr: 0, nadwyzkaZPoprzednichGr: 0 },
@@ -110,8 +110,8 @@ describe('wyrocznia ryczałtu za miesiąc', () => {
     );
     if (!aplikacja.ok) throw new Error(aplikacja.brak);
     const wyrocznia = ryczaltWyrocznia({ przychodWgStawek: przychod, ujemneZPoprzednich: [], spoleczneZaplaconeGr: 1, zdrowotnaZaplaconaGr: 0, nadwyzkaZPoprzednichGr: 0, odliczenieZdrowotnejPb: 5000 });
-    expect([...aplikacja.ryczalt.podstawaWgStawekGr.entries()].sort((a, b) => b[0] - a[0])).toEqual([[1200, 100_000], [850, 100_100]]);
-    expect(wyrocznia.podstawaWgStawek).toEqual([[1200, 100_000], [850, 100_100]]);
+    expect([...aplikacja.ryczalt.podstawaWgStawekGr.entries()].sort((a, b) => b[0] - a[0])).toEqual([[1200, 100_000], [850, 100_000]]);
+    expect(wyrocznia.podstawaWgStawek).toEqual([[1200, 100_000], [850, 100_000]]);
   });
 
   it('ryczałt, odliczenia, podstawy i ujemne na kolejne miesiące', () => {

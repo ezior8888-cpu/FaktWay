@@ -102,17 +102,22 @@ podatkowa art. 63 § 1) i reguły programu:
    50 % zapłaconej zdrowotnej (do grosza, połówka w górę).
 3. Odliczono = mniejsza z: dostępne, suma dodatnich przychodów stawek.
    Nadwyżka na kolejne = dostępne minus odliczono.
-4. Odliczono dzieli się między stawki proporcjonalnie do przychodu stawki, co
-   do grosza: każda stawka dostaje część całkowitą (w dół) swojej proporcji,
-   a pozostałe grosze rozdaje się po jednym stawkom z największą resztą
-   z dzielenia; przy równych resztach najpierw wyższa stawka (reguła programu,
-   do potwierdzenia przez księgową).
-5. Podstawa stawki = przychód stawki minus jej część odliczeń, zaokrąglona do
-   pełnych złotych (poniżej 50 gr w dół, 50 gr i więcej w górę).
+4. Odliczono dzieli się między stawki proporcjonalnie do przychodu stawki,
+   dokładnie, bez zaokrąglania części do groszy: część stawki = odliczono ×
+   przychód stawki / suma dodatnich przychodów stawek (reguła programu, do
+   potwierdzenia przez księgową). Do 13.11.2026 części szły co do grosza,
+   z resztami rozdawanymi po groszu; dopisanie przychodu przestawiało wtedy
+   grosze między stawkami i potrafiło obniżyć ryczałt (FZ-007).
+5. Podstawa stawki = przychód stawki minus jej dokładna część odliczeń,
+   zaokrąglona do pełnych złotych (poniżej 50 gr w dół, 50 gr i więcej
+   w górę), liczona dokładnie, bez groszy po drodze.
 6. Ryczałt = suma (podstawa stawki × stawka), policzona dokładnie, zaokrąglona
    raz do pełnych złotych (50 gr i więcej w górę).
 
 Przykład: jedna stawka 12 %, przychód 15 000 zł, bez odliczeń → ryczałt 1 800 zł.
 Dwie stawki: 8,5 % przychód 10 000 zł i 12 % przychód 5 000 zł, odliczenia
-społeczne 1 000 zł, zdrowotna 0 → części odliczeń 666,67 zł i 333,33 zł;
+społeczne 1 000 zł, zdrowotna 0 → części odliczeń 666,666… zł i 333,333… zł (dokładnie 2/3 i 1/3 z 1 000 zł);
 podstawy 9 333 zł i 4 667 zł; ryczałt 793,305 + 560,04 = 1 353,345 zł → 1 353 zł.
+Dwie stawki, 12 % i 8,5 %, każda z przychodem 1 000,50 zł, i 1 gr odliczeń:
+części po 0,5 gr, przychody po odliczeniu po 1 000,495 zł, obie podstawy
+1 000 zł.
