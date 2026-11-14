@@ -17,6 +17,11 @@ const SOURCE = readFileSync(
   new URL('../../app/actions/flo.ts', import.meta.url),
   'utf8',
 );
+/** Zatwierdzenie od M10a: akcja deleguje do `lib/flo/approve-proposal.ts` (wspólne z telefonem). */
+const APPROVE_SOURCE = readFileSync(
+  new URL('../../lib/flo/approve-proposal.ts', import.meta.url),
+  'utf8',
+);
 
 describe('kształt modułu akcji', () => {
   it('eksportuje WYŁĄCZNIE funkcje asynchroniczne', () => {
@@ -71,10 +76,12 @@ describe('bezpieczeństwo akcji', () => {
 
   it('akcje na pojedynczej propozycji filtrują po organizacji w zapytaniu', () => {
     // Druga linia obrony obok sprawdzenia sesji.
-    const guarded = ['approveProposal', 'dismissProposal', 'cancelScheduled'];
+    const guarded = ['approveFloProposal', 'dismissProposal', 'cancelScheduled'];
     for (const name of guarded) {
-      const start = SOURCE.indexOf(`export async function ${name}`);
-      const body = SOURCE.slice(start, start + 1600);
+      const source = name === 'approveFloProposal' ? APPROVE_SOURCE : SOURCE;
+      const start = source.indexOf(`export async function ${name}`);
+      expect(start, `${name} nie istnieje`).toBeGreaterThan(-1);
+      const body = source.slice(start, start + 1600);
       expect(body, `${name} bez filtru tenant_id`).toContain(
         ".eq('tenant_id', tenantId)",
       );
@@ -82,8 +89,11 @@ describe('bezpieczeństwo akcji', () => {
   });
 
   it('zatwierdzenie tworzy żeton PRZED wykonaniem', () => {
-    const start = SOURCE.indexOf('export async function approveProposal');
-    const body = SOURCE.slice(start, SOURCE.indexOf('export async function dismissProposal', start));
+    const action = SOURCE.slice(SOURCE.indexOf('export async function approveProposal'), SOURCE.indexOf('export async function dismissProposal'));
+    expect(action).toContain('approveFloProposal(');
+    const start = APPROVE_SOURCE.indexOf('export async function approveFloProposal');
+    const body = APPROVE_SOURCE.slice(start);
+    expect(start).toBeGreaterThan(-1);
     expect(body.indexOf('createApproval')).toBeGreaterThan(-1);
     expect(body.indexOf('createApproval')).toBeLessThan(
       body.indexOf('executeProposal'),

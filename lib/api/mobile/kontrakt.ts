@@ -17,9 +17,10 @@
 export const MOBILE_ACTIVE_ORG_HEADER = 'X-Active-Org';
 
 /**
- * Zapis z telefonu (M8, `POST /faktury`): UUID wylosowany raz na wypełnienie
- * formularza. Ponowienie z tym samym kluczem i tą samą treścią oddaje fakturę
- * z pierwszego zapisu (bez drugiej faktury i drugiej wysyłki).
+ * Zapis z telefonu (M8 `POST /faktury`, M9 `POST /wydatki/zdjecie`): UUID
+ * wylosowany raz na wypełnienie formularza albo jedno zdjęcie. Ponowienie
+ * z tym samym kluczem i tą samą treścią oddaje wynik pierwszego zapisu (bez
+ * drugiej faktury, drugiej wysyłki, drugiego odczytu i drugiego kosztu).
  */
 export const MOBILE_IDEMPOTENCY_HEADER = 'Idempotency-Key';
 
@@ -50,6 +51,15 @@ export const MOBILE_API_ERROR_CODES = [
   'not_draft',
   /** 422: kolejka KSeF odmówiła wysyłki szkicu (brak certyfikatu, pauza, 2FA); szkic zostaje, `message` mówi co zrobić. */
   'ksef_send_refused',
+  /**
+   * 400, 413, 415: `POST /wydatki/zdjecie` (M9): brak pliku, plik nie jest zdjęciem ani PDF albo jest za duży.
+   * `message` mówi, co zrobić; ponowienie tego samego pliku nic nie zmieni.
+   */
+  'file_invalid',
+  /** 400, 408: `POST /wydatki/zdjecie` (M9): nie dotarł cały plik albo wysyłka trwała za długo. Ponów z tym samym kluczem. */
+  'upload_incomplete',
+  /** 422: `POST /wydatki/{id}/zatwierdzenie` (M9): zasada zapisu kosztu (waluta, KPiR, koszt z KSeF); `message` mówi co zrobić. */
+  'expense_invalid',
   /** 429, z nagłówkiem `Retry-After`. */
   'rate_limited',
   /** 503, z nagłówkiem `Retry-After`. */
@@ -75,6 +85,24 @@ export const MOBILE_API_ERROR_CODES = [
    * Telefon zostaje na obecnej sesji.
    */
   'mfa_not_required',
+  // Należności, przypomnienia, PDF (M10a): zdanie z serwera mówi, co zrobić.
+  /** 403: rola w firmie nie pozwala na tę zmianę (np. księgowa ma wgląd w zapłaty, przypomnienie zatwierdza właściciel albo administrator). */
+  'forbidden',
+  /** 422: zapłaty nie zapisano (faktura skorygowana, z innego źródła, data z przyszłości); `message` mówi dlaczego. */
+  'payment_refused',
+  /** 422: przypomnienia nie przygotowano albo nie zlecono (podgląd wygasł, etap już zlecony, wyłączone); `message` mówi, co zrobić. */
+  'reminder_refused',
+  /** 409: PDF tej faktury nie powstanie w tym stanie (offline bez kodu QR, szkic wycofany); `message` mówi dlaczego. */
+  'pdf_unavailable',
+  // Konto i księgowość (M10b): zdanie z serwera mówi, co zrobić.
+  /** 403: usunięcie konta bez hasła wymaga świeżego logowania w tej sesji (konto tylko z Google). Telefon prowadzi do ponownego logowania. */
+  'reauth_required',
+  /** 409: konta nie usuniemy, bo firma ma aktywny abonament; `message` nazywa firmę i mówi, co zrobić. */
+  'deletion_blocked',
+  /** 409: usuwanie konta już trwa i nie da się go anulować. */
+  'deletion_in_progress',
+  /** 422: rozliczenia nie zatwierdzono albo zapłaty nie zapisano (miesiąc trwa, dane się zmieniły, zła data); `message` mówi dlaczego. */
+  'settlement_refused',
   /** 500, opis z identyfikatorem żądania. */
   'internal_error',
 ] as const;
@@ -181,6 +209,70 @@ export interface PodpowiedzFakturyOdpowiedz {
   zwolnienieVat: boolean;
 }
 
+// ─── Wydatki (M9): wydatek ze zdjęcia ─────────────────────────────────
+
+/** `POST /api/mobile/v1/wydatki/zdjecie`: pole formularza `multipart/form-data` z plikiem (JPG, PNG, WEBP, GIF albo PDF). */
+export const MOBILE_EXPENSE_FILE_FIELD = 'plik';
+
+/**
+ * `POST /api/mobile/v1/wydatki/zdjecie` (z nagłówkiem `Idempotency-Key`): 201 nowe wgranie,
+ * 200 powtórzenie (ten sam klucz i ten sam plik). `odczyt.id` to zadanie odczytu (OCR) do
+ * `GET /wydatki/odczyt/{id}`; wydatek z odczytu zapisuje serwer.
+ */
+export interface WgranieWydatkuOdpowiedz {
+  odczyt: { id: string };
+  powtorzenie: boolean;
+}
+
+/** Stan zadania odczytu jak kolumna `ocr_jobs.status`. */
+export type StanOdczytu = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * `GET /api/mobile/v1/wydatki/odczyt/{id}`: 200 ze stanem. `wydatekId` przy `completed`;
+ * `blad` przy `failed` (zdanie z odczytu). 404 `not_found`: zadania nie ma (koniec czekania);
+ * 503: stan nieznany, pytaj dalej (nie wgrywaj zdjęcia drugi raz).
+ */
+export interface OdczytWydatkuOdpowiedz {
+  odczyt: { id: string; stan: StanOdczytu; wydatekId: string | null; blad: string | null };
+}
+
+/** Kolumna KPiR jak enum `kpir_column` (ta sama lista co formularz kosztu na stronie). */
+export type KolumnaKpirTelefonu = 'col_7' | 'col_8' | 'col_10' | 'col_11' | 'col_12' | 'col_13' | 'col_15' | 'col_16';
+
+/**
+ * Zmiany kosztu jak formularz kosztu strony (`ExpenseEditForm`, `ExpenseReviewUpdates`):
+ * kwoty w złotych do 2 miejsc, data RRRR-MM-DD, NIP same cyfry albo `null`.
+ * `confirmPlnAmounts` tylko przy dokumencie w walucie bez kursu NBP: klient wpisał złote.
+ */
+export interface ZmianyWydatkuTelefonu {
+  seller_name: string;
+  seller_nip: string | null;
+  document_number?: string;
+  issue_date: string;
+  net_amount: number;
+  vat_amount: number;
+  gross_amount: number;
+  kpir_column: KolumnaKpirTelefonu;
+  category_label: string;
+  is_deductible: boolean;
+  notes?: string;
+  confirmPlnAmounts?: boolean;
+}
+
+/** `POST /api/mobile/v1/wydatki/{id}/zatwierdzenie`: opis i akceptacja kosztu ze zdjęcia (nie z KSeF). */
+export interface ZatwierdzenieWydatkuZadanie {
+  zmiany: ZmianyWydatkuTelefonu;
+}
+
+/**
+ * `POST /api/mobile/v1/wydatki/{id}/zatwierdzenie`, 200. `opisany: false`, gdy koszt został
+ * poza KPiR do wyjaśnienia (kwoty w walucie bez potwierdzenia złotych). Ponowienie zapisuje
+ * to samo drugi raz (bez drugiego kosztu), więc nie potrzebuje klucza.
+ */
+export interface ZatwierdzenieWydatkuOdpowiedz {
+  wydatek: { id: string; opisany: boolean; wKpir: boolean };
+}
+
 /** Jak `UserRole` strony (`lib/supabase/auth-context.ts`); zgodność sprawdza test kontraktu. */
 export type RolaWFirmie = 'owner' | 'admin' | 'member' | 'accountant';
 
@@ -242,4 +334,283 @@ export interface KodOdpowiedz {
 /** `POST /api/mobile/v1/sesja`: 201 `{ zapisane: true }` przy pierwszym wywołaniu dla sesji, potem 200 `{ zapisane: false }`. */
 export interface SesjaOdpowiedz {
   zapisane: boolean;
+}
+
+// ─── Należności, zapłata, przypomnienia, PDF, skrzynka KSeF (M10a) ─────
+
+/** Wpis przypomnienia o zapłacie (`payment_reminders.status`). */
+export type StatusPrzypomnienia = 'pending' | 'sent' | 'failed' | 'cancelled';
+
+/**
+ * Faktura po terminie, jak wiersz strony „Po terminie” (`/payments/overdue`):
+ * te same faktury (te same zasady: środowisko KSeF, korekty, zaliczki, kwoty),
+ * ten sam limit 100 i ten sam stan przypomnień. Kwoty w złotych.
+ */
+export interface NaleznoscTelefonu {
+  id: string;
+  numer: string;
+  kontrahent: string;
+  nip: string | null;
+  email: string | null;
+  /** Termin płatności, RRRR-MM-DD. */
+  termin: string;
+  brutto: number;
+  doZaplaty: number;
+  dniPoTerminie: number;
+  wstrzymane: boolean;
+  /** Wysłane przypomnienia tej faktury. */
+  wyslane: number;
+  /**
+   * Przypomnienie w kolejce: `brak`, `zaplanowane`, `do_sprawdzenia` (czeka dłużej niż 30 minut)
+   * albo `nieznany` (odczyt się nie udał, przygotowanie nowego jest wtedy zablokowane jak na stronie).
+   */
+  kolejka: 'brak' | 'zaplanowane' | 'do_sprawdzenia' | 'nieznany';
+  /** Ostatni wpis przypomnienia (etap 1 do 4, czas UTC); `null` bez przypomnień, `nieznany` bez odczytu. */
+  ostatnie: { status: StatusPrzypomnienia; etap: number; kiedy: string } | null | 'nieznany';
+}
+
+/** `GET /api/mobile/v1/naleznosci`, 200. `blad`: listy nie da się potwierdzić (to samo zdanie co na stronie), lista jest wtedy pusta. */
+export interface NaleznosciOdpowiedz {
+  faktury: NaleznoscTelefonu[];
+  blad: string | null;
+  /** Lista mogła się nie zmieścić w limicie 100: reszta na faktway.pl. */
+  limit: boolean;
+  /** Przypomnień wysłanych w tym miesiącu; `null`, gdy odczyt się nie udał. */
+  wyslaneWMiesiacu: number | null;
+  /** Rola pozwala oznaczać zapłatę (księgowa ma wgląd). */
+  mozeOznaczac: boolean;
+  /** Przypomnienie zatwierdza do wysyłki właściciel albo administrator. */
+  mozeZatwierdzac: boolean;
+}
+
+/** `POST /api/mobile/v1/faktury/{id}/zaplata`: opcjonalny dzień zapłaty RRRR-MM-DD (domyślnie dziś w Polsce). */
+export interface ZaplataZadanie {
+  dzien?: string;
+}
+
+/**
+ * `POST /faktury/{id}/zaplata` (oznacz) i `POST /faktury/{id}/zaplata/cofnij`, 200.
+ * `juzBylo`: stan był już taki (ponowienie po zerwanym połączeniu), nic się nie zmieniło.
+ */
+export interface ZaplataOdpowiedz {
+  zaplacona: boolean;
+  juzBylo: boolean;
+  numer: string | null;
+}
+
+/** `POST /api/mobile/v1/faktury/{id}/przypomnienie`: podgląd przypomnienia; pusty `email` to adres z faktury. Nic jeszcze nie wychodzi. */
+export interface PodgladPrzypomnieniaZadanie {
+  email?: string;
+}
+
+/** Podgląd do sprawdzenia i zatwierdzenia (jak okno „Przygotuj przypomnienie” na stronie). */
+export interface PodgladPrzypomnieniaOdpowiedz {
+  propozycja: string;
+  /** Wersja podglądu: zatwierdzenie z inną wersją odmawia (podgląd zmienił się w międzyczasie). */
+  wersja: string;
+  /** Do kiedy podgląd jest ważny (ISO). */
+  wazneDo: string;
+  od: string;
+  do: string;
+  odpowiedzNa: string | null;
+  temat: string;
+  tresc: string;
+  /** Załącznik PDF do obejrzenia przed zgodą; `null` bez załącznika. */
+  zalacznik: { nazwa: string; pdfBase64: string } | null;
+}
+
+/** `POST /api/mobile/v1/przypomnienia/{propozycja}/zatwierdz`: zgoda na tę wersję i tę treść (klient może ją poprawić). */
+export interface ZatwierdzeniePrzypomnieniaZadanie {
+  wersja: string;
+  tresc: string;
+}
+
+/** 200: przypomnienie zlecone do wysyłki (wychodzi w oknie wysyłki z ustawień przypomnień). */
+export interface ZatwierdzeniePrzypomnieniaOdpowiedz {
+  zlecone: true;
+}
+
+/** `POST /api/mobile/v1/faktury/{id}/wstrzymanie`: wstrzymuje albo wznawia przypomnienia faktury. */
+export interface WstrzymanieZadanie {
+  wstrzymane: boolean;
+}
+
+export interface WstrzymanieOdpowiedz {
+  wstrzymane: boolean;
+}
+
+/** `GET /api/mobile/v1/faktury/{id}/pdf`, 200: ten sam PDF co na stronie (`/api/invoices/{id}/pdf`), w Base64. */
+export interface PdfFakturyOdpowiedz {
+  nazwa: string;
+  pdfBase64: string;
+}
+
+/**
+ * `POST /api/mobile/v1/skrzynka/sprawdz`, 200: „Sprawdź teraz” w skrzynce KSeF (najwyżej raz na 5 minut).
+ * Faktury pobiera serwer w tle; `komunikat` to zdanie strony.
+ */
+export interface SprawdzenieSkrzynkiOdpowiedz {
+  stan: 'zlecone' | 'w_toku' | 'za_wczesnie' | 'bez_ksef' | 'blad';
+  komunikat: string;
+  ponowZaSekund: number | null;
+}
+
+// ─── Firma i usunięcie konta (M10b) ───────────────────────────────────
+
+/** `POST /api/mobile/v1/firma` (z `X-Active-Org`): firma zapisana jako ostatnio używana, wspólna ze stroną. `zapisane: false`: zapis się nie udał, wybór zostaje na telefonie. */
+export interface FirmaZapisanaOdpowiedz {
+  aktywnaFirma: string;
+  zapisane: boolean;
+}
+
+/**
+ * `GET /api/mobile/v1/konto/usuniecie`: stan usunięcia konta i to, jak je potwierdzić.
+ * `potwierdzenie` z serwera: `haslo` (konto z hasłem) albo `swieze_logowanie` (konto
+ * tylko z Google: logowanie w tej sesji nie starsze niż 10 minut, do `swiezeDo`).
+ */
+export interface UsuniecieKontaOdpowiedz {
+  /** Kiedy konto zostanie usunięte (ISO); `null` bez żądania. */
+  zaplanowane: string | null;
+  potwierdzenie: 'haslo' | 'swieze_logowanie';
+  /** Do kiedy świeże logowanie wystarcza (ISO); `null`, gdy nie wystarcza albo konto ma hasło. */
+  swiezeDo: string | null;
+}
+
+/** `POST /konto/usuniecie` i `POST /konto/usuniecie/anuluj`: hasło tylko przy koncie z hasłem. */
+export interface PotwierdzenieKontaZadanie {
+  haslo?: string;
+}
+
+/** `POST /konto/usuniecie`, 200. `juzBylo`: żądanie już istniało (ponowienie), bez nowego maila. */
+export interface UsuniecieZaplanowaneOdpowiedz {
+  zaplanowane: string;
+  juzBylo: boolean;
+  /** Mail z linkiem do anulowania wyszedł. */
+  mailWyslany: boolean;
+}
+
+/** `POST /konto/usuniecie/anuluj`, 200. `juzBylo`: nie było czego anulować (ponowienie). */
+export interface AnulowanieUsunieciaOdpowiedz {
+  anulowane: true;
+  juzBylo: boolean;
+}
+
+// ─── Księgowość, „Ten miesiąc” (M10b) ─────────────────────────────────
+
+/** Rodzaj rozliczenia (`RodzajRozliczenia` z `lib/ksiegowosc/ten-miesiac.ts`; zgodność sprawdza test). */
+export type RodzajRozliczeniaTelefonu = 'ryczalt' | 'pit' | 'zus_spoleczne' | 'zdrowotna' | 'vat';
+
+/** Pozycja „Do zapłaty”, jak wiersz strony `reports/ten-miesiac`. Kwoty w groszach. */
+export interface PozycjaRozliczeniaTelefonu {
+  rodzaj: RodzajRozliczeniaTelefonu;
+  nazwa: string;
+  /** `null`: kwoty nie liczymy (`brak` mówi dlaczego i co dalej). */
+  kwotaGr: number | null;
+  brak: string | null;
+  /** Termin faktyczny i ustawowy (RRRR-MM-DD); `przesuniety` na dzień roboczy. */
+  termin: { faktyczny: string; nominalny: string; przesuniety: boolean } | null;
+  /** Dane do przelewu, to samo zdanie co na stronie. */
+  przelew: string;
+  /** Ostatnia zatwierdzona wersja; `null`: niezatwierdzone. */
+  rozliczenie: { id: string; wersja: number; kwotaGr: number; status: 'zatwierdzone' | 'zaplacone'; zaplaconeO: string | null } | null;
+  /** Ile już zapłacono (najwyższa zapłacona wersja), w groszach. */
+  zaplaconoGr: number;
+  /** Dane zmieniły się po zatwierdzeniu: nowa kwota czeka na zatwierdzenie. */
+  zmiana: boolean;
+}
+
+/**
+ * `GET /api/mobile/v1/ksiegowosc?miesiac=RRRR-MM` (domyślnie poprzedni miesiąc, jak strona).
+ * `wlaczona: false`: moduł księgowości nie jest włączony dla tej firmy (reszta pól pusta).
+ */
+export interface TenMiesiacOdpowiedz {
+  wlaczona: boolean;
+  miesiac: string;
+  /** Miesiące do wyboru, od najnowszego. */
+  miesiace: string[];
+  dzis: string;
+  /** Podpis pod kwotami („Według Twoich danych i stawek na … r.”). */
+  podpis: string;
+  forma: 'ryczalt' | 'skala' | 'liniowy' | null;
+  /** Braki, przez które miesiąca nie liczymy (zdania strony); `null`, gdy policzony. */
+  braki: string[] | null;
+  przychodGr: number | null;
+  kosztyGr: number | null;
+  pozycje: PozycjaRozliczeniaTelefonu[];
+  /** Właściciel albo administrator zatwierdza i oznacza zapłaty. */
+  mozeEdytowac: boolean;
+  miesiacZakonczony: boolean;
+  /** Pozycje policzone, a jeszcze niezatwierdzone w tej postaci. */
+  doZatwierdzenia: number;
+  /** Skróty pozycji z tego widoku: zatwierdzenie zapisze tylko to, co klient widział. */
+  skroty: Partial<Record<RodzajRozliczeniaTelefonu, string>>;
+  /** Wszystkie wersje rozliczeń miesiąca, od najnowszej. */
+  historia: Array<{ rodzaj: RodzajRozliczeniaTelefonu; nazwa: string; wersja: number; kwotaGr: number; zatwierdzoneO: string; zaplaconeO: string | null }>;
+}
+
+/** `POST /api/mobile/v1/ksiegowosc/zatwierdz`: miesiąc i skróty z widoku. */
+export interface ZatwierdzenieMiesiacaZadanie {
+  miesiac: string;
+  skroty: Partial<Record<RodzajRozliczeniaTelefonu, string>>;
+}
+
+/** 200: `nowe` wersji zapisanych (0: wszystko było już zatwierdzone, ponowienie). */
+export interface ZatwierdzenieMiesiacaOdpowiedz {
+  nowe: number;
+}
+
+/** `POST /api/mobile/v1/ksiegowosc/rozliczenia/{id}/zaplata`: `dzien` RRRR-MM-DD przy `zaplacone: true`. */
+export interface ZaplataRozliczeniaZadanie {
+  zaplacone: boolean;
+  dzien: string | null;
+}
+
+export interface ZaplataRozliczeniaOdpowiedz {
+  zaplacone: boolean;
+}
+
+// ─── Ustawienia firmy (M10b) ──────────────────────────────────────────
+
+/**
+ * `GET /api/mobile/v1/ustawienia`: to, co karty Firma, KSeF i Przypomnienia
+ * strony pokazują, do odczytu. Zmiany zapisuje się na stronie.
+ */
+export interface UstawieniaOdpowiedz {
+  firma: {
+    nazwa: string;
+    nip: string;
+    /** Dwie linie adresu jak na stronie (`address_json`). */
+    adres: { linia1: string; linia2: string };
+    rachunek: string | null;
+    /** RRRR-MM-DD albo `null`. */
+    rozpoczecie: string | null;
+    /** Podstawa zwolnienia z VAT; `null`: czynny podatnik VAT bez zwolnienia. */
+    zwolnienie: string | null;
+    /** Zwolnienie podmiotowe (art. 113): firma nie jest czynnym podatnikiem VAT. */
+    zwolnieniePodmiotowe: boolean;
+    metodaKasowa: boolean;
+  };
+  ksef: {
+    /** Jak plakietka strony: połączono (dowód w środowisku aplikacji), do potwierdzenia, brak certyfikatu. */
+    stan: 'polaczono' | 'do_potwierdzenia' | 'brak';
+    /** RRRR-MM-DD albo `null`. */
+    certyfikatDo: string | null;
+  };
+  /**
+   * Tylko dla właściciela (zakładka strony też tylko dla niego); `null` dla
+   * pozostałych ról. `zapisane: false`: firma nie zapisała ustawień, więc
+   * FaktWay nie przygotowuje przypomnień (reszta pól to propozycja strony).
+   */
+  przypomnienia: {
+    zapisane: boolean;
+    wlaczone: boolean;
+    etapy: Array<{ etap: 1 | 2 | 3; wlaczony: boolean; dniPoTerminie: number }>;
+    godzina: number;
+    tylkoDniRobocze: boolean;
+    najwiecej: number;
+    nadawca: string | null;
+    odpowiedzNa: string | null;
+    wstrzymajPoOdpowiedzi: boolean;
+    wstrzymajPoCzesciowej: boolean;
+  } | null;
 }

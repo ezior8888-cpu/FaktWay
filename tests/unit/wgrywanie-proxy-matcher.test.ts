@@ -21,17 +21,28 @@ const { getMiddlewareMatchers } = createRequire(import.meta.url)('next/dist/buil
  *
  * Dlatego trasy wgrywania (`/api/uploads/*`) i `/share-target` są poza proxy
  * i same sprawdzają sesję, 2FA, firmę, Origin i rozmiar (`lib/uploads/server.ts`).
- * Ten test pilnuje obu stron: wyłączone są dokładnie te trzy adresy (bez
- * podścieżek — wszystko inne pod `/api/uploads/` i `/share-target/` dalej
- * idzie przez bramkę proxy), a każda trasa wgrywania przechodzi przez
- * wspólną bramkę.
+ * Od M9 planu aplikacji mobilnej także wgranie zdjęcia kosztu z telefonu
+ * (`/api/mobile/v1/wydatki/zdjecie`): token sprawdza bramka API telefonu
+ * (`authenticateMobileRequest`), rozmiar i odczyt ciała ta sama bramka wgrań.
+ * Ten test pilnuje obu stron: wyłączone są dokładnie te cztery adresy (bez
+ * podścieżek: wszystko inne pod `/api/uploads/`, `/api/mobile/` i
+ * `/share-target/` dalej idzie przez proxy), a każda trasa wgrywania
+ * przechodzi przez wspólną bramkę.
  */
 
 const matchers = getMiddlewareMatchers(config.matcher, {});
 const passesProxy = (pathname: string) => matchers.some((m) => new RegExp(m.regexp).test(pathname));
 
 describe('matcher proxy a trasy wgrywania', () => {
-  it.each(['/api/uploads/expense', '/api/uploads/import', '/api/uploads/expense/', '/share-target', '/share-target/'])(
+  it.each([
+    '/api/uploads/expense',
+    '/api/uploads/import',
+    '/api/uploads/expense/',
+    '/share-target',
+    '/share-target/',
+    '/api/mobile/v1/wydatki/zdjecie',
+    '/api/mobile/v1/wydatki/zdjecie/',
+  ])(
     '%s omija proxy (ciało nie jest buforowane przed trasą)',
     (pathname) => {
       expect(passesProxy(pathname)).toBe(false);
@@ -53,6 +64,12 @@ describe('matcher proxy a trasy wgrywania', () => {
     '/share-target-x',
     '/Share-Target',
     '/api/invoices/batch-pdf',
+    '/api/mobile/v1/wydatki',
+    '/api/mobile/v1/wydatki/zdjecie/x',
+    '/api/mobile/v1/wydatki/zdjecia',
+    '/api/mobile/v1/wydatki/odczyt/11111111-1111-4111-8111-111111111111',
+    '/api/mobile/v2/wydatki/zdjecie',
+    '/api/mobile/v1/faktury',
     '/api/ksef/health',
     '/expenses',
     '/dashboard',
@@ -106,4 +123,17 @@ describe('każda trasa poza proxy pilnuje się sama', () => {
       expect(source).not.toMatch(/export (async )?function (GET|PUT|PATCH|DELETE)\b/);
     },
   );
+
+  it('wgranie z telefonu: bramka API telefonu (token, firma) i bramka wgrań (rozmiar, odczyt ciała)', () => {
+    const route = readFileSync(path.join(process.cwd(), 'app/api/mobile/v1/wydatki/zdjecie/route.ts'), 'utf8');
+    expect(route).toMatch(/authenticateMobileRequest\(request, \{ org: 'required' \}\)/);
+    expect(route).toMatch(/export async function POST\(/);
+    expect(route).not.toMatch(/export (async )?function (GET|PUT|PATCH|DELETE)\b/);
+    const source = readFileSync(path.join(process.cwd(), 'lib/api/mobile/wydatki.ts'), 'utf8');
+    expect(source).toContain("from '@/lib/uploads/server'");
+    expect(source).toMatch(/checkUploadHeaders\(/);
+    expect(source).toMatch(/checkUploadRate\(/);
+    expect(source).toMatch(/reserveUploadBytes\(/);
+    expect(source).toMatch(/readUploadForm\(/);
+  });
 });
