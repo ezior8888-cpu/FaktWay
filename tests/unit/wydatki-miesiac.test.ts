@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { monthLabel, monthRange, parseExpenseMonth, shiftMonth } from '@/lib/expenses/month';
 
@@ -39,9 +39,16 @@ describe('miesiąc listy wydatków', () => {
 });
 
 describe('strona /expenses — zakres miesiąca w zapytaniu', () => {
-  it('wybrany miesiąc: od pierwszego do ostatniego dnia', async () => {
-    const calls: Array<[string, unknown[]]> = [];
-    const { vi } = await import('vitest');
+  const calls: Array<[string, unknown[]]> = [];
+  let ExpensesPage: (typeof import('@/app/(dashboard)/(koszty)/expenses/page'))['default'];
+
+  // Zimny import strony (Next, komponenty, moduły z `lib/`) to prawie cały czas
+  // tego pliku. Na Windowsie trwa ok. 4-5 s, a gdy kilka sesji testuje naraz,
+  // 8-20 s, czyli ponad domyślne 5 s na test z `vitest.config.ts` (hak przed
+  // pushem padał na tym limicie). Dlatego import idzie tu, raz, z jawnym
+  // limitem 60 s, a sam test z wywołaniem strony zostaje przy zwykłym limicie.
+  // Atrapa stoi przed importem, bo `vi.doMock` działa tylko na późniejsze `import()`.
+  beforeAll(async () => {
     vi.doMock('@/lib/supabase/page-context', () => ({
       getPageContext: async () => {
         const chain: Record<string, unknown> = {};
@@ -52,7 +59,10 @@ describe('strona /expenses — zakres miesiąca w zapytaniu', () => {
         return { supabase: chain, tenantId: 'ten-1' };
       },
     }));
-    const { default: ExpensesPage } = await import('@/app/(dashboard)/(koszty)/expenses/page');
+    ({ default: ExpensesPage } = await import('@/app/(dashboard)/(koszty)/expenses/page'));
+  }, 60_000);
+
+  it('wybrany miesiąc: od pierwszego do ostatniego dnia', async () => {
     await ExpensesPage({ searchParams: Promise.resolve({ miesiac: '2026-02' }) });
     expect(calls.filter(([m]) => m === 'gte')).toEqual([['gte', ['issue_date', '2026-02-01']]]);
     expect(calls.filter(([m]) => m === 'lte')).toEqual([['lte', ['issue_date', '2026-02-28']]]);
