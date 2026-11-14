@@ -424,6 +424,15 @@ function decodePng(png: Png): Uint8Array | null {
 }
 
 /**
+ * Iloraz liczb całkowitych nieujemnych zaokrąglony połową w górę, bez
+ * liczb zmiennoprzecinkowych. Tu liczymy piksele (średnia przy zmniejszaniu,
+ * wymiary po skali), nie kwoty.
+ */
+function ilorazZaokraglony(licznik: number, mianownik: number): number {
+  return Math.floor((2 * licznik + mianownik) / (2 * mianownik));
+}
+
+/**
  * Zmniejszenie średnią z pikseli źródła pod każdym pikselem wyniku, z wagą
  * krycia (kolor przezroczystego tła nie przyciemnia brzegów logo).
  */
@@ -455,11 +464,11 @@ function downscale(src: Uint8Array, sw: number, sh: number, dw: number, dh: numb
       }
       const o = (dy * dw + dx) * 4;
       if (a > 0) {
-        out[o] = Math.round(r / a);
-        out[o + 1] = Math.round(g / a);
-        out[o + 2] = Math.round(b / a);
+        out[o] = ilorazZaokraglony(r, a);
+        out[o + 1] = ilorazZaokraglony(g, a);
+        out[o + 2] = ilorazZaokraglony(b, a);
       }
-      out[o + 3] = Math.round(a / n);
+      out[o + 3] = ilorazZaokraglony(a, n);
     }
   }
   return out;
@@ -540,9 +549,14 @@ function preparePng(bytes: Buffer): LogoCheck {
   if (sizeProblem) return sizeProblem;
   const rgba = decodePng(png);
   if (!rgba) return reject('corrupt');
-  const scale = Math.min(1, LOGO_STORED_MAX_HEIGHT_PX / png.height, LOGO_STORED_MAX_WIDTH_PX / png.width);
-  const width = Math.max(1, Math.round(png.width * scale));
-  const height = Math.max(1, Math.round(png.height * scale));
+  // Skala z ułamka liczb całkowitych (bok docelowy / bok źródła), wymiary ilorazem zaokrąglonym.
+  const [num, den] =
+    png.height * LOGO_STORED_MAX_WIDTH_PX >= png.width * LOGO_STORED_MAX_HEIGHT_PX
+      ? [LOGO_STORED_MAX_HEIGHT_PX, png.height]
+      : [LOGO_STORED_MAX_WIDTH_PX, png.width];
+  const shrink = num < den;
+  const width = shrink ? Math.max(1, ilorazZaokraglony(png.width * num, den)) : png.width;
+  const height = shrink ? Math.max(1, ilorazZaokraglony(png.height * num, den)) : png.height;
   const pixels = width === png.width && height === png.height ? rgba : downscale(rgba, png.width, png.height, width, height);
   const data = encodePng(pixels, width, height);
   if (data.length > LOGO_STORED_MAX_BYTES) return reject('too_large', LOGO_TEXTS.storedTooLarge);
