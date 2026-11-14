@@ -210,6 +210,8 @@ const correctionInput = (extra: Partial<CorrectionInvoiceSchemaIn> = {}): Correc
 
 const lastInsert = () => db.inserts.at(-1)!;
 const fa3 = (row: Row) => row.fa3_data as Row;
+/** Wywołania numeracji; zapis zwykłej faktury woła po nim jeszcze licznik produktów (krok 2.6, 00204). */
+const numberingCalls = () => db.rpcCalls.filter((c) => c.fn !== 'product_usage_record');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -289,7 +291,7 @@ describe('zwykła faktura: numer z licznika serii', () => {
     expect(result).toMatchObject({ success: true });
     expect(lastInsert()).toMatchObject({ internal_number: 'FV/50/11/2026', number_series_id: SERIES });
     expect(lastInsert()).not.toHaveProperty('number_counter');
-    expect(db.rpcCalls).toHaveLength(0);
+    expect(numberingCalls()).toHaveLength(0);
   });
 
   it('formularz bez serii (dzisiejsza numeracja): wiersz bez nowych kolumn i bez wywołań numeracji', async () => {
@@ -300,7 +302,7 @@ describe('zwykła faktura: numer z licznika serii', () => {
     for (const column of ['number_series_id', 'number_period', 'number_counter', 'number_request_key']) {
       expect(lastInsert()).not.toHaveProperty(column);
     }
-    expect(db.rpcCalls).toHaveLength(0);
+    expect(numberingCalls()).toHaveLength(0);
   });
 });
 

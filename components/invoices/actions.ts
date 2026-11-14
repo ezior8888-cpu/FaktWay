@@ -51,6 +51,7 @@ import {
   withSalesQuoteColumns,
   type SalesQuoteIssueLink,
 } from '@/lib/proformy/powiazanie';
+import { recordProductUsage } from '@/lib/produkty/uzycie';
 import { addDaysToIsoDate, dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
   EU_BUYER_COUNTRIES,
@@ -387,6 +388,12 @@ async function insertInvoiceAndLines(
       }),
     );
   }
+
+  // Krok 2.6 (00204): licznik użyć produktów z katalogu, raz na zapisaną
+  // fakturę z pozycjami (szkic, „Wystaw i wyślij”, faktura cykliczna, z proformy).
+  // Odmowa numeru (`request_done`) i błąd pozycji wracają wyżej, bez licznika.
+  // Błąd licznika jest tylko w logu i nie cofa zapisu.
+  await recordProductUsage(supabase, invoice.lines);
 
   return { success: true, invoiceId: inserted.id as string };
 }
