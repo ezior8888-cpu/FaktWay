@@ -41,20 +41,30 @@ describe('ile odłożyć', () => {
 
 describe('karta „Odłóż na podatek” w pilotażu', () => {
   it('udział w przychodzie, kwota, podpis z rokiem stawek', () => {
-    const p = odlozycProps({ ok: true, miesiac: '2026-11', kwotaGr: 429_334, przychodGr: 1_500_000, pozycje: [], braki: [] }, 2026);
+    const p = odlozycProps({ ok: true, miesiac: '2026-11', kwotaGr: 429_334, przychodGr: 1_500_000, pozycje: [], braki: [] });
     expect(p).toMatchObject({ title: 'Odłóż na podatek', subtitle: 'Szacunek za listopad 2026 z danych do dziś', pct: 29, caption: 'Według Twoich danych i stawek na 2026 r.' });
     expect(p.lines[0]).toBe('29%');
     expect(p.lines[2]).toBe('do odłożenia');
   });
 
+  it('styczeń: suma ze składką zdrowotną ma w podpisie rok składkowy zdrowotnej (NZ-TRESC-02)', () => {
+    const zdrowotna = { rodzaj: 'zdrowotna' as const, kwotaGr: 49_835 };
+    expect(odlozycProps({ ok: true, miesiac: '2027-01', kwotaGr: 49_835, przychodGr: null, pozycje: [zdrowotna], braki: [] }).caption).toBe(
+      'Według Twoich danych i stawek na 2027 r.; składka zdrowotna według stawek roku składkowego od lutego 2026 r. do stycznia 2027 r.',
+    );
+    expect(odlozycProps({ ok: true, miesiac: '2027-02', kwotaGr: 49_835, przychodGr: null, pozycje: [zdrowotna], braki: [] }).caption).toBe(
+      'Według Twoich danych i stawek na 2027 r.',
+    );
+  });
+
   it('część kwot bez szacunku, brak ustawień i parametry czekające na księgową: powód zamiast kwoty, bez trybu rozkazującego', () => {
-    expect(odlozycProps({ ok: true, miesiac: '2026-11', kwotaGr: 1, przychodGr: 0, pozycje: [], braki: ['x'] }, 2026)).toMatchObject({
+    expect(odlozycProps({ ok: true, miesiac: '2026-11', kwotaGr: 1, przychodGr: 0, pozycje: [], braki: ['x'] })).toMatchObject({
       pct: 0,
-      caption: 'Według Twoich danych i stawek na 2026 r.; część kwot bez szacunku, szczegóły w „Ten miesiąc”.',
+      caption: 'Według Twoich danych i stawek na 2026 r. Część kwot bez szacunku, szczegóły w „Ten miesiąc”.',
     });
-    const bezProfilu = odlozycProps({ ok: false, miesiac: '2026-11', braki: ['Na listopad 2026 nie ma ustawień podatkowych, więc nic nie liczymy.'] }, 2026);
+    const bezProfilu = odlozycProps({ ok: false, miesiac: '2026-11', braki: ['Na listopad 2026 nie ma ustawień podatkowych, więc nic nie liczymy.'] });
     expect(bezProfilu.caption).toBe('Bez ustawień podatkowych nie liczymy szacunku.');
-    const d7 = odlozycProps({ ok: false, miesiac: '2026-11', braki: ['Stawki na 2026 r. (ryczałt) czekają na sprawdzenie przez księgową.'] }, 2026);
+    const d7 = odlozycProps({ ok: false, miesiac: '2026-11', braki: ['Stawki na 2026 r. (ryczałt) czekają na sprawdzenie przez księgową.'] });
     expect(d7.caption).toBe('Szacunku jeszcze nie liczymy; powód jest w „Ten miesiąc”.');
     const teksty = JSON.stringify([bezProfilu, d7]);
     expect(teksty).not.toMatch(/[—–]|Uzupełnij|Sprawdź|Zapłać/);

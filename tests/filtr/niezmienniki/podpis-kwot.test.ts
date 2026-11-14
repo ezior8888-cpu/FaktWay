@@ -116,18 +116,23 @@ describe('NZ-TRESC-02: kwoty modułu z podpisem „według Twoich danych i stawe
   });
 
   it('karta „Odłóż na podatek”: szacunek z kwotą ma podpis także przy brakach części pozycji', () => {
+    const pozycjeKarty = fc.uniqueArray(
+      fc.record({ rodzaj: fc.constantFrom(...RODZAJE_ROZLICZEN), kwotaGr: fc.integer({ min: 0, max: 100_000_000 }) }),
+      { minLength: 1, maxLength: 5, selector: (p) => p.rodzaj },
+    );
     fc.assert(
       fc.property(
         okres,
-        fc.integer({ min: 0, max: 100_000_000 }),
+        pozycjeKarty,
         fc.oneof(fc.constant(null), fc.integer({ min: 0, max: 100_000_000 })),
         fc.array(fc.constantFrom('Brak parametrów składki zdrowotnej.', 'Ewidencja przychodów ma braki.'), { maxLength: 2 }),
-        (o, kwotaGr, przychodGr, braki) => {
+        (o, p, przychodGr, braki) => {
           const miesiac = nazwaMiesiaca(o);
-          const k = odlozycProps({ ok: true, miesiac, kwotaGr, przychodGr, pozycje: [], braki }, o.rok);
-          // Kwota w pierścieniu jest zawsze, więc podpis też.
+          const kwotaGr = p.reduce((s, x) => s + x.kwotaGr, 0);
+          const k = odlozycProps({ ok: true, miesiac, kwotaGr, przychodGr, pozycje: p, braki });
+          // Kwota w pierścieniu jest zawsze, więc podpis też; suma ze zdrowotną za styczeń z rokiem składkowym.
           expect(KWOTA.test(k.lines.join(' '))).toBe(true);
-          expect(brakiPodpisu(`${k.lines.join(' ')} ${k.caption}`, miesiac, false)).toEqual([]);
+          expect(brakiPodpisu(`${k.lines.join(' ')} ${k.caption}`, miesiac, p.some((x) => x.rodzaj === 'zdrowotna'))).toEqual([]);
         },
       ),
       opcje(),

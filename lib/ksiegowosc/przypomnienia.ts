@@ -21,7 +21,7 @@ import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { terminDla, type Termin } from '@/lib/ksiegowosc/kalendarz';
-import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
+import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/podpis-kwot';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import type { RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
 import { aktualne, zaplacono, type PozycjaZeSkrotem, type Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
@@ -164,20 +164,10 @@ export interface Tresc {
 
 const adres = (miesiac: string) => `/reports/ten-miesiac?month=${Number(miesiac.slice(5, 7))}&year=${miesiac.slice(0, 4)}`;
 
-/**
- * Podpis kwot (NZ-TRESC-02; plan księgowości, sekcja 8), ten sam co pod kwotami
- * na stronie „Ten miesiąc”: rok stawek, a przy składce zdrowotnej za styczeń
- * także rok składkowy (luty-styczeń). Treść bez kwot nie ma podpisu.
- */
+/** Podpis kwot (NZ-TRESC-02), jak na stronie „Ten miesiąc”; treść bez kwot nie ma podpisu. */
 function podpisKwot(miesiac: string, pozycje: readonly PozycjaPrzypomnienia[]): string | null {
   if (!pozycje.some((p) => p.kwotaGr !== null)) return null;
-  const rok = Number(miesiac.slice(0, 4));
-  const rokSkladkowy = rokSkladkowyZdrowotnej(miesiac);
-  const zdrowotna =
-    rokSkladkowy !== rok && pozycje.some((p) => p.rodzaj === 'zdrowotna' && p.kwotaGr !== null)
-      ? `; składka zdrowotna według stawek roku składkowego od lutego ${rokSkladkowy} r. do stycznia ${rokSkladkowy + 1} r.`
-      : '';
-  return `Według Twoich danych i stawek na ${rok} r.${zdrowotna}`;
+  return podpisKwotMiesiaca(miesiac, pozycje.some((p) => p.rodzaj === 'zdrowotna' && p.kwotaGr !== null));
 }
 
 /** VAT 0 zł (F11-B5): nie ma czego zapłacić, więc idzie osobnym zdaniem o JPK_V7M. */
