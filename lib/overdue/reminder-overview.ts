@@ -1,3 +1,4 @@
+import { warsawMidnightIso } from '@/lib/format/warsaw-date';
 import { warsawMonthBounds } from '@/lib/invoices/list-stats';
 import type { PageContext } from '@/lib/supabase/page-context';
 
@@ -104,17 +105,8 @@ export async function readLatestReminders(
   }
 }
 
-/** Północ dnia RRRR-MM-DD w Europe/Warsaw jako znacznik ISO (UTC). */
-export function warsawMidnightIso(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-').map(Number) as [number, number, number];
-  const hourIn = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Warsaw', hour: '2-digit', hourCycle: 'h23' });
-  // Polska to UTC+1 (CET) albo UTC+2 (CEST); północ lokalna to 23:00 albo 22:00 UTC dnia poprzedniego.
-  for (const offsetHours of [1, 2]) {
-    const candidate = new Date(Date.UTC(y, m - 1, d) - offsetHours * 3_600_000);
-    if (hourIn.format(candidate) === '00') return candidate.toISOString();
-  }
-  return new Date(Date.UTC(y, m - 1, d) - 3_600_000).toISOString();
-}
+// Północ w Polsce jest w `lib/format/warsaw-date.ts` (używa jej też retencja faktur).
+export { warsawMidnightIso };
 
 /**
  * Kafel „Przypomnień wysłanych w miesiącu”: wpisy `status = 'sent'`

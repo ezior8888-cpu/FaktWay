@@ -242,7 +242,9 @@
         "app/api/noty/**",
         "app/actions/proformy.ts",
         "lib/proformy/**",
-        "app/api/proformy/**"
+        "app/api/proformy/**",
+        "app/actions/produkty.ts",
+        "lib/produkty/**"
       ]
     },
     {
@@ -809,6 +811,7 @@
         "components/expenses/finora/labels.ts",
         "components/import-danych/{import-model,ksef-history-model}.ts",
         "components/invoices/invoice-form-parts/validation-message.ts",
+        "components/invoices/invoice-form-parts/validation-issues.ts",
         "components/invoices/invoice-row-types.ts",
         "components/settings/finora/format-date.ts",
         "app/(dashboard)/(koszty)/inbox/_components/inbox-rows.ts",

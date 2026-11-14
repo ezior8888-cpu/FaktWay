@@ -28,6 +28,7 @@ import {
   labelClass,
   type BuyerKind,
 } from './constants';
+import { FieldErrorText, fieldErrorProps } from './field-error-text';
 
 /**
  * Sekcja „Nabywca” (Finora: „Invoice To:”): rodzaj nabywcy (AUD-70), pola
@@ -139,7 +140,7 @@ export function BuyerSection({
       {/* Rodzaj nabywcy — trzy wykluczające się opcje (AUD-70). Natywne
           pola radio: grupa z klawiatury (strzałki) i czytnik ekranu bez
           dodatkowej biblioteki; kółko zostaje widoczne, bo klika w nie e2e. */}
-      <fieldset>
+      <fieldset {...fieldErrorProps('buyer-kind', !!form.formState.errors.buyerIsEu)}>
         <legend className={cn(labelClass, 'text-muted-foreground')}>Rodzaj nabywcy</legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
           {BUYER_KINDS.map((opcja) => {
@@ -173,10 +174,9 @@ export function BuyerSection({
           })}
         </div>
         {form.formState.errors.buyerIsEu ? (
-          <p className={errorTextClass}>
-            <AlertCircle className="h-3 w-3" />
+          <FieldErrorText fieldId="buyer-kind">
             {form.formState.errors.buyerIsEu.message}
-          </p>
+          </FieldErrorText>
         ) : null}
       </fieldset>
       {buyerKind === 'eu' ? (
@@ -200,8 +200,8 @@ export function BuyerSection({
               })}
             />
             {form.formState.errors.buyerVatUe ? (
-              <p id="buyer-vat-ue-hint" className={errorTextClass}>
-                <AlertCircle className="h-3 w-3" />
+              <p id="buyer-vat-ue-hint" role="alert" className={errorTextClass}>
+                <AlertCircle aria-hidden="true" className="h-3 w-3" />
                 {form.formState.errors.buyerVatUe.message}
               </p>
             ) : (
@@ -239,7 +239,7 @@ export function BuyerSection({
               <SelectTrigger
                 id="buyer-country"
                 className="w-full"
-                aria-invalid={form.formState.errors.buyerCountryCode ? true : undefined}
+                {...fieldErrorProps('buyer-country', !!form.formState.errors.buyerCountryCode)}
               >
                 <SelectValue placeholder="Wybierz kraj UE" />
               </SelectTrigger>
@@ -252,10 +252,9 @@ export function BuyerSection({
               </SelectContent>
             </Select>
             {form.formState.errors.buyerCountryCode ? (
-              <p className={errorTextClass}>
-                <AlertCircle className="h-3 w-3" />
+              <FieldErrorText fieldId="buyer-country">
                 {form.formState.errors.buyerCountryCode.message}
-              </p>
+              </FieldErrorText>
             ) : (
               <p className="text-muted-foreground mt-1.5 text-xs">
                 Ustawiamy go z prefiksu numeru — zmień, jeśli adres jest w innym kraju UE.
@@ -319,7 +318,11 @@ export function BuyerSection({
               void form.trigger(['buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
             }}
           >
-            <SelectTrigger id="buyer-id-type" className="w-full">
+            <SelectTrigger
+              id="buyer-id-type"
+              className="w-full"
+              {...fieldErrorProps('buyer-id-type', !!form.formState.errors.buyerConsumerIdType)}
+            >
               <SelectValue placeholder="Wybierz typ" />
             </SelectTrigger>
             <SelectContent>
@@ -331,10 +334,9 @@ export function BuyerSection({
             </SelectContent>
           </Select>
           {form.formState.errors.buyerConsumerIdType ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
+            <FieldErrorText fieldId="buyer-id-type">
               {form.formState.errors.buyerConsumerIdType.message}
-            </p>
+            </FieldErrorText>
           ) : null}
         </div>
       ) : null}
@@ -346,13 +348,13 @@ export function BuyerSection({
             inputMode="numeric"
             autoComplete="off"
             placeholder="11 cyfr"
+            {...fieldErrorProps('buyer-pesel', !!form.formState.errors.buyerPesel)}
             {...form.register('buyerPesel')}
           />
           {form.formState.errors.buyerPesel ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
+            <FieldErrorText fieldId="buyer-pesel">
               {form.formState.errors.buyerPesel.message}
-            </p>
+            </FieldErrorText>
           ) : null}
         </div>
       ) : null}
@@ -366,13 +368,13 @@ export function BuyerSection({
             placeholder={
               buyerConsumerIdType === 'id_card' ? 'Seria i numer dowodu' : 'Numer paszportu'
             }
+            {...fieldErrorProps('buyer-id-document', !!form.formState.errors.buyerIdDocument)}
             {...form.register('buyerIdDocument')}
           />
           {form.formState.errors.buyerIdDocument ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
+            <FieldErrorText fieldId="buyer-id-document">
               {form.formState.errors.buyerIdDocument.message}
-            </p>
+            </FieldErrorText>
           ) : null}
         </div>
       ) : null}
