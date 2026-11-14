@@ -1,6 +1,7 @@
 
 
 import type { JobContext } from '@/lib/jobs/registry';
+import { inListChunks } from '@/lib/pagination/in-list';
 import { granicaArchiwizacji, terminUsunieciaPoArchiwizacji } from '@/lib/retention/terminy';
 import { createAdminClient } from '@/lib/supabase/server';
 import { uploadToGlacier } from '@/lib/storage/glacier';
@@ -47,7 +48,9 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
 
     if (candidates.length === 0) return { archived: 0 };
 
-    const ids = candidates.map((c) => c.id);
+    // Zapisy paczkami (FZ-011): `.in('id', …)` trafia do adresu PATCH, a 500
+    // identyfikatorów to ok. 19 KB, ponad limit wiersza żądania bramki.
+    const paczki = inListChunks(candidates.map((c) => c.id as string));
 
     for (const candidate of candidates) {
       await step.run(`glacier-${candidate.id}`, async () => {
@@ -91,24 +94,19 @@ export async function runArchiveOldInvoices({ step, logger }: JobContext) {
 
     await step.run('mark-archived', async () => {
       const supabase = createAdminClient();
-      const { error } = await supabase
-        .from('invoices')
-        .update({
-          archived_at: new Date().toISOString(),
-        })
-        .in('id', ids);
-
-      if (error) throw new Error(`Mark archived failed: ${error.message}`);
+      const archivedAt = new Date().toISOString();
+      for (const paczka of paczki) {
+        const { error } = await supabase.from('invoices').update({ archived_at: archivedAt }).in('id', paczka);
+        if (error) throw new Error(`Mark archived failed: ${error.message}`);
+      }
     });
 
     await step.run('schedule-deletion', async () => {
       const supabase = createAdminClient();
-      const { error } = await supabase
-        .from('invoices')
-        .update({ scheduled_deletion_at: terminUsuniecia })
-        .in('id', ids);
-
-      if (error) throw new Error(`Schedule deletion failed: ${error.message}`);
+      for (const paczka of paczki) {
+        const { error } = await supabase.from('invoices').update({ scheduled_deletion_at: terminUsuniecia }).in('id', paczka);
+        if (error) throw new Error(`Schedule deletion failed: ${error.message}`);
+      }
     });
 
     return { archived: candidates.length };
