@@ -6,6 +6,8 @@ import { odlozycProps } from '@/components/przeplywy/finora-1do1/adaptery';
 import { APP_NOTIFICATION_LIMITS } from '@/lib/app-notifications/types';
 import TerminRozliczenia from '@/lib/email/templates/TerminRozliczenia';
 import { terminDla, type RodzajTerminu } from '@/lib/ksiegowosc/kalendarz';
+import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
+import { podpisKwot, podpisKwotMiesiaca } from '@/lib/ksiegowosc/przelew';
 import { trescTerminu, trescWyliczenia, type PozycjaPrzypomnienia } from '@/lib/ksiegowosc/przypomnienia';
 import { RODZAJE_ROZLICZEN } from '@/lib/ksiegowosc/ten-miesiac';
 
@@ -24,9 +26,10 @@ import { opcje, PRZYPADKI } from '../generatory/ustawienia';
  * o wyliczonym miesiącu (push: `trescWyliczenia`) i karta „Odłóż na podatek”
  * na Pulpicie (`odlozycProps`). Kwotę w tekście poznajemy po zapisie
  * („1 536,00 zł”, „999 zł”, „4,3 tys. zł”), nie po danych wejściowych, więc
- * test łapie każdą kwotę, którą tekst pokazuje. Podpis strony „Ten miesiąc”
- * sprawdzi ten sam test po wydzieleniu go do `lib/` (PR aplikacji mobilnej
- * M10b).
+ * test łapie każdą kwotę, którą tekst pokazuje. Strona „Ten miesiąc”
+ * i telefon (`GET /api/mobile/v1/ksiegowosc`) biorą podpis z `podpisKwot`
+ * (`lib/ksiegowosc/przelew.ts`), przypomnienia i karta z `podpisKwotMiesiaca`,
+ * która woła tę samą funkcję.
  */
 
 const KWOTA = /\d(?:[\d\s]*\d)?(?:,\d+)?(?:\s(?:tys\.|mln))?\s?zł/u;
@@ -73,6 +76,21 @@ describe('NZ-TRESC-02: kwoty modułu z podpisem „według Twoich danych i stawe
     expect(brakiPodpisu('Składka zdrowotna 498,35 zł. Według Twoich danych i stawek na 2027 r.', '2027-01', true)).not.toEqual([]);
     expect(brakiPodpisu('Bez oznaczonej zapłaty: ryczałt.', '2026-10', false)).toEqual([]);
     expect(brakiPodpisu('Ryczałt 4,3 tys. zł. Według Twoich danych i stawek na 2026 r.', '2026-10', false)).toEqual([]);
+  });
+
+  it('strona „Ten miesiąc” i telefon: podpis każdego miesiąca 2026-2030 (zdrowotna zawsze na stronie)', () => {
+    const bledy: string[] = [];
+    for (let rok = 2026; rok <= 2030; rok++) {
+      for (let nr = 1; nr <= 12; nr++) {
+        const miesiac = nazwaMiesiaca({ rok, miesiac: nr });
+        const podpis = podpisKwot(rok, rokSkladkowyZdrowotnej(miesiac));
+        bledy.push(...brakiPodpisu(`Składka zdrowotna 498,35 zł. ${podpis}`, miesiac, true));
+        // Przypomnienia i karta: ten sam tekst co strona, gdy jest zdrowotna; bez niej sam rok stawek.
+        if (podpisKwotMiesiaca(miesiac, true) !== podpis) bledy.push(`inny podpis przypomnień niż strony za ${miesiac}`);
+        if (podpisKwotMiesiaca(miesiac, false) !== podpisKwot(rok, rok)) bledy.push(`podpis bez zdrowotnej za ${miesiac}`);
+      }
+    }
+    expect(bledy).toEqual([]);
   });
 
   it('przypomnienie o terminie (push i dzwonek): losowe rozliczenia, kwoty, terminy i dni', () => {

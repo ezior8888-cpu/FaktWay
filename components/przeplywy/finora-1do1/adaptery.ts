@@ -13,7 +13,7 @@ import type { InflowEntry } from '@/lib/dashboard/inflows';
 import type { TaxEstimate } from '@/lib/dashboard/tax-estimate';
 import { monthLabel } from '@/lib/expenses/month';
 import type { Odlozyc } from '@/lib/ksiegowosc/odlozyc';
-import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/podpis-kwot';
+import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/przelew';
 import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney, formatPlPercentChange } from '@/lib/format/pl';

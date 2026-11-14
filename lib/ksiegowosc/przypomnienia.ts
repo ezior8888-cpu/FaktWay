@@ -21,7 +21,7 @@ import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { terminDla, type Termin } from '@/lib/ksiegowosc/kalendarz';
-import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/podpis-kwot';
+import { podpisKwotMiesiaca } from '@/lib/ksiegowosc/przelew';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import type { RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
 import { aktualne, zaplacono, type PozycjaZeSkrotem, type Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';

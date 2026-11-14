@@ -1,4 +1,5 @@
 import { formatujRachunek } from '@/lib/ksiegowosc/mikrorachunek';
+import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
 import type { RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
 
 /**
@@ -33,4 +34,14 @@ export function podpisKwot(rok: number, rokSkladkowy: number): string {
   const zdrowotna =
     rokSkladkowy !== rok ? `; składka zdrowotna według stawek roku składkowego od lutego ${rokSkladkowy} r. do stycznia ${rokSkladkowy + 1} r.` : '';
   return `Według Twoich danych i stawek na ${rok} r.${zdrowotna}`;
+}
+
+/**
+ * Ten sam podpis (NZ-TRESC-02) dla kwot spoza strony: przypomnienia (push,
+ * dzwonek, mail) i karta „Odłóż na podatek”. Rok składkowy zdrowotnej tylko
+ * wtedy, gdy wśród kwot jest składka zdrowotna (strona pokazuje ją zawsze).
+ */
+export function podpisKwotMiesiaca(miesiac: string, zdrowotna: boolean): string {
+  const rok = Number(miesiac.slice(0, 4));
+  return podpisKwot(rok, zdrowotna ? rokSkladkowyZdrowotnej(miesiac) : rok);
 }
