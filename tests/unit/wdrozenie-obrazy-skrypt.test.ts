@@ -36,8 +36,11 @@ const WORKER = 'ghcr.io/ezior8888-cpu/faktway-worker';
  * - lokalnie są pominięte, z powodem przy teście i w ostrzeżeniu pliku;
  * - na CI są czerwone z komunikatem „brak jq”, bo zmiana obrazu CI nie może
  *   po cichu wyłączyć tych testów.
- * Podział sprawdza `afterEach`: atrapa `curl` zapisuje każdy adres do
- * `curl.log`, a adres `ghcr.io/` znaczy, że skrypt odpytał GHCR.
+ * Podział sprawdza `afterEach`: atrapa `curl` zapisuje do `curl.log` ostatni
+ * argument każdego wywołania, czyli adres, a adres z hostem `ghcr.io` znaczy,
+ * że skrypt odpytał GHCR. Host porównujemy po parsowaniu (`new URL`), a nie
+ * podciągiem `ghcr.io/`, który może stać w dowolnym miejscu adresu (CodeQL
+ * `js/incomplete-url-substring-sanitization`).
  *
  * `jq` sprawdzamy tak, jak widzi go skrypt: w bashu, z tym samym PATH. Natywny
  * `jq.exe` na Windowsie bez `--binary` kończy linie CRLF, a `$(jq -r …)`
@@ -268,8 +271,22 @@ beforeEach(() => {
   write(fake('running-1'), `apptest:${OLD}\n`);
 });
 
+/** Hosty adresów z `curl.log` atrapy `curl`; wiersz, który nie jest adresem, pomijamy. */
+function curlHosts(): string[] {
+  if (!existsSync(fake('curl.log'))) return [];
+  return readFileSync(fake('curl.log'), 'utf8')
+    .split('\n')
+    .flatMap((line) => {
+      try {
+        return [new URL(line.trim()).hostname];
+      } catch {
+        return [];
+      }
+    });
+}
+
 afterEach(() => {
-  const queriedGhcr = existsSync(fake('curl.log')) && readFileSync(fake('curl.log'), 'utf8').includes('ghcr.io/');
+  const queriedGhcr = curlHosts().some((host) => host === 'ghcr.io');
   const markedGhcr = ghcrTest;
   ghcrTest = false;
   rmSync(dir, { recursive: true, force: true });
