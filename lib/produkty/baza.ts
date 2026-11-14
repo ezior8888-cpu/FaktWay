@@ -1,4 +1,10 @@
-import type { ProductListItem } from '@/lib/produkty/model';
+import {
+  isProductVatRate,
+  PRODUCT_SUGGESTIONS_LIMIT,
+  PRODUCT_SUGGESTIONS_MIN_QUERY,
+  type ProductListItem,
+  type ProductSuggestion,
+} from '@/lib/produkty/model';
 
 /**
  * Odczyt katalogu produktów klientem z sesji (RLS 00013 zawęża do firmy, a
@@ -67,10 +73,14 @@ function toItem(r: ProductRow): ProductListItem {
   };
 }
 
+/** Fraza szukania bez znaków specjalnych PostgREST i wzorca `ilike`. */
+function cleanPhrase(q: string): string {
+  return q.replace(/[,()"\\%*_]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+
 /** Fraza szukania do `ilike`: bez znaków specjalnych PostgREST i wzorca. */
 function likePattern(q: string): string {
-  const clean = q.replace(/[,()"\\%*_]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
-  return `%${clean}%`;
+  return `%${cleanPhrase(q)}%`;
 }
 
 export async function listProducts(
@@ -112,4 +122,61 @@ export async function listProducts(
     }
   }
   return rows.map(toItem);
+}
+
+/** Ilu kandydatów z bazy układamy, zanim lista utnie się do `PRODUCT_SUGGESTIONS_LIMIT`. */
+const SUGGESTION_CANDIDATES = 50;
+
+interface SuggestQueryLike {
+  select: (cols: string) => SuggestQueryLike;
+  eq: (col: string, value: unknown) => SuggestQueryLike;
+  ilike: (col: string, pattern: string) => SuggestQueryLike;
+  order: (col: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) => SuggestQueryLike;
+  limit: (n: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
+}
+
+type SuggestionRow = Pick<ProductRow, 'id' | 'name' | 'unit' | 'default_price_net' | 'default_vat_rate'>;
+
+/** 0: nazwa zaczyna się od frazy, 1: któreś słowo nazwy zaczyna się od frazy, 2: fraza w środku słowa. */
+function suggestionRank(name: string, phrase: string): number {
+  const n = name.toLocaleLowerCase('pl');
+  const p = phrase.toLocaleLowerCase('pl');
+  if (n.startsWith(p)) return 0;
+  return n.split(/[\s,.;:()/-]+/).some((word) => word.startsWith(p)) ? 1 : 2;
+}
+
+/**
+ * Podpowiedź produktów przy nazwie pozycji faktury (plan kompletnej aplikacji,
+ * krok 2.6, część 2a): aktywne produkty firmy, których nazwa zawiera frazę.
+ * Kolejność: nazwa od frazy, słowo od frazy, reszta; w każdej grupie jak na
+ * liście katalogu (ostatnio używane, częściej używane), potem nazwa. Fraza
+ * krótsza niż `PRODUCT_SUGGESTIONS_MIN_QUERY` po usunięciu znaków wzorca nie
+ * pyta bazy. Błąd bazy rzuca (pusta lista to nie „brak produktów”).
+ */
+export async function suggestProducts(client: unknown, tenantId: string, q: string): Promise<ProductSuggestion[]> {
+  const phrase = cleanPhrase(q);
+  if (phrase.length < PRODUCT_SUGGESTIONS_MIN_QUERY) return [];
+  const db = client as ClientLike;
+  const res = await (db.from('products') as SuggestQueryLike)
+    .select('id, name, unit, default_price_net, default_vat_rate')
+    .eq('tenant_id', tenantId)
+    .eq('is_archived', false)
+    .ilike('name', `%${phrase}%`)
+    .order('last_used_at', { ascending: false, nullsFirst: false })
+    .order('use_count', { ascending: false })
+    .order('name', { ascending: true })
+    .limit(SUGGESTION_CANDIDATES);
+  if (res.error) throw new Error(`produkty: ${res.error.message}`);
+
+  return ((res.data ?? []) as SuggestionRow[])
+    .map((row, order) => ({ row, order, rank: suggestionRank(row.name, phrase) }))
+    .sort((a, b) => a.rank - b.rank || a.order - b.order)
+    .slice(0, PRODUCT_SUGGESTIONS_LIMIT)
+    .map(({ row }) => ({
+      id: row.id,
+      name: row.name,
+      unit: row.unit,
+      priceNet: price(row.default_price_net),
+      vatRate: isProductVatRate(row.default_vat_rate) ? row.default_vat_rate : null,
+    }));
 }

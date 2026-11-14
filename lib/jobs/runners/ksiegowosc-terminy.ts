@@ -24,6 +24,8 @@ import * as Sentry from '@sentry/nextjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { publishAppNotification } from '@/lib/app-notifications/publish';
+import { zglosAlarmy } from '@/lib/bezpieczniki/alarm';
+import { sprawdzPrzypomnienie } from '@/lib/bezpieczniki/przypomnienia';
 import { taxDeadlineNotification } from '@/lib/app-notifications/texts';
 import { sendTerminRozliczeniaEmail } from '@/lib/email/send';
 import { monthRange } from '@/lib/expenses/month';
@@ -83,6 +85,15 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
     pozycje = niezaplacone({ ...wejscie, jpkPrzyjete: true });
   }
   if (pozycje.length === 0) return 'pominiete';
+
+  // Strażnik przypomnień (żelazny filtr F13 część 5): kwota z zatwierdzonej wersji
+  // i termin z kalendarza poza strażnikiem „Ten miesiąc”. Zła kwota: przypomnienie
+  // bez niej; zły termin: bez przypomnienia. Alarm FILTR-RT-PRZ w Sentry, przed
+  // wpisem `tax_notifications`, więc wstrzymane przypomnienie nie jest „sent”.
+  const kontrola = sprawdzPrzypomnienie({ miesiac: t.miesiac, termin: t.termin.faktyczny, pozycje });
+  if (kontrola.alarmy.length > 0) zglosAlarmy(kontrola.alarmy, { tenantId, straznik: 'przypomnienia' });
+  if (!kontrola.wyslac) return 'pominiete';
+  pozycje = kontrola.pozycje;
 
   if ((await zajmij(admin, tenantId, t.miesiac, t.etap)) === 'duplikat') return 'duplikaty';
   const tresc = trescTerminu({ miesiac: t.miesiac, termin: t.termin, dni: t.dni, pozycje });

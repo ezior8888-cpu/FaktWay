@@ -49,8 +49,8 @@ powód, kto, do kiedy.
 Strażnicy w działającej aplikacji (F13, plan B4.10, `lib/bezpieczniki/`)
 sprawdzają kwoty i terminy tuż przed pokazaniem, zatwierdzeniem
 i przypomnieniem, plik JPK_V7M przed pobraniem i wysyłką, a pliki JPK_EWP
-i JPK_PKPIR przed pobraniem. W module
-księgowości blokują od razu (D-F7): pozycja, która nie przejdzie kontroli,
+i JPK_PKPIR przed pobraniem, a plik FA(3) przed wysyłką do KSeF (na razie
+tylko alarm, niżej). W module księgowości blokują od razu (D-F7): pozycja, która nie przejdzie kontroli,
 staje się brakiem z komunikatem „Tej kwoty nie pokazujemy, bo kontrola
 spójności wykryła błąd po naszej stronie. Zgłosiliśmy go.”, plik nie wychodzi
 (niżej), a operator dostaje alarm. Strażnik niczego nie zapisuje w bazie: po
@@ -74,6 +74,28 @@ sprawdzone pozycje.
 Zatrzymanej pozycji nie da się zatwierdzić, push o wyliczeniu i „Odłóż na
 podatek” jej nie liczą, a przypomnienie o terminie bierze kwotę ostatniej
 zatwierdzonej wersji z bazy albo wychodzi bez kwoty.
+
+### Przypomnienia o terminach (`lib/bezpieczniki/przypomnienia.ts`)
+
+Sprawdza przypomnienie w `cron.ksiegowosc-terminy` tuż przed mailem, pushem
+i wpisem w dzwonku. Pozycje szkicu przeszły już strażnika „Ten miesiąc”, ale
+kwota z zatwierdzonej wersji rozliczenia i termin z kalendarza przypomnienia
+idą inną drogą. Tag `straznik` to `przypomnienia`, `rodzaj` to rodzaj
+rozliczenia (przy terminie `termin`), a `miesiac` to okres rozliczenia.
+
+| Kod | Co znaczy | Co widzi klient |
+|---|---|---|
+| `FILTR-RT-PRZ-01` | kwota pozycji nie jest całkowitą liczbą groszy od zera w górę, albo ryczałt, zaliczka PIT lub VAT ma grosze (art. 63 § 1 Ordynacji podatkowej) | przypomnienie o terminie bez tej kwoty, jak przy braku podpisu księgowej (D7) |
+| `FILTR-RT-PRZ-02` | termin przypomnienia nie przypada w dzień roboczy albo nie jest datą | brak przypomnienia; oba etapy (5 dni i 1 dzień przed) mają ten sam termin, więc oba są wstrzymane; „Ten miesiąc” pokazuje termin po swojej kontroli |
+
+Przy PRZ-01 sprawdzić zatwierdzoną wersję rozliczenia firmy za ten miesiąc
+(kwota zapisana przy zatwierdzeniu) i silnik, który ją policzył; przy PRZ-02
+kalendarz terminów (`lib/ksiegowosc/kalendarz.ts`, RP-TERM-02). Naprawa
+według protokołu (`AGENTS.md`). Przy PRZ-02 dotyczy to wszystkich firm
+w pilotażu z tym terminem: po naprawie kalendarza codzienny przebieg liczy
+etapy od poprawionego terminu, więc przypomnienia wyjdą, jeśli ich dni są
+jeszcze przed nami; gdy termin jest bliżej niż 5 dni, Bartosz decyduje, czy
+uprzedzić firmy z alarmu (tag `tenantId`) inną drogą.
 
 ### JPK_V7M (`lib/bezpieczniki/jpk-v7m.ts`)
 
@@ -136,6 +158,55 @@ z natury (P_1, P_2, P_5B), kolumny bez wzoru w opisie (K_10, K_11, K_15,
 K_16B) i kwoty wierszy wobec faktur, kosztów i wpisów (silniki ewidencji
 i KPiR, testy filtra).
 
+### FA(3) przed wysyłką do KSeF (`lib/bezpieczniki/fa3.ts`)
+
+Sprawdza gotowy plik FA(3) po kontroli XSD, w `submitInvoiceFullFlow`
+(`lib/ksef/submit-invoice-full.ts`), jedynym miejscu, w którym FaktWay
+buduje XML faktury do KSeF (faktura zwykła, korekta, zaliczka, rozliczenie).
+Wzory są z opisów pól w schemacie MF (`lib/xml/schemas/fa3/schemat.xsd`)
+i z rejestru (`RP-FA-SUMY-01`, `RP-FA-KOR-01`, `RP-FA-ZAL-01`,
+`RP-FA-ROZ-01`), cytowane w nagłówku strażnika.
+
+**Na razie tylko alarm (D-F7).** Faktura idzie do KSeF tak jak dotąd, klient
+niczego nie widzi. Po dwóch tygodniach bez fałszywych alarmów blokada
+(faktura czeka z komunikatem) wymaga zgody Bartosza. Tag `straznik` to
+`fa3`, `rodzaj` to `RodzajFaktury` małymi literami (`vat`, `kor`, `zal`,
+`roz`), a `miesiac` to miesiąc daty wystawienia (`P_1`).
+
+| Kod | Co znaczy |
+|---|---|
+| `FILTR-RT-FA3-01` | `P_15` różni się od sumy pól `P_13_x` i `P_14_x` wszystkich stawek (bez `P_14_xW`), albo któreś z tych pól nie jest kwotą; także plik bez węzła `Faktura/Fa` |
+| `FILTR-RT-FA3-02` | faktura VAT: `P_13_x` różni się od sumy `P_11` pozycji w tej stawce, albo pole nie jest kwotą |
+| `FILTR-RT-FA3-03` | faktura VAT i zaliczkowa: `P_14_x` różni się od `P_13_x` razy stawka o więcej niż zaokrąglenie, czyli (100 + stawka) / 2 setnych grosza na pozycję w tej stawce (pokrywa podatek od netto i od brutto, np. fakturę za abonament i wzór zaliczki z art. 106f ust. 1 pkt 3), albo pozycje jednej grupy mają różne stawki |
+| `FILTR-RT-FA3-04` | pozycja „zw” bez `P_19 = 1` i podstawy zwolnienia (`P_19A`, `P_19B` albo `P_19C`); w fakturze VAT `P_19 = 1` bez pozycji „zw”; pozycja „oo” albo „np II” bez `P_18 = 1` |
+
+Faktura z alarmem jest już w KSeF (albo za chwilę będzie). Kolejność:
+znaleźć plik po identyfikatorze faktury z pola `extra.dokumentId` zgłoszenia
+(archiwum XML w R2, ścieżka w `xml_documents`), porównać z danymi faktury,
+a przy prawdziwym błędzie
+generatora naprawić go według protokołu (`AGENTS.md`). Czy firmy dostają
+fakturę korygującą, decyduje Bartosz z księgową. Poza tym strażnikiem:
+kontrola 02 dla korekt, zaliczek i rozliczeń oraz 03 dla korekt i rozliczeń
+(ich sumy sprawdzają testy filtra `tests/filtr/xsd/fa3-*.test.ts`), faktura
+z pozycją w stawce spoza
+listy albo bez `P_11` (wzoru nie da się sprawdzić z pliku), stawka
+z podatkiem u firmy zwolnionej z art. 113 (zatrzymuje ją kolejka wysyłki,
+F12-G6b) i daty (NZ-FA-07).
+
+**Przejście na blokadę (D-F7, decyzja Bartosza).** Warunki, wszystkie naraz:
+1. dwa tygodnie liczone od wdrożenia workera z tym strażnikiem (wysyłka do
+   KSeF działa w workerze), bez fałszywego alarmu `straznik:fa3` w Sentry;
+   każdy alarm z tego okresu rozpatrzony: błąd generatora naprawiony według
+   protokołu albo strażnik poprawiony;
+2. tekst dla klienta w miejscu, w którym faktura czeka (nazwa faktury, kod
+   pierwszego alarmu, że błąd jest po naszej stronie i co dalej), w tym samym
+   duchu co odmowa pliku JPK_V7M;
+3. ścieżka operatora: ponowienie wysyłki po naprawie generatora albo
+   strażnika, bez ręcznej zmiany pliku;
+4. wyłącznik: możliwość powrotu do trybu „tylko alarm” bez wdrożenia.
+Do tego czasu ogólne zdania tej sekcji o blokadzie („zła kwota do klienta nie
+doszła”, „plik nie wychodzi”) faktur FA(3) nie dotyczą.
+
 ### Co zrobić
 
 1. **Sentry.** Zgłoszenie ma poziom `error`, tag `area:filtr.bezpieczniki`
@@ -147,7 +218,8 @@ i KPiR, testy filtra).
 2. **`/admin/centrum` bez zmian.** Alarmy FILTR-RT jeszcze się tam nie
    pokazują (tak samo `critical-alerts-monitor`); to kolejna część F13.
    Panel nie ma też akcji dla tych alarmów: klient nie musi nic robić, bo zła
-   kwota do niego nie doszła. Wyjątek to pliki JPK (punkt 4).
+   kwota do niego nie doszła. Wyjątki: pliki JPK (punkt 4) i faktury FA(3)
+   w trybie „tylko alarm”, które idą do KSeF mimo alarmu (sekcja FA(3) wyżej).
 3. **Zakres.** Jedna firma czy wiele, jeden miesiąc czy kilka. Gdy błąd może
    dotyczyć liczb, których strażnik nie sprawdza (odliczenia w opisie pod
    kaflami, nadwyżka VAT na następny miesiąc), Bartosz decyduje

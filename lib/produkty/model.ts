@@ -147,6 +147,26 @@ export interface ProductListItem {
   lastUsedAt: string | null;
 }
 
+/** Podpowiedź przy nazwie pozycji faktury (krok 2.6, część 2a): najwyżej tyle produktów. */
+export const PRODUCT_SUGGESTIONS_LIMIT = 8;
+/** Od tylu znaków frazy (po usunięciu znaków wzorca) idzie zapytanie do katalogu. */
+export const PRODUCT_SUGGESTIONS_MIN_QUERY = 2;
+
+/** Produkt w podpowiedzi: to, co wstawia się do pozycji faktury. */
+export interface ProductSuggestion {
+  id: string;
+  name: string;
+  unit: string;
+  priceNet: number | null;
+  /** Stawka spoza listy formularza (np. z dawnego importu) to `null`: pozycja zostaje przy swojej. */
+  vatRate: ProductVatRate | null;
+}
+
+/** Czy wartość z bazy jest stawką z listy formularza faktury (`vatRateEnum`). */
+export function isProductVatRate(value: unknown): value is ProductVatRate {
+  return typeof value === 'string' && (PRODUCT_VAT_RATES as readonly string[]).includes(value);
+}
+
 /** Komunikat dla zajętego klucza nazwa + jednostka (indeks 00186): z nazwą, bez błędu bazy. */
 export function duplicateProductMessage(name: string, unit: string): string {
   return `Produkt „${name}” w jednostce „${unit}” już jest w katalogu. Zmień nazwę lub jednostkę albo edytuj istniejący wpis (może być zarchiwizowany).`;

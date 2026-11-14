@@ -7,7 +7,8 @@
  * 1 MiB, a podniesienie `serverActions.bodySizeLimit` działałoby na wszystkie
  * akcje naraz (decyzja Bartosza 03.11, wariant b). Idą trasami
  * `/api/uploads/expense` (zdjęcie albo PDF kosztu), `/api/uploads/import`
- * (CSV importu) i `/share-target` (udostępnienie z telefonu), które mają
+ * (CSV importu), `/api/uploads/logo` (logo firmy na fakturze) i
+ * `/share-target` (udostępnienie z telefonu), które mają
  * własny limit `Content-Length` i odmawiają przed odczytem ciała
  * (`lib/uploads/server.ts`). Trasy są poza proxy, bo proxy Next czyta całe
  * ciało i trzyma w pamięci jego kopię do 10 MiB, zanim trasa ruszy
@@ -42,6 +43,20 @@ export const UPLOAD_IMAGE_LIMIT_LABEL = '7 MB';
  * trasa wróciła pod proxy, dłuższe ciało dotarłoby do niej ucięte.
  */
 export const UPLOAD_BODY_LIMIT_BYTES = UPLOAD_FILE_LIMIT_BYTES + 64 * 1024;
+
+/**
+ * Największy plik logo firmy (plan kompletnej aplikacji, krok 2.2): PNG albo
+ * JPEG na wydruk faktury, proformy i oferty. Logo ma na wydruku 40 pt
+ * wysokości, więc 2 MB to zapas na pliki prosto z programu graficznego.
+ * Trasa `/api/uploads/logo` odmawia większego ciała przed jego odczytem.
+ */
+export const LOGO_FILE_LIMIT_BYTES = 2_000_000;
+
+/** Ten sam limit w komunikatach dla klienta. */
+export const LOGO_FILE_LIMIT_LABEL = '2 MB';
+
+/** Najdłuższe ciało żądania wgrania logo: plik i pole firmy, zapas jak wyżej. */
+export const LOGO_BODY_LIMIT_BYTES = LOGO_FILE_LIMIT_BYTES + 64 * 1024;
 
 /**
  * Rozmiar do komunikatu, w jednostkach dziesiętnych i zaokrąglony w górę:

@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
+import { sprawdzFa3 } from '@/lib/bezpieczniki/fa3';
 import { generateAdvanceInvoiceXml } from '@/lib/ksef/fa3-advance-generator';
 import { validateInvoiceXml } from '@/lib/xml/validator';
 import type { AdvanceInvoiceData } from '@/types/invoice-types';
@@ -75,6 +76,8 @@ describe('FA(3) ZAL: losowe zaliczki', () => {
         });
         const wynik = await validateInvoiceXml(xml);
         expect(wynik.errors).toEqual([]);
+        // Strażnik FA(3) (F13 część 4) nie zgłasza alarmu dla pliku z prawdziwego generatora.
+        expect(sprawdzFa3(xml)).toEqual([]);
 
         const podatek = kp(zaliczka, stawka);
         for (const [s, [netto, vat]] of Object.entries(POLA) as Array<[Stawka, [string, string | null]]>) {

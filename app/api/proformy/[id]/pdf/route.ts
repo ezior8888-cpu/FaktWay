@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
+import { loadCompanyPdfLogo } from '@/lib/pdf/logo-odczyt';
 import { getQuote } from '@/lib/proformy/baza';
 import { quotePdfFilename, quotePdfInput, renderQuotePdf } from '@/lib/proformy/pdf';
 import { resolveApiUserAndActiveOrg } from '@/lib/supabase/auth-context';
@@ -32,7 +33,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (!input) {
       return NextResponse.json({ error: 'Najpierw wystaw dokument. Szkic nie ma numeru ani PDF.' }, { status: 409 });
     }
-    const pdf = await renderQuotePdf(input);
+    // Logo firmy z ustawień (krok 2.2); bez pliku albo przy błędzie PDF bez logo.
+    const { logo } = await loadCompanyPdfLogo(ctx.tenantId);
+    const pdf = await renderQuotePdf(input, { logo });
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,
       headers: {

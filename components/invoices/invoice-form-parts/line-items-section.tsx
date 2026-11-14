@@ -13,11 +13,13 @@ import { calculateLineItem } from '@/lib/xml/invoice-calculator';
 
 import { FieldErrorText, fieldErrorProps } from './field-error-text';
 import { labelClass, LINE_GRID, vatSelectClass } from './constants';
+import { ProductNameInput } from './product-name-input';
 
 /**
  * Sekcja „Pozycje”: wiersze siatki od 1360 px albo karty
  * (`useLinesDesktopLayout`), dodawanie i usuwanie pozycji. Sumy liczy
- * formularz (`toLineItems`) i pokazuje pod sekcją.
+ * formularz (`toLineItems`) i pokazuje pod sekcją. Pole nazwy podpowiada
+ * produkty z katalogu (`ProductNameInput`, krok 2.6, część 2a).
  */
 export function LineItemsSection({
   form,
@@ -26,6 +28,7 @@ export function LineItemsSection({
   linesDesktopLayout,
   remove,
   onAddLine,
+  vatExempt = false,
 }: {
   form: UseFormReturn<InvoiceFormValues>;
   fields: FieldArrayWithId<InvoiceFormValues, 'lines', 'id'>[];
@@ -33,6 +36,8 @@ export function LineItemsSection({
   linesDesktopLayout: boolean;
   remove: (index: number) => void;
   onAddLine: () => void;
+  /** Firma zwolniona z VAT: podpowiedź z katalogu nie zastępuje „zw” stawką z podatkiem. */
+  vatExempt?: boolean;
 }) {
   /** Błąd stawki pozycji — np. „np. II” bez nabywcy z UE (AUD-70). */
   const bladStawki = (index: number): string | undefined =>
@@ -64,10 +69,7 @@ export function LineItemsSection({
               });
               return (
                 <div key={field.id} className={cn(LINE_GRID, 'items-start')}>
-                  <Input
-                    aria-label={`Nazwa pozycji ${index + 1}`}
-                    {...form.register(`lines.${index}.name`)}
-                  />
+                  <ProductNameInput form={form} index={index} ariaLabel={`Nazwa pozycji ${index + 1}`} vatExempt={vatExempt} />
                   <Input
                     aria-label={`Jednostka pozycji ${index + 1}`}
                     {...form.register(`lines.${index}.unit`)}
@@ -166,10 +168,12 @@ export function LineItemsSection({
 
                 <div>
                   <Label htmlFor={`line-${index}-name`} className={labelClass}>Nazwa pozycji</Label>
-                  <Input
+                  <ProductNameInput
+                    form={form}
+                    index={index}
                     id={`line-${index}-name`}
                     placeholder="np. Usługa programistyczna"
-                    {...form.register(`lines.${index}.name`)}
+                    vatExempt={vatExempt}
                   />
                 </div>
 
