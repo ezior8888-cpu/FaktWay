@@ -7,6 +7,15 @@ import {
   validateNipChecksum,
   validatePeselChecksum,
 } from '@/lib/xml/invoice-calculator';
+import {
+  DB_TEXT_LIMITS,
+  FA3_TEXT_LIMITS,
+  isXmlSafe,
+  liczbaZnakow,
+  NO_CONTROL_CHARS_MESSAGE,
+  notXsdBlank,
+  xsdLength,
+} from '@/lib/xml/fa3-limits';
 
 import {
   normalizeCashRegisterNumber,
@@ -106,12 +115,16 @@ const consumerIdChoices = buyerConsumerIdTypeEnum.enum;
 /**
  * Granice, których nie przyjmie XSD FA(3) albo baza (F-041). Bez nich
  * faktura przechodziła formularz, a padała dopiero po zapisie — w XSD
- * przy wysyłce albo surowym błędem Postgresa.
+ * przy wysyłce albo surowym błędem Postgresa. Liczby i znaki niedozwolone
+ * w XML 1.0 (np. pionowy tabulator wklejony z Worda) bierzemy z modułu
+ * granic (C1), tego samego, którego pilnują walidatory i generatory.
  */
-/** Znaki sterujące niedozwolone w XML 1.0 (np. pionowy tabulator wklejony z Worda). */
-const XML_FORBIDDEN_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
-const NO_CONTROL_CHARS_MESSAGE = 'Usuń niewidoczne znaki sterujące (np. wklejone z Worda)';
-const xmlSafe = (v: string) => !XML_FORBIDDEN_CHARS.test(v);
+const xmlSafe = isXmlSafe;
+/** „Maksymalnie 512 znaków”. */
+const maxMessage = (max: number) => `Maksymalnie ${liczbaZnakow(max)}`;
+// Ten sam komunikat dla pustego pola i samych spacji (XSD liczy je jak puste).
+const ADDRESS_LINE_1_REQUIRED = 'Adres — linia 1 wymagana';
+const ADDRESS_LINE_2_REQUIRED = 'Adres — linia 2 wymagana';
 /** `quantity`, `unit_price_net` to NUMERIC(14,4): najwyżej 4 miejsca po przecinku. */
 const hasAtMostDecimals = (v: number, d: number) => {
   const scaled = v * 10 ** d;
@@ -177,12 +190,14 @@ export const lineItemSchema = z.object({
   name: z
     .string()
     .min(1, 'Nazwa wymagana')
-    .max(512, 'Maksymalnie 512 znaków')
+    .max(FA3_TEXT_LIMITS.p7.max, maxMessage(FA3_TEXT_LIMITS.p7.max))
+    .refine(notXsdBlank, 'Nazwa wymagana')
     .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
   unit: z
     .string()
     .min(1, 'Podaj jednostkę')
-    .max(50, 'Jednostka — maksymalnie 50 znaków')
+    .max(DB_TEXT_LIMITS.lineUnit, `Jednostka — maksymalnie ${liczbaZnakow(DB_TEXT_LIMITS.lineUnit)}`)
+    .refine(notXsdBlank, 'Podaj jednostkę')
     .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
   quantity: z
     .number()
@@ -215,17 +230,20 @@ export const invoiceFormSchema = z
     buyerName: z
       .string()
       .min(1, 'Nazwa wymagana')
-      .max(512, 'Maksymalnie 512 znaków')
+      .max(FA3_TEXT_LIMITS.nazwa.max, maxMessage(FA3_TEXT_LIMITS.nazwa.max))
+      .refine(notXsdBlank, 'Nazwa wymagana')
       .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
     buyerAddressLine1: z
       .string()
-      .min(1, 'Adres — linia 1 wymagana')
-      .max(512, 'Maksymalnie 512 znaków')
+      .min(1, ADDRESS_LINE_1_REQUIRED)
+      .max(FA3_TEXT_LIMITS.adresL1.max, maxMessage(FA3_TEXT_LIMITS.adresL1.max))
+      .refine(notXsdBlank, ADDRESS_LINE_1_REQUIRED)
       .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
     buyerAddressLine2: z
       .string()
-      .min(1, 'Adres — linia 2 wymagana')
-      .max(512, 'Maksymalnie 512 znaków')
+      .min(1, ADDRESS_LINE_2_REQUIRED)
+      .max(FA3_TEXT_LIMITS.adresL2.max, maxMessage(FA3_TEXT_LIMITS.adresL2.max))
+      .refine(notXsdBlank, ADDRESS_LINE_2_REQUIRED)
       .refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE),
     buyerEmail: z.union([
       z.literal(''),
@@ -249,7 +267,7 @@ export const invoiceFormSchema = z
     paymentMethod: z.enum(['transfer', 'cash', 'card', 'other']),
     paymentDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     bankAccount: z.string().optional(),
-    notes: z.string().max(3500).refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
+    notes: z.string().max(FA3_TEXT_LIMITS.stopkaFaktury.max).refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
     /** P_18A — mechanizm podzielonej płatności (art. 106e ust. 1 pkt 18a). */
     splitPayment: z.boolean().optional(),
     /**
@@ -392,6 +410,20 @@ export const invoiceFormSchema = z
       path: ['buyerIdDocument'],
     },
   )
+  // C1: numer dokumentu trafia do NrID (XSD: najwyżej 50 znaków, bez znaków
+  // sterujących). Tylko gdy faktura go użyje: ukryte pole z wcześniejszego
+  // wyboru rodzaju nabywcy nie może blokować zapisu.
+  .superRefine((d, ctx) => {
+    if (!d.buyerIsConsumer) return;
+    const t = d.buyerConsumerIdType;
+    if (t !== consumerIdChoices.id_card && t !== consumerIdChoices.passport) return;
+    const doc = d.buyerIdDocument.trim();
+    if (!xmlSafe(doc)) {
+      ctx.addIssue({ code: 'custom', message: NO_CONTROL_CHARS_MESSAGE, path: ['buyerIdDocument'] });
+    } else if (xsdLength(doc, 'replace') > FA3_TEXT_LIMITS.nrId.max) {
+      ctx.addIssue({ code: 'custom', message: maxMessage(FA3_TEXT_LIMITS.nrId.max), path: ['buyerIdDocument'] });
+    }
+  })
   .refine((d) => new Date(d.paymentDueDate) >= new Date(d.issueDate), {
     message: 'Termin płatności nie może być przed datą wystawienia',
     path: ['paymentDueDate'],

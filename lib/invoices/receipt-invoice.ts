@@ -25,6 +25,7 @@
  */
 
 import { formatIsoDatePl } from '@/lib/format/iso-date';
+import { isXmlSafe } from '@/lib/xml/fa3-limits';
 import type { BuyerParty, ReceiptInvoiceData } from '@/types/invoice';
 
 /** Napis na PDF i w widoku faktury. */
@@ -48,8 +49,6 @@ export const RECEIPT_XML_KEYS = {
 
 const CASH_REGISTER_NUMBER = /^(?:[A-Z]{3}\d{10}|[A-Z]{2,3}\d{8})$/;
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
-/** Znaki sterujące niedozwolone w XML 1.0 (jak w schemacie formularza). */
-const XML_FORBIDDEN_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/;
 
 export const RECEIPT_ONLY_REGULAR_MESSAGE =
   'Fakturę do paragonu FaktWay wystawia jako zwykłą fakturę VAT. Zaliczki, korekty ani rozliczenia do paragonu jeszcze nie: napisz do nas przez Pomoc.';
@@ -173,7 +172,7 @@ export function receiptInvoiceIssues(input: ReceiptRuleInput): ReceiptRuleIssue[
   if (input.invoiceType !== 'VAT') add('type', RECEIPT_ONLY_REGULAR_MESSAGE);
 
   const number = typeof receipt.receiptNumber === 'string' ? receipt.receiptNumber.trim() : '';
-  if (!number || number.length > RECEIPT_NUMBER_MAX_LENGTH || XML_FORBIDDEN_CHARS.test(number)) {
+  if (!number || number.length > RECEIPT_NUMBER_MAX_LENGTH || !isXmlSafe(number)) {
     add('receiptNumber', RECEIPT_NUMBER_MESSAGE);
   }
 

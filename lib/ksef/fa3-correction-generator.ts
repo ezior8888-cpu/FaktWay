@@ -19,6 +19,13 @@ import type { BuyerEU, CorrectionInvoiceData, InvoiceLine } from '@/types/invoic
 import { resolveAmountChangeVatRate } from '@/lib/invoices/correction-amount-change';
 import { addressCountryForKodUE, parseVatUe, type ParsedVatUe } from '@/lib/invoices/vat-ue';
 import { correctionNpIiBuyerError } from '@/lib/validators/invoice-validators';
+import {
+  assertFa3TextLimits,
+  FA3_TEXT_LIMITS,
+  fa3LineChecks,
+  fa3PartyChecks,
+  type Fa3TextCheck,
+} from '@/lib/xml/fa3-limits';
 
 const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 const ETD_NAMESPACE =
@@ -448,6 +455,39 @@ function correctionAmounts(
   };
 }
 
+/**
+ * Tekst, który generator wstawi do XML, z granicami XSD (C1). Wartości są
+ * dokładnie takie, jakie wstawia `generateCorrectionInvoiceXml`, żeby nie
+ * odrzucić niczego, co XSD przyjmuje.
+ */
+function correctionTextChecks(data: CorrectionInvoiceData, preparedLines: CorrectionRow[]): Fa3TextCheck[] {
+  const { buyer } = data;
+  // NrID jak przy Podmiot2: firma (UE, NIP) i BrakID go nie mają.
+  const nrId =
+    buyer.type === 'eu' || buyer.type === 'b2b'
+      ? undefined
+      : buyer.idType === 'pesel' && buyer.pesel
+        ? buyer.pesel
+        : buyer.idType === 'no_id'
+          ? undefined
+          : buyer.idNumber;
+  // Korekta kwotowa ma jedną pozycję, której nazwą jest opis zmiany.
+  const lineChecks: Fa3TextCheck[] =
+    data.correctionType === 'amount_change'
+      ? [{ label: 'Opis korekty kwotowej', value: data.amountChange?.description, limit: FA3_TEXT_LIMITS.p7 }]
+      : fa3LineChecks(preparedLines);
+  return [
+    ...fa3PartyChecks('Sprzedawca', data.seller),
+    ...fa3PartyChecks('Nabywca', buyer),
+    { label: 'Nabywca, numer dokumentu', value: nrId, limit: FA3_TEXT_LIMITS.nrId },
+    { label: 'Numer faktury', value: data.internalNumber, limit: FA3_TEXT_LIMITS.p2 },
+    { label: 'Przyczyna korekty', value: data.correctionReason, limit: FA3_TEXT_LIMITS.przyczynaKorekty },
+    { label: 'Numer faktury korygowanej', value: data.parentInvoiceNumber, limit: FA3_TEXT_LIMITS.nrFaKorygowanej },
+    ...lineChecks,
+    { label: 'Uwagi', value: data.notes?.trim(), limit: FA3_TEXT_LIMITS.stopkaFaktury },
+  ];
+}
+
 /** XML FA(3) faktury korygującej (`RodzajFaktury` = `KOR`). */
 export function generateCorrectionInvoiceXml(
   data: CorrectionInvoiceData,
@@ -484,6 +524,9 @@ export function generateCorrectionInvoiceXml(
   }
 
   const { preparedLines, summaries, grossTotal } = correctionAmounts(data, domainLines);
+
+  // C1: tekst, którego XSD nie przyjmie, odrzucamy przed budową pliku, z nazwą pola.
+  assertFa3TextLimits(correctionTextChecks(data, preparedLines));
 
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktura', {
     xmlns: FA3_NAMESPACE,

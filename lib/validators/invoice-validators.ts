@@ -12,10 +12,50 @@ import {
   NP_II_NOT_FOR_XI_MESSAGE,
   SALES_QUOTE_LINK_MESSAGE,
 } from '@/lib/schemas/invoice-form';
+import {
+  ADVANCE_DESCRIPTION_MAX,
+  DB_TEXT_LIMITS,
+  FA3_TEXT_LIMITS,
+  fa3PartyChecks,
+  fa3TextProblems,
+  isXmlSafe,
+  liczbaZnakow,
+  NO_CONTROL_CHARS_MESSAGE,
+  notXsdBlank as notBlank,
+} from '@/lib/xml/fa3-limits';
 
 // ============================================================================
 // Helpers walidacyjne
 // ============================================================================
+
+/*
+ * Tekst, który trafia do XML FA(3), ma granice z `lib/xml/fa3-limits.ts` (C1):
+ * te same co odmowa generatora, więc faktura z formularza nie padnie przy
+ * wysyłce. `.max()` liczy jednostki UTF-16 i nie zwija spacji, więc jest
+ * najwyżej surowszy od generatora.
+ */
+
+/** „Maksymalnie 256 znaków”. */
+const maxMessage = (max: number) => `Maksymalnie ${liczbaZnakow(max)}`;
+
+/**
+ * Nazwa, adres i numer dokumentu nabywcy z granicami XSD, tymi samymi
+ * komunikatami co odmowa generatora. Błąd idzie pod klucz `buyer`, bo
+ * formularze ZAL i ROZ pokazują tylko `errors.buyer.message`.
+ */
+function buyerXsdProblems(buyer: {
+  name: string;
+  address: { addressLine1: string; addressLine2?: string };
+  idType?: string;
+  idNumber?: string;
+}): string[] {
+  // Numer dokumentu idzie do NrID tylko przy dowodzie i paszporcie (PESEL ma swój wzorzec).
+  const nrId = buyer.idType === 'id_card' || buyer.idType === 'passport' ? buyer.idNumber : undefined;
+  return fa3TextProblems([
+    ...fa3PartyChecks('Nabywca', buyer),
+    { label: 'Nabywca, numer dokumentu', value: nrId, limit: FA3_TEXT_LIMITS.nrId },
+  ]);
+}
 
 /** NIP po polsku - 10 cyfr + checksum mod11 */
 const nipSchema = z
@@ -49,13 +89,24 @@ const dateSchema = z
 // ============================================================================
 
 export const invoiceLineSchema = z.object({
-  name: z.string().min(1, 'Nazwa wymagana').max(512, 'Max 512 znaków'),
-  unit: z.string().min(1, 'Jednostka wymagana').max(20),
+  name: z
+    .string()
+    .min(1, 'Nazwa wymagana')
+    .max(FA3_TEXT_LIMITS.p7.max, maxMessage(FA3_TEXT_LIMITS.p7.max))
+    .refine(notBlank, 'Nazwa wymagana')
+    .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE),
+  // W6: granica kolumny `invoice_line_items.unit`, a nie dawne 20 (XSD, P_8A, przyjmuje 256).
+  unit: z
+    .string()
+    .min(1, 'Jednostka wymagana')
+    .max(DB_TEXT_LIMITS.lineUnit, maxMessage(DB_TEXT_LIMITS.lineUnit))
+    .refine(notBlank, 'Jednostka wymagana')
+    .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE),
   quantity: z.number().positive('Ilość musi być dodatnia'),
   unitPriceNet: z.number().min(0, 'Cena nieujemna'),
   /** Bez `zw` — brak pól P_19 (podstawa zwolnienia) w generatorze. */
   vatRate: z.enum(['23', '8', '5', '0', 'oo', 'np']),
-  pkwiuCode: z.string().optional(),
+  pkwiuCode: z.string().max(FA3_TEXT_LIMITS.pkwiu.max, maxMessage(FA3_TEXT_LIMITS.pkwiu.max)).optional(),
   gtuCode: z.string().optional(),
 });
 
@@ -67,7 +118,7 @@ export type InvoiceLineSchema = z.infer<typeof invoiceLineSchema>;
 
 export const sellerSchema = z.object({
   nip: nipSchema,
-  name: z.string().min(1).max(512),
+  name: z.string().min(1).max(FA3_TEXT_LIMITS.nazwa.max),
   address: z.object({
     addressLine1: z.string().min(1),
     addressLine2: z.string().min(1),
@@ -80,18 +131,23 @@ export const sellerSchema = z.object({
 // Nabywca - B2B
 // ============================================================================
 
-export const buyerB2BSchema = z.object({
-  type: z.literal('b2b'),
-  idType: z.literal('nip'),
-  nip: nipSchema,
-  name: z.string().min(1).max(512),
-  address: z.object({
-    addressLine1: z.string().min(1),
-    addressLine2: z.string().min(1),
-    countryCode: z.string().length(2),
-  }),
-  email: z.string().email().optional(),
-});
+export const buyerB2BSchema = z
+  .object({
+    type: z.literal('b2b'),
+    idType: z.literal('nip'),
+    nip: nipSchema,
+    // Granicę nazwy i adresu sprawdza `buyerXsdProblems` niżej, pod kluczem `buyer`.
+    name: z.string().min(1),
+    address: z.object({
+      addressLine1: z.string().min(1),
+      addressLine2: z.string().min(1),
+      countryCode: z.string().length(2),
+    }),
+    email: z.string().email().optional(),
+  })
+  .superRefine((buyer, ctx) => {
+    for (const message of buyerXsdProblems(buyer)) ctx.addIssue({ code: 'custom', message, path: [] });
+  });
 
 // ============================================================================
 // Nabywca - B2C
@@ -103,7 +159,8 @@ export const buyerB2CSchema = z
     idType: z.enum(['pesel', 'id_card', 'passport', 'no_id']),
     pesel: peselSchema.optional(),
     idNumber: z.string().min(3).max(20).optional(),
-    name: z.string().min(1).max(512),
+    // Granicę nazwy i adresu sprawdza `buyerXsdProblems` niżej, pod kluczem `buyer`.
+    name: z.string().min(1),
     address: z.object({
       addressLine1: z.string().min(1),
       addressLine2: z.string().min(1),
@@ -123,7 +180,10 @@ export const buyerB2CSchema = z
       message: 'Wymagany identyfikator dla wybranego typu',
       path: ['pesel'],
     }
-  );
+  )
+  .superRefine((buyer, ctx) => {
+    for (const message of buyerXsdProblems(buyer)) ctx.addIssue({ code: 'custom', message, path: [] });
+  });
 
 export const buyerSchema = z.discriminatedUnion('type', [buyerB2BSchema, buyerB2CSchema]);
 
@@ -131,22 +191,27 @@ export const buyerSchema = z.discriminatedUnion('type', [buyerB2BSchema, buyerB2
 // Nabywca z UE (VAT-UE) — tylko korekta zwykłej faktury (AUD-70)
 // ============================================================================
 
-export const buyerEUSchema = z.object({
-  type: z.literal('eu'),
-  vatUeNumber: z
-    .string()
-    .refine((v) => isForeignEuVat(v), 'Numer VAT-UE firmy z innego kraju UE, np. DE123456789 (Grecja: EL)'),
-  name: z.string().min(1).max(512),
-  address: z.object({
-    addressLine1: z.string().min(1),
-    addressLine2: z.string().optional(),
-    countryCode: z
+export const buyerEUSchema = z
+  .object({
+    type: z.literal('eu'),
+    vatUeNumber: z
       .string()
-      .length(2)
-      .refine((c) => c !== 'PL', 'Kraj adresu firmy z UE nie może być Polską'),
-  }),
-  email: z.string().email().optional(),
-});
+      .refine((v) => isForeignEuVat(v), 'Numer VAT-UE firmy z innego kraju UE, np. DE123456789 (Grecja: EL)'),
+    // Granicę nazwy i adresu sprawdza `buyerXsdProblems` niżej, pod kluczem `buyer`.
+    name: z.string().min(1),
+    address: z.object({
+      addressLine1: z.string().min(1),
+      addressLine2: z.string().optional(),
+      countryCode: z
+        .string()
+        .length(2)
+        .refine((c) => c !== 'PL', 'Kraj adresu firmy z UE nie może być Polską'),
+    }),
+    email: z.string().email().optional(),
+  })
+  .superRefine((buyer, ctx) => {
+    for (const message of buyerXsdProblems(buyer)) ctx.addIssue({ code: 'custom', message, path: [] });
+  });
 
 /** Nabywca korekty: jak na fakturze pierwotnej — z NIP, osoba prywatna albo firma z UE. */
 export const correctionBuyerSchema = z.discriminatedUnion('type', [
@@ -200,7 +265,7 @@ export const regularInvoiceSchema = z
     paymentMethod: z.enum(['transfer', 'card', 'cash', 'compensation', 'other']),
     paymentDueDate: dateSchema,
     bankAccount: z.string().regex(/^\d{26}$/, 'Numer konta = 26 cyfr').optional(),
-    notes: z.string().max(2000).optional(),
+    notes: z.string().max(2000).refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
 
     seller: sellerSchema,
     buyer: buyerSchema,
@@ -227,15 +292,25 @@ export const correctionInvoiceSchema = z
     bankAccount: z
       .union([z.literal(''), z.string().regex(/^[0-9]{26}$/)])
       .optional(),
-    notes: z.string().max(2000).optional(),
+    notes: z.string().max(2000).refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
 
     parentInvoiceId: z.string().uuid('Wybierz fakturę pierwotną'),
-    parentInvoiceNumber: z.string().min(1),
+    parentInvoiceNumber: z
+      .string()
+      .min(1)
+      .max(FA3_TEXT_LIMITS.nrFaKorygowanej.max, maxMessage(FA3_TEXT_LIMITS.nrFaKorygowanej.max))
+      .refine(notBlank, 'Wybierz fakturę pierwotną')
+      .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE),
     parentInvoiceIssueDate: dateSchema,
     parentKsefNumber: z.string().optional(),
 
     correctionType: z.enum(['before_after', 'amount_change', 'cancellation']),
-    correctionReason: z.string().min(5, 'Wymagane uzasadnienie min. 5 znaków').max(500),
+    correctionReason: z
+      .string()
+      .min(5, 'Wymagane uzasadnienie min. 5 znaków')
+      .max(FA3_TEXT_LIMITS.przyczynaKorekty.max, maxMessage(FA3_TEXT_LIMITS.przyczynaKorekty.max))
+      .refine(notBlank, 'Wymagane uzasadnienie min. 5 znaków')
+      .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE),
 
     /** MF `TTypKorekty`: 1 skutek okres pierwotny / 2 skutek data korekty / 3 inna. */
     typKorekty: z.enum(['1', '2', '3']).default('2'),
@@ -251,7 +326,13 @@ export const correctionInvoiceSchema = z
         netDelta: z.number(),
         vatDelta: z.number(),
         grossDelta: z.number(),
-        description: z.string().min(1).max(500),
+        // Opis to nazwa jedynej pozycji korekty kwotowej (P_7).
+        description: z
+          .string()
+          .min(1)
+          .max(FA3_TEXT_LIMITS.p7.max, maxMessage(FA3_TEXT_LIMITS.p7.max))
+          .refine(notBlank, 'Opisz zmianę kwoty')
+          .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE),
         /** Stawka bez VAT z faktury pierwotnej (np I / np II / oo) — nie wynika z kwot. */
         vatRate: z.enum(['np', 'np_ii', 'oo']).optional(),
       })
@@ -317,7 +398,7 @@ export const advanceInvoiceSchema = z
       .optional(),
     /** The user must answer explicitly; no default to "MPP does not apply". */
     splitPayment: z.boolean({ message: 'Wybierz, czy do zaliczki stosuje się MPP' }),
-    notes: z.string().max(2000).optional(),
+    notes: z.string().max(2000).refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
 
     seller: sellerSchema,
     buyer: buyerSchema,
@@ -328,7 +409,13 @@ export const advanceInvoiceSchema = z
     /** P_6: data otrzymania zaliczki, gdy inna niż data wystawienia (F12-D1). */
     advanceReceivedDate: dateSchema.optional(),
     vatRate: z.enum(['23', '8', '5', '0']),
-    description: z.string().min(5).max(1000),
+    // Opis idzie do P_7Z i, po „Zaliczka: ”, do P_7 (512), stąd 502, a nie dawne 1000.
+    description: z
+      .string()
+      .min(5)
+      .max(ADVANCE_DESCRIPTION_MAX, maxMessage(ADVANCE_DESCRIPTION_MAX))
+      .refine(notBlank, 'Opisz, za co jest zaliczka')
+      .refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE),
     /**
      * Proforma albo oferta (krok 2.4, 00198), z której otwarto formularz
      * (`?proforma=<id>`): ukryte pola, oba razem albo żadne. Brak = zwykła zaliczka.
@@ -377,7 +464,7 @@ export const finalInvoiceSchema = z
       .optional(),
     /** The user must answer explicitly; no default to "MPP does not apply". */
     splitPayment: z.boolean({ message: 'Wybierz, czy do faktury stosuje się MPP' }),
-    notes: z.string().max(2000).optional(),
+    notes: z.string().max(2000).refine(isXmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
 
     seller: sellerSchema,
     buyer: buyerSchema,

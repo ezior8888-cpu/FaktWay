@@ -25,6 +25,15 @@ import {
   calculateAdvanceTotals,
   calculateFinalInvoiceTotals,
 } from '@/lib/invoices/calculator';
+import {
+  ADVANCE_DESCRIPTION_MAX,
+  ADVANCE_LINE_NAME_PREFIX,
+  assertFa3TextLimits,
+  FA3_TEXT_LIMITS,
+  fa3LineChecks,
+  fa3PartyChecks,
+  type Fa3TextCheck,
+} from '@/lib/xml/fa3-limits';
 
 const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 const ETD_NAMESPACE =
@@ -396,13 +405,31 @@ function advanceLineItem(data: AdvanceInvoiceData): InvoiceLineItem {
     ordinal: 1,
     unit: 'szt.',
     quantity: 1,
-    name: `Zaliczka: ${data.description}`,
+    name: `${ADVANCE_LINE_NAME_PREFIX}${data.description}`,
     unitPriceNet: totals.advanceNet,
     vatRate: rateCfg.canonical,
     netAmount: totals.advanceNet,
     vatAmount: totals.advanceVat,
     grossAmount: totals.advanceGross,
   };
+}
+
+/** `NrID` nabywcy dokładnie tak, jak wstawia go `buildBuyer` (firma i BrakID: brak). */
+function buyerNrId(buyer: BuyerData): string | undefined {
+  if (buyer.type === 'b2b') return undefined;
+  if (buyer.idType === 'pesel' && buyer.pesel) return buyer.pesel;
+  if (buyer.idType === 'no_id') return undefined;
+  return buyer.idNumber;
+}
+
+/** Strony faktury i numer: wspólne dla ZAL i ROZ (C1). */
+function commonTextChecks(data: AdvanceInvoiceData | FinalInvoiceData): Fa3TextCheck[] {
+  return [
+    ...fa3PartyChecks('Sprzedawca', data.seller),
+    ...fa3PartyChecks('Nabywca', data.buyer),
+    { label: 'Nabywca, numer dokumentu', value: buyerNrId(data.buyer), limit: FA3_TEXT_LIMITS.nrId },
+    { label: 'Numer faktury', value: data.internalNumber, limit: FA3_TEXT_LIMITS.p2 },
+  ];
 }
 
 /** Faktura zaliczkowa — `RodzajFaktury` = `ZAL`. */
@@ -421,6 +448,14 @@ export function generateAdvanceInvoiceXml(
 
   const advanceLine = advanceLineItem(data);
   const summaries = summarizeVatPerRate([advanceLine]);
+
+  // C1: tekst, którego XSD nie przyjmie, odrzucamy przed budową pliku, z nazwą
+  // pola. Opis idzie do P_7Z i, z przedrostkiem, do P_7, stąd węższa granica.
+  assertFa3TextLimits([
+    ...commonTextChecks(data),
+    { label: 'Opis zaliczki', value: data.description, limit: FA3_TEXT_LIMITS.p7z, max: ADVANCE_DESCRIPTION_MAX },
+    { label: 'Uwagi', value: data.notes?.trim(), limit: FA3_TEXT_LIMITS.stopkaFaktury },
+  ]);
 
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktura', {
     xmlns: FA3_NAMESPACE,
@@ -607,6 +642,21 @@ export function generateFinalInvoiceXml(
   // Zaliczki ponad zamówienie zatrzymuje już `settlementVatSummaries` (stawka
   // spadłaby poniżej zera), więc P_15 nie wyjdzie ujemne.
   const finalTotals = calculateFinalInvoiceTotals(data.lines, sumAdvancesRound);
+
+  // C1: tekst, którego XSD nie przyjmie, odrzucamy przed budową pliku, z nazwą
+  // pola. Numer zaliczki idzie do XML tylko, gdy nie ma ona numeru KSeF.
+  assertFa3TextLimits([
+    ...commonTextChecks(data),
+    ...fa3LineChecks(preparedLines),
+    ...advanceInvoices
+      .filter((adv) => !adv.ksef_number?.trim())
+      .map((adv) => ({
+        label: 'Numer faktury zaliczkowej',
+        value: adv.internal_number,
+        limit: FA3_TEXT_LIMITS.nrFaZaliczkowej,
+      })),
+    { label: 'Uwagi', value: data.notes?.trim(), limit: FA3_TEXT_LIMITS.stopkaFaktury },
+  ]);
 
   const root = create({ version: '1.0', encoding: 'UTF-8' }).ele('Faktura', {
     xmlns: FA3_NAMESPACE,
