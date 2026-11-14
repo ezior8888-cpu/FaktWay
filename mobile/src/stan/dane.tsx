@@ -13,6 +13,8 @@
  *   (`POST /faktury/{id}/wysylka`). Nowa faktura od razu stoi na liście, a
  *   wysłane z telefonu odświeżamy co kilka sekund, aż KSeF przyjmie albo odrzuci
  *   (wibracja „sukces” albo „błąd”, ZASADY-DESIGNU.md, sekcja 7).
+ * - Od M10b wybór firmy w Więcej zapisuje się też na serwerze (`POST /firma`),
+ *   więc strona otwiera tę samą firmę.
  * - Od M10a zapłata i jej cofnięcie (`POST /faktury/{id}/zaplata`, `/zaplata/cofnij`):
  *   wiersz zmienia się od razu, pasek „Cofnij”, odmowa serwera przywraca stan
  *   i mówi dlaczego. `zapytaj` w kontekście konta daje innym ekranom (należności,
@@ -40,6 +42,7 @@ import type {
   SesjaOdpowiedz,
   WystawienieOdpowiedz,
   WysylkaSzkicuOdpowiedz,
+  FirmaZapisanaOdpowiedz,
   ZaplataOdpowiedz,
 } from '@/lib/api/kontrakt';
 import { zapytajApi } from '@/lib/api/polaczenie';
@@ -249,7 +252,12 @@ function DaneZBazy({ children }: { children: ReactNode }) {
     if (!aktualne()) return;
     const firma = wybierzFirme(k.dane, zapamietana);
     // Wybór z Więcej zostaje na telefonie dopiero, gdy serwer potwierdził firmę na liście konta.
-    if (wybrana && firma === wybrana) void ustawienia.zapisz(kluczFirmy(u), wybrana).catch(() => undefined);
+    if (wybrana && firma === wybrana) {
+      void ustawienia.zapisz(kluczFirmy(u), wybrana).catch(() => undefined);
+      // Ta sama firma przy następnym otwarciu strony (M10b, `last_active_tenant_id`). Nieudany zapis
+      // nie zmienia wyboru na telefonie, więc wynik pomijamy; ponowienie zapisuje to samo.
+      void zapytajApi<FirmaZapisanaOdpowiedz>('firma', { metoda: 'POST', firma: wybrana }).catch(() => undefined);
+    }
     if (!firma) {
       firmaPokazana.current = null;
       ostatnioUdane.current = Date.now();
