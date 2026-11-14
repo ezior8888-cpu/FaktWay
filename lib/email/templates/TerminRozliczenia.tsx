@@ -5,18 +5,17 @@ import { EmailLogo } from './EmailLogo';
 /**
  * Przypomnienie o terminie rozliczenia z modułu księgowości (plan księgowości
  * JDG, K5). Treść składa `lib/ksiegowosc/przypomnienia.ts`; bez trybu
- * rozkazującego i bez porad (D8).
+ * rozkazującego i bez porad (D8), z podpisem kwot (NZ-TRESC-02), więc szablon
+ * go nie powtarza.
  */
 export interface TerminRozliczeniaProps {
   tytul: string;
   tresc: string;
-  /** Rok stawek do podpisu kwot. */
-  rok: number;
   /** Pełny adres strony „Ten miesiąc” za ten miesiąc. */
   adres: string;
 }
 
-export default function TerminRozliczenia({ tytul, tresc, rok, adres }: TerminRozliczeniaProps) {
+export default function TerminRozliczenia({ tytul, tresc, adres }: TerminRozliczeniaProps) {
   return (
     <Html lang="pl">
       <Head />
@@ -26,8 +25,8 @@ export default function TerminRozliczenia({ tytul, tresc, rok, adres }: TerminRo
           <Heading style={headingStyle}>{tytul}</Heading>
           <Text style={textStyle}>{tresc}</Text>
           <Text style={textSmallStyle}>
-            Kwoty według Twoich danych i stawek na {rok} r. Dane do przelewu i oznaczanie zapłaty są w FaktWay, w zakładce „Ten
-            miesiąc”. Gdy zapłata jest tam oznaczona, przypomnienia o tym rozliczeniu ustają.
+            Dane do przelewu i oznaczanie zapłaty są w FaktWay, w zakładce „Ten miesiąc”. Gdy zapłata jest tam oznaczona,
+            przypomnienia o tym rozliczeniu ustają.
           </Text>
           <Button href={adres} style={buttonStyle}>
             „Ten miesiąc” w FaktWay

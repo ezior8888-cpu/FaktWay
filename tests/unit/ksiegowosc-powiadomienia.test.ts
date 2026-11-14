@@ -232,12 +232,12 @@ describe('cron.ksiegowosc-terminy', () => {
     expect(mocks.pushe).toHaveLength(1);
     expect(mocks.pushe[0].payload).toMatchObject({
       title: 'Termin 20.11.2026: rozliczenie za październik 2026',
-      body: 'Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składki społeczne 1926,76 zł, składka zdrowotna 830,58 zł.',
+      body: 'Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składki społeczne 1926,76 zł, składka zdrowotna 830,58 zł. Według Twoich danych i stawek na 2026 r.',
     });
     expect(mocks.maile).toEqual([
       {
         email: 'wlasciciel@faktway.test',
-        payload: expect.objectContaining({ rok: 2026, adres: '/reports/ten-miesiac?month=10&year=2026' }),
+        payload: { tytul: 'Termin 20.11.2026: rozliczenie za październik 2026', tresc: mocks.pushe[0].payload.body, adres: '/reports/ten-miesiac?month=10&year=2026' },
         opcje: { userId: 'u1', idempotencyKey: 'ksiegowosc/t1/2026-10/termin-5:2026-11-20' },
       },
     ]);
@@ -319,7 +319,9 @@ describe('cron.ksiegowosc-terminy', () => {
       expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 1 });
       expect(await runKsiegowoscTerminy(ctx)).toMatchObject({ wyslane: 0, duplikaty: 1 });
       expect(mocks.pushe).toHaveLength(1);
-      expect(mocks.pushe[0].payload.body).toBe('Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin.');
+      expect(mocks.pushe[0].payload.body).toBe(
+        'Za 5 dni, 25.11.2026, mija termin za październik 2026. VAT do zapłaty za październik 2026: 0,00 zł; JPK_V7M za ten miesiąc ma ten sam termin. Według Twoich danych i stawek na 2026 r.',
+      );
       expect(mocks.maile[0].opcje).toMatchObject({ idempotencyKey: 'ksiegowosc/t1/2026-10/termin-5:2026-11-25' });
       expect([...mocks.wpisy.keys()]).toEqual(['t1|2026-10|termin-5:2026-11-25']);
     });
@@ -375,7 +377,7 @@ describe('cron.ksiegowosc-terminy', () => {
     mocks.dane = { ...POLICZONE, pozycje: [pozycja('ryczalt', 120_000), pozycja('zus_spoleczne', 0), pozycja('zdrowotna', 49_835)] };
     await runKsiegowoscMiesiac(ctx);
     expect(mocks.pushe[0].payload.body).toBe(
-      'Według Twoich danych: ryczałt 1200,00 zł, składka zdrowotna 498,35 zł. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.',
+      'Do zapłaty: ryczałt 1200,00 zł, składka zdrowotna 498,35 zł. Według Twoich danych i stawek na 2026 r. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.',
     );
   });
 
@@ -402,7 +404,7 @@ describe('dzwonek w aplikacji: termin podatku (krok 8.1 planu kompletnej aplikac
           p_kind: 'tax_deadline',
           p_object_key: '2026-10:termin-5:2026-11-20',
           p_title: 'Termin 20.11.2026: rozliczenie za październik 2026',
-          p_body: 'Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składki społeczne 1926,76 zł, składka zdrowotna 830,58 zł.',
+          p_body: 'Za 5 dni, 20.11.2026, mija termin za październik 2026. Bez oznaczonej zapłaty: ryczałt 1536,00 zł, składki społeczne 1926,76 zł, składka zdrowotna 830,58 zł. Według Twoich danych i stawek na 2026 r.',
           p_link: '/reports/ten-miesiac?month=10&year=2026',
         },
       },

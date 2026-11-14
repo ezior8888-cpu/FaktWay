@@ -50,7 +50,7 @@ describe('karta „Odłóż na podatek” w pilotażu', () => {
   it('część kwot bez szacunku, brak ustawień i parametry czekające na księgową: powód zamiast kwoty, bez trybu rozkazującego', () => {
     expect(odlozycProps({ ok: true, miesiac: '2026-11', kwotaGr: 1, przychodGr: 0, pozycje: [], braki: ['x'] }, 2026)).toMatchObject({
       pct: 0,
-      caption: 'Część kwot bez szacunku; szczegóły w „Ten miesiąc”.',
+      caption: 'Według Twoich danych i stawek na 2026 r.; część kwot bez szacunku, szczegóły w „Ten miesiąc”.',
     });
     const bezProfilu = odlozycProps({ ok: false, miesiac: '2026-11', braki: ['Na listopad 2026 nie ma ustawień podatkowych, więc nic nie liczymy.'] }, 2026);
     expect(bezProfilu.caption).toBe('Bez ustawień podatkowych nie liczymy szacunku.');

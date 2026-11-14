@@ -12,7 +12,8 @@
  * - VAT: płatnik VAT składa JPK_V7M co miesiąc także przy VAT 0 zł (termin
  *   ten sam, 25.), więc kwota zero daje przypomnienie o pliku (F11-B5), chyba
  *   że MF przyjął już plik wysłany z FaktWay za ten miesiąc (`jpkPrzyjete`).
- * - Teksty bez trybu rozkazującego i bez porad (D8).
+ * - Teksty bez trybu rozkazującego i bez porad (D8); kwoty z podpisem „według
+ *   Twoich danych i stawek na {rok}”, jak na stronie (NZ-TRESC-02).
  */
 
 import { monthLabel, shiftMonth } from '@/lib/expenses/month';
@@ -20,6 +21,7 @@ import { formatIsoDatePl } from '@/lib/format/iso-date';
 import { formatPlMoney } from '@/lib/format/pl';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { terminDla, type Termin } from '@/lib/ksiegowosc/kalendarz';
+import { rokSkladkowyZdrowotnej } from '@/lib/ksiegowosc/parametry';
 import type { WersjaProfilu } from '@/lib/ksiegowosc/profil';
 import type { RodzajRozliczenia } from '@/lib/ksiegowosc/ten-miesiac';
 import { aktualne, zaplacono, type PozycjaZeSkrotem, type Rozliczenie } from '@/lib/ksiegowosc/ten-miesiac-dane';
@@ -162,6 +164,22 @@ export interface Tresc {
 
 const adres = (miesiac: string) => `/reports/ten-miesiac?month=${Number(miesiac.slice(5, 7))}&year=${miesiac.slice(0, 4)}`;
 
+/**
+ * Podpis kwot (NZ-TRESC-02; plan księgowości, sekcja 8), ten sam co pod kwotami
+ * na stronie „Ten miesiąc”: rok stawek, a przy składce zdrowotnej za styczeń
+ * także rok składkowy (luty-styczeń). Treść bez kwot nie ma podpisu.
+ */
+function podpisKwot(miesiac: string, pozycje: readonly PozycjaPrzypomnienia[]): string | null {
+  if (!pozycje.some((p) => p.kwotaGr !== null)) return null;
+  const rok = Number(miesiac.slice(0, 4));
+  const rokSkladkowy = rokSkladkowyZdrowotnej(miesiac);
+  const zdrowotna =
+    rokSkladkowy !== rok && pozycje.some((p) => p.rodzaj === 'zdrowotna' && p.kwotaGr !== null)
+      ? `; składka zdrowotna według stawek roku składkowego od lutego ${rokSkladkowy} r. do stycznia ${rokSkladkowy + 1} r.`
+      : '';
+  return `Według Twoich danych i stawek na ${rok} r.${zdrowotna}`;
+}
+
 /** VAT 0 zł (F11-B5): nie ma czego zapłacić, więc idzie osobnym zdaniem o JPK_V7M. */
 const jestVatZero = (p: PozycjaPrzypomnienia) => p.rodzaj === 'vat' && p.kwotaGr === 0;
 
@@ -174,6 +192,8 @@ export function trescTerminu(w: { miesiac: string; termin: Termin; dni: DniPrzed
   if (doZaplaty.length < w.pozycje.length) {
     zdania.push(`VAT do zapłaty za ${monthLabel(w.miesiac)}: ${zl(0)}; JPK_V7M za ten miesiąc ma ten sam termin.`);
   }
+  const podpis = podpisKwot(w.miesiac, w.pozycje);
+  if (podpis) zdania.push(podpis);
   return {
     tytul: `Termin ${data}: rozliczenie za ${monthLabel(w.miesiac)}`,
     tresc: zdania.join(' '),
@@ -184,7 +204,9 @@ export function trescTerminu(w: { miesiac: string; termin: Termin; dni: DniPrzed
 export function trescWyliczenia(w: { miesiac: string; pozycje: readonly PozycjaPrzypomnienia[] }): Tresc {
   return {
     tytul: `Rozliczenie za ${monthLabel(w.miesiac)} jest wyliczone`,
-    tresc: `Według Twoich danych: ${lista(w.pozycje)}. Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.`,
+    tresc: [`Do zapłaty: ${lista(w.pozycje)}.`, podpisKwot(w.miesiac, w.pozycje), 'Szczegóły i zatwierdzenie są w zakładce „Ten miesiąc”.']
+      .filter((z): z is string => z !== null)
+      .join(' '),
     adres: adres(w.miesiac),
   };
 }

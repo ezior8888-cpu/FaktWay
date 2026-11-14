@@ -267,7 +267,7 @@ export function odlozycProps(w: Odlozyc, rok: number): PierscienDane {
     lines: [`${pct}%`, formatPlCompactMoney(w.kwotaGr / 100), 'do odłożenia'],
     caption:
       w.braki.length > 0
-        ? 'Część kwot bez szacunku; szczegóły w „Ten miesiąc”.'
+        ? `Według Twoich danych i stawek na ${rok} r.; część kwot bez szacunku, szczegóły w „Ten miesiąc”.`
         : `Według Twoich danych i stawek na ${rok} r.`,
   };
 }

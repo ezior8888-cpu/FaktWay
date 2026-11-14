@@ -93,7 +93,7 @@ export async function przypomnijOTerminie(admin: SupabaseClient, tenantId: strin
     const mail = odbiorca
       ? await sendTerminRozliczeniaEmail(
           odbiorca.email,
-          { tytul: tresc.tytul, tresc: tresc.tresc, rok: Number(t.miesiac.slice(0, 4)), adres: tresc.adres },
+          { tytul: tresc.tytul, tresc: tresc.tresc, adres: tresc.adres },
           { userId: odbiorca.userId, idempotencyKey: `ksiegowosc/${tenantId}/${t.miesiac}/${t.etap}` },
         )
       : null;
