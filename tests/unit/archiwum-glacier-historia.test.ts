@@ -18,6 +18,8 @@ const m = vi.hoisted(() => ({
   updates: [] as Array<{ patch: Row; ids: unknown }>,
   /** Wywołania `.lt(kolumna, wartość)`: granica archiwizacji. */
   lt: [] as Array<[string, string]>,
+  /** Błąd zapisu do `invoices` (komunikat) dla danej zmiany albo `null`; zapis bez błędu zmienia wiersze. */
+  bladZapisu: null as ((patch: Row) => string | null) | null,
 }));
 
 vi.mock('@/lib/storage/glacier', () => ({ uploadToGlacier: m.glacier }));
@@ -47,7 +49,10 @@ vi.mock('@/lib/supabase/server', () => ({
         maybeSingle: async () => ({ data: null, error: null }),
         then: (ok: (v: unknown) => unknown) => {
           if (patch) {
+            const blad = table === 'invoices' ? (m.bladZapisu?.(patch) ?? null) : null;
+            if (blad) return Promise.resolve({ data: null, error: { message: blad } }).then(ok);
             m.updates.push({ patch, ids });
+            if (table === 'invoices') for (const r of m.invoices.filter((r) => predicates.every((p) => p(r)))) Object.assign(r, patch);
             return Promise.resolve({ data: null, error: null }).then(ok);
           }
           const rows = table === 'invoices' ? m.invoices.filter((r) => predicates.every((p) => p(r))) : [];
@@ -75,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.updates = [];
   m.lt = [];
+  m.bladZapisu = null;
 });
 
 describe('archiwum Glacier a historia z KSeF', () => {
@@ -133,5 +139,27 @@ describe('archiwum Glacier: granica i termin usunięcia', () => {
     expect(m.lt).toEqual([['issue_date', '2026-12-31']]);
     // Dziś 31.12.2028 plus 8 lat to 31.12.2036; północ po nim to 1.01.2037, 0:00 (CET).
     expect(plan()?.patch.scheduled_deletion_at).toBe('2036-12-31T23:00:00.000Z');
+  });
+});
+
+/**
+ * FZ-009: ponowienie zadania zaczyna od zera i bierze tylko faktury bez
+ * `archived_at`. Gdy zapis terminu usunięcia padał po udanym oznaczeniu
+ * archiwizacji, zarchiwizowane faktury zostawały na zawsze bez
+ * `scheduled_deletion_at`, więc nigdy nie zostałyby usunięte.
+ */
+describe('archiwum Glacier: ponowienie po błędzie zapisu terminu (FZ-009)', () => {
+  it('ponowienie od zera daje każdej zarchiwizowanej fakturze termin usunięcia', async () => {
+    m.invoices = [old('a', 'app'), old('b', 'file_import')];
+    m.bladZapisu = (patch) => ('scheduled_deletion_at' in patch ? 'canceling statement due to statement timeout' : null);
+
+    await expect(runArchiveOldInvoices(ctx)).rejects.toThrow('statement timeout');
+    m.bladZapisu = null;
+    await runArchiveOldInvoices(ctx);
+
+    expect(m.invoices.map((f) => [f.id, f.archived_at != null, typeof f.scheduled_deletion_at])).toEqual([
+      ['a', true, 'string'],
+      ['b', true, 'string'],
+    ]);
   });
 });
