@@ -36,24 +36,30 @@ const WORKER = 'ghcr.io/ezior8888-cpu/faktway-worker';
  * - lokalnie są pominięte, z powodem przy teście i w ostrzeżeniu pliku;
  * - na CI są czerwone z komunikatem „brak jq”, bo zmiana obrazu CI nie może
  *   po cichu wyłączyć tych testów.
- * Podział sprawdza `afterEach`: `curl` w tych skryptach woła tylko
- * `ghcr_rewizja`, a atrapa zapisuje każdy adres do `curl.log`.
+ * Podział sprawdza `afterEach`: atrapa `curl` zapisuje każdy adres do
+ * `curl.log`, a adres `ghcr.io/` znaczy, że skrypt odpytał GHCR.
+ *
+ * `jq` sprawdzamy tak, jak widzi go skrypt: w bashu, z tym samym PATH. Natywny
+ * `jq.exe` na Windowsie bez `--binary` kończy linie CRLF, a `$(jq -r …)`
+ * zostawia wtedy `\r` w tokenie i skrótach, więc taki `jq` też się nie nadaje.
  */
-const hasJq = spawnSync('jq', ['--version'], { encoding: 'utf8' }).status === 0;
-const onCi = Boolean(process.env.CI);
-const NO_JQ_MESSAGE = 'brak jq w PATH, a ghcr_rewizja (scripts/ops/coolify-wspolne.sh) czyta nim odpowiedzi GHCR';
+const jqProbe = spawnSync('bash', ['-c', `printf '{"a":1}' | jq -r .a`], { encoding: 'utf8' });
+const hasJq = jqProbe.status === 0 && jqProbe.stdout === '1\n';
+const onCi = !['', '0', 'false'].includes(process.env.CI ?? '');
+const NO_JQ_MESSAGE =
+  'brak jq w bashu (albo jq wypisuje CRLF), a ghcr_rewizja (scripts/ops/coolify-wspolne.sh) czyta nim odpowiedzi GHCR';
 if (!hasJq && !onCi) console.warn(`${NO_JQ_MESSAGE}: testy GHCR w tym pliku są pominięte. Zainstaluj jq, żeby je uruchomić.`);
 
 let ghcrTest = false;
 
-function itGhcr(name: string, fn: () => void) {
+function itGhcr(name: string, fn: () => void | Promise<void>) {
   it(name, (ctx) => {
     if (!hasJq) {
       if (onCi) throw new Error(`${NO_JQ_MESSAGE}. Na CI to błąd obrazu runnera, a nie powód do pominięcia testu.`);
       ctx.skip(NO_JQ_MESSAGE);
     }
     ghcrTest = true;
-    fn();
+    return fn();
   });
 }
 
@@ -248,7 +254,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  const queriedGhcr = existsSync(fake('curl.log'));
+  const queriedGhcr = existsSync(fake('curl.log')) && readFileSync(fake('curl.log'), 'utf8').includes('ghcr.io/');
   const markedGhcr = ghcrTest;
   ghcrTest = false;
   rmSync(dir, { recursive: true, force: true });
@@ -256,7 +262,9 @@ afterEach(() => {
     throw new Error('Skrypt odpytał GHCR (atrapa curl), więc ten test musi iść przez itGhcr: bez jq czeka i pada z mylącą asercją.');
   }
   if (!queriedGhcr && markedGhcr) {
-    throw new Error('Test idzie przez itGhcr, a skrypt nie odpytał GHCR: albo odmówił wcześniej, albo test nie potrzebuje itGhcr.');
+    throw new Error(
+      'Test idzie przez itGhcr, a skrypt nie odpytał GHCR. Jeśli test padł już wcześniej, zacznij od tamtego błędu (skrypt pewnie odmówił przed GHCR); inaczej test nie potrzebuje itGhcr.',
+    );
   }
 });
 
