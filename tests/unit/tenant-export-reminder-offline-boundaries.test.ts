@@ -55,6 +55,7 @@ function database() {
       gte(key: string, value: string) { predicates.push(row => String(row[key]) >= value); return query; },
       lte(key: string, value: string) { predicates.push(row => String(row[key]) <= value); return query; },
       lt(key: string, value: string) { predicates.push(row => String(row[key]) < value); return query; },
+      gt(key: string, value: string) { predicates.push(row => String(row[key]) > value); return query; },
       order(key: string, options?: { ascending?: boolean }) {
         ordering.push({ key, ascending: options?.ascending !== false });
         return query;
@@ -427,8 +428,14 @@ describe('reminder decisions distrust invoice-only foreign relationships', () =>
     // odpada z cronu ponagleń (reminders-kandydaci.test.ts).
     for (const row of tables.invoices) row.origin = 'app';
     tables.invoices.push(invoice('incoming-a', 'tenant-a', 'incoming'));
-    const candidates = await findInvoicesRequiringReminders();
-    expect(candidates.map(row => row.id)).toEqual(['invoice-a', 'invoice-b']);
+    const candidatesOf = async (tenantIds: string[]) => {
+      const ids: string[] = [];
+      await findInvoicesRequiringReminders(tenantIds, async page => { ids.push(...page.map(row => row.id)); });
+      return ids;
+    };
+    expect(await candidatesOf(['tenant-a', 'tenant-b'])).toEqual(['invoice-a', 'invoice-b']);
+    // Sesja 18 planu skalowania: tylko firmy z listy (te z włączonymi ponagleniami).
+    expect(await candidatesOf(['tenant-a'])).toEqual(['invoice-a']);
   });
 });
 

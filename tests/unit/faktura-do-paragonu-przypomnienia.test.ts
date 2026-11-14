@@ -80,7 +80,10 @@ describe('FP poza przypomnieniami i ponagleniami', () => {
 
   it('cron przypomnień: FP nie jest kandydatem', async () => {
     db.rows = [faktura('a-zwykla'), faktura('b-fp', { receipt: RECEIPT }), faktura('c-fp-import', { ksef_fp: 'true' })];
-    const ids = (await findInvoicesRequiringReminders()).map((i) => i.id);
+    const ids: string[] = [];
+    await findInvoicesRequiringReminders([TENANT], async (page) => {
+      ids.push(...page.map((i) => i.id));
+    });
     expect(ids).toEqual(['a-zwykla']);
   });
 
