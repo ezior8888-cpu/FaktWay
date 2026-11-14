@@ -9,7 +9,7 @@
  * „Zaloguj się na inne konto”. Bez własnego PIN-u: zapasem jest kod telefonu.
  */
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
-import { AppState, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { AppState, BackHandler, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
@@ -66,6 +66,17 @@ export function Blokada() {
     if (zablokowana) zapytajSystem();
   }, [zablokowana]);
 
+  // Android (M12): blokada to zwykły widok nad stosem, więc systemowy „wstecz” cofałby ukryte pod nią
+  // ekrany. Przy blokadzie „wstecz” chowa aplikację, jak na ekranie blokady innych aplikacji z kwotami.
+  useEffect(() => {
+    if (!zablokowana || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      BackHandler.exitApp();
+      return true;
+    });
+    return () => sub.remove();
+  }, [zablokowana]);
+
   if (!zablokowana) return null;
   const imie = imieDoPowitania(konto);
   const tekstPowitania = imie ? `${powitanie()}, ${imie}` : powitanie();
@@ -105,7 +116,7 @@ export function Blokada() {
               wariant="naGradiencie"
               onPress={() => void odblokuj()}
             />
-            <Pressable onPress={wyloguj} accessibilityRole="button" style={styles.tekstowy}>
+            <Pressable onPress={wyloguj} accessibilityRole="button" android_ripple={{ color: kolory.falaNaAkcencie }} style={styles.tekstowy}>
               <Tekst styl="callout" waga="medium" kolor="naGradiencie" style={styles.wysrodkowany}>
                 Zaloguj się na inne konto
               </Tekst>

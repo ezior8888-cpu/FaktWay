@@ -5,14 +5,15 @@
  * mają własne odstępy, więc karta nie rysuje między nimi linii (`pole = true`).
  * Listy opcji i kalendarz są systemowe (arkusz akcji, wybór daty).
  */
-import { Host, Picker } from '@expo/ui';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState, type Ref } from 'react';
 import { ActionSheetIOS, Platform, Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions, type ReturnKeyTypeOptions, type TextInputInstance } from 'react-native';
 import Animated, { FadeIn, FadeOut, interpolateColor, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { DotykFala } from '@/komponenty/dotyk';
 import { Ikona } from '@/komponenty/ikona';
+import { MenuWyboru } from '@/komponenty/menu-wyboru';
 import { useStylKarty } from '@/komponenty/karta';
 import { Tekst } from '@/komponenty/tekst';
 import { dataPelna } from '@/lib/format';
@@ -109,6 +110,8 @@ export function PoleTekstowe({
           onSubmitEditing={onZatwierdz ? (e) => onZatwierdz(e.nativeEvent.text) : undefined}
           submitBehavior={onZatwierdz ? 'submit' : undefined}
           selectionColor={kolory.akcent}
+          // Android (M12): bez kreski Material pod tekstem (motyw `rn_edit_text_material`); obwódkę ma ramka. iOS tego nie czyta.
+          underlineColorAndroid="transparent"
           accessibilityLabel={etykieta}
           style={[
             stylTekstu('body', { cyfry: liczby }),
@@ -123,6 +126,7 @@ export function PoleTekstowe({
             onPress={() => setWidoczne((w) => !w)}
             accessibilityRole="button"
             accessibilityLabel={widoczne ? 'Ukryj hasło' : 'Pokaż hasło'}
+            android_ripple={{ color: kolory.fala, borderless: true, radius: CEL_DOTYKU / 2 }}
             style={styles.oko}>
             <Ikona nazwa={widoczne ? 'eye-off-line' : 'eye-line'} rozmiar={20} kolor={kolory.etykietaDrugorzedna} />
           </Pressable>
@@ -187,6 +191,7 @@ export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, aut
           placeholder="000000"
           placeholderTextColor={kolory.etykietaTrzeciorzedna}
           selectionColor={kolory.akcent}
+          underlineColorAndroid="transparent"
           accessibilityLabel={etykieta}
           accessibilityHint="Sześć cyfr"
           style={[stylTekstu('title1', { cyfry: true }), styles.wejscieKodu, onWklej ? styles.rozciagniety : null, { color: kolory.etykieta }]}
@@ -210,6 +215,7 @@ export function PoleKodu({ etykieta, wartosc, onZmiana, opis, blad, poleRef, aut
             onPress={() => void Clipboard.getStringAsync().then(onWklej)}
             accessibilityRole="button"
             accessibilityLabel="Wklej"
+            android_ripple={{ color: kolory.fala, borderless: true, radius: CEL_DOTYKU / 2 }}
             style={styles.akcjaPola}>
             <Tekst styl="subheadline" waga="semibold" kolor="akcent" maxFontSizeMultiplier={1.4}>
               Wklej
@@ -257,18 +263,18 @@ export function PoleWyboru<T extends string>({ etykieta, wartosc, opcje, onZmian
   const wybrana = opcje.find((o) => o.wartosc === wartosc);
 
   if (Platform.OS !== 'ios') {
+    // Android (M12): to samo pole, lista w menu Material pod polem (`menu-wyboru.android.tsx`).
     return (
       <View style={styles.pole}>
         <Etykieta tekst={etykieta} />
-        <View style={[styles.ramka, { borderColor: kolory.obwodka, backgroundColor: kolory.tlo }]}>
-          <Host matchContents>
-            <Picker selectedValue={wartosc} onValueChange={(v) => onZmiana(v as T)} appearance="menu">
-              {opcje.map((o) => (
-                <Picker.Item key={o.wartosc} label={o.etykieta} value={o.wartosc} />
-              ))}
-            </Picker>
-          </Host>
-        </View>
+        <MenuWyboru
+          etykieta={etykieta}
+          wartosc={wartosc}
+          opcje={opcje}
+          onZmiana={onZmiana}
+          stylPola={[styles.ramka, styles.ramkaWiersz, { borderColor: kolory.obwodka, backgroundColor: kolory.tlo }]}
+          stylTekstu={styles.rozciagniety}
+        />
       </View>
     );
   }
@@ -330,6 +336,8 @@ export function PolePrzelacznik({ etykieta, opis, wartosc, onZmiana }: PolePrzel
         value={wartosc}
         onValueChange={onZmiana}
         trackColor={{ true: kolory.akcentWypelnienie, false: kolory.obwodka }}
+        // Android (M12): kciuk w kolorach marki zamiast koloru motywu systemu; iOS bez zmian.
+        thumbColor={Platform.OS === 'android' ? (wartosc ? kolory.naAkcencie : kolory.tloKomorki) : undefined}
         ios_backgroundColor={kolory.obwodka}
         accessibilityLabel={etykieta}
       />
@@ -354,13 +362,15 @@ type SegmentyProps = {
 export function Segmenty({ wartosci, wybrany, onZmiana, etykieta, liczniki }: SegmentyProps) {
   const kolory = useKolory();
   const stylKarty = useStylKarty();
+  // Android (M12): fala przycięta do pigułki; iOS bez zmian.
+  const Pigulka = Platform.OS === 'android' ? DotykFala : Pressable;
   return (
     <View style={styles.pigulki} accessibilityRole="tablist" accessibilityLabel={etykieta}>
       {wartosci.map((nazwa, i) => {
         const wybrana = i === wybrany;
         const licznik = liczniki?.[i];
         return (
-          <Pressable
+          <Pigulka
             key={nazwa}
             onPress={() => onZmiana(i)}
             accessibilityRole="tab"
@@ -375,7 +385,7 @@ export function Segmenty({ wartosci, wybrany, onZmiana, etykieta, liczniki }: Se
                 {licznik}
               </Tekst>
             ) : null}
-          </Pressable>
+          </Pigulka>
         );
       })}
     </View>

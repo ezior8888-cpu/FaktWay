@@ -171,6 +171,11 @@ export function zapleczeSupabase(supabase: SupabaseClient): Zaplecze {
       const [sprzet, zapisana] = await Promise.all([LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync()]);
       if (!sprzet || !zapisana) return undefined;
       const typy = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      // Android (M12): systemowe okno biometrii samo wybiera sposób, a czytnik palca jest najczęstszy i
+      // najpewniejszy (twarz bywa tam słabą biometrią). Gdy jest, mówimy o odcisku palca (ZASADY-DESIGNU.md, sekcja 4).
+      if (Platform.OS === 'android' && typy.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+        return { nazwa: 'odcisk palca', twarz: false };
+      }
       if (typy.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
         return { nazwa: Platform.OS === 'ios' ? 'Face ID' : 'rozpoznawanie twarzy', twarz: true };
       }

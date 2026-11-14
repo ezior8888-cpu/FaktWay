@@ -7,6 +7,7 @@
     "icon": "./assets/images/ikona.png",
     "scheme": "faktway",
     "userInterfaceStyle": "automatic",
+    "primaryColor": "#2463EF",
     "ios": {
       "bundleIdentifier": "pl.faktway.app",
       "supportsTablet": false,
@@ -26,7 +27,13 @@
         "foregroundImage": "./assets/images/android-ikona-pierwszy-plan.png",
         "monochromeImage": "./assets/images/android-ikona-mono.png"
       },
-      "predictiveBackGestureEnabled": true
+      "predictiveBackGestureEnabled": true,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",

@@ -6,7 +6,7 @@
  */
 import { Link } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
@@ -58,10 +58,12 @@ export function WierszFaktury({ faktura: f }: { faktura: Faktura }) {
           accessibilityHint="Otwiera fakturę"
           onPressIn={() => setWcisniety(true)}
           onPressOut={() => setWcisniety(false)}
+          // Android (M12): fala Material zamiast podświetlenia tła; rogi przycina karta.
+          android_ripple={{ color: kolory.wypelnienie }}
           style={StyleSheet.flatten([
             styles.wiersz,
             pionowo ? styles.wierszPionowy : null,
-            { backgroundColor: wcisniety ? kolory.wypelnienie : kolory.tloKomorki },
+            { backgroundColor: wcisniety && Platform.OS === 'ios' ? kolory.wypelnienie : kolory.tloKomorki },
           ])}>
           <View style={styles.lewa}>
             <Tekst styl="body" waga="medium" numberOfLines={pionowo ? 3 : 1}>

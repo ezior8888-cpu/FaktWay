@@ -11,6 +11,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { useKolory } from '@/wyglad/kolory';
 import { GRADIENT } from '@/wyglad/odstepy';
+import { stopyPodPaskiemAndroid } from '@/wyglad/pasek-android';
 
 /** Zapas nad treścią: pasek stanu, pasek nawigacji, duży tytuł i pociągnięcie w dół. */
 const NAD = 900;
@@ -26,14 +27,21 @@ type Props = {
    * nagłówek ekranu zamiast paska nawigacji (ekrany logowania).
    */
   odsuniecie?: number;
+  /**
+   * Android (M12): nad treścią stoi nieprzezroczysty pasek w kolorze
+   * `gradientGora` (`useOpcjeGradientu`), więc gradient zaczyna się od niego.
+   */
+  podPaskiemAndroid?: boolean;
 };
 
-export function GradientNaglowka({ podPaskiem, odsuniecie = 0 }: Props) {
+export function GradientNaglowka({ podPaskiem, odsuniecie = 0, podPaskiemAndroid }: Props) {
   const kolory = useKolory();
   const wysokosc = NAD + GRADIENT.podTrescia;
   const offset = (y: number) => Math.min(1, Math.max(0, (NAD + y) / wysokosc));
   // Punkty liczone od górnej krawędzi treści (y = 0); ujemne leżą pod paskiem nawigacji.
-  const stopy = podPaskiem
+  const stopy = podPaskiemAndroid
+    ? stopyPodPaskiemAndroid(NAD, GRADIENT.podTrescia).map((s) => ({ y: s.y, kolor: kolory[s.kolor] }))
+    : podPaskiem
     ? [
         { y: -NAD, kolor: kolory.gradientSrodek },
         { y: 0, kolor: kolory.gradientSrodek },

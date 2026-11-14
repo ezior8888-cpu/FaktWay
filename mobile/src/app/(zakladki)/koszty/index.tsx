@@ -20,6 +20,7 @@ import { useStanFaktur } from '@/stan/faktury';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
 import { useKolory } from '@/wyglad/kolory';
+import { GRUPY_MENU_W_LINII, useKoloryPaska, useOpcjeWyszukiwarki } from '@/wyglad/naglowki';
 
 const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
   { etykieta: 'Wszystkie źródła' },
@@ -38,7 +39,9 @@ const ZRODLA: { etykieta: string; zrodlo?: ZrodloKosztu }[] = [
  * według daty dokumentu), z wydatkiem ze zdjęcia w „Dodaj wydatek”.
  */
 export default function EkranKosztow() {
+  const wyszukiwarka = useOpcjeWyszukiwarki();
   const kolory = useKolory();
+  const pasek = useKoloryPaska(true);
   const router = useRouter();
   const { koszty, skrzynka: wszystkieZKsef, dane, dzis } = useStanFaktur();
   const zBazy = dane.zrodlo === 'baza';
@@ -98,11 +101,11 @@ export default function EkranKosztow() {
 
   return (
     <>
-      <Stack.SearchBar placeholder="Sprzedawca, NIP, numer" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
+      <Stack.SearchBar {...wyszukiwarka} placeholder="Sprzedawca, NIP, numer" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
       {widok === 0 ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={kolory.etykieta} title="Filtry wydatków">
-            <Stack.Toolbar.Menu title="Widok" inline>
+        <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+          <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={pasek.ikona} title="Filtry wydatków">
+            <Stack.Toolbar.Menu title="Widok" inline={GRUPY_MENU_W_LINII}>
               <Stack.Toolbar.MenuAction isOn={!tylkoDoOpisania} onPress={() => setTylkoDoOpisania(false)}>
                 Wszystkie
               </Stack.Toolbar.MenuAction>
@@ -110,7 +113,7 @@ export default function EkranKosztow() {
                 Do opisania
               </Stack.Toolbar.MenuAction>
             </Stack.Toolbar.Menu>
-            <Stack.Toolbar.Menu title="Źródło" inline>
+            <Stack.Toolbar.Menu title="Źródło" inline={GRUPY_MENU_W_LINII}>
               {ZRODLA.map((z) => (
                 <Stack.Toolbar.MenuAction key={z.etykieta} isOn={zrodlo === z.etykieta} onPress={() => setZrodlo(z.etykieta)}>
                   {z.etykieta}

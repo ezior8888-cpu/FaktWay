@@ -23,7 +23,7 @@ import { useFlaga, useStanFaktur } from '@/stan/faktury';
 import { doZaplatyGr, nazwaMiesiaca, useTenMiesiac } from '@/stan/ksiegowosc';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
-import { useKolory } from '@/wyglad/kolory';
+import { useKoloryPaska } from '@/wyglad/naglowki';
 
 const MIESIACE = ['październik 2026', 'wrzesień 2026', 'sierpień 2026'];
 
@@ -49,7 +49,7 @@ function stanPozycji(p: PozycjaRozliczeniaTelefonu): { tekst: string; kolor: 'su
  * KPiR, ewidencja, VAT, eksport i zapłaty spoza wyliczenia otwierają stronę.
  */
 function EkranKsiegowosciZBazy({ konto }: { konto: KontoFirmy }) {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(true);
   const router = useRouter();
   const [miesiac, setMiesiac] = useState<string>();
   const ten = useTenMiesiac(miesiac);
@@ -81,8 +81,8 @@ function EkranKsiegowosciZBazy({ konto }: { konto: KontoFirmy }) {
   };
 
   const menu = d ? (
-    <Stack.Toolbar placement="right">
-      <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={kolory.etykieta} title="Miesiąc rozliczenia">
+    <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+      <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={pasek.ikona} title="Miesiąc rozliczenia">
         {d.miesiace.map((m) => (
           <Stack.Toolbar.MenuAction key={m} isOn={d.miesiac === m} onPress={() => setMiesiac(m)}>
             {nazwaMiesiaca(m)}
@@ -249,7 +249,7 @@ function EkranKsiegowosciZBazy({ konto }: { konto: KontoFirmy }) {
  * Money (D14; WZORCE-MOBBIN.md 5.1); płatność otwiera arkusz z danymi przelewu.
  */
 function EkranKsiegowosciPrzyklad() {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(true);
   const router = useRouter();
   const r = ROZLICZENIE;
   const [miesiac, setMiesiac] = useState(MIESIACE[0] ?? '');
@@ -269,8 +269,8 @@ function EkranKsiegowosciPrzyklad() {
 
   return (
     <>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={kolory.etykieta} title="Miesiąc rozliczenia">
+      <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={pasek.ikona} title="Miesiąc rozliczenia">
           {MIESIACE.map((m) => (
             <Stack.Toolbar.MenuAction key={m} isOn={miesiac === m} onPress={() => setMiesiac(m)}>
               {m}

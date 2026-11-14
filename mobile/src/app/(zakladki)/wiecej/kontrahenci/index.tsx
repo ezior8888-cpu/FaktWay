@@ -9,12 +9,14 @@ import { StanPusty } from '@/komponenty/stan-pusty';
 import { kwota } from '@/lib/format';
 import { doZaplaty, ileFaktur, statusFaktury } from '@/lib/status-faktury';
 import { useStanFaktur } from '@/stan/faktury';
+import { useOpcjeWyszukiwarki } from '@/wyglad/naglowki';
 
 /**
  * Kontrahenci: odpowiednik `contractors` (zapisani z faktur, dane z GUS,
  * należności, zaległości, status VAT). Nowych dodaje się przez fakturę.
  */
 export default function EkranKontrahentow() {
+  const wyszukiwarka = useOpcjeWyszukiwarki();
   const router = useRouter();
   const { faktury, flagi } = useStanFaktur();
   const [szukaj, setSzukaj] = useState('');
@@ -25,7 +27,7 @@ export default function EkranKontrahentow() {
 
   return (
     <>
-      <Stack.SearchBar placeholder="Nazwa albo NIP" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
+      <Stack.SearchBar {...wyszukiwarka} placeholder="Nazwa albo NIP" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
       <EkranListy gradient={!szukaj} keyboardShouldPersistTaps="handled">
         {szukaj ? null : (
           <Kafle

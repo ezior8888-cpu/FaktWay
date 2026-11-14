@@ -22,6 +22,7 @@ import { podpisPrzypomnien, useNaleznosci } from '@/stan/naleznosci';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
 import { useKolory } from '@/wyglad/kolory';
+import { GRUPY_MENU_W_LINII, useKoloryPaska, useOpcjeWyszukiwarki } from '@/wyglad/naglowki';
 
 /** Widoki jak zakładki strony: Wystawione, Cykliczne, Po terminie. */
 const WIDOKI = ['Wystawione', 'Cykliczne', 'Po terminie'] as const;
@@ -90,7 +91,8 @@ function widokZParametru(parametr: string | undefined): number {
  * D7: „Nowa faktura” jako szeroki bloczek pod sumą, nie plus w pasku.
  */
 export default function EkranFaktur() {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(true);
+  const wyszukiwarka = useOpcjeWyszukiwarki();
   const router = useRouter();
   const { widok: widokParam } = useLocalSearchParams<{ widok?: string }>();
   const { faktury, cykliczne, flagi, dzis, dane } = useStanFaktur();
@@ -141,25 +143,25 @@ export default function EkranFaktur() {
 
   return (
     <>
-      <Stack.SearchBar placeholder="Numer albo kontrahent" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
+      <Stack.SearchBar {...wyszukiwarka} placeholder="Numer albo kontrahent" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
       {widok === 0 ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={filtrowAktywnych > 0 ? kolory.akcent : kolory.etykieta} title="Filtry">
-            <Stack.Toolbar.Menu title="Status KSeF" inline>
+        <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+          <Stack.Toolbar.Menu icon={IKONY_PASKA.filtr} iconRenderingMode="template" tintColor={filtrowAktywnych > 0 ? pasek.ikonaAktywna : pasek.ikona} title="Filtry">
+            <Stack.Toolbar.Menu title="Status KSeF" inline={GRUPY_MENU_W_LINII}>
               {STATUSY_KSEF.map((s) => (
                 <Stack.Toolbar.MenuAction key={s} isOn={statusKsef === s} onPress={() => setStatusKsef(s)}>
                   {s}
                 </Stack.Toolbar.MenuAction>
               ))}
             </Stack.Toolbar.Menu>
-            <Stack.Toolbar.Menu title="Płatność" inline>
+            <Stack.Toolbar.Menu title="Płatność" inline={GRUPY_MENU_W_LINII}>
               {PLATNOSCI.map((p) => (
                 <Stack.Toolbar.MenuAction key={p} isOn={platnosc === p} onPress={() => setPlatnosc(p)}>
                   {p}
                 </Stack.Toolbar.MenuAction>
               ))}
             </Stack.Toolbar.Menu>
-            <Stack.Toolbar.Menu title="Rodzaj" inline>
+            <Stack.Toolbar.Menu title="Rodzaj" inline={GRUPY_MENU_W_LINII}>
               {RODZAJE.map((r) => (
                 <Stack.Toolbar.MenuAction key={r.etykieta} isOn={rodzaj === r.etykieta} onPress={() => setRodzaj(r.etykieta)}>
                   {r.etykieta}

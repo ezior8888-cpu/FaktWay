@@ -8,8 +8,9 @@ import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { StanPusty } from '@/komponenty/stan-pusty';
 import { Wykres } from '@/komponenty/wykres';
 import { dataKrotka, kwota } from '@/lib/format';
-import { useKolory, type Kolory } from '@/wyglad/kolory';
+import { type Kolory } from '@/wyglad/kolory';
 import { IKONY_PASKA } from '@/wyglad/ikony-paska';
+import { useKoloryPaska } from '@/wyglad/naglowki';
 
 const MIESIACE = ['Listopad 2026', 'Październik 2026', 'Wrzesień 2026'];
 const WIDOKI = ['Wszystko', 'Przychody', 'Koszty'] as const;
@@ -25,7 +26,7 @@ const przychod = (w: WpisKpir) => w.kolumna === '7' || w.kolumna === '8';
 
 /** KPiR: odpowiednik `reports/kpir` (wynik, koszty według kolumn, księga z filtrami). */
 export default function EkranKpir() {
-  const kolory = useKolory();
+  const pasek = useKoloryPaska(false);
   const router = useRouter();
   const [miesiac, setMiesiac] = useState(MIESIACE[0] ?? '');
   const [widok, setWidok] = useState(0);
@@ -54,15 +55,15 @@ export default function EkranKpir() {
 
   return (
     <>
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={kolory.etykieta} title="Miesiąc">
+      <Stack.Toolbar placement="right" {...pasek.narzedzia}>
+        <Stack.Toolbar.Menu icon={IKONY_PASKA.kalendarz} iconRenderingMode="template" tintColor={pasek.ikona} title="Miesiąc">
           {MIESIACE.map((m) => (
             <Stack.Toolbar.MenuAction key={m} isOn={miesiac === m} onPress={() => setMiesiac(m)}>
               {m}
             </Stack.Toolbar.MenuAction>
           ))}
         </Stack.Toolbar.Menu>
-        <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={kolory.etykieta} accessibilityLabel="Eksport KPiR" onPress={() => router.push('/ksiegowosc/eksport')} />
+        <Stack.Toolbar.Button icon={IKONY_PASKA.udostepnij} iconRenderingMode="template" tintColor={pasek.ikona} accessibilityLabel="Eksport KPiR" onPress={() => router.push('/ksiegowosc/eksport')} />
       </Stack.Toolbar>
 
       <EkranListy>

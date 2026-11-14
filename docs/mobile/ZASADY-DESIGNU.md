@@ -259,6 +259,21 @@ Ten sam kod i ten sam wygląd treści (karty, czcionki, ikony, wykresy rysowane
 w SVG), ale konwencje Androida w zachowaniu: systemowy przycisk wstecz, górny
 pasek Material, efekt fali przy dotknięciu, menu Material w polach wyboru.
 
+Jak to wygląda w kodzie (M12a, 14.11.2026; iOS bez zmian):
+
+| Element | Android | Gdzie |
+|---|---|---|
+| Górny pasek | tytuł po lewej, strzałka Material; bez dużego tytułu. Na ekranach z gradientem pasek ma kolor `gradientGora`, biały tytuł i białe ikony na okręgu 20% bieli, a gradient w treści zaczyna się od tego samego koloru | `wyglad/pasek-android.ts`, `useOpcjeGradientu`, `useOpcjeSzczegoluNaGradiencie`, `useKoloryPaska` |
+| Pasek stanu | styl podany na każdym ekranie (ciemne ikony w jasnym motywie, jasne na gradiencie) | `useOpcjeStosu` |
+| Przyciski z napisem w pasku | zamknięcie to ikona X po lewej (pełnoekranowy formularz Material), akcja („Szkic”, „Zapisz”, „Wyślij”) to napis w kolorze marki po prawej | `komponenty/przycisk-paska.tsx` |
+| Menu w pasku | menu Compose na białej karcie z ciemnym tekstem; grupy filtrów jako podmenu z tytułem | `Stack.Toolbar.Menu`, `GRUPY_MENU_W_LINII` |
+| Pole wyboru | nasze pole jak na iOS, lista w menu Material pod polem | `komponenty/menu-wyboru.android.tsx` |
+| Dotyk | fala Material przycięta do zaokrąglenia zamiast zmniejszenia | `Dotyk`, `DotykFala`, `android_ripple` w wierszach |
+| Wstecz | systemowy przycisk wstecz cofa stos i zamyka arkusz; formularz z niezapisanymi zmianami pyta „Odrzucić zmiany?”; przy blokadzie chowa aplikację | `usePreventRemove`, `komponenty/blokada.tsx` |
+| Zdjęcie wydatku | systemowy aparat i galeria (skaner VisionKit jest tylko na iPhonie) | `koszty/dodaj.tsx` |
+| Biometria | systemowe okno Androida, nazwa „odcisk palca”, gdy telefon ma czytnik; ikona odcisku z Remix | `lib/logowanie/supabase.ts` |
+| Wklej kod | zwykły przycisk „Wklej” (Android nie pyta o zgodę na schowek) | `PoleKodu` |
+
 ## 11. Wzorce
 
 Wzorcem jest **wersja FaktWay na komputer** (`components/dashboard/`,

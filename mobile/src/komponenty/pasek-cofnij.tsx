@@ -43,6 +43,7 @@ export function PasekCofnij() {
           accessibilityRole="button"
           accessibilityLabel={cofnij.przycisk ?? 'Cofnij'}
           hitSlop={ODSTEP.xs}
+          android_ripple={{ color: kolory.falaNaAkcencie, borderless: true }}
           style={styles.cofnij}>
           <Tekst styl="subheadline" waga="semibold" style={{ color: kolory.tloKomorki }}>
             {cofnij.przycisk ?? 'Cofnij'}

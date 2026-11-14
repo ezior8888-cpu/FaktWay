@@ -18,6 +18,7 @@ import { useSesja } from '@/stan/sesja';
 import { useUstawienia } from '@/stan/ustawienia';
 import type { Kolory } from '@/wyglad/kolory';
 import { MARGINES, ODSTEP } from '@/wyglad/odstepy';
+import { useOpcjeWyszukiwarki } from '@/wyglad/naglowki';
 
 /**
  * `strona`: na prawdziwym koncie karta bez API telefonu (M10b) otwiera tę
@@ -40,6 +41,7 @@ type Grupa = { naglowek: string; pozycje: Pozycja[] };
  * „Wyloguj się” na końcu, z potwierdzeniem w arkuszu akcji (etap M5).
  */
 export default function EkranWiecej() {
+  const wyszukiwarka = useOpcjeWyszukiwarki();
   const router = useRouter();
   const [szukaj, setSzukaj] = useState('');
   const [dwaEtapyPrzyklad] = useFlaga('2fa', true);
@@ -134,7 +136,7 @@ export default function EkranWiecej() {
 
   return (
     <>
-      <Stack.SearchBar placeholder="Szukaj ustawień, np. 2FA" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
+      <Stack.SearchBar {...wyszukiwarka} placeholder="Szukaj ustawień, np. 2FA" onChangeText={(e) => setSzukaj(e.nativeEvent.text)} />
       <EkranListy gradient={!fraza} keyboardShouldPersistTaps="handled">
         {fraza ? (
           wyniki.length > 0 ? (

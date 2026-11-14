@@ -51,10 +51,19 @@ export function EkranListy({
       style={{ backgroundColor: kolory.tloGrupowane }}
       contentContainerStyle={styles.tresc}
       refreshControl={
-        onOdswiez ? <RefreshControl refreshing={odswiezam} onRefresh={() => void odswiez()} tintColor={gradient ? kolory.naGradiencie : kolory.etykietaDrugorzedna} /> : undefined
+        onOdswiez ? (
+          <RefreshControl
+            refreshing={odswiezam}
+            onRefresh={() => void odswiez()}
+            tintColor={gradient ? kolory.naGradiencie : kolory.etykietaDrugorzedna}
+            // Android (M12): kółko Material w kolorze marki na karcie; iOS tych opcji nie czyta.
+            colors={[kolory.akcent]}
+            progressBackgroundColor={kolory.tloKomorki}
+          />
+        ) : undefined
       }
       {...reszta}>
-      {gradient ? <GradientNaglowka podPaskiem={gradient === 'pod-paskiem'} /> : null}
+      {gradient ? <GradientNaglowka podPaskiem={gradient === 'pod-paskiem'} podPaskiemAndroid={Platform.OS === 'android' && gradient === true} /> : null}
       {children}
     </ScrollView>
   );
@@ -174,7 +183,12 @@ function NaglowekSekcji({ tytul, opis, akcja, wartosc, wKarcie }: NaglowekSekcji
           {tytul}
         </Tekst>
         {akcja ? (
-          <Pressable onPress={akcja.onPress} hitSlop={ODSTEP.s} accessibilityRole="button" style={styles.akcjaNaglowka}>
+          <Pressable
+            onPress={akcja.onPress}
+            hitSlop={ODSTEP.s}
+            accessibilityRole="button"
+            android_ripple={{ color: kolory.fala, borderless: true }}
+            style={styles.akcjaNaglowka}>
             <Tekst styl="subheadline" kolor="akcent" waga="medium">
               {akcja.tytul}
             </Tekst>

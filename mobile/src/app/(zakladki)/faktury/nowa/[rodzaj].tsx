@@ -26,6 +26,7 @@ import { NaglowekKwoty } from '@/komponenty/naglowek';
 import { PrzyciskGlowny } from '@/komponenty/przycisk-glowny';
 import { Tekst } from '@/komponenty/tekst';
 import { EkranTylkoNaStronie } from '@/komponenty/na-stronie';
+import { PrzyciskPaska } from '@/komponenty/przycisk-paska';
 import {
   bladFirmyZapisu,
   dodajDni,
@@ -431,13 +432,9 @@ function FormularzFaktury() {
       />
       {wprost ? (
         // Otwarty ze szczegółu albo karty kontrahenta: pod spodem nie ma wyboru rodzaju, więc „Anuluj” zamyka arkusz.
-        <Stack.Toolbar placement="left">
-          <Stack.Toolbar.Button onPress={() => router.back()}>Anuluj</Stack.Toolbar.Button>
-        </Stack.Toolbar>
+        <PrzyciskPaska strona="lewa" tytul="Anuluj" onPress={() => router.back()} />
       ) : null}
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Button onPress={() => void zapisz(false)}>{trwa === 'szkic' ? 'Zapisujemy…' : 'Szkic'}</Stack.Toolbar.Button>
-      </Stack.Toolbar>
+      <PrzyciskPaska strona="prawa" tytul={trwa === 'szkic' ? 'Zapisujemy…' : 'Szkic'} onPress={() => void zapisz(false)} />
 
       <EkranListy keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ paddingBottom: WYSOKOSC_PASKA + ODSTEP.xl }}>
         {podglad ? (

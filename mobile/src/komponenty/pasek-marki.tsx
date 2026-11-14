@@ -38,7 +38,13 @@ export function PasekMarki({ inicjaly, etykietaAwatara, onAwatar }: Props) {
         </Svg>
       </View>
       <LogoFaktWay wysokosc={24} biale />
-      <Pressable onPress={onAwatar} accessibilityRole="button" accessibilityLabel={etykietaAwatara} hitSlop={ODSTEP.xs} style={styles.dotyk}>
+      <Pressable
+        onPress={onAwatar}
+        accessibilityRole="button"
+        accessibilityLabel={etykietaAwatara}
+        hitSlop={ODSTEP.xs}
+        android_ripple={{ color: kolory.falaNaAkcencie, borderless: true, radius: AWATAR / 2 + ODSTEP.xxs }}
+        style={styles.dotyk}>
         <View style={[styles.awatar, { backgroundColor: kolory.naGradiencieTlo }]}>
           {/* Kółko ma stałą średnicę: inicjały rosną z dużym tekstem tylko trochę, pełną nazwę czyta etykieta. */}
           <Tekst styl="footnote" waga="semibold" kolor="naGradiencie" maxFontSizeMultiplier={1.3}>
