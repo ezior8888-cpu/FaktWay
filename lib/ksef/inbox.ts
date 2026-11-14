@@ -38,8 +38,9 @@ export interface ReceivedInvoicesResult {
    * całe okno. Data trwałego zapisu ostatniej pobranej faktury, obcięta do
    * milisekundy w dół: tu zaczyna się następne okno (`from` włącznie, więc
    * faktury z tą samą datą wracają i odsiewa je `filter-existing`). Nie wychodzi
-   * poza `hwm`, bo zapytanie z `restrictToPermanentStorageHwmDate` nie wychodzi
-   * poza HWM, więc poniżej tej daty KSeF też gwarantuje komplet.
+   * poza `hwm` (zapytanie z `restrictToPermanentStorageHwmDate` nie wychodzi
+   * poza HWM, a pętla i tak przycina do niego), więc poniżej tej daty KSeF też
+   * gwarantuje komplet.
    * `null` = okno pobrane w całości.
    */
   resumeFrom: string | null;
@@ -155,13 +156,17 @@ async function queryReceivedInvoicesOnce(
       // ostatniej faktury (sortowanie rosnące, więc wszystko pobrane ma datę nie
       // późniejszą). Obcięcie do milisekundy w dół: KSeF podaje ułamki do
       // mikrosekund, a zaokrąglenie w górę przeskoczyłoby faktury z tą samą
-      // milisekundą na następnej stronie. Brak postępu za `dateFrom` (cała porcja
-      // z datą początku okna) = pytamy dalej: przebieg z budżetem stałby w miejscu.
+      // milisekundą na następnej stronie. Nigdy dalej niż HWM tej odpowiedzi:
+      // `restrictToPermanentStorageHwmDate` powinien to zapewnić, ale kursor
+      // ponad HWM gubiłby faktury dopisane później, więc pilnujemy tego tutaj.
+      // Brak postępu za `dateFrom` (cała porcja z datą początku okna) = pytamy
+      // dalej: przebieg z budżetem stałby w miejscu.
       const last = page[page.length - 1];
       if (requests >= maxRequests && last?.permanentStorageDate) {
-        const lastMs = Date.parse(last.permanentStorageDate);
-        if (lastMs > dateFrom.getTime()) {
-          resumeFrom = new Date(lastMs).toISOString();
+        const hwmMs = hwm ? Date.parse(hwm) : Number.POSITIVE_INFINITY;
+        const cutMs = Math.min(Date.parse(last.permanentStorageDate), hwmMs);
+        if (cutMs > dateFrom.getTime()) {
+          resumeFrom = new Date(cutMs).toISOString();
           break;
         }
       }

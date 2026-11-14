@@ -275,6 +275,28 @@ describe('skrzynka KSeF — okno z 10 001 fakturami (limit 10 000 na zapytanie)'
     },
   );
 
+  // E1-W10-b, uwaga z przeglądu: punkt wznowienia nie może wyjść poza HWM KSeF,
+  // nawet gdy KSeF odda rekord późniejszy niż HWM (wbrew
+  // `restrictToPermanentStorageHwmDate`). Inaczej faktury zapisane w KSeF między
+  // HWM a tym rekordem już po zapytaniu zostałyby pod kursorem bez pobrania.
+  it('budżet: punkt wznowienia nie wychodzi poza HWM KSeF', async () => {
+    const hwm = '2026-10-02T11:00:05.000Z';
+    const page = [faktura(1), { ...faktura(2), permanentStorageDate: '2026-10-02T11:00:09.000Z' }];
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      reply(200, { invoices: page, hasMore: true, isTruncated: false, permanentStorageHwmDate: hwm })));
+
+    const result = await queryReceivedInvoices(
+      { nip: '1234567890' } as KsefAuth,
+      new Date(START_HWM),
+      new Date(KSEF_HWM),
+      'test',
+      undefined,
+      { maxRequests: 1 },
+    );
+
+    expect(result).toMatchObject({ hwm, resumeFrom: hwm, requests: 1 });
+  });
+
   // E1-W10-b: dawniej jeden przebieg pobierał 10 001 faktur w 41 zapytaniach
   // i zapisywał HWM raz. Teraz przebieg = jedno zapytanie, a HWM idzie częściowo.
   it.each<TruncationFlag>(['last-page', 'every-page'])(
