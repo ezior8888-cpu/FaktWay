@@ -18,12 +18,16 @@ export type Token = { token: string } | { brak: 'sesja' | 'polaczenie' };
 /** Wynik odświeżenia sesji: nowy token, brak sieci albo sesja nie do uratowania. */
 export type Odswiezenie = 'ok' | 'polaczenie' | 'koniec';
 
+/** `body`: JSON albo formularz z plikiem (M9); `limitMs`: dłuższy limit czasu dla wgrania pliku. */
+export type OpcjePobrania = { method: string; headers: Record<string, string>; body?: string | FormData; limitMs?: number };
+
 export type Zaleznosci = {
   /** `EXPO_PUBLIC_API_URL`, np. `http://localhost:3000`; bez niego API jest niedostępne. */
   adres: string | undefined;
   token: () => Promise<Token>;
   odswiez: () => Promise<Odswiezenie>;
-  pobierz: (adres: string, opcje: { method: string; headers: Record<string, string>; body?: string }) => Promise<{
+  /** Metoda, nie pole z funkcją: atrapy w testach mogą przyjmować węższe `body` (sam JSON). */
+  pobierz(adres: string, opcje: OpcjePobrania): Promise<{
     ok: boolean;
     status: number;
     headers: { get: (nazwa: string) => string | null };
@@ -39,6 +43,13 @@ export type OpcjeZapytania = {
   cialo?: unknown;
   /** Zapis (M8): `Idempotency-Key`, ten sam w każdym ponowieniu tego zapisu. */
   klucz?: string;
+  /**
+   * Plik (M9, `POST /wydatki/zdjecie`): `multipart/form-data` zamiast JSON. Nagłówek
+   * `Content-Type` z granicą części ustawia sam `fetch`, więc klient go nie podaje.
+   */
+  formularz?: FormData;
+  /** Limit czasu tego żądania (wgranie pliku trwa dłużej niż zwykłe 15 s). */
+  limitMs?: number;
 };
 
 export const BRAK_ADRESU_API = 'Aplikacja nie ma adresu serwera FaktWay (EXPO_PUBLIC_API_URL).';
@@ -96,14 +107,15 @@ export function utworzKlienta(z: Zaleznosci) {
   return function zapytaj<T>(sciezka: string, opcje: OpcjeZapytania = {}): Promise<Wynik<T>> {
     const adres = z.adres;
     if (!adres) return Promise.resolve({ ok: false, blad: bladTelefonu('serwer', BRAK_ADRESU_API) });
-    const zCialem = opcje.cialo !== undefined;
+    const zCialem = opcje.cialo !== undefined && opcje.formularz === undefined;
     return zPonowieniem<T>(z, async (token) => {
       let odp: Awaited<ReturnType<Zaleznosci['pobierz']>>;
       try {
         odp = await z.pobierz(adresTrasy(adres, sciezka), {
           method: opcje.metoda ?? 'GET',
           headers: naglowki(token, opcje.firma, zCialem, opcje.klucz),
-          ...(zCialem ? { body: JSON.stringify(opcje.cialo) } : {}),
+          ...(opcje.formularz !== undefined ? { body: opcje.formularz } : zCialem ? { body: JSON.stringify(opcje.cialo) } : {}),
+          ...(opcje.limitMs !== undefined ? { limitMs: opcje.limitMs } : {}),
         });
       } catch {
         return { ok: false, blad: bladTelefonu('polaczenie') };

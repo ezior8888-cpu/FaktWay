@@ -37,7 +37,7 @@ export default function EkranWiecej() {
   const { wyloguj, biometria, blokada, konto: kontoSesji } = useSesja();
   const kontoFirmy = useKontoFirmy();
   const { dane } = useStanFaktur();
-  // Prawdziwe konto (M7): firma i rola z `GET /konto`; reszta kart na danych przykładowych do M10.
+  // Prawdziwe konto (M7): firma i rola z `GET /konto`; od M9 też wydatki; reszta kart na danych przykładowych do M10.
   const zBazy = dane.zrodlo === 'baza';
   const przyklad = CZLONKOWIE.find((c) => c.ty);
   const konto = zBazy ? (kontoSesji ? { imie: kontoSesji.imie, email: kontoSesji.email } : undefined) : przyklad;
@@ -204,7 +204,7 @@ export default function EkranWiecej() {
             <Sekcja
               stopka={
                 zBazy
-                  ? `FaktWay ${Constants.expoConfig?.version ?? ''}. Z Twojego konta: firma, faktury wystawione i skrzynka KSeF. Pozostałe ekrany pokazują jeszcze dane przykładowe.`
+                  ? `FaktWay ${Constants.expoConfig?.version ?? ''}. Z Twojego konta: firma, faktury wystawione, skrzynka KSeF i wydatki. Pozostałe ekrany pokazują jeszcze dane przykładowe.`
                   : `FaktWay ${Constants.expoConfig?.version ?? ''}, dane przykładowe`
               }
             />

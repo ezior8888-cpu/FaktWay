@@ -50,6 +50,26 @@ export function otworzStrone(sciezka: string): void {
 
 export const MA_ADRES_STRONY = Boolean(ADRES_API);
 
+/**
+ * Wydatek, którego telefon nie zapisze (M9): koszt z KSeF (porównanie z XML
+ * i kursem), usunięcie albo wpis ręczny. Arkusz akcji z „Otwórz na stronie”.
+ */
+export function wydatekNaStronie(idWydatku?: string): void {
+  const tytul = idWydatku ? 'Ten wydatek zmienisz na faktway.pl' : 'Wydatek bez zdjęcia wpiszesz na faktway.pl';
+  const opis = idWydatku
+    ? 'Z telefonu opiszesz wydatek ze zdjęcia. Wydatek z KSeF porównasz z fakturą, a usuniesz go na stronie.'
+    : 'Z telefonu dodasz wydatek ze zdjęcia albo skanu. Ręczny wpis dojdzie w kolejnej wersji aplikacji.';
+  const sciezka = idWydatku ? `/expenses/${encodeURIComponent(idWydatku)}` : '/expenses';
+  const otworz = idWydatku ? 'Otwórz wydatek na stronie' : 'Otwórz faktway.pl';
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions({ title: tytul, message: opis, options: [otworz, 'Zamknij'], cancelButtonIndex: 1 }, (i) => {
+      if (i === 0) otworzStrone(sciezka);
+    });
+    return;
+  }
+  Alert.alert(tytul, opis, [{ text: 'Zamknij', style: 'cancel' }, { text: otworz, onPress: () => otworzStrone(sciezka) }]);
+}
+
 export function naStronie(co: ZmianaNaStronie, idFaktury?: string): void {
   const otworz = idFaktury ? 'Otwórz fakturę na stronie' : 'Otwórz faktway.pl';
   if (Platform.OS === 'ios') {

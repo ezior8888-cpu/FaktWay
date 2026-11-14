@@ -99,9 +99,10 @@ zostaje tylko panel administratora FaktWay (`/admin`) i zakup abonamentu (D5).
 Każda sekcja panelu strony ma odpowiednik w aplikacji (`mobile/src/app/`).
 Od M7 na prawdziwym koncie z bazy są: firma i konto (`GET /konto`), faktury
 wystawione (lista, szczegół) i skrzynka KSeF (lista, szczegół); od M8 także
-wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu.
-Reszta ekranów zostaje na danych przykładowych do M9 (wydatki ze zdjęcia)
-i M10 (pozostałe); stopka w Więcej mówi o tym klientowi.
+wystawienie zwykłej faktury VAT (szkic albo wysyłka do KSeF) i wysyłka szkicu;
+od M9 wydatki (lista z bazy) i wydatek ze zdjęcia (skaner, odczyt, sprawdzenie
+odczytu i zapis). Reszta ekranów zostaje na danych przykładowych do M10;
+stopka w Więcej mówi o tym klientowi.
 
 | Strona (`app/(dashboard)/`) | Telefon | Trasy |
 |---|---|---|
@@ -318,6 +319,33 @@ a te czytają sesję z ciasteczek. Aplikacja natywna ich nie wywoła. Dlatego:
   szkicem i informacją, że wysyłka nie wyszła; telefon bez odpowiedzi mówi
   „Nie wiemy, czy faktura się zapisała”.
 
+**Stan po M9 (13.11.2026).** Wydatek ze zdjęcia z telefonu:
+- Logika `reviewExpenseAction` i `getOcrJobStatusAction` wydzielona do
+  `lib/expenses/review.ts` (`reviewExpense`, z powodem odmowy dla telefonu
+  i opcją `refuseKsef`) i `lib/expenses/ocr-status.ts` (`readOcrJobStatus`);
+  akcje strony wołają je bez zmiany zachowania (test zgodności
+  `tests/unit/wydatki-lib-zgodnosc.test.ts`, zielony także na starej akcji).
+  Wgranie było w `lib/expenses/accept-upload.ts` od sesji 31 planu
+  skalowania; doszedł krok `onJobCreated` (klucz telefonu przed plikiem i kolejką).
+- Trasy (`lib/api/mobile/wydatki.ts`): `POST /wydatki/zdjecie` (multipart, pole
+  `plik`, poza proxy jak `/api/uploads/*`, ta sama bramka wgrań: rozmiar,
+  odczyt ciała, limit 30 wgrań na 10 minut, budżet bajtów; nagłówek
+  `Idempotency-Key` na jedno zdjęcie, 00202 `mobile_idempotency_keys.ocr_job_id`:
+  ponowienie oddaje to samo zadanie odczytu, inny plik z tym kluczem 409,
+  zadanie porzucone po kluczu czyści się po 5 minutach), `GET
+  /wydatki/odczyt/{id}` (stan odczytu; 503 to „pytaj dalej”, nie „wgraj
+  drugi raz”), `POST /wydatki/{id}/zatwierdzenie` (te same zasady co formularz
+  kosztu strony; koszt z KSeF odsyła na stronę). Kody `file_invalid`,
+  `upload_incomplete`, `expense_invalid`.
+- Telefon: systemowy skaner dokumentów (VisionKit, moduł lokalny
+  `mobile/modules/skaner-dokumentow`, jedna strona JPG, kilka PDF), galeria
+  (`expo-image-picker`), czekanie na odczyt co 2 s do 90 s, ekran „Sprawdź
+  odczyt” ze zdjęciem nad polami, VAT jako osobne pole, przełącznik „Kwoty są
+  w złotych” przy dokumencie w walucie bez kursu; lista Kosztów z bazy
+  (200 najnowszych według daty dokumentu, waluta kwot jak na stronie, kopia
+  reguły z testem zgodności). Wpis ręczny, usunięcie i opis kosztu z KSeF
+  zostają na stronie do M10.
+
 ### 4.4 Repozytorium (folder `mobile/`, jeśli D2 przyjęte)
 Dziś konfiguracja obejmuje całe repo, więc w M2 trzeba:
 - `tsconfig.json` (`include: **/*.ts`): dodać `mobile` do `exclude`;
@@ -412,16 +440,7 @@ częścią „gotowe” od M3.
 
 ## 9. Dziennik
 
-**Następny krok:** M9, wydatek ze zdjęcia: skaner dokumentów, OCR,
-sprawdzenie odczytu i zapis wydatku na prawdziwym koncie (wiersz M9 w sekcji 7).
-Na start M9: logikę `uploadExpensePhotoAction`, `getOcrJobStatusAction` i
-`reviewExpenseAction` (`app/actions/expenses.ts`) najpierw wydzielić do `lib/`
-z testem zgodności, jak M8 zrobił z wystawieniem (`tests/unit/wystawienie-faktury-lib.test.ts`);
-trasy w `app/api/mobile/v1` za `authenticateMobileRequest`; wgrywanie zdjęcia
-przez `lib/uploads/server.ts` (trasy wgrywania są poza proxy, AGENTS.md,
-niezmiennik 7); klucz idempotencji zapisu wydatku (wzór 00201,
-`mobile_idempotency_keys`: nowa wartość `endpoint` w CHECK); systemowy skaner
-dokumentów to nowa paczka natywna, więc nowy build w Xcode.
+**Następny krok:** dokończyć obchód M9 w symulatorze iPhone 17 (wymaga zgody w panelu symulatora; build ze skanerem zainstalowany, drogę serwera sprawdzono przez API na osobnym stosie), zrzuty do `docs/mobile/zrzuty/m9/`; potem M10 (pozostałe ekrany z 3a). Osobno: błąd z `main`, enum `categorization_method` bez `rule_global_keyword` i `rule_global_nip` (paragon ze stacji, hotelu, Allegro nie zapisuje się po OCR, 3 płatne odczyty na próbę), osobna gałąź i PR.
 **Przed scaleniem M8:** migracja 00201 (przed wdrożeniem; 00199 z #643 już
 na produkcji). Numeracja z #643 jest w `lib/invoices/issue-regular.ts`;
 telefon wysyła serię i podgląd numeru z podpowiedzi oraz klucz zapisu jako
@@ -469,3 +488,4 @@ dotknięciem (5.2), D4, D6.
 | 13.11.2026 | M6c | kod 2FA z telefonu przez nasze API (z przeglądu M6b, decyzja Bartosza: osobny etap przed M8; 4.2): trasa `POST /api/mobile/v1/kod` (`lib/api/mobile/kod.ts`) jak `verifyMfaChallengeAction` strony: kod spoza 6 cyfr i konto bez TOTP bez zużycia próby, `checkMfaRateLimit` wspólny ze stroną (bez Redisa 503 „Nie możemy teraz sprawdzić kodu”), wyzwanie i kod w GoTrue tokenem klienta i kluczem anon, sprawdzenie nowego tokenu (AAL2, to samo konto), wpisy `auth.mfa_challenge_failed` i `auth.mfa_challenge_succeeded` z `client: 'mobile'`, sesja AAL2 dla `setSession`; bramka w wariancie `mfa: 'challenge'` (inna sesja: 409 `mfa_not_required`, pozostałe trasy bez zmian); aplikacja: `potwierdzKod` przez trasę. Testy: trasa z atrapami (20), rdzeń aplikacji (16), prawdziwy GoTrue (`tests/rls-mobile-kod.test.ts`). Sprawdzone na osobnym stosie z migracjami i Redisem dev: limit 5 prób (6. próba 429), wpisy audytu; symulator: hasło, zły kod, dobry kod, Pulpit; zrzuty `docs/mobile/zrzuty/m6c/`. Z przeglądu kodu 4 uwagi poprawione. Zostaje: GoTrue przyjmuje `/factors/{id}/verify` wprost z kluczem anon (jak przy stronie), więc dla omijającego aplikację zaporą jest limit GoTrue | #711 |
 | 13.11.2026 | M8 | szybka faktura z telefonu do KSeF (4.3, „Stan po M8”): logika „Wystaw i wyślij”, szkicu i wysyłki szkicu wydzielona do `lib/invoices/{issue-regular,send-draft}.ts` (test zgodności ze stroną), kolejka KSeF z sesji tokenu (`tokenSession`: 2FA i znacznik KSeF bez ciasteczek), trasy `POST /faktury` z kluczem idempotencji (00201 `mobile_idempotency_keys`), `POST /faktury/{id}/wysylka`, `GET /faktury/podpowiedz`; w aplikacji formularz zwykłej faktury przez API (nabywcy z ostatnich faktur, numer z serwera, błąd serwera pod polem), szkic i „Wyślij do KSeF” przy szkicu, status co 3 s do przyjęcia; zdania serwera bez długich myślników, pola i przycisk zawijają się przy dużym tekście. Sprawdzone w symulatorze 17e na osobnym stosie z prawdziwym KSeF TEST (4 faktury przyjęte, fikcyjny NIP, certyfikat samopodpisany); 7 uwag z przeglądu (6 poprawionych); scalenie z #713 (numeracja #643 przeniesiona do `lib/`); zrzuty `docs/mobile/zrzuty/m8/` | #716 |
 | 13.11.2026 | M8, przegląd | niezależny przegląd #716 (9 uwag) i odpowiedzi: (1) nabywca z UE i osoba z PESEL nie stają się osobą prywatną, stawki spoza telefonu nie stają się 0%, „Duplikuj” takiej faktury otwiera stronę; (2) zapis do firmy formularza; (3) kwoty pozycji jak `calculateLineItem` (cena do 4 miejsc, 3 × 33,3333 = 123,00 zł), cena pokazywana z 4 miejscami; (4) seria numeracji z podpowiedzi; (5) klucz żądania jako `numberRequestKey` (00199) i ponowienie po przerwie; (6) wyjątek po szkicu to 201 ze szkicem, telefon bez odpowiedzi mówi „nie wiemy”; (7) wyścig przy ponowieniu i stan `failed`; (8) bez zmian, decyzja Bartosza; (9) zapisane jako ustalenie M8-9. Sprawdzone w symulatorze: nabywcy bez firmy z UE, duplikat faktury z UE na stronie, duplikat z ceną 33,3333 przyjęty w KSeF TEST (123,00 zł, `number_request_key` zapisany); zrzuty 13 do 18 w `docs/mobile/zrzuty/m8/` | #716 |
+| 14.11.2026 | M9 | wydatek ze zdjęcia (4.3, „Stan po M9”): `lib/expenses/{review,ocr-status}.ts` (test zgodności także na starej akcji), trasy `/wydatki/zdjecie` (poza proxy, klucz 00202), `/wydatki/odczyt/{id}`, `/wydatki/{id}/zatwierdzenie`; skaner VisionKit (moduł lokalny), galeria, sprawdzenie odczytu, wydatki z bazy. Sprawdzone przez API na osobnym stosie z prawdziwym OCR: wgranie, ponowienie (to samo zadanie), wydatek w bazie, zatwierdzenie. Obchód w symulatorze czeka na zgodę | #738 |
